@@ -365,6 +365,15 @@ export const roomStore = {
   async loadSceneParts<T>(roomId: string): Promise<T | undefined> {
     return get<T>(k(roomId, 'scene'));
   },
+  /** Drop the room's arrangement — its scene snapshot and its transforms — so the
+   *  next load builds from `detectedObjects`. Only `lib/rescan.ts` calls it, and only
+   *  after it has saved what it drops as a layout: see there for why a fresh scan
+   *  has to do this at all. */
+  async forgetArrangement(roomId: string) {
+    await del(k(roomId, 'scene'));
+    await del(k(roomId, 'transforms'));
+    await touch(roomId);
+  },
   async listRooms(): Promise<RoomSummary[]> {
     const all = (await keys()).filter((key): key is string => typeof key === 'string');
 

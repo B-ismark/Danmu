@@ -2458,6 +2458,17 @@ which would also discard that user's deletions, and **that is a product call**: 
 re-scan a fresh start or an update? Nobody has been asked. The capture gate above keeps
 this branch from widening the affected population; it does not close the item.
 
+**Closed 2026-09-27, as a fresh start that loses nothing.** A scan that actually ran in
+this visit replaces the arrangement (`lib/rescan.ts`): the old one — saved scene or the old
+detections rebuilt, plus every transform — is written to the room's layouts as **Before
+re-scan** first, then the scene and transforms keys are dropped, so the studio builds from
+the new list and one press in Room check › Layouts puts the old room back. Merging was
+declined because a fresh scan mints new ids, so it would mean guessing which new sofa is
+the old one. A visit that did NOT run a scan (the cached list, edited or not) still leaves
+the arrangement alone. The detect screen now also says when it is showing the cached list
+and offers **Look again**, since *Re-scan* had been showing the old list as if it were new.
+If a user would rather a re-scan UPDATE the room, that is the thing to revisit.
+
 **Who this bites, which is the part that makes it worth fixing rather than filing:** a
 user who has only MOVED furniture has transform overrides and **no scene key**, because
 `RoomSync` writes one from `state.parts` and a drag does not touch `parts`. The

@@ -1691,6 +1691,22 @@ the drag without a word, because the button was holding an old copy of the room 
 stale check compared press against answer. `tests/refit-press-time.test.tsx` holds the
 wiring; nobody has watched it happen.
 
+### Re-scan looks again, and its answer reaches the studio — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** A photographed room with furniture found → studio → move a piece and
+add one from the Library → Room rail → **Re-scan**. The screen should say *This is your last
+scan* with **Look again**. Press it, then **Continue to the studio**.
+
+**What wrong looks like.** The studio still showing the old arrangement after a scan that
+found something different (the saved scene won again); no *Before re-scan* entry under
+Room check › Layouts, or one that does not put back the moved and added pieces when
+applied; the toast naming a layout that is not there.
+
+**What has been seen.** The cached-list notice and **Look again** at 360 and 1280 wide in a
+production build (SwiftShader), and Undo restoring the list. The run itself could not be
+watched here — no on-device model and no key, so **Look again** ends at *Let's do this by
+hand* — so the replace-and-keep half is held by `tests/rescan.test.ts` alone.
+
 ## The browser route, so the next person does not rebuild it
 
 Looking is a half-hour of setup nobody has to hand, which is the actual reason items sit

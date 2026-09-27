@@ -42,6 +42,8 @@ import {
 } from '@/lib/review-history';
 import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
 import { cleanLabelOf, fromRecord, toRecord } from '@/lib/detection-record';
+import { adoptFreshScan } from '@/lib/rescan';
+import { toast } from '@/components/ui/StorageToast';
 import { formatDim } from '@/lib/units';
 import type { DimUnit } from '@/lib/store';
 import { roomFootprint } from '@/lib/footprint';
@@ -78,6 +80,7 @@ type Notice = {
     | 'NO_KEY'
     | 'STOPPED'
     | 'NOTHING_FOUND'
+    | 'CACHED'
     | 'DAILY_QUOTA'
     | 'RATE_LIMIT'
     | 'INVALID_KEY'
@@ -94,6 +97,8 @@ type Notice = {
   retry?: boolean;
   settings?: boolean;
   capture?: boolean;
+  /** offers **Look again** — a fresh run over the same photos */
+  again?: boolean;
 };
 
 // The by-hand path needs a name for the thing being drawn — the geometry engine
@@ -313,6 +318,12 @@ export default function DetectPage() {
   const padRef = useRef<HTMLButtonElement>(null);
   // Flipped by Stop so an in-flight run stops writing to state.
   const stopped = useRef(false);
+  // The detection run, set by the loading effect so **Look again** can start it.
+  const runRef = useRef<(() => Promise<void>) | null>(null);
+  // True once a run in THIS visit has produced a list. Continue then replaces the
+  // room's arrangement with it (`lib/rescan.ts`); without a run, Continue saves the
+  // reviewed list and leaves the arrangement alone, as it always has.
+  const scanned = useRef(false);
   // The detect run needs the key to be CURRENT when it calls, not to be a
   // trigger. With `apiKey` in the effect's dep array, editing it in Settings —
   // including in another tab, since the store persists to localStorage — re-ran
@@ -380,80 +391,105 @@ export default function DetectPage() {
           setRoomDims(dims);
         }
       }
+      // The run itself, as a function rather than inline, because there are two ways
+      // in: straight away on a room nobody has scanned, and **Look again** on one that
+      // has. `cancelled` is this effect's, so a press after navigating away writes
+      // nothing — the same guard the first run has.
+      const run = async () => {
+        stopped.current = false;
+        setRunning(true);
+        setPath('checking');
+        try {
+          let dets: Detection[] | null = null;
+          if (await localDetectorAvailable()) {
+            setPath('local');
+            try {
+              dets = await detectLocalAcrossImages(entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })));
+              if (dets && dets.length === 0) dets = null; // empty result → let Gemini try
+            } catch {
+              dets = null;
+            }
+          }
+          if (!dets) {
+            // The photos are about to leave the device. Say so BEFORE the call, so
+            // the disclosure is on screen for the whole upload.
+            setPath('cloud');
+            dets = await detectAcrossImages(
+              apiKeyRef.current,
+              entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })),
+              room ? { width: room.width, depth: room.depth, height: room.height, layoutId: room.layoutId } : undefined,
+            );
+          }
+          if (cancelled || stopped.current) return;
+          // Geometry pass, then the merge — in that order, which is the whole
+          // reason this is one call into lib. The AI result only contributes
+          // label/category and a depth hint.
+          const refined = keyed(refineDetections(dets, calMap, dims));
+          setDetections(refined);
+          // From here on, Continue saves a list the photos were really looked at for,
+          // and the studio has to show it — see `lib/rescan.ts`.
+          scanned.current = true;
+          // Which rows to tick before the user has looked at them. The whole policy
+          // lives in lib/detect-confidence.ts, because it was three unrelated
+          // confidence scales being compared against one literal here.
+          const judged = judgeLabels(refined, calMap, dims);
+          const marks = new Set<number>();
+          refined.forEach((d, i) => {
+            if (shouldAutoConfirm(d, judged[i].status)) marks.add(i);
+          });
+          setConfirmed(marks);
+          if (refined.length === 0) {
+            // Saying nothing here is how someone who photographed an empty study
+            // ends up in a room full of furniture they never owned.
+            setAdding(true);
+            setNotice({
+              code: 'NOTHING_FOUND',
+              tone: 'calm',
+              kicker: 'All clear',
+              title: 'Nothing stood out in your photos',
+              body: `Danmu went through ${entries.length === 1 ? 'your photo' : `all ${entries.length} photos`} and couldn’t pick out any furniture — which is exactly right for an empty room, and common in dim light or very close-up shots. Draw a box around anything you’d like measured; it’s switched on already. Carry on with an empty list and the studio opens with a starter arrangement instead of your own pieces, which you can clear one by one.`,
+            });
+          }
+        } catch (e) {
+          if (cancelled || stopped.current) return;
+          const n = noticeFor(e);
+          setNotice(n);
+          if (n.code === 'NO_KEY') {
+            // No key means the by-hand path IS the path — arm it rather than leave
+            // the user staring at a tool they have to discover. And nothing was
+            // sent: detection refuses before it touches the network, so the
+            // upload disclosure must not stay on screen.
+            setAdding(true);
+            setPath('idle');
+          }
+        } finally {
+          if (!cancelled && !stopped.current) setRunning(false);
+        }
+      };
+      runRef.current = run;
+
+      // CACHE: this room has been scanned, so show that list rather than spend a scan
+      // on arriving — and say so, with the way to look again, because **Re-scan** in
+      // the studio lands here and used to show the old list as though it were new.
       if (room?.detectedObjects && room.detectedObjects.length > 0) {
         setDetections(keyed(room.detectedObjects.map(fromRecord)));
         setConfirmed(new Set(room.detectedObjects.map((d, i) => (d.locked ? i : -1)).filter((x) => x >= 0)));
         setPath('cache');
+        setNotice({
+          code: 'CACHED',
+          tone: 'calm',
+          kicker: 'Already scanned',
+          title: 'This is your last scan',
+          body:
+            'Look again to go through your photos from scratch. The new list replaces this one, and the room as you have it now is saved under Layouts as “Before re-scan”, so nothing is lost.',
+          again: true,
+        });
         return;
       }
 
       // Otherwise: local on-device detector first (no key, no quota); Gemini
       // only as the fallback when the model isn't deployed or finds nothing.
-      setRunning(true);
-      setPath('checking');
-      try {
-        let dets: Detection[] | null = null;
-        if (await localDetectorAvailable()) {
-          setPath('local');
-          try {
-            dets = await detectLocalAcrossImages(entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })));
-            if (dets && dets.length === 0) dets = null; // empty result → let Gemini try
-          } catch {
-            dets = null;
-          }
-        }
-        if (!dets) {
-          // The photos are about to leave the device. Say so BEFORE the call, so
-          // the disclosure is on screen for the whole upload.
-          setPath('cloud');
-          dets = await detectAcrossImages(
-            apiKeyRef.current,
-            entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })),
-            room ? { width: room.width, depth: room.depth, height: room.height, layoutId: room.layoutId } : undefined,
-          );
-        }
-        if (cancelled || stopped.current) return;
-        // Geometry pass, then the merge — in that order, which is the whole
-        // reason this is one call into lib. The AI result only contributes
-        // label/category and a depth hint.
-        const refined = keyed(refineDetections(dets, calMap, dims));
-        setDetections(refined);
-        // Which rows to tick before the user has looked at them. The whole policy
-        // lives in lib/detect-confidence.ts, because it was three unrelated
-        // confidence scales being compared against one literal here.
-        const judged = judgeLabels(refined, calMap, dims);
-        const marks = new Set<number>();
-        refined.forEach((d, i) => {
-          if (shouldAutoConfirm(d, judged[i].status)) marks.add(i);
-        });
-        setConfirmed(marks);
-        if (refined.length === 0) {
-          // Saying nothing here is how someone who photographed an empty study
-          // ends up in a room full of furniture they never owned.
-          setAdding(true);
-          setNotice({
-            code: 'NOTHING_FOUND',
-            tone: 'calm',
-            kicker: 'All clear',
-            title: 'Nothing stood out in your photos',
-            body: `Danmu went through ${entries.length === 1 ? 'your photo' : `all ${entries.length} photos`} and couldn’t pick out any furniture — which is exactly right for an empty room, and common in dim light or very close-up shots. Draw a box around anything you’d like measured; it’s switched on already. Carry on with an empty list and the studio opens with a starter arrangement instead of your own pieces, which you can clear one by one.`,
-          });
-        }
-      } catch (e) {
-        if (cancelled || stopped.current) return;
-        const n = noticeFor(e);
-        setNotice(n);
-        if (n.code === 'NO_KEY') {
-          // No key means the by-hand path IS the path — arm it rather than leave
-          // the user staring at a tool they have to discover. And nothing was
-          // sent: detection refuses before it touches the network, so the
-          // upload disclosure must not stay on screen.
-          setAdding(true);
-          setPath('idle');
-        }
-      } finally {
-        if (!cancelled && !stopped.current) setRunning(false);
-      }
+      await run();
     })();
     return () => {
       cancelled = true;
@@ -730,7 +766,17 @@ export default function DetectPage() {
       const room = await roomStore.loadRoom(roomId);
       if (!room) return;
       const flat = detections.map((d, i) => toRecord(d, i, confirmed.has(i), uuid));
-      await roomStore.saveRoom({ ...room, detectedObjects: flat });
+      if (scanned.current) {
+        const kept = await adoptFreshScan(room, flat);
+        if (kept)
+          toast({
+            title: 'Your room now shows the new scan',
+            message: `The arrangement you had is saved under Room check › Layouts as “${kept.name}”.`,
+            ttl: 14000,
+          });
+      } else {
+        await roomStore.saveRoom({ ...room, detectedObjects: flat });
+      }
       router.push(`/room/${roomId}/model`);
     } finally {
       setSaving(false);
@@ -837,6 +883,23 @@ export default function DetectPage() {
               <Icon name="camera" size={13} />
               Take wall photos
             </Link>
+          )}
+          {notice.again && (
+            <button
+              onClick={() => {
+                // Undoable: the list being replaced is one step back.
+                remember();
+                setNotice(null);
+                setOffer(null);
+                setLinked(null);
+                void runRef.current?.();
+              }}
+              className="ds-btn"
+              style={{ height: 34, fontSize: 12.5 }}
+            >
+              <Icon name="refresh" size={12} />
+              Look again
+            </button>
           )}
           {notice.retry && (
             <button
