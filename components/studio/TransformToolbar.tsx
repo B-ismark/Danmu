@@ -23,6 +23,7 @@
 
 import { Fragment } from 'react';
 import { useStudio } from '@/lib/store';
+import { usePhoneStudio } from './NarrowViewportBanner';
 import { Icon } from '@/components/ui/Icon';
 import type { IconName } from '@/components/ui/Icon';
 
@@ -35,7 +36,7 @@ const MODES: Array<{ id: 'translate' | 'rotate' | 'scale'; label: string; key: s
   { id: 'rotate', label: 'Rotate', key: 'R', does: 'spin it in place', icon: 'refresh' },
 ];
 
-const SNAPS: Array<{ id: 'off' | 'fine' | 'coarse'; label: string; sub: string }> = [
+export const SNAPS: Array<{ id: 'off' | 'fine' | 'coarse'; label: string; sub: string }> = [
   { id: 'off', label: 'Free', sub: 'no snap' },
   { id: 'fine', label: 'Fine', sub: '10mm · 15°' },
   { id: 'coarse', label: 'Coarse', sub: '50mm · 45°' },
@@ -49,6 +50,10 @@ export function TransformToolbar() {
   const snapMode = useStudio((s) => s.snapMode);
   const setSnapMode = useStudio((s) => s.setSnapMode);
   const selected = useStudio((s) => s.selectedPartId);
+  // A phone keeps this row to one line and thumb-sized: the three modes at 40px, and
+  // Snap in the app bar's More menu, where the set-once settings live (HIG's toolbar
+  // guidance for a compact width). Here it wrapped to a second row of its own.
+  const phone = usePhoneStudio();
 
   return (
     <Fragment>
@@ -67,7 +72,7 @@ export function TransformToolbar() {
                   : `${m.label} (${m.key}) — ${m.does}; applies to the next piece you select`
               }
               style={{
-                height: 30,
+                height: phone ? 40 : 30,
                 padding: '0 12px',
                 display: 'flex',
                 alignItems: 'center',
@@ -130,7 +135,7 @@ export function TransformToolbar() {
         })}
       </div>
 
-      <SnapCycleButton snapMode={snapMode} setSnapMode={setSnapMode} />
+      {!phone && <SnapCycleButton snapMode={snapMode} setSnapMode={setSnapMode} />}
     </Fragment>
   );
 }

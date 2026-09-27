@@ -38,7 +38,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { usePathname } from 'next/navigation';
-import { stackedViewport } from './helpers/mount';
+import { stackedViewport, viewportAt } from './helpers/mount';
 
 // `usePathname` is a SPY over the helper's answer rather than the helper's plain arrow,
 // so a single test can render both cards. Everything else in the module object stays as
@@ -121,11 +121,33 @@ describe('help on the 2D plan says what the two lists are', () => {
       const nodes = screen.getAllByText(/is what you can add/);
       expect(nodes).toHaveLength(1);
       const line = nodes[0].textContent ?? '';
-      expect(line).toContain('on the Room tab of the panel at the bottom');
+      // 640px is a TABLET now: `SheetShell`'s pane, docked beside the room with a
+      // Room tab. "The panel at the bottom" was the bottom sheet that stood here
+      // before the phone and the tablet were given different shapes.
+      expect(line).toContain('on the Room tab of the panel beside the room');
       expect(line, 'the wide wording must not survive into a stacked shell').not.toContain('left rail');
-      // The half that does NOT branch, asserted here too: if a future edit makes the
-      // Library sentence conditional as well, this is where it goes wrong first.
+      expect(line).not.toContain('at the bottom');
+      // The Library card still sits on the right of the canvas at a tablet's width.
       expect(line).toContain('on the right of the canvas');
+    } finally {
+      restore();
+    }
+  });
+
+  // A phone is the third answer, and the Library half branches too there: a phone
+  // has no Library card on the canvas at all — both lists are sheets opened from the
+  // toolbar, so "on the right of the canvas" would send someone looking for nothing.
+  it('and names the phone toolbar\'s two buttons on a phone', () => {
+    const restore = viewportAt(390);
+    try {
+      openHelp();
+      const nodes = screen.getAllByText(/is what you can add/);
+      expect(nodes).toHaveLength(1);
+      const line = nodes[0].textContent ?? '';
+      expect(line).toContain('Catalog, under Room in the toolbar');
+      expect(line).toContain('Library, under Add');
+      expect(line).not.toContain('canvas');
+      expect(line).not.toContain('rail');
     } finally {
       restore();
     }
@@ -208,5 +230,47 @@ describe('help on the 2D plan says what the two lists are', () => {
     // And only the 3D card has these.
     expect(screen.queryByText('Walls and the room')).toBeNull();
     expect(screen.queryByText(/Left-drag to orbit/)).toBeNull();
+  });
+});
+
+// Under a finger the card teaches what a finger can do. The desktop cards are made of
+// right-click, Alt-click, Shift-click and keycaps, and on a phone that was a card of
+// things you cannot do.
+describe('help on a touch screen', () => {
+  const MOUSE_ONLY = /right-click|alt-click|shift-click|ctrl-click|double-click|scroll|\bkeys?\b|\bclick\b/i;
+
+  for (const [tab, path] of [['plan', PLAN], ['3D', MODEL]] as const) {
+    for (const [what, width] of [['phone', 390], ['tablet', 800]] as const) {
+      it(`teaches touch gestures, and no mouse or keyboard ones, on the ${tab} tab of a ${what}`, () => {
+        const restore = viewportAt(width, { touch: true });
+        try {
+          openHelp(path);
+          const card = screen.getByRole('note');
+          const text = card.textContent ?? '';
+          expect(text).toMatch(/Tap a wall/);
+          expect(text).toMatch(/Two fingers pinch to zoom/);
+          expect(text, 'a mouse or keyboard gesture reached a touch card').not.toMatch(MOUSE_ONLY);
+          expect(card.querySelectorAll('kbd'), 'a keycap on a touch card').toHaveLength(0);
+          // The two lists are still there: where they are matters most on a phone.
+          expect(groupTitles()).toContain('The two lists');
+          expect(text).toContain('Tap a piece in the Library');
+          // More (⋯) is a phone's; a tablet keeps the laptop's bar.
+          expect(text.includes('under More'), `More is named on a ${what}`).toBe(what === 'phone');
+        } finally {
+          restore();
+        }
+      });
+    }
+  }
+
+  it('and a mouse at a phone\'s width keeps the desktop card', () => {
+    // A narrow desktop window is not a phone in the hand: the verb follows the pointer.
+    const restore = viewportAt(390, { touch: false });
+    try {
+      openHelp(PLAN);
+      expect(screen.getByRole('note').textContent).toMatch(/Right-click a piece/);
+    } finally {
+      restore();
+    }
   });
 });

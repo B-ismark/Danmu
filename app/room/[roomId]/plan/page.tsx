@@ -10,6 +10,7 @@ import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
 import { HoverCard } from '@/components/studio/HoverCard';
 import { CatalogPanel, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { StudioShell } from '@/components/studio/StudioShell';
+import { usePhoneStudio } from '@/components/studio/NarrowViewportBanner';
 import { Icon } from '@/components/ui/Icon';
 import { useStudio, useSettings } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
@@ -17,6 +18,7 @@ import { UNIT_OPTIONS } from '@/lib/units';
 
 export default function PlanPage() {
   const dimUnit = useSettings((s) => s.dimUnit);
+  const phone = usePhoneStudio();
   const { roomId } = useParams<{ roomId: string }>();
   // Only the setter is read — the name is written into the export filename from
   // the ref below, not rendered, so the value binding was dead.
@@ -129,7 +131,9 @@ export default function PlanPage() {
 
       <CanvasView>
         <UndoRedo />
-        <ChromeDivider />
+        {/* The zoom box is not on a phone (pinch is), so neither is the rule
+            that separated it from undo/redo — alone, it drew a stray line. */}
+        {!phone && <ChromeDivider />}
         <PlanViewControls api={planApi} zoom={view.zoom} rot={view.rot} dimUnit={dimUnit} unitName={unitName.toLowerCase()} />
       </CanvasView>
 

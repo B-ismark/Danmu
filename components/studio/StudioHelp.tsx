@@ -22,7 +22,8 @@ import { useStudio } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
 import { HelpCard, HelpGroup, HelpLine, Kb } from './HelpCard';
 import { isTypingOrDialog } from './KeyboardShortcuts';
-import { useStudioLayout } from './NarrowViewportBanner';
+import { usePhoneStudio, useStudioLayout } from './NarrowViewportBanner';
+import { useMediaQuery } from '@/lib/use-media-query';
 
 type CoachId = 'drag' | 'wall';
 
@@ -57,6 +58,7 @@ export function StudioHelp({
 } = {}) {
   const pathname = usePathname();
   const onModel = pathname?.endsWith('/model') ?? false;
+  const touch = useMediaQuery('(pointer: coarse)');
 
   const dragging = useStudio((s) => s.draggingId);
   const selectedWall = useStudio((s) => s.selectedWall);
@@ -205,7 +207,12 @@ export function StudioHelp({
               btnRef.current?.focus();
             }}
           >
-            {onModel ? <ModelHelp /> : <PlanHelp />}
+            {/* A touch screen gets the card for its hands. The desktop cards teach
+                right-click, Alt-click, Shift-click and a row of keys, and none of
+                those exist under a finger — on a phone this card was a list of
+                things you cannot do. The verb follows the POINTER, not the width:
+                a tablet is a touch screen at a laptop's width. */}
+            {touch ? onModel ? <ModelTouchHelp /> : <PlanTouchHelp /> : onModel ? <ModelHelp /> : <PlanHelp />}
           </HelpCard>
         </div>
       )}
@@ -302,17 +309,90 @@ function ModelHelp() {
 // always picks the same answer is a second thing to keep true for nothing.
 function TwoLists() {
   const { layout } = useStudioLayout();
+  const phone = usePhoneStudio();
+  const touch = useMediaQuery('(pointer: coarse)');
+  // Three shells, three places. A phone has no Library card on the canvas at all:
+  // both lists are sheets, opened from the toolbar.
+  const catalogAt = phone
+    ? 'under Room in the toolbar'
+    : layout === 'stacked'
+      ? 'on the Room tab of the panel beside the room'
+      : 'in the left rail';
+  const libraryAt = phone ? 'under Add' : 'on the right of the canvas';
   return (
     <HelpGroup title="The two lists">
       <HelpLine>
-        <b>Catalog</b>, {layout === 'stacked' ? 'on the Room tab of the panel at the bottom' : 'in the left rail'}, is what
-        is in this room; <b>Library</b>, on the right of the canvas, is what you can add.
+        <b>Catalog</b>, {catalogAt}, is what is in this room; <b>Library</b>, {libraryAt}, is what you can add.
       </HelpLine>
-      <HelpLine>
-        In either list, <Kb>Shift</Kb>-click picks a run of rows at once, and <Kb>Ctrl</Kb>-click adds that
-        piece to the room.
-      </HelpLine>
+      {touch ? (
+        <HelpLine>Tap a piece in the Library to drop it into the first clear spot.</HelpLine>
+      ) : (
+        <HelpLine>
+          In either list, <Kb>Shift</Kb>-click picks a run of rows at once, and <Kb>Ctrl</Kb>-click adds that
+          piece to the room.
+        </HelpLine>
+      )}
     </HelpGroup>
+  );
+}
+
+// The two touch cards. Every line is a gesture this app actually answers under a
+// finger, and each was checked against the code that answers it rather than
+// assumed from the desktop card: one finger orbits and two pinch and pan in 3D
+// (drei's OrbitControls, whose touch defaults `CameraRig` does not override); one
+// finger pans and two pinch on the plan (`PlanView`'s own touch branch); a piece
+// drags under a finger on both. What has no touch form — multi-select, the
+// context menu, Alt-click's list, the keys — is left out rather than translated
+// into a gesture that does nothing.
+function ModelTouchHelp() {
+  const phone = usePhoneStudio();
+  return (
+    <>
+      <HelpGroup title="Moving furniture">
+        <HelpLine>Drag a piece to slide it around the floor. It stops against whatever is in the way.</HelpLine>
+        <HelpLine>
+          <b>Move</b>, <b>Scale</b> and <b>Rotate</b> at the top choose what dragging does.
+        </HelpLine>
+        <HelpLine>
+          Tap a piece to choose it, then {phone ? 'tap its name in the toolbar' : 'open Details'} for its colour,
+          style and size.
+        </HelpLine>
+      </HelpGroup>
+
+      <TwoLists />
+
+      <HelpGroup title="Walls and the room">
+        <HelpLine>Tap a wall to pick a colour for it. Drag it to make the room bigger or smaller.</HelpLine>
+      </HelpGroup>
+
+      <HelpGroup title="Getting around">
+        <HelpLine>One finger on empty space turns the view. Two fingers pinch to zoom and slide it across.</HelpLine>
+        <HelpLine>The four buttons in the corner jump to a set view: from above, the front wall, the corner.</HelpLine>
+        {phone && <HelpLine>Snap, and the exports, are under More (⋯) at the top.</HelpLine>}
+      </HelpGroup>
+    </>
+  );
+}
+
+function PlanTouchHelp() {
+  const phone = usePhoneStudio();
+  return (
+    <>
+      <HelpGroup title="Moving furniture">
+        <HelpLine>
+          Drag a piece to move it. It stops against whatever is in the way, and tints red if it cannot go there.
+        </HelpLine>
+        <HelpLine>Drag the handle on a chosen piece to turn it.</HelpLine>
+        <HelpLine>Tap a wall to paint it, or drag it to make the room bigger or smaller.</HelpLine>
+      </HelpGroup>
+
+      <TwoLists />
+
+      <HelpGroup title="Getting around">
+        <HelpLine>One finger on empty floor slides the drawing. Two fingers pinch to zoom.</HelpLine>
+        {phone && <HelpLine>Snap, and the exports, are under More (⋯) at the top.</HelpLine>}
+      </HelpGroup>
+    </>
   );
 }
 

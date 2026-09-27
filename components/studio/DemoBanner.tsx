@@ -20,11 +20,14 @@ import { roomStore } from '@/lib/storage';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { usePhoneStudio } from './NarrowViewportBanner';
+import { useMediaQuery } from '@/lib/use-media-query';
 
 export function DemoBanner() {
   const { roomId } = useParams<{ roomId: string }>();
   const [demo, setDemo] = useState(false);
   const phone = usePhoneStudio();
+  // The verb follows the pointer, not the width: a tablet is a touch screen too.
+  const touch = useMediaQuery('(pointer: coarse)');
   // Start hidden until storage is checked, so a previously-dismissed banner
   // never flashes on mount.
   const [dismissed, setDismissed] = useState(true);
@@ -93,7 +96,7 @@ export function DemoBanner() {
             because the full one was four lines of a 360px screen before the room. */}
         {phone
           ? 'Drag a piece to move it, tap a wall to paint it.'
-          : 'This room is yours to rearrange — drag a piece to move it, click a wall to paint it.'}{' '}
+          : `This room is yours to rearrange — drag a piece to move it, ${touch ? 'tap' : 'click'} a wall to paint it.`}{' '}
         <Link
           href="/onboarding/capture"
           style={{

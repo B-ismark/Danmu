@@ -2,10 +2,13 @@
 
 import { useHistory, applySnapshot } from '@/lib/history';
 import { IconButton } from '@/components/ui/primitives';
+import { usePhoneStudio } from './NarrowViewportBanner';
 
 export function UndoRedo() {
   const canUndo = useHistory((s) => s.past.length >= 2);
   const canRedo = useHistory((s) => s.future.length > 0);
+  // Level with the mode buttons beside it, which grow to 40 on a phone.
+  const size = usePhoneStudio() ? 40 : 28;
 
   return (
     <div className="toolbar" role="group" aria-label="Edit history">
@@ -18,7 +21,7 @@ export function UndoRedo() {
           if (snap) applySnapshot(snap);
         }}
         disabled={!canUndo}
-        size={28}
+        size={size}
         iconSize={12}
         style={{ borderRight: '1px solid var(--hairline-strong)' }}
       />
@@ -31,7 +34,7 @@ export function UndoRedo() {
           if (snap) applySnapshot(snap);
         }}
         disabled={!canRedo}
-        size={28}
+        size={size}
         iconSize={12}
       />
     </div>

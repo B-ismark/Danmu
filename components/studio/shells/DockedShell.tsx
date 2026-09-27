@@ -1,6 +1,10 @@
 'use client';
 
-// Rails beside the room — the one shell both studio tabs stand in.
+// Rails beside the room — the shell both studio tabs stand in from 1024px up.
+// Below that the studio is `SheetShell`: one docked panel on a tablet, a toolbar
+// and a sheet on a phone. That is a different layout, not this one made smaller,
+// and why is written at the top of that file and in `Design.md` § Phones and
+// tablets.
 //
 // Docked, not floating. That was an open question for one round: three shells
 // were built and compared here, in the real studio over a real room, because the

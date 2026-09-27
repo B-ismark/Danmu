@@ -258,6 +258,11 @@
   /* The phone's sheet at its tallest stops this short of the top, so a strip of
      room always shows: the sheet is over the room, not instead of it. */
   --sheet-top-gap: 56px;
+  /* …and at its middle detent it takes this share of the room: HIG's "medium",
+     about half, with the piece you are recolouring still in view above it. Read by
+     the drag too (`lib/sheet-detents.ts`), so a released sheet settles on the same
+     height the stylesheet draws. */
+  --sheet-half: 55%;
 }
 
 html, body {
@@ -1067,16 +1072,25 @@ textarea.field { border-radius: var(--r-2); }
   background: var(--paper); border-bottom: 1px solid var(--hairline);
 }
 .app-bar__btn { width: 44px; height: 44px; flex-shrink: 0; color: var(--ink-2); }
-.app-bar .editable { padding: 0 6px; }
+.app-bar .editable { padding: 0 6px; min-height: 44px; }
 
 /* The More menu: rows a thumb can hit — 48px, Material's target — under the bar's
    trailing edge, never wider than the screen. */
+/* The help card scrolls past this. On a laptop 420px sits beside the room; on a
+   phone the card hangs from the app bar over a room nobody is using while they
+   read, so it may reach down to just above the toolbar and show its whole touch
+   card rather than stop mid-sentence at 420. */
+.help-card { max-height: min(420px, 60vh); }
+@media (max-width: 599px) {
+  .help-card { max-height: calc(100dvh - 160px); }
+}
 .more-menu {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: var(--z-popover);
   width: min(300px, calc(100vw - 24px));
   padding: 6px; display: flex; flex-direction: column; gap: 2px;
 }
 .more-menu__heading { padding: 10px 10px 4px; }
+.more-menu__field { display: grid; gap: 6px; padding: 2px 10px 8px; }
 .menu-row {
   display: flex; align-items: center; gap: 12px; min-height: 48px; width: 100%;
   padding: 8px 10px; text-align: left;
@@ -1154,7 +1168,7 @@ textarea.field { border-radius: var(--r-2); }
 
 .sheet {
   position: absolute; left: 0; right: 0; bottom: 0;
-  height: 55%;
+  height: var(--sheet-half);
   display: flex; flex-direction: column;
   background: var(--paper);
   border-top: 1px solid var(--hairline);
@@ -1182,11 +1196,13 @@ textarea.field { border-radius: var(--r-2); }
   /* The head is the drag surface: the browser must not scroll the page with it. */
   touch-action: none; user-select: none;
 }
-/* The grabber: a 36×4 bar in a 48px-wide hit box across the top edge. */
+/* The grabber: a 36×4 bar drawn near the top edge, in a 64 × 44 hit box that
+   reaches down into the head (Material's handle has a 48dp touch area; a 20px strip
+   was a target only a mouse could find). */
 .sheet__handle {
   position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-  width: 64px; height: 20px; padding: 0;
-  display: grid; place-items: center;
+  width: 64px; height: 44px; padding: 8px 0 0;
+  display: grid; place-items: start center;
   background: none; border: 0; border-radius: var(--r-1); cursor: grab;
 }
 .sheet__handle > span { width: 36px; height: 4px; border-radius: 999px; background: var(--hairline-strong); }
@@ -1194,8 +1210,24 @@ textarea.field { border-radius: var(--r-2); }
   flex: 1 1 auto; min-width: 0;
   font-family: var(--font-sans); font-size: var(--fs-lead); font-weight: 700; color: var(--ink);
 }
-/* Under a finger the Library's rows are 44px, not a mouse's 32. */
-.catalog-touch .ds-btn--sm { height: auto; min-height: 44px; }
+/* A touch screen types a number on its number pad; the stepper's 16px chevrons are
+   a mouse's affordance. `min-height` rather than `height`, because the field's
+   height is set inline and a minimum still wins over it. */
+.num-field__steps {
+  position: absolute; right: 3px; top: 3px; bottom: 3px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+@media (pointer: coarse) {
+  .num-field__steps { display: none; }
+  .num-field > .field { min-height: 44px; }
+  /* A section's disclosure row is the thing a thumb opens most in a panel. */
+  .rail-section-toggle { min-height: 44px; }
+}
+/* Under a finger the Library's rows are 44px, not a mouse's 32 — and so is every
+   small button in the phone's sheet (Fix, Shuffle, Room checks): the sheet is only
+   ever under a finger. */
+.catalog-touch .ds-btn--sm,
+.sheet .ds-btn--sm { height: auto; min-height: 44px; }
 .sheet__close { width: 44px; height: 44px; flex-shrink: 0; color: var(--ink-2); }
 .sheet__body {
   flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;

@@ -967,6 +967,45 @@ What the sweep cannot tell you, and a person can:
 - **On a phone** the 3D tab's Move / Scale / Rotate read in full, with the W / S / R
   keycaps gone. Wrong looks like "M…".
 
+### Phones get a phone layout, tablets one docked panel — PR #157, SWEPT, needs a real phone and a real tablet
+
+Below 1024px the studio is `SheetShell` (see `Design.md` § Phones and tablets). Under
+600px: a one-row app bar, a toolbar (Room · Add · View, or Room · *piece name* · Done
+with something selected), and one sheet that rises above the toolbar. From 600 to
+1023px: the room with one docked pane and Room · Details tabs. Swept at 360 / 430 / 768 /
+1440: **0 findings**. The drag was also probed in the build: pulled up past the top, the
+sheet settled at full (613px of a 669px stage on a 390 × 844 window). SwiftShader,
+desktop Chromium with a mouse standing in for a finger, which is exactly the part a
+phone has to close.
+
+What only a real phone can tell you:
+- **Safe areas, on an iPhone with a notch or Dynamic Island.** The app bar clears the
+  status bar, and the toolbar's labels clear the home indicator. Wrong looks like
+  "Room" sitting under the home bar, or the back chevron under the clock. Do it in
+  landscape too: the side insets should keep the chevron and the More button off the
+  rounded corners.
+- **Safari's own toolbar collapsing.** Scroll a sheet's contents, then tap the room.
+  The studio's toolbar stays attached to the bottom edge, with no gap under it and no
+  jump when Safari's bar shrinks or grows. This is the iOS 26 fixed-bar report the
+  in-flow toolbar exists to avoid; it is **unverified**, so a jump here means the
+  workaround was the wrong one.
+- **The sheet under a finger.** Drag the grabber up slowly: it follows the finger and
+  settles at nearly full. Flick it down from half: it closes. Tap the grabber: it swaps
+  half ↔ full. Wrong looks like the page scrolling instead of the sheet moving, or the
+  sheet snapping back to where it started.
+- **Scrolling a panel to its end.** With Room open, scroll its list past the bottom. The
+  page must not scroll or bounce behind it.
+- **Pinch and pan in the 2D plan**, now that its zoom box is gone on a phone. Two fingers
+  zoom about the point between them; one finger on empty floor pans. Wrong looks like the
+  browser zooming the whole page.
+- **Add, by tap.** Open Add, tap a piece: it appears in the room at the first clear spot
+  and the sheet stays open for the next one.
+- **More (⋯).** It opens with How this works and the three exports, each row a
+  comfortable thumb target. Tap outside it: it closes.
+- **A tablet, portrait (768 or 820 wide).** The pane sits to the right of the room with
+  Room · Details tabs. Tap a piece: the pane turns to Details. The room keeps most of the
+  width. Wrong looks like the pane squeezing the room under half.
+
 ### The lens tilt read needs a real phone, on BOTH engines — merged to `main` in `17f9d62` (PR #148)
 
 **Where to click.** On an Android phone in Chrome and on an iPhone in Safari: open

@@ -31,6 +31,8 @@
 //             because a dense desktop control reflowed onto a tablet is a design
 //             question rather than a bug.
 //   hscroll   the page itself scrolling sideways.
+//   orphan    a `.chrome-divider` with nothing shown on one side of it — the control it
+//             separated was hidden (the plan's zoom box on a phone) and the rule stayed.
 //   stretched on widths of 768 and up, a control, card or paragraph spread wider than
 //             its content can use: a button more than 240px wide whose label and
 //             icon occupy under half of it, a `.ds-card` over 760px, or a paragraph
@@ -143,13 +145,24 @@ const SCREENS = [
     }],
     ['studio-phone-full', 'model', async (p) => {
       await p.locator('.phone-tool', { hasText: 'View' }).click();
-      await p.waitForTimeout(500);
+      // Wait for the rise to FINISH: a drag that starts mid-transition measures the
+      // head where it was, and a cold SwiftShader page once took long enough that
+      // the gesture missed and the screenshot showed `half` under this key's name.
+      await p.waitForFunction(() => {
+        const s = document.querySelector('.sheet');
+        return s?.dataset.snap === 'half' && s.getAnimations().length === 0;
+      }, null, { timeout: 5000 });
       // A real drag on the head, up past the top: settles at `full`.
       const head = await p.locator('.sheet__head').boundingBox();
       await p.mouse.move(head.x + 30, head.y + 30);
       await p.mouse.down();
       for (let i = 1; i <= 10; i++) await p.mouse.move(head.x + 30, head.y + 30 - i * 60);
       await p.mouse.up();
+      // The state this screenshot is named for is checked, not assumed.
+      const ok = await p
+        .waitForFunction(() => document.querySelector('.sheet')?.dataset.snap === 'full', null, { timeout: 3000 })
+        .then(() => true, () => false);
+      if (!ok) throw new Error('studio-phone-full: a drag to the top did not settle the sheet at full');
     }],
     ['studio-phone-more', 'plan', async (p) => {
       await p.getByRole('button', { name: 'More' }).click();
@@ -309,6 +322,16 @@ async function measure(page) {
         const h = Math.min(r.bottom, s.bottom) - Math.max(r.top, s.top);
         if (w > 4 && h > 4 && w * h > 16) out.push({ kind: 'overlap', what: `${label(a)} × ${label(b)} (${Math.round(w)}×${Math.round(h)})` });
       }
+    // A divider separates two things. One with nothing drawn on one side of it is a
+    // stray line: the thing it divided from was hidden and the rule was left behind.
+    const shown = (el) => el && el.getBoundingClientRect().width > 0 && getComputedStyle(el).visibility !== 'hidden';
+    for (const d of document.querySelectorAll('.chrome-divider')) {
+      if (!shown(d)) continue;
+      let prev = d.previousElementSibling, next = d.nextElementSibling;
+      while (prev && !shown(prev)) prev = prev.previousElementSibling;
+      while (next && !shown(next)) next = next.nextElementSibling;
+      if (!prev || !next) out.push({ kind: 'orphan', what: `divider in ${label(d.parentElement).slice(0, 40)} with nothing ${prev ? 'after' : 'before'} it` });
+    }
     return out;
   });
 }
@@ -330,18 +353,28 @@ const browser = await chromium
   });
   await probe.close();
 }
+const hasTouchAt = (width) => width < 1024;
 const report = {};
 let findings = 0, targets = 0;
 try {
   for (const width of WIDTHS) {
-    const ctx = await browser.newContext({ viewport: { width, height: width < 800 ? 820 : 900 } });
+    // Under 1024px the window is a touch screen: `(pointer: coarse)` matches, so the
+    // sweep sees what a phone or tablet is served (44px fields, no hover-only
+    // actions, the "Tap…" copy), not a laptop's rules at a phone's width.
+    const ctx = await browser.newContext({ viewport: { width, height: width < 800 ? 820 : 900 }, hasTouch: hasTouchAt(width) });
     const page = await ctx.newPage();
+    // Chromium drops touch emulation after a screenshot — `(pointer: coarse)` read
+    // true on the first screen of a width and false on every one after it, so the
+    // phone widths were being swept as a laptop's rules. Re-asserted per screen.
+    const cdp = hasTouchAt(width) ? await ctx.newCDPSession(page) : null;
+    const touch = () => cdp?.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     page.on('pageerror', (e) => console.log(`  [pageerror ${width}]`, e.message));
     const id = `sweep-${width}`;
     await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await seed(page, [room(id, LONG_NAME), room(`${id}-b`, 'Study')]);
     for (const s of SCREENS) {
       if (ONLY && !s.key.startsWith(ONLY)) continue;
+      await touch();
       if ((await s.go(page, id)) === 'skip') continue;
       await page.waitForLoadState('networkidle').catch(() => {});
       await page.waitForTimeout(s.studio ? 2500 : 700);

@@ -46,29 +46,10 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 import { LibraryBody } from '../CatalogPanel';
 import { usePhoneStudio } from '../NarrowViewportBanner';
 import { LeftRailBody, RightRailBody } from './shell-parts';
+import { cycleSheet, settleSheet, sheetHeights, TAP_PX, type SheetSnap } from '@/lib/sheet-detents';
 
-export type SheetSnap = 'closed' | 'half' | 'full';
 type Panel = 'room' | 'add' | 'details';
 
-/** A drag shorter than this is a tap on the grabber, not a resize. */
-const TAP_PX = 6;
-/** Released faster than this (px/ms) is a flick, and carries one detent further. */
-const FLICK = 0.5;
-
-/** Where a released drag settles: the nearest resting height, with a flick carrying
- *  one step further in its direction. Pure, so the rule is testable without a
- *  pointer. `heights` are the three resting heights in px, `closed, half, full`.
- *  A positive `velocityPxPerMs` means rising. */
-export function settleSheet(heightPx: number, velocityPxPerMs: number, heights: [number, number, number]): SheetSnap {
-  const order: SheetSnap[] = ['closed', 'half', 'full'];
-  let nearest = 0;
-  for (let i = 1; i < 3; i++) if (Math.abs(heights[i] - heightPx) < Math.abs(heights[nearest] - heightPx)) nearest = i;
-  if (velocityPxPerMs > FLICK && heightPx > heights[nearest]) nearest = Math.min(2, nearest + 1);
-  if (velocityPxPerMs < -FLICK && heightPx < heights[nearest]) nearest = Math.max(0, nearest - 1);
-  return order[nearest];
-}
-
-/** What the selection is called, for a tab or a toolbar button. */
 function useSelectionName(): { selected: boolean; name: string | null } {
   const selectedPartId = useStudio((s) => s.selectedPartId);
   const selectionCount = useStudio((s) => s.selection.length);
@@ -221,11 +202,12 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
   });
 
   const restingHeights = (): [number, number, number] => {
-    const shell = sheetRef.current?.parentElement;
-    if (!shell) return [0, 0, 0];
-    const gap = parseFloat(getComputedStyle(shell).getPropertyValue('--sheet-top-gap')) || 0;
-    const total = shell.clientHeight;
-    return [0, total * 0.55, total - gap];
+    const stage = sheetRef.current?.parentElement;
+    if (!stage) return [0, 0, 0];
+    const css = getComputedStyle(stage);
+    const half = (parseFloat(css.getPropertyValue('--sheet-half')) || 0) / 100;
+    const gap = parseFloat(css.getPropertyValue('--sheet-top-gap')) || 0;
+    return sheetHeights(stage.clientHeight, half, gap);
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -259,7 +241,7 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
     if (!d.moved) {
       // A tap on the grabber cycles the detents (HIG); a tap elsewhere on the
       // header is nothing.
-      if ((e.target as HTMLElement).closest('.sheet__handle')) setSnap(snap === 'full' ? 'half' : 'full');
+      if ((e.target as HTMLElement).closest('.sheet__handle')) setSnap(cycleSheet(snap));
       return;
     }
     const velocity = -(e.clientY - d.lastY) / Math.max(1, performance.now() - d.lastT);
@@ -312,7 +294,7 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
             // The head's pointer handlers turn a tap into a cycle; a click here is
             // the keyboard's Enter / Space, which has no pointer.
             onClick={(e) => {
-              if (e.detail === 0) setSnap(snap === 'full' ? 'half' : 'full');
+              if (e.detail === 0) setSnap(cycleSheet(snap));
             }}
           >
             <span aria-hidden="true" />

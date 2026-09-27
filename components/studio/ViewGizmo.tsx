@@ -15,6 +15,7 @@
 
 import type { ReactNode } from 'react';
 import { useStudio } from '@/lib/store';
+import { usePhoneStudio } from './NarrowViewportBanner';
 
 type Preset = 'front' | 'top' | 'iso' | 'free';
 
@@ -67,6 +68,9 @@ const CELLS: Array<{ value: Preset; label: string; glyph: ReactNode }> = [
 export function ViewGizmo() {
   const view = useStudio((s) => s.viewPreset);
   const setView = useStudio((s) => s.setView);
+  // 40px cells under a thumb: the 2×2 stays a small square in the corner, and each
+  // view is a target a finger can hit without landing on its neighbour.
+  const cell = usePhoneStudio() ? 40 : 28;
 
   return (
     <div
@@ -74,7 +78,7 @@ export function ViewGizmo() {
       aria-label="Camera"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(2, 28px)',
+        gridTemplateColumns: `repeat(2, ${cell}px)`,
         gap: 2,
         padding: 3,
         background: 'var(--paper)',
@@ -94,8 +98,8 @@ export function ViewGizmo() {
             aria-label={c.label}
             title={c.label}
             style={{
-              width: 28,
-              height: 28,
+              width: cell,
+              height: cell,
               display: 'grid',
               placeItems: 'center',
               cursor: 'pointer',

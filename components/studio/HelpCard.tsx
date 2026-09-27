@@ -19,7 +19,7 @@ import { IconButton } from '@/components/ui/primitives';
 export function HelpCard({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <div
-      className="ds-card"
+      className="ds-card help-card"
       role="note"
       // Making the card a tab stop makes it something a keyboard user LANDS on, and a
       // landing place with no accessible name is announced as "note" and nothing else.
@@ -36,7 +36,7 @@ export function HelpCard({ title, onClose, children }: { title: string; onClose:
       style={{
         padding: 0,
         boxShadow: 'var(--shadow-lift)',
-        maxHeight: 'min(420px, 60vh)',
+        // Height in globals.css (`.help-card`), because a phone gives it more.
         overflow: 'auto',
         // Capped against the window as well as stated: this card is placed by
         // whoever renders it, and none of those slots can promise it 320px.

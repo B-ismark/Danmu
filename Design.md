@@ -1817,6 +1817,88 @@ non-negotiable 6 forbids reinstating the carpenter spec — a parts list minus t
 prices is what that was. The Room panel's on-screen list and its plain-text **Copy**
 are what serve "communicate a plan", and they stay.
 
+### Phones and tablets — branch, don't scale
+
+Below 1024px the studio is **not the laptop layout made smaller**. Flutter's adaptive
+guidance names the mistake exactly: *branch on the window size, don't scale*. Every
+choice below is taken from a platform's published guidance rather than invented here,
+and `components/studio/shells/SheetShell.tsx` carries the same list at its head.
+
+| Window | Shape | Source |
+|---|---|---|
+| 1024px and up | `DockedShell`: two rails beside the room | — |
+| 600–1023px | **One docked pane** beside the room, with **Room · Details** tabs; selecting a piece turns to Details | Material's *supporting pane* canonical layout, at the medium and expanded window classes |
+| under 600px | **The room full-screen**, a one-row app bar, a toolbar under the thumb, and **one nonmodal sheet** that rises from the toolbar | HIG § Sheets, § Toolbars; Material 3 bottom sheets and the Expressive docked toolbar |
+
+The breakpoints are Material's window size classes (compact under 600, medium
+600–839, expanded 840+), not numbers picked to fit one phone. `usePhoneStudio()` and
+`useStudioLayout()` in `NarrowViewportBanner.tsx` are the only two questions anything
+asks about width.
+
+**The phone, piece by piece.**
+
+- **App bar: one row.** Back (which is also the way to another room), the room name,
+  the 3D · 2D switch, and **More** (⋯) for help and export. Apple's compact navigation
+  bar and Material's small top app bar are both one row. The laptop's bar wrapped to
+  three rows. No wordmark on this bar: the HIG says not to title a screen with the
+  app's name, and on a phone that name was costing the room's.
+- **A toolbar, not a tab bar.** Apple: *use a tab bar to support navigation, not to
+  provide actions.* Room, Add and View are things you do to this room, so they are
+  toolbar items. Material 3 Expressive retired the bottom app bar for the same docked
+  toolbar.
+- **One primary action, and it is Add.** Apple: specify one primary action. Material:
+  one FAB, for the primary or most common action.
+- **The toolbar changes with the selection.** Tap a sofa and it offers the sofa (its
+  name opens Details) and **Done**. Canva and IKEA Kreativ do this on a phone: the
+  tools for the thing you touched, under the thumb that touched it.
+- **Selecting does not open the sheet.** On a phone, a tap on a piece is also how you
+  start dragging it. A sheet that rose on every tap would cover the room exactly when
+  the room is in use.
+- **The sheet is nonmodal** (HIG: people *affect the parent view without dismissing
+  the sheet*), so you can recolour a piece and watch it change. It has two detents, about
+  half (`--sheet-half`) and nearly full (`--sheet-top-gap` short of the top, so some
+  room always shows). A grabber cycles the two when tapped (HIG), and there is a
+  **visible close button** beside it, because NN/g's testing found a grab handle alone
+  *easy to ignore*. The sheet rises from the toolbar's top edge, not the screen's, so
+  switching Room ↔ Add ↔ View never means closing first. **One sheet at a time**:
+  panels replace each other and never stack (NN/g, HIG). Where a released drag
+  settles is `lib/sheet-detents.ts`, which reads the same two tokens the stylesheet
+  draws.
+- **Targets.** Toolbar items are 56px tall, past Apple's 44pt and Material's 48dp,
+  because the bottom edge is where Hoober measured touches landing least accurately.
+  They stop at 128px wide, so three items never become three slabs.
+- **Gestures replace chrome.** The plan's zoom, rotate and fit box is gone on a phone,
+  because pinch zooms and a finger pans. The Library's copy says *tap*, and a tapped
+  piece drops into the first clear spot, because there is no cursor to drag from.
+
+**The web half of it**, where the platform guidance stops:
+
+- `viewport-fit=cover` plus `env(safe-area-inset-*)` on `body` and on the toolbar's
+  bottom padding (WebKit, *Designing websites for iPhone X*).
+- `100dvh` for the studio's height (web.dev, *viewport units*), minus the top inset.
+- **Bars in flow, never `position: fixed`.** The toolbar is a grid row. Fixed bottom
+  bars are what iOS Safari's collapsing toolbar is reported to misplace (iOS 26).
+  That report is **unverified here** and the workaround costs nothing, so it holds
+  until a real phone says otherwise (`docs/visual-check.md`).
+- `overscroll-behavior: contain` on the sheet body, so scrolling a panel to its end
+  does not scroll the page. `touch-action: none` on the sheet's head, so a drag
+  resizes the sheet rather than scrolling it.
+
+Sources: Apple HIG,
+[Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets),
+[Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars) and
+[Tab bars](https://developer.apple.com/design/human-interface-guidelines/tab-bars);
+Android,
+[window size classes](https://developer.android.com/develop/ui/compose/layouts/adaptive/use-window-size-classes)
+and [canonical layouts](https://developer.android.com/develop/ui/compose/layouts/adaptive/canonical-layouts);
+Material 3 Expressive,
+[docked and floating toolbars](https://github.com/material-components/material-components-android/blob/master/docs/components/DockedFloatingToolbars.md);
+Flutter, [adaptive and responsive design](https://docs.flutter.dev/ui/adaptive-responsive/general);
+NN/g, [Bottom sheets](https://www.nngroup.com/articles/bottom-sheet/);
+WebKit, [Designing websites for iPhone X](https://webkit.org/blog/7929/designing-websites-for-iphone-x/);
+Baymard, [line length](https://baymard.com/blog/line-length-readability) (the 70ch measure
+in *Nothing spreads wide*).
+
 ### Other studio tools
 - **"Will it fit?"** (`lib/fit-check.ts`, the `Will it fit` tab in `RoomTools.tsx`).
   The gap between "I like this layout" and `PRODUCT.md`'s *confidence to commit* is one
@@ -2449,7 +2531,7 @@ precedents to pick from. There are now two shells and two deliberate exceptions.
 
 | Shell | Owns | Used by |
 |---|---|---|
-| `components/studio/StudioShell.tsx` | The `--rail-left 1fr --rail-right` grid, the stacked fallback below ~1024px, both rails, the `ready` paint gate | `/room/[id]/model` · `/room/[id]/plan` |
+| `components/studio/StudioShell.tsx` | Picks the layout for the window: `DockedShell`'s two rails from 1024px, `SheetShell` below (one docked pane on a tablet, toolbar + sheet on a phone), plus the `ready` paint gate | `/room/[id]/model` · `/room/[id]/plan` |
 | `components/ui/DocShell.tsx` | The `.chrome-bar`, the mark (always a link), the breadcrumb, the content measure, and the `hero` wash | `/workspace` · `/settings` · `/onboarding/layout-pick` |
 
 **`.chrome-bar` is the app's one bar**, in two sizes — the 56px default and the
