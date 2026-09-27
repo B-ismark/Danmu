@@ -171,9 +171,21 @@ type InstancedProps = {
   items: InstanceItem[];
   /** shared albedo. Pass '#ffffff' when items carry their own colour. */
   color: string;
-  /** extra material props — normally a SURFACE preset from ./materials. */
-  surface?: Omit<ThreeElements['meshStandardMaterial'], 'color'>;
+  /** extra material props — normally a SURFACE preset from ./materials. A preset
+   *  carrying `sheen` (cloth) gets `meshPhysicalMaterial`, which is the only one of
+   *  the two that implements it: the curtains were handed `SURFACE.fabric` on a
+   *  standard material for as long as they existed, and three dropped the sheen
+   *  without a word — the most visible cloth in a room, drawn as painted card. */
+  surface?: Omit<ThreeElements['meshPhysicalMaterial'], 'color'>;
 };
+
+function InstanceMaterial({ surface, ...base }: Omit<ThreeElements['meshPhysicalMaterial'], 'surface'> & { surface?: InstancedProps['surface'] }) {
+  return surface && 'sheen' in surface ? (
+    <meshPhysicalMaterial {...base} {...surface} />
+  ) : (
+    <meshStandardMaterial {...(base as ThreeElements['meshStandardMaterial'])} {...(surface as ThreeElements['meshStandardMaterial'])} />
+  );
+}
 
 /** One draw call for N boxes — book spines, radiator fins, rack slats. */
 export function BoxInstances({ items, color, surface }: InstancedProps) {
@@ -182,7 +194,7 @@ export function BoxInstances({ items, color, surface }: InstancedProps) {
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color={color} roughness={0.8} envMapIntensity={0.5} {...surface} />
+      <InstanceMaterial color={color} roughness={0.8} envMapIntensity={0.5} surface={surface} />
     </instancedMesh>
   );
 }
@@ -194,7 +206,7 @@ export function PlaneInstances({ items, color, surface }: InstancedProps) {
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
       <planeGeometry args={[1, 1]} />
-      <meshStandardMaterial color={color} side={DoubleSide} envMapIntensity={0.5} {...surface} />
+      <InstanceMaterial color={color} side={DoubleSide} envMapIntensity={0.5} surface={surface} />
     </instancedMesh>
   );
 }

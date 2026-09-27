@@ -1642,6 +1642,27 @@ both near walls' windows and curtains gone in the default view, back after a ~18
 and a click through the vanished window selected the sofa. Shadow stability while orbiting
 was not measured — it is the half that wants eyes.
 
+### High has a bounce light now, and the furniture has real surfaces — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** The starter living room on **High**, every mood; then a bedroom and a
+room with its windows deleted. Zoom in on a wardrobe, a bed and a lamp.
+
+**What wrong looks like.** High washed out or flat in Day or Sunset (the bounce is an
+ambient term — too much and the sun's patch stops reading); a windowless room as bright
+as one with windows (it should be dimmer: `lib/bounce.ts` gives it nothing); Evening no
+longer dim; wood grain reading as stripes or noise on a painted wardrobe (casework takes
+`SURFACE.wood`'s normal map whatever its colour); a lamp shade glowing so hard it clips
+white, or not glowing at all with the lamp on.
+
+**What was measured, and on what.** SwiftShader, 1280 × 800, starter living room, Day:
+mean interior grey 110 on High before, 145 after, 152 on Fast. Evening before/after
+compared by eye — the shade glows, the room stays dim. Grain and sheen were **not visible
+at all** on SwiftShader at this camera distance, before or after, so whether they read on
+a real GPU is entirely unlooked-at.
+
+**Noticed, not fixed.** The sofa's fabric weave aliases into a moiré at room distance on
+both builds — the normal map wants mipmapping or a distance fade.
+
 ## The browser route, so the next person does not rebuild it
 
 Looking is a half-hour of setup nobody has to hand, which is the actual reason items sit

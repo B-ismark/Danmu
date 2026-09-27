@@ -83,3 +83,16 @@ export function hexFromKelvin(kelvin: number): string {
     .join('');
   return `#${hex}`;
 }
+
+/** How brightly a lit fabric shade glows, as an `emissiveIntensity`.
+ *
+ *  A shade is translucent: the bulb inside makes the cloth itself luminous, and
+ *  that glow — not the pool of light on the floor — is what tells you at a glance
+ *  that a lamp is on. The shades had none, so a lamp in Evening lit the sofa
+ *  beside it from a dark cone. Linear in flux, anchored so a 60 W-equivalent
+ *  (800 lm) bulb reads 0.45, and capped at 0.9 so a user who types 5000 lm gets a
+ *  bright shade rather than a white hole in the picture. */
+export function shadeGlow(lumens: number): number {
+  if (!(lumens > 0)) return 0;
+  return Math.min(0.9, (lumens / 800) * 0.45);
+}

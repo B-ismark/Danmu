@@ -1604,6 +1604,17 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
 - **Quality** High / Fast — gates procedural normal/roughness maps
   (`lib/textures.ts`, zero assets) + soft cast shadows + ambient occlusion
   (N8AO/SMAA mount on `high` only). There is no floor reflection.
+  High also adds a **bounce** term (`lib/bounce.ts`): the closed shell lets the key
+  light in only through the windows, and a shadow-mapped rasteriser computes no
+  interreflection, so an ambient light in the key's colour stands in for it, sized
+  by glazing-to-floor area. A windowless room gets none. Fast gets none either — its
+  key already passes through the ceiling.
+- **Surfaces** are named on `Box` (`surface="wood" | "fabric" | "metal" | …`,
+  `components/three/materials.ts`); casework takes the wood grain, upholstery,
+  bedding and shades the cloth sheen. Sheen needs `meshPhysicalMaterial`, and three
+  drops it silently on a standard one — `tests/sheen-material.test.ts` holds the
+  hand-written materials to that. Lamp shades glow with the bulb inside them
+  (`shadeGlow` in `lib/light-units.ts`).
 - **Ground shadows** (`GroundShadows` in `Room.tsx`) are a drei `ContactShadows`
   bake, not a per-frame render — the scene is drawn into a depth target and
   blurred, which is far too expensive to repeat at 60fps for a room that is

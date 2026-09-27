@@ -18,6 +18,7 @@ import { footprintBounds } from '@/lib/footprint';
 import { daylightKelvin } from '@/lib/solar';
 import { LIGHTING, moodSunDirection, KEY_DIR, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
 import { shadowFit } from '@/lib/shadow-fit';
+import { bounceIntensity, glazingArea } from '@/lib/bounce';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { snapshotFileName } from '@/lib/exports';
@@ -133,6 +134,14 @@ export function Room() {
       intensity: 0.25 + 1.35 * Math.sin((elevationDeg * Math.PI) / 180),
     };
   }, [L.sun, lighting, bearingDeg]);
+  // The light the room throws back, on the quality where the shell is closed —
+  // see lib/bounce.ts. Resolved parts, so a window stretched in the Inspector is
+  // measured at the size it is drawn.
+  const resolved = useRoomScene();
+  const footprint = useScene((s) => s.room.footprint);
+  const key = L.sun ? sun : L.key;
+  const glazing = useMemo(() => glazingArea(resolved), [resolved]);
+  const bounce = hi && key ? bounceIntensity(key.intensity, glazing, footprint) : 0;
   // Drop the upper DPR bound when FPS regresses (large scenes / weak GPUs);
   // AdaptiveDpr cuts further while interacting. Keeps AO affordable.
   const [dprMax, setDprMax] = useState(2);
@@ -317,6 +326,9 @@ export function Room() {
         <KeyLight intensity={L.key.intensity} color={L.key.color} cast={hi} />
       )}
       <directionalLight position={[-4, 3, -5]} intensity={L.fill.intensity} color={L.fill.color} />
+      {/* Interreflection, which a shadow-mapped rasteriser does not compute: soft,
+          shadowless, the key's own colour, sized by the glass it came through. */}
+      {bounce > 0 && key && <ambientLight intensity={bounce} color={key.color} />}
 
       {/* Offline studio environment built from emissive panels — gives metals
           something to reflect and adds soft specular gloss to all standard
