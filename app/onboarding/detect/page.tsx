@@ -866,7 +866,7 @@ export default function DetectPage() {
           />
         </div>
         <div className="chrome-bar__spacer" />
-        <span role="status" aria-live="polite" style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)' }}>
+        <span role="status" aria-live="polite" className="t-body">
           {statusText}
         </span>
         {/* The way out of onboarding is the loudest thing here — it used to be a
@@ -885,15 +885,14 @@ export default function DetectPage() {
         />
         {privacyLine && (
           <p
+            className="t-small"
             style={{
               display: 'flex',
               alignItems: 'flex-start',
               gap: 8,
               margin: 0,
               maxWidth: '68ch',
-              fontSize: 'var(--fs-small)',
               lineHeight: 1.5,
-              color: 'var(--ink-2)',
               background: 'var(--paper-2)',
               border: '1px solid var(--hairline)',
               borderRadius: 'var(--r-2)',
@@ -909,7 +908,7 @@ export default function DetectPage() {
       {notice && (
         <NoticeCard notice={notice} onDismiss={notice.tone === 'calm' ? () => setNotice(null) : undefined}>
           {notice.capture && (
-            <Link href="/onboarding/capture" className="ds-btn" style={{ height: 34, fontSize: 'var(--fs-small)' }}>
+            <Link href="/onboarding/capture" className="ds-btn ds-btn--sm">
               <Icon name="camera" size={13} />
               Take wall photos
             </Link>
@@ -924,8 +923,7 @@ export default function DetectPage() {
                 setLinked(null);
                 void runRef.current?.();
               }}
-              className="ds-btn"
-              style={{ height: 34, fontSize: 'var(--fs-small)' }}
+              className="ds-btn ds-btn--sm"
             >
               <Icon name="refresh" size={12} />
               Look again
@@ -941,21 +939,20 @@ export default function DetectPage() {
                 if (runRef.current) void runRef.current();
                 else location.reload();
               }}
-              className="ds-btn"
-              style={{ height: 34, fontSize: 'var(--fs-small)' }}
+              className="ds-btn ds-btn--sm"
             >
               <Icon name="refresh" size={12} />
               Try again
             </button>
           )}
           {notice.settings && (
-            <Link href="/settings" className="ds-btn" style={{ height: 34, fontSize: 'var(--fs-small)' }}>
+            <Link href="/settings" className="ds-btn ds-btn--sm">
               <Icon name="key" size={12} />
               Set up a key in Settings
             </Link>
           )}
           {notice.capture && (
-            <button onClick={goStudio} className="ds-btn" style={{ height: 34, fontSize: 'var(--fs-small)' }}>
+            <button onClick={goStudio} className="ds-btn ds-btn--sm">
               Skip to the studio
               <Icon name="arrow-right" size={12} />
             </button>
@@ -984,7 +981,6 @@ export default function DetectPage() {
                     className="ds-btn"
                     style={{
                       flex: '1 1 130px',
-                      height: 36,
                       justifyContent: 'space-between',
                       fontSize: 'var(--fs-small)',
                       background: sel ? 'var(--ink)' : 'var(--paper)',
@@ -992,7 +988,7 @@ export default function DetectPage() {
                       borderColor: sel ? 'var(--ink)' : 'var(--edge)',
                     }}
                   >
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span className="truncate">
                       {slotLabel(s.slot)}
                     </span>
                     {count > 0 && (
@@ -1059,7 +1055,7 @@ export default function DetectPage() {
                 )}
               </div>
             ) : (
-              <div style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', padding: 12 }}>
+              <div className="t-small" style={{ padding: 12 }}>
                 {slots.length === 0 ? 'No wall photos for this room yet.' : 'No photo for this wall yet.'}
               </div>
             )}
@@ -1098,7 +1094,7 @@ export default function DetectPage() {
 
               {adding ? (
                 <>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}>
+                  <label className="t-small" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     What is it?
                     <Select
                       value={manualCat}
@@ -1116,29 +1112,28 @@ export default function DetectPage() {
                         ref={padRef}
                         onClick={() => addManual(pending)}
                         onKeyDown={nudge}
-                        className="ds-btn"
-                        style={{ height: 34, fontSize: 'var(--fs-small)' }}
+                        className="ds-btn ds-btn--sm"
                         aria-describedby="place-hint"
                       >
                         <Icon name="check" size={13} />
                         Add this box
                       </button>
-                      <span id="place-hint" style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)' }}>
+                      <span id="place-hint" className="t-meta">
                         Arrow keys move it · Shift + arrows resize · Esc cancels
                       </span>
                     </>
                   ) : (
                     <>
-                      <button onClick={startPending} className="ds-btn" style={{ height: 34, fontSize: 'var(--fs-small)' }}>
+                      <button onClick={startPending} className="ds-btn ds-btn--sm">
                         <Icon name="crosshair" size={13} />
                         Place with the keyboard
                       </button>
-                      <span style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)' }}>…or drag a box around it on the photo.</span>
+                      <span className="t-meta">…or drag a box around it on the photo.</span>
                     </>
                   )}
                 </>
               ) : (
-                <span style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)' }}>
+                <span className="t-meta">
                   Tap a box on the photo to confirm that piece. Tap its × to drop it.
                 </span>
               )}
@@ -1152,7 +1147,7 @@ export default function DetectPage() {
               <h2 className="section-title">Your pieces</h2>
               {total > 0 && <span className="section-meta mono">{total}</span>}
             </div>
-            <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)', margin: 0, lineHeight: 1.45 }}>
+            <p className="t-meta" style={{ margin: 0, lineHeight: 1.45 }}>
               Confirmed pieces are the ones you’ve told Danmu are really in the room — it confirms the clearest ones
               for you. Tap a piece to change your mind, or rename it in your own words.
             </p>
@@ -1160,7 +1155,7 @@ export default function DetectPage() {
 
           <div className="list" style={{ padding: 10, gap: 4 }}>
             {total === 0 && !running && (
-              <div style={{ padding: '14px 12px', fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5 }}>
+              <div className="t-small" style={{ padding: '14px 12px', lineHeight: 1.5 }}>
                 <b style={{ display: 'block', marginBottom: 4, color: 'var(--ink)' }}>Nothing here yet</b>
                 {slots.length > 0
                   ? 'Draw a box around any piece on the photo and Danmu works out its real size. '
@@ -1246,11 +1241,11 @@ function NoticeCard({
             {notice.kicker}
           </div>
           <h2 style={{ fontSize: 'var(--fs-lead)', marginBottom: 6 }}>{notice.title}</h2>
-          <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.55, margin: 0, maxWidth: '68ch' }}>
+          <p className="t-small" style={{ lineHeight: 1.55, margin: 0, maxWidth: '68ch' }}>
             {notice.body}
           </p>
           {notice.detail && (
-            <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)', lineHeight: 1.5, margin: '6px 0 0' }}>{notice.detail}</p>
+            <p className="t-hint" style={{ lineHeight: 1.5, margin: '6px 0 0' }}>{notice.detail}</p>
           )}
         </div>
         {onDismiss && <IconButton icon="x" label="Dismiss this message" onClick={onDismiss} size={28} iconSize={12} />}
@@ -1367,7 +1362,7 @@ function DetectionRow({
         />
         {/* Confidence percentages and slot codes were telemetry. What helps is
             which photo it came from and what Danmu thinks it is. */}
-        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>
+        <div className="t-hint">
           {/* Who found it, said plainly. A row the user drew and a row a language
               model guessed at look identical otherwise, and they are not the same
               claim. */}
@@ -1417,15 +1412,14 @@ function DetectionRow({
             piece, which is a size nobody asked for yet. */}
         {offer.length > 0 && (
           <div
+            className="t-hint"
             style={{
               display: 'flex',
               flexWrap: 'wrap',
               alignItems: 'center',
               gap: 6,
               marginTop: 5,
-              fontSize: 'var(--fs-caption)',
               lineHeight: 1.45,
-              color: 'var(--ink-3)',
             }}
           >
             <span style={{ flex: '1 1 auto', minWidth: 0 }}>
@@ -1471,9 +1465,9 @@ function DetectionRow({
       {!onThisPhoto && (
         <button
           onClick={onShow}
-          className="ds-btn ds-btn--ghost"
+          className="ds-btn ds-btn--xs ds-btn--ghost"
           aria-label={`Show ${label} on the ${slotLabel(d.slot).toLowerCase()} photo`}
-          style={{ height: 26, fontSize: 'var(--fs-caption)', padding: '0 8px', color: 'var(--accent-text)' }}
+          style={{ padding: '0 8px', color: 'var(--accent-text)' }}
         >
           Show
         </button>

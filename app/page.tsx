@@ -33,12 +33,11 @@ export default function Home() {
       // reader on a silent blank page. 13px/--ink-2 rather than a whisper: this
       // is the very first thing a visitor sees, and it has to be legible.
       role="status"
+      className="t-body"
       style={{
         minHeight: '100dvh',
         display: 'grid',
         placeItems: 'center',
-        color: 'var(--ink-2)',
-        fontSize: 'var(--fs-body)',
       }}
     >
       Danmu · Opening your rooms…

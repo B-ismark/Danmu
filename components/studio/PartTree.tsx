@@ -535,7 +535,7 @@ export function PartTree() {
               rebuilt from photographs where detection found no opening — which is
               exactly where a silent flat sun mood would be most confusing. */}
           {sunHasNoWayIn && (
-            <p style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)', lineHeight: 1.4, margin: '6px 0 0' }}>
+            <p className="t-micro" style={{ lineHeight: 1.4, margin: '6px 0 0' }}>
               Sunlight only reaches a room through its openings. Add a window or a door
               from the Library to let this one in.
             </p>
@@ -549,15 +549,15 @@ export function PartTree() {
             <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--accent-text)', marginBottom: 4, fontWeight: 700 }}>
               {generics.length} generic shape{generics.length === 1 ? '' : 's'}
             </div>
-            <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', margin: '0 0 8px', lineHeight: 1.4 }}>
+            <p className="t-note" style={{ margin: '0 0 8px', lineHeight: 1.4 }}>
               {generics.length === 1
                 ? 'One piece is still a plain box. Match it to a real model by name.'
                 : 'Some pieces are still plain boxes. Match them to real models by name.'}
             </p>
             <button
               onClick={improveAll}
-              className="ds-btn"
-              style={{ width: '100%', height: 28, fontSize: 'var(--fs-caption)', justifyContent: 'center' }}
+              className="ds-btn ds-btn--xs"
+              style={{ width: '100%', justifyContent: 'center' }}
             >
               <Icon name="refresh" size={11} />
               Match to real models
@@ -588,7 +588,8 @@ export function PartTree() {
         <div
           role="status"
           aria-live="polite"
-          style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)', marginTop: q ? 4 : 0, fontWeight: 600 }}
+          className="t-hint"
+          style={{ marginTop: q ? 4 : 0, fontWeight: 600 }}
         >
           {q ? `${visibleParts.length} of ${parts.length} match` : ''}
         </div>
@@ -604,7 +605,7 @@ export function PartTree() {
         >
         {visibleParts.length === 0 && (
           // role="presentation": a listbox may only own options, and this is copy.
-          <div role="presentation" style={{ padding: '18px 14px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 'var(--fs-small)', lineHeight: 1.5 }}>
+          <div role="presentation" className="t-meta" style={{ padding: '18px 14px', textAlign: 'center', lineHeight: 1.5 }}>
             {q ? (
               <>Nothing here matches “{q}”. Try another word — a sofa, a lamp, a rug.</>
             ) : (
@@ -840,15 +841,13 @@ function PartRow({
         {locked ? <Icon name="camera" size={11} color="var(--locked)" /> : <Dot size={7} />}
       </span>
       <span
+        className="truncate"
         style={{
           fontSize: 'var(--fs-small)',
           fontWeight: 500,
           color: isHidden ? 'var(--ink-3)' : 'var(--ink)',
           textDecoration: isHidden ? 'line-through' : 'none',
           flex: 1,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
         }}
       >
         {name}
@@ -1028,8 +1027,8 @@ function GroupRow({
           glyph as well would have cost 20px of a label budget that is only ~46px
           in the 1024–1279px rail, and pushed the word itself to "Grou…". */}
       <span
-        className="ds-label"
-        style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        className="ds-label truncate"
+        style={{ flex: 1, minWidth: 0 }}
       >
         Group · {count}
       </span>

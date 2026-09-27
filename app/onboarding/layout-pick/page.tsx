@@ -181,7 +181,7 @@ export default function LayoutPickPage() {
                     <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: active ? 'var(--accent-text)' : 'var(--ink)' }}>{l.name}</span>
                     <span className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-2)' }}>{l.area}</span>
                   </div>
-                  <div style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}>Starts as a {l.starter.toLowerCase()}</div>
+                  <div className="t-small">Starts as a {l.starter.toLowerCase()}</div>
                 </button>
               );
             })}
@@ -208,16 +208,16 @@ export default function LayoutPickPage() {
           <button
             onClick={() => createRoom('model')}
             disabled={saving !== null}
-            className="ds-btn ds-btn--accent"
-            style={{ marginTop: 24, height: 48, fontSize: 'var(--fs-body)', justifyContent: 'center', width: '100%' }}
+            className="ds-btn ds-btn--xl ds-btn--accent"
+            style={{ marginTop: 24, fontSize: 'var(--fs-body)', justifyContent: 'center', width: '100%' }}
           >
             {saving === 'model' ? 'Creating your room…' : (<>Start decorating · {layout.starter.toLowerCase()}<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
           </button>
           <button
             onClick={() => createRoom('capture')}
             disabled={saving !== null}
-            className="ds-btn ds-btn--ghost"
-            style={{ marginTop: 8, height: 44, fontSize: 'var(--fs-small)', justifyContent: 'center', width: '100%', color: 'var(--ink-2)' }}
+            className="ds-btn ds-btn--lg ds-btn--ghost"
+            style={{ marginTop: 8, fontSize: 'var(--fs-small)', justifyContent: 'center', width: '100%', color: 'var(--ink-2)' }}
           >
             <Icon name="camera" size={13} />
             {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first (optional)'}
@@ -277,11 +277,11 @@ function BackButton({ onBack }: { onBack: () => void }) {
   return (
     <button
       onClick={onBack}
-      className="ds-btn ds-btn--ghost"
-      style={{ height: 32, padding: '0 10px', marginLeft: -10 }}
+      className="ds-btn ds-btn--sm ds-btn--ghost"
+      style={{ padding: '0 10px', marginLeft: -10, fontSize: 'var(--fs-body)' }}
     >
       <Icon name="chevron-left" size={14} />
-      <span style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}>Back</span>
+      <span className="t-small">Back</span>
     </button>
   );
 }

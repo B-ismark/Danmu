@@ -150,13 +150,13 @@ export function StudioHelp() {
             </span>
             <button
               onClick={() => setCoach(null)}
-              className="ds-btn ds-btn--ghost"
-              style={{ height: 24, fontSize: 'var(--fs-caption)', padding: '0 8px', color: 'var(--accent-text)' }}
+              className="ds-btn ds-btn--xs ds-btn--ghost"
+              style={{ padding: '0 8px', color: 'var(--accent-text)' }}
             >
               Got it
             </button>
           </div>
-          <div style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5, marginTop: 3 }}>
+          <div className="t-small" style={{ lineHeight: 1.5, marginTop: 3 }}>
             {COACH_COPY[coach].body}
           </div>
         </div>

@@ -83,9 +83,9 @@ export function FlowBarLead({
 }) {
   return (
     <>
-      <button onClick={onBack} className="ds-btn ds-btn--ghost" style={{ height: 32, padding: '0 10px' }}>
+      <button onClick={onBack} className="ds-btn ds-btn--sm ds-btn--ghost" style={{ padding: '0 10px', fontSize: 'var(--fs-body)' }}>
         <Icon name="chevron-left" size={14} />
-        <span style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}>Back</span>
+        <span className="t-small">Back</span>
       </button>
       <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
       {markHref ? (
@@ -257,7 +257,7 @@ export function StepHeader({
       )}
       <h1 style={{ fontSize: 'var(--fs-title)', lineHeight: 1.15, color: 'var(--ink)' }}>{title}</h1>
       {subtitle && (
-        <div style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.45 }}>{subtitle}</div>
+        <div className="t-body" style={{ lineHeight: 1.45 }}>{subtitle}</div>
       )}
     </div>
   );

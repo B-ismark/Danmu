@@ -118,3 +118,51 @@ describe('the motion tokens', () => {
     expect(block).toContain('transition-duration: var(--dur-quick) !important');
   });
 });
+
+describe('text styles', () => {
+  const TSX = FILES.filter((f) => f.endsWith('.tsx') && !(f in EXEMPT_FILES));
+  const PAIRS: Array<[string, string, string]> = [
+    ['caption', 'ink-3', 't-hint'],
+    ['caption', 'ink-2', 't-note'],
+    ['small', 'ink-3', 't-meta'],
+    ['small', 'ink-2', 't-small'],
+    ['micro', 'ink-3', 't-micro'],
+    ['body', 'ink-2', 't-body'],
+  ];
+
+  it('each named style exists in globals.css with exactly its pairing', () => {
+    for (const [size, ink, cls] of PAIRS) {
+      const rule = new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`).exec(CSS);
+      expect(rule, `.${cls} is not declared`).toBeTruthy();
+      expect(rule![1]).toContain(`font-size: var(--fs-${size})`);
+      expect(rule![1]).toContain(`color: var(--${ink})`);
+    }
+  });
+
+  it('a classless DOM element never spells out a named pairing inline', () => {
+    // The regrowth pattern: someone copies `fontSize` + `color` from a neighbour
+    // instead of reaching for the class. Elements that already carry a class are
+    // left alone — merging a text colour into another class's element is a
+    // specificity question, not a find-and-replace.
+    const offenders: string[] = [];
+    for (const f of TSX) {
+      const src = stripComments(readFileSync(join(ROOT, f), 'utf8'));
+      for (const m of src.matchAll(/<([a-z][\w]*)((?:(?!<[A-Za-z])[^>])*?)style=\{\{([^{}]*)\}\}/g)) {
+        if (/className=/.test(m[2])) continue;
+        for (const [size, ink, cls] of PAIRS)
+          if (m[3].includes(`fontSize: 'var(--fs-${size})'`) && m[3].includes(`color: 'var(--${ink})'`))
+            offenders.push(`${f}  <${m[1]}> → className="${cls}"`);
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+
+  it('inline styles only go down', () => {
+    // A ceiling, pinned as a literal and lowered by whoever retires more. There were
+    // 769 before the text styles (outside the OG image); a new inline style is allowed, a net gain is not —
+    // move one into a class for each one you add.
+    let n = 0;
+    for (const f of TSX) n += (readFileSync(join(ROOT, f), 'utf8').match(/style=\{\{/g) ?? []).length;
+    expect(n, `${n} inline styles — lower the ceiling if you retired some`).toBeLessThanOrEqual(727);
+  });
+});

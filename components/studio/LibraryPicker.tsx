@@ -171,7 +171,7 @@ export function LibraryPicker({
         }}
       >
         {Object.keys(groups).length === 0 && (
-          <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-3)', fontSize: 'var(--fs-small)', lineHeight: 1.5 }}>
+          <div className="t-meta" style={{ padding: 16, textAlign: 'center', lineHeight: 1.5 }}>
             Nothing matches &quot;{q}&quot;.
             <br />
             Try a room word like &quot;chair&quot;, &quot;lamp&quot; or &quot;storage&quot;.
@@ -227,7 +227,7 @@ export function LibraryPicker({
                   }
                   onClick={(e) => press(e, added)}
                   aria-pressed={marked.some((m) => m.label === item.label) || undefined}
-                  className="ds-btn"
+                  className="ds-btn ds-btn--sm"
                   title={
                     (draggable
                       ? `${added.label} — drag into the room, or click to add it in the first clear spot · ${added.dimMM[0]} × ${added.dimMM[1]} × ${added.dimMM[2]} mm`
@@ -244,8 +244,6 @@ export function LibraryPicker({
                       : undefined
                   }
                   style={{
-                    height: 34,
-                    fontSize: 'var(--fs-small)',
                     justifyContent: 'flex-start',
                     paddingLeft: 10,
                     cursor: draggable ? 'grab' : 'pointer',
@@ -253,7 +251,7 @@ export function LibraryPicker({
                   }}
                 >
                   <Icon name="plus" size={11} />
-                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span className="truncate" style={{ flex: 1, minWidth: 0 }}>
                     {added.label}
                   </span>
                   {/* Only when the words named a size, and then it is THIS row's
@@ -297,8 +295,8 @@ export function LibraryPicker({
       {canMark && marked.length > 0 && (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingTop: 8, flexShrink: 0 }}>
           <button
-            className="ds-btn"
-            style={{ flex: 1, minWidth: 0, height: 30, fontSize: 'var(--fs-small)', justifyContent: 'center', fontWeight: 700 }}
+            className="ds-btn ds-btn--sm"
+            style={{ flex: 1, minWidth: 0, justifyContent: 'center', fontWeight: 700 }}
             onClick={() => {
               // Catalogue order rather than press order, which is what this did before
               // and is the less surprising of the two when several pieces land at once.
@@ -313,8 +311,8 @@ export function LibraryPicker({
             Add {marked.length}
           </button>
           <button
-            className="ds-btn"
-            style={{ height: 30, fontSize: 'var(--fs-small)', paddingInline: 10 }}
+            className="ds-btn ds-btn--sm"
+            style={{ paddingInline: 10 }}
             onClick={() => setMarked([])}
           >
             Clear

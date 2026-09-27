@@ -454,11 +454,11 @@ export default function CapturePage() {
         <div className="ds-card" style={{ maxWidth: 'var(--measure-card)', padding: 24, textAlign: 'center' }}>
           <Icon name="camera" size={22} color="var(--ink-3)" style={{ margin: '0 auto 10px' }} />
           <h1 style={{ fontSize: 'var(--fs-title)', marginBottom: 8 }}>Pick a room shape first</h1>
-          <p style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.5, margin: '0 0 18px' }}>
+          <p className="t-body" style={{ lineHeight: 1.5, margin: '0 0 18px' }}>
             Photos are saved into a room, and there is no room open on this device yet. Choose a footprint and you can
             come straight back here.
           </p>
-          <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--accent" style={{ height: 44, justifyContent: 'center', width: '100%' }}>
+          <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--lg ds-btn--accent" style={{ justifyContent: 'center', width: '100%' }}>
             Pick a shape
             <Icon name="arrow-right" size={14} color="var(--on-accent)" />
           </Link>
@@ -489,7 +489,7 @@ export default function CapturePage() {
     <div style={{ padding: narrow ? '12px 14px 0' : '14px 16px 0' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <Icon name="info" size={14} color="var(--accent-text)" style={{ marginTop: 2 }} />
-        <p style={{ margin: 0, fontSize: 'var(--fs-small)', lineHeight: 1.45, color: 'var(--ink-2)', minWidth: 0 }}>
+        <p className="t-small" style={{ margin: 0, lineHeight: 1.45, minWidth: 0 }}>
           {CAPTURE_METHOD}{' '}
           <span style={{ color: 'var(--ink-3)' }}>
             One photo is enough to start; four gets the closest room. Add them in any order — each photo’s own compass
@@ -514,7 +514,7 @@ export default function CapturePage() {
         {/* A span, not a label: NumberField takes no `id`, so the `htmlFor` that
             used to be here pointed at nothing. The field carries its own
             accessible name via `ariaLabel`. */}
-        <span style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}>Phone height off the floor</span>
+        <span className="t-small">Phone height off the floor</span>
         <NumberField
           value={heightDraft}
           onChange={setHeightDraft}
@@ -525,8 +525,8 @@ export default function CapturePage() {
           ariaLabel="Phone height off the floor, in metres"
           style={{ width: 96 }}
         />
-        <span style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)' }}>m</span>
-        <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>
+        <span className="t-meta">m</span>
+        <span className="t-hint">
           Sets the scale of everything measured from your photos.
         </span>
       </div>
@@ -599,7 +599,7 @@ export default function CapturePage() {
         <FlowBarLead onBack={() => router.back()} markHref="/workspace">
           <span style={{ fontSize: 'var(--fs-body)', color: 'var(--ink)', fontWeight: 700 }}>Photograph your room</span>
         </FlowBarLead>
-        <span role="status" aria-live="polite" style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)' }}>
+        <span role="status" aria-live="polite" className="t-meta">
           {filled} of 4 walls added
         </span>
         {flaggedCount > 0 && (
@@ -620,8 +620,8 @@ export default function CapturePage() {
         />
         <Link
           href={`/room/${roomId}/model`}
-          className="ds-btn ds-btn--ghost"
-          style={{ height: 34, fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}
+          className="ds-btn ds-btn--sm ds-btn--ghost"
+          style={{ color: 'var(--ink-2)' }}
           title="Photos are optional — you can decorate the shape you picked instead"
         >
           Skip
@@ -757,15 +757,14 @@ function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps:
         padding: '12px 16px 0',
       }}
     >
-      <span style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', minWidth: 0 }}>
+      <span className="t-small" style={{ minWidth: 0 }}>
         {square
           ? 'Wrong wall on a photo? Move it, or turn the whole set round.'
           : 'Check each photo against the wall length beside it — if the whole set is one wall out, turn it round.'}
       </span>
       <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
         <button
-          className="ds-btn"
-          style={{ height: 30, fontSize: 'var(--fs-small)' }}
+          className="ds-btn ds-btn--sm"
           onClick={() => onRotate(-1)}
           title="Every photo moves back one wall"
         >
@@ -773,8 +772,7 @@ function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps:
           Back one
         </button>
         <button
-          className="ds-btn"
-          style={{ height: 30, fontSize: 'var(--fs-small)' }}
+          className="ds-btn ds-btn--sm"
           onClick={() => onRotate(1)}
           title="Every photo moves on one wall"
         >
@@ -848,7 +846,7 @@ function AddTile({
           {first ? 'Add photos' : 'Add another'}
         </span>
         {!compact && (
-          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.35 }}>
+          <span className="t-note" style={{ lineHeight: 1.35 }}>
             Tap to choose, or drop them here. Up to four — one per wall.
           </span>
         )}
@@ -1148,7 +1146,7 @@ function MoveMenu({
               }}
             >
               {labelOf(o)}
-              <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>
+              <span className="t-hint" style={{ marginLeft: 'auto' }}>
                 {filled[o] ? 'swap' : 'empty'}
               </span>
             </button>
@@ -1264,7 +1262,7 @@ function CameraPanel({
   const head = (
     <div className="section">
       <span className="ds-label">Camera</span>
-      <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', margin: '6px 0 8px', lineHeight: 1.45 }}>
+      <p className="t-small" style={{ margin: '6px 0 8px', lineHeight: 1.45 }}>
         {CAPTURE_METHOD}
       </p>
       {/* What used to be a four-way "Wall to shoot" picker. The sequence is the
@@ -1303,13 +1301,13 @@ function CameraPanel({
             <Icon name="camera" size={18} color="var(--warn-text)" />
           </span>
           <h2 style={{ fontSize: 'var(--fs-lead)', color: 'var(--ink)' }}>{copy.title}</h2>
-          <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5, margin: 0 }}>{copy.body}</p>
+          <p className="t-small" style={{ lineHeight: 1.5, margin: 0 }}>{copy.body}</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-            <button className="ds-btn ds-btn--accent" style={{ height: 40 }} onClick={onUseUpload}>
+            <button className="ds-btn ds-btn--lg ds-btn--accent" onClick={onUseUpload}>
               <Icon name="image" size={14} color="var(--on-accent)" />
               Upload photos instead
             </button>
-            <button className="ds-btn" style={{ height: 40 }} onClick={turnOn}>
+            <button className="ds-btn ds-btn--lg" onClick={turnOn}>
               <Icon name="refresh" size={13} />
               Try again
             </button>
@@ -1327,11 +1325,11 @@ function CameraPanel({
           <h2 style={{ fontSize: 'var(--fs-lead)', color: 'var(--ink)' }}>
             {nextLabel ? `Shoot ${nextLabel} with this device` : 'Every wall has a photo'}
           </h2>
-          <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5, margin: 0 }}>
+          <p className="t-small" style={{ lineHeight: 1.5, margin: 0 }}>
             Your photos stay on this device — there is nowhere for them to go. Your browser will ask permission when you
             turn the camera on.
           </p>
-          <button className="ds-btn ds-btn--accent" style={{ height: 40 }} disabled={phase === 'starting'} onClick={turnOn}>
+          <button className="ds-btn ds-btn--lg ds-btn--accent" disabled={phase === 'starting'} onClick={turnOn}>
             <Icon name="camera" size={14} color="var(--on-accent)" />
             {phase === 'starting' ? 'Starting camera…' : 'Turn on camera'}
           </button>

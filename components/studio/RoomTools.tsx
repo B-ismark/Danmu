@@ -427,14 +427,12 @@ export function RoomTools() {
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="ds-btn"
+        className="ds-btn ds-btn--sm"
         title="Room check, the furniture list and saved layouts"
         style={{
-          height: 34,
           width: '100%',
           justifyContent: 'flex-start',
           gap: 8,
-          fontSize: 'var(--fs-small)',
           background: problems > 0 ? 'var(--danger-tint)' : 'var(--accent-2-tint)',
           borderColor: problems > 0 ? 'var(--danger)' : 'var(--accent-2)',
           color: problems > 0 ? 'var(--danger-text)' : 'var(--success-text)',
@@ -808,10 +806,9 @@ function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
       onClick={() => run(solve)}
       disabled={busy}
       aria-busy={busy}
-      className="ds-btn"
+      className="ds-btn ds-btn--sm"
       title="Clear what's wrong (a blocked door, a crowded walkway…) moving as little as possible"
       style={{
-        height: 30,
         fontSize: 'var(--fs-caption)',
         gap: 6,
         background: 'var(--paper)',
@@ -836,7 +833,7 @@ function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
           row wraps first, so the word is not cut. It does NOT say "the full label is
           in the `title`", because it is not — this button's title never contains the
           word "Fix" and Shuffle's contains "Fix" and not "Shuffle". */}
-      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span className="truncate" style={{ minWidth: 0 }}>
         {busy ? 'Fixing…' : 'Fix'}
       </span>
     </button>
@@ -1065,10 +1062,9 @@ function ShuffleButton({
       onClick={() => run(work)}
       disabled={busy}
       aria-busy={busy}
-      className="ds-btn"
+      className="ds-btn ds-btn--sm"
       title="Try a different arrangement, whether or not anything is wrong — takes a bit longer than Fix"
       style={{
-        height: 30,
         fontSize: 'var(--fs-caption)',
         gap: 6,
         background: 'var(--paper)',
@@ -1088,7 +1084,7 @@ function ShuffleButton({
           two strings are the same width to within a character, was written for a row
           that could not reflow at all and is not true of these two words. Same
           last-resort span as Fix's. */}
-      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span className="truncate" style={{ minWidth: 0 }}>
         {busy ? 'Shuffling…' : 'Shuffle'}
       </span>
     </button>
@@ -1299,13 +1295,13 @@ function FixButton({ issue, appPlaced }: { issue: ClearanceIssue; appPlaced: App
       onClick={() => run(solve)}
       disabled={busy}
       aria-busy={busy}
-      className="ds-btn"
+      className="ds-btn ds-btn--xs"
       title={
         scope
           ? 'Move just the pieces named here, leaving the rest of the room alone'
           : 'Rearrange the unlocked furniture to open the floor up'
       }
-      style={{ height: 28, fontSize: 'var(--fs-micro)', padding: '0 10px', gap: 6, flexShrink: 0, alignSelf: 'flex-start' }}
+      style={{ fontSize: 'var(--fs-micro)', padding: '0 10px', gap: 6, flexShrink: 0, alignSelf: 'flex-start' }}
     >
       {busy && <Spinner size={10} />}
       {busy ? 'Trying…' : 'Try a fix'}
@@ -1336,6 +1332,7 @@ function CheckSummary({
   const desc = stepFreeDesc(dimUnit);
   return (
     <div
+      className="t-hint"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -1343,8 +1340,6 @@ function CheckSummary({
         flexWrap: 'wrap',
         padding: '8px 14px',
         borderBottom: '1px solid var(--hairline)',
-        fontSize: 'var(--fs-caption)',
-        color: 'var(--ink-3)',
       }}
     >
       <span>
@@ -1461,7 +1456,7 @@ function IssueRow({
           {issue.title}
         </div>
       </div>
-      <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 400, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 3 }}>
+      <div className="t-note" style={{ fontWeight: 400, lineHeight: 1.45, marginTop: 3 }}>
         {issue.detail}
       </div>
       {/* Actions align with the text column above, not with the right edge. Right-aligned
@@ -1481,9 +1476,9 @@ function IssueRow({
               // transparent border leave `.ds-btn`'s `box-shadow: var(--shadow-soft)`
               // and its hover lift in place, so a borderless label sat on a drop
               // shadow and rose when pointed at.
-              className="ds-btn ds-btn--ghost"
+              className="ds-btn ds-btn--xs ds-btn--ghost"
               title="Select the pieces involved and fly to them"
-              style={{ height: 28, fontSize: 'var(--fs-micro)', padding: '0 10px', color: 'var(--accent-text)' }}
+              style={{ fontSize: 'var(--fs-micro)', padding: '0 10px', color: 'var(--accent-text)' }}
             >
               Show me
             </button>
@@ -1522,7 +1517,7 @@ function CheckPanel({
     <div>
       <CheckSummary freeShare={freeShare} stepFree={stepFree} onStepFree={onStepFree} />
       {issues.length === 0 ? (
-        <div style={{ padding: '18px 14px', fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.55 }}>
+        <div className="t-small" style={{ padding: '18px 14px', lineHeight: 1.55 }}>
           Everything fits — doors open, walkways are comfortable, and seating distances look right.
         </div>
       ) : (
@@ -1668,12 +1663,12 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
   }
 
   const label = (t: string) => (
-    <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', fontWeight: 600 }}>{t}</span>
+    <span className="t-note" style={{ fontWeight: 600 }}>{t}</span>
   );
 
   return (
     <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.45 }}>
+      <div className="t-note" style={{ lineHeight: 1.45 }}>
         Type the size off the shop page. Nothing in your room moves — this only asks
         whether there is somewhere for it.
       </div>
@@ -1714,7 +1709,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
           </label>
         ))}
       </div>
-      <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)' }}>
+      <div className="t-micro">
         W × D × H in <span className="mono">{dimUnit}</span>
       </div>
 
@@ -1750,8 +1745,8 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
         onClick={check}
         disabled={!ready || busy}
         aria-busy={busy}
-        className="ds-btn ds-btn--primary"
-        style={{ height: 30, fontSize: 'var(--fs-caption)' }}
+        className="ds-btn ds-btn--sm ds-btn--primary"
+        style={{ fontSize: 'var(--fs-caption)' }}
       >
         {busy ? <Spinner size={12} /> : <Icon name="ruler" size={12} />}
         {busy ? 'Checking…' : 'Check the room'}
@@ -1823,14 +1818,14 @@ function FitAnswer({
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Pill tone={tone}>{lead}</Pill>
         {result.status === 'too-tall' && (
-          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)' }}>
+          <span className="t-note">
             by <span className="mono">{formatDim(-result.headroomMM, dimUnit)} {dimUnit}</span>
           </span>
         )}
       </div>
 
       {result.status === 'fits' && (
-        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.45 }}>
+        <div className="t-note" style={{ lineHeight: 1.45 }}>
           There is somewhere for it that keeps the doors opening and the walkways clear.
           {result.headroomMM > 0 && (
             <>
@@ -1842,14 +1837,14 @@ function FitAnswer({
       )}
 
       {result.status === 'too-tall' && (
-        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.45 }}>
+        <div className="t-note" style={{ lineHeight: 1.45 }}>
           The ceiling here is <span className="mono">{formatDim(room.height * 1000, dimUnit)} {dimUnit}</span>. Nothing
           about the floor can help with that.
         </div>
       )}
 
       {result.status === 'no-room' && (
-        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.45 }}>
+        <div className="t-note" style={{ lineHeight: 1.45 }}>
           {result.largestBay ? (
             <>
               The biggest clear rectangle of floor is{' '}
@@ -1869,7 +1864,7 @@ function FitAnswer({
       {result.issues.length > 0 && (
         <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
           {result.issues.map((i) => (
-            <li key={i.id} style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.4 }}>
+            <li key={i.id} className="t-note" style={{ lineHeight: 1.4 }}>
               {i.title}
             </li>
           ))}
@@ -1886,7 +1881,7 @@ function FitAnswer({
       {preview && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <MiniPlan parts={preview} footprint={room.footprint} />
-          <button onClick={onPlace} className="ds-btn" style={{ height: 26, fontSize: 'var(--fs-micro)' }}>
+          <button onClick={onPlace} className="ds-btn ds-btn--xs" style={{ fontSize: 'var(--fs-micro)' }}>
             <Icon name="plus" size={11} />
             Put it there
           </button>
@@ -1944,14 +1939,14 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
   return (
     <div>
       <TabActions>
-        <span style={{ flex: 1, fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>Real dimensions, in your unit</span>
-        <button onClick={copy} className="ds-btn" style={{ height: 24, fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
+        <span className="t-hint" style={{ flex: 1 }}>Real dimensions, in your unit</span>
+        <button onClick={copy} className="ds-btn ds-btn--xs" style={{ fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
           {copied ? 'Copied ✓' : 'Copy'}
         </button>
       </TabActions>
 
       {rows.length === 0 ? (
-        <div style={{ padding: '16px 14px', fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.55 }}>
+        <div className="t-small" style={{ padding: '16px 14px', lineHeight: 1.55 }}>
           Nothing in the room yet. Open the Library on the right and drop a piece in.
         </div>
       ) : (
@@ -1963,7 +1958,7 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
               <span style={{ width: 12, height: 12, borderRadius: 'var(--r-1)', background: 'var(--paper-2)', border: '1px dashed var(--hairline-strong)', flexShrink: 0 }} />
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div className="truncate" style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)' }}>
                 {count > 1 && <span style={{ color: 'var(--accent-text)' }}>{count}× </span>}
                 {p.name}
               </div>
@@ -2082,8 +2077,8 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
   return (
     <div>
       <TabActions>
-        <span style={{ flex: 1, fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>Snapshots you can flip between</span>
-        <button onClick={() => void saveCurrent()} className="ds-btn" style={{ height: 24, fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
+        <span className="t-hint" style={{ flex: 1 }}>Snapshots you can flip between</span>
+        <button onClick={() => void saveCurrent()} className="ds-btn ds-btn--xs" style={{ fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
           <Icon name="plus" size={10} /> Save current
         </button>
       </TabActions>
@@ -2093,7 +2088,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
         <MiniPlan parts={effParts} footprint={footprint} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 'var(--fs-small)', fontWeight: 700 }}>On screen now</div>
-          <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)' }}>
+          <div className="t-micro">
             <span className="mono">{effParts.length}</span> pieces
             {!currentIsSafe() && ' · not saved yet'}
           </div>
@@ -2101,7 +2096,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
       </div>
 
       {layouts.length === 0 ? (
-        <div style={{ padding: '16px 14px', fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.55 }}>
+        <div className="t-small" style={{ padding: '16px 14px', lineHeight: 1.55 }}>
           No saved layouts yet. Arrange the room, then <b>Save current</b> — save a second
           arrangement and flip between them to compare.
         </div>
@@ -2114,12 +2109,12 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
             <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
               <MiniPlan parts={vParts} footprint={footprint} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 'var(--fs-small)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</div>
-                <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)' }}>{savedLabel(v.createdAt)}</div>
+                <div className="truncate" style={{ fontSize: 'var(--fs-small)', fontWeight: 700 }}>{v.name}</div>
+                <div className="t-micro">{savedLabel(v.createdAt)}</div>
               </div>
               {/* Plain, not primary: this repeats once per saved layout, and the
                   rule beside the variants in globals.css excludes per-row actions. */}
-              <button onClick={() => requestApply(v)} className="ds-btn" style={{ height: 24, fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
+              <button onClick={() => requestApply(v)} className="ds-btn ds-btn--xs" style={{ fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
                 Apply
               </button>
               <IconButton
@@ -2151,7 +2146,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
                 onClick={() => setPendingApply(null)}
                 disabled={busy}
                 className="ds-btn"
-                style={{ height: 36, fontSize: 'var(--fs-body)', justifyContent: 'center' }}
+                style={{ justifyContent: 'center' }}
               >
                 Cancel
               </button>
@@ -2164,7 +2159,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
                   if (v) apply(v);
                 }}
                 className="ds-btn"
-                style={{ height: 36, fontSize: 'var(--fs-body)', justifyContent: 'center' }}
+                style={{ justifyContent: 'center' }}
               >
                 Apply without saving
               </button>
@@ -2181,7 +2176,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
                 }}
                 aria-busy={busy}
                 className="ds-btn ds-btn--primary"
-                style={{ height: 36, fontSize: 'var(--fs-body)', gap: 8, justifyContent: 'center' }}
+                style={{ gap: 8, justifyContent: 'center' }}
               >
                 {busy && <Spinner size={12} />}
                 {busy ? 'Saving…' : 'Save first, then apply'}
@@ -2189,10 +2184,10 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
             </>
           }
         >
-          <div id="apply-layout-title" style={{ fontSize: 'var(--fs-title)', fontWeight: 600, marginBottom: 6, letterSpacing: '-0.01em' }}>
+          <div id="apply-layout-title" className="t-title" style={{ marginBottom: 6 }}>
             Save this arrangement first?
           </div>
-          <div style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.55 }}>
+          <div className="t-body" style={{ lineHeight: 1.55 }}>
             Applying <b>{pendingApply.name}</b> replaces every piece in the room and where it sits. What is on screen
             right now has not been saved as a layout, so it would only be recoverable through undo.
           </div>

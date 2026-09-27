@@ -110,9 +110,9 @@ export function RailFooter() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <button
             onClick={() => setSelectedWall(null)}
-            className="ds-btn"
+            className="ds-btn ds-btn--sm"
             title="Finish with this wall"
-            style={{ width: '100%', height: 32, fontSize: 'var(--fs-small)', justifyContent: 'center' }}
+            style={{ width: '100%', justifyContent: 'center' }}
           >
             <Icon name="x" size={12} />
             <span style={LABEL}>Done</span>
@@ -136,13 +136,11 @@ export function RailFooter() {
               wants the latter. */}
           <button
             onClick={() => removeParts(selectedIds())}
-            className="ds-btn"
+            className="ds-btn ds-btn--sm"
             title={deleteLabel}
             aria-label={deleteLabel}
             style={{
               width: '100%',
-              height: 32,
-              fontSize: 'var(--fs-small)',
               justifyContent: 'center',
               color: 'var(--danger)',
               borderColor: 'var(--danger)',

@@ -100,7 +100,7 @@ export function TransformToolbar() {
               {/* Its own overflow, because `minWidth: 0` above sizes the BOX and
                   nothing else: a bare text node in a flex row would be free to
                   wrap onto a second line inside a 30px-tall button. */}
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span className="truncate" style={{ minWidth: 0 }}>
                 {m.label}
               </span>
               {/* A keyboard hint, so it is the FIRST thing to go when the row runs

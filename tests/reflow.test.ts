@@ -318,7 +318,9 @@ describe('the canvas tool cluster reflows instead of mangling', () => {
     // Everything above `SnapCycleButton` is the mode toolbar.
     const modes = SRC.slice(0, SRC.indexOf('function SnapCycleButton'));
     expect(modes, 'a flex item will not shrink below its own content without this').toMatch(/minWidth: 0/);
-    expect(modes, 'the label needs its own element to ellipsise in').toMatch(/textOverflow: 'ellipsis'/);
+    // `.truncate` (globals.css) is overflow + ellipsis + nowrap as one class.
+    expect(modes, 'the label needs its own element to ellipsise in').toMatch(/className="truncate"/);
+    expect(rule('.truncate')).toContain('text-overflow: ellipsis');
     expect(modes, 'the icon identifies the mode once the word is cut').toMatch(/flexShrink: 0/);
   });
 
@@ -376,10 +378,14 @@ describe('a rail section reflows instead of clipping', () => {
     // its own text and pushes the meta through the rail's `overflow: hidden` — no
     // scrollbar, no ellipsis, nothing to notice. The four properties are one
     // mechanism; any of them on its own does nothing.
-    const title = /className="section-title"[^>]*>/.exec(SRC);
-    expect(title, 'no section-title span in RailSection').toBeTruthy();
-    for (const prop of ['minWidth: 0', "overflow: 'hidden'", "textOverflow: 'ellipsis'", "whiteSpace: 'nowrap'"]) {
-      expect(title![0], `the title needs ${prop} to ellipsise`).toContain(prop);
+    // Three of the four ride `.truncate` (globals.css); `minWidth: 0` stays on the
+    // element because it only means something on a flex item.
+    const title = /className="section-title truncate"[^>]*>/.exec(SRC);
+    expect(title, 'no section-title truncate span in RailSection').toBeTruthy();
+    expect(title![0], 'the title needs minWidth: 0 to ellipsise').toContain('minWidth: 0');
+    const trunc = rule('.truncate');
+    for (const prop of ['overflow: hidden', 'text-overflow: ellipsis', 'white-space: nowrap']) {
+      expect(trunc, `.truncate needs ${prop}`).toContain(prop);
     }
   });
 
@@ -1181,14 +1187,15 @@ describe('the room-check actions wrap rather than cut a word', () => {
     // The measurement the wrap answers to. If this ever comes out generous, the grid was
     // fine after all and this row can go back to one — but it is not a matter of taste
     // while the number is 35.
-    const btn = /^\.ds-btn \{[\s\S]*?^\}/m.exec(CSS);
-    expect(btn, '.ds-btn is not declared in globals.css').toBeTruthy();
-    const padX = Number(/padding: 0 (\d+)px/.exec(btn![0])![1]);
+    // Fix and Shuffle are `ds-btn--sm`, whose padding and gap travel with the size.
+    expect(ROOM).toMatch(/function FixAllButton[\s\S]*?className="ds-btn ds-btn--sm"/);
+    const btn = rule('.ds-btn--sm');
+    const padX = Number(/padding: 0 (\d+)px/.exec(btn)![1]);
 
     // The row's own gap, and the icon each button carries, read out of the source.
     const rowGap = Number(/flexWrap: 'wrap', gap: (\d+) \}\}>\s*<FixAllButton/.exec(ROOM)![1]);
     const iconPx = Number(/<Icon name="shuffle" size=\{(\d+)\}/.exec(ROOM)![1]);
-    const btnGap = Number(/height: 30,\s*fontSize: 'var\(--fs-caption\)',\s*gap: (\d+),/.exec(ROOM)![1]);
+    const btnGap = Number(/fontSize: 'var\(--fs-caption\)',\s*gap: (\d+),/.exec(ROOM)![1]);
 
     const content = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]) - 32;
     const column = (content - rowGap) / 2;

@@ -278,7 +278,7 @@ export function SceneContextMenu() {
             style={{ fontSize: 'var(--fs-small)', padding: '7px 9px', color: entry.danger ? 'var(--danger-text)' : undefined }}
           >
             <Icon name={entry.icon} size={14} />
-            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span className="truncate" style={{ flex: 1, minWidth: 0 }}>
               {entry.label}
             </span>
             {entry.hint && (

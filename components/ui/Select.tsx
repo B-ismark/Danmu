@@ -226,7 +226,7 @@ export function Select<T extends string>({
           textAlign: 'left',
         }}
       >
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span className="truncate" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           {selected?.icon && <Icon name={selected.icon} size={13} />}
           {selected ? selected.short ?? selected.label : placeholder}
         </span>
@@ -274,8 +274,8 @@ export function Select<T extends string>({
                   }}
                 >
                   {o.icon && <Icon name={o.icon} size={13} />}
-                  <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</span>
-                  {o.hint && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>{o.hint}</span>}
+                  <span className="truncate" style={{ flex: 1 }}>{o.label}</span>
+                  {o.hint && <span className="t-hint">{o.hint}</span>}
                   {isSel && <Icon name="check" size={13} />}
                 </div>
               );

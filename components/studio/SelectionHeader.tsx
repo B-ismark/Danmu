@@ -56,17 +56,15 @@ export function SelectionHeader() {
             ungroupParts(groupMembers);
             setSelected(primaryId);
           }}
-          className="ds-btn"
-          style={{ height: 26, fontSize: 'var(--fs-caption)' }}
+          className="ds-btn ds-btn--xs"
         >
           <Icon name="swap" size={11} /> Ungroup
         </button>
       ) : (
         <button
           onClick={() => groupParts(selection)}
-          className="ds-btn"
+          className="ds-btn ds-btn--xs"
           title="Keep these pieces together — one click selects the whole set"
-          style={{ height: 26, fontSize: 'var(--fs-caption)' }}
         >
           <Icon name="layers" size={11} /> Group {selection.length}
         </button>

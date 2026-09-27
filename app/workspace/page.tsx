@@ -145,7 +145,7 @@ export default function WorkspacePage() {
       trail={[{ label: 'Rooms' }]}
       actions={
         <>
-          <Link href="/settings" className="ds-btn" style={{ height: 32, fontSize: 'var(--fs-small)' }}>
+          <Link href="/settings" className="ds-btn ds-btn--sm">
             <Icon name="settings" size={12} />
             Settings
           </Link>
@@ -161,7 +161,7 @@ export default function WorkspacePage() {
           {rooms.length > 0 && (
             <>
               <ImportSceneButton />
-              <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 32, fontSize: 'var(--fs-small)' }}>
+              <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--sm ds-btn--primary">
                 <Icon name="plus" size={12} />
                 New Room
               </Link>
@@ -194,7 +194,7 @@ export default function WorkspacePage() {
                   {/* The route had no heading element, so it had no document
                       outline and the display serif never rendered on it. */}
                   <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginBottom: 4 }}>Your rooms</h1>
-                  <div style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}>
+                  <div className="t-small">
                     <span className="mono">{rooms.length}</span> room{rooms.length === 1 ? '' : 's'}, newest edit
                     first
                   </div>
@@ -236,13 +236,13 @@ export default function WorkspacePage() {
                     <span className="mono">{selected.length}</span> selected
                   </span>
                   <div style={{ flex: 1 }} />
-                  <button onClick={() => setSelected([])} className="ds-btn" style={{ height: 30, fontSize: 'var(--fs-small)' }}>
+                  <button onClick={() => setSelected([])} className="ds-btn ds-btn--sm">
                     Clear selection
                   </button>
                   <button
                     onClick={() => removeRooms(selectedRooms)}
-                    className="ds-btn"
-                    style={{ height: 30, fontSize: 'var(--fs-small)', color: 'var(--danger-text)', borderColor: 'var(--danger)' }}
+                    className="ds-btn ds-btn--sm"
+                    style={{ color: 'var(--danger-text)', borderColor: 'var(--danger)' }}
                   >
                     <Icon name="trash" size={12} />
                     Delete selected
@@ -263,11 +263,11 @@ export default function WorkspacePage() {
                   <div style={{ fontSize: 'var(--fs-lead)', fontWeight: 600, marginBottom: 6 }}>
                     No room is called “{query.trim()}”.
                   </div>
-                  <p style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', margin: '0 0 16px' }}>
+                  <p className="t-body" style={{ margin: '0 0 16px' }}>
                     You have {rooms.length} room{rooms.length === 1 ? '' : 's'} — try a shorter word, or clear the
                     filter.
                   </p>
-                  <button onClick={() => setQuery('')} className="ds-btn" style={{ height: 32, fontSize: 'var(--fs-small)' }}>
+                  <button onClick={() => setQuery('')} className="ds-btn ds-btn--sm">
                     <Icon name="x" size={11} />
                     Clear filter
                   </button>
@@ -492,7 +492,7 @@ function RoomCard({
           </div>
         </div>
 
-        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>
+        <div className="t-hint">
           {editedLabel(room.updatedAt, today)} · <span className="mono">{room.itemCount}</span>{' '}
           {room.itemCount === 1 ? 'piece' : 'pieces'}
         </div>
@@ -534,8 +534,8 @@ function RoomCard({
         <Link
           href={href}
           onClick={onOpen}
-          className="ds-btn"
-          style={{ height: 32, fontSize: 'var(--fs-small)', justifyContent: 'center' }}
+          className="ds-btn ds-btn--sm"
+          style={{ justifyContent: 'center' }}
         >
           <Icon name="cube" size={11} />
           Open
@@ -552,7 +552,7 @@ function EmptyState() {
         Ready when you are
       </div>
       <h1 style={{ fontSize: 'var(--fs-hero)', letterSpacing: '-0.02em', marginBottom: 10 }}>Decorate your first room.</h1>
-      <p style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 28 }}>
+      <p className="t-body" style={{ lineHeight: 1.55, marginBottom: 28 }}>
         Pick a footprint and start arranging furniture in real 3D — move, recolour, restyle, and relight
         every piece. No account, no upload. Capturing your real room is optional.
       </p>
@@ -562,7 +562,7 @@ function EmptyState() {
             so there is exactly one. The pairing this replaces — an ink "New Room" in
             the bar beside a terracotta "Create your first room" here, both pointing
             at /onboarding/layout-pick — is the case the rule in globals.css cites. */}
-        <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 40, padding: '0 20px', fontSize: 'var(--fs-body)' }}>
+        <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--lg ds-btn--primary" style={{ padding: '0 20px' }}>
           <Icon name="plus" size={13} />
           Create your first room
         </Link>

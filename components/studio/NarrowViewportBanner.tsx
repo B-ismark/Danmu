@@ -98,8 +98,8 @@ export function NarrowViewportBanner() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
           <Link
             href="/onboarding/capture"
-            className="ds-btn ds-btn--primary"
-            style={{ height: 42, justifyContent: 'center', fontSize: 'var(--fs-body)' }}
+            className="ds-btn ds-btn--lg ds-btn--primary"
+            style={{ justifyContent: 'center' }}
           >
             <Icon name="camera" size={14} />
             Photograph the room here
@@ -108,7 +108,7 @@ export function NarrowViewportBanner() {
             <Link
               href="/workspace"
               className="ds-btn"
-              style={{ flex: 1, height: 38, justifyContent: 'center', fontSize: 'var(--fs-body)' }}
+              style={{ flex: 1, justifyContent: 'center' }}
             >
               <Icon name="arrow-left" size={12} /> All rooms
             </Link>
@@ -118,7 +118,7 @@ export function NarrowViewportBanner() {
                 setDismissed(true);
               }}
               className="ds-btn"
-              style={{ flex: 1, height: 38, justifyContent: 'center', fontSize: 'var(--fs-body)' }}
+              style={{ flex: 1, justifyContent: 'center' }}
             >
               Open it anyway
             </button>
@@ -129,16 +129,16 @@ export function NarrowViewportBanner() {
       <h1 id="studio-gate-title" style={{ fontSize: 'var(--fs-title)', lineHeight: 1.15, marginBottom: 10 }}>
         {reason === 'touch' ? 'The studio wants a mouse or trackpad.' : 'This window is too narrow to lay out.'}
       </h1>
-      <p style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.55, margin: '0 0 10px' }}>
+      <p className="t-body" style={{ lineHeight: 1.55, margin: '0 0 10px' }}>
         {reason === 'touch'
           ? 'Decorating means dragging furniture a centimetre at a time, nudging walls and scrubbing dimensions — all of which need a pointer that can hover. On a phone or tablet those gestures fight you.'
           : `The parts list, the room and the inspector need at least ${MIN_WIDTH}px of width between them. Widen the window, or zoom out a step.`}
       </p>
-      <p style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.55, margin: 0 }}>
+      <p className="t-body" style={{ lineHeight: 1.55, margin: 0 }}>
         Photographing the room <b>is</b> built for this device, though — shoot your walls here and the room will be
         waiting when you open Danmu on a laptop.
       </p>
-      <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)', lineHeight: 1.5, margin: '10px 0 0' }}>
+      <p className="t-meta" style={{ lineHeight: 1.5, margin: '10px 0 0' }}>
         Opening it anyway works, and it is remembered — some panels will just be cramped.
       </p>
     </Modal>

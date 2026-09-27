@@ -146,13 +146,12 @@ export function PlanThumb({ roomId }: { roomId: string }) {
       {(!parts || parts.length === 0) && (
         // Speaks to someone decorating, not to the data model ("No parts yet").
         <div
+          className="t-hint"
           style={{
             position: 'absolute',
             inset: 0,
             display: 'grid',
             placeItems: 'center',
-            color: 'var(--ink-3)',
-            fontSize: 'var(--fs-caption)',
             fontWeight: 600,
           }}
         >

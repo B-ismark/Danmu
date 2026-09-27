@@ -117,8 +117,8 @@ export function PlanViewControls({
       <button
         onClick={() => api.current?.fit()}
         title="Back to the default view"
-        className="ds-btn"
-        style={{ height: 28, fontSize: 'var(--fs-caption)', padding: '0 9px', gap: 5 }}
+        className="ds-btn ds-btn--xs"
+        style={{ padding: '0 9px', gap: 5 }}
       >
         <Icon name="fit" size={12} />
         Fit

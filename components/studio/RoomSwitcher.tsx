@@ -55,8 +55,8 @@ export function RoomSwitcher() {
         aria-label="Switch room"
         aria-expanded={open}
         title="Switch room"
-        className="ds-btn"
-        style={{ height: 28, padding: '0 8px', fontSize: 'var(--fs-small)' }}
+        className="ds-btn ds-btn--xs"
+        style={{ padding: '0 8px', fontSize: 'var(--fs-small)' }}
       >
         <Icon name="layers" size={12} />
         <Icon name="chevron-down" size={11} />
@@ -92,7 +92,7 @@ export function RoomSwitcher() {
             Switch room · <span className="mono">{rooms.length}</span>
           </div>
           {rooms.length === 0 && (
-            <div style={{ padding: '14px 12px', fontSize: 'var(--fs-small)', color: 'var(--ink-3)' }}>No rooms yet.</div>
+            <div className="t-meta" style={{ padding: '14px 12px' }}>No rooms yet.</div>
           )}
           {rooms.map((r) => {
             const isCurrent = r.id === currentId;
@@ -123,18 +123,16 @@ export function RoomSwitcher() {
                       or, if it was one long unbroken word, spill past the panel. */}
                   <div
                     title={r.name}
+                    className="truncate"
                     style={{
                       fontSize: 'var(--fs-body)',
                       fontWeight: 500,
                       color: 'var(--ink)',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
                     }}
                   >
                     {r.name}
                   </div>
-                  <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)' }}>
+                  <div className="t-micro">
                     <span className="mono">{r.itemCount}</span> {r.itemCount === 1 ? 'piece' : 'pieces'}
                   </div>
                 </div>
@@ -152,6 +150,7 @@ export function RoomSwitcher() {
                 setOpen(false);
                 router.push('/workspace');
               }}
+              className="t-small"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -161,8 +160,6 @@ export function RoomSwitcher() {
                 background: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: 'var(--fs-small)',
-                color: 'var(--ink-2)',
                 textAlign: 'left',
               }}
             >

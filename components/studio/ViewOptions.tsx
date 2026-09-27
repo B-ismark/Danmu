@@ -97,7 +97,7 @@ export function ViewOptions() {
           onChange={(v) => setQuality(v === 'high' ? 'high' : 'low')}
           stretch
         />
-        <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)', marginTop: 5, lineHeight: 1.4 }}>
+        <div className="t-micro" style={{ marginTop: 5, lineHeight: 1.4 }}>
           High adds soft shadows + textured surfaces.
         </div>
       </Group>
@@ -122,7 +122,7 @@ function SwitchRow({
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)' }}>{label}</div>
-        <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)', lineHeight: 1.35 }}>{hint}</div>
+        <div className="t-micro" style={{ lineHeight: 1.35 }}>{hint}</div>
       </div>
       <Toggle on={on} onClick={onToggle} label={label} />
     </div>

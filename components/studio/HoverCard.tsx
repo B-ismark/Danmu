@@ -82,7 +82,7 @@ export function HoverCard() {
           justifyContent: 'space-between',
         }}
       >
-        <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600, textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span className="truncate" style={{ fontSize: 'var(--fs-body)', fontWeight: 600, textTransform: 'capitalize' }}>
           {part.name || part.category}
         </span>
         {/* Kept even though the "From" row below usually says the same thing more
@@ -106,7 +106,7 @@ export function HoverCard() {
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr', gap: 6, fontSize: 'var(--fs-caption)' }}>
-      <span style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)', fontWeight: 700 }}>{label}</span>
+      <span className="t-micro" style={{ fontWeight: 700 }}>{label}</span>
       <span className={mono ? 'mono' : undefined} style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)' }}>
         {value}
       </span>

@@ -366,6 +366,23 @@ h1, h2, h3 { text-wrap: balance; }
 .ds-btn:hover { background: var(--paper-2); transform: translateY(-1px); box-shadow: var(--shadow-lift); }
 .ds-btn:active { transform: translateY(0); box-shadow: var(--shadow-soft); }
 .ds-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+/* Sizes. Buttons came in thirteen heights — 24 through 52, most of them two
+   pixels from a neighbour — each typed inline beside a font size that did not
+   always agree with it. Five now, and the label size and padding travel WITH
+   the height, because a 26px button with 16px of side padding and body-size
+   type is three decisions that were never made together.
+
+   · --xs  26  dense rows inside a panel (a card's secondary actions)
+   · --sm  32  panel and rail actions, toolbar buttons
+   · (md)  38  the default — dialogs, pages
+   · --lg  44  a page's main action, and anything a thumb has to hit
+   · --xl  52  the one front-door call to action
+
+   A size is not a variant: `ds-btn--sm ds-btn--primary` is a small primary. */
+.ds-btn--xs { height: 26px; padding: 0 10px; gap: 6px; font-size: var(--fs-caption); border-radius: var(--r-2); }
+.ds-btn--sm { height: 32px; padding: 0 12px; gap: 6px; font-size: var(--fs-small); }
+.ds-btn--lg { height: 44px; padding: 0 20px; }
+.ds-btn--xl { height: 52px; padding: 0 24px; font-size: var(--fs-lead); }
 
 /* ─── Busy ────────────────────────────────────────────────────────────────
    A ring in `currentColor`, so it takes the colour of whatever control it sits
@@ -772,6 +789,34 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   letter-spacing: 0.02em; color: var(--ink-3);
 }
 .section-meta { font-size: var(--fs-small); font-weight: 600; color: var(--ink-3); }
+
+/* ─── Text styles ───────────────────────────────────────────────────────────
+   A size is half a decision; the other half is the ink it is set in. These are
+   the pairings the app actually uses, named for their JOB — the way a design
+   file names its text styles — so "a hint under a control" is one word instead
+   of two properties retyped a hundred times with the odd one drifting.
+   Leading and weight stay with the element: they depend on whether the text is
+   a label or a paragraph, which the job name does not say.
+
+   · t-title  a dialog or card title (the sans one; h1–h3 bring the serif)
+   · t-body   running copy in a dialog or a panel
+   · t-small  compact copy in a rail
+   · t-note   a secondary line that still carries content
+   · t-hint   a hint under or beside a control — quieter than a note
+   · t-meta   a count or a status beside a heading
+   · t-micro  a unit suffix, a tick label, a badge
+   `tests/type-scale.test.ts` holds the ceiling on inline styles these retire. */
+.t-title { font-size: var(--fs-title); font-weight: 600; letter-spacing: -0.01em; }
+.t-body  { font-size: var(--fs-body); color: var(--ink-2); }
+.t-small { font-size: var(--fs-small); color: var(--ink-2); }
+.t-note  { font-size: var(--fs-caption); color: var(--ink-2); }
+.t-hint  { font-size: var(--fs-caption); color: var(--ink-3); }
+.t-meta  { font-size: var(--fs-small); color: var(--ink-3); }
+.t-micro { font-size: var(--fs-micro); color: var(--ink-3); }
+/* One line, cut with an ellipsis. In a flex row it also needs `min-width: 0`
+   on itself, which stays inline where the element is a flex item — on anything
+   else it would change nothing, and on a grid item it would change too much. */
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .field {
   width: 100%; height: 34px; padding: 0 12px;

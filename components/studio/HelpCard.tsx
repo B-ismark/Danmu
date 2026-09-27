@@ -73,13 +73,13 @@ export function HelpGroup({ title, note, children }: { title: string; note?: str
         {title}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>{children}</div>
-      {note && <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)', lineHeight: 1.45, marginTop: 7 }}>{note}</div>}
+      {note && <div className="t-hint" style={{ lineHeight: 1.45, marginTop: 7 }}>{note}</div>}
     </div>
   );
 }
 
 export function HelpLine({ children }: { children: ReactNode }) {
-  return <div style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5 }}>{children}</div>;
+  return <div className="t-small" style={{ lineHeight: 1.5 }}>{children}</div>;
 }
 
 // Keycaps in the sans face, not mono: a keycap is a real convention, but this

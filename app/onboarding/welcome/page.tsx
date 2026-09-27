@@ -106,14 +106,14 @@ export default function WelcomePage() {
           </div>
 
           <h2 style={{ fontSize: 'var(--fs-title)', margin: '6px 0 6px' }}>Build your first room</h2>
-          <p style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.55, margin: '0 0 22px' }}>
+          <p className="t-body" style={{ lineHeight: 1.55, margin: '0 0 22px' }}>
             Free, instant, and right in the browser. No sign-up, no upload, no key needed to start.
           </p>
 
           <button
             onClick={() => router.push('/onboarding/layout-pick')}
-            className="ds-btn ds-btn--accent"
-            style={{ height: 52, justifyContent: 'center', fontSize: 'var(--fs-lead)', width: '100%' }}
+            className="ds-btn ds-btn--xl ds-btn--accent"
+            style={{ justifyContent: 'center', width: '100%' }}
           >
             Start decorating
             <Icon name="arrow-right" size={15} color="var(--on-accent)" />
@@ -207,7 +207,7 @@ export default function WelcomePage() {
                   </span>
                 </div>
 
-                <p id="welcome-key-hint" style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)', lineHeight: 1.5, margin: '10px 0 0' }}>
+                <p id="welcome-key-hint" className="t-meta" style={{ lineHeight: 1.5, margin: '10px 0 0' }}>
                   Gemini keys start with “AIza”. Add one now or later in Settings — either way you
                   can start decorating.
                 </p>
@@ -216,8 +216,8 @@ export default function WelcomePage() {
                   href="https://aistudio.google.com/app/apikey"
                   target="_blank"
                   rel="noreferrer"
-                  className="ds-btn ds-btn--ghost"
-                  style={{ height: 44, justifyContent: 'center', fontSize: 'var(--fs-body)', color: 'var(--ink-2)', marginTop: 6 }}
+                  className="ds-btn ds-btn--lg ds-btn--ghost"
+                  style={{ justifyContent: 'center', color: 'var(--ink-2)', marginTop: 6 }}
                 >
                   How to get a free key
                   {/* target=_blank has to be visible, not a surprise. */}
@@ -304,7 +304,7 @@ function Feature({
         >
           {title}
         </h2>
-        <div style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
+        <div className="t-body" style={{ lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
       </div>
     </li>
   );

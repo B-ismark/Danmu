@@ -31,7 +31,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         <div style={{ padding: '22px 24px' }}>
           <div className="ds-kicker" style={{ color: 'var(--danger-text)', marginBottom: 6 }}>Hiccup</div>
           <h1 style={{ fontSize: 'var(--fs-title)', marginBottom: 8 }}>This screen stopped drawing</h1>
-          <p style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.55, margin: 0 }}>
+          <p className="t-body" style={{ lineHeight: 1.55, margin: 0 }}>
             Your rooms are safe — they live in this browser, not on this screen. Try again to redraw
             it. If it keeps happening, go back to your rooms and reopen the one you were working on.
           </p>
@@ -39,10 +39,10 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         <div style={{ display: 'flex', gap: 8, padding: '14px 24px', background: 'var(--paper-2)', borderTop: '1px solid var(--hairline)' }}>
           {/* '/' rather than '/workspace': the root router already sends you to
               your rooms, or to onboarding if you have none. */}
-          <button className="ds-btn" style={{ height: 40, fontSize: 'var(--fs-body)', flex: 1, justifyContent: 'center' }} onClick={() => (window.location.href = '/')}>
+          <button className="ds-btn ds-btn--lg" style={{ flex: 1, justifyContent: 'center' }} onClick={() => (window.location.href = '/')}>
             Back to your rooms
           </button>
-          <button className="ds-btn ds-btn--primary" style={{ height: 40, fontSize: 'var(--fs-body)', flex: 1, justifyContent: 'center' }} onClick={() => reset()}>
+          <button className="ds-btn ds-btn--lg ds-btn--primary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => reset()}>
             Try again
           </button>
         </div>

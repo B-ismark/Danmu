@@ -12,14 +12,14 @@ export default function NotFound() {
         {/* Names the likely cause instead of shrugging: rooms are stored per
             browser, so a link from another device or a deleted room both land
             here and both look identical from the outside. */}
-        <p style={{ fontSize: 'var(--fs-body)', lineHeight: 1.55, color: 'var(--ink-2)', marginBottom: 20 }}>
+        <p className="t-body" style={{ lineHeight: 1.55, marginBottom: 20 }}>
           It may have been deleted, or the link may be from another browser — your rooms are saved on
           the device you built them on, not in the cloud.
         </p>
         <Link
           href="/"
-          className="ds-btn ds-btn--primary"
-          style={{ display: 'inline-flex', height: 40, padding: '0 18px', alignItems: 'center', fontSize: 'var(--fs-body)' }}
+          className="ds-btn ds-btn--lg ds-btn--primary"
+          style={{ display: 'inline-flex', padding: '0 18px', alignItems: 'center' }}
         >
           Back to your rooms
         </Link>

@@ -167,13 +167,11 @@ function Breadcrumb({ trail }: { trail: Crumb[] }) {
                   // The current page is the accessible landmark of the trail, so
                   // it is marked as such rather than just being the unlinked one.
                   aria-current={last ? 'page' : undefined}
+                  className="truncate"
                   style={{
                     fontSize: 'var(--fs-small)',
                     fontWeight: 700,
                     color: 'var(--ink)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
                   }}
                 >
                   {c.label}

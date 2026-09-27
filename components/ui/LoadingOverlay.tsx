@@ -206,8 +206,8 @@ export function LoadingOverlay({
           {onCancel && (
             <button
               onClick={onCancel}
-              className="ds-btn"
-              style={{ height: 30, fontSize: 'var(--fs-small)', padding: '0 12px' }}
+              className="ds-btn ds-btn--sm"
+              style={{ padding: '0 12px' }}
             >
               <Icon name="x" size={12} />
               {cancelLabel}
@@ -225,12 +225,12 @@ export function LoadingOverlay({
         {/* One polite live region for the parts that actually change meaning. */}
         <div role="status" aria-live="polite">
           {description && (
-            <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.55, margin: '0 0 12px' }}>
+            <p className="t-small" style={{ lineHeight: 1.55, margin: '0 0 12px' }}>
               {description}
             </p>
           )}
           {slow && onCancel && (
-            <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.55, margin: '0 0 12px' }}>
+            <p className="t-small" style={{ lineHeight: 1.55, margin: '0 0 12px' }}>
               Still going. You can stop whenever you like — nothing you&rsquo;ve done is lost.
             </p>
           )}
@@ -238,9 +238,8 @@ export function LoadingOverlay({
 
         {note && (
           <p
+            className="t-small"
             style={{
-              fontSize: 'var(--fs-small)',
-              color: 'var(--ink-2)',
               lineHeight: 1.5,
               background: 'var(--paper-2)',
               border: '1px solid var(--hairline)',
