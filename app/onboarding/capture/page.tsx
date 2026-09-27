@@ -703,8 +703,8 @@ export default function CapturePage() {
  *  a photograph nobody has seen, so its text contrast would be a promise about the
  *  user's own living room. And the chip's SILHOUETTE against that photograph is
  *  guaranteed only for this ground: --ink plus the --edge-on-ink boundary clears
- *  3:1 against every possible photo tone, where a --warn ground manages 1.92:1 and
- *  a --success-text ground 2.02:1 — unfixable by a heavier boundary, since a
+ *  3:1 against every possible photo tone, where a --warn ground manages 1.93:1 and
+ *  a --success-text ground 2.03:1 — unfixable by a heavier boundary, since a
  *  mid-dark ground and a light edge sit too close together in luminance.
  *
  *  The clash chip and the two quality flags DID override it, which both escaped
@@ -1007,7 +1007,7 @@ function PhotoCard({
           <span
             title={`This photo’s compass pointed at ${labelOf(photo.clashedWith)}, which already had one. It may be a second photo of the same wall.`}
             // Signalled in the TYPE, not the ground. A --warn ground looked louder and
-            // cost the chip its outline against any mid-tone photo (1.92:1) — on the one
+            // cost the chip its outline against any mid-tone photo (1.93:1) — on the one
             // chip that is actually asking for something.
             style={{ ...photoChrome(), color: 'var(--on-ink-warn)' }}
           >
@@ -1035,7 +1035,7 @@ function PhotoCard({
                   key={f}
                   title={flagHelp(f)}
                   // Same rule as the clash chip: the ground is never overridden, so
-                  // these two carried the same silhouette defect (2.02:1 and 1.92:1).
+                  // these two carried the same silhouette defect (2.03:1 and 1.93:1).
                   style={{
                     ...photoChrome(),
                     color: good ? 'var(--on-ink-success)' : 'var(--on-ink-warn)',

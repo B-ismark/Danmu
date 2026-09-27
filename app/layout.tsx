@@ -77,7 +77,7 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
   // Matches --paper-0, the actual page wash, so mobile browser chrome blends
   // with the app instead of introducing a fourth unrelated cream.
-  themeColor: '#EFE9DD',
+  themeColor: '#EEE9E4',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

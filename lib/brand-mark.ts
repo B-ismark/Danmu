@@ -61,7 +61,7 @@ export const MARK_TILE_RADIUS = 9;
  *  under. */
 export const MARK_COLORS = {
   /** `--paper` — the tile the mark sits on. */
-  tile: '#FBF8F2',
+  tile: '#FBF9F6',
   /** `--accent` — the volume's fill and, for an icon, its stroke. */
   accent: '#E2613A',
   /** `--accent-2` — the piece of furniture. */

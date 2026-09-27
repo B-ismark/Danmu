@@ -64,9 +64,9 @@ describe('plan export palette', () => {
   });
 
   it('stays in sync with the CSS tokens it duplicates', () => {
-    expect(PLAN.paper).toBe('#FBF8F2'); // --paper
-    expect(PLAN.ink).toBe('#2A2520'); // --ink
-    expect(PLAN.ink2).toBe('#5A5147'); // --ink-2
+    expect(PLAN.paper).toBe('#FBF9F6'); // --paper
+    expect(PLAN.ink).toBe('#1D1816'); // --ink
+    expect(PLAN.ink2).toBe('#544D47'); // --ink-2
     expect(PLAN.accent).toBe(SCENE.accent);
   });
 

@@ -10,9 +10,9 @@
 // once (#FAFAF7 / #6B6358 / #C02618 were from an earlier palette).
 import { useEffect } from 'react';
 
-const PAPER = '#FBF8F2'; // --paper
-const INK = '#2A2520'; // --ink
-const INK_2 = '#5A5147'; // --ink-2
+const PAPER = '#FBF9F6'; // --paper
+const INK = '#1D1816'; // --ink
+const INK_2 = '#544D47'; // --ink-2
 const DANGER = '#C8472A'; // --danger
 const ACCENT_INK = '#C24A22'; // --accent-ink — 4.73:1 with white
 

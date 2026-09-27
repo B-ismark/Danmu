@@ -9,29 +9,29 @@
    Contrast rule for this file: any token used for *text* or for an interactive
    *boundary* carries its measured ratio in a comment. Decorative-only values
    are allowed to be soft, and say so. Paper surfaces are the reference
-   backgrounds (--paper 0.941 L, --paper-2 0.858, --paper-3 0.765). */
+   backgrounds (--paper 0.949 L, --paper-2 0.866, --paper-3 0.773). */
 :root {
-  --paper-0: #EFE9DD;       /* page wash behind every surface — was an untokenized body colour */
-  --paper: #FBF8F2;
-  --paper-2: #F3EEE4;
-  --paper-3: #E9E2D4;
-  --ink: #2A2520;           /* warm soft-black, not pure ink */
-  --ink-2: #5A5147;
-  --ink-3: #675E55;         /* 5.99:1 on --paper, 4.92:1 on --paper-3 — safe for 10-12px hint text */
-  --ink-4: #BBB1A3;         /* decorative fills only (1.99:1) */
-  --ink-hover: #3A342C;     /* --ink one step darker, for primary-button hover */
+  --paper-0: #EEE9E4;       /* page wash behind every surface — was an untokenized body colour */
+  --paper: #FBF9F6;
+  --paper-2: #F2EFEA;
+  --paper-3: #E8E3DC;
+  --ink: #1D1816;           /* warm near-black: deep, but never pure black */
+  --ink-2: #544D47;
+  --ink-3: #625C56;         /* 6.27:1 on --paper, 5.17:1 on --paper-3 — safe for 10-12px hint text */
+  --ink-4: #B8B1AA;         /* decorative fills only (2.02:1) */
+  --ink-hover: #322D28;     /* --ink one step darker, for primary-button hover */
 
-  --hairline: rgba(42, 37, 32, 0.12);        /* decorative divider */
-  --hairline-soft: rgba(42, 37, 32, 0.05);   /* decorative divider */
-  --hairline-strong: rgba(42, 37, 32, 0.20); /* decorative divider, heavier */
-  --edge: rgba(42, 37, 32, 0.50);            /* 3.10:1 — boundary of anything interactive (WCAG 1.4.11) */
+  --hairline: rgba(29, 24, 22, 0.12);        /* decorative divider */
+  --hairline-soft: rgba(29, 24, 22, 0.05);   /* decorative divider */
+  --hairline-strong: rgba(29, 24, 22, 0.20); /* decorative divider, heavier */
+  --edge: rgba(29, 24, 22, 0.50);            /* 3.31:1 — boundary of anything interactive (WCAG 1.4.11) */
 
   --accent: #E2613A;        /* warm clay-terracotta — fills, tints, 3D highlights. NOT for text. */
   --accent-tint: rgba(226, 97, 58, 0.12);
   --accent-tint-strong: rgba(226, 97, 58, 0.20);   /* darker terracotta — decorative hover fills */
   --accent-ink: #C24A22;      /* 4.73:1 with white — the accent-button surface */
   --accent-ink-hover: #A83D1A;/* 6.27:1 with white */
-  --accent-text: #B03F1E;     /* 5.54:1 on --paper, 4.85:1 on --accent-tint — accent-coloured type */
+  --accent-text: #B03F1E;     /* 5.59:1 on --paper, 4.89:1 on --accent-tint — accent-coloured type */
   --accent-2: #5E8B6E;      /* friendly sage — fills */
   --accent-2-tint: rgba(94, 139, 110, 0.14);
 
@@ -40,7 +40,7 @@
      deliberate next to clay + sage. Named for a word the UI no longer says — see
      `ScenePart.locked`, which cannot be renamed without breaking the saved-file
      format. */
-  --locked: #7A4B63;        /* 6.27:1 on --paper */
+  --locked: #7A4B63;        /* 6.63:1 on --paper */
   --locked-tint: rgba(122, 75, 99, 0.14);
 
   /* Alignment guides while a piece is being dragged: "this edge is level with
@@ -52,13 +52,13 @@
   --snap-edge: #1E9E54;
   --snap-center: #27A06A;
 
-  --danger: #C8472A;        /* 4.51:1 on --paper */
+  --danger: #C8472A;        /* 4.55:1 on --paper */
   --danger-tint: rgba(200, 71, 42, 0.10);
-  --danger-text: #A63A20;   /* 5.33:1 on --danger-tint — for text sitting in a danger banner */
-  --warn: #9A6233;          /* 4.75:1 on --paper */
-  --warn-text: #85511F;     /* 5.69:1 on --paper-2 — for warn text on a tinted chip */
-  --success: #5E8B6E;       /* fills only (3.67:1) */
-  --success-text: #46705A;  /* 5.32:1 on --paper */
+  --danger-text: #A63A20;   /* 5.37:1 on --danger-tint — for text sitting in a danger banner */
+  --warn: #9A6233;          /* 4.79:1 on --paper */
+  --warn-text: #85511F;     /* 5.73:1 on --paper-2 — for warn text on a tinted chip */
+  --success: #5E8B6E;       /* fills only (3.70:1) */
+  --success-text: #46705A;  /* 5.36:1 on --paper */
 
   /* Text/icons that sit on top of a filled surface. One knob, so a brand
      change can't silently produce white-on-light in 30 places. */
@@ -70,13 +70,13 @@
      stays behind, with every contrast assertion still green because it reads this
      one. Aliased, a bad edit to either moves both and the 4.5:1 assertion in
      tests/color-tokens.test.ts goes red. It keeps its own NAME because --ink-4 is
-     a decorative fill (1.99:1 on --paper, never text) and this is type: rule 4
+     a decorative fill (2.02:1 on --paper, never text) and this is type: rule 4
      says a fill token and a text token are not interchangeable, and the name is
      what records which ground makes it legal. */
-  --on-ink-2: var(--ink-4);  /* 7.18:1 on --ink */
+  --on-ink-2: var(--ink-4);  /* 8.29:1 on --ink */
 
   /* Signal colours for type on a chip over a photo. --warn and --success-text
-     cannot serve here — they are built for --paper and land at 3.01:1 and 2.24:1
+     cannot serve here — they are built for --paper and land at 3.49:1 and 3.12:1
      on --ink, under the 4.5:1 that 11px type owes. These are those two colours at
      OKLCH lightness 0.70 with hue and chroma untouched, which is why they still
      read as the same warning and the same success; the shared lightness is what
@@ -84,14 +84,14 @@
 
      They exist because the chips they belong to used to recolour their GROUND
      instead, which escaped the silhouette guarantee below and failed it: a --warn
-     ground is 1.92:1 against its worst photo tone and a --success-text ground
-     2.02:1, against --ink's 3.11:1. That is not fixable by a heavier boundary —
-     even a solid --paper edge on a --warn ground tops out at 2.18:1, because a
+     ground is 1.93:1 against its worst photo tone and a --success-text ground
+     2.03:1, against --ink's 3.32:1. That is not fixable by a heavier boundary —
+     even a solid --paper edge on a --warn ground tops out at 2.19:1, because a
      mid-dark ground and a light boundary sit too close together in luminance. So
      the ground is never overridden and the signal moved to the type. */
-  --on-ink-warn: #CB9060;    /* 5.54:1 on --ink */
-  --on-ink-success: #7EAA92; /* 5.83:1 on --ink */
-  --edge-on-ink: rgba(251, 248, 242, 0.80);
+  --on-ink-warn: #CB9060;    /* 6.44:1 on --ink */
+  --on-ink-success: #7EAA92; /* 6.74:1 on --ink */
+  --edge-on-ink: rgba(251, 249, 246, 0.80);
   /* Silhouette of a dark chip standing on a user's photograph. --edge is --ink at
      50%, so on an --ink chip it is invisible; and the chip's own dark ground only
      carries its outline against a LIGHT photo — against a dark one the chip
@@ -119,8 +119,8 @@
 
   --grid-unit: 16px;
   --grid-major: 80px;
-  --grid-line: rgba(42, 37, 32, 0.03);
-  --grid-line-major: rgba(42, 37, 32, 0.05);
+  --grid-line: rgba(29, 24, 22, 0.03);
+  --grid-line-major: rgba(29, 24, 22, 0.05);
 
   /* Content measures. How wide a column of content is allowed to get is a design
      value like a radius or a colour, and it was the one that never made it into
@@ -247,8 +247,8 @@
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
 
-  --shadow-soft: 0 1px 2px rgba(42, 37, 32, 0.04), 0 6px 16px rgba(42, 37, 32, 0.06);
-  --shadow-lift: 0 2px 4px rgba(42, 37, 32, 0.06), 0 12px 28px rgba(42, 37, 32, 0.10);
+  --shadow-soft: 0 1px 2px rgba(29, 24, 22, 0.04), 0 6px 16px rgba(29, 24, 22, 0.06);
+  --shadow-lift: 0 2px 4px rgba(29, 24, 22, 0.06), 0 12px 28px rgba(29, 24, 22, 0.10);
   /* Glasshouse — the laptop studio (DockedShell, 1024px up). The room and both
      rails are panes standing on a warm wash, `--pane-gap` apart. Every value here
      is decorative: text on glass is measured on the COMPOSITE, and the wash is built
@@ -256,19 +256,19 @@
      every text token already clears (tests/glass-skin.test.ts). */
   --studio-wash: radial-gradient(120% 90% at 70% 0%, var(--paper) 0%, var(--paper-2) 45%, var(--paper-3) 100%);
   --pane-gap: 10px;
-  --glass-fill: rgba(251, 248, 242, 0.74);        /* --paper at 74%: a rail */
-  --glass-fill-strong: rgba(251, 248, 242, 0.82); /* --paper at 82%: chrome over the room */
-  --glass-tone: rgba(42, 37, 32, 0.035);          /* a quieter band inside a pane (rail footer) */
+  --glass-fill: rgba(251, 249, 246, 0.74);        /* --paper at 74%: a rail */
+  --glass-fill-strong: rgba(251, 249, 246, 0.82); /* --paper at 82%: chrome over the room */
+  --glass-tone: rgba(29, 24, 22, 0.035);          /* a quieter band inside a pane (rail footer) */
   --glass-rim: rgba(255, 255, 255, 0.72);         /* the pane's lit edge — decorative */
   --glass-blur: blur(14px) saturate(140%);
-  --shadow-float: 0 1px 2px rgba(42, 37, 32, 0.05), 0 10px 30px rgba(60, 40, 20, 0.12);
+  --shadow-float: 0 1px 2px rgba(29, 24, 22, 0.05), 0 10px 30px rgba(60, 40, 20, 0.12);
   /* Clay: a control is raised (a soft warm shadow under a lit top edge) or it is a
      well (pressed in). It never replaces `--edge`, which stays the boundary. */
   --clay-raise: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(120, 80, 50, 0.10), 0 3px 8px rgba(120, 80, 50, 0.10);
   --clay-raise-hover: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 4px rgba(120, 80, 50, 0.12), 0 8px 18px rgba(120, 80, 50, 0.14);
   --clay-well: inset 0 1px 2px rgba(120, 80, 50, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.7);
   /* The lift, cast upward: a bottom sheet stands on the room from below. */
-  --shadow-sheet: 0 -1px 3px rgba(42, 37, 32, 0.06), 0 -12px 28px rgba(42, 37, 32, 0.10);
+  --shadow-sheet: 0 -1px 3px rgba(29, 24, 22, 0.06), 0 -12px 28px rgba(29, 24, 22, 0.10);
   /* A tablet's one docked panel (SheetShell's pane): a rail's width, and at
      768px the room keeps ~60% — Material's supporting pane asks 50/50 at a
      medium width, and the room is the primary content here. */
