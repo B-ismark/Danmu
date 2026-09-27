@@ -1120,6 +1120,22 @@ describe('a piece row keeps enough width to read the piece name', () => {
     for (const at of buttons) expect(at > open && at < close, `an IconButton at ${at} sits outside .row-actions`).toBe(true);
   });
 
+  it('the selected row opens its actions onto a line of their own, instead of floating them over the name', () => {
+    // The selected row is where the actions are ALWAYS showing — and the only way a
+    // touch screen reaches them — so the float that frees every other row would sit
+    // on this one's name for as long as it stays selected: ~100px of a ~150px row,
+    // the same "D…" one state over. Found by review, not by the width check below,
+    // which measures the row with its actions hidden.
+    expect(rule('.list-row.is-selected'), 'the selected row must be allowed to wrap').toMatch(/flex-wrap:\s*wrap/);
+    const open = rule('.list-row.is-selected .row-actions');
+    expect(open, 'selected-row actions must be back in the flow').toMatch(/position:\s*static/);
+    expect(open, 'selected-row actions must take a line of their own').toMatch(/flex-basis:\s*100%/);
+    // The name shrinks through a class, not an inline `flex`, so nothing inline can
+    // out-rank the rule above.
+    expect(partRow).toContain('className="row-name truncate"');
+    expect(rule('.row-name')).toMatch(/min-width:\s*0/);
+  });
+
   it('leaves the name a legible share of the narrowest shipping rail', () => {
     const row = rule('.list-row');
     const gap = Number(/gap:\s*(\d+)px/.exec(row)![1]);

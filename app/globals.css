@@ -874,6 +874,7 @@ textarea.field { border-radius: var(--r-2); }
 .list-row.is-selected {
   background: var(--accent-tint-strong);
   box-shadow: inset 0 0 0 1px var(--accent-text);
+  flex-wrap: wrap; row-gap: 2px; /* its actions open onto a line of their own — see .row-actions */
 }
 /* Row actions float over the END of the row rather than standing in it, so a
    row's name gets the row's width and not what three invisible buttons leave of
@@ -895,10 +896,19 @@ textarea.field { border-radius: var(--r-2); }
   opacity: 0; pointer-events: none;
   transition: opacity var(--dur-base) var(--ease-out);
 }
+/* The selected row is the one row whose actions are always showing — and on a
+   touch screen, selecting is the only way to reach them — so floating them there
+   would cover the name permanently: ~100px of buttons over a ~150px row is the
+   "D…" this rule exists to prevent. So the selected row OPENS instead: its
+   actions drop to a line of their own under the name, right-aligned, and the
+   name keeps the whole first line. Always, not only when the name is long — a
+   row that changes shape depending on its text reads as a glitch, and one that
+   opens when you pick it reads as the pick. */
+.row-name { flex: 1 1 0; min-width: 0; }
 .list-row.is-selected .row-actions {
-  background:
-    linear-gradient(to right, transparent, var(--accent-tint-strong) 16px),
-    linear-gradient(to right, transparent, var(--row-ground) 16px);
+  position: static; transform: none;
+  flex-basis: 100%; justify-content: flex-end;
+  padding-left: 0; background: none;
 }
 .list-row:hover .row-actions,
 .list-row:focus-within .row-actions,

@@ -101,8 +101,13 @@ const SCREENS = [
     go: async (p, id) => {
       await p.goto(`${BASE}/room/${id}/plan`);
       await p.waitForTimeout(1500);
-      const row = p.locator('.list-row').nth(1);
-      if (await row.count()) await row.click().catch(() => {});
+      // Pressed on the NAME, near the row's start. Playwright's default is the box's
+      // centre, which on a piece row is where the floating actions reveal — so the
+      // first version of this screen pressed "Keep … where it is", locked the piece,
+      // and photographed a HOVERED row it had called selected.
+      const row = p.locator('[role="option"].list-row').nth(1);
+      if (await row.count()) await row.click({ position: { x: 40, y: 12 } }).catch(() => {});
+      await p.mouse.move(0, 0);
     },
   },
   {
@@ -211,7 +216,23 @@ async function measure(page) {
   });
 }
 
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+/** Could not run is not the same answer as found something: a refused connection or a
+ *  browser that will not start exits 2, so a caller never reads a dead server as findings. */
+const cannotRun = (why, e) => {
+  console.error(`fidelity-sweep: ${why} — ${e?.message ?? e}`);
+  process.exit(2);
+};
+const browser = await chromium
+  .launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+  .catch((e) => cannotRun('the browser would not start', e));
+{
+  const probe = await browser.newPage();
+  await probe.goto(BASE, { waitUntil: 'domcontentloaded' }).catch(async (e) => {
+    await browser.close();
+    cannotRun(`nothing is serving ${BASE} (start a production build first)`, e);
+  });
+  await probe.close();
+}
 const report = {};
 let findings = 0, targets = 0;
 try {

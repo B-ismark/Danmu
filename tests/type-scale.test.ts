@@ -34,6 +34,9 @@ const FILES = [...walk(join(ROOT, 'app')), ...walk(join(ROOT, 'components'))];
 const EXEMPT_FILES: Record<string, string> = {
   // Rendered by satori into a PNG at build time — no stylesheet, no custom properties.
   'app/opengraph-image.tsx': 'satori cannot read CSS custom properties',
+  // The root error boundary replaces the root layout, so globals.css — and every token —
+  // may never have loaded. Its literals are hand-synced to the scale (see its header).
+  'app/global-error.tsx': 'renders when globals.css may not have loaded',
 };
 
 /** SVG `fontSize="…"` / `fontSize={…}` attributes are in the drawing's own user units
@@ -139,21 +142,36 @@ describe('text styles', () => {
     }
   });
 
+  /** Every classless element in `src` that spells out a named pairing inline. */
+  const pairingOffenders = (src: string) => {
+    const out: string[] = [];
+    // `=>` is let through explicitly: an arrow-function prop before `style` is the
+    // commonest thing in this codebase, and a bare `[^>]` stopped at its `>` and
+    // skipped the whole element.
+    for (const m of src.matchAll(/<([a-z][\w]*)((?:(?!<[A-Za-z])(?:=>|[^>]))*?)style=\{\{([^{}]*)\}\}/g)) {
+      if (/className=/.test(m[2])) continue;
+      for (const [size, ink, cls] of PAIRS)
+        if (m[3].includes(`fontSize: 'var(--fs-${size})'`) && m[3].includes(`color: 'var(--${ink})'`))
+          out.push(`<${m[1]}> → className="${cls}"`);
+    }
+    return out;
+  };
+
+  it('the pairing sweep sees an element whatever props come before its style', () => {
+    const pair = "style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}";
+    expect(pairingOffenders(`<p ${pair}>x</p>`)).toEqual(['<p> → className="t-hint"']);
+    expect(pairingOffenders(`<div onClick={() => go()} ${pair}>x</div>`)).toEqual(['<div> → className="t-hint"']);
+    expect(pairingOffenders(`<p className="t-hint" ${pair}>x</p>`)).toEqual([]);
+  });
+
   it('a classless DOM element never spells out a named pairing inline', () => {
     // The regrowth pattern: someone copies `fontSize` + `color` from a neighbour
     // instead of reaching for the class. Elements that already carry a class are
     // left alone — merging a text colour into another class's element is a
     // specificity question, not a find-and-replace.
     const offenders: string[] = [];
-    for (const f of TSX) {
-      const src = stripComments(readFileSync(join(ROOT, f), 'utf8'));
-      for (const m of src.matchAll(/<([a-z][\w]*)((?:(?!<[A-Za-z])[^>])*?)style=\{\{([^{}]*)\}\}/g)) {
-        if (/className=/.test(m[2])) continue;
-        for (const [size, ink, cls] of PAIRS)
-          if (m[3].includes(`fontSize: 'var(--fs-${size})'`) && m[3].includes(`color: 'var(--${ink})'`))
-            offenders.push(`${f}  <${m[1]}> → className="${cls}"`);
-      }
-    }
+    for (const f of TSX)
+      for (const o of pairingOffenders(stripComments(readFileSync(join(ROOT, f), 'utf8')))) offenders.push(`${f}  ${o}`);
     expect(offenders, offenders.join('\n')).toEqual([]);
   });
 

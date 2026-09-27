@@ -28,14 +28,14 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
       <body style={{ margin: 0, fontFamily: 'system-ui, sans-serif', background: PAPER, color: INK }}>
         <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 40 }}>
           <div style={{ maxWidth: 'var(--measure-card)', textAlign: 'center' }}>
-            <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: DANGER, marginBottom: 8 }}>Hiccup</div>
-            <h1 style={{ fontSize: 'var(--fs-title)', margin: '0 0 12px' }}>Danmu didn’t finish loading</h1>
-            <p style={{ fontSize: 'var(--fs-body)', lineHeight: 1.55, color: INK_2, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: DANGER, marginBottom: 8 }}>Hiccup</div>
+            <h1 style={{ fontSize: 24, margin: '0 0 12px' }}>Danmu didn’t finish loading</h1>
+            <p style={{ fontSize: 14, lineHeight: 1.55, color: INK_2, marginBottom: 20 }}>
               Nothing was lost — your rooms are saved in this browser. Reload to start it up again.
             </p>
             <button
               onClick={() => reset()}
-              style={{ padding: '12px 22px', borderRadius: 16, border: 'none', background: ACCENT_INK, color: '#FFFFFF', fontSize: 'var(--fs-body)', fontWeight: 700, cursor: 'pointer' }}
+              style={{ padding: '12px 22px', borderRadius: 16, border: 'none', background: ACCENT_INK, color: '#FFFFFF', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
             >
               Reload Danmu
             </button>

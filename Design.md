@@ -126,6 +126,15 @@ owned by a deterministic geometry engine, not by a model.
    drawing's own units, the brand mark's proportional wordmark). Every size moved
    by at most half a pixel except the old one-offs, which moved to the step they
    were doing the job of.
+   On top of the scale sit **named text styles** — a size and an ink that belong
+   together, so a hint is always a hint: `.t-title`, `.t-body`, `.t-small`,
+   `.t-note` (caption, ink-2), `.t-hint` (caption, ink-3), `.t-meta` (small,
+   ink-3), `.t-micro`, and `.truncate` for the one flex child that should
+   ellipsise. And **five button sizes** on `.ds-btn` — `--xs` 26 · `--sm` 32 ·
+   default 38 · `--lg` 44 · `--xl` 52 — each carrying its own padding, gap and
+   type step, so a button's height is never typed beside its label again. The same
+   test fails on a classless element spelling out a named pairing inline, and holds
+   a ceiling on inline styles that only goes down.
    **Nothing UI-facing is done until `scripts/fidelity-sweep.mjs` is clean.** It
    walks every screen at seven widths (360 → 1920) against a production build and
    counts the silent failures rule 4 names — text spilling its box, text clipped by

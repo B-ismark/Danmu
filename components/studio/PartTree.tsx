@@ -690,38 +690,37 @@ export function PartTree() {
  *  would either fight it or disappear under it. `--hairline-strong`, since this
  *  is a decorative connector and not the edge of anything interactive. */
 function Connector({ last }: { last: boolean }) {
+  // Measured from the row, not from this span. The span is a flex item, so it is
+  // only as tall as the row's CONTENT box: a stem drawn inside it stopped at the
+  // row's 9px padding and read as a dotted line — and once the selected row wraps
+  // its actions onto a second line, the span covers only the first. So the stem
+  // is positioned against `.list-row` itself (which is `position: relative`):
+  // `left` is the row's 11px padding plus this span's 4px, and `-3` reaches through
+  // the 1px border across `.list`'s 2px gap so the spine is continuous down the
+  // group. A last member's stem stops at the elbow, which stays in this span on
+  // purpose — centred on the name's line, not on a wrapped row's whole height —
+  // so it reaches up through the 9px padding, 1px border and 2px gap instead.
+  const stem = { position: 'absolute', width: 1, background: 'var(--hairline-strong)' } as const;
   return (
-    <span
-      aria-hidden="true"
-      style={{ position: 'relative', width: 11, alignSelf: 'stretch', flexShrink: 0 }}
-    >
+    <>
+      {!last && <span aria-hidden="true" style={{ ...stem, left: 15, top: -3, bottom: -3 }} />}
       <span
-        style={{
-          position: 'absolute',
-          left: 4,
-          // `.list` puts a 2px gap between rows, so a stem drawn inside the row
-          // box would break every 37px and read as a dotted line. The row has no
-          // `overflow`, so the stem simply reaches across the gap instead — no
-          // negative margins, no change to how the list stacks.
-          top: -2,
-          // A last member's stem stops at the elbow; every other member's runs
-          // past the bottom so the spine is continuous down the group.
-          bottom: last ? '50%' : -2,
-          width: 1,
-          background: 'var(--hairline-strong)',
-        }}
-      />
-      <span
-        style={{
-          position: 'absolute',
-          left: 4,
-          top: '50%',
-          width: 6,
-          height: 1,
-          background: 'var(--hairline-strong)',
-        }}
-      />
-    </span>
+        aria-hidden="true"
+        style={{ position: 'relative', width: 11, alignSelf: 'stretch', flexShrink: 0 }}
+      >
+        {last && <span style={{ ...stem, left: 4, top: -12, bottom: '50%' }} />}
+        <span
+          style={{
+            position: 'absolute',
+            left: 4,
+            top: '50%',
+            width: 6,
+            height: 1,
+            background: 'var(--hairline-strong)',
+          }}
+        />
+      </span>
+    </>
   );
 }
 
@@ -841,13 +840,12 @@ function PartRow({
         {locked ? <Icon name="camera" size={11} color="var(--locked)" /> : <Dot size={7} />}
       </span>
       <span
-        className="truncate"
+        className="row-name truncate"
         style={{
           fontSize: 'var(--fs-small)',
           fontWeight: 500,
           color: isHidden ? 'var(--ink-3)' : 'var(--ink)',
           textDecoration: isHidden ? 'line-through' : 'none',
-          flex: 1,
         }}
       >
         {name}
@@ -1026,10 +1024,7 @@ function GroupRow({
           and the connectors below carry the rest of the identity — a `layers`
           glyph as well would have cost 20px of a label budget that is only ~46px
           in the 1024–1279px rail, and pushed the word itself to "Grou…". */}
-      <span
-        className="ds-label truncate"
-        style={{ flex: 1, minWidth: 0 }}
-      >
+      <span className="ds-label row-name truncate">
         Group · {count}
       </span>
       <span className="row-actions">

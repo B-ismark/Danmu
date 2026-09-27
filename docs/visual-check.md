@@ -955,10 +955,13 @@ which the sweep could not see until it learned to). SwiftShader, desktop Chromiu
 What the sweep cannot tell you, and a person can:
 - **The catalog's hover actions.** Point at a piece row in the left rail: lock, hide and
   remove fade in OVER the end of the name, on a fade of the row's own colour. Wrong looks
-  like a grey slab, a hard edge, or the name jumping sideways. Do it on a selected row
-  too (the fade carries the terracotta tint).
-- **On a touch screen**, tap a row: its actions show on the selected row, since there is
-  no hover. Wrong looks like a row with no way to hide or delete the piece.
+  like a grey slab, a hard edge, or the name jumping sideways.
+- **Select a row** (mouse or touch): it opens to two lines — the name keeps the whole
+  first line, lock / hide / remove sit right-aligned beneath it. That is also the only
+  way a touch screen reaches them. Wrong looks like the buttons sitting on the name, the
+  name dropping under the dot, or a row with no way to hide or delete the piece. Do it on
+  a piece inside a group too: the group's line should run unbroken through the opened
+  row, and on the group's LAST piece stop at the elbow beside the name.
 - **A locked or hidden piece** shows a small padlock / crossed eye after its name without
   hovering.
 - **On a phone** the 3D tab's Move / Scale / Rotate read in full, with the W / S / R
