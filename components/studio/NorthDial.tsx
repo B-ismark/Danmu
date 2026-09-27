@@ -112,8 +112,8 @@ export function NorthDial() {
   // marker is drawn at (`sunAt` in `Dial`).
   const about =
     sunAzimuthDeg === null
-      ? 'Drag the dial so N points to real north. This lighting mood has no sun.'
-      : `Drag the dial so N points to real north. The dot is the sun: light comes from the dial's ${planSide(sunAzimuthDeg - bearingDeg)}.`;
+      ? 'Turn the dial so N points to real north. This lighting mood has no sun.'
+      : `Turn the dial so N points to real north. The dot marks the sun, which shines in from the ${planSide(sunAzimuthDeg - bearingDeg)} of the dial.`;
 
   return (
     <div style={{ minWidth: 0 }}>

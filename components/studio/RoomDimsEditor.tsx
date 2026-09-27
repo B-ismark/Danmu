@@ -240,8 +240,13 @@ export function RoomDimsEditor() {
    *  made the inert press legible. It cannot: `floorError` is rendered inside the
    *  `rangeError` branch, and this path never sets it. So the line is back, and it
    *  is back only for the axes that can actually be stuck. */
-  const heldAxes = (['width', 'depth'] as FloorAxis[]).filter((axis) =>
-    namesTheStop(floors[axis].stop, axis === 'width' ? room.width : room.depth),
+  const heldAxes = (['width', 'depth'] as FloorAxis[]).filter(
+    (axis) =>
+      namesTheStop(floors[axis].stop, axis === 'width' ? room.width : room.depth) &&
+      // Only once the field is AT that floor, which is when the down arrow goes
+      // inert. A 6 m room holding a 2.4 m rug has nothing to explain, and a line
+      // that shows whenever a room is furnished is a standing tip.
+      Number(local[ROOM_AXES.indexOf(axis)]) <= bounds(axis).min,
   );
 
   // The furniture refusal, in the user's unit — and it is CARRIED from the commit
@@ -340,7 +345,7 @@ export function RoomDimsEditor() {
           // will not reach — which is the pairing `boundsToUnit` exists for.
           <div className="t-hint" style={{ marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere' }}>
             {heldAxes
-              .map((axis) => `${axis === 'width' ? 'Width' : 'Depth'} stops at ${bounds(axis).min} ${dimUnit} (“${floors[axis].stop!.name}”).`)
+              .map((axis) => `“${floors[axis].stop!.name}” needs ${bounds(axis).min} ${dimUnit}, so the ${axis} stops there.`)
               .join(' ')}
           </div>
         ) : null}

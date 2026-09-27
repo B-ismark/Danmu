@@ -1645,6 +1645,30 @@ deliberately. And a selection restored onto a room that no longer holds those pi
 back partially — the pieces that survive stay selected and the rest are dropped, rather
 than the whole selection clearing.
 
+### A cleaner cream, a deeper ink, plain copy, and Sun direction behind an info button — PR #158, SWEPT, needs a real phone and a real screen
+
+The paper family lost about half its yellow and the ink went darker; every contrast
+ratio in `globals.css` went up, and `tests/color-tokens.test.ts` holds the comments to
+the tokens. The Room panel's "Facing" dial is **Sun direction** now, with its
+explanation behind an ⓘ that opens on a tap (`InfoTip` in `components/ui/Tooltip.tsx`)
+rather than a line of hint under it. The coach-mark pop-ups and the loading card's
+rotating tips are gone, and visible copy has no em dashes. The room size hint ("“Area
+rug” needs 2.4 m…") shows only once a width or depth is AT that floor. Swept at all
+seven widths: **0 findings**. The small-target count rose 186 → 195, and every one of
+the nine is the Settings unit picker (m · cm · mm · ft · in, 30 px tall), which shorter
+copy above it pulled into the first screen on a phone — it was always that size.
+
+What a person can see and the sweep cannot:
+- **The cream on a real display**, beside the old one if you have it: it should read as
+  paper, not as grey and not as yellow. Check the pale wall colours in 3D against it.
+- **Sun direction on a phone:** tap ⓘ, the bubble opens above it and stays on screen;
+  tap anywhere else or scroll the sheet and it closes. With a mouse it opens on hover
+  and on keyboard focus, and Esc closes it.
+- **The loading card** (run a detection): a pulsing dot, "Working…" and Stop on one
+  row, the title under it, and no tips cycling. Nobody has seen it since the tips went.
+- **The room size hint:** drag a room's width down to its largest piece; the sentence
+  appears at the floor and not before.
+
 ---
 ## Look and light
 
