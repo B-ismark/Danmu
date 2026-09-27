@@ -62,6 +62,7 @@ section is yours to fix if you are the one reading it.
 | Drag and selection | `drag` | drag, convoy, rotate, scale, snap, both tabs' pointers |
 | Layout and Shuffle | `layout` | the solver, Shuffle, bands, arrangement, layout rules |
 | Shell and flow | `shell` | rails, panels, capture / detect, copy and CTAs |
+| Look and light | `look` | the 3D render: grading, materials, lights, what the camera sees |
 
 ---
 
@@ -1598,6 +1599,33 @@ back partially — the pieces that survive stay selected and the rest are droppe
 than the whole selection clearing.
 
 ---
+## Look and light
+
+### High quality is graded again — on a real GPU, in every mood — branch `claude/amazing-davinci-m8zqys`, PR PENDING
+
+**Where to click.** Open any room on the **3D Model** tab with **View → Quality → High**
+(the default), then flip to **Fast** and back, in each lighting mood. Then **Export → This
+3D view** on High and open the PNG beside the screen.
+
+**What wrong looks like.** High reading flatter or greyer than Fast in a way that is not
+shadow (the composer used to switch the ACES curve off, so every mood's `exposure` did
+nothing on the default quality); the paper backdrop around the room a different colour
+inside the canvas than outside it (the grade is depth-gated in `components/three/grade.ts`
+to leave the cleared backdrop alone — a banded or haloed silhouette where the room meets
+the backdrop would mean that gate is misreading depth); or the saved PNG missing the soft
+corner shading the screen shows (snapshots now render through the composer).
+
+**What was measured, and on what.** SwiftShader only, one mood, 1280 × 800: backdrop
+251,248,241 on High before, on High after and on Fast — identical — where the ungated
+first attempt read 225,224,222. The snapshot PNG matched the High view to within 2 levels
+at three sampled points. A real GPU and the other moods are the unlooked-at half.
+
+**Not this item, noticed on the way.** High is much darker than Fast in the same mood,
+and it is not the grade: the back wall reads 109 on High and 174 on Fast with the grade on
+both. The closed shell (`RoomShell`) is doing its job — the key light casts on High and the
+ceiling stops it — so the interior is lit by the hemisphere and environment alone. That is
+the lighting pass's to answer (warm interior light sources), not a grading defect.
+
 ## The browser route, so the next person does not rebuild it
 
 Looking is a half-hour of setup nobody has to hand, which is the actual reason items sit

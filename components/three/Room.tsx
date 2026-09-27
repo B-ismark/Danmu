@@ -6,7 +6,8 @@
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
-import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
+import { EffectComposer, N8AO, SMAA, wrapEffect } from '@react-three/postprocessing';
+import type { EffectComposer as Composer } from 'postprocessing';
 import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Scene, type WebGLRenderer } from 'three';
 import { useStudio } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
@@ -28,6 +29,7 @@ import { RoomShell } from './RoomShell';
 import { WallHandles } from './WallHandles';
 import { MeasureGuides } from './MeasureGuides';
 import { Draggable } from './Draggable';
+import { GradeEffect } from './grade';
 import { PartGeometry } from './DynamicPart';
 import { Dressing } from './Dressing';
 import { CameraRig } from './CameraRig';
@@ -84,6 +86,7 @@ const _up = new Vector3(0, 1, 0);
 /** Reused across drops. `Plane` is `normal · x + constant = 0`, so a plane at `y = h`
  *  has constant `-h`; the floor is the `h = 0` case of that rather than a second rule. */
 const _dropPlane = new Plane(new Vector3(0, 1, 0), 0);
+const Grade = wrapEffect(GradeEffect);
 
 export function Room() {
   const hidden = useStudio((s) => s.hidden);
@@ -93,6 +96,9 @@ export function Room() {
   const panKey = useStudio((s) => s.panKeyHeld);
   const hi = quality === 'high';
   const L = LIGHTING[lighting];
+  /** The composer, when 'high' mounts one — SceneCapture renders through it so a
+   *  snapshot is graded and shaded exactly like the view it was taken of. */
+  const composer = useRef<Composer | null>(null);
   const parts = useScene((s) => s.parts).filter((p) => !hidden[p.id]);
 
   // The sun, in the moods that have one. Null in a studio mood, and null when the
@@ -348,9 +354,20 @@ export function Room() {
           broken — someone who picks Fast because the room stutters was still
           paying for SSAO. Without the composer the canvas' own MSAA
           (gl.antialias) handles edges, so Fast stays smooth, just flatter. */}
+      {/* The grading step is not optional here. The composer switches the
+          renderer's own tone mapping OFF (it renders into a linear half-float
+          buffer and expects a pass to finish the job), so without <Grade> the
+          ACES curve and every mood's `exposure` set on `gl` above silently stop
+          applying — 'high' showed the room flatter and muddier than 'fast', the
+          reverse of what the toggle promises. It is three's own ACES curve reading
+          `gl.toneMappingExposure`, so the two qualities share one curve and one
+          exposure, and it leaves the backdrop alone as 'fast' does (see grade.ts).
+          It sits after N8AO (occlusion is a linear-light operation) and before
+          SMAA (edge detection wants the display-range image). */}
       {hi && (
-        <EffectComposer enableNormalPass={false} multisampling={0}>
+        <EffectComposer ref={composer} enableNormalPass={false} multisampling={0}>
           <N8AO aoRadius={0.5} intensity={1.1} distanceFalloff={1} halfRes />
+          <Grade />
           <SMAA />
         </EffectComposer>
       )}
@@ -372,7 +389,7 @@ export function Room() {
       <AdaptiveDpr pixelated />
 
       <CameraRig />
-      <SceneCapture />
+      <SceneCapture composer={hi ? composer : null} />
       <DropConnector apiRef={dropApi} />
     </Canvas>
     </div>
@@ -619,7 +636,7 @@ function snapshotFailed(err?: unknown) {
   });
 }
 
-function SceneCapture() {
+function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null> | null }) {
   const { gl, scene, camera, invalidate } = useThree();
   const token = useSnapshot((s) => s.token);
   const done = useRef(useSnapshot.getState().token);
@@ -657,10 +674,16 @@ function SceneCapture() {
       }
     });
     try {
-      // Render the raw scene from the CURRENT camera to the WebGL buffer, then
-      // COPY it into a 2D canvas synchronously (before the un-preserved buffer
-      // clears). toBlob runs async off that copy.
-      gl.render(scene, camera);
+      // Render from the CURRENT camera to the WebGL buffer, then COPY it into a 2D
+      // canvas synchronously (before the un-preserved buffer clears). toBlob runs
+      // async off that copy.
+      // On 'high' that render goes through the composer. A bare `gl.render` there
+      // skipped occlusion AND grading — the composer has turned the renderer's
+      // tone mapping off — so the file someone saved to show a partner was a
+      // flatter, greyer room than the one on their screen.
+      const fx = composer?.current;
+      if (fx) fx.render();
+      else gl.render(scene, camera);
       const src = gl.domElement;
       const snap = document.createElement('canvas');
       snap.width = src.width;
