@@ -1592,6 +1592,15 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   the wall outline, because a door standing on the floor of a wall that starts at
   the floor is the degenerate case for the triangulator. The **part** keeps its real
   size; the hole behind it is what shrinks.
+- **Wall pieces leave with their wall.** The dollhouse cut-away is back-face
+  culling, which removes the near wall's mesh and nothing fixed to it, so a window,
+  its curtains, a painting or a door used to hang in mid-air across the view.
+  `CutAway` (in `Draggable`) asks `lib/near-wall.ts` the GPU's own question of each
+  wall-anchored piece — is the camera behind the plane through the piece's back? —
+  and, when it is, stops the piece's materials writing colour or depth and stops it
+  taking clicks. It deliberately does **not** set `visible = false` or move it to a
+  layer: both drop it from the shadow pass too (r184 tests layers against the main
+  camera there), and the curtains on a cut-away wall still shade the room.
 - **Quality** High / Fast — gates procedural normal/roughness maps
   (`lib/textures.ts`, zero assets) + soft cast shadows + ambient occlusion
   (N8AO/SMAA mount on `high` only). There is no floor reflection.

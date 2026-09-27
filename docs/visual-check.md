@@ -1626,6 +1626,22 @@ both. The closed shell (`RoomShell`) is doing its job — the key light casts on
 ceiling stops it — so the interior is lit by the hemisphere and environment alone. That is
 the lighting pass's to answer (warm interior light sources), not a grading defect.
 
+### Windows, curtains, art and doors go with the cut-away wall — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Any room with a window or a painting on each wall, **3D Model** tab,
+default dollhouse view. Orbit slowly all the way round, on **High** and on **Fast**.
+
+**What wrong looks like.** A wall piece still hanging where its wall has gone; a piece
+vanishing while its wall is still drawn (a sign error in `lib/near-wall.ts` shows only on
+the side walls); the room's **shadows moving** as the camera crosses a wall — the piece is
+meant to stop drawing but keep casting (`components/three/CutAway.tsx`); or a press where
+an invisible window was selecting the window instead of what is behind it.
+
+**What was measured, and on what.** SwiftShader, 1280 × 800, the starter living room:
+both near walls' windows and curtains gone in the default view, back after a ~180° orbit,
+and a click through the vanished window selected the sofa. Shadow stability while orbiting
+was not measured — it is the half that wants eyes.
+
 ## The browser route, so the next person does not rebuild it
 
 Looking is a half-hour of setup nobody has to hand, which is the actual reason items sit
