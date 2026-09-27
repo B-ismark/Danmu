@@ -1758,7 +1758,7 @@ button says "Shuffling…". Then press Shuffle and immediately **Ctrl+Z**.
 **What wrong looks like.** The room freezing while the button spins (the worker did not
 load — the console says "Arranging worker unavailable; running inline."); an arrangement
 landing on top of the undo you just made (the stamp check failed). The second press should
-end in "The room changed while it was thinking" with the undo standing.
+end in "The room changed during the search" with the undo standing.
 
 **What was measured, and on what.** SwiftShader, production build, 4 cores, the seeded
 9-piece showroom, three presses each. Inline (Worker hidden from the page): Shuffle froze

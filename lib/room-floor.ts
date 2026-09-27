@@ -183,8 +183,8 @@ export function namesTheStop(stop: FloorStop | null, current: number): stop is F
 export function floorRefusal(stop: FloorStop, axis: FloorAxis, current: number, unit: DimUnit): string {
   const way = axis === 'width' ? 'narrower' : 'shallower';
   if (stop.metres > current + ROOM_SIDE_EPS) {
-    return `“${stop.name}” is ${formatDim(stop.metres * 1000, unit)} ${unit} and already does not fit — the room will not get any ${way}.`;
+    return `“${stop.name}” is ${formatDim(stop.metres * 1000, unit)} ${unit} and already does not fit. The room will not get any ${way}.`;
   }
   const needs = boundsToUnit(stop.metres * 1000, ROOM_SIDE_M.max * 1000, unit).min;
-  return `“${stop.name}” needs ${needs} ${unit} — the room will not go ${way} than that.`;
+  return `“${stop.name}” needs ${needs} ${unit}, so the room will not go ${way} than that.`;
 }

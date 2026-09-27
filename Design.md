@@ -2010,7 +2010,7 @@ outlined box around outlined buttons, which put two boundaries on every control.
   two harnesses, both named at the overlap term in `lib/layout-score.ts`).
 - **The room report offers, it does not just report** (`RoomTools.tsx` `CheckPanel`).
   An earlier pass fixed how the panel *sounds* — findings badged FIX / TIGHT / NOTE
-  in tracked caps became "Worth fixing" / "A bit tight" / "Just so you know", which
+  in tracked caps became "Worth fixing" / "A bit tight" / "Note", which
   is the same information said the way the rest of the product talks. What it could
   *do* was still nothing: it named a problem, offered to select the pieces, and
   stopped. The only way to act was the whole-room **Fix** in the left rail, which

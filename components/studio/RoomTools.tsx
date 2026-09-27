@@ -60,7 +60,7 @@ const turnLabel = (unit: DimUnit) => formatLength(TURNING_DIAMETER * 1000, unit)
 
 const STEP_FREE_DESC_ID = 'step-free-desc';
 const stepFreeDesc = (unit: DimUnit) =>
-  `Report the ${turnLabel(unit)} of turning space a wheelchair needs, and flag steps and thresholds`;
+  `Check for the ${turnLabel(unit)} of clear floor a wheelchair needs to turn`;
 import { useScene, type RoomShape } from '@/lib/scene-store';
 import { currentRoomScene, resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
@@ -241,7 +241,7 @@ export function RoomHealthDot() {
   const ok = problems === 0;
   return (
     <div
-      title={ok ? 'Room checks out' : `${problems} ${problems === 1 ? 'issue' : 'issues'} — open this panel to see them`}
+      title={ok ? 'Room checks out' : `${problems} room ${problems === 1 ? 'issue' : 'issues'}`}
       aria-label={ok ? 'Room checks out' : `${problems} room ${problems === 1 ? 'issue' : 'issues'}`}
       role="status"
       style={{
@@ -604,8 +604,8 @@ function currentStamp(): SolveStamp {
  *  for every button, because it is one situation. */
 function toastStale() {
   toast({
-    title: 'The room changed while it was thinking',
-    message: 'Nothing was moved, so your change stands. Press again to work from the room as it is now.',
+    title: 'The room changed during the search',
+    message: 'Nothing was moved. Press again to use the room as it is now.',
   });
 }
 
@@ -781,7 +781,7 @@ function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
             }
           : {
               title: 'This is already a good arrangement',
-              message: 'Nothing was moved — the pieces are where the guidelines want them.',
+              message: 'Nothing was moved. The pieces are already where the guidelines want them.',
             },
       );
       return;
@@ -807,7 +807,7 @@ function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
       disabled={busy}
       aria-busy={busy}
       className="ds-btn ds-btn--sm"
-      title="Clear what's wrong (a blocked door, a crowded walkway…) moving as little as possible"
+      title="Clear what’s wrong, moving as little as possible"
       style={{
         fontSize: 'var(--fs-caption)',
         gap: 6,
@@ -1039,7 +1039,7 @@ function ShuffleButton({
               )
             : {
                 title: 'Nothing to shuffle',
-                message: 'Every piece is locked or wall-mounted — there is nothing left to move.',
+                message: 'Every piece is locked or wall-mounted.',
               },
         );
         return;
@@ -1063,7 +1063,7 @@ function ShuffleButton({
       disabled={busy}
       aria-busy={busy}
       className="ds-btn ds-btn--sm"
-      title="Try a different arrangement, whether or not anything is wrong — takes a bit longer than Fix"
+      title="Try a different arrangement, whether or not anything is wrong. Slower than Fix."
       style={{
         fontSize: 'var(--fs-caption)',
         gap: 6,
@@ -1162,7 +1162,7 @@ function useRefitOffer(
                   }
                 : {
                     title: 'Nothing to move',
-                    message: 'No arrangement of the unlocked pieces clears this — try a different size, or unlock more.',
+                    message: 'No arrangement of the unlocked pieces clears this. Try a different size, or unlock more pieces.',
                   },
           );
         },
@@ -1195,7 +1195,7 @@ function useRefitOffer(
 const SEVERITY: Record<ClearanceSeverity, { tone: 'danger' | 'warn' | 'neutral'; label: string }> = {
   error: { tone: 'danger', label: 'Worth fixing' },
   warn: { tone: 'warn', label: 'A bit tight' },
-  info: { tone: 'neutral', label: 'Just so you know' },
+  info: { tone: 'neutral', label: 'Note' },
 };
 
 /** A tab's action row — the buttons that belong to one reading rather than to the
@@ -1267,7 +1267,7 @@ function FixButton({ issue, appPlaced }: { issue: ClearanceIssue; appPlaced: App
         message:
           result.declined === 'impossible'
             ? scope
-              ? `The closest it found put a piece ${impossibleClause(result.declinedTerms)}. Fix can rearrange the whole room, which gives it more to work with.`
+              ? `The closest it found put a piece ${impossibleClause(result.declinedTerms)}. Fix can rearrange the whole room.`
               : `The closest it found put a piece ${impossibleClause(result.declinedTerms)}. Try unlocking a piece, or making some space.`
             : scope
               ? 'Nothing better was found without touching the rest of the room. Fix can rearrange everything.'
@@ -1298,7 +1298,7 @@ function FixButton({ issue, appPlaced }: { issue: ClearanceIssue; appPlaced: App
       className="ds-btn ds-btn--xs"
       title={
         scope
-          ? 'Move just the pieces named here, leaving the rest of the room alone'
+          ? 'Move only the pieces named here'
           : 'Rearrange the unlocked furniture to open the floor up'
       }
       style={{ fontSize: 'var(--fs-micro)', padding: '0 10px', gap: 6, flexShrink: 0, alignSelf: 'flex-start' }}
@@ -1518,7 +1518,7 @@ function CheckPanel({
       <CheckSummary freeShare={freeShare} stepFree={stepFree} onStepFree={onStepFree} />
       {issues.length === 0 ? (
         <div className="t-small" style={{ padding: '18px 14px', lineHeight: 1.55 }}>
-          Everything fits — doors open, walkways are comfortable, and seating distances look right.
+          No problems found. Doors open and walkways are wide enough.
         </div>
       ) : (
         issues.map((issue) => (
@@ -1547,7 +1547,7 @@ function CheckPanel({
 /** What the answer looks like, per verdict. Tone comes from the same Pill palette the
  *  room report uses, so a fit answer and a finding read as the same kind of statement. */
 const FIT_TONE: Record<FitStatus, { tone: 'sage' | 'warn' | 'danger'; lead: string }> = {
-  fits: { tone: 'sage', lead: 'Yes — it fits' },
+  fits: { tone: 'sage', lead: 'Yes, it fits' },
   tight: { tone: 'warn', lead: 'It goes in, but it is tight' },
   'no-room': { tone: 'danger', lead: 'No room for it' },
   'too-tall': { tone: 'danger', lead: 'Too tall for this room' },
@@ -1656,7 +1656,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
       tone: 'success',
       title: `${kind.label} placed`,
       message: resized
-        ? 'Its size was brought into the range the studio works in — the fit answer was about the size you entered.'
+        ? 'Its size was changed to fit the studio’s range. The fit answer was for the size you entered.'
         : 'Undo puts the room back.',
     });
     setResult(null);
@@ -1669,8 +1669,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
   return (
     <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div className="t-note" style={{ lineHeight: 1.45 }}>
-        Type the size off the shop page. Nothing in your room moves — this only asks
-        whether there is somewhere for it.
+        Checks for space. Nothing in the room moves.
       </div>
 
       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1720,7 +1719,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
           absurd as entered and sensible one unit down, say so. */}
       {misreadUnit(dimMM, dimUnit) && (
         <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--warn-text)', lineHeight: 1.4 }}>
-          Those look like {misreadUnit(dimMM, dimUnit)} — these fields are in{' '}
+          Those look like {misreadUnit(dimMM, dimUnit)}. These fields are in{' '}
           <span className="mono">{dimUnit}</span>. Settings can change the unit.
         </div>
       )}
@@ -1838,8 +1837,7 @@ function FitAnswer({
 
       {result.status === 'too-tall' && (
         <div className="t-note" style={{ lineHeight: 1.45 }}>
-          The ceiling here is <span className="mono">{formatDim(room.height * 1000, dimUnit)} {dimUnit}</span>. Nothing
-          about the floor can help with that.
+          The ceiling here is <span className="mono">{formatDim(room.height * 1000, dimUnit)} {dimUnit}</span>.
         </div>
       )}
 
@@ -1851,7 +1849,7 @@ function FitAnswer({
               <span className="mono">
                 {formatDim(result.largestBay.width * 1000, dimUnit)} × {formatDim(result.largestBay.depth * 1000, dimUnit)} {dimUnit}
               </span>
-              . Moving what is already in here might make room — try <b>Fix</b> or <b>Shuffle</b>.
+              . <b>Fix</b> or <b>Shuffle</b> may make room by moving what is already here.
             </>
           ) : (
             <>This room has no clear stretch of floor to put it on.</>
@@ -1873,8 +1871,8 @@ function FitAnswer({
 
       {result.outOfRange && (
         <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--warn-text)', lineHeight: 1.4 }}>
-          That size is outside the range the studio works in. The answer above is about
-          the size you entered; placing it will bring it into range.
+          That size is outside the studio’s range. The answer is for the size you entered.
+          Placing it changes the size to fit the range.
         </div>
       )}
 
@@ -1915,7 +1913,7 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
     return rows
       .map(({ part: p, count }) => {
         const dims = `${formatDim(p.dimMM[0], dimUnit)} × ${formatDim(p.dimMM[1], dimUnit)} × ${formatDim(p.dimMM[2], dimUnit)} ${dimUnit} (W×D×H)`;
-        return `${count > 1 ? `${count}× ` : ''}${p.name} — ${dims}${p.color ? ` — ${p.color.toUpperCase()}` : ''}`;
+        return `${count > 1 ? `${count}× ` : ''}${p.name} · ${dims}${p.color ? ` · ${p.color.toUpperCase()}` : ''}`;
       })
       .join('\n');
   }
@@ -1947,7 +1945,7 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
 
       {rows.length === 0 ? (
         <div className="t-small" style={{ padding: '16px 14px', lineHeight: 1.55 }}>
-          Nothing in the room yet. Open the Library on the right and drop a piece in.
+          Nothing in the room yet.
         </div>
       ) : (
         rows.map(({ part: p, count }, i) => (
@@ -2059,10 +2057,9 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
       body: (
         <>
           <p style={{ margin: '0 0 8px' }}>
-            Saved layouts are stored with the room rather than in the edit history, so <b>undo will not bring this
-            one back</b>.
+            Saved layouts are not part of the edit history, so <b>undo will not bring this one back</b>.
           </p>
-          <p style={{ margin: 0 }}>The furniture in your room is not touched — only this saved snapshot of it.</p>
+          <p style={{ margin: 0 }}>The furniture in your room stays as it is.</p>
         </>
       ),
       confirmLabel: 'Delete layout',
@@ -2077,7 +2074,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
   return (
     <div>
       <TabActions>
-        <span className="t-hint" style={{ flex: 1 }}>Snapshots you can flip between</span>
+        <span className="t-hint" style={{ flex: 1 }}>Saved arrangements</span>
         <button onClick={() => void saveCurrent()} className="ds-btn ds-btn--xs" style={{ fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
           <Icon name="plus" size={10} /> Save current
         </button>
@@ -2097,8 +2094,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
 
       {layouts.length === 0 ? (
         <div className="t-small" style={{ padding: '16px 14px', lineHeight: 1.55 }}>
-          No saved layouts yet. Arrange the room, then <b>Save current</b> — save a second
-          arrangement and flip between them to compare.
+          No saved layouts yet.
         </div>
       ) : (
         layouts.map((v) => {
@@ -2188,8 +2184,8 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
             Save this arrangement first?
           </div>
           <div className="t-body" style={{ lineHeight: 1.55 }}>
-            Applying <b>{pendingApply.name}</b> replaces every piece in the room and where it sits. What is on screen
-            right now has not been saved as a layout, so it would only be recoverable through undo.
+            Applying <b>{pendingApply.name}</b> replaces every piece in the room and where it sits. The current
+            arrangement is not saved as a layout, so only undo could bring it back.
           </div>
         </Modal>
       )}
