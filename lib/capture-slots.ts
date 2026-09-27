@@ -379,7 +379,7 @@ export function describePlacement(
 ): string {
   const { placed, rejected } = result;
   const tooMany = rejected.length
-    ? `${rejected.length} photo${rejected.length > 1 ? 's' : ''} could not be added — all four walls already have one.`
+    ? `${rejected.length} photo${rejected.length > 1 ? 's' : ''} could not be added. All four walls already have one.`
     : '';
   if (!placed.length) return tooMany || 'Nothing to add.';
 
@@ -391,7 +391,7 @@ export function describePlacement(
     timed ? 'Ordered by when they were taken.' : '',
     ...placed
       .filter((p) => p.clashedWith)
-      .map((p) => `${labelOf(p.slot)} may be a second photo of ${labelOf(p.clashedWith!)} — check it.`),
+      .map((p) => `${labelOf(p.slot)} may be a second photo of ${labelOf(p.clashedWith!)}. Check it.`),
     tooMany,
   ]
     .filter(Boolean)

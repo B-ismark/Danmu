@@ -115,9 +115,9 @@ export function flagHelp(f: QualityFlag): string {
     case 'too-dark':
       return 'Turn on the lights or open the curtains, then retake this wall.';
     case 'too-bright':
-      return 'Try again facing away from the window, or draw the curtains a little.';
+      return 'Retake facing away from the window, or draw the curtains a little.';
     case 'blurry':
-      return 'Hold still for a moment and retake — a sharp photo finds more furniture.';
+      return 'Hold still and retake. A sharp photo finds more furniture.';
     case 'ok':
       return 'Clear, bright and sharp enough to work with.';
   }

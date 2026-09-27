@@ -398,7 +398,7 @@ describe('describePlacement', () => {
     // The shipped bug. Nothing is placed, so the sentence had no walls to name,
     // and the rejection was appended after it rather than replacing it.
     const said = describePlacement(placePhotos(FULL, [{}]), L);
-    expect(said).toBe('1 photo could not be added — all four walls already have one.');
+    expect(said).toBe('1 photo could not be added. All four walls already have one.');
     expect(said).not.toContain('0 photo');
   });
 
@@ -416,7 +416,7 @@ describe('describePlacement', () => {
 
   it('says which wall a contradicted bearing pointed at', () => {
     const said = describePlacement(placePhotos([], [{ bearingDeg: 10 }, { bearingDeg: 15 }]), L);
-    expect(said).toContain('Wall 2 may be a second photo of Wall 1 — check it.');
+    expect(said).toContain('Wall 2 may be a second photo of Wall 1. Check it.');
   });
 
   it('reports both halves when some land and some do not', () => {
