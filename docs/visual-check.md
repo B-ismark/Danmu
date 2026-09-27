@@ -967,6 +967,18 @@ What the sweep cannot tell you, and a person can:
 - **On a phone** the 3D tab's Move / Scale / Rotate read in full, with the W / S / R
   keycaps gone. Wrong looks like "M…".
 
+### The laptop studio as panes on a wash — PR #157, SWEPT, needs a real GPU and a Mac
+
+At 1024, 1280 and 1440 on both tabs: the rails and the room are rounded panes with an
+even gap; the sash hover line sits in the middle of the gap; the right rail's footer
+band follows the pane's lower corners. Over the room, the toolbars and the camera
+gizmo should look frosted as the room moves under them; on SwiftShader the blur was
+only seen over a still frame. Wrong would be: a square corner poking past a pane, a
+dropdown or the room report landing lower than its trigger (a filter crept onto a
+rail), or text looking greyer on the rails than on plain paper. With macOS "Reduce
+transparency" on, the panes should be solid. The room size fields at 1024 put Height
+on a second line with every number whole; the plan's zoom bar folds into two pills.
+
 ### Phones get a phone layout, tablets one docked panel — PR #157, SWEPT, needs a real phone and a real tablet
 
 Below 1024px the studio is `SheetShell` (see `Design.md` § Phones and tablets). Under

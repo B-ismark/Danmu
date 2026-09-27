@@ -183,7 +183,7 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: E
     // in pure CSS. Carrying it here meant two thresholds for one decision (720px
     // in the stylesheet, 1023px in `useStudioLayout`) and two row templates, and
     // the CSS one describes two children while this shell has three.
-    <div className="split" ref={shellRef} style={shell}>
+    <div className="split split--glass" ref={shellRef} style={shell}>
       {[tree, surface, inspector]}
     </div>
   );

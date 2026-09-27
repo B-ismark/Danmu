@@ -76,16 +76,9 @@ export function ViewGizmo() {
     <div
       role="group"
       aria-label="Camera"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(2, ${cell}px)`,
-        gap: 2,
-        padding: 3,
-        background: 'var(--paper)',
-        border: '1px solid var(--edge)',
-        borderRadius: 'var(--r-2)',
-        boxShadow: 'var(--shadow-soft)',
-      }}
+      // Surface in globals.css (`.gizmo`), so the laptop's glass can replace it.
+      className="gizmo"
+      style={{ gridTemplateColumns: `repeat(2, ${cell}px)` }}
     >
       {CELLS.map((c) => {
         const on = view === c.value;

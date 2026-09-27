@@ -48,87 +48,96 @@ export function PlanViewControls({
     // and the Fit button unreachable with nothing on screen saying why. Folding
     // into two short rows costs a little height in the one slot that has height to
     // spare: the canvas's bottom-left and bottom-centre are deliberately empty.
-    <div className="toolbar" role="group" aria-label="Plan view" style={{ gap: 6, padding: 4, flexWrap: 'wrap' }}>
-      {/* Disabled at the bounds. The handle clamps silently, so without this the
-          buttons stay pressable at max/min and appear broken. */}
-      <IconButton
-        icon="minus"
-        label="Zoom out"
-        onClick={() => api.current?.zoomOut()}
-        disabled={zoom <= MIN_ZOOM + 0.001}
-        variant="outline"
-        size={28}
-        iconSize={15}
-      />
-      {/* One readout, not two. The old top-left chip said "To scale in mm" beside
-          a percentage while this toolbar showed the percentage again. The unit is
-          the claim worth making — it is what someone measuring would rely on.
-          The SHORT form: "centimeters (cm) · 100%" was the widest thing in the
-          row, and on a phone it was cut off by the toolbar's own edge. */}
-      <span
-        className="mono"
-        title={`Drawn to scale. Every dimension is in ${unitName}.`}
-        style={{
-          fontSize: 'var(--fs-micro)',
-          color: 'var(--ink-3)',
-          letterSpacing: '0.06em',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 8px',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {dimUnit} · {(zoom * 100).toFixed(0)}%
-      </span>
-      <IconButton
-        icon="plus"
-        label="Zoom in"
-        onClick={() => api.current?.zoomIn()}
-        disabled={zoom >= MAX_ZOOM - 0.001}
-        variant="outline"
-        size={28}
-        iconSize={15}
-      />
-      <span aria-hidden="true" style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', background: 'var(--hairline)' }} />
-      <IconButton
-        icon="rotate-ccw"
-        label="Turn the page left"
-        onClick={() => api.current?.rotateLeft()}
-        variant="outline"
-        size={28}
-        iconSize={14}
-      />
-      <span
-        className="mono"
-        style={{
-          fontSize: 'var(--fs-micro)',
-          color: 'var(--ink-3)',
-          letterSpacing: '0.06em',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 6px',
-        }}
-      >
-        {deg}°
-      </span>
-      <IconButton
-        icon="rotate-cw"
-        label="Turn the page right"
-        onClick={() => api.current?.rotateRight()}
-        variant="outline"
-        size={28}
-        iconSize={14}
-      />
-      <span aria-hidden="true" style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', background: 'var(--hairline)' }} />
-      <button
-        onClick={() => api.current?.fit()}
-        title="Back to the default view"
-        className="ds-btn ds-btn--xs"
-        style={{ padding: '0 9px', gap: 5 }}
-      >
-        <Icon name="fit" size={12} />
-        Fit
-      </button>
+    //
+    // It folds as two GROUPS, never control by control: zoom, and turn + fit. Wrapping
+    // one control at a time left "Fit" alone on a third row at the laptop's 1024px
+    // step, with a hairline divider stranded at the end of the row above it. And each
+    // group is its own pill rather than one box around both, because a wrapped flex
+    // row keeps the full width it was offered: the single box stayed 264px wide
+    // around two 130px rows, an empty strip inside its own border.
+    <div className="plan-view-bar" role="group" aria-label="Plan view">
+      <div className="toolbar plan-view-bar__group">
+        {/* Disabled at the bounds. The handle clamps silently, so without this the
+            buttons stay pressable at max/min and appear broken. */}
+        <IconButton
+          icon="minus"
+          label="Zoom out"
+          onClick={() => api.current?.zoomOut()}
+          disabled={zoom <= MIN_ZOOM + 0.001}
+          variant="outline"
+          size={28}
+          iconSize={15}
+        />
+        {/* One readout, not two. The old top-left chip said "To scale in mm" beside
+            a percentage while this toolbar showed the percentage again. The unit is
+            the claim worth making — it is what someone measuring would rely on.
+            The SHORT form: "centimeters (cm) · 100%" was the widest thing in the
+            row, and on a phone it was cut off by the toolbar's own edge. */}
+        <span
+          className="mono"
+          title={`Drawn to scale. Every dimension is in ${unitName}.`}
+          style={{
+            fontSize: 'var(--fs-micro)',
+            color: 'var(--ink-3)',
+            letterSpacing: '0.06em',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 8px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {dimUnit} · {(zoom * 100).toFixed(0)}%
+        </span>
+        <IconButton
+          icon="plus"
+          label="Zoom in"
+          onClick={() => api.current?.zoomIn()}
+          disabled={zoom >= MAX_ZOOM - 0.001}
+          variant="outline"
+          size={28}
+          iconSize={15}
+        />
+      </div>
+      <div className="toolbar plan-view-bar__group">
+        <IconButton
+          icon="rotate-ccw"
+          label="Turn the page left"
+          onClick={() => api.current?.rotateLeft()}
+          variant="outline"
+          size={28}
+          iconSize={14}
+        />
+        <span
+          className="mono"
+          style={{
+            fontSize: 'var(--fs-micro)',
+            color: 'var(--ink-3)',
+            letterSpacing: '0.06em',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 6px',
+          }}
+        >
+          {deg}°
+        </span>
+        <IconButton
+          icon="rotate-cw"
+          label="Turn the page right"
+          onClick={() => api.current?.rotateRight()}
+          variant="outline"
+          size={28}
+          iconSize={14}
+        />
+        <button
+          onClick={() => api.current?.fit()}
+          title="Back to the default view"
+          className="ds-btn ds-btn--xs"
+          style={{ padding: '0 9px', gap: 5 }}
+        >
+          <Icon name="fit" size={12} />
+          Fit
+        </button>
+      </div>
     </div>
   );
 }

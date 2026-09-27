@@ -376,14 +376,14 @@ describe('the canvas tool cluster reflows instead of mangling', () => {
   });
 
   it('lets the plan toolbar fold rather than clip its last controls', () => {
-    // ~450px of zoom / rotate / fit in a `.toolbar`, which is `overflow: hidden`.
-    // Without a wrap the Fit button was simply cut off at the border.
+    // ~450px of zoom / rotate / fit, and a `.toolbar` is `overflow: hidden`: without a
+    // wrap the Fit button was simply cut off at the border. It folds as two whole
+    // groups now (`.plan-view-bar`), so the wrap is in the stylesheet, and there are
+    // no dividers left to strand — tests/glass-skin.test.tsx holds the groups.
     const src = readFileSync(root('components', 'studio', 'PlanChrome.tsx'), 'utf8');
-    const bar = /function PlanViewControls[\s\S]*?<div className="toolbar"[^>]*>/.exec(src)?.[0] ?? '';
-    expect(bar).toMatch(/flexWrap: 'wrap'/);
-    // Its dividers have no content, so without a cross-axis size they were 1×0 —
-    // present in the DOM and invisible on screen.
-    expect(src).toMatch(/width: 1, flexShrink: 0, alignSelf: 'stretch'/);
+    expect(src).toMatch(/function PlanViewControls[\s\S]*?<div className="plan-view-bar"/);
+    const css = readFileSync(root('app', 'globals.css'), 'utf8');
+    expect(css).toMatch(/\.plan-view-bar \{[^}]*flex-wrap: wrap;/);
   });
 });
 

@@ -29,6 +29,21 @@ import { useEffect, useRef, type CSSProperties } from 'react';
 import { steppedValue } from '@/lib/units';
 import { Icon } from './Icon';
 
+/** Room either side of the digits: the stepper column on the right, a gap on the left. */
+const PAD_LEFT = 8;
+const PAD_RIGHT = 20;
+
+/** The narrowest a NumberField can be and still show every one of `values` whole:
+ *  the digits in the mono face (0.6em a character — Geist Mono's advance, measured
+ *  at 8.0px for 13.5px type), the padding either side and the two 1px borders. For a
+ *  row of fields (`.fields-row`), which drops a field to the next line rather than
+ *  cut a number short — at the laptop's 1024px step three room fields got 51px each
+ *  and "6.00" read "6.0", which an input does not report as overflow. */
+export function fieldMinWidth(values: string[]): string {
+  const chars = Math.max(1, ...values.map((v) => v.length));
+  return `calc(${chars} * 0.6 * var(--fs-body) + ${PAD_LEFT + PAD_RIGHT + 2}px)`;
+}
+
 const HOLD_DELAY = 380;
 const HOLD_EVERY = 60;
 const MAX_CATCH_UP = 3;
@@ -133,7 +148,7 @@ export function NumberField({
           fontWeight: 600,
           height,
           // room for the stepper column, so long values never run under it
-          padding: '0 20px 0 8px',
+          padding: `0 ${PAD_RIGHT}px 0 ${PAD_LEFT}px`,
           ...style,
         }}
       />

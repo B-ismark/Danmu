@@ -31,6 +31,8 @@
 //             because a dense desktop control reflowed onto a tablet is a design
 //             question rather than a bug.
 //   hscroll   the page itself scrolling sideways.
+//   cut       a text or number field whose value is wider than the field, so part of
+//             the number is hidden. Inputs report no text overflow of their own.
 //   orphan    a `.chrome-divider` with nothing shown on one side of it — the control it
 //             separated was hidden (the plan's zoom box on a phone) and the rule stayed.
 //   stretched on widths of 768 and up, a control, card or paragraph spread wider than
@@ -220,6 +222,14 @@ async function measure(page) {
     if (document.documentElement.scrollWidth > W + 1)
       out.push({ kind: 'hscroll', what: `page ${document.documentElement.scrollWidth}px wide in ${W}px` });
 
+    // A field whose VALUE is wider than it. An input reports no overflow through the
+    // text rules below (its value is not text content), so "6.00" printing as "6.0" in
+    // a 51px room field passed this sweep at every width until it was seen by eye.
+    for (const el of document.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])')) {
+      if (!vis(el) || !el.value) continue;
+      if (el.scrollWidth > el.clientWidth + 1)
+        out.push({ kind: 'cut', what: `field "${el.value.slice(0, 20)}" needs ${el.scrollWidth}px, has ${el.clientWidth}px` });
+    }
     for (const el of document.querySelectorAll('body *')) {
       if (el instanceof SVGElement) continue; // drawing text is in the drawing's own units
       if (!ownText(el) || !vis(el) || !onTop(el)) continue;

@@ -1899,6 +1899,26 @@ WebKit, [Designing websites for iPhone X](https://webkit.org/blog/7929/designing
 Baymard, [line length](https://baymard.com/blog/line-length-readability) (the 70ch measure
 in *Nothing spreads wide*).
 
+### Glasshouse on a laptop — docked panes on a wash
+
+From 1024px up (`DockedShell`, `.split--glass`) the room and both rails are panes
+standing `--pane-gap` apart on `--studio-wash`, a gradient built from paper tokens
+only, so nothing sits on a surface darker than `--paper-3`. The rails stay docked:
+the room is never under them.
+
+- **Rails are glass by tint, rim and shadow, never by `backdrop-filter`.** A filter
+  makes its element the containing block for `position: fixed` descendants, and four
+  things in the rails (Select, room report, tooltip, colour-mixer scrim) place
+  themselves in viewport coordinates. Nothing moves behind a docked pane anyway.
+- **The blur is on the chrome over the room**, where the room moves behind it.
+- **Clay** inside the rails: buttons raised (`--clay-raise`), fields and segmented
+  controls pressed in (`--clay-well`). `--edge` stays the boundary; clay is a finish.
+- `prefers-reduced-transparency` gets solid panes in the same layout.
+- A row of number fields is `.fields-row`, sized from its longest value
+  (`fieldMinWidth`), so a narrow rail moves a field to the next line rather than
+  printing "6.0" for 6.00. The sweep's `cut` rule catches a field's value wider than
+  the field, which inputs do not report as text overflow.
+
 ### Other studio tools
 - **"Will it fit?"** (`lib/fit-check.ts`, the `Will it fit` tab in `RoomTools.tsx`).
   The gap between "I like this layout" and `PRODUCT.md`'s *confidence to commit* is one

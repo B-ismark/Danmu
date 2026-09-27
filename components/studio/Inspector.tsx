@@ -10,7 +10,7 @@ import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { Select } from '@/components/ui/Select';
-import { NumberField } from '@/components/ui/NumberField';
+import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { SwapModelModal } from './RegenerateModal';
 import { RailSection } from './RailSection';
@@ -957,7 +957,7 @@ function DimensionEditor({
 
       {open && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 10 }}>
+          <div className="fields-row" style={{ ['--field-min' as string]: fieldMinWidth(local), marginTop: 10 }}>
             {labels.map((axis, i) => (
               <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span className="t-note" style={{ fontWeight: 600 }}>{axis}</span>

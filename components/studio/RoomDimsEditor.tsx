@@ -13,7 +13,7 @@ import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
-import { NumberField } from '@/components/ui/NumberField';
+import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 
 export function RoomDimsEditor() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -282,7 +282,7 @@ export function RoomDimsEditor() {
     // `--hairline`, not `--edge`: a decorative divider between two groups in the
     // rail, not the boundary of anything interactive.
     <div style={{ paddingBottom: 14, marginBottom: 4, borderBottom: '1px solid var(--hairline)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+        <div className="fields-row" style={{ ['--field-min' as string]: fieldMinWidth(local) }}>
           {labels.map((axis, i) => (
             <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span className="t-note" style={{ fontWeight: 600 }}>{axis}</span>

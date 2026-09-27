@@ -249,6 +249,24 @@
 
   --shadow-soft: 0 1px 2px rgba(42, 37, 32, 0.04), 0 6px 16px rgba(42, 37, 32, 0.06);
   --shadow-lift: 0 2px 4px rgba(42, 37, 32, 0.06), 0 12px 28px rgba(42, 37, 32, 0.10);
+  /* Glasshouse — the laptop studio (DockedShell, 1024px up). The room and both
+     rails are panes standing on a warm wash, `--pane-gap` apart. Every value here
+     is decorative: text on glass is measured on the COMPOSITE, and the wash is built
+     from paper tokens only, so no pane can end up darker than `--paper-3`, which
+     every text token already clears (tests/glass-skin.test.ts). */
+  --studio-wash: radial-gradient(120% 90% at 70% 0%, var(--paper) 0%, var(--paper-2) 45%, var(--paper-3) 100%);
+  --pane-gap: 10px;
+  --glass-fill: rgba(251, 248, 242, 0.74);        /* --paper at 74%: a rail */
+  --glass-fill-strong: rgba(251, 248, 242, 0.82); /* --paper at 82%: chrome over the room */
+  --glass-tone: rgba(42, 37, 32, 0.035);          /* a quieter band inside a pane (rail footer) */
+  --glass-rim: rgba(255, 255, 255, 0.72);         /* the pane's lit edge — decorative */
+  --glass-blur: blur(14px) saturate(140%);
+  --shadow-float: 0 1px 2px rgba(42, 37, 32, 0.05), 0 10px 30px rgba(60, 40, 20, 0.12);
+  /* Clay: a control is raised (a soft warm shadow under a lit top edge) or it is a
+     well (pressed in). It never replaces `--edge`, which stays the boundary. */
+  --clay-raise: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(120, 80, 50, 0.10), 0 3px 8px rgba(120, 80, 50, 0.10);
+  --clay-raise-hover: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 4px rgba(120, 80, 50, 0.12), 0 8px 18px rgba(120, 80, 50, 0.14);
+  --clay-well: inset 0 1px 2px rgba(120, 80, 50, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.7);
   /* The lift, cast upward: a bottom sheet stands on the room from below. */
   --shadow-sheet: 0 -1px 3px rgba(42, 37, 32, 0.06), 0 -12px 28px rgba(42, 37, 32, 0.10);
   /* A tablet's one docked panel (SheetShell's pane): a rail's width, and at
@@ -984,6 +1002,15 @@ textarea.field { border-radius: var(--r-2); }
   background: var(--paper); border: 1px solid var(--edge);
   border-radius: var(--r-2); box-shadow: var(--shadow-lift);
 }
+/* The plan's zoom / turn / fit bar (PlanViewControls): two groups that wrap whole. */
+.plan-view-bar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.plan-view-bar__group { gap: 6px; padding: 4px; }
+/* The four camera views, a 2×2 in the canvas's bottom-right corner (ViewGizmo). */
+.gizmo {
+  display: grid; gap: 2px; padding: 3px;
+  background: var(--paper); border: 1px solid var(--edge);
+  border-radius: var(--r-2); box-shadow: var(--shadow-soft);
+}
 .toolbar {
   display: inline-flex; align-items: center;
   background: var(--paper); border: 1px solid var(--edge);
@@ -1063,6 +1090,76 @@ textarea.field { border-radius: var(--r-2); }
 /* Two-column work surface: fixed rail(s) + fluid content. The `--stack` modifier
    that turns those columns into rows lives in the 720px block below. */
 .split { display: grid; min-height: 0; }
+
+/* ── Glasshouse, docked (laptops) ────────────────────────────────────────────
+   The rails stay docked — they own their columns, and the room is never under
+   them — but the three columns are panes on a wash rather than strips ruled off
+   by hairlines. See Design.md § Glasshouse on a laptop.
+
+   **No `backdrop-filter` on a rail, and that is not a shortcut.** A filter makes
+   its element the containing block for `position: fixed` descendants (unlike the
+   rails' `container-type`, measured not to — see the container-query note), and
+   four things inside the rails position themselves from viewport coordinates: the
+   Select dropdown, the room report, the tooltip and the colour-mixer scrim. They
+   would all land a top bar too low. It would buy nothing either: nothing moves
+   behind a docked pane, and a blurred smooth wash is the same wash. The rails are
+   glass by tint, rim and shadow; the blur goes where the room is behind it. */
+.split--glass {
+  background: var(--studio-wash);
+  padding: var(--pane-gap);
+  gap: var(--pane-gap);
+}
+.split--glass > .rail {
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-rim);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-float);
+}
+.split--glass > #studio-canvas {
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-float);
+}
+/* The footer is a quieter band of the same pane, so it takes the pane's lower
+   corners (inside the 1px rim) instead of drawing square ones past them. */
+.split--glass .rail-footer {
+  background: var(--glass-tone);
+  border-radius: 0 0 calc(var(--r-card) - 1px) calc(var(--r-card) - 1px);
+}
+/* The sash sits in the middle of the gap between two panes, not on a rail's edge. */
+.split--glass .rail-sash--left { right: calc(-5px - var(--pane-gap) / 2); }
+.split--glass .rail-sash--right { left: calc(-5px - var(--pane-gap) / 2); }
+
+/* Clay, in the rails: buttons are raised, and segmented controls and fields are
+   wells. `--edge` stays on all of them — the shadow is a finish, not a boundary. */
+.split--glass .rail .ds-btn:not(.ds-btn--ghost) { box-shadow: var(--clay-raise); }
+.split--glass .rail .ds-btn:not(.ds-btn--ghost):hover { box-shadow: var(--clay-raise-hover); }
+.split--glass .rail .ds-btn:not(.ds-btn--ghost):active { box-shadow: var(--clay-well); }
+.split--glass .rail .toolbar,
+.split--glass .rail .field { box-shadow: var(--clay-well); }
+.split--glass .rail .field:focus,
+.split--glass .rail .field:focus-visible { box-shadow: 0 0 0 4px var(--accent-tint); }
+
+/* Real glass over the room: the chrome clusters floating on the canvas. The room
+   moves behind these, so here the blur is doing something. */
+.split--glass #studio-canvas .canvas-chrome :is(.toolbar, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) {
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: var(--edge);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .split--glass #studio-canvas .canvas-chrome :is(.toolbar, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) { background: var(--paper); }
+}
+/* Someone who has asked for less transparency gets solid panes, same layout. */
+@media (prefers-reduced-transparency: reduce) {
+  .split--glass > .rail { background: var(--paper); }
+  .split--glass .rail-footer { background: var(--paper-2); }
+  .split--glass #studio-canvas .canvas-chrome :is(.toolbar, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) {
+    background: var(--paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
 
 /* The phone app bar (TopBar on a phone): one 56px row. Every control in it is a
    44px square (Apple's minimum hit region) and the room name takes what is left. */
@@ -1226,6 +1323,14 @@ textarea.field { border-radius: var(--r-2); }
 /* A touch screen types a number on its number pad; the stepper's 16px chevrons are
    a mouse's affordance. `min-height` rather than `height`, because the field's
    height is set inline and a minimum still wins over it. */
+/* A row of NumberFields (room size, a piece's exact size). As many across as fit
+   at `--field-min`, which the row computes from its own longest value
+   (`fieldMinWidth`), so a narrow rail puts the third field on the next line rather
+   than printing "6.0" for 6.00. */
+.fields-row {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--field-min, 64px), 100%), 1fr));
+}
 .num-field__steps {
   position: absolute; right: 3px; top: 3px; bottom: 3px;
   display: flex; flex-direction: column; justify-content: center;
