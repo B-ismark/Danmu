@@ -1705,7 +1705,13 @@ applied; the toast naming a layout that is not there.
 **What has been seen.** The cached-list notice and **Look again** at 360 and 1280 wide in a
 production build (SwiftShader), and Undo restoring the list. The run itself could not be
 watched here — no on-device model and no key, so **Look again** ends at *Let's do this by
-hand* — so the replace-and-keep half is held by `tests/rescan.test.ts` alone.
+hand*. The run itself was then driven end to end with Google's reply stubbed in the
+browser (a key set, the request answered by the probe): a fresh **Look again** →
+**Continue** dropped the scene, wrote a *Before re-scan* layout and raised the toast;
+**Look again** → **Undo** → **Continue** left the scene alone and wrote no layout; a
+rate-limited **Look again** → **Try again** ran the scan again rather than landing on the
+old list. What remains for a person is the studio side: that applying *Before re-scan*
+really puts the moved and added pieces back.
 
 ### Scanned furniture comes out as the right piece — branch `claude/amazing-davinci-m8zqys`, PR #157
 

@@ -321,10 +321,13 @@ export default function DetectPage() {
   const stopped = useRef(false);
   // The detection run, set by the loading effect so **Look again** can start it.
   const runRef = useRef<(() => Promise<void>) | null>(null);
-  // True once a run in THIS visit has produced a list. Continue then replaces the
-  // room's arrangement with it (`lib/rescan.ts`); without a run, Continue saves the
-  // reviewed list and leaves the arrangement alone, as it always has.
-  const scanned = useRef(false);
+  // The ids of every row a run in THIS visit produced. Continue replaces the room's
+  // arrangement (`lib/rescan.ts`) only when the list it saves still holds one of
+  // them — a flag would stay set after Undo took the list back to the last scan,
+  // and Continue would then throw away the studio's arrangement to rebuild the
+  // very list it already had. Ids survive every edit to a row, because every edit
+  // spreads the row; a list with none of them is the cached one, however edited.
+  const runUids = useRef(new Set<string>());
   // The detect run needs the key to be CURRENT when it calls, not to be a
   // trigger. With `apiKey` in the effect's dep array, editing it in Settings —
   // including in another tab, since the store persists to localStorage — re-ran
@@ -444,9 +447,9 @@ export default function DetectPage() {
           // label/category and a depth hint.
           const refined = keyed(refineDetections(dets, calMap, dims));
           setDetections(refined);
-          // From here on, Continue saves a list the photos were really looked at for,
-          // and the studio has to show it — see `lib/rescan.ts`.
-          scanned.current = true;
+            // These rows are what the photos were really looked at for, and the studio
+          // has to show them — see `runUids` and `lib/rescan.ts`.
+          for (const d of refined) if (d.uid) runUids.current.add(d.uid);
           // Which rows to tick before the user has looked at them. The whole policy
           // lives in lib/detect-confidence.ts, because it was three unrelated
           // confidence scales being compared against one literal here.
@@ -793,7 +796,7 @@ export default function DetectPage() {
       const room = await roomStore.loadRoom(roomId);
       if (!room) return;
       const flat = detections.map((d, i) => toRecord(d, i, confirmed.has(i), uuid));
-      if (scanned.current) {
+      if (detections.some((d) => d.uid && runUids.current.has(d.uid))) {
         const kept = await adoptFreshScan(room, flat);
         if (kept)
           toast({
@@ -932,7 +935,11 @@ export default function DetectPage() {
             <button
               onClick={() => {
                 setNotice(null);
-                location.reload();
+                // Run again rather than reload: a reload of a room that already has a
+                // scan lands on that scan, so after a failed Look again it showed the
+                // old list instead of trying.
+                if (runRef.current) void runRef.current();
+                else location.reload();
               }}
               className="ds-btn"
               style={{ height: 34, fontSize: 12.5 }}
