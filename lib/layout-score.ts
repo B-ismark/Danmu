@@ -58,6 +58,8 @@ import {
   roleOf,
   roomProfile,
   routeWidth,
+  rugKeepsOff,
+  rugTarget,
   sharesFloor,
   TUCKED_CLASH_SHARE,
   wallDebt,
@@ -363,6 +365,11 @@ export type LayoutModel = {
    *  sofa is still charged for sitting 300 mm from one. `lib/clearance.ts` reads the
    *  same rule through `belongTogether`. */
   related: Set<number>;
+  /** Rug-and-piece pairs the rug must stay out from under — `rugKeepsOff`, resolved
+   *  once here because which desks count depends on the whole room. */
+  rugClear: Array<{ rug: number; other: number }>;
+  /** Every rug in the room, for the door-swing half of the same rule. */
+  rugs: number[];
   /** The route width this room is big enough to be asked for. */
   route: number;
   /** The middle of the FLOOR — `polyAreaCentroid`, not the average of the corners.
@@ -473,6 +480,16 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     }
   }
 
+  const rugs: number[] = [];
+  const rugClear: LayoutModel['rugClear'] = [];
+  for (let i = 0; i < parts.length; i++) {
+    if (roles[i] !== 'rug') continue;
+    rugs.push(i);
+    for (let j = 0; j < parts.length; j++) {
+      if (j !== i && !parts[j].wallMounted && rugKeepsOff(parts[j], parts)) rugClear.push({ rug: i, other: j });
+    }
+  }
+
   return {
     ctx,
     poly: ctx.footprint as Poly,
@@ -504,6 +521,8 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     }),
     routeFormer: roles.map(formsRoute),
     related,
+    rugClear,
+    rugs,
     route,
     centre: polyAreaCentroid(ctx.footprint as Poly),
     winding: polygonWinding(ctx.footprint as Poly),
@@ -887,6 +906,11 @@ export function costBreakdown(
       }
     }
 
+    // A rug is 5 mm of textile: it has a footprint and no visual weight, and counting
+    // its area as mass let `balance` drag it toward the middle of the room and away
+    // from the group it belongs under — 0.42 m off `rugTarget` for a lone sofa and rug,
+    // because 3.8 m² of rug out-weighed the sofa it was meant to anchor.
+    if (roles[i] === 'rug') continue;
     const a = footArea(f);
     mass += a;
     mx += f.cx * a;
@@ -921,6 +945,29 @@ export function costBreakdown(
       }
     }
     if (bestJ >= 0) c.relation += bestWeight * best;
+  }
+
+  // ── What a rug stays out from under ───────────────────────────────────────
+  //
+  // `rugKeepsOff`'s list, priced by the share of THAT piece standing on the rug — a
+  // wardrobe with one foot on the edge is a smaller fault than one standing in the
+  // middle. And a door's swing, by the share of the SWING the rug covers, because a
+  // door catching a rug is a fault of the doorway, not of how big the rug is. Both in
+  // the relation term: they are the other half of "where does this rug belong", and a
+  // room with no rug pays nothing.
+  for (const { rug, other } of m.rugClear) {
+    const shared = footIntersectionArea(feet[rug], feet[other]);
+    if (shared > 0) c.relation += RUG_CLEAR_GAIN * (shared / area[other]);
+  }
+  if (m.rugs.length > 0) {
+    for (const ap of m.apertures) {
+      if (m.roles[ap.owner] !== 'door') continue;
+      const swing = footArea(ap.foot) || 1;
+      for (const r of m.rugs) {
+        const shared = footIntersectionArea(feet[r], ap.foot);
+        if (shared > 0) c.relation += RUG_CLEAR_GAIN * (shared / swing);
+      }
+    }
   }
 
   // ── Balance: the room's weight near its middle ────────────────────────────
@@ -1109,7 +1156,11 @@ function far2(a: Foot, b: Foot, reach: number): boolean {
  *  feet first — `relationParents` and `costBreakdown` both do, and that ordering is
  *  the one thing a caller can get wrong here. */
 export function relationDistance(feet: Foot[], i: number, j: number, rel: Relation): number {
-  return rel.kind === 'faces' || rel.kind === 'near'
+  if (rel.kind === 'under') {
+    const t = rugTarget(feet[i].hw, feet[i].hd, feet[j], rel.fit ?? 'table');
+    return Math.hypot(feet[i].cx - t.x, feet[i].cz - t.z);
+  }
+  return rel.kind === 'faces'
     ? Math.hypot(feet[j].cx - feet[i].cx, feet[j].cz - feet[i].cz)
     : obbGap(feet[i], feet[j]);
 }
@@ -1153,9 +1204,24 @@ function relationCost(
     cost += 1.5 * offAxis(feet[j], feet[i]);
     // …and turned to it, which is what sitting AT a table means.
     cost += 1.5 * toward();
+  } else if (rel.kind === 'under') {
+    // Squared up to the group — a rug at 30° under a sofa is in the right place and
+    // plainly wrong. A half turn is the same rug, so the cost is zero at both.
+    const t = rugTarget(feet[i].hw, feet[i].hd, feet[j], rel.fit ?? 'table');
+    cost += RUG_SQUARE_GAIN * halfTurnCost(placements[i].yaw, t.yaw);
   }
   return cost;
 }
+
+/** How much a rug turned square-on-to-its-group matters against being in the right
+ *  place — 1.5, the same weight `in-front` gives a chair turned to its table. */
+const RUG_SQUARE_GAIN = 1.5;
+
+/** A wardrobe standing wholly on a rug, or a door swing wholly over one, in relation
+ *  units: 2, which is 20 at the relation weight. A rug a whole metre off its group's
+ *  spot costs 3.2 (0.5 × `bandCost(1, 0, 0.2)` = 0.5 × 0.64, × 10), so the solver
+ *  leaves a rug off its spot long before it leaves one under a wardrobe. */
+const RUG_CLEAR_GAIN = 2;
 
 /** Ties in the relation term, broken so the winner does not depend on array order.
  *
@@ -1225,7 +1291,7 @@ export function relationParents(
     let best = Infinity;
     // `bestD2` is the TIE-BREAK — squared centre-to-centre, for "the physically nearer
     // anchor" — and it is NOT the band distance. It is centre-to-centre for every kind,
-    // where `relationDistance` is `obbGap` for all but `faces` and `near`. They differ
+    // where `relationDistance` is `obbGap` for all but `faces` (centres) and `under` (to the rug's target). They differ
     // by half a piece on the kinds that use the gap, so exposing this one as `d` would
     // hand every consumer a wrong number that looks right. `bestRel` is kept instead and
     // the distance is derived from it below.
@@ -1345,6 +1411,12 @@ function halfDepthToward(f: Foot, nx: number, nz: number): number {
 /** Smallest turn between two headings, normalised to 0..1 over a half turn. */
 function angleCost(a: number, b: number): number {
   return Math.abs(angleDelta(a, b)) / Math.PI;
+}
+
+/** …satisfied by either end — for a piece that is the same after a half turn, like
+ *  a rug. `(1 − cos 2Δθ)/2`: zero at 0 and π, one at a quarter turn. */
+function halfTurnCost(a: number, b: number): number {
+  return (1 - Math.cos(2 * (a - b))) / 2;
 }
 
 /** …and the same, but satisfied by any quarter turn. `(1 − cos 4Δθ)/2` — Merrell's

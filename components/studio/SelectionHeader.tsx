@@ -46,7 +46,7 @@ export function SelectionHeader() {
         background: 'var(--accent-tint)',
       }}
     >
-      <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--accent-text)', whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--accent-text)', whiteSpace: 'nowrap' }}>
         {grouped ? `Group · ${groupMembers.length}` : `${selection.length} selected`}
       </span>
       <span style={{ flex: 1 }} />
@@ -56,17 +56,15 @@ export function SelectionHeader() {
             ungroupParts(groupMembers);
             setSelected(primaryId);
           }}
-          className="ds-btn"
-          style={{ height: 26, fontSize: 11.5 }}
+          className="ds-btn ds-btn--xs"
         >
           <Icon name="swap" size={11} /> Ungroup
         </button>
       ) : (
         <button
           onClick={() => groupParts(selection)}
-          className="ds-btn"
+          className="ds-btn ds-btn--xs"
           title="Keep these pieces together — one click selects the whole set"
-          style={{ height: 26, fontSize: 11.5 }}
         >
           <Icon name="layers" size={11} /> Group {selection.length}
         </button>

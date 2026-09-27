@@ -168,7 +168,10 @@ function displayLabel(s: string): string {
 }
 
 export const WORLD_TO_CATEGORY: Record<string, Category> = {
-  sofa: 'sofa', couch: 'sofa', armchair: 'sofa',
+  // An armchair is a CHAIR here, not a sofa: filed as a sofa it was clamped up to the
+  // sofa's 1.2 m minimum width and drawn as a two-seater. `refineShape` turns the
+  // label into the armchair model.
+  sofa: 'sofa', couch: 'sofa', armchair: 'chair',
   chair: 'chair', 'office chair': 'chair', stool: 'chair',
   table: 'table', 'coffee table': 'table', 'dining table': 'table',
   desk: 'desk',

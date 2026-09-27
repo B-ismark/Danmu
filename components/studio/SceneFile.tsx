@@ -160,7 +160,7 @@ export function ImportSceneButton({
         disabled={busy}
         aria-busy={busy}
         className="ds-btn"
-        style={large ? { height: 40, padding: '0 20px', fontSize: 14 } : { height: 32, fontSize: 12 }}
+        style={large ? { height: 40, padding: '0 20px', fontSize: 'var(--fs-body)' } : { height: 32, fontSize: 'var(--fs-small)' }}
         title="Open a room someone shared with you, or one you saved earlier"
       >
         {busy ? <Spinner size={large ? 14 : 12} /> : <Icon name="file" size={large ? 14 : 12} />}

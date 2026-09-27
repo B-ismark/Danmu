@@ -31,6 +31,7 @@ import { IconButton } from '@/components/ui/primitives';
 import { LibraryPicker } from './LibraryPicker';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 import { announce } from '@/lib/announce';
+import { usePhoneStudio } from './NarrowViewportBanner';
 
 /** The id the pages put on their canvas element, so the rail's trigger can bring
  *  the panel into view when the studio is stacked and the rail sits below the
@@ -56,12 +57,8 @@ export function AddPiecesButton() {
       }}
       aria-expanded={open}
       title="Add a piece to the room"
-      className="ds-btn"
+      className="ds-btn ds-btn--sm"
       style={{
-        width: '100%',
-        height: 32,
-        fontSize: 12,
-        justifyContent: 'center',
         background: 'var(--accent-tint)',
         // --accent as type on --accent-tint measures 2.89:1; --accent-text is
         // the accent-coloured ink that clears 4.5:1 on the same tint.
@@ -104,29 +101,22 @@ export function AddPiecesButton() {
 export function CatalogToggle() {
   const open = useStudio((s) => s.catalogOpen);
   const setOpen = useStudio((s) => s.setCatalogOpen);
+  // A `.chrome-pill` like the rest of the cluster; open reads as the tinted capsule
+  // (`aria-expanded`, globals.css). It sits in `CanvasTools`, which wraps, and
+  // pills hold their width there — so it goes to a row of its own rather than being
+  // compressed to an icon and half a word.
   return (
-    <button
-      onClick={() => setOpen(!open)}
-      aria-expanded={open}
-      className="ds-btn"
-      title="Add a piece — drag it into the room, click to drop it in the first clear spot, or Shift-click to mark several"
-      style={{
-        height: 30,
-        fontSize: 12,
-        fontWeight: 700,
-        gap: 6,
-        // It sits in `CanvasTools`, which wraps. Holding its width there is what
-        // sends it to a row of its own rather than letting it be compressed to
-        // an icon and half a word.
-        flexShrink: 0,
-        background: open ? 'var(--accent-tint)' : 'var(--paper)',
-        borderColor: open ? 'var(--accent-text)' : 'var(--edge)',
-        color: open ? 'var(--accent-text)' : 'var(--ink-2)',
-        boxShadow: 'var(--shadow-soft)',
-      }}
-    >
-      <Icon name="plus" size={12} /> Add
-    </button>
+    <div className="chrome-pill">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="chrome-pill__text"
+        title="Add a piece — drag it into the room, click to drop it in the first clear spot, or Shift-click to mark several"
+      >
+        <Icon name="plus" size={12} /> Add
+      </button>
+    </div>
   );
 }
 
@@ -208,12 +198,16 @@ export function CatalogPanel({
   bottomGap?: number;
 }) {
   const setOpen = useStudio((s) => s.setCatalogOpen);
+  const phone = usePhoneStudio();
 
   // Esc closes it, like every other panel in the studio (Look, Room, help). It
   // yields to a field being edited or a dialog in front — so Esc out of the search
   // box goes to the box, not to the panel around it — and it stops the event from
   // reaching the canvas, whose global Esc means "deselect".
   useEffect(() => {
+    // The phone's sheet closes on its own Escape; a window-wide one here would
+    // take the key from a field inside it.
+    if (phone) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape' || isTypingOrDialog(e.target)) return;
       e.stopPropagation();
@@ -221,14 +215,11 @@ export function CatalogPanel({
     }
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [setOpen]);
+  }, [setOpen, phone]);
 
-  // `item.dimMM` is already the size the search words asked for, clamped per
-  // piece — `LibraryPicker` resolves it before handing the item over, so this path
-  // and the drag path cannot disagree about what a query meant.
-  function addItem(item: LibraryItem) {
-    spawn(item.category, item.shape, [...item.dimMM], item.label);
-  }
+  // On a phone the Library is a sheet, not a card over the room: `SheetShell` shows
+  // `LibraryBody` for the same `catalogOpen` flag.
+  if (phone) return null;
 
   return (
     <div
@@ -284,14 +275,34 @@ export function CatalogPanel({
         <IconButton icon="x" label="Close the Library" onClick={() => setOpen(false)} size={24} iconSize={12} />
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 12px' }}>
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', margin: '0 0 8px', lineHeight: 1.4 }}>
-          {canDrag
+      <LibraryBody canDrag={canDrag} />
+    </div>
+  );
+}
+
+/** The Library's list and its one line of instruction, without the floating card
+ *  around it — so a phone can show the same list in its sheet (`SheetShell`) rather
+ *  than a 268px card over a 360px room. */
+export function LibraryBody({ canDrag = false, touch = false }: { canDrag?: boolean; touch?: boolean }) {
+  // `item.dimMM` is already the size the search words asked for, clamped per
+  // piece — `LibraryPicker` resolves it before handing the item over, so this path
+  // and the drag path cannot disagree about what a query meant.
+  function addItem(item: LibraryItem) {
+    spawn(item.category, item.shape, [...item.dimMM], item.label);
+  }
+  return (
+    <div
+      className={touch ? 'catalog-touch' : undefined}
+      style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: touch ? '4px 16px 12px' : '0 12px 12px' }}
+    >
+      <div className="t-hint" style={{ margin: '0 0 8px', lineHeight: 1.4 }}>
+        {touch
+          ? 'Tap a piece to drop it in the first clear spot.'
+          : canDrag
             ? 'Drag a piece in, click to drop it in the first clear spot, or Shift-click to mark several.'
             : 'Click a piece to drop it in the first clear spot. Shift-click to mark several.'}
-        </div>
-        <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag} maxHeight={null} />
       </div>
+      <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag && !touch} maxHeight={null} />
     </div>
   );
 }

@@ -71,6 +71,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // Draw under the notch and the home indicator, and pad for them ourselves
+  // (`env(safe-area-inset-*)` in globals.css). Without it iOS letterboxes the page
+  // and the studio's toolbar floats a band above the bottom edge.
+  viewportFit: 'cover',
   // Matches --paper-0, the actual page wash, so mobile browser chrome blends
   // with the app instead of introducing a fourth unrelated cream.
   themeColor: '#EFE9DD',

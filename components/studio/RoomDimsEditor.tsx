@@ -13,7 +13,7 @@ import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
-import { NumberField } from '@/components/ui/NumberField';
+import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 
 export function RoomDimsEditor() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -282,10 +282,10 @@ export function RoomDimsEditor() {
     // `--hairline`, not `--edge`: a decorative divider between two groups in the
     // rail, not the boundary of anything interactive.
     <div style={{ paddingBottom: 14, marginBottom: 4, borderBottom: '1px solid var(--hairline)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+        <div className="fields-row" style={{ ['--field-min' as string]: fieldMinWidth(local) }}>
           {labels.map((axis, i) => (
             <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: 11, color: 'var(--ink-2)', fontWeight: 600 }}>{axis}</span>
+              <span className="t-note" style={{ fontWeight: 600 }}>{axis}</span>
               {/* .field owns the boundary and the focus ring — the old inline
                   outline:none + onFocus/onBlur border swap fought it. The
                   stepper is ours; the native one is suppressed app-wide. */}
@@ -328,7 +328,7 @@ export function RoomDimsEditor() {
             furniture stop is per-axis, and naming the offending piece inside it
             (`floorError`) is what makes the inert press legible. */}
         {rangeError ? (
-          <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere', color: 'var(--danger-text)' }}>
+          <div style={{ fontSize: 'var(--fs-caption)', marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere', color: 'var(--danger-text)' }}>
             {errorBy === 'floor' && floorError
               ? floorError
               : `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit} — enter one in that range and the room will follow.`}
@@ -338,7 +338,7 @@ export function RoomDimsEditor() {
           // simply has nowhere further to go. The number is `bounds()`, the SAME call
           // the arrows are clamped by, so the sentence cannot name a stop the stepper
           // will not reach — which is the pairing `boundsToUnit` exists for.
-          <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere', color: 'var(--ink-3)' }}>
+          <div className="t-hint" style={{ marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere' }}>
             {heldAxes
               .map((axis) => `${axis === 'width' ? 'Width' : 'Depth'} stops at ${bounds(axis).min} ${dimUnit} (“${floors[axis].stop!.name}”).`)
               .join(' ')}

@@ -80,8 +80,8 @@ export function RailSection({
               (a count, a theme name) and clipping a number is worse than clipping a
               word you can still recognise from its first letters. */}
           <span
-            className="section-title"
-            style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            className="section-title truncate"
+            style={{ flex: 1, minWidth: 0 }}
           >
             {title}
           </span>

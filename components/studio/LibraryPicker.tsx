@@ -171,7 +171,7 @@ export function LibraryPicker({
         }}
       >
         {Object.keys(groups).length === 0 && (
-          <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, lineHeight: 1.5 }}>
+          <div className="t-meta" style={{ padding: 16, textAlign: 'center', lineHeight: 1.5 }}>
             Nothing matches &quot;{q}&quot;.
             <br />
             Try a room word like &quot;chair&quot;, &quot;lamp&quot; or &quot;storage&quot;.
@@ -187,7 +187,7 @@ export function LibraryPicker({
                 position: 'sticky',
                 top: 0,
                 zIndex: 'var(--z-sticky-local)',
-                fontSize: 10,
+                fontSize: 'var(--fs-micro)',
                 padding: '2px 0 6px',
                 background: 'var(--paper)',
                 display: 'flex',
@@ -227,7 +227,7 @@ export function LibraryPicker({
                   }
                   onClick={(e) => press(e, added)}
                   aria-pressed={marked.some((m) => m.label === item.label) || undefined}
-                  className="ds-btn"
+                  className="ds-btn ds-btn--sm"
                   title={
                     (draggable
                       ? `${added.label} — drag into the room, or click to add it in the first clear spot · ${added.dimMM[0]} × ${added.dimMM[1]} × ${added.dimMM[2]} mm`
@@ -244,8 +244,6 @@ export function LibraryPicker({
                       : undefined
                   }
                   style={{
-                    height: 34,
-                    fontSize: 12,
                     justifyContent: 'flex-start',
                     paddingLeft: 10,
                     cursor: draggable ? 'grab' : 'pointer',
@@ -253,7 +251,10 @@ export function LibraryPicker({
                   }}
                 >
                   <Icon name="plus" size={11} />
-                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {/* Left-aligned: a list of names reads down its left edge, and
+                      `.ds-btn` centres its text, which set each name floating in
+                      the middle of a full-width row. */}
+                  <span className="truncate" style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                     {added.label}
                   </span>
                   {/* Only when the words named a size, and then it is THIS row's
@@ -270,7 +271,7 @@ export function LibraryPicker({
                     <span
                       className="mono"
                       style={{
-                        fontSize: 10,
+                        fontSize: 'var(--fs-micro)',
                         // Two tells, not one: the warn tone AND the glyph beside
                         // it, because colour alone is not a state.
                         color: refused ? 'var(--warn-text)' : 'var(--ink-3)',
@@ -297,8 +298,8 @@ export function LibraryPicker({
       {canMark && marked.length > 0 && (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingTop: 8, flexShrink: 0 }}>
           <button
-            className="ds-btn"
-            style={{ flex: 1, minWidth: 0, height: 30, fontSize: 12, justifyContent: 'center', fontWeight: 700 }}
+            className="ds-btn ds-btn--sm"
+            style={{ flex: 1, minWidth: 0, justifyContent: 'center', fontWeight: 700 }}
             onClick={() => {
               // Catalogue order rather than press order, which is what this did before
               // and is the less surprising of the two when several pieces land at once.
@@ -313,8 +314,8 @@ export function LibraryPicker({
             Add {marked.length}
           </button>
           <button
-            className="ds-btn"
-            style={{ height: 30, fontSize: 12, paddingInline: 10 }}
+            className="ds-btn ds-btn--sm"
+            style={{ paddingInline: 10 }}
             onClick={() => setMarked([])}
           >
             Clear

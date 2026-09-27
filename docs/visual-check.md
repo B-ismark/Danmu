@@ -62,6 +62,7 @@ section is yours to fix if you are the one reading it.
 | Drag and selection | `drag` | drag, convoy, rotate, scale, snap, both tabs' pointers |
 | Layout and Shuffle | `layout` | the solver, Shuffle, bands, arrangement, layout rules |
 | Shell and flow | `shell` | rails, panels, capture / detect, copy and CTAs |
+| Look and light | `look` | the 3D render: grading, materials, lights, what the camera sees |
 
 ---
 
@@ -190,46 +191,6 @@ declared size — ratio 1.00 on all three axes, gated per shape in
 whether a plant at its declared size still looks like a plant. If any of them look wrong, the
 honest fix is the **declared size in `PART_LIBRARY`**, not the renderer — the geometry is
 correct now and the catalogue number is the thing that was never checked against it.
-
-### An air purifier's intake slats stand up through it instead of banding around it
-
-**Where to click.** Any room, **3D Model** tab, Library → **Air purifier**. Look at it from
-the side, not from above.
-
-**What is wrong.** `AirPurifierGeo` (`components/three/DynamicPart.tsx:1232-1236`) draws its
-three intake slats as `<torusGeometry>` with **no rotation**. A torus lies in XY with its
-axis on Z; the purifier body is a cylinder about Y. So the three rings stand as vertical
-hoops in the `z = 0` plane, cutting edge-on through the body, where they are meant to be
-horizontal bands around it. The fix is almost certainly `rotation={[Math.PI/2, 0, 0]}` —
-the same axis confusion the washing-machine drum already carries a comment about.
-
-**Why it is filed here and not fixed.** It is a one-line rotation, which is exactly the
-class of change that ships upside-down because it was obviously right. Nothing in this repo
-renders geometry — the `FanGeo` control mutation above is the standing proof — so no gate
-can tell a corrected slat from a slat rotated the other way. Someone has to see it before
-and after.
-
-**Found by** the footprint lane, incidentally, while sweeping shapes for compound
-footprints. Never in a browser. Related, same class, also unfixed: `DeskGeo` draws the
-L-desk's return wing so the piece spans **2.86 m** where every consumer reads 1.60 m, and
-32 of 46 shapes draw outside their own `dimMM`.
-
-**Its twin has been looked at, and this one can be settled the same way.** `WardrobeGeo`'s
-doors sat here as one class with this item — both one-line rotations, both "obviously
-right", both filed because no gate in this repo can tell a corrected rotation from one
-flipped twice. That item is deleted because the `footprint` lane put it on screen: a
-Playwright A/B, SwiftShader, production builds, one arm at a time. Closed, the panels
-stand 12 mm proud; opened on `main` the box **shrank** to 1.380..1.980 against a closed
-1.368..1.980, and with the fix it grows to 0.856..1.980 — **+512 mm into the room** —
-across three bays with alternating hinge signs, so both directions were measured rather
-than reasoned. The write-up is on PR #123; the fix is on `fix/seeded-flags-and-wardrobe-doors`
-and unmerged at the time of writing. **That observation is not mine — I have not seen
-either piece.** What it establishes for this item is that the route exists. Two traps it
-cost, both on that PR rather than in the route section below: a plan piece is never
-`visible` to Playwright, because its stroke is drawn only while it is selected — wait on
-`{ state: 'attached' }` instead, or the locator resolves and times out; and projecting a
-part's world centre through the camera lands on the CANVAS and selects nothing, so
-clicking and reading `aria-selected` back is the only aiming that works.
 
 ### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
 
@@ -982,6 +943,93 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
+### One type scale, and piece names you can read at laptop width — PR #157, SWEPT, wants a hand on a real mouse and a real phone
+
+Every font size is one of eight steps now and every transition one of three speeds
+(`--fs-*`, `--dur-*` in `globals.css`). Most sizes moved by half a pixel. Swept with
+`scripts/fidelity-sweep.mjs` on every screen at 360 / 390 / 768 / 1024 / 1280 / 1440 /
+1920, metric and feet: **0 findings** (the build before this had 2 — the plan's unit
+readout cut off by its toolbar on a phone — plus the catalog names cut to one letter,
+which the sweep could not see until it learned to). SwiftShader, desktop Chromium only.
+
+What the sweep cannot tell you, and a person can:
+- **The catalog's hover actions.** Point at a piece row in the left rail: lock, hide and
+  remove fade in OVER the end of the name, on a fade of the row's own colour. Wrong looks
+  like a grey slab, a hard edge, or the name jumping sideways.
+- **Select a row** (mouse or touch): it opens to two lines — the name keeps the whole
+  first line, lock / hide / remove sit right-aligned beneath it. That is also the only
+  way a touch screen reaches them. Wrong looks like the buttons sitting on the name, the
+  name dropping under the dot, or a row with no way to hide or delete the piece. Do it on
+  a piece inside a group too: the group's line should run unbroken through the opened
+  row, and on the group's LAST piece stop at the elbow beside the name.
+- **A locked or hidden piece** shows a small padlock / crossed eye after its name without
+  hovering.
+- **On a phone** the 3D tab's Move / Scale / Rotate read in full, with the W / S / R
+  keycaps gone. Wrong looks like "M…".
+
+### The laptop studio as panes on a wash — PR #157, SWEPT, needs a real GPU and a Mac
+
+At 1024, 1280 and 1440 on both tabs: the rails and the room are rounded panes with an
+even gap; the sash hover line sits in the middle of the gap; the right rail's footer
+band follows the pane's lower corners. Over the room, the toolbars and the camera
+gizmo should look frosted as the room moves under them; on SwiftShader the blur was
+only seen over a still frame. Wrong would be: a square corner poking past a pane, a
+dropdown or the room report landing lower than its trigger (a filter crept onto a
+rail), or text looking greyer on the rails than on plain paper. With macOS "Reduce
+transparency" on, the panes should be solid. The room size fields at 1024 put Height
+on a second line with every number whole.
+
+### Floating chrome as pills — PR #157, SWEPT, needs a real GPU and a touch screen
+
+Swept at all seven widths: **0 findings**. On both tabs every cluster over the room is
+a rounded capsule with quiet buttons inside: undo/redo; on the plan, Zoom (− m · 100% +)
+and Turn and fit (⟲ 0° ⟳ | Fit); on 3D, Move / Scale / Rotate with the chosen mode as a
+dark capsule, then Snap and Add. At 1024 on the plan the right corner folds into two
+rows (undo/redo + Zoom, then Turn and fit), never three. Press + and − repeatedly: the
+buttons must not shift as the percentage changes digits. Wrong would be: a pill that
+disappears into a pale wall in 3D (the rim is deliberately soft and the lift is the
+shadow, so check a light wall colour), a keyboard focus ring cut off inside the mode
+strip, or Comfort zones shorter than undo/redo on a phone.
+
+### Phones get a phone layout, tablets one docked panel — PR #157, SWEPT, needs a real phone and a real tablet
+
+Below 1024px the studio is `SheetShell` (see `Design.md` § Phones and tablets). Under
+600px: a one-row app bar, a toolbar (Room · Add · View, or Room · *piece name* · Done
+with something selected), and one sheet that rises above the toolbar. From 600 to
+1023px: the room with one docked pane and Room · Details tabs. Swept at 360 / 430 / 768 /
+1440: **0 findings**. The drag was also probed in the build: pulled up past the top, the
+sheet settled at full (613px of a 669px stage on a 390 × 844 window). SwiftShader,
+desktop Chromium with a mouse standing in for a finger, which is exactly the part a
+phone has to close.
+
+What only a real phone can tell you:
+- **Safe areas, on an iPhone with a notch or Dynamic Island.** The app bar clears the
+  status bar, and the toolbar's labels clear the home indicator. Wrong looks like
+  "Room" sitting under the home bar, or the back chevron under the clock. Do it in
+  landscape too: the side insets should keep the chevron and the More button off the
+  rounded corners.
+- **Safari's own toolbar collapsing.** Scroll a sheet's contents, then tap the room.
+  The studio's toolbar stays attached to the bottom edge, with no gap under it and no
+  jump when Safari's bar shrinks or grows. This is the iOS 26 fixed-bar report the
+  in-flow toolbar exists to avoid; it is **unverified**, so a jump here means the
+  workaround was the wrong one.
+- **The sheet under a finger.** Drag the grabber up slowly: it follows the finger and
+  settles at nearly full. Flick it down from half: it closes. Tap the grabber: it swaps
+  half ↔ full. Wrong looks like the page scrolling instead of the sheet moving, or the
+  sheet snapping back to where it started.
+- **Scrolling a panel to its end.** With Room open, scroll its list past the bottom. The
+  page must not scroll or bounce behind it.
+- **Pinch and pan in the 2D plan**, now that its zoom box is gone on a phone. Two fingers
+  zoom about the point between them; one finger on empty floor pans. Wrong looks like the
+  browser zooming the whole page.
+- **Add, by tap.** Open Add, tap a piece: it appears in the room at the first clear spot
+  and the sheet stays open for the next one.
+- **More (⋯).** It opens with How this works and the three exports, each row a
+  comfortable thumb target. Tap outside it: it closes.
+- **A tablet, portrait (768 or 820 wide).** The pane sits to the right of the room with
+  Room · Details tabs. Tap a piece: the pane turns to Details. The room keeps most of the
+  width. Wrong looks like the pane squeezing the room under half.
+
 ### The lens tilt read needs a real phone, on BOTH engines — merged to `main` in `17f9d62` (PR #148)
 
 **Where to click.** On an Android phone in Chrome and on an iPhone in Safari: open
@@ -1598,6 +1646,175 @@ back partially — the pieces that survive stay selected and the rest are droppe
 than the whole selection clearing.
 
 ---
+## Look and light
+
+### High quality is graded again — on a real GPU, in every mood — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Open any room on the **3D Model** tab with **View → Quality → High**
+(the default), then flip to **Fast** and back, in each lighting mood. Then **Export → This
+3D view** on High and open the PNG beside the screen.
+
+**What wrong looks like.** High reading flatter or greyer than Fast in a way that is not
+shadow (the composer used to switch the ACES curve off, so every mood's `exposure` did
+nothing on the default quality); the paper backdrop around the room a different colour
+inside the canvas than outside it (the grade is depth-gated in `components/three/grade.ts`
+to leave the cleared backdrop alone — a banded or haloed silhouette where the room meets
+the backdrop would mean that gate is misreading depth); or the saved PNG missing the soft
+corner shading the screen shows (snapshots now render through the composer).
+
+**What was measured, and on what.** SwiftShader only, one mood, 1280 × 800: backdrop
+251,248,241 on High before, on High after and on Fast — identical — where the ungated
+first attempt read 225,224,222. The snapshot PNG matched the High view to within 2 levels
+at three sampled points. A real GPU and the other moods are the unlooked-at half.
+
+**Not this item, noticed on the way.** High is much darker than Fast in the same mood,
+and it is not the grade: the back wall reads 109 on High and 174 on Fast with the grade on
+both. The closed shell (`RoomShell`) is doing its job — the key light casts on High and the
+ceiling stops it — so the interior is lit by the hemisphere and environment alone. That is
+the lighting pass's to answer (warm interior light sources), not a grading defect.
+
+### Windows, curtains, art and doors go with the cut-away wall — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Any room with a window or a painting on each wall, **3D Model** tab,
+default dollhouse view. Orbit slowly all the way round, on **High** and on **Fast**.
+
+**What wrong looks like.** A wall piece still hanging where its wall has gone; a piece
+vanishing while its wall is still drawn (a sign error in `lib/near-wall.ts` shows only on
+the side walls); the room's **shadows moving** as the camera crosses a wall — the piece is
+meant to stop drawing but keep casting (`components/three/CutAway.tsx`); or a press where
+an invisible window was selecting the window instead of what is behind it.
+
+**What was measured, and on what.** SwiftShader, 1280 × 800, the starter living room:
+both near walls' windows and curtains gone in the default view, back after a ~180° orbit,
+and a click through the vanished window selected the sofa. Shadow stability while orbiting
+was not measured — it is the half that wants eyes.
+
+### High has a bounce light now, and the furniture has real surfaces — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** The starter living room on **High**, every mood; then a bedroom and a
+room with its windows deleted. Zoom in on a wardrobe, a bed and a lamp.
+
+**What wrong looks like.** High washed out or flat in Day or Sunset (the bounce is an
+ambient term — too much and the sun's patch stops reading); a windowless room as bright
+as one with windows (it should be dimmer: `lib/bounce.ts` gives it nothing); Evening no
+longer dim; wood grain reading as stripes or noise on a painted wardrobe (casework takes
+`SURFACE.wood`'s normal map whatever its colour); a lamp shade glowing so hard it clips
+white, or not glowing at all with the lamp on.
+
+**What was measured, and on what.** SwiftShader, 1280 × 800, starter living room, Day:
+mean interior grey 110 on High before, 145 after, 152 on Fast. Evening before/after
+compared by eye — the shade glows, the room stays dim. Grain and sheen were **not visible
+at all** on SwiftShader at this camera distance, before or after, so whether they read on
+a real GPU is entirely unlooked-at.
+
+**Noticed, not fixed.** The sofa's fabric weave aliases into a moiré at room distance on
+both builds — the normal map wants mipmapping or a distance fade.
+
+### Every model is one object now — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Library → coffee table, dining chair, armchair, office chair, desk, shoe
+rack, floor lamp, air purifier, both mirrors, monitor, fridge. Orbit close to each.
+
+**What wrong looks like.** A part that stops short of what it should meet: a table top above
+its legs, a chair back with nothing under it, a shelf between legs that does not reach them,
+a handle standing off a door, purifier rings through the floor (they were vertical hoops;
+now `rotation={[π/2,0,0]}` — this closes the old "intake slats stand up" item, seen as bands
+on SwiftShader). Also look at legs: the white outline strokes are gone from them.
+
+**What was measured, and on what.** `tests/model-integrity.test.tsx` walks every shape at
+min / library / max and found 181 detached or ungrounded parts across 19 shapes; it finds
+none now. It proves each model is connected, not that every visible joint is closed — the
+coffee table's legs cut back to 0.82h still pass, because the new aprons carry them. Seen on
+SwiftShader in a seeded showroom, the oval mirror included (seeded on three walls: it shows on
+the two the camera faces and leaves with the cut-away third, as it should). The purifier's
+rings follow its taper now — sized to the top radius, the lowest stood ~4 mm off the body,
+which an axis-aligned box test cannot see because the ring's box contains the body.
+
+### A rug sits where a designer would put it — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Any starter living room, **3D Model** tab. Then Library → Rug into a room
+with a bed, and another under a dining table, and press **Fix** (or Shuffle) with each.
+
+**What wrong looks like.** Living: the rug's edge should run under the sofa's FRONT legs
+only (about 20 cm in) and the coffee table should stand wholly on it; the back legs on the
+rug is the old placement. Bedroom: the rug should start a third of the way down the bed,
+with both nightstands on bare floor and rug showing past the sides and the foot. Dining:
+centred under the table, long side down its length. In every room: never under a
+wardrobe, bookcase, nightstand, fridge, or a desk that has an office chair, and never in a
+door's swing. A rug at an angle to its group is also wrong.
+
+**What was measured, and on what.** `tests/rug-zones.test.ts` (14 tests; 8 of 9 mutants
+caught, the ninth — a proposal straight to the target — measured as changing nothing and
+deleted). Starter rooms: only the rug moved in the five offered presets (and the open
+plan's dining chairs squared to the other axis). Under **Fix** a stray rug stops ~0.35 m
+short of its spot, by design — every relation is a soft band against a linear inertia.
+Not yet seen in a browser with a bed or a dining table.
+
+### Fix and Shuffle think in the background now — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Any furnished room → rail → **Shuffle**, then orbit the room while the
+button says "Shuffling…". Then press Shuffle and immediately **Ctrl+Z**.
+
+**What wrong looks like.** The room freezing while the button spins (the worker did not
+load — the console says "Arranging worker unavailable; running inline."); an arrangement
+landing on top of the undo you just made (the stamp check failed). The second press should
+end in "The room changed while it was thinking" with the undo standing.
+
+**What was measured, and on what.** SwiftShader, production build, 4 cores, the seeded
+9-piece showroom, three presses each. Inline (Worker hidden from the page): Shuffle froze
+the page for **567–667 ms** in one frame and finished in 640–790 ms. Worker: worst frame gap
+**17–33 ms** throughout, but finished in **~1.0 s** — the worker's own search takes ~900 ms
+against ~600 ms inline. Not the copy across threads (a structured clone costs ~10% in node,
+within noise), not the canvas (hiding it changed nothing), and not a slow worker thread in
+general (a synthetic loop runs at the same speed in both). Unexplained; a real phone and a
+real laptop are what settle whether the live room costs a longer wait there too. The stale
+path was seen working in that build.
+
+**One more path, found in review and not yet seen in a browser.** Resize a piece until the
+"That size change left N problems" toast appears, drag a different piece, *then* press
+**Re-fit** in that toast. The drag must survive: the re-fit works from the room with the
+drag in it. Before the fix it solved the room from when the toast appeared and wrote over
+the drag without a word, because the button was holding an old copy of the room while the
+stale check compared press against answer. `tests/refit-press-time.test.tsx` holds the
+wiring; nobody has watched it happen.
+
+### Re-scan looks again, and its answer reaches the studio — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** A photographed room with furniture found → studio → move a piece and
+add one from the Library → Room rail → **Re-scan**. The screen should say *This is your last
+scan* with **Look again**. Press it, then **Continue to the studio**.
+
+**What wrong looks like.** The studio still showing the old arrangement after a scan that
+found something different (the saved scene won again); no *Before re-scan* entry under
+Room check › Layouts, or one that does not put back the moved and added pieces when
+applied; the toast naming a layout that is not there.
+
+**What has been seen.** The cached-list notice and **Look again** at 360 and 1280 wide in a
+production build (SwiftShader), and Undo restoring the list. The run itself could not be
+watched here — no on-device model and no key, so **Look again** ends at *Let's do this by
+hand*. The run itself was then driven end to end with Google's reply stubbed in the
+browser (a key set, the request answered by the probe): a fresh **Look again** →
+**Continue** dropped the scene, wrote a *Before re-scan* layout and raised the toast;
+**Look again** → **Undo** → **Continue** left the scene alone and wrote no layout; a
+rate-limited **Look again** → **Try again** ran the scan again rather than landing on the
+old list. What remains for a person is the studio side: that applying *Before re-scan*
+really puts the moved and added pieces back.
+
+### Scanned furniture comes out as the right piece — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Photograph a room with an armchair, a dining table and a sofa, with
+the on-device model deployed and a detection key set, and let the scan run.
+
+**What wrong looks like.** The armchair listed or drawn as a two-seat sofa; the dining
+table drawn with a desk's side panel and cable rail; the same sofa listed twice, once as
+"Couch" and once as "Sofa"; the privacy line saying the photos stayed on the device while
+the second look was sending them; after a failed second look, the on-device pieces gone.
+
+**What has been seen.** The dining table beside a desk in the 3D view (SwiftShader): four
+legs and aprons against the desk's panel. Nothing else — neither the model nor a key is
+available here, so the second look and the merge are held by `tests/detection-dedupe.test.ts`
+and the armchair by `tests/shape-contract.test.ts`.
+
 ## The browser route, so the next person does not rebuild it
 
 Looking is a half-hour of setup nobody has to hand, which is the actual reason items sit
@@ -1625,6 +1842,11 @@ repo's `package.json` puts a browser download in everyone's install.
   with a beat between them brings the whole shell into frame, which is the only framing
   that can answer a question about walls.
 · **One fresh browser context per room**, or IndexedDB hands you the previous room.
+· **A plan piece is never `visible` to Playwright** — its stroke is drawn only while it is
+  selected — so wait on `{ state: 'attached' }`, or the locator resolves and times out.
+  (From PR #123's wardrobe-door A/B; moved here when the purifier item it sat in closed.)
+· **Projecting a piece's world centre through the camera lands on the canvas and selects
+  nothing.** Click, then read `aria-selected` back — that is the only aiming that works.
 · **Killing the server matters more than it looks.** `next start` survives a stopped
   parent process: the port stays held, and if you rebuild `.next` underneath it you are
   serving a mixture of two commits. That happened here and only failed because the

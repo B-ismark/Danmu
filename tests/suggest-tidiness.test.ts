@@ -173,11 +173,18 @@ describe('a suggestion never hands back a piece a few degrees off square', () =>
   // sweep, take the difference, do not adjust a number until the test passes. `t` is in
   // the set now because it is the shape with the most crooked pieces and it had no
   // witness at all.
+  //
+  // **Re-derived again for the rug rules** (`rugTarget` replacing the `near` band, and
+  // rugs leaving the `balance` mass), by exactly that procedure — the same five rooms ×
+  // 40 seeds, full `NUDGE_DIRS` against the first four. 42 solves crooked on the axes
+  // alone and 29 with the diagonals; the difference is thirteen coordinates. None of the
+  // old four survived as a witness: `l` seed 1 and `u` seed 8 stopped being crooked
+  // without the diagonals, and `rect` seed 5 and `t` seed 1 came back crooked with them.
   const DIAGONAL_ONLY: Array<[LayoutId, number, number, number]> = [
-    ['rect', 5, 4, 5],
-    ['l', 6, 5, 1],
-    ['t', 6, 5, 1],
-    ['u', 5, 4.5, 8],
+    ['rect', 5, 4, 3],
+    ['l', 6, 5, 3],
+    ['t', 6, 5, 5],
+    ['u', 5, 4.5, 3],
   ];
 
   it.each(DIAGONAL_ONLY)('squares a piece only a diagonal shove can reach: %s %sx%s seed %i', (id, w, d, seed) => {

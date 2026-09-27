@@ -23,6 +23,7 @@
 
 import { Fragment } from 'react';
 import { useStudio } from '@/lib/store';
+import { usePhoneStudio } from './NarrowViewportBanner';
 import { Icon } from '@/components/ui/Icon';
 import type { IconName } from '@/components/ui/Icon';
 
@@ -35,7 +36,7 @@ const MODES: Array<{ id: 'translate' | 'rotate' | 'scale'; label: string; key: s
   { id: 'rotate', label: 'Rotate', key: 'R', does: 'spin it in place', icon: 'refresh' },
 ];
 
-const SNAPS: Array<{ id: 'off' | 'fine' | 'coarse'; label: string; sub: string }> = [
+export const SNAPS: Array<{ id: 'off' | 'fine' | 'coarse'; label: string; sub: string }> = [
   { id: 'off', label: 'Free', sub: 'no snap' },
   { id: 'fine', label: 'Fine', sub: '10mm · 15°' },
   { id: 'coarse', label: 'Coarse', sub: '50mm · 45°' },
@@ -49,15 +50,22 @@ export function TransformToolbar() {
   const snapMode = useStudio((s) => s.snapMode);
   const setSnapMode = useStudio((s) => s.setSnapMode);
   const selected = useStudio((s) => s.selectedPartId);
+  // A phone keeps this row to one line and thumb-sized: the three modes at 40px, and
+  // Snap in the app bar's More menu, where the set-once settings live (HIG's toolbar
+  // guidance for a compact width). Here it wrapped to a second row of its own.
+  const phone = usePhoneStudio();
 
   return (
     <Fragment>
-      <div className="toolbar" role="group" aria-label="What dragging does" style={{ borderColor: 'var(--edge)' }}>
-        {MODES.map((m, i) => {
+      {/* A segmented `.chrome-pill` (`.chrome-seg`, globals.css): the chosen mode is
+          a dark capsule, the others are quiet words, and no rules between them. */}
+      <div className="chrome-pill chrome-seg" role="group" aria-label="What dragging does">
+        {MODES.map((m) => {
           const active = mode === m.id;
           return (
             <button
               key={m.id}
+              type="button"
               onClick={() => setMode(m.id)}
               aria-pressed={active}
               aria-label={`${m.label} — dragging will ${m.does} (${m.key})`}
@@ -66,31 +74,17 @@ export function TransformToolbar() {
                   ? `${m.label} (${m.key}) — dragging will ${m.does}`
                   : `${m.label} (${m.key}) — ${m.does}; applies to the next piece you select`
               }
-              style={{
-                height: 30,
-                padding: '0 12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                // The toolbar is `overflow: hidden`, so once the row is narrower
-                // than three labelled buttons SOMETHING gets cut. Letting the
-                // buttons shrink chooses what: the icon and the keycap hold their
-                // size and the word gives ground with an ellipsis, which still
-                // says which mode is which. A flex item's automatic minimum is
-                // its own content, so without `minWidth: 0` none of them shrink
-                // and the third button is simply clipped away at the border.
-                minWidth: 0,
-                background: active ? 'var(--ink)' : 'transparent',
-                // Dimmed by token, not by opacity: a 0.6-alpha --ink-2 drops
-                // under 4.5:1, and this row is 12px type.
-                color: active ? 'var(--paper)' : selected ? 'var(--ink-2)' : 'var(--ink-3)',
-                border: 'none',
-                borderLeft: i > 0 ? '1px solid var(--hairline-strong)' : 'none',
-                fontFamily: 'var(--font-sans)',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
+              // Dimmed by token, not by opacity, until a piece is selected: a
+              // 0.6-alpha --ink-2 drops under 4.5:1, and this row is 12px type.
+              //
+              // The pill clips (`.chrome-seg` is `overflow: hidden`), so once the row
+              // is narrower than three labelled buttons SOMETHING gets cut. Letting
+              // the buttons shrink chooses what: the icon and the keycap hold their
+              // size and the word gives ground with an ellipsis, which still says
+              // which mode is which. A flex item's automatic minimum is its own
+              // content, so without `minWidth: 0` none of them shrink.
+              className={`chrome-seg__btn${selected ? ' is-live' : ''}`}
+              style={{ height: phone ? 40 : 30, minWidth: 0 }}
             >
               {/* The icon identifies the mode once the word has been cut, so it
                   is the part that never shrinks — same reasoning as `Segmented`. */}
@@ -100,13 +94,17 @@ export function TransformToolbar() {
               {/* Its own overflow, because `minWidth: 0` above sizes the BOX and
                   nothing else: a bare text node in a flex row would be free to
                   wrap onto a second line inside a 30px-tall button. */}
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span className="truncate" style={{ minWidth: 0 }}>
                 {m.label}
               </span>
+              {/* A keyboard hint, so it is the FIRST thing to go when the row runs
+                  short (`.kbd-hint`): on a phone there is no W key to press, and it
+                  was the keycap that cut "Scale" to "Sc…". */}
               <kbd
+                className="kbd-hint"
                 style={{
                   fontFamily: 'var(--font-sans)',
-                  fontSize: 9.5,
+                  fontSize: 'var(--fs-micro)',
                   fontWeight: 700,
                   padding: '1px 4px',
                   marginLeft: 2,
@@ -115,7 +113,7 @@ export function TransformToolbar() {
                   // On the dark active button the keycap flips to a paper chip —
                   // a translucent white border was both a hard-coded colour and
                   // barely visible.
-                  background: active ? 'var(--paper)' : 'var(--paper-2)',
+                  background: active ? 'var(--paper)' : 'var(--paper-3)',
                   color: 'var(--ink)',
                 }}
               >
@@ -126,7 +124,7 @@ export function TransformToolbar() {
         })}
       </div>
 
-      <SnapCycleButton snapMode={snapMode} setSnapMode={setSnapMode} />
+      {!phone && <SnapCycleButton snapMode={snapMode} setSnapMode={setSnapMode} />}
     </Fragment>
   );
 }
@@ -144,47 +142,33 @@ function SnapCycleButton({
   const active = snapMode !== 'off';
   const next = SNAPS.find((s) => s.id === SNAP_ORDER[(SNAP_ORDER.indexOf(snapMode) + 1) % SNAP_ORDER.length])!;
   return (
-    <button
-      onClick={() => setSnapMode(next.id)}
-      aria-label={`Snap: ${cur.label}, ${cur.sub}. Activate for ${next.label}.`}
-      title={`Snap · ${cur.label} (${cur.sub}) — click for ${next.label}`}
-      style={{
-        height: 30,
-        padding: '0 12px',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 7,
-        // Never squeezed: this pill is one short phrase in a fixed-height,
-        // fully-rounded border, so there is no graceful narrow form of it — the
-        // honest reflow is to take a whole row. With the cluster wrapping, that
-        // is exactly what `flex-shrink: 0` buys. `Snap · Coarse` wrapping to a
-        // second line inside a 30px box is what this replaces.
-        flexShrink: 0,
-        whiteSpace: 'nowrap',
-        background: active ? 'var(--accent-tint)' : 'var(--paper)',
-        border: `1px solid ${active ? 'var(--accent-text)' : 'var(--edge)'}`,
-        borderRadius: 'var(--r-3)',
-        boxShadow: 'var(--shadow-soft)',
-        cursor: 'pointer',
-        fontFamily: 'var(--font-sans)',
-        fontSize: 12,
-        fontWeight: 700,
-        color: active ? 'var(--accent-text)' : 'var(--ink-2)',
-      }}
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          width: 6,
-          height: 6,
-          flexShrink: 0,
-          borderRadius: '50%',
-          background: active ? 'var(--accent)' : 'var(--ink-4)',
-        }}
-      />
-      {/* An element, not a bare text node: a text node is an anonymous flex item,
-          which nothing can address — no `nowrap`, no `overflow`, no min-width. */}
-      <span>Snap · {cur.label}</span>
-    </button>
+    // Never squeezed: one short phrase at a fixed height with fully rounded ends has
+    // no graceful narrow form, so the honest reflow is to take a whole row — which,
+    // with the cluster wrapping, is what `flexShrink: 0` buys. `Snap · Coarse`
+    // wrapping to a second line inside a 30px box is what this replaced.
+    <div className="chrome-pill" style={{ flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={() => setSnapMode(next.id)}
+        aria-label={`Snap: ${cur.label}, ${cur.sub}. Activate for ${next.label}.`}
+        title={`Snap · ${cur.label} (${cur.sub}) — click for ${next.label}`}
+        className={`chrome-pill__text${active ? ' is-on' : ''}`}
+        style={{ whiteSpace: 'nowrap' }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            width: 6,
+            height: 6,
+            flexShrink: 0,
+            borderRadius: '50%',
+            background: active ? 'var(--accent)' : 'var(--ink-4)',
+          }}
+        />
+        {/* An element, not a bare text node: a text node is an anonymous flex item,
+            which nothing can address — no `nowrap`, no `overflow`, no min-width. */}
+        <span>Snap · {cur.label}</span>
+      </button>
+    </div>
   );
 }

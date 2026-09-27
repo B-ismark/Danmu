@@ -37,14 +37,18 @@ function widthMatches(query: string, widthPx: number): boolean {
  *  every test file for a hand-rolled `matchMedia` — correctly, since ten of them had one
  *  — so the sanctioned way to need a different answer is to ask for it here.
  *
+ *  `touch` answers `(pointer: coarse)` and `(hover: none)` as a touch screen does, which
+ *  is a separate question from the width — a tablet is a touch screen at a laptop's
+ *  width, and the copy that says "tap" follows the pointer, not the breakpoint.
+ *
  *  Returns the restore function; call it in `afterEach`. */
-export function viewportAt(widthPx: number): () => void {
+export function viewportAt(widthPx: number, { touch = false }: { touch?: boolean } = {}): () => void {
   const prior = Object.getOwnPropertyDescriptor(window, 'matchMedia');
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     configurable: true,
     value: (query: string) => ({
-      matches: widthMatches(query, widthPx),
+      matches: /\(\s*(pointer:\s*coarse|hover:\s*none)\s*\)/.test(query) ? touch : widthMatches(query, widthPx),
       media: query,
       onchange: null,
       addEventListener: () => {},

@@ -229,11 +229,28 @@ describe('a floating card is capped against the window, not just stated', () => 
   // pixel width grows straight off screen. Browser zoom reaches these widths on a
   // laptop, which is the case the viewport gate deliberately stopped blocking.
   it.each([
-    ['components/studio/StudioHelp.tsx', /width:\s*'min\(\d+px,\s*calc\(100vw/],
-    ['components/studio/HelpCard.tsx', /width:\s*'min\(\d+px,\s*calc\(100vw/],
     ['components/studio/RoomSwitcher.tsx', /maxWidth:\s*'min\(\d+px,\s*calc\(100vw/],
   ])('%s caps its width', (file, pattern) => {
     expect(readFileSync(root(...file.split('/')), 'utf8')).toMatch(pattern);
+  });
+
+  // The help card and the coach note keep their widths in the stylesheet, because a
+  // phone replaces them with its own margins (`.app-bar .help-pop`). So the cap is
+  // asserted where it lives, and the components are held to the classes carrying it —
+  // a class the component stopped using would leave the rule capping nothing.
+  it.each([
+    ['components/studio/HelpCard.tsx', 'help-card'],
+    ['components/studio/StudioHelp.tsx', 'help-pop--coach'],
+  ])('%s caps its width through .%s', (file, cls) => {
+    expect(readFileSync(root(...file.split('/')), 'utf8')).toContain(cls);
+    const css = readFileSync(root('app', 'globals.css'), 'utf8');
+    const rule = new RegExp(`\\n\\.${cls} \\{[^}]*width: min\\(\\d+px, calc\\(100vw`);
+    expect(css).toMatch(rule);
+  });
+
+  it('a phone gives help the screen margins, not the edge of the More button', () => {
+    const css = readFileSync(root('app', 'globals.css'), 'utf8');
+    expect(css).toMatch(/\.app-bar \.help-pop \{[^}]*position: fixed;[^}]*left: 16px; right: 16px;/);
   });
 
   // A third guard stood here: the sun graph's `<svg>` had a 272-wide viewBox left
@@ -318,7 +335,9 @@ describe('the canvas tool cluster reflows instead of mangling', () => {
     // Everything above `SnapCycleButton` is the mode toolbar.
     const modes = SRC.slice(0, SRC.indexOf('function SnapCycleButton'));
     expect(modes, 'a flex item will not shrink below its own content without this').toMatch(/minWidth: 0/);
-    expect(modes, 'the label needs its own element to ellipsise in').toMatch(/textOverflow: 'ellipsis'/);
+    // `.truncate` (globals.css) is overflow + ellipsis + nowrap as one class.
+    expect(modes, 'the label needs its own element to ellipsise in').toMatch(/className="truncate"/);
+    expect(rule('.truncate')).toContain('text-overflow: ellipsis');
     expect(modes, 'the icon identifies the mode once the word is cut').toMatch(/flexShrink: 0/);
   });
 
@@ -357,14 +376,15 @@ describe('the canvas tool cluster reflows instead of mangling', () => {
   });
 
   it('lets the plan toolbar fold rather than clip its last controls', () => {
-    // ~450px of zoom / rotate / fit in a `.toolbar`, which is `overflow: hidden`.
-    // Without a wrap the Fit button was simply cut off at the border.
+    // ~450px of zoom / rotate / fit, and a `.toolbar` is `overflow: hidden`: without a
+    // wrap the Fit button was simply cut off at the border. It is two pills now, handed
+    // straight to `CanvasView` — which wraps — so each folds whole and on its own;
+    // tests/glass-skin.test.tsx holds the pills.
     const src = readFileSync(root('components', 'studio', 'PlanChrome.tsx'), 'utf8');
-    const bar = /function PlanViewControls[\s\S]*?<div className="toolbar"[^>]*>/.exec(src)?.[0] ?? '';
-    expect(bar).toMatch(/flexWrap: 'wrap'/);
-    // Its dividers have no content, so without a cross-axis size they were 1×0 —
-    // present in the DOM and invisible on screen.
-    expect(src).toMatch(/width: 1, flexShrink: 0, alignSelf: 'stretch'/);
+    const bar = src.slice(src.indexOf('export function PlanViewControls'), src.indexOf('export function ComfortLegend'));
+    expect(bar.match(/<div className="chrome-pill" role="group"/g)).toHaveLength(2);
+    const chrome = readFileSync(root('components', 'studio', 'CanvasChrome.tsx'), 'utf8');
+    expect(/export function CanvasView[\s\S]*?^}/m.exec(chrome)?.[0]).toMatch(/flexWrap: 'wrap'/);
   });
 });
 
@@ -376,10 +396,14 @@ describe('a rail section reflows instead of clipping', () => {
     // its own text and pushes the meta through the rail's `overflow: hidden` — no
     // scrollbar, no ellipsis, nothing to notice. The four properties are one
     // mechanism; any of them on its own does nothing.
-    const title = /className="section-title"[^>]*>/.exec(SRC);
-    expect(title, 'no section-title span in RailSection').toBeTruthy();
-    for (const prop of ['minWidth: 0', "overflow: 'hidden'", "textOverflow: 'ellipsis'", "whiteSpace: 'nowrap'"]) {
-      expect(title![0], `the title needs ${prop} to ellipsise`).toContain(prop);
+    // Three of the four ride `.truncate` (globals.css); `minWidth: 0` stays on the
+    // element because it only means something on a flex item.
+    const title = /className="section-title truncate"[^>]*>/.exec(SRC);
+    expect(title, 'no section-title truncate span in RailSection').toBeTruthy();
+    expect(title![0], 'the title needs minWidth: 0 to ellipsise').toContain('minWidth: 0');
+    const trunc = rule('.truncate');
+    for (const prop of ['overflow: hidden', 'text-overflow: ellipsis', 'white-space: nowrap']) {
+      expect(trunc, `.truncate needs ${prop}`).toContain(prop);
     }
   });
 
@@ -548,15 +572,20 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
   it('lets every label ellipsise rather than widening the rail', () => {
     // `.ds-btn` is `white-space: nowrap`, so at the narrowest right rail two labels
     // plus a 32px square push the row past the rail, and `.rail` is
-    // `overflow: hidden` — no scrollbar, no ellipsis, no clue. `flex: 1` sizes the
-    // BOX and `minWidth: 0` is what lets it go below its own text; the pair is one
-    // mechanism and either half alone does nothing.
+    // `overflow: hidden` — no scrollbar, no ellipsis, no clue. Each wrapper keeps
+    // flex's default `0 1 auto` — as wide as its label, and allowed to SHRINK — with
+    // `minWidth: 0` letting it go below its own text, and the button inside is
+    // capped at the wrapper (`max-width: 100%`), which is where the ellipsis starts.
+    // No `flex: 1`: the buttons hug their labels rather than splitting the rail into
+    // halves that read as a segmented control.
     //
     // Three wrappers, not two: the selection slot is Delete for a piece and Done
     // for a wall, written as two branches of one slot because the store makes those
     // two selections mutually exclusive.
-    const wrappers = CODE.match(/style=\{\{ flex: 1, minWidth: 0 \}\}/g) ?? [];
-    expect(wrappers, 'every labelled button in the row needs the flex/minWidth pair').toHaveLength(3);
+    const wrappers = CODE.match(/style=\{\{ minWidth: 0(?:, marginLeft: 'auto')? \}\}/g) ?? [];
+    expect(wrappers, 'every labelled button in the row needs a shrinkable wrapper').toHaveLength(3);
+    expect(CODE, 'footer buttons hug their labels; nothing grows').not.toMatch(/flex: 1\b/);
+    expect(rule('.rail-footer .ds-btn')).toContain('max-width: 100%');
 
     // And the label needs its OWN element or the ellipsis has nowhere to happen: a
     // bare text node beside an icon is an anonymous flex item, which is what
@@ -746,11 +775,14 @@ describe('the studio shells', () => {
   });
 
   it('always offers the sash on a three-column layout', () => {
-    // The sash used to be opt-in per variant. It ships now, so the only thing that
-    // withholds it is the stacked layout, where a vertical divider between rails
-    // stacked BELOW the room would resize nothing.
-    expect(DOCKED).not.toMatch(/sashable/);
-    expect(DOCKED, 'the sash is gated on layout alone').toMatch(/\{!stacked && \(\s*<RailSash/);
+    // The sash used to be opt-in per variant, and then gated on the stacked layout.
+    // Below 1024px is a different shell now (`SheetShell`), so the docked one is
+    // always three columns and both rails always carry a sash — and the sheet, whose
+    // panels are not side by side, carries none.
+    expect(DOCKED).not.toMatch(/sashable|\bstacked\b(?!'>)/);
+    expect([...codeOnly(DOCKED).matchAll(/<RailSash\b/g)]).toHaveLength(2);
+    const SHEET = readFileSync(root('components', 'studio', 'shells', 'SheetShell.tsx'), 'utf8');
+    expect(codeOnly(SHEET)).not.toMatch(/RailSash/);
   });
 
   it('renders a dragged width inside the token bounds rather than instead of them', () => {
@@ -1082,48 +1114,74 @@ describe('a capture card holds its own chrome', () => {
 });
 
 describe('a piece row keeps enough width to read the piece name', () => {
+  // The silent cost of a row action. The actions used to be `opacity: 0` in the FLOW,
+  // so every invisible button held its 24px plus an 8px gap whether anyone was
+  // pointing at the row or not, and the name — the one flex child with `minWidth: 0`
+  // — absorbed the whole cost by ellipsising. No overflow, no error, no failing test:
+  // at the laptop rail (`--rail-left-tight`, which this used to not measure at all)
+  // the name got ~25px and read "D…", "So…". The fidelity sweep's first run is what
+  // saw it. The actions float over the end of the row now, and these two assertions
+  // are the two halves of that: they are out of the flow, and what IS in the flow
+  // still leaves the name a legible width at the narrowest rail that ships.
+  const tree = codeOnly(readSrc('components', 'studio', 'PartTree.tsx'));
+  // The row renderer ONLY. `PartTree.tsx` holds several components and seven
+  // `IconButton`s between them; slicing to end-of-file counted all seven and
+  // reported a name width of −70px, which is how this bound came to be measured
+  // rather than assumed.
+  const from = tree.indexOf('function PartRow(');
+  const next = tree.indexOf('\nfunction ', from + 1);
+  const partRow = tree.slice(from, next === -1 ? undefined : next);
+
+  it('the row actions stand outside the flow', () => {
+    expect(from, 'PartRow is not declared in PartTree.tsx').toBeGreaterThan(-1);
+    const actions = rule('.row-actions');
+    expect(actions, 'the actions must be positioned over the row, not in it').toMatch(/position:\s*absolute/);
+    // Every button in the row is inside that wrapper — one left outside is a button
+    // back in the flow, costing the name its 32px again.
+    const open = partRow.indexOf('<span className="row-actions">');
+    expect(open, 'PartRow has no .row-actions wrapper').toBeGreaterThan(-1);
+    const close = partRow.indexOf('</span>', partRow.lastIndexOf('<IconButton'));
+    const buttons = [...partRow.matchAll(/<IconButton\b/g)].map((m) => m.index!);
+    expect(buttons.length).toBe(3);
+    for (const at of buttons) expect(at > open && at < close, `an IconButton at ${at} sits outside .row-actions`).toBe(true);
+  });
+
+  it('the selected row opens its actions onto a line of their own, instead of floating them over the name', () => {
+    // The selected row is where the actions are ALWAYS showing — and the only way a
+    // touch screen reaches them — so the float that frees every other row would sit
+    // on this one's name for as long as it stays selected: ~100px of a ~150px row,
+    // the same "D…" one state over. Found by review, not by the width check below,
+    // which measures the row with its actions hidden.
+    expect(rule('.list-row.is-selected'), 'the selected row must be allowed to wrap').toMatch(/flex-wrap:\s*wrap/);
+    const open = rule('.list-row.is-selected .row-actions');
+    expect(open, 'selected-row actions must be back in the flow').toMatch(/position:\s*static/);
+    expect(open, 'selected-row actions must take a line of their own').toMatch(/flex-basis:\s*100%/);
+    // The name shrinks through a class, not an inline `flex`, so nothing inline can
+    // out-rank the rule above.
+    expect(partRow).toContain('className="row-name truncate"');
+    expect(rule('.row-name')).toMatch(/min-width:\s*0/);
+  });
+
   it('leaves the name a legible share of the narrowest shipping rail', () => {
-    // The silent cost of a row action. `.row-action` is `opacity: 0`, NOT
-    // `display: none`, so every button in a row holds its width whether it is
-    // visible or not — and each new one costs its own 24px *plus* a 8px flex gap.
-    // The name is the flex child with `minWidth: 0`, so it absorbs the whole cost
-    // by ellipsising: no overflow, no error, no failing test. Just shorter names.
-    //
-    // Adding the Lock button took the name from 90px to 58px at `--rail-left-min`.
-    // That is recorded here as arithmetic rather than as a comment, because the
-    // next button is the one that makes a name unreadable and nothing else in the
-    // suite would notice.
     const row = rule('.list-row');
     const gap = Number(/gap:\s*(\d+)px/.exec(row)![1]);
     const padX = Number(/padding:\s*\d+px (\d+)px/.exec(row)![1]);
-
-    // `codeOnly`, for the reason its own comment gives — and this assertion is the
-    // third to need it. The row's JSX comment quotes the `<IconButton/>` shape it
-    // replaced, so counting buttons in the raw source found four where there are
-    // three, and the count read as a real measurement.
-    const tree = codeOnly(readSrc('components', 'studio', 'PartTree.tsx'));
-    // The row renderer ONLY. `PartTree.tsx` holds several components and seven
-    // `IconButton`s between them; slicing to end-of-file counted all seven and
-    // reported a name width of −70px, which is how this bound came to be measured
-    // rather than assumed.
-    const from = tree.indexOf('function PartRow(');
-    expect(from, 'PartRow is not declared in PartTree.tsx').toBeGreaterThan(-1);
-    const next = tree.indexOf('\nfunction ', from + 1);
-    const partRow = tree.slice(from, next === -1 ? undefined : next);
-    const buttons = [...partRow.matchAll(/<IconButton\b/g)].length;
     const glyph = Number(/justifyContent: 'center', width: (\d+), flexShrink: 0/.exec(partRow)![1]);
+    // What stays in the flow beside the name: the status glyph, and at worst both
+    // state marks (locked AND hidden), each an 11px icon plus a gap.
+    const marks = [...partRow.matchAll(/className="row-mark"/g)].length;
+    expect(marks).toBe(2);
+    const markPx = Number(/<Icon name="lock" size=\{(\d+)\}/.exec(partRow)![1]);
 
     // 32px of `.section` padding, the same figure the rail assertions above use.
-    const content = railFloor('rail-left') - 32;
-    const children = buttons + 2; // status glyph + name + the actions
-    const nameWidth = content - padX * 2 - gap * (children - 1) - glyph - buttons * 24;
+    // The TIGHT rail, not the floor: `DockedShell` ships it for the whole 1024–1279px
+    // step, which is the width the old version of this test did not ask about.
+    const content = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]) - 32;
+    const nameWidth = content - padX * 2 - glyph - gap - marks * (markPx + gap);
 
     // ~8 characters of 13px Nunito. Chosen, not derived — a derived floor would
     // move with the thing it is supposed to constrain and could never go red.
-    expect(
-      nameWidth,
-      `a piece name gets ${nameWidth}px at --rail-left-min with ${buttons} row actions`,
-    ).toBeGreaterThanOrEqual(56);
+    expect(nameWidth, `a piece name gets ${nameWidth}px at --rail-left-tight`).toBeGreaterThanOrEqual(56);
   });
 });
 
@@ -1171,14 +1229,15 @@ describe('the room-check actions wrap rather than cut a word', () => {
     // The measurement the wrap answers to. If this ever comes out generous, the grid was
     // fine after all and this row can go back to one — but it is not a matter of taste
     // while the number is 35.
-    const btn = /^\.ds-btn \{[\s\S]*?^\}/m.exec(CSS);
-    expect(btn, '.ds-btn is not declared in globals.css').toBeTruthy();
-    const padX = Number(/padding: 0 (\d+)px/.exec(btn![0])![1]);
+    // Fix and Shuffle are `ds-btn--sm`, whose padding and gap travel with the size.
+    expect(ROOM).toMatch(/function FixAllButton[\s\S]*?className="ds-btn ds-btn--sm"/);
+    const btn = rule('.ds-btn--sm');
+    const padX = Number(/padding: 0 (\d+)px/.exec(btn)![1]);
 
     // The row's own gap, and the icon each button carries, read out of the source.
     const rowGap = Number(/flexWrap: 'wrap', gap: (\d+) \}\}>\s*<FixAllButton/.exec(ROOM)![1]);
     const iconPx = Number(/<Icon name="shuffle" size=\{(\d+)\}/.exec(ROOM)![1]);
-    const btnGap = Number(/height: 30,\s*fontSize: 11,\s*gap: (\d+),/.exec(ROOM)![1]);
+    const btnGap = Number(/fontSize: 'var\(--fs-caption\)',\s*gap: (\d+),/.exec(ROOM)![1]);
 
     const content = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]) - 32;
     const column = (content - rowGap) / 2;
@@ -1192,5 +1251,33 @@ describe('the room-check actions wrap rather than cut a word', () => {
       label,
       `a 1fr column at --rail-left-tight leaves ${label}px for a label that wants ~${needed}px`,
     ).toBeLessThan(needed);
+  });
+});
+
+describe('nothing spreads wide because the window did', () => {
+  // The other half of rule 4. A control that does not fit must reflow; a control
+  // that has room to spare must not take it. Buttons hug their labels (Material's
+  // buttons are `wrap_content`; Apple's "span the width" advice is watchOS'), and a
+  // line of running text stops at ~70 characters (Baymard 50–75, WCAG 1.4.8's 80).
+  // `scripts/fidelity-sweep.mjs` measures the same thing in the browser as
+  // `stretched`; this is the half that fails in CI.
+
+  it('full width is a phone-only convention for a primary action', () => {
+    const at = CSS.indexOf('.ds-btn--block-compact');
+    expect(at, 'no .ds-btn--block-compact in globals.css').toBeGreaterThan(-1);
+    const before = CSS.slice(0, at);
+    const media = before.lastIndexOf('@media');
+    expect(before.slice(media), 'the full-width rule must live inside the compact query').toMatch(/^@media \(max-width: 599px\) \{\s*$/);
+    // Filled buttons only: the welcome card's "Add an AI key" is a disclosure ROW in
+    // ghost dress, and a row spanning its card is the pattern, not the defect.
+    for (const page of ['welcome', 'layout-pick', 'capture']) {
+      const src = codeOnly(readFileSync(root('app', 'onboarding', page, 'page.tsx'), 'utf8'));
+      expect(src, `${page}: a CTA stretched at every width`).not.toMatch(/className="ds-btn[^"]*--(?:accent|primary)[^"]*"\s+style=\{\{[^}]*width: '100%'/);
+      expect(src).toContain('ds-btn--block-compact');
+    }
+  });
+
+  it('running text stops at its measure', () => {
+    expect(CSS).toMatch(/\np, li \{ max-inline-size: 70ch; \}/);
   });
 });

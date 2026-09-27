@@ -165,7 +165,7 @@ export default function LayoutPickPage() {
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 8,
-                    transition: 'border-color .12s, background .12s',
+                    transition: 'border-color var(--dur-quick) var(--ease-out), background var(--dur-quick) var(--ease-out)',
                   }}
                 >
                   <svg viewBox="0 0 240 180" style={{ width: '100%', height: 60 }} aria-hidden="true">
@@ -178,10 +178,10 @@ export default function LayoutPickPage() {
                     />
                   </svg>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 700, color: active ? 'var(--accent-text)' : 'var(--ink)' }}>{l.name}</span>
-                    <span className="mono" style={{ fontSize: 10, color: 'var(--ink-2)' }}>{l.area}</span>
+                    <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: active ? 'var(--accent-text)' : 'var(--ink)' }}>{l.name}</span>
+                    <span className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-2)' }}>{l.area}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>Starts as a {l.starter.toLowerCase()}</div>
+                  <div className="t-small">Starts as a {l.starter.toLowerCase()}</div>
                 </button>
               );
             })}
@@ -197,7 +197,7 @@ export default function LayoutPickPage() {
                 borderRadius: 'var(--r-2)',
                 background: 'var(--danger-tint)',
                 color: 'var(--danger-text)',
-                fontSize: 12.5,
+                fontSize: 'var(--fs-small)',
                 lineHeight: 1.45,
               }}
             >
@@ -205,23 +205,25 @@ export default function LayoutPickPage() {
             </p>
           )}
 
-          <button
-            onClick={() => createRoom('model')}
-            disabled={saving !== null}
-            className="ds-btn ds-btn--accent"
-            style={{ marginTop: 24, height: 48, fontSize: 14, justifyContent: 'center', width: '100%' }}
-          >
-            {saving === 'model' ? 'Creating your room…' : (<>Start decorating · {layout.starter.toLowerCase()}<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
-          </button>
-          <button
-            onClick={() => createRoom('capture')}
-            disabled={saving !== null}
-            className="ds-btn ds-btn--ghost"
-            style={{ marginTop: 8, height: 44, fontSize: 12.5, justifyContent: 'center', width: '100%', color: 'var(--ink-2)' }}
-          >
-            <Icon name="camera" size={13} />
-            {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first (optional)'}
-          </button>
+          <div className="action-row" style={{ marginTop: 24 }}>
+            <button
+              onClick={() => createRoom('model')}
+              disabled={saving !== null}
+              className="ds-btn ds-btn--xl ds-btn--accent ds-btn--block-compact"
+              style={{ fontSize: 'var(--fs-body)' }}
+            >
+              {saving === 'model' ? 'Creating your room…' : (<>Start decorating · {layout.starter.toLowerCase()}<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
+            </button>
+            <button
+              onClick={() => createRoom('capture')}
+              disabled={saving !== null}
+              className="ds-btn ds-btn--lg ds-btn--ghost ds-btn--block-compact"
+              style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}
+            >
+              <Icon name="camera" size={13} />
+              {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first (optional)'}
+            </button>
+          </div>
         </div>
 
         {/* PREVIEW */}
@@ -277,11 +279,11 @@ function BackButton({ onBack }: { onBack: () => void }) {
   return (
     <button
       onClick={onBack}
-      className="ds-btn ds-btn--ghost"
-      style={{ height: 32, padding: '0 10px', marginLeft: -10 }}
+      className="ds-btn ds-btn--sm ds-btn--ghost"
+      style={{ padding: '0 10px', marginLeft: -10, fontSize: 'var(--fs-body)' }}
     >
       <Icon name="chevron-left" size={14} />
-      <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>Back</span>
+      <span className="t-small">Back</span>
     </button>
   );
 }

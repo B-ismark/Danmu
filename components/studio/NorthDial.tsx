@@ -135,11 +135,10 @@ export function NorthDial() {
           the sentence reflows inside a narrow rail rather than pushing the section
           wider; `overflowWrap` because "bottom-right" is one long token. */}
       <div
+        className="t-micro"
         style={{
           minWidth: 0,
           marginTop: 8,
-          fontSize: 10.5,
-          color: 'var(--ink-3)',
           lineHeight: 1.4,
           overflowWrap: 'anywhere',
         }}
@@ -296,7 +295,7 @@ function Dial({
             return <circle cx={sx} cy={sy} r={5} fill="var(--accent)" stroke="var(--accent-text)" strokeWidth={1.5} />;
           })()}
       </svg>
-      <div style={{ fontSize: 10, color: 'var(--ink-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
+      <div className="t-micro" style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
         <Icon name="compass" size={9} />
         <span className="mono">{Math.round(bearingDeg)}°</span>
       </div>

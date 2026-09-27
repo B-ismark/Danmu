@@ -13,6 +13,7 @@ import {
 import { RoomSwitcher } from '@/components/studio/RoomSwitcher';
 import { StudioHelp } from '@/components/studio/StudioHelp';
 import { ExportMenu } from '@/components/studio/ExportMenu';
+import { StudioMoreMenu } from '@/components/studio/StudioMoreMenu';
 import { NarrowViewportBanner } from '@/components/studio/NarrowViewportBanner';
 import { DemoBanner } from '@/components/studio/DemoBanner';
 
@@ -29,7 +30,9 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
   return (
     // dvh, not vh: on mobile browsers vh includes the collapsing URL bar, so the
     // bottom row of studio chrome sat under it.
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
+    // Less the top safe-area inset, which `body` pads for: the studio is exactly one
+    // screen tall, not one screen plus a notch.
+    <div style={{ height: 'calc(100dvh - env(safe-area-inset-top, 0px))', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
       <TopBar
         // flexShrink: 0 — the bar wraps rather than squeezes, and these two are
         // the studio's whole navigation; they move to a second row intact before
@@ -50,6 +53,7 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
             <ExportMenu />
           </>
         }
+        phoneEnd={<StudioMoreMenu />}
       />
       {/* A full-width strip under the top bar, so it can never overlap the
           canvas toolbars the way the old floating pill did. */}

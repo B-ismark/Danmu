@@ -198,7 +198,7 @@ export function LoadingOverlay({
               isn't read a new word every few seconds. */}
           <span
             aria-hidden="true"
-            style={{ fontSize: 12, letterSpacing: '0.01em', color: 'var(--accent-text)', fontWeight: 700 }}
+            style={{ fontSize: 'var(--fs-small)', letterSpacing: '0.01em', color: 'var(--accent-text)', fontWeight: 700 }}
           >
             {HUDS[hudIdx]}…
           </span>
@@ -206,8 +206,8 @@ export function LoadingOverlay({
           {onCancel && (
             <button
               onClick={onCancel}
-              className="ds-btn"
-              style={{ height: 30, fontSize: 12, padding: '0 12px' }}
+              className="ds-btn ds-btn--sm"
+              style={{ padding: '0 12px' }}
             >
               <Icon name="x" size={12} />
               {cancelLabel}
@@ -217,7 +217,7 @@ export function LoadingOverlay({
 
         <h2
           id="loading-overlay-title"
-          style={{ fontSize: 22, fontWeight: 600, marginBottom: 8, letterSpacing: '-0.015em' }}
+          style={{ fontSize: 'var(--fs-title)', fontWeight: 600, marginBottom: 8, letterSpacing: '-0.015em' }}
         >
           {title}
         </h2>
@@ -225,12 +225,12 @@ export function LoadingOverlay({
         {/* One polite live region for the parts that actually change meaning. */}
         <div role="status" aria-live="polite">
           {description && (
-            <p style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55, margin: '0 0 12px' }}>
+            <p className="t-small" style={{ lineHeight: 1.55, margin: '0 0 12px' }}>
               {description}
             </p>
           )}
           {slow && onCancel && (
-            <p style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55, margin: '0 0 12px' }}>
+            <p className="t-small" style={{ lineHeight: 1.55, margin: '0 0 12px' }}>
               Still going. You can stop whenever you like — nothing you&rsquo;ve done is lost.
             </p>
           )}
@@ -238,9 +238,8 @@ export function LoadingOverlay({
 
         {note && (
           <p
+            className="t-small"
             style={{
-              fontSize: 12,
-              color: 'var(--ink-2)',
               lineHeight: 1.5,
               background: 'var(--paper-2)',
               border: '1px solid var(--hairline)',
@@ -275,7 +274,7 @@ export function LoadingOverlay({
                   transformOrigin: 'left',
                   background: 'var(--accent)',
                   borderRadius: 'var(--r-full)',
-                  transition: 'transform 0.3s',
+                  transition: 'transform var(--dur-slow) var(--ease-out)',
                 }}
               />
               {/* moving scan dot */}
@@ -294,7 +293,7 @@ export function LoadingOverlay({
             </div>
             <div
               className="mono"
-              style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.08em', display: 'flex', justifyContent: 'space-between' }}
+              style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)', letterSpacing: '0.08em', display: 'flex', justifyContent: 'space-between' }}
             >
               <span>
                 Step {step} of {totalSteps}
@@ -316,7 +315,7 @@ export function LoadingOverlay({
           <div className="ds-label" style={{ marginBottom: 6 }}>
             Tip
           </div>
-          <div key={tipIdx} className="lo-tip" style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+          <div key={tipIdx} className="lo-tip" style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5 }}>
             {tips[tipIdx % tips.length]}
           </div>
         </div>
@@ -330,7 +329,7 @@ export function LoadingOverlay({
           animation: lo-pulse 1.4s ease-in-out infinite;
         }
         .lo-tip {
-          animation: lo-tip-fade 0.4s ease-out;
+          animation: lo-tip-fade var(--dur-slow) var(--ease-out);
         }
         @keyframes lo-pulse {
           0%,

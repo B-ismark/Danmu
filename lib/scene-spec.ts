@@ -52,6 +52,7 @@ import {
   isSoftFurnishing,
   roleOf,
   routeWidth,
+  rugOffset,
   sharesFloor,
   WALK_COMFORT,
   WALK_MIN,
@@ -1062,15 +1063,20 @@ export function defaultScene(
       const tableDim: [number, number, number] = [1100, 600, 420];
       const tableHalf = tableDim[1] / 2000;
       const vTable = Math.max(tableHalf + SEED_WALL_GAP, vSofa - sofaHalf - 0.45 - tableHalf);
-      const table = place('table', 'Coffee table', 'coffee-table', tableDim, f, uGroup, vTable);
+      place('table', 'Coffee table', 'coffee-table', tableDim, f, uGroup, vTable);
 
-      // A rug under whichever of the two got placed, anchoring the group. Rugs come in
-      // sizes, so a narrow bay gets a smaller one rather than a large one shoved through
-      // the wall — the T's stem is 2.42 m across and a 2.4 m rug touches both sides of
-      // it. Largest first; if neither fits, the group does without, which is honest.
-      const vRug = table ? (vSofa + vTable) / 2 : vSofa - 0.4;
+      // A rug with the sofa's front legs on it, where `rugOffset` — the rule the solver
+      // scores it against — puts one. It used to sit halfway between the sofa and the
+      // table, which ran a 2.4 × 1.6 rug 350 mm under the sofa: back legs and all.
+      // Rugs come in sizes, so a narrow bay gets a smaller one rather than a large one
+      // shoved through the wall — the T's stem is 2.42 m across and a 2.4 m rug touches
+      // both sides of it. Largest first; if neither fits, the group does without, which
+      // is honest: no rug is a valid answer.
       if (sofa) {
         for (const dim of RUGS) {
+          // Laid square to the wall (turn 0), so its depth is what runs out from the
+          // sofa's front — which points toward the screen, down `v`.
+          const vRug = vSofa - rugOffset('seat', sofaHalf, dim[1] / 2000);
           if (place('rug', 'Area rug', 'rug', dim, f, uGroup, vRug)) break;
         }
       }
@@ -2251,7 +2257,10 @@ export function refineShape(category: Category, label: string): Shape {
     case 'chair':
       if (/ottoman|footstool|pouf/.test(l)) return 'ottoman';
       if (/office|swivel|desk chair|computer chair|gaming/.test(l)) return 'chair-office';
-      if (/arm|lounge|accent|recliner|wingback|easy/.test(l)) return 'chair-armchair';
+      // `sofa|couch|loveseat` too: a chair still carrying a sofa word is a "sofa" that
+      // was too narrow to be one — what Room check's label repair offers as "Chair?"
+      // for a 0.8 m couch — and the seat it is, is an armchair, not a dining chair.
+      if (/arm|lounge|accent|recliner|wingback|easy|sofa|couch|loveseat/.test(l)) return 'chair-armchair';
       if (/stool/.test(l)) return 'stool';
       return 'chair-dining';
     case 'bed':

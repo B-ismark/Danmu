@@ -119,7 +119,7 @@ export function ConfirmHost() {
           <button
             onClick={() => close(false)}
             className="ds-btn"
-            style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center' }}
+            style={{ flex: 1, justifyContent: 'center' }}
           >
             <Icon name="x" size={11} />
             {pending.cancelLabel ?? 'Cancel'}
@@ -127,7 +127,7 @@ export function ConfirmHost() {
           <button
             onClick={() => close(true)}
             className="ds-btn ds-btn--primary"
-            style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center', ...confirmStyle }}
+            style={{ flex: 1, height: 36, fontSize: 'var(--fs-body)', justifyContent: 'center', ...confirmStyle }}
           >
             {/* no explicit colour — the glyph inherits the button's own
                 --on-ink / --on-accent foreground */}
@@ -137,12 +137,12 @@ export function ConfirmHost() {
         </>
       }
     >
-      <div id="confirm-title" style={{ fontSize: 20, fontWeight: 600, marginBottom: 6, letterSpacing: '-0.01em' }}>
+      <div id="confirm-title" className="t-title" style={{ marginBottom: 6 }}>
         {pending.title}
       </div>
       {pending.body && (
         // div, not p: the body may be a list of what is about to be removed.
-        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>{pending.body}</div>
+        <div className="t-body" style={{ lineHeight: 1.55 }}>{pending.body}</div>
       )}
     </Modal>
   );

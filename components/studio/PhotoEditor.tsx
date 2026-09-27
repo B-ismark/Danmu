@@ -202,7 +202,7 @@ function ItemOverlay({
           background: fill,
           color: 'var(--on-accent)',
           fontFamily: 'var(--font-sans)',
-          fontSize: 10,
+          fontSize: 'var(--fs-micro)',
           fontWeight: 700,
           letterSpacing: '0.03em',
           borderRadius: 'var(--r-1)',

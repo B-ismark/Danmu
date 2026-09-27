@@ -51,7 +51,8 @@ import {
   selectionForPick,
   type ScenePart,
 } from '@/lib/scene-spec';
-import { isFloorStanding } from '@/lib/physics';
+import { anchorFor, isFloorStanding } from '@/lib/physics';
+import { CutAway } from './CutAway';
 import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
 import {
@@ -1305,6 +1306,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           shapeKey={part.shape}
         />
         <Pickable partId={partId}>{children}</Pickable>
+        {/* Wall pieces leave with their wall in the dollhouse cut-away. The depth is
+            the authored one for a group-scaled piece (the scale carries the rest)
+            and the effective one for a parametric piece, which is rebuilt at it. */}
+        {anchorFor(part.category, part.shape).startsWith('wall') && (
+          <CutAway groupRef={ref} depthMM={(isParametric(part.shape) ? (storedDim ?? part.dimMM) : part.dimMM)[1]} />
+        )}
         {(inSelection || isHovered || refused) && (
           <Highlight
             dimMM={isParametric(part.shape) ? (storedDim ?? part.dimMM) : part.dimMM}

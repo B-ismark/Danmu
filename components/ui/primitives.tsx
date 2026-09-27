@@ -83,9 +83,9 @@ export function FlowBarLead({
 }) {
   return (
     <>
-      <button onClick={onBack} className="ds-btn ds-btn--ghost" style={{ height: 32, padding: '0 10px' }}>
+      <button onClick={onBack} className="ds-btn ds-btn--sm ds-btn--ghost" style={{ padding: '0 10px', fontSize: 'var(--fs-body)' }}>
         <Icon name="chevron-left" size={14} />
-        <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>Back</span>
+        <span className="t-small">Back</span>
       </button>
       <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
       {markHref ? (
@@ -255,9 +255,9 @@ export function StepHeader({
           <div style={{ flex: 1, height: 1, background: 'var(--hairline)' }} />
         </div>
       )}
-      <h1 style={{ fontSize: 24, lineHeight: 1.15, color: 'var(--ink)' }}>{title}</h1>
+      <h1 style={{ fontSize: 'var(--fs-title)', lineHeight: 1.15, color: 'var(--ink)' }}>{title}</h1>
       {subtitle && (
-        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.45 }}>{subtitle}</div>
+        <div className="t-body" style={{ lineHeight: 1.45 }}>{subtitle}</div>
       )}
     </div>
   );
@@ -279,7 +279,7 @@ export function Toggle({ on, onClick, label }: { on: boolean; onClick?: () => vo
         position: 'relative',
         cursor: 'pointer',
         padding: 0,
-        transition: 'background .15s, border-color .15s',
+        transition: 'background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out)',
       }}
     >
       <div
@@ -295,7 +295,7 @@ export function Toggle({ on, onClick, label }: { on: boolean; onClick?: () => vo
           // transform, not `left` — `left` forces layout on every toggle, and
           // this is the primitive every other switch in the app copies.
           transform: on ? 'translateX(20px)' : 'translateX(0)',
-          transition: 'transform .15s',
+          transition: 'transform var(--dur-base) var(--ease-out)',
         }}
       />
     </button>
@@ -341,7 +341,7 @@ export function IconButton({
   tone?: 'default' | 'danger';
   title?: string;
   style?: CSSProperties;
-  /** extra class(es) merged onto .icon-btn — e.g. "row-action" for hover-reveal */
+  /** extra class(es) merged onto .icon-btn */
   className?: string;
 }) {
   return (
@@ -396,7 +396,7 @@ export function Pill({
         borderRadius: 'var(--r-full)',
         background: `var(${bg})`,
         color: `var(${fg})`,
-        fontSize: 11,
+        fontSize: 'var(--fs-caption)',
         fontWeight: 700,
         whiteSpace: 'nowrap',
         ...style,
@@ -507,7 +507,7 @@ export function Segmented<T extends string>({
               background: active ? 'var(--accent-tint)' : 'transparent',
               color: active ? 'var(--accent-text)' : 'var(--ink-2)',
               cursor: 'pointer',
-              fontSize: 12.5,
+              fontSize: 'var(--fs-small)',
               fontWeight: 600,
               fontFamily: 'var(--font-sans)',
             }}

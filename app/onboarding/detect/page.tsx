@@ -42,6 +42,8 @@ import {
 } from '@/lib/review-history';
 import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
 import { cleanLabelOf, fromRecord, toRecord } from '@/lib/detection-record';
+import { adoptFreshScan } from '@/lib/rescan';
+import { toast } from '@/components/ui/StorageToast';
 import { formatDim } from '@/lib/units';
 import type { DimUnit } from '@/lib/store';
 import { roomFootprint } from '@/lib/footprint';
@@ -78,6 +80,8 @@ type Notice = {
     | 'NO_KEY'
     | 'STOPPED'
     | 'NOTHING_FOUND'
+    | 'CACHED'
+    | 'SECOND_LOOK_FAILED'
     | 'DAILY_QUOTA'
     | 'RATE_LIMIT'
     | 'INVALID_KEY'
@@ -94,6 +98,8 @@ type Notice = {
   retry?: boolean;
   settings?: boolean;
   capture?: boolean;
+  /** offers **Look again** — a fresh run over the same photos */
+  again?: boolean;
 };
 
 // The by-hand path needs a name for the thing being drawn — the geometry engine
@@ -313,6 +319,15 @@ export default function DetectPage() {
   const padRef = useRef<HTMLButtonElement>(null);
   // Flipped by Stop so an in-flight run stops writing to state.
   const stopped = useRef(false);
+  // The detection run, set by the loading effect so **Look again** can start it.
+  const runRef = useRef<(() => Promise<void>) | null>(null);
+  // The ids of every row a run in THIS visit produced. Continue replaces the room's
+  // arrangement (`lib/rescan.ts`) only when the list it saves still holds one of
+  // them — a flag would stay set after Undo took the list back to the last scan,
+  // and Continue would then throw away the studio's arrangement to rebuild the
+  // very list it already had. Ids survive every edit to a row, because every edit
+  // spreads the row; a list with none of them is the cached one, however edited.
+  const runUids = useRef(new Set<string>());
   // The detect run needs the key to be CURRENT when it calls, not to be a
   // trigger. With `apiKey` in the effect's dep array, editing it in Settings —
   // including in another tab, since the store persists to localStorage — re-ran
@@ -380,80 +395,131 @@ export default function DetectPage() {
           setRoomDims(dims);
         }
       }
+      // The run itself, as a function rather than inline, because there are two ways
+      // in: straight away on a room nobody has scanned, and **Look again** on one that
+      // has. `cancelled` is this effect's, so a press after navigating away writes
+      // nothing — the same guard the first run has.
+      const run = async () => {
+        stopped.current = false;
+        setRunning(true);
+        setPath('checking');
+        try {
+          let dets: Detection[] | null = null;
+          if (await localDetectorAvailable()) {
+            setPath('local');
+            try {
+              dets = await detectLocalAcrossImages(entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })));
+              if (dets && dets.length === 0) dets = null; // empty result → let Gemini try
+            } catch {
+              dets = null;
+            }
+          }
+          const askCloud = () =>
+            detectAcrossImages(
+              apiKeyRef.current,
+              entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })),
+              room ? { width: room.width, depth: room.depth, height: room.height, layoutId: room.layoutId } : undefined,
+            );
+          let secondLookFailed = false;
+          if (!dets) {
+            // The photos are about to leave the device. Say so BEFORE the call, so
+            // the disclosure is on screen for the whole upload.
+            setPath('cloud');
+            dets = await askCloud();
+          } else if (apiKeyRef.current) {
+            // A SECOND LOOK, not only a fallback. Someone who set up a key did it so
+            // their photos would be read by the stronger model, and the on-device pass
+            // finding SOMETHING used to be enough to skip it — measured on a real
+            // four-photo room, on-device found 13 of 19 pieces. Both lists go through
+            // the same geometry pass and merge, so a piece seen by both is one row.
+            // A failed second look costs nothing already found: the on-device list
+            // stands and the screen says the cloud half did not happen.
+            setPath('cloud');
+            try {
+              dets = [...dets, ...(await askCloud())];
+            } catch {
+              secondLookFailed = true;
+            }
+          }
+          if (cancelled || stopped.current) return;
+          // Geometry pass, then the merge — in that order, which is the whole
+          // reason this is one call into lib. The AI result only contributes
+          // label/category and a depth hint.
+          const refined = keyed(refineDetections(dets, calMap, dims));
+          setDetections(refined);
+            // These rows are what the photos were really looked at for, and the studio
+          // has to show them — see `runUids` and `lib/rescan.ts`.
+          for (const d of refined) if (d.uid) runUids.current.add(d.uid);
+          // Which rows to tick before the user has looked at them. The whole policy
+          // lives in lib/detect-confidence.ts, because it was three unrelated
+          // confidence scales being compared against one literal here.
+          const judged = judgeLabels(refined, calMap, dims);
+          const marks = new Set<number>();
+          refined.forEach((d, i) => {
+            if (shouldAutoConfirm(d, judged[i].status)) marks.add(i);
+          });
+          setConfirmed(marks);
+          if (secondLookFailed) {
+            setNotice({
+              code: 'SECOND_LOOK_FAILED',
+              tone: 'calm',
+              kicker: 'Found on this device',
+              title: 'The second look didn’t go through',
+              body: 'These are the pieces your browser found on its own. Google’s pass over your photos failed, so anything it would have added is missing — add those by hand, or come back and press Re-scan later.',
+            });
+          }
+          if (refined.length === 0) {
+            // Saying nothing here is how someone who photographed an empty study
+            // ends up in a room full of furniture they never owned.
+            setAdding(true);
+            setNotice({
+              code: 'NOTHING_FOUND',
+              tone: 'calm',
+              kicker: 'All clear',
+              title: 'Nothing stood out in your photos',
+              body: `Danmu went through ${entries.length === 1 ? 'your photo' : `all ${entries.length} photos`} and couldn’t pick out any furniture — which is exactly right for an empty room, and common in dim light or very close-up shots. Draw a box around anything you’d like measured; it’s switched on already. Carry on with an empty list and the studio opens with a starter arrangement instead of your own pieces, which you can clear one by one.`,
+            });
+          }
+        } catch (e) {
+          if (cancelled || stopped.current) return;
+          const n = noticeFor(e);
+          setNotice(n);
+          if (n.code === 'NO_KEY') {
+            // No key means the by-hand path IS the path — arm it rather than leave
+            // the user staring at a tool they have to discover. And nothing was
+            // sent: detection refuses before it touches the network, so the
+            // upload disclosure must not stay on screen.
+            setAdding(true);
+            setPath('idle');
+          }
+        } finally {
+          if (!cancelled && !stopped.current) setRunning(false);
+        }
+      };
+      runRef.current = run;
+
+      // CACHE: this room has been scanned, so show that list rather than spend a scan
+      // on arriving — and say so, with the way to look again, because **Re-scan** in
+      // the studio lands here and used to show the old list as though it were new.
       if (room?.detectedObjects && room.detectedObjects.length > 0) {
         setDetections(keyed(room.detectedObjects.map(fromRecord)));
         setConfirmed(new Set(room.detectedObjects.map((d, i) => (d.locked ? i : -1)).filter((x) => x >= 0)));
         setPath('cache');
+        setNotice({
+          code: 'CACHED',
+          tone: 'calm',
+          kicker: 'Already scanned',
+          title: 'This is your last scan',
+          body:
+            'Look again to go through your photos from scratch. The new list replaces this one, and the room as you have it now is saved under Layouts as “Before re-scan”, so nothing is lost.',
+          again: true,
+        });
         return;
       }
 
-      // Otherwise: local on-device detector first (no key, no quota); Gemini
-      // only as the fallback when the model isn't deployed or finds nothing.
-      setRunning(true);
-      setPath('checking');
-      try {
-        let dets: Detection[] | null = null;
-        if (await localDetectorAvailable()) {
-          setPath('local');
-          try {
-            dets = await detectLocalAcrossImages(entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })));
-            if (dets && dets.length === 0) dets = null; // empty result → let Gemini try
-          } catch {
-            dets = null;
-          }
-        }
-        if (!dets) {
-          // The photos are about to leave the device. Say so BEFORE the call, so
-          // the disclosure is on screen for the whole upload.
-          setPath('cloud');
-          dets = await detectAcrossImages(
-            apiKeyRef.current,
-            entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })),
-            room ? { width: room.width, depth: room.depth, height: room.height, layoutId: room.layoutId } : undefined,
-          );
-        }
-        if (cancelled || stopped.current) return;
-        // Geometry pass, then the merge — in that order, which is the whole
-        // reason this is one call into lib. The AI result only contributes
-        // label/category and a depth hint.
-        const refined = keyed(refineDetections(dets, calMap, dims));
-        setDetections(refined);
-        // Which rows to tick before the user has looked at them. The whole policy
-        // lives in lib/detect-confidence.ts, because it was three unrelated
-        // confidence scales being compared against one literal here.
-        const judged = judgeLabels(refined, calMap, dims);
-        const marks = new Set<number>();
-        refined.forEach((d, i) => {
-          if (shouldAutoConfirm(d, judged[i].status)) marks.add(i);
-        });
-        setConfirmed(marks);
-        if (refined.length === 0) {
-          // Saying nothing here is how someone who photographed an empty study
-          // ends up in a room full of furniture they never owned.
-          setAdding(true);
-          setNotice({
-            code: 'NOTHING_FOUND',
-            tone: 'calm',
-            kicker: 'All clear',
-            title: 'Nothing stood out in your photos',
-            body: `Danmu went through ${entries.length === 1 ? 'your photo' : `all ${entries.length} photos`} and couldn’t pick out any furniture — which is exactly right for an empty room, and common in dim light or very close-up shots. Draw a box around anything you’d like measured; it’s switched on already. Carry on with an empty list and the studio opens with a starter arrangement instead of your own pieces, which you can clear one by one.`,
-          });
-        }
-      } catch (e) {
-        if (cancelled || stopped.current) return;
-        const n = noticeFor(e);
-        setNotice(n);
-        if (n.code === 'NO_KEY') {
-          // No key means the by-hand path IS the path — arm it rather than leave
-          // the user staring at a tool they have to discover. And nothing was
-          // sent: detection refuses before it touches the network, so the
-          // upload disclosure must not stay on screen.
-          setAdding(true);
-          setPath('idle');
-        }
-      } finally {
-        if (!cancelled && !stopped.current) setRunning(false);
-      }
+      // Otherwise: local on-device detector first (no key, no quota), and
+      // Gemini when that finds nothing — or as a second look whenever a key is set.
+      await run();
     })();
     return () => {
       cancelled = true;
@@ -730,7 +796,17 @@ export default function DetectPage() {
       const room = await roomStore.loadRoom(roomId);
       if (!room) return;
       const flat = detections.map((d, i) => toRecord(d, i, confirmed.has(i), uuid));
-      await roomStore.saveRoom({ ...room, detectedObjects: flat });
+      if (detections.some((d) => d.uid && runUids.current.has(d.uid))) {
+        const kept = await adoptFreshScan(room, flat);
+        if (kept)
+          toast({
+            title: 'Your room now shows the new scan',
+            message: `The arrangement you had is saved under Room check › Layouts as “${kept.name}”.`,
+            ttl: 14000,
+          });
+      } else {
+        await roomStore.saveRoom({ ...room, detectedObjects: flat });
+      }
       router.push(`/room/${roomId}/model`);
     } finally {
       setSaving(false);
@@ -790,7 +866,7 @@ export default function DetectPage() {
           />
         </div>
         <div className="chrome-bar__spacer" />
-        <span role="status" aria-live="polite" style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+        <span role="status" aria-live="polite" className="t-body">
           {statusText}
         </span>
         {/* The way out of onboarding is the loudest thing here — it used to be a
@@ -809,15 +885,14 @@ export default function DetectPage() {
         />
         {privacyLine && (
           <p
+            className="t-small"
             style={{
               display: 'flex',
               alignItems: 'flex-start',
               gap: 8,
               margin: 0,
               maxWidth: '68ch',
-              fontSize: 12.5,
               lineHeight: 1.5,
-              color: 'var(--ink-2)',
               background: 'var(--paper-2)',
               border: '1px solid var(--hairline)',
               borderRadius: 'var(--r-2)',
@@ -833,32 +908,51 @@ export default function DetectPage() {
       {notice && (
         <NoticeCard notice={notice} onDismiss={notice.tone === 'calm' ? () => setNotice(null) : undefined}>
           {notice.capture && (
-            <Link href="/onboarding/capture" className="ds-btn" style={{ height: 34, fontSize: 12.5 }}>
+            <Link href="/onboarding/capture" className="ds-btn ds-btn--sm">
               <Icon name="camera" size={13} />
               Take wall photos
             </Link>
+          )}
+          {notice.again && (
+            <button
+              onClick={() => {
+                // Undoable: the list being replaced is one step back.
+                remember();
+                setNotice(null);
+                setOffer(null);
+                setLinked(null);
+                void runRef.current?.();
+              }}
+              className="ds-btn ds-btn--sm"
+            >
+              <Icon name="refresh" size={12} />
+              Look again
+            </button>
           )}
           {notice.retry && (
             <button
               onClick={() => {
                 setNotice(null);
-                location.reload();
+                // Run again rather than reload: a reload of a room that already has a
+                // scan lands on that scan, so after a failed Look again it showed the
+                // old list instead of trying.
+                if (runRef.current) void runRef.current();
+                else location.reload();
               }}
-              className="ds-btn"
-              style={{ height: 34, fontSize: 12.5 }}
+              className="ds-btn ds-btn--sm"
             >
               <Icon name="refresh" size={12} />
               Try again
             </button>
           )}
           {notice.settings && (
-            <Link href="/settings" className="ds-btn" style={{ height: 34, fontSize: 12.5 }}>
+            <Link href="/settings" className="ds-btn ds-btn--sm">
               <Icon name="key" size={12} />
               Set up a key in Settings
             </Link>
           )}
           {notice.capture && (
-            <button onClick={goStudio} className="ds-btn" style={{ height: 34, fontSize: 12.5 }}>
+            <button onClick={goStudio} className="ds-btn ds-btn--sm">
               Skip to the studio
               <Icon name="arrow-right" size={12} />
             </button>
@@ -887,19 +981,18 @@ export default function DetectPage() {
                     className="ds-btn"
                     style={{
                       flex: '1 1 130px',
-                      height: 36,
                       justifyContent: 'space-between',
-                      fontSize: 12.5,
+                      fontSize: 'var(--fs-small)',
                       background: sel ? 'var(--ink)' : 'var(--paper)',
                       color: sel ? 'var(--on-ink)' : 'var(--ink-2)',
                       borderColor: sel ? 'var(--ink)' : 'var(--edge)',
                     }}
                   >
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span className="truncate">
                       {slotLabel(s.slot)}
                     </span>
                     {count > 0 && (
-                      <span className="mono" style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>
+                      <span className="mono" style={{ fontSize: 'var(--fs-caption)', fontWeight: 600, opacity: 0.85 }}>
                         {count}
                       </span>
                     )}
@@ -962,7 +1055,7 @@ export default function DetectPage() {
                 )}
               </div>
             ) : (
-              <div style={{ fontSize: 12.5, color: 'var(--ink-2)', padding: 12 }}>
+              <div className="t-small" style={{ padding: 12 }}>
                 {slots.length === 0 ? 'No wall photos for this room yet.' : 'No photo for this wall yet.'}
               </div>
             )}
@@ -989,7 +1082,7 @@ export default function DetectPage() {
                 className="ds-btn"
                 style={{
                   height: 34,
-                  fontSize: 12.5,
+                  fontSize: 'var(--fs-small)',
                   ...(adding
                     ? { background: 'var(--accent-tint)', color: 'var(--accent-text)', borderColor: 'var(--accent-text)' }
                     : null),
@@ -1001,7 +1094,7 @@ export default function DetectPage() {
 
               {adding ? (
                 <>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--ink-2)' }}>
+                  <label className="t-small" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     What is it?
                     <Select
                       value={manualCat}
@@ -1010,7 +1103,7 @@ export default function DetectPage() {
                       ariaLabel="What is it?"
                       width={176}
                       height={34}
-                      fontSize={12.5}
+                      fontSize="var(--fs-small)"
                     />
                   </label>
                   {pending ? (
@@ -1019,29 +1112,28 @@ export default function DetectPage() {
                         ref={padRef}
                         onClick={() => addManual(pending)}
                         onKeyDown={nudge}
-                        className="ds-btn"
-                        style={{ height: 34, fontSize: 12.5 }}
+                        className="ds-btn ds-btn--sm"
                         aria-describedby="place-hint"
                       >
                         <Icon name="check" size={13} />
                         Add this box
                       </button>
-                      <span id="place-hint" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                      <span id="place-hint" className="t-meta">
                         Arrow keys move it · Shift + arrows resize · Esc cancels
                       </span>
                     </>
                   ) : (
                     <>
-                      <button onClick={startPending} className="ds-btn" style={{ height: 34, fontSize: 12.5 }}>
+                      <button onClick={startPending} className="ds-btn ds-btn--sm">
                         <Icon name="crosshair" size={13} />
                         Place with the keyboard
                       </button>
-                      <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>…or drag a box around it on the photo.</span>
+                      <span className="t-meta">…or drag a box around it on the photo.</span>
                     </>
                   )}
                 </>
               ) : (
-                <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                <span className="t-meta">
                   Tap a box on the photo to confirm that piece. Tap its × to drop it.
                 </span>
               )}
@@ -1055,7 +1147,7 @@ export default function DetectPage() {
               <h2 className="section-title">Your pieces</h2>
               {total > 0 && <span className="section-meta mono">{total}</span>}
             </div>
-            <p style={{ fontSize: 12, color: 'var(--ink-3)', margin: 0, lineHeight: 1.45 }}>
+            <p className="t-meta" style={{ margin: 0, lineHeight: 1.45 }}>
               Confirmed pieces are the ones you’ve told Danmu are really in the room — it confirms the clearest ones
               for you. Tap a piece to change your mind, or rename it in your own words.
             </p>
@@ -1063,7 +1155,7 @@ export default function DetectPage() {
 
           <div className="list" style={{ padding: 10, gap: 4 }}>
             {total === 0 && !running && (
-              <div style={{ padding: '14px 12px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+              <div className="t-small" style={{ padding: '14px 12px', lineHeight: 1.5 }}>
                 <b style={{ display: 'block', marginBottom: 4, color: 'var(--ink)' }}>Nothing here yet</b>
                 {slots.length > 0
                   ? 'Draw a box around any piece on the photo and Danmu works out its real size. '
@@ -1148,12 +1240,12 @@ function NoticeCard({
           <div className="ds-label" style={{ color: tone.fg, marginBottom: 4 }}>
             {notice.kicker}
           </div>
-          <h2 style={{ fontSize: 17, marginBottom: 6 }}>{notice.title}</h2>
-          <p style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55, margin: 0, maxWidth: '68ch' }}>
+          <h2 style={{ fontSize: 'var(--fs-lead)', marginBottom: 6 }}>{notice.title}</h2>
+          <p className="t-small" style={{ lineHeight: 1.55, margin: 0, maxWidth: '68ch' }}>
             {notice.body}
           </p>
           {notice.detail && (
-            <p style={{ fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5, margin: '6px 0 0' }}>{notice.detail}</p>
+            <p className="t-hint" style={{ lineHeight: 1.5, margin: '6px 0 0' }}>{notice.detail}</p>
           )}
         </div>
         {onDismiss && <IconButton icon="x" label="Dismiss this message" onClick={onDismiss} size={28} iconSize={12} />}
@@ -1236,7 +1328,7 @@ function DetectionRow({
         borderRadius: 'var(--r-2)',
         background: confirmed ? 'var(--locked-tint)' : 'var(--paper)',
         boxShadow: highlighted ? 'inset 0 0 0 1px var(--accent-text)' : 'none',
-        transition: 'background .12s, box-shadow .12s, border-color .12s',
+        transition: 'background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out)',
       }}
     >
       {/* Was the whole row as a `div onClick`: unreachable by keyboard and with
@@ -1265,12 +1357,12 @@ function DetectionRow({
           value={label}
           onCommit={onRename}
           label="Piece name"
-          style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', textTransform: 'capitalize', display: 'block' }}
-          inputStyle={{ height: 28, fontSize: 12.5 }}
+          style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)', textTransform: 'capitalize', display: 'block' }}
+          inputStyle={{ height: 28, fontSize: 'var(--fs-small)' }}
         />
         {/* Confidence percentages and slot codes were telemetry. What helps is
             which photo it came from and what Danmu thinks it is. */}
-        <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+        <div className="t-hint">
           {/* Who found it, said plainly. A row the user drew and a row a language
               model guessed at look identical otherwise, and they are not the same
               claim. */}
@@ -1288,7 +1380,7 @@ function DetectionRow({
               alignItems: 'center',
               gap: 6,
               marginTop: 5,
-              fontSize: 11,
+              fontSize: 'var(--fs-caption)',
               lineHeight: 1.45,
               color: 'var(--warn-text)',
             }}
@@ -1302,7 +1394,7 @@ function DetectionRow({
                 onClick={() => onRepair(cand)}
                 className="ds-chip"
                 title={`Measure this again as ${categoryLabel(cand.category)}`}
-                style={{ height: 22, fontSize: 11, padding: '0 8px', flex: '0 0 auto' }}
+                style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px', flex: '0 0 auto' }}
               >
                 {categoryLabel(cand.category)}?
               </button>
@@ -1320,15 +1412,14 @@ function DetectionRow({
             piece, which is a size nobody asked for yet. */}
         {offer.length > 0 && (
           <div
+            className="t-hint"
             style={{
               display: 'flex',
               flexWrap: 'wrap',
               alignItems: 'center',
               gap: 6,
               marginTop: 5,
-              fontSize: 11,
               lineHeight: 1.45,
-              color: 'var(--ink-3)',
             }}
           >
             <span style={{ flex: '1 1 auto', minWidth: 0 }}>
@@ -1351,7 +1442,7 @@ function DetectionRow({
                 }
                 style={{
                   height: 22,
-                  fontSize: 11,
+                  fontSize: 'var(--fs-caption)',
                   padding: '0 8px',
                   flex: '0 0 auto',
                   ...(cand.margin < 0 ? { color: 'var(--warn-text)' } : null),
@@ -1374,9 +1465,9 @@ function DetectionRow({
       {!onThisPhoto && (
         <button
           onClick={onShow}
-          className="ds-btn ds-btn--ghost"
+          className="ds-btn ds-btn--xs ds-btn--ghost"
           aria-label={`Show ${label} on the ${slotLabel(d.slot).toLowerCase()} photo`}
-          style={{ height: 26, fontSize: 11.5, padding: '0 8px', color: 'var(--accent-text)' }}
+          style={{ padding: '0 8px', color: 'var(--accent-text)' }}
         >
           Show
         </button>

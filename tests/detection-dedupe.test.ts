@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dedupeDetections, mergeDistanceFor } from '../lib/detect-refine';
+import { dedupeDetections, mergeDistanceFor, sameThingKey } from '../lib/detect-refine';
 import { CATEGORIES } from '../lib/scene-spec';
 import type { Detection } from '../lib/detection';
 
@@ -168,5 +168,31 @@ describe('mergeDistanceFor', () => {
     // An unlisted category falls back to the flat value this replaced, so nothing
     // silently loosens when a category is added.
     expect(mergeDistanceFor('other')).toBe(0.6);
+  });
+});
+
+describe('the two detectors\' words for one thing', () => {
+  const at = (label: string, slot: 'n' | 'e', x: number) =>
+    det({ label, category: 'sofa', slot, box: slot === 'n' ? [0.3, 0.5, 0.3, 0.2] : [0.6, 0.5, 0.3, 0.2], position: { x, y: 0.4, z: 0 } });
+
+  it('merges a couch in one photo with a sofa in another at the same spot', () => {
+    // The on-device path names a sofa "Couch" from its Open Images model and "Sofa"
+    // from its world prompts; the label test kept both.
+    expect(dedupeDetections([at('Couch', 'n', 0), at('Sofa', 'e', 0.1)])).toHaveLength(1);
+  });
+
+  it('still keeps two differently named seats — a loveseat is not a sofa', () => {
+    expect(dedupeDetections([at('Loveseat', 'n', 0), at('Sofa', 'e', 0.1)])).toHaveLength(2);
+  });
+
+  it('still keeps a synonym pair that is far apart', () => {
+    expect(dedupeDetections([at('Couch', 'n', 0), at('Sofa', 'e', 3)])).toHaveLength(2);
+  });
+
+  it('folds each detector\'s word onto one key, and nothing else', () => {
+    expect(sameThingKey(' Houseplant ')).toBe(sameThingKey('Potted plant'));
+    expect(sameThingKey('Television')).toBe(sameThingKey('tv'));
+    expect(sameThingKey('Ceiling fan')).not.toBe(sameThingKey('Electric fan'));
+    expect(sameThingKey('Armchair')).toBe('armchair');
   });
 });

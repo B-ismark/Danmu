@@ -30,14 +30,16 @@ import { saveSceneFile } from './SceneFile';
 import { toast } from '@/components/ui/StorageToast';
 import { Icon, type IconName } from '@/components/ui/Icon';
 
-export function ExportMenu() {
+export type ExportItem = { icon: IconName; label: string; hint: string; onClick: () => void };
+
+/** The three exports, as rows anything can render — the Export menu here, and the
+ *  phone app bar's More menu (`StudioMoreMenu`), which has no room for a second
+ *  trigger. */
+export function useExportItems(): ExportItem[] {
   const pathname = usePathname();
   const { roomId } = useParams<{ roomId: string }>();
   const dimUnit = useSettings((s) => s.dimUnit);
   const [roomName, setRoomName] = useState('Room');
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
 
   const onModel = pathname?.endsWith('/model') ?? false;
 
@@ -50,39 +52,6 @@ export function ExportMenu() {
 
   // Close on outside press or Esc. Esc is stopped so it does not also reach the
   // studio's global "deselect" binding and clear the user's selection.
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: PointerEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return;
-      // stopImmediatePropagation, not stopPropagation: capture listeners on the
-      // SAME node (window) still run after a plain stop, so one Esc closed this
-      // and the help card together.
-      e.stopImmediatePropagation();
-      e.stopPropagation();
-      setOpen(false);
-      btnRef.current?.focus();
-    }
-    window.addEventListener('pointerdown', onDown, true);
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      window.removeEventListener('pointerdown', onDown, true);
-      window.removeEventListener('keydown', onKey, true);
-    };
-  }, [open]);
-
-  function run(fn: () => void) {
-    setOpen(false);
-    fn();
-  }
-
-  // One fresh read of the room's name for both PNGs. `roomName` state was loaded
-  // once on mount, and a rename in the top bar after that would name the file —
-  // and, for the plan, the sheet's own title — for the room's old name. The
-  // catch falls back to the mount-loaded name: a failed meta read must not
-  // swallow an export. (`saveSceneFile` re-reads the room itself.)
   async function freshRoomName(): Promise<string> {
     if (!roomId) return roomName;
     try {
@@ -128,7 +97,7 @@ export function ExportMenu() {
     exportPlanPng(scene, room, dimUnit, await freshRoomName());
   }
 
-  const items: Array<{ icon: IconName; label: string; hint: string; onClick: () => void }> = [
+  const items: ExportItem[] = [
     ...(onModel
       ? [
           {
@@ -170,6 +139,48 @@ export function ExportMenu() {
       },
     },
   ];
+  return items;
+}
+
+export function ExportMenu() {
+  const items = useExportItems();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: PointerEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      // stopImmediatePropagation, not stopPropagation: capture listeners on the
+      // SAME node (window) still run after a plain stop, so one Esc closed this
+      // and the help card together.
+      e.stopImmediatePropagation();
+      e.stopPropagation();
+      setOpen(false);
+      btnRef.current?.focus();
+    }
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+
+  function run(fn: () => void) {
+    setOpen(false);
+    fn();
+  }
+
+  // One fresh read of the room's name for both PNGs. `roomName` state was loaded
+  // once on mount, and a rename in the top bar after that would name the file —
+  // and, for the plan, the sheet's own title — for the room's old name. The
+  // catch falls back to the mount-loaded name: a failed meta read must not
+  // swallow an export. (`saveSceneFile` re-reads the room itself.)
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', display: 'flex' }}>
@@ -185,8 +196,8 @@ export function ExportMenu() {
         ref={btnRef}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="ds-btn"
-        style={{ height: 28, fontSize: 12 }}
+        className="ds-btn ds-btn--xs"
+        style={{ fontSize: 'var(--fs-small)' }}
       >
         <Icon name="download" size={12} />
         Export
@@ -234,8 +245,8 @@ export function ExportMenu() {
             >
               <Icon name={it.icon} size={13} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>{it.label}</span>
-                <span style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.4 }}>{it.hint}</span>
+                <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--ink)' }}>{it.label}</span>
+                <span className="t-hint" style={{ lineHeight: 1.4 }}>{it.hint}</span>
               </span>
             </button>
           ))}

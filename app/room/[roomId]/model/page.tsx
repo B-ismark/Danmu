@@ -3,13 +3,14 @@
 import dynamic from 'next/dynamic';
 import { useStudio } from '@/lib/store';
 import { CatalogPanel, CatalogToggle, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
+import { usePhoneStudio } from '@/components/studio/NarrowViewportBanner';
 import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
 import { HoverCard } from '@/components/studio/HoverCard';
 import { TransformToolbar } from '@/components/studio/TransformToolbar';
 import { StudioShell } from '@/components/studio/StudioShell';
 import { ViewGizmo } from '@/components/studio/ViewGizmo';
 import { UndoRedo } from '@/components/studio/UndoRedo';
-import { CanvasTools, CanvasView, CanvasAide, ChromeDivider } from '@/components/studio/CanvasChrome';
+import { CanvasTools, CanvasView, CanvasAide } from '@/components/studio/CanvasChrome';
 
 const Room = dynamic(() => import('@/components/three/Room').then((m) => m.Room), {
   ssr: false,
@@ -21,7 +22,7 @@ const Room = dynamic(() => import('@/components/three/Room').then((m) => m.Room)
         display: 'grid',
         placeItems: 'center',
         color: 'var(--ink-3)',
-        fontSize: 13,
+        fontSize: 'var(--fs-body)',
       }}
     >
       Loading your 3D room…
@@ -33,6 +34,7 @@ export default function ModelPage() {
   // In the store, not in this page: the rail's catalog button opens the same
   // panel from the other side of the studio, and on the 2D tab as well.
   const catalogOpen = useStudio((s) => s.catalogOpen);
+  const phone = usePhoneStudio();
 
   const canvas = (
     <main
@@ -49,8 +51,9 @@ export default function ModelPage() {
           bottom centre; the slots are CanvasChrome's now, and both tabs use them. */}
       <CanvasTools>
         <TransformToolbar />
-        <ChromeDivider />
-        <CatalogToggle />
+        {/* A phone's Add is its toolbar's primary action, under the thumb; a second
+            one up here would be two buttons for one verb. */}
+        {!phone && <CatalogToggle />}
       </CanvasTools>
 
       <CanvasView>

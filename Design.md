@@ -113,6 +113,47 @@ owned by a deterministic geometry engine, not by a model.
    variants existed with no rule about when, so five files used one, five the
    other, and two pages used both at once. `globals.css` states it where they are
    defined.
+   **Then type and motion, the last two families still typed as numbers.** There
+   were twenty-two font sizes half a pixel apart and five transition speeds with
+   no rule about which. The *type scale* is six interface steps — `--fs-micro`
+   10.5 · `--fs-caption` 11.5 · `--fs-small` 12.5 · `--fs-body` 13.5 · `--fs-lead`
+   16 · `--fs-title` 22 — and two headline steps, `--fs-display` 30 and the fluid
+   `--fs-hero`. *Motion* is three speeds (`--dur-quick` feedback under the pointer,
+   `--dur-base` a control changing state, `--dur-slow` something travelling) and
+   two curves (`--ease-out`, `--ease-in-out`). `tests/type-scale.test.ts` pins the
+   steps and fails on a literal size or duration anywhere in `app/` or
+   `components/`; the exemptions are named there (satori's OG image, SVG text in a
+   drawing's own units, the brand mark's proportional wordmark). Every size moved
+   by at most half a pixel except the old one-offs, which moved to the step they
+   were doing the job of.
+   On top of the scale sit **named text styles** — a size and an ink that belong
+   together, so a hint is always a hint: `.t-title`, `.t-body`, `.t-small`,
+   `.t-note` (caption, ink-2), `.t-hint` (caption, ink-3), `.t-meta` (small,
+   ink-3), `.t-micro`, and `.truncate` for the one flex child that should
+   ellipsise. And **five button sizes** on `.ds-btn` — `--xs` 26 · `--sm` 32 ·
+   default 38 · `--lg` 44 · `--xl` 52 — each carrying its own padding, gap and
+   type step, so a button's height is never typed beside its label again. The same
+   test fails on a classless element spelling out a named pairing inline, and holds
+   a ceiling on inline styles that only goes down.
+   **Nothing spreads wide because the window did.** A button is as wide as its
+   label (Material's buttons hug their content; Apple's "span the screen" advice is
+   watchOS'), so full width is reserved for a screen's one primary action on a
+   phone — `.ds-btn--block-compact`, below 600px, Material's compact class — and an
+   action with its quieter alternative stacks as one block (`.action-row`). A
+   line of running text stops at `70ch` (`p, li { max-inline-size }`; Baymard
+   measures 50–75 characters as the readable band, WCAG 1.4.8 caps it at 80). Rows
+   that are not buttons — a disclosure header, a rename field, a tile — span their
+   panel on purpose. The sweep's `stretched` rule measures all three in the browser
+   at 768px and up.
+   **Nothing UI-facing is done until `scripts/fidelity-sweep.mjs` is clean.** It
+   walks every screen at seven widths (360 → 1920) against a production build and
+   counts the silent failures rule 4 names — text spilling its box, text clipped by
+   an `overflow: hidden` ancestor, a label ellipsised to nothing ("D…"), controls
+   off-screen or overlapping, the page scrolling sideways — and writes screenshots
+   to look at, because the counts do not see an awkward wrap. Its first run found
+   the piece catalog cutting names to one letter across the whole 1024–1279px step,
+   because three invisible row actions held 96px of a ~160px row; they float over
+   the row now (`.row-actions`).
 6. **Warm & playful visual direction.** Cream paper, terracotta (`--accent`) +
    sage (`--accent-2`) accents, Nunito (sans) / Fraunces (display) type, generous
    rounding. Matches the soft procedural 3D models.
@@ -326,10 +367,17 @@ Furniture detection runs through a fallback chain, best-effort:
    rejected: release assets redirect to a storage host with no
    `access-control-allow-origin`, so browsers block them (curl does not, which
    makes this easy to mis-verify).
-2. **Gemini fallback** — `lib/detection.ts`: one multimodal `@google/genai` call
+2. **Gemini fallback and second look** — `lib/detection.ts`: one multimodal `@google/genai` call
    over all wall photos at once (so it can reason about object continuity across
    walls). BYO key; quota tracked in `lib/quota.ts`. Key validated by
-   `lib/validate-key.ts`.
+   `lib/validate-key.ts`. It runs when the on-device pass finds nothing, **and as a
+   second look whenever a key is set**: both lists go through `refineDetections`, so
+   a piece both passes saw merges to one row (same photo by box overlap; across
+   photos by place plus `sameThingKey`, which folds the two local models' words —
+   `Couch`/`Sofa`, `Houseplant`/`Potted plant` — onto one). A failed second look
+   keeps the on-device list and says so. A dining table stays `desk-standard` in the
+   data and is DRAWN as a table: `DynamicPart` asks `roleOf`, which already tells the
+   two apart by category and size.
 
    The prompt itself is `lib/detect-prompt.ts` — extracted so it can be tested
    without the SDK, and **a function of the photos actually attached**. It used to
@@ -370,7 +418,10 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/apertures.ts` | Turns wall-mounted `window` / `door` parts into rectangles in each wall's own 2D frame, which is all `THREE.Shape` needs to punch a hole (`Shape.holes` + Earcut — no CSG library). Pure, because the wall-local conversion is the part that goes wrong invisibly: get the tangent backwards and every opening mirrors about the middle of its wall. |
 | `lib/layout-score.ts` / `lib/layout-solve.ts` | `layout-rules` restated as **costs** rather than checks — collisions, doors and their approach, functional zones, windows, walkways, wall affinity, relations, alignment, balance — plus **inertia**, which charges for movement so a piece only moves if moving it buys something, and **navigability** over the clearance field for the handful of finalists. Then seeded simulated annealing over `(x, z, yaw)` of the unlocked pieces, with proposals that know the room's structure (snap to a wall, park beside the thing you belong to, face the screen, swap two pieces). Deterministic per seed; `mode: 'refit'` turns the inertia up to repair a layout after a resize rather than reinvent it, and `mode: 'shuffle'` removes the anchor entirely — inertia 0, the search starting from `randomizeStart`'s scatter rather than from today's placement, and the "never hand back something worse" invariant skipped, because a shuffle of an already-optimal room costs MORE by definition and that is the answer to what was asked. **That exemption is about COST and not about legality.** `IMPOSSIBLE_TERMS` — `overlap` and `outside`, the two hard terms that describe a room which cannot exist rather than one that is merely bad — is vetoed in every mode: no solve hands back an arrangement more impossible than the one it was given, `bestCandidate` ranks least-impossible before cheapest, and `openRoutes` may not open a route by pushing furniture through a wall. This is the user's ruling of 2026-09-02 (*"nothing physically impossible should be encouraged"*), and it is a veto rather than a weight because both terms are continuous from zero, so no finite ratio can order them — a 20 mm overhang used to be bought by the lightest touch of a door's swing. A blocked door, an unreachable corner and a wardrobe that will not open stay PRICED, because those are rooms the report names and **Try a fix** acts on. The descent is untouched: a cliff there would give the annealer nothing to walk down, so the veto lives only where an arrangement is CHOSEN. A refusal says which refusal it is (`SolveResult.declined`), because "nothing could improve this" and "everything I found was illegal" are different sentences and the UI used to speak only the first. It also says **which of the two conditions** it hit (`SolveResult.declinedTerms`, rendered by `impossibleClause`), because "through a wall" and "inside another one" point at different remedies and the toast used to say both every time — measured over `u`, `l` and `t` at 6 × 4, seeds 1-8, both solver modes: 48 solves, **9** impossible refusals, every one naming `outside` **alone**, and every one of them on the `u` (`l` and `t` never refuse at that size). So the disjunction was never once the true answer. **That figure was published here as 11 and was wrong**; 9 is what `scripts/reconcile-declined.mjs` prints against a `lib/layout-solve.ts` whose hash matches its own commit, and it agrees with the count already recorded at the decline site inside that file. Three documents carried the 11 in agreement, which is exactly why it read as settled. The clause comes off the WINNER's breakdown, and `bestCandidate` ranks on the SUM of the two terms, so a runner-up may have failed the other way: the sentence may say what the closest arrangement did, never what every arrangement did. **The measurement covers both solver modes; the sentence reaches the user on the arrange paths only** — `lib/layout-shuffle.ts` returns `null` when no candidate survives, discarding the `SolveResult` and with it `declinedTerms`, so Shuffle's refusal names no condition and has no path to one. That is the right copy there rather than a gap: its gate requires every hard term at zero for every candidate, so Shuffle's "every layout it tried" universal is still true. See `docs/what-is-still-open.md` § 31 for the measurements. `lib/layout-shuffle.ts` is the pipeline over it — see its own row below. **Never writes `dimMM`** — it moves and turns, and the type it works in has no field a size could travel in. Restating a table is safe only while the restatements agree, so `tests/layout-conformance.test.ts` pins them to each other — see below. Three properties are worth naming because each one was a bug: a relation is discharged by its **best** anchor and not by all of them (a rug's `['sofa','bed','dining-table']` means *a rug goes under a group*, and read pairwise it charged the rug for every group it was not under — 38.3 of a seeded T's total, and the reason the rug ended up parked between the two); wall affinity is keyed on **role**, since `Category` cannot tell a coffee table from a dining table and gave both `prefers-middle`; the wall gap is measured **along that wall’s normal**, because `nearestEdge` clamps to the segment and hands back a DIAGONAL distance to an endpoint whenever a piece stands off the end of a wall, while `halfDepthToward` returns an AXIAL half-extent — the difference of the two is not a gap, and no `RuleKind` maps to `wall`, so this term has one consumer and no second opinion to contradict it (on the L, whose notch runs x 0.48→3.00 at z 0.38, a sofa centred at x = 0 with its back 24 mm off that plane was charged 0.215, 91% of the preset’s whole wall term, and the solver collected it by sliding the sofa 200 mm PAST a wall that does not reach that far); and facing the wrong way costs `FACING_GAIN ×` what being a few degrees off square does, because `angleCost` tops out at 1 and a completely backwards sofa was therefore cheaper than moving it 2.7 m.The best anchor is also an **argmin**, so it needs a tie-break that is not array order: a relation band costs zero everywhere inside it, so a lamp between two armchairs both within reach is a dead heat, and `parts` order changes whenever a piece is added or deleted. `beatsAnchor` settles it on cost, then the physically nearer anchor, then the anchor id — and `relationParents` exposes those `child → parent` edges, so anything that wants to know what a piece belongs to reads one answer rather than recomputing its own.The solver's **first pass** settles one piece alone — `RoomProfile.anchor`, the bed in a bedroom or the sofa in a living room — before the big-furniture and all-pieces passes run. It buys the tail rather than the median: twelve seeds on a scrambled room, worst run, without → with, `l` 1081 → 136 and `u` 155 → 6.9, because a catastrophic run is one where the biggest piece never found its wall and everything else spent the budget arranging itself around a bed in the middle of the floor. The anchor is picked by ROLE PRIORITY first (bed, then sofa, then dining table, then desk) and footprint area only within a rank, so a large sofa cannot outrank a single bed. Those edges are what the solver’s **group pass** moves: before the piece-level passes, a short anneal of its own proposes whole groups — swap two groups by their centroids, slide one bodily, turn one about its own centre — every one rigid, so a group that was arranged stays arranged. It exists for the one case single-piece moves provably cannot reach: two intact groups standing where the other belongs is a local minimum, because taking any one piece out of a coherent group makes the room worse, and the flat search duly moved 0–1 pieces of eleven at every seed. Groups are read from the ARRANGEMENT — only relation edges currently satisfied, movable members only — so a room nobody has arranged has none and the pass is skipped, which is measurably the right answer there. |
 | `lib/layout-solve.ts`, after the anneal | Three passes that turn a search result into a **suggestion**. *Snap* squares any yaw within 12° of its wall's own heading, keeping the change only if the room agrees — the free-turn proposal exists so a chair can angle toward a sofa, and it also leaves pieces at 8° that nobody meant to angle. *Prune* offers every moved piece its old place back, cheapest first, spending a bounded slack budget: measured over the five presets at three seeds this reverted **40–63 %** of the moves and left the total cost equal or lower in eight of twelve runs, because the annealer accepts uphill moves and never revisits them. *Explain* names, per piece, the cost term that paid for its move, which is what lets the toast say *"the floor lamp moved beside what it belongs with"* instead of *"moved 8 pieces"*. `isWorthOffering` is then the bar for showing a suggestion at all — a material gain, not merely a smaller number. |
-| `lib/layout-shuffle.ts` | **"Show me a different arrangement", as distinct from "fix what is wrong"** — the pipeline behind the rail's **Shuffle** button, next to **Fix**. `Fix` is `solveLayout`'s anchored `arrange`: it pays inertia to move anything and refuses an answer that is not a material gain, so on a room with nothing wrong it correctly does nothing — which is exactly why one button doing both read as a shuffle and behaved as a repair. This runs up to `MAX_CANDIDATES` **independent** solves in `mode: 'shuffle'`, each from its own `randomizeStart` scatter, then keeps only the ones that survive **two** gates and ranks the survivors with `lib/layout-offer.ts`'s `orderOffers` for cost *and* variety, skipping anything too like the last few offers (`ShuffleOffer` carries the part ids with the placements, because a bare `Placement[]` is index-aligned to one `parts` array and the history outlives every edit to the room — mismatched, `layoutSimilarity` throws, and matched-by-length-only it silently compares one piece against another's old position). One solve is not enough and that is measured, not assumed: clean solves run 20/20 on `rect` but **6/20** on `t`, mostly `navigation` — a scatter has to rebuild a whole room inside a budget tuned for a search that starts nearly right. More steps does not fix it (10x buys the `l` five seeds and the `t` *nothing*, 6/20 → 5/20 — the annealer is chaotic under any change); more **starting points** does. The second gate is `newRoomFindings`, and it exists because the solver and the room report disagree: `layout-score` exempts a `sharesFloor` pair from `overlap` outright while `clearance.ts` allows it only to `TUCKED_CLASH_SHARE` (0.85), so a dining chair buried in the dining table costs the search nothing and Room check calls it a clash — **8 of 40 offers** before the gate, 0 of 72 after. Aligning those two thresholds is the real repair and is deliberately left alone here: `overlap` is priced into every solve the app runs, including `Fix`. The cost of gating instead is refusals, unevenly — 12/12 offers on `rect`/`l`/`u`, 8/12 on `open`, **5/12 on `t`** — and raising the cap buys yield at up to a 6.6 s synchronous freeze, so it does not. Refusing is the safe direction and the button says so plainly rather than as an error. |
+| `lib/layout-shuffle.ts` | **"Show me a different arrangement", as distinct from "fix what is wrong"** — the pipeline behind the rail's **Shuffle** button, next to **Fix**. `Fix` is `solveLayout`'s anchored `arrange`: it pays inertia to move anything and refuses an answer that is not a material gain, so on a room with nothing wrong it correctly does nothing — which is exactly why one button doing both read as a shuffle and behaved as a repair. This runs up to `MAX_CANDIDATES` **independent** solves in `mode: 'shuffle'`, each from its own `randomizeStart` scatter, then keeps only the ones that survive **two** gates and ranks the survivors with `lib/layout-offer.ts`'s `orderOffers` for cost *and* variety, skipping anything too like the last few offers (`ShuffleOffer` carries the part ids with the placements, because a bare `Placement[]` is index-aligned to one `parts` array and the history outlives every edit to the room — mismatched, `layoutSimilarity` throws, and matched-by-length-only it silently compares one piece against another's old position). One solve is not enough and that is measured, not assumed: clean solves run 20/20 on `rect` but **6/20** on `t`, mostly `navigation` — a scatter has to rebuild a whole room inside a budget tuned for a search that starts nearly right. More steps does not fix it (10x buys the `l` five seeds and the `t` *nothing*, 6/20 → 5/20 — the annealer is chaotic under any change); more **starting points** does. The second gate is `newRoomFindings`, and it exists because the solver and the room report disagree: `layout-score` exempts a `sharesFloor` pair from `overlap` outright while `clearance.ts` allows it only to `TUCKED_CLASH_SHARE` (0.85), so a dining chair buried in the dining table costs the search nothing and Room check calls it a clash — **8 of 40 offers** before the gate, 0 of 72 after. Aligning those two thresholds is the real repair and is deliberately left alone here: `overlap` is priced into every solve the app runs, including `Fix`. The cost of gating instead is refusals, unevenly — 12/12 offers on `rect`/`l`/`u`, 8/12 on `open`, **5/12 on `t`** — and raising the cap buys yield at up to a 6.6 s wait (off the main thread since `layout-offload.ts`, but still a wait), so it does not. Refusing is the safe direction and the button says so plainly rather than as an error. |
+| Rug zones (`lib/layout-rules.ts` § Where a rug goes) | **A rug goes where its group's rule puts it, and stays out from under what it must not cover.** `rug-group` is an `under` relation: the band is 0.2 m of slack around `rugTarget`'s answer, not a distance between centres, and the rug pays for not being square to the group (`halfTurnCost` — a rug is the same after a half turn). Three rules, by the anchor's role: **seating**, the near edge `RUG_UNDER_SEAT_M` (0.2 m) under the front, so the front legs are on and the back legs off; **a bed**, from a third of the way down (`RUG_BED_START`), so the nightstands at the head stand on bare floor and the rug shows past the sides and the foot; **a dining table**, centred. The long side runs with the group's long side — along a sofa, across a bed, down a table. How far a rug runs past a table or a bed (60 cm, 45–60 cm) is its SIZE, which is the user's and never the solver's to change. `rugKeepsOff` lists what a rug stays out from under — wardrobe/closet, bookshelf, shoe rack, nightstand, fridge and appliances (standing in for a kitchen run and a dresser, which the catalogue has no shape for), and a desk **only when an office chair is in the room** — and `layout-score` also prices a rug over a door's swing; both land in the relation term at `RUG_CLEAR_GAIN`, by the share of the covered piece or swing. The old `near` band (centre within 0.8 m) was satisfied by a rug half under a sofa's BACK and by one under a bed's head with the nightstands on it. Rugs also left the `balance` mass: 5 mm of textile has no visual weight, and 3.8 m² of it pulled a rug 0.42 m off its spot toward the middle of the room. The seeder places the starter living rug with `rugOffset` — the same rule, never a copy. **No rug is a valid answer**: nothing asks for one, and the seeder leaves a group without one rather than force a rug that does not fit. |
+| `lib/rescan.ts` | **A scan that ran replaces the arrangement, and keeps the old one as a layout.** `RoomSync` builds from `detectedObjects` only when there is no saved scene, and a scene is saved on the first add/delete/reshape — so a new scan of a touched room used to be saved and never shown. `adoptFreshScan` writes the previous arrangement (saved scene, or the old detections rebuilt with `buildSceneFromRoom`, plus the whole `Transforms`) as a **Before re-scan** layout, then the new detections, then drops the scene and transforms keys (`roomStore.forgetArrangement`) — in that order, since there is no transaction across keys. The detect screen calls it only when a detection run completed in that visit; Continue on the cached list saves the reviewed rows and leaves the arrangement alone. Arriving on a scanned room shows the cached list with a **Look again** button (undoable) rather than re-running on arrival. |
+| `lib/layout-offload.ts` + `lib/layout.worker.ts` | **The arranging engine runs in a Web Worker.** Fix, Shuffle, Re-fit and Try a fix call `solveOffThread` / `shuffleOffThread`, which post the same arguments to one reused module worker and resolve with the same answer — the solver is pure and seeded, so moving it changes *when* the answer arrives and nothing about *what* it is. The request types live in `layout-worker-protocol.ts` and name a clone-safe subset of the options (`SolveOptions.pick` is a function and cannot cross). No worker (node tests, SSR, a browser without module workers) or a worker that fails to load or crashes means the call runs **inline** — a slower path, never a dead button — and an in-flight request is re-answered inline rather than left pending. **Because the window stays live, the room can change under a search**, so every press takes a `lib/solve-stamp.ts` stamp (reference identity of the parts, room, transform maps, parents and locks) and an answer whose stamp no longer matches is **not applied** and says so; a Shuffle offer that was not applied is not recorded in the skip-list either, since it was never shown. `checkFit` still runs inline — ~330 ms at worst, behind the same busy yield. |
 | `lib/solar.ts` | Sunlight as the two things a room can show you: `sunDirection` (a compass azimuth and an elevation → a unit vector in scene axes, null below the horizon) and `daylightKelvin` (warm at the horizon, neutral overhead, on the same Planckian locus as the lamps). It was a full NOAA / Meeus solar-position calculator accurate to ~0.01°, driven by a latitude, a longitude, a date and a clock; that went, and the file states why in its own header. **Correct is not the same as useful:** nobody arranging furniture can verify a hundredth of a degree, and the four fixed presets in `Room`'s `LIGHTING` table are the four pictures it existed to produce. |
 | `lib/lighting-moods.ts` | `LIGHTING` — what each of the five moods looks like, and for the three sun angles where the light comes from. Read by the 3D scene, by the north dial that draws the sun on its rim, and by its own test. It was inside `Room.tsx` first, which was wrong the moment a second consumer appeared: a table in one renderer becomes a table each consumer copies (rule 3, the `layout-rules.ts` argument). The dial had drawn the sun for as long as the sun existed, and putting the angles behind an R3F import is what silently dropped the marker. Hex rather than tokens because none of it is reachable from CSS — the `lib/scene-palette.ts` reason, and the reason it belongs in `lib/` beside it. It also owns `moodSunDirection` (mood + room bearing → a unit vector toward the light, `null` for a studio look or a sun below the horizon) and `DEFAULT_BEARING_DEG`. Its second consumer is `NorthDial`, which draws the same angle on its rim; a derivation with two callers drifts in a way nothing catches, and the specific failure here is a bearing sign that disagreed between them — the light in the right place and the marker on the dial in the wrong one. `moodKeyDirection` is gone with the shadow gate that was its only caller. |
 | `lib/part-rows.ts` | `groupRows` — the flat part list as the rows the layer tree draws. A group is nothing but a shared `groupId` (there is no node, no name, no ordering), so the nesting is **derived at read time** rather than stored, and three rules keep it honest: members cluster under their FIRST member so merging never reshuffles the rest of the list; a group of one is not a group, because deleting members leaves a lone part still carrying a `groupId` and a `Group · 1` header would describe something with no behaviour; and a search hides members but never the fact of the group, so a row still reports `3` against one visible member — “this piece is merged with two you cannot see” is exactly what you need before dragging it. Pure and generic over `{ id, groupId }`, so `tests/part-rows.test.ts` runs it without a scene, a store or React. |
@@ -1592,9 +1643,29 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   the wall outline, because a door standing on the floor of a wall that starts at
   the floor is the degenerate case for the triangulator. The **part** keeps its real
   size; the hole behind it is what shrinks.
+- **Wall pieces leave with their wall.** The dollhouse cut-away is back-face
+  culling, which removes the near wall's mesh and nothing fixed to it, so a window,
+  its curtains, a painting or a door used to hang in mid-air across the view.
+  `CutAway` (in `Draggable`) asks `lib/near-wall.ts` the GPU's own question of each
+  wall-anchored piece — is the camera behind the plane through the piece's back? —
+  and, when it is, stops the piece's materials writing colour or depth and stops it
+  taking clicks. It deliberately does **not** set `visible = false` or move it to a
+  layer: both drop it from the shadow pass too (r184 tests layers against the main
+  camera there), and the curtains on a cut-away wall still shade the room.
 - **Quality** High / Fast — gates procedural normal/roughness maps
   (`lib/textures.ts`, zero assets) + soft cast shadows + ambient occlusion
   (N8AO/SMAA mount on `high` only). There is no floor reflection.
+  High also adds a **bounce** term (`lib/bounce.ts`): the closed shell lets the key
+  light in only through the windows, and a shadow-mapped rasteriser computes no
+  interreflection, so an ambient light in the key's colour stands in for it, sized
+  by glazing-to-floor area. A windowless room gets none. Fast gets none either — its
+  key already passes through the ceiling.
+- **Surfaces** are named on `Box` (`surface="wood" | "fabric" | "metal" | …`,
+  `components/three/materials.ts`); casework takes the wood grain, upholstery,
+  bedding and shades the cloth sheen. Sheen needs `meshPhysicalMaterial`, and three
+  drops it silently on a standard one — `tests/sheen-material.test.ts` holds the
+  hand-written materials to that. Lamp shades glow with the bulb inside them
+  (`shadeGlow` in `lib/light-units.ts`).
 - **Ground shadows** (`GroundShadows` in `Room.tsx`) are a drei `ContactShadows`
   bake, not a per-frame render — the scene is drawn into a depth target and
   blurred, which is far too expensive to repeat at 60fps for a room that is
@@ -1745,6 +1816,133 @@ writer with formula-injection escaping is careful work aimed at the wrong target
 non-negotiable 6 forbids reinstating the carpenter spec — a parts list minus the
 prices is what that was. The Room panel's on-screen list and its plain-text **Copy**
 are what serve "communicate a plan", and they stay.
+
+### Phones and tablets — branch, don't scale
+
+Below 1024px the studio is **not the laptop layout made smaller**. Flutter's adaptive
+guidance names the mistake exactly: *branch on the window size, don't scale*. Every
+choice below is taken from a platform's published guidance rather than invented here,
+and `components/studio/shells/SheetShell.tsx` carries the same list at its head.
+
+| Window | Shape | Source |
+|---|---|---|
+| 1024px and up | `DockedShell`: two rails beside the room | — |
+| 600–1023px | **One docked pane** beside the room, with **Room · Details** tabs; selecting a piece turns to Details | Material's *supporting pane* canonical layout, at the medium and expanded window classes |
+| under 600px | **The room full-screen**, a one-row app bar, a toolbar under the thumb, and **one nonmodal sheet** that rises from the toolbar | HIG § Sheets, § Toolbars; Material 3 bottom sheets and the Expressive docked toolbar |
+
+The breakpoints are Material's window size classes (compact under 600, medium
+600–839, expanded 840+), not numbers picked to fit one phone. `usePhoneStudio()` and
+`useStudioLayout()` in `NarrowViewportBanner.tsx` are the only two questions anything
+asks about width.
+
+**The phone, piece by piece.**
+
+- **App bar: one row.** Back (which is also the way to another room), the room name,
+  the 3D · 2D switch, and **More** (⋯) for help and export. Apple's compact navigation
+  bar and Material's small top app bar are both one row. The laptop's bar wrapped to
+  three rows. No wordmark on this bar: the HIG says not to title a screen with the
+  app's name, and on a phone that name was costing the room's.
+- **A toolbar, not a tab bar.** Apple: *use a tab bar to support navigation, not to
+  provide actions.* Room, Add and View are things you do to this room, so they are
+  toolbar items. Material 3 Expressive retired the bottom app bar for the same docked
+  toolbar.
+- **One primary action, and it is Add.** Apple: specify one primary action. Material:
+  one FAB, for the primary or most common action.
+- **The toolbar changes with the selection.** Tap a sofa and it offers the sofa (its
+  name opens Details) and **Done**. Canva and IKEA Kreativ do this on a phone: the
+  tools for the thing you touched, under the thumb that touched it.
+- **Selecting does not open the sheet.** On a phone, a tap on a piece is also how you
+  start dragging it. A sheet that rose on every tap would cover the room exactly when
+  the room is in use.
+- **The sheet is nonmodal** (HIG: people *affect the parent view without dismissing
+  the sheet*), so you can recolour a piece and watch it change. It has two detents, about
+  half (`--sheet-half`) and nearly full (`--sheet-top-gap` short of the top, so some
+  room always shows). A grabber cycles the two when tapped (HIG), and there is a
+  **visible close button** beside it, because NN/g's testing found a grab handle alone
+  *easy to ignore*. The sheet rises from the toolbar's top edge, not the screen's, so
+  switching Room ↔ Add ↔ View never means closing first. **One sheet at a time**:
+  panels replace each other and never stack (NN/g, HIG). Where a released drag
+  settles is `lib/sheet-detents.ts`, which reads the same two tokens the stylesheet
+  draws.
+- **Targets.** Toolbar items are 56px tall, past Apple's 44pt and Material's 48dp,
+  because the bottom edge is where Hoober measured touches landing least accurately.
+  They stop at 128px wide, so three items never become three slabs.
+- **Gestures replace chrome.** The plan's zoom, rotate and fit box is gone on a phone,
+  because pinch zooms and a finger pans. The Library's copy says *tap*, and a tapped
+  piece drops into the first clear spot, because there is no cursor to drag from.
+
+**The web half of it**, where the platform guidance stops:
+
+- `viewport-fit=cover` plus `env(safe-area-inset-*)` on `body` and on the toolbar's
+  bottom padding (WebKit, *Designing websites for iPhone X*).
+- `100dvh` for the studio's height (web.dev, *viewport units*), minus the top inset.
+- **Bars in flow, never `position: fixed`.** The toolbar is a grid row. Fixed bottom
+  bars are what iOS Safari's collapsing toolbar is reported to misplace (iOS 26).
+  That report is **unverified here** and the workaround costs nothing, so it holds
+  until a real phone says otherwise (`docs/visual-check.md`).
+- `overscroll-behavior: contain` on the sheet body, so scrolling a panel to its end
+  does not scroll the page. `touch-action: none` on the sheet's head, so a drag
+  resizes the sheet rather than scrolling it.
+
+Sources: Apple HIG,
+[Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets),
+[Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars) and
+[Tab bars](https://developer.apple.com/design/human-interface-guidelines/tab-bars);
+Android,
+[window size classes](https://developer.android.com/develop/ui/compose/layouts/adaptive/use-window-size-classes)
+and [canonical layouts](https://developer.android.com/develop/ui/compose/layouts/adaptive/canonical-layouts);
+Material 3 Expressive,
+[docked and floating toolbars](https://github.com/material-components/material-components-android/blob/master/docs/components/DockedFloatingToolbars.md);
+Flutter, [adaptive and responsive design](https://docs.flutter.dev/ui/adaptive-responsive/general);
+NN/g, [Bottom sheets](https://www.nngroup.com/articles/bottom-sheet/);
+WebKit, [Designing websites for iPhone X](https://webkit.org/blog/7929/designing-websites-for-iphone-x/);
+Baymard, [line length](https://baymard.com/blog/line-length-readability) (the 70ch measure
+in *Nothing spreads wide*).
+
+### Glasshouse on a laptop — docked panes on a wash
+
+From 1024px up (`DockedShell`, `.split--glass`) the room and both rails are panes
+standing `--pane-gap` apart on `--studio-wash`, a gradient built from paper tokens
+only, so nothing sits on a surface darker than `--paper-3`. The rails stay docked:
+the room is never under them.
+
+- **Rails are glass by tint, rim and shadow, never by `backdrop-filter`.** A filter
+  makes its element the containing block for `position: fixed` descendants, and four
+  things in the rails (Select, room report, tooltip, colour-mixer scrim) place
+  themselves in viewport coordinates. Nothing moves behind a docked pane anyway.
+- **The blur is on the chrome over the room**, where the room moves behind it.
+- **Clay** inside the rails: buttons raised (`--clay-raise`), fields and segmented
+  controls pressed in (`--clay-well`). `--edge` stays the boundary; clay is a finish.
+- `prefers-reduced-transparency` gets solid panes in the same layout.
+- A row of number fields is `.fields-row`, sized from its longest value
+  (`fieldMinWidth`), so a narrow rail moves a field to the next line rather than
+  printing "6.0" for 6.00. The sweep's `cut` rule catches a field's value wider than
+  the field, which inputs do not report as text overflow.
+
+### Floating chrome — one pill per group
+
+Everything that floats over the room on either tab is a `.chrome-pill`: undo/redo,
+the plan's **Zoom** and **Turn and fit**, the 3D tab's Move / Scale / Rotate (a
+segmented pill, `.chrome-seg`), Snap, Add and Comfort zones. The camera gizmo and
+the comfort legend wear the same rim and lift at card corners. It replaced an
+outlined box around outlined buttons, which put two boundaries on every control.
+
+- **The container carries the rim, the controls carry none.** The rim is
+  `--hairline-strong`, not `--edge`, because a pill is not pressable: each control
+  inside is identified by its own glyph or word (≥ 7:1), and a pressed state is a
+  filled capsule — `--ink` for the chosen mode, `--accent-tint` for a toggle that is
+  on (Snap, Comfort zones, an open Add). Standalone controls keep `--edge`.
+- **Readouts hold a width** (`.chrome-pill__readout--zoom` 9ch, `--deg` 4ch) in
+  tabular figures, so − and + do not move under the pointer as the number changes.
+- **Pills are handed straight to the canvas cluster, never boxed together.** A box
+  around two pills is one flex item, so on a cramped canvas it drops below its
+  neighbour whole and then folds again inside itself. A rule between groups is the
+  gap now; the one `.chrome-pill__rule` left sits inside a pill, beside Fit, where no
+  neighbour can hide and strand it.
+- Heights: 30px controls in a 38px pill; 40px in a 48px pill on a phone, where the
+  mode strip and undo/redo are the only chrome.
+- On a laptop the pills are frosted (`.split--glass`, with a lit top edge); on a
+  tablet or phone they are solid paper.
 
 ### Other studio tools
 - **"Will it fit?"** (`lib/fit-check.ts`, the `Will it fit` tab in `RoomTools.tsx`).
@@ -2378,7 +2576,7 @@ precedents to pick from. There are now two shells and two deliberate exceptions.
 
 | Shell | Owns | Used by |
 |---|---|---|
-| `components/studio/StudioShell.tsx` | The `--rail-left 1fr --rail-right` grid, the stacked fallback below ~1024px, both rails, the `ready` paint gate | `/room/[id]/model` · `/room/[id]/plan` |
+| `components/studio/StudioShell.tsx` | Picks the layout for the window: `DockedShell`'s two rails from 1024px, `SheetShell` below (one docked pane on a tablet, toolbar + sheet on a phone), plus the `ready` paint gate | `/room/[id]/model` · `/room/[id]/plan` |
 | `components/ui/DocShell.tsx` | The `.chrome-bar`, the mark (always a link), the breadcrumb, the content measure, and the `hero` wash | `/workspace` · `/settings` · `/onboarding/layout-pick` |
 
 **`.chrome-bar` is the app's one bar**, in two sizes — the 56px default and the

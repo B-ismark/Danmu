@@ -1,6 +1,10 @@
 'use client';
 
-// Rails beside the room — the one shell both studio tabs stand in.
+// Rails beside the room — the shell both studio tabs stand in from 1024px up.
+// Below that the studio is `SheetShell`: one docked panel on a tablet, a toolbar
+// and a sheet on a phone. That is a different layout, not this one made smaller,
+// and why is written at the top of that file and in `Design.md` § Phones and
+// tablets.
 //
 // Docked, not floating. That was an open question for one round: three shells
 // were built and compared here, in the real studio over a real room, because the
@@ -33,7 +37,7 @@ import { LeftRailBody, RailToggle, RightRailBody, useRails } from './shell-parts
 
 export const RAIL_ID = { left: 'studio-rail-left', right: 'studio-rail-right' } as const;
 
-export function DockedShell({ surface, layout }: { surface: ReactNode; layout: StudioLayout }) {
+export function DockedShell({ surface, layout }: { surface: ReactNode; layout: Exclude<StudioLayout, 'stacked'> }) {
   const { leftOpen, rightOpen, toggleRail } = useRails();
   // Subscribed so that a width written from ANYWHERE re-renders this shell — the
   // layout effect below carries no dependency array and runs after every render, so
@@ -48,8 +52,6 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
   const shellRef = useRef<HTMLDivElement>(null);
   const leftRef = useRef<HTMLElement>(null);
   const rightRef = useRef<HTMLElement>(null);
-
-  const stacked = layout === 'stacked';
 
   // Three sources, in priority order, and the order is the whole design:
   //
@@ -89,32 +91,22 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
    *  Reading at call time removes the dependency rather than documenting it. */
   const applySashWidths = () => {
     const el = shellRef.current;
-    if (!el || stacked) return;
+    if (!el) return;
     const { railLeftW, railRightW } = useStudio.getState();
     el.style.setProperty('--sash-left', railWidth(railLeftW, 'left'));
     el.style.setProperty('--sash-right', railWidth(railRightW, 'right'));
   };
 
-  const shell = (
-    stacked
-      ? {
-          gridTemplateColumns: '1fr',
-          // dvh, matching the `100dvh` wrapper these rows are measured inside.
-          gridTemplateRows: 'minmax(300px, 55dvh) auto auto',
-          height: '100%',
-          overflow: 'auto',
-        }
-      : {
-          // `--sash-left` / `--sash-right` are NOT set here — see the layout effect
-          // below, which writes them to the DOM after every render.
-          gridTemplateColumns: [
-            leftOpen ? 'var(--sash-left)' : 'var(--rail-closed)',
-            '1fr',
-            rightOpen ? 'var(--sash-right)' : 'var(--rail-closed)',
-          ].join(' '),
-          height: '100%',
-        }
-  ) as CSSProperties;
+  const shell: CSSProperties = {
+    // `--sash-left` / `--sash-right` are NOT set here — see the layout effect
+    // below, which writes them to the DOM after every render.
+    gridTemplateColumns: [
+      leftOpen ? 'var(--sash-left)' : 'var(--rail-closed)',
+      '1fr',
+      rightOpen ? 'var(--sash-right)' : 'var(--rail-closed)',
+    ].join(' '),
+    height: '100%',
+  };
 
   // The two sash variables are written to the DOM after every render rather than
   // carried in the style object above, and that is a correctness fix rather than a
@@ -147,57 +139,42 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
     applySashWidths();
   });
 
-  const railStyle: CSSProperties = stacked
-    ? {
-        minHeight: 0,
-        height: 'auto',
-        maxHeight: '60dvh',
-        borderLeft: 0,
-        borderRight: 0,
-        borderTop: '1px solid var(--hairline)',
-      }
-    : // `relative` so the sash can straddle this rail's own border.
-      { minHeight: 0, position: 'relative' };
+  // `relative` so the sash can straddle this rail's own border.
+  const railStyle: CSSProperties = { minHeight: 0, position: 'relative' };
 
   // Collapsed rails keep their <aside> and their toggle, so the control that
-  // reopens one is always where the rail was — and a stacked layout never
-  // collapses, because there the rails are content rather than chrome.
-  const showLeft = stacked || leftOpen;
-  const showRight = stacked || rightOpen;
+  // reopens one is always where the rail was. (Below 1024px there are no rails to
+  // collapse: `SheetShell` takes over, and its sheet is the disclosure.)
 
   const tree = (
     <aside key="tree" id={RAIL_ID.left} ref={leftRef} className="rail rail--left" style={railStyle}>
-      {!stacked && <RailToggle side="left" open={leftOpen} onToggle={() => toggleRail('left')} />}
-      <LeftRailBody open={showLeft} />
-      {!stacked && (
-        <RailSash
-          side="left"
-          shellRef={shellRef}
-          railRef={leftRef}
-          railId={RAIL_ID.left}
-          open={leftOpen}
-          onToggle={() => toggleRail('left')}
-          onRestoreWidths={applySashWidths}
-        />
-      )}
+      <RailToggle side="left" open={leftOpen} onToggle={() => toggleRail('left')} />
+      <LeftRailBody open={leftOpen} />
+      <RailSash
+        side="left"
+        shellRef={shellRef}
+        railRef={leftRef}
+        railId={RAIL_ID.left}
+        open={leftOpen}
+        onToggle={() => toggleRail('left')}
+        onRestoreWidths={applySashWidths}
+      />
     </aside>
   );
 
   const inspector = (
     <aside key="inspector" id={RAIL_ID.right} ref={rightRef} className="rail rail--right" style={railStyle}>
-      {!stacked && <RailToggle side="right" open={rightOpen} onToggle={() => toggleRail('right')} />}
-      <RightRailBody open={showRight} />
-      {!stacked && (
-        <RailSash
-          side="right"
-          shellRef={shellRef}
-          railRef={rightRef}
-          railId={RAIL_ID.right}
-          open={rightOpen}
-          onToggle={() => toggleRail('right')}
-          onRestoreWidths={applySashWidths}
-        />
-      )}
+      <RailToggle side="right" open={rightOpen} onToggle={() => toggleRail('right')} />
+      <RightRailBody open={rightOpen} />
+      <RailSash
+        side="right"
+        shellRef={shellRef}
+        railRef={rightRef}
+        railId={RAIL_ID.right}
+        open={rightOpen}
+        onToggle={() => toggleRail('right')}
+        onRestoreWidths={applySashWidths}
+      />
     </aside>
   );
 
@@ -206,8 +183,8 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
     // in pure CSS. Carrying it here meant two thresholds for one decision (720px
     // in the stylesheet, 1023px in `useStudioLayout`) and two row templates, and
     // the CSS one describes two children while this shell has three.
-    <div className="split" ref={shellRef} style={shell}>
-      {stacked ? [surface, tree, inspector] : [tree, surface, inspector]}
+    <div className="split split--glass" ref={shellRef} style={shell}>
+      {[tree, surface, inspector]}
     </div>
   );
 }

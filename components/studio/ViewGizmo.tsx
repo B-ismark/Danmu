@@ -15,6 +15,7 @@
 
 import type { ReactNode } from 'react';
 import { useStudio } from '@/lib/store';
+import { usePhoneStudio } from './NarrowViewportBanner';
 
 type Preset = 'front' | 'top' | 'iso' | 'free';
 
@@ -67,21 +68,17 @@ const CELLS: Array<{ value: Preset; label: string; glyph: ReactNode }> = [
 export function ViewGizmo() {
   const view = useStudio((s) => s.viewPreset);
   const setView = useStudio((s) => s.setView);
+  // 40px cells under a thumb: the 2×2 stays a small square in the corner, and each
+  // view is a target a finger can hit without landing on its neighbour.
+  const cell = usePhoneStudio() ? 40 : 28;
 
   return (
     <div
       role="group"
       aria-label="Camera"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 28px)',
-        gap: 2,
-        padding: 3,
-        background: 'var(--paper)',
-        border: '1px solid var(--edge)',
-        borderRadius: 'var(--r-2)',
-        boxShadow: 'var(--shadow-soft)',
-      }}
+      // Surface in globals.css (`.gizmo`), so the laptop's glass can replace it.
+      className="gizmo"
+      style={{ gridTemplateColumns: `repeat(2, ${cell}px)` }}
     >
       {CELLS.map((c) => {
         const on = view === c.value;
@@ -94,14 +91,15 @@ export function ViewGizmo() {
             aria-label={c.label}
             title={c.label}
             style={{
-              width: 28,
-              height: 28,
+              width: cell,
+              height: cell,
               display: 'grid',
               placeItems: 'center',
               cursor: 'pointer',
               border: 0,
-              borderRadius: 'var(--r-1)',
-              background: on ? 'var(--accent-tint)' : 'transparent',
+              // Radius and hover are the class's (`.gizmo > button`); an inline
+              // `transparent` here would beat the hover fill.
+              background: on ? 'var(--accent-tint)' : undefined,
               color: on ? 'var(--accent-text)' : 'var(--ink-2)',
             }}
           >

@@ -19,7 +19,7 @@ import { IconButton } from '@/components/ui/primitives';
 export function HelpCard({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <div
-      className="ds-card"
+      className="ds-card help-card"
       role="note"
       // Making the card a tab stop makes it something a keyboard user LANDS on, and a
       // landing place with no accessible name is announced as "note" and nothing else.
@@ -36,11 +36,9 @@ export function HelpCard({ title, onClose, children }: { title: string; onClose:
       style={{
         padding: 0,
         boxShadow: 'var(--shadow-lift)',
-        maxHeight: 'min(420px, 60vh)',
+        // Height and width in globals.css (`.help-card`), because a phone gives it
+        // more of both.
         overflow: 'auto',
-        // Capped against the window as well as stated: this card is placed by
-        // whoever renders it, and none of those slots can promise it 320px.
-        width: 'min(320px, calc(100vw - 32px))',
       }}
     >
       <div
@@ -58,7 +56,7 @@ export function HelpCard({ title, onClose, children }: { title: string; onClose:
           zIndex: 'var(--z-sticky-local)',
         }}
       >
-        <span style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>{title}</span>
+        <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, flex: 1 }}>{title}</span>
         <IconButton icon="x" label="Close help" onClick={onClose} size={24} iconSize={12} />
       </div>
       {children}
@@ -73,13 +71,13 @@ export function HelpGroup({ title, note, children }: { title: string; note?: str
         {title}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>{children}</div>
-      {note && <div style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.45, marginTop: 7 }}>{note}</div>}
+      {note && <div className="t-hint" style={{ lineHeight: 1.45, marginTop: 7 }}>{note}</div>}
     </div>
   );
 }
 
 export function HelpLine({ children }: { children: ReactNode }) {
-  return <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>{children}</div>;
+  return <div className="t-small" style={{ lineHeight: 1.5 }}>{children}</div>;
 }
 
 // Keycaps in the sans face, not mono: a keycap is a real convention, but this
@@ -89,7 +87,7 @@ export function Kb({ children }: { children: ReactNode }) {
     <kbd
       style={{
         fontFamily: 'var(--font-sans)',
-        fontSize: 10.5,
+        fontSize: 'var(--fs-micro)',
         fontWeight: 700,
         color: 'var(--ink)',
         padding: '1px 5px',

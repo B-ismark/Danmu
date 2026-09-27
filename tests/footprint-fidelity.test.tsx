@@ -192,16 +192,13 @@ describe('what a shape actually occupies, against the one box every consumer rea
     for (const r of rows) {
       expect(r.prims, `${r.shape}/${r.size} draws no primitives at all`).toBeGreaterThan(0);
     }
-    // `mirror-oval` is the one shape that draws only vertical planes, so it has no floor
-    // area by construction — and it is pinned from BOTH sides. Asserting only that the
-    // others are non-zero would let a second shape join it silently, and asserting only
-    // that this one is zero would survive it starting to draw a floor.
+    // `mirror-oval` used to be the one shape with no floor area — a flat disc frame
+    // with its glass floating 25 mm in front. It has a real frame now (the model-
+    // integrity pass), so NO shape is flat, and that is pinned: a second shape
+    // drawing only vertical planes fails here rather than joining a list.
     const flat = new Set(rows.filter((r) => r.fill === 0).map((r) => r.shape));
-    expect([...flat], 'shapes with no floor area at all').toEqual(['mirror-oval']);
-    for (const r of rows) {
-      if (r.shape === 'mirror-oval') expect(r.fill, `${r.shape}/${r.size}`).toBe(0);
-      else expect(r.fill, `${r.shape}/${r.size} covers none of its own box`).toBeGreaterThan(0);
-    }
+    expect([...flat], 'shapes with no floor area at all').toEqual([]);
+    for (const r of rows) expect(r.fill, `${r.shape}/${r.size} covers none of its own box`).toBeGreaterThan(0);
   });
 
   it('measures a spinning shape as the disc it sweeps, not as its rest pose', () => {
@@ -431,8 +428,11 @@ describe('what a shape actually occupies, against the one box every consumer rea
     monitor: [1.0, 1.5, 0.98],
     laptop: [1.0, 1.4, 1.04],
     door: [1.0, 1.5, 1.0],
-    mirror: [1.05, 1.5, 1.02],
-    'mirror-oval': [1.1, 0.83, 1.05],
+    // Depth 1.03 on both mirrors: the frame is drawn at `dimMM[1]` now and the glass
+    // sits 1 mm proud of it. It was 1.5 (a flat 40 mm frame against a declared 30) and
+    // 0.83 (a flat disc with glass 25 mm in front) until the model-integrity pass.
+    mirror: [1.05, 1.03, 1.02],
+    'mirror-oval': [1.1, 1.03, 1.05],
     window: [1.1, 2.0, 1.11],
     'water-dispenser': [1.0, 1.14, 1.02],
     // A rug is 5 mm of declared thickness and 21 mm of drawn pile plus its border. The ratio

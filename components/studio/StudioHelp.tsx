@@ -22,7 +22,8 @@ import { useStudio } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
 import { HelpCard, HelpGroup, HelpLine, Kb } from './HelpCard';
 import { isTypingOrDialog } from './KeyboardShortcuts';
-import { useStudioLayout } from './NarrowViewportBanner';
+import { usePhoneStudio, useStudioLayout } from './NarrowViewportBanner';
+import { useMediaQuery } from '@/lib/use-media-query';
 
 type CoachId = 'drag' | 'wall';
 
@@ -42,14 +43,36 @@ const COACH_COPY: Record<CoachId, { title: string; body: string }> = {
   },
 };
 
-export function StudioHelp() {
+/** `hideTrigger` + `open` / `onOpenChange` are for the phone app bar, where the card
+ *  is opened from the More menu rather than from its own button. The component
+ *  stays mounted there regardless, because it is also what shows the one-time coach
+ *  notes after a first drag or a first wall. */
+export function StudioHelp({
+  hideTrigger = false,
+  open: openProp,
+  onOpenChange,
+}: {
+  hideTrigger?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} = {}) {
   const pathname = usePathname();
   const onModel = pathname?.endsWith('/model') ?? false;
+  const touch = useMediaQuery('(pointer: coarse)');
 
   const dragging = useStudio((s) => s.draggingId);
   const selectedWall = useStudio((s) => s.selectedWall);
 
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  // Read through a ref so the Escape listener below can close a controlled card
+  // without re-subscribing on every render of its owner.
+  const control = useRef({ controlled: openProp !== undefined, onOpenChange });
+  control.current = { controlled: openProp !== undefined, onOpenChange };
+  const setOpen = (next: boolean) => {
+    if (control.current.controlled) control.current.onOpenChange?.(next);
+    else setOpenState(next);
+  };
   const [coach, setCoach] = useState<CoachId | null>(null);
   const seen = useRef<Partial<Record<CoachId, boolean>>>({});
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -94,7 +117,8 @@ export function StudioHelp() {
       e.stopPropagation();
       if (coach) setCoach(null);
       else {
-        setOpen(false);
+        if (control.current.controlled) control.current.onOpenChange?.(false);
+        else setOpenState(false);
         btnRef.current?.focus();
       }
     }
@@ -107,71 +131,61 @@ export function StudioHelp() {
       {/* A question mark, not a sentence. "How this works" spent 150px saying what
           the universal glyph says in 30, on a control most people press once. The
           accessible name still carries the words. */}
-      <button
-        ref={btnRef}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label="How this works"
-        title="How this works"
-        className="icon-btn"
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: 'var(--r-full)',
-          border: `1px solid ${open || coach ? 'var(--accent-text)' : 'var(--edge)'}`,
-          background: open || coach ? 'var(--accent-tint)' : 'var(--paper)',
-          color: open || coach ? 'var(--accent-text)' : 'var(--ink-2)',
-        }}
-      >
-        <Icon name="help" size={14} />
-      </button>
+      {/* Not rendered, rather than `hidden`: `.icon-btn` sets `display`, which
+          outranks the attribute, and the trigger was drawn beside More anyway. */}
+      {!hideTrigger && (
+        <button
+          ref={btnRef}
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-label="How this works"
+          title="How this works"
+          className="icon-btn"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 'var(--r-full)',
+            border: `1px solid ${open || coach ? 'var(--accent-text)' : 'var(--edge)'}`,
+            background: open || coach ? 'var(--accent-tint)' : 'var(--paper)',
+            color: open || coach ? 'var(--accent-text)' : 'var(--ink-2)',
+          }}
+        >
+          <Icon name="help" size={14} />
+        </button>
+      )}
 
       {coach && (
         <div
-          className="ds-card"
+          // Placement and width in globals.css (`.help-pop`): anchored under the "?"
+          // on a laptop, and on the phone's margins under the app bar.
+          className="ds-card help-pop help-pop--coach"
           role="note"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            zIndex: 'var(--z-popover)',
-            // Anchored to its right edge, so it grows LEFT — and at a flat 300 it
-            // grew straight off a narrow window. 100vw rather than 100%, because
-            // the trigger it hangs from is a 28px button.
-            width: 'min(300px, calc(100vw - 32px))',
             padding: '11px 12px 12px 14px',
             boxShadow: 'var(--shadow-lift)',
             textAlign: 'left',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', flex: 1 }}>
+            <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--ink)', flex: 1 }}>
               {COACH_COPY[coach].title}
             </span>
             <button
               onClick={() => setCoach(null)}
-              className="ds-btn ds-btn--ghost"
-              style={{ height: 24, fontSize: 11, padding: '0 8px', color: 'var(--accent-text)' }}
+              className="ds-btn ds-btn--xs ds-btn--ghost"
+              style={{ padding: '0 8px', color: 'var(--accent-text)' }}
             >
               Got it
             </button>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5, marginTop: 3 }}>
+          <div className="t-small" style={{ lineHeight: 1.5, marginTop: 3 }}>
             {COACH_COPY[coach].body}
           </div>
         </div>
       )}
 
       {open && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            zIndex: 'var(--z-popover)',
-            textAlign: 'left',
-          }}
-        >
+        <div className="help-pop">
           <HelpCard
             title="How this works"
             onClose={() => {
@@ -179,7 +193,12 @@ export function StudioHelp() {
               btnRef.current?.focus();
             }}
           >
-            {onModel ? <ModelHelp /> : <PlanHelp />}
+            {/* A touch screen gets the card for its hands. The desktop cards teach
+                right-click, Alt-click, Shift-click and a row of keys, and none of
+                those exist under a finger — on a phone this card was a list of
+                things you cannot do. The verb follows the POINTER, not the width:
+                a tablet is a touch screen at a laptop's width. */}
+            {touch ? onModel ? <ModelTouchHelp /> : <PlanTouchHelp /> : onModel ? <ModelHelp /> : <PlanHelp />}
           </HelpCard>
         </div>
       )}
@@ -276,17 +295,90 @@ function ModelHelp() {
 // always picks the same answer is a second thing to keep true for nothing.
 function TwoLists() {
   const { layout } = useStudioLayout();
+  const phone = usePhoneStudio();
+  const touch = useMediaQuery('(pointer: coarse)');
+  // Three shells, three places. A phone has no Library card on the canvas at all:
+  // both lists are sheets, opened from the toolbar.
+  const catalogAt = phone
+    ? 'under Room in the toolbar'
+    : layout === 'stacked'
+      ? 'on the Room tab of the panel beside the room'
+      : 'in the left rail';
+  const libraryAt = phone ? 'under Add' : 'on the right of the canvas';
   return (
     <HelpGroup title="The two lists">
       <HelpLine>
-        <b>Catalog</b>, {layout === 'stacked' ? 'in the panel under the room' : 'in the left rail'}, is what
-        is in this room; <b>Library</b>, on the right of the canvas, is what you can add.
+        <b>Catalog</b>, {catalogAt}, is what is in this room; <b>Library</b>, {libraryAt}, is what you can add.
       </HelpLine>
-      <HelpLine>
-        In either list, <Kb>Shift</Kb>-click picks a run of rows at once, and <Kb>Ctrl</Kb>-click adds that
-        piece to the room.
-      </HelpLine>
+      {touch ? (
+        <HelpLine>Tap a piece in the Library to drop it into the first clear spot.</HelpLine>
+      ) : (
+        <HelpLine>
+          In either list, <Kb>Shift</Kb>-click picks a run of rows at once, and <Kb>Ctrl</Kb>-click adds that
+          piece to the room.
+        </HelpLine>
+      )}
     </HelpGroup>
+  );
+}
+
+// The two touch cards. Every line is a gesture this app actually answers under a
+// finger, and each was checked against the code that answers it rather than
+// assumed from the desktop card: one finger orbits and two pinch and pan in 3D
+// (drei's OrbitControls, whose touch defaults `CameraRig` does not override); one
+// finger pans and two pinch on the plan (`PlanView`'s own touch branch); a piece
+// drags under a finger on both. What has no touch form — multi-select, the
+// context menu, Alt-click's list, the keys — is left out rather than translated
+// into a gesture that does nothing.
+function ModelTouchHelp() {
+  const phone = usePhoneStudio();
+  return (
+    <>
+      <HelpGroup title="Moving furniture">
+        <HelpLine>Drag a piece to slide it around the floor. It stops against whatever is in the way.</HelpLine>
+        <HelpLine>
+          <b>Move</b>, <b>Scale</b> and <b>Rotate</b> at the top choose what dragging does.
+        </HelpLine>
+        <HelpLine>
+          Tap a piece to choose it, then {phone ? 'tap its name in the toolbar' : 'open Details'} for its colour,
+          style and size.
+        </HelpLine>
+      </HelpGroup>
+
+      <TwoLists />
+
+      <HelpGroup title="Walls and the room">
+        <HelpLine>Tap a wall to pick a colour for it. Drag it to make the room bigger or smaller.</HelpLine>
+      </HelpGroup>
+
+      <HelpGroup title="Getting around">
+        <HelpLine>One finger on empty space turns the view. Two fingers pinch to zoom and slide it across.</HelpLine>
+        <HelpLine>The four buttons in the corner jump to a set view: from above, the front wall, the corner.</HelpLine>
+        {phone && <HelpLine>Snap, and the exports, are under More (⋯) at the top.</HelpLine>}
+      </HelpGroup>
+    </>
+  );
+}
+
+function PlanTouchHelp() {
+  const phone = usePhoneStudio();
+  return (
+    <>
+      <HelpGroup title="Moving furniture">
+        <HelpLine>
+          Drag a piece to move it. It stops against whatever is in the way, and tints red if it cannot go there.
+        </HelpLine>
+        <HelpLine>Drag the handle on a chosen piece to turn it.</HelpLine>
+        <HelpLine>Tap a wall to paint it, or drag it to make the room bigger or smaller.</HelpLine>
+      </HelpGroup>
+
+      <TwoLists />
+
+      <HelpGroup title="Getting around">
+        <HelpLine>One finger on empty floor slides the drawing. Two fingers pinch to zoom.</HelpLine>
+        {phone && <HelpLine>Snap, and the exports, are under More (⋯) at the top.</HelpLine>}
+      </HelpGroup>
+    </>
   );
 }
 

@@ -60,6 +60,7 @@
 // which is exactly the case `lib/transforms.ts` allows: the question is "has
 // anything been overridden", not "what is this piece's transform".
 
+import { usePhoneStudio } from './NarrowViewportBanner';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { Icon } from '@/components/ui/Icon';
@@ -103,23 +104,27 @@ export function RailFooter() {
       ? `Delete ${selectedCount} selected pieces from the scene`
       : `Delete ${selectedName} from the scene`;
   const confirm = useConfirm();
+  const phone = usePhoneStudio();
+
+  // With Add moved to the toolbar, a phone's footer can have nothing to hold; an
+  // empty tinted strip at the bottom of a sheet reads as a broken bar.
+  if (phone && selectedWall === null && selectedName == null && !hasAnyOverride) return null;
 
   return (
     <div className="rail-footer">
       {selectedWall !== null ? (
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ minWidth: 0 }}>
           <button
             onClick={() => setSelectedWall(null)}
-            className="ds-btn"
+            className="ds-btn ds-btn--sm"
             title="Finish with this wall"
-            style={{ width: '100%', height: 32, fontSize: 12, justifyContent: 'center' }}
           >
             <Icon name="x" size={12} />
             <span style={LABEL}>Done</span>
           </button>
         </div>
       ) : selectedName != null ? (
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ minWidth: 0 }}>
           {/* No confirm — pressing a button labelled Delete is a decision, and the
               shared path answers with an Undo toast rather than a dialog (see
               `removeParts`). Backspace is the one delete gesture that asks first,
@@ -136,14 +141,10 @@ export function RailFooter() {
               wants the latter. */}
           <button
             onClick={() => removeParts(selectedIds())}
-            className="ds-btn"
+            className="ds-btn ds-btn--sm"
             title={deleteLabel}
             aria-label={deleteLabel}
             style={{
-              width: '100%',
-              height: 32,
-              fontSize: 12,
-              justifyContent: 'center',
               color: 'var(--danger)',
               borderColor: 'var(--danger)',
             }}
@@ -153,9 +154,16 @@ export function RailFooter() {
           </button>
         </div>
       ) : null}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <AddPiecesButton />
-      </div>
+      {/* Each button as wide as its label, the way a dialog's actions sit: the
+          destructive one leading, the one that adds trailing. Stretched halves read
+          as a segmented control, and a lone "Add" spanning a 320px rail is a bar,
+          not a button. */}
+      {/* A phone's Add is its toolbar's primary action, one row below this. */}
+      {!phone && (
+        <div style={{ minWidth: 0, marginLeft: 'auto' }}>
+          <AddPiecesButton />
+        </div>
+      )}
       {hasAnyOverride && (
         <Tooltip label="Put everything back">
           <IconButton

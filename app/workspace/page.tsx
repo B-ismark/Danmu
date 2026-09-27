@@ -145,7 +145,7 @@ export default function WorkspacePage() {
       trail={[{ label: 'Rooms' }]}
       actions={
         <>
-          <Link href="/settings" className="ds-btn" style={{ height: 32, fontSize: 12 }}>
+          <Link href="/settings" className="ds-btn ds-btn--sm">
             <Icon name="settings" size={12} />
             Settings
           </Link>
@@ -161,7 +161,7 @@ export default function WorkspacePage() {
           {rooms.length > 0 && (
             <>
               <ImportSceneButton />
-              <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 32, fontSize: 12 }}>
+              <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--sm ds-btn--primary">
                 <Icon name="plus" size={12} />
                 New Room
               </Link>
@@ -173,7 +173,7 @@ export default function WorkspacePage() {
       <div style={{ position: 'relative' }}>
         <div>
           {!booted ? (
-            <div style={{ textAlign: 'center', padding: 60, color: 'var(--ink-3)', fontSize: 13 }}>
+            <div style={{ textAlign: 'center', padding: 60, color: 'var(--ink-3)', fontSize: 'var(--fs-body)' }}>
               Loading rooms…
             </div>
           ) : rooms.length === 0 ? (
@@ -193,8 +193,8 @@ export default function WorkspacePage() {
                 <div>
                   {/* The route had no heading element, so it had no document
                       outline and the display serif never rendered on it. */}
-                  <h1 style={{ fontSize: 30, letterSpacing: '-0.02em', marginBottom: 4 }}>Your rooms</h1>
-                  <div style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
+                  <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginBottom: 4 }}>Your rooms</h1>
+                  <div className="t-small">
                     <span className="mono">{rooms.length}</span> room{rooms.length === 1 ? '' : 's'}, newest edit
                     first
                   </div>
@@ -232,17 +232,17 @@ export default function WorkspacePage() {
                     borderRadius: 'var(--r-3)',
                   }}
                 >
-                  <span style={{ fontSize: 12.5, fontWeight: 700 }}>
+                  <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700 }}>
                     <span className="mono">{selected.length}</span> selected
                   </span>
                   <div style={{ flex: 1 }} />
-                  <button onClick={() => setSelected([])} className="ds-btn" style={{ height: 30, fontSize: 12 }}>
+                  <button onClick={() => setSelected([])} className="ds-btn ds-btn--sm">
                     Clear selection
                   </button>
                   <button
                     onClick={() => removeRooms(selectedRooms)}
-                    className="ds-btn"
-                    style={{ height: 30, fontSize: 12, color: 'var(--danger-text)', borderColor: 'var(--danger)' }}
+                    className="ds-btn ds-btn--sm"
+                    style={{ color: 'var(--danger-text)', borderColor: 'var(--danger)' }}
                   >
                     <Icon name="trash" size={12} />
                     Delete selected
@@ -260,14 +260,14 @@ export default function WorkspacePage() {
                     borderRadius: 'var(--r-card)',
                   }}
                 >
-                  <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 6 }}>
+                  <div style={{ fontSize: 'var(--fs-lead)', fontWeight: 600, marginBottom: 6 }}>
                     No room is called “{query.trim()}”.
                   </div>
-                  <p style={{ fontSize: 13, color: 'var(--ink-2)', margin: '0 0 16px' }}>
+                  <p className="t-body" style={{ margin: '0 0 16px' }}>
                     You have {rooms.length} room{rooms.length === 1 ? '' : 's'} — try a shorter word, or clear the
                     filter.
                   </p>
-                  <button onClick={() => setQuery('')} className="ds-btn" style={{ height: 32, fontSize: 12 }}>
+                  <button onClick={() => setQuery('')} className="ds-btn ds-btn--sm">
                     <Icon name="x" size={11} />
                     Clear filter
                   </button>
@@ -359,7 +359,7 @@ function NewRoomCard() {
         background: hover ? 'var(--accent-tint)' : 'transparent',
         borderColor: hover ? 'var(--accent-text)' : 'var(--edge)',
         color: hover ? 'var(--accent-text)' : 'var(--ink-2)',
-        transition: 'background .15s, border-color .15s, color .15s',
+        transition: 'background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out)',
       }}
     >
       <span
@@ -374,8 +374,8 @@ function NewRoomCard() {
       >
         <Icon name="plus" size={16} />
       </span>
-      <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em' }}>New room</span>
-      <span style={{ fontSize: 11.5, color: hover ? 'var(--accent-text)' : 'var(--ink-3)' }}>
+      <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600, letterSpacing: '-0.01em' }}>New room</span>
+      <span style={{ fontSize: 'var(--fs-caption)', color: hover ? 'var(--accent-text)' : 'var(--ink-3)' }}>
         Pick a footprint to start
       </span>
     </Link>
@@ -409,7 +409,7 @@ function RoomCard({
   // Secondary actions reveal on hover *or* keyboard focus, and stay out while
   // the card is idle: a permanent trash button 6px from Open meant tabbing 40
   // rooms passed 40 permanent-delete controls at the same weight as the primary
-  // one. (The CSS .row-action rule needs a .list-row ancestor, which a card is
+  // one. (The CSS .row-actions rule needs a .list-row ancestor, which a card is
   // not — hence the same behaviour in state here.)
   const revealed = hover || focused || selected || alwaysShowActions;
   const lift = hover && !reducedMotion;
@@ -427,7 +427,7 @@ function RoomCard({
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        transition: 'box-shadow .15s, transform .12s',
+        transition: 'box-shadow var(--dur-base) var(--ease-out), transform var(--dur-quick) var(--ease-out)',
         transform: lift ? 'translateY(-2px)' : 'none',
         boxShadow: [
           selected ? 'inset 0 0 0 2px var(--accent-text)' : '',
@@ -458,8 +458,8 @@ function RoomCard({
             label="Room name"
             // A pasted 400-character name had nothing stopping it.
             maxLength={60}
-            style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', flex: 1, minWidth: 0 }}
-            inputStyle={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 0 }}
+            style={{ fontSize: 'var(--fs-lead)', fontWeight: 600, letterSpacing: '-0.01em', flex: 1, minWidth: 0 }}
+            inputStyle={{ fontSize: 'var(--fs-body)', fontWeight: 600, flex: 1, minWidth: 0 }}
           />
           <div
             style={{
@@ -470,7 +470,7 @@ function RoomCard({
               // focus is unaffected by pointer-events, and landing on it flips
               // `revealed` anyway.
               pointerEvents: revealed ? 'auto' : 'none',
-              transition: 'opacity .15s',
+              transition: 'opacity var(--dur-base) var(--ease-out)',
             }}
           >
             <IconButton
@@ -492,7 +492,7 @@ function RoomCard({
           </div>
         </div>
 
-        <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+        <div className="t-hint">
           {editedLabel(room.updatedAt, today)} · <span className="mono">{room.itemCount}</span>{' '}
           {room.itemCount === 1 ? 'piece' : 'pieces'}
         </div>
@@ -534,8 +534,8 @@ function RoomCard({
         <Link
           href={href}
           onClick={onOpen}
-          className="ds-btn"
-          style={{ height: 32, fontSize: 12, justifyContent: 'center' }}
+          className="ds-btn ds-btn--sm"
+          style={{ justifyContent: 'center' }}
         >
           <Icon name="cube" size={11} />
           Open
@@ -551,8 +551,8 @@ function EmptyState() {
       <div className="ds-kicker" style={{ marginBottom: 12 }}>
         Ready when you are
       </div>
-      <h1 style={{ fontSize: 38, letterSpacing: '-0.02em', marginBottom: 10 }}>Decorate your first room.</h1>
-      <p style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 28 }}>
+      <h1 style={{ fontSize: 'var(--fs-hero)', letterSpacing: '-0.02em', marginBottom: 10 }}>Decorate your first room.</h1>
+      <p className="t-body" style={{ lineHeight: 1.55, marginBottom: 28 }}>
         Pick a footprint and start arranging furniture in real 3D — move, recolour, restyle, and relight
         every piece. No account, no upload. Capturing your real room is optional.
       </p>
@@ -562,7 +562,7 @@ function EmptyState() {
             so there is exactly one. The pairing this replaces — an ink "New Room" in
             the bar beside a terracotta "Create your first room" here, both pointing
             at /onboarding/layout-pick — is the case the rule in globals.css cites. */}
-        <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
+        <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--lg ds-btn--primary" style={{ padding: '0 20px' }}>
           <Icon name="plus" size={13} />
           Create your first room
         </Link>

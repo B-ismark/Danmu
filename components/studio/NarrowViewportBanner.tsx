@@ -8,13 +8,16 @@
 // desktop" and had to opt out through a warning, every single reload. It also
 // let iPad Pro landscape — exactly 1024px — walk straight into a pointer-only UI.
 //
-// So the gate asks two much narrower questions instead of one about width:
-//   · is this a touch-only pointer (no hover, coarse)? That is the real
-//     limitation, and it catches the iPad case width never could.
-//   · is the viewport under the reflow floor (400px)? Far below any zoom level
-//     a laptop can reach.
-// Everything between that floor and full width now *reflows* — see
-// `useStackedStudio`, which both studio pages read.
+// It then asked two narrower questions: is this a touch-only pointer, and is the
+// viewport under a 400px floor? **Both are gone as reasons to turn someone away.**
+// A phone or a tablet gets the studio now — the room full-screen with its panels
+// in a bottom sheet (`shells/SheetShell.tsx`) — and the touch question was the one
+// that most needed deleting: it told an iPad "the studio wants a mouse" in front
+// of a studio that works under a finger. The 400px floor had quietly turned away
+// every 360px Android phone, which is the commonest phone width there is.
+//
+// What is left is the one width nothing can lay out at: below WCAG 1.4.10's 320px
+// reflow target. Everything above it reflows.
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -22,10 +25,10 @@ import { Icon } from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
 import { useMediaQuery, useMediaQueryState } from '@/lib/use-media-query';
 
-/** Below this the studio cannot lay out at all. Chosen to sit under WCAG 1.4.10's
- *  320px reflow target plus chrome, and far under any browser-zoom viewport. */
-const MIN_WIDTH = 400;
-/** At or below this the rails stack under the canvas instead of flanking it. */
+/** Below this the studio cannot lay out at all: WCAG 1.4.10's reflow target, the
+ *  narrowest width anything is obliged to work at. */
+const MIN_WIDTH = 320;
+/** At or below this the rails become a bottom sheet instead of flanking the room. */
 const STACK_WIDTH = 1023;
 /** At or below this there is room for three columns but not three comfortable
  *  ones: 1024px with both rails at their token widths leaves the room less width
@@ -33,6 +36,13 @@ const STACK_WIDTH = 1023;
  *  width", which one boolean cannot express — tldraw carries a 0–7 ladder for
  *  the same reason. */
 const COMPACT_WIDTH = 1279;
+/** At or below this the studio is laid out for a PHONE, not merely a narrow window:
+ *  one app-bar row, a toolbar under the thumb, and panels that rise as sheets. It is
+ *  Material's compact width class (under 600dp), and Flutter's adaptive guidance
+ *  draws the same line for the same reason — past it the layout BRANCHES rather than
+ *  scaling. Between this and `STACK_WIDTH` is a tablet: the room with one panel
+ *  docked beside it (Material's supporting pane). */
+const PHONE_WIDTH = 599;
 const DISMISS_KEY = 'danmu-studio-gate-dismissed';
 
 /** Whether the studio should stack its rails under the canvas rather than sit in
@@ -72,10 +82,14 @@ export function useStudioLayout(): { layout: StudioLayout; ready: boolean } {
   };
 }
 
+/** True on a phone-width window — see `PHONE_WIDTH`. Exported from here so the
+ *  studio's breakpoints stay in one file. */
+export function usePhoneStudio(): boolean {
+  return useMediaQuery(`(max-width: ${PHONE_WIDTH}px)`);
+}
+
 export function NarrowViewportBanner() {
-  const touch = useMediaQuery('(hover: none) and (pointer: coarse)');
   const narrow = useMediaQuery(`(max-width: ${MIN_WIDTH - 1}px)`);
-  const reason: 'touch' | 'narrow' | null = touch ? 'touch' : narrow ? 'narrow' : null;
   // Start dismissed so a previously-dismissed gate never flashes before
   // localStorage has been read.
   const [dismissed, setDismissed] = useState(true);
@@ -84,7 +98,7 @@ export function NarrowViewportBanner() {
     setDismissed(localStorage.getItem(DISMISS_KEY) === '1');
   }, []);
 
-  if (!reason || dismissed) return null;
+  if (!narrow || dismissed) return null;
 
   // Esc / backdrop-less close dismisses for this session only. Choosing to open
   // the studio anyway is a decision worth remembering; pressing Escape is not.
@@ -98,8 +112,8 @@ export function NarrowViewportBanner() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
           <Link
             href="/onboarding/capture"
-            className="ds-btn ds-btn--primary"
-            style={{ height: 42, justifyContent: 'center', fontSize: 14 }}
+            className="ds-btn ds-btn--lg ds-btn--primary"
+            style={{ justifyContent: 'center' }}
           >
             <Icon name="camera" size={14} />
             Photograph the room here
@@ -108,7 +122,7 @@ export function NarrowViewportBanner() {
             <Link
               href="/workspace"
               className="ds-btn"
-              style={{ flex: 1, height: 38, justifyContent: 'center', fontSize: 13 }}
+              style={{ flex: 1, justifyContent: 'center' }}
             >
               <Icon name="arrow-left" size={12} /> All rooms
             </Link>
@@ -118,7 +132,7 @@ export function NarrowViewportBanner() {
                 setDismissed(true);
               }}
               className="ds-btn"
-              style={{ flex: 1, height: 38, justifyContent: 'center', fontSize: 13 }}
+              style={{ flex: 1, justifyContent: 'center' }}
             >
               Open it anyway
             </button>
@@ -126,19 +140,17 @@ export function NarrowViewportBanner() {
         </div>
       }
     >
-      <h1 id="studio-gate-title" style={{ fontSize: 24, lineHeight: 1.15, marginBottom: 10 }}>
-        {reason === 'touch' ? 'The studio wants a mouse or trackpad.' : 'This window is too narrow to lay out.'}
+      <h1 id="studio-gate-title" style={{ fontSize: 'var(--fs-title)', lineHeight: 1.15, marginBottom: 10 }}>
+        This window is too narrow to lay out.
       </h1>
-      <p style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.55, margin: '0 0 10px' }}>
-        {reason === 'touch'
-          ? 'Decorating means dragging furniture a centimetre at a time, nudging walls and scrubbing dimensions — all of which need a pointer that can hover. On a phone or tablet those gestures fight you.'
-          : `The parts list, the room and the inspector need at least ${MIN_WIDTH}px of width between them. Widen the window, or zoom out a step.`}
+      <p className="t-body" style={{ lineHeight: 1.55, margin: '0 0 10px' }}>
+        The room and its panels need at least {MIN_WIDTH}px of width. Widen the window, or zoom out a step.
       </p>
-      <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, margin: 0 }}>
-        Photographing the room <b>is</b> built for this device, though — shoot your walls here and the room will be
-        waiting when you open Danmu on a laptop.
+      <p className="t-body" style={{ lineHeight: 1.55, margin: 0 }}>
+        Photographing the room still works at this width — shoot your walls here and the room will be waiting on a
+        wider screen.
       </p>
-      <p style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5, margin: '10px 0 0' }}>
+      <p className="t-meta" style={{ lineHeight: 1.5, margin: '10px 0 0' }}>
         Opening it anyway works, and it is remembered — some panels will just be cramped.
       </p>
     </Modal>

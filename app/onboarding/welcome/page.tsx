@@ -66,7 +66,7 @@ export default function WelcomePage() {
           <span className="ds-kicker">Interior · Decoration studio</span>
           <h1
             style={{
-              fontSize: 'clamp(34px, 5vw, 54px)',
+              fontSize: 'var(--fs-hero)',
               lineHeight: 1.05,
               letterSpacing: '-0.035em',
               fontWeight: 500,
@@ -83,7 +83,7 @@ export default function WelcomePage() {
               the optional detect step really does POST wall photos to Gemini, so
               an unhedged "nothing leaves your device" would be untrue for anyone
               who switches it on. */}
-          <p style={{ fontSize: 15, color: 'var(--ink-2)', lineHeight: 1.6, margin: 0, maxWidth: 'var(--measure-hero)' }}>
+          <p style={{ fontSize: 'var(--fs-lead)', color: 'var(--ink-2)', lineHeight: 1.6, margin: 0, maxWidth: 'var(--measure-hero)' }}>
             Pick a room shape, drop in furniture, then move, recolour, restyle and relight every
             piece — live, in your browser. Nothing leaves your device, unless you switch on the
             optional AI step that spots furniture in a photo of a real room.
@@ -105,15 +105,14 @@ export default function WelcomePage() {
             <span className="ds-label" style={{ color: 'var(--accent-text)' }}>Start here</span>
           </div>
 
-          <h2 style={{ fontSize: 20, margin: '6px 0 6px' }}>Build your first room</h2>
-          <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, margin: '0 0 22px' }}>
+          <h2 style={{ fontSize: 'var(--fs-title)', margin: '6px 0 6px' }}>Build your first room</h2>
+          <p className="t-body" style={{ lineHeight: 1.55, margin: '0 0 22px' }}>
             Free, instant, and right in the browser. No sign-up, no upload, no key needed to start.
           </p>
 
           <button
             onClick={() => router.push('/onboarding/layout-pick')}
-            className="ds-btn ds-btn--accent"
-            style={{ height: 52, justifyContent: 'center', fontSize: 15, width: '100%' }}
+            className="ds-btn ds-btn--xl ds-btn--accent ds-btn--block-compact"
           >
             Start decorating
             <Icon name="arrow-right" size={15} color="var(--on-accent)" />
@@ -136,7 +135,7 @@ export default function WelcomePage() {
               // sentence, not a pill label". Without it the class's nowrap won and
               // the trailing chevron was cut off at the card's edge on a phone —
               // the same sentence, clipped instead of spilled.
-              style={{ height: 'auto', whiteSpace: 'normal', minHeight: 44, fontSize: 13, lineHeight: 1.35, padding: '8px 6px', color: 'var(--ink-2)', width: '100%', justifyContent: 'space-between', textAlign: 'left' }}
+              style={{ height: 'auto', whiteSpace: 'normal', minHeight: 44, fontSize: 'var(--fs-body)', lineHeight: 1.35, padding: '8px 6px', color: 'var(--ink-2)', width: '100%', justifyContent: 'space-between', textAlign: 'left' }}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="sparkles" size={13} color={keyState === 'valid' ? 'var(--accent-2)' : 'var(--ink-3)'} />
@@ -179,7 +178,7 @@ export default function WelcomePage() {
                     alignItems: 'center',
                     gap: 10,
                     marginTop: 10,
-                    fontSize: 12,
+                    fontSize: 'var(--fs-small)',
                   }}
                 >
                   {/* Accurate: the key is kept in this browser and only ever
@@ -207,7 +206,7 @@ export default function WelcomePage() {
                   </span>
                 </div>
 
-                <p id="welcome-key-hint" style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5, margin: '10px 0 0' }}>
+                <p id="welcome-key-hint" className="t-meta" style={{ lineHeight: 1.5, margin: '10px 0 0' }}>
                   Gemini keys start with “AIza”. Add one now or later in Settings — either way you
                   can start decorating.
                 </p>
@@ -216,8 +215,8 @@ export default function WelcomePage() {
                   href="https://aistudio.google.com/app/apikey"
                   target="_blank"
                   rel="noreferrer"
-                  className="ds-btn ds-btn--ghost"
-                  style={{ height: 44, justifyContent: 'center', fontSize: 13, color: 'var(--ink-2)', marginTop: 6 }}
+                  className="ds-btn ds-btn--lg ds-btn--ghost"
+                  style={{ justifyContent: 'center', color: 'var(--ink-2)', marginTop: 6 }}
                 >
                   How to get a free key
                   {/* target=_blank has to be visible, not a surprise. */}
@@ -300,11 +299,11 @@ function Feature({
             section titles, not a 14px list label. */}
         <h2
           className="sans"
-          style={{ fontSize: 14, fontWeight: 700, letterSpacing: 0, color: 'var(--ink)', lineHeight: 1.3 }}
+          style={{ fontSize: 'var(--fs-body)', fontWeight: 700, letterSpacing: 0, color: 'var(--ink)', lineHeight: 1.3 }}
         >
           {title}
         </h2>
-        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
+        <div className="t-body" style={{ lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
       </div>
     </li>
   );

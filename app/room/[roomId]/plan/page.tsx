@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { PlanView, type PlanViewHandle } from '@/components/studio/PlanView';
 import { PlanViewControls, ComfortLegend } from '@/components/studio/PlanChrome';
-import { CanvasTools, CanvasView, CanvasAide, ChromeDivider } from '@/components/studio/CanvasChrome';
+import { CanvasTools, CanvasView, CanvasAide } from '@/components/studio/CanvasChrome';
 import { UndoRedo } from '@/components/studio/UndoRedo';
 import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
 import { HoverCard } from '@/components/studio/HoverCard';
@@ -110,27 +110,25 @@ export default function PlanPage() {
           card and a zoom toolbar bottom-left (inside PlanView), and a legend
           bottom-right: four corners, on the tab that also had the least to say. */}
       <CanvasTools>
-        <button
-          onClick={() => setComfort((v) => !v)}
-          aria-pressed={comfort}
-          className={`ds-chip ${comfort ? 'ds-chip--accent' : ''}`}
-          title="Shade the floor a person needs to walk, open a door, and get into bed"
-          style={{
-            cursor: 'pointer',
-            fontWeight: 700,
-            borderColor: comfort ? 'var(--accent-text)' : 'var(--edge)',
-            background: comfort ? 'var(--accent-tint)' : 'var(--paper)',
-          }}
-        >
-          <Icon name="crosshair" size={10} />
-          Comfort zones
-        </button>
+        <div className="chrome-pill">
+          <button
+            type="button"
+            onClick={() => setComfort((v) => !v)}
+            aria-pressed={comfort}
+            className="chrome-pill__text"
+            title="Shade the floor a person needs to walk, open a door, and get into bed"
+          >
+            <Icon name="crosshair" size={12} />
+            Comfort zones
+          </button>
+        </div>
       </CanvasTools>
 
       <CanvasView>
+        {/* Pills, so the gap is the separation: no rule to strand when the zoom
+            pills are not on a phone (pinch is). */}
         <UndoRedo />
-        <ChromeDivider />
-        <PlanViewControls api={planApi} zoom={view.zoom} rot={view.rot} dimUnit={unitName.toLowerCase()} />
+        <PlanViewControls api={planApi} zoom={view.zoom} rot={view.rot} dimUnit={dimUnit} unitName={unitName.toLowerCase()} />
       </CanvasView>
 
       {/* The tab's one bottom-right aide, and only while the shading is on. */}

@@ -218,8 +218,69 @@
   --r-card: 20px;
   --r-full: 9999px;
 
+  /* Type scale. Six steps for the interface and two for headlines — there were
+     twenty-two sizes, half a pixel apart, and no two panels agreed on what a
+     caption was. Reach for the step that names the JOB, not the one whose pixels
+     match what was there before. The half-pixel steps are deliberate: this is a
+     dense tool UI in Nunito, where 11 and 12 are genuinely different jobs and a
+     modular ratio would jump straight past one of them.
+
+     Held by `tests/type-scale.test.ts`, which fails on a literal font size
+     anywhere in `app/` or `components/` outside the named exemptions. */
+  --fs-micro: 10.5px;    /* badges, keycaps, unit suffixes, meter ticks */
+  --fs-caption: 11.5px;  /* hints under a control, secondary row text, labels */
+  --fs-small: 12.5px;    /* rail rows, chips, compact buttons, fine print */
+  --fs-body: 13.5px;     /* buttons, body copy, inputs in panels */
+  --fs-lead: 16px;       /* a piece's name, card titles, an intro paragraph */
+  --fs-title: 22px;      /* dialog and section titles */
+  --fs-display: 30px;    /* page titles */
+  --fs-hero: clamp(34px, 5vw, 54px);  /* the one first-run headline per screen */
+
+  /* Motion. Three speeds and two curves — the app had five durations with no
+     rule about which. `quick` is feedback under the pointer (hover, press);
+     `base` is a control changing state; `slow` is something travelling (a sheet,
+     a progress sweep). The reduced-motion block at the bottom of this file keeps
+     colour and opacity at `quick` and drops travel. */
+  --dur-quick: 120ms;
+  --dur-base: 160ms;
+  --dur-slow: 300ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
+  --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
+
   --shadow-soft: 0 1px 2px rgba(42, 37, 32, 0.04), 0 6px 16px rgba(42, 37, 32, 0.06);
   --shadow-lift: 0 2px 4px rgba(42, 37, 32, 0.06), 0 12px 28px rgba(42, 37, 32, 0.10);
+  /* Glasshouse — the laptop studio (DockedShell, 1024px up). The room and both
+     rails are panes standing on a warm wash, `--pane-gap` apart. Every value here
+     is decorative: text on glass is measured on the COMPOSITE, and the wash is built
+     from paper tokens only, so no pane can end up darker than `--paper-3`, which
+     every text token already clears (tests/glass-skin.test.ts). */
+  --studio-wash: radial-gradient(120% 90% at 70% 0%, var(--paper) 0%, var(--paper-2) 45%, var(--paper-3) 100%);
+  --pane-gap: 10px;
+  --glass-fill: rgba(251, 248, 242, 0.74);        /* --paper at 74%: a rail */
+  --glass-fill-strong: rgba(251, 248, 242, 0.82); /* --paper at 82%: chrome over the room */
+  --glass-tone: rgba(42, 37, 32, 0.035);          /* a quieter band inside a pane (rail footer) */
+  --glass-rim: rgba(255, 255, 255, 0.72);         /* the pane's lit edge — decorative */
+  --glass-blur: blur(14px) saturate(140%);
+  --shadow-float: 0 1px 2px rgba(42, 37, 32, 0.05), 0 10px 30px rgba(60, 40, 20, 0.12);
+  /* Clay: a control is raised (a soft warm shadow under a lit top edge) or it is a
+     well (pressed in). It never replaces `--edge`, which stays the boundary. */
+  --clay-raise: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(120, 80, 50, 0.10), 0 3px 8px rgba(120, 80, 50, 0.10);
+  --clay-raise-hover: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 4px rgba(120, 80, 50, 0.12), 0 8px 18px rgba(120, 80, 50, 0.14);
+  --clay-well: inset 0 1px 2px rgba(120, 80, 50, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.7);
+  /* The lift, cast upward: a bottom sheet stands on the room from below. */
+  --shadow-sheet: 0 -1px 3px rgba(42, 37, 32, 0.06), 0 -12px 28px rgba(42, 37, 32, 0.10);
+  /* A tablet's one docked panel (SheetShell's pane): a rail's width, and at
+     768px the room keeps ~60% — Material's supporting pane asks 50/50 at a
+     medium width, and the room is the primary content here. */
+  --pane-w: clamp(300px, 40vw, 360px);
+  /* The phone's sheet at its tallest stops this short of the top, so a strip of
+     room always shows: the sheet is over the room, not instead of it. */
+  --sheet-top-gap: 56px;
+  /* …and at its middle detent it takes this share of the room: HIG's "medium",
+     about half, with the piece you are recolouring still in view above it. Read by
+     the drag too (`lib/sheet-detents.ts`), so a released sheet settles on the same
+     height the stylesheet draws. */
+  --sheet-half: 55%;
 }
 
 html, body {
@@ -230,6 +291,11 @@ html, body {
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
+
+/* `viewport-fit=cover` (app/layout.tsx) hands the notch and the rounded corners to
+   the page, so the page steps out of their way — top and sides here, the bottom
+   wherever something actually sits on it (the phone toolbar, a sheet's body). */
+body { padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
 * { box-sizing: border-box; }
 
 /* Headings lean on the display serif by default — warm + editorial. */
@@ -242,6 +308,17 @@ h1, h2, h3, .display {
    These reset the browser's default margins so an h1 can be dropped into an
    existing layout without shifting it. */
 h1, h2, h3 { margin: 0; }
+/* No orphans. A lone word on the last line of a banner ("…Photograph / it") reads
+   as a layout accident; `pretty` rebalances the final lines of running text and
+   `balance` evens out a two-line heading. Both are hints a browser may ignore,
+   which is the right failure — it falls back to ordinary wrapping. */
+p, li, figcaption, [role="status"], [role="alert"] { text-wrap: pretty; }
+/* A line of running text stops at about seventy characters however wide the window
+   is: Baymard measures 50–75 as the readable band, WCAG 1.4.8 caps it at 80. `ch`,
+   not px, so the cap follows the type size it is set in. A paragraph never gets
+   longer lines because the screen did. */
+p, li { max-inline-size: 70ch; }
+h1, h2, h3 { text-wrap: balance; }
 
 .mono { font-family: var(--font-mono); font-feature-settings: "tnum" 1, "zero" 1; }
 .sans { font-family: var(--font-sans); }
@@ -258,14 +335,14 @@ h1, h2, h3 { margin: 0; }
 
 .ds-label {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   letter-spacing: 0.02em;
   color: var(--ink-3);
   font-weight: 700;
 }
 .ds-kicker {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.01em;
   color: var(--accent-text);
   font-weight: 700;
@@ -298,7 +375,7 @@ h1, h2, h3 { margin: 0; }
    it belongs, on .ds-card and the real dividers. */
 .ds-btn {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-body);
   font-weight: 700;
   letter-spacing: -0.005em;
   height: 38px;
@@ -326,11 +403,43 @@ h1, h2, h3 { margin: 0; }
      "Add an AI key for furniture detection (optional)" is the one such button, and
      it lost its trailing chevron on a phone until it said so. */
   white-space: nowrap;
-  transition: background .15s, border-color .15s, transform .12s, box-shadow .15s;
+  transition: background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), transform var(--dur-quick) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 .ds-btn:hover { background: var(--paper-2); transform: translateY(-1px); box-shadow: var(--shadow-lift); }
 .ds-btn:active { transform: translateY(0); box-shadow: var(--shadow-soft); }
 .ds-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+/* A button is as wide as what it says. Full width is the phone convention for a
+   screen's one primary action — below 600px, Material's compact width class — and
+   only there: on a laptop the same bar is 500px of colour around a two-word label.
+   (Material buttons hug their label; Apple's "span the width" advice is watchOS'.) */
+@media (max-width: 599px) {
+  .ds-btn--block-compact { width: 100%; justify-content: center; }
+}
+/* A row of actions: primary first, wrapping rather than squeezing. On a phone it
+   becomes a stack, each action full width, so the thumb has the whole row. */
+/* A primary action and its quieter alternative, stacked, as wide as the wider of
+   the two: one block with one left edge, rather than a bar and a stray link. On a
+   phone the stack takes the full width, so the thumb has the whole row. */
+.action-row { display: inline-grid; grid-auto-flow: row; gap: 8px; max-inline-size: 100%; }
+.action-row > .ds-btn { justify-content: center; }
+@media (max-width: 599px) { .action-row { display: grid; } }
+/* Sizes. Buttons came in thirteen heights — 24 through 52, most of them two
+   pixels from a neighbour — each typed inline beside a font size that did not
+   always agree with it. Five now, and the label size and padding travel WITH
+   the height, because a 26px button with 16px of side padding and body-size
+   type is three decisions that were never made together.
+
+   · --xs  26  dense rows inside a panel (a card's secondary actions)
+   · --sm  32  panel and rail actions, toolbar buttons
+   · (md)  38  the default — dialogs, pages
+   · --lg  44  a page's main action, and anything a thumb has to hit
+   · --xl  52  the one front-door call to action
+
+   A size is not a variant: `ds-btn--sm ds-btn--primary` is a small primary. */
+.ds-btn--xs { height: 26px; padding: 0 10px; gap: 6px; font-size: var(--fs-caption); border-radius: var(--r-2); }
+.ds-btn--sm { height: 32px; padding: 0 12px; gap: 6px; font-size: var(--fs-small); }
+.ds-btn--lg { height: 44px; padding: 0 20px; }
+.ds-btn--xl { height: 52px; padding: 0 24px; font-size: var(--fs-lead); }
 
 /* ─── Busy ────────────────────────────────────────────────────────────────
    A ring in `currentColor`, so it takes the colour of whatever control it sits
@@ -401,7 +510,7 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--r-2); border: 1px solid transparent;
   background: transparent; color: var(--ink-2); cursor: pointer;
-  transition: background .12s, color .12s, border-color .12s;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out);
 }
 .icon-btn::after {
   content: ''; position: absolute; left: 50%; top: 50%;
@@ -428,7 +537,7 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   border: 1px solid var(--edge);
   background: var(--paper);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--ink-2);
@@ -442,7 +551,7 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 
 .ds-input {
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--fs-body);
   height: 42px;
   padding: 0 14px;
   border-radius: var(--r-2);
@@ -527,7 +636,7 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   width: 2px; height: 100%;
   background: transparent;
   transform: scaleX(0.5);
-  transition: background .12s, transform .12s;
+  transition: background var(--dur-quick) var(--ease-out), transform var(--dur-quick) var(--ease-out);
 }
 .rail-sash:hover > span,
 .rail-sash:focus-visible > span { background: var(--edge); transform: scaleX(1); }
@@ -731,19 +840,48 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   padding: 12px 16px; flex-shrink: 0;
   background: var(--paper-2);
 }
+.rail-footer .ds-btn { max-width: 100%; }
 .section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
 .section-title {
-  font-family: var(--font-sans); font-size: 11px; font-weight: 700;
+  font-family: var(--font-sans); font-size: var(--fs-caption); font-weight: 700;
   letter-spacing: 0.02em; color: var(--ink-3);
 }
-.section-meta { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.section-meta { font-size: var(--fs-small); font-weight: 600; color: var(--ink-3); }
+
+/* ─── Text styles ───────────────────────────────────────────────────────────
+   A size is half a decision; the other half is the ink it is set in. These are
+   the pairings the app actually uses, named for their JOB — the way a design
+   file names its text styles — so "a hint under a control" is one word instead
+   of two properties retyped a hundred times with the odd one drifting.
+   Leading and weight stay with the element: they depend on whether the text is
+   a label or a paragraph, which the job name does not say.
+
+   · t-title  a dialog or card title (the sans one; h1–h3 bring the serif)
+   · t-body   running copy in a dialog or a panel
+   · t-small  compact copy in a rail
+   · t-note   a secondary line that still carries content
+   · t-hint   a hint under or beside a control — quieter than a note
+   · t-meta   a count or a status beside a heading
+   · t-micro  a unit suffix, a tick label, a badge
+   `tests/type-scale.test.ts` holds the ceiling on inline styles these retire. */
+.t-title { font-size: var(--fs-title); font-weight: 600; letter-spacing: -0.01em; }
+.t-body  { font-size: var(--fs-body); color: var(--ink-2); }
+.t-small { font-size: var(--fs-small); color: var(--ink-2); }
+.t-note  { font-size: var(--fs-caption); color: var(--ink-2); }
+.t-hint  { font-size: var(--fs-caption); color: var(--ink-3); }
+.t-meta  { font-size: var(--fs-small); color: var(--ink-3); }
+.t-micro { font-size: var(--fs-micro); color: var(--ink-3); }
+/* One line, cut with an ellipsis. In a flex row it also needs `min-width: 0`
+   on itself, which stays inline where the element is a flex item — on anything
+   else it would change nothing, and on a grid item it would change too much. */
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .field {
   width: 100%; height: 34px; padding: 0 12px;
-  font-family: var(--font-sans); font-size: 13px;
+  font-family: var(--font-sans); font-size: var(--fs-body);
   background: var(--paper); color: var(--ink);
   border: 1px solid var(--edge); border-radius: var(--r-2);
-  outline: none; transition: border-color .12s, box-shadow .12s;
+  outline: none; transition: border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
 }
 .field:focus { border-color: var(--accent-text); box-shadow: 0 0 0 4px var(--accent-tint); }
 /* The combobox trigger in Select is a button, so it focuses on click too — give
@@ -782,10 +920,10 @@ textarea.field { border-radius: var(--r-2); }
 .list-row {
   display: flex; align-items: center; gap: 8px;
   width: 100%; padding: 9px 11px; border-radius: var(--r-2);
-  font-family: var(--font-sans); font-size: 13px; text-align: left;
+  font-family: var(--font-sans); font-size: var(--fs-body); text-align: left;
   background: transparent; border: 1px solid transparent; color: var(--ink);
   cursor: pointer; user-select: none;
-  transition: background .12s, box-shadow .12s;
+  transition: background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
 }
 .list-row:hover { background: var(--paper-2); }
 /* Selection = a tinted fill plus a 1px inset ring at 5.1:1, so the state is
@@ -794,14 +932,53 @@ textarea.field { border-radius: var(--r-2); }
 .list-row.is-selected {
   background: var(--accent-tint-strong);
   box-shadow: inset 0 0 0 1px var(--accent-text);
+  flex-wrap: wrap; row-gap: 2px; /* its actions open onto a line of their own — see .row-actions */
 }
-/* Row actions reveal on hover *or* keyboard focus. Without :focus-within a
-   tabbing user lands on an invisible control. */
-.row-action { opacity: 0; transition: opacity .15s, color .15s; }
-.list-row:hover .row-action,
-.list-row:focus-within .row-action,
-.list-row .row-action:focus-visible,
-.list-row .row-action.is-on { opacity: 1; }
+/* Row actions float over the END of the row rather than standing in it, so a
+   row's name gets the row's width and not what three invisible buttons leave of
+   it. They reveal on hover, on keyboard focus (without :focus-within a tabbing
+   user lands on an invisible control) and on the selected row — which is also
+   the touch path, since a touch screen has no hover. Hidden, they take no
+   pointer either: an invisible delete button is not one anybody means to press.
+
+   The fade under them is the row's own ground, layered the way the row paints
+   it, so the name ellipsises into the row instead of into a grey slab. */
+.list-row { position: relative; --row-ground: var(--paper); }
+.list-row:hover { --row-ground: var(--paper-2); }
+.list-row.is-selected { --row-ground: var(--paper); } /* the tint is layered on top, below */
+.row-actions {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 2px;
+  padding-left: 18px;
+  background: linear-gradient(to right, transparent, var(--row-ground) 16px);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+/* The selected row is the one row whose actions are always showing — and on a
+   touch screen, selecting is the only way to reach them — so floating them there
+   would cover the name permanently: ~100px of buttons over a ~150px row is the
+   "D…" this rule exists to prevent. So the selected row OPENS instead: its
+   actions drop to a line of their own under the name, right-aligned, and the
+   name keeps the whole first line. Always, not only when the name is long — a
+   row that changes shape depending on its text reads as a glitch, and one that
+   opens when you pick it reads as the pick. */
+.row-name { flex: 1 1 0; min-width: 0; }
+.list-row.is-selected .row-actions {
+  position: static; transform: none;
+  flex-basis: 100%; justify-content: flex-end;
+  padding-left: 0; background: none;
+}
+.list-row:hover .row-actions,
+.list-row:focus-within .row-actions,
+.list-row.is-selected .row-actions { opacity: 1; pointer-events: auto; }
+/* A keycap beside a control's label. On a screen with no hover there is
+   usually no keyboard either, and below 600px the label needs the room more
+   than the hint does — so the hint goes first, before any word is cut. */
+@media (hover: none), (max-width: 599px) {
+  .kbd-hint { display: none; }
+}
+/* A state mark — locked, hidden — after the name: small, quiet, always there. */
+.row-mark { display: inline-flex; flex-shrink: 0; color: var(--ink-3); }
 
 /* Editable text: a real button that swaps to an input on activate. Replaces
    four separate `<div onClick>` rename affordances. */
@@ -814,7 +991,7 @@ textarea.field { border-radius: var(--r-2); }
 .editable:hover { background: var(--paper-2); }
 
 .tag {
-  font-size: 10px; font-weight: 600; color: var(--ink-3);
+  font-size: var(--fs-micro); font-weight: 600; color: var(--ink-3);
   text-transform: capitalize; background: var(--paper-2);
   border-radius: var(--r-full); padding: 2px 8px; white-space: nowrap;
 }
@@ -825,6 +1002,97 @@ textarea.field { border-radius: var(--r-2); }
   background: var(--paper); border: 1px solid var(--edge);
   border-radius: var(--r-2); box-shadow: var(--shadow-lift);
 }
+/* The four camera views, a 2×2 in the canvas's bottom-right corner (ViewGizmo).
+   Same family as `.chrome-pill` below: a container with a quiet rim and quiet cells. */
+.gizmo {
+  display: grid; gap: 2px; padding: 3px;
+  background: var(--paper); border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-3); box-shadow: var(--shadow-float);
+}
+.gizmo > button { border-radius: var(--r-2); transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out); }
+.gizmo > button:hover:not([aria-pressed="true"]) { background: var(--paper-2); color: var(--ink); }
+
+/* ── Floating chrome: one capsule per group ────────────────────────────────────
+   Everything that floats over the room (undo/redo, the plan's zoom and turn, the
+   move / scale / rotate modes, Snap, Add, Comfort zones) is a PILL: a fully rounded
+   container holding quiet controls. It replaces an outlined box around outlined
+   buttons — two boundaries per control, which read as dated and as noise.
+
+   The rim is `--hairline-strong`, not `--edge`, and that is the rule working rather
+   than an exception to it: the pill is a CONTAINER and is not pressable. Every
+   control inside is identified by its own glyph or word (--ink-2 / --ink, ≥ 7:1 on
+   --paper), which is what WCAG 1.4.11 asks of a borderless control, and the pill
+   is lifted off the room by `--shadow-float`. A pressed state is a filled capsule
+   (`--ink`, or `--accent-tint` for a toggle), never a border. Standalone controls
+   elsewhere keep `--edge`. */
+.chrome-pill {
+  display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;
+  padding: 3px;
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-float);
+}
+.chrome-pill .icon-btn { border-radius: var(--r-full); }
+/* A word button inside a pill (Fit, Snap, Add, Comfort zones): the same height as
+   the icon buttons beside it, a capsule of its own for hover and pressed. */
+.chrome-pill__text {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  height: 30px; padding: 0 12px;
+  white-space: nowrap;
+  border: 0; border-radius: var(--r-full);
+  background: transparent; color: var(--ink-2);
+  font-family: var(--font-sans); font-size: var(--fs-small); font-weight: 700;
+  cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.chrome-pill__text:hover { background: var(--paper-2); color: var(--ink); }
+.chrome-pill__text.is-on,
+.chrome-pill__text[aria-pressed="true"],
+.chrome-pill__text[aria-expanded="true"] { background: var(--accent-tint); color: var(--accent-text); }
+.chrome-pill__text:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; }
+/* Thumb height on a phone, level with the 40px icon buttons beside it. */
+@media (max-width: 599px) { .chrome-pill__text { height: 40px; } }
+/* A number that changes while you press beside it (zoom %, degrees). Tabular and
+   given a floor wide enough for its longest value, so the + and − never shift under
+   the pointer as the number grows a digit. */
+.chrome-pill__readout {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 4px; white-space: nowrap;
+  font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums; color: var(--ink-3);
+}
+.chrome-pill__readout--zoom { min-width: 9ch; }  /* "cm · 100%" — the longest unit × zoom */
+.chrome-pill__readout--deg { min-width: 4ch; }   /* "-90°" / "270°" */
+/* A divider INSIDE a pill only, so it can never be stranded by its neighbour hiding. */
+.chrome-pill__rule { width: 1px; height: 16px; margin: 0 3px; flex-shrink: 0; background: var(--hairline-strong); }
+
+/* A key floating over the room (the plan's ComfortLegend): the pill's rim and lift,
+   a card's corners, because it may be two lines. */
+.chrome-legend {
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-float);
+}
+
+/* The three drag modes as a segmented pill. It may shrink (the labels ellipsise,
+   see TransformToolbar), so unlike its siblings it has a floor of 0 and clips. */
+.chrome-seg { flex-shrink: 1; min-width: 0; overflow: hidden; }
+.chrome-seg__btn {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  height: 30px; padding: 0 12px;
+  border: 0; border-radius: var(--r-full);
+  background: transparent; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: var(--fs-small); font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.chrome-seg__btn.is-live { color: var(--ink-2); }
+.chrome-seg__btn:hover:not([aria-pressed="true"]) { background: var(--paper-2); color: var(--ink); }
+.chrome-seg__btn[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
+/* Inside, because the pill clips: an outside ring would be cut at the rim. */
+.chrome-seg__btn:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; }
 .toolbar {
   display: inline-flex; align-items: center;
   background: var(--paper); border: 1px solid var(--edge);
@@ -905,6 +1173,273 @@ textarea.field { border-radius: var(--r-2); }
    that turns those columns into rows lives in the 720px block below. */
 .split { display: grid; min-height: 0; }
 
+/* ── Glasshouse, docked (laptops) ────────────────────────────────────────────
+   The rails stay docked — they own their columns, and the room is never under
+   them — but the three columns are panes on a wash rather than strips ruled off
+   by hairlines. See Design.md § Glasshouse on a laptop.
+
+   **No `backdrop-filter` on a rail, and that is not a shortcut.** A filter makes
+   its element the containing block for `position: fixed` descendants (unlike the
+   rails' `container-type`, measured not to — see the container-query note), and
+   four things inside the rails position themselves from viewport coordinates: the
+   Select dropdown, the room report, the tooltip and the colour-mixer scrim. They
+   would all land a top bar too low. It would buy nothing either: nothing moves
+   behind a docked pane, and a blurred smooth wash is the same wash. The rails are
+   glass by tint, rim and shadow; the blur goes where the room is behind it. */
+.split--glass {
+  background: var(--studio-wash);
+  padding: var(--pane-gap);
+  gap: var(--pane-gap);
+}
+.split--glass > .rail {
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-rim);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-float);
+}
+.split--glass > #studio-canvas {
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-float);
+}
+/* The footer is a quieter band of the same pane, so it takes the pane's lower
+   corners (inside the 1px rim) instead of drawing square ones past them. */
+.split--glass .rail-footer {
+  background: var(--glass-tone);
+  border-radius: 0 0 calc(var(--r-card) - 1px) calc(var(--r-card) - 1px);
+}
+/* The sash sits in the middle of the gap between two panes, not on a rail's edge. */
+.split--glass .rail-sash--left { right: calc(-5px - var(--pane-gap) / 2); }
+.split--glass .rail-sash--right { left: calc(-5px - var(--pane-gap) / 2); }
+
+/* Clay, in the rails: buttons are raised, and segmented controls and fields are
+   wells. `--edge` stays on all of them — the shadow is a finish, not a boundary. */
+.split--glass .rail .ds-btn:not(.ds-btn--ghost) { box-shadow: var(--clay-raise); }
+.split--glass .rail .ds-btn:not(.ds-btn--ghost):hover { box-shadow: var(--clay-raise-hover); }
+.split--glass .rail .ds-btn:not(.ds-btn--ghost):active { box-shadow: var(--clay-well); }
+.split--glass .rail .toolbar,
+.split--glass .rail .field { box-shadow: var(--clay-well); }
+.split--glass .rail .field:focus,
+.split--glass .rail .field:focus-visible { box-shadow: 0 0 0 4px var(--accent-tint); }
+
+/* Real glass over the room: the chrome clusters floating on the canvas. The room
+   moves behind these, so here the blur is doing something. */
+.split--glass #studio-canvas .canvas-chrome :is(.toolbar, .chrome-pill, .chrome-legend, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) {
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+/* A standalone control keeps `--edge`; a pill or the gizmo keeps its container rim
+   and gains a lit top edge, which is what makes frosted glass read as glass. */
+.split--glass #studio-canvas .canvas-chrome :is(.toolbar, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) { border-color: var(--edge); }
+.split--glass #studio-canvas .canvas-chrome :is(.chrome-pill, .chrome-legend, .gizmo) { box-shadow: inset 0 1px 0 var(--glass-rim), var(--shadow-float); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .split--glass #studio-canvas .canvas-chrome :is(.toolbar, .chrome-pill, .chrome-legend, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) { background: var(--paper); }
+}
+/* Someone who has asked for less transparency gets solid panes, same layout. */
+@media (prefers-reduced-transparency: reduce) {
+  .split--glass > .rail { background: var(--paper); }
+  .split--glass .rail-footer { background: var(--paper-2); }
+  .split--glass #studio-canvas .canvas-chrome :is(.toolbar, .chrome-pill, .chrome-legend, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) {
+    background: var(--paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* The phone app bar (TopBar on a phone): one 56px row. Every control in it is a
+   44px square (Apple's minimum hit region) and the room name takes what is left. */
+.app-bar {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  min-height: 56px; padding: 6px 6px 6px 2px;
+  background: var(--paper); border-bottom: 1px solid var(--hairline);
+}
+.app-bar__btn { width: 44px; height: 44px; flex-shrink: 0; color: var(--ink-2); }
+.app-bar .editable { padding: 0 6px; min-height: 44px; }
+
+/* The More menu: rows a thumb can hit — 48px, Material's target — under the bar's
+   trailing edge, never wider than the screen. */
+/* The help card scrolls past this. On a laptop 420px sits beside the room; on a
+   phone the card hangs from the app bar over a room nobody is using while they
+   read, so it may reach down to just above the toolbar and show its whole touch
+   card rather than stop mid-sentence at 420. */
+/* Width is capped against the window as well as stated: none of the slots that
+   render the card can promise it 320px. */
+.help-card { max-height: min(420px, 60vh); width: min(320px, calc(100vw - 32px)); }
+/* Help hangs under the "?" it opens from, right edges aligned, so it grows left. */
+.help-pop {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  z-index: var(--z-popover); text-align: left;
+}
+.help-pop--coach { width: min(300px, calc(100vw - 32px)); }
+@media (max-width: 599px) {
+  .help-card { max-height: calc(100dvh - 160px); }
+  /* A phone opens help from More, at the bar's far edge, and a card anchored there
+     sat 6px from one side of the screen and 34–64px from the other. It takes the
+     screen's 16px margins instead, just under the 56px bar. */
+  .app-bar .help-pop { position: fixed; top: 64px; left: 16px; right: 16px; }
+  .app-bar .help-pop .help-card, .app-bar .help-pop--coach { width: auto; }
+}
+.more-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: var(--z-popover);
+  width: min(300px, calc(100vw - 24px));
+  padding: 6px; display: flex; flex-direction: column; gap: 2px;
+}
+.more-menu__heading { padding: 10px 10px 4px; }
+.more-menu__field { display: grid; gap: 6px; padding: 2px 10px 8px; }
+.menu-row {
+  display: flex; align-items: center; gap: 12px; min-height: 48px; width: 100%;
+  padding: 8px 10px; text-align: left;
+  background: transparent; border: 0; border-radius: var(--r-2); cursor: pointer;
+  color: var(--ink-2);
+}
+.menu-row:hover, .menu-row:focus-visible { background: var(--paper-2); }
+.menu-row__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.menu-row__label { font-size: var(--fs-body); font-weight: 700; color: var(--ink); }
+
+/* The studio below 1024px (SheetShell) — two shapes, and neither is the laptop
+   layout made smaller. See that file's header for where each choice comes from. */
+.shell-room { min-height: 0; min-width: 0; display: grid; }
+.shell-room > * { min-height: 0; min-width: 0; }
+/* The rail bodies, reused inside a sheet or the tablet pane. `.rail` is
+   `display: flex`, which outranks the UA's `[hidden] { display: none }`. */
+.sheet__rail { flex: 1 1 auto; height: auto; min-height: 0; border: 0; }
+.sheet__rail[hidden] { display: none; }
+
+/* Tablet: Material's supporting pane — the room, and one panel docked beside it. */
+.pane-shell {
+  height: 100%; min-height: 0; overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr) var(--pane-w);
+}
+.pane { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--hairline); }
+.pane__body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.panel-tabs {
+  display: flex; gap: 4px; flex-shrink: 0; padding: 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.panel-tab {
+  flex: 1 1 0; min-width: 0; height: 44px; padding: 0 12px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: var(--font-sans); font-size: var(--fs-body); font-weight: 600;
+  color: var(--ink-2); background: transparent;
+  border: 1px solid transparent; border-radius: var(--r-2); cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.panel-tab[aria-selected="true"] { background: var(--paper-2); color: var(--ink); border-color: var(--edge); }
+.panel-tab__dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 999px; background: var(--accent); }
+
+/* Phone: the room full-screen, a toolbar under the thumb, one sheet at a time.
+   The toolbar is a grid ROW rather than `position: fixed` — bars in flow are what
+   iOS Safari's collapsing toolbar leaves alone — and it clears the home indicator
+   with the safe-area inset (`viewport-fit=cover`, app/layout.tsx). */
+.sheet-shell {
+  position: relative; height: 100%; min-height: 0; overflow: hidden;
+  display: grid; grid-template-rows: minmax(0, 1fr) auto;
+}
+.sheet-shell__stage { grid-row: 1; position: relative; min-height: 0; display: grid; overflow: hidden; }
+.phone-toolbar {
+  display: flex; justify-content: center; gap: 4px;
+  padding: 6px 12px max(6px, env(safe-area-inset-bottom));
+  background: var(--paper);
+  border-top: 1px solid var(--hairline);
+}
+/* A toolbar item: icon over a one-word label, 56px tall — past Apple's 44pt and
+   Material's 48dp, because a bottom edge is where Hoober measured touches landing
+   least accurately. Items share the bar but stop at 128px: three of them do not
+   become three 120px slabs on a 430px phone. */
+.phone-tool {
+  flex: 1 1 0; min-width: 0; max-width: 128px; min-height: 56px; padding: 6px 8px;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-family: var(--font-sans); font-size: var(--fs-caption); font-weight: 700;
+  color: var(--ink-2); background: transparent;
+  border: 0; border-radius: var(--r-3); cursor: pointer;
+  touch-action: manipulation;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.phone-tool > .truncate { max-width: 100%; }
+.phone-tool[aria-expanded="true"] { background: var(--paper-2); color: var(--ink); }
+/* The one primary action (Add, or the selected piece) — tinted, never a second fill. */
+.phone-tool[data-prominent] { color: var(--accent-text); background: var(--accent-tint); }
+.phone-tool[data-prominent][aria-expanded="true"] { box-shadow: inset 0 0 0 1px var(--accent-text); }
+
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: var(--sheet-half);
+  display: flex; flex-direction: column;
+  background: var(--paper);
+  border-top: 1px solid var(--hairline);
+  border-radius: var(--r-3) var(--r-3) 0 0;
+  box-shadow: var(--shadow-sheet);
+  z-index: var(--z-panel);
+  /* Visible from the first frame of the rise (`step-start`)… */
+  transition: height var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out), visibility var(--dur-slow) step-start;
+}
+.sheet[data-snap="full"] { height: calc(100% - var(--sheet-top-gap)); }
+/* Closed is off the bottom edge and out of the accessibility tree; `visibility`
+   waits for the slide to finish before it hides anything. */
+.sheet[data-snap="closed"] {
+  transform: translateY(calc(100% + 16px)); visibility: hidden;
+  /* …and hidden only once the slide down has finished (`step-end`). */
+  transition: height var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out), visibility var(--dur-slow) step-end;
+}
+/* A finger on the grabber owns the height; easing it would trail the finger. */
+.sheet[data-dragging] { transition: none; }
+.sheet__head {
+  position: relative; flex-shrink: 0;
+  display: flex; align-items: center; gap: 8px;
+  min-height: 56px; padding: 12px 6px 4px 16px;
+  border-bottom: 1px solid var(--hairline);
+  /* The head is the drag surface: the browser must not scroll the page with it. */
+  touch-action: none; user-select: none;
+}
+/* The grabber: a 36×4 bar drawn near the top edge, in a 64 × 44 hit box that
+   reaches down into the head (Material's handle has a 48dp touch area; a 20px strip
+   was a target only a mouse could find). */
+.sheet__handle {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 64px; height: 44px; padding: 8px 0 0;
+  display: grid; place-items: start center;
+  background: none; border: 0; border-radius: var(--r-1); cursor: grab;
+}
+.sheet__handle > span { width: 36px; height: 4px; border-radius: 999px; background: var(--hairline-strong); }
+.sheet__title {
+  flex: 1 1 auto; min-width: 0;
+  font-family: var(--font-sans); font-size: var(--fs-lead); font-weight: 700; color: var(--ink);
+}
+/* A touch screen types a number on its number pad; the stepper's 16px chevrons are
+   a mouse's affordance. `min-height` rather than `height`, because the field's
+   height is set inline and a minimum still wins over it. */
+/* A row of NumberFields (room size, a piece's exact size). As many across as fit
+   at `--field-min`, which the row computes from its own longest value
+   (`fieldMinWidth`), so a narrow rail puts the third field on the next line rather
+   than printing "6.0" for 6.00. */
+.fields-row {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--field-min, 64px), 100%), 1fr));
+}
+.num-field__steps {
+  position: absolute; right: 3px; top: 3px; bottom: 3px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+@media (pointer: coarse) {
+  .num-field__steps { display: none; }
+  .num-field > .field { min-height: 44px; }
+  /* A section's disclosure row is the thing a thumb opens most in a panel. */
+  .rail-section-toggle { min-height: 44px; }
+}
+/* Under a finger the Library's rows are 44px, not a mouse's 32 — and so is every
+   small button in the phone's sheet (Fix, Shuffle, Room checks): the sheet is only
+   ever under a finger. */
+.catalog-touch .ds-btn--sm,
+.sheet .ds-btn--sm { height: auto; min-height: 44px; }
+.sheet__close { width: 44px; height: 44px; flex-shrink: 0; color: var(--ink-2); }
+.sheet__body {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+  /* A scroll that reaches the end of a panel stops there, rather than dragging the
+     page (or pulling to refresh) behind it. */
+  overscroll-behavior: contain;
+}
+
 /* Reassurance, not feedback: "Saves as you go" is worth a laptop's pixels and
    not a small laptop's. The dot keeps its tooltip and the live region keeps
    announcing, so hiding the words costs a screen-reader user nothing — and the
@@ -950,7 +1485,7 @@ textarea.field { border-radius: var(--r-2); }
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-property: background-color, background, border-color, color, box-shadow, opacity !important;
-    transition-duration: 120ms !important;
+    transition-duration: var(--dur-quick) !important;
     scroll-behavior: auto !important;
   }
   .ds-btn:hover, .ds-btn:active, .ds-card:hover { transform: none !important; }

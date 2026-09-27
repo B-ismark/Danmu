@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { candelaFromLumens, candelaFromLumensInCone, hexFromKelvin } from '@/lib/light-units';
+import { candelaFromLumens, candelaFromLumensInCone, hexFromKelvin, shadeGlow } from '@/lib/light-units';
 
 const channels = (hex: string) => [
   parseInt(hex.slice(1, 3), 16),
@@ -84,5 +84,17 @@ describe('hexFromKelvin', () => {
       // Normalised, not clipped — one channel is always at the top.
       expect(Math.max(...channels(hex))).toBe(255);
     }
+  });
+});
+
+describe('shadeGlow', () => {
+  it('reads 0.45 for a 60 W-equivalent bulb and scales linearly', () => {
+    expect(shadeGlow(800)).toBeCloseTo(0.45, 9);
+    expect(shadeGlow(400)).toBeCloseTo(0.225, 9);
+  });
+  it('caps a very bright bulb, and a dark or broken one glows not at all', () => {
+    expect(shadeGlow(5000)).toBe(0.9);
+    expect(shadeGlow(0)).toBe(0);
+    expect(shadeGlow(Number.NaN)).toBe(0);
   });
 });

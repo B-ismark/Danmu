@@ -1,5 +1,6 @@
 'use client';
 
+import { useMediaQuery } from '@/lib/use-media-query';
 import { useEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
@@ -9,7 +10,7 @@ import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { Select } from '@/components/ui/Select';
-import { NumberField } from '@/components/ui/NumberField';
+import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { SwapModelModal } from './RegenerateModal';
 import { RailSection } from './RailSection';
@@ -59,13 +60,18 @@ export function Inspector() {
   const { report } = useRoomReport();
 
   const [swapOpen, setSwapOpen] = useState(false);
+  // "Tap" under a finger, "click" under a mouse: the verb follows the pointer, not
+  // the window's width — a touch laptop is still a laptop.
+  const touch = useMediaQuery('(pointer: coarse)');
 
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
 
   if (!part || !id)
     return (
-      <div style={{ padding: 20, textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, lineHeight: 1.5 }}>
-        Click a piece of furniture to recolour, restyle or move it — or click a wall to paint it.
+      <div className="t-meta" style={{ padding: 20, textAlign: 'center', lineHeight: 1.5 }}>
+        {touch
+          ? 'Tap a piece of furniture to recolour, restyle or move it — or tap a wall to paint it.'
+          : 'Click a piece of furniture to recolour, restyle or move it — or click a wall to paint it.'}
       </div>
     );
 
@@ -300,15 +306,15 @@ export function Inspector() {
             value={part.name}
             label="Furniture name"
             onCommit={(next) => updatePart(id!, { name: next })}
-            style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}
-            inputStyle={{ fontSize: 16, fontWeight: 500, height: 32 }}
+            style={{ flex: 1, minWidth: 0, fontSize: 'var(--fs-lead)', fontWeight: 500, letterSpacing: '-0.01em' }}
+            inputStyle={{ fontSize: 'var(--fs-lead)', fontWeight: 500, height: 32 }}
           />
           {/* Not "Locked": the piece drags, resizes and recolours like any other.
               What the flag means is where it came from — see ScenePart.locked. */}
           {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>From photo</Pill>}
         </div>
 
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2, paddingLeft: 4, textTransform: 'capitalize' }}>
+        <div className="t-hint" style={{ marginTop: 2, paddingLeft: 4, textTransform: 'capitalize' }}>
           {/* shape ids are hyphenated internally ("chair-armchair") — say it in words */}
           {part.category} · {part.shape.replace(/-/g, ' ')}
         </div>
@@ -358,7 +364,7 @@ export function Inspector() {
               : placementTone === 'warn'
                 ? 'var(--warn-text)'
                 : 'var(--success-text)',
-          fontSize: 12,
+          fontSize: 'var(--fs-small)',
           lineHeight: 1.35,
           // The tell is the ICON and the words; the colour is the third signal, not the
           // only one. And `minWidth: 0` on the text so a long piece name ellipsises
@@ -459,10 +465,10 @@ export function Inspector() {
             one with no CSS reader left is plumbing wearing a rule's name. */}
         {!part.wallMounted && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
-            <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+            <button onClick={snapToNearestWall} className="ds-btn ds-btn--sm" title="Move to the nearest wall and face the room" style={{ fontSize: 'var(--fs-caption)', gap: 6, justifyContent: 'center' }}>
               <Icon name="snap-wall" size={13} /> Wall
             </button>
-            <button onClick={groundToFloor} className="ds-btn" title="Put this piece on the floor, without moving it sideways" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+            <button onClick={groundToFloor} className="ds-btn ds-btn--sm" title="Put this piece on the floor, without moving it sideways" style={{ fontSize: 'var(--fs-caption)', gap: 6, justifyContent: 'center' }}>
               <Icon name="snap-floor" size={13} /> Floor
             </button>
           </div>
@@ -492,9 +498,9 @@ export function Inspector() {
           className={isGeneric ? 'ds-btn' : 'ds-btn ds-btn--primary'}
           title="Pick a different model from the Library"
           style={{
-            width: '100%',
+            alignSelf: 'flex-start',
             height: 34,
-            fontSize: 12,
+            fontSize: 'var(--fs-small)',
             gap: 6,
             justifyContent: 'center',
             ...(isGeneric
@@ -508,9 +514,9 @@ export function Inspector() {
         {hasOverrides && (
           <button
             onClick={() => resetTransforms(id!)}
-            className="ds-btn"
+            className="ds-btn ds-btn--sm"
             title="Undo the moves, turns and resizes you made to this piece"
-            style={{ width: '100%', height: 30, gap: 6, justifyContent: 'center', fontSize: 11 }}
+            style={{ alignSelf: 'flex-start', gap: 6, fontSize: 'var(--fs-caption)' }}
           >
             <Icon name="refresh" size={12} /> Back to where it started
           </button>
@@ -625,7 +631,7 @@ function LightControls({
           `scrollWidth > clientWidth` read off the live box, which no test in this
           repo can do. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        <label htmlFor={`lm-${part.id}`} style={{ fontSize: 12, color: 'var(--ink-2)', minWidth: 66, flex: '0 1 auto' }}>
+        <label htmlFor={`lm-${part.id}`} className="t-small" style={{ minWidth: 66, flex: '0 1 auto' }}>
           Brightness
         </label>
         <NumberField
@@ -641,7 +647,7 @@ function LightControls({
           ariaLabel="Brightness in lumens"
           style={{ width: 104, maxWidth: '100%', minWidth: 0 }}
         />
-        <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>lm</span>
+        <span className="t-meta">lm</span>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {WARMTHS.map((w) => {
@@ -659,7 +665,7 @@ function LightControls({
           );
         })}
       </div>
-      <p style={{ margin: '8px 0 0', fontSize: 11.5, lineHeight: 1.45, color: 'var(--ink-3)' }}>
+      <p className="t-hint" style={{ margin: '8px 0 0', lineHeight: 1.45 }}>
         A typical bulb is 400–800 lm. Switch the room to Evening to see what this
         one actually does.
       </p>
@@ -704,12 +710,12 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
   return (
     <RailSection title="On the surface" meta={summary} open={open} onToggle={() => setOpen((v) => !v)}>
       {isAuto && (
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8, lineHeight: 1.4 }}>
+        <div className="t-hint" style={{ marginBottom: 8, lineHeight: 1.4 }}>
           Showing suggested props. Add or remove to make it your own.
         </div>
       )}
       {items.length === 0 && !isAuto && (
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8, lineHeight: 1.4 }}>
+        <div className="t-hint" style={{ marginBottom: 8, lineHeight: 1.4 }}>
           Bare surface. Add something below, or go back to the suggestion.
         </div>
       )}
@@ -717,7 +723,7 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
           {items.map((it) => (
             <div key={it.id} className="list-row" style={{ cursor: 'default', padding: '5px 8px', background: 'var(--paper-2)' }}>
-              <span style={{ flex: 1, fontSize: 12, fontWeight: 600 }}>{DECOR_LABEL[it.kind]}</span>
+              <span style={{ flex: 1, fontSize: 'var(--fs-small)', fontWeight: 600 }}>{DECOR_LABEL[it.kind]}</span>
               <IconButton
                 icon="x"
                 label={`Remove ${DECOR_LABEL[it.kind].toLowerCase()}`}
@@ -737,11 +743,11 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
         ))}
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        <button onClick={() => onChange([])} className="ds-btn" style={{ flex: 1, height: 28, fontSize: 11, justifyContent: 'center' }}>
+        <button onClick={() => onChange([])} className="ds-btn ds-btn--xs" style={{ flex: 1, justifyContent: 'center' }}>
           Clear
         </button>
         {!isAuto && (
-          <button onClick={() => onChange(undefined)} className="ds-btn" style={{ flex: 1, height: 28, fontSize: 11, justifyContent: 'center' }}>
+          <button onClick={() => onChange(undefined)} className="ds-btn ds-btn--xs" style={{ flex: 1, justifyContent: 'center' }}>
             <Icon name="refresh" size={10} /> Suggested
           </button>
         )}
@@ -778,8 +784,8 @@ function WallInspector({ index }: { index: number }) {
   return (
     <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', flex: '0 0 auto', minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
-        <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>{name}</div>
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
+        <div style={{ fontSize: 'var(--fs-lead)', fontWeight: 500, letterSpacing: '-0.01em' }}>{name}</div>
+        <div className="t-hint" style={{ marginTop: 2 }}>
           {seg ? (
             <>
               <span className="mono">{seg.len.toFixed(2)} m</span> wide ·{' '}
@@ -799,9 +805,9 @@ function WallInspector({ index }: { index: number }) {
         footer={
           <button
             onClick={() => setAllWallColors(current)}
-            className="ds-btn"
+            className="ds-btn ds-btn--sm"
             title={painted ? 'Paint every wall this colour' : 'Paint every wall the default colour'}
-            style={{ width: '100%', height: 32, fontSize: 12, justifyContent: 'center', gap: 6, marginTop: 10 }}
+            style={{ gap: 6, marginTop: 10 }}
           >
             <Icon name="layers" size={13} /> Use this colour on every wall
           </button>
@@ -810,16 +816,16 @@ function WallInspector({ index }: { index: number }) {
 
       {/* Move */}
       <Section label="Move wall">
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8, lineHeight: 1.4 }}>
+        <div className="t-hint" style={{ marginBottom: 8, lineHeight: 1.4 }}>
           Drag the handle on the wall in the 3D or plan view — or nudge it here.
           Only this wall moves, and anything mounted on it or standing against it
           comes along.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-          <button onClick={() => moveWallCarrying(index, 0.1)} className="ds-btn" style={{ height: 32, fontSize: 11, justifyContent: 'center', gap: 6 }}>
+          <button onClick={() => moveWallCarrying(index, 0.1)} className="ds-btn ds-btn--sm" style={{ fontSize: 'var(--fs-caption)', justifyContent: 'center', gap: 6 }}>
             <Icon name="plus" size={12} /> Out 10 cm
           </button>
-          <button onClick={() => moveWallCarrying(index, -0.1)} className="ds-btn" style={{ height: 32, fontSize: 11, justifyContent: 'center', gap: 6 }}>
+          <button onClick={() => moveWallCarrying(index, -0.1)} className="ds-btn ds-btn--sm" style={{ fontSize: 'var(--fs-caption)', justifyContent: 'center', gap: 6 }}>
             <Icon name="minus" size={12} /> In 10 cm
           </button>
         </div>
@@ -937,24 +943,24 @@ function DimensionEditor({
           textAlign: 'left',
         }}
       >
-        <span style={{ display: 'flex', color: 'var(--ink-3)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+        <span style={{ display: 'flex', color: 'var(--ink-3)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform var(--dur-base) var(--ease-out)' }}>
           <Icon name="chevron-right" size={14} />
         </span>
         <span className="section-title" style={{ color: 'var(--ink)' }}>Exact size</span>
         {!open && (
-          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', letterSpacing: '0.04em', marginLeft: 'auto' }}>
+          <span className="mono" style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)', letterSpacing: '0.04em', marginLeft: 'auto' }}>
             {local.join(' × ')} {dimUnit}
           </span>
         )}
       </button>
-      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4, paddingLeft: 22 }}>{tier}</div>
+      <div className="t-hint" style={{ marginTop: 4, paddingLeft: 22 }}>{tier}</div>
 
       {open && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 10 }}>
+          <div className="fields-row" style={{ ['--field-min' as string]: fieldMinWidth(local), marginTop: 10 }}>
             {labels.map((axis, i) => (
               <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 11, color: 'var(--ink-2)', fontWeight: 600 }}>{axis}</span>
+                <span className="t-note" style={{ fontWeight: 600 }}>{axis}</span>
                 {/* .field owns the border + focus ring; mono is here only because
                     these are measurements. The stepper is ours — the native one
                     is suppressed app-wide (see globals.css). */}
@@ -984,7 +990,7 @@ function DimensionEditor({
           </div>
 
           {/* The values every edit is clamped into. */}
-          <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.6 }}>
+          <div className="t-micro" style={{ marginTop: 8, lineHeight: 1.6 }}>
             Anything you type lands inside{' '}
             <span className="mono">
               {bound(0).min}–{bound(0).max} wide ·{' '}
@@ -997,7 +1003,7 @@ function DimensionEditor({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
             {/* One display unit for the whole app — Settings owns it, and this is
                 the same preference, labelled, where the numbers actually are. */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--ink-2)', fontWeight: 600 }}>
+            <label className="t-note" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
               Units
               <Select
                 value={dimUnit}
@@ -1007,15 +1013,15 @@ function DimensionEditor({
                 title="Applies everywhere in Danmu"
                 width={64}
                 height={26}
-                fontSize={11}
+                fontSize="var(--fs-caption)"
               />
             </label>
             <div style={{ flex: 1 }} />
             <button
               onClick={() => onChange(defaultDim)}
-              className="ds-btn ds-btn--ghost"
+              className="ds-btn ds-btn--xs ds-btn--ghost"
               title="Back to the size it came with"
-              style={{ height: 26, padding: '0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}
+              style={{ padding: '0 8px', fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}
             >
               <Icon name="refresh" size={11} /> Original size
             </button>
@@ -1170,7 +1176,7 @@ function PaintPicker({
 
       {extra && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', marginBottom: 6 }}>Finish</div>
+          <div className="t-micro" style={{ fontWeight: 700, marginBottom: 6 }}>Finish</div>
           {extra}
         </div>
       )}
@@ -1183,17 +1189,17 @@ function PaintPicker({
           onClick={() => setMixing((o) => !o)}
           aria-expanded={mixing}
           title="Mix a custom colour"
-          className="ds-btn"
-          style={{ flex: 1, height: 28, fontSize: 11, justifyContent: 'center', gap: 6, minWidth: 0 }}
+          className="ds-btn ds-btn--xs"
+          style={{ flex: 1, justifyContent: 'center', gap: 6, minWidth: 0 }}
         >
           <Icon name="edit" size={11} /> Mix a custom colour
         </button>
         {value && (
           <button
             onClick={onReset}
-            className="ds-btn"
+            className="ds-btn ds-btn--xs"
             title="Back to the default colour"
-            style={{ height: 28, padding: '0 10px', fontSize: 11, fontWeight: 600, color: 'var(--accent-text)', gap: 4, flexShrink: 0 }}
+            style={{ padding: '0 10px', fontWeight: 600, color: 'var(--accent-text)', gap: 4, flexShrink: 0 }}
           >
             <Icon name="refresh" size={11} /> Default
           </button>
@@ -1292,7 +1298,7 @@ function MountHeightRow({
             but it is the property the rule is about and this is the branch that
             lands. Asked for by danmu-62, who reverted their own copy of the line
             so the two of us are not both editing it. */}
-        <span style={{ fontSize: 11, color: 'var(--ink-2)', flex: 1, minWidth: 0 }}>Height off the floor</span>
+        <span className="t-note" style={{ flex: 1, minWidth: 0 }}>Height off the floor</span>
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -1304,14 +1310,14 @@ function MountHeightRow({
           className="field"
           disabled={!fits}
           aria-invalid={!fits || outOfRange}
-          style={{ width: 72, height: 28, fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'right' }}
+          style={{ width: 72, height: 28, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-caption)', textAlign: 'right' }}
         />
-        <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>{dimUnit}</span>
+        <span className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)' }}>{dimUnit}</span>
       </label>
       {(!fits || outOfRange || noRoom) && (
         // `noRoom` is not a fault — the piece fits and simply has nowhere to go —
         // so it reads as information rather than as an error.
-        <div style={{ fontSize: 10.5, lineHeight: 1.4, marginTop: 4, color: !fits || outOfRange ? 'var(--danger-text)' : 'var(--ink-3)' }}>
+        <div style={{ fontSize: 'var(--fs-micro)', lineHeight: 1.4, marginTop: 4, color: !fits || outOfRange ? 'var(--danger-text)' : 'var(--ink-3)' }}>
           {!fits
             ? 'Taller than the room — there is no height it can hang at. Room check says by how much.'
             : outOfRange
