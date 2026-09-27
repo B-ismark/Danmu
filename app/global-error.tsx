@@ -31,7 +31,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
             <div style={{ fontSize: 13, fontWeight: 700, color: DANGER, marginBottom: 8 }}>Hiccup</div>
             <h1 style={{ fontSize: 24, margin: '0 0 12px' }}>Danmu didn’t finish loading</h1>
             <p style={{ fontSize: 14, lineHeight: 1.55, color: INK_2, marginBottom: 20 }}>
-              Nothing was lost — your rooms are saved in this browser. Reload to start it up again.
+              Your rooms are saved in this browser.
             </p>
             <button
               onClick={() => reset()}

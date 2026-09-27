@@ -13,8 +13,8 @@ export default function NotFound() {
             browser, so a link from another device or a deleted room both land
             here and both look identical from the outside. */}
         <p className="t-body" style={{ lineHeight: 1.55, marginBottom: 20 }}>
-          It may have been deleted, or the link may be from another browser — your rooms are saved on
-          the device you built them on, not in the cloud.
+          It may have been deleted, or the link came from another browser. Rooms are saved only in the
+          browser they were made in.
         </p>
         <Link
           href="/"

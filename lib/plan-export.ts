@@ -256,7 +256,7 @@ function metaText(
 }
 
 function legendText(p: ScenePart, dimUnit: DimUnit): string {
-  return `${p.name} — ${formatDim(p.dimMM[0], dimUnit)} × ${formatDim(p.dimMM[1], dimUnit)} × ${formatDim(p.dimMM[2], dimUnit)} ${dimUnit} (W×D×H)`;
+  return `${p.name} · ${formatDim(p.dimMM[0], dimUnit)} × ${formatDim(p.dimMM[1], dimUnit)} × ${formatDim(p.dimMM[2], dimUnit)} ${dimUnit} (W×D×H)`;
 }
 
 /** Trim to fit `maxW`, ending in an ellipsis. Assumes ctx.font is already set to

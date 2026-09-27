@@ -33,7 +33,7 @@ import { MARK_COLORS, markDataUri } from '@/lib/brand-mark';
 //   rasterises it and what ships is a PNG. Nothing runs per request, which is what
 //   keeps "no backend" true.
 
-export const alt = 'Danmu — decorate a scaled 3D room in your browser';
+export const alt = 'Danmu · Decorate your room in 3D';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 

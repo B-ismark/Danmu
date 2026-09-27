@@ -23,10 +23,10 @@ export const PAPER_0 = '#EEE9E4';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Danmu — Decorate your room in real 3D',
+    name: 'Danmu · Decorate your room in 3D',
     short_name: 'Danmu',
     description:
-      'A warm, local-first interior decoration studio. Arrange, recolour, restyle and relight furniture in a scaled 3D room — right in your browser. No account, nothing leaves your device.',
+      'Arrange, recolour, restyle and relight furniture in a scaled 3D room in your browser. No account. Your rooms stay on your device.',
     // `/` and not `/workspace`: a fresh install has no rooms, and the landing
     // page is the only screen that reads correctly with none.
     start_url: '/',

@@ -45,16 +45,16 @@ const nunito = Nunito({
 // itself — see `lib/site-url.ts` for why it is resolved rather than written down.
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: 'Danmu — Decorate your room in real 3D',
+  title: 'Danmu · Decorate your room in 3D',
   description:
-    'A warm, local-first interior decoration studio. Arrange, recolour, restyle and relight furniture in a scaled 3D room — right in your browser. No account, nothing leaves your device.',
+    'Arrange, recolour, restyle and relight furniture in a scaled 3D room in your browser. No account. Your rooms stay on your device.',
   applicationName: 'Danmu',
   openGraph: {
     type: 'website',
     siteName: 'Danmu',
-    title: 'Danmu — Decorate your room in real 3D',
+    title: 'Danmu · Decorate your room in 3D',
     description:
-      'Pick a footprint, get a scaled 3D room, and redecorate it. Real dimensions, computed on your device. No account, no uploads.',
+      'Pick a footprint, get a scaled 3D room, and redecorate it. Real dimensions, computed on your device. No account.',
   },
   // Stated rather than left to be inferred: without a `twitter` block Next emits
   // no `twitter:card`, and a reader with no card type gets the small square
@@ -62,9 +62,9 @@ export const metadata: Metadata = {
   // also what Slack and several others read in preference to the og tags.
   twitter: {
     card: 'summary_large_image',
-    title: 'Danmu — Decorate your room in real 3D',
+    title: 'Danmu · Decorate your room in 3D',
     description:
-      'Pick a footprint, get a scaled 3D room, and redecorate it. Real dimensions, computed on your device. No account, no uploads.',
+      'Pick a footprint, get a scaled 3D room, and redecorate it. Real dimensions, computed on your device. No account.',
   },
 };
 

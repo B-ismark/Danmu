@@ -32,8 +32,8 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
           <div className="ds-kicker" style={{ color: 'var(--danger-text)', marginBottom: 6 }}>Hiccup</div>
           <h1 style={{ fontSize: 'var(--fs-title)', marginBottom: 8 }}>This screen stopped drawing</h1>
           <p className="t-body" style={{ lineHeight: 1.55, margin: 0 }}>
-            Your rooms are safe — they live in this browser, not on this screen. Try again to redraw
-            it. If it keeps happening, go back to your rooms and reopen the one you were working on.
+            Your rooms are saved in this browser. If Try again does not help, go back to your rooms and
+            reopen this one.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, padding: '14px 24px', background: 'var(--paper-2)', borderTop: '1px solid var(--hairline)' }}>
