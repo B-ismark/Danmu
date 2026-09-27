@@ -943,7 +943,7 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
-### One type scale, and piece names you can read at laptop width — PR #157, SWEPT, wants a hand on a real mouse and a real phone
+### One type scale, and piece names you can read at laptop width — `c2137c4` on `main` (PR #157), SWEPT, wants a hand on a real mouse and a real phone
 
 Every font size is one of eight steps now and every transition one of three speeds
 (`--fs-*`, `--dur-*` in `globals.css`). Most sizes moved by half a pixel. Swept with
@@ -967,7 +967,7 @@ What the sweep cannot tell you, and a person can:
 - **On a phone** the 3D tab's Move / Scale / Rotate read in full, with the W / S / R
   keycaps gone. Wrong looks like "M…".
 
-### The laptop studio as panes on a wash — PR #157, SWEPT, needs a real GPU and a Mac
+### The laptop studio as panes on a wash — `c2137c4` on `main` (PR #157), SWEPT, needs a real GPU and a Mac
 
 At 1024, 1280 and 1440 on both tabs: the rails and the room are rounded panes with an
 even gap; the sash hover line sits in the middle of the gap; the right rail's footer
@@ -979,7 +979,7 @@ rail), or text looking greyer on the rails than on plain paper. With macOS "Redu
 transparency" on, the panes should be solid. The room size fields at 1024 put Height
 on a second line with every number whole.
 
-### Floating chrome as pills — PR #157, SWEPT, needs a real GPU and a touch screen
+### Floating chrome as pills — `c2137c4` on `main` (PR #157), SWEPT, needs a real GPU and a touch screen
 
 Swept at all seven widths: **0 findings**. On both tabs every cluster over the room is
 a rounded capsule with quiet buttons inside: undo/redo; on the plan, Zoom (− m · 100% +)
@@ -991,7 +991,7 @@ disappears into a pale wall in 3D (the rim is deliberately soft and the lift is 
 shadow, so check a light wall colour), a keyboard focus ring cut off inside the mode
 strip, or Comfort zones shorter than undo/redo on a phone.
 
-### Phones get a phone layout, tablets one docked panel — PR #157, SWEPT, needs a real phone and a real tablet
+### Phones get a phone layout, tablets one docked panel — `c2137c4` on `main` (PR #157), SWEPT, needs a real phone and a real tablet
 
 Below 1024px the studio is `SheetShell` (see `Design.md` § Phones and tablets). Under
 600px: a one-row app bar, a toolbar (Room · Add · View, or Room · *piece name* · Done
@@ -1648,7 +1648,7 @@ than the whole selection clearing.
 ---
 ## Look and light
 
-### High quality is graded again — on a real GPU, in every mood — branch `claude/amazing-davinci-m8zqys`, PR #157
+### High quality is graded again — on a real GPU, in every mood — `c2137c4` on `main` (PR #157)
 
 **Where to click.** Open any room on the **3D Model** tab with **View → Quality → High**
 (the default), then flip to **Fast** and back, in each lighting mood. Then **Export → This
@@ -1673,7 +1673,7 @@ both. The closed shell (`RoomShell`) is doing its job — the key light casts on
 ceiling stops it — so the interior is lit by the hemisphere and environment alone. That is
 the lighting pass's to answer (warm interior light sources), not a grading defect.
 
-### Windows, curtains, art and doors go with the cut-away wall — branch `claude/amazing-davinci-m8zqys`, PR #157
+### Windows, curtains, art and doors go with the cut-away wall — `c2137c4` on `main` (PR #157)
 
 **Where to click.** Any room with a window or a painting on each wall, **3D Model** tab,
 default dollhouse view. Orbit slowly all the way round, on **High** and on **Fast**.
@@ -1689,7 +1689,7 @@ both near walls' windows and curtains gone in the default view, back after a ~18
 and a click through the vanished window selected the sofa. Shadow stability while orbiting
 was not measured — it is the half that wants eyes.
 
-### High has a bounce light now, and the furniture has real surfaces — branch `claude/amazing-davinci-m8zqys`, PR #157
+### High has a bounce light now, and the furniture has real surfaces — `c2137c4` on `main` (PR #157)
 
 **Where to click.** The starter living room on **High**, every mood; then a bedroom and a
 room with its windows deleted. Zoom in on a wardrobe, a bed and a lamp.
@@ -1710,7 +1710,7 @@ a real GPU is entirely unlooked-at.
 **Noticed, not fixed.** The sofa's fabric weave aliases into a moiré at room distance on
 both builds — the normal map wants mipmapping or a distance fade.
 
-### Every model is one object now — branch `claude/amazing-davinci-m8zqys`, PR #157
+### Every model is one object now — `c2137c4` on `main` (PR #157)
 
 **Where to click.** Library → coffee table, dining chair, armchair, office chair, desk, shoe
 rack, floor lamp, air purifier, both mirrors, monitor, fridge. Orbit close to each.
@@ -1730,7 +1730,7 @@ the two the camera faces and leaves with the cut-away third, as it should). The 
 rings follow its taper now — sized to the top radius, the lowest stood ~4 mm off the body,
 which an axis-aligned box test cannot see because the ring's box contains the body.
 
-### A rug sits where a designer would put it — branch `claude/amazing-davinci-m8zqys`, PR #157
+### A rug sits where a designer would put it — `c2137c4` on `main` (PR #157)
 
 **Where to click.** Any starter living room, **3D Model** tab. Then Library → Rug into a room
 with a bed, and another under a dining table, and press **Fix** (or Shuffle) with each.
@@ -1750,7 +1750,7 @@ plan's dining chairs squared to the other axis). Under **Fix** a stray rug stops
 short of its spot, by design — every relation is a soft band against a linear inertia.
 Not yet seen in a browser with a bed or a dining table.
 
-### Fix and Shuffle think in the background now — branch `claude/amazing-davinci-m8zqys`, PR #157
+### Fix and Shuffle think in the background now — `c2137c4` on `main` (PR #157)
 
 **Where to click.** Any furnished room → rail → **Shuffle**, then orbit the room while the
 button says "Shuffling…". Then press Shuffle and immediately **Ctrl+Z**.
@@ -1778,7 +1778,7 @@ the drag without a word, because the button was holding an old copy of the room 
 stale check compared press against answer. `tests/refit-press-time.test.tsx` holds the
 wiring; nobody has watched it happen.
 
-### Re-scan looks again, and its answer reaches the studio — branch `claude/amazing-davinci-m8zqys`, PR #157
+### Re-scan looks again, and its answer reaches the studio — `c2137c4` on `main` (PR #157)
 
 **Where to click.** A photographed room with furniture found → studio → move a piece and
 add one from the Library → Room rail → **Re-scan**. The screen should say *This is your last
@@ -1800,7 +1800,7 @@ rate-limited **Look again** → **Try again** ran the scan again rather than lan
 old list. What remains for a person is the studio side: that applying *Before re-scan*
 really puts the moved and added pieces back.
 
-### Scanned furniture comes out as the right piece — branch `claude/amazing-davinci-m8zqys`, PR #157
+### Scanned furniture comes out as the right piece — `c2137c4` on `main` (PR #157)
 
 **Where to click.** Photograph a room with an armchair, a dining table and a sofa, with
 the on-device model deployed and a detection key set, and let the scan run.
