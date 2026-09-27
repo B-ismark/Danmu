@@ -130,7 +130,7 @@ export default function PlanPage() {
       <CanvasView>
         <UndoRedo />
         <ChromeDivider />
-        <PlanViewControls api={planApi} zoom={view.zoom} rot={view.rot} dimUnit={unitName.toLowerCase()} />
+        <PlanViewControls api={planApi} zoom={view.zoom} rot={view.rot} dimUnit={dimUnit} unitName={unitName.toLowerCase()} />
       </CanvasView>
 
       {/* The tab's one bottom-right aide, and only while the shading is on. */}

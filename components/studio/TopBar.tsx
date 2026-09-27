@@ -73,11 +73,11 @@ export function TopBar({
       >
         <Link
           href="/workspace"
-          style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-3)', textDecoration: 'none', whiteSpace: 'nowrap' }}
+          style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink-3)', textDecoration: 'none', whiteSpace: 'nowrap' }}
         >
           Rooms
         </Link>
-        <span aria-hidden="true" style={{ color: 'var(--ink-4)', fontSize: 12 }}>/</span>
+        <span aria-hidden="true" style={{ color: 'var(--ink-4)', fontSize: 'var(--fs-small)' }}>/</span>
       </nav>
       {/* Renaming is a real control now: reachable by keyboard, announced, and
           it reverts a blank name instead of appearing to ignore it.
@@ -94,15 +94,15 @@ export function TopBar({
         onReject={() =>
           toast({ title: 'Room kept its name', message: 'A room needs a name, so the old one stayed.' })
         }
-        style={{ fontSize: 13, fontWeight: 500, minWidth: 0 }}
+        style={{ fontSize: 'var(--fs-body)', fontWeight: 500, minWidth: 0 }}
         // A 200px floor on the input is what forced the bar past the window on a
         // narrow screen mid-rename; it can have up to 280 and no more than it has.
-        inputStyle={{ fontSize: 13, fontWeight: 500, height: 28, width: 'min(280px, 100%)' }}
+        inputStyle={{ fontSize: 'var(--fs-body)', fontWeight: 500, height: 28, width: 'min(280px, 100%)' }}
       />
       {/* Save state says a word. A bare 6px dot claimed something it could not
           explain — and it is announced, because a silent colour change is not
           feedback for anyone using a screen reader. */}
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, flexShrink: 0 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--fs-caption)', flexShrink: 0 }}>
         <span
           aria-hidden="true"
           title={savedHint ? 'Room saved' : 'Saves as you go'}
@@ -112,7 +112,7 @@ export function TopBar({
             borderRadius: '50%',
             background: savedHint ? 'var(--success)' : 'var(--ink-3)',
             opacity: savedHint ? 1 : 0.5,
-            transition: 'background 0.2s, opacity 0.2s',
+            transition: 'background var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out)',
             flexShrink: 0,
           }}
         />

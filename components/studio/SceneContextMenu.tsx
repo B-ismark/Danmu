@@ -275,14 +275,14 @@ export function SceneContextMenu() {
             // arrowing down the list as well as for someone reading it.
             onPointerEnter={entry.hoverId ? () => useStudio.getState().setHovered(entry.hoverId!) : undefined}
             onFocus={entry.hoverId ? () => useStudio.getState().setHovered(entry.hoverId!) : undefined}
-            style={{ fontSize: 12.5, padding: '7px 9px', color: entry.danger ? 'var(--danger-text)' : undefined }}
+            style={{ fontSize: 'var(--fs-small)', padding: '7px 9px', color: entry.danger ? 'var(--danger-text)' : undefined }}
           >
             <Icon name={entry.icon} size={14} />
             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {entry.label}
             </span>
             {entry.hint && (
-              <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
+              <span className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)' }}>
                 {entry.hint}
               </span>
             )}

@@ -252,7 +252,7 @@ export function RoomHealthDot() {
         height: 24,
         margin: '0 auto',
         borderRadius: 'var(--r-full)',
-        fontSize: 10,
+        fontSize: 'var(--fs-micro)',
         fontWeight: 700,
         border: `1px solid ${ok ? 'var(--accent-2)' : 'var(--danger)'}`,
         background: ok ? 'var(--accent-2-tint)' : 'var(--danger-tint)',
@@ -381,7 +381,7 @@ export function RoomTools() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px 6px 14px' }}>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', flex: 1 }}>This room</span>
+              <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--ink)', flex: 1 }}>This room</span>
               <IconButton icon="x" label="Close room panel" onClick={() => setOpen(false)} size={24} iconSize={12} />
             </div>
             <div style={{ padding: '0 12px 10px' }}>
@@ -434,7 +434,7 @@ export function RoomTools() {
           width: '100%',
           justifyContent: 'flex-start',
           gap: 8,
-          fontSize: 12,
+          fontSize: 'var(--fs-small)',
           background: problems > 0 ? 'var(--danger-tint)' : 'var(--accent-2-tint)',
           borderColor: problems > 0 ? 'var(--danger)' : 'var(--accent-2)',
           color: problems > 0 ? 'var(--danger-text)' : 'var(--success-text)',
@@ -812,7 +812,7 @@ function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
       title="Clear what's wrong (a blocked door, a crowded walkway…) moving as little as possible"
       style={{
         height: 30,
-        fontSize: 11,
+        fontSize: 'var(--fs-caption)',
         gap: 6,
         background: 'var(--paper)',
         borderColor: 'var(--edge)',
@@ -1069,7 +1069,7 @@ function ShuffleButton({
       title="Try a different arrangement, whether or not anything is wrong — takes a bit longer than Fix"
       style={{
         height: 30,
-        fontSize: 11,
+        fontSize: 'var(--fs-caption)',
         gap: 6,
         background: 'var(--paper)',
         borderColor: 'var(--edge)',
@@ -1305,7 +1305,7 @@ function FixButton({ issue, appPlaced }: { issue: ClearanceIssue; appPlaced: App
           ? 'Move just the pieces named here, leaving the rest of the room alone'
           : 'Rearrange the unlocked furniture to open the floor up'
       }
-      style={{ height: 28, fontSize: 10, padding: '0 10px', gap: 6, flexShrink: 0, alignSelf: 'flex-start' }}
+      style={{ height: 28, fontSize: 'var(--fs-micro)', padding: '0 10px', gap: 6, flexShrink: 0, alignSelf: 'flex-start' }}
     >
       {busy && <Spinner size={10} />}
       {busy ? 'Trying…' : 'Try a fix'}
@@ -1343,7 +1343,7 @@ function CheckSummary({
         flexWrap: 'wrap',
         padding: '8px 14px',
         borderBottom: '1px solid var(--hairline)',
-        fontSize: 11.5,
+        fontSize: 'var(--fs-caption)',
         color: 'var(--ink-3)',
       }}
     >
@@ -1457,11 +1457,11 @@ function IssueRow({
         <Pill tone={sev.tone} style={{ flexShrink: 0 }}>
           {sev.label}
         </Pill>
-        <div style={{ minWidth: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.5 }}>
+        <div style={{ minWidth: 0, fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--ink)', lineHeight: 1.5 }}>
           {issue.title}
         </div>
       </div>
-      <div style={{ fontSize: 11.5, fontWeight: 400, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 3 }}>
+      <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 400, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 3 }}>
         {issue.detail}
       </div>
       {/* Actions align with the text column above, not with the right edge. Right-aligned
@@ -1483,7 +1483,7 @@ function IssueRow({
               // shadow and rose when pointed at.
               className="ds-btn ds-btn--ghost"
               title="Select the pieces involved and fly to them"
-              style={{ height: 28, fontSize: 10, padding: '0 10px', color: 'var(--accent-text)' }}
+              style={{ height: 28, fontSize: 'var(--fs-micro)', padding: '0 10px', color: 'var(--accent-text)' }}
             >
               Show me
             </button>
@@ -1522,7 +1522,7 @@ function CheckPanel({
     <div>
       <CheckSummary freeShare={freeShare} stepFree={stepFree} onStepFree={onStepFree} />
       {issues.length === 0 ? (
-        <div style={{ padding: '18px 14px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+        <div style={{ padding: '18px 14px', fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.55 }}>
           Everything fits — doors open, walkways are comfortable, and seating distances look right.
         </div>
       ) : (
@@ -1668,12 +1668,12 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
   }
 
   const label = (t: string) => (
-    <span style={{ fontSize: 11, color: 'var(--ink-2)', fontWeight: 600 }}>{t}</span>
+    <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', fontWeight: 600 }}>{t}</span>
   );
 
   return (
     <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>
+      <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.45 }}>
         Type the size off the shop page. Nothing in your room moves — this only asks
         whether there is somewhere for it.
       </div>
@@ -1714,7 +1714,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
           </label>
         ))}
       </div>
-      <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>
+      <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)' }}>
         W × D × H in <span className="mono">{dimUnit}</span>
       </div>
 
@@ -1724,7 +1724,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
           too tall for the room. Cheaper to notice than to explain: if the numbers are
           absurd as entered and sensible one unit down, say so. */}
       {misreadUnit(dimMM, dimUnit) && (
-        <div style={{ fontSize: 11, color: 'var(--warn-text)', lineHeight: 1.4 }}>
+        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--warn-text)', lineHeight: 1.4 }}>
           Those look like {misreadUnit(dimMM, dimUnit)} — these fields are in{' '}
           <span className="mono">{dimUnit}</span>. Settings can change the unit.
         </div>
@@ -1737,7 +1737,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
               key={p.label}
               onClick={() => fill(p)}
               className="ds-chip"
-              style={{ cursor: 'pointer', fontSize: 10 }}
+              style={{ cursor: 'pointer', fontSize: 'var(--fs-micro)' }}
               title={`Fill in ${p.dimMM.join(' × ')} mm`}
             >
               {p.label}
@@ -1751,7 +1751,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
         disabled={!ready || busy}
         aria-busy={busy}
         className="ds-btn ds-btn--primary"
-        style={{ height: 30, fontSize: 11.5 }}
+        style={{ height: 30, fontSize: 'var(--fs-caption)' }}
       >
         {busy ? <Spinner size={12} /> : <Icon name="ruler" size={12} />}
         {busy ? 'Checking…' : 'Check the room'}
@@ -1823,14 +1823,14 @@ function FitAnswer({
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Pill tone={tone}>{lead}</Pill>
         {result.status === 'too-tall' && (
-          <span style={{ fontSize: 11, color: 'var(--ink-2)' }}>
+          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)' }}>
             by <span className="mono">{formatDim(-result.headroomMM, dimUnit)} {dimUnit}</span>
           </span>
         )}
       </div>
 
       {result.status === 'fits' && (
-        <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>
+        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.45 }}>
           There is somewhere for it that keeps the doors opening and the walkways clear.
           {result.headroomMM > 0 && (
             <>
@@ -1842,14 +1842,14 @@ function FitAnswer({
       )}
 
       {result.status === 'too-tall' && (
-        <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>
+        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.45 }}>
           The ceiling here is <span className="mono">{formatDim(room.height * 1000, dimUnit)} {dimUnit}</span>. Nothing
           about the floor can help with that.
         </div>
       )}
 
       {result.status === 'no-room' && (
-        <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>
+        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.45 }}>
           {result.largestBay ? (
             <>
               The biggest clear rectangle of floor is{' '}
@@ -1869,7 +1869,7 @@ function FitAnswer({
       {result.issues.length > 0 && (
         <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
           {result.issues.map((i) => (
-            <li key={i.id} style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+            <li key={i.id} style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.4 }}>
               {i.title}
             </li>
           ))}
@@ -1877,7 +1877,7 @@ function FitAnswer({
       )}
 
       {result.outOfRange && (
-        <div style={{ fontSize: 11, color: 'var(--warn-text)', lineHeight: 1.4 }}>
+        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--warn-text)', lineHeight: 1.4 }}>
           That size is outside the range the studio works in. The answer above is about
           the size you entered; placing it will bring it into range.
         </div>
@@ -1886,7 +1886,7 @@ function FitAnswer({
       {preview && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <MiniPlan parts={preview} footprint={room.footprint} />
-          <button onClick={onPlace} className="ds-btn" style={{ height: 26, fontSize: 10.5 }}>
+          <button onClick={onPlace} className="ds-btn" style={{ height: 26, fontSize: 'var(--fs-micro)' }}>
             <Icon name="plus" size={11} />
             Put it there
           </button>
@@ -1944,14 +1944,14 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
   return (
     <div>
       <TabActions>
-        <span style={{ flex: 1, fontSize: 11, color: 'var(--ink-3)' }}>Real dimensions, in your unit</span>
-        <button onClick={copy} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
+        <span style={{ flex: 1, fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>Real dimensions, in your unit</span>
+        <button onClick={copy} className="ds-btn" style={{ height: 24, fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
           {copied ? 'Copied ✓' : 'Copy'}
         </button>
       </TabActions>
 
       {rows.length === 0 ? (
-        <div style={{ padding: '16px 14px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+        <div style={{ padding: '16px 14px', fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.55 }}>
           Nothing in the room yet. Open the Library on the right and drop a piece in.
         </div>
       ) : (
@@ -1963,11 +1963,11 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
               <span style={{ width: 12, height: 12, borderRadius: 'var(--r-1)', background: 'var(--paper-2)', border: '1px dashed var(--hairline-strong)', flexShrink: 0 }} />
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {count > 1 && <span style={{ color: 'var(--accent-text)' }}>{count}× </span>}
                 {p.name}
               </div>
-              <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.04em' }}>
+              <div className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)', letterSpacing: '0.04em' }}>
                 {formatDim(p.dimMM[0], dimUnit)} × {formatDim(p.dimMM[1], dimUnit)} × {formatDim(p.dimMM[2], dimUnit)} {dimUnit}
               </div>
             </div>
@@ -2082,8 +2082,8 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
   return (
     <div>
       <TabActions>
-        <span style={{ flex: 1, fontSize: 11, color: 'var(--ink-3)' }}>Snapshots you can flip between</span>
-        <button onClick={() => void saveCurrent()} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
+        <span style={{ flex: 1, fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>Snapshots you can flip between</span>
+        <button onClick={() => void saveCurrent()} className="ds-btn" style={{ height: 24, fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
           <Icon name="plus" size={10} /> Save current
         </button>
       </TabActions>
@@ -2092,8 +2092,8 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--hairline)', background: 'var(--paper-2)' }}>
         <MiniPlan parts={effParts} footprint={footprint} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 12, fontWeight: 700 }}>On screen now</div>
-          <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>
+          <div style={{ fontSize: 'var(--fs-small)', fontWeight: 700 }}>On screen now</div>
+          <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)' }}>
             <span className="mono">{effParts.length}</span> pieces
             {!currentIsSafe() && ' · not saved yet'}
           </div>
@@ -2101,7 +2101,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
       </div>
 
       {layouts.length === 0 ? (
-        <div style={{ padding: '16px 14px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+        <div style={{ padding: '16px 14px', fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.55 }}>
           No saved layouts yet. Arrange the room, then <b>Save current</b> — save a second
           arrangement and flip between them to compare.
         </div>
@@ -2114,12 +2114,12 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
             <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
               <MiniPlan parts={vParts} footprint={footprint} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</div>
-                <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>{savedLabel(v.createdAt)}</div>
+                <div style={{ fontSize: 'var(--fs-small)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</div>
+                <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)' }}>{savedLabel(v.createdAt)}</div>
               </div>
               {/* Plain, not primary: this repeats once per saved layout, and the
                   rule beside the variants in globals.css excludes per-row actions. */}
-              <button onClick={() => requestApply(v)} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
+              <button onClick={() => requestApply(v)} className="ds-btn" style={{ height: 24, fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
                 Apply
               </button>
               <IconButton
@@ -2151,7 +2151,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
                 onClick={() => setPendingApply(null)}
                 disabled={busy}
                 className="ds-btn"
-                style={{ height: 36, fontSize: 13, justifyContent: 'center' }}
+                style={{ height: 36, fontSize: 'var(--fs-body)', justifyContent: 'center' }}
               >
                 Cancel
               </button>
@@ -2164,7 +2164,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
                   if (v) apply(v);
                 }}
                 className="ds-btn"
-                style={{ height: 36, fontSize: 13, justifyContent: 'center' }}
+                style={{ height: 36, fontSize: 'var(--fs-body)', justifyContent: 'center' }}
               >
                 Apply without saving
               </button>
@@ -2181,7 +2181,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
                 }}
                 aria-busy={busy}
                 className="ds-btn ds-btn--primary"
-                style={{ height: 36, fontSize: 13, gap: 8, justifyContent: 'center' }}
+                style={{ height: 36, fontSize: 'var(--fs-body)', gap: 8, justifyContent: 'center' }}
               >
                 {busy && <Spinner size={12} />}
                 {busy ? 'Saving…' : 'Save first, then apply'}
@@ -2189,10 +2189,10 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
             </>
           }
         >
-          <div id="apply-layout-title" style={{ fontSize: 20, fontWeight: 600, marginBottom: 6, letterSpacing: '-0.01em' }}>
+          <div id="apply-layout-title" style={{ fontSize: 'var(--fs-title)', fontWeight: 600, marginBottom: 6, letterSpacing: '-0.01em' }}>
             Save this arrangement first?
           </div>
-          <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+          <div style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.55 }}>
             Applying <b>{pendingApply.name}</b> replaces every piece in the room and where it sits. What is on screen
             right now has not been saved as a layout, so it would only be recoverable through undo.
           </div>

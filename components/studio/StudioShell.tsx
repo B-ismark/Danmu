@@ -44,7 +44,7 @@ export function StudioShell({
   if (!ready) {
     return (
       <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--paper-2)' }}>
-        <span role="status" style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+        <span role="status" style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-3)' }}>
           {loadingLabel}
         </span>
       </div>

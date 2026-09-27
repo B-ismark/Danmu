@@ -1082,48 +1082,58 @@ describe('a capture card holds its own chrome', () => {
 });
 
 describe('a piece row keeps enough width to read the piece name', () => {
+  // The silent cost of a row action. The actions used to be `opacity: 0` in the FLOW,
+  // so every invisible button held its 24px plus an 8px gap whether anyone was
+  // pointing at the row or not, and the name — the one flex child with `minWidth: 0`
+  // — absorbed the whole cost by ellipsising. No overflow, no error, no failing test:
+  // at the laptop rail (`--rail-left-tight`, which this used to not measure at all)
+  // the name got ~25px and read "D…", "So…". The fidelity sweep's first run is what
+  // saw it. The actions float over the end of the row now, and these two assertions
+  // are the two halves of that: they are out of the flow, and what IS in the flow
+  // still leaves the name a legible width at the narrowest rail that ships.
+  const tree = codeOnly(readSrc('components', 'studio', 'PartTree.tsx'));
+  // The row renderer ONLY. `PartTree.tsx` holds several components and seven
+  // `IconButton`s between them; slicing to end-of-file counted all seven and
+  // reported a name width of −70px, which is how this bound came to be measured
+  // rather than assumed.
+  const from = tree.indexOf('function PartRow(');
+  const next = tree.indexOf('\nfunction ', from + 1);
+  const partRow = tree.slice(from, next === -1 ? undefined : next);
+
+  it('the row actions stand outside the flow', () => {
+    expect(from, 'PartRow is not declared in PartTree.tsx').toBeGreaterThan(-1);
+    const actions = rule('.row-actions');
+    expect(actions, 'the actions must be positioned over the row, not in it').toMatch(/position:\s*absolute/);
+    // Every button in the row is inside that wrapper — one left outside is a button
+    // back in the flow, costing the name its 32px again.
+    const open = partRow.indexOf('<span className="row-actions">');
+    expect(open, 'PartRow has no .row-actions wrapper').toBeGreaterThan(-1);
+    const close = partRow.indexOf('</span>', partRow.lastIndexOf('<IconButton'));
+    const buttons = [...partRow.matchAll(/<IconButton\b/g)].map((m) => m.index!);
+    expect(buttons.length).toBe(3);
+    for (const at of buttons) expect(at > open && at < close, `an IconButton at ${at} sits outside .row-actions`).toBe(true);
+  });
+
   it('leaves the name a legible share of the narrowest shipping rail', () => {
-    // The silent cost of a row action. `.row-action` is `opacity: 0`, NOT
-    // `display: none`, so every button in a row holds its width whether it is
-    // visible or not — and each new one costs its own 24px *plus* a 8px flex gap.
-    // The name is the flex child with `minWidth: 0`, so it absorbs the whole cost
-    // by ellipsising: no overflow, no error, no failing test. Just shorter names.
-    //
-    // Adding the Lock button took the name from 90px to 58px at `--rail-left-min`.
-    // That is recorded here as arithmetic rather than as a comment, because the
-    // next button is the one that makes a name unreadable and nothing else in the
-    // suite would notice.
     const row = rule('.list-row');
     const gap = Number(/gap:\s*(\d+)px/.exec(row)![1]);
     const padX = Number(/padding:\s*\d+px (\d+)px/.exec(row)![1]);
-
-    // `codeOnly`, for the reason its own comment gives — and this assertion is the
-    // third to need it. The row's JSX comment quotes the `<IconButton/>` shape it
-    // replaced, so counting buttons in the raw source found four where there are
-    // three, and the count read as a real measurement.
-    const tree = codeOnly(readSrc('components', 'studio', 'PartTree.tsx'));
-    // The row renderer ONLY. `PartTree.tsx` holds several components and seven
-    // `IconButton`s between them; slicing to end-of-file counted all seven and
-    // reported a name width of −70px, which is how this bound came to be measured
-    // rather than assumed.
-    const from = tree.indexOf('function PartRow(');
-    expect(from, 'PartRow is not declared in PartTree.tsx').toBeGreaterThan(-1);
-    const next = tree.indexOf('\nfunction ', from + 1);
-    const partRow = tree.slice(from, next === -1 ? undefined : next);
-    const buttons = [...partRow.matchAll(/<IconButton\b/g)].length;
     const glyph = Number(/justifyContent: 'center', width: (\d+), flexShrink: 0/.exec(partRow)![1]);
+    // What stays in the flow beside the name: the status glyph, and at worst both
+    // state marks (locked AND hidden), each an 11px icon plus a gap.
+    const marks = [...partRow.matchAll(/className="row-mark"/g)].length;
+    expect(marks).toBe(2);
+    const markPx = Number(/<Icon name="lock" size=\{(\d+)\}/.exec(partRow)![1]);
 
     // 32px of `.section` padding, the same figure the rail assertions above use.
-    const content = railFloor('rail-left') - 32;
-    const children = buttons + 2; // status glyph + name + the actions
-    const nameWidth = content - padX * 2 - gap * (children - 1) - glyph - buttons * 24;
+    // The TIGHT rail, not the floor: `DockedShell` ships it for the whole 1024–1279px
+    // step, which is the width the old version of this test did not ask about.
+    const content = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]) - 32;
+    const nameWidth = content - padX * 2 - glyph - gap - marks * (markPx + gap);
 
     // ~8 characters of 13px Nunito. Chosen, not derived — a derived floor would
     // move with the thing it is supposed to constrain and could never go red.
-    expect(
-      nameWidth,
-      `a piece name gets ${nameWidth}px at --rail-left-min with ${buttons} row actions`,
-    ).toBeGreaterThanOrEqual(56);
+    expect(nameWidth, `a piece name gets ${nameWidth}px at --rail-left-tight`).toBeGreaterThanOrEqual(56);
   });
 });
 
@@ -1178,7 +1188,7 @@ describe('the room-check actions wrap rather than cut a word', () => {
     // The row's own gap, and the icon each button carries, read out of the source.
     const rowGap = Number(/flexWrap: 'wrap', gap: (\d+) \}\}>\s*<FixAllButton/.exec(ROOM)![1]);
     const iconPx = Number(/<Icon name="shuffle" size=\{(\d+)\}/.exec(ROOM)![1]);
-    const btnGap = Number(/height: 30,\s*fontSize: 11,\s*gap: (\d+),/.exec(ROOM)![1]);
+    const btnGap = Number(/height: 30,\s*fontSize: 'var\(--fs-caption\)',\s*gap: (\d+),/.exec(ROOM)![1]);
 
     const content = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]) - 32;
     const column = (content - rowGap) / 2;

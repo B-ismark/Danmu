@@ -166,7 +166,7 @@ export function Tooltip({
             color: 'var(--on-ink)',
             borderRadius: 'var(--r-1)',
             padding: '4px 8px',
-            fontSize: 11.5,
+            fontSize: 'var(--fs-caption)',
             fontWeight: 600,
             fontFamily: 'var(--font-sans)',
             lineHeight: 1.3,

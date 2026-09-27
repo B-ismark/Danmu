@@ -240,7 +240,7 @@ export function WallColorsFromPhotos() {
         aria-busy={busy}
         className="ds-btn"
         title="Read each wall’s colour out of the photo of it"
-        style={{ width: '100%', height: 32, fontSize: 12, gap: 6, justifyContent: 'center' }}
+        style={{ width: '100%', height: 32, fontSize: 'var(--fs-small)', gap: 6, justifyContent: 'center' }}
       >
         {busy ? <Spinner size={12} /> : <Icon name="image" size={13} />}
         {/* The label gets its OWN element, which is what `.ds-btn`'s own comment
@@ -259,7 +259,7 @@ export function WallColorsFromPhotos() {
           {busy ? 'Reading your photos…' : 'Use my photos’ colours'}
         </span>
       </button>
-      <p style={{ margin: '6px 0 0', fontSize: 10.5, lineHeight: 1.4, color: 'var(--ink-3)' }}>
+      <p style={{ margin: '6px 0 0', fontSize: 'var(--fs-micro)', lineHeight: 1.4, color: 'var(--ink-3)' }}>
         Reads the wall colour straight out of each photo. Nothing is uploaded, and Undo puts it back.
       </p>
     </div>

@@ -131,7 +131,7 @@ export function MeasureGuides() {
             <div
               style={{
                 fontFamily: 'var(--font-mono, monospace)',
-                fontSize: 10,
+                fontSize: 'var(--fs-micro)',
                 fontWeight: 700,
                 letterSpacing: '0.04em',
                 // The same treatment as the size tag below, and for the reason
@@ -165,7 +165,7 @@ export function MeasureGuides() {
         <div
           style={{
             fontFamily: 'var(--font-mono, monospace)',
-            fontSize: 11,
+            fontSize: 'var(--fs-caption)',
             fontWeight: 700,
             letterSpacing: '0.04em',
             // Tokens, not literals. This is a drei `Html` overlay — real DOM, which

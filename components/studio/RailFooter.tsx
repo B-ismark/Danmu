@@ -112,7 +112,7 @@ export function RailFooter() {
             onClick={() => setSelectedWall(null)}
             className="ds-btn"
             title="Finish with this wall"
-            style={{ width: '100%', height: 32, fontSize: 12, justifyContent: 'center' }}
+            style={{ width: '100%', height: 32, fontSize: 'var(--fs-small)', justifyContent: 'center' }}
           >
             <Icon name="x" size={12} />
             <span style={LABEL}>Done</span>
@@ -142,7 +142,7 @@ export function RailFooter() {
             style={{
               width: '100%',
               height: 32,
-              fontSize: 12,
+              fontSize: 'var(--fs-small)',
               justifyContent: 'center',
               color: 'var(--danger)',
               borderColor: 'var(--danger)',

@@ -87,7 +87,7 @@ export function TransformToolbar() {
                 border: 'none',
                 borderLeft: i > 0 ? '1px solid var(--hairline-strong)' : 'none',
                 fontFamily: 'var(--font-sans)',
-                fontSize: 12,
+                fontSize: 'var(--fs-small)',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
@@ -103,10 +103,14 @@ export function TransformToolbar() {
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {m.label}
               </span>
+              {/* A keyboard hint, so it is the FIRST thing to go when the row runs
+                  short (`.kbd-hint`): on a phone there is no W key to press, and it
+                  was the keycap that cut "Scale" to "Sc…". */}
               <kbd
+                className="kbd-hint"
                 style={{
                   fontFamily: 'var(--font-sans)',
-                  fontSize: 9.5,
+                  fontSize: 'var(--fs-micro)',
                   fontWeight: 700,
                   padding: '1px 4px',
                   marginLeft: 2,
@@ -167,7 +171,7 @@ function SnapCycleButton({
         boxShadow: 'var(--shadow-soft)',
         cursor: 'pointer',
         fontFamily: 'var(--font-sans)',
-        fontSize: 12,
+        fontSize: 'var(--fs-small)',
         fontWeight: 700,
         color: active ? 'var(--accent-text)' : 'var(--ink-2)',
       }}

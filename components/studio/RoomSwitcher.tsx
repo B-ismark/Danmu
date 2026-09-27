@@ -56,7 +56,7 @@ export function RoomSwitcher() {
         aria-expanded={open}
         title="Switch room"
         className="ds-btn"
-        style={{ height: 28, padding: '0 8px', fontSize: 12 }}
+        style={{ height: 28, padding: '0 8px', fontSize: 'var(--fs-small)' }}
       >
         <Icon name="layers" size={12} />
         <Icon name="chevron-down" size={11} />
@@ -92,7 +92,7 @@ export function RoomSwitcher() {
             Switch room · <span className="mono">{rooms.length}</span>
           </div>
           {rooms.length === 0 && (
-            <div style={{ padding: '14px 12px', fontSize: 12, color: 'var(--ink-3)' }}>No rooms yet.</div>
+            <div style={{ padding: '14px 12px', fontSize: 'var(--fs-small)', color: 'var(--ink-3)' }}>No rooms yet.</div>
           )}
           {rooms.map((r) => {
             const isCurrent = r.id === currentId;
@@ -124,7 +124,7 @@ export function RoomSwitcher() {
                   <div
                     title={r.name}
                     style={{
-                      fontSize: 13,
+                      fontSize: 'var(--fs-body)',
                       fontWeight: 500,
                       color: 'var(--ink)',
                       whiteSpace: 'nowrap',
@@ -134,7 +134,7 @@ export function RoomSwitcher() {
                   >
                     {r.name}
                   </div>
-                  <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>
+                  <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)' }}>
                     <span className="mono">{r.itemCount}</span> {r.itemCount === 1 ? 'piece' : 'pieces'}
                   </div>
                 </div>
@@ -161,7 +161,7 @@ export function RoomSwitcher() {
                 background: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: 12,
+                fontSize: 'var(--fs-small)',
                 color: 'var(--ink-2)',
                 textAlign: 'left',
               }}

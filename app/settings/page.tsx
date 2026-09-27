@@ -174,8 +174,8 @@ export default function SettingsPage() {
       <div>
         {/* The route had no heading element at all — no document outline, and the
             display serif (which globals.css hangs off h1/h2/h3) never rendered. */}
-        <h1 style={{ fontSize: 30, letterSpacing: '-0.02em', marginBottom: 8 }}>Settings</h1>
-        <p style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.55, margin: 0, maxWidth: 'var(--measure-text)' }}>
+        <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginBottom: 8 }}>Settings</h1>
+        <p style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.55, margin: 0, maxWidth: 'var(--measure-text)' }}>
           Everything here is kept in this browser. There is no account to manage.
         </p>
 
@@ -205,7 +205,7 @@ export default function SettingsPage() {
                 boxShadow: keyFocus ? '0 0 0 4px var(--accent-tint)' : 'none',
                 borderRadius: 'var(--r-2)',
                 background: 'var(--paper)',
-                transition: 'border-color .12s, box-shadow .12s',
+                transition: 'border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out)',
               }}
             >
               <input
@@ -226,7 +226,7 @@ export default function SettingsPage() {
                   height: 36,
                   padding: '0 10px',
                   fontFamily: 'var(--font-mono)',
-                  fontSize: 12,
+                  fontSize: 'var(--fs-small)',
                   background: 'transparent',
                   color: 'var(--ink)',
                 }}
@@ -240,7 +240,7 @@ export default function SettingsPage() {
                 iconSize={13}
               />
             </div>
-            <button onClick={test} disabled={testing || !s.apiKey} className="ds-btn" style={{ height: 36, fontSize: 12 }}>
+            <button onClick={test} disabled={testing || !s.apiKey} className="ds-btn" style={{ height: 36, fontSize: 'var(--fs-small)' }}>
               <Icon name={testing ? 'refresh' : 'check'} size={12} />
               {testing ? 'Testing…' : 'Test'}
             </button>
@@ -248,7 +248,7 @@ export default function SettingsPage() {
               onClick={removeKey}
               disabled={!s.apiKey || testing}
               className="ds-btn"
-              style={{ height: 36, fontSize: 12, color: 'var(--danger-text)', borderColor: 'var(--edge)' }}
+              style={{ height: 36, fontSize: 'var(--fs-small)', color: 'var(--danger-text)', borderColor: 'var(--edge)' }}
             >
               <Icon name="trash" size={12} />
               Remove
@@ -276,7 +276,7 @@ export default function SettingsPage() {
               <span className="ds-chip" style={{ borderColor: 'var(--danger)', color: 'var(--danger-text)' }}>
                 <Dot color="var(--danger)" size={5} /> {failure.lead}
               </span>
-              <p style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5, margin: '8px 0 0', maxWidth: 'var(--measure-text-sm)' }}>
+              <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5, margin: '8px 0 0', maxWidth: 'var(--measure-text-sm)' }}>
                 {failure.help}
               </p>
             </div>
@@ -301,8 +301,8 @@ export default function SettingsPage() {
               maxWidth: 'var(--measure-text-sm)',
             }}
           >
-            <div style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 4 }}>Where your key goes</div>
-            <p style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.55, margin: 0 }}>
+            <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, marginBottom: 4 }}>Where your key goes</div>
+            <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.55, margin: 0 }}>
               It is stored in this browser and never sent to Danmu. When you run detection — or press Test — your
               browser sends the key, and in a detection run the photos too, straight to Google, whose service the key
               belongs to. Nothing else in Danmu leaves your device. For safety you can restrict the key to this site in
@@ -310,7 +310,7 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <p style={{ fontSize: 11.5, color: 'var(--ink-3)', margin: '10px 0 0', lineHeight: 1.5, maxWidth: 'var(--measure-text-sm)' }}>
+          <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)', margin: '10px 0 0', lineHeight: 1.5, maxWidth: 'var(--measure-text-sm)' }}>
             Detection works about {dailyDetections} times a day on a free key and resets each day. Testing here uses
             one of those. If detection stops responding late in the day, that is usually why — not your key.
           </p>
@@ -330,7 +330,7 @@ export default function SettingsPage() {
             onChange={(u) => s.setDimUnit(u)}
             options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.id }))}
           />
-          <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 8 }}>Showing sizes in {unitLabel}.</div>
+          <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)', marginTop: 8 }}>Showing sizes in {unitLabel}.</div>
         </Row>
 
         <SecHeader
@@ -352,7 +352,7 @@ export default function SettingsPage() {
             className="ds-btn"
             style={{
               height: 32,
-              fontSize: 12,
+              fontSize: 'var(--fs-small)',
               color: 'var(--danger-text)',
               borderColor: 'var(--danger)',
             }}
@@ -362,7 +362,7 @@ export default function SettingsPage() {
           </button>
           {!room && (
             <div style={{ marginTop: 8 }}>
-              <Link href="/workspace" className="ds-btn" style={{ height: 28, fontSize: 11.5 }}>
+              <Link href="/workspace" className="ds-btn" style={{ height: 28, fontSize: 'var(--fs-caption)' }}>
                 Go to your rooms
               </Link>
             </div>
@@ -385,8 +385,8 @@ function SecHeader({ eyebrow, title, desc }: { eyebrow: string; title: string; d
         {eyebrow}
       </div>
       {/* h2, so the sections are a real outline under the page h1 */}
-      <h2 style={{ fontSize: 22, marginBottom: 6 }}>{title}</h2>
-      {desc && <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55, maxWidth: 'var(--measure-text)' }}>{desc}</div>}
+      <h2 style={{ fontSize: 'var(--fs-title)', marginBottom: 6 }}>{title}</h2>
+      {desc && <div style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.55, maxWidth: 'var(--measure-text)' }}>{desc}</div>}
     </div>
   );
 }
@@ -406,7 +406,7 @@ function Row({
   controlId?: string;
   children: ReactNode;
 }) {
-  const labelStyle = { fontSize: 12.5, fontWeight: 600, marginBottom: 4, display: 'block' } as const;
+  const labelStyle = { fontSize: 'var(--fs-small)', fontWeight: 600, marginBottom: 4, display: 'block' } as const;
   return (
     <div
       // .row-grid collapses this to one column under 720px — the fixed
@@ -429,7 +429,7 @@ function Row({
         ) : (
           <div style={labelStyle}>{label}</div>
         )}
-        {hint && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>{hint}</div>}
+        {hint && <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)', lineHeight: 1.5 }}>{hint}</div>}
       </div>
       <div style={{ minWidth: 0 }}>{children}</div>
     </div>

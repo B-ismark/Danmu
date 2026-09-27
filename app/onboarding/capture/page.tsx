@@ -453,8 +453,8 @@ export default function CapturePage() {
       <div className="page-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--paper)' }}>
         <div className="ds-card" style={{ maxWidth: 'var(--measure-card)', padding: 24, textAlign: 'center' }}>
           <Icon name="camera" size={22} color="var(--ink-3)" style={{ margin: '0 auto 10px' }} />
-          <h1 style={{ fontSize: 19, marginBottom: 8 }}>Pick a room shape first</h1>
-          <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.5, margin: '0 0 18px' }}>
+          <h1 style={{ fontSize: 'var(--fs-title)', marginBottom: 8 }}>Pick a room shape first</h1>
+          <p style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-2)', lineHeight: 1.5, margin: '0 0 18px' }}>
             Photos are saved into a room, and there is no room open on this device yet. Choose a footprint and you can
             come straight back here.
           </p>
@@ -476,7 +476,7 @@ export default function CapturePage() {
   const forwardButton = (full?: boolean) => (
     <button
       className="ds-btn ds-btn--accent"
-      style={full ? { height: 48, width: '100%', justifyContent: 'center', fontSize: 14 } : { height: 34, fontSize: 12.5 }}
+      style={full ? { height: 48, width: '100%', justifyContent: 'center', fontSize: 'var(--fs-body)' } : { height: 34, fontSize: 'var(--fs-small)' }}
       disabled={!anyCaptured}
       onClick={() => router.push('/onboarding/detect')}
     >
@@ -489,7 +489,7 @@ export default function CapturePage() {
     <div style={{ padding: narrow ? '12px 14px 0' : '14px 16px 0' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <Icon name="info" size={14} color="var(--accent-text)" style={{ marginTop: 2 }} />
-        <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: 'var(--ink-2)', minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 'var(--fs-small)', lineHeight: 1.45, color: 'var(--ink-2)', minWidth: 0 }}>
           {CAPTURE_METHOD}{' '}
           <span style={{ color: 'var(--ink-3)' }}>
             One photo is enough to start; four gets the closest room. Add them in any order — each photo’s own compass
@@ -514,7 +514,7 @@ export default function CapturePage() {
         {/* A span, not a label: NumberField takes no `id`, so the `htmlFor` that
             used to be here pointed at nothing. The field carries its own
             accessible name via `ariaLabel`. */}
-        <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>Phone height off the floor</span>
+        <span style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}>Phone height off the floor</span>
         <NumberField
           value={heightDraft}
           onChange={setHeightDraft}
@@ -525,8 +525,8 @@ export default function CapturePage() {
           ariaLabel="Phone height off the floor, in metres"
           style={{ width: 96 }}
         />
-        <span style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>m</span>
-        <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+        <span style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)' }}>m</span>
+        <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>
           Sets the scale of everything measured from your photos.
         </span>
       </div>
@@ -597,9 +597,9 @@ export default function CapturePage() {
         {/* The mark links here: `persistPhoto` writes every shot to IndexedDB as
             it is taken, so leaving this screen costs nothing. */}
         <FlowBarLead onBack={() => router.back()} markHref="/workspace">
-          <span style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 700 }}>Photograph your room</span>
+          <span style={{ fontSize: 'var(--fs-body)', color: 'var(--ink)', fontWeight: 700 }}>Photograph your room</span>
         </FlowBarLead>
-        <span role="status" aria-live="polite" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+        <span role="status" aria-live="polite" style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)' }}>
           {filled} of 4 walls added
         </span>
         {flaggedCount > 0 && (
@@ -621,7 +621,7 @@ export default function CapturePage() {
         <Link
           href={`/room/${roomId}/model`}
           className="ds-btn ds-btn--ghost"
-          style={{ height: 34, fontSize: 12, color: 'var(--ink-2)' }}
+          style={{ height: 34, fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}
           title="Photos are optional — you can decorate the shape you picked instead"
         >
           Skip
@@ -733,7 +733,7 @@ function photoChrome(tier: ChromeTier = 'fact'): CSSProperties {
     border: '1px solid var(--edge-on-ink)',
     color: quiet ? 'var(--on-ink-2)' : 'var(--on-ink)',
     fontFamily: 'var(--font-sans)',
-    fontSize: quiet ? 10.5 : 11,
+    fontSize: quiet ? 'var(--fs-micro)' : 'var(--fs-caption)',
     fontWeight: quiet ? 600 : 700,
     whiteSpace: 'nowrap',
     cursor: tier === 'action' ? 'pointer' : 'default',
@@ -757,7 +757,7 @@ function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps:
         padding: '12px 16px 0',
       }}
     >
-      <span style={{ fontSize: 12.5, color: 'var(--ink-2)', minWidth: 0 }}>
+      <span style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', minWidth: 0 }}>
         {square
           ? 'Wrong wall on a photo? Move it, or turn the whole set round.'
           : 'Check each photo against the wall length beside it — if the whole set is one wall out, turn it round.'}
@@ -765,7 +765,7 @@ function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps:
       <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
         <button
           className="ds-btn"
-          style={{ height: 30, fontSize: 12 }}
+          style={{ height: 30, fontSize: 'var(--fs-small)' }}
           onClick={() => onRotate(-1)}
           title="Every photo moves back one wall"
         >
@@ -774,7 +774,7 @@ function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps:
         </button>
         <button
           className="ds-btn"
-          style={{ height: 30, fontSize: 12 }}
+          style={{ height: 30, fontSize: 'var(--fs-small)' }}
           onClick={() => onRotate(1)}
           title="Every photo moves on one wall"
         >
@@ -844,11 +844,11 @@ function AddTile({
         }}
       >
         <Icon name="plus" size={compact ? 18 : 22} color="var(--ink-3)" />
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+        <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: 'var(--ink)' }}>
           {first ? 'Add photos' : 'Add another'}
         </span>
         {!compact && (
-          <span style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.35 }}>
+          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', lineHeight: 1.35 }}>
             Tap to choose, or drop them here. Up to four — one per wall.
           </span>
         )}
@@ -1141,14 +1141,14 @@ function MoveMenu({
               type="button"
               role="menuitem"
               className="list-row"
-              style={{ fontSize: 12.5 }}
+              style={{ fontSize: 'var(--fs-small)' }}
               onClick={() => {
                 onMoveTo(o);
                 setOpen(false);
               }}
             >
               {labelOf(o)}
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ink-3)' }}>
+              <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>
                 {filled[o] ? 'swap' : 'empty'}
               </span>
             </button>
@@ -1264,12 +1264,12 @@ function CameraPanel({
   const head = (
     <div className="section">
       <span className="ds-label">Camera</span>
-      <p style={{ fontSize: 12, color: 'var(--ink-2)', margin: '6px 0 8px', lineHeight: 1.45 }}>
+      <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', margin: '6px 0 8px', lineHeight: 1.45 }}>
         {CAPTURE_METHOD}
       </p>
       {/* What used to be a four-way "Wall to shoot" picker. The sequence is the
           answer, so the panel states where you are in it instead of asking. */}
-      <p style={{ fontSize: 12.5, color: 'var(--ink)', margin: 0, lineHeight: 1.45 }}>
+      <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink)', margin: 0, lineHeight: 1.45 }}>
         {nextSlot ? (
           <>
             <strong>Next: {nextLabel}</strong>{' '}
@@ -1302,8 +1302,8 @@ function CameraPanel({
           >
             <Icon name="camera" size={18} color="var(--warn-text)" />
           </span>
-          <h2 style={{ fontSize: 15, color: 'var(--ink)' }}>{copy.title}</h2>
-          <p style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5, margin: 0 }}>{copy.body}</p>
+          <h2 style={{ fontSize: 'var(--fs-lead)', color: 'var(--ink)' }}>{copy.title}</h2>
+          <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5, margin: 0 }}>{copy.body}</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
             <button className="ds-btn ds-btn--accent" style={{ height: 40 }} onClick={onUseUpload}>
               <Icon name="image" size={14} color="var(--on-accent)" />
@@ -1324,10 +1324,10 @@ function CameraPanel({
       <>
         {head}
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
-          <h2 style={{ fontSize: 15, color: 'var(--ink)' }}>
+          <h2 style={{ fontSize: 'var(--fs-lead)', color: 'var(--ink)' }}>
             {nextLabel ? `Shoot ${nextLabel} with this device` : 'Every wall has a photo'}
           </h2>
-          <p style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5, margin: 0 }}>
+          <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5, margin: 0 }}>
             Your photos stay on this device — there is nowhere for them to go. Your browser will ask permission when you
             turn the camera on.
           </p>

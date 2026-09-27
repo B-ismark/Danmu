@@ -535,7 +535,7 @@ export function PartTree() {
               rebuilt from photographs where detection found no opening — which is
               exactly where a silent flat sun mood would be most confusing. */}
           {sunHasNoWayIn && (
-            <p style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.4, margin: '6px 0 0' }}>
+            <p style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-3)', lineHeight: 1.4, margin: '6px 0 0' }}>
               Sunlight only reaches a room through its openings. Add a window or a door
               from the Library to let this one in.
             </p>
@@ -546,10 +546,10 @@ export function PartTree() {
           <div style={{ marginTop: 10, padding: '10px 12px', border: '1px solid var(--accent-text)', background: 'var(--accent-tint)', borderRadius: 'var(--r-2)' }}>
             {/* --accent-text, not --accent: accent as 11px type on its own tint
                 measures 2.89:1. */}
-            <div style={{ fontSize: 11, color: 'var(--accent-text)', marginBottom: 4, fontWeight: 700 }}>
+            <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--accent-text)', marginBottom: 4, fontWeight: 700 }}>
               {generics.length} generic shape{generics.length === 1 ? '' : 's'}
             </div>
-            <p style={{ fontSize: 11, color: 'var(--ink-2)', margin: '0 0 8px', lineHeight: 1.4 }}>
+            <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-2)', margin: '0 0 8px', lineHeight: 1.4 }}>
               {generics.length === 1
                 ? 'One piece is still a plain box. Match it to a real model by name.'
                 : 'Some pieces are still plain boxes. Match them to real models by name.'}
@@ -557,7 +557,7 @@ export function PartTree() {
             <button
               onClick={improveAll}
               className="ds-btn"
-              style={{ width: '100%', height: 28, fontSize: 11, justifyContent: 'center' }}
+              style={{ width: '100%', height: 28, fontSize: 'var(--fs-caption)', justifyContent: 'center' }}
             >
               <Icon name="refresh" size={11} />
               Match to real models
@@ -588,7 +588,7 @@ export function PartTree() {
         <div
           role="status"
           aria-live="polite"
-          style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: q ? 4 : 0, fontWeight: 600 }}
+          style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)', marginTop: q ? 4 : 0, fontWeight: 600 }}
         >
           {q ? `${visibleParts.length} of ${parts.length} match` : ''}
         </div>
@@ -604,7 +604,7 @@ export function PartTree() {
         >
         {visibleParts.length === 0 && (
           // role="presentation": a listbox may only own options, and this is copy.
-          <div role="presentation" style={{ padding: '18px 14px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, lineHeight: 1.5 }}>
+          <div role="presentation" style={{ padding: '18px 14px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 'var(--fs-small)', lineHeight: 1.5 }}>
             {q ? (
               <>Nothing here matches “{q}”. Try another word — a sofa, a lamp, a rug.</>
             ) : (
@@ -841,7 +841,7 @@ function PartRow({
       </span>
       <span
         style={{
-          fontSize: 12,
+          fontSize: 'var(--fs-small)',
           fontWeight: 500,
           color: isHidden ? 'var(--ink-3)' : 'var(--ink)',
           textDecoration: isHidden ? 'line-through' : 'none',
@@ -853,58 +853,69 @@ function PartRow({
       >
         {name}
       </span>
-      {/* Both actions are permanent DOM — .row-action only fades them, and the
-          class reveals them on row hover, row focus and their own focus. The
-          previous `{hover && <IconButton/>}` delete existed for the mouse only.
-          `is-on` pins the eye open while a piece is hidden, so the state is
-          visible without hovering. */}
-      {/* Lock, beside Hide and pinned open by `is-on` for the same reason: a piece
-          Fix or Shuffle may not move is a state you need to see without hovering
-          every row to find it.
-
-          The label says what it does rather than what it is. "Lock" alone invites
-          the reading the padlock that used to sit in the status glyph got wrong —
-          that the piece is frozen against everything — and this one blocks the
-          solver only: it still drags, turns, resizes and deletes by hand. */}
-      <IconButton
-        icon={isPinned ? 'lock' : 'unlock'}
-        label={isPinned ? `Let Fix/Shuffle move ${name}` : `Keep ${name} where it is`}
-        title={isPinned ? 'Fix and Shuffle may not move this — click to release' : 'Keep where it is when the room is rearranged'}
-        active={isPinned}
-        className={`row-action${isPinned ? ' is-on' : ''}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onTogglePinned();
-        }}
-        size={24}
-        iconSize={12}
-      />
-      <IconButton
-        icon={isHidden ? 'eye-off' : 'eye'}
-        label={isHidden ? `Show ${name}` : `Hide ${name}`}
-        title={isHidden ? 'Show in the room' : 'Hide from the room'}
-        active={isHidden}
-        className={`row-action${isHidden ? ' is-on' : ''}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleHidden();
-        }}
-        size={24}
-        iconSize={12}
-      />
-      <IconButton
-        icon="trash"
-        label={`Remove ${name}`}
-        title="Remove (Del)"
-        tone="danger"
-        className="row-action"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete();
-        }}
-        size={24}
-        iconSize={12}
-      />
+      {/* A locked or hidden piece says so without hovering — a state you need to
+          see across the whole list, not one row at a time. Marks, not buttons: the
+          buttons that change them are in `.row-actions` below, and the row's
+          `aria-label` already speaks both states. */}
+      {isPinned && (
+        <span className="row-mark" aria-hidden="true">
+          <Icon name="lock" size={11} />
+        </span>
+      )}
+      {isHidden && (
+        <span className="row-mark" aria-hidden="true">
+          <Icon name="eye-off" size={11} />
+        </span>
+      )}
+      {/* The actions float over the end of the row instead of standing in it. They
+          used to be `opacity: 0` in the flow, so three invisible 24px buttons and
+          their gaps held 96px of a ~160px row whether anyone was pointing at it or
+          not — and at the laptop rail width the NAME got what was left: "D…",
+          "So…". Permanent DOM still, revealed on hover, on focus within the row and
+          on the selected row (which is also how a touch screen, with no hover,
+          reaches them). */}
+      <span className="row-actions">
+        {/* Lock: the label says what it does rather than what it is. "Lock" alone invites
+            the reading the padlock that used to sit in the status glyph got wrong —
+            that the piece is frozen against everything — and this one blocks the
+            solver only: it still drags, turns, resizes and deletes by hand. */}
+        <IconButton
+          icon={isPinned ? 'lock' : 'unlock'}
+          label={isPinned ? `Let Fix/Shuffle move ${name}` : `Keep ${name} where it is`}
+          title={isPinned ? 'Fix and Shuffle may not move this — click to release' : 'Keep where it is when the room is rearranged'}
+          active={isPinned}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePinned();
+          }}
+          size={24}
+          iconSize={12}
+        />
+        <IconButton
+          icon={isHidden ? 'eye-off' : 'eye'}
+          label={isHidden ? `Show ${name}` : `Hide ${name}`}
+          title={isHidden ? 'Show in the room' : 'Hide from the room'}
+          active={isHidden}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleHidden();
+          }}
+          size={24}
+          iconSize={12}
+        />
+        <IconButton
+          icon="trash"
+          label={`Remove ${name}`}
+          title="Remove (Del)"
+          tone="danger"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          size={24}
+          iconSize={12}
+        />
+      </span>
     </div>
   );
 }
@@ -1022,31 +1033,31 @@ function GroupRow({
       >
         Group · {count}
       </span>
-      <IconButton
-        icon="swap"
-        label={`Ungroup these ${total} pieces`}
-        title="Ungroup — they stay where they are"
-        className="row-action"
-        onClick={(e) => {
-          e.stopPropagation();
-          onUngroup();
-        }}
-        size={24}
-        iconSize={12}
-      />
-      <IconButton
-        icon="trash"
-        label={`Remove these ${total} pieces`}
-        title="Remove the whole group (Del)"
-        tone="danger"
-        className="row-action"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete();
-        }}
-        size={24}
-        iconSize={12}
-      />
+      <span className="row-actions">
+        <IconButton
+          icon="swap"
+          label={`Ungroup these ${total} pieces`}
+          title="Ungroup — they stay where they are"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUngroup();
+          }}
+          size={24}
+          iconSize={12}
+        />
+        <IconButton
+          icon="trash"
+          label={`Remove these ${total} pieces`}
+          title="Remove the whole group (Del)"
+          tone="danger"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          size={24}
+          iconSize={12}
+        />
+      </span>
     </div>
   );
 }

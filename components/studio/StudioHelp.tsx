@@ -145,18 +145,18 @@ export function StudioHelp() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', flex: 1 }}>
+            <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--ink)', flex: 1 }}>
               {COACH_COPY[coach].title}
             </span>
             <button
               onClick={() => setCoach(null)}
               className="ds-btn ds-btn--ghost"
-              style={{ height: 24, fontSize: 11, padding: '0 8px', color: 'var(--accent-text)' }}
+              style={{ height: 24, fontSize: 'var(--fs-caption)', padding: '0 8px', color: 'var(--accent-text)' }}
             >
               Got it
             </button>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5, marginTop: 3 }}>
+          <div style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5, marginTop: 3 }}>
             {COACH_COPY[coach].body}
           </div>
         </div>

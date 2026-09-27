@@ -527,7 +527,9 @@ backend, no account. The 3D studio *is* the product.
 4. **No hard-coded design values.** Colours / spacing / type / radii go through
    CSS tokens in `app/globals.css` (`--paper`, `--ink`, `--accent` terracotta,
    `--accent-2` sage, `--r-*`, `--font-sans` Nunito / `--font-display`
-   Fraunces). Match the warm, rounded, playful direction. **Fill tokens and text
+   Fraunces, the `--fs-*` type scale and the `--dur-*` / `--ease-*` motion tokens —
+   `tests/type-scale.test.ts` fails on a literal font size or transition speed).
+   Match the warm, rounded, playful direction. **Fill tokens and text
    tokens are not interchangeable:** `--accent` / `--danger` / `--warn` /
    `--success` are fills, and their `-ink` / `-text` variants are the ones that
    clear 4.5:1 as type (`--accent-text` also works on `--accent-tint`). Anything

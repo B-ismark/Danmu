@@ -38,7 +38,7 @@ export default function Home() {
         display: 'grid',
         placeItems: 'center',
         color: 'var(--ink-2)',
-        fontSize: 13,
+        fontSize: 'var(--fs-body)',
       }}
     >
       Danmu · Opening your rooms…

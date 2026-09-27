@@ -113,6 +113,28 @@ owned by a deterministic geometry engine, not by a model.
    variants existed with no rule about when, so five files used one, five the
    other, and two pages used both at once. `globals.css` states it where they are
    defined.
+   **Then type and motion, the last two families still typed as numbers.** There
+   were twenty-two font sizes half a pixel apart and five transition speeds with
+   no rule about which. The *type scale* is six interface steps — `--fs-micro`
+   10.5 · `--fs-caption` 11.5 · `--fs-small` 12.5 · `--fs-body` 13.5 · `--fs-lead`
+   16 · `--fs-title` 22 — and two headline steps, `--fs-display` 30 and the fluid
+   `--fs-hero`. *Motion* is three speeds (`--dur-quick` feedback under the pointer,
+   `--dur-base` a control changing state, `--dur-slow` something travelling) and
+   two curves (`--ease-out`, `--ease-in-out`). `tests/type-scale.test.ts` pins the
+   steps and fails on a literal size or duration anywhere in `app/` or
+   `components/`; the exemptions are named there (satori's OG image, SVG text in a
+   drawing's own units, the brand mark's proportional wordmark). Every size moved
+   by at most half a pixel except the old one-offs, which moved to the step they
+   were doing the job of.
+   **Nothing UI-facing is done until `scripts/fidelity-sweep.mjs` is clean.** It
+   walks every screen at seven widths (360 → 1920) against a production build and
+   counts the silent failures rule 4 names — text spilling its box, text clipped by
+   an `overflow: hidden` ancestor, a label ellipsised to nothing ("D…"), controls
+   off-screen or overlapping, the page scrolling sideways — and writes screenshots
+   to look at, because the counts do not see an awkward wrap. Its first run found
+   the piece catalog cutting names to one letter across the whole 1024–1279px step,
+   because three invisible row actions held 96px of a ~160px row; they float over
+   the row now (`.row-actions`).
 6. **Warm & playful visual direction.** Cream paper, terracotta (`--accent`) +
    sage (`--accent-2`) accents, Nunito (sans) / Fraunces (display) type, generous
    rounding. Matches the soft procedural 3D models.

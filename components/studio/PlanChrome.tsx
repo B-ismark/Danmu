@@ -23,11 +23,15 @@ export function PlanViewControls({
   zoom,
   rot,
   dimUnit,
+  unitName,
 }: {
   api: RefObject<PlanViewHandle | null>;
   zoom: number;
   rot: number;
+  /** The unit's short form, as the readout prints it — `m`, `cm`, `ft`. */
   dimUnit: string;
+  /** Its full name, for the tooltip. */
+  unitName: string;
 }) {
   const deg = (((rot * 180) / Math.PI) % 360).toFixed(0);
   return (
@@ -52,12 +56,14 @@ export function PlanViewControls({
       />
       {/* One readout, not two. The old top-left chip said "To scale in mm" beside
           a percentage while this toolbar showed the percentage again. The unit is
-          the claim worth making — it is what someone measuring would rely on. */}
+          the claim worth making — it is what someone measuring would rely on.
+          The SHORT form: "centimeters (cm) · 100%" was the widest thing in the
+          row, and on a phone it was cut off by the toolbar's own edge. */}
       <span
         className="mono"
-        title={`Drawn to scale. Every dimension is in ${dimUnit}.`}
+        title={`Drawn to scale. Every dimension is in ${unitName}.`}
         style={{
-          fontSize: 10,
+          fontSize: 'var(--fs-micro)',
           color: 'var(--ink-3)',
           letterSpacing: '0.06em',
           display: 'flex',
@@ -89,7 +95,7 @@ export function PlanViewControls({
       <span
         className="mono"
         style={{
-          fontSize: 10,
+          fontSize: 'var(--fs-micro)',
           color: 'var(--ink-3)',
           letterSpacing: '0.06em',
           display: 'flex',
@@ -112,7 +118,7 @@ export function PlanViewControls({
         onClick={() => api.current?.fit()}
         title="Back to the default view"
         className="ds-btn"
-        style={{ height: 28, fontSize: 11, padding: '0 9px', gap: 5 }}
+        style={{ height: 28, fontSize: 'var(--fs-caption)', padding: '0 9px', gap: 5 }}
       >
         <Icon name="fit" size={12} />
         Fit
@@ -132,7 +138,7 @@ export function ComfortLegend({ hasCutOff }: { hasCutOff: boolean }) {
       className="popover"
       style={{
         padding: '7px 10px',
-        fontSize: 11,
+        fontSize: 'var(--fs-caption)',
         color: 'var(--ink-3)',
         lineHeight: 1.45,
         display: 'flex',

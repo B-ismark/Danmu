@@ -47,7 +47,7 @@ export function Select<T extends string>({
   id,
   width,
   height = 34,
-  fontSize = 13,
+  fontSize = 'var(--fs-body)',
   placeholder = 'Select…',
 }: {
   options: SelectOption<T>[];
@@ -59,7 +59,8 @@ export function Select<T extends string>({
   /** trigger width. Defaults to filling its container, like `.field`. */
   width?: number | string;
   height?: number;
-  fontSize?: number;
+  /** A `--fs-*` step, as `var(--fs-…)`. */
+  fontSize?: string;
   placeholder?: string;
 }) {
   const listId = useId();
@@ -261,7 +262,7 @@ export function Select<T extends string>({
                     height: 32,
                     padding: '0 8px',
                     borderRadius: 'var(--r-1)',
-                    fontSize: 12.5,
+                    fontSize: 'var(--fs-small)',
                     fontWeight: isSel ? 700 : 500,
                     color: isSel ? 'var(--accent-text)' : 'var(--ink)',
                     // Hover/keyboard focus is a wash; the chosen one keeps the
@@ -274,7 +275,7 @@ export function Select<T extends string>({
                 >
                   {o.icon && <Icon name={o.icon} size={13} />}
                   <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</span>
-                  {o.hint && <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{o.hint}</span>}
+                  {o.hint && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)' }}>{o.hint}</span>}
                   {isSel && <Icon name="check" size={13} />}
                 </div>
               );

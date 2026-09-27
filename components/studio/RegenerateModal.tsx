@@ -52,7 +52,7 @@ export function SwapModelModal({
       width={520}
       bodyPadding="20px 24px 12px"
       footer={
-        <button onClick={onClose} className="ds-btn" style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center' }}>
+        <button onClick={onClose} className="ds-btn" style={{ flex: 1, height: 36, fontSize: 'var(--fs-body)', justifyContent: 'center' }}>
           Cancel
         </button>
       }
@@ -60,10 +60,10 @@ export function SwapModelModal({
       <div className="ds-kicker" style={{ marginBottom: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <Icon name="swap" size={13} /> Change the model
       </div>
-      <div id="swap-model-title" style={{ fontSize: 22, fontWeight: 600, marginBottom: 6, letterSpacing: '-0.01em' }}>
+      <div id="swap-model-title" style={{ fontSize: 'var(--fs-title)', fontWeight: 600, marginBottom: 6, letterSpacing: '-0.01em' }}>
         {part.name}
       </div>
-      <p style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5, margin: '0 0 14px' }}>
+      <p style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-3)', lineHeight: 1.5, margin: '0 0 14px' }}>
         Pick a closer model. It stays where it is and keeps its colour and finish, and a
         size you type in the search (&quot;1200mm tall&quot;) carries over.
       </p>

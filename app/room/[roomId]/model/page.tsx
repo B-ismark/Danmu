@@ -21,7 +21,7 @@ const Room = dynamic(() => import('@/components/three/Room').then((m) => m.Room)
         display: 'grid',
         placeItems: 'center',
         color: 'var(--ink-3)',
-        fontSize: 13,
+        fontSize: 'var(--fs-body)',
       }}
     >
       Loading your 3D room…

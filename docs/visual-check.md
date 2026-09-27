@@ -943,6 +943,27 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
+### One type scale, and piece names you can read at laptop width — PR #157, SWEPT, wants a hand on a real mouse and a real phone
+
+Every font size is one of eight steps now and every transition one of three speeds
+(`--fs-*`, `--dur-*` in `globals.css`). Most sizes moved by half a pixel. Swept with
+`scripts/fidelity-sweep.mjs` on every screen at 360 / 390 / 768 / 1024 / 1280 / 1440 /
+1920, metric and feet: **0 findings** (the build before this had 2 — the plan's unit
+readout cut off by its toolbar on a phone — plus the catalog names cut to one letter,
+which the sweep could not see until it learned to). SwiftShader, desktop Chromium only.
+
+What the sweep cannot tell you, and a person can:
+- **The catalog's hover actions.** Point at a piece row in the left rail: lock, hide and
+  remove fade in OVER the end of the name, on a fade of the row's own colour. Wrong looks
+  like a grey slab, a hard edge, or the name jumping sideways. Do it on a selected row
+  too (the fade carries the terracotta tint).
+- **On a touch screen**, tap a row: its actions show on the selected row, since there is
+  no hover. Wrong looks like a row with no way to hide or delete the piece.
+- **A locked or hidden piece** shows a small padlock / crossed eye after its name without
+  hovering.
+- **On a phone** the 3D tab's Move / Scale / Rotate read in full, with the W / S / R
+  keycaps gone. Wrong looks like "M…".
+
 ### The lens tilt read needs a real phone, on BOTH engines — merged to `main` in `17f9d62` (PR #148)
 
 **Where to click.** On an Android phone in Chrome and on an iPhone in Safari: open

@@ -124,7 +124,7 @@ export function NumberField({
         className="field"
         style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 13,
+          fontSize: 'var(--fs-body)',
           fontWeight: 600,
           height,
           // room for the stepper column, so long values never run under it

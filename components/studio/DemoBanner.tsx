@@ -80,13 +80,13 @@ export function DemoBanner() {
         borderBottom: '1px solid var(--hairline)',
         color: 'var(--accent-text)',
         fontFamily: 'var(--font-sans)',
-        fontSize: 13,
+        fontSize: 'var(--fs-body)',
         fontWeight: 600,
         lineHeight: 1.4,
       }}
     >
       <Icon name="sparkles" size={15} style={{ flexShrink: 0 }} />
-      <span style={{ minWidth: 0, flex: 1 }}>
+      <p style={{ minWidth: 0, flex: 1, margin: 0 }}>
         This room is yours to rearrange — drag a piece to move it, click a wall to paint it.{' '}
         <Link
           href="/onboarding/capture"
@@ -99,7 +99,7 @@ export function DemoBanner() {
         >
           Rather use your own room? Photograph it
         </Link>
-      </span>
+      </p>
       <IconButton
         icon="x"
         label="Hide the getting-started tip"

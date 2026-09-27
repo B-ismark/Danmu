@@ -186,7 +186,7 @@ export function ExportMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className="ds-btn"
-        style={{ height: 28, fontSize: 12 }}
+        style={{ height: 28, fontSize: 'var(--fs-small)' }}
       >
         <Icon name="download" size={12} />
         Export
@@ -234,8 +234,8 @@ export function ExportMenu() {
             >
               <Icon name={it.icon} size={13} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>{it.label}</span>
-                <span style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.4 }}>{it.hint}</span>
+                <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--ink)' }}>{it.label}</span>
+                <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)', lineHeight: 1.4 }}>{it.hint}</span>
               </span>
             </button>
           ))}

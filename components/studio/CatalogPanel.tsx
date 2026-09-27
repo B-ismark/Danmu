@@ -60,7 +60,7 @@ export function AddPiecesButton() {
       style={{
         width: '100%',
         height: 32,
-        fontSize: 12,
+        fontSize: 'var(--fs-small)',
         justifyContent: 'center',
         background: 'var(--accent-tint)',
         // --accent as type on --accent-tint measures 2.89:1; --accent-text is
@@ -112,7 +112,7 @@ export function CatalogToggle() {
       title="Add a piece — drag it into the room, click to drop it in the first clear spot, or Shift-click to mark several"
       style={{
         height: 30,
-        fontSize: 12,
+        fontSize: 'var(--fs-small)',
         fontWeight: 700,
         gap: 6,
         // It sits in `CanvasTools`, which wraps. Holding its width there is what
@@ -285,7 +285,7 @@ export function CatalogPanel({
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 12px' }}>
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', margin: '0 0 8px', lineHeight: 1.4 }}>
+        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--ink-3)', margin: '0 0 8px', lineHeight: 1.4 }}>
           {canDrag
             ? 'Drag a piece in, click to drop it in the first clear spot, or Shift-click to mark several.'
             : 'Click a piece to drop it in the first clear spot. Shift-click to mark several.'}

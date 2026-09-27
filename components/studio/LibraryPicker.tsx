@@ -171,7 +171,7 @@ export function LibraryPicker({
         }}
       >
         {Object.keys(groups).length === 0 && (
-          <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, lineHeight: 1.5 }}>
+          <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-3)', fontSize: 'var(--fs-small)', lineHeight: 1.5 }}>
             Nothing matches &quot;{q}&quot;.
             <br />
             Try a room word like &quot;chair&quot;, &quot;lamp&quot; or &quot;storage&quot;.
@@ -187,7 +187,7 @@ export function LibraryPicker({
                 position: 'sticky',
                 top: 0,
                 zIndex: 'var(--z-sticky-local)',
-                fontSize: 10,
+                fontSize: 'var(--fs-micro)',
                 padding: '2px 0 6px',
                 background: 'var(--paper)',
                 display: 'flex',
@@ -245,7 +245,7 @@ export function LibraryPicker({
                   }
                   style={{
                     height: 34,
-                    fontSize: 12,
+                    fontSize: 'var(--fs-small)',
                     justifyContent: 'flex-start',
                     paddingLeft: 10,
                     cursor: draggable ? 'grab' : 'pointer',
@@ -270,7 +270,7 @@ export function LibraryPicker({
                     <span
                       className="mono"
                       style={{
-                        fontSize: 10,
+                        fontSize: 'var(--fs-micro)',
                         // Two tells, not one: the warn tone AND the glyph beside
                         // it, because colour alone is not a state.
                         color: refused ? 'var(--warn-text)' : 'var(--ink-3)',
@@ -298,7 +298,7 @@ export function LibraryPicker({
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingTop: 8, flexShrink: 0 }}>
           <button
             className="ds-btn"
-            style={{ flex: 1, minWidth: 0, height: 30, fontSize: 12, justifyContent: 'center', fontWeight: 700 }}
+            style={{ flex: 1, minWidth: 0, height: 30, fontSize: 'var(--fs-small)', justifyContent: 'center', fontWeight: 700 }}
             onClick={() => {
               // Catalogue order rather than press order, which is what this did before
               // and is the less surprising of the two when several pieces land at once.
@@ -314,7 +314,7 @@ export function LibraryPicker({
           </button>
           <button
             className="ds-btn"
-            style={{ height: 30, fontSize: 12, paddingInline: 10 }}
+            style={{ height: 30, fontSize: 'var(--fs-small)', paddingInline: 10 }}
             onClick={() => setMarked([])}
           >
             Clear

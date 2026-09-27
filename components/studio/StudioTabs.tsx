@@ -62,7 +62,7 @@ export function StudioTabs() {
               border: 'none',
               borderRadius: 'var(--r-1)',
               fontFamily: 'var(--font-sans)',
-              fontSize: 12.5,
+              fontSize: 'var(--fs-small)',
               fontWeight: 600,
               cursor: 'pointer',
             }}

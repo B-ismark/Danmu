@@ -145,9 +145,9 @@ export function StorageToast() {
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: tone.lead, lineHeight: 1.5 }}>{t.title}</div>
+              <div style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: tone.lead, lineHeight: 1.5 }}>{t.title}</div>
               {t.message && (
-                <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 2 }}>
+                <div style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 2 }}>
                   {t.message}
                 </div>
               )}
@@ -157,7 +157,7 @@ export function StorageToast() {
                 <div
                   className="mono"
                   style={{
-                    fontSize: 9.5,
+                    fontSize: 'var(--fs-micro)',
                     color: 'var(--ink-3)',
                     marginTop: 5,
                     lineHeight: 1.4,
@@ -177,7 +177,7 @@ export function StorageToast() {
                         t.action?.onClick();
                       }}
                       className="ds-btn"
-                      style={{ height: 26, fontSize: 11.5, padding: '0 10px' }}
+                      style={{ height: 26, fontSize: 'var(--fs-caption)', padding: '0 10px' }}
                     >
                       {t.action.label}
                     </button>
@@ -187,7 +187,7 @@ export function StorageToast() {
                       href={t.link.href}
                       onClick={() => dismiss(t.id)}
                       className="ds-btn"
-                      style={{ height: 26, fontSize: 11.5, padding: '0 10px' }}
+                      style={{ height: 26, fontSize: 'var(--fs-caption)', padding: '0 10px' }}
                     >
                       {t.link.label}
                     </Link>

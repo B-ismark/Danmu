@@ -152,7 +152,7 @@ export function PlanThumb({ roomId }: { roomId: string }) {
             display: 'grid',
             placeItems: 'center',
             color: 'var(--ink-3)',
-            fontSize: 11,
+            fontSize: 'var(--fs-caption)',
             fontWeight: 600,
           }}
         >

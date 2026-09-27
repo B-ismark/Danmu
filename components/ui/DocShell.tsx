@@ -145,7 +145,7 @@ function Breadcrumb({ trail }: { trail: Crumb[] }) {
           return (
             <li key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               {i > 0 && (
-                <span aria-hidden="true" style={{ color: 'var(--ink-4)', fontSize: 12 }}>
+                <span aria-hidden="true" style={{ color: 'var(--ink-4)', fontSize: 'var(--fs-small)' }}>
                   /
                 </span>
               )}
@@ -153,7 +153,7 @@ function Breadcrumb({ trail }: { trail: Crumb[] }) {
                 <Link
                   href={c.href}
                   style={{
-                    fontSize: 12.5,
+                    fontSize: 'var(--fs-small)',
                     fontWeight: 600,
                     color: 'var(--ink-3)',
                     textDecoration: 'none',
@@ -168,7 +168,7 @@ function Breadcrumb({ trail }: { trail: Crumb[] }) {
                   // it is marked as such rather than just being the unlinked one.
                   aria-current={last ? 'page' : undefined}
                   style={{
-                    fontSize: 12.5,
+                    fontSize: 'var(--fs-small)',
                     fontWeight: 700,
                     color: 'var(--ink)',
                     whiteSpace: 'nowrap',
