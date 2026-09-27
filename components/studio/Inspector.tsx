@@ -1,5 +1,6 @@
 'use client';
 
+import { useMediaQuery } from '@/lib/use-media-query';
 import { useEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
@@ -59,13 +60,18 @@ export function Inspector() {
   const { report } = useRoomReport();
 
   const [swapOpen, setSwapOpen] = useState(false);
+  // "Tap" under a finger, "click" under a mouse: the verb follows the pointer, not
+  // the window's width — a touch laptop is still a laptop.
+  const touch = useMediaQuery('(pointer: coarse)');
 
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
 
   if (!part || !id)
     return (
       <div className="t-meta" style={{ padding: 20, textAlign: 'center', lineHeight: 1.5 }}>
-        Click a piece of furniture to recolour, restyle or move it — or click a wall to paint it.
+        {touch
+          ? 'Tap a piece of furniture to recolour, restyle or move it — or tap a wall to paint it.'
+          : 'Click a piece of furniture to recolour, restyle or move it — or click a wall to paint it.'}
       </div>
     );
 

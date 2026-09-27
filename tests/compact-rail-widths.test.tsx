@@ -148,7 +148,9 @@ describe('the compact step, at a width that is actually in it', () => {
       </StudioShell>,
     );
     expect(container.querySelector('.split'), `at ${STACK_MAX}px`).toBeNull();
-    expect(container.querySelector('.sheet-shell'), `no sheet at ${STACK_MAX}px`).not.toBeNull();
+    // A tablet width: the room with one docked panel (SheetShell's pane), not a
+    // phone's bottom sheet, which starts below 600px.
+    expect(container.querySelector('.pane-shell'), `no tablet pane at ${STACK_MAX}px`).not.toBeNull();
   });
 
   it('and a dragged rail keeps the width it was dragged to, because a preference outranks a step', () => {

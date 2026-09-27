@@ -60,6 +60,7 @@
 // which is exactly the case `lib/transforms.ts` allows: the question is "has
 // anything been overridden", not "what is this piece's transform".
 
+import { usePhoneStudio } from './NarrowViewportBanner';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { Icon } from '@/components/ui/Icon';
@@ -103,6 +104,11 @@ export function RailFooter() {
       ? `Delete ${selectedCount} selected pieces from the scene`
       : `Delete ${selectedName} from the scene`;
   const confirm = useConfirm();
+  const phone = usePhoneStudio();
+
+  // With Add moved to the toolbar, a phone's footer can have nothing to hold; an
+  // empty tinted strip at the bottom of a sheet reads as a broken bar.
+  if (phone && selectedWall === null && selectedName == null && !hasAnyOverride) return null;
 
   return (
     <div className="rail-footer">
@@ -152,9 +158,12 @@ export function RailFooter() {
           destructive one leading, the one that adds trailing. Stretched halves read
           as a segmented control, and a lone "Add" spanning a 320px rail is a bar,
           not a button. */}
-      <div style={{ minWidth: 0, marginLeft: 'auto' }}>
-        <AddPiecesButton />
-      </div>
+      {/* A phone's Add is its toolbar's primary action, one row below this. */}
+      {!phone && (
+        <div style={{ minWidth: 0, marginLeft: 'auto' }}>
+          <AddPiecesButton />
+        </div>
+      )}
       {hasAnyOverride && (
         <Tooltip label="Put everything back">
           <IconButton

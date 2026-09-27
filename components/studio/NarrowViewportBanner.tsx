@@ -36,6 +36,13 @@ const STACK_WIDTH = 1023;
  *  width", which one boolean cannot express — tldraw carries a 0–7 ladder for
  *  the same reason. */
 const COMPACT_WIDTH = 1279;
+/** At or below this the studio is laid out for a PHONE, not merely a narrow window:
+ *  one app-bar row, a toolbar under the thumb, and panels that rise as sheets. It is
+ *  Material's compact width class (under 600dp), and Flutter's adaptive guidance
+ *  draws the same line for the same reason — past it the layout BRANCHES rather than
+ *  scaling. Between this and `STACK_WIDTH` is a tablet: the room with one panel
+ *  docked beside it (Material's supporting pane). */
+const PHONE_WIDTH = 599;
 const DISMISS_KEY = 'danmu-studio-gate-dismissed';
 
 /** Whether the studio should stack its rails under the canvas rather than sit in
@@ -73,6 +80,12 @@ export function useStudioLayout(): { layout: StudioLayout; ready: boolean } {
     // other has not answered — which is the layout shift `ready` exists to stop.
     ready: stack.ready && compact.ready,
   };
+}
+
+/** True on a phone-width window — see `PHONE_WIDTH`. Exported from here so the
+ *  studio's breakpoints stay in one file. */
+export function usePhoneStudio(): boolean {
+  return useMediaQuery(`(max-width: ${PHONE_WIDTH}px)`);
 }
 
 export function NarrowViewportBanner() {

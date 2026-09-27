@@ -251,11 +251,12 @@
   --shadow-lift: 0 2px 4px rgba(42, 37, 32, 0.06), 0 12px 28px rgba(42, 37, 32, 0.10);
   /* The lift, cast upward: a bottom sheet stands on the room from below. */
   --shadow-sheet: 0 -1px 3px rgba(42, 37, 32, 0.06), 0 -12px 28px rgba(42, 37, 32, 0.10);
-  /* The phone studio's bottom sheet. At rest it is exactly its tab bar — a grab
-     line over two 44px tabs — and the room gets everything above it. Open, it
-     stops `--sheet-top-gap` short of the top so a strip of room always shows:
-     the sheet is over the room, not instead of it. */
-  --sheet-peek: 64px;
+  /* A tablet's one docked panel (SheetShell's pane): a rail's width, and at
+     768px the room keeps ~60% — Material's supporting pane asks 50/50 at a
+     medium width, and the room is the primary content here. */
+  --pane-w: clamp(300px, 40vw, 360px);
+  /* The phone's sheet at its tallest stops this short of the top, so a strip of
+     room always shows: the sheet is over the room, not instead of it. */
   --sheet-top-gap: 56px;
 }
 
@@ -267,6 +268,11 @@ html, body {
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
+
+/* `viewport-fit=cover` (app/layout.tsx) hands the notch and the rounded corners to
+   the page, so the page steps out of their way — top and sides here, the bottom
+   wherever something actually sits on it (the phone toolbar, a sheet's body). */
+body { padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
 * { box-sizing: border-box; }
 
 /* Headings lean on the display serif by default — warm + editorial. */
@@ -1053,50 +1059,55 @@ textarea.field { border-radius: var(--r-2); }
    that turns those columns into rows lives in the 720px block below. */
 .split { display: grid; min-height: 0; }
 
-/* The studio on a phone or tablet (SheetShell). The room is the grid's first row
-   and the sheet's resting height is its second, so at rest the sheet covers no
-   room at all; opened, it rises OVER the room from that row, which is when the
-   panel and not the room is what is in use. */
-.sheet-shell {
-  position: relative; height: 100%; min-height: 0; overflow: hidden;
-  display: grid; grid-template-rows: minmax(0, 1fr) var(--sheet-peek);
+/* The phone app bar (TopBar on a phone): one 56px row. Every control in it is a
+   44px square (Apple's minimum hit region) and the room name takes what is left. */
+.app-bar {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  min-height: 56px; padding: 6px 6px 6px 2px;
+  background: var(--paper); border-bottom: 1px solid var(--hairline);
 }
-.sheet-shell__room { grid-row: 1; min-height: 0; display: grid; }
-.sheet-shell__room > * { min-height: 0; min-width: 0; }
-.sheet {
-  position: absolute; left: 0; right: 0; bottom: 0;
-  height: var(--sheet-peek);
-  display: flex; flex-direction: column;
-  background: var(--paper);
-  border-top: 1px solid var(--hairline);
-  border-radius: var(--r-3) var(--r-3) 0 0;
-  box-shadow: var(--shadow-sheet);
-  z-index: var(--z-panel);
-  transition: height var(--dur-slow) var(--ease-out);
+.app-bar__btn { width: 44px; height: 44px; flex-shrink: 0; color: var(--ink-2); }
+.app-bar .editable { padding: 0 6px; }
+
+/* The More menu: rows a thumb can hit — 48px, Material's target — under the bar's
+   trailing edge, never wider than the screen. */
+.more-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: var(--z-popover);
+  width: min(300px, calc(100vw - 24px));
+  padding: 6px; display: flex; flex-direction: column; gap: 2px;
 }
-.sheet[data-snap="half"] { height: 55%; }
-.sheet[data-snap="full"] { height: calc(100% - var(--sheet-top-gap)); }
-/* A finger on the handle owns the height; easing it would trail the finger. */
-.sheet[data-dragging] { transition: none; }
-.sheet__bar {
-  position: relative; flex-shrink: 0;
-  height: var(--sheet-peek);
-  display: flex; align-items: flex-end;
-  padding: 0 10px 6px;
-  /* The bar is the drag surface: the browser must not scroll the page with it. */
-  touch-action: none; user-select: none; cursor: grab;
+.more-menu__heading { padding: 10px 10px 4px; }
+.menu-row {
+  display: flex; align-items: center; gap: 12px; min-height: 48px; width: 100%;
+  padding: 8px 10px; text-align: left;
+  background: transparent; border: 0; border-radius: var(--r-2); cursor: pointer;
+  color: var(--ink-2);
 }
-.sheet[data-snap="half"] .sheet__bar,
-.sheet[data-snap="full"] .sheet__bar { border-bottom: 1px solid var(--hairline); }
-.sheet__handle {
-  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-  width: 64px; height: 14px; padding: 0;
-  display: grid; place-items: center;
-  background: none; border: 0; border-radius: var(--r-1); cursor: grab;
+.menu-row:hover, .menu-row:focus-visible { background: var(--paper-2); }
+.menu-row__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.menu-row__label { font-size: var(--fs-body); font-weight: 700; color: var(--ink); }
+
+/* The studio below 1024px (SheetShell) — two shapes, and neither is the laptop
+   layout made smaller. See that file's header for where each choice comes from. */
+.shell-room { min-height: 0; min-width: 0; display: grid; }
+.shell-room > * { min-height: 0; min-width: 0; }
+/* The rail bodies, reused inside a sheet or the tablet pane. `.rail` is
+   `display: flex`, which outranks the UA's `[hidden] { display: none }`. */
+.sheet__rail { flex: 1 1 auto; height: auto; min-height: 0; border: 0; }
+.sheet__rail[hidden] { display: none; }
+
+/* Tablet: Material's supporting pane — the room, and one panel docked beside it. */
+.pane-shell {
+  height: 100%; min-height: 0; overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr) var(--pane-w);
 }
-.sheet__handle > span { width: 36px; height: 4px; border-radius: 999px; background: var(--hairline-strong); }
-.sheet__tabs { display: flex; gap: 6px; width: 100%; }
-.sheet__tab {
+.pane { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--hairline); }
+.pane__body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.panel-tabs {
+  display: flex; gap: 4px; flex-shrink: 0; padding: 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.panel-tab {
   flex: 1 1 0; min-width: 0; height: 44px; padding: 0 12px;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   font-family: var(--font-sans); font-size: var(--fs-body); font-weight: 600;
@@ -1104,12 +1115,95 @@ textarea.field { border-radius: var(--r-2); }
   border: 1px solid transparent; border-radius: var(--r-2); cursor: pointer;
   transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
 }
-.sheet__tab[aria-selected="true"] { background: var(--paper-2); color: var(--ink); border-color: var(--edge); }
-.sheet__tab-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 999px; background: var(--accent); }
-.sheet__body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.sheet__rail { flex: 1 1 auto; height: auto; }
-/* `.rail` is `display: flex`, which outranks the UA's `[hidden] { display: none }`. */
-.sheet__rail[hidden] { display: none; }
+.panel-tab[aria-selected="true"] { background: var(--paper-2); color: var(--ink); border-color: var(--edge); }
+.panel-tab__dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 999px; background: var(--accent); }
+
+/* Phone: the room full-screen, a toolbar under the thumb, one sheet at a time.
+   The toolbar is a grid ROW rather than `position: fixed` — bars in flow are what
+   iOS Safari's collapsing toolbar leaves alone — and it clears the home indicator
+   with the safe-area inset (`viewport-fit=cover`, app/layout.tsx). */
+.sheet-shell {
+  position: relative; height: 100%; min-height: 0; overflow: hidden;
+  display: grid; grid-template-rows: minmax(0, 1fr) auto;
+}
+.sheet-shell__stage { grid-row: 1; position: relative; min-height: 0; display: grid; overflow: hidden; }
+.phone-toolbar {
+  display: flex; justify-content: center; gap: 4px;
+  padding: 6px 12px max(6px, env(safe-area-inset-bottom));
+  background: var(--paper);
+  border-top: 1px solid var(--hairline);
+}
+/* A toolbar item: icon over a one-word label, 56px tall — past Apple's 44pt and
+   Material's 48dp, because a bottom edge is where Hoober measured touches landing
+   least accurately. Items share the bar but stop at 128px: three of them do not
+   become three 120px slabs on a 430px phone. */
+.phone-tool {
+  flex: 1 1 0; min-width: 0; max-width: 128px; min-height: 56px; padding: 6px 8px;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-family: var(--font-sans); font-size: var(--fs-caption); font-weight: 700;
+  color: var(--ink-2); background: transparent;
+  border: 0; border-radius: var(--r-3); cursor: pointer;
+  touch-action: manipulation;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.phone-tool > .truncate { max-width: 100%; }
+.phone-tool[aria-expanded="true"] { background: var(--paper-2); color: var(--ink); }
+/* The one primary action (Add, or the selected piece) — tinted, never a second fill. */
+.phone-tool[data-prominent] { color: var(--accent-text); background: var(--accent-tint); }
+.phone-tool[data-prominent][aria-expanded="true"] { box-shadow: inset 0 0 0 1px var(--accent-text); }
+
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 55%;
+  display: flex; flex-direction: column;
+  background: var(--paper);
+  border-top: 1px solid var(--hairline);
+  border-radius: var(--r-3) var(--r-3) 0 0;
+  box-shadow: var(--shadow-sheet);
+  z-index: var(--z-panel);
+  /* Visible from the first frame of the rise (`step-start`)… */
+  transition: height var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out), visibility var(--dur-slow) step-start;
+}
+.sheet[data-snap="full"] { height: calc(100% - var(--sheet-top-gap)); }
+/* Closed is off the bottom edge and out of the accessibility tree; `visibility`
+   waits for the slide to finish before it hides anything. */
+.sheet[data-snap="closed"] {
+  transform: translateY(calc(100% + 16px)); visibility: hidden;
+  /* …and hidden only once the slide down has finished (`step-end`). */
+  transition: height var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out), visibility var(--dur-slow) step-end;
+}
+/* A finger on the grabber owns the height; easing it would trail the finger. */
+.sheet[data-dragging] { transition: none; }
+.sheet__head {
+  position: relative; flex-shrink: 0;
+  display: flex; align-items: center; gap: 8px;
+  min-height: 56px; padding: 12px 6px 4px 16px;
+  border-bottom: 1px solid var(--hairline);
+  /* The head is the drag surface: the browser must not scroll the page with it. */
+  touch-action: none; user-select: none;
+}
+/* The grabber: a 36×4 bar in a 48px-wide hit box across the top edge. */
+.sheet__handle {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 64px; height: 20px; padding: 0;
+  display: grid; place-items: center;
+  background: none; border: 0; border-radius: var(--r-1); cursor: grab;
+}
+.sheet__handle > span { width: 36px; height: 4px; border-radius: 999px; background: var(--hairline-strong); }
+.sheet__title {
+  flex: 1 1 auto; min-width: 0;
+  font-family: var(--font-sans); font-size: var(--fs-lead); font-weight: 700; color: var(--ink);
+}
+/* Under a finger the Library's rows are 44px, not a mouse's 32. */
+.catalog-touch .ds-btn--sm { height: auto; min-height: 44px; }
+.sheet__close { width: 44px; height: 44px; flex-shrink: 0; color: var(--ink-2); }
+.sheet__body {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+  /* A scroll that reaches the end of a panel stops there, rather than dragging the
+     page (or pulling to refresh) behind it. */
+  overscroll-behavior: contain;
+}
 
 /* Reassurance, not feedback: "Saves as you go" is worth a laptop's pixels and
    not a small laptop's. The dot keeps its tooltip and the live region keeps

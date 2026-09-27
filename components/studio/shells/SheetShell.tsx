@@ -1,108 +1,240 @@
 'use client';
 
-// The studio on a phone or a tablet: the room fills the screen, and the two rails
-// become one bottom sheet with a tab each.
+// The studio below 1024px, in the two shapes a small screen actually wants — and
+// neither of them is the laptop layout made smaller.
 //
-// This replaces the stacked layout, which put the rails UNDER the room as page
-// content: the room got a fixed ~55% of the height, and reaching the Inspector meant
-// scrolling the whole studio — the canvas included — out of view. A sheet is the
-// shape phones already teach (maps, music, photos): the room keeps the screen, and
-// the panels rise over it only when asked.
+// **A tablet (600–1023px) gets the room with ONE panel docked beside it** —
+// Material's "supporting pane" canonical layout, which at a medium width class puts
+// the supporting content side by side with the primary content rather than under
+// it. Two rails do not fit beside a room at 768px (they left it ~300px), so the
+// laptop's two become one, with a tab each. Docked, not floating: the same verdict
+// `DockedShell` records, because the piece being placed is what hides under a panel.
 //
-// Docked, not floating, is still the rule on a laptop — see `DockedShell` for why
-// (the piece you are placing is the thing that hides under a floating panel). A
-// sheet is not an exception to that rule so much as the version of it a small
-// screen can afford: at REST it covers nothing, because its resting height is a row
-// of the grid, not an overlay. It overlays only while open, which is when you are
-// working in it rather than in the room.
+// **A phone (under 600px) gets the room full-screen, a toolbar under the thumb, and
+// panels that rise as a sheet.** The shape of that is taken from the platforms rather
+// than invented here, and each choice has a source:
 //
-// **Selecting a piece switches the tab and does not open the sheet.** Tapping a
-// piece on a phone is also how you start dragging it; a sheet that rose on every tap
-// would cover the room at exactly the moment the room is the thing in use. The tab's
-// label takes the piece's name instead, so the selection is visible at rest.
+// · A toolbar, not a tab bar. Apple: "use a tab bar to support navigation, not to
+//   provide actions"; Room / Add / Details are things you DO to this room, so they
+//   are toolbar items, and Material 3 Expressive's floating toolbar is the same
+//   answer ("contextual actions relevant to the body content").
+// · The toolbar changes with the selection — tap a sofa and it offers the sofa —
+//   which is what Canva and IKEA Kreativ do on a phone: tools for the thing you
+//   touched, where your thumb already is.
+// · One primary action, and it is Add (Apple: "only specify one primary action";
+//   Material: one FAB, "the primary or the most common action").
+// · The sheet is NONMODAL, so the room stays live under it while you recolour a
+//   piece (HIG § Sheets: "people use its functionality to affect the parent view
+//   without dismissing the sheet"). Two detents — about half, and nearly full — and
+//   a grabber that cycles them when tapped (HIG). A visible close button beside it,
+//   because NN/g's testing found the grab handle alone "easy to ignore". One sheet
+//   at a time: Room, Add and Details replace one another rather than stack (NN/g,
+//   HIG).
+// · The toolbar is a grid ROW, not `position: fixed`: bars in flow are what iOS
+//   Safari's collapsing toolbar leaves alone, and a row costs the room nothing it was
+//   not already giving up.
+//
+// **Selecting a piece does not open the sheet.** Tapping a piece on a phone is also
+// how you start dragging it; a sheet that rose on every tap would cover the room at
+// exactly the moment the room is in use. The toolbar takes the piece's name instead,
+// so the selection is visible and one tap away.
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
+import { Icon, type IconName } from '@/components/ui/Icon';
+import { LibraryBody } from '../CatalogPanel';
+import { usePhoneStudio } from '../NarrowViewportBanner';
 import { LeftRailBody, RightRailBody } from './shell-parts';
 
-export type SheetSnap = 'peek' | 'half' | 'full';
-type SheetTab = 'room' | 'details';
+export type SheetSnap = 'closed' | 'half' | 'full';
+type Panel = 'room' | 'add' | 'details';
 
-/** A drag shorter than this is a tap on the handle, not a resize. */
+/** A drag shorter than this is a tap on the grabber, not a resize. */
 const TAP_PX = 6;
+/** Released faster than this (px/ms) is a flick, and carries one detent further. */
+const FLICK = 0.5;
 
-/** Where a released drag settles: the nearest resting height, with a flick
- *  (fast enough to mean it) carrying one step further in its direction. Pure, so
- *  the rule is testable without a pointer. `heights` are the three resting heights
- *  in px, in `peek, half, full` order. */
+/** Where a released drag settles: the nearest resting height, with a flick carrying
+ *  one step further in its direction. Pure, so the rule is testable without a
+ *  pointer. `heights` are the three resting heights in px, `closed, half, full`.
+ *  A positive `velocityPxPerMs` means rising. */
 export function settleSheet(heightPx: number, velocityPxPerMs: number, heights: [number, number, number]): SheetSnap {
-  const order: SheetSnap[] = ['peek', 'half', 'full'];
+  const order: SheetSnap[] = ['closed', 'half', 'full'];
   let nearest = 0;
   for (let i = 1; i < 3; i++) if (Math.abs(heights[i] - heightPx) < Math.abs(heights[nearest] - heightPx)) nearest = i;
-  // Upward is a NEGATIVE clientY delta, so a positive `velocity` here means rising.
-  const FLICK = 0.5;
   if (velocityPxPerMs > FLICK && heightPx > heights[nearest]) nearest = Math.min(2, nearest + 1);
   if (velocityPxPerMs < -FLICK && heightPx < heights[nearest]) nearest = Math.max(0, nearest - 1);
   return order[nearest];
 }
 
-export function SheetShell({ surface }: { surface: ReactNode }) {
-  const [snap, setSnap] = useState<SheetSnap>('peek');
-  const [tab, setTab] = useState<SheetTab>('room');
-  const sheetRef = useRef<HTMLElement>(null);
-  const drag = useRef<{ y: number; h: number; t: number; lastY: number; lastT: number; moved: boolean } | null>(null);
-
+/** What the selection is called, for a tab or a toolbar button. */
+function useSelectionName(): { selected: boolean; name: string | null } {
   const selectedPartId = useStudio((s) => s.selectedPartId);
   const selectionCount = useStudio((s) => s.selection.length);
   const selectedWall = useStudio((s) => s.selectedWall);
-  const selectedName = useScene((s) => s.parts.find((p) => p.id === selectedPartId)?.name);
+  const partName = useScene((s) => s.parts.find((p) => p.id === selectedPartId)?.name);
+  if (selectionCount > 1) return { selected: true, name: `${selectionCount} selected` };
+  if (partName) return { selected: true, name: partName };
+  if (selectedWall != null) return { selected: true, name: `Wall ${selectedWall + 1}` };
+  return { selected: false, name: null };
+}
 
-  const hasSelection = selectedPartId != null || selectedWall != null;
-  const detailsLabel =
-    selectionCount > 1
-      ? `${selectionCount} selected`
-      : selectedName ?? (selectedWall != null ? `Wall ${selectedWall + 1}` : 'Details');
+export function SheetShell({ surface }: { surface: ReactNode }) {
+  return usePhoneStudio() ? <PhoneShell surface={surface} /> : <PaneShell surface={surface} />;
+}
 
-  // A new selection points the sheet at what acts on it. Keyed on the ids, not on
-  // "anything selected", so picking a second piece while Room is showing switches too.
+// ─── Tablet: the room and one docked panel ──────────────────────────────────
+
+function PaneShell({ surface }: { surface: ReactNode }) {
+  const [tab, setTab] = useState<'room' | 'details'>('room');
+  const { selected, name } = useSelectionName();
+  const selectedPartId = useStudio((s) => s.selectedPartId);
+  const selectedWall = useStudio((s) => s.selectedWall);
+
+  // A new selection points the panel at what acts on it; here the panel is always
+  // open, so switching costs the room nothing.
   useEffect(() => {
-    if (hasSelection) setTab('details');
-  }, [selectedPartId, selectedWall, hasSelection]);
+    if (selected) setTab('details');
+  }, [selectedPartId, selectedWall, selected]);
 
-  // Escape lowers the sheet — but only when focus is inside it, so Escape in the
-  // room keeps meaning what the studio's shortcuts say it means.
+  return (
+    <div className="pane-shell">
+      <div className="shell-room">{surface}</div>
+      <aside className="rail pane" aria-label="Studio panels">
+        <div className="panel-tabs" role="tablist" aria-label="Panel">
+          <PanelTab id="room" active={tab === 'room'} onChoose={() => setTab('room')}>
+            Room
+          </PanelTab>
+          <PanelTab id="details" active={tab === 'details'} onChoose={() => setTab('details')} dot={selected}>
+            {name ?? 'Details'}
+          </PanelTab>
+        </div>
+        <div
+          id="studio-pane-body"
+          className="pane__body"
+          role="tabpanel"
+          aria-labelledby={`studio-pane-tab-${tab}`}
+        >
+          {/* Both bodies stay mounted: the catalog's search and a half-typed
+              dimension survive switching tabs, as they do on a laptop. */}
+          <div className="rail sheet__rail" hidden={tab !== 'room'}>
+            <LeftRailBody open />
+          </div>
+          <div className="rail sheet__rail" hidden={tab !== 'details'}>
+            <RightRailBody open />
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function PanelTab({
+  id,
+  active,
+  onChoose,
+  dot = false,
+  children,
+}: {
+  id: string;
+  active: boolean;
+  onChoose: () => void;
+  dot?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      id={`studio-pane-tab-${id}`}
+      aria-selected={active}
+      aria-controls="studio-pane-body"
+      className="panel-tab"
+      onClick={onChoose}
+    >
+      {dot && <span className="panel-tab__dot" aria-hidden="true" />}
+      <span className="truncate">{children}</span>
+    </button>
+  );
+}
+
+// ─── Phone: full-screen room, toolbar, sheet ────────────────────────────────
+
+const SHEET_ID = 'studio-sheet';
+
+function PhoneShell({ surface }: { surface: ReactNode }) {
+  const [snap, setSnap] = useState<SheetSnap>('closed');
+  const [panel, setPanel] = useState<Panel>('room');
+  const sheetRef = useRef<HTMLElement>(null);
+  const drag = useRef<{ y: number; h: number; lastY: number; lastT: number; moved: boolean } | null>(null);
+
+  const { selected, name } = useSelectionName();
+  const catalogOpen = useStudio((s) => s.catalogOpen);
+  const setCatalogOpen = useStudio((s) => s.setCatalogOpen);
+  const setSelected = useStudio((s) => s.setSelected);
+  const setSelectedWall = useStudio((s) => s.setSelectedWall);
+
+  const open = snap !== 'closed';
+
+  // The Library is the same `catalogOpen` flag on every layout, so anything that
+  // opens it — the rail's Add, the right-click menu's "Add from the Library…" —
+  // opens it here as a sheet.
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
+  useEffect(() => {
+    if (catalogOpen) {
+      setPanel('add');
+      setSnap((s) => (s === 'closed' ? 'half' : s));
+    } else if (panelRef.current === 'add') {
+      setSnap('closed');
+    }
+  }, [catalogOpen]);
+
+  const show = (p: Panel) => {
+    // Pressing the button for the sheet already showing lowers it: a toolbar item
+    // that only ever opens leaves the close button as the one way down.
+    if (open && panel === p) return close();
+    setPanel(p);
+    setCatalogOpen(p === 'add');
+    setSnap((s) => (s === 'closed' ? 'half' : s));
+  };
+
+  const close = () => {
+    setSnap('closed');
+    if (catalogOpen) setCatalogOpen(false);
+  };
+
+  // Escape lowers the sheet — only when focus is inside it, so Escape in the room
+  // keeps meaning what the studio's shortcuts say it means.
   useEffect(() => {
     const el = sheetRef.current;
     if (!el) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && snap !== 'peek' && !e.defaultPrevented) {
+      if (e.key === 'Escape' && open && !e.defaultPrevented) {
         e.stopPropagation();
-        setSnap('peek');
+        close();
       }
     };
     el.addEventListener('keydown', onKey);
     return () => el.removeEventListener('keydown', onKey);
-  }, [snap]);
+  });
 
   const restingHeights = (): [number, number, number] => {
-    const el = sheetRef.current;
-    const shell = el?.parentElement;
-    if (!el || !shell) return [0, 0, 0];
-    const css = getComputedStyle(shell);
-    const px = (name: string) => parseFloat(css.getPropertyValue(name)) || 0;
+    const shell = sheetRef.current?.parentElement;
+    if (!shell) return [0, 0, 0];
+    const gap = parseFloat(getComputedStyle(shell).getPropertyValue('--sheet-top-gap')) || 0;
     const total = shell.clientHeight;
-    return [px('--sheet-peek'), total * 0.55, total - px('--sheet-top-gap')];
+    return [0, total * 0.55, total - gap];
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    // The tabs inside the bar are buttons; a press on one is a press, not a drag.
-    if ((e.target as HTMLElement).closest('[role="tab"]')) return;
+    // The close button is a press, never a drag.
+    if ((e.target as HTMLElement).closest('.sheet__close')) return;
     const el = sheetRef.current;
     if (!el) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    const now = performance.now();
-    drag.current = { y: e.clientY, h: el.getBoundingClientRect().height, t: now, lastY: e.clientY, lastT: now, moved: false };
+    drag.current = { y: e.clientY, h: el.getBoundingClientRect().height, lastY: e.clientY, lastT: performance.now(), moved: false };
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -112,10 +244,9 @@ export function SheetShell({ surface }: { surface: ReactNode }) {
     const dy = e.clientY - d.y;
     if (!d.moved && Math.abs(dy) < TAP_PX) return;
     d.moved = true;
-    const [peek, , full] = restingHeights();
-    const h = Math.min(full, Math.max(peek, d.h - dy));
+    const [, , full] = restingHeights();
     el.dataset.dragging = '1';
-    el.style.height = `${h}px`;
+    el.style.height = `${Math.min(full, Math.max(0, d.h - dy))}px`;
     d.lastY = e.clientY;
     d.lastT = performance.now();
   };
@@ -126,37 +257,49 @@ export function SheetShell({ surface }: { surface: ReactNode }) {
     drag.current = null;
     if (!d || !el) return;
     if (!d.moved) {
-      // A tap on the handle: open a resting sheet, lower an open one.
-      setSnap(snap === 'peek' ? 'half' : 'peek');
+      // A tap on the grabber cycles the detents (HIG); a tap elsewhere on the
+      // header is nothing.
+      if ((e.target as HTMLElement).closest('.sheet__handle')) setSnap(snap === 'full' ? 'half' : 'full');
       return;
     }
-    const dt = Math.max(1, performance.now() - d.lastT);
-    // Rising is a negative clientY step; flip it so positive means "up".
-    const velocity = -(e.clientY - d.lastY) / dt;
+    const velocity = -(e.clientY - d.lastY) / Math.max(1, performance.now() - d.lastT);
     const next = settleSheet(el.getBoundingClientRect().height, velocity, restingHeights());
     delete el.dataset.dragging;
     el.style.height = '';
-    setSnap(next);
+    if (next === 'closed') close();
+    else setSnap(next);
   };
 
-  const choose = (t: SheetTab) => {
-    setTab(t);
-    if (snap === 'peek') setSnap('half');
-  };
+  // The toolbar already carries the piece's name, and the panel's own header says
+  // it again with its kind beneath; the sheet's title names the panel.
+  const title = panel === 'room' ? 'Room' : panel === 'add' ? 'Library' : selected ? 'Details' : 'View';
 
-  const open = snap !== 'peek';
+  const deselect = () => {
+    setSelected(null);
+    setSelectedWall(null);
+  };
 
   return (
     <div className="sheet-shell">
-      <div className="sheet-shell__room">{surface}</div>
+      {/* The sheet rises from the TOOLBAR's top edge, not the screen's: the toolbar
+          stays put under it, so switching Room ↔ Add ↔ Details, or pressing the
+          open one again to lower it, never needs the sheet closed first — Apple
+          Maps' sheet over its bar, Canva's panels over its tools. */}
+      <div className="sheet-shell__stage">
+        <div className="shell-room">{surface}</div>
+
       <section
         ref={sheetRef}
+        id={SHEET_ID}
         className="sheet"
         data-snap={snap}
-        aria-label="Studio panels"
+        aria-label={title}
+        // Hidden from everyone at rest — it is off-screen, and a keyboard must not
+        // tab into a panel nobody can see.
+        inert={!open}
       >
         <div
-          className="sheet__bar"
+          className="sheet__head"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -165,62 +308,87 @@ export function SheetShell({ surface }: { surface: ReactNode }) {
           <button
             type="button"
             className="sheet__handle"
-            aria-expanded={open}
-            aria-controls="studio-sheet-body"
-            aria-label={open ? 'Lower the panel' : 'Raise the panel'}
-            // The bar's own pointer handlers already turn a tap into a toggle; a
-            // click here is the keyboard's Enter / Space, which has no pointer.
+            aria-label={snap === 'full' ? 'Shrink the panel' : 'Expand the panel'}
+            // The head's pointer handlers turn a tap into a cycle; a click here is
+            // the keyboard's Enter / Space, which has no pointer.
             onClick={(e) => {
-              if (e.detail === 0) setSnap(open ? 'peek' : 'half');
+              if (e.detail === 0) setSnap(snap === 'full' ? 'half' : 'full');
             }}
           >
             <span aria-hidden="true" />
           </button>
-          <div className="sheet__tabs" role="tablist" aria-label="Panel">
-            <button
-              type="button"
-              role="tab"
-              id="studio-sheet-tab-room"
-              aria-selected={tab === 'room'}
-              aria-controls="studio-sheet-body"
-              className="sheet__tab"
-              onClick={() => choose('room')}
-            >
-              <span className="truncate">Room</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="studio-sheet-tab-details"
-              aria-selected={tab === 'details'}
-              aria-controls="studio-sheet-body"
-              className="sheet__tab"
-              onClick={() => choose('details')}
-            >
-              {hasSelection && <span className="sheet__tab-dot" aria-hidden="true" />}
-              <span className="truncate">{detailsLabel}</span>
-            </button>
-          </div>
+          <h2 className="sheet__title truncate">{title}</h2>
+          <button type="button" className="icon-btn sheet__close" aria-label={`Close ${title}`} onClick={close}>
+            <Icon name="x" size={18} />
+          </button>
         </div>
-        {/* Both bodies stay mounted, as they do on a laptop: the catalog's search
-            and a half-typed dimension survive switching tabs. `hidden` rather than
-            unmounting, and the whole body is inert at rest so a keyboard cannot
-            tab into a panel nobody can see. */}
-        <div
-          id="studio-sheet-body"
-          className="sheet__body"
-          role="tabpanel"
-          aria-labelledby={tab === 'room' ? 'studio-sheet-tab-room' : 'studio-sheet-tab-details'}
-          inert={!open}
-        >
-          <div className="rail sheet__rail" hidden={tab !== 'room'}>
+        <div className="sheet__body">
+          <div className="rail sheet__rail" hidden={panel !== 'room'}>
             <LeftRailBody open />
           </div>
-          <div className="rail sheet__rail" hidden={tab !== 'details'}>
+          <div className="rail sheet__rail" hidden={panel !== 'details'}>
             <RightRailBody open />
           </div>
+          {panel === 'add' && (
+            <div className="rail sheet__rail">
+              <LibraryBody touch />
+            </div>
+          )}
         </div>
       </section>
+      </div>
+
+      <nav className="phone-toolbar" aria-label="Studio">
+        <ToolButton icon="list" label="Room" pressed={open && panel === 'room'} onPress={() => show('room')} />
+        {selected ? (
+          <>
+            <ToolButton
+              icon="edit"
+              label={name ?? 'Details'}
+              prominent
+              pressed={open && panel === 'details'}
+              onPress={() => show('details')}
+            />
+            <ToolButton icon="check" label="Done" onPress={deselect} title="Finish with this selection" />
+          </>
+        ) : (
+          <>
+            <ToolButton icon="plus" label="Add" prominent pressed={open && panel === 'add'} onPress={() => show('add')} />
+            <ToolButton icon="sliders" label="View" pressed={open && panel === 'details'} onPress={() => show('details')} />
+          </>
+        )}
+      </nav>
     </div>
+  );
+}
+
+function ToolButton({
+  icon,
+  label,
+  onPress,
+  pressed,
+  prominent = false,
+  title,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  pressed?: boolean;
+  prominent?: boolean;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      className="phone-tool"
+      data-prominent={prominent || undefined}
+      aria-expanded={pressed}
+      aria-controls={pressed === undefined ? undefined : SHEET_ID}
+      title={title}
+      onClick={onPress}
+    >
+      <Icon name={icon} size={20} />
+      <span className="truncate">{label}</span>
+    </button>
   );
 }

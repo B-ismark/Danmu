@@ -251,7 +251,10 @@ export function LibraryPicker({
                   }}
                 >
                   <Icon name="plus" size={11} />
-                  <span className="truncate" style={{ flex: 1, minWidth: 0 }}>
+                  {/* Left-aligned: a list of names reads down its left edge, and
+                      `.ds-btn` centres its text, which set each name floating in
+                      the middle of a full-width row. */}
+                  <span className="truncate" style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                     {added.label}
                   </span>
                   {/* Only when the words named a size, and then it is THIS row's

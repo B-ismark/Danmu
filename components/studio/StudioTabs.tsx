@@ -4,13 +4,17 @@ import { useEffect } from 'react';
 import { useRouter, usePathname, useParams } from 'next/navigation';
 
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { usePhoneStudio } from './NarrowViewportBanner';
 
-const TABS: Array<{ id: 'plan' | 'model'; label: string; icon: IconName }> = [
-  { id: 'plan', label: '2D Plan', icon: 'grid' },
-  { id: 'model', label: '3D Model', icon: 'cube' },
+const TABS: Array<{ id: 'plan' | 'model'; label: string; short: string; icon: IconName }> = [
+  { id: 'plan', label: '2D Plan', short: 'Plan', icon: 'grid' },
+  { id: 'model', label: '3D Model', short: '3D', icon: 'cube' },
 ];
 
 export function StudioTabs() {
+  // On a phone the switch shares one row with the back button, the room's name and
+  // More, so it says "Plan" / "3D" — the icon carries the rest — at a 44px height.
+  const phone = usePhoneStudio();
   const router = useRouter();
   const pathname = usePathname();
   const params = useParams<{ roomId: string }>();
@@ -51,9 +55,10 @@ export function StudioTabs() {
             // reader the button was "not pressed" while it was the page you were
             // already on.
             aria-current={isActive ? 'page' : undefined}
+            aria-label={phone ? t.label : undefined}
             style={{
-              height: 28,
-              padding: '0 12px',
+              height: phone ? 38 : 28,
+              padding: phone ? '0 10px' : '0 12px',
               display: 'flex',
               alignItems: 'center',
               gap: 6,
@@ -67,8 +72,8 @@ export function StudioTabs() {
               cursor: 'pointer',
             }}
           >
-            <Icon name={t.icon} size={13} />
-            {t.label}
+            <Icon name={t.icon} size={phone ? 15 : 13} />
+            {phone ? t.short : t.label}
           </button>
         );
       })}

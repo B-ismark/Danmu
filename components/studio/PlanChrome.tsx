@@ -16,6 +16,7 @@ import type { RefObject } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { MAX_ZOOM, MIN_ZOOM, type PlanViewHandle } from './PlanView';
+import { usePhoneStudio } from './NarrowViewportBanner';
 
 /** Zoom, page rotation, fit — driven through PlanView's handle. */
 export function PlanViewControls({
@@ -33,7 +34,12 @@ export function PlanViewControls({
   /** Its full name, for the tooltip. */
   unitName: string;
 }) {
+  const phone = usePhoneStudio();
   const deg = (((rot * 180) / Math.PI) % 360).toFixed(0);
+  // None on a phone. Pinch zooms and a finger pans, which is how every map on it already
+  // works, and a box of seven small controls stacked in two columns
+  // over the drawing cost more of the room than it gave back.
+  if (phone) return null;
   return (
     // `flexWrap`, because this row is about 450px of zoom, rotation and fit and
     // the 2D canvas is not always 450px wide. `.toolbar` is `overflow: hidden`

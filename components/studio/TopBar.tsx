@@ -6,16 +6,22 @@ import { useParams } from 'next/navigation';
 import { DanmuMark, EditableText } from '@/components/ui/primitives';
 import { toast } from '@/components/ui/StorageToast';
 import { roomStore } from '@/lib/storage';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { Icon } from '@/components/ui/Icon';
+import { usePhoneStudio } from './NarrowViewportBanner';
 
 export function TopBar({
   right,
   centerSlot,
+  phoneEnd,
 }: {
   roomName?: string;
   right?: ReactNode;
   centerSlot?: ReactNode;
+  /** What ends the bar on a phone, in place of `right` — the More menu. */
+  phoneEnd?: ReactNode;
 }) {
+  const phone = usePhoneStudio();
   const { roomId } = useParams<{ roomId: string }>();
   const [name, setName] = useState('Living Room');
   const [savedHint, setSavedHint] = useState(false);
@@ -47,6 +53,43 @@ export function TopBar({
     setSavedHint(true);
     if (hintTimer.current) clearTimeout(hintTimer.current);
     hintTimer.current = setTimeout(() => setSavedHint(false), 1800);
+  }
+
+  const nameField = (style: CSSProperties) => (
+    <EditableText
+      value={name}
+      label="Room name"
+      onCommit={commitName}
+      onReject={() =>
+        toast({ title: 'Room kept its name', message: 'A room needs a name, so the old one stayed.' })
+      }
+      style={style}
+      inputStyle={{ fontSize: 'var(--fs-body)', fontWeight: 500, height: 28, width: 'min(280px, 100%)' }}
+    />
+  );
+  const savedStatus = (
+    <span className="sr-only" role="status" aria-live="polite">
+      {savedHint ? 'Room saved' : ''}
+    </span>
+  );
+
+  // A phone gets ONE row — Apple's compact navigation bar, Material's small top app
+  // bar — not the laptop's bar wrapped into three. Back (which is also the way to
+  // another room), the name, the view switch, and More for everything used less.
+  // No wordmark: the HIG's toolbar guidance is not to title a screen with the app's
+  // name, and on a phone that name cost the room's.
+  if (phone) {
+    return (
+      <header className="app-bar">
+        <Link href="/workspace" className="icon-btn app-bar__btn" aria-label="Back to your rooms" title="Your rooms">
+          <Icon name="chevron-left" size={22} />
+        </Link>
+        {nameField({ fontSize: 'var(--fs-body)', fontWeight: 700, minWidth: 0, flex: '1 1 auto' })}
+        {savedStatus}
+        {centerSlot}
+        {phoneEnd}
+      </header>
+    );
   }
 
   return (
@@ -87,18 +130,7 @@ export function TopBar({
           sentence pushed the bar wider than the window instead of shortening. The
           full name stays in the tooltip, in the accessible name, and in the field
           the moment you press it. */}
-      <EditableText
-        value={name}
-        label="Room name"
-        onCommit={commitName}
-        onReject={() =>
-          toast({ title: 'Room kept its name', message: 'A room needs a name, so the old one stayed.' })
-        }
-        style={{ fontSize: 'var(--fs-body)', fontWeight: 500, minWidth: 0 }}
-        // A 200px floor on the input is what forced the bar past the window on a
-        // narrow screen mid-rename; it can have up to 280 and no more than it has.
-        inputStyle={{ fontSize: 'var(--fs-body)', fontWeight: 500, height: 28, width: 'min(280px, 100%)' }}
-      />
+      {nameField({ fontSize: 'var(--fs-body)', fontWeight: 500, minWidth: 0 })}
       {/* Save state says a word. A bare 6px dot claimed something it could not
           explain — and it is announced, because a silent colour change is not
           feedback for anyone using a screen reader. */}
@@ -127,9 +159,7 @@ export function TopBar({
           </span>
         )}
       </span>
-      <span className="sr-only" role="status" aria-live="polite">
-        {savedHint ? 'Room saved' : ''}
-      </span>
+      {savedStatus}
       {centerSlot}
       {/* `margin-left: auto`, not a `flex: 1` spacer. A spacer stays on row one
           when the bar wraps, which left these three hanging off the left edge of

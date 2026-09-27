@@ -116,65 +116,64 @@ const SCREENS = [
       await p.mouse.move(0, 0);
     },
   },
-  // Below 1024px the rails are a bottom sheet (SheetShell). Its states are swept like
-  // any other screen; above 1024px there is no sheet and these are skipped.
-  {
-    key: 'studio-sheet-room',
-    studio: true,
-    go: async (p, id) => {
-      await p.goto(`${BASE}/room/${id}/plan`);
-      await p.waitForTimeout(1500);
-      if (!(await p.locator('.sheet').count())) return 'skip';
-      await p.getByRole('tab', { name: 'Room' }).click();
-      await p.waitForTimeout(500);
-    },
-  },
-  {
-    key: 'studio-sheet-details',
-    studio: true,
-    go: async (p, id) => {
-      await p.goto(`${BASE}/room/${id}/plan`);
-      await p.waitForTimeout(1500);
-      if (!(await p.locator('.sheet').count())) return 'skip';
-      await p.getByRole('tab', { name: 'Room' }).click();
-      await p.waitForTimeout(500);
-      await p.locator('.sheet [role="option"].list-row').nth(1).click({ position: { x: 40, y: 12 } });
-      await p.waitForTimeout(500);
-    },
-  },
-  {
-    // Selected, then the sheet lowered: the piece's name rides in the tab at rest.
-    key: 'studio-sheet-rest-selected',
-    studio: true,
-    go: async (p, id) => {
-      await p.goto(`${BASE}/room/${id}/plan`);
-      await p.waitForTimeout(1500);
-      if (!(await p.locator('.sheet').count())) return 'skip';
-      await p.getByRole('tab', { name: 'Room' }).click();
+  // Below 600px the studio is the phone shell (SheetShell): a toolbar, and panels
+  // that rise as a sheet. Between 600 and 1023 it is the tablet pane. Each state is
+  // swept at the widths that have it and skipped elsewhere.
+  ...[
+    ['studio-phone-room', 'plan', async (p) => {
+      await p.locator('.phone-tool', { hasText: 'Room' }).click();
+    }],
+    ['studio-phone-add', 'model', async (p) => {
+      await p.locator('.phone-tool', { hasText: 'Add' }).click();
+    }],
+    ['studio-phone-details', 'plan', async (p) => {
+      await p.locator('.phone-tool', { hasText: 'Room' }).click();
       await p.waitForTimeout(500);
       await p.locator('.sheet [role="option"].list-row').nth(1).click({ position: { x: 40, y: 12 } });
       await p.waitForTimeout(300);
-      await p.locator('.sheet__handle').focus();
-      await p.keyboard.press('Enter');
-      await p.waitForTimeout(600);
-    },
-  },
-  {
-    key: 'studio-sheet-full',
+      // Selecting does not raise Details; the toolbar's named button does.
+      await p.locator('.phone-tool[data-prominent]').click();
+    }],
+    ['studio-phone-selected', 'model', async (p) => {
+      await p.locator('.phone-tool', { hasText: 'Room' }).click();
+      await p.waitForTimeout(500);
+      await p.locator('.sheet [role="option"].list-row').nth(1).click({ position: { x: 40, y: 12 } });
+      await p.waitForTimeout(300);
+      await p.locator('.sheet__close').click();
+    }],
+    ['studio-phone-full', 'model', async (p) => {
+      await p.locator('.phone-tool', { hasText: 'View' }).click();
+      await p.waitForTimeout(500);
+      // A real drag on the head, up past the top: settles at `full`.
+      const head = await p.locator('.sheet__head').boundingBox();
+      await p.mouse.move(head.x + 30, head.y + 30);
+      await p.mouse.down();
+      for (let i = 1; i <= 10; i++) await p.mouse.move(head.x + 30, head.y + 30 - i * 60);
+      await p.mouse.up();
+    }],
+    ['studio-phone-more', 'plan', async (p) => {
+      await p.getByRole('button', { name: 'More' }).click();
+    }],
+  ].map(([key, tab, act]) => ({
+    key,
     studio: true,
     go: async (p, id) => {
-      await p.goto(`${BASE}/room/${id}/model`);
+      await p.goto(`${BASE}/room/${id}/${tab}`);
       await p.waitForTimeout(1500);
-      if (!(await p.locator('.sheet').count())) return 'skip';
-      await p.getByRole('tab', { name: 'Details' }).click();
-      await p.waitForTimeout(400);
-      // A real drag on the bar, up past the top: settles at `full`.
-      const bar = await p.locator('.sheet__bar').boundingBox();
-      await p.mouse.move(bar.x + 20, bar.y + 8);
-      await p.mouse.down();
-      for (let i = 1; i <= 10; i++) await p.mouse.move(bar.x + 20, bar.y + 8 - i * 80);
-      await p.mouse.up();
+      if (!(await p.locator('.phone-toolbar').count())) return 'skip';
+      await act(p);
       await p.waitForTimeout(600);
+    },
+  })),
+  {
+    key: 'studio-pane-selected',
+    studio: true,
+    go: async (p, id) => {
+      await p.goto(`${BASE}/room/${id}/plan`);
+      await p.waitForTimeout(1500);
+      if (!(await p.locator('.pane-shell').count())) return 'skip';
+      await p.locator('.pane [role="option"].list-row').nth(1).click({ position: { x: 40, y: 12 } });
+      await p.mouse.move(0, 0);
     },
   },
   { key: 'studio-model', studio: true, go: (p, id) => p.goto(`${BASE}/room/${id}/model`) },
@@ -303,6 +302,9 @@ async function measure(page) {
         const inside = (p, q) => p.left >= q.left - 1 && p.right <= q.right + 1 && p.top >= q.top - 1 && p.bottom <= q.bottom + 1;
         const placed = (el) => getComputedStyle(el).position === 'absolute' || getComputedStyle(el.parentElement).position === 'absolute';
         if ((inside(s, r) && placed(b)) || (inside(r, s) && placed(a))) continue;
+        // A popover floats over whatever is under it by design; what matters is that
+        // it is on top, which `onTop` already checked at each control's centre.
+        if (!!a.closest('.popover') !== !!b.closest('.popover')) continue;
         const w = Math.min(r.right, s.right) - Math.max(r.left, s.left);
         const h = Math.min(r.bottom, s.bottom) - Math.max(r.top, s.top);
         if (w > 4 && h > 4 && w * h > 16) out.push({ kind: 'overlap', what: `${label(a)} × ${label(b)} (${Math.round(w)}×${Math.round(h)})` });

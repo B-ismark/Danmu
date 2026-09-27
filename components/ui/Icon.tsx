@@ -8,6 +8,7 @@ import {
   Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Pencil, Trash2, RefreshCw,
   Image, Play, Replace, Circle, Sun, Sunrise, Sunset, Moon, Cloud, Compass,
   RotateCcw, RotateCw, Maximize, Copy, Shuffle, type LucideIcon,
+  Ellipsis, List, SlidersHorizontal,
 } from 'lucide-react';
 
 // Single icon surface for the whole app. Backed by Lucide (MIT, free) — a
@@ -34,7 +35,8 @@ export type IconName =
   | 'rotate-ccw' | 'rotate-cw' | 'fit'
   | 'sun' | 'sunrise' | 'sunset'
   | 'moon' | 'cloud' | 'compass'
-  | 'swap' | 'shuffle' | 'snap-wall' | 'snap-floor';
+  | 'swap' | 'shuffle' | 'snap-wall' | 'snap-floor'
+  | 'more' | 'list' | 'sliders';
 
 const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, LucideIcon> = {
   'arrow-right': ArrowRight, 'arrow-left': ArrowLeft, 'arrow-up-right': ArrowUpRight,
@@ -54,6 +56,7 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, Lu
   'rotate-ccw': RotateCcw, 'rotate-cw': RotateCw, fit: Maximize,
   sun: Sun, sunrise: Sunrise, sunset: Sunset,
   moon: Moon, cloud: Cloud, compass: Compass,
+  more: Ellipsis, list: List, sliders: SlidersHorizontal,
 };
 
 type Props = { name: IconName; size?: number; color?: string; strokeWidth?: number; style?: CSSProperties };

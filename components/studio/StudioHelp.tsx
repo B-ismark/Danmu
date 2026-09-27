@@ -42,14 +42,35 @@ const COACH_COPY: Record<CoachId, { title: string; body: string }> = {
   },
 };
 
-export function StudioHelp() {
+/** `hideTrigger` + `open` / `onOpenChange` are for the phone app bar, where the card
+ *  is opened from the More menu rather than from its own button. The component
+ *  stays mounted there regardless, because it is also what shows the one-time coach
+ *  notes after a first drag or a first wall. */
+export function StudioHelp({
+  hideTrigger = false,
+  open: openProp,
+  onOpenChange,
+}: {
+  hideTrigger?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} = {}) {
   const pathname = usePathname();
   const onModel = pathname?.endsWith('/model') ?? false;
 
   const dragging = useStudio((s) => s.draggingId);
   const selectedWall = useStudio((s) => s.selectedWall);
 
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  // Read through a ref so the Escape listener below can close a controlled card
+  // without re-subscribing on every render of its owner.
+  const control = useRef({ controlled: openProp !== undefined, onOpenChange });
+  control.current = { controlled: openProp !== undefined, onOpenChange };
+  const setOpen = (next: boolean) => {
+    if (control.current.controlled) control.current.onOpenChange?.(next);
+    else setOpenState(next);
+  };
   const [coach, setCoach] = useState<CoachId | null>(null);
   const seen = useRef<Partial<Record<CoachId, boolean>>>({});
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -94,7 +115,8 @@ export function StudioHelp() {
       e.stopPropagation();
       if (coach) setCoach(null);
       else {
-        setOpen(false);
+        if (control.current.controlled) control.current.onOpenChange?.(false);
+        else setOpenState(false);
         btnRef.current?.focus();
       }
     }
@@ -107,24 +129,28 @@ export function StudioHelp() {
       {/* A question mark, not a sentence. "How this works" spent 150px saying what
           the universal glyph says in 30, on a control most people press once. The
           accessible name still carries the words. */}
-      <button
-        ref={btnRef}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label="How this works"
-        title="How this works"
-        className="icon-btn"
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: 'var(--r-full)',
-          border: `1px solid ${open || coach ? 'var(--accent-text)' : 'var(--edge)'}`,
-          background: open || coach ? 'var(--accent-tint)' : 'var(--paper)',
-          color: open || coach ? 'var(--accent-text)' : 'var(--ink-2)',
-        }}
-      >
-        <Icon name="help" size={14} />
-      </button>
+      {/* Not rendered, rather than `hidden`: `.icon-btn` sets `display`, which
+          outranks the attribute, and the trigger was drawn beside More anyway. */}
+      {!hideTrigger && (
+        <button
+          ref={btnRef}
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-label="How this works"
+          title="How this works"
+          className="icon-btn"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 'var(--r-full)',
+            border: `1px solid ${open || coach ? 'var(--accent-text)' : 'var(--edge)'}`,
+            background: open || coach ? 'var(--accent-tint)' : 'var(--paper)',
+            color: open || coach ? 'var(--accent-text)' : 'var(--ink-2)',
+          }}
+        >
+          <Icon name="help" size={14} />
+        </button>
+      )}
 
       {coach && (
         <div

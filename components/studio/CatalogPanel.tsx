@@ -31,6 +31,7 @@ import { IconButton } from '@/components/ui/primitives';
 import { LibraryPicker } from './LibraryPicker';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 import { announce } from '@/lib/announce';
+import { usePhoneStudio } from './NarrowViewportBanner';
 
 /** The id the pages put on their canvas element, so the rail's trigger can bring
  *  the panel into view when the studio is stacked and the rail sits below the
@@ -202,12 +203,16 @@ export function CatalogPanel({
   bottomGap?: number;
 }) {
   const setOpen = useStudio((s) => s.setCatalogOpen);
+  const phone = usePhoneStudio();
 
   // Esc closes it, like every other panel in the studio (Look, Room, help). It
   // yields to a field being edited or a dialog in front — so Esc out of the search
   // box goes to the box, not to the panel around it — and it stops the event from
   // reaching the canvas, whose global Esc means "deselect".
   useEffect(() => {
+    // The phone's sheet closes on its own Escape; a window-wide one here would
+    // take the key from a field inside it.
+    if (phone) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape' || isTypingOrDialog(e.target)) return;
       e.stopPropagation();
@@ -215,14 +220,11 @@ export function CatalogPanel({
     }
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [setOpen]);
+  }, [setOpen, phone]);
 
-  // `item.dimMM` is already the size the search words asked for, clamped per
-  // piece — `LibraryPicker` resolves it before handing the item over, so this path
-  // and the drag path cannot disagree about what a query meant.
-  function addItem(item: LibraryItem) {
-    spawn(item.category, item.shape, [...item.dimMM], item.label);
-  }
+  // On a phone the Library is a sheet, not a card over the room: `SheetShell` shows
+  // `LibraryBody` for the same `catalogOpen` flag.
+  if (phone) return null;
 
   return (
     <div
@@ -278,14 +280,34 @@ export function CatalogPanel({
         <IconButton icon="x" label="Close the Library" onClick={() => setOpen(false)} size={24} iconSize={12} />
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 12px' }}>
-        <div className="t-hint" style={{ margin: '0 0 8px', lineHeight: 1.4 }}>
-          {canDrag
+      <LibraryBody canDrag={canDrag} />
+    </div>
+  );
+}
+
+/** The Library's list and its one line of instruction, without the floating card
+ *  around it — so a phone can show the same list in its sheet (`SheetShell`) rather
+ *  than a 268px card over a 360px room. */
+export function LibraryBody({ canDrag = false, touch = false }: { canDrag?: boolean; touch?: boolean }) {
+  // `item.dimMM` is already the size the search words asked for, clamped per
+  // piece — `LibraryPicker` resolves it before handing the item over, so this path
+  // and the drag path cannot disagree about what a query meant.
+  function addItem(item: LibraryItem) {
+    spawn(item.category, item.shape, [...item.dimMM], item.label);
+  }
+  return (
+    <div
+      className={touch ? 'catalog-touch' : undefined}
+      style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: touch ? '4px 16px 12px' : '0 12px 12px' }}
+    >
+      <div className="t-hint" style={{ margin: '0 0 8px', lineHeight: 1.4 }}>
+        {touch
+          ? 'Tap a piece to drop it in the first clear spot.'
+          : canDrag
             ? 'Drag a piece in, click to drop it in the first clear spot, or Shift-click to mark several.'
             : 'Click a piece to drop it in the first clear spot. Shift-click to mark several.'}
-        </div>
-        <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag} maxHeight={null} />
       </div>
+      <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag && !touch} maxHeight={null} />
     </div>
   );
 }
