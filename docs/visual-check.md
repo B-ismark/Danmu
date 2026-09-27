@@ -1683,6 +1683,14 @@ general (a synthetic loop runs at the same speed in both). Unexplained; a real p
 real laptop are what settle whether the live room costs a longer wait there too. The stale
 path was seen working in that build.
 
+**One more path, found in review and not yet seen in a browser.** Resize a piece until the
+"That size change left N problems" toast appears, drag a different piece, *then* press
+**Re-fit** in that toast. The drag must survive: the re-fit works from the room with the
+drag in it. Before the fix it solved the room from when the toast appeared and wrote over
+the drag without a word, because the button was holding an old copy of the room while the
+stale check compared press against answer. `tests/refit-press-time.test.tsx` holds the
+wiring; nobody has watched it happen.
+
 ## The browser route, so the next person does not rebuild it
 
 Looking is a half-hour of setup nobody has to hand, which is the actual reason items sit

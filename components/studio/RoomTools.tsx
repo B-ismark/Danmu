@@ -62,7 +62,7 @@ const STEP_FREE_DESC_ID = 'step-free-desc';
 const stepFreeDesc = (unit: DimUnit) =>
   `Report the ${turnLabel(unit)} of turning space a wheelchair needs, and flag steps and thresholds`;
 import { useScene, type RoomShape } from '@/lib/scene-store';
-import { resolveParts, useRoomScene } from '@/lib/room-scene';
+import { currentRoomScene, resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity, type RoomReport } from '@/lib/clearance';
 import {
@@ -407,8 +407,6 @@ export function RoomTools() {
               freeShare={report.freeFloorShare}
               stepFree={stepFree}
               onStepFree={setStepFree}
-              effParts={effParts}
-              footprint={room.footprint}
               appPlaced={appPlaced}
             />
           )}
@@ -479,7 +477,7 @@ export function RoomTools() {
           entirely; `LightingPicker` next door already does exactly this, and
           `tests/reflow.test.ts` holds the arithmetic. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        <FixAllButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
+        <FixAllButton appPlaced={appPlaced} />
         <ShuffleButton effParts={effParts} room={room} appPlaced={appPlaced} />
       </div>
     </div>
@@ -615,7 +613,7 @@ function toastStale() {
 
 type SuggestOutcome =
   | { stale: true }
-  | { stale: false; applied: boolean; result: SolveResult };
+  | { stale: false; applied: boolean; result: SolveResult; parts: ScenePart[] };
 
 /** Run the solver and write the result as one history entry. Shared, because the
  *  same thing happens whether the user asked for an idea, accepted a re-fit after
@@ -627,12 +625,21 @@ type SuggestOutcome =
  *  clear it would be answering a question they did not ask. Locking is the whole
  *  mechanism — the solver already understands locked pieces, and still scores them,
  *  because a piece nobody may move is still in the way. */
-function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppPlacedRef) {
+function useSuggest(appPlaced: AppPlacedRef) {
   const loadTransforms = useStudio((s) => s.loadTransforms);
   return useCallback(
     async (mode: 'arrange' | 'refit', seed: number, only?: string[]): Promise<SuggestOutcome> => {
       const t = useStudio.getState();
       const stamp = currentStamp();
+      // The room is read HERE, in the same tick as the stamp, never taken from the
+      // caller's render. The Re-fit toast keeps its button for 14 s, and a closure
+      // over that render's parts would solve a room from before the user's next drag
+      // while the stamp — taken at the press, after the drag — saw nothing change,
+      // so the answer landed over the drag. A stamp only guards the inputs it was
+      // taken beside. The outcome hands these parts back, because `result` is
+      // index-aligned to them and naming a piece off any other array can misname it.
+      const effParts = currentRoomScene();
+      const footprint = useScene.getState().room.footprint;
       // …and whatever is STANDING ON one of them travels with it, or the fix strands
       // it. `lib/clearance.ts` skips anything above the floor, so a rider can never
       // appear in a finding's `partIds` — which means without this line EVERY
@@ -684,9 +691,9 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
       // Three ways to end up applying nothing, and they are three different
       // sentences. `null` used to be all of them, so the toast that fires on the
       // commonest one spoke for the other two as well — see `SolveDecline`.
-      if (result.moved.length === 0) return { stale: false, applied: false, result };
+      if (result.moved.length === 0) return { stale: false, applied: false, result, parts: effParts };
       if (!confined && !isWorthOffering(result.before, result.after)) {
-        return { stale: false, applied: false, result };
+        return { stale: false, applied: false, result, parts: effParts };
       }
       const positions = { ...t.positions };
       const rotations = { ...t.rotations };
@@ -700,22 +707,14 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
       // suggestion that resized the furniture would be the one thing this app
       // refuses to do.
       loadTransforms({ positions, rotations, dims: t.dims });
-      return { stale: false, applied: true, result };  // …and only this path writes.
+      return { stale: false, applied: true, result, parts: effParts };  // …and only this path writes.
     },
-    [effParts, footprint, loadTransforms, appPlaced],
+    [loadTransforms, appPlaced],
   );
 }
 
-function FixAllButton({
-  effParts,
-  footprint,
-  appPlaced,
-}: {
-  effParts: ScenePart[];
-  footprint: Footprint;
-  appPlaced: AppPlacedRef;
-}) {
-  const suggest = useSuggest(effParts, footprint, appPlaced);
+function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
+  const suggest = useSuggest(appPlaced);
   // `useBusyAction`, not a bare `useState`. The solve runs in the arranging worker
   // now (`lib/layout-offload.ts`), so the window no longer freezes for it — but the
   // hook still owns the flag, the re-entry guard and the error path, and on the
@@ -731,7 +730,7 @@ function FixAllButton({
   async function solve() {
     const outcome = await suggest('arrange', ++attempt.current);
     if (outcome.stale) return toastStale();
-    const { applied, result } = outcome;
+    const { applied, result, parts } = outcome;
     if (!applied) {
       // `declined === 'impossible'` means the search DID find arrangements and every
       // one of them was illegal (§ 31) — `bestCandidate` returns the LEAST impossible
@@ -791,7 +790,7 @@ function FixAllButton({
     }
     // One piece named beats a count. A single move says exactly what happened; a
     // handful still gets the biggest one first, then the room-level summary.
-    const lead = biggestMove(result.moves, effParts);
+    const lead = biggestMove(result.moves, parts);
     toast({
       title:
         result.moved.length === 1 && lead
@@ -1115,7 +1114,7 @@ function useRefitOffer(
   problems: number,
   appPlaced: AppPlacedRef,
 ) {
-  const suggest = useSuggest(effParts, footprint, appPlaced);
+  const suggest = useSuggest(appPlaced);
   // What the geometry looked like last time, and how many problems it had. Both
   // are needed: a problem count that went up on its own is the user dragging
   // something, and they can see that happening.
@@ -1234,18 +1233,8 @@ function TabActions({ children }: { children: ReactNode }) {
  *  When the confined solve cannot find anything, it says so and names the wider
  *  move — that is the honest answer, and it is better than a button that silently
  *  does nothing. */
-function FixButton({
-  issue,
-  effParts,
-  footprint,
-  appPlaced,
-}: {
-  issue: ClearanceIssue;
-  effParts: ScenePart[];
-  footprint: Footprint;
-  appPlaced: AppPlacedRef;
-}) {
-  const suggest = useSuggest(effParts, footprint, appPlaced);
+function FixButton({ issue, appPlaced }: { issue: ClearanceIssue; appPlaced: AppPlacedRef }) {
+  const suggest = useSuggest(appPlaced);
   // The label below has said "Trying…" since the day it was written and had never
   // been seen: the solve ran on the same tick that set the flag, so the render
   // carrying that word was flushed and replaced before the browser was given a
@@ -1261,7 +1250,7 @@ function FixButton({
   async function solve() {
     const outcome = await suggest('refit', ++attempt.current, scope);
     if (outcome.stale) return toastStale();
-    const { applied, result } = outcome;
+    const { applied, result, parts } = outcome;
     if (!applied) {
       // Already honest about finding nothing, and now able to say WHY when the reason
       // is the § 31 veto rather than an absent improvement.
@@ -1291,7 +1280,7 @@ function FixButton({
       });
       return;
     }
-    const lead = biggestMove(result.moves, effParts);
+    const lead = biggestMove(result.moves, parts);
     toast({
       tone: 'success',
       title:
@@ -1431,14 +1420,10 @@ function CheckSummary({
  *  is discovered by hovering. */
 function IssueRow({
   issue,
-  effParts,
-  footprint,
   appPlaced,
   onShow,
 }: {
   issue: ClearanceIssue;
-  effParts: ScenePart[];
-  footprint: Footprint;
   appPlaced: AppPlacedRef;
   onShow: (issue: ClearanceIssue) => void;
 }) {
@@ -1503,9 +1488,7 @@ function IssueRow({
               Show me
             </button>
           )}
-          {canFix && (
-            <FixButton issue={issue} effParts={effParts} footprint={footprint} appPlaced={appPlaced} />
-          )}
+          {canFix && <FixButton issue={issue} appPlaced={appPlaced} />}
         </div>
       )}
     </div>
@@ -1517,16 +1500,12 @@ function CheckPanel({
   freeShare,
   stepFree,
   onStepFree,
-  effParts,
-  footprint,
   appPlaced,
 }: {
   issues: ClearanceIssue[];
   freeShare: number;
   stepFree: boolean;
   onStepFree: (on: boolean) => void;
-  effParts: ScenePart[];
-  footprint: Footprint;
   appPlaced: AppPlacedRef;
 }) {
   const setSelection = useStudio((s) => s.setSelection);
@@ -1551,8 +1530,6 @@ function CheckPanel({
           <IssueRow
             key={issue.id}
             issue={issue}
-            effParts={effParts}
-            footprint={footprint}
             appPlaced={appPlaced}
             onShow={show}
           />
