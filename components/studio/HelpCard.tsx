@@ -7,8 +7,7 @@
 //
 // The chip that OPENS the card is not here. It used to be — a `HelpToggle` that
 // bundled chip and card together for the canvas's bottom-left corner — and
-// `StudioHelp` replaced it by moving help into the top bar and anchoring the coach
-// marks under the same "?". The bundled version stayed behind unused for a while
+// `StudioHelp` replaced it by moving help into the top bar. The bundled version stayed behind unused for a while
 // afterwards, which is the only reason to mention it: help is one surface, and a
 // second control that opens the same card in a different corner is not a spare, it
 // is a fork.

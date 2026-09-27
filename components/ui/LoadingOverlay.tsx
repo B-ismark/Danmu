@@ -1,13 +1,13 @@
 'use client';
 
 // Blocking progress overlay for long async work: a calm card over a scrim with
-// rotating flavour text. Three things here are contracts, not decoration.
+// a plain status line. Three things here are contracts, not decoration.
 //
-// 1. `local` — the tip rotation used to include "Your photos and designs stay on
-//    your device" unconditionally, while this same overlay was mounted over an
-//    upload of the user's room photos. A privacy promise can only be shown when
-//    the caller states the work really is on-device, so the tip now lives behind
-//    this flag and `note` carries the truth for the other case.
+// 1. No rotating tips. The card used to cycle usage tips and a privacy line
+//    ("Your photos and designs stay on your device") under a "Tip" heading, and
+//    its status line cycled flavour phrases ending in "Almost ready", which is a
+//    duration claim (see 3). The caller's `description` and `note` are the only
+//    copy; where the work happens is said by the screen that started it.
 // 2. It blocks the whole page, so it behaves like a dialog: focus moves in, Tab
 //    stays in, Esc cancels when the caller can cancel. Without `onCancel` the
 //    only way out of a slow operation is a hard reload.
@@ -18,35 +18,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Dot } from './primitives';
 import { Icon } from './Icon';
 
-// Studio tips — true wherever the work is happening.
-const TIPS = [
-  'Lock a piece and Danmu keeps it exactly as it is.',
-  'Right-click and drag any piece to spin it around.',
-  'Recolour anything in the inspector — the room updates live.',
-  'Try the material swatches to switch wood, fabric, or metal finishes.',
-  'Press W / R / S to Move, Rotate, or Scale the selected piece.',
-  'One-tap a style theme to redecorate the whole room at once.',
-  'Toggle day or evening light to see your room in a different mood.',
-  'Drag new furniture in from the Library to fill out the space.',
-];
-
-// Only ever added to the rotation when the caller passes `local` — see note 1.
-const ON_DEVICE_TIP = 'Your photos and designs stay on your device.';
-
-const HUDS = [
-  'Tidying up',
-  'Fluffing cushions',
-  'Opening the curtains',
-  'Adjusting the light',
-  'Styling the shelves',
-  'Setting the mood',
-  'Almost ready',
-];
-
-// Flavour text rotates slower than reading speed. The old 700ms HUD cadence
-// read as a flicker, not as progress.
-const HUD_MS = 3400;
-const TIP_MS = 6000;
 // After this long, offer the way out rather than let someone keep waiting on a
 // download that may never land.
 const SLOW_MS = 18000;
@@ -60,7 +31,6 @@ export function LoadingOverlay({
   totalSteps,
   description,
   note,
-  local = false,
   onCancel,
   cancelLabel = 'Stop',
 }: {
@@ -68,19 +38,14 @@ export function LoadingOverlay({
   step?: number;
   totalSteps?: number;
   description?: string;
-  /** One honest line about what this operation does — e.g. that it uploads. */
+  /** One line about what this operation does, e.g. that it uploads. */
   note?: string;
-  /** True ONLY when the wrapped work runs entirely on the user's device. */
-  local?: boolean;
   /** Strongly recommended: without it this overlay has no exit. */
   onCancel?: () => void;
   cancelLabel?: string;
 }) {
   const pct = step !== undefined && totalSteps ? Math.min(100, (step / totalSteps) * 100) : null;
   const hasBar = pct !== null;
-  const tips = local ? [...TIPS, ON_DEVICE_TIP] : TIPS;
-  const [tipIdx, setTipIdx] = useState(() => Math.floor(Math.random() * TIPS.length));
-  const [hudIdx, setHudIdx] = useState(0);
   const [t, setT] = useState(0);
   const [slow, setSlow] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -88,15 +53,12 @@ export function LoadingOverlay({
 
   useEffect(() => {
     // CSS handles declarative animation under prefers-reduced-motion; a JS
-    // ticker has to opt out for itself. Tips keep rotating (they're content);
-    // the HUD phrases and the scan dot are pure movement, so they stop.
+    // ticker has to opt out for itself. The scan dot is pure movement, so it stops.
     const still =
       typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 
     const timers: ReturnType<typeof setInterval>[] = [];
-    timers.push(setInterval(() => setTipIdx((i) => i + 1), TIP_MS));
-    if (!still) timers.push(setInterval(() => setHudIdx((i) => (i + 1) % HUDS.length), HUD_MS));
     if (!still && hasBar) timers.push(setInterval(() => setT((v) => v + 1), 80));
     const slowTimer = setTimeout(() => setSlow(true), SLOW_MS);
     return () => {
@@ -194,13 +156,12 @@ export function LoadingOverlay({
           <span className="lo-pulse" style={{ display: 'inline-flex' }} aria-hidden="true">
             <Dot color="var(--accent)" size={7} />
           </span>
-          {/* Decorative flavour: hidden from the live region so a screen reader
-              isn't read a new word every few seconds. */}
+          {/* Hidden from the live region: the dialog's title already names the work. */}
           <span
             aria-hidden="true"
             style={{ fontSize: 'var(--fs-small)', letterSpacing: '0.01em', color: 'var(--accent-text)', fontWeight: 700 }}
           >
-            {HUDS[hudIdx]}…
+            Working…
           </span>
           <div style={{ flex: 1, minWidth: 0 }} />
           {onCancel && (
@@ -231,7 +192,7 @@ export function LoadingOverlay({
           )}
           {slow && onCancel && (
             <p className="t-small" style={{ lineHeight: 1.55, margin: '0 0 12px' }}>
-              Still going. You can stop whenever you like — nothing you&rsquo;ve done is lost.
+              Still working. You can stop without losing anything.
             </p>
           )}
         </div>
@@ -302,34 +263,14 @@ export function LoadingOverlay({
             </div>
           </div>
         )}
-
-        {/* rotating tip */}
-        <div
-          style={{
-            marginTop: 22,
-            paddingTop: 14,
-            borderTop: '1px solid var(--hairline)',
-            minHeight: 48,
-          }}
-        >
-          <div className="ds-label" style={{ marginBottom: 6 }}>
-            Tip
-          </div>
-          <div key={tipIdx} className="lo-tip" style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)', lineHeight: 1.5 }}>
-            {tips[tipIdx % tips.length]}
-          </div>
-        </div>
       </div>
 
       {/* Kept in styled-jsx but driven by classes on elements this component
           renders, so the hashed keyframe names actually resolve. The global
-          prefers-reduced-motion block in globals.css governs both. */}
+          prefers-reduced-motion block in globals.css governs it. */}
       <style jsx>{`
         .lo-pulse {
           animation: lo-pulse 1.4s ease-in-out infinite;
-        }
-        .lo-tip {
-          animation: lo-tip-fade var(--dur-slow) var(--ease-out);
         }
         @keyframes lo-pulse {
           0%,
@@ -340,16 +281,6 @@ export function LoadingOverlay({
           50% {
             opacity: 0.4;
             transform: scale(0.8);
-          }
-        }
-        @keyframes lo-tip-fade {
-          from {
-            opacity: 0;
-            transform: translateY(4px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
           }
         }
       `}</style>

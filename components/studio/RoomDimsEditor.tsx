@@ -331,7 +331,7 @@ export function RoomDimsEditor() {
           <div style={{ fontSize: 'var(--fs-caption)', marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere', color: 'var(--danger-text)' }}>
             {errorBy === 'floor' && floorError
               ? floorError
-              : `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit} — enter one in that range and the room will follow.`}
+              : `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit}. Enter a value in that range.`}
           </div>
         ) : heldAxes.length > 0 ? (
           // Not an error, so not `--danger-text`: nothing has gone wrong, a chevron

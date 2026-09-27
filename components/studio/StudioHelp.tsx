@@ -7,10 +7,9 @@
 // could bury it. Moving it to the top bar frees that corner and puts it where
 // every other tool keeps help.
 //
-// The risk of moving it is discoverability, so the COACH MARKS now anchor here
-// too. They still fire on the first drag and the first wall-selection — the two
-// gestures whose power features are otherwise invisible — but they now appear
-// under the "?" they are teaching you to find. One hint, two jobs.
+// It used to fire one-time coach marks after the first drag and the first wall
+// selection. They were deleted with the rest of the unsolicited tips: help is
+// here when someone asks for it, and nothing pops up to teach a gesture.
 //
 // Both tabs' shortcut content lives here rather than in either page, because the
 // two used to describe the same app differently and nobody comparing them was
@@ -18,35 +17,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { useStudio } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
 import { HelpCard, HelpGroup, HelpLine, Kb } from './HelpCard';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 import { usePhoneStudio, useStudioLayout } from './NarrowViewportBanner';
 import { useMediaQuery } from '@/lib/use-media-query';
 
-type CoachId = 'drag' | 'wall';
-
-const COACH_KEY: Record<CoachId, string> = {
-  drag: 'danmu-coach-drag',
-  wall: 'danmu-coach-wall',
-};
-
-const COACH_COPY: Record<CoachId, { title: string; body: string }> = {
-  drag: {
-    title: 'While you are dragging',
-    body: 'Scroll to spin the piece as it moves, and it will nudge up against whatever it bumps into. Snap, at the top of the room, keeps it on tidy steps.',
-  },
-  wall: {
-    title: 'Walls move too',
-    body: 'Drag a wall to resize the room, or give it a colour in the panel on the right. Every other piece stays where it is.',
-  },
-};
-
 /** `hideTrigger` + `open` / `onOpenChange` are for the phone app bar, where the card
- *  is opened from the More menu rather than from its own button. The component
- *  stays mounted there regardless, because it is also what shows the one-time coach
- *  notes after a first drag or a first wall. */
+ *  is opened from the More menu rather than from its own button. */
 export function StudioHelp({
   hideTrigger = false,
   open: openProp,
@@ -60,9 +38,6 @@ export function StudioHelp({
   const onModel = pathname?.endsWith('/model') ?? false;
   const touch = useMediaQuery('(pointer: coarse)');
 
-  const dragging = useStudio((s) => s.draggingId);
-  const selectedWall = useStudio((s) => s.selectedWall);
-
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
   // Read through a ref so the Escape listener below can close a controlled card
@@ -73,58 +48,28 @@ export function StudioHelp({
     if (control.current.controlled) control.current.onOpenChange?.(next);
     else setOpenState(next);
   };
-  const [coach, setCoach] = useState<CoachId | null>(null);
-  const seen = useRef<Partial<Record<CoachId, boolean>>>({});
   const btnRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    for (const id of Object.keys(COACH_KEY) as CoachId[]) {
-      seen.current[id] = localStorage.getItem(COACH_KEY[id]) === '1';
-    }
-  }, []);
-
-  function fire(id: CoachId) {
-    if (seen.current[id]) return;
-    seen.current[id] = true;
-    localStorage.setItem(COACH_KEY[id], '1');
-    setCoach(id);
-  }
-
-  // On release, not on grab: appearing mid-gesture would both distract and force
-  // a re-render in the middle of a drag.
-  const wasDragging = useRef(false);
-  useEffect(() => {
-    if (!dragging && wasDragging.current) fire('drag');
-    wasDragging.current = !!dragging;
-  }, [dragging]);
-
-  useEffect(() => {
-    if (selectedWall !== null) fire('wall');
-  }, [selectedWall]);
 
   // Esc closes help before it reaches the global "deselect" binding. Capture on
   // window runs first and stops the event from ever bubbling back there.
   useEffect(() => {
-    if (!open && !coach) return;
+    if (!open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
       // Escape belongs to a field being edited, or to a dialog in front of us,
-      // before it belongs to a hint.
+      // before it belongs to the help card.
       if (isTypingOrDialog(e.target)) return;
       // See ExportMenu: a plain stop still lets a sibling capture listener on
       // window fire, so one Esc closed both popovers.
       e.stopImmediatePropagation();
       e.stopPropagation();
-      if (coach) setCoach(null);
-      else {
-        if (control.current.controlled) control.current.onOpenChange?.(false);
-        else setOpenState(false);
-        btnRef.current?.focus();
-      }
+      if (control.current.controlled) control.current.onOpenChange?.(false);
+      else setOpenState(false);
+      btnRef.current?.focus();
     }
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [open, coach]);
+  }, [open]);
 
   return (
     <div style={{ position: 'relative', display: 'flex' }}>
@@ -145,43 +90,13 @@ export function StudioHelp({
             width: 28,
             height: 28,
             borderRadius: 'var(--r-full)',
-            border: `1px solid ${open || coach ? 'var(--accent-text)' : 'var(--edge)'}`,
-            background: open || coach ? 'var(--accent-tint)' : 'var(--paper)',
-            color: open || coach ? 'var(--accent-text)' : 'var(--ink-2)',
+            border: `1px solid ${open ? 'var(--accent-text)' : 'var(--edge)'}`,
+            background: open ? 'var(--accent-tint)' : 'var(--paper)',
+            color: open ? 'var(--accent-text)' : 'var(--ink-2)',
           }}
         >
           <Icon name="help" size={14} />
         </button>
-      )}
-
-      {coach && (
-        <div
-          // Placement and width in globals.css (`.help-pop`): anchored under the "?"
-          // on a laptop, and on the phone's margins under the app bar.
-          className="ds-card help-pop help-pop--coach"
-          role="note"
-          style={{
-            padding: '11px 12px 12px 14px',
-            boxShadow: 'var(--shadow-lift)',
-            textAlign: 'left',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--ink)', flex: 1 }}>
-              {COACH_COPY[coach].title}
-            </span>
-            <button
-              onClick={() => setCoach(null)}
-              className="ds-btn ds-btn--xs ds-btn--ghost"
-              style={{ padding: '0 8px', color: 'var(--accent-text)' }}
-            >
-              Got it
-            </button>
-          </div>
-          <div className="t-small" style={{ lineHeight: 1.5, marginTop: 3 }}>
-            {COACH_COPY[coach].body}
-          </div>
-        </div>
       )}
 
       {open && (
@@ -211,16 +126,18 @@ function ModelHelp() {
     <>
       <HelpGroup title="Moving furniture">
         <HelpLine>Drag a piece to slide it around the floor. It stops against whatever is in the way.</HelpLine>
-        <HelpLine>Scroll while you are dragging to spin the piece.</HelpLine>
+        <HelpLine>Scroll while dragging to spin the piece.</HelpLine>
+        <HelpLine>Shift-click to select more than one piece. Drag any of them to move them all.</HelpLine>
         <HelpLine>
-          Shift-click a second piece and drag either one — the whole selection moves together. <b>Group</b> makes
-          that stick: a grouped set comes back as one piece the next time you click it.
+          <b>Group</b> keeps a selection together. One click then selects the whole set.
         </HelpLine>
         <HelpLine>Double-click a wardrobe or a nightstand to open its doors and drawers.</HelpLine>
         <HelpLine>
-          Where pieces overlap, <Kb>Alt</Kb>-click lists everything under the pointer so you can pick the one you
-          meant — and <Kb>Alt</Kb>-clicking again steps down through them. Add <Kb>Shift</Kb> to take one into the
-          selection instead of replacing it.
+          Where pieces overlap, <Kb>Alt</Kb>-click lists everything under the pointer. <Kb>Alt</Kb>-click again to
+          step through them.
+        </HelpLine>
+        <HelpLine>
+          Add <Kb>Shift</Kb> to add that piece to the selection instead of replacing it.
         </HelpLine>
       </HelpGroup>
 
@@ -233,9 +150,9 @@ function ModelHelp() {
       <HelpGroup title="Getting around">
         <HelpLine>Left-drag to orbit, scroll to zoom.</HelpLine>
         <HelpLine>
-          Hold <Kb>Space</Kb> and drag to slide the whole view across.
+          Hold <Kb>Space</Kb> and drag to pan.
         </HelpLine>
-        <HelpLine>Right-click a piece — or the room — for what you can do to it.</HelpLine>
+        <HelpLine>Right-click a piece or the room to see what you can do.</HelpLine>
         <HelpLine>
           <Kb>↑</Kb>
           <Kb>↓</Kb>
@@ -245,7 +162,7 @@ function ModelHelp() {
         </HelpLine>
       </HelpGroup>
 
-      <HelpGroup title="Keys" note="Click the room first — these stay quiet while you are using a panel.">
+      <HelpGroup title="Keys" note="Click the room first. Keys do nothing while you are in a panel.">
         <HelpLine>
           <Kb>W</Kb> move · <Kb>S</Kb> resize · <Kb>R</Kb> spin
         </HelpLine>
@@ -314,8 +231,8 @@ function TwoLists() {
         <HelpLine>Tap a piece in the Library to drop it into the first clear spot.</HelpLine>
       ) : (
         <HelpLine>
-          In either list, <Kb>Shift</Kb>-click picks a run of rows at once, and <Kb>Ctrl</Kb>-click adds that
-          piece to the room.
+          In either list, <Kb>Shift</Kb>-click picks a run of rows. <Kb>Ctrl</Kb>-click adds that piece to the
+          room.
         </HelpLine>
       )}
     </HelpGroup>
@@ -340,7 +257,7 @@ function ModelTouchHelp() {
           <b>Move</b>, <b>Scale</b> and <b>Rotate</b> at the top choose what dragging does.
         </HelpLine>
         <HelpLine>
-          Tap a piece to choose it, then {phone ? 'tap its name in the toolbar' : 'open Details'} for its colour,
+          Tap a piece to select it. Then {phone ? 'tap its name in the toolbar' : 'open Details'} for its colour,
           style and size.
         </HelpLine>
       </HelpGroup>
@@ -352,9 +269,9 @@ function ModelTouchHelp() {
       </HelpGroup>
 
       <HelpGroup title="Getting around">
-        <HelpLine>One finger on empty space turns the view. Two fingers pinch to zoom and slide it across.</HelpLine>
-        <HelpLine>The four buttons in the corner jump to a set view: from above, the front wall, the corner.</HelpLine>
-        {phone && <HelpLine>Snap, and the exports, are under More (⋯) at the top.</HelpLine>}
+        <HelpLine>One finger on empty space turns the view. Two fingers pinch to zoom and pan.</HelpLine>
+        <HelpLine>The buttons in the corner jump to set views: from above, the front wall, the corner.</HelpLine>
+        {phone && <HelpLine>Snap and the exports are under More (⋯) at the top.</HelpLine>}
       </HelpGroup>
     </>
   );
@@ -365,9 +282,8 @@ function PlanTouchHelp() {
   return (
     <>
       <HelpGroup title="Moving furniture">
-        <HelpLine>
-          Drag a piece to move it. It stops against whatever is in the way, and tints red if it cannot go there.
-        </HelpLine>
+        <HelpLine>Drag a piece to move it. It stops against whatever is in the way.</HelpLine>
+        <HelpLine>It tints red if it cannot go there.</HelpLine>
         <HelpLine>Drag the handle on a chosen piece to turn it.</HelpLine>
         <HelpLine>Tap a wall to paint it, or drag it to make the room bigger or smaller.</HelpLine>
       </HelpGroup>
@@ -376,7 +292,7 @@ function PlanTouchHelp() {
 
       <HelpGroup title="Getting around">
         <HelpLine>One finger on empty floor slides the drawing. Two fingers pinch to zoom.</HelpLine>
-        {phone && <HelpLine>Snap, and the exports, are under More (⋯) at the top.</HelpLine>}
+        {phone && <HelpLine>Snap and the exports are under More (⋯) at the top.</HelpLine>}
       </HelpGroup>
     </>
   );
@@ -392,11 +308,9 @@ function PlanHelp() {
   return (
     <>
       <HelpGroup title="Moving furniture">
-        <HelpLine>
-          Drag a piece to move it. It stops against whatever is in the way, tints red if it cannot go there —
-          along with whichever piece of a selection ran out of room — and measures its way to the nearest walls
-          as it goes.
-        </HelpLine>
+        <HelpLine>Drag a piece to move it. It stops against whatever is in the way.</HelpLine>
+        <HelpLine>It tints red if it cannot go there. So does any selected piece that runs out of room.</HelpLine>
+        <HelpLine>While you drag, it shows the distance to the nearest walls.</HelpLine>
         <HelpLine>
           <Kb>Esc</Kb> part-way through a drag puts the piece back where it was.
         </HelpLine>
@@ -407,9 +321,9 @@ function PlanHelp() {
       <TwoLists />
 
       <HelpGroup title="Choosing pieces">
+        <HelpLine>Drag across empty floor to lasso several pieces.</HelpLine>
         <HelpLine>
-          Drag across empty floor to lasso several. Hold <Kb>Shift</Kb> to add to what is already chosen — by
-          lasso, or by clicking one piece at a time.
+          Hold <Kb>Shift</Kb> to add to the selection, by lasso or by click.
         </HelpLine>
         <HelpLine>
           {/* The line break must not fall between a word and a keycap. JSX strips the
@@ -420,23 +334,23 @@ function PlanHelp() {
               this is written with the space made explicit rather than moved. */}
           Where pieces overlap, <Kb>Alt</Kb>-click lists everything under the pointer and lets you pick.
           Keep{' '}
-          <Kb>Alt</Kb>-clicking the same spot to step down through them one at a time.
+          <Kb>Alt</Kb>-clicking the same spot to step through them.
         </HelpLine>
-        <HelpLine>Right-click a piece — or the plan — for what you can do to it, including that same list.</HelpLine>
+        <HelpLine>Right-click a piece or the plan to see what you can do, including that same list.</HelpLine>
       </HelpGroup>
 
       <HelpGroup title="Getting around">
+        <HelpLine>Pinch or scroll to zoom.</HelpLine>
         <HelpLine>
-          Pinch or scroll to zoom. Two fingers, a middle-drag, <Kb>Shift</Kb>-scroll, or hold <Kb>Space</Kb> and
-          drag, to pan.
+          To pan: two fingers, middle-drag, <Kb>Shift</Kb>-scroll, or hold <Kb>Space</Kb> and drag.
         </HelpLine>
         <HelpLine>
           <Kb>[</Kb>
-          <Kb>]</Kb> turn the page — the drawing, not the furniture. <Kb>0</Kb> puts the view back.
+          <Kb>]</Kb> turn the page, not the furniture · <Kb>0</Kb> puts the view back
         </HelpLine>
       </HelpGroup>
 
-      <HelpGroup title="Keys" note="Click the drawing first — these stay quiet while you are using a panel.">
+      <HelpGroup title="Keys" note="Click the drawing first. Keys do nothing while you are in a panel.">
         <HelpLine>
           <Kb>↑</Kb>
           <Kb>↓</Kb>

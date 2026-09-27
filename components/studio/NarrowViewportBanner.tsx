@@ -147,11 +147,11 @@ export function NarrowViewportBanner() {
         The room and its panels need at least {MIN_WIDTH}px of width. Widen the window, or zoom out a step.
       </p>
       <p className="t-body" style={{ lineHeight: 1.55, margin: 0 }}>
-        Photographing the room still works at this width — shoot your walls here and the room will be waiting on a
-        wider screen.
+        Photographing the room works at this width. Take your wall photos here, then open the room on a wider
+        screen.
       </p>
       <p className="t-meta" style={{ lineHeight: 1.5, margin: '10px 0 0' }}>
-        Opening it anyway works, and it is remembered — some panels will just be cramped.
+        If you open it anyway, some panels will be cramped. This choice is remembered.
       </p>
     </Modal>
   );

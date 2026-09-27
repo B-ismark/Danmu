@@ -68,11 +68,11 @@ export function TransformToolbar() {
               type="button"
               onClick={() => setMode(m.id)}
               aria-pressed={active}
-              aria-label={`${m.label} — dragging will ${m.does} (${m.key})`}
+              aria-label={`${m.label}: dragging will ${m.does} (${m.key})`}
               title={
                 selected
-                  ? `${m.label} (${m.key}) — dragging will ${m.does}`
-                  : `${m.label} (${m.key}) — ${m.does}; applies to the next piece you select`
+                  ? `${m.label} (${m.key}) · Dragging will ${m.does}`
+                  : `${m.label} (${m.key}) · Dragging will ${m.does}. Applies to the next piece you select.`
               }
               // Dimmed by token, not by opacity, until a piece is selected: a
               // 0.6-alpha --ink-2 drops under 4.5:1, and this row is 12px type.
@@ -151,7 +151,7 @@ function SnapCycleButton({
         type="button"
         onClick={() => setSnapMode(next.id)}
         aria-label={`Snap: ${cur.label}, ${cur.sub}. Activate for ${next.label}.`}
-        title={`Snap · ${cur.label} (${cur.sub}) — click for ${next.label}`}
+        title={`Snap · ${cur.label} (${cur.sub}) · Next: ${next.label}`}
         className={`chrome-pill__text${active ? ' is-on' : ''}`}
         style={{ whiteSpace: 'nowrap' }}
       >

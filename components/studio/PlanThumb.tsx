@@ -94,7 +94,7 @@ export function PlanThumb({ roomId }: { roomId: string }) {
     u: 'U-shaped, ',
     custom: 'custom shape, ',
   };
-  const label = `Floor plan — ${SHAPE_WORD[room.layoutId] ?? ''}${W.toFixed(1)} by ${D.toFixed(1)} metres, ${
+  const label = `Floor plan: ${SHAPE_WORD[room.layoutId] ?? ''}${W.toFixed(1)} by ${D.toFixed(1)} metres, ${
     count === 0 ? 'nothing in it yet' : count === 1 ? '1 piece of furniture' : `${count} pieces of furniture`
   }`;
 
@@ -155,7 +155,7 @@ export function PlanThumb({ roomId }: { roomId: string }) {
             fontWeight: 600,
           }}
         >
-          Empty room — open it to start
+          Empty room
         </div>
       )}
     </div>

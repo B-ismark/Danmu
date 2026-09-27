@@ -234,13 +234,12 @@ describe('a floating card is capped against the window, not just stated', () => 
     expect(readFileSync(root(...file.split('/')), 'utf8')).toMatch(pattern);
   });
 
-  // The help card and the coach note keep their widths in the stylesheet, because a
-  // phone replaces them with its own margins (`.app-bar .help-pop`). So the cap is
+  // The help card keeps its width in the stylesheet, because a
+  // phone replaces it with its own margins (`.app-bar .help-pop`). So the cap is
   // asserted where it lives, and the components are held to the classes carrying it —
   // a class the component stopped using would leave the rule capping nothing.
   it.each([
     ['components/studio/HelpCard.tsx', 'help-card'],
-    ['components/studio/StudioHelp.tsx', 'help-pop--coach'],
   ])('%s caps its width through .%s', (file, cls) => {
     expect(readFileSync(root(...file.split('/')), 'utf8')).toContain(cls);
     const css = readFileSync(root('app', 'globals.css'), 'utf8');

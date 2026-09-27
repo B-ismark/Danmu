@@ -516,8 +516,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         saidRef.current = saying;
         announce(
           namesMember
-            ? `${namesMember.name} will not fit there — the rest of the selection cannot follow.`
-            : `${part.name} will not fit there — ${refusalCause(lead)}`,
+            ? `${namesMember.name} will not fit there, so the rest of the selection cannot follow.`
+            : `${part.name} will not fit there: ${refusalCause(lead)}`,
         );
       }
     }

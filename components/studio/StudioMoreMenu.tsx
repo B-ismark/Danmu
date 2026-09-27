@@ -66,8 +66,7 @@ export function StudioMoreMenu() {
       >
         <Icon name="more" size={20} />
       </button>
-      {/* Mounted with no trigger of its own: the card opens from the row below, and
-          the component is also what shows the one-time coach notes. */}
+      {/* Mounted with no trigger of its own: the card opens from the row below. */}
       <StudioHelp hideTrigger open={help} onOpenChange={setHelp} />
       {/* A group of buttons, not role="menu" — the same decision, for the same
           reason, as ExportMenu's: a menu promises arrow-key roving focus. */}

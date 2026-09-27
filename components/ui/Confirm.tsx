@@ -85,8 +85,7 @@ export function useConfirmDeleteRooms() {
             <p style={{ margin: '0 0 8px', color: 'var(--ink-3)' }}>{names.slice(0, 6).join(', ')}{names.length > 6 ? `, and ${names.length - 6} more` : ''}.</p>
           )}
           <p style={{ margin: 0 }}>
-            You can undo this straight afterwards, and it stays recoverable for 30 days. After that it is deleted
-            permanently.
+            You can undo this. It stays recoverable for 30 days, then it is deleted permanently.
           </p>
         </>
       ),

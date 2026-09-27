@@ -92,7 +92,7 @@ export function DocShell({
         {/* Always a link, always to the same place. This was the inconsistency:
             the workspace rendered a bare <DanmuMark/>, so the one affordance
             every other page trained you to click did nothing there. */}
-        <Link href="/workspace" aria-label="Danmu — back to your rooms" style={{ display: 'flex' }}>
+        <Link href="/workspace" aria-label="Danmu: back to your rooms" style={{ display: 'flex' }}>
           <DanmuMark size={12} />
         </Link>
         <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)' }} />

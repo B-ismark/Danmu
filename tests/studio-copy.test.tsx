@@ -299,11 +299,13 @@ describe('no copy offers a feature this app deleted', () => {
     console.log(`[rule-1 sweep] files=${files.length} keptChars=${kept} quotedStrings=${quoted.length}`);
   });
 
-  it('and the piece list points at Add by name rather than by direction', () => {
+  it('and the empty piece list states the state rather than pointing at Add by direction', () => {
     // The other half of the same item. `Add` has not been above that list since it
     // moved to the right rail, and on a stacked layout it is not even on the same side.
+    // The empty state used to point at Add by name ("Press Add to put the first piece
+    // in"); the copy pass made it a plain statement, so it points nowhere at all.
     const src = code('components/studio/PartTree.tsx');
-    expect(src).toContain('Press Add to put the first piece in');
+    expect(src).toContain('No furniture yet.');
     expect(src).not.toMatch(/Add a piece above/);
   });
 });

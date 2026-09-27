@@ -1187,7 +1187,6 @@ export default function DetectPage() {
               ? 'Your wall photos go to Google once for this step. Nothing else leaves your device.'
               : undefined
           }
-          local={path === 'local'}
           onCancel={stopDetecting}
           cancelLabel="Stop and add by hand"
         />

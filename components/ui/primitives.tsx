@@ -89,7 +89,7 @@ export function FlowBarLead({
       </button>
       <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
       {markHref ? (
-        <Link href={markHref} aria-label="Danmu — back to your rooms" style={{ display: 'flex' }}>
+        <Link href={markHref} aria-label="Danmu: back to your rooms" style={{ display: 'flex' }}>
           <DanmuMark size={12} />
         </Link>
       ) : (

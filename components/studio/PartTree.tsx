@@ -169,7 +169,7 @@ export function PartTree() {
     toast({
       tone: 'success',
       title: `${matched.size} piece${matched.size === 1 ? '' : 's'} matched to a real model`,
-      message: matched.size < generics.length ? 'The rest stayed generic — rename them, or pick a model by hand.' : undefined,
+      message: matched.size < generics.length ? 'The rest stayed generic. Rename them, or pick a model by hand.' : undefined,
     });
   }
 
@@ -417,7 +417,8 @@ export function PartTree() {
               that consumed it, alongside a latitude and a longitude; it is a
               property of the ROOM — `lib/storage.ts` says so in as many words —
               so it belongs with the room's other dimensions. NorthDial renders
-              its own Facing label, with the drag hint on an info tooltip. */}
+              its own section, labelled "Sun direction", with its explanation
+              behind an info button. */}
           <div style={{ marginTop: 12 }}>
             <NorthDial />
           </div>
@@ -460,8 +461,8 @@ export function PartTree() {
                 <button
                   key={t.id}
                   onClick={() => applyTheme(t)}
-                  title={`Restyle the room — ${t.label}`}
-                  aria-label={`Restyle the room — ${t.label}`}
+                  title={`Restyle the room · ${t.label}`}
+                  aria-label={`Restyle the room: ${t.label}`}
                   aria-pressed={on}
                   className={`ds-chip${on ? ' ds-chip--accent' : ''}`}
                   style={{
@@ -536,8 +537,7 @@ export function PartTree() {
               exactly where a silent flat sun mood would be most confusing. */}
           {sunHasNoWayIn && (
             <p className="t-micro" style={{ lineHeight: 1.4, margin: '6px 0 0' }}>
-              Sunlight only reaches a room through its openings. Add a window or a door
-              from the Library to let this one in.
+              No window or door, so no sunlight gets in. Add one from the Library.
             </p>
           )}
         </div>
@@ -606,9 +606,9 @@ export function PartTree() {
           // role="presentation": a listbox may only own options, and this is copy.
           <div role="presentation" className="t-meta" style={{ padding: '18px 14px', textAlign: 'center', lineHeight: 1.5 }}>
             {q ? (
-              <>Nothing here matches “{q}”. Try another word — a sofa, a lamp, a rug.</>
+              <>Nothing here matches “{q}”.</>
             ) : (
-              <>The room is bare. Press Add to put the first piece in.</>
+              <>No furniture yet.</>
             )}
           </div>
         )}
@@ -878,7 +878,7 @@ function PartRow({
         <IconButton
           icon={isPinned ? 'lock' : 'unlock'}
           label={isPinned ? `Let Fix/Shuffle move ${name}` : `Keep ${name} where it is`}
-          title={isPinned ? 'Fix and Shuffle may not move this — click to release' : 'Keep where it is when the room is rearranged'}
+          title={isPinned ? 'Kept in place when the room is rearranged' : 'Keep where it is when the room is rearranged'}
           active={isPinned}
           onClick={(e) => {
             e.stopPropagation();
@@ -997,7 +997,7 @@ function GroupRow({
       aria-label={name}
       tabIndex={tabbable ? 0 : -1}
       className={`list-row${selected ? ' is-selected' : ''}`}
-      title={`${name} — one press takes the whole set`}
+      title={`${name} · Selects the whole set`}
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
@@ -1030,7 +1030,7 @@ function GroupRow({
         <IconButton
           icon="swap"
           label={`Ungroup these ${total} pieces`}
-          title="Ungroup — they stay where they are"
+          title="Ungroup · The pieces stay where they are"
           onClick={(e) => {
             e.stopPropagation();
             onUngroup();

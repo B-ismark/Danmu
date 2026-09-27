@@ -1701,10 +1701,9 @@ Three things left the canvas to make that true:
 
 - **Help** → the top bar (`StudioHelp.tsx`). A 30px button pressed about once per
   user was holding a corner permanently, with its own `--z-canvas-hint` rung so no
-  panel could bury it. The **coach marks moved with it** and now anchor under the
-  `?` they are teaching you to find — they still fire on the first drag and the
-  first wall-selection, which is the only reason those power features are
-  discoverable. Both tabs' shortcut content lives in that one file, because the two
+  panel could bury it. The one-time coach marks that used to pop up after the first
+  drag and the first wall-selection are **deleted**: the copy pass of PR #157
+  removed every unsolicited tip, and help opens only when someone asks. Both tabs' shortcut content lives in that one file, because the two
   used to describe the same app differently.
 - **The selection bar** → the Inspector's header (`SelectionHeader.tsx`). It was a
   second surface answering the question the Inspector exists to answer. It now

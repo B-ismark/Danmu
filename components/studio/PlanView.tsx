@@ -741,8 +741,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
       announcedRef.current = saying;
       announce(
         blocker
-          ? `${blocker.name} will not fit there — the rest of the selection cannot follow.`
-          : `${part.name} will not fit there — ${refusalCause({ refusal: refusedAs })}`,
+          ? `${blocker.name} will not fit there, so the rest of the selection cannot follow.`
+          : `${part.name} will not fit there: ${refusalCause({ refusal: refusedAs })}`,
       );
     }
     return false;
@@ -1300,7 +1300,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     const fell = turnDrop(part.pos, turned.pos);
     const alsoFell =
       fell === 0 ? ''
-      : fell > 0 ? ` It dropped ${formatLength(fell * 1000, dimUnit)} — it is no longer standing on anything.`
+      : fell > 0 ? ` It dropped ${formatLength(fell * 1000, dimUnit)}. It is no longer standing on anything.`
       : ` It rose ${formatLength(-fell * 1000, dimUnit)} onto what is under it.`;
     const said =
       turnAngleHeld(wanted, turned.rot)
@@ -1310,7 +1310,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
         ? `${part.name} is held square to its wall, at ${Math.round((turned.rot * 180) / Math.PI)} degrees.`
         : `${part.name} turned to ${Math.round((turned.rot * 180) / Math.PI)} degrees.`;
     if (!turned.valid) {
-      announce(`${said} It does not fit at that angle — ${refusalCause(turned)}${alsoFell}`);
+      announce(`${said} It does not fit at that angle: ${refusalCause(turned)}${alsoFell}`);
       return;
     }
     // …and a turn that FITS may still have been slid to make it fit, which `valid`

@@ -112,7 +112,7 @@ export function CatalogToggle() {
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         className="chrome-pill__text"
-        title="Add a piece — drag it into the room, click to drop it in the first clear spot, or Shift-click to mark several"
+        title="Add a piece"
       >
         <Icon name="plus" size={12} /> Add
       </button>
@@ -297,10 +297,10 @@ export function LibraryBody({ canDrag = false, touch = false }: { canDrag?: bool
     >
       <div className="t-hint" style={{ margin: '0 0 8px', lineHeight: 1.4 }}>
         {touch
-          ? 'Tap a piece to drop it in the first clear spot.'
+          ? 'Tap a piece to add it in the first clear spot.'
           : canDrag
-            ? 'Drag a piece in, click to drop it in the first clear spot, or Shift-click to mark several.'
-            : 'Click a piece to drop it in the first clear spot. Shift-click to mark several.'}
+            ? 'Drag a piece in, or click to add it in the first clear spot. Shift-click to mark several.'
+            : 'Click a piece to add it in the first clear spot. Shift-click to mark several.'}
       </div>
       <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag && !touch} maxHeight={null} />
     </div>
