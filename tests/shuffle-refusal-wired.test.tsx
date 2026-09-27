@@ -84,8 +84,10 @@ afterEach(() => {
   cleanup();
 });
 
-function pressShuffle() {
-  act(() => {
+// Async since the arranging engine moved to a worker (`lib/layout-offload.ts`):
+// the answer arrives on a later microtask, so the press is awaited inside `act`.
+async function pressShuffle() {
+  await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: /^Shuffle$/ }));
   });
   expect(toasts.map((t) => t.title), 'exactly one toast per press').toHaveLength(1);
@@ -93,7 +95,7 @@ function pressShuffle() {
 }
 
 describe('the shuffle refusal says which of the two "no" it is', () => {
-  it('a room that already has a hard finding is told so, and not to press again', () => {
+  it('a room that already has a hard finding is told so, and not to press again', async () => {
     // **The fixture's shape, pinned before the assertion rather than assumed.** This
     // whole case rests on `u` at 6 x 4 seeding a room that already carries a finding
     // whose cost term is one `isCleanShuffle` reads. If the seeder ever stops doing
@@ -106,7 +108,7 @@ describe('the shuffle refusal says which of the two "no" it is', () => {
       'this fixture is supposed to start with a hard finding — see § 4c',
     ).toBeGreaterThan(0);
 
-    const said = pressShuffle();
+    const said = await pressShuffle();
     expect(said.title).toBe('Shuffle cannot arrange around this');
     // The title VERBATIM, not lowercased. Half of these are sentences rather than
     // noun phrases — `access` reads "you can't walk to everything" — so the sentence
@@ -121,14 +123,14 @@ describe('the shuffle refusal says which of the two "no" it is', () => {
     ).not.toContain('Press Shuffle again');
   });
 
-  it('a room with nothing wrong keeps the "press again" refusal, which is true there', () => {
+  it('a room with nothing wrong keeps the "press again" refusal, which is true there', async () => {
     const { parts, footprint } = mount('rect', 6, 4);
     expect(
       shuffleBlockers(analyzeRoom(parts, { footprint, height: HEIGHT }).issues),
       'this fixture is supposed to start clean, or it is a second copy of the case above',
     ).toEqual([]);
 
-    const said = pressShuffle();
+    const said = await pressShuffle();
     expect(said.title).toBe('No new arrangement this time');
     expect(said.message).toContain('Press Shuffle again');
     expect(said.message).not.toContain('Try Fix first');

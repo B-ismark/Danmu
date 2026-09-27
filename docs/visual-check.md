@@ -1643,6 +1643,26 @@ the two the camera faces and leaves with the cut-away third, as it should). The 
 rings follow its taper now — sized to the top radius, the lowest stood ~4 mm off the body,
 which an axis-aligned box test cannot see because the ring's box contains the body.
 
+### Fix and Shuffle think in the background now — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Any furnished room → rail → **Shuffle**, then orbit the room while the
+button says "Shuffling…". Then press Shuffle and immediately **Ctrl+Z**.
+
+**What wrong looks like.** The room freezing while the button spins (the worker did not
+load — the console says "Arranging worker unavailable; running inline."); an arrangement
+landing on top of the undo you just made (the stamp check failed). The second press should
+end in "The room changed while it was thinking" with the undo standing.
+
+**What was measured, and on what.** SwiftShader, production build, 4 cores, the seeded
+9-piece showroom, three presses each. Inline (Worker hidden from the page): Shuffle froze
+the page for **567–667 ms** in one frame and finished in 640–790 ms. Worker: worst frame gap
+**17–33 ms** throughout, but finished in **~1.0 s** — the worker's own search takes ~900 ms
+against ~600 ms inline. Not the copy across threads (a structured clone costs ~10% in node,
+within noise), not the canvas (hiding it changed nothing), and not a slow worker thread in
+general (a synthetic loop runs at the same speed in both). Unexplained; a real phone and a
+real laptop are what settle whether the live room costs a longer wait there too. The stale
+path was seen working in that build.
+
 ## The browser route, so the next person does not rebuild it
 
 Looking is a half-hour of setup nobody has to hand, which is the actual reason items sit

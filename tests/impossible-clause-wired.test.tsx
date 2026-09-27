@@ -239,10 +239,10 @@ const CASES: { terms: ImpossibleTerm[]; says: string; notSays?: string }[] = [
 
 describe('the refusal names the condition the solver named, at every site that says it', () => {
   describe.each(CASES)('a refusal naming $terms', ({ terms, says, notSays }) => {
-    it('Fix says it', () => {
+    it('Fix says it', async () => {
       const parts = mount();
       solveSpy.mockReturnValue(refusal(terms, parts));
-      act(() => {
+      await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /^Fix$/ }));
       });
       expect(solveSpy, 'the press must actually have solved').toHaveBeenCalled();
@@ -255,11 +255,11 @@ describe('the refusal names the condition the solver named, at every site that s
         ).not.toContain(notSays);
     });
 
-    it('a confined Try a fix says it — the finding that names a piece', () => {
+    it('a confined Try a fix says it — the finding that names a piece', async () => {
       const parts = mount();
       openFindings();
       solveSpy.mockReturnValue(refusal(terms, parts));
-      act(() => {
+      await act(async () => {
         fireEvent.click(tryFixFor('Bed hard to get into'));
       });
       expect(said().title).toBe('No safe way to move those');
@@ -270,11 +270,11 @@ describe('the refusal names the condition the solver named, at every site that s
       expect(said().message).toContain('Fix can rearrange the whole room');
     });
 
-    it('an unconfined Try a fix says it — the finding that names no piece', () => {
+    it('an unconfined Try a fix says it — the finding that names no piece', async () => {
       const parts = mount();
       openFindings();
       solveSpy.mockReturnValue(refusal(terms, parts));
-      act(() => {
+      await act(async () => {
         fireEvent.click(tryFixFor('Part of the floor is cut off'));
       });
       expect(said().title).toBe('No safe way to move those');
@@ -283,7 +283,7 @@ describe('the refusal names the condition the solver named, at every site that s
       expect(said().message).toContain('Try unlocking a piece');
     });
 
-    it('the re-fit offer after a size change says it', () => {
+    it('the re-fit offer after a size change says it', async () => {
       const parts = mount();
       // Same cast, smaller room: `u` 6 × 4 reports 2 findings and 5.5 × 3.8 reports 8, so
       // the "that size change left N problems" offer fires. The cast has to be identical
@@ -305,7 +305,7 @@ describe('the refusal names the condition the solver named, at every site that s
       ).toBeTruthy();
       toasts.length = 0;
       solveSpy.mockReturnValue(refusal(terms, parts));
-      act(() => {
+      await act(async () => {
         offer!.action!.onClick();
       });
       expect(said().title).toBe('No safe way to fit that');
@@ -314,10 +314,10 @@ describe('the refusal names the condition the solver named, at every site that s
     });
   });
 
-  it('a decline that is NOT impossible never reaches the clause at all', () => {
+  it('a decline that is NOT impossible never reaches the clause at all', async () => {
     const parts = mount();
     solveSpy.mockReturnValue(refusal([], parts, 'no-gain'));
-    act(() => {
+    await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^Fix$/ }));
     });
     expect(said().title).toBe('This is already a good arrangement');

@@ -70,20 +70,21 @@ import {
   isWorthOffering,
   lockedForSolve,
   movableFor,
-  solveLayout,
   type MoveReason,
+  type SolveResult,
   withRiders,
 } from '@/lib/layout-solve';
 import {
   HISTORY_DEPTH,
   lockedForShuffle,
-  shuffleRoom,
   shuffleBlockers,
   shuffleRefusal,
   type ShuffleOffer,
   type ShuffleRoom,
 } from '@/lib/layout-shuffle';
 import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
+import { shuffleOffThread, solveOffThread } from '@/lib/layout-offload';
+import { sameStamp, stampOf, type SolveStamp } from '@/lib/solve-stamp';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim, formatLength, fromMM, stepFor, toMM } from '@/lib/units';
@@ -586,6 +587,36 @@ function biggestMove(moves: MoveReason[], parts: ScenePart[]): string | null {
     : `“${name}” moved ${phrase}.`;
 }
 
+/** What a solve reads, as it stands now — see `lib/solve-stamp.ts`. */
+function currentStamp(): SolveStamp {
+  const t = useStudio.getState();
+  const sc = useScene.getState();
+  return stampOf({
+    parts: sc.parts,
+    room: sc.room,
+    positions: t.positions,
+    rotations: t.rotations,
+    dims: t.dims,
+    parentIds: t.parentIds,
+    pinned: t.pinned,
+  });
+}
+
+/** The room changed while the worker was searching, so its answer describes a
+ *  room that no longer exists. Said rather than swallowed: the button spun, and
+ *  a press that ends in silence reads as a press that did nothing. One sentence
+ *  for every button, because it is one situation. */
+function toastStale() {
+  toast({
+    title: 'The room changed while it was thinking',
+    message: 'Nothing was moved, so your change stands. Press again to work from the room as it is now.',
+  });
+}
+
+type SuggestOutcome =
+  | { stale: true }
+  | { stale: false; applied: boolean; result: SolveResult };
+
 /** Run the solver and write the result as one history entry. Shared, because the
  *  same thing happens whether the user asked for an idea, accepted a re-fit after
  *  resizing something, or asked the room report to clear one finding.
@@ -599,8 +630,9 @@ function biggestMove(moves: MoveReason[], parts: ScenePart[]): string | null {
 function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppPlacedRef) {
   const loadTransforms = useStudio((s) => s.loadTransforms);
   return useCallback(
-    (mode: 'arrange' | 'refit', seed: number, only?: string[]) => {
+    async (mode: 'arrange' | 'refit', seed: number, only?: string[]): Promise<SuggestOutcome> => {
       const t = useStudio.getState();
+      const stamp = currentStamp();
       // …and whatever is STANDING ON one of them travels with it, or the fix strands
       // it. `lib/clearance.ts` skips anything above the floor, so a rider can never
       // appear in a finding's `partIds` — which means without this line EVERY
@@ -635,11 +667,15 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
       );
       // Three reasons a piece may not move, composed in one place a test can
       // reach — see `lockedForSolve`. The user's Lock button is the first of them.
-      const result = solveLayout(effParts, footprint, lockedForSolve(effParts, t.pinned, confined), {
-        seed,
-        mode,
-        placed,
+      // Off the main thread — `lib/layout-offload.ts`. The window keeps drawing
+      // while the search runs, which is also why the stamp check below exists.
+      const result = await solveOffThread({
+        parts: effParts,
+        footprint,
+        locked: lockedForSolve(effParts, t.pinned, confined),
+        opts: { seed, mode, placed },
       });
+      if (!sameStamp(stamp, currentStamp())) return { stale: true };
       // A material gain, not merely a smaller number. `isWorthOffering` is the bar:
       // a solve that trims 3.1 to 2.4 by sliding a sofa 10 cm and a rug 10 cm has
       // found a real improvement and is still not an answer to "give me an idea".
@@ -648,9 +684,9 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
       // Three ways to end up applying nothing, and they are three different
       // sentences. `null` used to be all of them, so the toast that fires on the
       // commonest one spoke for the other two as well — see `SolveDecline`.
-      if (result.moved.length === 0) return { applied: false as const, result };
+      if (result.moved.length === 0) return { stale: false, applied: false, result };
       if (!confined && !isWorthOffering(result.before, result.after)) {
-        return { applied: false as const, result };
+        return { stale: false, applied: false, result };
       }
       const positions = { ...t.positions };
       const rotations = { ...t.rotations };
@@ -664,7 +700,7 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
       // suggestion that resized the furniture would be the one thing this app
       // refuses to do.
       loadTransforms({ positions, rotations, dims: t.dims });
-      return { applied: true as const, result };  // …and only this path writes.
+      return { stale: false, applied: true, result };  // …and only this path writes.
     },
     [effParts, footprint, loadTransforms, appPlaced],
   );
@@ -680,20 +716,22 @@ function FixAllButton({
   appPlaced: AppPlacedRef;
 }) {
   const suggest = useSuggest(effParts, footprint, appPlaced);
-  // `useBusyAction`, not a bare `useState`: `solveLayout` is synchronous and runs
-  // for seconds on a furnished room, so a flag set on the same tick never reaches
-  // the screen. This button had exactly that — `disabled={busy}` over a solve the
-  // window was already frozen for, and no label change either, so pressing
-  // Suggest looked like pressing nothing until the room jumped. See
-  // `lib/after-paint.ts`.
+  // `useBusyAction`, not a bare `useState`. The solve runs in the arranging worker
+  // now (`lib/layout-offload.ts`), so the window no longer freezes for it — but the
+  // hook still owns the flag, the re-entry guard and the error path, and on the
+  // inline fallback (no module workers) the old freeze is back and so is the
+  // reason for the yield: a flag set on the same tick as seconds of solving never
+  // reaches the screen. See `lib/after-paint.ts`.
   const [busy, run] = useBusyAction();
   // Pressing again asks for a DIFFERENT arrangement rather than recomputing the
   // same one — the solver is deterministic per seed, which is what makes both
   // behaviours possible at once.
   const attempt = useRef(0);
 
-  function solve() {
-    const { applied, result } = suggest('arrange', ++attempt.current);
+  async function solve() {
+    const outcome = await suggest('arrange', ++attempt.current);
+    if (outcome.stale) return toastStale();
+    const { applied, result } = outcome;
     if (!applied) {
       // `declined === 'impossible'` means the search DID find arrangements and every
       // one of them was illegal (§ 31) — `bestCandidate` returns the LEAST impossible
@@ -705,9 +743,8 @@ function FixAllButton({
       // is the opposite of it — the room may be a mess, and the honest report is that
       // nothing safe was found rather than that nothing was needed.
       // `ttl` is 14000 rather than the 9000 default, matching the re-fit offer below.
-      // This is the longest message in the app, and a solve freezes the window for a
-      // second or two first, so the read starts late: 34 words at an ordinary reading
-      // rate is most of nine seconds on its own.
+      // This is the longest message in the app: 34 words at an ordinary reading rate
+      // is most of nine seconds on its own.
       //
       // The remedies are ordered by what costs the user least. Pressing again is free
       // and genuinely different — `attempt` increments per press, so the next press is
@@ -892,18 +929,24 @@ function useShuffle(effParts: ScenePart[], room: ShuffleRoom, appPlaced: AppPlac
   // on every tab switch — which is the bug this replaced.
   const key = roomId ?? '~';
   return useCallback(
-    (attempt: number) => {
+    async (attempt: number) => {
       const t = useStudio.getState();
+      const stamp = currentStamp();
       // `ShuffleOffer`, not `Placement[]`: this history outlives every edit to the
       // room, and a bare placement list is index-aligned to the `parts` array it
       // was recorded against while saying so nowhere. The ids travel with it so
       // `shuffleRoom` can tell an entry from this room apart from one recorded
       // when the room had two more pieces in it.
       const history = SHUFFLE_HISTORY.get(key) ?? [];
-      const outcome = shuffleRoom(effParts, room, lockedForShuffle(effParts, t.pinned), {
-        attempt,
-        history,
+      const outcome = await shuffleOffThread({
+        parts: effParts,
+        room,
+        locked: lockedForShuffle(effParts, t.pinned),
+        opts: { attempt, history },
       });
+      // Checked BEFORE the history is written: an offer that was never applied was
+      // never shown, and recording it would make the skip-list pass over it later.
+      if (!sameStamp(stamp, currentStamp())) return 'stale' as const;
       if (!outcome) return null;
       const chosen = outcome.result;
 
@@ -951,7 +994,7 @@ function ShuffleButton({
   const { roomId } = useParams<{ roomId: string }>();
   const attemptKey = roomId ?? '~';
 
-  function work() {
+  async function work() {
       // Module scope, keyed by room — NOT a `useRef`. See `SHUFFLE_ATTEMPT`: this
       // component unmounts on a tab switch, so a per-mount pair restarted and the
       // user was handed an arrangement they had already been shown. The key is
@@ -959,7 +1002,8 @@ function ShuffleButton({
       // measurement, including which of the two refs actually does the work.
       const next = (SHUFFLE_ATTEMPT.get(attemptKey) ?? 0) + 1;
       SHUFFLE_ATTEMPT.set(attemptKey, next);
-      const outcome = shuffle(next);
+      const outcome = await shuffle(next);
+      if (outcome === 'stale') return toastStale();
       // Two different "no", and telling them apart is the honest part. Nothing
       // movable is a fact about the room; every candidate faulted is the search
       // failing, and in that case the room is deliberately left ALONE rather than
@@ -1011,11 +1055,11 @@ function ShuffleButton({
     });
   }
 
-  // Why this one needs the yield at all: the search blocks the main thread —
-  // measured at a median 2.0 s and a worst 2.3 s on the `t` preset, because one
-  // press is up to twelve solves (see `lib/layout-shuffle.ts` for why it is more
-  // than one). It is the longest freeze in the app and the least survivable without
-  // a tell. The mechanism is `lib/after-paint.ts`.
+  // The search is long — measured at a median 2.0 s and a worst 2.3 s on the `t`
+  // preset, because one press is up to twelve solves (see `lib/layout-shuffle.ts`
+  // for why it is more than one). It used to be two seconds of frozen window; it
+  // runs in the arranging worker now (`lib/layout-offload.ts`), so the room stays
+  // live and the label below is what says it is working.
 
   return (
     <button
@@ -1038,7 +1082,7 @@ function ShuffleButton({
       }}
     >
       {busy ? <Spinner size={12} /> : <Icon name="shuffle" size={12} />}
-      {/* The label carries the busy state, because the freeze it covers is up to
+      {/* The label carries the busy state, because the wait it covers is up to
           two seconds long and a greyed-out button alone reads as broken rather
           than as working. "Shuffling…" is about 18px wider than "Shuffle" at 11px,
           which the wrapping row absorbs — the claim that used to sit here, that the
@@ -1100,8 +1144,10 @@ function useRefitOffer(
       ttl: 14000,
       action: {
         label: 'Re-fit',
-        onClick: () => {
-          const { applied, result } = suggest('refit', 1);
+        onClick: async () => {
+          const outcome = await suggest('refit', 1);
+          if (outcome.stale) return toastStale();
+          const { applied, result } = outcome;
           // The third of the three sentences, and it was missed on the first pass: this
           // path is reached straight after a RESIZE, which is the state most likely to
           // leave the search with nothing but illegal answers. Saying "nothing to move"
@@ -1212,8 +1258,10 @@ function FixButton({
   // has nothing to confine to, so it falls back to the whole room.
   const scope = issue.partIds.length > 0 ? issue.partIds : undefined;
 
-  function solve() {
-    const { applied, result } = suggest('refit', ++attempt.current, scope);
+  async function solve() {
+    const outcome = await suggest('refit', ++attempt.current, scope);
+    if (outcome.stale) return toastStale();
+    const { applied, result } = outcome;
     if (!applied) {
       // Already honest about finding nothing, and now able to say WHY when the reason
       // is the § 31 veto rather than an absent improvement.
