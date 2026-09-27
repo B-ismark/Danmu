@@ -744,9 +744,12 @@ export type RelationKind =
   | 'in-front'
   /** Centre-to-centre distance, plus `self` turned toward `anchor`. */
   | 'faces'
-  /** Centre-to-centre distance only — for a rug under a group, where facing is
-   *  meaningless and the gap is negative by design. */
-  | 'near';
+  /** A rug under a group: the distance from the rug's centre to where THAT group's
+   *  rule puts it (`rugTarget`), plus the rug squared up to the group. It replaced
+   *  `near`, which asked only that the rug's centre be within 0.8 m of the anchor's —
+   *  a band a rug half under a sofa's BACK satisfies, and so does one entirely under
+   *  a bed's head with both nightstands standing on it. */
+  | 'under';
 
 export type Relation = {
   /** Which spec this came from. Carried so a consumer can tell one OBLIGATION from
@@ -762,6 +765,10 @@ export type Relation = {
   /** Relative to the other cost weights in `layout-score`. */
   weight: number;
   reason: string;
+  /** For `under` only: which group's rule places the rug — see `rugTarget`. Resolved
+   *  per pair from the ANCHOR's role, because one rug spec has three anchors and
+   *  each wants the rug somewhere different. */
+  fit?: RugFit;
 };
 
 type RelationSpec = {
@@ -858,11 +865,14 @@ const RELATIONS: RelationSpec[] = [
     reason: 'close enough to talk across without raising your voice',
   },
   {
+    // The band is SLACK around `rugTarget`'s answer, not a distance between centres:
+    // inside 0.2 m of where the group's rule puts the rug costs nothing, so the rule
+    // says where a rug goes without pinning it to the millimetre.
     id: 'rug-group',
     self: ['rug'],
     anchor: ['sofa', 'bed', 'dining-table'],
-    kind: 'near',
-    band: band(0, 0.8),
+    kind: 'under',
+    band: band(0, 0.2),
     weight: 0.5,
     reason: 'a rug anchors the group it sits under',
   },
@@ -892,7 +902,9 @@ export function relationFor(self: ScenePart, anchor: ScenePart): Relation | null
     if (!spec.self.includes(a) || !spec.anchor.includes(b)) continue;
     const [min, max] = spec.band(self, anchor);
     if (!(max > 0)) continue;
-    return { specId: spec.id, kind: spec.kind, min, max, weight: spec.weight, reason: spec.reason };
+    const rel: Relation = { specId: spec.id, kind: spec.kind, min, max, weight: spec.weight, reason: spec.reason };
+    if (spec.kind === 'under') rel.fit = RUG_FIT[b];
+    return rel;
   }
   return null;
 }
@@ -958,6 +970,113 @@ export function relationOptions(
     else groups.set(rel.specId, { specId: rel.specId, options: [{ anchor: j, rel }] });
   }
   return [...groups.values()];
+}
+
+// ─── Where a rug goes ───────────────────────────────────────────────────────
+//
+// A rug is not "near" its group; each group has a rule for where it sits, and they
+// are three different rules:
+//
+//   · **Seating** — the front legs on, the back legs off. The rug's near edge runs
+//     `RUG_UNDER_SEAT_M` under the front of the sofa and the rug extends out into
+//     the room, where the coffee table stands on it.
+//   · **A bed** — under the lower two-thirds. The rug starts a third of the way down
+//     from the headboard, so the nightstands at the head stand on bare floor and the
+//     rug shows past the sides and the foot, which is where feet land.
+//   · **A dining table** — centred, so chairs pulled back stay on it. How far it runs
+//     past the table (60 cm is the usual answer) is the rug's SIZE, which is the
+//     user's to choose and never this module's to change.
+//
+// In every case the rug's long side runs with the group's long side: along the sofa,
+// across the bed, down the table. A rug is the same after a half turn, so that is the
+// only orientation question there is.
+//
+// **No rug is a valid answer.** None of this asks for a rug; it says where one goes
+// if there is one. The seeder leaves a group without one rather than force a rug
+// that does not fit (`scene-spec.ts`), and a room with no rug owes nothing here.
+
+/** Which rule places a rug, by the role it sits under. */
+export type RugFit = 'seat' | 'bed' | 'table';
+
+const RUG_FIT: Partial<Record<Role, RugFit>> = {
+  sofa: 'seat',
+  armchair: 'seat',
+  bed: 'bed',
+  'dining-table': 'table',
+};
+
+/** How far a rug runs under the front of the seat it belongs to — far enough that
+ *  the front legs stand on it, not so far that the back legs do. A sofa's front legs
+ *  sit 50–150 mm in from its front face. */
+export const RUG_UNDER_SEAT_M = 0.2;
+
+/** Where along the bed a rug starts, as a share of the bed's length from the head. */
+export const RUG_BED_START = 1 / 3;
+
+/** How far the rug's centre sits from the anchor's centre along the anchor's FRONT,
+ *  for a rug whose extent along that direction is `rugHalfAlong` either side.
+ *  `anchorHD` is the anchor's half depth. Exported because the seeder places the
+ *  starter room's rug with it: a hand-typed offset there would be the copy rule 3
+ *  forbids, free to drift from the rule it is scored against. */
+export function rugOffset(fit: RugFit, anchorHD: number, rugHalfAlong: number): number {
+  if (fit === 'seat') return anchorHD - RUG_UNDER_SEAT_M + rugHalfAlong;
+  if (fit === 'bed') return -anchorHD + 2 * anchorHD * RUG_BED_START + rugHalfAlong;
+  return 0;
+}
+
+/** Where a rug of half extents `rugHW` × `rugHD` belongs under an anchor whose
+ *  footprint is `anchor` (centre, heading and half extents), in world metres and a
+ *  heading. Uses the three.js convention every placement here uses: the anchor's
+ *  front is `(sin rot, cos rot)`. */
+export function rugTarget(
+  rugHW: number,
+  rugHD: number,
+  anchor: { cx: number; cz: number; rot: number; hw: number; hd: number },
+  fit: RugFit,
+): { x: number; z: number; yaw: number } {
+  // Long side with the group's long side. For seating and a bed that is the anchor's
+  // own width (local X: along a sofa, across a bed); for a table it is whichever of
+  // its sides is longer.
+  const alongAnchorX = fit === 'table' ? anchor.hw >= anchor.hd : true;
+  const rugLongIsX = rugHW >= rugHD;
+  const yaw = alongAnchorX === rugLongIsX ? anchor.rot : anchor.rot + Math.PI / 2;
+  // The rug's reach along the anchor's front is whichever of its halves ended up
+  // pointing that way.
+  const halfAlong = alongAnchorX ? Math.min(rugHW, rugHD) : Math.max(rugHW, rugHD);
+  const off = rugOffset(fit, anchor.hd, halfAlong);
+  return {
+    x: anchor.cx + off * Math.sin(anchor.rot),
+    z: anchor.cz + off * Math.cos(anchor.rot),
+    yaw,
+  };
+}
+
+/** Pieces a rug must not go under. Storage that stands on the floor for good — a rug
+ *  under a wardrobe or a bookcase is a rug you can never lift, and a trip edge where
+ *  its front meets the floor. Nightstands, because a bedroom rug starts below them.
+ *  Appliances and the fridge, which stand in for the kitchen run the catalogue does
+ *  not have as a shape. (There is no dresser or counter shape either; a wardrobe or
+ *  closet is the nearest thing and is listed.) */
+const RUG_KEEPS_OFF: ReadonlySet<Role> = new Set<Role>([
+  'wardrobe',
+  'bookshelf',
+  'shoe-rack',
+  'nightstand',
+  'fridge',
+  'appliance',
+]);
+
+/** Must a rug stay out from under `other`, in a room holding `room`?
+ *
+ *  A desk only when something rolls at it: an office chair's castors catch a rug's
+ *  edge on every push back, which is the whole of the objection, so a desk with a
+ *  dining chair — or none — is not on the list. Door swings are the other thing a
+ *  rug keeps clear of, and `layout-score` reads those from the door's own zone. */
+export function rugKeepsOff(other: ScenePart, room: readonly ScenePart[]): boolean {
+  const r = roleOf(other);
+  if (RUG_KEEPS_OFF.has(r)) return true;
+  if (r === 'desk') return room.some((p) => roleOf(p) === 'office-chair');
+  return false;
 }
 
 /** May these two legitimately sit closer together than a walkway?

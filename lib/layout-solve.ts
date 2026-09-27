@@ -2293,7 +2293,11 @@ function pickPartner(m: LayoutModel, current: Placement[], i: number, rng: () =>
       yaw: normaliseYaw(anchor.yaw + Math.PI),
     };
   }
-  // 'faces' / 'near' — a centre distance and a heading, so put it on a ring.
+  // 'faces' / 'under' — a centre distance and a heading, so put it on a ring. For a rug
+  // that is a ring round the ANCHOR's centre rather than round `rugTarget`'s answer, and
+  // a proposal straight to the target was tried and measured: four presets × 15 seeds,
+  // rug scattered, 60/60 landed in band with it and 60/60 without. All it changed was
+  // WHICH group a rug settled under, so it was deleted rather than kept as decoration.
   const d = rel.min + rng() * Math.max(0.01, rel.max - rel.min);
   const a = rng() * Math.PI * 2;
   const x = anchor.x + Math.sin(a) * d;

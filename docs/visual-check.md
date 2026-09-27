@@ -1643,6 +1643,26 @@ the two the camera faces and leaves with the cut-away third, as it should). The 
 rings follow its taper now — sized to the top radius, the lowest stood ~4 mm off the body,
 which an axis-aligned box test cannot see because the ring's box contains the body.
 
+### A rug sits where a designer would put it — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Any starter living room, **3D Model** tab. Then Library → Rug into a room
+with a bed, and another under a dining table, and press **Fix** (or Shuffle) with each.
+
+**What wrong looks like.** Living: the rug's edge should run under the sofa's FRONT legs
+only (about 20 cm in) and the coffee table should stand wholly on it; the back legs on the
+rug is the old placement. Bedroom: the rug should start a third of the way down the bed,
+with both nightstands on bare floor and rug showing past the sides and the foot. Dining:
+centred under the table, long side down its length. In every room: never under a
+wardrobe, bookcase, nightstand, fridge, or a desk that has an office chair, and never in a
+door's swing. A rug at an angle to its group is also wrong.
+
+**What was measured, and on what.** `tests/rug-zones.test.ts` (14 tests; 8 of 9 mutants
+caught, the ninth — a proposal straight to the target — measured as changing nothing and
+deleted). Starter rooms: only the rug moved in the five offered presets (and the open
+plan's dining chairs squared to the other axis). Under **Fix** a stray rug stops ~0.35 m
+short of its spot, by design — every relation is a soft band against a linear inertia.
+Not yet seen in a browser with a bed or a dining table.
+
 ### Fix and Shuffle think in the background now — branch `claude/amazing-davinci-m8zqys`, PR #157
 
 **Where to click.** Any furnished room → rail → **Shuffle**, then orbit the room while the

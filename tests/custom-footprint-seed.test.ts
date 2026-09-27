@@ -424,16 +424,23 @@ describe('§ G.1 · what the seeder does with a wall-moved footprint', () => {
     // lamp is applied to something hanging from the ceiling.
     //
     // **Not an offered size, and that is stated rather than smuggled.** The picker's
-    // five are swept above and none of them reaches this; 3.5 x 6.0 is a room the Room
+    // five are swept above and none of them reaches this; 3.5 x 5.5 is a room the Room
     // rail's own number fields will accept, which is why it is worth a gate. A review
     // lens found it on a wider grid than this file sweeps, which is exactly the value of
     // measuring the catalogue rather than the fixture.
-    const base = footprintForLayout('t', 3.5, 6);
+    //
+    // **It was 3.5 x 6.0 until the rug rules** (`rugOffset`): the living rug moved to
+    // the sofa's front legs, that room's seeder picked a different bay for the group,
+    // and the before-room stopped having a floor lamp at all. A sweep of the T over
+    // 3.0–7.0 m in half-metre steps, one press of every blind wall, still finds 22
+    // instances; 3.5 x 5.5 on the same edge is the nearest. The phenomenon is the
+    // seeder's id churn, and the rug change neither caused nor cured it.
+    const base = footprintForLayout('t', 3.5, 5.5);
     const box = footprintBounds(base);
     const before = new Map(
-      defaultScene('t', 3.5, 6, { footprint: base, height: HEIGHT }).map((p) => [p.id, p]),
+      defaultScene('t', 3.5, 5.5, { footprint: base, height: HEIGHT }).map((p) => [p.id, p]),
     );
-    // Edge 2 is in the T's blind set, so the room is 3.50 x 6.00 before and after: no
+    // Edge 2 is in the T's blind set, so the room is 3.50 x 5.50 before and after: no
     // size sweep, and no glance at the Room panel, would show anything at all.
     const poly = moved(base, 2, STEP)!;
     const b = footprintBounds(poly);
