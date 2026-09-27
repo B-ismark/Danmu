@@ -291,6 +291,15 @@ export const WALK_MIN = WALK_RADIUS * 2;
 /** The comfortable route width, and what a seated diner needs to push back. */
 export const WALK_COMFORT = 0.9;
 
+/** How much of the floor furniture may cover before Room check calls the room
+ *  crowded, as a share of the floor's area.
+ *
+ *  One number for the rule and for the sentence that explains it. The finding used
+ *  to fire past 60% while telling the user "most rooms feel open below 50%": two
+ *  thresholds, one of them hand-typed into the copy, so a room at 55% was over the
+ *  line the sentence named and was never told. `crowdingDetail` reads this too. */
+export const CROWDED_COVER = 0.6;
+
 /** Breathing room left between a piece's back and the wall behind it, metres.
  *
  *  Small, and load-bearing anyway: it is the difference between furniture that

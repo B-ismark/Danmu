@@ -57,6 +57,7 @@ import {
   roleOf,
   sharesFloor,
   zoneExempt,
+  CROWDED_COVER,
   TUCKED_CLASH_SHARE,
   WALK_MIN,
   type AccessRule,
@@ -245,6 +246,17 @@ export function floorBlockers(parts: ScenePart[]): ScenePart[] {
   return parts.filter(
     (p) => !p.wallMounted && p.category !== 'rug' && p.pos[1] < 0.05 && p.dimMM[2] > 250,
   );
+}
+
+/** The crowding finding's sentence, for a room whose furniture covers `cover` of
+ *  the floor. Both numbers come from code: the share measured, and the line from
+ *  `CROWDED_COVER`, the same constant the finding fires on.
+ *
+ *  The measured share rounds UP. It only reaches this sentence once it is past the
+ *  line, and a room at 60.3% against a 60% line would otherwise read "covers 60%.
+ *  Past 60%…", which is a finding that contradicts itself. */
+export function crowdingDetail(cover: number): string {
+  return `Furniture covers ${Math.ceil(cover * 100)}% of the floor. Past ${Math.round(CROWDED_COVER * 100)}%, a room starts to feel crowded.`;
 }
 
 /** Which walkable regions someone can actually enter the room into.
@@ -840,13 +852,13 @@ export function analyzeRoom(
   // ── 8. Free floor share ──────────────────────────────────────────────────
   // A by-product of the raster now, rather than its own pass over the room.
   const freeFloorShare = field ? freeShareOf(field) : freeFloorFraction(solidObbs, poly);
-  if (freeFloorShare < 0.4) {
+  if (1 - freeFloorShare > CROWDED_COVER) {
     issues.push({
       id: 'crowding',
       rule: 'crowding',
       severity: 'warn',
       title: 'Room is getting crowded',
-      detail: `Furniture covers ${Math.round((1 - freeFloorShare) * 100)}% of the floor. Most rooms feel open below 50%.`,
+      detail: crowdingDetail(1 - freeFloorShare),
       partIds: [],
     });
   }
