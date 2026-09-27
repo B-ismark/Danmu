@@ -1601,7 +1601,7 @@ than the whole selection clearing.
 ---
 ## Look and light
 
-### High quality is graded again — on a real GPU, in every mood — branch `claude/amazing-davinci-m8zqys`, PR PENDING
+### High quality is graded again — on a real GPU, in every mood — branch `claude/amazing-davinci-m8zqys`, PR #157
 
 **Where to click.** Open any room on the **3D Model** tab with **View → Quality → High**
 (the default), then flip to **Fast** and back, in each lighting mood. Then **Export → This
