@@ -84,9 +84,9 @@ export default function WelcomePage() {
               an unhedged "nothing leaves your device" would be untrue for anyone
               who switches it on. */}
           <p style={{ fontSize: 'var(--fs-lead)', color: 'var(--ink-2)', lineHeight: 1.6, margin: 0, maxWidth: 'var(--measure-hero)' }}>
-            Pick a room shape, drop in furniture, then move, recolour, restyle and relight every
-            piece — live, in your browser. Nothing leaves your device, unless you switch on the
-            optional AI step that spots furniture in a photo of a real room.
+            Pick a room shape, add furniture, then move, recolour, restyle and relight every piece
+            in your browser. Nothing leaves your device unless you turn on the optional AI step
+            that finds furniture in photos of your room.
           </p>
         </div>
 
@@ -107,7 +107,7 @@ export default function WelcomePage() {
 
           <h2 style={{ fontSize: 'var(--fs-title)', margin: '6px 0 6px' }}>Build your first room</h2>
           <p className="t-body" style={{ lineHeight: 1.55, margin: '0 0 22px' }}>
-            Free, instant, and right in the browser. No sign-up, no upload, no key needed to start.
+            Free, with no key needed to start.
           </p>
 
           <button
@@ -207,8 +207,7 @@ export default function WelcomePage() {
                 </div>
 
                 <p id="welcome-key-hint" className="t-meta" style={{ lineHeight: 1.5, margin: '10px 0 0' }}>
-                  Gemini keys start with “AIza”. Add one now or later in Settings — either way you
-                  can start decorating.
+                  Gemini keys start with “AIza”. You can add one later in Settings.
                 </p>
 
                 <a
@@ -252,7 +251,7 @@ export default function WelcomePage() {
             tint="var(--paper-3)"
             color="var(--ink-2)"
             title="Real dimensions, not guesses"
-            desc="Every size is computed on your device — clearance and fit come from geometry, never AI."
+            desc="Sizes, clearance and fit come from geometry, not AI."
           />
         </ul>
 

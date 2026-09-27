@@ -26,9 +26,9 @@ import { readExifFromJpeg } from './exif';
 // aria-label, and there are no empty cards now; leaving it would be the same
 // demanded-and-ignored field Phase 9 cut `alsoSeenIn` for.
 export const CAPTURE_SLOTS: { id: CaptureSlot; label: string; instruction: string }[] = [
-  { id: 'n', label: 'Wall 1', instruction: 'Any wall you like — frame it corner to corner.' },
+  { id: 'n', label: 'Wall 1', instruction: 'Any wall you like. Frame it corner to corner.' },
   { id: 'e', label: 'Wall 2', instruction: 'Turn a quarter-turn right and frame the next wall.' },
-  { id: 's', label: 'Wall 3', instruction: 'Keep turning — this is the wall facing Wall 1.' },
+  { id: 's', label: 'Wall 3', instruction: 'Keep turning. This is the wall facing Wall 1.' },
   { id: 'w', label: 'Wall 4', instruction: 'One last quarter-turn right for the final wall.' },
 ];
 

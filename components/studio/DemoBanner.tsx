@@ -20,14 +20,11 @@ import { roomStore } from '@/lib/storage';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { usePhoneStudio } from './NarrowViewportBanner';
-import { useMediaQuery } from '@/lib/use-media-query';
 
 export function DemoBanner() {
   const { roomId } = useParams<{ roomId: string }>();
   const [demo, setDemo] = useState(false);
   const phone = usePhoneStudio();
-  // The verb follows the pointer, not the width: a tablet is a touch screen too.
-  const touch = useMediaQuery('(pointer: coarse)');
   // Start hidden until storage is checked, so a previously-dismissed banner
   // never flashes on mount.
   const [dismissed, setDismissed] = useState(true);
@@ -92,11 +89,10 @@ export function DemoBanner() {
     >
       <Icon name="sparkles" size={15} style={{ flexShrink: 0 }} />
       <p style={{ minWidth: 0, flex: 1, margin: 0, fontSize: phone ? 'var(--fs-small)' : undefined }}>
-        {/* A phone gets the sentence a thumb needs — "tap", and half the words —
-            because the full one was four lines of a 360px screen before the room. */}
-        {phone
-          ? 'Drag a piece to move it, tap a wall to paint it.'
-          : `This room is yours to rearrange — drag a piece to move it, ${touch ? 'tap' : 'click'} a wall to paint it.`}{' '}
+        {/* One short sentence on every screen. It used to go on to narrate the
+            gestures ("drag a piece to move it, click a wall to paint it"), which the
+            copy pass removed as a standing tip; the link is the one real next step. */}
+        This room is yours to rearrange.{' '}
         <Link
           href="/onboarding/capture"
           style={{
@@ -114,7 +110,7 @@ export function DemoBanner() {
       </p>
       <IconButton
         icon="x"
-        label="Hide the getting-started tip"
+        label="Hide this banner"
         onClick={dismiss}
         size={phone ? 44 : 26}
         iconSize={phone ? 16 : 13}

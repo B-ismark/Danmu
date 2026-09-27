@@ -446,10 +446,10 @@ describe('chrome that stands on a photograph, not on the page', () => {
     // The guarantee above is about ONE ground. Three chips used to override it —
     // the clash warning to --warn and the two quality flags to --warn and
     // --success-text — which put them outside the assertion entirely, and they
-    // failed it: 1.92:1 and 2.02:1 against their own worst photo tone, on the
+    // failed it: 1.93:1 and 2.03:1 against their own worst photo tone, on the
     // chips whose whole job is to be noticed. Worse, it is not reachable by a
     // heavier boundary; a mid-dark ground and a light edge sit too close together
-    // in luminance, and even a solid --paper edge on --warn tops out at 2.18:1.
+    // in luminance, and even a solid --paper edge on --warn tops out at 2.19:1.
     //
     // Both of those grounds are still asserted below, so this is not merely a
     // style rule: it is the reason the rule exists.
@@ -487,7 +487,7 @@ describe('chrome that stands on a photograph, not on the page', () => {
 
   it('the signal colours are legible on the ground that replaced those chips', () => {
     // The colour moved from the ground to the type, so these two now carry the whole
-    // signal and owe the full 4.5:1 at 11px. --warn itself is 3.01:1 on --ink and
+    // signal and owe the full 4.5:1 at 11px. --warn itself is 3.49:1 on --ink and
     // --warn-text is darker still, which is why neither could simply be reused.
     for (const name of ['on-ink-warn', 'on-ink-success']) {
       const fg = surface(name)!;

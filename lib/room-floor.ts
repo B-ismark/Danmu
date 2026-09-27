@@ -183,8 +183,23 @@ export function namesTheStop(stop: FloorStop | null, current: number): stop is F
 export function floorRefusal(stop: FloorStop, axis: FloorAxis, current: number, unit: DimUnit): string {
   const way = axis === 'width' ? 'narrower' : 'shallower';
   if (stop.metres > current + ROOM_SIDE_EPS) {
-    return `“${stop.name}” is ${formatDim(stop.metres * 1000, unit)} ${unit} and already does not fit — the room will not get any ${way}.`;
+    return `“${stop.name}” is ${formatDim(stop.metres * 1000, unit)} ${unit} and already does not fit. The room will not get any ${way}.`;
   }
   const needs = boundsToUnit(stop.metres * 1000, ROOM_SIDE_M.max * 1000, unit).min;
-  return `“${stop.name}” needs ${needs} ${unit} — the room will not go ${way} than that.`;
+  return `“${stop.name}” needs ${needs} ${unit}, so the room will not go ${way} than that.`;
+}
+
+/** The standing line under the size fields once one of them is at its furniture
+ *  floor, where the down arrow has stopped working and nothing else says why.
+ *
+ *  Not an error, so it speaks of the field rather than of a refused change, and it
+ *  takes `floorRefusal`'s two branches for `floorRefusal`'s reason: in a room the
+ *  piece already overhangs, `roomFloor` pins the floor to the room's own side, so
+ *  "needs" would name that side and tell a 2.0 m room that a 2.4 m rug needs 2 m. */
+export function floorHint(stop: FloorStop, axis: FloorAxis, current: number, unit: DimUnit): string {
+  if (stop.metres > current + ROOM_SIDE_EPS) {
+    return `“${stop.name}” is ${formatDim(stop.metres * 1000, unit)} ${unit} and already does not fit, so the ${axis} stops here.`;
+  }
+  const needs = boundsToUnit(stop.metres * 1000, ROOM_SIDE_M.max * 1000, unit).min;
+  return `“${stop.name}” needs ${needs} ${unit}, so the ${axis} stops there.`;
 }

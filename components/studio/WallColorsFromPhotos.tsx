@@ -62,7 +62,7 @@ function skipSentence(skipped: Array<{ slot: CaptureSlot; reason: SkipReason }>)
   // helps, where a list of slot letters is internal vocabulary.
   const reasons = [...new Set(skipped.map((s) => SKIP_COPY[s.reason]))];
   const n = skipped.length;
-  return `${n === 1 ? 'One photo was' : `${n} photos were`} skipped — ${reasons.join('; ')}.`;
+  return `${n === 1 ? 'One photo was' : `${n} photos were`} skipped: ${reasons.join('; ')}.`;
 }
 
 export function WallColorsFromPhotos() {
@@ -120,7 +120,7 @@ export function WallColorsFromPhotos() {
       toast({
         tone: 'danger',
         title: 'Could not read your photos',
-        message: 'This room’s photos could not be opened just now. Nothing was changed.',
+        message: 'This room’s photos could not be opened. Nothing was changed.',
       });
     }
   }
@@ -260,7 +260,7 @@ export function WallColorsFromPhotos() {
         </span>
       </button>
       <p className="t-micro" style={{ margin: '6px 0 0', lineHeight: 1.4 }}>
-        Reads the wall colour straight out of each photo. Nothing is uploaded, and Undo puts it back.
+        Paints each wall the colour in its photo. Nothing is uploaded. Undo reverts it.
       </p>
     </div>
   );

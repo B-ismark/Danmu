@@ -81,7 +81,7 @@ export async function saveSceneFile(roomId: string) {
     toast({
       tone: 'danger',
       title: "Couldn't save the file",
-      message: 'The room is still here — try again.',
+      message: 'Try again.',
       detail: String(e),
     });
   }

@@ -76,7 +76,7 @@ export const LIGHTING: Record<Lighting, Mood> = {
   // key light is a real sun here and an ambient generous enough to be flattering
   // fills the shadow you were trying to look at.
   day: {
-    bg: '#FBF8F2',
+    bg: '#FBF9F6',
     hemi: ['#ffffff', '#cfc7b6', 0.4] as [string, string, number],
     sun: { azimuthDeg: 180, elevationDeg: 58 },
     fill: { color: '#dfe7ff', intensity: 0.15 },

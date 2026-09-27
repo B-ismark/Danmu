@@ -216,9 +216,9 @@ function noticeFor(e: unknown): Notice {
         code: 'NO_KEY',
         tone: 'calm',
         kicker: 'No key needed',
-        title: 'Let’s do this by hand',
+        title: 'Add your pieces by hand',
         body:
-          'Automatic recognising is optional and there’s no key set for it — so we’ll go the direct way, which works just as well. Draw a box around anything you want in the room and Danmu works out its real size from the photo. It’s switched on already.',
+          'Automatic detection is optional and no key is set for it. Draw a box around anything you want in the room and Danmu works out its real size from the photo.',
         settings: true,
       };
     case 'DAILY_QUOTA':
@@ -228,16 +228,16 @@ function noticeFor(e: unknown): Notice {
         kicker: 'Daily limit',
         title: 'Today’s free scans are used up',
         body:
-          'The allowance resets overnight. Come back tomorrow if you’d like Danmu to look for you — or add your pieces by hand right now, which needs no key at all.',
+          'The limit resets overnight. Try again tomorrow, or add your pieces by hand now.',
       };
     case 'RATE_LIMIT':
       return {
         code: 'RATE_LIMIT',
         tone: 'warn',
         kicker: 'One at a time',
-        title: 'That was a lot of scanning at once',
+        title: 'Too many scans at once',
         body:
-          'Only a few scans a minute get through. Give it a minute and try again, or add your pieces by hand in the meantime — nothing is lost either way.',
+          'Only a few scans a minute get through. Wait a minute and try again, or add your pieces by hand.',
         retry: true,
       };
     case 'INVALID_KEY':
@@ -247,7 +247,7 @@ function noticeFor(e: unknown): Notice {
         kicker: 'Key not accepted',
         title: 'Google didn’t accept that key',
         body:
-          'Have a look at the detection key in Settings — a stray space is the usual culprit. You don’t need a key to carry on: draw a box around each piece instead.',
+          'Check the detection key in Settings. A stray space is the usual cause. Or add your pieces by hand, which needs no key.',
         settings: true,
       };
     case 'PHOTOS_TOO_BIG':
@@ -260,7 +260,7 @@ function noticeFor(e: unknown): Notice {
         kicker: 'Photos too large',
         title: 'These photos are too big to send in one go',
         body:
-          'Danmu now shrinks photos as you add them, so this usually means these were taken before that. Retake or re-add your wall photos and it will go through — or add your pieces by hand right now, which sends nothing at all.',
+          'Danmu shrinks photos as you add them, so these were probably added before it did. Retake or re-add your wall photos, or add your pieces by hand.',
         capture: true,
       };
     case 'BAD_RESPONSE':
@@ -273,7 +273,7 @@ function noticeFor(e: unknown): Notice {
         kicker: 'Unreadable answer',
         title: 'Danmu couldn’t make sense of the reply',
         body:
-          'The service answered, but not in a form Danmu can read — this is not something about your room or your photos. Trying again usually clears it. You can also add your pieces by hand, which needs no key.',
+          'The detection service replied in a form Danmu can’t read. Nothing is wrong with your photos. Try again, or add your pieces by hand.',
         retry: true,
       };
     default:
@@ -283,7 +283,7 @@ function noticeFor(e: unknown): Notice {
         kicker: 'Something went wrong',
         title: 'Danmu couldn’t finish looking through your photos',
         body:
-          'Trying again often works. If it doesn’t, add your pieces by hand — draw a box around each one and Danmu measures it from the photo.',
+          'Try again. If that fails, add your pieces by hand: draw a box around each one and Danmu measures it from the photo.',
         detail: err?.message ?? (e instanceof Error ? e.message : String(e)),
         retry: true,
       };
@@ -350,8 +350,7 @@ export default function DetectPage() {
           tone: 'calm',
           kicker: 'Nothing to look at yet',
           title: 'This room has no wall photos',
-          body:
-            'Photos are how Danmu spots what’s already in the room, so there’s nothing to go through. Take your wall photos, or head straight to the studio and decorate the room at its real size.',
+          body: 'Danmu needs wall photos to find the furniture already in the room.',
           capture: true,
         });
         return;
@@ -465,7 +464,7 @@ export default function DetectPage() {
               tone: 'calm',
               kicker: 'Found on this device',
               title: 'The second look didn’t go through',
-              body: 'These are the pieces your browser found on its own. Google’s pass over your photos failed, so anything it would have added is missing — add those by hand, or come back and press Re-scan later.',
+              body: 'Google’s scan of your photos failed, so this list is only what your browser found. Add anything missing by hand, or press Re-scan later.',
             });
           }
           if (refined.length === 0) {
@@ -475,9 +474,9 @@ export default function DetectPage() {
             setNotice({
               code: 'NOTHING_FOUND',
               tone: 'calm',
-              kicker: 'All clear',
+              kicker: 'Scan finished',
               title: 'Nothing stood out in your photos',
-              body: `Danmu went through ${entries.length === 1 ? 'your photo' : `all ${entries.length} photos`} and couldn’t pick out any furniture — which is exactly right for an empty room, and common in dim light or very close-up shots. Draw a box around anything you’d like measured; it’s switched on already. Carry on with an empty list and the studio opens with a starter arrangement instead of your own pieces, which you can clear one by one.`,
+              body: `Danmu found no furniture in ${entries.length === 1 ? 'your photo' : `your ${entries.length} photos`}. This is common in dim light or with close-up shots. Draw a box around anything you’d like measured.`,
             });
           }
         } catch (e) {
@@ -509,9 +508,9 @@ export default function DetectPage() {
           code: 'CACHED',
           tone: 'calm',
           kicker: 'Already scanned',
-          title: 'This is your last scan',
+          title: 'Showing your previous scan',
           body:
-            'Look again to go through your photos from scratch. The new list replaces this one, and the room as you have it now is saved under Layouts as “Before re-scan”, so nothing is lost.',
+            'Look again scans your photos from scratch. The new list replaces this one, and your current room is saved under Layouts as “Before re-scan”.',
           again: true,
         });
         return;
@@ -779,9 +778,8 @@ export default function DetectPage() {
       code: 'STOPPED',
       tone: 'calm',
       kicker: 'Stopped',
-      title: 'Left it there',
-      body:
-        'No problem — you can add the pieces yourself. Draw a box around anything in the photo and Danmu works out its real size.',
+      title: 'Add your pieces by hand',
+      body: 'Draw a box around anything in the photo and Danmu works out its real size.',
     });
   }
 
@@ -823,9 +821,9 @@ export default function DetectPage() {
   // Truthful for the path actually taken, and on screen for the whole upload.
   const sendsPhotos = path === 'cloud' || (path === 'checking' && !!apiKey);
   const privacyLine = sendsPhotos
-    ? `One thing to know: to name your furniture, this step sends your ${photoCount === 1 ? 'wall photo' : `${photoCount} wall photos`} to Google once. Nothing else in Danmu leaves your device.`
+    ? `To name your furniture, this step sends your ${photoCount === 1 ? 'wall photo' : `${photoCount} wall photos`} to Google once. Nothing else in Danmu leaves your device.`
     : path === 'local'
-      ? 'Recognised right here in your browser — your photos never left this device.'
+      ? 'Found in your browser. Your photos did not leave this device.'
       : null;
 
   // The one live region on the page: detection can run for tens of seconds, and
@@ -1128,15 +1126,11 @@ export default function DetectPage() {
                         <Icon name="crosshair" size={13} />
                         Place with the keyboard
                       </button>
-                      <span className="t-meta">…or drag a box around it on the photo.</span>
+                      <span className="t-meta">Or drag a box around it on the photo.</span>
                     </>
                   )}
                 </>
-              ) : (
-                <span className="t-meta">
-                  Tap a box on the photo to confirm that piece. Tap its × to drop it.
-                </span>
-              )}
+              ) : null}
             </div>
           )}
         </div>
@@ -1148,8 +1142,8 @@ export default function DetectPage() {
               {total > 0 && <span className="section-meta mono">{total}</span>}
             </div>
             <p className="t-meta" style={{ margin: 0, lineHeight: 1.45 }}>
-              Confirmed pieces are the ones you’ve told Danmu are really in the room — it confirms the clearest ones
-              for you. Tap a piece to change your mind, or rename it in your own words.
+              Confirmed pieces are the ones you’ve said are really in the room. Danmu confirms the clearest ones for
+              you.
             </p>
           </div>
 
@@ -1157,11 +1151,8 @@ export default function DetectPage() {
             {total === 0 && !running && (
               <div className="t-small" style={{ padding: '14px 12px', lineHeight: 1.5 }}>
                 <b style={{ display: 'block', marginBottom: 4, color: 'var(--ink)' }}>Nothing here yet</b>
-                {slots.length > 0
-                  ? 'Draw a box around any piece on the photo and Danmu works out its real size. '
-                  : 'Take your wall photos and Danmu can measure what’s in them. '}
-                Carry on with an empty list and the studio opens with a starter arrangement instead of your own
-                pieces — you can clear it one by one.
+                If you continue with an empty list, the studio opens with a starter arrangement instead of your own
+                pieces.
               </div>
             )}
             {detections.map((d, i) => (
@@ -1190,13 +1181,12 @@ export default function DetectPage() {
       {running && (
         <LoadingOverlay
           title="Finding your furniture"
-          description={`Danmu looks at your ${photoCount === 1 ? 'photo' : `${photoCount} photos`} together, so a piece caught in two of them isn’t counted twice.`}
+          description={`Danmu checks your ${photoCount === 1 ? 'photo' : `${photoCount} photos`} together, so a piece seen twice is counted once.`}
           note={
             sendsPhotos
               ? 'Your wall photos go to Google once for this step. Nothing else leaves your device.'
               : undefined
           }
-          local={path === 'local'}
           onCancel={stopDetecting}
           cancelLabel="Stop and add by hand"
         />
@@ -1338,7 +1328,7 @@ function DetectionRow({
         label={`Confirm ${label}`}
         title={
           confirmed
-            ? 'Confirmed — this piece goes into your room as measured'
+            ? 'Confirmed: this piece goes into your room as measured'
             : 'Confirm this piece is really in your room'
         }
         active={confirmed}
@@ -1386,7 +1376,7 @@ function DetectionRow({
             }}
           >
             <span style={{ flex: '1 1 auto', minWidth: 0 }}>
-              Measured {took} {dimUnit} — {categoryLabel(d.category)} range is {miss}
+              Measured {took} {dimUnit}. {categoryLabel(d.category)} range is {miss}.
             </span>
             {verdict.candidates.slice(0, 2).map((cand) => (
               <button
@@ -1437,7 +1427,7 @@ function DetectionRow({
                 // that do fit, so a caveated chip is never the first thing offered.
                 title={
                   cand.margin < 0
-                    ? `Use the ${categoryLabel(cand.category)} model — though what the camera measured is not ${categoryLabel(cand.category).toLowerCase()}-sized`
+                    ? `Use the ${categoryLabel(cand.category)} model, though what the camera measured is not ${categoryLabel(cand.category).toLowerCase()}-sized`
                     : `Use the ${categoryLabel(cand.category)} model and measure it again`
                 }
                 style={{

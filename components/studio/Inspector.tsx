@@ -1,6 +1,5 @@
 'use client';
 
-import { useMediaQuery } from '@/lib/use-media-query';
 import { useEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
@@ -60,18 +59,13 @@ export function Inspector() {
   const { report } = useRoomReport();
 
   const [swapOpen, setSwapOpen] = useState(false);
-  // "Tap" under a finger, "click" under a mouse: the verb follows the pointer, not
-  // the window's width — a touch laptop is still a laptop.
-  const touch = useMediaQuery('(pointer: coarse)');
 
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
 
   if (!part || !id)
     return (
       <div className="t-meta" style={{ padding: 20, textAlign: 'center', lineHeight: 1.5 }}>
-        {touch
-          ? 'Tap a piece of furniture to recolour, restyle or move it — or tap a wall to paint it.'
-          : 'Click a piece of furniture to recolour, restyle or move it — or click a wall to paint it.'}
+        Nothing selected
       </div>
     );
 
@@ -509,7 +503,7 @@ export function Inspector() {
           }}
         >
           <Icon name="swap" size={13} />
-          {isGeneric ? 'Generic shape — pick a real model' : 'Change the model'}
+          {isGeneric ? 'Generic shape · Pick a model' : 'Change the model'}
         </button>
         {hasOverrides && (
           <button
@@ -666,8 +660,7 @@ function LightControls({
         })}
       </div>
       <p className="t-hint" style={{ margin: '8px 0 0', lineHeight: 1.45 }}>
-        A typical bulb is 400–800 lm. Switch the room to Evening to see what this
-        one actually does.
+        A typical bulb is 400–800 lm.
       </p>
     </Section>
   );
@@ -711,12 +704,12 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
     <RailSection title="On the surface" meta={summary} open={open} onToggle={() => setOpen((v) => !v)}>
       {isAuto && (
         <div className="t-hint" style={{ marginBottom: 8, lineHeight: 1.4 }}>
-          Showing suggested props. Add or remove to make it your own.
+          Suggested props.
         </div>
       )}
       {items.length === 0 && !isAuto && (
         <div className="t-hint" style={{ marginBottom: 8, lineHeight: 1.4 }}>
-          Bare surface. Add something below, or go back to the suggestion.
+          Bare surface.
         </div>
       )}
       {items.length > 0 && (
@@ -817,9 +810,8 @@ function WallInspector({ index }: { index: number }) {
       {/* Move */}
       <Section label="Move wall">
         <div className="t-hint" style={{ marginBottom: 8, lineHeight: 1.4 }}>
-          Drag the handle on the wall in the 3D or plan view — or nudge it here.
-          Only this wall moves, and anything mounted on it or standing against it
-          comes along.
+          Only this wall moves. Anything mounted on it or standing against it
+          moves with it.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           <button onClick={() => moveWallCarrying(index, 0.1)} className="ds-btn ds-btn--sm" style={{ fontSize: 'var(--fs-caption)', justifyContent: 'center', gap: 6 }}>
@@ -1319,10 +1311,10 @@ function MountHeightRow({
         // so it reads as information rather than as an error.
         <div style={{ fontSize: 'var(--fs-micro)', lineHeight: 1.4, marginTop: 4, color: !fits || outOfRange ? 'var(--danger-text)' : 'var(--ink-3)' }}>
           {!fits
-            ? 'Taller than the room — there is no height it can hang at. Room check says by how much.'
+            ? 'Taller than the room. There is no height it can hang at. Room check says by how much.'
             : outOfRange
               ? `0–${formatDim(maxBottomMM, dimUnit)} ${dimUnit} under this ceiling.`
-              : 'It only just fits — there is no room to move it under this ceiling.'}
+              : 'It only just fits. There is no room to move it under this ceiling.'}
         </div>
       )}
     </div>

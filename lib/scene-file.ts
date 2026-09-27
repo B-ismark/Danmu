@@ -284,7 +284,7 @@ export function parseSceneFile(text: string): SceneFileParse {
   try {
     raw = JSON.parse(text);
   } catch {
-    return { ok: false, error: "That file isn't readable as a Danmu room — it may be damaged." };
+    return { ok: false, error: "That file isn't readable as a Danmu room. It may be damaged." };
   }
   if (!isObj(raw)) return { ok: false, error: "That file isn't a Danmu room." };
 
@@ -312,7 +312,7 @@ export function parseSceneFile(text: string): SceneFileParse {
   if (!room) {
     return {
       ok: false,
-      error: "That room file has no usable room — its width, depth or height is missing or unreadable.",
+      error: "That room file has no usable room. Its width, depth or height is missing or unreadable.",
     };
   }
 
@@ -484,7 +484,7 @@ function readRoom(
   if (footprint) room.footprint = footprint;
   else if (v.footprint !== undefined) {
     // The layout preset still describes a shape, so this degrades rather than fails.
-    dropped.push("the room's custom outline was unreadable — its preset shape was used instead");
+    dropped.push("the room's custom outline was unreadable, so its preset shape was used instead");
   }
 
   const wallColors = readWallColors(v.wallColors);

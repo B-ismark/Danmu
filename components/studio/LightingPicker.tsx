@@ -30,7 +30,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 // `LIGHTINGS` itself, for the same reason.
 const MOODS: Record<Lighting, { label: string; hint: string; icon: IconName }> = {
   day: { label: 'Day', hint: 'Overhead sun, from the south', icon: 'sun' },
-  evening: { label: 'Evening', hint: 'Dim — lets the lamps do the work', icon: 'moon' },
+  evening: { label: 'Evening', hint: 'Dim, lit by the lamps', icon: 'moon' },
   cool: { label: 'Cool', hint: 'Flat overcast, no direction', icon: 'cloud' },
   sunrise: { label: 'Sunrise', hint: 'Low sun from the east', icon: 'sunrise' },
   sunset: { label: 'Sunset', hint: 'Low sun from the west', icon: 'sunset' },
@@ -64,7 +64,7 @@ export function LightingPicker() {
               // back on. The hint rides along because the glyph cannot say
               // "from the east", which is the part that actually distinguishes
               // Sunrise from Sunset.
-              aria-label={`${m.label} — ${m.hint}`}
+              aria-label={`${m.label}: ${m.hint}`}
               style={{
                 width: 32,
                 height: 32,

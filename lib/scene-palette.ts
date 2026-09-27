@@ -88,15 +88,15 @@ export const DECOR = {
 // as deliberately removed from the brand.
 export const PLAN = {
   /** page — matches --paper */
-  paper: '#FBF8F2',
+  paper: '#FBF9F6',
   /** the floor inside the footprint */
   floor: '#FFFFFF',
   /** titles, wall stroke, badge numerals — matches --ink */
-  ink: '#2A2520',
+  ink: '#1D1816',
   /** secondary type (scale bar, dimension labels) — matches --ink-2 */
-  ink2: '#5A5147',
+  ink2: '#544D47',
   /** dimension lines + ticks — matches --hairline-strong, flattened to opaque */
-  rule: '#A9A296',
+  rule: '#A7A29D',
   /** furniture outline */
   outline: '#3A3A36',
   /** furniture fill when the piece has no colour of its own, and the legend

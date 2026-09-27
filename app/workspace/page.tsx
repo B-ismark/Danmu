@@ -212,7 +212,7 @@ export default function WorkspacePage() {
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') setQuery('');
                     }}
-                    placeholder="Filter rooms — press /"
+                    placeholder="Filter rooms (press /)"
                     autoComplete="off"
                   />
                 </div>
@@ -264,8 +264,7 @@ export default function WorkspacePage() {
                     No room is called “{query.trim()}”.
                   </div>
                   <p className="t-body" style={{ margin: '0 0 16px' }}>
-                    You have {rooms.length} room{rooms.length === 1 ? '' : 's'} — try a shorter word, or clear the
-                    filter.
+                    You have {rooms.length} room{rooms.length === 1 ? '' : 's'}.
                   </p>
                   <button onClick={() => setQuery('')} className="ds-btn ds-btn--sm">
                     <Icon name="x" size={11} />
@@ -549,12 +548,12 @@ function EmptyState() {
   return (
     <div style={{ textAlign: 'center', padding: '80px 8px', maxWidth: 'var(--measure-text)', marginInline: 'auto' }}>
       <div className="ds-kicker" style={{ marginBottom: 12 }}>
-        Ready when you are
+        No rooms yet
       </div>
       <h1 style={{ fontSize: 'var(--fs-hero)', letterSpacing: '-0.02em', marginBottom: 10 }}>Decorate your first room.</h1>
       <p className="t-body" style={{ lineHeight: 1.55, marginBottom: 28 }}>
-        Pick a footprint and start arranging furniture in real 3D — move, recolour, restyle, and relight
-        every piece. No account, no upload. Capturing your real room is optional.
+        Pick a footprint and arrange furniture in a scaled 3D room. Move, recolour, restyle and relight
+        every piece. No account needed. Capturing your real room is optional.
       </p>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
         {/* --primary, not --accent. This is the page you are reading, not a step in

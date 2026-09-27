@@ -101,7 +101,7 @@ export function TopBar({
     // in it could shrink either: flex items default to `min-width: auto`, so the
     // `flex: 1` spacer collapsed to nothing and then the row spilled.
     <div className="chrome-bar chrome-bar--tight">
-      <Link href="/workspace" aria-label="Danmu — back to your rooms" style={{ display: 'flex' }}>
+      <Link href="/workspace" aria-label="Danmu: back to your rooms" style={{ display: 'flex' }}>
         <DanmuMark size={12} />
       </Link>
       <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)', flexShrink: 0 }} />

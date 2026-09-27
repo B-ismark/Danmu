@@ -57,6 +57,7 @@ import {
   roleOf,
   sharesFloor,
   zoneExempt,
+  CROWDED_COVER,
   TUCKED_CLASH_SHARE,
   WALK_MIN,
   type AccessRule,
@@ -222,10 +223,10 @@ function zoneDetail(
 ): string {
   const need_ = len(rule.depth);
   if (rule.sides.length === 1) {
-    return `“${part.name}” has ${len(narrowest)} ${rule.sides[0] === 'front' ? 'in front' : `on its ${rule.sides[0]}`} — needs ${need_} ${rule.reason}.`;
+    return `“${part.name}” has ${len(narrowest)} ${rule.sides[0] === 'front' ? 'in front' : `on its ${rule.sides[0]}`}. It needs ${need_} ${rule.reason}.`;
   }
   const need = rule.atLeast === rule.sides.length ? `all ${rule.sides.length}` : `${rule.atLeast} of its ${rule.sides.length}`;
-  return `“${part.name}” wants ${need_} clear on ${need} sides ${rule.reason} — ${clear === 0 ? 'none of them is' : `only ${clear} ${clear === 1 ? 'is' : 'are'}`} (${blocked} blocked).`;
+  return `“${part.name}” needs ${need_} clear on ${need} sides ${rule.reason}. ${clear === 0 ? 'None of them is clear' : `Only ${clear} ${clear === 1 ? 'is' : 'are'} clear`} (${blocked} blocked).`;
 }
 
 function clashShare(a: ScenePart, b: ScenePart): number {
@@ -245,6 +246,27 @@ export function floorBlockers(parts: ScenePart[]): ScenePart[] {
   return parts.filter(
     (p) => !p.wallMounted && p.category !== 'rug' && p.pos[1] < 0.05 && p.dimMM[2] > 250,
   );
+}
+
+/** The floor's clear share as the room report shows it: a whole percent. One
+ *  call, because the report's summary ("40% floor clear") and the crowding
+ *  finding's "covers N%" sit on one panel and must add up to 100. */
+export function floorClearPct(freeShare: number): number {
+  return Math.round(freeShare * 100);
+}
+
+/** The crowding finding's sentence, for a room whose floor is `freeShare` clear.
+ *  Both numbers come from code: the covered share is whatever the summary does not
+ *  show as clear, and the line is `CROWDED_COVER`, the constant the finding fires on.
+ *
+ *  A room only a fraction past the line rounds back onto it (60.3% covered is
+ *  "40% clear"), and "covers 60%. Past 60%…" contradicts itself, so that room is
+ *  "just over" the line instead: still true, and still adding up with the summary. */
+export function crowdingDetail(freeShare: number): string {
+  const line = Math.round(CROWDED_COVER * 100);
+  const covered = 100 - floorClearPct(freeShare);
+  const share = covered > line ? `${covered}%` : `just over ${line}%`;
+  return `Furniture covers ${share} of the floor. Past ${line}%, a room starts to feel crowded.`;
 }
 
 /** Which walkable regions someone can actually enter the room into.
@@ -435,7 +457,7 @@ export function analyzeRoom(
         rule: 'clash',
         severity: 'error',
         title: 'Two pieces in the same place',
-        detail: `“${a.name}” and “${b.name}” overlap on the floor — one of them has to move before this arrangement is real.`,
+        detail: `“${a.name}” and “${b.name}” overlap on the floor. One of them has to move.`,
         partIds: [a.id, b.id],
       });
     }
@@ -524,7 +546,7 @@ export function analyzeRoom(
         rule: 'clash-mounted',
         severity: 'error',
         title: 'A piece is inside something on the wall',
-        detail: `“${f.name}” is standing where “${m.name}” hangs — they share the same space between ${len(low, 'down')} and ${len(high, 'up')} up. Slide one of them along its wall.`,
+        detail: `“${f.name}” is standing where “${m.name}” hangs. They share the space between ${len(low, 'down')} and ${len(high, 'up')} up. Slide one of them along its wall.`,
         partIds: [f.id, m.id],
       });
     }
@@ -567,7 +589,7 @@ export function analyzeRoom(
         rule: 'walk',
         severity: 'warn',
         title: 'Tight walkway',
-        detail: `Only ${len(gap)} between “${a.name}” and “${b.name}” — comfortable passage needs ${len(MIN_WALKWAY)}.`,
+        detail: `Only ${len(gap)} between “${a.name}” and “${b.name}”. A comfortable walkway needs ${len(MIN_WALKWAY)}.`,
         partIds: [a.id, b.id],
       });
     }
@@ -681,7 +703,7 @@ export function analyzeRoom(
         // The ″ stays. A screen diagonal is quoted in inches worldwide — "a 55-inch
         // TV" is the product's name, not a measurement the user chose a unit for —
         // while the two DISTANCES are room measurements and convert like every other.
-        detail: `“${nearest.name}” is ${len(nd)} from the ${Math.round((diag / 0.0254) * 10) / 10}″-class screen — comfortable viewing starts around ${len(diag * 1.2)}.`,
+        detail: `“${nearest.name}” is ${len(nd)} from the ${Math.round((diag / 0.0254) * 10) / 10}″-class screen. Comfortable viewing starts at about ${len(diag * 1.2)}.`,
         partIds: [tv.id, nearest.id],
       });
     } else if (nd > diag * 3.2) {
@@ -690,7 +712,7 @@ export function analyzeRoom(
         rule: 'tv',
         severity: 'info',
         title: 'TV may feel small from the seat',
-        detail: `“${nearest.name}” sits ${len(nd)} away — ideal range for this screen is ${len(diag * 1.2)}–${len(diag * 2.5)}.`,
+        detail: `“${nearest.name}” sits ${len(nd)} away. The ideal range for this screen is ${len(diag * 1.2)}–${len(diag * 2.5)}.`,
         partIds: [tv.id, nearest.id],
       });
     }
@@ -751,14 +773,14 @@ export function analyzeRoom(
       : 'it will not stand up in here';
     const tail =
       floor > room.height
-        ? `It does not go any shorter than ${len(floor)}, so nothing you type will fit it in here — the ceiling has to reach ${len(floor)}, or the piece has to go.`
-        : `Danmu keeps the real size rather than shrinking it for you; ${len(floor)} is as short as this piece goes, and that would fit.`;
+        ? `It does not go any shorter than ${len(floor)}, so nothing you type will fit it in here. The ceiling has to reach ${len(floor)}, or the piece has to go.`
+        : `Danmu keeps the real size. ${len(floor)} is as short as this piece goes, and that would fit.`;
     issues.push({
       id: `tall-${p.id}`,
       rule: 'tall',
       severity: 'error',
       title: 'Taller than the room',
-      detail: `“${p.name}” is ${len(h)} tall and the ceiling is ${len(room.height)} — ${lead}. ${tail}`,
+      detail: `“${p.name}” is ${len(h)} tall and the ceiling is ${len(room.height)}, so ${lead}. ${tail}`,
       partIds: [p.id],
     });
   }
@@ -826,7 +848,7 @@ export function analyzeRoom(
       title: standing ? 'Outside the room' : 'Sticks out of the room',
       detail:
         (standing
-          ? `“${p.name}” is standing off the floor plan entirely — there is no room under it.`
+          ? `“${p.name}” is standing off the floor plan, with no floor under it.`
           : `“${p.name}” crosses a wall: part of it is outside the room.`) +
         (fixable
           ? ' Drag it back inside, or use Try a fix.'
@@ -840,13 +862,13 @@ export function analyzeRoom(
   // ── 8. Free floor share ──────────────────────────────────────────────────
   // A by-product of the raster now, rather than its own pass over the room.
   const freeFloorShare = field ? freeShareOf(field) : freeFloorFraction(solidObbs, poly);
-  if (freeFloorShare < 0.4) {
+  if (1 - freeFloorShare > CROWDED_COVER) {
     issues.push({
       id: 'crowding',
       rule: 'crowding',
       severity: 'warn',
       title: 'Room is getting crowded',
-      detail: `Furniture covers ${Math.round((1 - freeFloorShare) * 100)}% of the floor — most rooms breathe best under 50%.`,
+      detail: crowdingDetail(freeFloorShare),
       partIds: [],
     });
   }
@@ -881,7 +903,7 @@ export function analyzeRoom(
         rule: 'reach',
         severity: 'warn',
         title: 'You can’t walk to everything',
-        detail: `${stranded.map((p) => `“${p.name}”`).join(', ')} ${stranded.length === 1 ? 'sits' : 'sit'} in part of the room that nothing connects to the door — every route in is under ${len(MIN_WALKWAY)} wide.`,
+        detail: `${stranded.map((p) => `“${p.name}”`).join(', ')} ${stranded.length === 1 ? 'sits' : 'sit'} in part of the room with no way in from the door. Every route in is under ${len(MIN_WALKWAY)} wide.`,
         partIds: stranded.map((p) => p.id),
       });
     }

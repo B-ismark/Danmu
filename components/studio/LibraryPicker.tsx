@@ -229,9 +229,7 @@ export function LibraryPicker({
                   aria-pressed={marked.some((m) => m.label === item.label) || undefined}
                   className="ds-btn ds-btn--sm"
                   title={
-                    (draggable
-                      ? `${added.label} — drag into the room, or click to add it in the first clear spot · ${added.dimMM[0]} × ${added.dimMM[1]} × ${added.dimMM[2]} mm`
-                      : `${added.dimMM[0]} × ${added.dimMM[1]} × ${added.dimMM[2]} mm`) + (refused ? ` · ${refused}` : '')
+                    `${added.dimMM[0]} × ${added.dimMM[1]} × ${added.dimMM[2]} mm` + (refused ? ` · ${refused}` : '')
                   }
                   // A refusal that only a `title` carries is a refusal for mouse
                   // users. `title` does not surface on keyboard focus and screen

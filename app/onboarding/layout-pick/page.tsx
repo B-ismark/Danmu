@@ -135,7 +135,7 @@ export default function LayoutPickPage() {
           <StepHeader
             kicker="Pick a shape"
             title="Which footprint is closest to your room?"
-            subtitle="It becomes the 1:1 floor your 3D room is built on. Start decorating right away, or photograph your real room first — either way you can move the walls later."
+            subtitle="It becomes the 1:1 floor your 3D room is built on. You can move the walls later."
           />
           <div role="radiogroup" aria-label="Room footprint" style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {LAYOUTS.map((l, i) => {

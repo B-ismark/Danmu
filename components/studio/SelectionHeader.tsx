@@ -64,7 +64,7 @@ export function SelectionHeader() {
         <button
           onClick={() => groupParts(selection)}
           className="ds-btn ds-btn--xs"
-          title="Keep these pieces together — one click selects the whole set"
+          title="Keep these pieces together. One click then selects the whole set."
         >
           <Icon name="layers" size={11} /> Group {selection.length}
         </button>

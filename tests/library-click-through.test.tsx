@@ -69,7 +69,9 @@ describe('the Library opens when a signpost is pressed', () => {
     // Two assertions, because the heading alone would pass on an empty panel: the
     // heading names it, and `LibraryPicker` inside it has actually rendered pieces.
     expect(screen.getByText('Library')).toBeTruthy();
-    expect(screen.getAllByTitle(/drag into the room/).length).toBeGreaterThan(10);
+    // Each piece's title is its size (W × D × H mm); the copy pass removed the drag
+    // hint that used to lead it, which is what this used to match.
+    expect(screen.getAllByTitle(/\d+ × \d+ × \d+ mm/).length).toBeGreaterThan(10);
     // The trigger tells assistive tech what it just did.
     expect(addButton().getAttribute('aria-expanded')).toBe('true');
   });

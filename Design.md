@@ -1701,10 +1701,9 @@ Three things left the canvas to make that true:
 
 - **Help** → the top bar (`StudioHelp.tsx`). A 30px button pressed about once per
   user was holding a corner permanently, with its own `--z-canvas-hint` rung so no
-  panel could bury it. The **coach marks moved with it** and now anchor under the
-  `?` they are teaching you to find — they still fire on the first drag and the
-  first wall-selection, which is the only reason those power features are
-  discoverable. Both tabs' shortcut content lives in that one file, because the two
+  panel could bury it. The one-time coach marks that used to pop up after the first
+  drag and the first wall-selection are **deleted**: the copy pass of PR #158
+  (`6d7bf0c`) removed every unsolicited tip, and help opens only when someone asks. Both tabs' shortcut content lives in that one file, because the two
   used to describe the same app differently.
 - **The selection bar** → the Inspector's header (`SelectionHeader.tsx`). It was a
   second surface answering the question the Inspector exists to answer. It now
@@ -2010,7 +2009,7 @@ outlined box around outlined buttons, which put two boundaries on every control.
   two harnesses, both named at the overlap term in `lib/layout-score.ts`).
 - **The room report offers, it does not just report** (`RoomTools.tsx` `CheckPanel`).
   An earlier pass fixed how the panel *sounds* — findings badged FIX / TIGHT / NOTE
-  in tracked caps became "Worth fixing" / "A bit tight" / "Just so you know", which
+  in tracked caps became "Worth fixing" / "A bit tight" / "Note", which
   is the same information said the way the rest of the product talks. What it could
   *do* was still nothing: it named a problem, offered to select the pieces, and
   stopped. The only way to act was the whole-room **Fix** in the left rail, which

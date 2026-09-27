@@ -8,7 +8,7 @@ import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
 import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis, type RoomRejection } from '@/lib/dimension-ranges';
-import { floorRefusal, namesTheStop, roomFloors, type FloorAxis } from '@/lib/room-floor';
+import { floorHint, floorRefusal, namesTheStop, roomFloors, type FloorAxis } from '@/lib/room-floor';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
@@ -240,8 +240,13 @@ export function RoomDimsEditor() {
    *  made the inert press legible. It cannot: `floorError` is rendered inside the
    *  `rangeError` branch, and this path never sets it. So the line is back, and it
    *  is back only for the axes that can actually be stuck. */
-  const heldAxes = (['width', 'depth'] as FloorAxis[]).filter((axis) =>
-    namesTheStop(floors[axis].stop, axis === 'width' ? room.width : room.depth),
+  const heldAxes = (['width', 'depth'] as FloorAxis[]).filter(
+    (axis) =>
+      namesTheStop(floors[axis].stop, axis === 'width' ? room.width : room.depth) &&
+      // Only once the field is AT that floor, which is when the down arrow goes
+      // inert. A 6 m room holding a 2.4 m rug has nothing to explain, and a line
+      // that shows whenever a room is furnished is a standing tip.
+      Number(local[ROOM_AXES.indexOf(axis)]) <= bounds(axis).min,
   );
 
   // The furniture refusal, in the user's unit — and it is CARRIED from the commit
@@ -331,16 +336,17 @@ export function RoomDimsEditor() {
           <div style={{ fontSize: 'var(--fs-caption)', marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere', color: 'var(--danger-text)' }}>
             {errorBy === 'floor' && floorError
               ? floorError
-              : `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit} — enter one in that range and the room will follow.`}
+              : `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit}. Enter a value in that range.`}
           </div>
         ) : heldAxes.length > 0 ? (
           // Not an error, so not `--danger-text`: nothing has gone wrong, a chevron
-          // simply has nowhere further to go. The number is `bounds()`, the SAME call
-          // the arrows are clamped by, so the sentence cannot name a stop the stepper
-          // will not reach — which is the pairing `boundsToUnit` exists for.
+          // simply has nowhere further to go. `floorHint` names the bound through the
+          // same `boundsToUnit` call the arrows are clamped by (`bounds()` above reads
+          // the same range), so the sentence cannot name a stop the stepper will not
+          // reach, and it says the piece's size instead where the piece overhangs.
           <div className="t-hint" style={{ marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere' }}>
             {heldAxes
-              .map((axis) => `${axis === 'width' ? 'Width' : 'Depth'} stops at ${bounds(axis).min} ${dimUnit} (“${floors[axis].stop!.name}”).`)
+              .map((axis) => floorHint(floors[axis].stop!, axis, axis === 'width' ? room.width : room.depth, dimUnit))
               .join(' ')}
           </div>
         ) : null}

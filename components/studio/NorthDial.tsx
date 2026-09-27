@@ -33,6 +33,7 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { LIGHTING } from '@/lib/lighting-moods';
 import { Icon } from '@/components/ui/Icon';
+import { InfoTip } from '@/components/ui/Tooltip';
 
 /** Eight points, because sixteen would be precision the sentence around it does
  *  not have. */
@@ -93,58 +94,34 @@ export function NorthDial() {
     [setSite],
   );
 
-  // The drag hint is STANDING TEXT under the dial, not a tooltip. It was briefly an
-  // info bubble on a 24px button beside the Facing label, and three things were wrong
-  // with that. `Tooltip` latches on press (`onPointerDown` sets `pressedRef`), so on a
-  // touch device the sequence is enter → open → down → latch-closed and the hint
-  // flashes and is gone, with no second rendering anywhere. The trigger was a
-  // `<button>` with no `onClick`, no `aria-expanded` and no `aria-describedby` — a
-  // control that does nothing, whose accessible name was an instruction, sitting 6px
-  // from a visible "Facing" label a screen reader had just read. And the frame
-  // argument below rests on the sentence being NEXT TO the dial; a bubble opens above
-  // the Facing row, which is the position furthest from the dial on the whole panel.
+  // The explanation lives behind an info button beside the label, not as standing
+  // text under the dial: the dial and its dot already say it to anyone who has used
+  // it once, and a sentence that is always on screen is read once and then only
+  // takes room. `InfoTip` rather than `Tooltip` because this one has to open under a
+  // finger (see `ui/Tooltip.tsx`).
   //
-  // It NAMES the direction rather than saying
-  // "the dot": the dot is invisible to a screen reader, and the dial's
-  // `aria-valuetext` is about the bearing, which is the slider's own value and
-  // not the place to bolt this on. Derived from the same azimuth the marker is
-  // drawn at, so the two cannot disagree.
+  // It NAMES the direction rather than saying "the dot" alone: the dot is invisible
+  // to a screen reader, and the dial's `aria-valuetext` is about the bearing, which
+  // is the slider's own value and not the place to bolt this on. Derived from the
+  // same azimuth the marker is drawn at, so the two cannot disagree.
   //
-  // THE FRAME IS NAMED, and it has to be. This read "Light comes from the
-  // bottom-right" — a bare screen direction, with nothing saying what it was a
-  // direction *in*. In the 2D plan it is true of the drawing; in the 3D tab the
-  // camera orbits, so the same sentence is false at every heading but one and
-  // there is no way to tell from the words which. The dial is the one frame that
-  // survives both: it is 12 px away, it never rotates, and `planSide` is computed
-  // from `sunAzimuthDeg - bearingDeg`, which IS the screen angle the marker is
-  // drawn at (`sunAt` in `Dial`). So the sentence describes the picture beside
-  // it rather than the room behind it, and the room's own answer stays where it
-  // belongs — the marker for the eye, `aria-valuetext` for a screen reader.
-  const hint =
+  // THE FRAME IS NAMED, and it has to be. A bare "light comes from the bottom-right"
+  // is true of the 2D plan and false in the 3D tab at every camera heading but one.
+  // The dial is the one frame that survives both: it never rotates, and `planSide`
+  // is computed from `sunAzimuthDeg - bearingDeg`, which IS the screen angle the
+  // marker is drawn at (`sunAt` in `Dial`).
+  const about =
     sunAzimuthDeg === null
-      ? 'Drag to set north.'
-      : `Drag to set north. Light comes from the dial's ${planSide(sunAzimuthDeg - bearingDeg)}.`;
+      ? 'Turn the dial so N points to real north. This lighting mood has no sun.'
+      : `Turn the dial so N points to real north. The dot marks the sun, which shines in from the ${planSide(sunAzimuthDeg - bearingDeg)} of the dial.`;
 
   return (
     <div style={{ minWidth: 0 }}>
-      <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>Facing</span>
-      <Dial bearingDeg={bearingDeg} sunAzimuthDeg={sunAzimuthDeg} onChange={onChange} />
-      {/* Under the dial and a few pixels from it, which is what the frame argument
-          above depends on — "the dial's bottom-right" is only a direction anyone can
-          follow while the dial is the nearest thing to the words. `minWidth: 0` so
-          the sentence reflows inside a narrow rail rather than pushing the section
-          wider; `overflowWrap` because "bottom-right" is one long token. */}
-      <div
-        className="t-micro"
-        style={{
-          minWidth: 0,
-          marginTop: 8,
-          lineHeight: 1.4,
-          overflowWrap: 'anywhere',
-        }}
-      >
-        {hint}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+        <span className="ds-label">Sun direction</span>
+        <InfoTip label="About sun direction">{about}</InfoTip>
       </div>
+      <Dial bearingDeg={bearingDeg} sunAzimuthDeg={sunAzimuthDeg} onChange={onChange} />
     </div>
   );
 }
@@ -208,7 +185,9 @@ function Dial({
         height={C * 2}
         role="slider"
         tabIndex={0}
-        aria-label="Which way the room faces"
+        // Opens with the visible label, so "Sun direction" is what voice control
+        // answers to (WCAG 2.5.3); the rest says what dragging it actually sets.
+        aria-label="Sun direction: which way the room faces"
         aria-valuemin={0}
         aria-valuemax={359}
         aria-valuenow={Math.round(bearingDeg)}

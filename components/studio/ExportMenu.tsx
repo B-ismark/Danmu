@@ -82,7 +82,7 @@ export function useExportItems(): ExportItem[] {
       toast({
         tone: 'danger',
         title: `Could not export ${what}`,
-        message: 'Nothing was saved. Try again, and if it keeps happening reload the page.',
+        message: 'Nothing was saved. Try again. If it keeps failing, reload the page.',
       });
     };
   }

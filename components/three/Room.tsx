@@ -644,7 +644,7 @@ function snapshotFailed(err?: unknown) {
   toast({
     tone: 'danger',
     title: 'Could not export this 3D view',
-    message: 'The room is still here — try again, and if it keeps happening reload the page.',
+    message: 'Try again. If it keeps failing, reload the page.',
   });
 }
 

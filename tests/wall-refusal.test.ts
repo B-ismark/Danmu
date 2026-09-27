@@ -134,7 +134,7 @@ describe('a wall will not close on the furniture', () => {
     // the derivation.
     setRoom(2.4, 3, [part({ dimMM: [2400, 900, 800], name: 'Sectional' })]);
     moveWallCarrying(widthWall(), -0.2);
-    expect(heard.at(-1)).toMatch(/needs 2\.4\d* m —/);
+    expect(heard.at(-1)).toMatch(/needs 2\.4\d* m,/);
   });
 
   it('says "already does not fit" from the wall path, not just as a pure function', () => {

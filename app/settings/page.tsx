@@ -26,7 +26,7 @@ const KEY_FAILURE: Record<KeyFailure, { lead: string; help: string }> = {
   },
   'bad-key': {
     lead: 'Key was rejected',
-    help: 'The service did not accept this key. Check it was copied whole — keys are long and easy to truncate — then test again.',
+    help: 'The service did not accept this key. Check that you copied all of it, then test again.',
   },
   offline: {
     lead: 'Could not reach the service',
@@ -34,11 +34,11 @@ const KEY_FAILURE: Record<KeyFailure, { lead: string; help: string }> = {
   },
   'rate-limited': {
     lead: 'Too many checks just now',
-    help: 'Nothing is wrong with your key. Wait a minute and test again.',
+    help: 'Your key is fine. Wait a minute, then test again.',
   },
   unknown: {
     lead: 'Could not finish the check',
-    help: 'The service answered in a way Danmu did not expect. Your key was not changed — try again in a moment.',
+    help: 'The service sent an unexpected answer. Your key was not changed. Try again in a moment.',
   },
 };
 
@@ -124,7 +124,7 @@ export default function SettingsPage() {
   async function removeKey() {
     const ok = await confirm({
       title: 'Remove your detection key?',
-      body: 'It is deleted from this browser straight away. Detection stops working until you paste a key again — nothing else in Danmu needs one.',
+      body: 'It is deleted from this browser. Detection stops working until you add a key again.',
       confirmLabel: 'Remove key',
       danger: true,
     });
@@ -182,14 +182,10 @@ export default function SettingsPage() {
         <SecHeader
           eyebrow="Detection"
           title="Connect a detection key (optional)."
-          desc="Used only to recognise furniture in photos of your room. Everything else — the room, the sizes, the arranging — runs on your device and needs no key."
+          desc="Used only to recognise furniture in photos of your room. Everything else works without one."
         />
 
-        <Row
-          label="Access key"
-          controlId={KEY_INPUT_ID}
-          hint="Saved in this browser. Danmu has no server to send it to."
-        >
+        <Row label="Access key" controlId={KEY_INPUT_ID}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <div
               style={{
@@ -267,7 +263,7 @@ export default function SettingsPage() {
           {!testing && s.keyValid === true && (
             <div style={{ marginTop: 10 }}>
               <span className="ds-chip" style={{ borderColor: 'var(--success)', color: 'var(--success-text)' }}>
-                <Dot color="var(--success)" size={5} /> Working · saved on this device
+                <Dot color="var(--success)" size={5} /> Working
               </span>
             </div>
           )}
@@ -303,23 +299,22 @@ export default function SettingsPage() {
           >
             <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, marginBottom: 4 }}>Where your key goes</div>
             <p className="t-note" style={{ lineHeight: 1.55, margin: 0 }}>
-              It is stored in this browser and never sent to Danmu. When you run detection — or press Test — your
-              browser sends the key, and in a detection run the photos too, straight to Google, whose service the key
-              belongs to. Nothing else in Danmu leaves your device. For safety you can restrict the key to this site in
-              your provider&apos;s console.
+              The key is stored in this browser and never sent to Danmu. Pressing Test sends it directly to Google.
+              Running detection sends it to Google with your photos. Nothing else leaves your device. You can restrict
+              the key to this site in your provider&apos;s console.
             </p>
           </div>
 
           <p className="t-hint" style={{ margin: '10px 0 0', lineHeight: 1.5, maxWidth: 'var(--measure-text-sm)' }}>
-            Detection works about {dailyDetections} times a day on a free key and resets each day. Testing here uses
-            one of those. If detection stops responding late in the day, that is usually why — not your key.
+            A free key allows about {dailyDetections} detections a day, and each test uses one. If detection stops
+            responding late in the day, the daily limit is the likely cause.
           </p>
         </Row>
 
         <SecHeader eyebrow="Workspace" title="Preferences." desc="" />
         <Row
           label="Dimension units"
-          hint="Sizes are always stored in millimetres and only converted for display, so switching units never changes a measurement."
+          hint="Sizes are stored in millimetres. Changing units only changes how they are shown."
         >
           {/* This replaced a Metric/Imperial switch that was wired to a store
               field nothing read — a units control that changed nothing, on a
@@ -336,14 +331,14 @@ export default function SettingsPage() {
         <SecHeader
           eyebrow="Data"
           title="Local-first storage."
-          desc="Rooms live in this browser's database. Clearing the browser's site data removes them the same way deleting them here does."
+          desc="Rooms are stored in this browser. Clearing this site's data in your browser deletes them."
         />
         <Row
           label={room ? 'Delete this room' : 'Delete a room'}
           hint={
             room
-              ? `Removes “${room.name}” — its shape, wall colours, photos, detections, furniture and every saved layout. Recoverable for 30 days.`
-              : 'No room is open, so there is nothing to delete here. Open a room from your workspace first, or delete rooms directly from their cards.'
+              ? `Removes “${room.name}”: its shape, wall colours, photos, detections, furniture and saved layouts. Recoverable for 30 days.`
+              : 'No room is open.'
           }
         >
           <button

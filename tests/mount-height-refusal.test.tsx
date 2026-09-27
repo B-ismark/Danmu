@@ -107,7 +107,7 @@ describe('a piece taller than the room is told so, rather than pinned to 0', () 
 
   it('and says why, which is the half that was missing', () => {
     render(<PlanPage />);
-    expect(screen.getByText(/Taller than the room — there is no height it can hang at/)).toBeTruthy();
+    expect(screen.getByText(/Taller than the room\. There is no height it can hang at/)).toBeTruthy();
     // It points at where the amount is, rather than repeating a number it would then
     // own a second copy of.
     expect(screen.getByText(/Room check says by how much/)).toBeTruthy();
@@ -163,7 +163,7 @@ describe('a range narrower than one step is said in words, not quoted as a range
 
   it('says there is no room to move it, instead of quoting 0–0.0 ft', () => {
     render(<PlanPage />);
-    expect(screen.getByText(/It only just fits — there is no room to move it under this ceiling/)).toBeTruthy();
+    expect(screen.getByText(/It only just fits\. There is no room to move it under this ceiling/)).toBeTruthy();
     // Not a fault: the piece fits. So the field stays usable and is not marked invalid.
     expect(field().disabled).toBe(false);
     expect(field().getAttribute('aria-invalid')).toBe('false');

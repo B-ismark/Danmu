@@ -543,7 +543,7 @@ export function spinSelection(quarterTurns = 1) {
     );
   }
   if (refused.length > 0) {
-    parts.push(`${refused[0].name} does not fit at that angle — ${refused[0].why}`);
+    parts.push(`${refused[0].name} does not fit at that angle: ${refused[0].why}`);
     // "1 more do not fit" is what an unconditional plural verb reads like for a set
     // of exactly two, which is the commonest multi-select there is.
     const rest = refused.length - 1;
@@ -562,7 +562,7 @@ export function spinSelection(quarterTurns = 1) {
     const d = dropped[0];
     parts.push(
       d.by > 0
-        ? `${d.name} dropped ${formatLength(d.by * 1000, dimUnit)} — it is no longer standing on anything.`
+        ? `${d.name} dropped ${formatLength(d.by * 1000, dimUnit)}. It is no longer standing on anything.`
         : `${d.name} rose ${formatLength(-d.by * 1000, dimUnit)} onto what is under it.`,
     );
     if (dropped.length > 1) parts.push(`${dropped.length - 1} more changed height.`);

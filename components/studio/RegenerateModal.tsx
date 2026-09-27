@@ -64,8 +64,8 @@ export function SwapModelModal({
         {part.name}
       </div>
       <p className="t-meta" style={{ lineHeight: 1.5, margin: '0 0 14px' }}>
-        Pick a closer model. It stays where it is and keeps its colour and finish, and a
-        size you type in the search (&quot;1200mm tall&quot;) carries over.
+        It keeps its place, colour and finish. A size typed in the search (&quot;1200mm
+        tall&quot;) carries over.
       </p>
 
       {/* `draggable` off: this sits in a dialog over the room, so a dragged row has

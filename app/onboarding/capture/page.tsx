@@ -243,7 +243,7 @@ export default function CapturePage() {
    *  owes the user is what is now TRUE on it, which is why every caller below leaves
    *  the tiles showing the store rather than what it just tried to write. */
   function writeFailed(what: string): string {
-    return `${what} could not be saved. Your other photos are safe — try again, or carry on with the walls you have.`;
+    return `${what} could not be saved. Your other photos are safe. Try again, or continue with the walls you have.`;
   }
 
   /** `blob` is stored as given — callers normalise first (see addFiles / shoot),
@@ -284,8 +284,8 @@ export default function CapturePage() {
     if (!files.length) {
       setAnnounce(
         picked.length
-          ? 'Danmu can’t read that kind of file. Choose a photo — JPEG, PNG, WebP or HEIC.'
-          : 'That file is not an image. Choose a photo — JPEG, PNG, WebP or HEIC.',
+          ? 'Danmu can’t read that kind of file. Choose a JPEG, PNG, WebP or HEIC photo.'
+          : 'That file is not an image. Choose a JPEG, PNG, WebP or HEIC photo.',
       );
       return;
     }
@@ -332,7 +332,7 @@ export default function CapturePage() {
   async function replacePhoto(slot: CaptureSlot, list: FileList | File[] | null) {
     const file = Array.from(list ?? []).filter(isAcceptedPhoto)[0];
     if (!file) {
-      setAnnounce('Danmu can’t read that kind of file. Choose a photo — JPEG, PNG, WebP or HEIC.');
+      setAnnounce('Danmu can’t read that kind of file. Choose a JPEG, PNG, WebP or HEIC photo.');
       return;
     }
     const { pose } = await readCaptureFacts(file, { heightM: statedHeight });
@@ -455,8 +455,8 @@ export default function CapturePage() {
           <Icon name="camera" size={22} color="var(--ink-3)" style={{ margin: '0 auto 10px' }} />
           <h1 style={{ fontSize: 'var(--fs-title)', marginBottom: 8 }}>Pick a room shape first</h1>
           <p className="t-body" style={{ lineHeight: 1.5, margin: '0 0 18px' }}>
-            Photos are saved into a room, and there is no room open on this device yet. Choose a footprint and you can
-            come straight back here.
+            Photos are saved into a room, and no room is open on this device yet. Choose a footprint, then come back
+            here.
           </p>
           <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--lg ds-btn--accent ds-btn--block-compact">
             Pick a shape
@@ -492,8 +492,7 @@ export default function CapturePage() {
         <p className="t-small" style={{ margin: 0, lineHeight: 1.45, minWidth: 0 }}>
           {CAPTURE_METHOD}{' '}
           <span style={{ color: 'var(--ink-3)' }}>
-            One photo is enough to start; four gets the closest room. Add them in any order — each photo’s own compass
-            names its wall where it has one.
+            One photo is enough to start. Four give the most accurate room. Add them in any order.
           </span>
         </p>
       </div>
@@ -526,9 +525,7 @@ export default function CapturePage() {
           style={{ width: 96 }}
         />
         <span className="t-meta">m</span>
-        <span className="t-hint">
-          Sets the scale of everything measured from your photos.
-        </span>
+        <span className="t-hint">Sets the scale of every measurement.</span>
       </div>
     </div>
   );
@@ -622,7 +619,7 @@ export default function CapturePage() {
           href={`/room/${roomId}/model`}
           className="ds-btn ds-btn--sm ds-btn--ghost"
           style={{ color: 'var(--ink-2)' }}
-          title="Photos are optional — you can decorate the shape you picked instead"
+          title="Photos are optional. Decorate the shape you picked instead."
         >
           Skip
         </Link>
@@ -703,8 +700,8 @@ export default function CapturePage() {
  *  a photograph nobody has seen, so its text contrast would be a promise about the
  *  user's own living room. And the chip's SILHOUETTE against that photograph is
  *  guaranteed only for this ground: --ink plus the --edge-on-ink boundary clears
- *  3:1 against every possible photo tone, where a --warn ground manages 1.92:1 and
- *  a --success-text ground 2.02:1 — unfixable by a heavier boundary, since a
+ *  3:1 against every possible photo tone, where a --warn ground manages 1.93:1 and
+ *  a --success-text ground 2.03:1 — unfixable by a heavier boundary, since a
  *  mid-dark ground and a light edge sit too close together in luminance.
  *
  *  The clash chip and the two quality flags DID override it, which both escaped
@@ -760,7 +757,7 @@ function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps:
       <span className="t-small" style={{ minWidth: 0 }}>
         {square
           ? 'Wrong wall on a photo? Move it, or turn the whole set round.'
-          : 'Check each photo against the wall length beside it — if the whole set is one wall out, turn it round.'}
+          : 'Check each photo against the wall length beside it. If the whole set is one wall out, turn it round.'}
       </span>
       <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
         <button
@@ -847,7 +844,7 @@ function AddTile({
         </span>
         {!compact && (
           <span className="t-note" style={{ lineHeight: 1.35 }}>
-            Tap to choose, or drop them here. Up to four — one per wall.
+            Up to four, one per wall.
           </span>
         )}
       </button>
@@ -1007,7 +1004,7 @@ function PhotoCard({
           <span
             title={`This photo’s compass pointed at ${labelOf(photo.clashedWith)}, which already had one. It may be a second photo of the same wall.`}
             // Signalled in the TYPE, not the ground. A --warn ground looked louder and
-            // cost the chip its outline against any mid-tone photo (1.92:1) — on the one
+            // cost the chip its outline against any mid-tone photo (1.93:1) — on the one
             // chip that is actually asking for something.
             style={{ ...photoChrome(), color: 'var(--on-ink-warn)' }}
           >
@@ -1035,7 +1032,7 @@ function PhotoCard({
                   key={f}
                   title={flagHelp(f)}
                   // Same rule as the clash chip: the ground is never overridden, so
-                  // these two carried the same silhouette defect (2.02:1 and 1.92:1).
+                  // these two carried the same silhouette defect (2.03:1 and 1.93:1).
                   style={{
                     ...photoChrome(),
                     color: good ? 'var(--on-ink-success)' : 'var(--on-ink-warn)',
@@ -1049,7 +1046,7 @@ function PhotoCard({
                     color={good ? 'var(--on-ink-success)' : 'var(--on-ink-warn)'}
                   />
                   {flagLabel(f)}
-                  <span className="sr-only"> — {flagHelp(f)}</span>
+                  <span className="sr-only">. {flagHelp(f)}</span>
                 </span>
               );
             })
@@ -1160,32 +1157,32 @@ function MoveMenu({
 const CAMERA_ERRORS: Record<string, { title: string; body: string }> = {
   NotAllowedError: {
     title: 'Your browser is blocking the camera',
-    body: 'Nothing you shoot leaves this device — Danmu has no server to send it to. Allow camera access from the icon in your address bar, then try again. Or use photos you already have.',
+    body: 'Allow camera access from the icon in your address bar, then try again. Or upload photos you already have.',
   },
   SecurityError: {
     title: 'Your browser is blocking the camera',
-    body: 'Camera access needs a secure page. Uploading photos from this device works exactly the same.',
+    body: 'Camera access needs a secure page. Upload photos from this device instead.',
   },
   NotFoundError: {
     title: 'No camera on this device',
-    body: 'We could not find one to use. Upload photos from this device instead — the rest of the flow is identical.',
+    body: 'Upload photos from this device instead.',
   },
   OverconstrainedError: {
     title: 'No usable camera on this device',
-    body: 'The cameras here cannot give us a usable picture. Upload photos from this device instead.',
+    body: 'The cameras here cannot give a usable picture. Upload photos from this device instead.',
   },
   NotReadableError: {
     title: 'The camera is busy',
-    body: 'Another app or browser tab seems to be using it. Close that one and try again, or upload photos instead.',
+    body: 'Another app or browser tab may be using it. Close it and try again, or upload photos instead.',
   },
   AbortError: {
     title: 'The camera stopped before it started',
-    body: 'That is usually another app taking it over. Try again, or upload photos instead.',
+    body: 'Another app may have taken it over. Try again, or upload photos instead.',
   },
 };
 const CAMERA_ERROR_FALLBACK = {
   title: 'The camera did not start',
-  body: 'Something on this device stopped it. You can try again, or upload photos you already have.',
+  body: 'Something on this device stopped it. Try again, or upload photos instead.',
 };
 
 function CameraPanel({
@@ -1326,8 +1323,7 @@ function CameraPanel({
             {nextLabel ? `Shoot ${nextLabel} with this device` : 'Every wall has a photo'}
           </h2>
           <p className="t-small" style={{ lineHeight: 1.5, margin: 0 }}>
-            Your photos stay on this device — there is nowhere for them to go. Your browser will ask permission when you
-            turn the camera on.
+            Your photos stay on this device. Your browser will ask for permission when you turn the camera on.
           </p>
           <button className="ds-btn ds-btn--lg ds-btn--accent" disabled={phase === 'starting'} onClick={turnOn}>
             <Icon name="camera" size={14} color="var(--on-accent)" />

@@ -10,9 +10,9 @@
 // once (#FAFAF7 / #6B6358 / #C02618 were from an earlier palette).
 import { useEffect } from 'react';
 
-const PAPER = '#FBF8F2'; // --paper
-const INK = '#2A2520'; // --ink
-const INK_2 = '#5A5147'; // --ink-2
+const PAPER = '#FBF9F6'; // --paper
+const INK = '#1D1816'; // --ink
+const INK_2 = '#544D47'; // --ink-2
 const DANGER = '#C8472A'; // --danger
 const ACCENT_INK = '#C24A22'; // --accent-ink — 4.73:1 with white
 
@@ -31,7 +31,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
             <div style={{ fontSize: 13, fontWeight: 700, color: DANGER, marginBottom: 8 }}>Hiccup</div>
             <h1 style={{ fontSize: 24, margin: '0 0 12px' }}>Danmu didn’t finish loading</h1>
             <p style={{ fontSize: 14, lineHeight: 1.55, color: INK_2, marginBottom: 20 }}>
-              Nothing was lost — your rooms are saved in this browser. Reload to start it up again.
+              Your rooms are saved in this browser.
             </p>
             <button
               onClick={() => reset()}

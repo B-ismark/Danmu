@@ -122,6 +122,6 @@ describe('the Re-fit toast solves the room as it stands when pressed', () => {
     );
     expect(solvedFootprint, 'and the room it was handed is the resized one').toEqual(smaller);
     // …and the press was not treated as stale: the stamp and the parts came from one tick.
-    expect(toasts.map((t) => t.title)).not.toContain('The room changed while it was thinking');
+    expect(toasts.map((t) => t.title)).not.toContain('The room changed during the search');
   });
 });
