@@ -1373,7 +1373,9 @@ function AirPurifierGeo({ part }: { part: ScenePart }) {
         // A torus lies in XY with its axis on Z; the body's axis is Y. Unturned, the
         // rings stood as vertical hoops through the body and 22–42 mm into the floor.
         <mesh key={i} position={[0, h * y, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[r + 0.002, 0.006, 8, 28]} />
+          {/* The body tapers from r at the top to 0.96r at the floor, so each ring is
+              sized to the body at its own height — a top-radius ring stood ~4 mm off it. */}
+          <torusGeometry args={[r * (0.96 + 0.04 * y) + 0.002, 0.006, 8, 28]} />
           <meshStandardMaterial color={shade(bodyC, -22)} roughness={0.8} />
         </mesh>
       ))}

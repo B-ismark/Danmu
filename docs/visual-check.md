@@ -1638,8 +1638,10 @@ on SwiftShader). Also look at legs: the white outline strokes are gone from them
 min / library / max and found 181 detached or ungrounded parts across 19 shapes; it finds
 none now. It proves each model is connected, not that every visible joint is closed — the
 coffee table's legs cut back to 0.82h still pass, because the new aprons carry them. Seen on
-SwiftShader in a seeded showroom (all but the oval mirror, which did not appear in that
-seeded room — not yet looked at).
+SwiftShader in a seeded showroom, the oval mirror included (seeded on three walls: it shows on
+the two the camera faces and leaves with the cut-away third, as it should). The purifier's
+rings follow its taper now — sized to the top radius, the lowest stood ~4 mm off the body,
+which an axis-aligned box test cannot see because the ring's box contains the body.
 
 ## The browser route, so the next person does not rebuild it
 
@@ -1668,6 +1670,11 @@ repo's `package.json` puts a browser download in everyone's install.
   with a beat between them brings the whole shell into frame, which is the only framing
   that can answer a question about walls.
 · **One fresh browser context per room**, or IndexedDB hands you the previous room.
+· **A plan piece is never `visible` to Playwright** — its stroke is drawn only while it is
+  selected — so wait on `{ state: 'attached' }`, or the locator resolves and times out.
+  (From PR #123's wardrobe-door A/B; moved here when the purifier item it sat in closed.)
+· **Projecting a piece's world centre through the camera lands on the canvas and selects
+  nothing.** Click, then read `aria-selected` back — that is the only aiming that works.
 · **Killing the server matters more than it looks.** `next start` survives a stopped
   parent process: the port stays held, and if you rebuild `.next` underneath it you are
   serving a mixture of two commits. That happened here and only failed because the
