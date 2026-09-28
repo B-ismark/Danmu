@@ -342,6 +342,8 @@ export default function DetectPage() {
   // make — the header says what the sizes are instead.
   const [roughSize, setRoughSize] = useState(false);
   const padRef = useRef<HTMLButtonElement>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const photoBoxRef = useRef<HTMLDivElement>(null);
   // Flipped by Stop so an in-flight run stops writing to state.
   const stopped = useRef(false);
   // The detection run, set by the loading effect so **Look again** can start it.
@@ -869,6 +871,53 @@ export default function DetectPage() {
   const keptCount = confirmed.size;
   const photoCount = slots.length;
 
+  // The pinned photo column, measured, for two rules in globals.css that no fixed
+  // number could serve. `--scan-photo-room` is the height of everything in the column
+  // but the photo — the wall buttons, the padding, the tool row — which the photo's cap
+  // leaves room for, because those rows wrap: four walls are two rows of buttons on a
+  // phone, and adding by hand grows the tools by two more lines. Guessed at 200px, the
+  // column outgrew the window, and the box round the photo became a 30px scroll area of
+  // its own that took every swipe and hid the photo's bottom edge. `--scan-pin-h` is the
+  // column's own height, which the list keeps clear of when focus scrolls a row into
+  // view, so a row focused while stacked does not land under the photo.
+  const hasWallButtons = slots.length > 1;
+  const hasPhoto = active !== undefined;
+  useEffect(() => {
+    const pane = paneRef.current;
+    const box = photoBoxRef.current;
+    if (!pane || !box) return;
+    const root = document.documentElement;
+    const publish = () => {
+      const cs = getComputedStyle(box);
+      // The box's padding is room too; its height, squeezed or not, is not.
+      const room = pane.getBoundingClientRect().height - box.getBoundingClientRect().height + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const next = `${Math.ceil(room)}px`;
+      if (pane.style.getPropertyValue('--scan-photo-room') !== next) pane.style.setProperty('--scan-photo-room', next);
+      root.style.setProperty('--scan-pin-h', `${Math.ceil(pane.getBoundingClientRect().height)}px`);
+    };
+    publish();
+    if (typeof ResizeObserver === 'undefined') return () => root.style.removeProperty('--scan-pin-h');
+    // On the next frame, not inside the observer's own delivery: the cap resizes the
+    // column being observed, and a resize made there is one the browser cannot deliver
+    // in the same pass — it reports a ResizeObserver loop error, twice at 360×640 on
+    // turning adding by hand on and off and nudging the window.
+    let frame = 0;
+    const ro = new ResizeObserver(() => {
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; publish(); });
+    });
+    // Every row, not only the column: a row that wraps inside a column already at its
+    // cap changes nothing about the column's own size.
+    ro.observe(pane);
+    for (const row of pane.children) ro.observe(row);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(frame);
+      // Removed rather than left: the next page has no column to keep clear of.
+      root.style.removeProperty('--scan-pin-h');
+    };
+    // Re-run when a row comes or goes, so the new one is observed too.
+  }, [hasWallButtons, hasPhoto]);
+
   // Truthful for the path actually taken, and on screen for the whole upload.
   const sendsPhotos = path === 'cloud' || (path === 'checking' && !!apiKey);
   const privacyLine = sendsPhotos
@@ -1024,8 +1073,11 @@ export default function DetectPage() {
 
       {/* .split--stack turns the rail into a sheet under the photo on narrow
           screens; the fixed 380px track left the canvas about 10px wide. */}
-      <div className="split split--stack" style={{ flex: 1, gridTemplateColumns: '1fr 380px', minHeight: 0 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div className="split split--stack scan-split" style={{ flex: 1, gridTemplateColumns: '1fr 380px', minHeight: 0 }}>
+        {/* Pinned while the list scrolls (`.scan-photo-pane`): a long list used to
+            take the photo off screen, so the rows at its end had no picture to be
+            matched against. */}
+        <div ref={paneRef} className="scan-photo-pane" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {slots.length > 1 && (
             <div
               role="group"
@@ -1042,7 +1094,10 @@ export default function DetectPage() {
                     aria-pressed={sel}
                     className="ds-btn"
                     style={{
+                      // Share the row, up to a button's width: two walls at 1920 were
+                      // 751px each for six characters.
                       flex: '1 1 130px',
+                      maxWidth: 240,
                       justifyContent: 'space-between',
                       fontSize: 'var(--fs-small)',
                       background: sel ? 'var(--ink)' : 'var(--paper)',
@@ -1064,21 +1119,25 @@ export default function DetectPage() {
             </div>
           )}
 
-          <div style={{ flex: 1, padding: 16, minHeight: 0, overflow: 'auto' }}>
+          <div ref={photoBoxRef} style={{ flex: 1, padding: 16, minHeight: 0, overflow: 'auto' }}>
             {active ? (
-              <div style={{ position: 'relative' }}>
-                <PhotoEditor
-                  imageUrl={active.url}
-                  // Without this every photo on this screen shares one generic alt
-                  // string, which is the whole review queue reading identically to a
-                  // screen reader. The prop existed; nothing passed it.
-                  slotLabel={slotLabel(active.slot)}
-                  items={activeDetections.map(({ d, i }) => ({ index: i, d, locked: confirmed.has(i) }))}
-                  mode={adding ? 'add' : 'select'}
-                  onToggleLock={toggleConfirm}
-                  onDelete={deleteDetection}
-                  onAddBox={addManual}
-                />
+              // On the page's left edge with the heading, the notice and the wall
+              // buttons, rather than centred away from all three.
+              <PhotoEditor
+                imageUrl={active.url}
+                // The pinned column's cap, one per layout — beside the list and stacked
+                // over it — so it lives with the rule that pins it (globals.css).
+                maxPhotoHeight="var(--scan-photo-cap)"
+                // Without this every photo on this screen shares one generic alt
+                // string, which is the whole review queue reading identically to a
+                // screen reader. The prop existed; nothing passed it.
+                slotLabel={slotLabel(active.slot)}
+                items={activeDetections.map(({ d, i }) => ({ index: i, d, locked: confirmed.has(i) }))}
+                mode={adding ? 'add' : 'select'}
+                onToggleLock={toggleConfirm}
+                onDelete={deleteDetection}
+                onAddBox={addManual}
+              >
                 {/* Page-level box layer, in the same normalized space as the
                     editor's own overlays: the row↔box link and the keyboard
                     placement preview. Pointer events off so it never eats a
@@ -1114,7 +1173,7 @@ export default function DetectPage() {
                     }}
                   />
                 )}
-              </div>
+              </PhotoEditor>
             ) : (
               <div className="t-small" style={{ padding: 12 }}>
                 {slots.length === 0 ? 'No wall photos for this room yet.' : 'No photo for this wall yet.'}
@@ -1288,6 +1347,10 @@ function NoticeCard({
     <div
       role={notice.tone === 'error' ? 'alert' : 'status'}
       style={{
+        // As wide as what it says: its text already stops at 68ch, and the card ran on
+        // to the window's edge beside it, 1,884px of tint at 1920.
+        width: 'fit-content',
+        maxWidth: 'calc(100% - 36px)',
         margin: '0 18px 14px',
         border: `1px solid ${tone.border}`,
         background: tone.bg,
@@ -1421,7 +1484,8 @@ function DetectionRow({
           value={label}
           onCommit={onRename}
           label="Piece name"
-          style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)', textTransform: 'capitalize', display: 'block' }}
+          className="sentence-case"
+          style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)', display: 'block' }}
           inputStyle={{ height: 28, fontSize: 'var(--fs-small)' }}
         />
         {/* Confidence percentages and slot codes were telemetry. What helps is

@@ -197,6 +197,9 @@ export default function SettingsPage() {
         <Row label="Access key" controlId={KEY_INPUT_ID}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <div
+              // The field is this wrapper, not the input inside it, so this is what
+              // grows to 44px under a finger; the input stretches to fill it.
+              className="key-field"
               style={{
                 flex: '1 1 220px',
                 minWidth: 0,
@@ -228,7 +231,7 @@ export default function SettingsPage() {
                   minWidth: 0,
                   border: 'none',
                   outline: 'none',
-                  height: 36,
+                  alignSelf: 'stretch',
                   padding: '0 10px',
                   fontFamily: 'var(--font-mono)',
                   fontSize: 'var(--fs-small)',

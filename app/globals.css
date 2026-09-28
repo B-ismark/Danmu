@@ -1001,6 +1001,11 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    on itself, which stays inline where the element is a flex item — on anything
    else it would change nothing, and on a grid item it would change too much. */
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A name as a sentence: its first letter up, the rest as written. Not `capitalize`,
+   which ups every word and turned a finder's "lamp by the window" into "Lamp By The
+   Window". `::first-letter` only reaches a block, inline-block or flex item, never a
+   plain inline span, so put it on the box that holds the words. */
+.sentence-case::first-letter { text-transform: uppercase; }
 
 .field {
   width: 100%; height: 34px; padding: 0 12px;
@@ -1125,12 +1130,6 @@ textarea.field { border-radius: var(--r-2); }
 }
 .editable:hover { background: var(--paper-2); }
 
-.tag {
-  font-size: var(--fs-micro); font-weight: 600; color: var(--ink-3);
-  text-transform: capitalize; background: var(--paper-2);
-  border-radius: var(--r-full); padding: 2px 8px; white-space: nowrap;
-}
-
 /* Both hold controls and float over other content, so both need a boundary that
    is actually perceivable against whatever they land on. */
 .popover {
@@ -1233,6 +1232,17 @@ textarea.field { border-radius: var(--r-2); }
   background: var(--paper); border: 1px solid var(--edge);
   border-radius: var(--r-3); box-shadow: var(--shadow-soft); overflow: hidden;
 }
+/* A `Segmented` segment. Free to shrink, so a label ellipsises rather than prints over
+   its neighbours; under a finger, never smaller than 44px either way. The height is
+   inline and sized for a mouse (30px by default), and a minimum wins over it.
+   `--fill` segments share out the row between them (`stretch`, `wrap`), so they take
+   only the height: a width floor there makes N segments wider than a narrow row,
+   and `.toolbar` clips what crosses its edge. */
+.seg { min-width: 0; }
+@media (pointer: coarse) {
+  .seg { min-height: 44px; }
+  .seg:not(.seg--fill) { min-width: 44px; }
+}
 
 /* A chrome cluster floating on a work surface (CanvasChrome's three slots).
    The cluster is a box, and the parts of that box which are not a control — the
@@ -1307,6 +1317,29 @@ textarea.field { border-radius: var(--r-2); }
 /* Two-column work surface: fixed rail(s) + fluid content. The `--stack` modifier
    that turns those columns into rows lives in the 720px block below. */
 .split { display: grid; min-height: 0; }
+
+/* The scan screen's photo column (onboarding/detect), pinned while the list of found
+   pieces beside it scrolls the page. The photo is how a person tells which box is
+   which row, so it has to be on screen at the END of the list — and it used to have
+   scrolled away by then, at every width. `align-self: start` gives it a height of its
+   own to stick with: stretched to the row, it would have nowhere to go.
+
+   The cap is the window less the rows that go with the photo — the wall buttons, the
+   padding and the tool row under it — and those rows wrap, so the page measures them
+   (`--scan-photo-room`) rather than this guessing: never less than the 200px the photo
+   was designed with, and more when four walls or adding by hand need it. A pinned
+   column has to fit the window, or the box round the photo becomes a scroll area of
+   its own, which takes every swipe that starts on the photo and hides its bottom edge
+   — 25 to 36px of one on a phone, with a fixed allowance and a 280px floor. The floor
+   is 120px now, and only a window too short for even that scrolls the box. At 1920
+   the photo was drawn 1,508px wide and taller than the window.
+
+   `svh`, not `dvh`: the dynamic unit changes as a phone's address bar slides away on
+   the first scroll, which would resize the pinned photo while the list moves. */
+.scan-photo-pane {
+  --scan-photo-cap: max(120px, calc(100svh - max(200px, var(--scan-photo-room, 200px))));
+  position: sticky; top: 0; align-self: start; max-height: 100svh;
+}
 
 /* ── Glasshouse, docked (laptops) ────────────────────────────────────────────
    The rails stay docked — they own their columns, and the room is never under
@@ -1610,11 +1643,19 @@ textarea.field { border-radius: var(--r-2); }
      mouse; a minimum wins over it, so a finger gets 44px without every caller
      having to know it is on a phone. */
   .select-trigger, .select-option { min-height: 44px; }
-  /* The shape picker's "Use a typical size" — a small ghost button for a mouse,
-     a thumb-sized one for a finger. */
-  .size-entry .ds-btn--sm { min-height: 44px; }
-  /* And the studio's "These are right", for the same reason. */
+  /* The studio's "These are right": a small button for a mouse, a thumb-sized one
+     for a finger. */
   .rough-note .ds-btn--sm { min-height: 44px; }
+  /* The pages that are read and filled in (`ui/DocShell`): the workspace, settings
+     and the layout picker. Their buttons and fields are sized for a mouse inline;
+     `.key-field` is settings' key input, whose boundary is a wrapper round it. Not a
+     rename in place (`.editable__input`): it stands in for a line of text, and at 44px
+     starting one pushed the workspace's card 14px taller under the keyboard. */
+  .doc-shell .ds-btn, .doc-shell .field:not(.editable__input), .doc-shell .key-field { min-height: 44px; }
+  /* A dialog's decision (`ui/Modal`). It renders from the root layout, outside any
+     page's shell, so settings' "Remove the key?" was 38px under a thumb and its
+     Remove 36px, on the page whose own buttons had just grown to 44px. */
+  .modal__footer .ds-btn { min-height: 44px; }
 }
 /* Under a finger the Library's rows are 44px, not a mouse's 32 — and so is every
    small button in the phone's sheet (Fix, Shuffle, Room checks): the sheet is only
@@ -1657,6 +1698,29 @@ textarea.field { border-radius: var(--r-2); }
      ever right about the third child. */
   .split--stack { grid-template-columns: 1fr !important; grid-template-rows: minmax(280px, 55dvh) auto; }
   .split--stack > .rail { border: 0; border-top: 1px solid var(--hairline); height: auto; }
+  /* Stacked, the scan photo is a strip pinned over the list, which scrolls under it,
+     and it is seen whole: about half the screen, so the list keeps the other half.
+     It used to fill a 55dvh row that scrolled away with the page, drawn wider than
+     that row was tall. The shadow is the rail's own top rule at rest, and stays with
+     the strip once rows slide under it. */
+  .split--stack.scan-split { grid-template-rows: auto auto; }
+  .split--stack > .scan-photo-pane {
+    /* Half the screen, unless the rows round the photo leave it less than that inside
+       the strip's 70%. */
+    --scan-photo-cap: max(120px, min(calc(50svh - 140px), calc(70svh - var(--scan-photo-room, 0px))));
+    max-height: 70svh;
+    z-index: var(--z-sticky-local);
+    background: var(--paper);
+    box-shadow: 0 1px 0 var(--hairline);
+  }
+  /* …and what keyboard focus scrolls to in the list stops below the strip, not under
+     it. A margin on the list's own boxes, not padding on the page: as the page's
+     `scroll-padding` it covered the strip's own controls too, which sit in that band
+     by definition, so focusing one — "Place with the keyboard" hands focus to "Add
+     this box" — scrolled the page 150–240px to reveal a button already in view. The
+     height is the page's measure of the strip (`--scan-pin-h`): it wraps and scales,
+     so no fixed number here would be it. */
+  .split--stack.scan-split > .rail * { scroll-margin-top: var(--scan-pin-h, 0px); }
   /* Label/control rows stop being a fixed 220px + 1fr grid. */
   .row-grid { grid-template-columns: 1fr !important; gap: 6px !important; }
   /* A primary action pinned where a thumb can reach it. */

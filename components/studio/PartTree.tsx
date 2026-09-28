@@ -848,7 +848,7 @@ function PartRow({
         {locked ? <Icon name="camera" size={11} color="var(--locked)" /> : <Dot size={7} />}
       </span>
       <span
-        className="row-name truncate"
+        className="row-name truncate sentence-case"
         style={{
           fontSize: 'var(--fs-small)',
           fontWeight: 500,

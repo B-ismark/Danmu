@@ -76,6 +76,10 @@ export function DocShell({
 
   return (
     <div
+      // `.doc-shell` sizes this page's buttons and fields for a finger (globals.css).
+      // They are sized for a mouse inline, and a page that is read and filled in is
+      // exactly where a phone meets 32px buttons and 34px fields.
+      className="doc-shell"
       style={{
         minHeight: '100dvh',
         display: 'flex',

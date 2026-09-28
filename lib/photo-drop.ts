@@ -60,3 +60,22 @@ export function photoDropIntent<S>(args: {
 
   return hasFiles ? { kind: 'replace' } : { kind: 'ignore' };
 }
+
+/** What a drop ANYWHERE ELSE on the capture screen means — the add tile, or the page
+ *  around the gallery. There is no wall there to replace, so files are ADDED to the
+ *  next free walls. Except while one of the gallery's own tiles is in flight: its
+ *  image rides in `dataTransfer` as a file (see above), so a tile let go beside the
+ *  gallery, or over the add tile, came back as a second copy of the photo it already
+ *  is. The same proof, asked first, for the same reason.
+ *
+ *  The page catches these at all because a file dropped where nothing accepts it is
+ *  OPENED by the browser, in place of the app: capping the gallery at the page
+ *  measure left a 400px margin either side of it at 1920 that did exactly that. */
+export function looseDropIntent<S>(args: {
+  /** The slot the drag STARTED from, if it started in this gallery. */
+  draggingFrom: S | null;
+  hasFiles: boolean;
+}): { kind: 'add' } | { kind: 'ignore' } {
+  if (args.draggingFrom !== null) return { kind: 'ignore' };
+  return args.hasFiles ? { kind: 'add' } : { kind: 'ignore' };
+}

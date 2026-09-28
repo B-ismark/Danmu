@@ -1617,6 +1617,55 @@ the user went and looked.
 
     **Committed:** nothing.
 
+19. **On a phone, is the scan photo seen whole or drawn large? — ANSWERED 2026-09-28: whole,
+    and pinned.** It was filed as a designer's either/or, and the user's own report settled
+    it the other way round: *"the model identification has a long list which goes so down
+    user can't even see the image when they scroll down."* The photo is how a person tells
+    which box is which row, so the question that mattered was never its size but whether it
+    is on screen at the END of the list — and it was not, at any width: the page grew with
+    the list and the photo scrolled away with it.
+
+    So the photo column is pinned (`.scan-photo-pane`, `position: sticky`) at every width.
+    Beside the list it is capped at the window; stacked at 720px and under it is a strip over
+    the list, seen whole at about half the screen, and the list scrolls under it. Four things
+    came with it, each found by `scripts/scan-pin-probe.mjs` or by the review of it rather than
+    reasoned:
+
+    · **A finger on the photo scrolls unless you are drawing.** The frame was
+      `touch-action: none` in every mode, and no box on it moves, so a swipe on half the
+      screen moved nothing. It is `none` only while *Add a piece by hand* is on.
+    · **The photo's cap is the window less the rows round it, as MEASURED.** A pinned column
+      has to fit the window, and a fixed allowance for the wall buttons and the tool row is
+      wrong in both directions: with four walls on a phone the buttons wrap to two rows, and
+      *Add a piece by hand* grows the tool row by two more (the picker, *Place with the
+      keyboard*, a hint). Each time the photo's padded box turned into a small scroll area of
+      its own — 25px at 844×390 under a 280px floor, then 36px at 360×640 and 31px at 844×390
+      while adding — which took every swipe that started on the photo and hid its bottom
+      edge. The page measures those rows and publishes them (`--scan-photo-room`); the floor
+      under the cap is 120px. The probe's first version passed the 25px case, because it
+      measured the photo against the window and not against every box that clips it, and it
+      had two walls, so the wrapping never happened.
+    · **Keyboard focus in the list stops below the strip, not under it.** Walking back up
+      the list with Shift+Tab, 17 of 40 stops at 360×640 and 13 of 40 at 390×844 were focused
+      out of sight under the photo. The first fix, `scroll-padding-top` on the page, also
+      applied to the strip's OWN controls, so focusing *Add this box* scrolled the page 150 to
+      240px away from the photo it belongs to. It is `scroll-margin-top` on the list's boxes
+      alone now, from the strip's measured height (`--scan-pin-h`).
+    · **The strip is sized in `svh`, not `dvh`,** so it does not resize while the phone's
+      address bar slides away mid-scroll. That one is from the specification; headless
+      Chromium has no address bar to measure it against.
+
+    Measured in Chromium from 360×640 to 1920×900, with four walls of 16 pieces. Before, at
+    the end of the list, the photo was 0% on screen at five of the six sizes then in the probe
+    and 2% at 1920×900; after, at those six and a 700px laptop window, 79 of 79 checks pass —
+    the photo whole at the end of the list, the last row not under it, no scroll area inside
+    the column, no stop focused out of sight, a swipe on the photo and on the list both
+    scrolling, and a drag while adding drawing a box without moving the page. On a 360×640
+    phone the photo is 240×180 (192×144 while adding); at 844×390, 253×190 (212×159). Not
+    looked at on a real phone — that is `docs/visual-check.md`'s to close.
+
+    **Committed:** the pull request that adds `scripts/scan-pin-probe.mjs`.
+
 
 ---
 

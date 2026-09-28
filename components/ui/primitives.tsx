@@ -110,6 +110,7 @@ export function EditableText({
   onReject,
   label,
   maxLength = 80,
+  className,
   style,
   inputStyle,
 }: {
@@ -121,6 +122,8 @@ export function EditableText({
   /** what is being renamed, e.g. "Room name" — used for the accessible name */
   label: string;
   maxLength?: number;
+  /** extra class(es) on the button, beside `.editable` */
+  className?: string;
   /** `.editable` already truncates (`max-width: 100%`, ellipsis, nowrap), so a
    *  caller inside a flex row needs nothing here but `minWidth: 0` — without it
    *  the item's automatic minimum is its content and it refuses to shrink at
@@ -160,7 +163,9 @@ export function EditableText({
   if (editing) {
     return (
       <input
-        className="field"
+        // `editable__input`: the rename stays the size of the name it replaces, so the
+        // touch rule for the form pages' fields leaves it out (globals.css).
+        className="field editable__input"
         aria-label={label}
         autoFocus
         maxLength={maxLength}
@@ -181,7 +186,7 @@ export function EditableText({
     <button
       ref={btnRef}
       type="button"
-      className="editable"
+      className={className ? `editable ${className}` : 'editable'}
       onClick={(e) => {
         e.stopPropagation();
         start();
@@ -257,7 +262,11 @@ export function StepHeader({
       )}
       <h1 style={{ fontSize: 'var(--fs-title)', lineHeight: 1.15, color: 'var(--ink)' }}>{title}</h1>
       {subtitle && (
-        <div className="t-body" style={{ lineHeight: 1.45 }}>{subtitle}</div>
+        // A <p>, so the prose measure applies (`p, li` in globals.css): as a <div> it
+        // ran one 952px line at 1920. Nothing inline here, which would override it.
+        <p className="t-body" style={{ lineHeight: 1.45 }}>
+          {subtitle}
+        </p>
       )}
     </div>
   );
@@ -480,6 +489,11 @@ export function Segmented<T extends string>({
           <button
             key={o.value}
             type="button"
+            // `.seg` carries the segment's minimums, so a finger gets 44px each way
+            // (globals.css). Inline, a `min-width` would beat that rule. A segment that
+            // shares out the row (`--fill`) keeps only the height: its width is the
+            // row's to give, and a floor on it would push the last one out of view.
+            className={fill ? 'seg seg--fill' : 'seg'}
             onClick={() => onChange(o.value)}
             aria-pressed={active}
             aria-label={o.label ?? o.value}
@@ -494,7 +508,6 @@ export function Segmented<T extends string>({
               // `flex` is meaningless in the grid, and setting it would read as
               // if one of the two modes were still doing the other's work.
               flex: wrap ? undefined : stretch ? '1 1 0' : undefined,
-              minWidth: 0,
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',

@@ -12,6 +12,21 @@
 // more stops per field would add twelve tab stops across the two editors that
 // use this, for a control keyboard users already have.
 //
+// Nor do they take focus when pressed: a press leaves it where it was. A pressed
+// button takes focus by default, and these took it out of the field onto a button
+// assistive tech is told is not there — after which Up and Down stepped nothing,
+// because the field they step no longer had focus. Putting focus IN the field
+// instead, as a native spinner does, was tried and dropped: the studio's shortcuts
+// stand down while an input has focus (`KeyboardShortcuts.tsx`), so undo stopped
+// undoing the step just taken; and on a touch laptop, where the arrows show, a tap
+// focusing a decimal field can bring up the on-screen keyboard.
+//
+// The one exception is a press made while ANOTHER field is being typed in. Left
+// there, focus stayed in the width while its depth's arrow was pressed, so the next
+// Up stepped the width. Both costs above are already paid by then — the shortcuts
+// are off and the keyboard is up — so the focus follows the press, as it would
+// into a native spinner.
+//
 // On a touch screen the chevrons step aside (`.num-field` in globals.css) and the
 // field grows to 44px. A 16 × 14 arrow is not a target a finger can hit, and on a
 // phone `inputMode="decimal"` brings up the number pad, which is how a phone asks
@@ -25,7 +40,7 @@
 // 27-step leap at release. The cap keeps a slow host feeling slow instead of
 // feeling broken.
 
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties, type PointerEvent } from 'react';
 import { steppedValue } from '@/lib/units';
 import { Icon } from './Icon';
 
@@ -42,6 +57,21 @@ const PAD_RIGHT = 20;
 export function fieldMinWidth(values: string[]): string {
   const chars = Math.max(1, ...values.map((v) => v.length));
   return `calc(${chars} * 0.6 * var(--fs-body) + ${PAD_LEFT + PAD_RIGHT + 2}px)`;
+}
+
+/** The two arrows. One list, so a change to how an arrow answers a press is made
+ *  once rather than to each arrow in turn. */
+const ARROWS = [
+  { dir: 1, title: 'Increase', icon: 'chevron-up' },
+  { dir: -1, title: 'Decrease', icon: 'chevron-down' },
+] as const;
+
+/** Focus a person is typing into: a text-entry input, a textarea, editable text. A
+ *  checkbox or a slider is focusable without bringing up a keyboard, so it is not. */
+const UNTYPED = new Set(['checkbox', 'radio', 'range', 'color', 'file', 'button', 'submit', 'reset', 'image']);
+function isTypedInto(el: Element | null): boolean {
+  if (el instanceof HTMLInputElement) return !UNTYPED.has(el.type);
+  return el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable);
 }
 
 const HOLD_DELAY = 380;
@@ -70,6 +100,7 @@ export function NumberField({
   style?: CSSProperties;
 }) {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   // The latest value, so a repeat that started three steps ago still counts from
   // where the field actually is.
   const latest = useRef(value);
@@ -116,6 +147,18 @@ export function NumberField({
     }, HOLD_EVERY);
   }
 
+  function press(e: PointerEvent<HTMLButtonElement>, dir: 1 | -1) {
+    // The primary button only. A right-click stepped the value and started the
+    // repeat, and the context menu it opens can take the pointerup that stops it.
+    if (e.button !== 0) return;
+    // Capture, so a pointer that drifts off a 16px target mid-hold keeps
+    // stepping and still ends on pointerup.
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const was = document.activeElement;
+    if (was !== inputRef.current && isTypedInto(was)) inputRef.current?.focus({ preventScroll: true });
+    hold(dir);
+  }
+
   const chevron: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -132,6 +175,7 @@ export function NumberField({
   return (
     <div className="num-field" style={{ position: 'relative', display: 'flex' }}>
       <input
+        ref={inputRef}
         type="number"
         inputMode="decimal"
         value={value}
@@ -158,36 +202,26 @@ export function NumberField({
         // touch-screen rule that hides the column.
         className="num-field__steps"
       >
-        <button
-          type="button"
-          tabIndex={-1}
-          title="Increase"
-          style={chevron}
-          onPointerDown={(e) => {
-            // Capture, so a pointer that drifts off a 16px target mid-hold keeps
-            // stepping and still ends on pointerup.
-            e.currentTarget.setPointerCapture(e.pointerId);
-            hold(1);
-          }}
-          onPointerUp={stop}
-          onPointerCancel={stop}
-        >
-          <Icon name="chevron-up" size={11} />
-        </button>
-        <button
-          type="button"
-          tabIndex={-1}
-          title="Decrease"
-          style={chevron}
-          onPointerDown={(e) => {
-            e.currentTarget.setPointerCapture(e.pointerId);
-            hold(-1);
-          }}
-          onPointerUp={stop}
-          onPointerCancel={stop}
-        >
-          <Icon name="chevron-down" size={11} />
-        </button>
+        {ARROWS.map(({ dir, title, icon }) => (
+          <button
+            key={dir}
+            type="button"
+            tabIndex={-1}
+            title={title}
+            style={chevron}
+            // The focus a press would move is the mouse-down's to move, not the
+            // pointer-down's, so that is the default to cancel.
+            onMouseDown={(e) => e.preventDefault()}
+            onPointerDown={(e) => press(e, dir)}
+            onPointerUp={stop}
+            onPointerCancel={stop}
+            // A capture that ends without a pointerup reaching the arrow ends the
+            // hold too, rather than leaving the repeat running on its own.
+            onLostPointerCapture={stop}
+          >
+            <Icon name={icon} size={11} />
+          </button>
+        ))}
       </div>
     </div>
   );

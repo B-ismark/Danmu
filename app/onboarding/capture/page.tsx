@@ -32,7 +32,7 @@ import {
 } from '@/lib/capture-slots';
 import { wallFrame } from '@/lib/photo-geometry';
 import { roomFootprint } from '@/lib/footprint';
-import { photoDropIntent } from '@/lib/photo-drop';
+import { looseDropIntent, photoDropIntent } from '@/lib/photo-drop';
 import { useDeviceTilt } from '@/lib/device-tilt';
 import { scoreQuality, flagHelp, flagLabel, flagTone, type Quality } from '@/lib/image-quality';
 import { useMediaQuery } from '@/lib/use-media-query';
@@ -125,6 +125,7 @@ export default function CapturePage() {
     roughSize: boolean;
   } | null>(null);
   const [draggingFrom, setDraggingFrom] = useState<CaptureSlot | null>(null);
+  const takesDrop = (e: React.DragEvent) => draggingFrom !== null || carriesFiles(e);
   /** single polite live region for everything that happens without a page change */
   const [announce, setAnnounce] = useState('');
   const dimUnit = useSettings((s) => s.dimUnit);
@@ -555,7 +556,7 @@ export default function CapturePage() {
           onDropFrom={(from) => movePhoto(from, slot)}
         />
       ))}
-      {!allCaptured && <AddTile compact={compact} first={!anyCaptured} onFiles={addFiles} />}
+      {!allCaptured && <AddTile compact={compact} first={!anyCaptured} cardDragging={draggingFrom !== null} onFiles={addFiles} />}
     </>
   );
 
@@ -588,6 +589,20 @@ export default function CapturePage() {
 
   return (
     <div
+      // A photo let go anywhere but on a card is added, rather than opened by the
+      // browser in place of the app (`looseDropIntent`). A card has already claimed
+      // its own drop by the time one bubbles here. Only a drag carrying a file, or a
+      // card's own, is the page's to take: text dragged into a field is the field's,
+      // and cancelling that drop is what stops the text landing.
+      onDragOver={(e) => {
+        if (takesDrop(e)) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (e.defaultPrevented || !takesDrop(e)) return;
+        e.preventDefault();
+        const intent = looseDropIntent({ draggingFrom, hasFiles: !!e.dataTransfer.files?.length });
+        if (intent.kind === 'add') void addFiles(e.dataTransfer.files);
+      }}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -649,25 +664,41 @@ export default function CapturePage() {
           style={{ flex: 1, gridTemplateColumns: source === 'camera' ? '1fr 360px' : '1fr', minHeight: 0 }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
-            {method}
-            {anyCaptured && (
-              <WallControls square={!!room && room.width === room.depth} onRotate={rotateAll} />
-            )}
+            {/* One centred column, the width of the layout picker's: the scroll box
+                stays window-wide so its scrollbar is at the edge, and what is in it
+                does not grow with the window. At 1920 the drop zone was 1,886px
+                wide, and the buttons that turn the walls sat at the window's far
+                edge, away from the sentence they answer. */}
             <div
               style={{
-                display: 'grid',
-                // auto-fill, not two fixed columns: the gallery now holds one to
-                // four cards plus an add tile, and a 2×2 grid left a lone photo
-                // occupying a quarter of the screen next to three empty cells.
-                gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
-                gap: 8,
-                padding: narrow ? 14 : 16,
-                alignContent: 'start',
+                display: 'flex',
+                flexDirection: 'column',
                 flex: 1,
-                minHeight: 0,
+                width: '100%',
+                maxWidth: 'var(--measure-page)',
+                marginInline: 'auto',
               }}
             >
-              {gallery(false)}
+              {method}
+              {anyCaptured && (
+                <WallControls square={!!room && room.width === room.depth} onRotate={rotateAll} />
+              )}
+              <div
+                style={{
+                  display: 'grid',
+                  // auto-fill, not two fixed columns: the gallery now holds one to
+                  // four cards plus an add tile, and a 2×2 grid left a lone photo
+                  // occupying a quarter of the screen next to three empty cells.
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
+                  gap: 8,
+                  padding: narrow ? 14 : 16,
+                  alignContent: 'start',
+                  flex: 1,
+                  minHeight: 0,
+                }}
+              >
+                {gallery(false)}
+              </div>
             </div>
           </div>
 
@@ -788,14 +819,24 @@ function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps:
   );
 }
 
+/** A drag with a file in it — from the desktop, or a gallery card, which carries its
+ *  own photo as one. `types`, not `files`: during a drag only the kinds are readable. */
+function carriesFiles(e: React.DragEvent): boolean {
+  return Array.from(e.dataTransfer?.types ?? []).includes('Files');
+}
+
 /** The way photos get in, now that there are no bays to drop them onto. */
 function AddTile({
   compact,
   first,
+  cardDragging,
   onFiles,
 }: {
   compact: boolean;
   first: boolean;
+  /** A gallery card is being dragged: letting it go here adds nothing, so the tile
+   *  does not light as though it would. */
+  cardDragging: boolean;
   onFiles: (list: FileList | File[] | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -804,15 +845,14 @@ function AddTile({
   return (
     <div
       onDragOver={(e) => {
+        if (cardDragging || !carriesFiles(e)) return;
         e.preventDefault();
         setOver(true);
       }}
       onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        if (e.dataTransfer.files?.length) onFiles(e.dataTransfer.files);
-      }}
+      // Lit here, taken by the page: a drop that is not on a card means the same
+      // thing wherever it lands, including what to do with a gallery tile.
+      onDrop={() => setOver(false)}
       style={{
         display: 'flex',
         borderRadius: 'var(--r-3)',
