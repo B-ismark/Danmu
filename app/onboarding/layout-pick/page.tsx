@@ -172,7 +172,7 @@ export default function LayoutPickPage() {
     // Refused, not repaired: a size outside the room range is named with its range
     // and the room is not made. Saving the two good sides of a half-typed room, or
     // clamping a typed 80 m to 50, would build a room nobody described.
-    const dims = entry ? enteredDims(text, dimUnit) : typicalOf(preset);
+    const dims = entry ? enteredDims(entry, dimUnit) : typicalOf(preset);
     if (!dims) {
       setTried(true);
       const inputs = sizeRef.current?.querySelectorAll('input');

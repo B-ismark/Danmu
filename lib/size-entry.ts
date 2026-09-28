@@ -17,7 +17,8 @@
 // The text is kept as text, in the unit it was typed in, because a field that
 // re-renders what you are typing mangles it (`4.` becomes `4`, and the dot you just
 // pressed disappears). Changing the unit mid-entry converts what can be converted and
-// leaves the rest exactly as typed.
+// leaves the rest exactly as typed. The converted text is for READING: it is rounded
+// to the new unit, so what is saved is the size behind it (`enteredDims`).
 //
 // Nothing here clamps. A size outside the room range is REFUSED with a sentence
 // naming the range (`rangeSentence`), which reads the same `boundsToUnit` call the
@@ -127,16 +128,21 @@ export function badAxes(text: SizeText, unit: DimUnit): RoomAxis[] {
   return ROOM_AXES.filter((a, i) => !roomAxisWithin(a, textToMetres(text[i], unit)));
 }
 
-/** The room to save, or null when any field is not a size it may have. All three or
- *  nothing: saving the two good sides of a half-typed room would build a room nobody
- *  described. */
-export function enteredDims(text: SizeText, unit: DimUnit): RoomDims | null {
-  if (badAxes(text, unit).length > 0) return null;
-  const out = {} as RoomDims;
-  ROOM_AXES.forEach((a, i) => {
-    out[a] = textToMetres(text[i], unit);
-  });
-  return out;
+/** The room to save, or null when any field shown in `unit` is not a size it may
+ *  have. All three or nothing: saving the two good sides of a half-typed room would
+ *  build a room nobody described.
+ *
+ *  The size saved is `good`, never the text, because the text is not always what was
+ *  typed. A field converted to another unit shows the size ROUNDED to that unit —
+ *  4237 mm reads `4.24` once the unit is metres — and so does every field the user
+ *  never touched, which shows the shape's size in their unit. Reading the text back
+ *  saved that rounding as the room: 4.24 m for a typed 4237 mm, 6.0015 m for a
+ *  6 m preset shown in feet. `good` is the typed size, and it is the whole answer
+ *  whenever every field is in range, since a keystroke that lands in range is written
+ *  to it exactly and a unit change carries it untouched. */
+export function enteredDims(e: SizeEntry, unit: DimUnit): RoomDims | null {
+  if (badAxes(entryInUnit(e, unit).text, unit).length > 0) return null;
+  return { ...e.good };
 }
 
 /** One field's arrow limits, in the field's own unit. */

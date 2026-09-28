@@ -21,6 +21,10 @@ const UNITS = ['mm', 'cm', 'm', 'in', 'ft'] as const;
 const RECT: RoomDims = { width: 6, depth: 4, height: 2.8 };
 const U: RoomDims = { width: 6, depth: 5, height: 2.8 };
 
+/** All three fields typed, one keystroke each, in `unit`. */
+const typed = (text: SizeText, unit: (typeof UNITS)[number]): SizeEntry =>
+  text.reduce<SizeEntry | null>((e, t, i) => typeInto(e, RECT, unit, i as 0 | 1 | 2, t), null)!;
+
 describe('reading a field', () => {
   it('reads a number in the unit it was typed in', () => {
     expect(textToMetres('4.2', 'm')).toBeCloseTo(4.2, 9);
@@ -58,15 +62,20 @@ describe('untouched, the fields follow the shape', () => {
 
   // Every size the picker offers must be a room the picker will save, in every unit,
   // or pressing the CTA without touching anything refuses its own suggestion.
+  // Typing into one box leaves the other two showing the shape's size, and those have
+  // to save as that size — not as its rounding in feet, which is 6.0015 m for 6.
   it('every offered preset is a savable room in every unit', () => {
     const offered = offeredSizes();
     expect(offered.length).toBe(5);
     for (const o of offered) {
+      const dims: RoomDims = { width: o.width, depth: o.depth, height: 2.8 };
       for (const unit of UNITS) {
-        const dims = enteredDims(sizeText({ width: o.width, depth: o.depth, height: 2.8 }, unit), unit);
-        expect(dims, `${o.id} in ${unit}`).not.toBeNull();
-        expect(dims!.width).toBeCloseTo(o.width, 2);
-        expect(dims!.depth).toBeCloseTo(o.depth, 2);
+        const shown = sizeText(dims, unit);
+        expect(badAxes(shown, unit), `${o.id} in ${unit}`).toEqual([]);
+        const e = typeInto(null, dims, unit, 2, shown[2]);
+        const saved = enteredDims(e, unit);
+        expect(saved, `${o.id} in ${unit}`).not.toBeNull();
+        expect([saved!.width, saved!.depth], `${o.id} in ${unit}`).toEqual([o.width, o.depth]);
       }
     }
   });
@@ -187,17 +196,32 @@ describe('changing the unit mid-entry', () => {
 
 describe('what gets saved', () => {
   it('all three or nothing', () => {
-    expect(enteredDims(['4.2', '3.6', '2.5'], 'm')).toEqual({ width: 4.2, depth: 3.6, height: 2.5 });
-    expect(enteredDims(['4.2', '', '2.5'], 'm')).toBeNull();
-    expect(enteredDims(['4.2', '3.6', '80'], 'm')).toBeNull();
-    expect(enteredDims(['4 m', '3.6', '2.5'], 'm')).toBeNull();
+    expect(enteredDims(typed(['4.2', '3.6', '2.5'], 'm'), 'm')).toEqual({ width: 4.2, depth: 3.6, height: 2.5 });
+    expect(enteredDims(typed(['4.2', '', '2.5'], 'm'), 'm')).toBeNull();
+    expect(enteredDims(typed(['4.2', '3.6', '80'], 'm'), 'm')).toBeNull();
+    expect(enteredDims(typed(['4 m', '3.6', '2.5'], 'm'), 'm')).toBeNull();
   });
 
   it('in the unit it was typed in', () => {
-    const d = enteredDims(['420', '360', '250'], 'cm')!;
+    const d = enteredDims(typed(['420', '360', '250'], 'cm'), 'cm')!;
     expect(d.width).toBeCloseTo(4.2, 9);
     expect(d.depth).toBeCloseTo(3.6, 9);
     expect(d.height).toBeCloseTo(2.5, 9);
+  });
+
+  // The fields show a converted size rounded to the unit now selected; the room is
+  // the size that was typed. Read back from the text, a typed 4237 mm saved as the
+  // 4.24 m it reads once the unit is metres.
+  it('the size typed, not the rounding a unit change shows', () => {
+    const e = typed(['4237', '3608', '2462'], 'mm');
+    expect(entryInUnit(e, 'm').text).toEqual(['4.24', '3.61', '2.46']);
+    expect(enteredDims(e, 'm')).toEqual({ width: 4.237, depth: 3.608, height: 2.462 });
+    // …and a keystroke in the new unit writes its own field and leaves the others' size.
+    const more = typeInto(e, RECT, 'ft', 0, '14');
+    expect(more.text.slice(1)).toEqual(['11.84', '8.08']);
+    const saved = enteredDims(more, 'ft')!;
+    expect(saved.width).toBeCloseTo(4.2672, 9);
+    expect([saved.depth, saved.height]).toEqual([3.608, 2.462]);
   });
 
   // Nothing clamps. 80 m is refused, not quietly saved as 50.
@@ -208,13 +232,13 @@ describe('what gets saved', () => {
       for (const bad of [r.min - 0.01, r.max + 0.01]) {
         const text = ['4', '4', '2.8'] as SizeText;
         text[i] = String(bad);
-        expect(enteredDims(text, 'm'), `${axis} ${bad}`).toBeNull();
+        expect(enteredDims(typed(text, 'm'), 'm'), `${axis} ${bad}`).toBeNull();
         expect(badAxes(text, 'm')).toEqual([axis]);
       }
       for (const ok of [r.min, r.max]) {
         const text = ['4', '4', '2.8'] as SizeText;
         text[i] = String(ok);
-        expect(enteredDims(text, 'm')?.[axis], `${axis} ${ok}`).toBe(ok);
+        expect(enteredDims(typed(text, 'm'), 'm')?.[axis], `${axis} ${ok}`).toBe(ok);
       }
     }
   });
