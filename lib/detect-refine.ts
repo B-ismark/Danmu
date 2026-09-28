@@ -324,14 +324,22 @@ export function sameThingKey(label: string): string {
  *  Exported for tests: this is pure logic that decides what the user gets from the
  *  one call that spends their quota. */
 export function dedupeDetections(items: Detection[], measured?: ReadonlySet<Detection>): Detection[] {
-  // A group is compared through the row that FOUNDED it, and hands back its survivor.
-  const founders: Detection[] = [];
+  // A group is compared through the row that FOUNDED it across photos, and through
+  // every row in it within one, and hands back its survivor.
+  const groups: Detection[][] = [];
   const out: Detection[] = [];
   for (const d of items) {
-    const at = founders.findIndex((o) => {
+    const at = groups.findIndex((g) => {
+      const o = g[0];
       if (o.category !== d.category) return false;
-      // Same photo — heavily overlapping boxes mean one object boxed twice.
-      if (o.slot === d.slot && boxIoU(o.box, d.box) >= SAME_BOX_IOU) return true;
+      // Same photo — heavily overlapping boxes mean one object boxed twice. Asked of
+      // every sighting in the group, not only its founder: a print founded from the
+      // north photo and joined from the east one is still boxed twice in the east
+      // photo, and asking the founder alone could not see it — two photos, and
+      // `wall art` is not `painting` — so the print came out twice. A box that
+      // overlaps a group's own box that heavily cannot reach anywhere new, which is
+      // why this one rule may ask the members and the one below may not.
+      if (g.some((m) => m.slot === d.slot && boxIoU(m.box, d.box) >= SAME_BOX_IOU)) return true;
       // Different photos — same name AND same place.
       if (sameThingKey(o.label) !== sameThingKey(d.label)) return false;
       if (!o.position || !d.position) return false;
@@ -339,21 +347,25 @@ export function dedupeDetections(items: Detection[], measured?: ReadonlySet<Dete
       return dist < mergeDistanceFor(d.category);
     });
     if (at < 0) {
-      founders.push(d);
+      groups.push([d]);
       out.push(d);
+      continue;
     }
+    groups[at].push(d);
     // Which sighting SURVIVES is the second half of the merge, and first-come was only
     // ever safe while every row with a position had been measured. A located row has a
     // position and no size of its own, so when it arrived first — the east photo before
     // the north one — it ate the measurement and the piece went into the room at its
     // catalogue size. The measured row takes its place, in its place in the list.
     //
-    // And ONLY its place: later rows are still compared against the founder. They used
-    // to be compared against the survivor, so a measurement arriving mid-group moved the
-    // group — to another photo, which lost the same-photo rule for the founder's own
-    // double box, and up to a tier's distance across the floor, where it swallowed a
-    // second bed the founder was never near. Choosing a survivor never changes a count.
-    else if (measured?.has(d) && !measured.has(out[at])) out[at] = d;
+    // And ONLY its place: later rows are still compared against the founder, and the
+    // members, never the survivor. They used to be compared against the survivor, so a
+    // measurement arriving mid-group moved the group — to another photo, which lost the
+    // same-photo rule for the founder's own double box, and up to a tier's distance
+    // across the floor, where it swallowed a second bed the founder was never near.
+    // The members are every row that joined, whichever survives, so choosing a
+    // survivor never changes a count.
+    if (measured?.has(d) && !measured.has(out[at])) out[at] = d;
   }
   return out;
 }

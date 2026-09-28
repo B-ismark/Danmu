@@ -389,11 +389,19 @@ describe('the known room', () => {
       name: 'light', label: 'ceiling light', category: 'lamp', shape: 'lamp-pendant',
       x: 1.5, z: -1.5, dimMM: [500, 500, 300], slots: ['n', 'e'],
     };
-    const refined = refineDetections(readTwice(light, 'pendant light'), CALS, ROOM);
+    // The east photo read only by the second model, under the second word, so no rule
+    // of the hard merge joins the two photos and it is this check's to take. Read
+    // twice in both, the east photo's own double box now joins the group its first
+    // box did, and the hard merge takes the lot — asserted below, since that is the
+    // fixture this test used to be.
+    const [nLabel, nSecond] = readTwice({ ...light, slots: ['n'] }, 'pendant light');
+    const [, eSecond] = readTwice({ ...light, slots: ['e'] }, 'pendant light');
+    const refined = refineDetections([nLabel, nSecond, eSecond], CALS, ROOM);
     // Every sighting measured, and measured up at the ceiling.
     expect(refined.length).toBeGreaterThan(1);
     for (const d of refined) expect(d.position?.y, d.label).toBeGreaterThan(ROOM.height - 0.5);
     expect(keptAtFirst(refined, refined.map(() => true), ROOM, CALS).size).toBe(1);
+    expect(refineDetections(readTwice(light, 'pendant light'), CALS, ROOM)).toHaveLength(1);
   });
 
   it('keeps TWO beds out of twin singles read twice in one photo', () => {
