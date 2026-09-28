@@ -13,6 +13,7 @@ import { EditableText, FlowBarLead, IconButton, StepHeader } from '@/components/
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { Select } from '@/components/ui/Select';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
+import { boxCss } from '@/lib/photo-tag';
 import { isTypingOrDialog } from '@/components/studio/KeyboardShortcuts';
 import { sampleBoxColor } from '@/lib/color-sample';
 import { localDetectorAvailable, detectLocalAcrossImages } from '@/lib/local-detect';
@@ -1087,10 +1088,9 @@ export default function DetectPage() {
                     aria-hidden="true"
                     style={{
                       position: 'absolute',
-                      left: `${linkedBox[0] * 100}%`,
-                      top: `${linkedBox[1] * 100}%`,
-                      width: `${linkedBox[2] * 100}%`,
-                      height: `${linkedBox[3] * 100}%`,
+                      // The same part of the box the editor draws: the raw box ran past
+                      // the photo and scrolled the review sideways on a row's hover.
+                      ...boxCss(linkedBox, 0),
                       outline: '2px solid var(--accent-text)',
                       outlineOffset: 2,
                       borderRadius: 'var(--r-1)',

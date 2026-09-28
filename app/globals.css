@@ -109,6 +109,11 @@
                            over the rows sliding under it, and is not a layer in
                            the app-wide stack below. Three panels had this as a
                            bare `zIndex: 1`. */
+  --z-photo-raised: 1;  /* inside the scan review's photo, which isolates its own
+                           stack (`PhotoEditor`): the tags over every box, so no
+                           box's press area lies over another piece's X, and the
+                           box being drawn over them. Like the rung above, it is
+                           local, not a layer in the app-wide stack. */
   --z-canvas-ui: 20;    /* panels floating over the 3D canvas */
   --z-canvas-hint: 30;  /* help affordances — must stay above the panels */
   --z-canvas-veil: 35;  /* the canvas's loading cover: over everything that floats

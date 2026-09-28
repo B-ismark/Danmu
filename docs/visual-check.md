@@ -1711,7 +1711,7 @@ delayed 1.8 s (the working toast at 600 ms, then the result), at 1440 and 390.
 - On a phone, the working toast covering the banner's close button (the toast's own
   top-right placement, which this did not change).
 
-### Only kept pieces go into the room — this branch
+### Only kept pieces go into the room — `fdd1f20` on `main` (PR #160)
 
 **Where to click.** Any preset → *"Photograph my real room first"* → photos → the detect
 screen. Untick a piece with its ✓ (it turns to +), then **Continue with N pieces**; then
@@ -1720,7 +1720,6 @@ untick everything and read the note and the button again.
 The review's tick used to be decoration: every row was built whatever it said, so two
 sightings of one bed made two beds. Now a row goes into the room only when it is kept.
 Rooms saved before this open exactly as they did (every row is marked kept on load).
-`tests/scene-build.test.ts` and `tests/storage.test.ts`: 6 of 6 mutants caught at `a33872f`.
 
 **What wrong looks like.**
 - A piece you left out standing in the studio, or a kept one missing.
@@ -1729,7 +1728,7 @@ Rooms saved before this open exactly as they did (every row is marked kept on lo
 - "Continue with an empty room" or the *Nothing kept yet* note wrapping badly at 360 px.
 - An old room (made before this) opening with pieces missing.
 
-### A bed seen in two photos starts unticked, and says whose it is — this branch, PROBED at 360–1920
+### A bed seen in two photos starts unticked, and says whose it is — `fdd1f20` on `main` (PR #160), PROBED at 360–1920
 
 **Where to click.** Any preset → *"Photograph my real room first"* → photograph the walls
 so the bed is in two of them (the foot wall and a side wall) → the detect screen. One bed
@@ -1741,8 +1740,7 @@ came back as two ticked beds. Now a row that shares a quarter of its floor with 
 of the same kind starts unticked and names the row it repeats — nothing is deleted.
 Probed by seeding the review list directly (a real scan cannot be driven headless): the
 caption wraps under the name at 360, the header reads *3 of 4 pieces kept*, no overflow
-at seven widths. `tests/repeat-sightings.test.ts`: 28 of 28 mutants caught at `bb1aef2`. The case it
-cannot reach — twin beds in a corner, where the hard merge deletes one before this runs —
+at seven widths. The case it cannot reach — twin beds in a corner, where the hard merge deletes one before this runs —
 is `docs/what-is-still-open.md` § 46.1.
 
 **What wrong looks like.**
@@ -1754,7 +1752,7 @@ is `docs/what-is-still-open.md` § 46.1.
   unless the word reads as an acronym (*the TV*), and a detector's own wording is the
   untested half.
 
-### The room's size on the shape picker, and the rough mark when it is skipped — this branch, SWEPT and PROBED
+### The room's size on the shape picker, and the rough mark when it is skipped — `fdd1f20` on `main` (PR #160), SWEPT and PROBED
 
 **Where to click.** New room → the shape picker. Under the outlines, **Room size · optional**
 holds Width, Depth and Ceiling at the selected shape's typical size; change shape and they
@@ -1782,11 +1780,51 @@ room. Then start **without typing**:
 - In the studio's glass rail the refused rim is the border alone, since the rail owns the
   box-shadow. Whether that reads as refused beside the other boxes is a person's call.
 
-**What was measured, and on what.** SwiftShader, desktop Chromium, `06476a8`: the size
-step and the note swept at seven widths in metres and feet; a browser probe walked
-skip → note → *These are right* → reload, skip → typed width → reload, typed on the picker,
-and skip → capture → scan, 18 of 18 on three runs. `tests/size-entry.test.ts` (21 of 21
-mutants caught at `5f197e6`) and `tests/rough-size.test.ts` (13 of 13 at `06476a8`).
+**What was measured, and on what.** SwiftShader, desktop Chromium, at `06476a8` on PR
+#160's branch (squashed into `fdd1f20`): the size step and the note swept at seven widths
+in metres and feet; a browser probe walked skip → note → *These are right* → reload,
+skip → typed width → reload, typed on the picker, and skip → capture → scan, 18 of 18 on
+three runs. A real phone, and a person reading the note, are the unlooked-at half.
+
+### A piece's tag stays on the photo — this branch (PR #161), PROBED at 360, 768 and 1280
+
+**Where to click.** The detect screen, with pieces near the photo's right edge and touching
+its top — a picture high on the wall, a pendant, a chair at the side of the frame — and, if
+a scan hands one back, a box that runs past the frame. Each box's tag (name, how sure, and
+the X) used to start at the box's left side whatever the box was, so on a phone a tag at the
+right ran up to 132 px past the photo and the whole review scrolled sideways, and one at the
+top sat above the photo, where the scroll box cut it off. Now the tag still starts at its
+box's left side and slides left only as far as the photo's edge; it sits just above its box,
+just below it where there is no room above, and inside its top only for a box as tall as the
+photo; and a name too long for the photo ellipsises before the X moves. A box that runs past
+the frame is drawn only to the photo's edge, and so is its list row's highlight. On the
+photo, Tab reaches one piece at a time: its keep, then its Remove. The X keeps its 24 px,
+and still removes its piece while **Add a piece by hand** is on.
+`scripts/photo-tag-probe.mjs` checks all of this at the three widths on seeded boxes,
+except the Tab order, which `tests/photo-editor.test.tsx` holds.
+
+**What wrong looks like.**
+- A tag, or its X, past any edge of the photo, or the review scrolling sideways at 360 px.
+- A tag that no longer reads as its box's: not touching the box's top or bottom border, or
+  slid so far along that it sits over a different piece.
+- A small box at the top (a pendant) that a tap at its centre does not keep or un-keep.
+- A name ellipsised when the photo had room for it, or a long name's X squeezed narrower
+  than the others.
+- With **Add a piece by hand** on, a drag that starts on a tag not drawing a box, or a tap
+  on a tag's X not removing its piece.
+- Hovering a list row whose box runs past the frame, and its highlight running past too.
+- **Known and not fixed here:** two tags on the same line can overlap, and the later one
+  covers the earlier one's X. The probe counts these and does not fail on them. The row's
+  own Remove in the list still works. Whether it happens often enough on real photos to need
+  tags that step aside is a person's call.
+
+**What was measured, and on what.** SwiftShader, desktop Chromium, seeded boxes (no detector
+ran): the probe's 147 checks across 360, 768 and 1280 px all pass, against 67 of 147 on
+`main` at `fdd1f20`. A copy with the tags not raised and the X off while drawing fails five,
+and one whose X may shrink fails two, so those checks can fail. `tests/photo-tag.test.ts`
+sweeps the placement rule over 43,200 box, photo and name cases, laid out from the CSS
+strings the photo is handed, and the outline over 28,800. A real phone, with a real scan's
+boxes, is the unlooked-at half.
 
 ---
 ## Look and light
