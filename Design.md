@@ -516,6 +516,44 @@ has a test:
 The screen's internal names (`confirmed`, `toggleConfirm`, `shouldAutoConfirm`)
 predate this and were left alone on purpose; what the user reads says **keep**.
 
+**A second sighting starts unticked, and says whose it is.** The merge in step 3
+only takes the pairs it is sure of — same word, centres inside a per-category
+distance tuned so four dining chairs survive as four — and one bed photographed from
+its foot and from its side fails both: the two estimates disagree by more than that
+distance, and the detector may call it "bed" once and "double bed" the next time.
+Every wall of a four-photo capture sees a big piece, so a bedroom came back with
+five beds, all ticked. `lib/repeat-sightings.ts` is the **soft** half of the same
+decision and deletes nothing. It asks what a person looking at the list asks —
+*could these two rows be standing in the same spot?* — and answers with the index of
+the row a sighting probably repeats. The review leaves that row unticked with the
+caption *Probably the bed from Wall 1 again*; ticking it back is one tap, which is
+the asymmetry the merge argues for: a real piece that never appears is worse than a
+duplicate, so the duplicate is paid for once on the list rather than in the studio.
+The rule is two facts about rooms, not about detectors:
+
+- **two pieces cannot share floor.** Two same-kind footprints that share a quarter
+  (`REPEAT_SHARE`) of the **smaller** one are one piece measured twice, however far
+  apart their centres came out. Floor pieces are compared as the circle they could
+  turn within, because a photo measures where a floor piece stands and never which
+  way it faces: the foot view and the side view of one bed come back a quarter-turn
+  apart and, as rectangles, share a sixth of their floor. A row the camera could not
+  place is compared at `startingSpot` — the spot the room will actually build it —
+  because a bed cut off by the bottom of the frame still becomes a bed;
+- **within one photo, boxes that do not meet are two things.** The detector drew a
+  gap between them, so twin beds against one wall stay twins whatever the
+  measurement says. Boxes that DO meet can still be one piece, because every photo is
+  read by more than one model and each draws its own box.
+
+Which sighting is THE piece is ranked — the user's own box, then a row that would be
+kept on its merits, then one the frame did not cut off, then the bigger box — and
+kept-first is the load-bearing rung: rank by framing alone and a bed whose best view
+was an unconfident one would end with every sighting unticked. The pass is greedy
+with no chaining, so a bed in four photos is one bed and three repeats. `keptAtFirst`
+is the one place the seeding decision is made, so the screen and the tests cannot
+disagree about it. The known miss is filed in `docs/what-is-still-open.md`: a piece
+at the far edge of a side photo decodes onto the wall's end, so twins seen from two
+walls can still come back as three.
+
 **`tests/detect-pipeline.test.ts`** regression-tests the whole chain over one
 synthetic room whose contents are known, from analytic ground truth — boxes are
 projected through a test-side camera model, so there is no renderer in CI. With a

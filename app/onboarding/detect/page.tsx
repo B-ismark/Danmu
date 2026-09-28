@@ -41,6 +41,7 @@ import {
   undo as undoStep,
 } from '@/lib/review-history';
 import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
+import { findRepeats, keptAtFirst } from '@/lib/repeat-sightings';
 import { cleanLabelOf, fromRecord, toRecord } from '@/lib/detection-record';
 import { adoptFreshScan } from '@/lib/rescan';
 import { toast } from '@/components/ui/StorageToast';
@@ -139,6 +140,11 @@ const KEY_MIN = 0.05;
 // about what the user photographed. The n/e/s/w ids stay; only labels are human.
 function slotLabel(slot: CaptureSlot): string {
   return CAPTURE_SLOTS.find((c) => c.id === slot)?.label ?? slot.toUpperCase();
+}
+
+/** A piece's name mid-sentence: "the bed", but "the TV". */
+function inSentence(label: string): string {
+  return /^.[A-Z]/.test(label) ? label : label.charAt(0).toLowerCase() + label.slice(1);
 }
 
 function categoryLabel(cat?: string): string {
@@ -452,13 +458,11 @@ export default function DetectPage() {
           for (const d of refined) if (d.uid) runUids.current.add(d.uid);
           // Which rows to tick before the user has looked at them. The whole policy
           // lives in lib/detect-confidence.ts, because it was three unrelated
-          // confidence scales being compared against one literal here.
+          // confidence scales being compared against one literal here — and a row
+          // that is probably another row seen again starts unticked, so one bed
+          // photographed from three walls is one bed (lib/repeat-sightings.ts).
           const judged = judgeLabels(refined, calMap, dims);
-          const marks = new Set<number>();
-          refined.forEach((d, i) => {
-            if (shouldAutoConfirm(d, judged[i].status)) marks.add(i);
-          });
-          setConfirmed(marks);
+          setConfirmed(keptAtFirst(refined, refined.map((d, i) => shouldAutoConfirm(d, judged[i].status)), dims));
           if (secondLookFailed) {
             setNotice({
               code: 'SECOND_LOOK_FAILED',
@@ -585,6 +589,20 @@ export default function DetectPage() {
   // verdict is about the current measurement, so persisting one would let a stale
   // accusation outlive the row it was about.
   const verdicts = useMemo(() => judgeLabels(detections, cals, roomDims), [detections, cals, roomDims]);
+
+  /** Which row each row probably repeats — the same piece seen from another wall,
+   *  or read twice from one photo. Ranked by the confidence policy rather than by
+   *  the current ticks, so a row's note does not move when the user ticks it: the
+   *  note is about the photographs, and a tick is not new evidence about them. */
+  const repeats = useMemo(
+    () =>
+      findRepeats(
+        detections,
+        detections.map((d, i) => shouldAutoConfirm(d, (verdicts[i] ?? { status: 'unmeasured' }).status)),
+        roomDims,
+      ),
+    [detections, verdicts, roomDims],
+  );
 
   /** A model offered because of what the user just TYPED, rather than because the
    *  measurement disagreed. Held on the page and not per row because only one rename
@@ -1178,6 +1196,7 @@ export default function DetectPage() {
                 d={d}
                 confirmed={confirmed.has(i)}
                 verdict={verdicts[i] ?? { status: 'unmeasured' }}
+                repeatOf={repeats[i] == null ? null : (detections[repeats[i]] ?? null)}
                 dimUnit={dimUnit}
                 onRepair={(cand) => applyRepair(i, cand)}
                 offer={offer?.index === i ? offer.candidates : EMPTY_OFFER}
@@ -1266,6 +1285,7 @@ function DetectionRow({
   d,
   confirmed,
   verdict,
+  repeatOf,
   dimUnit,
   highlighted,
   onThisPhoto,
@@ -1281,6 +1301,9 @@ function DetectionRow({
   d: Detection;
   confirmed: boolean;
   verdict: LabelVerdict;
+  /** The row this one is probably a second sighting of — see
+   *  lib/repeat-sightings.ts. Null for a piece in its own right. */
+  repeatOf: Detection | null;
   dimUnit: DimUnit;
   highlighted: boolean;
   onThisPhoto: boolean;
@@ -1375,6 +1398,21 @@ function DetectionRow({
               claim. */}
           {categoryLabel(d.category)} · {slotLabel(d.slot)} · {sourceLabel(sourceOf(d))}
         </div>
+        {/* Why this row started unticked, when that is the reason. Said rather than
+            acted on — it is still on the list, one tap from kept, because a real
+            piece that never appears is worse than a duplicate. Wraps rather than
+            clips: the sentence is as long as two piece names make it. */}
+        {repeatOf && (
+          <div
+            className="t-hint"
+            style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 3, lineHeight: 1.45 }}
+          >
+            <Icon name="copy" size={11} style={{ flex: '0 0 auto', marginTop: 2 }} />
+            <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
+              Probably the {inSentence(cleanLabelOf(repeatOf))} from {slotLabel(repeatOf.slot)} again
+            </span>
+          </div>
+        )}
         {/* The measurement disagreeing with the word. Said out loud rather than
             acted on: a silent re-label is the same mistake as a silent resize.
             Wraps rather than clips — the sentence is as long as the unit setting

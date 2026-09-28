@@ -2366,6 +2366,64 @@ function placementForSlot(
   }
 }
 
+/** The shape a detected row becomes in the room.
+ *
+ *  Label-based refinement takes priority over the AI's generic shape: the detector
+ *  often returns shape:'monitor' for a laptop or shape:'mirror' for an oval mirror.
+ *  When the label maps to a *specific* variant (anything other than the category's
+ *  generic default), trust the label; only fall back to the raw AI shape when the
+ *  label is generic. Exported for the same reason as `startingSpot` below. */
+export function sceneShapeFor(cat: Category, cleanLabel: string, aiShape: string | undefined): Shape {
+  const labelShape = refineShape(cat, cleanLabel);
+  const catDefaultShape = CATEGORY_DEFAULTS[cat]?.shape ?? 'box';
+  return labelShape !== catDefaultShape
+    ? labelShape
+    : aiShape && CATALOG_SHAPES.has(aiShape as Shape) && aiShape !== 'box'
+      ? (aiShape as Shape)
+      : labelShape;
+}
+
+/** Where a detected piece starts in the room, before gravity, wall affinity and the
+ *  footprint have had their say: its own estimate when that is inside the room,
+ *  else the spot on its photo's wall under the middle of its box.
+ *
+ *  Exported because the scan screen asks the same question about rows the camera
+ *  could not place (`lib/repeat-sightings.ts`): a bed cut off by the bottom of the
+ *  frame has no measured spot, and it still becomes a bed here, at this one. The list
+ *  judging it anywhere else would be judging a different room.
+ *
+ *  **Y is deliberately neither read nor tested.** `groundY` overwrites pos[1]
+ *  unconditionally after this, so passing `aiPos.y` through was dead. The height
+ *  check was worse than dead: it gated x and z — the axes we keep — on an axis
+ *  nothing consumes, so a detection whose Y was out of the room lost its perfectly
+ *  good floor position and fell back to slot-snapping. A fan the model put 3.2 m up
+ *  in a 2.8 m room is a fan with a wrong height, not a fan in the wrong corner. Y is
+ *  owned by the anchor, and only there. */
+export function startingSpot(
+  slot: CaptureSlot,
+  box: [number, number, number, number],
+  dimMM: [number, number, number],
+  mounted: boolean,
+  shape: Shape,
+  aiPos: { x: number; z: number } | undefined,
+  aiYaw: number | undefined,
+  room: { width: number; depth: number; height: number },
+): { pos: [number, number, number]; rot: number } {
+  if (
+    aiPos &&
+    typeof aiPos.x === 'number' &&
+    typeof aiPos.z === 'number' &&
+    Math.abs(aiPos.x) <= room.width / 2 + 0.2 &&
+    Math.abs(aiPos.z) <= room.depth / 2 + 0.2
+  ) {
+    return {
+      pos: [aiPos.x, 0, aiPos.z],
+      rot: typeof aiYaw === 'number' ? aiYaw : 0,
+    };
+  }
+  return placementForSlot(slot, box, dimMM, mounted, shape, room);
+}
+
 export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   const dets = room.detectedObjects ?? [];
 
@@ -2421,20 +2479,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // The starter branch above reads the RAW list, so a scan where nothing was kept
     // opens an empty room rather than furniture the user never had.
     if (!d.locked) continue;
-    const aiShape = (d as { shape?: string }).shape as Shape | undefined;
-    // Label-based refinement takes priority over the AI's generic shape: the
-    // detector often returns shape:'monitor' for a laptop or shape:'mirror' for
-    // an oval mirror. When the label maps to a *specific* variant (anything other
-    // than the category's generic default), trust the label; only fall back to
-    // the raw AI shape when the label is generic.
-    const labelShape = refineShape(cat, cleanLabel);
-    const catDefaultShape = CATEGORY_DEFAULTS[cat]?.shape ?? 'box';
-    const refined: Shape =
-      labelShape !== catDefaultShape
-        ? labelShape
-        : aiShape && CATALOG_SHAPES.has(aiShape) && aiShape !== 'box'
-          ? aiShape
-          : labelShape;
+    const refined = sceneShapeFor(cat, cleanLabel, (d as { shape?: string }).shape);
     // Keyed on the SHAPE, like every other answer to this question in the app.
     // `CATEGORY_DEFAULTS` used to carry its own `wallMounted` copy and this line read
     // it, which made the detected builder the one path that answered by CATEGORY while
@@ -2454,18 +2499,10 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       aiDim && aiDim.every((n) => Number.isFinite(n) && n > 0) ? (aiDim as [number, number, number]) : cfg.dim,
     );
     // Prefer the estimated position/yaw when present and in-room; otherwise snap
-    // to wall. "Estimated" is either measured (lib/detect-refine.ts wrote it from
-    // the calibrated camera) or the model's own guess on an uncalibrated slot;
-    // this cannot tell them apart and does not need to, because the only axes it
-    // reads are the two a photo can actually locate.
-    //
-    // **Y is deliberately neither read nor tested here.** `groundY` overwrites
-    // pos[1] unconditionally just below, so passing `aiPos.y` through was
-    // dead. The height check was worse than dead: it gated x and z — the axes we
-    // keep — on an axis nothing consumes, so a detection whose Y was out of the
-    // room lost its perfectly good floor position and fell back to slot-snapping.
-    // A fan the model put 3.2 m up in a 2.8 m room is a fan with a wrong height,
-    // not a fan in the wrong corner. Y is owned by the anchor, and only there.
+    // to wall (`startingSpot`). "Estimated" is either measured (lib/detect-refine.ts
+    // wrote it from the calibrated camera) or the model's own guess on an
+    // uncalibrated slot; this cannot tell them apart and does not need to, because
+    // the only axes it reads are the two a photo can actually locate.
     const aiPos = (d as { position?: { x: number; y: number; z: number } }).position;
     const aiYaw = (d as { yaw?: number }).yaw;
     /** Does the model's own yaw survive a wall snap?
@@ -2481,23 +2518,11 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
      *  `snapToWall` use the wall's own heading, which is what will really apply
      *  whenever the snapped `rot` wins. */
     const clampRot = keepsAiYaw ? aiYaw : undefined;
-    let placement: { pos: [number, number, number]; rot: number };
-    const w = rw / 2;
-    const dHalf = rd / 2;
-    if (
-      aiPos &&
-      typeof aiPos.x === 'number' &&
-      typeof aiPos.z === 'number' &&
-      Math.abs(aiPos.x) <= w + 0.2 &&
-      Math.abs(aiPos.z) <= dHalf + 0.2
-    ) {
-      placement = {
-        pos: [aiPos.x, 0, aiPos.z],
-        rot: typeof aiYaw === 'number' ? aiYaw : 0,
-      };
-    } else {
-      placement = placementForSlot(realSlot, d.box, dim, mounted, refined, { width: rw, depth: rd, height: rh });
-    }
+    const placement = startingSpot(realSlot, d.box, dim, mounted, refined, aiPos, aiYaw, {
+      width: rw,
+      depth: rd,
+      height: rh,
+    });
     // Gravity: floor-standing items must touch the floor. Wall-mounted / ceiling
     // items snap to their canonical mounting height for the current part height.
     placement.pos[1] = groundY(cat, refined, dim, rh);

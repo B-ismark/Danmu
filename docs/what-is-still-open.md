@@ -6724,6 +6724,8 @@ that is not a vanishing point. The device sensors are already out (the design re
 the rig requires). What is left is either a detector good enough that the VP pair stops
 flipping, or a different observable entirely. Neither is close, and the duplicate stays one
 tap to delete — which `lib/detect-refine.ts` already argues is the safe way to be wrong.
+*(Since 2026-09-28 it is not even that: a second sighting starts UNTICKED and says which
+row it repeats — see § 46.)*
 
 ### § 42.3 · Two gates that were missing — **FIXED 2026-09-09**
 
@@ -7224,3 +7226,52 @@ and would need one line changed (assert present on the route with the consumer, 
 elsewhere) once the header is split, which is a sharper invariant than "present
 somewhere".
 
+## § 46 · Repeat sightings — the soft merge, and the case it cannot reach
+
+The user's report, 2026-09-28: *"we end up having 5 beds in a room"*. The hard merge
+(`dedupeDetections`) takes only the pairs it is sure of, and one bed seen from its foot and
+from its side fails both of its tests — the centres disagree by more than a bed's merge
+distance, and the second model's word ("double bed") is not the first's. **BUILT** on
+`claude/amazing-davinci-m8zqys`: `lib/repeat-sightings.ts` flags each row that probably
+repeats another, and the review screen starts it unticked with *Probably the bed from Wall 1
+again*. Nothing is deleted. Design.md § *The detection pipeline* has the rule;
+`tests/repeat-sightings.test.ts` holds it, **28 of 28 mutants killed**
+(`scratchpad/mut-repeat.py` in the session that built it — not in the repo). Three of those
+28 survived the first round, and each was the fixture, not the code: a "touching" pair whose
+edges were `0.1 + 0.35` and `0.45`, which a float holds 5.6e-17 apart, so strict and
+non-strict contact read the same; a loading-state test that only ever asked about an
+UNplaced row; and a curtain exception nobody had given a ceiling shape, although
+`sceneShapeFor('curtain', 'curtain', 'lamp-pendant')` returns one.
+
+### § 46.1 · Twin beds in a corner come back as ONE — MEASURED, NOT FIXED, and it is not the soft merge
+
+Measured 2026-09-28 against the known room (7 × 6 m, 106° lens), two single beds 900 × 1900
+a hand's width apart against the north wall in the north-east quadrant, each photo read twice
+(`readTwice` in `tests/repeat-sightings.test.ts`), seen from `n` and `e`:
+
+| beds at x = | rows after `refineDetections` | kept at first | truth |
+|---|---|---|---|
+| 1.9 and 3.0 | 2 (both the first bed, from `n`) | 1 | 2 |
+| 1.7 and 2.8 | 4 (the first bed from `n`; one bed from `e`) | 1 | 2 |
+
+**The cause is upstream of both merges.** Every one of these boxes is cut off by the side of
+its frame, so `geoRefine` measures the sliver it can see (a 900 mm bed decoded **31 mm,
+305 mm, 539 mm** wide) and the placer's wall clamp puts the centre at `wall − depth/2` — so
+both beds decode within a few centimetres of **(2.50, −2.00)**, the corner spot, whatever
+their true x. Two same-kind pieces decoded onto one spot are, to any merge, one piece. In the
+first row the **hard** merge then deletes the second bed outright (it deletes; the soft pass
+only unticks), which predates this work. In the second, the hard merge leaves one `e`
+sighting — which really is the second bed — and the soft pass files it under the first,
+because it decodes onto the same floor. It is unticked, not gone: one tap brings it back.
+
+**What would fix it**, not built: a clipped box's width is a lower bound
+(`repeat-sightings.ts` already reads it that way for ranking), so a placer that knew the box
+ran out of frame could place the piece's VISIBLE edge rather than its centre and leave the
+far edge open. That is a change to `lib/photo-geometry.ts`'s contract under rule 2, and it
+wants its own measurement, not a line in the duplicate fix.
+
+**An earlier note of this, in the session that built § 46, was wrong in the way the fixture
+was wrong:** it recorded "twins seen from n+e keep 3", from a probe that put one bed at
+x = −0.6 — behind the east camera, which cannot have seen it, so `inPicture` clamped a
+projection from behind the lens to the whole frame. A fixture must be a photograph that could
+have been taken.

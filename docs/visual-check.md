@@ -1731,6 +1731,31 @@ Rooms saved before this open exactly as they did (every row is marked kept on lo
 - "Continue with an empty room" or the *Nothing kept yet* note wrapping badly at 360 px.
 - An old room (made before this) opening with pieces missing.
 
+### A bed seen in two photos starts unticked, and says whose it is — this branch, PROBED at 360–1920
+
+**Where to click.** Any preset → *"Photograph my real room first"* → photograph the walls
+so the bed is in two of them (the foot wall and a side wall) → the detect screen. One bed
+row is ticked; the other starts at + and reads *"Probably the bed from Wall 1 again"*
+under its name. Tick it back and **Continue with N pieces** counts it.
+
+The hard merge only folds pairs it is sure of, so a bed seen from its foot and its side
+came back as two ticked beds. Now a row that shares a quarter of its floor with a kept row
+of the same kind starts unticked and names the row it repeats — nothing is deleted.
+Probed by seeding the review list directly (a real scan cannot be driven headless): the
+caption wraps under the name at 360, the header reads *3 of 4 pieces kept*, no overflow
+at seven widths. `tests/repeat-sightings.test.ts`: 28 of 28 mutants caught. The case it
+cannot reach — twin beds in a corner, where the hard merge deletes one before this runs —
+is `docs/what-is-still-open.md` § 46.1.
+
+**What wrong looks like.**
+- Two ticked beds where the room has one, or a real second chair starting unticked.
+- The caption naming a wall the photo was not taken of, or a row that does not exist.
+- The caption clipped, ellipsised or running under the + at 360 px, or pushing the row
+  taller than its photo.
+- *"Probably the the bed…"*, or a capital mid-sentence — the first letter is lower-cased
+  unless the word reads as an acronym (*the TV*), and a detector's own wording is the
+  untested half.
+
 ---
 ## Look and light
 
