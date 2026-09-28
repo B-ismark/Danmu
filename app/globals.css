@@ -1620,10 +1620,8 @@ textarea.field { border-radius: var(--r-2); }
      mouse; a minimum wins over it, so a finger gets 44px without every caller
      having to know it is on a phone. */
   .select-trigger, .select-option { min-height: 44px; }
-  /* The shape picker's "Use a typical size" — a small ghost button for a mouse,
-     a thumb-sized one for a finger. */
-  .size-entry .ds-btn--sm { min-height: 44px; }
-  /* And the studio's "These are right", for the same reason. */
+  /* The studio's "These are right": a small button for a mouse, a thumb-sized one
+     for a finger. */
   .rough-note .ds-btn--sm { min-height: 44px; }
   /* The pages that are read and filled in (`ui/DocShell`): the workspace, settings
      and the layout picker. Their buttons and fields are sized for a mouse inline;
