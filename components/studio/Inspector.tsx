@@ -308,7 +308,7 @@ export function Inspector() {
           {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>From photo</Pill>}
         </div>
 
-        <div className="t-hint" style={{ marginTop: 2, paddingLeft: 4, textTransform: 'capitalize' }}>
+        <div className="t-hint sentence-case" style={{ marginTop: 2, paddingLeft: 4 }}>
           {/* shape ids are hyphenated internally ("chair-armchair") — say it in words */}
           {part.category} · {part.shape.replace(/-/g, ' ')}
         </div>

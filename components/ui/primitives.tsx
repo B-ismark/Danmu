@@ -110,6 +110,7 @@ export function EditableText({
   onReject,
   label,
   maxLength = 80,
+  className,
   style,
   inputStyle,
 }: {
@@ -121,6 +122,8 @@ export function EditableText({
   /** what is being renamed, e.g. "Room name" — used for the accessible name */
   label: string;
   maxLength?: number;
+  /** extra class(es) on the button, beside `.editable` */
+  className?: string;
   /** `.editable` already truncates (`max-width: 100%`, ellipsis, nowrap), so a
    *  caller inside a flex row needs nothing here but `minWidth: 0` — without it
    *  the item's automatic minimum is its content and it refuses to shrink at
@@ -181,7 +184,7 @@ export function EditableText({
     <button
       ref={btnRef}
       type="button"
-      className="editable"
+      className={className ? `editable ${className}` : 'editable'}
       onClick={(e) => {
         e.stopPropagation();
         start();

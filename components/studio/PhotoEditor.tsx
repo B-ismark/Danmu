@@ -275,8 +275,8 @@ function ItemTag({
       >
         {locked && <Icon name="check" size={9} color="var(--on-accent)" />}
         <span
+          className="sentence-case"
           style={{
-            textTransform: 'capitalize',
             minWidth: 0,
             overflow: 'hidden',
             textOverflow: 'ellipsis',

@@ -1421,7 +1421,8 @@ function DetectionRow({
           value={label}
           onCommit={onRename}
           label="Piece name"
-          style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)', textTransform: 'capitalize', display: 'block' }}
+          className="sentence-case"
+          style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)', display: 'block' }}
           inputStyle={{ height: 28, fontSize: 'var(--fs-small)' }}
         />
         {/* Confidence percentages and slot codes were telemetry. What helps is

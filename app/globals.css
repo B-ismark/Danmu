@@ -1001,6 +1001,11 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    on itself, which stays inline where the element is a flex item — on anything
    else it would change nothing, and on a grid item it would change too much. */
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A name as a sentence: its first letter up, the rest as written. Not `capitalize`,
+   which ups every word and turned a finder's "lamp by the window" into "Lamp By The
+   Window". `::first-letter` only reaches a block, inline-block or flex item, never a
+   plain inline span, so put it on the box that holds the words. */
+.sentence-case::first-letter { text-transform: uppercase; }
 
 .field {
   width: 100%; height: 34px; padding: 0 12px;
@@ -1124,12 +1129,6 @@ textarea.field { border-radius: var(--r-2); }
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .editable:hover { background: var(--paper-2); }
-
-.tag {
-  font-size: var(--fs-micro); font-weight: 600; color: var(--ink-3);
-  text-transform: capitalize; background: var(--paper-2);
-  border-radius: var(--r-full); padding: 2px 8px; white-space: nowrap;
-}
 
 /* Both hold controls and float over other content, so both need a boundary that
    is actually perceivable against whatever they land on. */

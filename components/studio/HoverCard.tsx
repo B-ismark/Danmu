@@ -82,7 +82,7 @@ export function HoverCard() {
           justifyContent: 'space-between',
         }}
       >
-        <span className="truncate" style={{ fontSize: 'var(--fs-body)', fontWeight: 600, textTransform: 'capitalize' }}>
+        <span className="truncate sentence-case" style={{ fontSize: 'var(--fs-body)', fontWeight: 600 }}>
           {part.name || part.category}
         </span>
         {/* Kept even though the "From" row below usually says the same thing more
