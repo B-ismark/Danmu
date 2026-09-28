@@ -21,10 +21,14 @@
 // search found something, never what the panel says about it. Driving a real refusal
 // would work for the `u` and is a two-minute solve per press for a string comparison.
 //
-// What this does NOT prove: no layout, no overflow, no contrast, no pixels, and nothing
-// about the toast host — `toast` is spied at the module boundary. Mounting under jsdom
-// settles wiring and nothing else.
+// Since Shuffle became the ideas gallery, the refusal is the gallery's empty state:
+// three searches in a row that found nothing (`DRY_SEARCHES`), then the pair of
+// sentences in the panel instead of a toast.
+//
+// What this does NOT prove: no layout, no overflow, no contrast, no pixels. Mounting
+// under jsdom settles wiring and nothing else.
 
+import 'fake-indexeddb/auto';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
@@ -33,24 +37,25 @@ import { analyzeRoom } from '@/lib/clearance';
 import { shuffleBlockers } from '@/lib/layout-shuffle';
 import { useScene } from '@/lib/scene-store';
 import { useStudio, useSettings } from '@/lib/store';
-import type { ToastSpec } from '@/components/ui/StorageToast';
+import { DRY_SEARCHES } from '@/lib/layout-ideas';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('shuffle-room'));
 
-const toasts: ToastSpec[] = [];
-vi.mock('@/components/ui/StorageToast', async () => {
-  const actual = await vi.importActual<typeof import('@/components/ui/StorageToast')>(
-    '@/components/ui/StorageToast',
-  );
-  return { ...actual, toast: (spec: ToastSpec) => toasts.push(spec) };
-});
+let searches = 0;
 
 vi.mock('@/lib/layout-shuffle', async () => {
   const actual = await vi.importActual<typeof import('@/lib/layout-shuffle')>('@/lib/layout-shuffle');
-  return { ...actual, shuffleRoom: () => null };
+  return {
+    ...actual,
+    shuffleRoom: () => {
+      searches += 1;
+      return null;
+    },
+  };
 });
 
 const { RoomTools } = await import('@/components/studio/RoomTools');
+const { useIdeas } = await import('@/components/studio/IdeasPanel');
 
 const HEIGHT = 2.5;
 
@@ -72,7 +77,8 @@ function mount(id: 'u' | 'rect', w: number, d: number) {
 const realRaf = globalThis.requestAnimationFrame;
 
 beforeEach(() => {
-  toasts.length = 0;
+  searches = 0;
+  useIdeas.setState({ session: null });
   globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
     cb(0);
     return 0;
@@ -84,14 +90,16 @@ afterEach(() => {
   cleanup();
 });
 
-// Async since the arranging engine moved to a worker (`lib/layout-offload.ts`):
-// the answer arrives on a later microtask, so the press is awaited inside `act`.
-async function pressShuffle() {
+// Open the gallery and let it search until it gives up. Each search answers on a later
+// microtask (the arranging engine is `lib/layout-offload.ts`), so the refusal is
+// awaited rather than read.
+async function openIdeasUntilDry(title: string) {
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /^Shuffle$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Ideas$/ }));
   });
-  expect(toasts.map((t) => t.title), 'exactly one toast per press').toHaveLength(1);
-  return toasts[0];
+  const heading = await screen.findByText(title);
+  expect(searches, 'the gallery gives up after DRY_SEARCHES empty searches, not before').toBe(DRY_SEARCHES);
+  return heading.parentElement!.textContent ?? '';
 }
 
 describe('the shuffle refusal says which of the two "no" it is', () => {
@@ -108,31 +116,36 @@ describe('the shuffle refusal says which of the two "no" it is', () => {
       'this fixture is supposed to start with a hard finding — see § 4c',
     ).toBeGreaterThan(0);
 
-    const said = await pressShuffle();
-    expect(said.title).toBe('Shuffle cannot arrange around this');
+    const said = await openIdeasUntilDry('Ideas cannot arrange around this');
     // The title VERBATIM, not lowercased. Half of these are sentences rather than
     // noun phrases — `access` reads "you can't walk to everything" — so the sentence
     // quotes the report instead of splicing it, and quoting keeps the casing.
-    expect(said.message).toContain(`“${blockers[0].title}”`);
-    expect(said.message).toContain('Try Fix first');
+    expect(said).toContain(`“${blockers[0].title}”`);
+    expect(said).toContain('Try Fix first');
+    expect(screen.queryByRole('button', { name: 'Look again' }), 'looking again cannot work here').toBeNull();
     // The negative half, and it carries the row: the shipped sentence contains this,
     // so a call site that stopped asking the room passes every positive assertion.
     expect(
-      said.message,
-      'a blocked room was told to press again, which is advice that cannot work there',
-    ).not.toContain('Press Shuffle again');
+      said,
+      'a blocked room was told to look again, which is advice that cannot work there',
+    ).not.toContain('Look again');
   });
 
-  it('a room with nothing wrong keeps the "press again" refusal, which is true there', async () => {
+  it('a room with nothing wrong keeps the "look again" refusal, which is true there', async () => {
     const { parts, footprint } = mount('rect', 6, 4);
     expect(
       shuffleBlockers(analyzeRoom(parts, { footprint, height: HEIGHT }).issues),
       'this fixture is supposed to start clean, or it is a second copy of the case above',
     ).toEqual([]);
 
-    const said = await pressShuffle();
-    expect(said.title).toBe('No new arrangement this time');
-    expect(said.message).toContain('Press Shuffle again');
-    expect(said.message).not.toContain('Try Fix first');
+    const said = await openIdeasUntilDry('No ideas this time');
+    expect(said).toContain('Look again for a different try');
+    expect(said).not.toContain('Try Fix first');
+    // And the advice is a button that works: it asks again.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Look again' }));
+    });
+    await screen.findByText('No ideas this time');
+    expect(searches).toBe(2 * DRY_SEARCHES);
   });
 });

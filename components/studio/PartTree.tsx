@@ -877,7 +877,7 @@ function PartRow({
             solver only: it still drags, turns, resizes and deletes by hand. */}
         <IconButton
           icon={isPinned ? 'lock' : 'unlock'}
-          label={isPinned ? `Let Fix/Shuffle move ${name}` : `Keep ${name} where it is`}
+          label={isPinned ? `Let Fix and Ideas move ${name}` : `Keep ${name} where it is`}
           title={isPinned ? 'Kept in place when the room is rearranged' : 'Keep where it is when the room is rearranged'}
           active={isPinned}
           onClick={(e) => {

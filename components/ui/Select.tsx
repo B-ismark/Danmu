@@ -72,8 +72,12 @@ export function Select<T extends string>({
   const [box, setBox] = useState<CSSProperties | null>(null);
   const typed = useRef({ q: '', at: 0 });
 
-  const index = Math.max(0, options.findIndex((o) => o.value === value));
-  const selected = options[index];
+  // A value that is not one of the options shows the placeholder, and it used to
+  // show the FIRST option instead: the ideas gallery's "Keep a piece…" read "Sofa",
+  // which says the sofa is kept. `index` stays 0 for the list's own starting point.
+  const found = options.findIndex((o) => o.value === value);
+  const index = Math.max(0, found);
+  const selected = found >= 0 ? options[found] : undefined;
 
   function place() {
     const r = btn.current?.getBoundingClientRect();
@@ -144,6 +148,10 @@ export function Select<T extends string>({
     t.q = now - t.at > 1000 ? key : t.q + key;
     t.at = now;
     const q = t.q.toLowerCase();
+    if (!open && found < 0) {
+      setOpen(true);
+      return;
+    }
     const from = open ? active : index;
     const cycle = t.q.length > 1 ? 0 : 1;
     for (let n = cycle; n < options.length + cycle; n++) {
@@ -160,6 +168,9 @@ export function Select<T extends string>({
     const step = (d: number) => {
       e.preventDefault();
       if (open) setActive((a) => Math.min(options.length - 1, Math.max(0, a + d)));
+      // Nothing chosen yet: an arrow opens the list rather than choosing for the
+      // person, since a closed trigger has nothing to step from.
+      else if (found < 0) setOpen(true);
       else {
         const next = Math.min(options.length - 1, Math.max(0, index + d));
         if (next !== index) onChange(options[next].value);

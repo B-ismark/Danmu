@@ -7,8 +7,8 @@ import { CATEGORIES, isWallMountedPart, type Category, type Shape } from '../lib
 import { CATALOG_SHAPES_ORDERED } from '../lib/scene-spec';
 
 /** Three surfaces draw a plan of one room — the 2D Plan tab (`PlanView`), the exported
- *  PNG (`plan-export`) and the Room panel's layout thumbnails (`MiniPlan` inside
- *  `RoomTools`). They were answering "which pieces are drawn as footprints" three
+ *  PNG (`plan-export`) and the layout and idea thumbnails (`MiniPlan`, which lived
+ *  inside `RoomTools` until the ideas gallery needed it too). They were answering "which pieces are drawn as footprints" three
  *  different ways: `PlanView` drew every piece, `MiniPlan` filtered on the stored
  *  `wallMounted` flag, and `plan-export` filtered on the anchor. So a 1000 mm ceiling fan
  *  was a numbered rectangle in the export and absent from the thumbnail of the same room.
@@ -32,7 +32,7 @@ const read = (rel: string) => stripCommentsAndStrings(readFileSync(join(process.
 
 const PLAN_SURFACES = [
   'lib/plan-export.ts',
-  'components/studio/RoomTools.tsx',
+  'components/studio/MiniPlan.tsx',
   'components/studio/PlanView.tsx',
 ];
 
@@ -55,7 +55,10 @@ describe('every plan surface answers "is this drawn as a footprint" the same way
     // the failure mode it is guarding against in the first place.
     for (const rel of PLAN_SURFACES) {
       const src = read(rel);
-      expect(src.length, `${rel} must exist and have content`).toBeGreaterThan(2000);
+      // 1000, not the 2000 this started at: `MiniPlan` is one small component now,
+      // 1900 characters of code once comments and strings are stripped, and the
+      // floor is here to catch a file that moved or emptied, not to rank them.
+      expect(src.length, `${rel} must exist and have content`).toBeGreaterThan(1000);
       expect(src, `${rel} must actually draw a plan`).toMatch(/pos\[0\]|pos\[2\]/);
     }
   });

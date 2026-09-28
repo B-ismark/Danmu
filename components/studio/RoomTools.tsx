@@ -5,8 +5,8 @@
 // leaving it on the canvas meant the health of the room was chrome you could bury,
 // and it cost a corner that also had to hold the camera, the lighting and the grid.
 //
-// A health chip and Fix / Shuffle, plus one "Room" button whose panel carries four
-// readings as tabs:
+// A health chip and Fix / Ideas, plus one "Room" button whose panel carries four
+// readings as tabs (Ideas opens its own gallery beside the rail, `IdeasPanel.tsx`):
 //   · Check — deterministic ergonomics review (door swings, walkways, storage
 //     clearance, bed access, TV distance, crowding). Click a finding to select the
 //     pieces involved and fly to them, or offer it a fix where the solver can act.
@@ -69,34 +69,28 @@ import {
   impossibleClause,
   isWorthOffering,
   lockedForSolve,
-  movableFor,
   type MoveReason,
   type SolveResult,
   withRiders,
 } from '@/lib/layout-solve';
-import {
-  HISTORY_DEPTH,
-  lockedForShuffle,
-  shuffleBlockers,
-  shuffleRefusal,
-  type ShuffleOffer,
-  type ShuffleRoom,
-} from '@/lib/layout-shuffle';
 import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
-import { shuffleOffThread, solveOffThread } from '@/lib/layout-offload';
+import { solveOffThread } from '@/lib/layout-offload';
 import { sameStamp, stampOf, type SolveStamp } from '@/lib/solve-stamp';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
-import { footprintBounds, type Footprint } from '@/lib/footprint';
+import type { Footprint } from '@/lib/footprint';
 import { formatDim, formatLength, fromMM, stepFor, toMM } from '@/lib/units';
 import { checkFit, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
 import { clampDims } from '@/lib/dimension-ranges';
-import { groundY, ridesWall } from '@/lib/physics';
+import { groundY } from '@/lib/physics';
 import { normalizeStoredParts, PART_LIBRARY } from '@/lib/scene-spec';
 import { Select } from '@/components/ui/Select';
 import { NumberField } from '@/components/ui/NumberField';
 import { v4 as uuid } from 'uuid';
 import { savedLabel } from '@/lib/dates';
 import { Icon } from '@/components/ui/Icon';
+import { MiniPlan } from './MiniPlan';
+import { IdeasPanel } from './IdeasPanel';
+import { useBesideRail } from './useBesideRail';
 import { IconButton, Pill, Segmented, Spinner } from '@/components/ui/primitives';
 import { useBusyAction } from '@/components/ui/useBusyAction';
 import { Modal } from '@/components/ui/Modal';
@@ -135,7 +129,7 @@ type RoomTab = 'check' | 'fit' | 'list' | 'layouts';
  *  module-global default, where they outlived the room and were read by nobody.
  *  A prop cannot be wired to the wrong scope; a context can, and did. */
 type AppPlacement = { pos: [number, number, number]; rot: number };
-type AppPlacedRef = { current: Map<string, AppPlacement> };
+export type AppPlacedRef = { current: Map<string, AppPlacement> };
 
 /** THE map. One, at module scope, still threaded as an argument.
  *
@@ -173,7 +167,7 @@ function stillTheApps(
 }
 
 /** Widest the report panel gets. Four tab labels and a findings list want this
- *  much; a narrow window gets less, and `place()` below is what decides how much,
+ *  much; a narrow window gets less, and `useBesideRail` is what decides how much,
  *  because it also has to know the width to keep the panel on screen. */
 const PANEL_W = 324;
 
@@ -269,40 +263,18 @@ export function RoomTools() {
   // that were already mutually exclusive — i.e. a tab strip with the tabs spread
   // along the bottom of the canvas. Saying so costs two buttons of width, makes the
   // later readings discoverable from the first, and left room for a fourth.
-  const [open, setOpen] = useState(false);
+  // The room panel and the ideas gallery open in the same place beside the rail,
+  // so at most one of them is open.
+  const [panel, setPanel] = useState<'room' | 'ideas' | null>(null);
+  const open = panel === 'room';
   const [tab, setTab] = useState<RoomTab>('check');
   const anchorRef = useRef<HTMLDivElement>(null);
   // Who moved what — see `APP_PLACED`, which is where it lives and why.
   const appPlaced = APP_PLACED;
-  const [panelPos, setPanelPos] = useState({ left: 0, top: 0, width: PANEL_W });
-
-  // Measured on open and kept true through resize and scroll. Placed to the RIGHT
-  // of the rail rather than over it, so the room the panel is describing — and
-  // that clicking a finding flies to — stays visible.
-  useEffect(() => {
-    if (!open) return;
-    function place() {
-      const r = anchorRef.current?.getBoundingClientRect();
-      if (!r) return;
-      // The width is measured, not declared, because `left` is computed from it:
-      // a CSS `min()` in the style and a constant here are two answers to one
-      // question, and the constant is the one that would be wrong. At the gate's
-      // 400px floor a flat 324 still fitted; below it — the gate is dismissible,
-      // and browser zoom reaches there too — the panel hung off the left edge,
-      // because only the right edge was ever clamped.
-      const width = Math.min(PANEL_W, window.innerWidth - 24);
-      const left = Math.max(12, Math.min(r.right + 10, window.innerWidth - width - 12));
-      const top = Math.max(12, Math.min(r.top, window.innerHeight - 200));
-      setPanelPos({ left, top, width });
-    }
-    place();
-    window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
-    return () => {
-      window.removeEventListener('resize', place);
-      window.removeEventListener('scroll', place, true);
-    };
-  }, [open]);
+  // Placed to the RIGHT of the rail rather than over it, so the room the panel is
+  // describing — and that clicking a finding flies to — stays visible.
+  const panelPos = useBesideRail(anchorRef, open, { width: PANEL_W });
+  const closeIdeas = useCallback(() => setPanel(null), []);
 
   const room = useScene((s) => s.room);
   const draggingId = useStudio((s) => s.draggingId);
@@ -328,7 +300,7 @@ export function RoomTools() {
 
   // Close any open panel when a drag starts.
   useEffect(() => {
-    if (draggingId) setOpen(false);
+    if (draggingId) setPanel(null);
   }, [draggingId]);
 
   // Esc closes the open panel — it was previously only closable by re-clicking
@@ -342,7 +314,7 @@ export function RoomTools() {
       // key, so it has to yield.
       if (isTypingOrDialog(e.target)) return;
       e.stopPropagation();
-      setOpen(false);
+      setPanel(null);
     }
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -382,7 +354,7 @@ export function RoomTools() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px 6px 14px' }}>
               <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--ink)', flex: 1 }}>This room</span>
-              <IconButton icon="x" label="Close room panel" onClick={() => setOpen(false)} size={24} iconSize={12} />
+              <IconButton icon="x" label="Close room panel" onClick={() => setPanel(null)} size={24} iconSize={12} />
             </div>
             <div style={{ padding: '0 12px 10px' }}>
               <Segmented
@@ -415,6 +387,7 @@ export function RoomTools() {
           {tab === 'layouts' && <LayoutsPanel effParts={effParts} footprint={room.footprint} />}
         </div>
       )}
+      {panel === 'ideas' && <IdeasPanel anchorRef={anchorRef} onClose={closeIdeas} appPlaced={appPlaced} />}
 
       {/* The room's health, stated — not hidden behind a press.
           `analyzeRoom` already recomputed this on every scene change; the only
@@ -425,7 +398,7 @@ export function RoomTools() {
           The severity colour is a FILL, so the text uses the matching -text token:
           --danger / --warn are not legible as type on paper. */}
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setPanel((v) => (v === 'room' ? null : 'room'))}
         aria-expanded={open}
         className="ds-btn ds-btn--sm"
         title="Room check, the furniture list and saved layouts"
@@ -457,16 +430,18 @@ export function RoomTools() {
           this row is `overflow: hidden`, so anything past the edge is eaten with no
           scrollbar and no error — the "Look panel" failure CLAUDE.md names by hand.
 
-          This was briefly a `1fr 1fr` grid, for the good reason that Fix and Shuffle
+          This was briefly a `1fr 1fr` grid, for the good reason that Fix and Ideas
           should line up with the room-check button above rather than leave a dead
           strip on the right. It does line them up, and it also truncates both labels
           at every rail width that ships. The budget, from this repo's own numbers:
           `--rail-left-tight` is 208px and this row sits inside `PartTree`'s
           `12px 16px`, so the content box is 176px; a `1fr` column is (176 − 6) / 2 =
-          85px; `.ds-btn` spends `0 16px` of padding plus a 12px icon plus a 6px gap
-          = 50px of chrome, leaving **35px** for the word. "Shuffle" wants ~41px at
-          11px Nunito and "Shuffling…" ~59px — and the busy string is the tell that
-          has to survive `prefers-reduced-motion`, where the ring does not turn.
+          85px; `.ds-btn--sm` spends `0 12px` of padding plus a 12px icon plus a 6px
+          gap = 42px of chrome, leaving **43px** for the word. "Fixing…" wants ~41px
+          at 11px Nunito — two pixels on an estimate, which is no margin — and the
+          busy string is the tell that has to survive `prefers-reduced-motion`, where
+          the ring does not turn. (With Shuffle's "Shuffling…", ~59px, it did not fit
+          at all.)
 
           `flex: 1 0 auto` gets the alignment the grid was after without the cost:
           the buttons GROW to fill a line they fit on, and because they may not
@@ -476,7 +451,7 @@ export function RoomTools() {
           `tests/reflow.test.ts` holds the arithmetic. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         <FixAllButton appPlaced={appPlaced} />
-        <ShuffleButton effParts={effParts} room={room} appPlaced={appPlaced} />
+        <IdeasButton open={panel === 'ideas'} onToggle={() => setPanel((v) => (v === 'ideas' ? null : 'ideas'))} />
       </div>
     </div>
   );
@@ -832,7 +807,7 @@ function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
           last resort for a rail narrower than one button, not the normal path: the
           row wraps first, so the word is not cut. It does NOT say "the full label is
           in the `title`", because it is not — this button's title never contains the
-          word "Fix" and Shuffle's contains "Fix" and not "Shuffle". */}
+          word "Fix". */}
       <span className="truncate" style={{ minWidth: 0 }}>
         {busy ? 'Fixing…' : 'Fix'}
       </span>
@@ -840,252 +815,44 @@ function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
   );
 }
 
-// ─── Shuffle: a different valid arrangement, not a repair ──────────────────
+// ─── Ideas: other arrangements to try, not a repair ─────────────────────────
 //
-// `Fix` is anchored to the room it is handed — it pays `inertia` to move
-// anything, so a room with nothing wrong has nothing to offer, and pressing it
-// again mostly finds the same local minimum. That is correct FOR Fix, and it is
-// exactly the complaint about the old single "Suggest" button: it read as
-// creative rearranging but behaved as repair-only. Shuffle is the other half.
+// `Fix` is anchored to the room it is handed — it pays `inertia` to move anything,
+// so a room with nothing wrong has nothing to offer, and pressing it again mostly
+// finds the same local minimum. That is correct FOR Fix. Ideas is the other half:
+// a gallery of different valid arrangements (`IdeasPanel.tsx`), searched by
+// `lib/layout-shuffle.ts` — several independent solves, the faulted ones thrown
+// away, the survivors ranked for cost AND variety. It replaced a Shuffle button
+// that applied one of those per press and threw the rest away.
 //
-// The pipeline itself is `lib/layout-shuffle.ts` — several independent solves,
-// the faulted ones thrown away, the survivors ranked for cost AND variety. It
-// lives there rather than here because every part of it is a decision a test
-// should be able to reach: without that, "how often does a shuffle hand back a
-// room with a piece across the doorway" is a question nobody can ask, and the
-// answer turned out to be 14 of 20 seeds on the T preset. See that file's header
-// for the measurements.
-//
-// What never moves: locked pieces, wall-mounted fixtures (doors, windows, the
-// ceiling light, the fan). `movableFor` is the one answer to that question and
-// both buttons read it.
+// What never moves: kept pieces, locked ones, wall-mounted fixtures (doors,
+// windows, the ceiling light, the fan). `movableFor` is the one answer to that
+// question and both buttons read it.
 
-// How many recent offers Shuffle keeps is `HISTORY_DEPTH`, read from
-// `lib/layout-shuffle.ts` rather than restated here — it is the same number the
-// pipeline's own repeat-avoidance is documented against, and a second copy is
-// free to drift.
-//
-// ── Module scope, for the reason `APP_PLACED` is ─────────────────────────────
-//
-// Both of these were `useRef` first, which is wrong here for a reason this file
-// already records twenty lines up: **`RoomTools` unmounts on a tab switch**,
-// because `3D Model` and `2D Plan` are different ROUTES. Both refs therefore
-// restarted — so Shuffle, switch to the plan, Shuffle again handed back an
-// arrangement the user had already been shown while the toast cheerfully said it
-// had moved six pieces. Two refs, one bug, both invisible to every test in the
-// suite.
-//
-// It was the HISTORY that mattered, not the counter, and the measurement is below
-// with the maps. Saying "the counter restarted so the same seed re-served what was
-// on screen" is the tempting version and it is wrong: `isCleanShuffle` refuses a
-// candidate that moved nothing, so the on-screen arrangement is the one repeat that
-// cannot come back.
-//
-// Keyed by room id — deliberately NOT by tab, though this component unmounts on
-// a tab switch and both keys are re-derived fresh on the other one. The ROOM is
-// what persists across the switch (the stores are shared; only the routes
-// differ), so:
-//
-//   · The history is the half that actually defends this, and it is load-bearing
-//     for a reason worth stating exactly, because the obvious reason is WRONG.
-//     Measured on `rect` / `l` / `open`: press, press, switch tab, press — with
-//     both maps tab-scoped, the third press hands back the arrangement from the
-//     FIRST press byte for byte (layout similarity 1.000, 3 of 3 presets). With
-//     the history kept and only the counter restarted, 0.000 / 0.000 / 0.100.
-//   · What it is NOT is a re-serve of the arrangement ALREADY ON SCREEN. This
-//     comment used to say that, and `isCleanShuffle` makes it impossible: it opens
-//     `if (result.moved.length === 0) return false`, so the candidate reproducing
-//     what is on screen is filtered as "changed nothing". Same parts, same locked,
-//     byte-identical `randomizeStart` scatter at the same seed, and the outcome
-//     still diverged (clean 4/6 vs 4/9, similarity 0.000). The repeat a restarted
-//     counter serves is one shown a press or more AGO — which the user has seen,
-//     which is exactly why the skip-list has to outlive the tab.
-//   · The counter still must survive, for a smaller reason: restarting it re-walks
-//     the same twelve seeds, so the candidate POOL repeats and only the skip-list
-//     separates the offers. It buys exploration, not the fix.
-//   · The history is a skip-list of "what the user has just been shown"
-//     (`layout-shuffle.ts` passes over offers similar to the recorded one), and
-//     what they have been shown is a fact about the room, not about a viewport:
-//     the arrangement applied on the 3D tab is the one the plan is drawing.
-//     Tab-scoping the skip-list forgets a genuinely-seen arrangement, which
-//     reads as a fix and is the bug.
-//
-// Room-only is still right across ROOMS: the user can open another, and an
-// unkeyed pair would carry one room's history into the next and suppress an
-// arrangement nobody had been shown.
-const SHUFFLE_ATTEMPT = new Map<string, number>();
-const SHUFFLE_HISTORY = new Map<string, ShuffleOffer[]>();
-
-function useShuffle(effParts: ScenePart[], room: ShuffleRoom, appPlaced: AppPlacedRef) {
-  const loadTransforms = useStudio((s) => s.loadTransforms);
-  const { roomId } = useParams<{ roomId: string }>();
-  // Falls back to one shared bucket when there is no route param. A single bucket
-  // is the safe direction: the worst it does is carry one room's recent offers
-  // into another and pass over an arrangement, where a per-mount store loses them
-  // on every tab switch — which is the bug this replaced.
-  const key = roomId ?? '~';
-  return useCallback(
-    async (attempt: number) => {
-      const t = useStudio.getState();
-      const stamp = currentStamp();
-      // `ShuffleOffer`, not `Placement[]`: this history outlives every edit to the
-      // room, and a bare placement list is index-aligned to the `parts` array it
-      // was recorded against while saying so nowhere. The ids travel with it so
-      // `shuffleRoom` can tell an entry from this room apart from one recorded
-      // when the room had two more pieces in it.
-      const history = SHUFFLE_HISTORY.get(key) ?? [];
-      const outcome = await shuffleOffThread({
-        parts: effParts,
-        room,
-        locked: lockedForShuffle(effParts, t.pinned),
-        opts: { attempt, history },
-      });
-      // Checked BEFORE the history is written: an offer that was never applied was
-      // never shown, and recording it would make the skip-list pass over it later.
-      if (!sameStamp(stamp, currentStamp())) return 'stale' as const;
-      if (!outcome) return null;
-      const chosen = outcome.result;
-
-      // Append THEN trim, rather than trimming to `DEPTH - 1` and appending. The
-      // second form reads the same and is a landmine on a tunable constant: at
-      // `HISTORY_DEPTH = 1` it is `slice(-0)`, and `-0 === 0`, so it keeps the whole
-      // array and the history grows without bound instead of holding one entry.
-      SHUFFLE_HISTORY.set(key, [...history, outcome.offer].slice(-HISTORY_DEPTH));
-
-      const positions = { ...t.positions };
-      const rotations = { ...t.rotations };
-      for (const i of chosen.moved) {
-        const p = effParts[i];
-        positions[p.id] = [chosen.placements[i].x, p.pos[1], chosen.placements[i].z];
-        rotations[p.id] = chosen.placements[i].yaw;
-        appPlaced.current.set(p.id, { pos: positions[p.id], rot: rotations[p.id] });
-      }
-      // dims carried through untouched, for the same reason Fix does it: the
-      // solver moves and turns, and a suggestion that resized the furniture is
-      // the one thing this app refuses to do.
-      loadTransforms({ positions, rotations, dims: t.dims });
-      return outcome;
-    },
-    [effParts, room, loadTransforms, appPlaced, key],
-  );
-}
-
-function ShuffleButton({
-  effParts,
-  room,
-  appPlaced,
-}: {
-  effParts: ScenePart[];
-  room: ShuffleRoom;
-  appPlaced: AppPlacedRef;
-}) {
-  const shuffle = useShuffle(effParts, room, appPlaced);
-  // This button arrived with its own copy of the yield — a hand-rolled
-  // `requestAnimationFrame(() => requestAnimationFrame(work))`, an `alive` ref and
-  // a `busy` guard, reasoned out from first principles and correct. It is the
-  // FOURTH place in this file to need it and the third to write it out, which is
-  // the argument for `useBusyAction` rather than against it: two of the other
-  // three did not have it at all and shipped a flag that could never paint.
-  const [busy, run] = useBusyAction();
-  const { roomId } = useParams<{ roomId: string }>();
-  const attemptKey = roomId ?? '~';
-
-  async function work() {
-      // Module scope, keyed by room — NOT a `useRef`. See `SHUFFLE_ATTEMPT`: this
-      // component unmounts on a tab switch, so a per-mount pair restarted and the
-      // user was handed an arrangement they had already been shown. The key is
-      // room-only, not room-plus-tab — the map declarations above carry the
-      // measurement, including which of the two refs actually does the work.
-      const next = (SHUFFLE_ATTEMPT.get(attemptKey) ?? 0) + 1;
-      SHUFFLE_ATTEMPT.set(attemptKey, next);
-      const outcome = await shuffle(next);
-      if (outcome === 'stale') return toastStale();
-      // Two different "no", and telling them apart is the honest part. Nothing
-      // movable is a fact about the room; every candidate faulted is the search
-      // failing, and in that case the room is deliberately left ALONE rather than
-      // handed an arrangement with a piece across the doorway.
-      if (!outcome) {
-        const anythingToMove = movableFor(effParts, lockedForShuffle(effParts, useStudio.getState().pinned)).some(
-          Boolean,
-        );
-        toast(
-          anythingToMove
-            ? // Not an error, and worded so it does not read as one: on a complex
-              // footprint this is 2–4 attempts in 12 (see `lib/layout-shuffle.ts`).
-              // Nothing went wrong — every arrangement it found would have left
-              // something in the way, and showing one of those is the thing it is
-              // refusing to do.
-              //
-              // **Which of the two "no" it is comes from the ROOM, not the search.**
-              // `isCleanShuffle` is absolute where the other gate is relative, so a
-              // room that already carries a hard finding refuses on every press and
-              // "press again" is advice that cannot work (§ 4c). `shuffleBlockers`
-              // derives that from `RULE_HANDLING` rather than a list here, and
-              // `shuffleRefusal` owns both sentences so neither is a literal in a
-              // component — #121 measured what happens when a sentence and its call
-              // site are two things nothing joins.
-              //
-              // `analyzeRoom` runs again here, on the refusal path only. The report
-              // above is a memo in another component and this is an event handler,
-              // so reaching for it would mean lifting state to save one call that
-              // happens when a press already failed.
-              shuffleRefusal(
-                shuffleBlockers(
-                  analyzeRoom(effParts, room, {
-                    accessibility: useSettings.getState().stepFree,
-                    dimUnit: useSettings.getState().dimUnit,
-                  }).issues,
-                ),
-              )
-            : {
-                title: 'Nothing to shuffle',
-                message: 'Every piece is locked or wall-mounted.',
-              },
-        );
-        return;
-      }
-      const moved = outcome.result.moved.length;
-      toast({
-        title: `Shuffled ${moved} ${moved === 1 ? 'piece' : 'pieces'}`,
-        message: 'A different arrangement, not a fix. Undo puts the previous one back.',
-    });
-  }
-
-  // The search is long — measured at a median 2.0 s and a worst 2.3 s on the `t`
-  // preset, because one press is up to twelve solves (see `lib/layout-shuffle.ts`
-  // for why it is more than one). It used to be two seconds of frozen window; it
-  // runs in the arranging worker now (`lib/layout-offload.ts`), so the room stays
-  // live and the label below is what says it is working.
-
+/** Opens the gallery. A toggle rather than an action, so it carries no busy state:
+ *  the search runs inside the panel, which says so. Same row contract as Fix. */
+function IdeasButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   return (
     <button
-      onClick={() => run(work)}
-      disabled={busy}
-      aria-busy={busy}
+      onClick={onToggle}
+      aria-expanded={open}
       className="ds-btn ds-btn--sm"
-      title="Try a different arrangement, whether or not anything is wrong. Slower than Fix."
+      title="Different arrangements to try, whether or not anything is wrong"
       style={{
         fontSize: 'var(--fs-caption)',
         gap: 6,
-        background: 'var(--paper)',
-        borderColor: 'var(--edge)',
-        color: 'var(--ink-2)',
+        background: open ? 'var(--accent-tint)' : 'var(--paper)',
+        borderColor: open ? 'var(--accent-text)' : 'var(--edge)',
+        color: open ? 'var(--accent-text)' : 'var(--ink-2)',
         boxShadow: 'var(--shadow-soft)',
         // Same contract as Fix; see the note there.
         flex: '1 0 auto',
         justifyContent: 'center',
       }}
     >
-      {busy ? <Spinner size={12} /> : <Icon name="shuffle" size={12} />}
-      {/* The label carries the busy state, because the wait it covers is up to
-          two seconds long and a greyed-out button alone reads as broken rather
-          than as working. "Shuffling…" is about 18px wider than "Shuffle" at 11px,
-          which the wrapping row absorbs — the claim that used to sit here, that the
-          two strings are the same width to within a character, was written for a row
-          that could not reflow at all and is not true of these two words. Same
-          last-resort span as Fix's. */}
+      <Icon name="idea" size={12} />
       <span className="truncate" style={{ minWidth: 0 }}>
-        {busy ? 'Shuffling…' : 'Shuffle'}
+        Ideas
       </span>
     </button>
   );
@@ -1849,7 +1616,7 @@ function FitAnswer({
               <span className="mono">
                 {formatDim(result.largestBay.width * 1000, dimUnit)} × {formatDim(result.largestBay.depth * 1000, dimUnit)} {dimUnit}
               </span>
-              . <b>Fix</b> or <b>Shuffle</b> may make room by moving what is already here.
+              . <b>Fix</b> or <b>Ideas</b> may make room by moving what is already here.
             </>
           ) : (
             <>This room has no clear stretch of floor to put it on.</>
@@ -2105,7 +1872,17 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
             <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
               <MiniPlan parts={vParts} footprint={footprint} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="truncate" style={{ fontSize: 'var(--fs-small)', fontWeight: 700 }}>{v.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                  <span className="truncate" style={{ fontSize: 'var(--fs-small)', fontWeight: 700 }}>{v.name}</span>
+                  {/* Kept from the ideas gallery with its heart. Named in words too,
+                      since the glyph alone is colour and shape. */}
+                  {v.favourite && (
+                    <span title="Saved from Ideas" style={{ display: 'inline-flex', color: 'var(--accent-text)', flexShrink: 0 }}>
+                      <Icon name="heart" size={10} filled />
+                      <span className="sr-only">, saved from Ideas</span>
+                    </span>
+                  )}
+                </div>
                 <div className="t-micro">{savedLabel(v.createdAt)}</div>
               </div>
               {/* Plain, not primary: this repeats once per saved layout, and the
@@ -2190,58 +1967,5 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
         </Modal>
       )}
     </div>
-  );
-}
-
-/** Tiny top-down floor plan — footprint outline + furniture rectangles. */
-function MiniPlan({ parts, footprint }: { parts: ScenePart[]; footprint: Footprint }) {
-  const b = footprintBounds(footprint);
-  const W = 84;
-  const H = Math.max(36, Math.round((W * b.depth) / Math.max(0.1, b.width)));
-  const sx = W / b.width;
-  const sy = H / b.depth;
-  const s = Math.min(sx, sy);
-  const px = (x: number) => (x - b.minX) * s + (W - b.width * s) / 2;
-  const pz = (z: number) => (z - b.minZ) * s + (H - b.depth * s) / 2;
-  return (
-    <svg
-      width={W}
-      height={H}
-      aria-hidden="true"
-      style={{ flexShrink: 0, background: 'var(--paper)', border: '1px solid var(--hairline-strong)', borderRadius: 'var(--r-1)' }}
-    >
-      <polygon
-        points={footprint.map(([x, z]) => `${px(x)},${pz(z)}`).join(' ')}
-        fill="var(--paper-2)"
-        stroke="var(--ink-3)"
-        strokeWidth={1}
-      />
-      {parts
-        // `ridesWall`, like `lib/plan-export.ts`. Asking `wallMounted` here dropped the
-        // ceiling family out of every layout thumbnail while the exported PNG listed it
-        // with a number and a legend row — the same room, two plans, disagreeing about
-        // whether a 1 m ceiling fan is in it. Three surfaces answer this question and
-        // they were answering it three ways: `PlanView` draws every piece, this filtered
-        // on the stored flag, and the export filtered on the anchor.
-        .filter((p) => !ridesWall(p.category, p.shape))
-        .map((p) => {
-          const w = (p.dimMM[0] / 1000) * s;
-          const d = (p.dimMM[1] / 1000) * s;
-          return (
-            <rect
-              key={p.id}
-              x={px(p.pos[0]) - w / 2}
-              y={pz(p.pos[2]) - d / 2}
-              width={w}
-              height={d}
-              transform={`rotate(${(-p.rot * 180) / Math.PI} ${px(p.pos[0])} ${pz(p.pos[2])})`}
-              fill={p.color ?? 'var(--accent)'}
-              fillOpacity={0.55}
-              stroke="var(--ink-2)"
-              strokeWidth={0.5}
-            />
-          );
-        })}
-    </svg>
   );
 }

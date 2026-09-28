@@ -244,6 +244,7 @@
   --dur-quick: 120ms;
   --dur-base: 160ms;
   --dur-slow: 300ms;
+  --dur-breathe: 1100ms; /* one half-cycle of a placeholder's breathing */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
 
@@ -495,6 +496,7 @@ h1, h2, h3 { text-wrap: balance; }
 .list-row:focus-visible,
 .card-link:focus-visible,
 .slot-card:focus-visible,
+.idea-card__pick:focus-visible,
 .editable:focus-visible,
 .swatch:focus-visible,
 [role="slider"]:focus-visible,
@@ -547,6 +549,103 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   color: var(--accent-text);
   border-color: var(--accent-text);
   background: var(--accent-tint);
+}
+
+/* ─── Loading placeholders ────────────────────────────────────────────────
+   The shape of what is coming, breathing, where the empty space would otherwise
+   read as "there is nothing here". Always paired with words somewhere a screen
+   reader hears them (a live region saying what is being fetched), because a
+   placeholder is `aria-hidden` and, under reduced motion, still. */
+.ds-skeleton {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 6px 6px 8px;
+  border-color: var(--hairline);
+  background: var(--paper);
+  animation: danmu-breathe var(--dur-breathe) var(--ease-in-out) infinite alternate;
+}
+.ds-skeleton__block { display: block; width: 100%; border-radius: var(--r-1); background: var(--paper-3); }
+.ds-skeleton__line { display: block; height: 8px; width: 85%; border-radius: var(--r-full); background: var(--paper-3); }
+.ds-skeleton__line--short { width: 50%; }
+@keyframes danmu-breathe { from { opacity: 1; } to { opacity: 0.45; } }
+
+/* ─── Ideas gallery (`IdeasPanel.tsx`) ────────────────────────────────────
+   A card beside the rail, placed by `useBesideRail`. Two thumbnails a row there,
+   three across a phone: decision D6, four ideas to a page beside a laptop's rail
+   and three on a phone. Every column is `minmax(0, 1fr)` so a long piece name
+   wraps inside its card instead of widening the grid. */
+.ideas-panel {
+  z-index: var(--z-popover);
+  display: flex; flex-direction: column;
+  padding: 0;
+  overflow: auto;
+  box-shadow: var(--shadow-lift);
+}
+.ideas-panel__head {
+  position: sticky; top: 0; z-index: var(--z-sticky-local);
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 10px 8px 14px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--hairline);
+}
+.ideas-panel__title { font-size: var(--fs-small); font-weight: 700; color: var(--ink); }
+.ideas-panel__status {
+  flex: 1; min-width: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--ink-3);
+}
+.ideas-panel__note { display: flex; flex-direction: column; gap: 6px; padding: 14px; overflow-wrap: anywhere; }
+.ideas-grid { display: grid; gap: 8px; padding: 12px; }
+.ideas-grid--wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ideas-grid--phone { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ideas-grid__end { grid-column: 1 / -1; }
+.idea-card {
+  position: relative; min-width: 0;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-2);
+  background: var(--paper);
+  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+.idea-card:hover { box-shadow: var(--shadow-soft); }
+/* The idea on screen. A border AND a ring, so it does not rest on colour alone:
+   the ring doubles the edge's weight. */
+.idea-card--on { border-color: var(--accent-text); box-shadow: 0 0 0 2px var(--accent-tint); }
+.idea-card__pick {
+  display: flex; flex-direction: column; gap: 4px;
+  width: 100%; min-width: 0;
+  padding: 6px 6px 8px;
+  border: 0; border-radius: inherit;
+  background: none;
+  font-family: var(--font-sans); text-align: left; color: var(--ink);
+  cursor: pointer;
+}
+.idea-card__lead {
+  font-size: var(--fs-caption); font-weight: 600; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.idea-card__count { font-size: var(--fs-micro); color: var(--ink-3); }
+/* Three to a row leaves about seventeen characters a line, and the caption's last
+   clause ("facing the TV") is the part that says what the idea is for. */
+.ideas-grid--phone .idea-card__lead { -webkit-line-clamp: 3; }
+.idea-card__heart {
+  position: absolute; top: 3px; right: 3px;
+  width: 26px; height: 26px;
+  border-radius: var(--r-full);
+  background: var(--paper);
+  color: var(--ink-3);
+}
+.idea-card__heart[aria-pressed="true"] { color: var(--accent-text); }
+.ideas-panel__kept {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--hairline);
+}
+.ideas-panel__kept > .ds-label { flex-basis: 100%; }
+.ideas-chip { gap: 0; padding: 0 0 0 10px; max-width: 100%; min-width: 0; box-shadow: none; }
+.ideas-panel__foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 8px 10px 10px 14px;
+  border-top: 1px solid var(--hairline);
 }
 
 .ds-input {

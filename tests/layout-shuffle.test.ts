@@ -333,7 +333,7 @@ describe('shuffleRoom — the offer, not the search', () => {
     ).toContain('and 3 more,');
     // The empty list is the OTHER sentence, and it must not fall through to this one:
     // forcing that branch open crashes on `blockers[0]`, so the guard is load-bearing.
-    expect(shuffleRefusal([]).title).toBe('No new arrangement this time');
+    expect(shuffleRefusal([]).title).toBe('No ideas this time');
   });
 
   it('a single solve is NOT reliably clean, which is why the pipeline exists', { timeout: 60_000 }, () => {

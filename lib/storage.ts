@@ -197,6 +197,9 @@ export type LayoutVariant = {
   /** ScenePart[] — stored opaque to avoid a lib cycle (same as saveSceneParts). */
   parts: unknown;
   transforms: Transforms;
+  /** Saved from the ideas gallery's heart rather than "Save current". Optional, so
+   *  every layout saved before it reads as an ordinary one. */
+  favourite?: boolean;
 };
 
 export type RoomSummary = {
