@@ -11,9 +11,9 @@
 // A press now leaves focus where it was. jsdom does not move focus on a mouse-down at
 // all, so the two halves are asserted apart: the mouse-down's default (the focus move)
 // is cancelled, and the press itself moves focus nowhere while it steps the value.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { NumberField } from '@/components/ui/NumberField';
 
 // Pointer capture, which jsdom does not implement and a chevron calls on every press.
@@ -58,5 +58,35 @@ describe('pressing a NumberField chevron', () => {
     fireEvent.pointerUp(chevron(name));
     expect(document.activeElement).toBe(document.body);
     expect(input.value).toBe(STEPPED[name]);
+  });
+
+  it('answers the primary button only', () => {
+    // A right-click stepped the value and started the repeat, and the context menu it
+    // opens can take the pointerup that stops it.
+    render(<Field />);
+    const input = screen.getByLabelText('Width in m') as HTMLInputElement;
+    fireEvent.pointerDown(chevron('Increase'), { button: 2 });
+    expect(input.value).toBe('3.00');
+    fireEvent.pointerDown(chevron('Increase'), { button: 0 });
+    fireEvent.pointerUp(chevron('Increase'));
+    expect(input.value).toBe('3.05');
+  });
+
+  it('stops repeating when the arrow loses its capture without a pointerup', () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'performance'] });
+    try {
+      render(<Field />);
+      const input = screen.getByLabelText('Width in m') as HTMLInputElement;
+      fireEvent.pointerDown(chevron('Increase'));
+      // Held well past the repeat's start, so it is running before the capture goes.
+      act(() => vi.advanceTimersByTime(1000));
+      const held = input.value;
+      expect(Number(held)).toBeGreaterThan(3.05);
+      fireEvent.lostPointerCapture(chevron('Increase'));
+      act(() => vi.advanceTimersByTime(2000));
+      expect(input.value).toBe(held);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

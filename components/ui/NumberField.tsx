@@ -53,6 +53,13 @@ export function fieldMinWidth(values: string[]): string {
   return `calc(${chars} * 0.6 * var(--fs-body) + ${PAD_LEFT + PAD_RIGHT + 2}px)`;
 }
 
+/** The two arrows. One list, so a change to how an arrow answers a press is made
+ *  once rather than to each arrow in turn. */
+const ARROWS = [
+  { dir: 1, title: 'Increase', icon: 'chevron-up' },
+  { dir: -1, title: 'Decrease', icon: 'chevron-down' },
+] as const;
+
 const HOLD_DELAY = 380;
 const HOLD_EVERY = 60;
 const MAX_CATCH_UP = 3;
@@ -126,6 +133,9 @@ export function NumberField({
   }
 
   function press(e: PointerEvent<HTMLButtonElement>, dir: 1 | -1) {
+    // The primary button only. A right-click stepped the value and started the
+    // repeat, and the context menu it opens can take the pointerup that stops it.
+    if (e.button !== 0) return;
     // Capture, so a pointer that drifts off a 16px target mid-hold keeps
     // stepping and still ends on pointerup.
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -174,32 +184,26 @@ export function NumberField({
         // touch-screen rule that hides the column.
         className="num-field__steps"
       >
-        <button
-          type="button"
-          tabIndex={-1}
-          title="Increase"
-          style={chevron}
-          // The focus a press would move is the mouse-down's to move, not the
-          // pointer-down's, so that is the default to cancel.
-          onMouseDown={(e) => e.preventDefault()}
-          onPointerDown={(e) => press(e, 1)}
-          onPointerUp={stop}
-          onPointerCancel={stop}
-        >
-          <Icon name="chevron-up" size={11} />
-        </button>
-        <button
-          type="button"
-          tabIndex={-1}
-          title="Decrease"
-          style={chevron}
-          onMouseDown={(e) => e.preventDefault()}
-          onPointerDown={(e) => press(e, -1)}
-          onPointerUp={stop}
-          onPointerCancel={stop}
-        >
-          <Icon name="chevron-down" size={11} />
-        </button>
+        {ARROWS.map(({ dir, title, icon }) => (
+          <button
+            key={dir}
+            type="button"
+            tabIndex={-1}
+            title={title}
+            style={chevron}
+            // The focus a press would move is the mouse-down's to move, not the
+            // pointer-down's, so that is the default to cancel.
+            onMouseDown={(e) => e.preventDefault()}
+            onPointerDown={(e) => press(e, dir)}
+            onPointerUp={stop}
+            onPointerCancel={stop}
+            // A capture that ends without a pointerup reaching the arrow ends the
+            // hold too, rather than leaving the repeat running on its own.
+            onLostPointerCapture={stop}
+          >
+            <Icon name={icon} size={11} />
+          </button>
+        ))}
       </div>
     </div>
   );
