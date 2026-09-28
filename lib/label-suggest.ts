@@ -81,5 +81,10 @@ export function suggestFromLabel(
   const current = (d.category ?? 'other') as Category;
   const wanted = categoriesFromLabel(label, current);
   if (wanted.length === 0) return [];
-  return candidatesFor(d, wanted, cals, room, { requireFit: false });
+  // Measured under the words just TYPED, not the words they replace. The row still
+  // carries its old label, and `candidatesFor` reads the label to pick which kind of
+  // the new category to measure — so a sofa renamed "double bed" was measured as the
+  // plain single bed its old word "sofa" names none of, and offered at a single bed's
+  // size for a piece the user had just called double.
+  return candidatesFor({ ...d, label }, wanted, cals, room, { requireFit: false });
 }
