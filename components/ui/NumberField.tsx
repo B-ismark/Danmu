@@ -12,6 +12,11 @@
 // more stops per field would add twelve tab stops across the two editors that
 // use this, for a control keyboard users already have.
 //
+// Nor do they take focus when pressed: a press puts it in the field, as a native
+// spinner's arrows do. A pressed button takes focus by default, and these took it
+// out of the field onto a button assistive tech is told is not there — after which
+// Up and Down stepped nothing, because the field they step no longer had focus.
+//
 // On a touch screen the chevrons step aside (`.num-field` in globals.css) and the
 // field grows to 44px. A 16 × 14 arrow is not a target a finger can hit, and on a
 // phone `inputMode="decimal"` brings up the number pad, which is how a phone asks
@@ -25,7 +30,7 @@
 // 27-step leap at release. The cap keeps a slow host feeling slow instead of
 // feeling broken.
 
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties, type PointerEvent } from 'react';
 import { steppedValue } from '@/lib/units';
 import { Icon } from './Icon';
 
@@ -80,6 +85,7 @@ export function NumberField({
   // would take one step and then sit there however long you held it.
   const emit = useRef(onChange);
   emit.current = onChange;
+  const field = useRef<HTMLInputElement>(null);
 
   const stop = () => {
     if (timer.current !== null) clearInterval(timer.current);
@@ -116,6 +122,14 @@ export function NumberField({
     }, HOLD_EVERY);
   }
 
+  function press(e: PointerEvent<HTMLButtonElement>, dir: 1 | -1) {
+    // Capture, so a pointer that drifts off a 16px target mid-hold keeps
+    // stepping and still ends on pointerup.
+    e.currentTarget.setPointerCapture(e.pointerId);
+    field.current?.focus({ preventScroll: true });
+    hold(dir);
+  }
+
   const chevron: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -132,6 +146,7 @@ export function NumberField({
   return (
     <div className="num-field" style={{ position: 'relative', display: 'flex' }}>
       <input
+        ref={field}
         type="number"
         inputMode="decimal"
         value={value}
@@ -163,12 +178,10 @@ export function NumberField({
           tabIndex={-1}
           title="Increase"
           style={chevron}
-          onPointerDown={(e) => {
-            // Capture, so a pointer that drifts off a 16px target mid-hold keeps
-            // stepping and still ends on pointerup.
-            e.currentTarget.setPointerCapture(e.pointerId);
-            hold(1);
-          }}
+          // The focus a press would move is the mouse-down's to move, not the
+          // pointer-down's, so that is the default to cancel.
+          onMouseDown={(e) => e.preventDefault()}
+          onPointerDown={(e) => press(e, 1)}
           onPointerUp={stop}
           onPointerCancel={stop}
         >
@@ -179,10 +192,8 @@ export function NumberField({
           tabIndex={-1}
           title="Decrease"
           style={chevron}
-          onPointerDown={(e) => {
-            e.currentTarget.setPointerCapture(e.pointerId);
-            hold(-1);
-          }}
+          onMouseDown={(e) => e.preventDefault()}
+          onPointerDown={(e) => press(e, -1)}
           onPointerUp={stop}
           onPointerCancel={stop}
         >
