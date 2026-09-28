@@ -1780,10 +1780,11 @@ room. Then start **without typing**:
 - In the studio's glass rail the refused rim is the border alone, since the rail owns the
   box-shadow. Whether that reads as refused beside the other boxes is a person's call.
 
-**What was looked at, and on what.** SwiftShader, desktop Chromium only: the size step
-and the note swept at seven widths in metres and feet, and a browser probe walked
-skip → note → *These are right* → reload, skip → typed width → reload, typed on the picker,
-and skip → capture → scan.
+**What was measured, and on what.** SwiftShader, desktop Chromium, at `06476a8` on PR
+#160's branch (squashed into `fdd1f20`): the size step and the note swept at seven widths
+in metres and feet; a browser probe walked skip → note → *These are right* → reload,
+skip → typed width → reload, typed on the picker, and skip → capture → scan, 18 of 18 on
+three runs. A real phone, and a person reading the note, are the unlooked-at half.
 
 ### A piece's tag stays on the photo — this branch, PROBED at 360, 768 and 1280
 
