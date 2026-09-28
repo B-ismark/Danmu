@@ -24,9 +24,11 @@
 // every green run and held as literals, because the sweep's price is a rate and a
 // hand-built fixture cannot measure a rate.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { refineDetections, type CalMap } from '@/lib/detect-refine';
-import { findRepeats, keptAtFirst, REPEAT_SHARE, sweptSolids, SWEPT_HFOV_DEG } from '@/lib/repeat-sightings';
+import { findRepeats, keptAtFirst, REPEAT_SHARE, sameButColor, sweptSolids, SWEPT_HFOV_DEG } from '@/lib/repeat-sightings';
 import { footArea, footFromPart, footIntersectionArea } from '@/lib/geometry';
 import {
   atLens,
@@ -837,5 +839,42 @@ describe('findRepeats — a lens a floor line tied to the height', () => {
       [968, 18, 23, 11, 21],
       [979, 44, 17, 27, 17],
     ]);
+  });
+});
+
+describe('sameButColor — the one write the review makes that nothing measures', () => {
+  const rows: Detection[] = [
+    { label: 'bed', conf: 0.9, box: [0.1, 0.4, 0.5, 0.4], category: 'bed', slot: 'n', position: { x: 0, y: 0.3, z: -1 } },
+    { label: 'lamp', conf: 0.8, box: [0.7, 0.2, 0.1, 0.3], category: 'lamp', slot: 'e' },
+  ];
+  // Exactly the colour fill's write in app/onboarding/detect/page.tsx.
+  const filled = rows.map((x, i) => (i === 0 ? { ...x, color: '#a0522d' } : x));
+
+  it('treats the colour fill as no change', () => {
+    expect(sameButColor(rows, filled)).toBe(true);
+    // Both ways: a colour the other list has not got yet is still only a colour.
+    expect(sameButColor(filled, rows)).toBe(true);
+  });
+
+  it('and every edit that is measured as one', () => {
+    const edits: Detection[][] = [
+      rows.map((x, i) => (i === 1 ? { ...x, label: 'floor lamp' } : x)), // a rename
+      rows.map((x, i) => (i === 0 ? { ...x, position: { x: 0, y: 0.3, z: -1 } } : x)), // re-placed where it was
+      rows.map((x, i) => (i === 1 ? { ...x, shape: 'lamp-floor' } : x)), // a field the other has not got
+      rows.map((x, i) => (i === 1 ? { ...x, uid: 'u1', color: '#fff000' } : x)), // colour AND something else
+      [rows[1], rows[0]], // the same rows in another order
+      rows.slice(0, 1), // one deleted
+    ];
+    expect(edits.map((e) => sameButColor(rows, e))).toEqual([false, false, false, false, false, false]);
+  });
+
+  it('is what the scan screen measures from', () => {
+    // A wiring the helper cannot see: both memos have to read the colour-blind rows, and
+    // the verdicts are one of the repeat check's own inputs, so either reading the raw
+    // list re-runs it.
+    const src = readFileSync(join(process.cwd(), 'app/onboarding/detect/page.tsx'), 'utf8');
+    expect(src.match(/useMemo\(\(\) => judgeLabels\((\w+),/)?.[1]).toBe('measuredRows');
+    expect(src.match(/findRepeats\(\s*(\w+),\s*(\w+)\.map/)?.slice(1)).toEqual(['measuredRows', 'measuredRows']);
+    expect(src).toContain('if (!sameButColor(measuredRows, detections)) setMeasuredRows(detections);');
   });
 });

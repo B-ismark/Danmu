@@ -43,7 +43,7 @@ import {
   undo as undoStep,
 } from '@/lib/review-history';
 import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
-import { findRepeats, keptAtFirst } from '@/lib/repeat-sightings';
+import { findRepeats, keptAtFirst, sameButColor } from '@/lib/repeat-sightings';
 import { cleanLabelOf, fromRecords, toRecord } from '@/lib/detection-record';
 import { adoptEditedList, adoptFreshScan, listEditSentence } from '@/lib/rescan';
 import { toast } from '@/components/ui/StorageToast';
@@ -596,11 +596,18 @@ export default function DetectPage() {
     });
   }
 
+  /** `detections` as the two memos below read it: the same list until something they
+   *  measure changes, so the colour fill's write does not run the repeat check again.
+   *  State adjusted during render, React's pattern for deriving from a changing value;
+   *  it settles in one pass because the adjusted value then matches. */
+  const [measuredRows, setMeasuredRows] = useState(detections);
+  if (!sameButColor(measuredRows, detections)) setMeasuredRows(detections);
+
   // Only the geometry may accuse a word, and only the user may change it. The
   // verdicts are recomputed from `detections` rather than stored on them: a
   // verdict is about the current measurement, so persisting one would let a stale
   // accusation outlive the row it was about.
-  const verdicts = useMemo(() => judgeLabels(detections, cals, roomDims), [detections, cals, roomDims]);
+  const verdicts = useMemo(() => judgeLabels(measuredRows, cals, roomDims), [measuredRows, cals, roomDims]);
 
   /** Which row each row probably repeats — the same piece seen from another wall,
    *  or read twice from one photo. Ranked by the confidence policy rather than by
@@ -609,12 +616,12 @@ export default function DetectPage() {
   const repeats = useMemo(
     () =>
       findRepeats(
-        detections,
-        detections.map((d, i) => shouldAutoConfirm(d, (verdicts[i] ?? { status: 'unmeasured' }).status)),
+        measuredRows,
+        measuredRows.map((d, i) => shouldAutoConfirm(d, (verdicts[i] ?? { status: 'unmeasured' }).status)),
         roomDims,
         cals,
       ),
-    [detections, verdicts, roomDims, cals],
+    [measuredRows, verdicts, roomDims, cals],
   );
 
   /** A model offered because of what the user just TYPED, rather than because the
