@@ -41,7 +41,7 @@ import { analyzeRoom } from '@/lib/clearance';
 import { movableFor, type SolveResult } from '@/lib/layout-solve';
 import { lockedForShuffle, shuffleBlockers, shuffleRefusal, type ShuffleRoom } from '@/lib/layout-shuffle';
 import { shuffleOffThread } from '@/lib/layout-offload';
-import { roomStore, type LayoutVariant } from '@/lib/storage';
+import { newLayout, roomStore } from '@/lib/storage';
 import {
   DRY_SEARCHES,
   freeName,
@@ -60,6 +60,7 @@ import { IconButton, Spinner } from '@/components/ui/primitives';
 import { Select } from '@/components/ui/Select';
 import { Icon } from '@/components/ui/Icon';
 import { toast } from '@/components/ui/StorageToast';
+import { afterPaint } from '@/lib/after-paint';
 import { MiniPlan, miniPlanBox } from './MiniPlan';
 import { useBesideRail } from './useBesideRail';
 import { usePhoneStudio } from './NarrowViewportBanner';
@@ -106,7 +107,26 @@ type Session = {
    *  base lands nowhere. */
   run: number;
   numbered: number;
+  /** Every idea's key this gallery has produced, across every ask-again, so an undo
+   *  back onto one of them is not mistaken for a hand edit after the list moved on. */
+  seen: string[];
+  /** What `APP_PLACED` said when the gallery opened, and which ids its tries have
+   *  written since: "Back to your room" puts the record back with the room, or Fix
+   *  would treat a piece it placed itself as one the user placed by hand. */
+  originPlaced: [string, { pos: [number, number, number]; rot: number }][];
+  touched: string[];
+  /** The last search failed. Not a dry search: saying "every layout it tried left
+   *  something in the way" about an error would be false. */
+  failed: boolean;
 };
+
+/** Ideas whose heart is being written, so a double press cannot save one twice. */
+const SAVING = new Set<string>();
+
+/** Every session's `run`, never reused: a search still in flight for a session that
+ *  has been replaced must find no session with its number, even if the replacement
+ *  began from nothing. */
+let RUNS = 0;
 
 export const useIdeas = create<{ session: Session | null }>(() => ({ session: null }));
 
@@ -132,8 +152,8 @@ const pinKeyOf = (pinned: Record<string, boolean>) =>
     .join('|');
 
 /** A new session on the room as it is now. `from` keeps an existing session's
- *  origin and numbering: that is the keep-a-piece-and-ask-again path. */
-function begin(roomId: string, from: Session | null): Session {
+ *  origin, numbering and memory: that is the keep-a-piece-and-ask-again path. */
+function begin(roomId: string, from: Session | null, placed: AppPlacedRef['current']): Session {
   const t = useStudio.getState();
   const room = useScene.getState().room;
   const maps: Maps = { positions: t.positions, rotations: t.rotations, dims: t.dims };
@@ -155,15 +175,23 @@ function begin(roomId: string, from: Session | null): Session {
     searching: false,
     dry: 0,
     attempt: 1,
-    run: (useIdeas.getState().session?.run ?? 0) + 1,
+    run: ++RUNS,
     numbered: from?.numbered ?? 0,
+    seen: from?.seen ?? [],
+    originPlaced: from?.originPlaced ?? [...placed.entries()],
+    touched: from?.touched ?? [],
+    failed: false,
   };
 }
 
 /** A search's answer, added to the session it was asked for and nowhere else. */
-function land(run: number, attempt: number, found: SolveResult[]) {
+function land(run: number, attempt: number, found: SolveResult[] | 'failed') {
   const s = useIdeas.getState().session;
   if (!s || s.run !== run) return;
+  if (found === 'failed') {
+    setSession({ failed: true, searching: false, attempt: attempt + 1 });
+    return;
+  }
   let n = s.numbered;
   const fresh = found.slice(0, MAX_IDEAS - s.ideas.length).map((r): ShownIdea => {
     n += 1;
@@ -179,6 +207,7 @@ function land(run: number, attempt: number, found: SolveResult[]) {
   });
   setSession({
     ideas: [...s.ideas, ...fresh],
+    seen: [...s.seen, ...fresh.map((i) => i.key)],
     numbered: n,
     dry: fresh.length > 0 ? 0 : s.dry + 1,
     attempt: attempt + 1,
@@ -210,6 +239,10 @@ export function IdeasPanel({
   const dock = useDockTop(phone);
 
   const session = useIdeas((s) => (s.session?.roomId === roomId ? s.session : null));
+  // Nothing is asked of a room that has not finished loading: a session begun on the
+  // starter room would be marked stale the moment the real one arrived, and would
+  // blame "your last edit" for it.
+  const hydrated = useScene((s) => routeRoom === undefined || s.hydratedRoomId === routeRoom);
   const parts = useScene((s) => s.parts);
   const room = useScene((s) => s.room);
   const positions = useStudio((s) => s.positions);
@@ -227,8 +260,7 @@ export function IdeasPanel({
   // origin: after a drag, "Back to your room" would undo the drag.
   let status: Status = 'ok';
   if (session) {
-    const handEdited =
-      tKey !== session.origin.key && tKey !== session.base.key && !session.ideas.some((i) => i.key === tKey);
+    const handEdited = tKey !== session.origin.key && tKey !== session.base.key && !session.seen.includes(tKey);
     if (session.base.sceneKey !== sceneKey || handEdited) status = 'stale';
     else if (session.base.pinKey !== pinKey) status = 'rebase';
   }
@@ -237,15 +269,15 @@ export function IdeasPanel({
   // gallery was shut: there is nobody to show a "you changed the room" note to.
   const opened = useRef(false);
   useEffect(() => {
-    if (opened.current) return;
+    if (!hydrated || opened.current) return;
     opened.current = true;
-    if (!session || status === 'stale') useIdeas.setState({ session: begin(roomId, null) });
-  }, [session, status, roomId]);
+    if (!session || status === 'stale') useIdeas.setState({ session: begin(roomId, null, appPlaced.current) });
+  }, [hydrated, session, status, roomId, appPlaced]);
 
   // A piece kept in place, or let go: ask again, from the room on screen.
   useEffect(() => {
-    if (status === 'rebase') useIdeas.setState({ session: begin(roomId, session) });
-  }, [status, roomId, session]);
+    if (hydrated && status === 'rebase') useIdeas.setState({ session: begin(roomId, session, appPlaced.current) });
+  }, [hydrated, status, roomId, session, appPlaced]);
 
   // A heart whose layout was deleted in the Layouts tab is not a heart.
   useEffect(() => {
@@ -278,9 +310,11 @@ export function IdeasPanel({
   // each is up to twelve solves in the arranging worker.
   const searchable =
     session !== null &&
+    hydrated &&
     status === 'ok' &&
     anyMovable &&
     !session.searching &&
+    !session.failed &&
     wantsMore(session.ideas.length, session.page, size, session.dry);
   useEffect(() => {
     if (!searchable) return;
@@ -291,15 +325,24 @@ export function IdeasPanel({
     const { run, attempt } = s;
     const ids = s.base.parts.map((p) => p.id);
     setSession({ searching: true });
-    shuffleOffThread({
-      parts: s.base.parts,
-      room: s.base.room,
-      locked: lockedForShuffle(s.base.parts, s.base.pinned),
-      opts: { attempt, history: s.ideas.map((i) => ({ ids, placements: i.placements })) },
-    })
-      .then((outcome) => land(run, attempt, outcome?.ideas ?? []))
-      // A failed search is a dry one: said by the empty state, not by a crash.
-      .catch(() => land(run, attempt, []));
+    // After a paint, so "Finding more…" is on screen first. With the arranging
+    // worker that costs two frames; on the inline fallback (no module workers) the
+    // search holds the thread for seconds, and without the yield the panel would
+    // freeze before it had said anything.
+    afterPaint(() => {
+      if (useIdeas.getState().session?.run !== run) return;
+      shuffleOffThread({
+        parts: s.base.parts,
+        room: s.base.room,
+        locked: lockedForShuffle(s.base.parts, s.base.pinned),
+        opts: { attempt, history: s.ideas.map((i) => ({ ids, placements: i.placements })) },
+      })
+        .then((outcome) => land(run, attempt, outcome?.ideas ?? []))
+        .catch((err) => {
+          console.error('[ideas] the search failed', err);
+          land(run, attempt, 'failed');
+        });
+    });
   }, [searchable]);
 
   // Esc closes it, yielding to a field or a dialog like the room panel does.
@@ -320,16 +363,30 @@ export function IdeasPanel({
       // dims carried through untouched: ideas move and turn, never resize.
       loadTransforms({ ...t, dims: base.dims });
       // The app moved these, so Fix may move them again freely (see `APP_PLACED`).
-      for (const i of idea.moved) {
-        const id = base.parts[i].id;
-        appPlaced.current.set(id, { pos: t.positions[id], rot: t.rotations[id] });
-      }
+      const ids = idea.moved.map((i) => base.parts[i].id);
+      for (const id of ids) appPlaced.current.set(id, { pos: t.positions[id], rot: t.rotations[id] });
+      const s = useIdeas.getState().session;
+      if (s) setSession({ touched: [...new Set([...s.touched, ...ids])] });
     },
     [base, loadTransforms, appPlaced],
   );
 
+  /** The room as it was when the gallery opened, and the app's record of which of
+   *  its pieces the app placed, as it was then too. */
+  function backToRoom() {
+    if (!session) return;
+    loadTransforms(session.origin);
+    const was = new Map(session.originPlaced);
+    for (const id of session.touched) {
+      const w = was.get(id);
+      if (w) appPlaced.current.set(id, w);
+      else appPlaced.current.delete(id);
+    }
+  }
+
   async function toggleSaved(idea: ShownIdea) {
-    if (!routeRoom || !base) return;
+    if (!routeRoom || !base || SAVING.has(idea.id)) return;
+    SAVING.add(idea.id);
     try {
       await writeSaved(routeRoom, base, idea);
     } catch {
@@ -338,6 +395,8 @@ export function IdeasPanel({
         title: idea.savedId ? `Idea ${idea.n} is still in Layouts` : `Idea ${idea.n} was not saved`,
         message: 'This browser would not let Danmu write to its storage.',
       });
+    } finally {
+      SAVING.delete(idea.id);
     }
   }
 
@@ -351,16 +410,14 @@ export function IdeasPanel({
     }
     const t = ideaTransforms(base, base.parts, idea);
     const taken = (await roomStore.listLayouts(routeRoom)).map((l) => l.name);
-    const v: LayoutVariant = {
-      id: `l-${Date.now().toString(36)}`,
-      name: freeName(name, taken),
-      createdAt: Date.now(),
-      // The authored parts, with the idea as the override layer: the same two
-      // layers "Save current" stores, so Apply resolves it the same way.
-      parts: useScene.getState().parts,
-      transforms: { ...t, dims: base.dims, parentIds: useStudio.getState().parentIds },
-      favourite: true,
-    };
+    // The authored parts, with the idea as the override layer: the same two layers
+    // "Save current" stores, so Apply resolves it the same way.
+    const v = newLayout(
+      freeName(name, taken),
+      useScene.getState().parts,
+      { ...t, dims: base.dims, parentIds: useStudio.getState().parentIds },
+      { favourite: true },
+    );
     await roomStore.saveLayout(routeRoom, v);
     patchIdea(idea.id, { savedId: v.id });
     toast({ title: `${v.name} saved to Layouts`, ttl: 4000 });
@@ -372,16 +429,20 @@ export function IdeasPanel({
   }
 
   const found = session?.ideas.length ?? 0;
-  const page = session?.page ?? 0;
+  const exhausted = session !== null && session.dry >= DRY_SEARCHES;
+  const failed = session?.failed ?? false;
+  const lastPage = Math.max(0, Math.ceil(found / size) - 1);
+  // A page past the last idea is only worth showing while more are coming. Pressed
+  // Next into a search that then ran dry, it would be a blank card.
+  const page = Math.min(session?.page ?? 0, exhausted || failed ? lastPage : Infinity);
   const shown = session ? pageOf(session.ideas, page, size) : [];
   const onScreen = session?.ideas.find((i) => i.key === tKey) ?? null;
-  const expecting = session !== null && anyMovable && status === 'ok' && wantsMore(found, page, size, session.dry);
+  const expecting =
+    session !== null && hydrated && anyMovable && status === 'ok' && !failed && wantsMore(found, page, size, session.dry);
   const placeholders = expecting ? size - shown.length : 0;
-  const lastPage = Math.max(0, Math.ceil(found / size) - 1);
   const canNext = page < lastPage || (expecting && shown.length === size);
   const range = pageRange(page, size, found);
   const plan = miniPlanBox(room.footprint);
-  const exhausted = session !== null && session.dry >= DRY_SEARCHES;
 
   // Pieces a person can keep or let go: everything an idea could move.
   const keepable = base ? base.parts.filter((p) => !p.wallMounted && !p.locked) : [];
@@ -435,14 +496,20 @@ export function IdeasPanel({
         <IconButton icon="x" label="Close ideas" onClick={onClose} size={24} iconSize={12} />
       </div>
 
-      {status === 'stale' ? (
+      {!hydrated ? (
+        <div className="ideas-panel__note">
+          <div className="t-hint" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Spinner size={10} /> Opening your room…
+          </div>
+        </div>
+      ) : status === 'stale' ? (
         <div className="ideas-panel__note">
           <div className="t-small" style={{ fontWeight: 700 }}>The room changed</div>
           <div className="t-hint">These ideas were for the room before your last edit.</div>
           <button
             className="ds-btn ds-btn--xs"
             style={{ alignSelf: 'flex-start' }}
-            onClick={() => useIdeas.setState({ session: begin(roomId, null) })}
+            onClick={() => useIdeas.setState({ session: begin(roomId, null, appPlaced.current) })}
           >
             Find new ideas
           </button>
@@ -451,6 +518,14 @@ export function IdeasPanel({
         <div className="ideas-panel__note">
           <div className="t-small" style={{ fontWeight: 700 }}>Nothing here can move</div>
           <div className="t-hint">Every piece is kept in place or fixed to a wall.</div>
+        </div>
+      ) : failed && found === 0 ? (
+        <div className="ideas-panel__note">
+          <div className="t-small" style={{ fontWeight: 700 }}>The search stopped</div>
+          <div className="t-hint">Something went wrong while looking for ideas. Your room is unchanged.</div>
+          <button className="ds-btn ds-btn--xs" style={{ alignSelf: 'flex-start' }} onClick={() => setSession({ failed: false })}>
+            Try again
+          </button>
         </div>
       ) : refusal ? (
         <div className="ideas-panel__note">
@@ -483,8 +558,16 @@ export function IdeasPanel({
               <span className="ds-skeleton__line ds-skeleton__line--short" />
             </div>
           ))}
-          {exhausted && found > 0 && page === lastPage && shown.length < size && (
+          {exhausted && !failed && found > 0 && page === lastPage && shown.length < size && (
             <div className="t-hint ideas-grid__end">No more ideas for this room.</div>
+          )}
+          {failed && (
+            <div className="t-hint ideas-grid__end">
+              The search stopped.{' '}
+              <button className="ds-btn ds-btn--xs" onClick={() => setSession({ failed: false })}>
+                Try again
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -515,7 +598,7 @@ export function IdeasPanel({
       {status !== 'stale' && (found > 0 || onScreen || tKey !== session?.origin.key) && (
         <div className="ideas-panel__foot">
           {session && tKey !== session.origin.key && (
-            <button className="ds-btn ds-btn--xs" onClick={() => loadTransforms(session.origin)}>
+            <button className="ds-btn ds-btn--xs" onClick={backToRoom}>
               <Icon name="rotate-ccw" size={10} /> Back to your room
             </button>
           )}

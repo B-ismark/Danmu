@@ -65,6 +65,7 @@ export default function SettingsPage() {
   // `undefined` while it is being read: "No room is open" said during the read was
   // a false empty state, with a "Go to your rooms" button for a room that WAS open.
   const [room, setRoom] = useState<{ id: string; name: string } | null | undefined>(undefined);
+  const [unreadable, setUnreadable] = useState(false);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -81,8 +82,14 @@ export default function SettingsPage() {
         setRoom(null);
         return;
       }
-      const r = await roomStore.loadRoom(roomId);
-      if (!cancelled) setRoom(r ? { id: r.id, name: r.name } : null);
+      try {
+        const r = await roomStore.loadRoom(roomId);
+        if (!cancelled) setRoom(r ? { id: r.id, name: r.name } : null);
+      } catch {
+        if (cancelled) return;
+        setRoom(null);
+        setUnreadable(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -342,7 +349,9 @@ export default function SettingsPage() {
               ? `Removes “${room.name}”: its shape, wall colours, photos, detections, furniture and saved layouts. Recoverable for 30 days.`
               : room === undefined
                 ? 'Finding the open room…'
-                : 'No room is open.'
+                : unreadable
+                  ? 'The open room could not be read.'
+                  : 'No room is open.'
           }
         >
           <button

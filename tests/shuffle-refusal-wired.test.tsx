@@ -66,6 +66,7 @@ function mount(id: 'u' | 'rect', w: number, d: number) {
     useScene.setState({
       parts,
       room: { ...useScene.getState().room, width: w, depth: d, height: HEIGHT, footprint, layoutId: id },
+      hydratedRoomId: 'shuffle-room',
     });
     useStudio.setState({ positions: {}, rotations: {}, dims: {}, selection: [], selectedPartId: null, pinned: {} });
     useSettings.setState({ dimUnit: 'm', stepFree: false });

@@ -20,7 +20,7 @@
 // spare layout, and one before the drop leaves the old behaviour (the old snapshot
 // still wins) — never a room whose arrangement is gone with no copy.
 
-import { roomStore, type LayoutVariant, type RoomData, type Transforms } from './storage';
+import { newLayout, roomStore, type LayoutVariant, type RoomData, type Transforms } from './storage';
 import { buildSceneFromRoom } from './scene-spec';
 
 export const BEFORE_RESCAN = 'Before re-scan';
@@ -52,13 +52,7 @@ export async function adoptFreshScan(
   const something = savedScene !== undefined || hasEdits(transforms) || hadDetections;
   let kept: LayoutVariant | null = null;
   if (something) {
-    kept = {
-      id: `l-${now.toString(36)}`,
-      name: BEFORE_RESCAN,
-      createdAt: now,
-      parts: savedScene ?? buildSceneFromRoom(room),
-      transforms: transforms ?? EMPTY,
-    };
+    kept = newLayout(BEFORE_RESCAN, savedScene ?? buildSceneFromRoom(room), transforms ?? EMPTY, { now });
     await roomStore.saveLayout(room.id, kept);
   }
   await roomStore.saveRoom({ ...room, detectedObjects });

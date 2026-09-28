@@ -10,18 +10,30 @@
 // marker it sets is the one the veil reads, and only the real load can answer that.
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ToastSpec } from '@/components/ui/StorageToast';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { roomStore, type RoomData } from '@/lib/storage';
 import { useScene } from '@/lib/scene-store';
+import { useStudio } from '@/lib/store';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('veil-room'));
+
+const toasts: ToastSpec[] = [];
+vi.mock('@/components/ui/StorageToast', async () => {
+  const actual = await vi.importActual<typeof import('@/components/ui/StorageToast')>('@/components/ui/StorageToast');
+  return { ...actual, toast: (spec: ToastSpec) => toasts.push(spec) };
+});
 
 const { RoomSync } = await import('@/components/studio/RoomSync');
 const { CanvasVeil } = await import('@/components/studio/CanvasVeil');
 
 const ROOM = { id: 'veil-room', name: 'Den', createdAt: 1, version: 1, layoutId: 'rect', width: 6, depth: 5, height: 2.6 } as RoomData;
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  toasts.length = 0;
+});
 
 describe('the canvas veil', () => {
   it('covers the canvas from the first render until the room has loaded, then lifts', async () => {
@@ -59,5 +71,32 @@ describe('the canvas veil', () => {
     );
     expect(screen.getByRole('status').textContent).toMatch(/Opening your room…/);
     await waitFor(() => expect(screen.queryByText(/Opening your room/)).toBeNull());
+  });
+
+  it('a room that cannot be read lifts the veil, says so, and saves nothing over it', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(roomStore, 'loadRoom').mockRejectedValue(new Error('blocked'));
+    const saved = vi.spyOn(roomStore, 'saveTransforms');
+    render(
+      <>
+        <RoomSync />
+        <CanvasVeil />
+      </>,
+    );
+    // Not "Opening your room…" forever.
+    await waitFor(() => expect(screen.queryByText(/Opening your room/)).toBeNull());
+    expect(toasts.map((t) => t.title)).toEqual(['This room could not be opened']);
+    // The starter room is on screen; an edit to it must not be written over the room.
+    act(() => useStudio.setState({ positions: { anything: [1, 0, 1] } }));
+    await new Promise((r) => setTimeout(r, 400));
+    expect(saved).not.toHaveBeenCalled();
+  });
+
+  it('leaving a room clears the marker, so a revisit is veiled from its first paint', async () => {
+    await roomStore.saveRoom(ROOM);
+    const { unmount } = render(<RoomSync />);
+    await waitFor(() => expect(useScene.getState().hydratedRoomId).toBe('veil-room'));
+    unmount();
+    expect(useScene.getState().hydratedRoomId).toBeNull();
   });
 });

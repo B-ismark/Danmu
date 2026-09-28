@@ -76,7 +76,8 @@ import {
 import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
 import { solveOffThread } from '@/lib/layout-offload';
 import { sameStamp, stampOf, type SolveStamp } from '@/lib/solve-stamp';
-import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
+import { newLayout, roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
+import { transformsKey } from '@/lib/layout-ideas';
 import type { Footprint } from '@/lib/footprint';
 import { formatDim, formatLength, fromMM, stepFor, toMM } from '@/lib/units';
 import { checkFit, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
@@ -1744,15 +1745,12 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
 
 // ─── Layouts — named arrangement snapshots ─────────────────────────────────
 
-function transformKey(t: Transforms): string {
-  return JSON.stringify([t.positions, t.rotations, t.dims]);
-}
-
 function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprint: Footprint }) {
   const { roomId } = useParams<{ roomId: string }>();
   // Null until the saved list is read, so the tab does not say "No saved layouts
   // yet" about a room that has some.
   const [layouts, setLayouts] = useState<LayoutVariant[] | null>(null);
+  const [unreadable, setUnreadable] = useState(false);
   const [pendingApply, setPendingApply] = useState<LayoutVariant | null>(null);
   // A plain flag on purpose, and NOT `useBusyAction`: the work here is a real
   // `await` into IndexedDB, so the thread is handed back and the flag paints
@@ -1768,20 +1766,24 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
 
   useEffect(() => {
     if (!roomId) return;
-    roomStore.listLayouts(roomId).then(setLayouts);
+    roomStore
+      .listLayouts(roomId)
+      .then(setLayouts)
+      // Said, rather than an empty list that claims there are none.
+      .catch(() => {
+        setLayouts([]);
+        setUnreadable(true);
+      });
   }, [roomId]);
 
   async function saveCurrent(): Promise<LayoutVariant | null> {
     if (!roomId) return null;
     const t = useStudio.getState();
     const transforms: Transforms = { positions: t.positions, rotations: t.rotations, dims: t.dims, parentIds: t.parentIds };
-    const v: LayoutVariant = {
-      id: `l-${Date.now().toString(36)}`,
-      name: `Layout ${String.fromCharCode(65 + ((layouts?.length ?? 0) % 26))}`,
-      createdAt: Date.now(),
-      parts: baseParts,
-      transforms,
-    };
+    // Lettered by the layouts saved THIS way: hearts from the ideas gallery are
+    // named "Idea N" and would otherwise make the letters skip.
+    const lettered = (layouts ?? []).filter((l) => !l.favourite).length;
+    const v = newLayout(`Layout ${String.fromCharCode(65 + (lettered % 26))}`, baseParts, transforms);
     await roomStore.saveLayout(roomId, v);
     setLayouts((prev) => [...(prev ?? []), v]);
     return v;
@@ -1810,8 +1812,9 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
       Object.keys(t.rotations).length === 0 &&
       Object.keys(t.dims).length === 0;
     if (untouched) return true;
-    const key = transformKey({ positions: t.positions, rotations: t.rotations, dims: t.dims });
-    return (layouts ?? []).some((l) => transformKey(l.transforms) === key);
+    // One key for "the same arrangement", shared with the ideas gallery.
+    const key = transformsKey({ positions: t.positions, rotations: t.rotations, dims: t.dims });
+    return (layouts ?? []).some((l) => transformsKey(l.transforms) === key);
   }
 
   function requestApply(v: LayoutVariant) {
@@ -1873,7 +1876,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
         </div>
       ) : layouts.length === 0 ? (
         <div className="t-small" style={{ padding: '16px 14px', lineHeight: 1.55 }}>
-          No saved layouts yet.
+          {unreadable ? 'Saved layouts could not be read.' : 'No saved layouts yet.'}
         </div>
       ) : (
         layouts.map((v) => {

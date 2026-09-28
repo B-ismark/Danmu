@@ -223,10 +223,6 @@ export type ShuffleOptions = {
 };
 
 export type ShuffleOutcome = {
-  result: SolveResult;
-  /** What to put in the history, already carrying the ids it is aligned to, so the
-   *  caller cannot record a bare `Placement[]` and reintroduce the drift above. */
-  offer: ShuffleOffer;
   /** How many solves were run and how many survived the fault filter. Reported
    *  rather than discarded because "we tried twelve and none was usable" and "the
    *  first four were all fine" are different facts about a room, and only one of
@@ -234,15 +230,17 @@ export type ShuffleOutcome = {
   tried: number;
   clean: number;
   /** Every candidate worth SHOWING from this attempt, in offer order: clean, not
-   *  like anything in `history`, and not like an earlier entry of this list. When it
-   *  is non-empty its first entry IS `result`; when it is empty, `result` is the
-   *  repeat that the fallback below hands back rather than refuse.
+   *  like anything in `history`, and not like an earlier entry of this list. Empty
+   *  when every clean candidate was a repeat, which the gallery counts as a dry
+   *  search.
    *
-   *  The ideas gallery reads this and a single press reads `result`, and they are
-   *  one list rather than two searches because the pool was already gathered:
-   *  `MIN_CLEAN` stops the loop at four clean candidates so that `orderOffers` has
-   *  something to choose between, and before this field three of those four were
-   *  discarded after the choice. A page of ideas is those four. */
+   *  It is the whole pool rather than one winner because the pool was already
+   *  gathered: `MIN_CLEAN` stops the loop at four clean candidates so that
+   *  `orderOffers` has something to choose between, and the Shuffle button this
+   *  replaced applied the first and discarded the other three. A page of ideas is
+   *  those four. There is no longer a `result` or a fallback to a repeat: the one
+   *  caller that wanted a single answer is gone, and a gallery shows a repeat as
+   *  nothing new rather than as an idea. */
   ideas: SolveResult[];
 };
 
@@ -414,10 +412,7 @@ export function shuffleRoom(
     diversityPenalty: opts.diversityPenalty ?? DIVERSITY_PENALTY,
   });
 
-  // …then walk that order and pass over anything the user has just been shown.
-  // Falls back to the top-ranked candidate rather than refusing: a repeat is still a
-  // valid room and still different from the one on screen, and "no" to someone who
-  // pressed the button is the worse answer.
+  // …then walk that order and pass over anything the user has already been shown.
   //
   // Only history recorded against THIS furniture is comparable. An entry from before
   // a piece was added or deleted is not stale-but-usable, it is index-aligned to a
@@ -429,16 +424,11 @@ export function shuffleRoom(
   const ideas = showableIdeas(ranked, history, (a, b) =>
     layoutSimilarity(a, b, { spotM: LAYOUT_SIMILAR_M, yawRad: TURN_EPSILON, movable }) > REPEAT_SIMILARITY,
   );
-  const result = ideas[0] ?? ranked[0];
-  return { result, offer: { ids, placements: result.placements }, tried, clean: clean.length, ideas };
+  return { tried, clean: clean.length, ideas };
 }
 
 /** The ranked candidates worth showing, in rank order: each one checked against
  *  what has been shown already AND against the ideas kept before it.
- *
- *  The second half arrived with the gallery and cannot change what a single press
- *  applies: the first candidate kept has nothing before it to be compared with, so
- *  it is the same first-not-a-repeat `shuffleRoom` always returned.
  *
  *  **It has no work to do on today's rooms, and that is measured, not hoped.** The
  *  clean pool is already mutually unlike (see `DIVERSITY_PENALTY`: none of 66 pairs

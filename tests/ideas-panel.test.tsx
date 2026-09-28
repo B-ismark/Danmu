@@ -25,6 +25,7 @@ import { useSettings, useStudio } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import type { SolveResult } from '@/lib/layout-solve';
 import { viewportAt } from './helpers/mount';
+import { DRY_SEARCHES } from '@/lib/layout-ideas';
 
 const ROOM_ID = 'ideas-room';
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('ideas-room'));
@@ -33,6 +34,9 @@ vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigat
 const step = (n: number) => 0.1 * n;
 let handedOut = 0;
 let calls = 0;
+/** What the stand-in does: hand out four ideas a call; throw; or four once and then
+ *  nothing, which is a room that runs dry after one page. */
+let mode: 'four' | 'throw' | 'once' = 'four';
 
 vi.mock('@/lib/layout-shuffle', async () => {
   const actual = await vi.importActual<typeof import('@/lib/layout-shuffle')>('@/lib/layout-shuffle');
@@ -40,6 +44,8 @@ vi.mock('@/lib/layout-shuffle', async () => {
     ...actual,
     shuffleRoom: (parts: ScenePart[], _room: unknown, locked: boolean[]) => {
       calls += 1;
+      if (mode === 'throw') throw new Error('solver fell over');
+      if (mode === 'once' && calls > 1) return { tried: 12, clean: 0, ideas: [] };
       const m = parts.findIndex((p, i) => !locked[i] && !p.wallMounted);
       if (m < 0) return null;
       const ideas = Array.from({ length: 4 }, (): SolveResult => {
@@ -48,13 +54,13 @@ vi.mock('@/lib/layout-shuffle', async () => {
         placements[m] = { ...placements[m], x: placements[m].x + step(handedOut) };
         return { placements, moved: [m] } as unknown as SolveResult;
       });
-      return { result: ideas[0], offer: { ids: parts.map((p) => p.id), placements: ideas[0].placements }, tried: 4, clean: 4, ideas };
+      return { tried: 4, clean: 4, ideas };
     },
   };
 });
 
 const { RoomTools } = await import('@/components/studio/RoomTools');
-const { useIdeas } = await import('@/components/studio/IdeasPanel');
+const { IdeasPanel, useIdeas } = await import('@/components/studio/IdeasPanel');
 
 const W = 6;
 const D = 4;
@@ -69,6 +75,8 @@ function mount() {
     useScene.setState({
       parts,
       room: { ...useScene.getState().room, width: W, depth: D, height: HEIGHT, footprint, layoutId: 'rect' },
+      // As `RoomSync` leaves it once the room has loaded; the gallery waits for it.
+      hydratedRoomId: ROOM_ID,
     });
     useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {}, selection: [], selectedPartId: null, pinned: {} });
     useSettings.setState({ dimUnit: 'm', stepFree: false });
@@ -90,6 +98,7 @@ const firstMovable = () => parts.find((p) => !p.wallMounted && !p.locked && !use
 beforeEach(() => {
   handedOut = 0;
   calls = 0;
+  mode = 'four';
   useIdeas.setState({ session: null });
 });
 
@@ -262,9 +271,118 @@ describe('the ideas gallery', () => {
     expect(calls).toBe(0);
   });
 
+  it('waits for the room to finish loading before asking anything of it', async () => {
+    mount();
+    act(() => useScene.setState({ hydratedRoomId: null }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Ideas$/ }));
+    });
+    expect(screen.getByText('Opening your room…')).toBeTruthy();
+    expect(calls, 'nothing asked of the starter room').toBe(0);
+    act(() => useScene.setState({ hydratedRoomId: ROOM_ID }));
+    expect(await screen.findAllByRole('button', { name: /^Idea \d+:/ })).toHaveLength(4);
+    // Begun on the room that loaded, so it is not stale the moment it arrives.
+    expect(screen.queryByText('The room changed')).toBeNull();
+  });
+
+  it('a search that fails says so, and never that every layout was in the way', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mode = 'throw';
+    mount();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Ideas$/ }));
+    });
+    expect(await screen.findByText('The search stopped')).toBeTruthy();
+    expect(screen.queryByText('No ideas this time')).toBeNull();
+    expect(calls, 'one failure stops the search rather than burning three').toBe(1);
+    expect(quiet).toHaveBeenCalled();
+    mode = 'four';
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    });
+    expect(await screen.findAllByRole('button', { name: /^Idea \d+:/ })).toHaveLength(4);
+  });
+
+  it('a page pressed into a search that then ran dry falls back to the last one with ideas', async () => {
+    mode = 'once';
+    mount();
+    await openIdeas();
+    // Next is live while the second page is still being looked for.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'More ideas' }));
+    });
+    await vi.waitFor(() => {
+      const s = useIdeas.getState().session!;
+      expect(s.searching === false && s.dry >= DRY_SEARCHES).toBe(true);
+    });
+    expect(cards(), 'never a blank card').toHaveLength(4);
+    expect(screen.getByRole('button', { name: 'More ideas' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('a double press on a heart saves the idea once', async () => {
+    mount();
+    await openIdeas();
+    const heart = screen.getByRole('button', { name: 'Save Idea 2 to Layouts' });
+    await act(async () => {
+      fireEvent.click(heart);
+      fireEvent.click(heart);
+    });
+    await vi.waitFor(async () => expect(heart.getAttribute('aria-pressed')).toBe('true'));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await roomStore.listLayouts(ROOM_ID)).toHaveLength(1);
+  });
+
+  it('an undo back onto an idea from before a piece was kept is not a hand edit', async () => {
+    mount();
+    await openIdeas();
+    const piece = firstMovable();
+    await act(async () => {
+      fireEvent.click(cards()[1]);
+    });
+    const idea2 = { ...useStudio.getState().positions };
+    await act(async () => {
+      fireEvent.click(cards()[2]);
+    });
+    // Keep a piece other than the one the stand-in moves, so the ideas start again.
+    const other = parts.find((p) => p.id !== piece.id && !p.wallMounted && !p.locked)!;
+    await act(async () => {
+      useStudio.getState().togglePinned(other.id);
+    });
+    await screen.findAllByRole('button', { name: /^Idea \d+:/ });
+    // What undo would restore: idea 2, which the gallery itself put on screen.
+    await act(async () => {
+      useStudio.setState({ positions: idea2 });
+    });
+    expect(screen.queryByText('The room changed')).toBeNull();
+  });
+
+  it('Back to your room puts back the app\'s record of what it placed, with the room', async () => {
+    mount();
+    const piece = firstMovable();
+    // Fix had placed this piece where it stands; the record says so.
+    const fixed = { pos: [piece.pos[0], piece.pos[1], piece.pos[2]] as [number, number, number], rot: piece.rot };
+    act(() => useStudio.setState({ positions: { [piece.id]: fixed.pos }, rotations: { [piece.id]: fixed.rot } }));
+    const appPlaced = { current: new Map([[piece.id, fixed]]) };
+    const anchor = { current: document.createElement('div') };
+    render(<IdeasPanel anchorRef={anchor} onClose={() => {}} appPlaced={appPlaced} />);
+    await screen.findAllByRole('button', { name: /^Idea \d+:/ });
+    await act(async () => {
+      fireEvent.click(cards()[0]);
+    });
+    expect(appPlaced.current.get(piece.id)!.pos[0]).toBeCloseTo(piece.pos[0] + step(1), 9);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Back to your room/ }));
+    });
+    // Still the app's, so Fix may move it without treating it as placed by hand.
+    expect(appPlaced.current.get(piece.id)).toEqual(fixed);
+  });
+
   it('survives the tab switch: the same ideas are there after a remount', async () => {
     mount();
     const first = (await openIdeas()).map((b) => b.getAttribute('aria-label'));
+    // Settled: this page and the next are full, so nothing more is being looked for.
+    await vi.waitFor(() => expect(useIdeas.getState().session?.searching).toBe(false));
+    await vi.waitFor(() => expect(useIdeas.getState().session?.ideas.length).toBe(8));
     const searched = calls;
     cleanup();
     render(<RoomTools />);

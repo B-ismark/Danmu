@@ -13,6 +13,7 @@ import { livingParents } from '@/lib/rigid-parent';
 import { seedHistory } from '@/lib/history';
 import type { ScenePart } from '@/lib/scene-spec';
 import { normalizeStoredParts } from '@/lib/scene-spec';
+import { toast } from '@/components/ui/StorageToast';
 
 const DEBOUNCE_MS = 300;
 
@@ -48,12 +49,34 @@ export function RoomSync() {
     ready.current = false;
     // Even for the room the store already holds: it may have changed in another tab.
     useScene.getState().setHydrated(null);
+    let live = true;
     (async () => {
-      const [room, savedScene, t] = await Promise.all([
-        roomStore.loadRoom(roomId),
-        roomStore.loadSceneParts<ScenePart[]>(roomId),
-        roomStore.loadTransforms(roomId),
-      ]);
+      let loaded: [Awaited<ReturnType<typeof roomStore.loadRoom>>, ScenePart[] | undefined, Awaited<ReturnType<typeof roomStore.loadTransforms>>];
+      try {
+        loaded = await Promise.all([
+          roomStore.loadRoom(roomId),
+          roomStore.loadSceneParts<ScenePart[]>(roomId),
+          roomStore.loadTransforms(roomId),
+        ]);
+      } catch (err) {
+        // Storage unreadable: a private window, blocked site data, a broken record.
+        // The veil must still lift (an opaque "Opening your room…" forever is worse
+        // than any room), and `ready` stays FALSE, so nothing below writes: the
+        // starter room on screen must never be saved over the room that could not
+        // be read.
+        console.error('[room] could not read the room', err);
+        if (!live) return;
+        loadFromRoom(undefined);
+        useScene.getState().setHydrated(roomId);
+        toast({
+          tone: 'danger',
+          title: 'This room could not be opened',
+          message: 'This browser would not let Danmu read it. A starter room is showing, and nothing you do here will be saved over yours.',
+        });
+        return;
+      }
+      if (!live) return;
+      const [room, savedScene, t] = loaded;
       loadFromRoom(room);
       // If user previously edited / deleted parts, prefer that snapshot over rebuild from detections.
       // An empty array is a room the user emptied on purpose, NOT a missing
@@ -103,6 +126,12 @@ export function RoomSync() {
       // default starter scene and the first undo would wipe the real room.
       seedHistory();
     })();
+    return () => {
+      live = false;
+      // Leaving this room, so the next one to open (or this one, revisited) starts
+      // behind the veil from its first paint rather than one frame after it.
+      useScene.getState().setHydrated(null);
+    };
   }, [roomId, loadFromRoom, setParts, loadTransforms, setHiddenMap, setPinnedMap, setParentIds]);
 
   // Persist transform changes

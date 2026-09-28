@@ -31,9 +31,13 @@ export function TopBar({
 
   useEffect(() => {
     if (!roomId) return;
-    roomStore.loadRoom(roomId).then((r) => {
-      if (r) setName(r.name);
-    });
+    // A room that is not there, or storage that cannot be read, still gets a name
+    // to show: "Room", the Export menu's fallback too, rather than a loading gap
+    // that never fills.
+    roomStore
+      .loadRoom(roomId)
+      .then((r) => setName(r?.name ?? 'Room'))
+      .catch(() => setName('Room'));
   }, [roomId]);
 
   useEffect(() => () => {

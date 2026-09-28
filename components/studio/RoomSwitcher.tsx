@@ -18,12 +18,23 @@ export function RoomSwitcher() {
   // Null until the first read: "No rooms yet" said during the read was false, in a
   // menu opened from inside a room.
   const [rooms, setRooms] = useState<RoomSummary[] | null>(null);
+  const [unreadable, setUnreadable] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    roomStore.listRooms().then(setRooms);
+    roomStore
+      .listRooms()
+      .then((rs) => {
+        setRooms(rs);
+        setUnreadable(false);
+      })
+      // Not "No rooms yet", which would be false, and not a spinner forever.
+      .catch(() => {
+        setRooms([]);
+        setUnreadable(true);
+      });
   }, [open]);
 
   useEffect(() => {
@@ -106,7 +117,9 @@ export function RoomSwitcher() {
             </div>
           )}
           {rooms?.length === 0 && (
-            <div className="t-meta" style={{ padding: '14px 12px' }}>No rooms yet.</div>
+            <div className="t-meta" style={{ padding: '14px 12px' }}>
+              {unreadable ? 'Your rooms could not be read.' : 'No rooms yet.'}
+            </div>
           )}
           {rooms?.map((r) => {
             const isCurrent = r.id === currentId;

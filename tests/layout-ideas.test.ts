@@ -53,14 +53,13 @@ describe('a shuffle hands back every idea worth showing', () => {
   const alike = (a: Placement[], b: Placement[]) =>
     layoutSimilarity(a, b, { spotM: LAYOUT_SIMILAR_M, yawRad: TURN_EPSILON, movable });
 
-  it('more than one, led by the one a single press applies, and no two alike', () => {
+  it('more than one, and no two alike', () => {
     const out = shuffleRoom(parts, room, locked, { attempt: 1 });
     expect(out).not.toBeNull();
     // A page of ideas is only a page if a press finds several. Asserted rather than
     // assumed: the gallery exists because the pool was already there.
     expect(out!.ideas.length).toBeGreaterThan(1);
     expect(out!.ideas.length).toBeLessThanOrEqual(out!.clean);
-    expect(out!.ideas[0]).toBe(out!.result);
     for (let i = 0; i < out!.ideas.length; i++)
       for (let j = 0; j < i; j++)
         expect(alike(out!.ideas[i].placements, out!.ideas[j].placements)).toBeLessThanOrEqual(REPEAT_SIMILARITY);
@@ -68,12 +67,12 @@ describe('a shuffle hands back every idea worth showing', () => {
 
   it('none of them repeats what the gallery has already shown', () => {
     const first = shuffleRoom(parts, room, locked, { attempt: 1 })!;
-    const shown = first.ideas.map((r) => ({ ids: first.offer.ids, placements: r.placements }));
+    const ids = parts.map((p) => p.id);
+    const shown = first.ideas.map((r) => ({ ids, placements: r.placements }));
     // Same attempt, so the same pool: everything in it has been shown, and the
-    // honest answer is an empty list — with `result` still the fallback repeat.
+    // honest answer is an empty list, never a repeat dressed as an idea.
     const again = shuffleRoom(parts, room, locked, { attempt: 1, history: shown })!;
     expect(again.ideas).toEqual([]);
-    expect(again.result.placements).toEqual(first.result.placements);
     // A new attempt is a new question, and what it offers is new.
     const next = shuffleRoom(parts, room, locked, { attempt: 2, history: shown })!;
     for (const idea of next.ideas)
