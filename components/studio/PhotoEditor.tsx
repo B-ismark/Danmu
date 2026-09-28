@@ -12,7 +12,7 @@
 // All coordinates are normalized 0..1 in image space — the same convention used
 // by the detection pipeline. The element is responsive to its container.
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { Detection } from '@/lib/detection';
 import { Icon } from '@/components/ui/Icon';
 import { BOX_BORDER_PX, TAG_HEIGHT_PX, boxCss, tagCss, tagSpot } from '@/lib/photo-tag';
@@ -104,6 +104,9 @@ export function PhotoEditor({
         cursor: mode === 'add' ? 'crosshair' : 'default',
         userSelect: 'none',
         touchAction: 'none',
+        // The tags are raised over the boxes, and that stays in here: the page's own
+        // layers over the photo still paint over all of it, as they do by their order.
+        isolation: 'isolate',
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -118,18 +121,15 @@ export function PhotoEditor({
         draggable={false}
       />
 
+      {/* One piece at a time, its box and then its tag, so Tab reads each piece's keep
+          toggle and then its Remove. The tags are raised over every box instead of
+          coming after them all, which is what keeps a box's press area off another
+          piece's X. */}
       {items.map((item) => (
-        <ItemBox key={item.index} item={item} mode={mode} onToggleLock={() => onToggleLock(item.index)} />
-      ))}
-      {/* Tags after every box, so no box's press area lies over another piece's X. */}
-      {items.map((item) => (
-        <ItemTag
-          key={item.index}
-          item={item}
-          mode={mode}
-          photoH={photoH}
-          onDelete={() => onDelete(item.index)}
-        />
+        <Fragment key={item.index}>
+          <ItemBox item={item} mode={mode} onToggleLock={() => onToggleLock(item.index)} />
+          <ItemTag item={item} mode={mode} photoH={photoH} onDelete={() => onDelete(item.index)} />
+        </Fragment>
       ))}
 
       {drag && (
@@ -143,6 +143,7 @@ export function PhotoEditor({
             border: '2px dashed var(--accent)',
             background: 'var(--accent-tint-strong)',
             pointerEvents: 'none',
+            zIndex: 'var(--z-photo-raised)',
           }}
         />
       )}
@@ -245,6 +246,7 @@ function ItemTag({
         height: TAG_HEIGHT_PX,
         display: 'flex',
         pointerEvents: 'none',
+        zIndex: 'var(--z-photo-raised)',
       }}
     >
       <div style={{ flex: `0 1 ${css.start}` }} />
