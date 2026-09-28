@@ -28,7 +28,7 @@
 
 import { newLayout, roomStore, type LayoutVariant, type RoomData, type Transforms } from './storage';
 import { buildSceneFromRoom, type ScenePart } from './scene-spec';
-import { detectionPartIds, type SavedDetection } from './detection-record';
+import { detectionPartIds, fromRecord, type SavedDetection } from './detection-record';
 
 export const BEFORE_RESCAN = 'Before re-scan';
 
@@ -101,7 +101,12 @@ export type ListEdit = {
  *  A piece is found by the id its row builds as (`detectionPartIds`), and a new one is
  *  built by `buildSceneFromRoom` against the whole new list, so it is the piece the
  *  studio would have built. Transforms are keyed by the same ids and are not touched:
- *  a piece ticked back in later lands where the person last put it. */
+ *  a piece ticked back in later lands where the person last put it.
+ *
+ *  A rebuilt piece takes the place of the one it replaces, and keeps what the studio
+ *  did to it (`carryStudioEdits`). It used to be taken out and appended, rebuilt bare,
+ *  so re-wording one kept row on the scan screen moved it to the bottom of the list
+ *  and quietly undid its recolour, its finish and the set it was merged into. */
 export function applyListEdits(parts: ScenePart[], room: RoomData, next: SavedDetection[]): ListEdit | null {
   const before = room.detectedObjects ?? [];
   const was = new Map(detectionPartIds(before).map((id, i) => [id, before[i]]));
@@ -126,12 +131,53 @@ export function applyListEdits(parts: ScenePart[], room: RoomData, next: SavedDe
   const added = built.length - updated;
   // A row unticked whose piece the studio had already deleted changes no piece.
   if (removed + added + updated === 0) return null;
+  const rebuilt = new Map(built.map((p) => [p.id, p]));
+  const kept = parts.flatMap((p) => {
+    const fresh = rebuilt.get(p.id);
+    if (fresh) return [carryStudioEdits(p, fresh, was.get(p.id), now.get(p.id))];
+    return out.has(p.id) ? [] : [p];
+  });
   return {
-    parts: [...parts.filter((p) => !out.has(p.id) && !into.has(p.id)), ...built],
+    parts: [...kept, ...built.filter((p) => !present.has(p.id))],
     removed,
     added,
     updated,
   };
+}
+
+/** `fresh`, rebuilt from its row's new details, with what the studio had done to
+ *  `old`, the piece it replaces. `was` and `now` are the row before and after.
+ *
+ *  The row decides what the piece IS — its model, its size, where the photo put it —
+ *  and the studio decides how it looks and what it belongs to, so those carry:
+ *
+ *  · **Colour**, when the studio changed it. The build copies the row's photo colour
+ *    onto the piece, so a piece whose colour is still the row's has nobody's choice
+ *    in it, and follows the row. One that differs was recoloured, or reset, and that
+ *    stands.
+ *  · **Finish and merged set**, always: neither is something a row has an opinion on.
+ *  · **Decor, light and name**, only while it is the same model. What sits on a
+ *    desk and a lamp's brightness belong to that model, and a studio name survives a
+ *    rebuild only while the row's words have not changed as well — the scan screen's
+ *    new word is the newer name. A name carried across a change of model is how a bed
+ *    came to be called Fridge: the studio's model swap names the piece, and a rebuild
+ *    that put the row's own model back under the swap's name would repeat it. */
+function carryStudioEdits(
+  old: ScenePart,
+  fresh: ScenePart,
+  was: SavedDetection | undefined,
+  now: SavedDetection | undefined,
+): ScenePart {
+  const out: ScenePart = { ...fresh };
+  if (old.color !== was?.color) out.color = old.color;
+  if (old.finish !== undefined) out.finish = old.finish;
+  if (old.groupId !== undefined) out.groupId = old.groupId;
+  if (old.shape === fresh.shape) {
+    if (old.decor !== undefined) out.decor = old.decor;
+    if (old.light !== undefined) out.light = old.light;
+    if (was && now && fromRecord(was).label === fromRecord(now).label) out.name = old.name;
+  }
+  return out;
 }
 
 /** Save an edited list the room was already built from, and make the studio show the

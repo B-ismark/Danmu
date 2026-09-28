@@ -150,6 +150,66 @@ describe('applyListEdits', () => {
     expect(edit).toMatchObject({ removed: 0, added: 0, updated: 1 });
   });
 
+  // Rebuilt where it stood, not appended: the studio's list is in the order the
+  // person has been looking at, and a re-worded row should not jump to the bottom.
+  it('a rebuilt piece keeps its place in the room', () => {
+    const edit = applyListEdits(SCENE, R, [LIST[0], { ...LIST[1], yaw: 1.2 }, LIST[2]]);
+    expect(ids(edit?.parts)).toEqual(['bed-a', 'bed-b', 'lib-plant']);
+    expect(edit?.parts[1].rot).not.toBe(built[1].rot);
+  });
+
+  describe('a rebuilt piece keeps what the studio did to it', () => {
+    const decor = [{ id: 'd1', kind: 'vase', x: 0, z: 0 }] as ScenePart['decor'];
+    const light = { lumens: 800, kelvin: 2700 } as ScenePart['light'];
+    const dressed: ScenePart = {
+      ...recoloured,
+      name: 'Guest bed',
+      finish: 'satin',
+      groupId: 'g1',
+      decor,
+      light,
+    };
+    const scene = [dressed, built[1], plant];
+    const rebuild = (change: Partial<(typeof LIST)[0]>) =>
+      applyListEdits(scene, R, [{ ...LIST[0], ...change }, LIST[1], LIST[2]])?.parts.find((p) => p.id === 'bed-a');
+
+    it('the same model re-measured keeps all of it, name included', () => {
+      const part = rebuild({ yaw: 1.2 });
+      expect(part).toMatchObject({ color: '#123456', finish: 'satin', groupId: 'g1', name: 'Guest bed' });
+      expect(part?.decor).toBe(decor);
+      expect(part?.light).toBe(light);
+      expect(part?.rot).not.toBe(dressed.rot);
+    });
+
+    it('new words for the same model are its new name, and the rest stays', () => {
+      const part = rebuild({ label: 'my bed__slot:n' });
+      expect(part?.shape).toBe(dressed.shape);
+      expect(part).toMatchObject({ name: 'my bed', color: '#123456', finish: 'satin', groupId: 'g1' });
+      expect(part?.decor).toBe(decor);
+    });
+
+    it('a different model keeps its colour, finish and set, and not what belonged to the old model', () => {
+      const part = rebuild({ category: 'sofa', label: 'sofa__slot:n' });
+      expect(part).toMatchObject({ category: 'sofa', name: 'sofa', color: '#123456', finish: 'satin', groupId: 'g1' });
+      expect(part?.decor).toBeUndefined();
+      expect(part?.light).toBeUndefined();
+    });
+
+    // The build copies a row's photo colour onto its piece, so a piece still wearing
+    // its row's colour was never recoloured, and follows the row.
+    it('a colour nobody chose follows the row', () => {
+      const photo = [{ ...LIST[0], color: '#aa0000' }, LIST[1], LIST[2]];
+      const r = room({ detectedObjects: photo });
+      const [bed] = buildSceneFromRoom(r);
+      expect(bed.color, 'fixture: the build copies the photo colour').toBe('#aa0000');
+      const edit = applyListEdits([bed], r, [{ ...photo[0], yaw: 1.2, color: '#00aa00' }, LIST[1], LIST[2]]);
+      expect(edit?.parts[0].color).toBe('#00aa00');
+      // …and a colour the studio RESET is a choice too: back to the model's own.
+      const reset = applyListEdits([{ ...bed, color: undefined }], r, [{ ...photo[0], yaw: 1.2 }, LIST[1], LIST[2]]);
+      expect(reset?.parts[0].color).toBeUndefined();
+    });
+  });
+
   // Each field that shapes the piece, changed on its own.
   it.each([
     ['label', { label: 'bunk bed__slot:n' }],
