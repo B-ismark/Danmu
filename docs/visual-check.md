@@ -1786,7 +1786,7 @@ in metres and feet; a browser probe walked skip → note → *These are right* �
 skip → typed width → reload, typed on the picker, and skip → capture → scan, 18 of 18 on
 three runs. A real phone, and a person reading the note, are the unlooked-at half.
 
-### A piece's tag stays on the photo — this branch, PROBED at 360, 768 and 1280
+### A piece's tag stays on the photo — this branch (PR #161), PROBED at 360, 768 and 1280
 
 **Where to click.** The detect screen, with pieces near the photo's right edge and touching
 its top — a picture high on the wall, a pendant, a chair at the side of the frame — and, if
