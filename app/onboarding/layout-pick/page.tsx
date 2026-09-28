@@ -324,9 +324,11 @@ export default function LayoutPickPage() {
                   <label
                     key={axis}
                     className="size-entry__field"
-                    // Left means focus went out of the FIELD, not out of the input:
-                    // a chevron press moves focus to the chevron, and counting that
-                    // judged the box live while the person was still working it.
+                    // Left means focus went out of the FIELD, not out of the input.
+                    // A chevron press used to move focus to the chevron, and counting
+                    // that judged the box live while the person was still working it;
+                    // it leaves focus where it was now (`NumberField`), and the check
+                    // stays on the label so that holds whatever else joins the field.
                     onBlur={(e) => {
                       if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
                       setLeft((s) => (s.has(axis) ? s : new Set(s).add(axis)));

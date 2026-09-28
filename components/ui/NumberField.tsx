@@ -12,10 +12,14 @@
 // more stops per field would add twelve tab stops across the two editors that
 // use this, for a control keyboard users already have.
 //
-// Nor do they take focus when pressed: a press puts it in the field, as a native
-// spinner's arrows do. A pressed button takes focus by default, and these took it
-// out of the field onto a button assistive tech is told is not there — after which
-// Up and Down stepped nothing, because the field they step no longer had focus.
+// Nor do they take focus when pressed: a press leaves it where it was. A pressed
+// button takes focus by default, and these took it out of the field onto a button
+// assistive tech is told is not there — after which Up and Down stepped nothing,
+// because the field they step no longer had focus. Putting focus IN the field
+// instead, as a native spinner does, was tried and dropped: the studio's shortcuts
+// stand down while an input has focus (`KeyboardShortcuts.tsx`), so undo stopped
+// undoing the step just taken; and on a touch laptop, where the arrows show, a tap
+// focusing a decimal field can bring up the on-screen keyboard.
 //
 // On a touch screen the chevrons step aside (`.num-field` in globals.css) and the
 // field grows to 44px. A 16 × 14 arrow is not a target a finger can hit, and on a
@@ -85,7 +89,6 @@ export function NumberField({
   // would take one step and then sit there however long you held it.
   const emit = useRef(onChange);
   emit.current = onChange;
-  const field = useRef<HTMLInputElement>(null);
 
   const stop = () => {
     if (timer.current !== null) clearInterval(timer.current);
@@ -126,7 +129,6 @@ export function NumberField({
     // Capture, so a pointer that drifts off a 16px target mid-hold keeps
     // stepping and still ends on pointerup.
     e.currentTarget.setPointerCapture(e.pointerId);
-    field.current?.focus({ preventScroll: true });
     hold(dir);
   }
 
@@ -146,7 +148,6 @@ export function NumberField({
   return (
     <div className="num-field" style={{ position: 'relative', display: 'flex' }}>
       <input
-        ref={field}
         type="number"
         inputMode="decimal"
         value={value}
