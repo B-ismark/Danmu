@@ -20,7 +20,7 @@ import {
   defaultCal,
   calFromHfov,
   calibrateFromFloorLine,
-  heightFromFloorLine,
+  fitHeightToFloorLine,
   findFloorLine,
   imageAspect,
   pickLens,
@@ -202,8 +202,7 @@ async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> 
     if (picked !== null) {
       let cal: CameraCal = { ...calFromHfov(picked.hfov, aspect, view), lens: picked.lens };
       if (view.height === undefined && vFloor !== null) {
-        const solved = heightFromFloorLine(vFloor, e.slot, room.footprint, cal);
-        if (solved !== null) cal = { ...cal, height: solved };
+        cal = fitHeightToFloorLine(vFloor, e.slot, room.footprint, cal) ?? cal;
       }
       map[e.slot] = cal;
       continue;

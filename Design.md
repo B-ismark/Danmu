@@ -598,7 +598,10 @@ held as literals in `tests/repeat-sightings.test.ts`):
   (`SWEPT_HFOV_DEG`, 30–120° every 2°) and counts as one piece if ANY one lens puts both
   in the same place. A lens EXIF measured is held fixed — `pickLens` reports `measured`
   for EXIF only, never for a lens inferred from vanishing points — because a bound may
-  falsify an assumption and never overrule a measurement;
+  falsify an assumption and never overrule a measurement. Where the detect screen spent
+  the wall-floor line on the height (or on the lens, against an assumed 1.5 m), that
+  height is one lens's answer, so each swept lens re-asks the line (`atLens`) and a lens
+  that would need the camera below 0.8 m or above 2.2 m answers nothing;
 - **the return wall**, which step 1's `geoLocate` answers: a wall piece seen past a
   corner used to have no position at all, so it had nothing to be compared with;
 - **the side of the frame.** A floor box the side of its photo cut off is not the piece:

@@ -73,6 +73,15 @@ export type CameraCal = {
    *  every lens is used as given — it is for a caller deciding whether a lens may be
    *  doubted, which is only ever an assumed one. */
   lens?: LensSource;
+  /** The row the wall-floor line was found at (0 = top of frame), kept only when
+   *  that line was spent on an unknown: the lens against an ASSUMED camera height
+   *  (`calibrateFromFloorLine`), or the height against a lens (`fitHeightToFloorLine`).
+   *  One line gives one equation in both, so `height` here is this `k`'s answer and
+   *  no other's — a caller that doubts the lens re-asks the line at each one
+   *  (`atLens`) rather than carrying this height to a lens it was never solved for.
+   *  Absent where the height is the person's own: then the height holds and it is
+   *  the line that is doubted along with the lens. */
+  floorLine?: number;
 };
 
 /** Whether a photo's lens is known or assumed. `measured` means EXIF gave a focal
@@ -187,7 +196,7 @@ export function calibrateFromFloorLine(
   // Sanity: a lens a phone could have.
   const hfov = (2 * Math.atan(k / 2) * 180) / Math.PI;
   if (hfov < PLAUSIBLE_HFOV_DEG.min || hfov > PLAUSIBLE_HFOV_DEG.max) return null;
-  return { k, aspect, ...view };
+  return { k, aspect, ...view, ...(view?.height === undefined ? { floorLine: vFloor } : {}) };
 }
 
 /** Plausible band for a solved camera height, in metres. Outside it the floor
@@ -567,6 +576,36 @@ export function heightFromFloorLine(
   const height = (d * (s - b * c)) / denom;
   if (!Number.isFinite(height) || height < MIN_SOLVED_HEIGHT || height > MAX_SOLVED_HEIGHT) return null;
   return height;
+}
+
+/** `cal` with its camera height solved from the floor line, and the line kept so
+ *  the height stays tied to the lens it was solved at (`CameraCal.floorLine`). Null
+ *  wherever `heightFromFloorLine` is. */
+export function fitHeightToFloorLine(
+  vFloor: number,
+  slot: CaptureSlot,
+  footprint: Footprint,
+  cal: CameraCal,
+): CameraCal | null {
+  const height = heightFromFloorLine(vFloor, slot, footprint, cal);
+  return height === null ? null : { ...cal, height, floorLine: vFloor };
+}
+
+/** The same photo read on another lens: `cal` with `k` swapped, and — where a floor
+ *  line tied the height to the lens — the height that line gives at `k`. Null when it
+ *  gives none a person could hold a phone at, which is the line saying the photo was
+ *  not taken on that lens.
+ *
+ *  Why the height moves with it: the line fixes `height / k` (for a level camera),
+ *  so every lens on it keeps each floor piece's DISTANCE and rescales its width,
+ *  while carrying one lens's height to another keeps the width and moves the piece
+ *  along its line of sight — a camera the photo contradicts. Measured on the
+ *  generated rooms in `tests/repeat-sightings.test.ts`, whose table this changes. */
+export function atLens(cal: CameraCal, k: number, slot: CaptureSlot, footprint: Footprint): CameraCal | null {
+  const next: CameraCal = { ...cal, k };
+  if (cal.floorLine === undefined) return next;
+  const height = heightFromFloorLine(cal.floorLine, slot, footprint, next);
+  return height === null ? null : { ...next, height };
 }
 
 const tanX = (u: number, cal: CameraCal) => (u - 0.5) * cal.k;

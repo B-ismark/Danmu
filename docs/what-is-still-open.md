@@ -7279,6 +7279,15 @@ does, and at 106° read truly it leaves 2 repeats ticked. What the table cannot 
 often a real phone's lens is measured; `tests/exif-in-the-wild.test.ts` holds four real
 photographs that carried no focal length, so the assumed lens is the normal path.
 
+**The table's rooms are all shot 1.5 m up and read at 1.5 m, so it could not see the height
+riding the sweep.** Found in review of #160: where the detect screen finds the wall-floor
+line it spends it on the lens (against the assumed 1.5 m) or on the height (against a lens
+the vanishing points inferred), and the sweep then carried that one lens's height to every
+lens. The line fixes `height / k`, so the height has to move with the lens (`atLens`, and
+`CameraCal.floorLine` marks the cameras it applies to). Held beside the table in the same
+file, shot at 1.3, 1.5 and 1.7 m: repeats left ticked 96 → 44 and real pieces unticked
+80 → 70 across the four readings, and no reading worse on either count.
+
 ### § 46.1 · Twin beds in a corner come back as ONE — MEASURED, NOT FIXED, and it is not the soft merge
 
 Measured against the known room (7 × 6 m, 106° lens), two single beds 900 × 1900, 200 mm

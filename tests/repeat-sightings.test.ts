@@ -28,13 +28,22 @@ import { describe, expect, it } from 'vitest';
 import { refineDetections, type CalMap } from '@/lib/detect-refine';
 import { findRepeats, keptAtFirst, REPEAT_SHARE, sweptSolids, SWEPT_HFOV_DEG } from '@/lib/repeat-sightings';
 import { footArea, footFromPart, footIntersectionArea } from '@/lib/geometry';
-import { PLAUSIBLE_HFOV_DEG, type CameraCal, type LensSource } from '@/lib/photo-geometry';
+import {
+  atLens,
+  calFromHfov,
+  calibrateFromFloorLine,
+  fitHeightToFloorLine,
+  PLAUSIBLE_HFOV_DEG,
+  wallFrame,
+  type CameraCal,
+  type LensSource,
+} from '@/lib/photo-geometry';
 import { startingSpot } from '@/lib/scene-spec';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { boxFor, CAL, CALS, refinedOnly, ROOM, shots, squareOn, TRUTH, type Truth } from './helpers/known-room';
 import { boxIn, furnishedRoom, SWEEP_SLOTS } from './helpers/furnished-rooms';
-import type { Box } from './helpers/project';
+import { project, type Box } from './helpers/project';
 
 type Row = Partial<Detection> & Pick<Detection, 'category'>;
 
@@ -706,6 +715,110 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
       [993, 252, 9, 23, 11, 1, 21, 2, 11],
       [989, 464, 39, 460, 41, 24, 41, 431, 41],
       [989, 464, 2, 43, 4, 23, 6, 29, 4],
+    ]);
+  });
+});
+
+// ── A floor line ──────────────────────────────────────────────────────────────
+
+describe('findRepeats — a lens a floor line tied to the height', () => {
+  // The rooms above are shot 1.5 m up and read at 1.5 m, so a height is never
+  // wrong there. A person holds a phone anywhere from 1.3 to 1.7 m, and where the
+  // detect screen finds the wall-floor line it spends it on whichever of the lens
+  // and the height it does not have: the lens against an assumed 1.5 m, or the
+  // height against a lens the vanishing points inferred. Either way the height is
+  // one lens's answer, and the sweep asks every lens — so it re-asks the line at
+  // each (`atLens`) rather than carrying one lens's height to all of them, which is
+  // a camera the photo contradicts. HELD is the sweep as it was, the line dropped
+  // from the same calibration; TIED is the sweep now. Both on 150 rooms.
+  const K = (deg: number) => 2 * Math.tan(((deg / 2) * Math.PI) / 180);
+  /** What the detect screen builds from each wall's floor line, for a photo taken on
+   *  `shot`: the lens solved at 1.5 m (`solve`), or the height at an inferred lens. */
+  const lined = (shot: CameraCal, inferredDeg?: number): CalMap => {
+    const out: CalMap = {};
+    for (const s of SWEEP_SLOTS as readonly CaptureSlot[]) {
+      const d = wallFrame(s, ROOM.footprint)!.distance;
+      const foot = { n: [0, -d], s: [0, d], e: [d, 0], w: [-d, 0] }[s];
+      const [, vFloor] = project(s, foot[0], 0, foot[1], shot);
+      out[s] =
+        (inferredDeg === undefined
+          ? calibrateFromFloorLine(vFloor, s, ROOM.footprint, shot.aspect)
+          : fitHeightToFloorLine(vFloor, s, ROOM.footprint, calFromHfov(inferredDeg, shot.aspect))) ?? undefined;
+      expect(out[s]?.floorLine, `${s}: the line is in frame and solved`).toBe(vFloor);
+    }
+    return out;
+  };
+  const held = (m: CalMap): CalMap =>
+    Object.fromEntries(Object.entries(m).map(([s, c]) => [s, { ...c!, floorLine: undefined }]));
+
+  it('re-asks the line at every lens, and a lens it puts out of reach answers nothing', () => {
+    const cals = lined({ k: K(106), aspect: 4 / 3, height: 1.3 });
+    const sofa = seen(piece('sofa', 'sofa', 'sofa', 1.8, -1.6, [2000, 850, 800]), 'n', { k: K(106), aspect: 4 / 3, height: 1.3 });
+    const [placed] = refineDetections([sofa], cals, ROOM);
+    const swept = sweptSolids(placed, ROOM, cals)!;
+    const reachable = SWEPT_HFOV_DEG.map((deg) => atLens(cals.n!, K(deg), 'n', ROOM.footprint) !== null);
+    // A narrow lens would need the camera near the floor, a wide one near the ceiling.
+    expect(reachable[0]).toBe(false);
+    expect(reachable.some(Boolean)).toBe(true);
+    swept.forEach((at, i) => expect(at.length > 0, `${SWEPT_HFOV_DEG[i]}°`).toBe(reachable[i]));
+    // Held, every lens answers, at a height only one of them was solved for.
+    expect(sweptSolids(placed, ROOM, held(cals))!.every((at) => at.length > 0)).toBe(true);
+  });
+
+  it('prints and holds the rate', { timeout: 300_000 }, () => {
+    const ROOMS = 150;
+    const count = (shot: CameraCal, cals: CalMap) => {
+      const out = { vis: 0, held: { dup: 0, lost: 0 }, tied: { dup: 0, lost: 0 } };
+      for (let sd = 1; sd <= ROOMS; sd++) {
+        const pieces = furnishedRoom(sd * 7919 + 13);
+        const dets: Tallied[] = [];
+        const shots = pieces.map(() => 0);
+        pieces.forEach((p, i) => {
+          for (const s of SWEEP_SLOTS) {
+            const box = boxIn(p, s, shot);
+            if (!box) continue;
+            shots[i]++;
+            dets.push({ label: p.label, conf: 0.9, box, category: p.category, slot: s, shape: p.shape, _t: i } as Tallied);
+          }
+        });
+        const refined = refineDetections(dets, cals, ROOM) as Tallied[];
+        const tally = (t: { dup: number; lost: number }, compare: CalMap) => {
+          const ticks = pieces.map(() => 0);
+          keptAtFirst(refined, refined.map(() => true), ROOM, compare).forEach((i) => ticks[refined[i]._t]++);
+          shots.forEach((n, i) => {
+            if (n === 0) return;
+            if (ticks[i] === 0) t.lost++;
+            if (ticks[i] > 1) t.dup += ticks[i] - 1;
+          });
+        };
+        out.vis += shots.filter((n) => n > 0).length;
+        tally(out.held, held(cals));
+        tally(out.tied, cals);
+      }
+      return out;
+    };
+    const rows = [
+      [106, 1.3, undefined],
+      [106, 1.5, 80],
+      [106, 1.7, 66],
+      [120, 1.7, 80],
+    ] as const;
+    const lines: string[] = [];
+    const got = rows.map(([deg, height, inferred]) => {
+      const shot: CameraCal = { k: K(deg), aspect: 4 / 3, height };
+      const r = count(shot, lined(shot, inferred));
+      lines.push(
+        `true ${deg}° at ${height} m, line solved the ${inferred === undefined ? 'lens at 1.5 m' : `height at ${inferred}°`}  ` +
+          `seen ${r.vis}  held dup ${r.held.dup} lost ${r.held.lost}  tied dup ${r.tied.dup} lost ${r.tied.lost}`,
+      );
+      return [r.vis, r.held.dup, r.held.lost, r.tied.dup, r.tied.lost];
+    });
+    console.log(`findRepeats with a floor line, over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
+    expect(got).toEqual([
+      [1000, 17, 14, 2, 14],
+      [993, 17, 26, 4, 18],
+      [968, 18, 23, 11, 21],
+      [979, 44, 17, 27, 17],
     ]);
   });
 });

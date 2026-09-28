@@ -7,6 +7,8 @@ import {
   wallRowAtHeight,
   calibrateFromFloorLine,
   heightFromFloorLine,
+  fitHeightToFloorLine,
+  atLens,
   locateOnWall,
   placeCeilingObject,
   placeFloorObject,
@@ -910,6 +912,54 @@ describe('heightFromFloorLine', () => {
     // report nothing than a confident wrong height.
     expect(heightFromFloorLine(0.55, 'n', ROOM.footprint, { k: 1.2, aspect: 0.75 })).toBeNull();
     expect(heightFromFloorLine(0.4, 'n', ROOM.footprint, { k: 1.2, aspect: 0.75 })).toBeNull();
+  });
+});
+
+describe('a floor line ties the height to the lens', () => {
+  // A 106° photo taken 1.3 m up, of the north wall 2 m away, on a phone that wrote
+  // no focal length. One line is one equation in the lens and the height, so
+  // whichever of the two it was spent on is that other one's answer only.
+  const TRUE: CameraCal = { ...WIDE, height: 1.3 };
+  const [, vFloor] = project('n', 0, 0, -2, TRUE);
+  const K40 = 2 * Math.tan((20 * Math.PI) / 180);
+
+  it('keeps the line where it solved against an assumed unknown, and only there', () => {
+    expect(calibrateFromFloorLine(vFloor, 'n', ROOM.footprint, WIDE.aspect)!.floorLine).toBe(vFloor);
+    const fitted = fitHeightToFloorLine(vFloor, 'n', ROOM.footprint, WIDE)!;
+    expect(fitted.floorLine).toBe(vFloor);
+    expect(fitted.height).toBeCloseTo(1.3, 9);
+    // A height the person gave holds, so the line only solved the lens, and it is
+    // doubted along with it.
+    expect('floorLine' in calibrateFromFloorLine(vFloor, 'n', ROOM.footprint, WIDE.aspect, { height: 1.3 })!).toBe(false);
+    expect(fitHeightToFloorLine(0.55, 'n', ROOM.footprint, { k: 1.2, aspect: 0.75 })).toBeNull();
+  });
+
+  it('re-asks the line at another lens, so the true lens gives back the true height', () => {
+    // Against the assumed 1.5 m the line reads a lens too wide; carried to the true
+    // lens, that 1.5 m would be a camera the photo contradicts.
+    const solved = calibrateFromFloorLine(vFloor, 'n', ROOM.footprint, WIDE.aspect)!;
+    expect(solved.k).toBeGreaterThan(WIDE.k * 1.1);
+    const back = atLens(solved, WIDE.k, 'n', ROOM.footprint)!;
+    expect(back.k).toBe(WIDE.k);
+    expect(back.height).toBeCloseTo(1.3, 9);
+    expect(back.floorLine).toBe(vFloor);
+    // So every lens on the line sees a floor point at the same distance: here, the
+    // foot of the wall itself.
+    for (const k of [WIDE.k, 2.2, 3.2]) {
+      const c = atLens(solved, k, 'n', ROOM.footprint)!;
+      expect(project('n', 0, 0, -2, c)[1], `k ${k}`).toBeCloseTo(vFloor, 9);
+    }
+  });
+
+  it('refuses a lens the line would need a camera out of reach for', () => {
+    // At 40° the same line is a camera 0.36 m off the floor.
+    const solved = calibrateFromFloorLine(vFloor, 'n', ROOM.footprint, WIDE.aspect)!;
+    expect(atLens(solved, K40, 'n', ROOM.footprint)).toBeNull();
+  });
+
+  it('swaps the lens alone where nothing ties them', () => {
+    const held: CameraCal = { ...WIDE, height: 1.3, tiltRad: 0.05, lens: 'assumed' };
+    expect(atLens(held, K40, 'n', ROOM.footprint)).toEqual({ ...held, k: K40 });
   });
 });
 

@@ -52,7 +52,7 @@ import {
   type Shape,
 } from './scene-spec';
 import { geoPlace, geoRefine, sameThingKey, type CalMap, type RoomDims } from './detect-refine';
-import { PLAUSIBLE_HFOV_DEG } from './photo-geometry';
+import { atLens, PLAUSIBLE_HFOV_DEG } from './photo-geometry';
 import { sourceOf } from './detect-confidence';
 import type { Detection } from './detection';
 
@@ -225,6 +225,14 @@ const REACH_STEPS = Math.round(1 / REACH_STEP);
  *  lens's answer, so a pair with one measured and one assumed lens sweeps only the
  *  assumed one.
  *
+ *  **Where a floor line tied the height to the lens** (`CameraCal.floorLine`), each
+ *  lens is asked with the height that line gives at it (`atLens`), and a lens it would
+ *  need a camera out of a person's reach for answers nothing. Carrying the one lens's
+ *  height to every other is a camera the photo contradicts: it holds each floor
+ *  piece's width and moves it along its line of sight, where the line holds the
+ *  distance and rescales the width. On the generated rooms shot 1.3–1.7 m up, that
+ *  took the repeats left ticked from 96 to 44 across four readings.
+ *
  *  **Why a cut-off side is doubted even at a measured lens** is `reachedSolids`:
  *  it is the box that is short, not the lens that is wrong.
  *
@@ -244,7 +252,9 @@ export function sweptSolids(d: Detection, room: RoomDims | null, cals: CalMap): 
   // east wall, located at the true lens on the north wall, would still face east.
   const bare = { ...d, position: undefined, yaw: undefined, dimMM: undefined };
   const at = (k: number): Solid[] => {
-    const lens = { [d.slot]: { ...cal, k } };
+    const c = atLens(cal, k, d.slot, room.footprint);
+    if (!c) return [];
+    const lens = { [d.slot]: c };
     const r = geoPlace(bare, lens, room);
     const s = r.position ? solidOf(r, room) : null;
     const out = s ? [s] : [];
