@@ -12,7 +12,7 @@
 // All coordinates are normalized 0..1 in image space — the same convention used
 // by the detection pipeline. The element is responsive to its container.
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Detection } from '@/lib/detection';
 import { Icon } from '@/components/ui/Icon';
 import { BOX_BORDER_PX, TAG_HEIGHT_PX, TAG_PAD_Y_PX, TAG_X_PX, boxCss, tagCss, tagSpot } from '@/lib/photo-tag';
@@ -186,7 +186,9 @@ export function PhotoEditor({
         />
       )}
 
-      {children && (
+      {/* Only when a layer has something in it: the page hands over a list of
+          conditionals, which is truthy with every one of them false. */}
+      {Children.toArray(children).length > 0 && (
         <div
           style={{
             position: 'absolute',
