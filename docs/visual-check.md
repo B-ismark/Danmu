@@ -1785,6 +1785,33 @@ and the note swept at seven widths in metres and feet, and a browser probe walke
 skip → note → *These are right* → reload, skip → typed width → reload, typed on the picker,
 and skip → capture → scan.
 
+### A piece's tag stays on the photo — this branch
+
+**Where to click.** The detect screen, with pieces near the photo's right edge and touching
+its top — a picture high on the wall, a pendant, a chair at the side of the frame — and, if
+a scan hands one back, a box that runs past the frame. Each box's tag (name, how sure, and
+the X) used to start at the box's left side whatever the box was, so on a phone a tag at the
+right ran up to 92 px past the photo and the whole review scrolled sideways, and one at the
+top sat above the photo, where the scroll box cut it off. Now the tag still starts at its
+box's left side and slides left only as far as the photo's edge; it sits just above its box,
+just below it where there is no room above, and inside its top only for a box as tall as the
+photo; and a name too long for the photo ellipsises before the X moves.
+
+**What wrong looks like.**
+- A tag, or its X, past any edge of the photo, or the review scrolling sideways at 360 px.
+- A tag that no longer reads as its box's: not touching the box's top or bottom border, or
+  slid so far along that it sits over a different piece.
+- A small box at the top (a pendant) that a tap at its centre does not keep or un-keep.
+- A name ellipsised when the photo had room for it.
+- With **Add a piece by hand** on, a drag that starts on a tag not drawing a box.
+- **Known and not fixed here:** two tags on the same line can overlap, and the later one
+  covers the earlier one's X. The row's own Remove in the list still works. Whether it happens often enough on real photos to need
+  tags that step aside is a person's call.
+
+**What was measured, and on what.** `tests/photo-tag.test.ts` sweeps the placement rule over
+43,200 box, photo and name cases. A real phone, with a real scan's boxes, is the unlooked-at
+half.
+
 ---
 ## Look and light
 

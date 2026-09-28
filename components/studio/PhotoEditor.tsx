@@ -12,9 +12,10 @@
 // All coordinates are normalized 0..1 in image space — the same convention used
 // by the detection pipeline. The element is responsive to its container.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Detection } from '@/lib/detection';
 import { Icon } from '@/components/ui/Icon';
+import { TAG_HEIGHT_PX, tagCss, tagSpot } from '@/lib/photo-tag';
 
 export type PhotoEditorItem = {
   index: number;
@@ -44,6 +45,17 @@ export function PhotoEditor({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  // The photo's drawn height, for "is there room above this box for its tag" — a
+  // length in pixels, where the box's top is a share of the photo (`lib/photo-tag.ts`).
+  // 0 until the image has laid out, which keeps every tag above its box meanwhile.
+  const [photoH, setPhotoH] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => setPhotoH(e.contentRect.height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   function localPct(e: React.PointerEvent): { x: number; y: number } {
     const rect = ref.current!.getBoundingClientRect();
@@ -107,11 +119,15 @@ export function PhotoEditor({
       />
 
       {items.map((item) => (
-        <ItemOverlay
+        <ItemBox key={item.index} item={item} mode={mode} onToggleLock={() => onToggleLock(item.index)} />
+      ))}
+      {/* Tags after every box, so no box's press area lies over another piece's X. */}
+      {items.map((item) => (
+        <ItemTag
           key={item.index}
           item={item}
           mode={mode}
-          onToggleLock={() => onToggleLock(item.index)}
+          photoH={photoH}
           onDelete={() => onDelete(item.index)}
         />
       ))}
@@ -134,24 +150,28 @@ export function PhotoEditor({
   );
 }
 
-function ItemOverlay({
+/** A box's fill and label, shared by its outline and its tag. Fill tokens, not the
+ *  plain hues: --accent is 3.5:1 with white, so 10px label copy on it fails.
+ *  --accent-ink (4.73:1) and --locked (6.97:1) do not. */
+function look({ d, locked }: PhotoEditorItem) {
+  return {
+    fill: locked ? 'var(--locked)' : 'var(--accent-ink)',
+    cleanLabel: d.label.replace(/__slot:[nesw]$/, ''),
+  };
+}
+
+function ItemBox({
   item,
   mode,
   onToggleLock,
-  onDelete,
 }: {
   item: PhotoEditorItem;
   mode: Mode;
   onToggleLock: () => void;
-  onDelete: () => void;
 }) {
   const { d, locked } = item;
   const [sx, sy, sw, sh] = d.box;
-  const [hoverX, setHoverX] = useState(false);
-  // Fill tokens, not the plain hues: --accent is 3.5:1 with white, so 10px label
-  // copy on it fails. --accent-ink (4.73:1) and --locked (6.97:1) do not.
-  const fill = locked ? 'var(--locked)' : 'var(--accent-ink)';
-  const cleanLabel = d.label.replace(/__slot:[nesw]$/, '');
+  const { fill, cleanLabel } = look(item);
   // While drawing, boxes step aside entirely: a half-interactive overlay under a
   // crosshair was ambiguous for the mouse and unreachable for the keyboard.
   const drawing = mode === 'add';
@@ -192,12 +212,48 @@ function ItemOverlay({
           pointerEvents: drawing ? 'none' : 'auto',
         }}
       />
+    </div>
+  );
+}
 
+/** The box's tag, laid out across the whole photo (`lib/photo-tag.ts`): a row as wide as
+ *  the photo, a spacer that puts the tag at the box's left side and shrinks when the tag
+ *  would otherwise run past the right edge, then the tag, never wider than the row. */
+function ItemTag({
+  item,
+  mode,
+  photoH,
+  onDelete,
+}: {
+  item: PhotoEditorItem;
+  mode: Mode;
+  photoH: number;
+  onDelete: () => void;
+}) {
+  const { d, locked } = item;
+  const [hoverX, setHoverX] = useState(false);
+  const { fill, cleanLabel } = look(item);
+  const drawing = mode === 'add';
+  const css = tagCss(tagSpot(d.box, photoH));
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: css.top,
+        height: TAG_HEIGHT_PX,
+        display: 'flex',
+        pointerEvents: 'none',
+      }}
+    >
+      <div style={{ flex: `0 1 ${css.start}` }} />
       <div
         style={{
-          position: 'absolute',
-          top: -26,
-          left: -1,
+          flex: '0 0 auto',
+          maxWidth: '100%',
+          height: TAG_HEIGHT_PX,
           padding: '2px 4px 2px 7px',
           background: fill,
           color: 'var(--on-accent)',
@@ -210,15 +266,29 @@ function ItemOverlay({
           display: 'flex',
           alignItems: 'center',
           gap: 4,
-          pointerEvents: 'auto',
+          // Like the boxes, the tag steps aside while a new box is being drawn: it sits on
+          // the photo now, so a press on it has to be able to start one.
+          pointerEvents: drawing ? 'none' : 'auto',
         }}
         onPointerDown={(e) => e.stopPropagation()}
       >
         {locked && <Icon name="check" size={9} color="var(--on-accent)" />}
-        <span style={{ textTransform: 'capitalize' }}>{cleanLabel}</span>
-        <span className="mono" style={{ opacity: 0.8 }}>· {(d.conf * 100).toFixed(0)}%</span>
+        <span
+          style={{
+            textTransform: 'capitalize',
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {cleanLabel}
+        </span>
+        <span className="mono" style={{ opacity: 0.8, flexShrink: 0 }}>
+          · {(d.conf * 100).toFixed(0)}%
+        </span>
         <button
           type="button"
+          disabled={drawing}
           title={`Remove ${cleanLabel}`}
           aria-label={`Remove ${cleanLabel}`}
           onMouseEnter={() => setHoverX(true)}
@@ -228,9 +298,10 @@ function ItemOverlay({
             onDelete();
           }}
           style={{
-            // 24px is the WCAG 2.5.8 floor; this control was 16px.
-            width: 24,
-            height: 24,
+            // 24px is the WCAG 2.5.8 floor; this control was 16px. It is the tag's height
+            // less its padding, so the two cannot drift apart.
+            width: TAG_HEIGHT_PX - 4,
+            height: TAG_HEIGHT_PX - 4,
             background: hoverX ? 'var(--scrim-photo)' : 'transparent',
             border: '1px solid transparent',
             display: 'inline-flex',
@@ -239,6 +310,7 @@ function ItemOverlay({
             cursor: 'pointer',
             borderRadius: 'var(--r-1)',
             padding: 0,
+            flexShrink: 0,
           }}
         >
           <Icon name="x" size={12} color="var(--on-accent)" />
