@@ -1622,6 +1622,10 @@ textarea.field { border-radius: var(--r-2); }
   .size-entry .ds-btn--sm { min-height: 44px; }
   /* And the studio's "These are right", for the same reason. */
   .rough-note .ds-btn--sm { min-height: 44px; }
+  /* The pages that are read and filled in (`ui/DocShell`): the workspace, settings
+     and the layout picker. Their buttons and fields are sized for a mouse inline;
+     `.key-field` is settings' key input, whose boundary is a wrapper round it. */
+  .doc-shell .ds-btn, .doc-shell .field, .doc-shell .key-field { min-height: 44px; }
 }
 /* Under a finger the Library's rows are 44px, not a mouse's 32 — and so is every
    small button in the phone's sheet (Fix, Shuffle, Room checks): the sheet is only
