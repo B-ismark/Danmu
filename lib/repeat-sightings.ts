@@ -124,8 +124,11 @@ function solidOf(d: Detection, room: RoomDims | null): Solid | null {
     // A measured height where there is one: on a wall it is the piece's centre, and
     // the start spot's is only a default. Floor pieces all stand at 0 either way. Only
     // from a position the spot was taken from, though: one the room refused is
-    // refused whole, or its height would ride a place it never described.
-    const y = estimateInRoom(d.position, room) ? d.position.y : start.pos[1];
+    // refused whole, or its height would ride a place it never described. And only a
+    // height that is a number: nothing checks the cloud's JSON, and a place with no
+    // height gave every wall reading NaN, which shares nothing with anything — so a
+    // print read twice that way was never one print.
+    const y = estimateInRoom(d.position, room) && Number.isFinite(d.position.y) ? d.position.y : start.pos[1];
     spot = { x: start.pos[0], y, z: start.pos[2], rot: start.rot };
   } else if (d.position) {
     spot = { ...d.position, rot: d.yaw ?? 0 };

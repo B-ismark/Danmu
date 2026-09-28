@@ -156,6 +156,16 @@ describe('findRepeats — what counts as the same piece', () => {
     expect(repeats([at(1.5, 'n'), at(1.6, 'e')])).toEqual([null, 0]);
   });
 
+  it('compares a wall row the cloud gave no height at the height the room starts it', () => {
+    // Nothing validates the cloud's JSON, so a place can arrive with no `y`. Read as
+    // it stood that was NaN, which overlaps nothing, and the same print read twice
+    // was two prints.
+    const noHeight = (slot: CaptureSlot, y?: unknown): Detection =>
+      row({ category: 'painting', slot, position: { x: 0, z: -2.98, ...(y === undefined ? {} : { y }) } as Detection['position'], dimMM: [700, 40, 500] });
+    expect(repeats([noHeight('n'), noHeight('e')])).toEqual([null, 0]);
+    expect(repeats([noHeight('n', '1.5'), noHeight('e', null)])).toEqual([null, 0]);
+  });
+
   it('keeps a curtain on the wall whatever shape the detector gave it', () => {
     // The same curtain read twice, once with a ceiling shape. It is cloth on a wall
     // either way — the split `geoRefine` measures it by — so the two are one piece.
