@@ -40,8 +40,13 @@
 //
 // Pure, so the rule can be swept across the whole photo without a browser.
 
-/** The tag's height: the X's 24 px (the WCAG 2.5.8 floor) and 2 px of padding each side. */
-export const TAG_HEIGHT_PX = 28;
+/** The tag's X, each side: 24 px, the WCAG 2.5.8 floor. It was 16. */
+export const TAG_X_PX = 24;
+/** The tag's padding above and below its X. */
+export const TAG_PAD_Y_PX = 2;
+/** The tag's height, built from its X and that padding, so the X cannot be squeezed
+ *  under its floor by a change to either. */
+export const TAG_HEIGHT_PX = TAG_X_PX + 2 * TAG_PAD_Y_PX;
 /** How far the tag overlaps its box's border, so it reads as attached. */
 export const TAG_OVERLAP_PX = 2;
 

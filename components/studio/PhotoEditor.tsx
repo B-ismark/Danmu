@@ -15,7 +15,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { Detection } from '@/lib/detection';
 import { Icon } from '@/components/ui/Icon';
-import { BOX_BORDER_PX, TAG_HEIGHT_PX, boxCss, tagCss, tagSpot } from '@/lib/photo-tag';
+import { BOX_BORDER_PX, TAG_HEIGHT_PX, TAG_PAD_Y_PX, TAG_X_PX, boxCss, tagCss, tagSpot } from '@/lib/photo-tag';
 
 export type PhotoEditorItem = {
   index: number;
@@ -255,7 +255,7 @@ function ItemTag({
           flex: '0 0 auto',
           maxWidth: '100%',
           height: TAG_HEIGHT_PX,
-          padding: '2px 4px 2px 7px',
+          padding: `${TAG_PAD_Y_PX}px 4px ${TAG_PAD_Y_PX}px 7px`,
           background: fill,
           color: 'var(--on-accent)',
           fontFamily: 'var(--font-sans)',
@@ -298,10 +298,10 @@ function ItemTag({
             onDelete();
           }}
           style={{
-            // 24px is the WCAG 2.5.8 floor; this control was 16px. It is the tag's height
-            // less its padding, so the two cannot drift apart.
-            width: TAG_HEIGHT_PX - 4,
-            height: TAG_HEIGHT_PX - 4,
+            // The WCAG 2.5.8 floor, filling the tag's height inside its padding: the
+            // height is built from the two (`lib/photo-tag.ts`).
+            width: TAG_X_PX,
+            height: TAG_X_PX,
             background: hoverX ? 'var(--scrim-photo)' : 'transparent',
             border: '1px solid transparent',
             display: 'inline-flex',

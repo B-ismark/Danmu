@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PhotoEditor, type PhotoEditorItem } from '@/components/studio/PhotoEditor';
 import type { Detection } from '@/lib/detection';
+import { TAG_HEIGHT_PX } from '@/lib/photo-tag';
 
 afterEach(cleanup);
 
@@ -64,5 +65,14 @@ describe('the scan photo, by keyboard', () => {
     const x = screen.getByRole('button', { name: 'Remove floor lamp' });
     expect(x.parentElement!.style.pointerEvents).toBe('none');
     expect(x.style.pointerEvents).toBe('auto');
+  });
+
+  it('gives each X the 24 px floor, filling the tag inside its padding', () => {
+    mount('select');
+    const x = screen.getByRole('button', { name: 'Remove armchair' });
+    const tag = x.parentElement!;
+    expect([x.style.width, x.style.height]).toEqual(['24px', '24px']);
+    expect(tag.style.height).toBe(`${TAG_HEIGHT_PX}px`);
+    expect(TAG_HEIGHT_PX - parseFloat(tag.style.paddingTop) - parseFloat(tag.style.paddingBottom)).toBe(24);
   });
 });
