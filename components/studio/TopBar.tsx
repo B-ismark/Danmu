@@ -48,11 +48,9 @@ export function TopBar({
     const trimmed = next.trim();
     if (!trimmed || !roomId) return;
     setName(trimmed);
-    const r = await roomStore.loadRoom(roomId);
-    if (r) {
-      await roomStore.saveRoom({ ...r, name: trimmed });
-      flashSaved();
-    }
+    // The name alone, in one transaction: copying the record it read would put back
+    // whatever the studio saved in between — a size, or a cleared rough-size note.
+    if (await roomStore.renameRoom(roomId, trimmed)) flashSaved();
   }
 
   function flashSaved() {

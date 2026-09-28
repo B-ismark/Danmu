@@ -192,15 +192,13 @@ export function RoomSync() {
       const wasReshaped = reshapedSince.current;
       reshapedSince.current = false;
 
-      const existing = await roomStore.loadRoom(roomId);
-      if (!existing) return;
-      // The rough-size mark from the live room, never the stored one — see
-      // `markRoughSize`: `RoomDimsEditor` saves too, and spreading `existing` would
-      // put back a mark it had just cleared.
-      await roomStore.saveRoom(
+      // One transaction (`editRoom`), and the rough-size mark from the live room,
+      // never the stored one — see `markRoughSize`: `RoomDimsEditor` saves too, and
+      // keeping the stored mark would put back one it had just cleared.
+      const existing = await roomStore.editRoom(roomId, (stored) =>
         markRoughSize(
           {
-            ...existing,
+            ...stored,
             width: p.room.width,
             depth: p.room.depth,
             height: p.room.height,
@@ -211,6 +209,7 @@ export function RoomSync() {
           p.room.roughSize === true,
         ),
       );
+      if (!existing) return;
       // ── A reshaped room has to pin the scene, if it was SEEDED ───────────────
       //
       // This effect writes the outline and `moveWallCarrying` writes the transform

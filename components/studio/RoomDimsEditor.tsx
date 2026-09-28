@@ -198,10 +198,10 @@ export function RoomDimsEditor() {
         }
       }
       if (roomId) {
-        const existing = await roomStore.loadRoom(roomId);
         // The mark from the live room, which `setRoom` has just cleared — not the
-        // stored one `existing` still carries (`markRoughSize`).
-        if (existing) await roomStore.saveRoom(markRoughSize({ ...existing, ...r }, useScene.getState().room.roughSize === true));
+        // stored one the record still carries (`markRoughSize`).
+        const rough = useScene.getState().room.roughSize === true;
+        await roomStore.editRoom(roomId, (stored) => markRoughSize({ ...stored, ...r }, rough));
       }
     }, 200);
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import { get, set as idbSet, del, keys } from 'idb-keyval';
+import { get, set as idbSet, update, del, keys } from 'idb-keyval';
 import { v4 as uuid } from 'uuid';
 
 // Wrap set so QuotaExceededError fires a global event the StorageToast listens to.
@@ -8,15 +8,24 @@ async function set<T>(key: IDBValidKey, value: T): Promise<void> {
   try {
     await idbSet(key, value);
   } catch (e) {
-    const name = (e as { name?: string })?.name ?? '';
-    if (name === 'QuotaExceededError' || /quota/i.test(String(e))) {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('danmu:storage-full', { detail: String(e) }));
-      }
-    }
+    reportQuota(e);
     throw e;
   }
 }
+
+function reportQuota(e: unknown) {
+  const name = (e as { name?: string })?.name ?? '';
+  if (name === 'QuotaExceededError' || /quota/i.test(String(e))) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('danmu:storage-full', { detail: String(e) }));
+    }
+  }
+}
+
+/** Thrown from inside an `update` to write nothing: idb-keyval puts whatever the
+ *  updater returns, so handing back a missing record would store `undefined` under
+ *  its key, and a rename of a deleted room would leave a key behind. */
+const NO_ROOM = Symbol('no room');
 
 // IndexedDB-backed room data: captures (blobs), detections, scene parts, transforms.
 // Single-room v0.1. Keys are namespaced by roomId.
@@ -208,10 +217,11 @@ export type RoomData = {
 /** `room` with its rough-size mark set or cleared — the one way a writer spells it.
  *
  *  Two writers save a room's size (`RoomSync`'s debounced shell write and
- *  `RoomDimsEditor`'s own), each as a read-modify-write of the stored record, so
- *  both write the mark FROM THE LIVE ROOM rather than carrying the stored one
- *  forward: a writer that spread the record it read would put back a mark the
- *  other had just cleared, whenever its read landed first. */
+ *  `RoomDimsEditor`'s own), and both write the mark FROM THE LIVE ROOM rather than
+ *  carrying the stored one forward: the stored record trails the studio by a save,
+ *  so a writer that kept the mark it read would put back one the person had just
+ *  cleared. The third writer, the name, touches nothing but the name, and all three
+ *  go through `roomStore.editRoom` so none can land between another's read and write. */
 export function markRoughSize(room: RoomData, rough: boolean): RoomData {
   const { roughSize: _stored, ...rest } = room;
   return rough ? { ...rest, roughSize: true } : rest;
@@ -306,11 +316,35 @@ export const roomStore = {
     await set(k(room.id, 'meta'), { ...room, version: ROOM_SCHEMA_VERSION });
     await touch(room.id);
   },
-  async renameRoom(roomId: string, name: string) {
-    const meta = await get<RoomData>(k(roomId, 'meta'));
-    if (!meta) return;
-    await set(k(roomId, 'meta'), { ...migrateRoom(meta), name, version: ROOM_SCHEMA_VERSION });
+  /** Change a room's record in ONE transaction — read, edit, write, with no other
+   *  write able to land between — and return it as written, or undefined having
+   *  written nothing when there is no such room.
+   *
+   *  The studio has three writers of this record: the name (`TopBar`), the size
+   *  (`RoomDimsEditor`) and the shell (`RoomSync`'s debounced save). Each changes a
+   *  field or two of whatever is stored, and as a separate read and write, whichever
+   *  read first and wrote last put back what the other had just changed: a rename
+   *  landing across the save of **These are right** brought the rough-size note back
+   *  with the stored record it had copied. `edit` must be synchronous; it runs inside
+   *  the transaction. */
+  async editRoom(roomId: string, edit: (room: RoomData) => RoomData): Promise<RoomData | undefined> {
+    let written: RoomData | undefined;
+    try {
+      await update<RoomData>(k(roomId, 'meta'), (old) => {
+        if (!old) throw NO_ROOM;
+        written = { ...edit(migrateRoom(old)), version: ROOM_SCHEMA_VERSION };
+        return written;
+      });
+    } catch (e) {
+      if (e === NO_ROOM) return undefined;
+      reportQuota(e);
+      throw e;
+    }
     await touch(roomId);
+    return written;
+  },
+  async renameRoom(roomId: string, name: string): Promise<RoomData | undefined> {
+    return roomStore.editRoom(roomId, (r) => ({ ...r, name }));
   },
   /** Land a scene file (`lib/scene-file.ts`) as a brand-new room, and return its id.
    *
