@@ -62,6 +62,11 @@ export function PhotoEditor({
   // next wall's photo is not sized by the last one's shape.
   const [shape, setShape] = useState<{ url: string; ratio: number } | null>(null);
   const ratio = shape?.url === imageUrl ? shape.ratio : null;
+  // Until then the frame cannot know its width, and drawn at the column's the photo
+  // runs past the cap: on a slowed phone, a wall switch drew the next photo 437px
+  // tall for two frames under a 180px cap, and the pinned strip jumped with it. So a
+  // capped frame waits at the cap's height, empty, and the photo arrives at its size.
+  const waiting = ratio === null && !!maxPhotoHeight;
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -116,6 +121,7 @@ export function PhotoEditor({
         // measured against. Stated as a width, not left to the photo, so a small photo
         // is still drawn up to the column rather than at its own few hundred pixels.
         width: ratio && maxPhotoHeight ? `min(100%, calc(${maxPhotoHeight} * ${ratio}))` : '100%',
+        ...(waiting ? { height: maxPhotoHeight, overflow: 'hidden', visibility: 'hidden' } : {}),
         // Tokenised: the old near-black #0A0A08 made this read like an annotation
         // tool rather than part of a warm decorating app.
         background: 'var(--ink)',
@@ -147,6 +153,9 @@ export function PhotoEditor({
           const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
           if (w > 0 && h > 0) setShape({ url: imageUrl, ratio: w / h });
         }}
+        // A photo that will not decode has no shape to wait for, and a frame left
+        // waiting would hide that there is anything wrong with it.
+        onError={() => setShape({ url: imageUrl, ratio: 4 / 3 })}
         draggable={false}
       />
 
