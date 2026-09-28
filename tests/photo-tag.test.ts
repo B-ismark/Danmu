@@ -10,14 +10,18 @@ const LIFT = TAG_HEIGHT_PX - TAG_OVERLAP_PX;
  *  then the tag at its natural width, capped at the row. Everything resolves against the
  *  photo, which has no border or padding of its own — that is what makes this model the
  *  layout rather than an approximation of it. `scripts/photo-tag-probe.mjs` checks the
- *  same claims against a real browser. */
+ *  same claims against a real browser.
+ *
+ *  The two lengths are read out of the CSS `tagCss` writes, not worked out again here:
+ *  a model that repeats the arithmetic agrees with it by construction, so a wrong sign in
+ *  the string would pass every sweep below. Only the flexbox is modelled. */
 function laidOut(box: Box, W: number, H: number, natural: number) {
   const s = tagSpot(box, H);
-  const start = Math.max(0, (s.startPct / 100) * W - TAG_BLEED_PX);
+  const css = tagCss(s);
+  const start = cssLength(css.start, W);
   const width = Math.min(natural, W);
   const left = Math.min(start, W - width);
-  // CSS clamp(): the floor wins when the photo is shorter than the tag.
-  const top = Math.max(0, Math.min((s.topPct / 100) * H + s.topPx, H - TAG_HEIGHT_PX));
+  const top = cssLength(css.top, H);
   return { ...s, start, left, right: left + width, top, bottom: top + TAG_HEIGHT_PX, width };
 }
 
