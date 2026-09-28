@@ -188,7 +188,11 @@ selected shape's typical size and follow the shape until someone types, after wh
 the numbers are theirs and a shape change no longer moves them (`lib/size-entry.ts`).
 Each axis is judged against its own range from `roomAxisRange`, the sentence naming a
 range reads the same `boundsToUnit` pair the arrows obey, and nothing clamps: 80 m is
-refused and said, not saved as 50. The preview draws the typed room, with its
+refused and said, not saved as 50. What is saved is the size TYPED, never the text a
+unit change shows: `4237` mm reads `4.24` once the unit is metres and still saves as
+4.237 m (`enteredDims` reads `good`, the last in-range value per axis). A box that is
+not a size yet is called out only once focus has left the whole field — its chevrons
+are part of it, so pressing one is not leaving. The preview draws the typed room, with its
 dimension labels sized in screen pixels so they read the same on a phone as on a desk.
 
 A room built at the typical size, because nothing was typed, is **marked rough**
