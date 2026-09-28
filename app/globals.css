@@ -1627,6 +1627,10 @@ textarea.field { border-radius: var(--r-2); }
      and the layout picker. Their buttons and fields are sized for a mouse inline;
      `.key-field` is settings' key input, whose boundary is a wrapper round it. */
   .doc-shell .ds-btn, .doc-shell .field, .doc-shell .key-field { min-height: 44px; }
+  /* A dialog's decision (`ui/Modal`). It renders from the root layout, outside any
+     page's shell, so settings' "Remove the key?" was 38px under a thumb and its
+     Remove 36px, on the page whose own buttons had just grown to 44px. */
+  .modal__footer .ds-btn { min-height: 44px; }
 }
 /* Under a finger the Library's rows are 44px, not a mouse's 32 — and so is every
    small button in the phone's sheet (Fix, Shuffle, Room checks): the sheet is only

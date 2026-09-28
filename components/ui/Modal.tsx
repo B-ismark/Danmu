@@ -119,6 +119,8 @@ export function Modal({
         <div style={{ padding: bodyPadding }}>{children}</div>
         {footer && (
           <div
+            // `.modal__footer` gives its buttons 44px under a finger (globals.css).
+            className="modal__footer"
             style={{
               padding: '14px 24px',
               background: 'var(--paper-2)',
