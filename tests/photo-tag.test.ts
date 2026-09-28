@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOX_BORDER_PX, TAG_BLEED_PX, TAG_HEIGHT_PX, TAG_OVERLAP_PX, boxCss, tagCss, tagSpot } from '@/lib/photo-tag';
+import { BOX_BORDER_PX, TAG_HEIGHT_PX, TAG_OVERLAP_PX, boxCss, tagCss, tagSpot } from '@/lib/photo-tag';
 import { cssLength } from './helpers/css-length';
 
 type Box = [number, number, number, number];
@@ -71,8 +71,9 @@ describe('the photo tag', () => {
           const x0 = clamp(box[0]) * W;
           const at = `${JSON.stringify(box)} in ${W}×${H}, ${t}px tag`;
           if (r.start + r.width <= W) {
-            // Where it fits it is exactly where it always was: flush with the box.
-            expect(r.left, at).toBe(Math.max(0, x0 - TAG_BLEED_PX));
+            // Where it fits it is exactly where it always was: flush with the box's
+            // outer edge, so the tag's left side carries on the line of its border.
+            expect(r.left, at).toBe(x0);
             flush++;
           } else {
             expect(r.right, at).toBeCloseTo(W, 9);
@@ -139,20 +140,20 @@ describe('the photo tag', () => {
   it('writes the CSS the component lays out with', () => {
     expect(tagCss(tagSpot([0.8, 0.4, 0.2, 0.25], 246))).toEqual({
       top: 'clamp(0px, calc(40% - 26px), calc(100% - 28px))',
-      start: 'max(0px, calc(80% - 1px))',
+      start: 'max(0px, 80%)',
     });
     expect(tagCss(tagSpot([0.1, 0, 0.4, 0.5], 246))).toEqual({
       top: 'clamp(0px, calc(50% - 2px), calc(100% - 28px))',
-      start: 'max(0px, calc(10% - 1px))',
+      start: 'max(0px, 10%)',
     });
     expect(tagCss(tagSpot([0.1, 0.02, 0.4, 0.97], 246))).toEqual({
       top: 'clamp(0px, calc(2% + 0px), calc(100% - 28px))',
-      start: 'max(0px, calc(10% - 1px))',
+      start: 'max(0px, 10%)',
     });
   });
 
   it('rounds its percentages, so a share like 0.07 does not write 7.000000000000001%', () => {
-    expect(tagCss(tagSpot([0.07, 0.5, 0.2, 0.2], 246)).start).toBe('max(0px, calc(7% - 1px))');
+    expect(tagCss(tagSpot([0.07, 0.5, 0.2, 0.2], 246)).start).toBe('max(0px, 7%)');
   });
 
   it('holds a box that is not a number to the photo rather than writing NaN', () => {

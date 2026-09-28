@@ -44,12 +44,11 @@
 export const TAG_HEIGHT_PX = 28;
 /** How far the tag overlaps its box's border, so it reads as attached. */
 export const TAG_OVERLAP_PX = 2;
-/** How far the tag's left edge sits outside the box's, so the two borders line up. */
-export const TAG_BLEED_PX = 1;
 
 export type TagSpot = {
   /** Where the tag starts when it fits: the box's left side, as a share of the photo's
-   *  width (percent). Less `TAG_BLEED_PX`, held at the photo's left edge. */
+   *  width (percent), so the tag's left edge carries on the line of the box's border.
+   *  Not held here: `tagCss` holds it at the photo's left edge. */
   startPct: number;
   /** Which side of the box the tag sits on. */
   place: 'above' | 'below' | 'inside';
@@ -88,7 +87,7 @@ export function tagCss(s: TagSpot): { top: string; start: string } {
   const at = `calc(${pct(s.topPct)} ${s.topPx < 0 ? '-' : '+'} ${Math.abs(s.topPx)}px)`;
   return {
     top: `clamp(0px, ${at}, calc(100% - ${TAG_HEIGHT_PX}px))`,
-    start: `max(0px, calc(${pct(s.startPct)} - ${TAG_BLEED_PX}px))`,
+    start: `max(0px, ${pct(s.startPct)})`,
   };
 }
 
