@@ -563,15 +563,15 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
-### The ideas gallery replaces Shuffle — this branch, SWEPT, needs a real phone and a real GPU
+### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 
 **Ideas** sits where Shuffle did, beside **Fix**. It opens a card of arrangements: four
 to a page beside a laptop rail, three on a phone, where the card is a sheet resting on
 the bottom bar. Press one and the room takes it; **Back to your room** undoes all of it;
 the heart saves one to Layouts (it shows a small heart there); **Kept in place** keeps a
 piece and asks again from the room on screen. Drag something while it is open and it
-says *The room changed* with **Find new ideas**. `tests/ideas-panel.test.tsx` holds the
-wiring, 7 of 7 mutants caught; looked at in SwiftShader at 1440 and 390.
+says *The room changed* with **Find new ideas**. Looked at in SwiftShader at 1440 and 390
+only.
 
 **Where to click.** Any furnished room → left rail (the Room sheet on a phone) → **Ideas**.
 
@@ -1694,7 +1694,7 @@ What a person can see and the sweep cannot:
 - **The room size hint:** drag a room's width down to its largest piece; the sentence
   appears at the floor and not before.
 
-### Loading states — this branch, PROBED in SwiftShader, needs a real phone and a real GPU
+### Loading states — `6ff707f` on `main` (PR #159), PROBED in SwiftShader, needs a real phone and a real GPU
 
 A room opening shows paper and "Opening your room…" over the canvas, then "Building the
 3D view…" until the first frame; a slow Fix or Try a fix puts up "Arranging your room…"
@@ -1702,8 +1702,6 @@ after 600 ms and replaces it with the result; busy buttons stay at full strength
 being read show breathing rows instead of "No … yet". Probed with the CPU throttled 8×
 (veil: Setting up → Opening → Building, then gone) and with the worker's replies
 delayed 1.8 s (the working toast at 600 ms, then the result), at 1440 and 390.
-`tests/canvas-veil.test.tsx`, `tests/toast-while.test.tsx`,
-`tests/export-menu-wired.test.tsx`: 7 of 7 mutants caught.
 
 **What wrong looks like.**
 - The previous room, or the starter room, visible for a moment when opening a room.
@@ -1722,7 +1720,7 @@ untick everything and read the note and the button again.
 The review's tick used to be decoration: every row was built whatever it said, so two
 sightings of one bed made two beds. Now a row goes into the room only when it is kept.
 Rooms saved before this open exactly as they did (every row is marked kept on load).
-`tests/scene-build.test.ts` and `tests/storage.test.ts`: 6 of 6 mutants caught.
+`tests/scene-build.test.ts` and `tests/storage.test.ts`: 6 of 6 mutants caught at `a33872f`.
 
 **What wrong looks like.**
 - A piece you left out standing in the studio, or a kept one missing.
@@ -1743,7 +1741,7 @@ came back as two ticked beds. Now a row that shares a quarter of its floor with 
 of the same kind starts unticked and names the row it repeats — nothing is deleted.
 Probed by seeding the review list directly (a real scan cannot be driven headless): the
 caption wraps under the name at 360, the header reads *3 of 4 pieces kept*, no overflow
-at seven widths. `tests/repeat-sightings.test.ts`: 28 of 28 mutants caught. The case it
+at seven widths. `tests/repeat-sightings.test.ts`: 28 of 28 mutants caught at `bb1aef2`. The case it
 cannot reach — twin beds in a corner, where the hard merge deletes one before this runs —
 is `docs/what-is-still-open.md` § 46.1.
 
@@ -1755,6 +1753,40 @@ is `docs/what-is-still-open.md` § 46.1.
 - *"Probably the the bed…"*, or a capital mid-sentence — the first letter is lower-cased
   unless the word reads as an acronym (*the TV*), and a detector's own wording is the
   untested half.
+
+### The room's size on the shape picker, and the rough mark when it is skipped — this branch, SWEPT and PROBED
+
+**Where to click.** New room → the shape picker. Under the outlines, **Room size · optional**
+holds Width, Depth and Ceiling at the selected shape's typical size; change shape and they
+follow. Type a width, then change shape: the numbers stay yours, and **Use a typical size**
+gives them back. Type an 80 m width and leave the box: it takes a danger rim, a sentence
+names the range, and **Start decorating** puts you back in that box rather than building the
+room. Then start **without typing**:
+
+- the studio's Room section opens with a quiet note — *Rough sizes, from a typical room of
+  this shape. Enter yours below.* — and **These are right**; its collapsed size reads
+  *≈6.0×5.0m*;
+- *"Photograph my real room first"* instead: each wall card's length reads *≈… m wall*, and
+  the scan screen's subtitle says the sizes are for a typical room of this shape;
+- **These are right**, or a size typed into those boxes, clears the note and the ≈ for good.
+  Dragging a wall does not.
+
+**What wrong looks like.**
+- The note or its button crowding the size boxes in the laptop rail (1024–1279 px), the
+  button landing somewhere other than under the sentence, or smaller than a fingertip on a
+  phone.
+- The note back after a reload once cleared, or on a room whose size was typed on the
+  picker. (A reload in the half-second after typing is § 47 in the open list, not this.)
+- A ≈ on a measured room, or missing from a rough room's wall lengths.
+- The preview's dimension labels unreadable on a phone or oversized on a desk.
+- In the studio's glass rail the refused rim is the border alone, since the rail owns the
+  box-shadow. Whether that reads as refused beside the other boxes is a person's call.
+
+**What was measured, and on what.** SwiftShader, desktop Chromium, `06476a8`: the size
+step and the note swept at seven widths in metres and feet; a browser probe walked
+skip → note → *These are right* → reload, skip → typed width → reload, typed on the picker,
+and skip → capture → scan, 18 of 18 on three runs. `tests/size-entry.test.ts` (21 of 21
+mutants caught at `5f197e6`) and `tests/rough-size.test.ts` (13 of 13 at `06476a8`).
 
 ---
 ## Look and light

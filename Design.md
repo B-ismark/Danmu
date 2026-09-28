@@ -166,7 +166,7 @@ owned by a deterministic geometry engine, not by a model.
 /                         entry router → onboarding (no rooms) or workspace
 └─ /onboarding
    ├─ /welcome            intro + "Start decorating"; optional BYO key (collapsed)
-   ├─ /layout-pick        pick footprint preset → sets width/depth + starter scene
+   ├─ /layout-pick        pick footprint preset + (optionally) its size → starter scene
    ├─ /capture            add up to 4 wall photos (upload or getUserMedia)
    └─ /detect             furniture detection on captured photos
 /workspace                rooms list — create / resume / delete
@@ -181,6 +181,29 @@ Two ways in:
 1. **Quick start** — pick a footprint, skip capture, land straight in the studio
    with a contextual starter scene. Zero credentials.
 2. **Capture flow** — footprint → photograph room → detect furniture → studio.
+
+**The size is asked for on the shape picker, and skipping it is allowed** (D7). Three
+boxes under the outlines — width, depth, ceiling, in the user's unit — start at the
+selected shape's typical size and follow the shape until someone types, after which
+the numbers are theirs and a shape change no longer moves them (`lib/size-entry.ts`).
+Each axis is judged against its own range from `roomAxisRange`, the sentence naming a
+range reads the same `boundsToUnit` pair the arrows obey, and nothing clamps: 80 m is
+refused and said, not saved as 50. The preview draws the typed room, with its
+dimension labels sized in screen pixels so they read the same on a phone as on a desk.
+
+A room built at the typical size, because nothing was typed, is **marked rough**
+(`RoomData.roughSize: true`; absent otherwise, so every older room reads as measured).
+The mark is a claim about every number beside it, so it is said wherever a size is: a
+quiet note above the studio's size boxes, a `≈` on the Room section's collapsed size
+and on each capture card's wall length, and the scan screen's subtitle, which would
+otherwise claim "measured at real size" — untrue here, since every size read off a wall
+or the floor line scales with the assumed wall distance. It clears on exactly the two
+answers that mean *this is my room's size*: a size committed in the studio's Room
+section (`setRoom`, even one equal to the typical size) and the note's **These are
+right** (`confirmSize`). A wall drag keeps it — shaping by eye is not measuring. Both
+studio savers write it from the live room through `markRoughSize`, because each reads
+the stored record and spreads it, and would otherwise put back a mark the other had
+just cleared.
 
 There are **only two studio tabs**: `3D Model` and `2D Plan` (`StudioTabs.tsx`).
 
@@ -2844,7 +2867,9 @@ for the one you have open, because `roomStore.importScene` mints its own id.
 
 ### What travels
 
-The room — name, footprint polygon, wall paint, site — and every piece with its
+The room — name, footprint polygon, wall paint, site, and whether its size is still a
+rough one (`roughSize`: a guessed 6 × 5 m should not open on someone else's screen as a
+measured room; `false` reads as measured, anything else is reported in `dropped`) — and every piece with its
 size, position, rotation, colour, finish, decor and light. Transforms are **baked**:
 in the running app a part's position lives in both `ScenePart.pos` and
 `useStudio.positions`, reconciled by an unwritten "overrides win", and a file is the
