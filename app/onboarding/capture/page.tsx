@@ -32,7 +32,7 @@ import {
 } from '@/lib/capture-slots';
 import { wallFrame } from '@/lib/photo-geometry';
 import { roomFootprint } from '@/lib/footprint';
-import { photoDropIntent } from '@/lib/photo-drop';
+import { looseDropIntent, photoDropIntent } from '@/lib/photo-drop';
 import { useDeviceTilt } from '@/lib/device-tilt';
 import { scoreQuality, flagHelp, flagLabel, flagTone, type Quality } from '@/lib/image-quality';
 import { useMediaQuery } from '@/lib/use-media-query';
@@ -588,6 +588,16 @@ export default function CapturePage() {
 
   return (
     <div
+      // A photo let go anywhere but on a card is added, rather than opened by the
+      // browser in place of the app (`looseDropIntent`). A card has already claimed
+      // its own drop by the time one bubbles here.
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        if (e.defaultPrevented) return;
+        e.preventDefault();
+        const intent = looseDropIntent({ draggingFrom, hasFiles: !!e.dataTransfer.files?.length });
+        if (intent.kind === 'add') void addFiles(e.dataTransfer.files);
+      }}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -824,11 +834,9 @@ function AddTile({
         setOver(true);
       }}
       onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        if (e.dataTransfer.files?.length) onFiles(e.dataTransfer.files);
-      }}
+      // Lit here, taken by the page: a drop that is not on a card means the same
+      // thing wherever it lands, including what to do with a gallery tile.
+      onDrop={() => setOver(false)}
       style={{
         display: 'flex',
         borderRadius: 'var(--r-3)',

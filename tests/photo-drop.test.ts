@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { photoDropIntent } from '@/lib/photo-drop';
+import { looseDropIntent, photoDropIntent } from '@/lib/photo-drop';
 import { SLOT_ORDER } from '@/lib/capture-slots';
 
 /** The bug this file exists for, stated as the assertion that catches it.
@@ -71,5 +71,29 @@ describe('photoDropIntent', () => {
     expect(SLOT_ORDER.length).toBe(4);
     expect(ignores).toBe(4 * 2);
     expect(reorders).toBe(4 * 3 * 2);
+  });
+});
+
+/** A drop that lands on no card: the add tile, or the page around the gallery. The
+ *  same trap one target over — a tile let go there offers its image as a file, and
+ *  the add tile used to take it, so the gallery grew a second copy of that photo. */
+describe('looseDropIntent', () => {
+  it('adds files dragged in from outside the page', () => {
+    expect(looseDropIntent({ draggingFrom: null, hasFiles: true })).toEqual({ kind: 'add' });
+  });
+
+  it('ignores a drag carrying no files', () => {
+    expect(looseDropIntent({ draggingFrom: null, hasFiles: false })).toEqual({ kind: 'ignore' });
+  });
+
+  it('never adds a gallery tile back as a new photo, from any wall', () => {
+    let ignores = 0;
+    for (const from of SLOT_ORDER) {
+      for (const hasFiles of [true, false]) {
+        expect(looseDropIntent({ draggingFrom: from, hasFiles })).toEqual({ kind: 'ignore' });
+        ignores++;
+      }
+    }
+    expect(ignores).toBe(4 * 2);
   });
 });
