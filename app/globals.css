@@ -1648,8 +1648,10 @@ textarea.field { border-radius: var(--r-2); }
   .rough-note .ds-btn--sm { min-height: 44px; }
   /* The pages that are read and filled in (`ui/DocShell`): the workspace, settings
      and the layout picker. Their buttons and fields are sized for a mouse inline;
-     `.key-field` is settings' key input, whose boundary is a wrapper round it. */
-  .doc-shell .ds-btn, .doc-shell .field, .doc-shell .key-field { min-height: 44px; }
+     `.key-field` is settings' key input, whose boundary is a wrapper round it. Not a
+     rename in place (`.editable__input`): it stands in for a line of text, and at 44px
+     starting one pushed the workspace's card 14px taller under the keyboard. */
+  .doc-shell .ds-btn, .doc-shell .field:not(.editable__input), .doc-shell .key-field { min-height: 44px; }
   /* A dialog's decision (`ui/Modal`). It renders from the root layout, outside any
      page's shell, so settings' "Remove the key?" was 38px under a thumb and its
      Remove 36px, on the page whose own buttons had just grown to 44px. */

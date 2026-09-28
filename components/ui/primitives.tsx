@@ -163,7 +163,9 @@ export function EditableText({
   if (editing) {
     return (
       <input
-        className="field"
+        // `editable__input`: the rename stays the size of the name it replaces, so the
+        // touch rule for the form pages' fields leaves it out (globals.css).
+        className="field editable__input"
         aria-label={label}
         autoFocus
         maxLength={maxLength}
