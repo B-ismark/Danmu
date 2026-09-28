@@ -318,13 +318,17 @@ export function sameThingKey(label: string): string {
  *  `measured` names the rows the camera sized. Without it the first sighting of a pair
  *  survives, which is the old rule and the right one for rows that are all measured or
  *  all hints; with it, a measured sighting replaces an unmeasured one it merges with.
+ *  It decides which row is handed back and never which rows merge, so the same list
+ *  gives the same number of rows with the set or without it.
  *
  *  Exported for tests: this is pure logic that decides what the user gets from the
  *  one call that spends their quota. */
 export function dedupeDetections(items: Detection[], measured?: ReadonlySet<Detection>): Detection[] {
+  // A group is compared through the row that FOUNDED it, and hands back its survivor.
+  const founders: Detection[] = [];
   const out: Detection[] = [];
   for (const d of items) {
-    const at = out.findIndex((o) => {
+    const at = founders.findIndex((o) => {
       if (o.category !== d.category) return false;
       // Same photo — heavily overlapping boxes mean one object boxed twice.
       if (o.slot === d.slot && boxIoU(o.box, d.box) >= SAME_BOX_IOU) return true;
@@ -334,12 +338,21 @@ export function dedupeDetections(items: Detection[], measured?: ReadonlySet<Dete
       const dist = Math.hypot(o.position.x - d.position.x, o.position.z - d.position.z);
       return dist < mergeDistanceFor(d.category);
     });
-    if (at < 0) out.push(d);
+    if (at < 0) {
+      founders.push(d);
+      out.push(d);
+    }
     // Which sighting SURVIVES is the second half of the merge, and first-come was only
     // ever safe while every row with a position had been measured. A located row has a
     // position and no size of its own, so when it arrived first — the east photo before
     // the north one — it ate the measurement and the piece went into the room at its
     // catalogue size. The measured row takes its place, in its place in the list.
+    //
+    // And ONLY its place: later rows are still compared against the founder. They used
+    // to be compared against the survivor, so a measurement arriving mid-group moved the
+    // group — to another photo, which lost the same-photo rule for the founder's own
+    // double box, and up to a tier's distance across the floor, where it swallowed a
+    // second bed the founder was never near. Choosing a survivor never changes a count.
     else if (measured?.has(d) && !measured.has(out[at])) out[at] = d;
   }
   return out;
