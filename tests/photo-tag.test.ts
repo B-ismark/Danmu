@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TAG_BLEED_PX, TAG_HEIGHT_PX, TAG_OVERLAP_PX, tagCss, tagSpot } from '@/lib/photo-tag';
+import { BOX_BORDER_PX, TAG_BLEED_PX, TAG_HEIGHT_PX, TAG_OVERLAP_PX, boxCss, tagCss, tagSpot } from '@/lib/photo-tag';
+import { cssLength } from './helpers/css-length';
 
 type Box = [number, number, number, number];
 const LIFT = TAG_HEIGHT_PX - TAG_OVERLAP_PX;
@@ -158,6 +159,98 @@ describe('the photo tag', () => {
     ] as number[][]) {
       const css = tagCss(tagSpot(box, 246));
       expect(`${css.top} ${css.start}`).not.toMatch(/NaN|Infinity|undefined/);
+    }
+  });
+});
+
+describe('the CSS reader these sweeps lay out with', () => {
+  it('resolves what a browser would, and refuses what a browser would drop', () => {
+    expect(cssLength('calc(40% - 26px)', 200)).toBe(54);
+    expect(cssLength('max(0px, calc(10% - 30px))', 200)).toBe(0);
+    expect(cssLength('min(100%, calc(100% - 3px))', 200)).toBe(197);
+    expect(cssLength('clamp(0px, calc(1% - 26px), calc(100% - 28px))', 200)).toBe(0);
+    expect(cssLength('clamp(0px, calc(99% + 0px), calc(100% - 28px))', 200)).toBe(172);
+    expect(cssLength('clamp(0px, calc(50% + 0px), calc(100% - 28px))', 200)).toBe(100);
+    for (const bad of ['calc(40%-26px)', 'calc(40% -26px)', 'calc(40%- 26px)', '40', '4em', 'calc(1%, 2%)', 'clamp(0px, 1%)', '1% 2%'])
+      expect(() => cssLength(bad, 200), bad).toThrow();
+  });
+});
+
+describe("a box's outline on the photo", () => {
+  /** The outline's rectangle in photo pixels, resolved from the CSS it is handed. A
+   *  border-box never draws narrower than its two borders, which is the whole reason a
+   *  sliver needs holding in. */
+  function drawn(box: Box, W: number, H: number, border: number) {
+    const css = boxCss(box, border);
+    const left = cssLength(css.left, W);
+    const top = cssLength(css.top, H);
+    const width = Math.max(cssLength(css.width, W), 2 * border);
+    const height = Math.max(cssLength(css.height, H), 2 * border);
+    return { left, top, right: left + width, bottom: top + height };
+  }
+
+  it('never reaches past the photo, whatever the box, for the outline and the highlight', () => {
+    let n = 0;
+    for (const [W, H] of PHOTOS)
+      for (const box of boxes())
+        for (const border of [BOX_BORDER_PX, 0]) {
+          const r = drawn(box, W, H, border);
+          const at = `${JSON.stringify(box)} in ${W}×${H}, ${border}px border`;
+          expect(r.left, at).toBeGreaterThanOrEqual(0);
+          expect(r.top, at).toBeGreaterThanOrEqual(0);
+          expect(r.right, at).toBeLessThanOrEqual(W + 1e-9);
+          expect(r.bottom, at).toBeLessThanOrEqual(H + 1e-9);
+          n++;
+        }
+    expect(n).toBe(28800);
+  });
+
+  it('draws exactly the part of the box that is on the photo, where that is wider than its borders', () => {
+    let exact = 0;
+    for (const [W, H] of PHOTOS)
+      for (const box of boxes()) {
+        const r = drawn(box, W, H, BOX_BORDER_PX);
+        const [x0, x1] = [clamp(box[0]) * W, clamp(box[0] + box[2]) * W];
+        const [y0, y1] = [clamp(box[1]) * H, clamp(box[1] + box[3]) * H];
+        if (x1 - x0 < 2 * BOX_BORDER_PX || y1 - y0 < 2 * BOX_BORDER_PX) continue;
+        const at = `${JSON.stringify(box)} in ${W}×${H}`;
+        expect([r.left, r.right, r.top, r.bottom].map((v) => Number(v.toFixed(6))), at).toEqual(
+          [x0, x1, y0, y1].map((v) => Number(v.toFixed(6))),
+        );
+        exact++;
+      }
+    expect(exact).toBe(11236);
+  });
+
+  it('holds a sliver in by its two borders, and only when it has to', () => {
+    expect(boxCss([0.8, 0.4, 0.2, 0.25], BOX_BORDER_PX)).toEqual({
+      left: 'min(80%, calc(100% - 3px))',
+      top: 'min(40%, calc(100% - 3px))',
+      width: '20%',
+      height: '25%',
+    });
+    // Wholly past the right edge: nothing of it is on the photo, and its two borders
+    // sit just inside the frame rather than 3 px outside it.
+    expect(boxCss([1.05, 0.3, 0.1, 0.12], BOX_BORDER_PX)).toEqual({
+      left: 'min(100%, calc(100% - 3px))',
+      top: 'min(30%, calc(100% - 3px))',
+      width: '0%',
+      height: '12%',
+    });
+    // The highlight is an outline, which takes no room, so it is not held in.
+    expect(boxCss([0.9, -0.1, 0.3, 0.3], 0)).toEqual({ left: '90%', top: '0%', width: '10%', height: '20%' });
+    // A box whose size came back negative is empty, not a negative length the browser drops.
+    expect(boxCss([0.5, 0.5, -0.1, -0.2], 0)).toEqual({ left: '50%', top: '50%', width: '0%', height: '0%' });
+  });
+
+  it('draws nothing, rather than NaN, for a box that is not a number', () => {
+    for (const box of [
+      [NaN, NaN, NaN, NaN],
+      [0.3, undefined, 0.2, 0.2],
+      [Infinity, -Infinity, 0, 0],
+    ] as number[][]) {
+      const css = boxCss(box, BOX_BORDER_PX);
+      expect(Object.values(css).join(' ')).not.toMatch(/NaN|Infinity|undefined/);
     }
   });
 });

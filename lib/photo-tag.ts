@@ -1,4 +1,5 @@
-// Where a piece's name tag sits on the scan screen's photo.
+// Where a piece's name tag sits on the scan screen's photo, and how much of its box is
+// drawn there.
 //
 // Each box carries a tag — the piece's name, how sure the finder was, and the X that
 // removes it. It used to hang off the box's top-left corner whatever the box was, so on
@@ -88,5 +89,35 @@ export function tagCss(s: TagSpot): { top: string; start: string } {
   return {
     top: `clamp(0px, ${at}, calc(100% - ${TAG_HEIGHT_PX}px))`,
     start: `max(0px, calc(${pct(s.startPct)} - ${TAG_BLEED_PX}px))`,
+  };
+}
+
+/** The width of a box's outline, each side. */
+export const BOX_BORDER_PX = 1.5;
+
+/** A box as the CSS that draws it: only the part of it that is on the photo, as a share
+ *  of the photo. That is all anyone sees of it, and a box drawn past the edge scrolled
+ *  the whole review sideways — the outline in `PhotoEditor`, and the page's highlight of
+ *  the box whose list row is hovered or focused, which drew the same raw box a second
+ *  time. Both call this, so the two cannot disagree about where a box is.
+ *
+ *  `borderPx` is the drawing's own border, each side. A box keeps its two borders when
+ *  next to nothing of it is on the photo, so a sliver at the right edge or the foot would
+ *  still reach past the frame by their width; its corner is held that far in. An outline
+ *  (the highlight's) takes no room, and passes 0. */
+export function boxCss(
+  box: readonly number[],
+  borderPx: number,
+): { left: string; top: string; width: string; height: string } {
+  const [x0, y0, x1, y1] = [box[0], box[1], box[0] + box[2], box[1] + box[3]].map((n) =>
+    Math.min(1, Math.max(0, num(n))),
+  );
+  const held = (share: number) =>
+    borderPx > 0 ? `min(${pct(share * 100)}, calc(100% - ${2 * borderPx}px))` : pct(share * 100);
+  return {
+    left: held(x0),
+    top: held(y0),
+    width: pct(Math.max(0, x1 - x0) * 100),
+    height: pct(Math.max(0, y1 - y0) * 100),
   };
 }
