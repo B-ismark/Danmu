@@ -62,7 +62,9 @@ export async function adoptFreshScan(
     kept = newLayout(BEFORE_RESCAN, savedScene ?? buildSceneFromRoom(room), transforms ?? EMPTY, { now });
     await roomStore.saveLayout(room.id, kept);
   }
-  await roomStore.saveRoom({ ...room, detectedObjects });
+  // Into the room as stored, not over it with the copy this was handed: a name or a
+  // size written since that copy was read would otherwise be put back.
+  if (!(await roomStore.editRoom(room.id, (r) => ({ ...r, detectedObjects })))) return null;
   await roomStore.forgetArrangement(room.id);
   return kept;
 }
@@ -204,7 +206,9 @@ function carryStudioEdits(
 export async function adoptEditedList(room: RoomData, detectedObjects: SavedDetection[]): Promise<ListEdit | null> {
   const saved = await roomStore.loadSceneParts<ScenePart[]>(room.id);
   const edit = saved ? applyListEdits(saved, room, detectedObjects) : null;
-  await roomStore.saveRoom({ ...room, detectedObjects });
+  // `editRoom`, for the reason `adoptFreshScan` gives. And a room deleted meanwhile
+  // gets no scene written for it, which would be keys belonging to nothing.
+  if (!(await roomStore.editRoom(room.id, (r) => ({ ...r, detectedObjects })))) return null;
   if (edit) await roomStore.saveSceneParts(room.id, edit.parts);
   return edit;
 }

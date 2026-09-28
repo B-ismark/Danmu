@@ -105,6 +105,38 @@ describe('adoptFreshScan', () => {
 // person ticks, unticks, deletes, adds or re-words some of them. A room the studio has
 // arranged loads its saved scene over the list, so without `applyListEdits` none of
 // that reached the room while the button promised "Continue with N pieces".
+// The screen reads the room, then the person may still rename it in another tab or
+// the studio's debounced save may land, before the list is written. Written over the
+// copy it read, that change was put back.
+describe('the list is written into the room as it is stored', () => {
+  const LIST = [det('bed-a', 'bed', -1)];
+
+  it.each([
+    ['a fresh scan', (r: RoomData) => adoptFreshScan(r, NEW)],
+    ['an edited list', (r: RoomData) => adoptEditedList(r, [{ ...LIST[0], locked: false }])],
+  ] as const)('%s keeps a name given since the room was read', async (_what, adopt) => {
+    const r = room({ detectedObjects: LIST });
+    await roomStore.saveRoom(r);
+    await roomStore.saveSceneParts(r.id, buildSceneFromRoom(r));
+    await roomStore.renameRoom(r.id, 'Study');
+    await adopt(r);
+    const stored = await roomStore.loadRoom(r.id);
+    expect(stored?.name).toBe('Study');
+    expect(stored?.detectedObjects).not.toEqual(LIST);
+  });
+
+  it.each([
+    ['a fresh scan', (r: RoomData) => adoptFreshScan(r, NEW)],
+    ['an edited list', (r: RoomData) => adoptEditedList(r, [{ ...LIST[0], locked: false }])],
+  ] as const)('%s of a room deleted meanwhile brings nothing back', async (_what, adopt) => {
+    const r = room({ detectedObjects: LIST });
+    await roomStore.saveSceneParts(r.id, buildSceneFromRoom(r));
+    expect(await adopt(r)).toBeNull();
+    expect(await roomStore.loadRoom(r.id)).toBeUndefined();
+    expect(await roomStore.listRooms()).toEqual([]);
+  });
+});
+
 describe('applyListEdits', () => {
   const LIST = [det('bed-a', 'bed', -1), det('bed-b', 'bed', 1), { ...det('sofa-a', 'sofa', 0), locked: false }];
   const R = room({ detectedObjects: LIST });
