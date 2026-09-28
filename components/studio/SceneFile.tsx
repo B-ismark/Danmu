@@ -68,6 +68,7 @@ export async function saveSceneFile(roomId: string) {
         // `footprintForLayout` ever changing its mind about a preset.
         footprint: room.footprint,
         site: room.site,
+        roughSize: room.roughSize,
       },
       parts,
       { positions, rotations, dims, hidden, parentIds },

@@ -146,6 +146,19 @@ export type RoomData = {
   width: number; // meters
   depth: number;
   height: number;
+  /** The three sizes above are a shape's typical size, not the person's: they
+   *  skipped the size row on the shape picker. Only ever `true` or absent —
+   *  cleared means the key is gone (`markRoughSize`), so a room whose size was set
+   *  reads exactly like one written before the mark existed. Those older rooms were
+   *  all built at a preset size too, and they read as set on purpose: nobody can
+   *  now tell which of them were measured since, and a note that nags about a room
+   *  someone already fixed is worse than one that stays quiet about an old guess.
+   *
+   *  It is the studio's note and the scan screen's wording that read it, and it is
+   *  cleared by setting a size in the studio's Room section, or by saying the sizes
+   *  shown are right. Dragging a wall does not clear it: that is shaping the room by
+   *  eye, not measuring it. Additive, so no version bump. */
+  roughSize?: true;
   /** per-wall paint colour, keyed by footprint-edge index. Optional — absent on
    *  rooms created before wall painting shipped (defensive read on load). */
   wallColors?: Record<number, string>;
@@ -191,6 +204,18 @@ export type RoomData = {
     color?: string;
   }>;
 };
+
+/** `room` with its rough-size mark set or cleared — the one way a writer spells it.
+ *
+ *  Two writers save a room's size (`RoomSync`'s debounced shell write and
+ *  `RoomDimsEditor`'s own), each as a read-modify-write of the stored record, so
+ *  both write the mark FROM THE LIVE ROOM rather than carrying the stored one
+ *  forward: a writer that spread the record it read would put back a mark the
+ *  other had just cleared, whenever its read landed first. */
+export function markRoughSize(room: RoomData, rough: boolean): RoomData {
+  const { roughSize: _stored, ...rest } = room;
+  return rough ? { ...rest, roughSize: true } : rest;
+}
 
 const k = (roomId: string, sub: string) => `room:${roomId}:${sub}`;
 

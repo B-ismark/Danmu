@@ -1577,6 +1577,21 @@ textarea.field { border-radius: var(--r-2); }
    negative right margin cancels its own padding, so the LABEL lines up with the
    fields' right edge rather than the invisible button box. */
 .size-entry__reset { margin-left: auto; margin-right: -12px; }
+/* The studio's "rough sizes" note (`RoomDimsEditor`), shown while a room still
+   stands at its shape's typical size. Neutral paper rather than `--warn`: nothing
+   is wrong, a size simply has not been given. A grid, so the words wrap beside the
+   icon and the button sits under the words rather than under the icon — at the
+   compact rail's ~176px of content as much as the wide one's. */
+.rough-note {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px;
+  align-items: start; margin-bottom: 12px; padding: 8px 10px 4px;
+  border-radius: var(--r-2); background: var(--paper-2); color: var(--ink-2);
+}
+.rough-note > svg { margin-top: 1px; color: var(--ink-3); }
+.rough-note__text { margin: 0; font-size: var(--fs-caption); line-height: 1.4; overflow-wrap: anywhere; }
+/* Right-aligned under the words, like the shape picker's reset; the negative right
+   margin lines the LABEL up with the words' right edge rather than the button box. */
+.rough-note__confirm { grid-column: 2; justify-self: end; margin-right: -8px; }
 .num-field__steps {
   position: absolute; right: 3px; top: 3px; bottom: 3px;
   display: flex; flex-direction: column; justify-content: center;
@@ -1593,6 +1608,8 @@ textarea.field { border-radius: var(--r-2); }
   /* The shape picker's "Use a typical size" — a small ghost button for a mouse,
      a thumb-sized one for a finger. */
   .size-entry .ds-btn--sm { min-height: 44px; }
+  /* And the studio's "These are right", for the same reason. */
+  .rough-note .ds-btn--sm { min-height: 44px; }
 }
 /* Under a finger the Library's rows are 44px, not a mouse's 32 — and so is every
    small button in the phone's sheet (Fix, Shuffle, Room checks): the sheet is only

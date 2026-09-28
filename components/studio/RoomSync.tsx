@@ -6,7 +6,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { roomStore } from '@/lib/storage';
+import { markRoughSize, roomStore } from '@/lib/storage';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { livingParents } from '@/lib/rigid-parent';
@@ -194,15 +194,23 @@ export function RoomSync() {
 
       const existing = await roomStore.loadRoom(roomId);
       if (!existing) return;
-      await roomStore.saveRoom({
-        ...existing,
-        width: p.room.width,
-        depth: p.room.depth,
-        height: p.room.height,
-        wallColors: p.room.wallColors,
-        footprint: p.room.footprint,
-        site: p.room.site,
-      });
+      // The rough-size mark from the live room, never the stored one — see
+      // `markRoughSize`: `RoomDimsEditor` saves too, and spreading `existing` would
+      // put back a mark it had just cleared.
+      await roomStore.saveRoom(
+        markRoughSize(
+          {
+            ...existing,
+            width: p.room.width,
+            depth: p.room.depth,
+            height: p.room.height,
+            wallColors: p.room.wallColors,
+            footprint: p.room.footprint,
+            site: p.room.site,
+          },
+          p.room.roughSize === true,
+        ),
+      );
       // ── A reshaped room has to pin the scene, if it was SEEDED ───────────────
       //
       // This effect writes the outline and `moveWallCarrying` writes the transform

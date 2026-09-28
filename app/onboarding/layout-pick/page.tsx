@@ -193,6 +193,9 @@ export default function LayoutPickPage() {
         width: dims.width,
         depth: dims.depth,
         height: dims.height,
+        // Untouched boxes are the shape's size, not theirs, and the studio says so
+        // until they set one. A typed size is theirs even where it equals the preset.
+        ...(entry ? {} : { roughSize: true as const }),
       });
     } catch {
       // Storage can genuinely refuse (private windows, full disk). Say so and

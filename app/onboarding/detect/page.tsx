@@ -330,6 +330,11 @@ export default function DetectPage() {
   // the room's real dimensions. Used on fresh detections and manual adds.
   const [cals, setCals] = useState<CalMap>({});
   const [roomDims, setRoomDims] = useState<RoomDims | null>(null);
+  // The room still stands at its shape's typical size (`RoomData.roughSize`). Every
+  // size read off a wall or the floor line scales with how far away the wall is
+  // assumed to be, so "measured at real size" would be a claim this screen cannot
+  // make — the header says what the sizes are instead.
+  const [roughSize, setRoughSize] = useState(false);
   const padRef = useRef<HTMLButtonElement>(null);
   // Flipped by Stop so an in-flight run stops writing to state.
   const stopped = useRef(false);
@@ -381,6 +386,7 @@ export default function DetectPage() {
 
       // CACHE: if this room already has detections, skip the API call entirely.
       const room = await roomStore.loadRoom(roomId);
+      if (!cancelled) setRoughSize(room?.roughSize === true);
       // Calibrate every photo up front (floor-line → exact, else default FOV)
       // so geometry-derived dims are available to detections + manual adds.
       let calMap: CalMap = {};
@@ -916,7 +922,11 @@ export default function DetectPage() {
         <StepHeader
           kicker="Last step"
           title="Check your furniture"
-          subtitle="Everything Danmu found, measured at real size. Only the pieces you keep go into your room, so leave out anything that isn’t yours and add anything it missed."
+          subtitle={
+            roughSize
+              ? 'Everything Danmu found, sized for a typical room of this shape, so sizes are rough. Only the pieces you keep go into your room, so leave out anything that isn’t yours and add anything it missed.'
+              : 'Everything Danmu found, measured at real size. Only the pieces you keep go into your room, so leave out anything that isn’t yours and add anything it missed.'
+          }
         />
         {privacyLine && (
           <p

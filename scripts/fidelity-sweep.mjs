@@ -221,6 +221,41 @@ const SCREENS = [
     },
   },
   { key: 'studio-model', studio: true, go: (p, id) => p.goto(`${BASE}/room/${id}/model`) },
+  // A room still at its shape's typical size (`roughSize`: the size step was skipped).
+  // The note sits above the size boxes, so it is photographed wherever those are: the
+  // rail on a desk — including the compact step's narrow one, which is what the note's
+  // wrapping is for — and the Room sheet on a phone.
+  {
+    key: 'studio-rough',
+    studio: true,
+    go: async (p, id) => {
+      await p.goto(`${BASE}/room/${id}-rough/plan`);
+      await p.waitForTimeout(1500);
+      if (await p.locator('.phone-toolbar').count()) {
+        await p.locator('.phone-tool', { hasText: 'Room' }).click();
+        await p.waitForTimeout(600);
+      }
+    },
+  },
+  // The studio's size boxes REFUSED. In the glass rail the clay rule owns
+  // `box-shadow`, so the danger rim on `.field[aria-invalid]` is only half of what it
+  // is anywhere else — this is where that has to be looked at, not assumed.
+  {
+    key: 'studio-dims-refused',
+    studio: true,
+    go: async (p, id) => {
+      await p.goto(`${BASE}/room/${id}/plan`);
+      await p.waitForTimeout(1500);
+      if (await p.locator('.phone-toolbar').count()) {
+        await p.locator('.phone-tool', { hasText: 'Room' }).click();
+        await p.waitForTimeout(600);
+      }
+      const width = p.getByLabel('Width', { exact: true });
+      if (!(await width.count())) return 'skip';
+      await width.first().fill('999999');
+      await p.waitForTimeout(500);
+    },
+  },
 ];
 
 async function measure(page) {
@@ -410,7 +445,7 @@ try {
     page.on('pageerror', (e) => console.log(`  [pageerror ${width}]`, e.message));
     const id = `sweep-${width}`;
     await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-    await seed(page, [room(id, LONG_NAME), room(`${id}-b`, 'Study')]);
+    await seed(page, [room(id, LONG_NAME), room(`${id}-b`, 'Study'), { ...room(`${id}-rough`, 'Spare room'), roughSize: true }]);
     for (const s of SCREENS) {
       if (ONLY && !s.key.startsWith(ONLY)) continue;
       await touch();
