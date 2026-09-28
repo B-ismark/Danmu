@@ -891,18 +891,27 @@ export default function DetectPage() {
       const cs = getComputedStyle(box);
       // The box's padding is room too; its height, squeezed or not, is not.
       const room = pane.getBoundingClientRect().height - box.getBoundingClientRect().height + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-      pane.style.setProperty('--scan-photo-room', `${Math.ceil(room)}px`);
+      const next = `${Math.ceil(room)}px`;
+      if (pane.style.getPropertyValue('--scan-photo-room') !== next) pane.style.setProperty('--scan-photo-room', next);
       root.style.setProperty('--scan-pin-h', `${Math.ceil(pane.getBoundingClientRect().height)}px`);
     };
     publish();
     if (typeof ResizeObserver === 'undefined') return () => root.style.removeProperty('--scan-pin-h');
-    const ro = new ResizeObserver(publish);
+    // On the next frame, not inside the observer's own delivery: the cap resizes the
+    // column being observed, and a resize made there is one the browser cannot deliver
+    // in the same pass — it reports a ResizeObserver loop error, twice at 360×640 on
+    // turning adding by hand on and off and nudging the window.
+    let frame = 0;
+    const ro = new ResizeObserver(() => {
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; publish(); });
+    });
     // Every row, not only the column: a row that wraps inside a column already at its
     // cap changes nothing about the column's own size.
     ro.observe(pane);
     for (const row of pane.children) ro.observe(row);
     return () => {
       ro.disconnect();
+      cancelAnimationFrame(frame);
       // Removed rather than left: the next page has no column to keep clear of.
       root.style.removeProperty('--scan-pin-h');
     };
