@@ -11,7 +11,7 @@ import { candidatesFor } from '@/lib/label-repair';
 import type { CameraCal } from '@/lib/photo-geometry';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
-import { PART_LIBRARY } from '@/lib/scene-spec';
+import { PART_LIBRARY, sceneShapeFor } from '@/lib/scene-spec';
 import { footprintForLayout } from '@/lib/footprint';
 
 const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
@@ -93,10 +93,29 @@ describe('suggestFromLabel', () => {
     for (const c of out) {
       expect(c.detection.category, 'the candidate must carry its own category').toBe(c.category);
       expect(c.detection.dimMM, 'a candidate with no measurement must not be offered').toBeDefined();
-      // The shape hint is deliberately dropped so `refineShape` picks one at build
-      // time from the new category.
-      expect(c.detection.shape).toBeUndefined();
+      // The old category's shape hint is dropped, and the candidate carries the shape
+      // the new category makes of the words just typed — or of the Library name it
+      // was measured as, when those words name no kind — which is the one accepting
+      // it builds.
+      expect(c.detection.shape).toBe(sceneShapeFor(c.category, c.name ?? 'Fridge', undefined));
     }
+  });
+
+  it('measures the piece as what it was renamed to, not what it was called', () => {
+    // A sofa-sized row, 1080 mm across, renamed "double bed". The row still carries
+    // its old word, and the kind of bed a candidate is measured as is read from the
+    // words — so measuring under "sofa" found no kind named and offered the plain
+    // single bed, at a margin that called it a fit, to someone who had just typed
+    // double. The typed words name the double, and the double is what is offered,
+    // caveated: 1080 is narrower than any double bed.
+    const sofa = det({ category: 'sofa', slot: 'n', label: 'sofa', box: [0.275, 0.75, 0.45, 0.1] });
+    const [bed, ...rest] = suggestFromLabel(sofa, 'double bed', CALS, ROOM);
+    expect(rest).toEqual([]);
+    expect(bed.category).toBe('bed');
+    expect(bed.detection.shape).toBe('bed-double');
+    expect(bed.name).toBe('Double bed');
+    expect(bed.detection.dimMM?.[0]).toBe(1080);
+    expect(bed.margin).toBeLessThan(0);
   });
 
   it('offers nothing when the words only reach the category it already is', () => {

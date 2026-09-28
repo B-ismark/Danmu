@@ -380,7 +380,16 @@ export function PartTree() {
           // the room correctly, and a `meta` is what a COLLAPSED section says about
           // itself — "the fields are the measurement now" is true only while the
           // fields are on screen, which is the state a meta does not serve.
-          meta={<span className="mono">{room.width.toFixed(1)}×{room.depth.toFixed(1)}m</span>}
+          //
+          // `≈` while the room still stands at its shape's typical size
+          // (`RoomData.roughSize`): collapsed, this line is the only place the rail
+          // gives the room a size, and it should not read as a measured one.
+          meta={
+            <span className="mono">
+              {room.roughSize ? '≈' : ''}
+              {room.width.toFixed(1)}×{room.depth.toFixed(1)}m
+            </span>
+          }
           open={sec.room}
           onToggle={() => toggle('room')}
           // Re-scan changes what is IN the room, which is this section's subject — it

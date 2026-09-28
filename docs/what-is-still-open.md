@@ -171,9 +171,12 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 20 | **§ 42.1** a floor-standing piece was measured at its NEAR FACE, so its position was short by about half its depth — **at a perfectly square camera** | **FIXED 2026-09-09.** `placeFloorObject` decodes a piece's CENTRE now, and it took the whole silhouette rather than a nudge to the position, because width, lateral offset and height all rode the same wrong distance. Three closed forms, no iteration, exact to 1e-13 against a forward-projected box at 0°, ±5° and ±12° of tilt; a ROUND footprint inverts from its tangent pair instead and needs no assumed depth at all, since a circle's depth IS its width. Two errors nobody had measured fell out with it: a piece whose top is below the lens reads its FAR top edge, so both nightstands were ~130 mm too tall (the baseline table had no height column — it has one now), and tilt roughly DOUBLED the width inflation, a lamp going from +81% level to +132% at 5°. What is left, in order: the ceiling fan at 0.1136 m (its own allowance, now the largest error at zero yaw), the three wall pieces at 5–23 mm (§ 42.4, fixed the same day, and those figures were themselves understated by a fixture of thin panels), the sofa at exactly 0.0500 m — half the gap between its real 850 mm depth and the catalogue's 950 — and a round footprint under tilt at +6% of width at 5°. The fixture had to move first: `tests/helpers/project.ts` projects solids now, because a 1e-9 baseline that holds only because the fixture cannot express the defect is the same thing as an assertion that cannot fail | **nothing** — decided (catalogue depth, and the piece is rendered with the same number), built, and mutation-tested: ten mechanism mutants, all caught | `lib/photo-geometry.ts`, `lib/detect-refine.ts`, `tests/helpers/project.ts`, `tests/helpers/known-room.ts`, and the three suites |
 | 20b | **§ 42.4** a WALL piece was measured at its centre-on-the-plaster, where its BACK goes | **FIXED 2026-09-09**, the same fix one anchor over, with `lateralSpan` extracted rather than copied. The three figures this was filed with — TV 21 mm/3.5%, curtain 23 mm/3.4%, painting 5 mm/1.6% — understated it by an order of magnitude, because all three wall fixtures are 30–80 mm deep. The catalogue goes to 220 mm (`ac-unit`) and 200 mm (`window`), and at 220 mm the old placer read a correct 800×280 unit **+21.7% wide and 91 mm too tall** — 371 mm against the shape's own 250–350 band, so `judgeLabel` accused a correctly identified air conditioner. An `ac` row went into the truth table with the fix. **Half of this item was mis-titled and the correction matters:** the wall-normal position never reached the rendered scene, because `snapToWall` recomputes it from the wall as `inward × (depth/2 + gap)` and `groundY` overwrites the height — so the scene was already right by a downstream correction, and what the user gains is SIZE, not position | **nothing** — built and mutation-tested: nine mutants, two of them FIXTURE mutants (wall pieces back to panels; `truthCentre` stripped), all caught | `lib/photo-geometry.ts`, `lib/detect-refine.ts`, `tests/helpers/known-room.ts`, and the three suites |
 | 21 | **§ 42.2** off-square framing is what creates the duplicate, and it takes only ±3.5° | **MEASURED, then DECIDED AGAINST 2026-09-09.** The cross-slot lamp stops merging at ±3.5° of DIFFERENTIAL yaw; a UNIFORM bias never splits it at any angle to 20°, because it moves both sightings together. The nightstands never collapse (gap within 6 mm across the sweep) because they share a photo. The user chose the report-only fix — measure ψ, tell the person, offer a retake, nothing downstream reading it — and it was built and reverted: the angle is exact from ideal segments (six decimals, 0–35°, roll costing 0.054° at 10°) but the pixel path on a WALL capture gives 23.5°, 97.8° and no answer for the same 100° lens at three resolutions, with **coverage 0.96 on the answer that is 76° wrong** — so there is no confidence signal to gate a report on. A square-on wall capture is the degenerate case for vanishing points, which is a second and independent reason for rule 2's prohibition | **nothing** — closed with evidence; `tests/vanishing-point.test.ts` prints the table on every green run | the measurement and the negative result are in a commit; no `lib/` change survives |
-| 21b | **§ 42.3** two placers assumed which surface a piece was on and never checked the answer against the room | **FIXED 2026-09-09.** The wall placer had no lateral bound at all; the ceiling placer's bounded the wall-normal axis only **while its docstring read as though it covered both**. On an ultrawide every ordinary room has picture past the ends of the wall being photographed, and what is out there is the RETURN wall — the exposure condition is `span < 2·tan(hFOV/2)·distance` over `wallFrame`'s two answers, so a **square room always is**. Measured, both fixtures wholly in frame: a 700 × 500 print 800 mm from a corner decodes onto the wrong wall at **+28% wide and +61% tall**, larger than the air conditioner § 42.4 was written around; a 300 mm vent read as a ceiling piece **passes the old gate** and comes back 386 mm wide, 571 mm outside the room. **A review on the same day found the first version of the gate bounding against `wallSpan/2` — a BOUNDING-BOX dimension — so it refused a correctly measured print in a room whose wall had been dragged; it reads `wallFrame` now, a verified no-op on any centred room, and went inert where the framed wall's own distance was untrustworthy — an exemption **§ 44 deleted on 2026-09-10** by retiring that input, so the gate now speaks in every room it has a polygon for. That review also found nine of twelve fixture mutants surviving, coverage floors of `> 0` that would let the sweep lose a third of its rows, and every published number taken from a scratch re-implementation of the placer rather than from the placer — all fixed, and the numbers now print on every green run. Refused rather than clamped, and refusal is not deletion — the piece still appears, at its catalogue size only on the on-device path (`buildSceneFromRoom` prefers the detector's own `dimMM`, and the cloud prompt asks for it), and `judgeLabel` WITHDRAWS its verdict (`ok → unmeasured`) rather than accusing: `painting`'s band had judged the fabricated 893 × 803 `ok`, a false clean bill. The gate's own limitation is measured in both directions now — an under-read lens never refuses, an over-read one refuses the outer half of every wall at 66°-read-as-106°, and by then it has inflated the SIZE by the same ratio, so the discarded measurement was worthless. **Two of my own predictions were wrong and are recorded in § 42.3:** it does not remove the duplicate row (two in, two out, measured), and the looser wholly-off-the-wall variant survived a first full round of mutation until a fixture was built that separates them | **nothing** — built and mutation-tested twice over: nine mutants on the code, eight caught and the ninth a documented survivor (the floor placer's exemption rests on a measured lens-invariance rather than on an assertion); then the review found the FIXTURE surface wide open — nine of twelve `FACING`-row mutants surviving, since only one wall was reachable from any test — so `FACING` is derived from `ALONG` and all four rows are pinned by cross-slot negatives | `lib/photo-geometry.ts`, `tests/helpers/project.ts`, `tests/photo-geometry.test.ts`, `tests/detect-refine.test.ts` |
+| 21b | **§ 42.3** two placers assumed which surface a piece was on and never checked the answer against the room | **FIXED 2026-09-09.** The wall placer had no lateral bound at all; the ceiling placer's bounded the wall-normal axis only **while its docstring read as though it covered both**. On an ultrawide every ordinary room has picture past the ends of the wall being photographed, and what is out there is the RETURN wall — the exposure condition is `span < 2·tan(hFOV/2)·distance` over `wallFrame`'s two answers, so a **square room always is**. Measured, both fixtures wholly in frame: a 700 × 500 print 800 mm from a corner decodes onto the wrong wall at **+28% wide and +61% tall**, larger than the air conditioner § 42.4 was written around; a 300 mm vent read as a ceiling piece **passes the old gate** and comes back 386 mm wide, 571 mm outside the room. **A review on the same day found the first version of the gate bounding against `wallSpan/2` — a BOUNDING-BOX dimension — so it refused a correctly measured print in a room whose wall had been dragged; it reads `wallFrame` now, a verified no-op on any centred room, and went inert where the framed wall's own distance was untrustworthy — an exemption **§ 44 deleted on 2026-09-10** by retiring that input, so the gate now speaks in every room it has a polygon for. That review also found nine of twelve fixture mutants surviving, coverage floors of `> 0` that would let the sweep lose a third of its rows, and every published number taken from a scratch re-implementation of the placer rather than from the placer — all fixed, and the numbers now print on every green run. Refused rather than clamped, and refusal is not deletion — the piece still appears, at its catalogue size only on the on-device path (`buildSceneFromRoom` prefers the detector's own `dimMM`, and the cloud prompt asks for it), and `judgeLabel` WITHDRAWS its verdict (`ok → unmeasured`) rather than accusing: `painting`'s band had judged the fabricated 893 × 803 `ok`, a false clean bill. The gate's own limitation is measured in both directions now — an under-read lens never refuses, an over-read one refuses the outer half of every wall at 66°-read-as-106°, and by then it has inflated the SIZE by the same ratio, so the discarded measurement was worthless. **Two of my own predictions were wrong and are recorded in § 42.3:** it does not remove the duplicate row (two in, two out, measured — **true of the gate and no longer of the pipeline: since `1ca9ce3` (2026-09-28) the refused row is LOCATED on its wall and merges into the measured sighting, so it is one row, and the measured one survives in either photo order**), and the looser wholly-off-the-wall variant survived a first full round of mutation until a fixture was built that separates them | **nothing** — built and mutation-tested twice over: nine mutants on the code, eight caught and the ninth a documented survivor (the floor placer's exemption rests on a measured lens-invariance rather than on an assertion); then the review found the FIXTURE surface wide open — nine of twelve `FACING`-row mutants surviving, since only one wall was reachable from any test — so `FACING` is derived from `ALONG` and all four rows are pinned by cross-slot negatives | `lib/photo-geometry.ts`, `tests/helpers/project.ts`, `tests/photo-geometry.test.ts`, `tests/detect-refine.test.ts` |
 | 22 | **§ 44** all five sites that measure from the framed wall read `depth/2` / `width/2` — a bounding box, in a room a wall drag makes off-centre | **FIXED 2026-09-10.** `wallDistance` is **deleted**; the two floor-line solvers and all three placers take a `Footprint`, so a bounding box is unpassable rather than merely unread. The item named four sites and there were five — `heightFromFloorLine` too — and it under-stated reachability: `offsetWall` never recentres, `RoomSync` persists the off-centre polygon, and the Room rail's **Re-scan** is unconditional, with `RoomSync` deliberately declining to pin a reshaped room that still has photos *so that re-scan keeps working*. Measured by calling the functions: on a north wall dragged out to 4.0 m (bbox 3.5) a 700 × 500 print decoded **611 × 437, −12.7%**, on the EXIF path. **On the floor-line path it decoded 699 × 499 — right — because `k ∝ 1/d` solved from the same wrong distance CANCELS what the placers multiply back**, which is why nothing caught this, and why migrating either half alone moves it +14% or −13%. `heightFromFloorLine` solved a 1.5 m camera as 1.3125 m. Two things fell out: the gate's inertness exemption is gone (the return-wall fabrication is now refused in a dragged room, where it was accepted), and `placeCeilingObject`'s forward gate was **refusing every legitimate ceiling piece between 3.5 and 4.0 m** in such a room — found by mutation, invisible while every fixture was centred. What it did not buy: `wallFrame` reads BOUNDS, so an L/T/U is still measured to its box, and a `u`'s real north wall is at `z = 0` against both conventions' `depth/2` — a larger error, filed below | **nothing** — built, and mutation-tested: **13 mechanism mutants, 13 caught**, plus two fixture mutants (dragged room reverted to centred; drag direction flipped), 8 failures each. Mutation also caught two defective assertions of my own — one appended where its fixture put it 1.1 m from the boundary it claimed to test | `lib/photo-geometry.ts`, `lib/detect-refine.ts`, `app/onboarding/detect/page.tsx`, `components/three/WallHandles.tsx`, and five suites |
 | 22b | **§ 44b** an L, T or U was measured to the BOX around it — `wallFrame` read the footprint's bounds, which is the same convention one layer in | **FIXED 2026-09-10.** `wallFrame` names a wall now: of the walls facing this slot's camera and reaching the image's centre column, the nearest with nothing in between. Signature unchanged, so six readers inherit it with no plumbing. **Reachability is one press** — *"Photograph my real room first"* is offered for whichever preset is selected, and no layout gates the flow. Measured at the shipping preset dimensions and printed on every green run: a `t`'s stem wall is at **1.210 m** where its box said 2.750, so every size off that photograph was **2.273× too large** — 1614 × 1153 mm for a 700 × 500 print. **Six distinct walls of twenty were wrong** — two with the wrong DISTANCE (`t` east and west), one with no wall at all (`u` north), five with the wrong ENDS of which two are those same two; the first version of this row said "three of sixteen, and five more", which flattered on all three numbers. The ends are the surface gate's input, so § 42.3's gate was handed 2–3 m of return wall and told it was the framed one — the `l` being the sharp case, since its distances are right — structurally, not by luck: it cuts at 0.42 of each side and 0.42 < 0.5, so 0 of 80 (w, d, slot) combinations deviate — and nothing about those photographs looks wrong. **The cancellation trap repeated and this time improving the calibration made it worse:** the 66° default is wrong the other way by almost the same factor, so the shipped answer was +12.9% and knowing the lens takes it to +130.6%. The **`u`'s** notch inner face is at `−depth/2 + 0.5·depth` = **exactly zero for every `u` room**, so the rig stands the lens ON that wall and its north view has no wall at all — a mis-placed CAMERA, filed as the larger item. Also deleted: `wallSpan`, the last box dimension in the module, whose one reader was the user-facing wall-length label; and the bbox origin test, which an L's cut-away quadrant passed while standing the camera outdoors. **WALKED IN A BROWSER 2026-09-10, and the user-facing half of this row was FALSE:** `scripts/capture-route-probe.mjs` drove the real click path against the build before this fix and against `main` and got the identical score, 12 passed / 4 failed. The geometry reaches the user — a `t`'s stem wall measures **0.36 m** where the pre-fix build said **1.31**, a 3.64× move, through a room made by pressing the buttons a person presses. But the **wall-length label never moved at all**: the capture screen held its room as `{ width, depth }` and `roomFootprint` took the polygon inputs as OPTIONAL, so that bounding box type-checked and fell back to `'rect'`, and a T-Shape's stem wall went on being announced as **4.70 m against a real 2.58** under the instruction *'Check each photo against the wall length beside it.'* § 44's own lesson defeated at a boundary — it narrowed five signatures so a box would be unpassable rather than unread, and one optional parameter handed the hole back. Fixed by making `layoutId` a required key of possibly-undefined value, so the compiler is the guard; it found exactly one offending caller and it was the defect. Both controls held to the printed digit (a Rectangle's labels and its measured size are identical across all three builds), which is the no-op proof at UI level | **nothing** — built, and mutation-tested: **17 mutations run, 14 caught outright, 1 caught only after building the two-arm footprint that separates nearest from farthest, 2 provably equivalent** — the first version of this row said "16 of 16" beside an admitted survivor, which cannot both be true. The two equivalents changed the CODE (a dead flat-wall branch deleted, and a false claim about what made the no-op proof exact). Both baselines byte-identical to `origin/main`, reproduced in a worktree rather than quoted | `lib/photo-geometry.ts`, `app/onboarding/capture/page.tsx`, `lib/capture-slots.ts`, and three suites |
+| 23 | **§ 46** repeat sightings: what the soft merge reaches, and the pieces the HARD merge deletes before it can | **BUILT, with two items MEASURED and NOT FIXED.** The soft merge (`lib/repeat-sightings.ts`) starts a probable repeat unticked with a reason, for every kind, not only beds; over the 150 furnished rooms it takes the repeats left ticked at an ultrawide read as 66° from **249 to 3** (106°) and **460 to 24** (120°), at a price of 22 real pieces started unticked across the five readings, each one tap from back. What it cannot reach is a piece with no row: **§ 46.1** twin beds in a corner come back as one, and **§ 46.3** under an ultrawide read as 66° **35 and 39 pieces** of about 990 are deleted outright, nearly all dining chairs — both the hard merge deciding a pair on a distance nobody measured (a centre bound, or a box the frame cut). **§ 46.2** is the bottom-edge walk, measured and not built | M — one change to what the hard merge takes, measured over the same 150 rooms and against `tests/detect-pipeline.test.ts` in both directions | § 46.1 and § 46.3 are one piece of work; `tests/repeat-sightings.test.ts` holds both as literals, so the fix turns them red on purpose |
+| 24 | **§ 47** a change made in the last half-second before a reload or a closed tab is lost | **MEASURED 2026-09-28, NOT FIXED.** Every studio save is a debounce (`RoomSync` 300 ms, the Room section's size boxes 200 ms before that) and every one of them flushes on UNMOUNT, which covers leaving the room inside the app and nothing else: a reload, a closed tab or a phone backgrounding the browser unmounts nothing, and there is no `pagehide` listener anywhere in `app/`, `components/` or `lib/`. Found by a browser probe that typed a width and reloaded; under software GL the write landed **2.5–5.8 s** after the edit, because the timers queue behind rendered frames. Predates item 10. | small | — |
+| 25 | **§ 48** a tab left open across the keep-means-keep update can bring unticked pieces back | **WRITTEN DOWN 2026-09-28, NOT FIXED — the user's call.** `migrateRoom` reads a row's `locked` by the version stamp alone, and the previous build stamps `version: 1` on every save. One edit in a tab open across the deployment re-stamps a v2 room, and the next up-to-date load reads every row as kept: the scan list shows unticked rows ticked, and a room with no saved scene is rebuilt with them in it. It fails toward MORE furniture, deletes nothing, and closes itself on a reload. The one fix on offer (a marker the old writers carry through) inverts on the re-scan path, which is why it is not built. | — | — |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
 putting a 1450 mm TV on a 1.2 m wall in the small L and T (`placeNewPart` has no
@@ -1630,6 +1633,26 @@ the user went and looked.
   at exactly the width the original report was about.
 - **A furniture CSV or parts spreadsheet.** `CLAUDE.md` rule 6. Recorded because it has been
   violated twice.
+- **Hiding the repeat note on a ticked row** (review of #160). *Probably the bed from Wall 1
+  again* is about the photographs, not the tick: on an unticked row it says why the row
+  started that way, and with both rows ticked it is the one warning that the room now holds
+  two beds. The row it names may be unticked as well; it still names where the piece was seen.
+- **Clamping the side walk's boxes to the frame** (`reachedSolids`, review of #160). Carrying
+  a box past the photo's edge is the point of the walk: the ray through a column beyond the
+  frame is still a ray from that lens, and it is how a piece the edge cut is reached. The walk
+  stops at the widest of the kind, and `REACH_STEPS` caps the work.
+- **Settling a newly kept piece against the arranged room** (second review of #160). Ticking a
+  row back in on the cached list puts its piece where the photo measured it, settled against the
+  list as the first build is, and moves nothing the person arranged. If that spot now overlaps
+  a piece they moved, **Room check** says so. Nudging the newcomer to a free spot would put it
+  somewhere no photograph saw it, and nudging the arranged pieces would undo someone's work to
+  make room for a tick.
+- **Bringing back a deleted piece when its row is re-worded** (same review). Re-wording a row
+  is about what the piece is; deleting it in the studio was about whether it is in the room,
+  and the first used to undo the second. A tick is how to ask for it back: untick the row and
+  Continue, then tick it on the next visit, and it is built again where the photo saw it.
+- **Comparing floor pieces as their rectangles in the repeat check.** § 46.4: measured level
+  or worse on both counts in every reading.
 - **Re-baselining any currently failing assertion.** Every red in this document is
   attributed to a cause instead.
 - **`bandCost` as `e + e²`.** Measured, correct diagnosis, wrong remedy, **reverted** — and
@@ -6238,7 +6261,7 @@ NOT established for either, and the trap has bitten here before: a dirty tree
 from a dead session was once thirteen files all already on `main`. The cheap check says
 these are probably the same story; the expensive one was not run.
 
-**3. The primary shared checkout is CLEAN.** `D:\CODES _AI\Antigravity\Claude\Danmu` is
+**3. The primary shared checkout is CLEAN.** `D:\CODES\0_AI\Antigravity\Claude\Danmu` is
 on branch `work` at `a0fb53d`, which **is an ancestor of `origin/main`**, with no modified
 files and no stashes. It opened this round dirty in ~13 files; nothing is stranded there now.
 
@@ -6724,6 +6747,8 @@ that is not a vanishing point. The device sensors are already out (the design re
 the rig requires). What is left is either a detector good enough that the VP pair stops
 flipping, or a different observable entirely. Neither is close, and the duplicate stays one
 tap to delete — which `lib/detect-refine.ts` already argues is the safe way to be wrong.
+*(Since 2026-09-28 it is not even that: a second sighting starts UNTICKED and says which
+row it repeats — see § 46.)*
 
 ### § 42.3 · Two gates that were missing — **FIXED 2026-09-09**
 
@@ -6799,6 +6824,19 @@ predictions teaches nothing:
   IS compared and the count can move there. The fixture carried neither field — the
   on-device shape — so it could not express the case the claim was about, one layer up
   from the depthless card.
+
+  **Corrected 2026-09-28, by `1ca9ce3`, and the bullet above is left standing because it
+  was true of the code it measured.** The count was never the gate's to move — it was the
+  missing position's. `geoLocate` now gives a refused wall row the place its line of sight
+  meets the wall it hangs on, and a heading, and nothing else: no size. So the east
+  sighting lands **58 mm** from the north one against `painting`'s 0.35 m tier and the
+  pair is **one row**, in either photo order, and the survivor is the MEASURED row
+  (700 × 500 at x = 2.2), because `dedupeDetections` now lets a measured sighting replace
+  a located one it merges with. First-come would have hung the print at the catalogue's
+  size whenever the east photo was taken first. A refused CLOUD row is located the same
+  way, so the model's own position no longer decides its merge either.
+  `tests/detect-refine.test.ts` pins both, under "a refused placement"; the test that
+  pinned two rows was rewritten in the same commit, not deleted.
 - **"Gating the centre rather than the whole extent is obviously right."** It is right, but
   the case offered for it was invented and the looser variant **survived a first full round
   of mutation with every assertion green**. What separates them had to be built: a 1400 × 500
@@ -7224,3 +7262,276 @@ and would need one line changed (assert present on the route with the consumer, 
 elsewhere) once the header is split, which is a sharper invariant than "present
 somewhere".
 
+## § 46 · Repeat sightings — the soft merge, and the case it cannot reach
+
+The user's report, 2026-09-28: *"we end up having 5 beds in a room"*. The hard merge
+(`dedupeDetections`) takes only the pairs it is sure of, and one bed seen from its foot and
+from its side fails both of its tests — the centres disagree by more than a bed's merge
+distance, and the second model's word ("double bed") is not the first's. **BUILT** on
+`claude/amazing-davinci-m8zqys`: `lib/repeat-sightings.ts` flags each row that probably
+repeats another, and the review screen starts it unticked with *Probably the bed from Wall 1
+again*. Nothing is deleted. Design.md § *The detection pipeline* has the rule;
+`tests/repeat-sightings.test.ts` holds it, **28 of 28 mutants killed**
+(`scratchpad/mut-repeat.py` in the session that built it — not in the repo). Three of those
+28 survived the first round, and each was the fixture, not the code: a "touching" pair whose
+edges were `0.1 + 0.35` and `0.45`, which a float holds 5.6e-17 apart, so strict and
+non-strict contact read the same; a loading-state test that only ever asked about an
+UNplaced row; and a curtain exception nobody had given a ceiling shape, although
+`sceneShapeFor('curtain', 'curtain', 'lamp-pendant')` returns one.
+
+**Then the user's second word on it, 2026-09-28: *"the duplication issue doesn't only apply
+to beds"*.** Four commits on the same branch took the soft merge to every kind, each measured
+on the 150 furnished rooms `tests/repeat-sightings.test.ts` holds (`tests/helpers/furnished-rooms.ts`
+generates them; repeats left ticked, lens as the phone reported it):
+
+| commit | what it does | 106° read as 66° | 120° read as 66° |
+|---|---|---|---|
+| — | the soft merge as first built | 249 | 460 |
+| `577e395` | a row is measured as the shape the room builds it as, so a "ceiling light" is a pendant on the slab rather than a box refused above the horizon | — | — |
+| `4eddff8` | two rows from different photos are compared at every lens a phone could have (30–120°, every 2°) as well as the one assumed; a photo whose lens EXIF measured is held at it (`pickLens` counts EXIF only, never a lens inferred from vanishing points) | 83 | 152 |
+| `1ca9ce3` | a wall piece seen past a corner is hung where its line of sight meets the wall (`locateOnWall`, position and heading, never a size), and a measured sighting beats a located one it merges with | 27 | 49 |
+| `bd4790e` | a floor box the side of its photo cut off is walked past the frame to every width its kind could have (`reachedSolids`) | **3** | **24** |
+
+The price is real pieces started unticked, each with a reason and one tap from back: the lens
+sweep costs **22** across the five readings of the table (2 → 10 at a 66° lens read as 66°,
+11 → 21 at 106° read as 106°), and neither later commit adds one. On a lens EXIF measured
+there is no sweep and no price — the measured column loses exactly the pieces the unswept one
+does, and at 106° read truly it leaves 2 repeats ticked. What the table cannot say is how
+often a real phone's lens is measured; `tests/exif-in-the-wild.test.ts` holds four real
+photographs that carried no focal length, so the assumed lens is the normal path.
+
+**The table's rooms are all shot 1.5 m up and read at 1.5 m, so it could not see the height
+riding the sweep.** Found in review of #160: where the detect screen finds the wall-floor
+line it spends it on the lens (against the assumed 1.5 m) or on the height (against a lens
+the vanishing points inferred), and the sweep then carried that one lens's height to every
+lens. The line fixes `height / k`, so the height has to move with the lens (`atLens`, and
+`CameraCal.floorLine` marks the cameras it applies to). Held beside the table in the same
+file, shot at 1.3, 1.5 and 1.7 m: repeats left ticked 96 → 44 and real pieces unticked
+80 → 70 across the four readings, and no reading worse on either count.
+
+### § 46.1 · Twin beds in a corner come back as ONE — MEASURED, NOT FIXED, and it is not the soft merge
+
+Measured against the known room (7 × 6 m, 106° lens), two single beds 900 × 1900, 200 mm
+apart, against the north wall in the north-east quadrant, each photo read twice (`readTwice`
+in `tests/repeat-sightings.test.ts`), seen from `n` and `e`. Held as literals by *still loses
+the second of twin beds in a corner* in that file, on the lens as assumed and as measured,
+which give the same rows:
+
+| beds at x = | rows after `refineDetections` | kept at first | truth |
+|---|---|---|---|
+| 1.9 and 3.0 | 2 (the first bed from `n`, read twice) | 1 | 2 |
+| 1.7 and 2.8 | 4 (the first bed from `n` and from `e`, each read twice) | 1 | 2 |
+
+**The second bed is deleted, not unticked, and by the hard merge.** Every row left is a
+sighting of the first bed, so no tap on the review screen brings the second one back. Both of
+its sightings go, through two different doors:
+
+- **In the north photo**, both beds run out of the right side of the frame, and the second
+  bed's box lies inside the first's (IoU 0.57 and 0.60 against a bar of 0.5), so the
+  same-photo rule reads them as one object boxed twice.
+- **In the east photo**, the second bed decodes 0.66 and 0.77 m from the first bed's north
+  sighting, under a bed's 0.9 m merge distance and with the same word. That is the floor
+  placer's centre bound: a centre may stand no nearer its wall than half the catalogue depth,
+  and a single bed's catalogue depth is its length, 2000 mm. Seen from its side, the axis
+  toward the camera is the bed's width, so the bound holds it at x = 2.50 when it stands at
+  3.0 or 2.8, half a metre toward the first bed. A photo never measures a floor piece's
+  heading, which is why the bound cannot know which of the bed's two axes it is facing.
+
+In the second layout, the east photo's sighting of the FIRST bed is cut by the frame and
+refused, so it has no position for the cross-photo rule to compare, and it survives. The soft
+pass files it under the first bed, which is right.
+
+**What would fix it**, not built: both doors are the hard merge deciding a pair it is not sure
+of. Two boxes that both run out of the frame share their cut edge whatever they are, so their
+overlap is not the evidence it is between two whole boxes; and a distance taken through a bound
+that assumed a heading is a distance nobody measured. Handing such pairs to the soft pass, to
+untick with a reason instead of deleting, is the hard merge's own rule (*a duplicate the user
+deletes in one tap beats a real piece that never appears*) applied to the case that breaks it.
+It changes what the hard merge takes, which `tests/detect-pipeline.test.ts` holds in both
+directions, so it wants its own measurement over the 150 furnished rooms rather than a line in
+the duplicate fix. The side walk (§ 46.2) does not reach it: it widens where the soft pass looks
+for a pair, and it runs after the second bed is gone.
+
+**Both earlier readings of this were wrong**, each in a way worth keeping. The first, in the
+session that built § 46, recorded "twins seen from n+e keep 3", from a probe that put one bed at
+x = −0.6: behind the east camera, which cannot have seen it, so `inPicture` clamped a projection
+from behind the lens to the whole frame. **A fixture must be a photograph that could have been
+taken.** The second was this section's first version. It said both beds decoded within a few
+centimetres of the corner spot (2.50, −2.00), and that the row left from `e` in the second
+layout was the second bed, one tap from back. The first bed's north sighting decodes at
+x = 1.85 and 1.73, and every row left is the first bed's. Re-run at the commit that wrote it
+(`bb1aef2`), the same probe prints the same rows as today, so that version was wrong when it was
+written, not overtaken. Both readings came from probes nobody kept, which is why the table is a
+test now.
+
+### § 46.2 · A floor piece cut off at the BOTTOM of its photo — MEASURED, NOT BUILT
+
+The soft merge compares a floor row cut off by the SIDE of its photo at every width it could
+really have (`reachedSolids` in `lib/repeat-sightings.ts`): the box is carried past the frame
+two hundredths at a time and each longer box is asked again, until the piece it measures is
+wider than the widest of its kind. It had to be, because the box as seen is not the piece —
+`lateralSpan` reads the frame's edge as the far corner of something, and a fridge in the
+corner of a 106° photo came back **−79 mm** wide at its true lens and was refused, so the one
+sighting that saw it whole had nothing to meet. The same walk carried DOWN the photo, for a box
+the bottom of the frame cut off, was measured and not built.
+
+Measured on the 150 furnished rooms `tests/repeat-sightings.test.ts` holds (repeats left
+ticked / real pieces started unticked, lens as the phone reported it):
+
+| photos taken on, read as | before either walk | sides walked (built) | bottom walked alone |
+|---|---|---|---|
+| 106°, read as 66° | 27 / 37 | **3 / 37** | 25 / 38 |
+| 106°, read as 106° | 21 / 21 | **1 / 21** | 21 / 22 |
+| 120°, read as 66° | 49 / 41 | **24 / 41** | 41 / 41 |
+| 120°, read as 120° | 38 / 6 | **23 / 6** | 32 / 6 |
+| the whole table's time | 0.9 s | 2.7 s | 5.0 s |
+
+The bottom walk alone buys little, costs a real piece twice, and nearly doubles the time again.
+Walking both edges at once is a grid rather than a line, and did not finish the table in half
+an hour — more than two seconds a room on a laptop, for one review screen.
+
+**What is left after the side walk is the case both would need.** Of the 51 repeats still
+ticked across the four ultrawide readings, **48 are floor pieces with a sighting cut off at a
+bottom corner** of its photo, one is cut at the bottom alone, and two are wall pieces cut at
+the side (the walk is for floor rows only). The side is walked round; the bottom still bounds
+the piece's near face rather than measuring it — the ray through the last row of pixels is as
+near as the photo shows, not as near as the piece comes — so its distance is held by nothing.
+A cheaper form than the grid is not known to exist: the two edges' unknowns are independent,
+and a walk along one diagonal would be a guess about how a piece sits in a corner.
+
+The trade on the list if it is never built: one of those pieces starts ticked twice, says
+nothing, and one tap unticks it. Recorded 2026-09-28; the side walk is in the commit that
+filed this.
+
+### § 46.3 · Chairs the hard merge deletes outright — MEASURED, NOT FIXED
+
+The table's `lost` column (a real piece with no row started ticked) is mostly not the soft
+merge. The same test now holds a `gone` column — pieces with **no row at all** once
+`refineDetections` has run — and under a lens read narrower than it is, nearly every lost
+piece is gone before the soft pass sees it:
+
+| photos taken on, read as | pieces seen | gone | lost (unswept) |
+|---|---|---|---|
+| 66°, read as 66° | 575 | 1 | 2 |
+| 106°, read as 66° | 993 | **35** | 35 |
+| 106°, read as 106° | 993 | 9 | 11 |
+| 120°, read as 66° | 989 | **39** | 41 |
+| 120°, read as 120° | 989 | 2 | 4 |
+
+**All of them are the hard merge's second rule inside ONE photo**: two pieces of the same kind
+whose centres came out closer than the kind's merge distance. All chairs, bar one curtain in
+each narrow reading. Nothing on the review screen brings one back — there is no row to tick.
+Two placement errors feed it, and both were found by a probe that replayed the merge and
+said which rule took each row (not kept; the gone column is what is held):
+
+- **A lens read narrower than it is** roughly doubles every floor distance, so two chairs one
+  behind the other — across a dining table, 0.8 to 1.7 m apart along the view — both run past
+  the far wall, and the floor placer's centre bound stops both **0.25 m off the plaster**, half
+  a chair's catalogue depth. The bound erases the one thing that told them apart. Every gone
+  piece at 106° and 120° read as 66° was a pair stopped on that bound.
+- **At the true lens**, every gone piece had a sighting cut off at the bottom of the frame
+  (9 of 9, 2 of 2). A bottom-cut box is read as though the frame's last row were the chair's
+  near face, so the nearer chair is placed half a metre to nearly a metre further from the camera than it stands,
+  onto the chair across the table. That is § 46.2's bottom edge, costing a piece a second way.
+
+**What would fix it**, not built, and it is § 46.1's fix: a distance taken through a bound, or
+off a box the frame cut, is a distance nobody measured, so the hard merge should not decide a
+pair on it — hand the pair to the soft pass to untick with a reason. It changes what the hard
+merge takes, so it wants the same measurement as § 46.1, and the two are one piece of work.
+The size of it is worth stating plainly: with the assumed lens as the normal path (above),
+**3.5–3.9% of the pieces in a room photographed on an ultrawide can vanish, nearly all of them
+dining chairs** (0.2% on a lens the assumption fits), and nothing tells the person.
+
+### § 46.4 · A floor piece is compared as the circle it could turn within — MEASURED, KEPT
+
+Filed as a defect in review of #160: `solidOf` gives every floor row a disc of
+`max(width, depth)` rather than its rectangle, so two real pieces of one kind within about a
+piece-length of each other can share a quarter of the smaller disc. Twin singles 200 mm apart
+stand 1.1 m centre to centre, well inside two 1.9 m discs. It is a trade, so it was measured
+rather than argued: the same 150 rooms, the disc replaced by the rectangle at the row's own
+heading and nothing else changed (the shipped, swept rule; repeats left ticked / real pieces
+started unticked):
+
+| photos taken on, read as | disc (shipped) | rectangle |
+|---|---|---|
+| 66°, read as 66° | 0 / 10 | 0 / 12 |
+| 106°, read as 66° | 3 / 37 | 4 / 41 |
+| 106°, read as 106° | 1 / 21 | 1 / 22 |
+| 120°, read as 66° | 24 / 41 | 30 / 43 |
+| 120°, read as 120° | 23 / 6 | 25 / 6 |
+| the four floor-line readings, summed | 44 / 70 | 57 / 74 |
+
+**The rectangle is level or worse on both counts in every reading.** It leaves more repeats
+ticked, which is the disc's reason — a floor decode never measures which way a piece faces, so
+one bed seen from its foot and from its side comes back a quarter-turn apart, two rectangles
+sharing about a sixth of their floor, under `REPEAT_SHARE` — and it ALSO starts more real
+pieces unticked, which is the opposite of what the finding predicted. Why is not traced; the
+decision rests on the table, not on a story about it.
+
+What keeps twin beds apart is the photo, not the disc: two boxes one photo drew apart are
+never one piece (*never merges two boxes the photo drew apart*, and *keeps TWO beds out of
+twin singles read twice in one photo*, in `tests/repeat-sightings.test.ts`). The case the disc
+does cost is two of a kind each seen from a different wall and never together — the second
+starts unticked with *Probably the bed from Wall 1 again*, one tap from back, and it is inside
+the `lost` column above. Swapping in the rectangle turns three tests in that file red: the
+quarter-share rule test and both population tables.
+
+## § 47 · A change made just before a reload is lost — MEASURED, NOT FIXED
+
+Every save the studio makes waits first: `RoomSync` writes 300 ms after the last change
+(`DEBOUNCE_MS`), and the Room section's size boxes commit 200 ms after the last keystroke,
+before `RoomSync` even sees the change. All three of `RoomSync`'s effects flush a pending
+write when they **unmount**, which is the right answer to leaving the room inside the app
+and no answer at all to leaving the page: a reload, a closed tab and a phone that
+backgrounds the browser unmount nothing. There is no `pagehide` (or `visibilitychange`)
+flush anywhere in `app/`, `components/` or `lib/` — the one `visibilitychange` listener, in
+`KeyboardShortcuts.tsx`, releases a held pan key.
+
+**How it was found**, on `claude/amazing-davinci-m8zqys` while building the rough-size mark:
+a browser probe typed a width into the studio and reloaded, and the width came back as it
+was. Instrumenting IndexedDB's `put` showed the write arriving **2.5–5.8 s** after the edit
+under software GL, where the timers queue behind rendered frames; on a real GPU the window
+should be the half-second the two debounces add up to, which is still a reload's worth. The
+probe now waits for the write before it reloads, so it holds the rough-size mark and not
+this.
+
+**What would fix it**, not built: one `pagehide` listener that runs the same flush the
+unmount does. IndexedDB writes started in `pagehide` are not guaranteed to finish, so it
+wants a measurement on a real phone as well as a test, and it is its own commit — it
+touches every save path, not the one this was found on.
+
+## § 48 · A tab left open across the update can bring unticked pieces back — WRITTEN DOWN, NOT FIXED
+
+Found in review of #160; the user's call, 2026-09-28, was to write it down and build nothing.
+`ROOM_SCHEMA_VERSION` 2 is the keep-means-keep change: a detected row's `locked` meant
+"confirmed" up to 1 and means "kept" from 2, and `migrateRoom` marks every row of a pre-2
+record kept, because under the old rule every row was built. It decides by the version stamp
+alone, and the stamp is written by whichever build saves last.
+
+A tab opened before the deployment and never reloaded is still running the previous build —
+`public/sw.js` has no `skipWaiting()`, on purpose, and nothing in the page reloads itself.
+Every room writer in that build loads the record, spreads it, and saves it stamped
+`version: 1`: `RoomSync`'s shell write, the top bar's name, `renameRoom`, the Room section's
+size boxes, a re-scan. So one edit in the old tab re-stamps a v2 room as v1 with its rows'
+new meaning intact, and the next load in an up-to-date tab reads every row as kept:
+
+- the scan list shows every unticked row ticked again;
+- a room with no saved scene — one the person has only moved things in — is rebuilt from its
+  rows, and the unticked pieces are back in it;
+- a room with a saved scene (anything added, deleted or recoloured) opens as arranged, and
+  only the list is wrong.
+
+It fails toward the old behaviour — more furniture, never less — and deletes nothing, so
+unticking again is the way back. Its reach is one deployment: a tab open across this update,
+a room with detections, an edit made in that tab. A reload online always fetches the new page
+(navigations are network-first in `public/sw.js`), so it closes itself.
+
+**Why it is not built.** The old build is shipped and cannot be taught anything, so a fix
+would have to be in what the new build reads. A second marker is the one on offer, and the
+old writers WOULD carry it — each spreads the stored record, and the old `loadRoom` rebuilds
+only `site` — so it would tell a re-stamped v2 from a true v1 on the shell, name and size
+paths. It inverts on the re-scan path: the old detect screen and `lib/rescan.ts` write a fresh
+list whose `locked` has the OLD meaning under the carried marker, and every piece that was
+built without being confirmed would then drop out of the room. A rule that turns "more
+furniture" into "less furniture" on one path is worse than the defect it answers. Re-open if a
+later non-additive change makes a stale tab cost more than this one does.

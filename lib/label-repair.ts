@@ -24,7 +24,7 @@
 import { dimRangeFor } from './dimension-ranges';
 import { geoRefine, type CalMap, type RoomDims } from './detect-refine';
 import { anchorFor } from './physics';
-import { CATEGORIES, type Category, type Shape } from './scene-spec';
+import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
 
 /** The axis names this module reasons about. Never depth — see `sizeFitsLabel`. */
@@ -37,6 +37,11 @@ export type LabelCandidate = {
    *  projection, so a repaired word that keeps the old measurement is measuring a
    *  curtain as though it stood on the floor. */
   detection: Detection;
+  /** What to call it, when that is not the category's plain name: the Library's name
+   *  for the kind it was measured as — "Double bed" — because a chip reading "Bed?"
+   *  that builds a double bed says less than it does. Absent for the category's
+   *  plain kind, whose name is the category's. */
+  name?: string;
   /** How comfortably the re-measurement sits inside this word's band — the
    *  tightest of the two axes, as a fraction of the band's own span, 0…0.5.
    *  Ordering only. It is not a probability and there is no prior behind it. */
@@ -126,8 +131,9 @@ function sizeMargin(
  *  Judged on the CATEGORY band (`dimRangeFor(c, 'box')`, which resolves to the
  *  per-category entry) rather than on any one shape's, because a candidate has no
  *  shape yet — asking "could this be a bed" against `bed-single`'s narrower band
- *  would reject every double bed. The detector's own word is judged with its shape
- *  included, because that is what it actually said.
+ *  would reject every double bed, and `candidatesFor` then measures it as whichever
+ *  kind of bed it fits. The detector's own word is judged with its shape included,
+ *  because that is what it actually said.
  *
  *  `'other'` is never a candidate. Its band is nearly the whole space, so it fits
  *  everything and tells the user nothing. */
@@ -135,6 +141,53 @@ export function categoriesFittingSize(widthMM: number, heightMM: number, exclude
   return CATEGORIES.filter((c) => c !== 'other' && c !== exclude && sizeFitsLabel(c, 'box', widthMM, heightMM)).sort(
     (a, b) => sizeMargin(b, 'box', widthMM, heightMM) - sizeMargin(a, 'box', widthMM, heightMM),
   );
+}
+
+type Kinds = {
+  /** The category's plain kind (`refineShape(c, '')`) — what words naming no kind build. */
+  plain: Shape;
+  /** The Library's names for the plain kind, lowercased: "single bed", "floor lamp". */
+  plainNames: string[];
+  /** The other kinds, each under the Library name that makes the room build it. */
+  variants: Array<{ shape: Shape; name: string }>;
+};
+const KINDS = new Map<Category, Kinds>();
+
+/** The kinds a category's pieces come in: a bed is a single or a double bed, a lamp
+ *  a floor, table or pendant lamp. Read off the Library, leaving out `box` and any
+ *  row whose name would build something other than its own shape. */
+function kindsOf(c: Category): Kinds {
+  const known = KINDS.get(c);
+  if (known) return known;
+  const plain = refineShape(c, '');
+  const k: Kinds = { plain, plainNames: [], variants: [] };
+  const seen = new Set<Shape>([plain, 'box']);
+  for (const p of PART_LIBRARY) {
+    if (p.category !== c || sceneShapeFor(c, p.label, undefined) !== p.shape) continue;
+    if (p.shape === plain) k.plainNames.push(p.label.toLowerCase());
+    else if (!seen.has(p.shape)) {
+      seen.add(p.shape);
+      k.variants.push({ shape: p.shape, name: p.label });
+    }
+  }
+  KINDS.set(c, k);
+  return k;
+}
+
+/** Whether `label` names a kind of `c` — one of its keywords, or the plain kind by
+ *  its Library name. The plain kind has no keyword, being what no keyword builds, so
+ *  without the second half "single bed" read as a bed of no particular size. */
+function namesAKind(c: Category, label: string): boolean {
+  const k = kindsOf(c);
+  const l = label.toLowerCase();
+  return sceneShapeFor(c, label, undefined) !== k.plain || k.plainNames.some((n) => l.includes(n));
+}
+
+/** The first try when it is among `ts` — the words' own kind — else the most
+ *  comfortable fit. */
+function preferFirst<T extends { first: boolean; margin: number }>(ts: T[]): T | undefined {
+  if (ts[0]?.first) return ts[0];
+  return ts.reduce<T | undefined>((a, b) => (!a || b.margin > a.margin ? b : a), undefined);
 }
 
 /** Build a repair candidate for each of `categories`: re-categorised AND
@@ -167,32 +220,79 @@ export function candidatesFor(
 ): LabelCandidate[] {
   const out: LabelCandidate[] = [];
   for (const c of categories) {
-    // The shape goes with the word that is being replaced, so the candidate has
-    // none and scene-spec's own refineShape picks one at build time. The depth hint
-    // goes too: if the old word is wrong, its guess at that word's depth is not
-    // evidence about a different word.
-    const seed: Detection = { ...d, category: c, shape: undefined, dimMM: undefined };
-    const trial = geoRefine(seed, cals, room);
-    // This word cannot be measured at all under its own anchor — a ceiling
-    // category, today. Offering it would mean offering an unmeasured repair.
-    if (trial === seed || !trial.dimMM) continue;
-    // Re-measured, so check again: changing the word can change the projection, and
-    // a candidate that only fitted the old measurement is not a repair. The axis
-    // restriction matters — a ceiling candidate is checked on width, because width
-    // is what measuring it as a ceiling item produced.
-    const cAxes = measuredAxes(c, 'box');
-    const misfit = failedAxes(c, 'box', trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
-    if (misfit && requireFit) continue;
-    out.push({
-      category: c,
-      detection: trial,
-      margin: sizeMargin(c, 'box', trial.dimMM[0], trial.dimMM[2], cAxes),
-    });
+    // The detector's shape hint goes with the category being replaced, and so does
+    // its depth hint: if the old word is wrong, its guess at that word's shape and
+    // depth is not evidence about a different word. The candidate still needs A
+    // shape, and it carries the one it is MEASURED as — the new category read
+    // through the room's own rule, with the words the row already has, so a
+    // "ceiling fan" offered as a lamp is measured as the pendant those words make
+    // it. Leaving the field blank was the defect: the scan screen relabels an
+    // accepted repair ("Lamp"), and the room resolves a blank shape from THAT word,
+    // so the piece was measured on the ceiling and built as a floor lamp. Every
+    // label the screen applies is its category's plain name or a variant's `name`,
+    // neither of which outvotes the shape it came with (`sceneShapeFor`), so carrying
+    // it here is what makes the two agree.
+    const worded = sceneShapeFor(c, d.label, undefined);
+    // Words that name no kind get the category's plain one, and that is the NARROWEST
+    // of several more often than not: a single bed. Judged as that alone, a 1.5 m
+    // "sofa" was never offered as a bed, and before the shape was carried at all it
+    // was offered and then built as a single bed squeezed to 1.2 m. So when the words
+    // say nothing, the other kinds are measured too, and the plain one stands unless
+    // it misfits where another fits. Words that DO name a kind are the user's or the
+    // detector's, and are not second-guessed here.
+    const kinds = kindsOf(c);
+    const own = { shape: worded, ...(worded === kinds.plain ? {} : { name: kinds.variants.find((v) => v.shape === worded)?.name }) };
+    const tries = namesAKind(c, d.label) ? [own] : [own, ...kinds.variants];
+    const trials: Array<LabelCandidate & { fits: boolean; first: boolean }> = [];
+    for (const [n, t] of tries.entries()) {
+      const seed: Detection = { ...d, category: c, shape: t.shape, dimMM: undefined };
+      const trial = geoRefine(seed, cals, room);
+      // This kind cannot be measured at all under its own anchor — a ceiling kind
+      // with no ceiling in frame. Offering it would mean offering an unmeasured repair.
+      if (trial === seed || !trial.dimMM) continue;
+      // Re-measured, so check again: changing the word can change the projection, and
+      // a candidate that only fitted the old measurement is not a repair. The axis
+      // restriction matters — a ceiling candidate is checked on width, because width
+      // is what measuring it as a ceiling item produced.
+      // Judged as the shape it was measured as, for the reason `judgeLabel` is.
+      const cAxes = measuredAxes(c, t.shape);
+      const fits = !failedAxes(c, t.shape, trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
+      trials.push({
+        category: c,
+        detection: trial,
+        ...('name' in t && t.name ? { name: t.name } : {}),
+        margin: sizeMargin(c, t.shape, trial.dimMM[0], trial.dimMM[2], cAxes),
+        fits,
+        first: n === 0,
+      });
+    }
+    const fitting = trials.filter((t) => t.fits);
+    const pick = fitting.length > 0 ? preferFirst(fitting) : requireFit ? undefined : preferFirst(trials);
+    if (!pick) continue;
+    const { fits: _fits, first: _first, ...cand } = pick;
+    out.push(cand);
   }
   // Signed margin, so a candidate that does not fit its own band sorts below every
   // one that does, without needing to be flagged.
   out.sort((a, b) => b.margin - a.margin);
   return out;
+}
+
+/** The row accepting `cand` leaves in place of `row`, called `label`: the candidate's
+ *  category, model and measurement, with the row's own colour.
+ *
+ *  Not simply `cand.detection`. A candidate is measured from the row as it was when
+ *  the verdicts were worked out, and the scan screen works them out from a copy that
+ *  deliberately ignores colour, so the photo's sampled colour landing does not
+ *  re-run the checks. So a candidate can predate the colour, and accepting it wrote
+ *  a colourless row over a coloured one — the piece went grey until the next sample
+ *  painted it back. Colour is the one thing a candidate knows nothing new about: it
+ *  is read off the photograph, not the word. */
+export function acceptCandidate(row: Detection, cand: LabelCandidate, label: string): Detection {
+  // The row's colour or none, never the candidate's: the candidate's is the same
+  // row's from earlier, so the row's own is always the newer answer.
+  const { color: _stale, ...measured } = cand.detection;
+  return { ...measured, label, ...(row.color === undefined ? {} : { color: row.color }) };
 }
 
 /** Judge the word a detector used against the size the camera measured.
@@ -209,7 +309,9 @@ export function candidatesFor(
  *  than a guess. */
 export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVerdict {
   const category = (d.category ?? 'other') as Category;
-  const shape = (d.shape ?? 'box') as Shape;
+  // The same shape `geoRefine` measures it as, so the range it is judged by is the
+  // range of the thing that was measured.
+  const shape = sceneShapeFor(category, d.label, d.shape);
 
   const measured = geoRefine(d, cals, room);
   if (measured === d || !measured.dimMM) return { status: 'unmeasured' };

@@ -114,6 +114,11 @@ export type SceneFileRoom = {
   wallColors?: Record<number, string>;
   footprint?: Array<[number, number]>;
   site?: Site;
+  /** The size is a shape's typical one, not measured (`RoomData.roughSize`). It
+   *  travels because it is a claim about every number beside it: a room opened
+   *  from a file would otherwise present a guessed 6 × 4 m as somebody's measured
+   *  room. Only ever `true` or absent, both ways. */
+  roughSize?: true;
 };
 
 /** A part with its transform already resolved, plus the one per-part flag that
@@ -193,6 +198,7 @@ export function buildSceneFile(
       // explicit projection cannot leak a key it does not name, whereas a spread
       // leaks every key a future record grows.
       ...(room.site ? { site: { bearingDeg: room.site.bearingDeg } } : {}),
+      ...(room.roughSize === true ? { roughSize: true as const } : {}),
     },
     parts: resolveScene(
       parts,
@@ -493,6 +499,15 @@ function readRoom(
   const site = readSite(v.site);
   if (site) room.site = site;
   else if (v.site !== undefined) dropped.push("which way the room faces was unreadable and was left off");
+
+  // `true` exactly. Absent is a size somebody set, which is what a file written
+  // before the mark existed means, and `false` says the same thing in so many words,
+  // so neither loses anything. Anything else (`"yes"`, `1`) is unreadable and SAID,
+  // like every other field here, because reading it as absent makes what may be a
+  // guessed room look measured.
+  if (v.roughSize === true) room.roughSize = true;
+  else if (v.roughSize !== undefined && v.roughSize !== false)
+    dropped.push("the note that the room's size is a rough guess was unreadable and was left off");
 
   return room;
 }

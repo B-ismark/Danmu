@@ -1,6 +1,6 @@
 'use client';
 
-import { get, set as idbSet, del, keys } from 'idb-keyval';
+import { get, set as idbSet, update, del, keys } from 'idb-keyval';
 import { v4 as uuid } from 'uuid';
 
 // Wrap set so QuotaExceededError fires a global event the StorageToast listens to.
@@ -8,15 +8,24 @@ async function set<T>(key: IDBValidKey, value: T): Promise<void> {
   try {
     await idbSet(key, value);
   } catch (e) {
-    const name = (e as { name?: string })?.name ?? '';
-    if (name === 'QuotaExceededError' || /quota/i.test(String(e))) {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('danmu:storage-full', { detail: String(e) }));
-      }
-    }
+    reportQuota(e);
     throw e;
   }
 }
+
+function reportQuota(e: unknown) {
+  const name = (e as { name?: string })?.name ?? '';
+  if (name === 'QuotaExceededError' || /quota/i.test(String(e))) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('danmu:storage-full', { detail: String(e) }));
+    }
+  }
+}
+
+/** Thrown from inside an `update` to write nothing: idb-keyval puts whatever the
+ *  updater returns, so handing back a missing record would store `undefined` under
+ *  its key, and a rename of a deleted room would leave a key behind. */
+const NO_ROOM = Symbol('no room');
 
 // IndexedDB-backed room data: captures (blobs), detections, scene parts, transforms.
 // Single-room v0.1. Keys are namespaced by roomId.
@@ -72,8 +81,45 @@ export type Capture = {
  *  defensively (`wallColors?`, `footprint?`, `hidden?`). A change that is NOT
  *  additive (a renamed field, a units change, a restructured `detectedObjects`)
  *  needs something to branch on, and there was nothing. Records written before
- *  this existed read back as version 0. */
-export const ROOM_SCHEMA_VERSION = 1;
+ *  this existed read back as version 0.
+ *
+ *  **2 is the first non-additive change: `detectedObjects[].locked` changed
+ *  meaning.** Up to 1 it meant "confirmed" and every row went into the room,
+ *  ticked or not, so an unticked row was furniture the user could see in the
+ *  studio. From 2 it means "kept", and only kept rows are built
+ *  (`buildSceneFromRoom`). Read an old record under the new rule and every piece
+ *  someone never ticked would vanish from a room they already made, so
+ *  `migrateRoom` marks every row of a pre-2 record kept — which is exactly what
+ *  it was. */
+export const ROOM_SCHEMA_VERSION = 2;
+
+/** Bring a stored room record up to the current schema. Pure, and the ONLY way a
+ *  stored meta record is read back into the app — `loadRoom` and `renameRoom` both
+ *  go through it. `renameRoom` is the one that matters most: it re-stamps the
+ *  current version, so a rename that skipped this would mark an old room as
+ *  already migrated with its unticked pieces still unticked, and they would drop
+ *  out of the room the next time it opened. */
+export function migrateRoom(rec: RoomData): RoomData {
+  let out = rec;
+  // Strip a legacy `site` down to the one field `Site` still declares.
+  //
+  // This is the line that makes the comment on `Site` true, and it was missing. The
+  // old sun mood stored a latitude and a longitude here; removing them from the
+  // TYPE stopped anything reading them but did nothing about the bytes, and
+  // because they are no longer declared, TypeScript could not see them ride
+  // along. `loadFromRoom` passed the object through by reference, `RoomSync`
+  // re-saved it, and `NorthDial` SPREAD it — so a dial nudge rewrote the
+  // coordinates rather than replacing them, and `buildSceneFile` wrote them into
+  // the file the user hands to someone else. An asymmetric round trip in the
+  // leaking direction: refused on import, exported on save.
+  //
+  // Rebuilt rather than deleted from, so an unknown key cannot survive either.
+  if (out.site) out = { ...out, site: { bearingDeg: out.site.bearingDeg } };
+  if ((out.version ?? 0) < 2 && out.detectedObjects?.length) {
+    out = { ...out, detectedObjects: out.detectedObjects.map((d) => ({ ...d, locked: true })) };
+  }
+  return out;
+}
 
 /** How a room is oriented, for the sun.
  *
@@ -109,6 +155,19 @@ export type RoomData = {
   width: number; // meters
   depth: number;
   height: number;
+  /** The three sizes above are a shape's typical size, not the person's: they
+   *  skipped the size row on the shape picker. Only ever `true` or absent —
+   *  cleared means the key is gone (`markRoughSize`), so a room whose size was set
+   *  reads exactly like one written before the mark existed. Those older rooms were
+   *  all built at a preset size too, and they read as set on purpose: nobody can
+   *  now tell which of them were measured since, and a note that nags about a room
+   *  someone already fixed is worse than one that stays quiet about an old guess.
+   *
+   *  It is the studio's note and the scan screen's wording that read it, and it is
+   *  cleared by setting a size in the studio's Room section, or by saying the sizes
+   *  shown are right. Dragging a wall does not clear it: that is shaping the room by
+   *  eye, not measuring it. Additive, so no version bump. */
+  roughSize?: true;
   /** per-wall paint colour, keyed by footprint-edge index. Optional — absent on
    *  rooms created before wall painting shipped (defensive read on load). */
   wallColors?: Record<number, string>;
@@ -139,6 +198,10 @@ export type RoomData = {
      *  later build must not fail to parse in an earlier one. Absent on rooms saved
      *  before it existed; lib/detect-confidence.ts reads those as 'cloud'. */
     source?: string;
+    /** Kept: the user wants this piece in their room, and only kept rows are
+     *  built into it. The scan screen ticks the confident ones for them
+     *  (`lib/detect-confidence.ts`). It meant "confirmed" before schema 2, when
+     *  every row was built — see `ROOM_SCHEMA_VERSION`. */
     locked: boolean;
     box: [number, number, number, number];
     category?: string;
@@ -150,6 +213,19 @@ export type RoomData = {
     color?: string;
   }>;
 };
+
+/** `room` with its rough-size mark set or cleared — the one way a writer spells it.
+ *
+ *  Two writers save a room's size (`RoomSync`'s debounced shell write and
+ *  `RoomDimsEditor`'s own), and both write the mark FROM THE LIVE ROOM rather than
+ *  carrying the stored one forward: the stored record trails the studio by a save,
+ *  so a writer that kept the mark it read would put back one the person had just
+ *  cleared. The third writer, the name, touches nothing but the name, and all three
+ *  go through `roomStore.editRoom` so none can land between another's read and write. */
+export function markRoughSize(room: RoomData, rough: boolean): RoomData {
+  const { roughSize: _stored, ...rest } = room;
+  return rough ? { ...rest, roughSize: true } : rest;
+}
 
 const k = (roomId: string, sub: string) => `room:${roomId}:${sub}`;
 
@@ -240,11 +316,35 @@ export const roomStore = {
     await set(k(room.id, 'meta'), { ...room, version: ROOM_SCHEMA_VERSION });
     await touch(room.id);
   },
-  async renameRoom(roomId: string, name: string) {
-    const meta = await get<RoomData>(k(roomId, 'meta'));
-    if (!meta) return;
-    await set(k(roomId, 'meta'), { ...meta, name, version: ROOM_SCHEMA_VERSION });
+  /** Change a room's record in ONE transaction — read, edit, write, with no other
+   *  write able to land between — and return it as written, or undefined having
+   *  written nothing when there is no such room.
+   *
+   *  The studio has three writers of this record: the name (`TopBar`), the size
+   *  (`RoomDimsEditor`) and the shell (`RoomSync`'s debounced save). Each changes a
+   *  field or two of whatever is stored, and as a separate read and write, whichever
+   *  read first and wrote last put back what the other had just changed: a rename
+   *  landing across the save of **These are right** brought the rough-size note back
+   *  with the stored record it had copied. `edit` must be synchronous; it runs inside
+   *  the transaction. */
+  async editRoom(roomId: string, edit: (room: RoomData) => RoomData): Promise<RoomData | undefined> {
+    let written: RoomData | undefined;
+    try {
+      await update<RoomData>(k(roomId, 'meta'), (old) => {
+        if (!old) throw NO_ROOM;
+        written = { ...edit(migrateRoom(old)), version: ROOM_SCHEMA_VERSION };
+        return written;
+      });
+    } catch (e) {
+      if (e === NO_ROOM) return undefined;
+      reportQuota(e);
+      throw e;
+    }
     await touch(roomId);
+    return written;
+  },
+  async renameRoom(roomId: string, name: string): Promise<RoomData | undefined> {
+    return roomStore.editRoom(roomId, (r) => ({ ...r, name }));
   },
   /** Land a scene file (`lib/scene-file.ts`) as a brand-new room, and return its id.
    *
@@ -274,21 +374,7 @@ export const roomStore = {
   },
   async loadRoom(roomId: string): Promise<RoomData | undefined> {
     const rec = await get<RoomData>(k(roomId, 'meta'));
-    if (!rec) return rec;
-    // Strip a legacy `site` down to the one field `Site` still declares.
-    //
-    // This is the line that makes the comment above true, and it was missing. The
-    // old sun mood stored a latitude and a longitude here; removing them from the
-    // TYPE stopped anything reading them but did nothing about the bytes, and
-    // because they are no longer declared, TypeScript could not see them ride
-    // along. `loadFromRoom` passed the object through by reference, `RoomSync`
-    // re-saved it, and `NorthDial` SPREAD it — so a dial nudge rewrote the
-    // coordinates rather than replacing them, and `buildSceneFile` wrote them into
-    // the file the user hands to someone else. An asymmetric round trip in the
-    // leaking direction: refused on import, exported on save.
-    //
-    // Rebuilt rather than deleted from, so an unknown key cannot survive either.
-    return rec.site ? { ...rec, site: { bearingDeg: rec.site.bearingDeg } } : rec;
+    return rec ? migrateRoom(rec) : rec;
   },
   async saveCapture(roomId: string, capture: Capture) {
     await set(k(roomId, `cap:${capture.slot}`), capture);

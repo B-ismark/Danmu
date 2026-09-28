@@ -120,6 +120,9 @@ export default function CapturePage() {
     depth: number;
     layoutId: string | undefined;
     footprint?: Array<[number, number]>;
+    /** The size is the shape's typical one (`RoomData.roughSize`), so the wall
+     *  lengths beside the photos are too, and say so. */
+    roughSize: boolean;
   } | null>(null);
   const [draggingFrom, setDraggingFrom] = useState<CaptureSlot | null>(null);
   /** single polite live region for everything that happens without a page change */
@@ -216,6 +219,7 @@ export default function CapturePage() {
           depth: meta.depth,
           layoutId: meta.layoutId,
           footprint: meta.footprint,
+          roughSize: meta.roughSize === true,
         });
       for (const c of caps) {
         // `patchIfSame`, not a write by slot: scoring is async and the user can
@@ -442,8 +446,11 @@ export default function CapturePage() {
     const known = SLOT_ORDER.map((s) => wallSpans[s]).filter((v): v is number => v != null);
     if (known.every((v) => v === known[0])) return null;
     // `formatDim` returns the number alone, so the unit has to come from the
-    // setting beside it — a bare "5.60 wall" is not a measurement.
-    return `${formatDim(span * 1000, dimUnit)} ${dimUnit}`;
+    // setting beside it — a bare "5.60 wall" is not a measurement. `≈` when the
+    // room is still its shape's typical size: the label is then a typical wall's
+    // length, which still tells the long walls from the short ones but is not a
+    // number to hold a tape measure against.
+    return `${room?.roughSize ? '≈' : ''}${formatDim(span * 1000, dimUnit)} ${dimUnit}`;
   };
 
   // Arriving here without a room (a shared link, a cleared browser) used to do

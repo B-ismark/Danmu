@@ -11,14 +11,16 @@ import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis, type RoomRejec
 import { floorHint, floorRefusal, namesTheStop, roomFloors, type FloorAxis } from '@/lib/room-floor';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
-import { roomStore } from '@/lib/storage';
+import { markRoughSize, roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
 import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
+import { Icon } from '@/components/ui/Icon';
 
 export function RoomDimsEditor() {
   const { roomId } = useParams<{ roomId: string }>();
   const room = useScene((s) => s.room);
   const setRoom = useScene((s) => s.setRoom);
+  const confirmSize = useScene((s) => s.confirmSize);
   const dimUnit = useSettings((s) => s.dimUnit);
   const prec = precisionFor(dimUnit);
   const step = stepFor(dimUnit);
@@ -196,8 +198,10 @@ export function RoomDimsEditor() {
         }
       }
       if (roomId) {
-        const existing = await roomStore.loadRoom(roomId);
-        if (existing) await roomStore.saveRoom({ ...existing, ...r });
+        // The mark from the live room, which `setRoom` has just cleared — not the
+        // stored one the record still carries (`markRoughSize`).
+        const rough = useScene.getState().room.roughSize === true;
+        await roomStore.editRoom(roomId, (stored) => markRoughSize({ ...stored, ...r }, rough));
       }
     }, 200);
   }
@@ -287,6 +291,21 @@ export function RoomDimsEditor() {
     // `--hairline`, not `--edge`: a decorative divider between two groups in the
     // rail, not the boundary of anything interactive.
     <div style={{ paddingBottom: 14, marginBottom: 4, borderBottom: '1px solid var(--hairline)' }}>
+        {/* The room still stands at its shape's typical size, because the size step
+            was skipped (`RoomData.roughSize`). Said HERE, above the boxes that fix
+            it, and nowhere louder: nothing is wrong, a size simply has not been
+            given. Typing a size clears it (`setRoom`); so does saying the typical
+            one is right, which is a real answer — a person whose room happens to
+            be the typical size should not have to retype it to be believed. */}
+        {room.roughSize && (
+          <div className="rough-note" role="note">
+            <Icon name="info" size={14} />
+            <p className="rough-note__text">Rough sizes, from a typical room of this shape. Enter yours below.</p>
+            <button type="button" className="ds-btn ds-btn--ghost ds-btn--sm rough-note__confirm" onClick={confirmSize}>
+              These are right
+            </button>
+          </div>
+        )}
         <div className="fields-row" style={{ ['--field-min' as string]: fieldMinWidth(local) }}>
           {labels.map((axis, i) => (
             <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

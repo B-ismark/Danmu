@@ -40,7 +40,7 @@ function saved(i: number, over: Partial<Saved> = {}): Saved {
     id: i,
     label: `sofa__slot:n`,
     conf: 0.9,
-    locked: false,
+    locked: true,
     box: [0.2, 0.4, 0.3, 0.3],
     category: 'sofa',
     ...over,
@@ -273,10 +273,46 @@ describe('buildSceneFromRoom', () => {
     expect(parts[0].pos[1]).toBe(0);
   });
 
-  it('carries the saved locked flag and colour through', () => {
+  it('marks a kept piece as from your photo, and carries its colour through', () => {
     const parts = buildSceneFromRoom(room([saved(0, { locked: true, color: '#123456' })]));
     expect(parts[0].locked).toBe(true);
     expect(parts[0].color).toBe('#123456');
+  });
+});
+
+describe('only kept pieces go into the room', () => {
+  // A scan's list is a proposal, and the tick beside each row is the user's answer.
+  // It used to be decoration: every row was built, ticked or not, so a bed spotted
+  // from three photos arrived as three beds whatever the list said. `locked` on a
+  // saved detection means KEPT now, and an unkept row stays on the list and out of
+  // the room.
+  it('builds the kept rows and leaves the rest out', () => {
+    const parts = buildSceneFromRoom(
+      room([
+        saved(0, { uid: 'kept', locked: true }),
+        saved(1, { uid: 'dropped', locked: false, label: 'armchair__slot:n', category: 'chair' }),
+      ]),
+    );
+    expect(parts.map((p) => p.id)).toEqual(['kept']);
+  });
+
+  it('keeps a legacy ordinal id where it was when an earlier row is dropped', () => {
+    // Rooms saved before `uid` existed are keyed `${category}-${n}`, and every move
+    // the user made is stored against that key. Dropping the first sofa must not
+    // re-point the second sofa's saved move at a different piece, so the counter
+    // advances for a row that is then skipped.
+    const both = buildSceneFromRoom(room([saved(0), saved(1)]));
+    const secondOnly = buildSceneFromRoom(room([saved(0, { locked: false }), saved(1)]));
+    expect(both.map((p) => p.id)).toEqual(['sofa-1', 'sofa-2']);
+    expect(secondOnly.map((p) => p.id)).toEqual(['sofa-2']);
+  });
+
+  it('opens an empty room when nothing is kept, not the starter arrangement', () => {
+    // The starter is for a room with no scan. Someone who looked at every row and
+    // kept none has answered, and furnishing their room anyway overrules them.
+    const parts = buildSceneFromRoom(room([saved(0, { locked: false }), saved(1, { locked: false })]));
+    expect(parts).toEqual([]);
+    expect(buildSceneFromRoom(room([])).length).toBeGreaterThan(0);
   });
 });
 

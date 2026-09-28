@@ -26,6 +26,7 @@ import {
   verticalExtent,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
+import { detectionPartIds } from './detection-record';
 import { clampDims, dimRangeFor } from './dimension-ranges';
 import {
   footArea,
@@ -2366,6 +2367,76 @@ function placementForSlot(
   }
 }
 
+/** The shape a detected row becomes in the room.
+ *
+ *  Label-based refinement takes priority over the AI's generic shape: the detector
+ *  often returns shape:'monitor' for a laptop or shape:'mirror' for an oval mirror.
+ *  When the label maps to a *specific* variant (anything other than the category's
+ *  generic default), trust the label; only fall back to the raw AI shape when the
+ *  label is generic. Exported for the same reason as `startingSpot` below. */
+export function sceneShapeFor(cat: Category, cleanLabel: string, aiShape: string | undefined): Shape {
+  const labelShape = refineShape(cat, cleanLabel);
+  const catDefaultShape = CATEGORY_DEFAULTS[cat]?.shape ?? 'box';
+  return labelShape !== catDefaultShape
+    ? labelShape
+    : aiShape && CATALOG_SHAPES.has(aiShape as Shape) && aiShape !== 'box'
+      ? (aiShape as Shape)
+      : labelShape;
+}
+
+/** Whether `startingSpot` takes a row's own estimate: a position inside the room,
+ *  give or take 200 mm. Exported so a caller reading anything else off that estimate
+ *  — the scan screen compares a wall piece at its estimated height — reads it only
+ *  when the spot came from it too, rather than pairing one estimate's height with
+ *  another place's floor. */
+export function estimateInRoom(
+  aiPos: { x: number; z: number } | undefined,
+  room: { width: number; depth: number },
+): aiPos is { x: number; z: number } {
+  return (
+    !!aiPos &&
+    typeof aiPos.x === 'number' &&
+    typeof aiPos.z === 'number' &&
+    Math.abs(aiPos.x) <= room.width / 2 + 0.2 &&
+    Math.abs(aiPos.z) <= room.depth / 2 + 0.2
+  );
+}
+
+/** Where a detected piece starts in the room, before gravity, wall affinity and the
+ *  footprint have had their say: its own estimate when that is inside the room,
+ *  else the spot on its photo's wall under the middle of its box.
+ *
+ *  Exported because the scan screen asks the same question about rows the camera
+ *  could not place (`lib/repeat-sightings.ts`): a bed cut off by the bottom of the
+ *  frame has no measured spot, and it still becomes a bed here, at this one. The list
+ *  judging it anywhere else would be judging a different room.
+ *
+ *  **Y is deliberately neither read nor tested.** `groundY` overwrites pos[1]
+ *  unconditionally after this, so passing `aiPos.y` through was dead. The height
+ *  check was worse than dead: it gated x and z — the axes we keep — on an axis
+ *  nothing consumes, so a detection whose Y was out of the room lost its perfectly
+ *  good floor position and fell back to slot-snapping. A fan the model put 3.2 m up
+ *  in a 2.8 m room is a fan with a wrong height, not a fan in the wrong corner. Y is
+ *  owned by the anchor, and only there. */
+export function startingSpot(
+  slot: CaptureSlot,
+  box: [number, number, number, number],
+  dimMM: [number, number, number],
+  mounted: boolean,
+  shape: Shape,
+  aiPos: { x: number; z: number } | undefined,
+  aiYaw: number | undefined,
+  room: { width: number; depth: number; height: number },
+): { pos: [number, number, number]; rot: number } {
+  if (estimateInRoom(aiPos, room)) {
+    return {
+      pos: [aiPos.x, 0, aiPos.z],
+      rot: typeof aiYaw === 'number' ? aiYaw : 0,
+    };
+  }
+  return placementForSlot(slot, box, dimMM, mounted, shape, room);
+}
+
 export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   const dets = room.detectedObjects ?? [];
 
@@ -2390,15 +2461,14 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   }
 
   const parts: ScenePart[] = [];
-  const counters: Record<string, number> = {};
+  const ids = detectionPartIds(dets);
 
-  for (const d of dets) {
+  for (const [i, d] of dets.entries()) {
     const slot = (d.label as string).match(/__slot:([nesw])$/)?.[1] as CaptureSlot | undefined;
     const realSlot: CaptureSlot = slot ?? 'n';
     const cleanLabel = (d.label as string).replace(/__slot:[nesw]$/, '');
     const cat = ((d as { category?: Category }).category ?? 'other') as Category;
     const cfg = CATEGORY_DEFAULTS[cat] ?? CATEGORY_DEFAULTS.other;
-    counters[cat] = (counters[cat] ?? 0) + 1;
     // Prefer the detection's own stable key. The positional `${cat}-${n}` is an
     // ordinal, not an identity, and every per-part user edit — positions,
     // rotations, dims, hidden — is stored in a map keyed by this string. So
@@ -2408,22 +2478,21 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     //
     // Rooms detected before `uid` shipped have none, and fall back to the ordinal
     // — which keeps their existing transforms attached rather than orphaning every
-    // one of them in the name of the fix.
-    const id = (d as { uid?: string }).uid ?? `${cat}-${counters[cat]}`;
-    const aiShape = (d as { shape?: string }).shape as Shape | undefined;
-    // Label-based refinement takes priority over the AI's generic shape: the
-    // detector often returns shape:'monitor' for a laptop or shape:'mirror' for
-    // an oval mirror. When the label maps to a *specific* variant (anything other
-    // than the category's generic default), trust the label; only fall back to
-    // the raw AI shape when the label is generic.
-    const labelShape = refineShape(cat, cleanLabel);
-    const catDefaultShape = CATEGORY_DEFAULTS[cat]?.shape ?? 'box';
-    const refined: Shape =
-      labelShape !== catDefaultShape
-        ? labelShape
-        : aiShape && CATALOG_SHAPES.has(aiShape) && aiShape !== 'box'
-          ? aiShape
-          : labelShape;
+    // one of them in the name of the fix. The rule lives beside the record codec,
+    // because the review screen needs the same answer (`fromRecords`).
+    const id = ids[i];
+    // **Only kept pieces go into the room.** An unticked row is a piece the scan
+    // screen showed and the user did not keep — a wrong guess, or a second sighting
+    // of something already kept — and building it anyway is how one bed seen from
+    // three walls became three beds. The skip is AFTER the ids are counted: a
+    // room saved before `uid` keys its transforms by that ordinal, so counting only
+    // the kept rows would re-point `sofa-2`'s saved move at whatever sofa is kept
+    // next. A room saved before this rule has every row kept (`migrateRoom`).
+    //
+    // The starter branch above reads the RAW list, so a scan where nothing was kept
+    // opens an empty room rather than furniture the user never had.
+    if (!d.locked) continue;
+    const refined = sceneShapeFor(cat, cleanLabel, (d as { shape?: string }).shape);
     // Keyed on the SHAPE, like every other answer to this question in the app.
     // `CATEGORY_DEFAULTS` used to carry its own `wallMounted` copy and this line read
     // it, which made the detected builder the one path that answered by CATEGORY while
@@ -2443,18 +2512,10 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       aiDim && aiDim.every((n) => Number.isFinite(n) && n > 0) ? (aiDim as [number, number, number]) : cfg.dim,
     );
     // Prefer the estimated position/yaw when present and in-room; otherwise snap
-    // to wall. "Estimated" is either measured (lib/detect-refine.ts wrote it from
-    // the calibrated camera) or the model's own guess on an uncalibrated slot;
-    // this cannot tell them apart and does not need to, because the only axes it
-    // reads are the two a photo can actually locate.
-    //
-    // **Y is deliberately neither read nor tested here.** `groundY` overwrites
-    // pos[1] unconditionally just below, so passing `aiPos.y` through was
-    // dead. The height check was worse than dead: it gated x and z — the axes we
-    // keep — on an axis nothing consumes, so a detection whose Y was out of the
-    // room lost its perfectly good floor position and fell back to slot-snapping.
-    // A fan the model put 3.2 m up in a 2.8 m room is a fan with a wrong height,
-    // not a fan in the wrong corner. Y is owned by the anchor, and only there.
+    // to wall (`startingSpot`). "Estimated" is either measured (lib/detect-refine.ts
+    // wrote it from the calibrated camera) or the model's own guess on an
+    // uncalibrated slot; this cannot tell them apart and does not need to, because
+    // the only axes it reads are the two a photo can actually locate.
     const aiPos = (d as { position?: { x: number; y: number; z: number } }).position;
     const aiYaw = (d as { yaw?: number }).yaw;
     /** Does the model's own yaw survive a wall snap?
@@ -2470,23 +2531,11 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
      *  `snapToWall` use the wall's own heading, which is what will really apply
      *  whenever the snapped `rot` wins. */
     const clampRot = keepsAiYaw ? aiYaw : undefined;
-    let placement: { pos: [number, number, number]; rot: number };
-    const w = rw / 2;
-    const dHalf = rd / 2;
-    if (
-      aiPos &&
-      typeof aiPos.x === 'number' &&
-      typeof aiPos.z === 'number' &&
-      Math.abs(aiPos.x) <= w + 0.2 &&
-      Math.abs(aiPos.z) <= dHalf + 0.2
-    ) {
-      placement = {
-        pos: [aiPos.x, 0, aiPos.z],
-        rot: typeof aiYaw === 'number' ? aiYaw : 0,
-      };
-    } else {
-      placement = placementForSlot(realSlot, d.box, dim, mounted, refined, { width: rw, depth: rd, height: rh });
-    }
+    const placement = startingSpot(realSlot, d.box, dim, mounted, refined, aiPos, aiYaw, {
+      width: rw,
+      depth: rd,
+      height: rh,
+    });
     // Gravity: floor-standing items must touch the floor. Wall-mounted / ceiling
     // items snap to their canonical mounting height for the current part height.
     placement.pos[1] = groundY(cat, refined, dim, rh);
@@ -2552,7 +2601,9 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       pos: placement.pos,
       rot: placement.rot,
       dimMM: dim,
-      locked: d.locked,
+      // Every row that reaches here was kept, and `ScenePart.locked` means "from
+      // your photo" — so this is true by construction, not a copy of the tick.
+      locked: true,
       circle: isRoundPart(refined) || undefined,
       wallMounted: mounted || undefined,
       fromDetection: { slot: realSlot, bbox: d.box, conf: d.conf },

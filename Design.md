@@ -166,7 +166,7 @@ owned by a deterministic geometry engine, not by a model.
 /                         entry router → onboarding (no rooms) or workspace
 └─ /onboarding
    ├─ /welcome            intro + "Start decorating"; optional BYO key (collapsed)
-   ├─ /layout-pick        pick footprint preset → sets width/depth + starter scene
+   ├─ /layout-pick        pick footprint preset + (optionally) its size → starter scene
    ├─ /capture            add up to 4 wall photos (upload or getUserMedia)
    └─ /detect             furniture detection on captured photos
 /workspace                rooms list — create / resume / delete
@@ -181,6 +181,33 @@ Two ways in:
 1. **Quick start** — pick a footprint, skip capture, land straight in the studio
    with a contextual starter scene. Zero credentials.
 2. **Capture flow** — footprint → photograph room → detect furniture → studio.
+
+**The size is asked for on the shape picker, and skipping it is allowed** (D7). Three
+boxes under the outlines — width, depth, ceiling, in the user's unit — start at the
+selected shape's typical size and follow the shape until someone types, after which
+the numbers are theirs and a shape change no longer moves them (`lib/size-entry.ts`).
+Each axis is judged against its own range from `roomAxisRange`, the sentence naming a
+range reads the same `boundsToUnit` pair the arrows obey, and nothing clamps: 80 m is
+refused and said, not saved as 50. What is saved is the size TYPED, never the text a
+unit change shows: `4237` mm reads `4.24` once the unit is metres and still saves as
+4.237 m (`enteredDims` reads `good`, the last in-range value per axis). A box that is
+not a size yet is called out only once focus has left the whole field — its chevrons
+are part of it, so pressing one is not leaving. The preview draws the typed room, with its
+dimension labels sized in screen pixels so they read the same on a phone as on a desk.
+
+A room built at the typical size, because nothing was typed, is **marked rough**
+(`RoomData.roughSize: true`; absent otherwise, so every older room reads as measured).
+The mark is a claim about every number beside it, so it is said wherever a size is: a
+quiet note above the studio's size boxes, a `≈` on the Room section's collapsed size
+and on each capture card's wall length, and the scan screen's subtitle, which would
+otherwise claim "measured at real size" — untrue here, since every size read off a wall
+or the floor line scales with the assumed wall distance. It clears on exactly the two
+answers that mean *this is my room's size*: a size committed in the studio's Room
+section (`setRoom`, even one equal to the typical size) and the note's **These are
+right** (`confirmSize`). A wall drag keeps it — shaping by eye is not measuring. Both
+studio savers write it from the live room through `markRoughSize`, because each reads
+the stored record and spreads it, and would otherwise put back a mark the other had
+just cleared.
 
 There are **only two studio tabs**: `3D Model` and `2D Plan` (`StudioTabs.tsx`).
 
@@ -421,7 +448,7 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/layout-shuffle.ts` | **"Show me a different arrangement", as distinct from "fix what is wrong"** — the pipeline behind the rail's **Ideas** gallery, next to **Fix** (it was a one-press **Shuffle** button until the gallery replaced it; see the next row). `Fix` is `solveLayout`'s anchored `arrange`: it pays inertia to move anything and refuses an answer that is not a material gain, so on a room with nothing wrong it correctly does nothing — which is exactly why one button doing both read as a shuffle and behaved as a repair. This runs up to `MAX_CANDIDATES` **independent** solves in `mode: 'shuffle'`, each from its own `randomizeStart` scatter, then keeps only the ones that survive **two** gates and ranks the survivors with `lib/layout-offer.ts`'s `orderOffers` for cost *and* variety, skipping anything too like the last few offers (`ShuffleOffer` carries the part ids with the placements, because a bare `Placement[]` is index-aligned to one `parts` array and the history outlives every edit to the room — mismatched, `layoutSimilarity` throws, and matched-by-length-only it silently compares one piece against another's old position). One solve is not enough and that is measured, not assumed: clean solves run 20/20 on `rect` but **6/20** on `t`, mostly `navigation` — a scatter has to rebuild a whole room inside a budget tuned for a search that starts nearly right. More steps does not fix it (10x buys the `l` five seeds and the `t` *nothing*, 6/20 → 5/20 — the annealer is chaotic under any change); more **starting points** does. The second gate is `newRoomFindings`, and it exists because the solver and the room report disagree: `layout-score` exempts a `sharesFloor` pair from `overlap` outright while `clearance.ts` allows it only to `TUCKED_CLASH_SHARE` (0.85), so a dining chair buried in the dining table costs the search nothing and Room check calls it a clash — **8 of 40 offers** before the gate, 0 of 72 after. Aligning those two thresholds is the real repair and is deliberately left alone here: `overlap` is priced into every solve the app runs, including `Fix`. The cost of gating instead is refusals, unevenly — 12/12 offers on `rect`/`l`/`u`, 8/12 on `open`, **5/12 on `t`** — and raising the cap buys yield at up to a 6.6 s wait (off the main thread since `layout-offload.ts`, but still a wait), so it does not. Refusing is the safe direction and the gallery says so plainly rather than as an error. `ShuffleOutcome.ideas` hands back every showable candidate of one call, not only the winner: clean, unlike anything in `history`, and unlike each other (`showableIdeas`). |
 | `lib/layout-ideas.ts` + `components/studio/IdeasPanel.tsx` | **The ideas gallery**: several arrangements of the room at once, a page at a time — **four to a page beside a laptop rail, three on a phone** (decision D6) — each a thumbnail (`MiniPlan` with what it moves in the accent, rugs as a dashed outline so a rug under a sofa does not read as an overlap) and a caption derived from the placements: where the room's anchor ends up, what it faces inside a ±30° cone, and how many pieces move ("Sofa against a wall, facing the TV · 5 pieces move"). Never a score. **Press an idea and the room takes it**, so the 3D view is the preview and the card is the thumbnail; every idea is applied onto the same `base` (`ideaTransforms`), so trying idea 3 after idea 2 puts back what idea 2 moved. **Back to your room** restores the room as it was when the gallery opened. The **heart** saves an idea as a `LayoutVariant` with `favourite: true` (named `Idea N`, made unique by `freeName`), and the Layouts tab marks it. **Kept in place** lists the pinned pieces as chips with a picker to keep another; changing it asks again from the room ON SCREEN, which is Merrell et al.'s keep-and-rearrange, and keeps "Back to your room" meaning the room the person started from. The search is `shuffleOffThread` run while this page and the next are not full (`wantsMore`), up to `MAX_IDEAS` 36, stopping after `DRY_SEARCHES` 3 in a row find nothing new; placeholders breathe (`.ds-skeleton`) while it looks, and a live region says "Finding more…". The session is a module store keyed by room, because `RoomTools` unmounts on a tab switch. **A hand edit, a resize or a new piece makes the session stale**: its thumbnails describe another room, so it says "The room changed" and offers **Find new ideas** rather than applying an idea over the edit — the stamp check the old button did at apply time, done by content (`transformsKey`, `sceneKeyOf`) because the gallery applies long after it searched. On a phone the card is a sheet resting on the bottom bar; beside a rail it is placed by `useBesideRail`, which the room panel shares. |
 | Rug zones (`lib/layout-rules.ts` § Where a rug goes) | **A rug goes where its group's rule puts it, and stays out from under what it must not cover.** `rug-group` is an `under` relation: the band is 0.2 m of slack around `rugTarget`'s answer, not a distance between centres, and the rug pays for not being square to the group (`halfTurnCost` — a rug is the same after a half turn). Three rules, by the anchor's role: **seating**, the near edge `RUG_UNDER_SEAT_M` (0.2 m) under the front, so the front legs are on and the back legs off; **a bed**, from a third of the way down (`RUG_BED_START`), so the nightstands at the head stand on bare floor and the rug shows past the sides and the foot; **a dining table**, centred. The long side runs with the group's long side — along a sofa, across a bed, down a table. How far a rug runs past a table or a bed (60 cm, 45–60 cm) is its SIZE, which is the user's and never the solver's to change. `rugKeepsOff` lists what a rug stays out from under — wardrobe/closet, bookshelf, shoe rack, nightstand, fridge and appliances (standing in for a kitchen run and a dresser, which the catalogue has no shape for), and a desk **only when an office chair is in the room** — and `layout-score` also prices a rug over a door's swing; both land in the relation term at `RUG_CLEAR_GAIN`, by the share of the covered piece or swing. The old `near` band (centre within 0.8 m) was satisfied by a rug half under a sofa's BACK and by one under a bed's head with the nightstands on it. Rugs also left the `balance` mass: 5 mm of textile has no visual weight, and 3.8 m² of it pulled a rug 0.42 m off its spot toward the middle of the room. The seeder places the starter living rug with `rugOffset` — the same rule, never a copy. **No rug is a valid answer**: nothing asks for one, and the seeder leaves a group without one rather than force a rug that does not fit. |
-| `lib/rescan.ts` | **A scan that ran replaces the arrangement, and keeps the old one as a layout.** `RoomSync` builds from `detectedObjects` only when there is no saved scene, and a scene is saved on the first add/delete/reshape — so a new scan of a touched room used to be saved and never shown. `adoptFreshScan` writes the previous arrangement (saved scene, or the old detections rebuilt with `buildSceneFromRoom`, plus the whole `Transforms`) as a **Before re-scan** layout, then the new detections, then drops the scene and transforms keys (`roomStore.forgetArrangement`) — in that order, since there is no transaction across keys. The detect screen calls it only when a detection run completed in that visit; Continue on the cached list saves the reviewed rows and leaves the arrangement alone. Arriving on a scanned room shows the cached list with a **Look again** button (undoable) rather than re-running on arrival. |
+| `lib/rescan.ts` | **A scan that ran replaces the arrangement, and keeps the old one as a layout.** `RoomSync` builds from `detectedObjects` only when there is no saved scene, and a scene is saved on the first add/delete/reshape — so a new scan of a touched room used to be saved and never shown. `adoptFreshScan` writes the previous arrangement (saved scene, or the old detections rebuilt with `buildSceneFromRoom`, plus the whole `Transforms`) as a **Before re-scan** layout, then the new detections, then drops the scene and transforms keys (`roomStore.forgetArrangement`) — in that order, since there is no transaction across keys. The detect screen calls it only when a detection run completed in that visit; Continue on the cached list goes through `adoptEditedList` instead, which keeps the arrangement and moves only the pieces whose rows changed (`applyListEdits`): an unticked row takes its piece out, a newly ticked one puts one in, a re-worded kept row is rebuilt in place with the studio's colour, finish and set carried, and a piece the studio deleted stays deleted. Arriving on a scanned room shows the cached list with a **Look again** button (undoable) rather than re-running on arrival. |
 | `lib/layout-offload.ts` + `lib/layout.worker.ts` | **The arranging engine runs in a Web Worker.** Fix, Ideas, Re-fit and Try a fix call `solveOffThread` / `shuffleOffThread`, which post the same arguments to one reused module worker and resolve with the same answer — the solver is pure and seeded, so moving it changes *when* the answer arrives and nothing about *what* it is. The request types live in `layout-worker-protocol.ts` and name a clone-safe subset of the options (`SolveOptions.pick` is a function and cannot cross). No worker (node tests, SSR, a browser without module workers) or a worker that fails to load or crashes means the call runs **inline** — a slower path, never a dead button — and an in-flight request is re-answered inline rather than left pending. **Because the window stays live, the room can change under a search**, so every press takes a `lib/solve-stamp.ts` stamp (reference identity of the parts, room, transform maps, parents and locks) and an answer whose stamp no longer matches is **not applied** and says so. The ideas gallery is the exception that proves the rule: it applies an idea long after the search, so it compares the room by content at every render instead, and a room that moved on shows "The room changed" rather than any idea. `checkFit` still runs inline — ~330 ms at worst, behind the same busy yield. |
 | `lib/solar.ts` | Sunlight as the two things a room can show you: `sunDirection` (a compass azimuth and an elevation → a unit vector in scene axes, null below the horizon) and `daylightKelvin` (warm at the horizon, neutral overhead, on the same Planckian locus as the lamps). It was a full NOAA / Meeus solar-position calculator accurate to ~0.01°, driven by a latitude, a longitude, a date and a clock; that went, and the file states why in its own header. **Correct is not the same as useful:** nobody arranging furniture can verify a hundredth of a degree, and the four fixed presets in `Room`'s `LIGHTING` table are the four pictures it existed to produce. |
 | `lib/lighting-moods.ts` | `LIGHTING` — what each of the five moods looks like, and for the three sun angles where the light comes from. Read by the 3D scene, by the north dial that draws the sun on its rim, and by its own test. It was inside `Room.tsx` first, which was wrong the moment a second consumer appeared: a table in one renderer becomes a table each consumer copies (rule 3, the `layout-rules.ts` argument). The dial had drawn the sun for as long as the sun existed, and putting the angles behind an R3F import is what silently dropped the marker. Hex rather than tokens because none of it is reachable from CSS — the `lib/scene-palette.ts` reason, and the reason it belongs in `lib/` beside it. It also owns `moodSunDirection` (mood + room bearing → a unit vector toward the light, `null` for a studio look or a sun below the horizon) and `DEFAULT_BEARING_DEG`. Its second consumer is `NorthDial`, which draws the same angle on its rim; a derivation with two callers drifts in a way nothing catches, and the specific failure here is a bearing sign that disagreed between them — the light in the right place and the marker on the dial in the wrong one. `moodKeyDirection` is gone with the shadow gate that was its only caller. |
@@ -452,7 +479,13 @@ decision it makes.
    foreshortened diameter and no thickness); an uncalibrated slot gets nothing at
    all. Unmeasured means the function returns **its own input object**, so callers
    establish measurability by reference identity rather than by a flag nobody
-   maintains.
+   maintains. A wall row it refused — a piece seen past the end of the framed wall,
+   on the return wall beside it — is then **located** by `geoLocate`: `locateOnWall`
+   follows the box's line of sight to the wall it actually meets and gives the row a
+   position and a heading, **never a size**, because the size was read against the
+   wrong plane. It is a separate function rather than a fourth branch so the identity
+   rule above still holds for `label-repair`; `geoPlace` is the two in order, and
+   every path that turns a photo into rows calls it.
 2. **Judge the word** — `lib/label-repair.ts` reads `clampDims` backwards. Forward,
    everywhere else: the detector said "bed", so clamp the size into a bed's range —
    the size is the suspect. Backwards, here: the camera measured 1400 × 2300 and no
@@ -470,7 +503,12 @@ decision it makes.
    duplicates go by bounding-box **IoU** (a fixed 12% of the image ate two bedside
    tables 0.55 m apart, whose boxes did not touch), and cross-photo duplicates go by
    a **per-category** merge distance (a flat 0.6 m collapsed four dining chairs to
-   two).
+   two). Which sighting of a pair **survives** is the second half of the merge:
+   `refineDetections` tells `dedupeDetections` which rows the camera measured, and a
+   measured sighting replaces a located one it merges with, in its place in the list.
+   First-come was only safe while every row with a position had been measured — a
+   located row arriving first ate the measurement, and the piece went into the room
+   at its catalogue size.
 4. **Build** — `buildSceneFromRoom` clamps, snaps and settles. It reads only the two
    axes a photograph can locate: `groundY` owns Y outright, and the placement gate
    used to test Y as well, so a fan the model put 3.2 m up in a 2.8 m room lost its
@@ -492,6 +530,99 @@ persisted form. One pair because there were two, written by hand at opposite end
 the detect page, and they had drifted: the write carried the geometry pass and the
 read did not, so the next press of the always-enabled Finish button wrote
 `undefined` over all of it.
+
+**Only kept pieces go into the room.** The review's tick is persisted as
+`detectedObjects[].locked`, and from `ROOM_SCHEMA_VERSION` 2 that field means
+**kept**: `buildSceneFromRoom` builds a row only when it is set. Before 2 it meant
+"the user confirmed this one" while every row was built regardless, so a room with
+two sightings of one bed got two beds whatever the user ticked — the screen asked a
+question whose answer nothing read. `migrateRoom` marks every row of a pre-2 record
+kept, which is exactly what those rooms rendered, and runs in `loadRoom` and in
+`renameRoom` (a rename rewrites the record at the current version, so an unmigrated
+rename would silently empty a legacy room). Three details are load-bearing and each
+has a test:
+
+- the per-category counter advances **before** the skip, so a legacy ordinal id
+  (`sofa-2`) names the same row whether or not an earlier one is dropped, and a
+  user's moves — stored by id — stay on the piece they were made to;
+- an all-unkept list opens an **empty** room, never the starter arrangement: the
+  starter is for a room with no detections at all, and a user who left everything
+  out has said something different from one who never scanned;
+- an unkept row is not deleted. It stays on the list, so a wrong guess or a second
+  sighting costs one tap to bring back.
+
+The screen's internal names (`confirmed`, `toggleConfirm`, `shouldAutoConfirm`)
+predate this and were left alone on purpose; what the user reads says **keep**.
+
+**A second sighting starts unticked, and says whose it is.** The merge in step 3
+only takes the pairs it is sure of — same word, centres inside a per-category
+distance tuned so four dining chairs survive as four — and one bed photographed from
+its foot and from its side fails both: the two estimates disagree by more than that
+distance, and the detector may call it "bed" once and "double bed" the next time.
+Every wall of a four-photo capture sees a big piece, so a bedroom came back with
+five beds, all ticked. `lib/repeat-sightings.ts` is the **soft** half of the same
+decision and deletes nothing. It asks what a person looking at the list asks —
+*could these two rows be standing in the same spot?* — and answers with the index of
+the row a sighting probably repeats. The review leaves that row unticked with the
+caption *Probably the bed from Wall 1 again*; ticking it back is one tap, which is
+the asymmetry the merge argues for: a real piece that never appears is worse than a
+duplicate, so the duplicate is paid for once on the list rather than in the studio.
+The rule is two facts about rooms, not about detectors:
+
+- **two pieces cannot share floor.** Two same-kind footprints that share a quarter
+  (`REPEAT_SHARE`) of the **smaller** one are one piece measured twice, however far
+  apart their centres came out. Floor pieces are compared as the circle they could
+  turn within, because a photo measures where a floor piece stands and never which
+  way it faces: the foot view and the side view of one bed come back a quarter-turn
+  apart and, as rectangles, share a sixth of their floor. A row the camera could not
+  place is compared at `startingSpot` — the spot the room will actually build it —
+  because a bed cut off by the bottom of the frame still becomes a bed;
+- **within one photo, boxes that do not meet are two things.** The detector drew a
+  gap between them, so twin beds against one wall stay twins whatever the
+  measurement says. Boxes that DO meet can still be one piece, because every photo is
+  read by more than one model and each draws its own box.
+
+Which sighting is THE piece is ranked — the user's own box, then a row that would be
+kept on its merits, then one the frame did not cut off, then the bigger box — and
+kept-first is the load-bearing rung: rank by framing alone and a bed whose best view
+was an unconfident one would end with every sighting unticked. The pass is greedy
+with no chaining, so a bed in four photos is one bed and three repeats. `keptAtFirst`
+is the one place the seeding decision is made, so the screen and the tests cannot
+disagree about it.
+
+**It is for every kind, not beds**, and three things stood between it and the rest of
+a room, each measured over 150 generated furnished rooms (`tests/helpers/furnished-rooms.ts`,
+held as literals in `tests/repeat-sightings.test.ts`):
+
+- **the lens.** Most photos carry no focal length, so the lens is assumed — and a wrong
+  lens moves a floor piece along its OWN photo's line of sight, so two sightings from
+  two walls are pushed two different ways, a metre apart at an ultrawide. No tolerance
+  absorbs that without merging a room's dining chairs. What the two sightings share is
+  the phone, so a cross-photo pair is compared at **every lens a phone could have**
+  (`SWEPT_HFOV_DEG`, 30–120° every 2°) and counts as one piece if ANY one lens puts both
+  in the same place. A lens EXIF measured is held fixed — `pickLens` reports `measured`
+  for EXIF only, never for a lens inferred from vanishing points — because a bound may
+  falsify an assumption and never overrule a measurement. Where the detect screen spent
+  the wall-floor line on the height (or on the lens, against an assumed 1.5 m), that
+  height is one lens's answer, so each swept lens re-asks the line (`atLens`) and a lens
+  that would need the camera below 0.8 m or above 2.2 m answers nothing;
+- **the return wall**, which step 1's `geoLocate` answers: a wall piece seen past a
+  corner used to have no position at all, so it had nothing to be compared with;
+- **the side of the frame.** A floor box the side of its photo cut off is not the piece:
+  `lateralSpan` reads the frame's edge as a corner, and a fridge in the corner of a 106°
+  photo came back −79 mm wide. `reachedSolids` walks the cut side past the frame to every
+  width the kind's catalogue range could hold, and the pair is compared at each.
+
+Together they take the repeats left ticked, at an ultrawide read as the assumed 66°, from
+249 to 3 (106°) and 460 to 24 (120°). The price is 22 real pieces across the table's five
+readings started unticked — each with its reason, one tap from back — and none on a lens
+EXIF measured. Three things it does not reach are filed in `docs/what-is-still-open.md`
+§ 46, measured and not fixed: twin beds in a corner come back as one (§ 46.1); a box cut at
+the BOTTOM of its photo is not walked, because doing so bought little and walking both
+edges is a grid that did not finish (§ 46.2); and under a wrong lens the HARD merge deletes
+3.5–3.9% of an ultrawide room's pieces outright, nearly all dining chairs, before this pass
+ever sees them (§ 46.3). § 46.1 and § 46.3 are one fix — the hard merge deciding a pair on
+a distance nobody measured.
 
 **`tests/detect-pipeline.test.ts`** regression-tests the whole chain over one
 synthetic room whose contents are known, from analytic ground truth — boxes are
@@ -862,7 +993,8 @@ check, a check whose prose certifies the hole beside it.
 `onFramedSurface` refuses both. **Refused rather than clamped**, because clamping leaves the
 piece a metre from the truth *and* keeps a size read off the wrong plane; and refusal is not
 deletion — `geoRefine` hands the detection back unchanged, so the piece still reaches the
-scene, and `label-repair` reads that same object identity as "unmeasurable", which WITHDRAWS
+scene (and `geoLocate` then hangs it on the wall its line of sight really meets, with no size
+of its own — step 1 of the pipeline above), and `label-repair` reads that same object identity as "unmeasurable", which WITHDRAWS
 a verdict rather than accusing. (For the print that verdict had been `ok`: `painting`'s band
 is 150–2400 × 150–1800, so a fabricated 893 × 803 fits it comfortably and was given a false
 clean bill. The row that was genuinely accused is the vent, at 386 mm against `fan`'s floor.)
@@ -923,6 +1055,13 @@ version says so: a detection with no position of its own cannot be compared by
 refused row that has one *is* compared, so the count can move there. What changes in both
 cases is that the second row is unmeasured rather than mis-measured; the row count was never
 this gate's to move.
+
+**Corrected 2026-09-28, and the paragraph above is left standing because it was true of the
+code it measured.** The gate still moves no count — but the refused row is no longer left
+without a position. `geoLocate` puts it where its line of sight meets the north wall, 58 mm
+from the measured sighting against `painting`'s 0.35 m, so `dedupeDetections` compares the
+pair and they are **one row**, and the measured one survives in either photo order.
+`tests/detect-refine.test.ts` holds both orders under *a refused placement*.
 
 ---
 
@@ -2632,7 +2771,7 @@ dividers. That triple is now `FlowBarLead` in `ui/primitives.tsx`.
 Its `markHref` is **optional on purpose**, and this is the one place in the app
 where the mark is not a link. Capture passes an href because `persistBlob` writes
 every shot to IndexedDB as it is taken, so leaving costs nothing. Detect passes
-none: its entire review — confirmations, edits, hand-drawn boxes — lives in
+none: its entire review — what is kept, edits, hand-drawn boxes — lives in
 component state until `finish()` writes it, and a logo is a low-intent click
 target in a way an explicit Back button is not. Do not "fix" detect's to match.
 
@@ -2735,7 +2874,9 @@ for the one you have open, because `roomStore.importScene` mints its own id.
 
 ### What travels
 
-The room — name, footprint polygon, wall paint, site — and every piece with its
+The room — name, footprint polygon, wall paint, site, and whether its size is still a
+rough one (`roughSize`: a guessed 6 × 5 m should not open on someone else's screen as a
+measured room; `false` reads as measured, anything else is reported in `dropped`) — and every piece with its
 size, position, rotation, colour, finish, decor and light. Transforms are **baked**:
 in the running app a part's position lives in both `ScenePart.pos` and
 `useStudio.positions`, reconciled by an unwritten "overrides win", and a file is the

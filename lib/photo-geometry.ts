@@ -51,6 +51,12 @@ export const CAM_HEIGHT = 1.5;
  *  1/k and angular size as k — until the wall clamp breaks the cancellation). */
 const DEFAULT_HFOV_DEG = 66;
 
+/** The horizontal fields of view a phone photograph can plausibly have been taken
+ *  with — from a short telephoto to the widest ultrawide. A lens solved outside it
+ *  was solved from something that was not the floor line; a lens GUESSED inside it
+ *  is one a real phone has. */
+export const PLAUSIBLE_HFOV_DEG = { min: 30, max: 120 } as const;
+
 export type CameraCal = {
   /** tan of half-hFOV × 2 — horizontal tangent span per normalized image unit:
    *  tanX(u) = (u − 0.5) · k */
@@ -63,7 +69,27 @@ export type CameraCal = {
    *  Handheld shots are routinely 5° off, which at 3 m under-reads distance by
    *  19% — the single largest error in this module when it is not known. */
   tiltRad?: number;
+  /** Where `k` came from. Absent means `assumed`. Nothing in this module reads it —
+   *  every lens is used as given — it is for a caller deciding whether a lens may be
+   *  doubted, which is only ever an assumed one. */
+  lens?: LensSource;
+  /** The row the wall-floor line was found at (0 = top of frame), kept only when
+   *  that line was spent on an unknown: the lens against an ASSUMED camera height
+   *  (`calibrateFromFloorLine`), or the height against a lens (`fitHeightToFloorLine`).
+   *  One line gives one equation in both, so `height` here is this `k`'s answer and
+   *  no other's — a caller that doubts the lens re-asks the line at each one
+   *  (`atLens`) rather than carrying this height to a lens it was never solved for.
+   *  Absent where the height is the person's own: then the height holds and it is
+   *  the line that is doubted along with the lens. */
+  floorLine?: number;
 };
+
+/** Whether a photo's lens is known or assumed. `measured` means EXIF gave a focal
+ *  length for this photo; everything else is `assumed`, including the two lenses
+ *  this module solves for (`calibrateFromFloorLine`, and the vanishing points in
+ *  `lib/vanishing-point.ts`), because each is inferred from a premise — a camera
+ *  height, a square-on wall — rather than read. */
+export type LensSource = 'measured' | 'assumed';
 
 export function defaultCal(aspect: number): CameraCal {
   return { k: 2 * Math.tan(((DEFAULT_HFOV_DEG / 2) * Math.PI) / 180), aspect };
@@ -73,6 +99,18 @@ export function defaultCal(aspect: number): CameraCal {
  *  See `hfovFromFocal35` in lib/exif.ts for where the angle comes from. */
 export function calFromHfov(hfovDeg: number, aspect: number, view?: CameraView): CameraCal {
   return { k: 2 * Math.tan(((hfovDeg / 2) * Math.PI) / 180), aspect, ...view };
+}
+
+/** Which lens to read a photo on, and whether it may be doubted: the one EXIF gave,
+ *  else the one inferred from the picture, else none (the caller falls back to the
+ *  floor line, then the default). Only EXIF is `measured` — the inferred lens rests
+ *  on a premise, like every other lens this module solves for. Here rather than on
+ *  the detect screen because a wrong answer switches `lib/repeat-sightings.ts`'s lens
+ *  sweep off for every photo, and nothing on a screen can be tested for that. */
+export function pickLens(exifHfov: number | null, inferredHfov: number | null): { hfov: number; lens: LensSource } | null {
+  if (exifHfov !== null) return { hfov: exifHfov, lens: 'measured' };
+  if (inferredHfov !== null) return { hfov: inferredHfov, lens: 'assumed' };
+  return null;
 }
 
 /** What we know about where the camera was, as opposed to what lens it had. */
@@ -155,10 +193,10 @@ export function calibrateFromFloorLine(
   // b = (0.5 − vFloor)·k / aspect, and 0.5 − vFloor is negative here.
   const k = (b * aspect) / (0.5 - vFloor);
   if (!(k > 0)) return null;
-  // Sanity: equivalent hFOV between 30° and 120°.
+  // Sanity: a lens a phone could have.
   const hfov = (2 * Math.atan(k / 2) * 180) / Math.PI;
-  if (hfov < 30 || hfov > 120) return null;
-  return { k, aspect, ...view };
+  if (hfov < PLAUSIBLE_HFOV_DEG.min || hfov > PLAUSIBLE_HFOV_DEG.max) return null;
+  return { k, aspect, ...view, ...(view?.height === undefined ? { floorLine: vFloor } : {}) };
 }
 
 /** Plausible band for a solved camera height, in metres. Outside it the floor
@@ -540,6 +578,36 @@ export function heightFromFloorLine(
   return height;
 }
 
+/** `cal` with its camera height solved from the floor line, and the line kept so
+ *  the height stays tied to the lens it was solved at (`CameraCal.floorLine`). Null
+ *  wherever `heightFromFloorLine` is. */
+export function fitHeightToFloorLine(
+  vFloor: number,
+  slot: CaptureSlot,
+  footprint: Footprint,
+  cal: CameraCal,
+): CameraCal | null {
+  const height = heightFromFloorLine(vFloor, slot, footprint, cal);
+  return height === null ? null : { ...cal, height, floorLine: vFloor };
+}
+
+/** The same photo read on another lens: `cal` with `k` swapped, and — where a floor
+ *  line tied the height to the lens — the height that line gives at `k`. Null when it
+ *  gives none a person could hold a phone at, which is the line saying the photo was
+ *  not taken on that lens.
+ *
+ *  Why the height moves with it: the line fixes `height / k` (for a level camera),
+ *  so every lens on it keeps each floor piece's DISTANCE and rescales its width,
+ *  while carrying one lens's height to another keeps the width and moves the piece
+ *  along its line of sight — a camera the photo contradicts. Measured on the
+ *  generated rooms in `tests/repeat-sightings.test.ts`, whose table this changes. */
+export function atLens(cal: CameraCal, k: number, slot: CaptureSlot, footprint: Footprint): CameraCal | null {
+  const next: CameraCal = { ...cal, k };
+  if (cal.floorLine === undefined) return next;
+  const height = heightFromFloorLine(cal.floorLine, slot, footprint, next);
+  return height === null ? null : { ...next, height };
+}
+
 const tanX = (u: number, cal: CameraCal) => (u - 0.5) * cal.k;
 /** positive up */
 const tanY = (v: number, cal: CameraCal) => ((0.5 - v) * cal.k) / cal.aspect;
@@ -761,18 +829,20 @@ function lateralSpan(
  * **What it does NOT do is remove the duplicate row, and that claim was written here
  * before it was measured.** The same print is in the north photo, correctly placed; the
  * two sightings are ~1.0 m apart against `painting`'s 0.35 m tier, so `dedupeDetections`
- * keeps both — and it keeps both AFTER the refusal too, since a refused detection has no
- * `position` and the merge declines to compare one that is missing. Measured through
- * `refineDetections`: two rows in, two rows out, before and after. What changes is that
- * the second row is UNMEASURED rather than mis-measured — catalogue size, arranged by
- * `placementForSlot` — which is `placeCeilingObject`'s "no better than before beats
- * confidently wrong", not a de-duplication. The row count is not this gate's to move.
+ * keeps both — and it kept both AFTER the refusal too, since a refused detection had no
+ * `position` and the merge declines to compare one that is missing. What the refusal
+ * changes is that the second row is UNMEASURED rather than mis-measured, which is
+ * `placeCeilingObject`'s "no better than before beats confidently wrong", not a
+ * de-duplication. The row count is not this gate's to move — it is `locateOnWall`'s,
+ * below, which puts the refused sighting on the wall its line of sight meets. There it
+ * lands 58 mm from the north photo's row, and `refineDetections` gives one row, the
+ * measured one, in either photo order.
  *
  * **REFUSED, not clamped**, for `placeCeilingObject`'s reason one axis over: clamping
  * leaves the piece a metre from the truth AND keeps a size read off the wrong plane, so
  * it stays a duplicate and stays wrong. Refusing costs the MEASUREMENT and not the
- * piece — `geoRefine` hands the detection back untouched, `placementForSlot` arranges
- * it at its catalogue size, and `lib/label-repair.ts` reads that same object identity as
+ * piece — `geoRefine` hands the detection back untouched, `geoLocate` gives it a place
+ * and no size, and `lib/label-repair.ts` reads `geoRefine`'s object identity as
  * "unmeasurable", so `judgeLabel` does not accuse it either.
  *
  * The CENTRE is what is tested, not the extent. "Wholly off the wall" is the looser
@@ -1138,6 +1208,106 @@ export function placeWallObject(
     heightMM: Math.round(heightM * 1000),
     yaw,
     distance: d - depthM / 2,
+  };
+}
+
+/** Where a wall piece hangs, and which way it faces — and nothing about its size. */
+export type WallLocation = {
+  /** The body's centre: its back on the plaster, half a depth into the room. */
+  position: { x: number; y: number; z: number };
+  /** The heading of the wall it is on, facing into the room. */
+  yaw: number;
+};
+
+/**
+ * WHERE a wall piece is, for the one case `placeWallObject` refuses to measure: the
+ * piece is on a wall the photo was not pointed at.
+ *
+ * An ultrawide sees past the ends of the wall in front of it, and a TV or a print near
+ * the corner is in shot on the RETURN wall. `placeWallObject` refuses it, rightly — its
+ * size was read against the wrong plane — and then the room had nowhere to hang it but
+ * the wall the photo was pointed at, under the middle of its box. That spot is a phantom:
+ * the photo of the return wall sees the same piece where it really is, so the room got
+ * two TVs a corner apart, and nothing could tell they were one, because one of them was
+ * at a place no photograph had put it.
+ *
+ * The line of sight through the box's centre does say where the piece is, though: it
+ * leaves the lens and meets the first wall in its way, and that is the wall the piece is
+ * on. That needs no plane assumed in advance — it walks the room's own outline — so
+ * nothing here depends on the answer `onFramedSurface` just refused. The SIZE is still
+ * not measured, and not by oversight: this finds a point on a wall, and a width needs the
+ * wall's distance at both edges of the box, which near a corner are on different walls.
+ *
+ * Null when the photo has no room to look into (`wallFrame` answers null: the lens stands
+ * outside the outline, or the outline is not one), when the centre ray points behind the
+ * lens, and when it leaves through a wall seen from outside before any wall seen from
+ * inside — the ray went out of the room, and whatever the box shows is not on its walls.
+ */
+export function locateOnWall(
+  box: [number, number, number, number],
+  slot: CaptureSlot,
+  footprint: Footprint,
+  cal: CameraCal,
+  foot: PieceFootprint,
+): WallLocation | null {
+  if (!wallFrame(slot, footprint)) return null;
+  const [bx, by, bw, bh] = box;
+  const rC = ray(bx + bw / 2, by + bh / 2, cal);
+  if (!(rC.fwd > 0)) return null;
+  // The line of sight in plan, as lateral offset per metre forward.
+  const t = rC.right / rC.fwd;
+  const n = footprint.length;
+  let best: { f: number; i: number } | null = null;
+  // Same rule as `wallFrame`: a crossing seen from outside is an OBSTRUCTION only when
+  // it spans the ray properly. A ray through a vertex exactly touches two walls at one
+  // point, and counting either as in the way refuses a line of sight that is clear.
+  let blocker = Infinity;
+  for (let i = 0; i < n; i++) {
+    const a = worldToLens(slot, footprint[i][0], footprint[i][1]);
+    const b = worldToLens(slot, footprint[(i + 1) % n][0], footprint[(i + 1) % n][1]);
+    // Where the edge a→b meets the ray `right = t · forward`.
+    const denom = b.right - a.right - t * (b.forward - a.forward);
+    if (denom === 0) continue; // parallel to the line of sight
+    const s = (t * a.forward - a.right) / denom;
+    if (!(s >= 0 && s <= 1)) continue;
+    const f = a.forward + s * (b.forward - a.forward);
+    if (!(f > 0)) continue; // behind the lens, or the lens standing on it
+    // Travelling along the ray takes us through this wall from INSIDE the room when the
+    // ray's direction has a positive component along its outward normal.
+    const [nx, nz] = wallOutwardNormal(footprint, i);
+    const nl = worldToLens(slot, nx, nz);
+    if (!(nl.right * t + nl.forward > 0)) {
+      if (s > 0 && s < 1 && f < blocker) blocker = f;
+      continue;
+    }
+    if (!best || f < best.f) best = { f, i };
+  }
+  if (!best || blocker < best.f) return null;
+
+  // The body's mid-plane, not the plaster: a piece is `depth` deep with its back on the
+  // wall, so the ray through its middle meets it half a depth into the room. Solved on
+  // the hit wall's own line, moved in along its normal, so an oblique wall is as exact
+  // as a square one. `n · p = n · a` is the plaster, and a point on the ray at forward
+  // distance `f` is `(t·f, f)`.
+  const [nx, nz] = wallOutwardNormal(footprint, best.i);
+  const nl = worldToLens(slot, nx, nz);
+  const a = worldToLens(slot, footprint[best.i][0], footprint[best.i][1]);
+  const plaster = nl.right * a.right + nl.forward * a.forward;
+  const depthM = foot.depthM > 0 ? foot.depthM : 0;
+  const f = (plaster - depthM / 2) / (nl.right * t + nl.forward);
+  // A piece deeper than twice the lens's distance from its wall would have its middle
+  // behind the camera. Refused rather than clamped, unlike `placeWallObject`'s near
+  // face: there the clamp cannot bite, and here it could — a return wall is met at a
+  // slant, so its distance along the view axis says nothing about how far the lens is
+  // from its plaster — and the depth it clamped to would be no piece's.
+  if (!(f > 0)) return null;
+  const { x, z } = slotToWorld(slot, f, t * f);
+  return {
+    position: { x, y: heightOf(cal) + (f / rC.fwd) * rC.up, z },
+    // A part's front is (sin rot, cos rot), and it faces into the room. The `+ 0` turns
+    // a −0 into 0, so the north and south walls read 0 and π, as `slotToWorld` gives
+    // them, rather than −0 and −π.
+    yaw: Math.atan2(-nx + 0, -nz + 0),
   };
 }
 

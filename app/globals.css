@@ -1009,6 +1009,15 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    it the same ring the text fields get from :focus. */
 .field:focus-visible { border-color: var(--accent-text); box-shadow: 0 0 0 4px var(--accent-tint); }
 .field::placeholder { color: var(--ink-3); }
+/* A box holding something the form cannot use. The sentence under a row of fields
+   says what to type; only the rim can say WHICH box — two sentences under three
+   boxes left the empty one looking exactly like the good one beside it. It keeps
+   its danger rim through focus, because the accent's own focus ring is terracotta
+   and a near neighbour of --danger: a refused box that turned "focused" on the
+   press that refused it would read as fixed. */
+.field[aria-invalid='true'] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+.field[aria-invalid='true']:focus,
+.field[aria-invalid='true']:focus-visible { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger), 0 0 0 4px var(--danger-tint); }
 
 /* Native number spinners are drawn by the platform: grey chrome-blue arrows that
    appear on hover, in a set of fields that are otherwise ours. Both editors that
@@ -1536,6 +1545,53 @@ textarea.field { border-radius: var(--r-2); }
   display: grid; gap: 8px;
   grid-template-columns: repeat(auto-fit, minmax(min(var(--field-min, 64px), 100%), 1fr));
 }
+/* A shape option's name and floor area. Wraps rather than squeezing: at a phone's
+   two ~150px columns an area in square feet ("241.1 ft²") and "Open Plan" do not
+   share a line, and a baseline row that cannot wrap prints one over the other. */
+.shape-option__row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 2px 8px; flex-wrap: wrap;
+}
+/* The shape picker's room size (app/onboarding/layout-pick): optional, so it
+   reads as a quiet form under the shapes rather than a step of its own. */
+.size-entry { margin-top: 24px; }
+.size-entry__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.size-entry__title { margin: 0; font-size: var(--fs-body); font-weight: 700; color: var(--ink); }
+.size-entry__title .t-hint { font-weight: 600; }
+.size-entry__field { display: flex; flex-direction: column; gap: 4px; }
+.size-entry__field > .t-note { font-weight: 600; }
+/* Always in the tree (it is the live region), so it takes space only when it speaks. */
+.size-entry__error { font-size: var(--fs-caption); line-height: 1.4; color: var(--danger-text); }
+.size-entry__error:not(:empty) { margin-top: 8px; }
+/* Wraps rather than squeezing: at a phone's width the note takes its own line
+   and the reset drops beneath it. */
+.size-entry__foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 4px 12px; flex-wrap: wrap; margin-top: 8px;
+}
+.size-entry__foot > p { margin: 0; line-height: 1.45; flex: 1 1 11rem; min-width: 0; }
+/* `margin-left: auto` keeps it on the right when it wraps under the note; the
+   negative right margin cancels its own padding, so the LABEL lines up with the
+   fields' right edge rather than the invisible button box. */
+.size-entry__reset { margin-left: auto; margin-right: -12px; }
+/* The studio's "rough sizes" note (`RoomDimsEditor`), shown while a room still
+   stands at its shape's typical size. Neutral paper rather than `--warn`: nothing
+   is wrong, a size simply has not been given. A grid, so the words wrap beside the
+   icon and the button sits under the words rather than under the icon — at the
+   compact rail's ~176px of content as much as the wide one's. */
+.rough-note {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px;
+  align-items: start; margin-bottom: 12px; padding: 8px 10px 4px;
+  border-radius: var(--r-2); background: var(--paper-2); color: var(--ink-2);
+}
+.rough-note > svg { margin-top: 1px; color: var(--ink-3); }
+.rough-note__text { margin: 0; font-size: var(--fs-caption); line-height: 1.4; overflow-wrap: anywhere; }
+/* Right-aligned under the words, like the shape picker's reset; the negative right
+   margin lines the LABEL up with the words' right edge rather than the button box. */
+.rough-note__confirm { grid-column: 2; justify-self: end; margin-right: -8px; }
 .num-field__steps {
   position: absolute; right: 3px; top: 3px; bottom: 3px;
   display: flex; flex-direction: column; justify-content: center;
@@ -1545,6 +1601,15 @@ textarea.field { border-radius: var(--r-2); }
   .num-field > .field { min-height: 44px; }
   /* A section's disclosure row is the thing a thumb opens most in a panel. */
   .rail-section-toggle { min-height: 44px; }
+  /* A dropdown and its rows (`ui/Select`). Both carry an inline height sized for a
+     mouse; a minimum wins over it, so a finger gets 44px without every caller
+     having to know it is on a phone. */
+  .select-trigger, .select-option { min-height: 44px; }
+  /* The shape picker's "Use a typical size" — a small ghost button for a mouse,
+     a thumb-sized one for a finger. */
+  .size-entry .ds-btn--sm { min-height: 44px; }
+  /* And the studio's "These are right", for the same reason. */
+  .rough-note .ds-btn--sm { min-height: 44px; }
 }
 /* Under a finger the Library's rows are 44px, not a mouse's 32 — and so is every
    small button in the phone's sheet (Fix, Shuffle, Room checks): the sheet is only

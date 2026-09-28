@@ -34,6 +34,7 @@ import {
   wallFrame,
   wallRowAtHeight,
   type CameraCal,
+  type LensSource,
 } from './photo-geometry';
 
 /** Skirting boards, and whatever is stacked against them. Real rooms have 70–150 mm
@@ -76,9 +77,8 @@ export const EDGE_TRIM = 0.04;
  *  the answer was a confident colour read off a sliver. */
 export const MIN_BAND_FRAC = 0.05;
 
-/** Whether the lens is known or assumed, which changes how the band is drawn.
- *  `measured` means EXIF gave a focal length for this photo. */
-export type LensSource = 'measured' | 'assumed';
+/** Whether the lens is known or assumed, which changes how the band is drawn. */
+export type { LensSource };
 
 /** The lens the band assumes when the photo does not say. Degrees of horizontal
  *  field of view.

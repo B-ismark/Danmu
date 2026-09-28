@@ -118,6 +118,71 @@ describe('dedupeDetections', () => {
   });
 });
 
+describe('dedupeDetections — which sighting survives', () => {
+  // `measured` chooses WHICH row of a group is handed back, and nothing else. It used to
+  // do more by accident: the measured row took the survivor's slot in the list, and every
+  // later row was compared against it rather than against the row that founded the group,
+  // so a measurement arriving in the middle moved the group to another photo and another
+  // spot. Two ways that showed, one in each direction.
+
+  // A print on the north wall, seen straight on from the north photo (measured) and past
+  // the corner from the east one, where the on-device pass boxed it twice under two names.
+  const east = det({ label: 'painting', category: 'painting', slot: 'e', box: [0.1, 0.3, 0.2, 0.2], position: { x: 2.2, y: 1.5, z: -1.98 } });
+  const eastTwin = det({ label: 'wall art', category: 'painting', slot: 'e', box: [0.11, 0.31, 0.2, 0.19], position: { x: 2.2, y: 1.5, z: -1.98 } });
+  const north = det({ label: 'painting', category: 'painting', slot: 'n', box: [0.6, 0.3, 0.12, 0.1], position: { x: 2.2, y: 1.5, z: -1.96 } });
+
+  it('keeps the founder’s own double box merged after a measurement takes its place', () => {
+    // The twin is the east row boxed again (same photo, IoU ~0.9) under a word rule 2 does
+    // not fold, so the same-photo rule is the only thing that can catch it — and swapping
+    // the east row out for the north one took the east photo's box with it.
+    const out = dedupeDetections([east, north, eastTwin], new Set([north]));
+    expect(out).toEqual([north]);
+  });
+
+  it('catches a double box of a sighting that joined from another photo', () => {
+    // North founds the group and the east row joins it by name and place. The twin is
+    // the EAST row boxed again, so it is the east row it has to be asked against: the
+    // founder is another photo, under a word rule 2 does not fold.
+    expect(dedupeDetections([north, east, eastTwin])).toEqual([north]);
+    expect(dedupeDetections([north, east, eastTwin], new Set([north]))).toEqual([north]);
+  });
+
+  it('and does not reach a second bed the founder was never near', () => {
+    // Twin beds 1.6 m apart, the first seen twice. The located sighting founds the group,
+    // the measured one 0.8 m off it joins (bed's tier is 0.9 m) and survives — and the
+    // second bed, 0.8 m from the SURVIVOR and 1.6 m from the founder, used to be swallowed.
+    // Boxes a fifth of the frame apart per metre. They were a tenth, which drew the two
+    // beds in the north photo overlapping by 58% — what the same-photo rule calls one
+    // bed boxed twice, and asks of every row in a group, so that fixture was two beds
+    // only while the rule could not see the second photo's member.
+    const bed = (x: number, slot: Detection['slot']) =>
+      det({ label: 'bed', category: 'bed', slot, box: [0.1 + x / 5, 0.5, 0.3, 0.3], position: { x, y: 0.3, z: -1 } });
+    const [located, seen, other] = [bed(0, 'e'), bed(0.8, 'n'), bed(1.6, 'n')];
+    const out = dedupeDetections([located, seen, other], new Set([seen, other]));
+    expect(out).toEqual([seen, other]);
+  });
+
+  it('never changes how many pieces come out, in any order', () => {
+    const rows = [east, eastTwin, north];
+    const orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+    const counts = orders.map((o) => {
+      const list = o.map((i) => rows[i]);
+      return [dedupeDetections(list).length, dedupeDetections(list, new Set([north])).length];
+    });
+    // Each pair is [without the set, with it], and the two halves agree in every order.
+    // The ORDER still matters, and that is first-come's own answer rather than this
+    // defect: across photos a group is compared through its founder, and in three of
+    // the six orders the twin meets the north row before it meets the east one — `wall
+    // art` is not `painting`, and they are different photos, so no rule joins those two
+    // and the room gets the print twice, for the soft merge to start unticked. (The
+    // fifth order used to be a fourth: north, east, twin, where the twin does meet the
+    // east row, as a member of north's group, and the same-photo rule now asks it.) What
+    // the set may not do is move a count, and in the second order it did: 1 without it,
+    // 2 with it.
+    expect(counts).toEqual([[1, 1], [1, 1], [2, 2], [2, 2], [1, 1], [2, 2]]);
+  });
+});
+
 describe('mergeDistanceFor', () => {
   // The regression this whole tier exists for. Four chairs tucked around a table
   // at 0.55 m centres collapsed to TWO under the old flat 0.6 m: the first ate

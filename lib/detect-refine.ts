@@ -15,9 +15,15 @@
 // in the Gemini SDK.
 
 import { anchorFor } from './physics';
-import { placeCeilingObject, placeFloorObject, placeWallObject, type CameraCal } from './photo-geometry';
+import {
+  locateOnWall,
+  placeCeilingObject,
+  placeFloorObject,
+  placeWallObject,
+  type CameraCal,
+} from './photo-geometry';
 import type { Detection } from './detection';
-import { defaultAxisFor, defaultDepthFor, isRoundPart, type Category, type Shape } from './scene-spec';
+import { defaultAxisFor, defaultDepthFor, isRoundPart, sceneShapeFor, type Category } from './scene-spec';
 import type { CaptureSlot } from './storage';
 import type { Footprint } from './footprint';
 
@@ -65,7 +71,15 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
   const cal = cals[d.slot];
   if (!cal) return d;
   const cat = (d.category ?? 'other') as Category;
-  const shape = (d.shape ?? 'box') as Shape;
+  // The shape the room will BUILD this row as, by the room's own rule — never the
+  // raw hint with `box` for a blank. The on-device detector names almost no shapes,
+  // so that blank was the normal case, and a `ceiling light` came through as a lamp
+  // shaped like a box: a floor piece. Its box is above the horizon, so the floor
+  // placer refused it, and the room then built the pendant the label says it is and
+  // hung it by the wall of whichever photo saw it — one per photo. A row measured as
+  // one shape and built as another is measured on the wrong plane, with the wrong
+  // depth, and compared for repeats as something it is not.
+  const shape = sceneShapeFor(cat, d.label, d.shape);
   const anchor = anchorFor(cat, shape);
   const catalogueDepth = defaultDepthFor(cat, shape);
   // Named for its only consumer. It was `hintedDepth`, read by two branches of
@@ -95,8 +109,8 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
   // this piece in plan — and the two placers differ only in what pins its depth
   // axis. Roundness is read off the SAME (category, shape) pair as the depth, so the
   // number a piece is measured by and the footprint it is inverted as cannot
-  // disagree. A detection with no shape resolves to `box` here, which is exactly
-  // what its depth default already assumes.
+  // disagree — and both are the shape the room builds, so a round table named only
+  // by its word is measured round.
   const foot = { depthM: catalogueDepth / 1000, round: isRoundPart(shape) };
   const g =
     anchor === 'floor'
@@ -109,6 +123,45 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
     yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
     dimMM: [g.widthMM, catalogueDepth, g.heightMM],
   };
+}
+
+/** WHERE a wall row is, when `geoRefine` could not measure it — position and heading,
+ *  never size. Returns the row itself when there is nothing to locate: a floor or
+ *  ceiling piece, an uncalibrated photo, or a line of sight that meets no wall.
+ *
+ *  Its own function rather than a fourth branch of `geoRefine`, because the two answer
+ *  different questions and a caller needs to be able to ask the first alone.
+ *  `geoRefine` returning the SAME object is how `lib/label-repair.ts` knows a row went
+ *  unmeasured, and a return-wall piece has to stay unmeasured there: its size was read
+ *  against the wrong wall, so a verdict on its label would be a verdict on nothing.
+ *  Folding the location in would hand back a new object and a measured-looking row.
+ *
+ *  The size stays whatever the row already had — the cloud path's hint, or nothing —
+ *  and `buildSceneFromRoom` clamps it like any other hint. The heading follows
+ *  `geoRefine`'s precedent: the model's own yaw wins where it gave one. */
+export function geoLocate(d: Detection, cals: CalMap, room: RoomDims): Detection {
+  const cal = cals[d.slot];
+  if (!cal) return d;
+  const cat = (d.category ?? 'other') as Category;
+  const shape = sceneShapeFor(cat, d.label, d.shape);
+  const anchor = anchorFor(cat, shape);
+  // The same plane split `geoRefine` makes, curtain exception included.
+  if (anchor === 'floor' || (anchor === 'ceiling' && d.category !== 'curtain')) return d;
+  const g = locateOnWall(d.box, d.slot, room.footprint, cal, {
+    depthM: defaultDepthFor(cat, shape) / 1000,
+    round: isRoundPart(shape),
+  });
+  if (!g) return d;
+  return { ...d, position: g.position, yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw };
+}
+
+/** Measure a row where the camera can, and otherwise locate it where it can — the one
+ *  call every path that turns a photo into rows makes. A row `geoRefine` measured comes
+ *  back measured; one it refused comes back from `geoLocate`, which adds a position and
+ *  nothing else. */
+export function geoPlace(d: Detection, cals: CalMap, room: RoomDims): Detection {
+  const measured = geoRefine(d, cals, room);
+  return measured === d ? geoLocate(d, cals, room) : measured;
 }
 
 /** How close two same-category detections have to be, in metres, before they are
@@ -262,22 +315,57 @@ export function sameThingKey(label: string): string {
  *  paintings 0.30 m apart against painting's 0.35 m), and buys back a duplicate
  *  that is one tap from gone. Same asymmetry as everywhere else in this file.
  *
+ *  `measured` names the rows the camera sized. Without it the first sighting of a pair
+ *  survives, which is the old rule and the right one for rows that are all measured or
+ *  all hints; with it, a measured sighting replaces an unmeasured one it merges with.
+ *  It decides which row is handed back and never which rows merge, so the same list
+ *  gives the same number of rows with the set or without it.
+ *
  *  Exported for tests: this is pure logic that decides what the user gets from the
  *  one call that spends their quota. */
-export function dedupeDetections(items: Detection[]): Detection[] {
+export function dedupeDetections(items: Detection[], measured?: ReadonlySet<Detection>): Detection[] {
+  // A group is compared through the row that FOUNDED it across photos, and through
+  // every row in it within one, and hands back its survivor.
+  const groups: Detection[][] = [];
   const out: Detection[] = [];
   for (const d of items) {
-    const isDup = out.some((o) => {
+    const at = groups.findIndex((g) => {
+      const o = g[0];
       if (o.category !== d.category) return false;
-      // Same photo — heavily overlapping boxes mean one object boxed twice.
-      if (o.slot === d.slot && boxIoU(o.box, d.box) >= SAME_BOX_IOU) return true;
+      // Same photo — heavily overlapping boxes mean one object boxed twice. Asked of
+      // every sighting in the group, not only its founder: a print founded from the
+      // north photo and joined from the east one is still boxed twice in the east
+      // photo, and asking the founder alone could not see it — two photos, and
+      // `wall art` is not `painting` — so the print came out twice. A box that
+      // overlaps a group's own box that heavily cannot reach anywhere new, which is
+      // why this one rule may ask the members and the one below may not.
+      if (g.some((m) => m.slot === d.slot && boxIoU(m.box, d.box) >= SAME_BOX_IOU)) return true;
       // Different photos — same name AND same place.
       if (sameThingKey(o.label) !== sameThingKey(d.label)) return false;
       if (!o.position || !d.position) return false;
       const dist = Math.hypot(o.position.x - d.position.x, o.position.z - d.position.z);
       return dist < mergeDistanceFor(d.category);
     });
-    if (!isDup) out.push(d);
+    if (at < 0) {
+      groups.push([d]);
+      out.push(d);
+      continue;
+    }
+    groups[at].push(d);
+    // Which sighting SURVIVES is the second half of the merge, and first-come was only
+    // ever safe while every row with a position had been measured. A located row has a
+    // position and no size of its own, so when it arrived first — the east photo before
+    // the north one — it ate the measurement and the piece went into the room at its
+    // catalogue size. The measured row takes its place, in its place in the list.
+    //
+    // And ONLY its place: later rows are still compared against the founder, and the
+    // members, never the survivor. They used to be compared against the survivor, so a
+    // measurement arriving mid-group moved the group — to another photo, which lost the
+    // same-photo rule for the founder's own double box, and up to a tier's distance
+    // across the floor, where it swallowed a second bed the founder was never near.
+    // The members are every row that joined, whichever survives, so choosing a
+    // survivor never changes a count.
+    if (measured?.has(d) && !measured.has(out[at])) out[at] = d;
   }
   return out;
 }
@@ -298,5 +386,15 @@ export function dedupeDetections(items: Detection[]): Detection[] {
  *  Runs before any uid is minted, so there is no survivorship question to get
  *  wrong here — see the note on `confirmed` in app/onboarding/detect/page.tsx. */
 export function refineDetections(dets: Detection[], cals: CalMap, room: RoomDims | null): Detection[] {
-  return dedupeDetections(room ? dets.map((d) => geoRefine(d, cals, room)) : dets);
+  if (!room) return dedupeDetections(dets);
+  // `geoPlace` written out, because the merge needs to know which rows it measured and
+  // `geoPlace`'s answer cannot say: a located row is a new object too.
+  const measured = new Set<Detection>();
+  const placed = dets.map((d) => {
+    const m = geoRefine(d, cals, room);
+    if (m === d) return geoLocate(d, cals, room);
+    measured.add(m);
+    return m;
+  });
+  return dedupeDetections(placed, measured);
 }

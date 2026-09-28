@@ -29,6 +29,11 @@ export type RoomShape = {
    *  user says — a latitude cannot be guessed, and guessing one would make the
    *  daylight study quietly wrong rather than obviously unset. */
   site?: Site;
+  /** The size is a shape's typical one, not the person's — `RoomData.roughSize`,
+   *  carried here so the studio can say so and both writers can save it from the
+   *  live room. Cleared by `setRoom`, whose one caller is the Room section's size
+   *  boxes, and by `confirmSize`. */
+  roughSize?: true;
 };
 
 // Room resize clamps come from `ROOM_SIDE_M`, the one place the bound is written.
@@ -62,7 +67,12 @@ type SceneState = {
   setHydrated: (roomId: string | null) => void;
   ready: boolean;
   setParts: (p: ScenePart[]) => void;
+  /** The person set the room's size. Clears `roughSize`: a size typed into the
+   *  studio is theirs, even when it happens to equal the typical one. */
   setRoom: (r: { width: number; depth: number; height: number }) => void;
+  /** The person says the sizes shown are right as they are. Clears `roughSize`
+   *  without moving a wall. */
+  confirmSize: () => void;
   loadFromRoom: (room: RoomData | undefined) => void;
   /** where the room is on earth + which way it faces (sun path). */
   setSite: (site: Site) => void;
@@ -120,13 +130,20 @@ export const useScene = create<SceneState>((set, get) => ({
   setRoom: (r) =>
     set((s) => {
       const wdChanged = r.width !== s.room.width || r.depth !== s.room.depth;
+      const { roughSize: _typical, ...room } = s.room;
       return {
         room: {
-          ...s.room,
+          ...room,
           ...r,
           footprint: wdChanged ? footprintForLayout(s.room.layoutId, r.width, r.depth) : s.room.footprint,
         },
       };
+    }),
+  confirmSize: () =>
+    set((s) => {
+      if (!s.room.roughSize) return {};
+      const { roughSize: _typical, ...room } = s.room;
+      return { room };
     }),
   loadFromRoom: (room) => {
     if (!room)
@@ -154,6 +171,7 @@ export const useScene = create<SceneState>((set, get) => ({
         footprint,
         wallColors: room.wallColors ?? {},
         site: room.site,
+        ...(room.roughSize === true ? { roughSize: true as const } : {}),
       },
       ready: true,
     });

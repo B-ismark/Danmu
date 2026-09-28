@@ -197,7 +197,10 @@ backend, no account. The 3D studio *is* the product.
    sentence used to carry, each written from reasoning and each disproved by measurement:
    it does **not** remove the duplicate row (two sightings in, two out, before and after —
    though the mechanism is fixture-dependent, since the merge only skips a row whose
-   position is MISSING and the cloud prompt asks for one); the piece does **not** appear at
+   position is MISSING and the cloud prompt asks for one — and the missing position was the
+   whole reason: `geoLocate` gives a refused wall row the place its line of sight meets its
+   wall, and no size, so the pair now merges into ONE row and the measured sighting is the
+   one kept, in either photo order); the piece does **not** appear at
    its catalogue size on the cloud path (`buildSceneFromRoom` prefers the detector's own
    `dimMM` and reaches `cfg.dim` only with no hint at all); and `judgeLabel` was **not**
    accusing the print — `painting`'s band is 150–2400 × 150–1800, so the fabrication was

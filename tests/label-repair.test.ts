@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
 import { placeFloorObject, placeWallObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
-import { PART_LIBRARY, defaultDepthFor, type Category, type Shape } from '@/lib/scene-spec';
+import {
+  CATEGORIES,
+  PART_LIBRARY,
+  buildSceneFromRoom,
+  defaultDepthFor,
+  sceneShapeFor,
+  type Category,
+  type Shape,
+} from '@/lib/scene-spec';
+import { toRecord } from '@/lib/detection-record';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
@@ -198,14 +209,21 @@ describe('judgeLabel', () => {
     // pixels that measure 480 x 360 as a hung painting measure 480 x 1680 as
     // something standing on the floor. That is exactly why a repaired word has to
     // be re-measured rather than keeping the numbers taken under the old one.
+    //
+    // And judged as the bed the ROOM would build from that row — `sceneShapeFor`,
+    // not `box`. The row names no shape, which is what the on-device detector
+    // hands over, and a band taken from a shape nothing builds is a band for
+    // nothing.
+    const shape = sceneShapeFor('bed', 'thing', undefined);
+    expect(shape).not.toBe('box'); // premise: a bed with no shape is still built as a bed
     const g = placeFloorObject(WALL_BOX, 'n', ROOM.footprint, CAL, {
-      depthM: defaultDepthFor('bed', 'box') / 1000,
+      depthM: defaultDepthFor('bed', shape) / 1000,
     })!;
     const v = judgeLabel(det({ category: 'bed', slot: 'n', box: WALL_BOX }), CALS, ROOM);
     expect(v.status).toBe('suspect');
     if (v.status !== 'suspect') return;
     expect(v.measured).toEqual({ width: g.widthMM, height: g.heightMM });
-    expect(v.allowed.width).toEqual([dimRangeFor('bed', 'box').min[0], dimRangeFor('bed', 'box').max[0]]);
+    expect(v.allowed.width).toEqual([dimRangeFor('bed', shape).min[0], dimRangeFor('bed', shape).max[0]]);
     expect(v.failed).toEqual(['width', 'height']); // a 480 mm wide, 1.68 m tall bed
   });
 
@@ -213,16 +231,23 @@ describe('judgeLabel', () => {
     // The re-entrancy point. A candidate's category picks its anchor and the anchor
     // picks the projection, so the detection offered back has been measured again
     // rather than carrying the numbers taken under the wrong word.
-    const v = judgeLabel(det({ category: 'bed', slot: 'n', box: WALL_BOX }), CALS, ROOM);
+    //
+    // The row carries a bed's shape hint, which is a shape the catalogue knows and so
+    // one `sceneShapeFor` would honour for ANY category — a sofa candidate built as a
+    // double bed — unless it is dropped with the word it came with.
+    const v = judgeLabel(det({ category: 'bed', shape: 'bed-double', slot: 'n', box: WALL_BOX }), CALS, ROOM);
     if (v.status !== 'suspect') throw new Error('expected suspect');
     expect(v.candidates.length).toBeGreaterThan(0);
     for (const c of v.candidates) {
       expect(c.detection.category).toBe(c.category);
-      expect(c.detection.shape).toBeUndefined(); // the shape went with the old word
+      // The shape the new category makes of the row's words — the old category's
+      // hint does not come with it — and that is the shape it was measured as.
+      const shape = sceneShapeFor(c.category, 'thing', undefined);
+      expect(c.detection.shape).toBe(shape);
       expect(c.detection.dimMM).toBeDefined();
-      // Whatever it now measures, it fits the word being offered — otherwise it is
-      // not a repair.
-      expect(sizeFitsLabel(c.category, 'box', c.detection.dimMM![0], c.detection.dimMM![2])).toBe(true);
+      // Whatever it now measures, it fits the word being offered as the shape it
+      // will be built as — otherwise it is not a repair.
+      expect(sizeFitsLabel(c.category, shape, c.detection.dimMM![0], c.detection.dimMM![2])).toBe(true);
     }
     // Most comfortable fit first. The list is re-sorted after re-measuring, so
     // this is a different sort from the one categoriesFittingSize does and needs
@@ -339,5 +364,171 @@ describe('judgeLabel — ceiling items', () => {
     expect(band.min[0]).toBeLessThan(893);
     expect(band.max[0]).toBeGreaterThan(893);
     expect(band.max[2]).toBeGreaterThan(803);
+  });
+});
+
+describe('accepting a repair', () => {
+  // The scan screen works its verdicts out from a copy of the rows that ignores
+  // colour, so the photo's sample landing does not re-run every check. A candidate can
+  // therefore be measured from the row as it was BEFORE its colour arrived.
+  const before = det({ label: 'Sofa', category: 'sofa', slot: 'n', box: [0.175, 0.75, 0.65, 0.1] });
+  const now: Detection = { ...before, color: '#7a5c3e' };
+  const [bed] = candidatesFor(before, ['bed'], CALS, ROOM);
+
+  it('keeps the colour the photo gave the row', () => {
+    expect(bed, 'fixture must offer a repair').toBeDefined();
+    expect(bed.detection.color, 'fixture must predate the colour').toBeUndefined();
+    const out = acceptCandidate(now, bed, 'Double bed');
+    expect(out.color).toBe('#7a5c3e');
+    // Everything the word decides comes from the candidate.
+    expect(out.category).toBe('bed');
+    expect(out.shape).toBe(bed.detection.shape);
+    expect(out.dimMM).toEqual(bed.detection.dimMM);
+    expect(out.label).toBe('Double bed');
+  });
+
+  it('writes no colour key for a row that has none yet', () => {
+    // So the next sample still sees a row "missing colour" and paints it.
+    expect('color' in acceptCandidate(before, bed, 'Bed')).toBe(false);
+    // And never the candidate's own: it is the same row's, from earlier.
+    const stale = { ...bed, detection: { ...bed.detection, color: '#111111' } };
+    expect('color' in acceptCandidate(before, stale, 'Bed')).toBe(false);
+  });
+});
+
+describe('a repair is built as the shape it was measured as', () => {
+  // A light the detector called a ceiling fan: high in a wide frame, 400-odd mm across,
+  // which no fan is and a pendant is.
+  const LIGHT_BOX: Detection['box'] = [0.45, 0.03, 0.09, 0.14];
+  const fan = det({ label: 'Ceiling fan', category: 'fan', slot: 'n', box: LIGHT_BOX });
+
+  // What accepting it does on the scan screen: the candidate's detection, relabelled
+  // with the category's plain name — then saved and built like any kept row.
+  const accept = (cand: { category: Category; detection: Detection }, label: string) => {
+    const rec = toRecord({ ...cand.detection, label }, 0, true, () => 'u-1');
+    return buildSceneFromRoom({
+      id: 'r',
+      createdAt: 1,
+      name: 'R',
+      layoutId: 'rect',
+      width: ROOM.width,
+      depth: ROOM.depth,
+      height: ROOM.height,
+      detectedObjects: [rec],
+    });
+  };
+
+  it('offers the light as the pendant its words make it, and builds a pendant', () => {
+    const [lamp] = candidatesFor(fan, ['lamp'], WIDE_CALS, ROOM);
+    expect(lamp).toBeDefined();
+    // Measured on the ceiling, width alone — the pendant's plane — and called one.
+    expect(lamp.detection.shape).toBe('lamp-pendant');
+    expect(lamp.name).toBe('Pendant lamp');
+    const parts = accept(lamp, 'Lamp');
+    expect(parts).toHaveLength(1);
+    expect(accept(lamp, lamp.name!)[0].shape).toBe('lamp-pendant');
+    // The defect: a blank shape resolved from "Lamp" at build time is a floor lamp,
+    // so a piece measured on the ceiling stood on the floor at a pendant's width.
+    expect(parts[0].shape).toBe('lamp-pendant');
+  });
+
+  it('judges it against the band of the shape it carries', () => {
+    const [lamp] = candidatesFor(fan, ['lamp'], WIDE_CALS, ROOM, { requireFit: false });
+    const pendant = dimRangeFor('lamp', 'lamp-pendant');
+    const w = lamp.detection.dimMM![0];
+    // Width alone, as a ceiling piece is measured — the height in dimMM is the
+    // catalogue's, not a measurement — and inside the PENDANT's band, whose floor is
+    // not a plain lamp's.
+    expect(pendant.min[0]).not.toBe(dimRangeFor('lamp', 'box').min[0]); // premise
+    expect(lamp.margin).toBeCloseTo(Math.min(w - pendant.min[0], pendant.max[0] - w) / (pendant.max[0] - pendant.min[0]), 9);
+  });
+
+  // 134 mm across: inside a plain lamp's band (from 120) and under any pendant's (from
+  // 150). Judged as the shape it would be built as, it is not a pendant, so it is not
+  // offered as a repair; the looser band would have offered it.
+  it('does not offer a light narrower than any pendant as one', () => {
+    const thin = { ...fan, box: [0.47, 0.03, 0.031, 0.14] as Detection['box'] };
+    const [measured] = candidatesFor(thin, ['lamp'], WIDE_CALS, ROOM, { requireFit: false });
+    expect(measured.detection.dimMM![0]).toBeGreaterThan(dimRangeFor('lamp', 'box').min[0]); // premise
+    expect(measured.detection.dimMM![0]).toBeLessThan(dimRangeFor('lamp', 'lamp-pendant').min[0]); // premise
+    expect(candidatesFor(thin, ['lamp'], WIDE_CALS, ROOM)).toEqual([]);
+  });
+
+  // A 1.56 m row: a double bed's width, well past any single's. The words ("sofa")
+  // name no kind of bed, so the plain one alone — a single bed — rejected it, and
+  // before the shape was carried it was offered and then built squeezed to 1.2 m.
+  const WIDE_BOX: Detection['box'] = [0.175, 0.75, 0.65, 0.1];
+  const sofa = det({ label: 'sofa', category: 'sofa', slot: 'n', box: WIDE_BOX });
+
+  it('measures the other kinds when the words name none, and says which it chose', () => {
+    const [bed] = candidatesFor(sofa, ['bed'], CALS, ROOM);
+    expect(bed).toBeDefined();
+    expect(bed.detection.shape).toBe('bed-double');
+    expect(bed.name).toBe('Double bed');
+    const w = bed.detection.dimMM![0];
+    expect(sizeFitsLabel('bed', 'bed-single', w, bed.detection.dimMM![2])).toBe(false); // premise
+    expect(sizeFitsLabel('bed', 'bed-double', w, bed.detection.dimMM![2])).toBe(true);
+    // Accepted under the name its chip shows, it builds the double bed it was measured
+    // as, at the width it was measured at — nothing squeezed to fit.
+    const [part] = accept(bed, bed.name!);
+    expect(part.shape).toBe('bed-double');
+    expect(part.dimMM[0]).toBe(w);
+    // A typed word is answered the same way: the kind that fits, over the plain one that does not.
+    expect(candidatesFor(sofa, ['bed'], CALS, ROOM, { requireFit: false })[0].detection.shape).toBe('bed-double');
+  });
+
+  it('keeps the plain kind when it fits, even where another kind fits too', () => {
+    const chair = det({ label: 'thing', category: 'bed', slot: 'n', box: [0.375, 0.75, 0.25, 0.1] });
+    const [c] = candidatesFor(chair, ['chair'], CALS, ROOM);
+    expect(c.detection.shape).toBe('chair-dining');
+    expect(c.name).toBeUndefined();
+    // premise: the office chair fits this row as well, so the rule is what chose
+    const office = candidatesFor({ ...chair, label: 'office chair' }, ['chair'], CALS, ROOM);
+    expect(office[0]?.detection.shape).toBe('chair-office');
+  });
+
+  it('reaches another kind only where the plain one misfits', () => {
+    const tall = det({ label: 'thing', category: 'bed', slot: 'n', box: [0.375, 0.65, 0.25, 0.2] });
+    const [c] = candidatesFor(tall, ['chair'], CALS, ROOM);
+    expect([c.detection.shape, c.name]).toEqual(['chair-office', 'Office chair']);
+  });
+
+  it('of several kinds that fit where the plain one does not, takes the most comfortable', () => {
+    const row = det({ label: 'thing', category: 'bed', slot: 'n', box: [0.37, 0.68, 0.26, 0.1] });
+    const [c] = candidatesFor(row, ['chair'], CALS, ROOM);
+    const [arm] = candidatesFor({ ...row, label: 'armchair' }, ['chair'], CALS, ROOM);
+    expect(candidatesFor({ ...row, label: 'dining chair' }, ['chair'], CALS, ROOM)).toEqual([]); // premise: plain misfits
+    expect(arm.detection.shape).toBe('chair-armchair'); // premise: and an armchair fits too
+    expect(c.detection.shape).toBe('chair-office');
+    expect(c.margin).toBeGreaterThan(arm.margin);
+  });
+
+  it('leaves words that name a kind alone, fitting or not', () => {
+    // "single bed" at 1.56 m: the user's or the detector's word, not second-guessed.
+    const said = { ...sofa, label: 'single bed' };
+    expect(candidatesFor(said, ['bed'], CALS, ROOM)).toEqual([]);
+    const [kept] = candidatesFor(said, ['bed'], CALS, ROOM, { requireFit: false });
+    expect([kept.detection.shape, kept.name]).toEqual(['bed-single', undefined]);
+    expect(kept.margin).toBeLessThan(0);
+  });
+
+  // The fix leans on one fact the scan screen holds: every label it writes onto an
+  // accepted repair is a category's plain name, which never outvotes a shape the row
+  // carries. Read from the screen itself, since that is where the words live — a
+  // label like "Ceiling light" added there would build every accepted lamp as a
+  // pendant whatever it was measured as.
+  it('the scan screen only ever writes labels that leave the shape alone', () => {
+    const src = readFileSync(join(process.cwd(), 'app/onboarding/detect/page.tsx'), 'utf8');
+    const start = src.indexOf('const MANUAL_CATEGORIES');
+    const table = src.slice(start, src.indexOf('\n];', start));
+    const pairs = [...table.matchAll(/\{ value: '([a-z-]+)', label: '([^']+)' \}/g)].map((m) => [m[1], m[2]] as const);
+    expect(pairs.map(([v]) => v).sort()).toEqual([...CATEGORIES].sort());
+    for (const [value, label] of pairs) {
+      const cat = value as Category;
+      for (const shape of new Set(PART_LIBRARY.filter((p) => p.category === cat).map((p) => p.shape))) {
+        if (shape === 'box') continue;
+        expect([cat, label, sceneShapeFor(cat, label, shape)]).toEqual([cat, label, shape]);
+      }
+    }
   });
 });

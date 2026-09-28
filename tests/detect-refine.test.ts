@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { dedupeDetections, geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
+import {
+  dedupeDetections,
+  geoLocate,
+  geoPlace,
+  geoRefine,
+  refineDetections,
+  type CalMap,
+  type RoomDims,
+} from '@/lib/detect-refine';
 import {
   placeCeilingObject,
   placeFloorObject,
@@ -10,7 +18,7 @@ import {
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { anchorFor } from '@/lib/physics';
-import { CATEGORIES, SHAPES, defaultAxisFor, defaultDepthFor, isRoundPart, type Category } from '@/lib/scene-spec';
+import { CATEGORIES, SHAPES, defaultAxisFor, defaultDepthFor, isRoundPart, sceneShapeFor, type Category } from '@/lib/scene-spec';
 import { bboxOfWallSolid } from './helpers/project';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import { footprintForLayout, type Footprint } from '@/lib/footprint';
@@ -406,41 +414,117 @@ describe('a refused placement', () => {
     expect(refused.position).toBeDefined();
   });
 
-  it('and a refused CLOUD row can change the merge, where an on-device one cannot', () => {
-    // The other half of the same fixture gap. `dedupeDetections` bails only when a
-    // position is MISSING, so a refused row that kept the model's own position is still
-    // compared — and two sightings 0.3 m apart in `painting`'s 0.35 m tier merge to one.
-    // So "two rows in, two rows out, before and after" was true of the fixture, not of
-    // the gate.
-    const near = (view: 'n' | 'e', z: number): Detection => ({
-      ...print(view),
-      position: { x: 2.2, y: 1.5, z },
-    });
-    const merged = refineDetections([near('n', -1.9), near('e', -1.7)], WCALS, ROOM);
+  it('and a refused CLOUD row is located too, so the model’s own position does not decide the merge', () => {
+    // The other half of the same fixture gap, and what `geoLocate` changed about it. A
+    // refused row used to keep the model's own position, so a cloud row merged or did not
+    // on a guess while an on-device one was never compared at all. Both are located now,
+    // from the line of sight: a guess on the far side of the room merges with the print it
+    // was a sighting of, and the survivor is the measured row.
+    const guessed: Detection = { ...print('e'), position: { x: -2.4, y: 1.5, z: 1.6 } };
+    const merged = refineDetections([print('n'), guessed], WCALS, ROOM);
     expect(merged).toHaveLength(1);
+    expect(merged[0].slot).toBe('n');
   });
 
-  it('does NOT change the row count — the duplicate survives either way', () => {
+  it('merges the corner sighting into the measured one, in either photo order', () => {
     // Two sightings of one print, in the ON-DEVICE shape (no `dimMM`, no `position` of
-    // their own). Measured, they are ~1.0 m apart against `painting`'s 0.35 m tier, so
-    // both survive; refused, the second has no position at all and `dedupeDetections`
-    // declines to compare a missing one — so both survive again. Two in, two out, before
-    // and after the gate.
-    //
-    // Scoped to that shape deliberately: the test above shows a refused CLOUD row keeping
-    // its own position and merging. The gate buys size and verdicts, not de-duplication,
-    // and the row count was never its to move — but the reason it does not move here is
-    // the fixture, not the gate, and the first version of this comment claimed the latter.
-    const out = refineDetections([print('n'), print('e')], WCALS, ROOM);
-    expect(out).toHaveLength(2);
+    // their own). Refused, the east one used to come back with no position; `dedupeDetections`
+    // declined to compare a missing one, and the room got the print twice — once where it
+    // hangs and once a corner away, on the east wall, where `startingSpot` put it. Located,
+    // it lands 58 mm from the measured one against `painting`'s 0.35 m tier, and the pair
+    // is one row. The first version of this test pinned two rows and said the count was
+    // never the gate's to move; it was not the gate's, it was the missing position's.
+    for (const order of [['n', 'e'], ['e', 'n']] as const) {
+      const out = refineDetections(order.map((v) => print(v)), WCALS, ROOM);
+      const where = order.join(' then ');
+      expect(out, where).toHaveLength(1);
+      // …and the row that survives is the MEASURED one whichever photo came first. A
+      // located row has a position and no size of its own, so first-come hung the print at
+      // the catalogue's size whenever the east photo was taken before the north one.
+      const [kept] = out;
+      expect(kept.slot, where).toBe('n');
+      expect(kept.dimMM![0], where).toBe(700);
+      expect(kept.dimMM![2], where).toBe(500);
+      expect(kept.position!.x, where).toBeCloseTo(2.2, 9);
+    }
+  });
+});
 
-    const own = out.find((d) => d.slot === 'n')!;
-    expect(own.dimMM![0]).toBe(700);
-    expect(own.dimMM![2]).toBe(500);
-    expect(own.position!.x).toBeCloseTo(2.2, 9);
+// ── Where an unmeasured wall row goes ─────────────────────────────────────────
+//
+// `geoLocate` is the half of `geoPlace` that answers WHERE and never HOW BIG, and it is a
+// separate function because of one contract: `geoRefine` returning the same object is how
+// `lib/label-repair.ts` knows a row went unmeasured. These pin that the two halves stay
+// apart, and which rows `geoLocate` leaves alone.
+describe('geoLocate and geoPlace', () => {
+  const W: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+  const WCALS: CalMap = { n: W, e: W, s: W, w: W };
+  /** A piece on the N wall near the north-east corner, from the east photo. */
+  const corner = (p: Partial<Detection> & Pick<Detection, 'category'>, w = 0.7, h = 0.5, d = 0.03): Detection => ({
+    label: 'thing',
+    conf: 0.9,
+    slot: 'e',
+    box: bboxOfWallSolid('n', 'e', 2.2, 1.5, wallD('n', ROOM), w, h, d, W),
+    ...p,
+  });
 
-    const returned = out.find((d) => d.slot === 'e')!;
-    expect(returned.dimMM).toBeUndefined();
-    expect(returned.position).toBeUndefined();
+  it('gives a refused wall row a place and a heading, and nothing else', () => {
+    const seed = corner({ category: 'painting', shape: 'painting' });
+    expect(geoRefine(seed, WCALS, ROOM)).toBe(seed); // still refused: the identity contract
+    const g = geoLocate(seed, WCALS, ROOM);
+    expect(g).not.toBe(seed);
+    expect(g.position!.z).toBeCloseTo(-2 + defaultDepthFor('painting', 'painting') / 2000, 9);
+    expect(Math.abs(g.position!.x - 2.2)).toBeLessThan(0.15);
+    expect(g.yaw).toBe(0);
+    expect(g.dimMM).toBeUndefined(); // on-device: no size, and none invented
+    // The cloud hint rides through untouched — it is still a hint, and `buildSceneFromRoom`
+    // clamps it like one. What the model said about WHERE does not survive the ray.
+    const cloud = { ...seed, dimMM: [1500, 40, 1100] as [number, number, number], position: { x: 2.9, y: 1.5, z: -1.6 } };
+    const gc = geoLocate(cloud, WCALS, ROOM);
+    expect(gc.dimMM).toEqual([1500, 40, 1100]);
+    expect(gc.position).toEqual(g.position);
+  });
+
+  it('keeps the model’s yaw where it gave one, a deliberate 0 included', () => {
+    expect(geoLocate(corner({ category: 'painting', yaw: 1.23 }), WCALS, ROOM).yaw).toBe(1.23);
+    // A `0` from the model is indistinguishable from the north wall's own heading, so the
+    // `||` mutation is caught on the SOUTH wall instead — the same photo's other edge,
+    // where the located heading is π.
+    const south = corner({
+      category: 'painting',
+      yaw: 0,
+      box: bboxOfWallSolid('s', 'e', -2.2, 1.5, wallD('s', ROOM), 0.7, 0.5, 0.03, W),
+    });
+    expect(geoRefine(south, WCALS, ROOM)).toBe(south);
+    expect(geoLocate({ ...south, yaw: undefined }, WCALS, ROOM).yaw).toBe(Math.PI);
+    expect(geoLocate(south, WCALS, ROOM).yaw).toBe(0);
+  });
+
+  it('locates a curtain, and leaves floor pieces, ceiling pieces and uncalibrated photos alone', () => {
+    // A curtain is a wall piece, and located like one.
+    const curtain = corner({ category: 'curtain', shape: 'curtain' }, 1.4, 2.3, 0.08);
+    expect(geoRefine(curtain, WCALS, ROOM)).toBe(curtain);
+    expect(geoLocate(curtain, WCALS, ROOM).position).toBeDefined();
+    // The ceiling exception `geoRefine` makes, made here too. A curtain reaches the
+    // ceiling anchor only when the detector's shape hint says pendant or fan — its
+    // category's own anchor is 'wall-high', so the row above never asks — and cloth the
+    // model called a pendant still hangs on a wall.
+    const hung = corner({ category: 'curtain', shape: 'lamp-pendant' }, 1.4, 2.3, 0.08);
+    expect(anchorFor('curtain', sceneShapeFor('curtain', hung.label, hung.shape))).toBe('ceiling');
+    expect(geoRefine(hung, WCALS, ROOM)).toBe(hung);
+    expect(geoLocate(hung, WCALS, ROOM).position).toBeDefined();
+    const pendant = corner({ category: 'lamp', shape: 'lamp-pendant' });
+    expect(geoLocate(pendant, WCALS, ROOM)).toBe(pendant);
+    const sofa = det({ category: 'sofa', slot: 'e', box: [0.02, 0.9, 0.1, 0.09] });
+    expect(geoLocate(sofa, WCALS, ROOM)).toBe(sofa);
+    const painting = corner({ category: 'painting' });
+    expect(geoLocate(painting, { n: W }, ROOM)).toBe(painting);
+  });
+
+  it('measures where it can and locates only where it cannot', () => {
+    const own = corner({ category: 'painting', shape: 'painting', slot: 'n', box: bboxOfWallSolid('n', 'n', 2.2, 1.5, wallD('n', ROOM), 0.7, 0.5, 0.03, W) });
+    expect(geoPlace(own, WCALS, ROOM)).toEqual(geoRefine(own, WCALS, ROOM));
+    const seed = corner({ category: 'painting', shape: 'painting' });
+    expect(geoPlace(seed, WCALS, ROOM)).toEqual(geoLocate(seed, WCALS, ROOM));
   });
 });

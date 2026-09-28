@@ -20,15 +20,17 @@ import {
   defaultCal,
   calFromHfov,
   calibrateFromFloorLine,
-  heightFromFloorLine,
+  fitHeightToFloorLine,
   findFloorLine,
   imageAspect,
+  pickLens,
+  type CameraCal,
   type CameraView,
   calibrateFromPhoto,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
-import { geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
-import { judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
+import { geoPlace, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
+import { acceptCandidate, judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
 import { suggestFromLabel } from '@/lib/label-suggest';
 import {
   canRedo,
@@ -41,8 +43,9 @@ import {
   undo as undoStep,
 } from '@/lib/review-history';
 import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
-import { cleanLabelOf, fromRecord, toRecord } from '@/lib/detection-record';
-import { adoptFreshScan } from '@/lib/rescan';
+import { findRepeats, keptAtFirst, sameButColor } from '@/lib/repeat-sightings';
+import { cleanLabelOf, fromRecords, toRecord } from '@/lib/detection-record';
+import { adoptEditedList, adoptFreshScan, listEditSentence } from '@/lib/rescan';
 import { toast } from '@/components/ui/StorageToast';
 import { formatDim } from '@/lib/units';
 import type { DimUnit } from '@/lib/store';
@@ -141,8 +144,19 @@ function slotLabel(slot: CaptureSlot): string {
   return CAPTURE_SLOTS.find((c) => c.id === slot)?.label ?? slot.toUpperCase();
 }
 
+/** A piece's name mid-sentence: "the bed", but "the TV". */
+function inSentence(label: string): string {
+  return /^.[A-Z]/.test(label) ? label : label.charAt(0).toLowerCase() + label.slice(1);
+}
+
 function categoryLabel(cat?: string): string {
   return MANUAL_CATEGORIES.find((c) => c.value === cat)?.label ?? 'Furniture';
+}
+
+/** What a repair is called on its chip and on the row once accepted: its kind's own
+ *  name when it was measured as one ("Double bed"), else its category's. */
+function candidateLabel(cand: LabelCandidate): string {
+  return cand.name ?? categoryLabel(cand.category);
 }
 
 // Per-photo camera calibration. Deterministic at every step — no model decides a
@@ -169,7 +183,8 @@ async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> 
     if (pose?.heightM !== undefined) view.height = pose.heightM;
     if (pose?.tiltDeg !== undefined) view.tiltRad = (pose.tiltDeg * Math.PI) / 180;
 
-    let hfov = pose?.focal35mm !== undefined ? hfovFromFocal35(pose.focal35mm, aspect) : null;
+    const exif = pose?.focal35mm !== undefined ? hfovFromFocal35(pose.focal35mm, aspect) : null;
+    let inferred: number | null = null;
     const vFloor = await findFloorLine(e.cap.blob);
 
     // No EXIF: read the lens out of the photo's own perspective. This is the path
@@ -178,19 +193,22 @@ async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> 
     // TILT as well, the only source of one for a photo that was not taken inside
     // this app; a measured device tilt still wins, being a direct observation
     // rather than an inference.
-    if (hfov === null) {
+    if (exif === null) {
       const vp = await calibrateFromPhoto(e.cap.blob);
       if (vp) {
-        hfov = vp.hfovDeg;
+        inferred = vp.hfovDeg;
         if (view.tiltRad === undefined) view.tiltRad = (vp.tiltDeg * Math.PI) / 180;
       }
     }
 
-    if (hfov !== null) {
-      let cal = calFromHfov(hfov, aspect, view);
+    // Only EXIF MEASURED the lens. The vanishing points inferred one, from the
+    // premise that the photo is not square-on to its wall — which the capture flow
+    // asks for — so it is as open to doubt as the default.
+    const picked = pickLens(exif, inferred);
+    if (picked !== null) {
+      let cal: CameraCal = { ...calFromHfov(picked.hfov, aspect, view), lens: picked.lens };
       if (view.height === undefined && vFloor !== null) {
-        const solved = heightFromFloorLine(vFloor, e.slot, room.footprint, cal);
-        if (solved !== null) cal = { ...cal, height: solved };
+        cal = fitHeightToFloorLine(vFloor, e.slot, room.footprint, cal) ?? cal;
       }
       map[e.slot] = cal;
       continue;
@@ -299,8 +317,9 @@ export default function DetectPage() {
   const [saving, setSaving] = useState(false);
   const [slots, setSlots] = useState<SlotEntry[]>([]);
   const [detections, setDetections] = useState<Detection[]>([]);
-  // Persisted as `locked` on RoomData.detectedObjects — "confirmed" is the same
-  // flag in the user's words: a piece they've said is really in the room.
+  // Persisted as `locked` on RoomData.detectedObjects, and it means KEPT: only these
+  // rows are built into the room (`buildSceneFromRoom`). An unkept row stays on the
+  // list, so a wrong guess or a second sighting costs one tap to bring back.
   const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
   const [activeSlot, setActiveSlot] = useState<CaptureSlot>('n');
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -316,6 +335,11 @@ export default function DetectPage() {
   // the room's real dimensions. Used on fresh detections and manual adds.
   const [cals, setCals] = useState<CalMap>({});
   const [roomDims, setRoomDims] = useState<RoomDims | null>(null);
+  // The room still stands at its shape's typical size (`RoomData.roughSize`). Every
+  // size read off a wall or the floor line scales with how far away the wall is
+  // assumed to be, so "measured at real size" would be a claim this screen cannot
+  // make — the header says what the sizes are instead.
+  const [roughSize, setRoughSize] = useState(false);
   const padRef = useRef<HTMLButtonElement>(null);
   // Flipped by Stop so an in-flight run stops writing to state.
   const stopped = useRef(false);
@@ -367,6 +391,7 @@ export default function DetectPage() {
 
       // CACHE: if this room already has detections, skip the API call entirely.
       const room = await roomStore.loadRoom(roomId);
+      if (!cancelled) setRoughSize(room?.roughSize === true);
       // Calibrate every photo up front (floor-line → exact, else default FOV)
       // so geometry-derived dims are available to detections + manual adds.
       let calMap: CalMap = {};
@@ -451,13 +476,11 @@ export default function DetectPage() {
           for (const d of refined) if (d.uid) runUids.current.add(d.uid);
           // Which rows to tick before the user has looked at them. The whole policy
           // lives in lib/detect-confidence.ts, because it was three unrelated
-          // confidence scales being compared against one literal here.
+          // confidence scales being compared against one literal here — and a row
+          // that is probably another row seen again starts unticked, so one bed
+          // photographed from three walls is one bed (lib/repeat-sightings.ts).
           const judged = judgeLabels(refined, calMap, dims);
-          const marks = new Set<number>();
-          refined.forEach((d, i) => {
-            if (shouldAutoConfirm(d, judged[i].status)) marks.add(i);
-          });
-          setConfirmed(marks);
+          setConfirmed(keptAtFirst(refined, refined.map((d, i) => shouldAutoConfirm(d, judged[i].status)), dims, calMap));
           if (secondLookFailed) {
             setNotice({
               code: 'SECOND_LOOK_FAILED',
@@ -501,7 +524,7 @@ export default function DetectPage() {
       // on arriving — and say so, with the way to look again, because **Re-scan** in
       // the studio lands here and used to show the old list as though it were new.
       if (room?.detectedObjects && room.detectedObjects.length > 0) {
-        setDetections(keyed(room.detectedObjects.map(fromRecord)));
+        setDetections(fromRecords(room.detectedObjects));
         setConfirmed(new Set(room.detectedObjects.map((d, i) => (d.locked ? i : -1)).filter((x) => x >= 0)));
         setPath('cache');
         setNotice({
@@ -579,11 +602,33 @@ export default function DetectPage() {
     });
   }
 
+  /** `detections` as the two memos below read it: the same list until something they
+   *  measure changes, so the colour fill's write does not run the repeat check again.
+   *  State adjusted during render, React's pattern for deriving from a changing value;
+   *  it settles in one pass because the adjusted value then matches. */
+  const [measuredRows, setMeasuredRows] = useState(detections);
+  if (!sameButColor(measuredRows, detections)) setMeasuredRows(detections);
+
   // Only the geometry may accuse a word, and only the user may change it. The
   // verdicts are recomputed from `detections` rather than stored on them: a
   // verdict is about the current measurement, so persisting one would let a stale
   // accusation outlive the row it was about.
-  const verdicts = useMemo(() => judgeLabels(detections, cals, roomDims), [detections, cals, roomDims]);
+  const verdicts = useMemo(() => judgeLabels(measuredRows, cals, roomDims), [measuredRows, cals, roomDims]);
+
+  /** Which row each row probably repeats — the same piece seen from another wall,
+   *  or read twice from one photo. Ranked by the confidence policy rather than by
+   *  the current ticks, so a row's note does not move when the user ticks it: the
+   *  note is about the photographs, and a tick is not new evidence about them. */
+  const repeats = useMemo(
+    () =>
+      findRepeats(
+        measuredRows,
+        measuredRows.map((d, i) => shouldAutoConfirm(d, (verdicts[i] ?? { status: 'unmeasured' }).status)),
+        roomDims,
+        cals,
+      ),
+    [measuredRows, verdicts, roomDims, cals],
+  );
 
   /** A model offered because of what the user just TYPED, rather than because the
    *  measurement disagreed. Held on the page and not per row because only one rename
@@ -664,7 +709,7 @@ export default function DetectPage() {
     // INDICES, so reordering here would silently move every confirmation onto a
     // different piece of furniture.
     setDetections((arr) =>
-      arr.map((x, idx) => (idx === i ? { ...cand.detection, label: categoryLabel(cand.category) } : x)),
+      arr.map((x, idx) => (idx === i ? acceptCandidate(x, cand, candidateLabel(cand)) : x)),
     );
   }
 
@@ -720,9 +765,9 @@ export default function DetectPage() {
     };
     // Zero-AI path: the drawn box + calibrated camera give real position and
     // W/H directly. Works offline, no key needed.
-    if (roomDims) det = geoRefine(det, cals, roomDims);
+    if (roomDims) det = geoPlace(det, cals, roomDims);
     setDetections((d) => [...d, det]);
-    // A piece the user drew themselves is confirmed by definition.
+    // A piece the user drew themselves is kept by definition.
     setConfirmed((prev) => new Set(prev).add(detections.length));
     setPending(null);
     // Stay armed: whoever is adding by hand is usually adding several.
@@ -803,7 +848,11 @@ export default function DetectPage() {
             ttl: 14000,
           });
       } else {
-        await roomStore.saveRoom({ ...room, detectedObjects: flat });
+        // The list the room was already built from, edited or not. A room the studio
+        // has arranged loads its saved scene over the list, so the edit has to be
+        // carried into that scene or a tick changed here never reaches the room.
+        const edit = await adoptEditedList(room, flat);
+        if (edit) toast({ title: 'Your room now matches this list', message: listEditSentence(edit), ttl: 9000 });
       }
       router.push(`/room/${roomId}/model`);
     } finally {
@@ -816,6 +865,7 @@ export default function DetectPage() {
     .map((d, i) => ({ d, i }))
     .filter((x) => x.d.slot === activeSlot);
   const total = detections.length;
+  const keptCount = confirmed.size;
   const photoCount = slots.length;
 
   // Truthful for the path actually taken, and on screen for the whole upload.
@@ -832,7 +882,16 @@ export default function DetectPage() {
     ? `Looking through your ${photoCount === 1 ? 'photo' : `${photoCount} photos`}…`
     : total === 0
       ? 'No pieces yet'
-      : `${total} ${total === 1 ? 'piece' : 'pieces'} in this room`;
+      : `${keptCount} of ${total} ${total === 1 ? 'piece' : 'pieces'} kept`;
+  // The button says what pressing it will build, because the three outcomes differ
+  // and only one of them is obvious: kept pieces, an empty room when every row was
+  // left out, and the starter arrangement when the list itself is empty.
+  const continueLabel =
+    total === 0
+      ? 'Continue to the studio'
+      : keptCount === 0
+        ? 'Continue with an empty room'
+        : `Continue with ${keptCount} ${keptCount === 1 ? 'piece' : 'pieces'}`;
 
   const linkedBox = linked !== null && detections[linked]?.slot === activeSlot ? detections[linked].box : null;
 
@@ -840,7 +899,7 @@ export default function DetectPage() {
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
       {/* .chrome-bar wraps instead of overflowing when the viewport narrows. */}
       <header className="chrome-bar">
-        {/* No `markHref`, deliberately: this page's whole review — confirmations,
+        {/* No `markHref`, deliberately: this page's whole review — what is kept,
             edits, boxes added by hand — lives in component state until `finish()`
             writes it, so a stray click on a logo would discard it. Back is an
             explicit, high-intent control; a logo is not. */}
@@ -870,7 +929,7 @@ export default function DetectPage() {
         {/* The way out of onboarding is the loudest thing here — it used to be a
             32px ghost-weight button, quieter than the add-a-box tool. */}
         <button onClick={finish} disabled={running || saving} className="ds-btn ds-btn--accent">
-          {saving ? 'Opening your room…' : 'Continue to the studio'}
+          {saving ? 'Opening your room…' : continueLabel}
           <Icon name="arrow-right" size={13} />
         </button>
       </header>
@@ -879,7 +938,11 @@ export default function DetectPage() {
         <StepHeader
           kicker="Last step"
           title="Check your furniture"
-          subtitle="Everything Danmu found, measured at real size. Confirm what’s yours, drop what isn’t, and add anything it missed."
+          subtitle={
+            roughSize
+              ? 'Everything Danmu found, sized for a typical room of this shape, so sizes are rough. Only the pieces you keep go into your room, so leave out anything that isn’t yours and add anything it missed.'
+              : 'Everything Danmu found, measured at real size. Only the pieces you keep go into your room, so leave out anything that isn’t yours and add anything it missed.'
+          }
         />
         {privacyLine && (
           <p
@@ -1142,8 +1205,8 @@ export default function DetectPage() {
               {total > 0 && <span className="section-meta mono">{total}</span>}
             </div>
             <p className="t-meta" style={{ margin: 0, lineHeight: 1.45 }}>
-              Confirmed pieces are the ones you’ve said are really in the room. Danmu confirms the clearest ones for
-              you.
+              Only kept pieces go into your room. Danmu keeps the clearest ones for you; the rest wait here until
+              you say.
             </p>
           </div>
 
@@ -1155,12 +1218,19 @@ export default function DetectPage() {
                 pieces.
               </div>
             )}
+            {total > 0 && keptCount === 0 && !running && (
+              <div className="t-small" style={{ padding: '4px 12px 10px', lineHeight: 1.5 }}>
+                <b style={{ display: 'block', marginBottom: 4, color: 'var(--ink)' }}>Nothing kept yet</b>
+                Your room will open empty. Press + beside a piece to keep it.
+              </div>
+            )}
             {detections.map((d, i) => (
               <DetectionRow
                 key={d.uid ?? `row-${i}`}
                 d={d}
                 confirmed={confirmed.has(i)}
                 verdict={verdicts[i] ?? { status: 'unmeasured' }}
+                repeatOf={repeats[i] == null ? null : (detections[repeats[i]] ?? null)}
                 dimUnit={dimUnit}
                 onRepair={(cand) => applyRepair(i, cand)}
                 offer={offer?.index === i ? offer.candidates : EMPTY_OFFER}
@@ -1249,6 +1319,7 @@ function DetectionRow({
   d,
   confirmed,
   verdict,
+  repeatOf,
   dimUnit,
   highlighted,
   onThisPhoto,
@@ -1264,6 +1335,9 @@ function DetectionRow({
   d: Detection;
   confirmed: boolean;
   verdict: LabelVerdict;
+  /** The row this one is probably a second sighting of — see
+   *  lib/repeat-sightings.ts. Null for a piece in its own right. */
+  repeatOf: Detection | null;
   dimUnit: DimUnit;
   highlighted: boolean;
   onThisPhoto: boolean;
@@ -1324,12 +1398,12 @@ function DetectionRow({
       {/* Was the whole row as a `div onClick`: unreachable by keyboard and with
           no state announced. Now a real toggle with aria-pressed. */}
       <IconButton
-        icon={confirmed ? 'lock' : 'unlock'}
-        label={`Confirm ${label}`}
+        icon={confirmed ? 'check' : 'plus'}
+        label={`Keep ${label}`}
         title={
           confirmed
-            ? 'Confirmed: this piece goes into your room as measured'
-            : 'Confirm this piece is really in your room'
+            ? 'Kept: this piece goes into your room as measured'
+            : 'Not kept: it stays on this list and out of your room'
         }
         active={confirmed}
         onClick={onToggle}
@@ -1358,6 +1432,21 @@ function DetectionRow({
               claim. */}
           {categoryLabel(d.category)} · {slotLabel(d.slot)} · {sourceLabel(sourceOf(d))}
         </div>
+        {/* Why this row started unticked, when that is the reason. Said rather than
+            acted on — it is still on the list, one tap from kept, because a real
+            piece that never appears is worse than a duplicate. Wraps rather than
+            clips: the sentence is as long as two piece names make it. */}
+        {repeatOf && (
+          <div
+            className="t-hint"
+            style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 3, lineHeight: 1.45 }}
+          >
+            <Icon name="copy" size={11} style={{ flex: '0 0 auto', marginTop: 2 }} />
+            <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
+              Probably the {inSentence(cleanLabelOf(repeatOf))} from {slotLabel(repeatOf.slot)} again
+            </span>
+          </div>
+        )}
         {/* The measurement disagreeing with the word. Said out loud rather than
             acted on: a silent re-label is the same mistake as a silent resize.
             Wraps rather than clips — the sentence is as long as the unit setting
@@ -1383,10 +1472,10 @@ function DetectionRow({
                 key={cand.category}
                 onClick={() => onRepair(cand)}
                 className="ds-chip"
-                title={`Measure this again as ${categoryLabel(cand.category)}`}
+                title={`Measure this again as ${candidateLabel(cand)}`}
                 style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px', flex: '0 0 auto' }}
               >
-                {categoryLabel(cand.category)}?
+                {candidateLabel(cand)}?
               </button>
             ))}
           </div>
@@ -1427,8 +1516,8 @@ function DetectionRow({
                 // that do fit, so a caveated chip is never the first thing offered.
                 title={
                   cand.margin < 0
-                    ? `Use the ${categoryLabel(cand.category)} model, though what the camera measured is not ${categoryLabel(cand.category).toLowerCase()}-sized`
-                    : `Use the ${categoryLabel(cand.category)} model and measure it again`
+                    ? `Use the ${candidateLabel(cand)} model, though what the camera measured is not ${candidateLabel(cand).toLowerCase()}-sized`
+                    : `Use the ${candidateLabel(cand)} model and measure it again`
                 }
                 style={{
                   height: 22,
@@ -1438,7 +1527,7 @@ function DetectionRow({
                   ...(cand.margin < 0 ? { color: 'var(--warn-text)' } : null),
                 }}
               >
-                Use {categoryLabel(cand.category)}
+                Use {candidateLabel(cand)}
                 {cand.margin < 0 ? '?' : ''}
               </button>
             ))}

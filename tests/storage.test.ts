@@ -14,7 +14,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { clear, keys, set } from 'idb-keyval';
-import { roomStore, ROOM_SCHEMA_VERSION, type RoomData } from '@/lib/storage';
+import { markRoughSize, roomStore, ROOM_SCHEMA_VERSION, type RoomData } from '@/lib/storage';
 
 function room(id: string, over: Partial<RoomData> = {}): RoomData {
   return {
@@ -54,8 +54,72 @@ describe('saveRoom / loadRoom', () => {
     expect(back?.version).toBe(ROOM_SCHEMA_VERSION);
   });
 
+  // Schema 2 changed what `detectedObjects[].locked` means: from "confirmed" (every
+  // row built, ticked or not) to "kept" (only these are built). A record written
+  // before it must read back with every row kept, or opening an old room quietly
+  // deletes every piece nobody got round to ticking.
+  describe('a room saved before "kept" meant kept', () => {
+    const rows = [
+      { id: 0, label: 'bed__slot:n', conf: 0.9, locked: true, box: [0.1, 0.4, 0.3, 0.3] as [number, number, number, number] },
+      { id: 1, label: 'rug__slot:n', conf: 0.5, locked: false, box: [0.5, 0.6, 0.3, 0.3] as [number, number, number, number] },
+    ];
+    // Written raw, the way an older build left it, so `saveRoom`'s stamp cannot help.
+    const writeOld = (version: number | undefined) =>
+      set('room:old:meta', { ...room('old'), version, detectedObjects: rows });
+
+    it.each([[1], [undefined]])('reads version %s back with every row kept', async (version) => {
+      await writeOld(version);
+      const back = await roomStore.loadRoom('old');
+      expect(back?.detectedObjects?.map((d) => d.locked)).toEqual([true, true]);
+      expect(back?.detectedObjects?.map((d) => d.label)).toEqual(['bed__slot:n', 'rug__slot:n']);
+    });
+
+    it('keeps them kept through a rename, which re-stamps the version', async () => {
+      // The rename is the dangerous write: it stamps the record current, so if it
+      // copied the old rows across unmigrated, the next load would believe them.
+      await writeOld(1);
+      await roomStore.renameRoom('old', 'Bedroom');
+      const back = await roomStore.loadRoom('old');
+      expect(back?.name).toBe('Bedroom');
+      expect(back?.version).toBe(ROOM_SCHEMA_VERSION);
+      expect(back?.detectedObjects?.map((d) => d.locked)).toEqual([true, true]);
+    });
+
+    it('leaves a current record alone, so a dropped piece stays dropped', async () => {
+      await roomStore.saveRoom({ ...room('new'), detectedObjects: rows });
+      const back = await roomStore.loadRoom('new');
+      expect(back?.detectedObjects?.map((d) => d.locked)).toEqual([true, false]);
+    });
+  });
+
+  // Three studio writers edit this one record — the name, the size, the shell —
+  // each changing a field or two of what is stored. Started together, as a rename
+  // pressed while the studio's save of "These are right" is in flight, each must see
+  // the other's write: as a read then a write, whichever read first and wrote last
+  // put back what the other had changed, and the rough-size note came back.
+  it('lets a rename and a size save started together both land', async () => {
+    await roomStore.saveRoom(room('a', { roughSize: true }));
+    await Promise.all([
+      roomStore.renameRoom('a', 'Kitchen'),
+      roomStore.editRoom('a', (r) => markRoughSize({ ...r, width: 5 }, false)),
+    ]);
+    const back = await roomStore.loadRoom('a');
+    expect(back?.name).toBe('Kitchen');
+    expect(back?.width).toBe(5);
+    expect(back && 'roughSize' in back).toBe(false);
+  });
+
+  it('hands back the record as written, migrated and stamped', async () => {
+    await set('room:old:meta', { ...room('old'), version: 1, detectedObjects: [{ id: 0, label: 'bed', conf: 0.9, locked: false, box: [0, 0, 1, 1] }] });
+    const written = await roomStore.editRoom('old', (r) => ({ ...r, width: 5 }));
+    expect(written?.width).toBe(5);
+    expect(written?.version).toBe(ROOM_SCHEMA_VERSION);
+    expect(written?.detectedObjects?.map((d) => d.locked)).toEqual([true]);
+    expect(await roomStore.loadRoom('old')).toEqual(written);
+  });
+
   it('ignores a rename for a room that is not there', async () => {
-    await roomStore.renameRoom('ghost', 'Nope');
+    expect(await roomStore.renameRoom('ghost', 'Nope')).toBeUndefined();
     expect(await roomStore.loadRoom('ghost')).toBeUndefined();
     expect((await keys()).length).toBe(0);
   });
@@ -110,13 +174,21 @@ describe('listRooms', () => {
   });
 
   it('sorts most-recently-touched first', async () => {
-    await roomStore.saveRoom(room('a'));
-    await roomStore.saveRoom(room('b'));
-    await roomStore.saveRoom(room('c'));
-    // Touch 'a' last.
-    await roomStore.renameRoom('a', 'Newest');
-    const ids = (await roomStore.listRooms()).map((r) => r.id);
-    expect(ids[0]).toBe('a');
+    // A clock that moves, so the order is the stamps' and not a tie broken by chance:
+    // saved in one millisecond, 'a' came first with the rename's stamp or without it.
+    let now = 1_000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => (now += 10));
+    try {
+      await roomStore.saveRoom(room('a'));
+      await roomStore.saveRoom(room('b'));
+      await roomStore.saveRoom(room('c'));
+      expect((await roomStore.listRooms()).map((r) => r.id)).toEqual(['c', 'b', 'a']);
+      // Touch 'a' last.
+      await roomStore.renameRoom('a', 'Newest');
+      expect((await roomStore.listRooms()).map((r) => r.id)).toEqual(['a', 'c', 'b']);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it('skips a room whose meta is gone but whose other keys linger', async () => {
