@@ -24,7 +24,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { refineDetections, type CalMap } from '@/lib/detect-refine';
-import { findRepeats, keptAtFirst, REPEAT_SHARE, SWEPT_HFOV_DEG } from '@/lib/repeat-sightings';
+import { findRepeats, keptAtFirst, REPEAT_SHARE, sweptSolids, SWEPT_HFOV_DEG } from '@/lib/repeat-sightings';
 import { footArea, footFromPart, footIntersectionArea } from '@/lib/geometry';
 import { PLAUSIBLE_HFOV_DEG, type CameraCal, type LensSource } from '@/lib/photo-geometry';
 import { startingSpot } from '@/lib/scene-spec';
@@ -408,7 +408,8 @@ const piece = (
   x: number,
   z: number,
   dimMM: [number, number, number],
-): Truth => ({ name, label: name, category, shape, x, z, dimMM, slots: ['n', 'e'] });
+  y?: number,
+): Truth => ({ name, label: name, category, shape, x, z, y, dimMM, slots: ['n', 'e'] });
 
 describe('findRepeats — a lens nobody measured', () => {
   // Every photo here is taken on the known room's 106° ultrawide and read by a phone
@@ -420,11 +421,19 @@ describe('findRepeats — a lens nobody measured', () => {
   // lens a phone could have, and the best agreement is the answer.
   //
   // Each kind is read twice per photo, the second time under another word and a
-  // taller box, so the hard merge keeps all four rows. The bookshelf is not here:
+  // taller box, so the hard merge leaves the pair across photos to this rule. (A wall
+  // piece's two readings from one photo can hang at one spot on its wall, and the
+  // hard merge takes those — the TV and the curtain here — which still leaves one
+  // row per photo for the sweep, as the control below shows.) The bookshelf is not here:
   // one is cut off by the edge of the east photo at any position this room has, and
-  // the cut-off sighting disagrees at every lens (filed as B2d). Nor are wall pieces:
-  // on an ultrawide, the east photo sees a north-wall piece on the return wall, and
-  // what the geometry does with that is a placement question (B2c), not this one.
+  // the cut-off sighting disagrees at every lens (filed as B2d).
+  //
+  // The wall pieces sit near the north-east corner, which is the case they are here
+  // for: on the 106° the east photo sees them on the RETURN wall, so at the true lens
+  // that sighting is refused as a measurement and located where its line of sight
+  // meets the north wall. At the assumed 66° the same sighting fits the east wall and
+  // is measured there. The sweep re-asks the camera at every lens from the box alone,
+  // and at the true one the two sightings hang on one stretch of the north wall.
   const KINDS: [Truth, string][] = [
     [piece('sofa', 'sofa', 'sofa', 1.8, -1.6, [2000, 850, 800]), 'couch'],
     [piece('wardrobe', 'wardrobe', 'wardrobe', 2.4, -2.65, [1200, 600, 2000]), 'closet'],
@@ -436,6 +445,10 @@ describe('findRepeats — a lens nobody measured', () => {
     [piece('plant', 'plant', 'plant', 2.5, -2.2, [400, 400, 900]), 'houseplant'],
     [piece('ottoman', 'ottoman', 'ottoman', 1.3, -1.4, [600, 600, 450]), 'pouf'],
     [piece('bed', 'bed', 'bed-double', 1.5, -1.5, [1600, 2000, 500]), 'double bed'],
+    [piece('tv', 'tv', 'tv', 2.3, -3.0, [1200, 80, 700], 1.2), 'television'],
+    [piece('painting', 'painting', 'painting', 2.5, -3.0, [700, 40, 500], 1.5), 'picture'],
+    [piece('mirror', 'mirror', 'mirror', 2.8, -3.0, [600, 30, 1400], 1.2), 'wall mirror'],
+    [piece('curtain', 'curtain', 'curtain', 2.2, -3.0, [1400, 80, 2300], 1.45), 'drapes'],
     [piece('pendant', 'lamp', 'lamp-pendant', 1.5, -1.5, [500, 500, 300]), 'ceiling light'],
     [piece('fan', 'fan', 'fan', 1.5, -1.5, [1000, 1000, 200]), 'ceiling fan'],
   ];
@@ -470,6 +483,23 @@ describe('findRepeats — a lens nobody measured', () => {
     // one moves both.
     expect(PLAUSIBLE_HFOV_DEG).toEqual({ min: 30, max: 120 });
     expect([SWEPT_HFOV_DEG[0], SWEPT_HFOV_DEG[SWEPT_HFOV_DEG.length - 1], SWEPT_HFOV_DEG.length]).toEqual([30, 120, 46]);
+  });
+
+  it('asks a lens the camera could not place at for nothing, not for the assumed lens’s answer', () => {
+    // A pendant halfway to the north wall, on the 106°. At the assumed 66° it is
+    // placed, near the plaster. Every narrower lens puts it beyond the wall, and the
+    // ceiling placer refuses — so at those lenses the sweep must have no place for it.
+    // A sweep that re-asked from the refined row rather than from its box would be
+    // handed the 66° answer back by every refusal and compare that instead.
+    const pendant = piece('pendant', 'lamp', 'lamp-pendant', 1.5, -1.5, [500, 500, 300]);
+    const cals = every(lens(66, 'assumed'));
+    const [placed] = refineDetections([seen(pendant, 'n', CAL)], cals, ROOM);
+    expect(placed.position).toBeDefined();
+    const swept = sweptSolids(placed, ROOM, cals)!;
+    const refused = SWEPT_HFOV_DEG.filter((_, i) => swept[i] === null);
+    expect([refused[0], refused[refused.length - 1], refused.length]).toEqual([30, 64, 18]);
+    expect(swept[SWEPT_HFOV_DEG.indexOf(66)]).not.toBeNull();
+    expect(swept[SWEPT_HFOV_DEG.indexOf(106)]).not.toBeNull();
   });
 
   it('holds a photo whose lens was measured where it was measured', () => {
@@ -586,10 +616,10 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
     console.log(`findRepeats over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
     expect(got).toEqual([
       [575, 0, 0, 2, 0, 10],
-      [993, 252, 249, 35, 83, 37],
-      [993, 252, 79, 11, 77, 21],
-      [989, 464, 460, 41, 152, 41],
-      [989, 464, 148, 4, 143, 6],
+      [993, 252, 249, 35, 27, 37],
+      [993, 252, 23, 11, 21, 21],
+      [989, 464, 460, 41, 49, 41],
+      [989, 464, 43, 4, 38, 6],
     ]);
   });
 });

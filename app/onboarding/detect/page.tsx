@@ -29,7 +29,7 @@ import {
   calibrateFromPhoto,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
-import { geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
+import { geoPlace, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
 import { suggestFromLabel } from '@/lib/label-suggest';
 import {
@@ -747,7 +747,7 @@ export default function DetectPage() {
     };
     // Zero-AI path: the drawn box + calibrated camera give real position and
     // W/H directly. Works offline, no key needed.
-    if (roomDims) det = geoRefine(det, cals, roomDims);
+    if (roomDims) det = geoPlace(det, cals, roomDims);
     setDetections((d) => [...d, det]);
     // A piece the user drew themselves is kept by definition.
     setConfirmed((prev) => new Set(prev).add(detections.length));

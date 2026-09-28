@@ -7,6 +7,7 @@ import {
   wallRowAtHeight,
   calibrateFromFloorLine,
   heightFromFloorLine,
+  locateOnWall,
   placeCeilingObject,
   placeFloorObject,
   placeWallObject,
@@ -2009,5 +2010,234 @@ describe('§ 44 · reading the polygon instead of its bounding box', () => {
       9,
     );
     expect(at('§ 44').dist - at('shipped').dist, 'the headline: 500 mm').toBeCloseTo(0.5, 9);
+  });
+});
+
+// ── Where a return-wall piece hangs ───────────────────────────────────────────
+//
+// `placeWallObject` refuses a piece the photo caught on a wall it was not pointed at,
+// and the room then had nowhere to hang it but the wall it WAS pointed at — a phantom
+// a corner away from the real one. `locateOnWall` answers where it is instead, from
+// the line of sight through the box's centre and the room's own outline. Every
+// fixture below is a POINT on the body's mid-plane with a box drawn round its image,
+// because the claim under test is the ray-to-wall arithmetic: a box's centre is not
+// the image of its body's centre under perspective, and a fixture that mixed the two
+// would be measuring the fixture.
+describe('locateOnWall', () => {
+  const EPS = 1e-4;
+  /** A detector box a hair wide, centred on the image of one world point. */
+  const at = (view: CaptureSlot, x: number, y: number, z: number, c: CameraCal) => {
+    const [u, v] = project(view, x, y, z, c);
+    return [u - EPS, v - EPS, 2 * EPS, 2 * EPS] as [number, number, number, number];
+  };
+  const tilted = (deg: number): CameraCal => ({ ...WIDE, tiltRad: (deg * Math.PI) / 180 });
+  const DEPTH = 0.08;
+
+  /** The mid-plane point `along` metres from the middle of wall `wall` in the 6 × 4
+   *  room, and the heading of that wall — written out rather than derived, so the
+   *  yaw convention is stated here and not read off the code under test. */
+  const onWall = (wall: CaptureSlot, along: number): [number, number, number] => {
+    const inset = DEPTH / 2;
+    if (wall === 'n') return [along, -2 + inset, 0];
+    if (wall === 's') return [along, 2 - inset, Math.PI];
+    if (wall === 'e') return [3 - inset, along, -Math.PI / 2];
+    return [-3 + inset, along, Math.PI / 2];
+  };
+
+  it('finds the wall the line of sight meets, from every photo that sees it', () => {
+    // Every (photo, wall) pair where the spot is in shot: the framed wall itself, and the
+    // return walls, which are the case this function exists for. A 106° lens, three tilts,
+    // and two off-centre spots per wall, one each side, so a swapped axis cannot pass and
+    // the east and west photos each reach a return wall at BOTH edges of the frame. (The
+    // north and south photos reach neither: from 1.96 m a 106° lens spans 5.2 m of a 6 m
+    // wall, so their return walls are out of shot, which is the room and not a gap.)
+    const walls: Array<[CaptureSlot, number]> = [
+      ['n', 2.2], ['n', -2.4], ['s', -1.9], ['s', 2.3],
+      ['e', -1.3], ['e', 1.2], ['w', 1.1], ['w', -1.4],
+    ];
+    let located = 0;
+    let returnWall = 0;
+    for (const view of ['n', 'e', 's', 'w'] as const) {
+      for (const [wall, along] of walls) {
+        for (const deg of [0, 5, -8]) {
+          const c = tilted(deg);
+          const [x, z, yaw] = onWall(wall, along);
+          // Only what the photo actually has in frame. `project` answers for a point
+          // BEHIND the lens too — mirrored, in frame — so ahead-of-the-lens is its own
+          // test, written out per view like the yaw above.
+          const ahead = { n: -z, s: z, e: x, w: -x }[view];
+          if (!(ahead > 0)) continue;
+          const box = at(view, x, 1.4, z, c);
+          if (!(box[0] > 0 && box[0] + box[2] < 1 && box[1] > 0 && box[1] + box[3] < 1)) continue;
+          const g = locateOnWall(box, view, ROOM.footprint, c, { depthM: DEPTH });
+          const where = `${wall} wall from the ${view} photo at ${deg}°`;
+          expect(g, where).not.toBeNull();
+          expect(g!.position.x, where).toBeCloseTo(x, 3);
+          expect(g!.position.z, where).toBeCloseTo(z, 3);
+          expect(g!.position.y, where).toBeCloseTo(1.4, 3);
+          // `toBe`, not `toBeCloseTo`: −0 and −π are the same heading and not the same
+          // number, and `slotToWorld` hands out 0 and π.
+          expect(g!.yaw, where).toBe(yaw);
+          located++;
+          if (wall !== view) returnWall++;
+        }
+      }
+    }
+    // Literals, so a fixture change that quietly drops the return walls out of frame
+    // fails here rather than passing on the framed-wall cases alone.
+    expect([located, returnWall]).toEqual([36, 12]);
+  });
+
+  it('places the piece where `placeWallObject` refused to measure it', () => {
+    // The fixture the refusal is filed with: a 700 × 500 print 800 mm from the north-east
+    // corner, which the east photo catches on its return wall. Measured, it was 28% too
+    // wide; refused, it was hung on the east wall. Located, it is on the north wall where
+    // it is, and its size is still nobody's claim.
+    const c = WIDE;
+    const box = bboxOfWallSolid('n', 'e', 2.2, 1.5, wallD('n', ROOM), 0.7, 0.5, 0.03, c);
+    expect(placeWallObject(box, 'e', ROOM.footprint, c, { depthM: 0.03 })).toBeNull();
+    const g = locateOnWall(box, 'e', ROOM.footprint, c, { depthM: 0.03 })!;
+    expect(g.yaw).toBe(0); // the north wall, facing into the room
+    expect(g.position.z).toBeCloseTo(-2 + 0.015, 9); // on its mid-plane, exactly
+    // Along the wall and up it, only as close as a box centre is to its body's centre
+    // at a grazing 54°: the ray is exact, the point it is fired through is not.
+    expect(Math.abs(g.position.x - 2.2)).toBeLessThan(0.15);
+    expect(Math.abs(g.position.y - 1.5)).toBeLessThan(0.05);
+  });
+
+  it('solves on the wall itself, so a wall that is not square to the photo is exact', () => {
+    // A room with its north-east corner cut at 45°. Solving against the framed wall's
+    // distance, or against an axis, would land the piece off this wall by up to half
+    // its length; solving on the wall's own line moved in along its normal cannot.
+    const cut: Footprint = [[-3, -2], [2, -2], [3, -1], [3, 2], [-3, 2]];
+    const [nx, nz] = [Math.SQRT1_2, -Math.SQRT1_2]; // outward
+    const mid = [2.5 - (nx * DEPTH) / 2, -1.5 - (nz * DEPTH) / 2] as const;
+    for (const view of ['e', 'n'] as const) {
+      const c = view === 'n' ? calFromHfov(120, 4 / 3) : WIDE;
+      const box = at(view, mid[0], 1.2, mid[1], c);
+      const g = locateOnWall(box, view, cut, c, { depthM: DEPTH })!;
+      expect(g, view).not.toBeNull();
+      expect(g.position.x, view).toBeCloseTo(mid[0], 3);
+      expect(g.position.z, view).toBeCloseTo(mid[1], 3);
+      expect(g.yaw, view).toBeCloseTo(-Math.PI / 4, 9);
+    }
+  });
+
+  it('refuses a line of sight that leaves the room', () => {
+    // A U-shaped room stands the lens ON the notch's inner wall (filed as a mis-placed
+    // camera), so the east photo's left half looks out through the notch. A ray there
+    // first crosses the notch's side wall from OUTSIDE, and whatever the box shows is
+    // not on this room's walls.
+    const u = footprintForLayout('u', 6, 5);
+    const c = WIDE;
+    const out = at('e', 2.0, 1.4, -0.8, c);
+    expect(out[0] + out[2] / 2).toBeLessThan(0.5); // the left half: toward the notch
+    expect(locateOnWall(out, 'e', u, c, { depthM: DEPTH })).toBeNull();
+    // The right half of the same photo looks into the room, and is answered.
+    const [x, z] = [2.0, 2.5 - DEPTH / 2];
+    const inRoom = locateOnWall(at('e', x, 1.4, z, c), 'e', u, c, { depthM: DEPTH })!;
+    expect(inRoom.position.x).toBeCloseTo(x, 3);
+    expect(inRoom.position.z).toBeCloseTo(z, 3);
+    expect(inRoom.yaw).toBe(Math.PI);
+  });
+
+  it('lets a line of sight through a corner reach the wall behind it', () => {
+    // The same U's east photo, dead centre: the line of sight runs along the notch's inner
+    // face and through the corner where the notch's side wall ends. It touches that wall,
+    // from outside, at one point — the graze `wallFrame` refuses to call an obstruction,
+    // and for the same reason: counting it refuses the east wall the whole centre column
+    // is looking at. A box centred on the column EXACTLY, because the graze is exact.
+    const u = footprintForLayout('u', 6, 5);
+    expect(u).toContainEqual([0.22 * 6, 0]); // the corner, on the column
+    const c = WIDE;
+    const x = 3 - DEPTH / 2;
+    const [, v] = project('e', x, 1.4, 0, c);
+    const g = locateOnWall([0.25, v - EPS, 0.5, 2 * EPS], 'e', u, c, { depthM: DEPTH })!;
+    expect(g).not.toBeNull();
+    expect(g.position.x).toBeCloseTo(x, 3);
+    expect(g.position.z).toBeCloseTo(0, 9);
+    expect(g.position.y).toBeCloseTo(1.4, 3);
+    expect(g.yaw).toBe(-Math.PI / 2);
+  });
+
+  it('takes the first wall the line of sight meets, and only where that wall is', () => {
+    // A U with the lens in one arm: looking east, the arm's own wall is 1 m ahead, the
+    // notch's far side is 3 m (seen from outside), and the far arm's wall 5 m. Two rules
+    // make this answer right, and each one has a line of sight here that only it decides.
+    const arm: Footprint = [[-1, -2], [1, -2], [1, 1], [3, 1], [3, -2], [5, -2], [5, 3], [-1, 3]];
+    expect(wallFrame('e', arm)).not.toBeNull();
+    const c = WIDE;
+    // The NEAREST wall: a TV on the arm's wall. The farthest crossing is a wall of this
+    // room seen from inside too, with the notch in between.
+    const near = locateOnWall(at('e', 1 - DEPTH / 2, 1.4, -0.5, c), 'e', arm, c, { depthM: DEPTH })!;
+    expect(near).not.toBeNull();
+    expect(near.position.x).toBeCloseTo(1 - DEPTH / 2, 3);
+    expect(near.position.z).toBeCloseTo(-0.5, 3);
+    expect(near.yaw).toBe(-Math.PI / 2);
+    // Only WHERE the wall is: a print on the south wall, seen past the end of the arm.
+    // Its line of sight crosses the arm wall's LINE 184 mm beyond the wall's end, and a
+    // wall's line is not a wall.
+    const [px, pz] = [2.5, 3 - DEPTH / 2];
+    expect(pz / px).toBeGreaterThan(1); // the ray's z at x = 1: past z = 1, the arm's end
+    const far = locateOnWall(at('e', px, 1.4, pz, c), 'e', arm, c, { depthM: DEPTH })!;
+    expect(far).not.toBeNull();
+    expect(far.position.x).toBeCloseTo(px, 3);
+    expect(far.position.z).toBeCloseTo(pz, 3);
+    expect(far.yaw).toBe(Math.PI);
+  });
+
+  it('places a deep piece on its own mid-plane, however close its wall passes the lens', () => {
+    // A 1.2 m galley kitchen's side wall, met at a slant near the edge of an ultrawide:
+    // 480 mm ahead along the view axis, 600 mm from the lens across it. An air
+    // conditioner is 220 mm deep. Along the view axis the wall is close enough to look
+    // too near for that depth; the plaster is not, and the piece is placed at half its
+    // own depth off it — not at a depth shortened to suit the view axis.
+    const galley: Footprint = [[-0.6, -2], [0.6, -2], [0.6, 2], [-0.6, 2]];
+    const c = WIDE;
+    const depthM = 0.22;
+    const [x, z] = [0.6 - depthM / 2, -(0.6 - depthM / 2) / 1.25];
+    const g = locateOnWall(at('n', x, 1.7, z, c), 'n', galley, c, { depthM })!;
+    expect(g).not.toBeNull();
+    expect(g.position.x).toBeCloseTo(x, 3);
+    expect(g.position.z).toBeCloseTo(z, 3);
+    expect(g.yaw).toBe(-Math.PI / 2);
+  });
+
+  it('answers nothing where there is no room to look into', () => {
+    // The north photo of a U has no wall ahead of the lens at all.
+    expect(wallFrame('n', footprintForLayout('u', 6, 5))).toBeNull();
+    expect(locateOnWall([0.45, 0.4, 0.1, 0.1], 'n', footprintForLayout('u', 6, 5), WIDE, { depthM: DEPTH })).toBeNull();
+    // A line of sight pointing behind the lens: the bottom of a frame tipped 80° down.
+    const down = tilted(80);
+    expect(locateOnWall([0.45, 0.9, 0.1, 0.1], 'n', ROOM.footprint, down, { depthM: DEPTH })).toBeNull();
+    // …and the top of the same frame, which does meet a wall, is answered — so the line
+    // above is the guard and not the tilt.
+    expect(locateOnWall([0.45, 0.0, 0.1, 0.02], 'n', ROOM.footprint, down, { depthM: DEPTH })).not.toBeNull();
+    // An outline with a NaN in it is not an outline, and is answered nothing — in either
+    // winding. (That holds without asking `wallFrame`: the NaN reaches the winding's sign,
+    // and through it every wall's normal. It is a regression check, not the gate's test.)
+    const box = at('n', 0.5, 1.4, -2 + DEPTH / 2, WIDE);
+    for (const outline of [ROOM.footprint, [...ROOM.footprint].reverse()]) {
+      expect(locateOnWall(box, 'n', outline, WIDE, { depthM: DEPTH })).not.toBeNull();
+      const broken: Footprint = outline.map(([x, z], i) => (i === 2 ? [NaN, z] : [x, z]));
+      expect(locateOnWall(box, 'n', broken, WIDE, { depthM: DEPTH })).toBeNull();
+    }
+    // The one line of sight a scan of the walls WOULD answer from a photo with no wall
+    // ahead: from a lens standing on a U's notch, a ray through the notch's far corner
+    // exactly. Touching a corner is no obstruction, so the arm's wall beyond it is met
+    // from inside. But the camera is not in the room it is said to be photographing,
+    // and a photo whose premise fails is answered nothing everywhere, not at one ray.
+    // The lens is 90° wide, so the box centre at 0.75 is a ray of exactly 0.5 across per
+    // metre forward, and the corner at (1, −2) is exactly on it.
+    const notch: Footprint = [[-3, -2], [-1, -2], [-1, 0], [1, 0], [1, -2], [3, -2], [3, 2], [-3, 2]];
+    const square: CameraCal = { k: 2, aspect: 4 / 3 };
+    expect(wallFrame('n', notch)).toBeNull();
+    expect(locateOnWall([0.7, 0.45, 0.1, 0.1], 'n', notch, square, { depthM: DEPTH })).toBeNull();
+    // A piece whose middle would be behind the camera: the lens 100 mm from its framed
+    // wall, and a 220 mm air conditioner on it. The same spot with a print is answered.
+    const tight: Footprint = [[-0.1, -2], [3, -2], [3, 2], [-0.1, 2]];
+    const spot = at('w', -0.1, 1.45, 0.05, WIDE);
+    expect(locateOnWall(spot, 'w', tight, WIDE, { depthM: 0.22 })).toBeNull();
+    expect(locateOnWall(spot, 'w', tight, WIDE, { depthM: 0.03 })).not.toBeNull();
   });
 });
