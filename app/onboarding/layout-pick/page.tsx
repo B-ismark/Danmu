@@ -324,7 +324,13 @@ export default function LayoutPickPage() {
                   <label
                     key={axis}
                     className="size-entry__field"
-                    onBlur={() => setLeft((s) => (s.has(axis) ? s : new Set(s).add(axis)))}
+                    // Left means focus went out of the FIELD, not out of the input:
+                    // a chevron press moves focus to the chevron, and counting that
+                    // judged the box live while the person was still working it.
+                    onBlur={(e) => {
+                      if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                      setLeft((s) => (s.has(axis) ? s : new Set(s).add(axis)));
+                    }}
                   >
                     <span className="t-note">{AXIS_LABEL[axis]}</span>
                     <NumberField
