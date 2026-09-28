@@ -634,12 +634,15 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
   // Measured is unswept plus the one doubt a measured lens still leaves, a box the
   // side of its photo cut off; it takes duplicates the unswept reading leaves and
   // loses exactly the pieces that one loses — that is the gate, at scale.
+  // GONE counts the pieces with no row at all once `refineDetections` has run: the
+  // hard merge took every sighting of them into a neighbour's. No reading of the
+  // ticks can bring one back, and under a wrong lens they are nearly all the losses.
   it('prints and holds the rate', { timeout: 300_000 }, () => {
     const ROOMS = 150;
     const count = (trueDeg: number, givenDeg: number) => {
       const given = every(lens(givenDeg));
       const measured = every(lens(givenDeg, 'measured'));
-      const out = { unswept: blank(), swept: blank(), measured: blank() };
+      const out = { gone: 0, unswept: blank(), swept: blank(), measured: blank() };
       for (let sd = 1; sd <= ROOMS; sd++) {
         const pieces = furnishedRoom(sd * 7919 + 13);
         const dets: Tallied[] = [];
@@ -653,6 +656,10 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
           }
         });
         const refined = refineDetections(dets, given, ROOM) as Tallied[];
+        const rowed = new Set(refined.map((d) => d._t));
+        shots.forEach((n, i) => {
+          if (n > 0 && !rowed.has(i)) out.gone++;
+        });
         const tally = (t: Tally, cals: CalMap) => {
           const ticks = pieces.map(() => 0);
           keptAtFirst(refined, refined.map(() => true), ROOM, cals).forEach((i) => ticks[refined[i]._t]++);
@@ -683,22 +690,22 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
     const got = rows.map(([t, g]) => {
       const r = count(t, g);
       lines.push(
-        `true ${t}° read at ${g}°  seen ${r.swept.vis}, in two photos ${r.swept.multi}  ` +
+        `true ${t}° read at ${g}°  seen ${r.swept.vis}, in two photos ${r.swept.multi}, gone ${r.gone}  ` +
           `unswept dup ${r.unswept.dup} lost ${r.unswept.lost}  swept dup ${r.swept.dup} lost ${r.swept.lost}  ` +
           `measured dup ${r.measured.dup} lost ${r.measured.lost}`,
       );
       return [
-        r.swept.vis, r.swept.multi,
+        r.swept.vis, r.swept.multi, r.gone,
         r.unswept.dup, r.unswept.lost, r.swept.dup, r.swept.lost, r.measured.dup, r.measured.lost,
       ];
     });
     console.log(`findRepeats over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
     expect(got).toEqual([
-      [575, 0, 0, 2, 0, 10, 0, 2],
-      [993, 252, 249, 35, 3, 37, 217, 35],
-      [993, 252, 23, 11, 1, 21, 2, 11],
-      [989, 464, 460, 41, 24, 41, 431, 41],
-      [989, 464, 43, 4, 23, 6, 29, 4],
+      [575, 0, 1, 0, 2, 0, 10, 0, 2],
+      [993, 252, 35, 249, 35, 3, 37, 217, 35],
+      [993, 252, 9, 23, 11, 1, 21, 2, 11],
+      [989, 464, 39, 460, 41, 24, 41, 431, 41],
+      [989, 464, 2, 43, 4, 23, 6, 29, 4],
     ]);
   });
 });

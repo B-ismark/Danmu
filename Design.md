@@ -452,7 +452,13 @@ decision it makes.
    foreshortened diameter and no thickness); an uncalibrated slot gets nothing at
    all. Unmeasured means the function returns **its own input object**, so callers
    establish measurability by reference identity rather than by a flag nobody
-   maintains.
+   maintains. A wall row it refused — a piece seen past the end of the framed wall,
+   on the return wall beside it — is then **located** by `geoLocate`: `locateOnWall`
+   follows the box's line of sight to the wall it actually meets and gives the row a
+   position and a heading, **never a size**, because the size was read against the
+   wrong plane. It is a separate function rather than a fourth branch so the identity
+   rule above still holds for `label-repair`; `geoPlace` is the two in order, and
+   every path that turns a photo into rows calls it.
 2. **Judge the word** — `lib/label-repair.ts` reads `clampDims` backwards. Forward,
    everywhere else: the detector said "bed", so clamp the size into a bed's range —
    the size is the suspect. Backwards, here: the camera measured 1400 × 2300 and no
@@ -470,7 +476,12 @@ decision it makes.
    duplicates go by bounding-box **IoU** (a fixed 12% of the image ate two bedside
    tables 0.55 m apart, whose boxes did not touch), and cross-photo duplicates go by
    a **per-category** merge distance (a flat 0.6 m collapsed four dining chairs to
-   two).
+   two). Which sighting of a pair **survives** is the second half of the merge:
+   `refineDetections` tells `dedupeDetections` which rows the camera measured, and a
+   measured sighting replaces a located one it merges with, in its place in the list.
+   First-come was only safe while every row with a position had been measured — a
+   located row arriving first ate the measurement, and the piece went into the room
+   at its catalogue size.
 4. **Build** — `buildSceneFromRoom` clamps, snaps and settles. It reads only the two
    axes a photograph can locate: `groundY` owns Y outright, and the placement gate
    used to test Y as well, so a fan the model put 3.2 m up in a 2.8 m room lost its
@@ -550,9 +561,38 @@ kept-first is the load-bearing rung: rank by framing alone and a bed whose best 
 was an unconfident one would end with every sighting unticked. The pass is greedy
 with no chaining, so a bed in four photos is one bed and three repeats. `keptAtFirst`
 is the one place the seeding decision is made, so the screen and the tests cannot
-disagree about it. The known miss is filed in `docs/what-is-still-open.md`: a piece
-at the far edge of a side photo decodes onto the wall's end, so twins seen from two
-walls can still come back as three.
+disagree about it.
+
+**It is for every kind, not beds**, and three things stood between it and the rest of
+a room, each measured over 150 generated furnished rooms (`tests/helpers/furnished-rooms.ts`,
+held as literals in `tests/repeat-sightings.test.ts`):
+
+- **the lens.** Most photos carry no focal length, so the lens is assumed — and a wrong
+  lens moves a floor piece along its OWN photo's line of sight, so two sightings from
+  two walls are pushed two different ways, a metre apart at an ultrawide. No tolerance
+  absorbs that without merging a room's dining chairs. What the two sightings share is
+  the phone, so a cross-photo pair is compared at **every lens a phone could have**
+  (`SWEPT_HFOV_DEG`, 30–120° every 2°) and counts as one piece if ANY one lens puts both
+  in the same place. A lens EXIF measured is held fixed — `pickLens` reports `measured`
+  for EXIF only, never for a lens inferred from vanishing points — because a bound may
+  falsify an assumption and never overrule a measurement;
+- **the return wall**, which step 1's `geoLocate` answers: a wall piece seen past a
+  corner used to have no position at all, so it had nothing to be compared with;
+- **the side of the frame.** A floor box the side of its photo cut off is not the piece:
+  `lateralSpan` reads the frame's edge as a corner, and a fridge in the corner of a 106°
+  photo came back −79 mm wide. `reachedSolids` walks the cut side past the frame to every
+  width the kind's catalogue range could hold, and the pair is compared at each.
+
+Together they take the repeats left ticked, at an ultrawide read as the assumed 66°, from
+249 to 3 (106°) and 460 to 24 (120°). The price is 22 real pieces across the table's five
+readings started unticked — each with its reason, one tap from back — and none on a lens
+EXIF measured. Three things it does not reach are filed in `docs/what-is-still-open.md`
+§ 46, measured and not fixed: twin beds in a corner come back as one (§ 46.1); a box cut at
+the BOTTOM of its photo is not walked, because doing so bought little and walking both
+edges is a grid that did not finish (§ 46.2); and under a wrong lens the HARD merge deletes
+3.5–3.9% of an ultrawide room's pieces outright, nearly all dining chairs, before this pass
+ever sees them (§ 46.3). § 46.1 and § 46.3 are one fix — the hard merge deciding a pair on
+a distance nobody measured.
 
 **`tests/detect-pipeline.test.ts`** regression-tests the whole chain over one
 synthetic room whose contents are known, from analytic ground truth — boxes are
@@ -923,7 +963,8 @@ check, a check whose prose certifies the hole beside it.
 `onFramedSurface` refuses both. **Refused rather than clamped**, because clamping leaves the
 piece a metre from the truth *and* keeps a size read off the wrong plane; and refusal is not
 deletion — `geoRefine` hands the detection back unchanged, so the piece still reaches the
-scene, and `label-repair` reads that same object identity as "unmeasurable", which WITHDRAWS
+scene (and `geoLocate` then hangs it on the wall its line of sight really meets, with no size
+of its own — step 1 of the pipeline above), and `label-repair` reads that same object identity as "unmeasurable", which WITHDRAWS
 a verdict rather than accusing. (For the print that verdict had been `ok`: `painting`'s band
 is 150–2400 × 150–1800, so a fabricated 893 × 803 fits it comfortably and was given a false
 clean bill. The row that was genuinely accused is the vent, at 386 mm against `fan`'s floor.)
@@ -984,6 +1025,13 @@ version says so: a detection with no position of its own cannot be compared by
 refused row that has one *is* compared, so the count can move there. What changes in both
 cases is that the second row is unmeasured rather than mis-measured; the row count was never
 this gate's to move.
+
+**Corrected 2026-09-28, and the paragraph above is left standing because it was true of the
+code it measured.** The gate still moves no count — but the refused row is no longer left
+without a position. `geoLocate` puts it where its line of sight meets the north wall, 58 mm
+from the measured sighting against `painting`'s 0.35 m, so `dedupeDetections` compares the
+pair and they are **one row**, and the measured one survives in either photo order.
+`tests/detect-refine.test.ts` holds both orders under *a refused placement*.
 
 ---
 
