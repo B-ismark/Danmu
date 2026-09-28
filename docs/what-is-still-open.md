@@ -1617,6 +1617,23 @@ the user went and looked.
 
     **Committed:** nothing.
 
+19. **On a phone, is the scan photo seen whole or drawn large? — OPEN, found 2026-09-28.**
+    Below 720px the scan screen stacks, and the photo sits in a scroll box of
+    `minmax(280px, 55dvh)`. A 4:3 photo at 390×844 draws 269px tall in a box 246px high; a
+    portrait one 477px; at 360×640 the box is 134px. The photo frame is `touchAction: 'none'`
+    (it is where a box is drawn), so **a finger on the photo cannot scroll that box** — the
+    lower pieces are reached only by the thin strip beside the photo. It was already so
+    before the wide-window change (#162), which caps the photo's height only against the
+    window, not against this box.
+
+    The choice is a designer's, which is why it is here: fit the photo to the box (seen
+    whole, but smaller to draw on — about 285px wide on a 390px phone), or keep it the
+    column's width and give the box a scroll the photo does not swallow (a drawing mode
+    that has to be entered, as the "Adding by hand" toggle already is, so touch scrolls
+    while it is off). Measured by the review of #162; not looked at on a real phone.
+
+    **Committed:** nothing.
+
 
 ---
 

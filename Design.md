@@ -142,9 +142,11 @@ owned by a deterministic geometry engine, not by a model.
    action with its quieter alternative stacks as one block (`.action-row`). A
    line of running text stops at `70ch` (`p, li { max-inline-size }`; Baymard
    measures 50–75 characters as the readable band, WCAG 1.4.8 caps it at 80). Rows
-   that are not buttons — a disclosure header, a rename field, a tile — span their
-   panel on purpose. The sweep's `stretched` rule measures all three in the browser
-   at 768px and up.
+   that are not buttons — a disclosure header, a rename field — span their panel on
+   purpose. A tile (a card you press) may too, up to `--measure-page` and no further,
+   and a screen's column stops there with it: the capture screen's drop zone was
+   1,886px wide at 1920. A photo is drawn no taller than the window. The sweep's
+   `stretched` rule measures all of it in the browser at 768px and up.
    **Nothing UI-facing is done until `scripts/fidelity-sweep.mjs` is clean.** It
    walks every screen at seven widths (360 → 1920) against a production build and
    counts the silent failures rule 4 names — text spilling its box, text clipped by
