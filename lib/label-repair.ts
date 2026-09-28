@@ -278,6 +278,23 @@ export function candidatesFor(
   return out;
 }
 
+/** The row accepting `cand` leaves in place of `row`, called `label`: the candidate's
+ *  category, model and measurement, with the row's own colour.
+ *
+ *  Not simply `cand.detection`. A candidate is measured from the row as it was when
+ *  the verdicts were worked out, and the scan screen works them out from a copy that
+ *  deliberately ignores colour, so the photo's sampled colour landing does not
+ *  re-run the checks. So a candidate can predate the colour, and accepting it wrote
+ *  a colourless row over a coloured one — the piece went grey until the next sample
+ *  painted it back. Colour is the one thing a candidate knows nothing new about: it
+ *  is read off the photograph, not the word. */
+export function acceptCandidate(row: Detection, cand: LabelCandidate, label: string): Detection {
+  // The row's colour or none, never the candidate's: the candidate's is the same
+  // row's from earlier, so the row's own is always the newer answer.
+  const { color: _stale, ...measured } = cand.detection;
+  return { ...measured, label, ...(row.color === undefined ? {} : { color: row.color }) };
+}
+
 /** Judge the word a detector used against the size the camera measured.
  *
  *  Safe to call on a detection that has already been through `geoRefine`: the

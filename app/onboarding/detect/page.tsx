@@ -30,7 +30,7 @@ import {
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
 import { geoPlace, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
-import { judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
+import { acceptCandidate, judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
 import { suggestFromLabel } from '@/lib/label-suggest';
 import {
   canRedo,
@@ -709,7 +709,7 @@ export default function DetectPage() {
     // INDICES, so reordering here would silently move every confirmation onto a
     // different piece of furniture.
     setDetections((arr) =>
-      arr.map((x, idx) => (idx === i ? { ...cand.detection, label: candidateLabel(cand) } : x)),
+      arr.map((x, idx) => (idx === i ? acceptCandidate(x, cand, candidateLabel(cand)) : x)),
     );
   }
 

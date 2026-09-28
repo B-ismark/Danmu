@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
+import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
 import { placeFloorObject, placeWallObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
@@ -364,6 +364,35 @@ describe('judgeLabel — ceiling items', () => {
     expect(band.min[0]).toBeLessThan(893);
     expect(band.max[0]).toBeGreaterThan(893);
     expect(band.max[2]).toBeGreaterThan(803);
+  });
+});
+
+describe('accepting a repair', () => {
+  // The scan screen works its verdicts out from a copy of the rows that ignores
+  // colour, so the photo's sample landing does not re-run every check. A candidate can
+  // therefore be measured from the row as it was BEFORE its colour arrived.
+  const before = det({ label: 'Sofa', category: 'sofa', slot: 'n', box: [0.175, 0.75, 0.65, 0.1] });
+  const now: Detection = { ...before, color: '#7a5c3e' };
+  const [bed] = candidatesFor(before, ['bed'], CALS, ROOM);
+
+  it('keeps the colour the photo gave the row', () => {
+    expect(bed, 'fixture must offer a repair').toBeDefined();
+    expect(bed.detection.color, 'fixture must predate the colour').toBeUndefined();
+    const out = acceptCandidate(now, bed, 'Double bed');
+    expect(out.color).toBe('#7a5c3e');
+    // Everything the word decides comes from the candidate.
+    expect(out.category).toBe('bed');
+    expect(out.shape).toBe(bed.detection.shape);
+    expect(out.dimMM).toEqual(bed.detection.dimMM);
+    expect(out.label).toBe('Double bed');
+  });
+
+  it('writes no colour key for a row that has none yet', () => {
+    // So the next sample still sees a row "missing colour" and paints it.
+    expect('color' in acceptCandidate(before, bed, 'Bed')).toBe(false);
+    // And never the candidate's own: it is the same row's, from earlier.
+    const stale = { ...bed, detection: { ...bed.detection, color: '#111111' } };
+    expect('color' in acceptCandidate(before, stale, 'Bed')).toBe(false);
   });
 });
 
