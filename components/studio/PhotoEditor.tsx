@@ -170,7 +170,12 @@ function ItemBox({
   onToggleLock: () => void;
 }) {
   const { d, locked } = item;
-  const [sx, sy, sw, sh] = d.box;
+  // Only the part of the box that is on the photo. The on-device finder keeps x and w
+  // in 0..1 but not their sum, and the cloud's boxes are not clamped at all, so a box
+  // can run past the frame — and one that did scrolled the whole review sideways.
+  const [x0, y0, x1, y1] = [d.box[0], d.box[1], d.box[0] + d.box[2], d.box[1] + d.box[3]].map((n) =>
+    Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0,
+  );
   const { fill, cleanLabel } = look(item);
   // While drawing, boxes step aside entirely: a half-interactive overlay under a
   // crosshair was ambiguous for the mouse and unreachable for the keyboard.
@@ -180,10 +185,10 @@ function ItemBox({
     <div
       style={{
         position: 'absolute',
-        left: `${sx * 100}%`,
-        top: `${sy * 100}%`,
-        width: `${sw * 100}%`,
-        height: `${sh * 100}%`,
+        left: `${x0 * 100}%`,
+        top: `${y0 * 100}%`,
+        width: `${Math.max(0, x1 - x0) * 100}%`,
+        height: `${Math.max(0, y1 - y0) * 100}%`,
         border: `1.5px ${locked ? 'solid' : 'dashed'} ${fill}`,
         background: locked ? 'var(--locked-tint)' : 'var(--accent-tint)',
         pointerEvents: 'none',

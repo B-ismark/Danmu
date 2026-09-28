@@ -1795,7 +1795,8 @@ right ran up to 92 px past the photo and the whole review scrolled sideways, and
 top sat above the photo, where the scroll box cut it off. Now the tag still starts at its
 box's left side and slides left only as far as the photo's edge; it sits just above its box,
 just below it where there is no room above, and inside its top only for a box as tall as the
-photo; and a name too long for the photo ellipsises before the X moves.
+photo; and a name too long for the photo ellipsises before the X moves. A box that runs past
+the frame is drawn only to the photo's edge.
 
 **What wrong looks like.**
 - A tag, or its X, past any edge of the photo, or the review scrolling sideways at 360 px.
