@@ -41,7 +41,7 @@
 
 import { footArea, footFromPart, footIntersectionArea, type Foot } from './geometry';
 import { anchorFor } from './physics';
-import { clampDims } from './dimension-ranges';
+import { clampDims, dimRangeFor } from './dimension-ranges';
 import {
   defaultAxisFor,
   isRoundPart,
@@ -51,7 +51,7 @@ import {
   type Category,
   type Shape,
 } from './scene-spec';
-import { geoPlace, sameThingKey, type CalMap, type RoomDims } from './detect-refine';
+import { geoPlace, geoRefine, sameThingKey, type CalMap, type RoomDims } from './detect-refine';
 import { PLAUSIBLE_HFOV_DEG } from './photo-geometry';
 import { sourceOf } from './detect-confidence';
 import type { Detection } from './detection';
@@ -74,7 +74,7 @@ import type { Detection } from './detection';
 export const REPEAT_SHARE = 0.25;
 
 /** A box this close to the photo's edge is clipped: the piece carries on out of
- *  frame, so its measured width is a lower bound rather than a size. */
+ *  frame, so the box did not measure the whole of it. */
 const EDGE = 0.01;
 
 /** Which plane a row was measured on — the same split `geoRefine` makes, curtain
@@ -198,8 +198,17 @@ export const SWEPT_HFOV_DEG: readonly number[] = (() => {
 /** The same lenses as `k`, which is what the placers read. */
 const LENSES: readonly number[] = SWEPT_HFOV_DEG.map((deg) => 2 * Math.tan((deg * Math.PI) / 360));
 
-/** Where a row would stand if its photo had been taken on each of `LENSES` — or
- *  null when its lens was measured, because a measured lens is not one to doubt.
+/** How far past its photo's side a cut-off floor box is carried at each step of
+ *  `reachedSolids`, as a share of the frame's width. */
+const REACH_STEP = 0.02;
+
+/** …and at most one frame's width past it. Only a limit on the work: the walk
+ *  stops long before, at the catalogue's widest piece of the kind. */
+const REACH_STEPS = Math.round(1 / REACH_STEP);
+
+/** Where a row would stand if its photo had been taken on each of `LENSES` — every
+ *  place the camera could have meant, per lens — or null when there is nothing to
+ *  doubt: a lens EXIF measured, and a box the frame did not cut.
  *
  *  **Why the lens, and why only an assumed one.** Most photos carry no focal length
  *  (`CLAUDE.md` records four real phone photos, and not one did), so the lens is
@@ -212,25 +221,109 @@ const LENSES: readonly number[] = SWEPT_HFOV_DEG.map((deg) => 2 * Math.tan((deg 
  *  large would merge a room's dining chairs. What the two sightings DO share is the
  *  phone, so the question becomes whether ONE lens a phone could have puts them in
  *  the same place. A lens EXIF measured is held fixed — a bound may falsify an
- *  assumption, never overrule a measurement — and a pair with one measured and one
- *  assumed lens sweeps only the assumed one.
+ *  assumption, never overrule a measurement — and every entry is then that one
+ *  lens's answer, so a pair with one measured and one assumed lens sweeps only the
+ *  assumed one.
+ *
+ *  **Why a cut-off side is doubted even at a measured lens** is `reachedSolids`:
+ *  it is the box that is short, not the lens that is wrong.
  *
  *  Exported for `tests/repeat-sightings.test.ts` and for no other caller: which
  *  lenses answer nothing for a row is not visible through `findRepeats`, and a
  *  sweep that quietly asked every lens the assumed one's question passed it. */
-export function sweptSolids(d: Detection, room: RoomDims | null, cals: CalMap): (Solid | null)[] | null {
+export function sweptSolids(d: Detection, room: RoomDims | null, cals: CalMap): Solid[][] | null {
   const cal = cals[d.slot];
-  if (!room || !cal || cal.lens === 'measured') return null;
+  if (!room || !cal) return null;
+  const measured = cal.lens === 'measured';
+  const cut = cutSides(d);
+  if (measured && !cut) return null;
   // The row as the camera first saw it: a box and a word. A refined row's position,
   // heading and size are the ASSUMED lens's answers, and a placer keeps a heading or
   // a size it is handed — it reads them as the model's hint — so leaving them on
   // carries that lens's answer into every other one. A TV the east photo put on the
   // east wall, located at the true lens on the north wall, would still face east.
   const bare = { ...d, position: undefined, yaw: undefined, dimMM: undefined };
-  return LENSES.map((k) => {
-    const r = geoPlace(bare, { [d.slot]: { ...cal, k } }, room);
-    return r.position ? solidOf(r, room) : null;
-  });
+  const at = (k: number): Solid[] => {
+    const lens = { [d.slot]: { ...cal, k } };
+    const r = geoPlace(bare, lens, room);
+    const s = r.position ? solidOf(r, room) : null;
+    const out = s ? [s] : [];
+    if (cut) out.push(...reachedSolids(bare, cut, lens, room));
+    return out;
+  };
+  if (measured) {
+    const one = at(cal.k);
+    return LENSES.map(() => one);
+  }
+  return LENSES.map(at);
+}
+
+type Cut = { left: boolean; right: boolean };
+
+/** Which sides of its photo cut a FLOOR row's box, or null when neither did.
+ *
+ *  A wall row is not walked. The wall placer reads a box against the plane the
+ *  piece hangs on, so a cut edge lands on a real point of that wall and the box
+ *  measures the part it saw, rather than mistaking the frame for a corner. Measured
+ *  over the same 150 rooms at 80° to 120°: walking wall rows too changed no count,
+ *  since a wall piece seen twice was never left doubled at a lens read right or
+ *  assumed (none of 25, 37, 56 and 105), and it took the table a third longer. */
+function cutSides(d: Detection): Cut | null {
+  if (planeOf(d) !== 'floor') return null;
+  const [x, , w] = d.box;
+  const cut = { left: x <= EDGE, right: x + w >= 1 - EDGE };
+  return cut.left || cut.right ? cut : null;
+}
+
+/** Where a floor row cut off by the side of its photo could stand, at one lens: the
+ *  box carried past the frame a step at a time, and each longer box asked again.
+ *
+ *  **Why the box as seen cannot be asked.** `lateralSpan` reads a floor box's outer
+ *  edge as the piece's NEAR corner and its inner edge as the FAR one, which is
+ *  right for a whole piece and backwards for a cut one: the frame's edge is not a
+ *  corner of anything. So the far corner's ray is held against a near corner that
+ *  was never seen, and the width comes out short — often below nothing. A fridge
+ *  in the corner of a 106° photo came back −79 mm wide at its true lens, and was
+ *  refused; at a narrower lens the same box was a sliver standing in the wrong
+ *  place. Either way the one sighting that saw it whole had nothing to meet, and
+ *  the fridge was in the room twice.
+ *
+ *  **Why walk it rather than solve it.** The piece really did carry on out of
+ *  frame, by an amount the photo does not hold, so every length is a candidate
+ *  and none is the answer. The walk stops where the kind's own catalogue does:
+ *  a box whose width has passed the widest piece of the kind is a piece that does
+ *  not exist, and widening only widens it further. A step whose size falls outside
+ *  the kind's range is skipped. Every candidate left stands where a real piece of
+ *  that kind could, which is the question the repeat check asks.
+ *
+ *  **Why only the sides.** Cut off at the bottom, the near face is read from the
+ *  last row of pixels, which bounds it rather than measures it, and the same walk
+ *  down the photo was measured on the same 150 rooms: alone, it took the repeats
+ *  left at 106° read as 66° from 27 to 25 while starting one more real piece
+ *  unticked there, and one more at 106° read as 106°, and it doubled the table's
+ *  time over the sides' walk. Walking both at once is a grid, and did not finish
+ *  in half an hour. Filed with those numbers in `docs/what-is-still-open.md`
+ *  § 46.2. A box cut at both sides is carried out both ways at once, and a floor
+ *  piece's height is not compared, so a box cut at the top needs nothing.
+ *
+ *  Never a measurement: this answers only "could these two be one piece", and the
+ *  row keeps the size and place `refineDetections` gave it. */
+function reachedSolids(bare: Detection, cut: Cut, cals: CalMap, room: RoomDims): Solid[] {
+  const range = dimRangeFor(bare.category as Category, shapeOf(bare));
+  const [x, y, w, h] = bare.box;
+  const out: Solid[] = [];
+  for (let i = 1; i <= REACH_STEPS; i++) {
+    const left = cut.left ? i * REACH_STEP : 0;
+    const right = cut.right ? i * REACH_STEP : 0;
+    const r = geoRefine({ ...bare, box: [x - left, y, w + left + right, h] }, cals, room);
+    if (!r.position || !r.dimMM) continue;
+    const [wide, , tall] = r.dimMM;
+    if (wide > range.max[0]) break;
+    if (wide < range.min[0] || tall < range.min[2] || tall > range.max[2]) continue;
+    const s = solidOf(r, room);
+    if (s) out.push(s);
+  }
+  return out;
 }
 
 /** For each row, the index of the row it most likely repeats — or null when it is
@@ -245,8 +338,8 @@ export function sweptSolids(d: Detection, room: RoomDims | null, cals: CalMap): 
  *
  *    1. a row the user drew — theirs is never the repeat;
  *    2. a row that would be kept;
- *    3. a row whose box is not cut off by the photo's edge, since its width is a
- *       measurement rather than a lower bound;
+ *    3. a row whose box is not cut off by the photo's edge, since it measured the
+ *       whole piece;
  *    4. the bigger box — the photo that saw the most of it;
  *    5. list order.
  *
@@ -264,7 +357,7 @@ export function sweptSolids(d: Detection, room: RoomDims | null, cals: CalMap): 
  *  **What the sweep costs, measured** on 150 random furnished rooms photographed
  *  from the middle — generated by `tests/helpers/furnished-rooms.ts`, and printed
  *  and held by `tests/repeat-sightings.test.ts`. A 106° ultrawide read as the
- *  assumed 66°: repeats left ticked 249 → 27. At 120°: 460 → 49. The price is real
+ *  assumed 66°: repeats left ticked 249 → 3. At 120°: 460 → 24. The price is real
  *  pieces that start unticked — 35 → 37 at 106° read as 66°, 11 → 21 when the
  *  ultrawide was assumed at its true 106°, 4 → 6 at 120° assumed correctly, and
  *  2 → 10 when the assumed 66° was right. Every one of those 22 is a dining chair
@@ -284,10 +377,18 @@ export function sweptSolids(d: Detection, room: RoomDims | null, cals: CalMap): 
  *  size as well as the position. Before those sightings were located, the TVs,
  *  pictures, mirrors and curtains of the same rooms were 56 of the 83 repeats left
  *  at 106° read as 66°, and 105 of the 152 at 120°.
- *  What is left — 27 there, 21 at the ultrawide's true lens, and 134 of 135 across
- *  the four ultrawide readings — is floor pieces with one sighting cut off by the
- *  SIDE of its photo, whose width is a lower bound and whose centre is not the
- *  piece's. That is a placement question, not a lens one.
+ *  A floor piece cut off by the SIDE of its photo is in that count because
+ *  `reachedSolids` walks its box out of the frame — which runs on a measured lens
+ *  too, since it doubts the box and not the lens. With the lens marked measured,
+ *  so that the side walk is the only doubt left, the same rooms go 23 → 2 at 106°
+ *  and 43 → 29 at 120°, and lose exactly the pieces the unswept rule loses. Before
+ *  the walk, those sightings were 134 of the 135 repeats left across the four
+ *  ultrawide readings.
+ *  What is left — 3 at 106° read as 66°, 1 at its true lens, 24 and 23 at 120° —
+ *  is 48 floor pieces with a sighting cut off at a bottom CORNER of its photo, one
+ *  cut at the bottom alone, and two wall pieces cut at the side (the walk is for
+ *  floor rows only). The side is walked round; the bottom still bounds the piece's
+ *  near face rather than measuring it, so its distance is not held by anything.
  *
  *  `room` is required, and null only while the screen is still loading it: without
  *  it, a row with no position has nothing to compare and is its own piece. `cals`
@@ -301,7 +402,7 @@ export function findRepeats(
   const solids = dets.map((d) => solidOf(d, room));
   // Swept on demand and once per row: only a row with a same-kind partner in
   // another photo ever needs it, and each costs a geometry pass per lens.
-  const swept = new Map<number, (Solid | null)[] | null>();
+  const swept = new Map<number, Solid[][] | null>();
   const sweptOf = (i: number) => {
     if (!swept.has(i)) swept.set(i, sweptSolids(dets[i], room, cals));
     return swept.get(i)!;
@@ -315,9 +416,9 @@ export function findRepeats(
     const sb = sweptOf(i);
     if (!sa && !sb) return best;
     for (let t = 0; t < LENSES.length; t++) {
-      const x = sa ? sa[t] : a;
-      const y = sb ? sb[t] : b;
-      if (x && y) best = Math.max(best, sharedPart(x, y));
+      const xs = sa ? sa[t] : a ? [a] : [];
+      const ys = sb ? sb[t] : b ? [b] : [];
+      for (const x of xs) for (const y of ys) best = Math.max(best, sharedPart(x, y));
     }
     return best;
   };

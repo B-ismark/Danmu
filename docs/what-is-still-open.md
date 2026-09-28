@@ -7275,3 +7275,42 @@ was wrong:** it recorded "twins seen from n+e keep 3", from a probe that put one
 x = −0.6 — behind the east camera, which cannot have seen it, so `inPicture` clamped a
 projection from behind the lens to the whole frame. A fixture must be a photograph that could
 have been taken.
+
+### § 46.2 · A floor piece cut off at the BOTTOM of its photo — MEASURED, NOT BUILT
+
+The soft merge compares a floor row cut off by the SIDE of its photo at every width it could
+really have (`reachedSolids` in `lib/repeat-sightings.ts`): the box is carried past the frame
+two hundredths at a time and each longer box is asked again, until the piece it measures is
+wider than the widest of its kind. It had to be, because the box as seen is not the piece —
+`lateralSpan` reads the frame's edge as the far corner of something, and a fridge in the
+corner of a 106° photo came back **−79 mm** wide at its true lens and was refused, so the one
+sighting that saw it whole had nothing to meet. The same walk carried DOWN the photo, for a box
+the bottom of the frame cut off, was measured and not built.
+
+Measured on the 150 furnished rooms `tests/repeat-sightings.test.ts` holds (repeats left
+ticked / real pieces started unticked, lens as the phone reported it):
+
+| photos taken on, read as | before either walk | sides walked (built) | bottom walked alone |
+|---|---|---|---|
+| 106°, read as 66° | 27 / 37 | **3 / 37** | 25 / 38 |
+| 106°, read as 106° | 21 / 21 | **1 / 21** | 21 / 22 |
+| 120°, read as 66° | 49 / 41 | **24 / 41** | 41 / 41 |
+| 120°, read as 120° | 38 / 6 | **23 / 6** | 32 / 6 |
+| the whole table's time | 0.9 s | 2.7 s | 5.0 s |
+
+The bottom walk alone buys little, costs a real piece twice, and nearly doubles the time again.
+Walking both edges at once is a grid rather than a line, and did not finish the table in half
+an hour — more than two seconds a room on a laptop, for one review screen.
+
+**What is left after the side walk is the case both would need.** Of the 51 repeats still
+ticked across the four ultrawide readings, **48 are floor pieces with a sighting cut off at a
+bottom corner** of its photo, one is cut at the bottom alone, and two are wall pieces cut at
+the side (the walk is for floor rows only). The side is walked round; the bottom still bounds
+the piece's near face rather than measuring it — the ray through the last row of pixels is as
+near as the photo shows, not as near as the piece comes — so its distance is held by nothing.
+A cheaper form than the grid is not known to exist: the two edges' unknowns are independent,
+and a walk along one diagonal would be a guess about how a piece sits in a corner.
+
+The trade on the list if it is never built: one of those pieces starts ticked twice, says
+nothing, and one tap unticks it. Recorded 2026-09-28; the side walk is in the commit that
+filed this.
