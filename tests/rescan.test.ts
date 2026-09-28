@@ -12,6 +12,7 @@ import { clear } from 'idb-keyval';
 import { roomStore, type RoomData } from '@/lib/storage';
 import { adoptEditedList, adoptFreshScan, applyListEdits, BEFORE_RESCAN, listEditSentence } from '@/lib/rescan';
 import { buildSceneFromRoom, type ScenePart } from '@/lib/scene-spec';
+import { fromRecords, toRecord } from '@/lib/detection-record';
 
 type Saved = NonNullable<RoomData['detectedObjects']>[number];
 
@@ -213,6 +214,7 @@ describe('applyListEdits', () => {
   // Each field that shapes the piece, changed on its own.
   it.each([
     ['label', { label: 'bunk bed__slot:n' }],
+    ['wall', { label: 'bed__slot:e' }],
     ['category', { category: 'sofa' }],
     ['box', { box: [0.2, 0.1, 0.4, 0.4] }],
     ['size', { dimMM: [1400, 2000, 500] }],
@@ -230,6 +232,21 @@ describe('applyListEdits', () => {
   it('a list that is only looked at changes nothing', () => {
     const looked = LIST.map((r, i) => ({ ...r, id: i + 7, conf: 0.5, source: 'cloud', color: '#abcdef' }));
     expect(applyListEdits(SCENE, R, looked)).toBeNull();
+  });
+
+  // The screen re-saves every row through `toRecord`, which writes an old row in the
+  // current form: its wall in the label, a missing category as `other`, a uid where
+  // there was an ordinal. Same rows, so nothing is rebuilt.
+  it('an old list re-saved by the screen changes nothing', () => {
+    const old: Saved[] = [
+      { id: 0, label: 'bed', conf: 0.9, locked: true, box: [0.1, 0.1, 0.4, 0.4], category: 'bed', dimMM: [800, 2000, 500], position: { x: -1, y: 0, z: 0 } },
+      { id: 1, label: 'thing', conf: 0.9, locked: true, box: [0.5, 0.1, 0.3, 0.3], dimMM: [600, 600, 600], position: { x: 1, y: 0, z: 0 } },
+    ];
+    const r = room({ detectedObjects: old });
+    const resaved = fromRecords(old).map((d, i) => toRecord(d, i, true, () => 'minted'));
+    expect(resaved.map((x) => x.label), 'fixture: re-saving rewrites the rows').toEqual(['bed__slot:n', 'thing__slot:n']);
+    expect(resaved[1].category).toBe('other');
+    expect(applyListEdits(buildSceneFromRoom(r), r, resaved)).toBeNull();
   });
 
   // The studio is allowed to disagree with the list. A detected piece deleted there

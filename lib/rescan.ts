@@ -70,9 +70,17 @@ export async function adoptFreshScan(
 /** What in a row decides the piece it builds. Not `id` (its index, rewritten on every
  *  save), `conf` or `source` (how it was found, not what it is), and not `color`: the
  *  review screen samples one from the photo for any row that lacks it, so counting
- *  that would rebuild a piece the user had recoloured just for having been looked at. */
+ *  that would rebuild a piece the user had recoloured just for having been looked at.
+ *
+ *  Read through the codec rather than off the record, because the screen re-saves
+ *  every row through `toRecord` and that is not the identity on an old one: a row
+ *  saved before labels carried their wall, or before a missing category meant
+ *  `other`, comes back written differently and meaning the same. Compared raw, every
+ *  row of such a room read as changed the first time anyone pressed Continue, and
+ *  every piece was rebuilt for having been looked at. */
 function buildsAs(r: SavedDetection): string {
-  return JSON.stringify([r.label, r.category ?? null, r.box, r.dimMM ?? null, r.position ?? null, r.yaw ?? null, r.shape ?? null]);
+  const d = fromRecord(r);
+  return JSON.stringify([d.label, d.slot, d.category, d.box, d.dimMM ?? null, d.position ?? null, d.yaw ?? null, d.shape ?? null]);
 }
 
 export type ListEdit = {
