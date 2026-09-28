@@ -128,6 +128,23 @@ describe('findRepeats — what counts as the same piece', () => {
     expect(repeats(dets)).toEqual([null, null]);
   });
 
+  it('reads a height only off a position the room took', () => {
+    // A cloud row that put the print outside the room: the room builds it on its
+    // photo's wall instead, at that wall's default height, and it is compared THERE.
+    // Its own 1.2 m went with the place it described, or it would hang one print
+    // below the other at the one spot the room gives them both.
+    const box: Box = [0.6, 0.3, 0.1, 0.1];
+    const dimMM: [number, number, number] = [700, 40, 500];
+    const spot = startingSpot('n', box, dimMM, true, 'painting', undefined, undefined, ROOM);
+    const [x, y, z] = spot.pos;
+    const refused = row({ category: 'painting', box, dimMM, position: { x: 0, y: 1.2, z: -9 } });
+    const seen = row({ category: 'painting', slot: 'e', dimMM, position: { x, y, z }, yaw: spot.rot });
+    expect(y).toBeGreaterThan(1.2 + 0.5);
+    expect(repeats([refused, seen])).toEqual([1, null]);
+    // Inside the room it is the row's own place, and its own height with it.
+    expect(repeats([{ ...refused, position: { x, y: 1.2, z } }, seen])).toEqual([null, null]);
+  });
+
   it('keeps two wall pieces apart when one hangs above the other', () => {
     const at = (y: number, slot: CaptureSlot): Detection =>
       row({ category: 'painting', slot, position: { x: 0, y, z: -2.98 }, dimMM: [700, 40, 500] });

@@ -2384,6 +2384,24 @@ export function sceneShapeFor(cat: Category, cleanLabel: string, aiShape: string
       : labelShape;
 }
 
+/** Whether `startingSpot` takes a row's own estimate: a position inside the room,
+ *  give or take 200 mm. Exported so a caller reading anything else off that estimate
+ *  — the scan screen compares a wall piece at its estimated height — reads it only
+ *  when the spot came from it too, rather than pairing one estimate's height with
+ *  another place's floor. */
+export function estimateInRoom(
+  aiPos: { x: number; z: number } | undefined,
+  room: { width: number; depth: number },
+): aiPos is { x: number; z: number } {
+  return (
+    !!aiPos &&
+    typeof aiPos.x === 'number' &&
+    typeof aiPos.z === 'number' &&
+    Math.abs(aiPos.x) <= room.width / 2 + 0.2 &&
+    Math.abs(aiPos.z) <= room.depth / 2 + 0.2
+  );
+}
+
 /** Where a detected piece starts in the room, before gravity, wall affinity and the
  *  footprint have had their say: its own estimate when that is inside the room,
  *  else the spot on its photo's wall under the middle of its box.
@@ -2410,13 +2428,7 @@ export function startingSpot(
   aiYaw: number | undefined,
   room: { width: number; depth: number; height: number },
 ): { pos: [number, number, number]; rot: number } {
-  if (
-    aiPos &&
-    typeof aiPos.x === 'number' &&
-    typeof aiPos.z === 'number' &&
-    Math.abs(aiPos.x) <= room.width / 2 + 0.2 &&
-    Math.abs(aiPos.z) <= room.depth / 2 + 0.2
-  ) {
+  if (estimateInRoom(aiPos, room)) {
     return {
       pos: [aiPos.x, 0, aiPos.z],
       rot: typeof aiYaw === 'number' ? aiYaw : 0,

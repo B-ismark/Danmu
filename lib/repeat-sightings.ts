@@ -44,6 +44,7 @@ import { anchorFor } from './physics';
 import { clampDims, dimRangeFor } from './dimension-ranges';
 import {
   defaultAxisFor,
+  estimateInRoom,
   isRoundPart,
   isWallMountedPart,
   sceneShapeFor,
@@ -121,8 +122,11 @@ function solidOf(d: Detection, room: RoomDims | null): Solid | null {
   if (room) {
     const start = startingSpot(d.slot, d.box, dims, isWallMountedPart(cat, shape), shape, d.position, d.yaw, room);
     // A measured height where there is one: on a wall it is the piece's centre, and
-    // the start spot's is only a default. Floor pieces all stand at 0 either way.
-    spot = { x: start.pos[0], y: d.position?.y ?? start.pos[1], z: start.pos[2], rot: start.rot };
+    // the start spot's is only a default. Floor pieces all stand at 0 either way. Only
+    // from a position the spot was taken from, though: one the room refused is
+    // refused whole, or its height would ride a place it never described.
+    const y = estimateInRoom(d.position, room) ? d.position.y : start.pos[1];
+    spot = { x: start.pos[0], y, z: start.pos[2], rot: start.rot };
   } else if (d.position) {
     spot = { ...d.position, rot: d.yaw ?? 0 };
   }
