@@ -392,10 +392,12 @@ describe('a repair is built as the shape it was measured as', () => {
   it('offers the light as the pendant its words make it, and builds a pendant', () => {
     const [lamp] = candidatesFor(fan, ['lamp'], WIDE_CALS, ROOM);
     expect(lamp).toBeDefined();
-    // Measured on the ceiling, width alone — the pendant's plane.
+    // Measured on the ceiling, width alone — the pendant's plane — and called one.
     expect(lamp.detection.shape).toBe('lamp-pendant');
+    expect(lamp.name).toBe('Pendant lamp');
     const parts = accept(lamp, 'Lamp');
     expect(parts).toHaveLength(1);
+    expect(accept(lamp, lamp.name!)[0].shape).toBe('lamp-pendant');
     // The defect: a blank shape resolved from "Lamp" at build time is a floor lamp,
     // so a piece measured on the ceiling stood on the floor at a pendant's width.
     expect(parts[0].shape).toBe('lamp-pendant');
@@ -421,6 +423,64 @@ describe('a repair is built as the shape it was measured as', () => {
     expect(measured.detection.dimMM![0]).toBeGreaterThan(dimRangeFor('lamp', 'box').min[0]); // premise
     expect(measured.detection.dimMM![0]).toBeLessThan(dimRangeFor('lamp', 'lamp-pendant').min[0]); // premise
     expect(candidatesFor(thin, ['lamp'], WIDE_CALS, ROOM)).toEqual([]);
+  });
+
+  // A 1.56 m row: a double bed's width, well past any single's. The words ("sofa")
+  // name no kind of bed, so the plain one alone — a single bed — rejected it, and
+  // before the shape was carried it was offered and then built squeezed to 1.2 m.
+  const WIDE_BOX: Detection['box'] = [0.175, 0.75, 0.65, 0.1];
+  const sofa = det({ label: 'sofa', category: 'sofa', slot: 'n', box: WIDE_BOX });
+
+  it('measures the other kinds when the words name none, and says which it chose', () => {
+    const [bed] = candidatesFor(sofa, ['bed'], CALS, ROOM);
+    expect(bed).toBeDefined();
+    expect(bed.detection.shape).toBe('bed-double');
+    expect(bed.name).toBe('Double bed');
+    const w = bed.detection.dimMM![0];
+    expect(sizeFitsLabel('bed', 'bed-single', w, bed.detection.dimMM![2])).toBe(false); // premise
+    expect(sizeFitsLabel('bed', 'bed-double', w, bed.detection.dimMM![2])).toBe(true);
+    // Accepted under the name its chip shows, it builds the double bed it was measured
+    // as, at the width it was measured at — nothing squeezed to fit.
+    const [part] = accept(bed, bed.name!);
+    expect(part.shape).toBe('bed-double');
+    expect(part.dimMM[0]).toBe(w);
+    // A typed word is answered the same way: the kind that fits, over the plain one that does not.
+    expect(candidatesFor(sofa, ['bed'], CALS, ROOM, { requireFit: false })[0].detection.shape).toBe('bed-double');
+  });
+
+  it('keeps the plain kind when it fits, even where another kind fits too', () => {
+    const chair = det({ label: 'thing', category: 'bed', slot: 'n', box: [0.375, 0.75, 0.25, 0.1] });
+    const [c] = candidatesFor(chair, ['chair'], CALS, ROOM);
+    expect(c.detection.shape).toBe('chair-dining');
+    expect(c.name).toBeUndefined();
+    // premise: the office chair fits this row as well, so the rule is what chose
+    const office = candidatesFor({ ...chair, label: 'office chair' }, ['chair'], CALS, ROOM);
+    expect(office[0]?.detection.shape).toBe('chair-office');
+  });
+
+  it('reaches another kind only where the plain one misfits', () => {
+    const tall = det({ label: 'thing', category: 'bed', slot: 'n', box: [0.375, 0.65, 0.25, 0.2] });
+    const [c] = candidatesFor(tall, ['chair'], CALS, ROOM);
+    expect([c.detection.shape, c.name]).toEqual(['chair-office', 'Office chair']);
+  });
+
+  it('of several kinds that fit where the plain one does not, takes the most comfortable', () => {
+    const row = det({ label: 'thing', category: 'bed', slot: 'n', box: [0.37, 0.68, 0.26, 0.1] });
+    const [c] = candidatesFor(row, ['chair'], CALS, ROOM);
+    const [arm] = candidatesFor({ ...row, label: 'armchair' }, ['chair'], CALS, ROOM);
+    expect(candidatesFor({ ...row, label: 'dining chair' }, ['chair'], CALS, ROOM)).toEqual([]); // premise: plain misfits
+    expect(arm.detection.shape).toBe('chair-armchair'); // premise: and an armchair fits too
+    expect(c.detection.shape).toBe('chair-office');
+    expect(c.margin).toBeGreaterThan(arm.margin);
+  });
+
+  it('leaves words that name a kind alone, fitting or not', () => {
+    // "single bed" at 1.56 m: the user's or the detector's word, not second-guessed.
+    const said = { ...sofa, label: 'single bed' };
+    expect(candidatesFor(said, ['bed'], CALS, ROOM)).toEqual([]);
+    const [kept] = candidatesFor(said, ['bed'], CALS, ROOM, { requireFit: false });
+    expect([kept.detection.shape, kept.name]).toEqual(['bed-single', undefined]);
+    expect(kept.margin).toBeLessThan(0);
   });
 
   // The fix leans on one fact the scan screen holds: every label it writes onto an

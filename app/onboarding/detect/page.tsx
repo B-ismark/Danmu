@@ -153,6 +153,12 @@ function categoryLabel(cat?: string): string {
   return MANUAL_CATEGORIES.find((c) => c.value === cat)?.label ?? 'Furniture';
 }
 
+/** What a repair is called on its chip and on the row once accepted: its kind's own
+ *  name when it was measured as one ("Double bed"), else its category's. */
+function candidateLabel(cand: LabelCandidate): string {
+  return cand.name ?? categoryLabel(cand.category);
+}
+
 // Per-photo camera calibration. Deterministic at every step — no model decides a
 // number here, and each rung of the ladder is a measurement or an honest default.
 //
@@ -703,7 +709,7 @@ export default function DetectPage() {
     // INDICES, so reordering here would silently move every confirmation onto a
     // different piece of furniture.
     setDetections((arr) =>
-      arr.map((x, idx) => (idx === i ? { ...cand.detection, label: categoryLabel(cand.category) } : x)),
+      arr.map((x, idx) => (idx === i ? { ...cand.detection, label: candidateLabel(cand) } : x)),
     );
   }
 
@@ -1466,10 +1472,10 @@ function DetectionRow({
                 key={cand.category}
                 onClick={() => onRepair(cand)}
                 className="ds-chip"
-                title={`Measure this again as ${categoryLabel(cand.category)}`}
+                title={`Measure this again as ${candidateLabel(cand)}`}
                 style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px', flex: '0 0 auto' }}
               >
-                {categoryLabel(cand.category)}?
+                {candidateLabel(cand)}?
               </button>
             ))}
           </div>
@@ -1510,8 +1516,8 @@ function DetectionRow({
                 // that do fit, so a caveated chip is never the first thing offered.
                 title={
                   cand.margin < 0
-                    ? `Use the ${categoryLabel(cand.category)} model, though what the camera measured is not ${categoryLabel(cand.category).toLowerCase()}-sized`
-                    : `Use the ${categoryLabel(cand.category)} model and measure it again`
+                    ? `Use the ${candidateLabel(cand)} model, though what the camera measured is not ${candidateLabel(cand).toLowerCase()}-sized`
+                    : `Use the ${candidateLabel(cand)} model and measure it again`
                 }
                 style={{
                   height: 22,
@@ -1521,7 +1527,7 @@ function DetectionRow({
                   ...(cand.margin < 0 ? { color: 'var(--warn-text)' } : null),
                 }}
               >
-                Use {categoryLabel(cand.category)}
+                Use {candidateLabel(cand)}
                 {cand.margin < 0 ? '?' : ''}
               </button>
             ))}
