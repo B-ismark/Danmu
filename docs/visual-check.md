@@ -1711,7 +1711,7 @@ delayed 1.8 s (the working toast at 600 ms, then the result), at 1440 and 390.
 - On a phone, the working toast covering the banner's close button (the toast's own
   top-right placement, which this did not change).
 
-### Only kept pieces go into the room — this branch
+### Only kept pieces go into the room — `fdd1f20` on `main` (PR #160)
 
 **Where to click.** Any preset → *"Photograph my real room first"* → photos → the detect
 screen. Untick a piece with its ✓ (it turns to +), then **Continue with N pieces**; then
@@ -1720,7 +1720,6 @@ untick everything and read the note and the button again.
 The review's tick used to be decoration: every row was built whatever it said, so two
 sightings of one bed made two beds. Now a row goes into the room only when it is kept.
 Rooms saved before this open exactly as they did (every row is marked kept on load).
-`tests/scene-build.test.ts` and `tests/storage.test.ts`: 6 of 6 mutants caught at `a33872f`.
 
 **What wrong looks like.**
 - A piece you left out standing in the studio, or a kept one missing.
@@ -1729,7 +1728,7 @@ Rooms saved before this open exactly as they did (every row is marked kept on lo
 - "Continue with an empty room" or the *Nothing kept yet* note wrapping badly at 360 px.
 - An old room (made before this) opening with pieces missing.
 
-### A bed seen in two photos starts unticked, and says whose it is — this branch, PROBED at 360–1920
+### A bed seen in two photos starts unticked, and says whose it is — `fdd1f20` on `main` (PR #160), PROBED at 360–1920
 
 **Where to click.** Any preset → *"Photograph my real room first"* → photograph the walls
 so the bed is in two of them (the foot wall and a side wall) → the detect screen. One bed
@@ -1741,8 +1740,7 @@ came back as two ticked beds. Now a row that shares a quarter of its floor with 
 of the same kind starts unticked and names the row it repeats — nothing is deleted.
 Probed by seeding the review list directly (a real scan cannot be driven headless): the
 caption wraps under the name at 360, the header reads *3 of 4 pieces kept*, no overflow
-at seven widths. `tests/repeat-sightings.test.ts`: 28 of 28 mutants caught at `bb1aef2`. The case it
-cannot reach — twin beds in a corner, where the hard merge deletes one before this runs —
+at seven widths. The case it cannot reach — twin beds in a corner, where the hard merge deletes one before this runs —
 is `docs/what-is-still-open.md` § 46.1.
 
 **What wrong looks like.**
@@ -1754,7 +1752,7 @@ is `docs/what-is-still-open.md` § 46.1.
   unless the word reads as an acronym (*the TV*), and a detector's own wording is the
   untested half.
 
-### The room's size on the shape picker, and the rough mark when it is skipped — this branch, SWEPT and PROBED
+### The room's size on the shape picker, and the rough mark when it is skipped — `fdd1f20` on `main` (PR #160), SWEPT and PROBED
 
 **Where to click.** New room → the shape picker. Under the outlines, **Room size · optional**
 holds Width, Depth and Ceiling at the selected shape's typical size; change shape and they
@@ -1782,11 +1780,10 @@ room. Then start **without typing**:
 - In the studio's glass rail the refused rim is the border alone, since the rail owns the
   box-shadow. Whether that reads as refused beside the other boxes is a person's call.
 
-**What was measured, and on what.** SwiftShader, desktop Chromium, `06476a8`: the size
-step and the note swept at seven widths in metres and feet; a browser probe walked
+**What was looked at, and on what.** SwiftShader, desktop Chromium only: the size step
+and the note swept at seven widths in metres and feet, and a browser probe walked
 skip → note → *These are right* → reload, skip → typed width → reload, typed on the picker,
-and skip → capture → scan, 18 of 18 on three runs. `tests/size-entry.test.ts` (21 of 21
-mutants caught at `5f197e6`) and `tests/rough-size.test.ts` (13 of 13 at `06476a8`).
+and skip → capture → scan.
 
 ---
 ## Look and light
