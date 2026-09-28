@@ -484,8 +484,10 @@ export function Segmented<T extends string>({
             key={o.value}
             type="button"
             // `.seg` carries the segment's minimums, so a finger gets 44px each way
-            // (globals.css). Inline, a `min-width` would beat that rule.
-            className="seg"
+            // (globals.css). Inline, a `min-width` would beat that rule. A segment that
+            // shares out the row (`--fill`) keeps only the height: its width is the
+            // row's to give, and a floor on it would push the last one out of view.
+            className={fill ? 'seg seg--fill' : 'seg'}
             onClick={() => onChange(o.value)}
             aria-pressed={active}
             aria-label={o.label ?? o.value}
