@@ -3,7 +3,7 @@
 //
 // Each box carries a tag — the piece's name, how sure the finder was, and the X that
 // removes it. It used to hang off the box's top-left corner whatever the box was, so on
-// a phone a box at the right ran its tag up to 92 px past the photo (the whole review
+// a phone a box at the right ran its tag up to 132 px past the photo (the whole review
 // scrolled sideways), and a box touching the top lifted its tag clean above the frame,
 // where the scroll box cut it off. The tag holds the X, so a tag off the photo was a
 // piece you could not remove there.
@@ -35,8 +35,12 @@
 // A box can run past the frame — the on-device finder keeps `x` and `w` in 0..1 but not
 // their sum, and the cloud path's boxes are not clamped at all — so nothing here trusts a
 // box to be on the photo. The CSS holds the tag there on every side instead, and that
-// hold is needed for boxes that ARE on it too (a tag above a box at the very top, below
-// one at the very bottom), so clamping the box as well would be a second copy of it.
+// hold is needed for boxes that ARE on the photo too: until the photo's height is known
+// every tag sits above its box, so one near the top would rise past the frame; and above
+// a box whose top is within the 2 px overlap of the foot, the tag would hang past it.
+// Trimming the box to the photo before placing its tag would be a second copy of that
+// hold, and was deleted as one. The OUTLINE is trimmed (`boxCss`), because the outline is
+// the box drawn; the tag is placed from the box as it came.
 //
 // Pure, so the rule can be swept across the whole photo without a browser.
 
