@@ -480,6 +480,9 @@ export function Segmented<T extends string>({
           <button
             key={o.value}
             type="button"
+            // `.seg` carries the segment's minimums, so a finger gets 44px each way
+            // (globals.css). Inline, a `min-width` would beat that rule.
+            className="seg"
             onClick={() => onChange(o.value)}
             aria-pressed={active}
             aria-label={o.label ?? o.value}
@@ -494,7 +497,6 @@ export function Segmented<T extends string>({
               // `flex` is meaningless in the grid, and setting it would read as
               // if one of the two modes were still doing the other's work.
               flex: wrap ? undefined : stretch ? '1 1 0' : undefined,
-              minWidth: 0,
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',

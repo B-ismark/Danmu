@@ -1233,6 +1233,13 @@ textarea.field { border-radius: var(--r-2); }
   background: var(--paper); border: 1px solid var(--edge);
   border-radius: var(--r-3); box-shadow: var(--shadow-soft); overflow: hidden;
 }
+/* A `Segmented` segment. Free to shrink, so a label ellipsises rather than prints over
+   its neighbours; under a finger, never smaller than 44px either way. The height is
+   inline and sized for a mouse (30px by default), and a minimum wins over it. */
+.seg { min-width: 0; }
+@media (pointer: coarse) {
+  .seg { min-width: 44px; min-height: 44px; }
+}
 
 /* A chrome cluster floating on a work surface (CanvasChrome's three slots).
    The cluster is a box, and the parts of that box which are not a control — the
