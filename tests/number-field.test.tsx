@@ -60,6 +60,39 @@ describe('pressing a NumberField chevron', () => {
     expect(input.value).toBe(STEPPED[name]);
   });
 
+  it.each(['Increase', 'Decrease'] as const)('%s brings focus with it from another field being typed in', (name) => {
+    // Left in the width, focus meant the next Up stepped the width, not the depth
+    // whose arrow was just pressed. Typing had already switched the shortcuts off.
+    render(
+      <>
+        <input aria-label="Width" defaultValue="4" />
+        <Field />
+      </>,
+    );
+    const other = screen.getByLabelText('Width') as HTMLInputElement;
+    const input = screen.getByLabelText('Width in m') as HTMLInputElement;
+    other.focus();
+    fireEvent.pointerDown(chevron(name));
+    fireEvent.pointerUp(chevron(name));
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe(STEPPED[name]);
+    expect(other.value).toBe('4');
+  });
+
+  it('leaves focus on a checkbox, which brings up no keyboard', () => {
+    render(
+      <>
+        <input type="checkbox" aria-label="Snap" />
+        <Field />
+      </>,
+    );
+    const box = screen.getByLabelText('Snap');
+    box.focus();
+    fireEvent.pointerDown(chevron('Increase'));
+    fireEvent.pointerUp(chevron('Increase'));
+    expect(document.activeElement).toBe(box);
+  });
+
   it('answers the primary button only', () => {
     // A right-click stepped the value and started the repeat, and the context menu it
     // opens can take the pointerup that stops it.

@@ -21,6 +21,12 @@
 // undoing the step just taken; and on a touch laptop, where the arrows show, a tap
 // focusing a decimal field can bring up the on-screen keyboard.
 //
+// The one exception is a press made while ANOTHER field is being typed in. Left
+// there, focus stayed in the width while its depth's arrow was pressed, so the next
+// Up stepped the width. Both costs above are already paid by then — the shortcuts
+// are off and the keyboard is up — so the focus follows the press, as it would
+// into a native spinner.
+//
 // On a touch screen the chevrons step aside (`.num-field` in globals.css) and the
 // field grows to 44px. A 16 × 14 arrow is not a target a finger can hit, and on a
 // phone `inputMode="decimal"` brings up the number pad, which is how a phone asks
@@ -60,6 +66,14 @@ const ARROWS = [
   { dir: -1, title: 'Decrease', icon: 'chevron-down' },
 ] as const;
 
+/** Focus a person is typing into: a text-entry input, a textarea, editable text. A
+ *  checkbox or a slider is focusable without bringing up a keyboard, so it is not. */
+const UNTYPED = new Set(['checkbox', 'radio', 'range', 'color', 'file', 'button', 'submit', 'reset', 'image']);
+function isTypedInto(el: Element | null): boolean {
+  if (el instanceof HTMLInputElement) return !UNTYPED.has(el.type);
+  return el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable);
+}
+
 const HOLD_DELAY = 380;
 const HOLD_EVERY = 60;
 const MAX_CATCH_UP = 3;
@@ -86,6 +100,7 @@ export function NumberField({
   style?: CSSProperties;
 }) {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   // The latest value, so a repeat that started three steps ago still counts from
   // where the field actually is.
   const latest = useRef(value);
@@ -139,6 +154,8 @@ export function NumberField({
     // Capture, so a pointer that drifts off a 16px target mid-hold keeps
     // stepping and still ends on pointerup.
     e.currentTarget.setPointerCapture(e.pointerId);
+    const was = document.activeElement;
+    if (was !== inputRef.current && isTypedInto(was)) inputRef.current?.focus({ preventScroll: true });
     hold(dir);
   }
 
@@ -158,6 +175,7 @@ export function NumberField({
   return (
     <div className="num-field" style={{ position: 'relative', display: 'flex' }}>
       <input
+        ref={inputRef}
         type="number"
         inputMode="decimal"
         value={value}
