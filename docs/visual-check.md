@@ -1785,7 +1785,7 @@ and the note swept at seven widths in metres and feet, and a browser probe walke
 skip → note → *These are right* → reload, skip → typed width → reload, typed on the picker,
 and skip → capture → scan.
 
-### A piece's tag stays on the photo — this branch
+### A piece's tag stays on the photo — this branch, PROBED at 360, 768 and 1280
 
 **Where to click.** The detect screen, with pieces near the photo's right edge and touching
 its top — a picture high on the wall, a pendant, a chair at the side of the frame — and, if
@@ -1796,7 +1796,8 @@ top sat above the photo, where the scroll box cut it off. Now the tag still star
 box's left side and slides left only as far as the photo's edge; it sits just above its box,
 just below it where there is no room above, and inside its top only for a box as tall as the
 photo; and a name too long for the photo ellipsises before the X moves. A box that runs past
-the frame is drawn only to the photo's edge.
+the frame is drawn only to the photo's edge. `scripts/photo-tag-probe.mjs` presses all of
+this at the three widths.
 
 **What wrong looks like.**
 - A tag, or its X, past any edge of the photo, or the review scrolling sideways at 360 px.
@@ -1806,12 +1807,14 @@ the frame is drawn only to the photo's edge.
 - A name ellipsised when the photo had room for it.
 - With **Add a piece by hand** on, a drag that starts on a tag not drawing a box.
 - **Known and not fixed here:** two tags on the same line can overlap, and the later one
-  covers the earlier one's X. The row's own Remove in the list still works. Whether it happens often enough on real photos to need
+  covers the earlier one's X. The probe counts these and does not fail on them. The row's
+  own Remove in the list still works. Whether it happens often enough on real photos to need
   tags that step aside is a person's call.
 
-**What was measured, and on what.** `tests/photo-tag.test.ts` sweeps the placement rule over
-43,200 box, photo and name cases. A real phone, with a real scan's boxes, is the unlooked-at
-half.
+**What was measured, and on what.** SwiftShader, desktop Chromium, seeded boxes (no detector
+ran): the probe's 36 checks at 360, 768 and 1280 px, against 10 of 36 on `main` at `fdd1f20`.
+`tests/photo-tag.test.ts` sweeps the placement rule over 43,200 box, photo and name cases. A
+real phone, with a real scan's boxes, is the unlooked-at half.
 
 ---
 ## Look and light
