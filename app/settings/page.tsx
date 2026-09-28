@@ -62,7 +62,9 @@ export default function SettingsPage() {
   // The danger zone used to act on an unnamed "current room" read from a
   // persisted id — which may be a room last opened weeks ago. Load it so the
   // button can say what it will delete.
-  const [room, setRoom] = useState<{ id: string; name: string } | null>(null);
+  // `undefined` while it is being read: "No room is open" said during the read was
+  // a false empty state, with a "Go to your rooms" button for a room that WAS open.
+  const [room, setRoom] = useState<{ id: string; name: string } | null | undefined>(undefined);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -338,7 +340,9 @@ export default function SettingsPage() {
           hint={
             room
               ? `Removes “${room.name}”: its shape, wall colours, photos, detections, furniture and saved layouts. Recoverable for 30 days.`
-              : 'No room is open.'
+              : room === undefined
+                ? 'Finding the open room…'
+                : 'No room is open.'
           }
         >
           <button
@@ -353,7 +357,7 @@ export default function SettingsPage() {
             <Icon name="trash" size={12} />
             {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
           </button>
-          {!room && (
+          {room === null && (
             <div style={{ marginTop: 8 }}>
               <Link href="/workspace" className="ds-btn ds-btn--xs">
                 Go to your rooms

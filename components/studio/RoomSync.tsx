@@ -46,6 +46,8 @@ export function RoomSync() {
   useEffect(() => {
     if (!roomId) return;
     ready.current = false;
+    // Even for the room the store already holds: it may have changed in another tab.
+    useScene.getState().setHydrated(null);
     (async () => {
       const [room, savedScene, t] = await Promise.all([
         roomStore.loadRoom(roomId),
@@ -91,6 +93,8 @@ export function RoomSync() {
       // swept on the next load, which is what stops it growing forever in IDB.
       setParentIds(livingParents(t?.parentIds, useScene.getState().parts));
       ready.current = true;
+      // The room on screen is this one now, so the canvas veil can lift.
+      useScene.getState().setHydrated(roomId);
       // Record the loaded room as the state undo returns *to*. Without a
       // baseline, `undo()` has nothing before the current entry and the first
       // edit of every session is unreachable forever — worst case, that edit is

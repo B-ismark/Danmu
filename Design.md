@@ -2645,6 +2645,23 @@ target in a way an explicit Back button is not. Do not "fix" detect's to match.
 | `DocShell.tsx` | The document-route shell — see above. Takes `trail` (the breadcrumb), `actions`, `back`, `measure` (`page` \| `prose`) and `variant` (`plain` \| `hero`). |
 | `Confirm.tsx` · `ColorPicker.tsx` | Promise-based confirm modal; HSV picker. Both exist to keep an OS widget out of the UI. |
 
+### Waiting: what the app shows while it works
+
+Four patterns, one per kind of wait, so a wait is never a screen that looks finished or a
+list that looks empty.
+
+| Wait | What it shows | Where |
+|---|---|---|
+| **A room opening** | `CanvasVeil`: opaque paper over the canvas and its floating chrome, "Opening your room…" until `RoomSync`'s three reads are in (`useScene.hydratedRoomId`, set only there, reset at the start of every load), then on the 3D tab "Building the 3D view…" until the first frame (`Room`'s `onFirstFrame`). Before it, the studio drew whatever the store still held: the previous room, or the starter room. The words arrive after a beat (`.veil__say`), so a one-frame load is a frame of paper, not a flash of text. `StudioShell`'s pre-layout "Setting up your studio…" uses the same look. | both room tabs |
+| **A press that takes a while** | The button says so (`Fixing…`), and at **full strength**: `.ds-btn[aria-busy="true"]:disabled` undoes the disabled rule's half opacity, which had made the spinner faint and the button read as switched off. After `SAY_WORKING_AFTER_MS` (600 ms) `toastWhile` also puts up a working toast ("Arranging your room…"), taken down when the work settles either way, so the result toast is the only card left. Under 600 ms nothing extra is said, since a card that flashes for a frame is flicker. It needs the arranging worker: on the inline fallback the solve holds the thread and nothing can paint anyway. | Fix, Try a fix, Re-fit |
+| **A search** | Placeholders the shape of what is coming (`.ds-skeleton`, breathing) and a live region saying "Finding more…". | the ideas gallery |
+| **A list being read** | `.ds-skeleton--row` rows and an `sr-only` status, instead of the empty-state sentence. "No saved layouts yet", "No rooms yet", "No room is open" and a room briefly called "Living Room" were all said during the read, about rooms that had layouts, rooms and names. | Layouts, the room switcher, Settings, the top bar's name, the workspace |
+
+A finished export says so too, naming the file ("Floor plan saved · den-floor-plan.png"),
+because a download is easy to miss on a phone. The floor-plan export also used to drop
+its own failure: `exportPlanPng`'s promise was not awaited, so an encode error rejected
+into nothing. `tests/export-menu-wired.test.tsx` holds both.
+
 ### Two layers, one fallback
 
 A part's transform lives in two places, and it is meant to:

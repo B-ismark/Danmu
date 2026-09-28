@@ -1693,6 +1693,25 @@ What a person can see and the sweep cannot:
 - **The room size hint:** drag a room's width down to its largest piece; the sentence
   appears at the floor and not before.
 
+### Loading states — this branch, PROBED in SwiftShader, needs a real phone and a real GPU
+
+A room opening shows paper and "Opening your room…" over the canvas, then "Building the
+3D view…" until the first frame; a slow Fix or Try a fix puts up "Arranging your room…"
+after 600 ms and replaces it with the result; busy buttons stay at full strength; lists
+being read show breathing rows instead of "No … yet". Probed with the CPU throttled 8×
+(veil: Setting up → Opening → Building, then gone) and with the worker's replies
+delayed 1.8 s (the working toast at 600 ms, then the result), at 1440 and 390.
+`tests/canvas-veil.test.tsx`, `tests/toast-while.test.tsx`,
+`tests/export-menu-wired.test.tsx`: 7 of 7 mutants caught.
+
+**What wrong looks like.**
+- The previous room, or the starter room, visible for a moment when opening a room.
+- A veil that never lifts on a real GPU (the first-frame signal not arriving), or
+  "Building the 3D view…" flashing on every tab switch on a fast machine.
+- A working toast that stays after its result arrives, or appears for a quick Fix.
+- On a phone, the working toast covering the banner's close button (the toast's own
+  top-right placement, which this did not change).
+
 ---
 ## Look and light
 

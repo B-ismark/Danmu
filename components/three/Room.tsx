@@ -89,7 +89,20 @@ const _up = new Vector3(0, 1, 0);
 const _dropPlane = new Plane(new Vector3(0, 1, 0), 0);
 const Grade = wrapEffect(GradeEffect);
 
-export function Room() {
+/** Calls `onFrame` once, when the first frame is drawn: the canvas veil stays up
+ *  until then, because between the WebGL context arriving and the first frame is
+ *  shader compilation, and that is the wait a slow device sees as a blank room. */
+function FirstFrame({ onFrame }: { onFrame?: () => void }) {
+  const said = useRef(false);
+  useFrame(() => {
+    if (said.current || !onFrame) return;
+    said.current = true;
+    onFrame();
+  });
+  return null;
+}
+
+export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
   const hidden = useStudio((s) => s.hidden);
   const lighting = useStudio((s) => s.lighting);
   const quality = useStudio((s) => s.quality);
@@ -403,6 +416,7 @@ export function Room() {
       <CameraRig />
       <SceneCapture composer={hi ? composer : null} />
       <DropConnector apiRef={dropApi} />
+      <FirstFrame onFrame={onFirstFrame} />
     </Canvas>
     </div>
   );
@@ -706,6 +720,8 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
       snap.toBlob((blob) => {
         if (!blob) return snapshotFailed();
         downloadBlob(blob, snapshotFileName(name));
+        // Said, and the file named: a download is easy to miss, on a phone most of all.
+        toast({ title: 'Picture saved', message: snapshotFileName(name), ttl: 4000 });
       }, 'image/png');
     } catch (e) {
       // Canvas not ready, context lost, or a surface-size cap. This used to be a bare

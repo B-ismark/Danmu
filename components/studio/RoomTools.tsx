@@ -95,7 +95,7 @@ import { IconButton, Pill, Segmented, Spinner } from '@/components/ui/primitives
 import { useBusyAction } from '@/components/ui/useBusyAction';
 import { Modal } from '@/components/ui/Modal';
 import { useConfirm } from '@/components/ui/Confirm';
-import { toast } from '@/components/ui/StorageToast';
+import { toast, toastWhile } from '@/components/ui/StorageToast';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 import type { LibraryItem, ScenePart } from '@/lib/scene-spec';
 
@@ -701,7 +701,7 @@ function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
   const attempt = useRef(0);
 
   async function solve() {
-    const outcome = await suggest('arrange', ++attempt.current);
+    const outcome = await toastWhile({ title: 'Arranging your room…' }, () => suggest('arrange', ++attempt.current));
     if (outcome.stale) return toastStale();
     const { applied, result, parts } = outcome;
     if (!applied) {
@@ -907,7 +907,9 @@ function useRefitOffer(
       action: {
         label: 'Re-fit',
         onClick: async () => {
-          const outcome = await suggest('refit', 1);
+          // The toast carrying this button is gone the moment it is pressed, so the
+          // wait would otherwise say nothing at all.
+          const outcome = await toastWhile({ title: 'Re-fitting your room…' }, () => suggest('refit', 1));
           if (outcome.stale) return toastStale();
           const { applied, result } = outcome;
           // The third of the three sentences, and it was missed on the first pass: this
@@ -1011,7 +1013,9 @@ function FixButton({ issue, appPlaced }: { issue: ClearanceIssue; appPlaced: App
   const scope = issue.partIds.length > 0 ? issue.partIds : undefined;
 
   async function solve() {
-    const outcome = await suggest('refit', ++attempt.current, scope);
+    const outcome = await toastWhile({ title: `Trying a fix for “${issue.title}”…` }, () =>
+      suggest('refit', ++attempt.current, scope),
+    );
     if (outcome.stale) return toastStale();
     const { applied, result, parts } = outcome;
     if (!applied) {
@@ -1746,7 +1750,9 @@ function transformKey(t: Transforms): string {
 
 function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprint: Footprint }) {
   const { roomId } = useParams<{ roomId: string }>();
-  const [layouts, setLayouts] = useState<LayoutVariant[]>([]);
+  // Null until the saved list is read, so the tab does not say "No saved layouts
+  // yet" about a room that has some.
+  const [layouts, setLayouts] = useState<LayoutVariant[] | null>(null);
   const [pendingApply, setPendingApply] = useState<LayoutVariant | null>(null);
   // A plain flag on purpose, and NOT `useBusyAction`: the work here is a real
   // `await` into IndexedDB, so the thread is handed back and the flag paints
@@ -1771,13 +1777,13 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
     const transforms: Transforms = { positions: t.positions, rotations: t.rotations, dims: t.dims, parentIds: t.parentIds };
     const v: LayoutVariant = {
       id: `l-${Date.now().toString(36)}`,
-      name: `Layout ${String.fromCharCode(65 + (layouts.length % 26))}`,
+      name: `Layout ${String.fromCharCode(65 + ((layouts?.length ?? 0) % 26))}`,
       createdAt: Date.now(),
       parts: baseParts,
       transforms,
     };
     await roomStore.saveLayout(roomId, v);
-    setLayouts((prev) => [...prev, v]);
+    setLayouts((prev) => [...(prev ?? []), v]);
     return v;
   }
 
@@ -1805,7 +1811,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
       Object.keys(t.dims).length === 0;
     if (untouched) return true;
     const key = transformKey({ positions: t.positions, rotations: t.rotations, dims: t.dims });
-    return layouts.some((l) => transformKey(l.transforms) === key);
+    return (layouts ?? []).some((l) => transformKey(l.transforms) === key);
   }
 
   function requestApply(v: LayoutVariant) {
@@ -1834,7 +1840,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
     });
     if (!ok) return;
     await roomStore.deleteLayout(roomId, v.id);
-    setLayouts((prev) => prev.filter((x) => x.id !== v.id));
+    setLayouts((prev) => (prev ?? []).filter((x) => x.id !== v.id));
     toast({ title: `${v.name} deleted`, message: 'Your room is unchanged.' });
   }
 
@@ -1859,7 +1865,13 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
         </div>
       </div>
 
-      {layouts.length === 0 ? (
+      {layouts === null ? (
+        <div role="status" style={{ padding: '10px 14px', display: 'grid', gap: 8 }}>
+          <span className="sr-only">Loading saved layouts</span>
+          <div className="ds-skeleton ds-skeleton--row" aria-hidden="true" />
+          <div className="ds-skeleton ds-skeleton--row" aria-hidden="true" />
+        </div>
+      ) : layouts.length === 0 ? (
         <div className="t-small" style={{ padding: '16px 14px', lineHeight: 1.55 }}>
           No saved layouts yet.
         </div>

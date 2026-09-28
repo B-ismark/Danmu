@@ -15,7 +15,9 @@ export function RoomSwitcher() {
   const { roomId: currentId } = useParams<{ roomId: string }>();
   const setRoomId = useRoom((s) => s.setRoomId);
   const [open, setOpen] = useState(false);
-  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  // Null until the first read: "No rooms yet" said during the read was false, in a
+  // menu opened from inside a room.
+  const [rooms, setRooms] = useState<RoomSummary[] | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -89,12 +91,24 @@ export function RoomSwitcher() {
               borderBottom: '1px solid var(--hairline)',
             }}
           >
-            Switch room · <span className="mono">{rooms.length}</span>
+            Switch room{rooms && (
+              <>
+                {' · '}
+                <span className="mono">{rooms.length}</span>
+              </>
+            )}
           </div>
-          {rooms.length === 0 && (
+          {rooms === null && (
+            <div role="status" style={{ padding: '8px 12px', display: 'grid', gap: 6 }}>
+              <span className="sr-only">Loading your rooms</span>
+              <div className="ds-skeleton ds-skeleton--row" aria-hidden="true" />
+              <div className="ds-skeleton ds-skeleton--row" aria-hidden="true" />
+            </div>
+          )}
+          {rooms?.length === 0 && (
             <div className="t-meta" style={{ padding: '14px 12px' }}>No rooms yet.</div>
           )}
-          {rooms.map((r) => {
+          {rooms?.map((r) => {
             const isCurrent = r.id === currentId;
             return (
               <button

@@ -21,7 +21,7 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { IconButton } from './primitives';
+import { IconButton, Spinner } from './primitives';
 
 export type ToastTone = 'neutral' | 'danger' | 'success';
 
@@ -38,6 +38,9 @@ export type ToastSpec = {
   /** ms before auto-dismiss. 0 = sticky — an error the user hasn't read yet
    *  must not vanish on a timer. Defaults: danger sticky, everything else 9s. */
   ttl?: number;
+  /** Work still going: a spinner beside the title. Only `toastWhile` sets it, and
+   *  it takes the toast down itself when the work ends. */
+  busy?: boolean;
 };
 
 type Toast = ToastSpec & { id: number; tone: ToastTone; ttl: number };
@@ -69,6 +72,29 @@ const useToasts = create<ToastState>((set, get) => ({
  *  function, no hook and no prop-drilling. */
 export function toast(spec: ToastSpec): number {
   return useToasts.getState().push(spec);
+}
+
+/** How long work runs before it is worth a word. Under this, the result is the only
+ *  thing said: a "working" card replaced a frame later reads as a flicker. Over it, a
+ *  press with nothing but an 11px spinner in a rail button reads as a press that did
+ *  nothing, which is how the arranging solves felt on a slow machine. */
+export const SAY_WORKING_AFTER_MS = 600;
+
+/** Run `work`, and say `working` if it is still going after `SAY_WORKING_AFTER_MS`.
+ *  The working toast is taken down when the work settles, either way, so whatever
+ *  the caller says next (its result, or its error) is the only card left. It is
+ *  announced when it appears, through the same live region as every toast. */
+export async function toastWhile<T>(working: { title: string; message?: string }, work: () => Promise<T>): Promise<T> {
+  let id: number | null = null;
+  const timer = setTimeout(() => {
+    id = useToasts.getState().push({ ...working, busy: true, ttl: 0 });
+  }, SAY_WORKING_AFTER_MS);
+  try {
+    return await work();
+  } finally {
+    clearTimeout(timer);
+    if (id !== null) useToasts.getState().dismiss(id);
+  }
 }
 
 const TONE: Record<ToastTone, { border: string; lead: string }> = {
@@ -145,7 +171,20 @@ export function StorageToast() {
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: tone.lead, lineHeight: 1.5 }}>{t.title}</div>
+              <div
+                style={{
+                  fontSize: 'var(--fs-small)',
+                  fontWeight: 700,
+                  color: tone.lead,
+                  lineHeight: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                {t.busy && <Spinner size={12} />}
+                <span style={{ minWidth: 0 }}>{t.title}</span>
+              </div>
               {t.message && (
                 <div className="t-small" style={{ lineHeight: 1.45, marginTop: 2 }}>
                   {t.message}
