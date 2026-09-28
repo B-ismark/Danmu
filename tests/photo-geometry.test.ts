@@ -10,6 +10,7 @@ import {
   placeCeilingObject,
   placeFloorObject,
   placeWallObject,
+  pickLens,
   type CameraCal,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
@@ -956,6 +957,18 @@ describe('calFromHfov', () => {
     const assumed = placeFloorObject(box, 'n', ROOM.footprint, defaultCal(4 / 3), CARD)!;
     expect(assumed.distance).toBe(wallD('n', ROOM));
     expect(assumed.widthMM).toBeLessThan(right.widthMM * 0.7);
+  });
+});
+
+describe('pickLens', () => {
+  it('calls a lens measured only when EXIF gave it', () => {
+    // A measured lens is held still by the repeat check and an assumed one is swept
+    // across every lens a phone could have, so this one word decides whether one
+    // piece seen from two walls can come back together.
+    expect(pickLens(78, 95)).toEqual({ hfov: 78, lens: 'measured' });
+    expect(pickLens(78, null)).toEqual({ hfov: 78, lens: 'measured' });
+    expect(pickLens(null, 95)).toEqual({ hfov: 95, lens: 'assumed' });
+    expect(pickLens(null, null)).toBeNull();
   });
 });
 

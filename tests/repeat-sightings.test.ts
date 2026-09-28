@@ -12,15 +12,26 @@
 // Floor pieces are compared as the circle they could turn within (a photo never
 // measures a floor piece's heading), so the distances below are disc distances:
 // two 1 m discs share a quarter of their floor about 0.64 m apart, not 0.75.
+//
+// The lens tests after the known room are the half the others cannot reach. Most
+// phones write no focal length, so a photo's lens is assumed, and an ultrawide
+// measured as a 66° lens puts one piece seen from two walls in two places. Those
+// tests run one kind of furniture at a time, each with a control that marks the
+// same lens measured to show the fixture really does double it. The last block is
+// the population: 150 rooms from `tests/helpers/furnished-rooms.ts`, printed on
+// every green run and held as literals, because the sweep's price is a rate and a
+// hand-built fixture cannot measure a rate.
 
 import { describe, expect, it } from 'vitest';
-import { refineDetections } from '@/lib/detect-refine';
-import { findRepeats, keptAtFirst, REPEAT_SHARE } from '@/lib/repeat-sightings';
+import { refineDetections, type CalMap } from '@/lib/detect-refine';
+import { findRepeats, keptAtFirst, REPEAT_SHARE, SWEPT_HFOV_DEG } from '@/lib/repeat-sightings';
 import { footArea, footFromPart, footIntersectionArea } from '@/lib/geometry';
+import { PLAUSIBLE_HFOV_DEG, type CameraCal, type LensSource } from '@/lib/photo-geometry';
 import { startingSpot } from '@/lib/scene-spec';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { boxFor, CAL, CALS, refinedOnly, ROOM, shots, squareOn, TRUTH, type Truth } from './helpers/known-room';
+import { boxIn, furnishedRoom, SWEEP_SLOTS } from './helpers/furnished-rooms';
 import type { Box } from './helpers/project';
 
 type Row = Partial<Detection> & Pick<Detection, 'category'>;
@@ -43,9 +54,12 @@ function row(r: Row): Detection {
 }
 
 /** The rule tests' room: the known room, so a row is compared where the room will
- *  build it — which, for a row that carries a position, is that position. */
+ *  build it — which, for a row that carries a position, is that position. No lens:
+ *  with one, a row from another photo would be re-measured from its box at every
+ *  lens a phone could have, and the hand-written position would stop being the
+ *  thing under test. */
 function repeats(dets: Detection[], keep: boolean[] = []): (number | null)[] {
-  return findRepeats(dets, keep, ROOM);
+  return findRepeats(dets, keep, ROOM, {});
 }
 
 /** How far apart two 1 m floor discs stand when they share `share` of their floor —
@@ -129,9 +143,9 @@ describe('findRepeats — what counts as the same piece', () => {
   it('while the room is still loading, leaves a row with no position as a piece in its own right', () => {
     const dets = slid(0.9);
     // Placed rows need no room: they are compared where they were measured.
-    expect(findRepeats(dets, [], null)).toEqual([null, 0]);
+    expect(findRepeats(dets, [], null, {})).toEqual([null, 0]);
     delete dets[1].position;
-    expect(findRepeats(dets, [], null)).toEqual([null, null]);
+    expect(findRepeats(dets, [], null, {})).toEqual([null, null]);
   });
 });
 
@@ -145,7 +159,7 @@ describe('findRepeats — a row the camera could not place', () => {
     const dets = [unplaced([0.3, 0.5, 0.4, 0.3]), unplaced([0.33, 0.5, 0.34, 0.3])];
     expect(repeats(dets)).toEqual([null, 0]);
     // No room, no starting spot, nothing to compare.
-    expect(findRepeats(dets, [], null)).toEqual([null, null]);
+    expect(findRepeats(dets, [], null, {})).toEqual([null, null]);
   });
 
   it('flags it against a placed sighting standing on that spot, and not one across the room', () => {
@@ -200,7 +214,7 @@ describe('findRepeats — which sighting is THE piece', () => {
     // The unkept row is unclipped and bigger — it wins every later tie-break.
     const dets = slid(0.9, { category: 'table', box: [0.2, 0.2, 0.5, 0.5] }, { category: 'table', box: [0, 0.4, 0.2, 0.2] });
     expect(repeats(dets, [false, true])).toEqual([1, null]);
-    expect(keptAtFirst(dets, [false, true], ROOM)).toEqual(new Set([1]));
+    expect(keptAtFirst(dets, [false, true], ROOM, {})).toEqual(new Set([1]));
   });
 
   it('prefers the sighting the frame did not cut off', () => {
@@ -245,8 +259,8 @@ describe('findRepeats — which sighting is THE piece', () => {
 describe('keptAtFirst', () => {
   it('ticks what would be kept, minus its repeats', () => {
     const dets = [...slid(0.9), row({ category: 'sofa', slot: 's', position: { x: 3, y: 0, z: 0 } })];
-    expect(keptAtFirst(dets, [true, true, true], ROOM)).toEqual(new Set([0, 2]));
-    expect(keptAtFirst(dets, [true, true, false], ROOM)).toEqual(new Set([0]));
+    expect(keptAtFirst(dets, [true, true, true], ROOM, {})).toEqual(new Set([0, 2]));
+    expect(keptAtFirst(dets, [true, true, false], ROOM, {})).toEqual(new Set([0]));
   });
 });
 
@@ -270,14 +284,16 @@ function taller(b: Box, f: number): Box {
 }
 
 /** Every sighting of `t`, each photo read twice: once as `label`, and once by a
- *  second model that calls it `second` and draws the taller box. */
-function readTwice(t: Truth, second: string): Detection[] {
+ *  second model that calls it `second` and draws the taller box — photographed on
+ *  `shot`, the lens the phone really had. `grow: false` keeps the second box the
+ *  same, for a piece with no height for a second model to take in. */
+function readTwice(t: Truth, second: string, { shot = CAL, grow = true }: { shot?: CameraCal; grow?: boolean } = {}): Detection[] {
   return t.slots.flatMap((slot) => {
-    const seen = inPicture(boxFor(t, slot, CAL));
+    const seen = inPicture(boxFor(t, slot, shot));
     const unplaced = { slot, shape: undefined, position: undefined, dimMM: undefined, yaw: undefined };
     return [
       row({ category: t.category, label: t.label, box: seen, ...unplaced }),
-      row({ category: t.category, label: second, box: taller(seen, 2.2), ...unplaced }),
+      row({ category: t.category, label: second, box: grow ? taller(seen, 2.2) : seen, ...unplaced }),
     ];
   });
 }
@@ -288,7 +304,7 @@ describe('the known room', () => {
     // a lamp in two photos that the hard merge already took. Every one is a piece.
     const refined = refinedOnly(squareOn(CAL), CALS);
     expect(refined).toHaveLength(TRUTH.length);
-    expect(findRepeats(refined, refined.map(() => true), ROOM)).toEqual(refined.map(() => null));
+    expect(findRepeats(refined, refined.map(() => true), ROOM, CALS)).toEqual(refined.map(() => null));
   });
 
   it('flags the lamp when its second photo calls it something else', () => {
@@ -303,7 +319,7 @@ describe('the known room', () => {
     // The word test keeps both rows through the hard merge…
     expect(lamps).toHaveLength(2);
     // …and the floor says they are one lamp.
-    const flagged = findRepeats(renamed, renamed.map(() => true), ROOM);
+    const flagged = findRepeats(renamed, renamed.map(() => true), ROOM, CALS);
     expect(lamps.filter(({ i }) => flagged[i] !== null)).toHaveLength(1);
   });
 
@@ -320,7 +336,7 @@ describe('the known room', () => {
     const refined = refineDetections(readTwice(bed, 'double bed'), CALS, ROOM);
     // The hard merge alone leaves several beds, every one of them kept.
     expect(refined.length).toBeGreaterThan(2);
-    expect(keptAtFirst(refined, refined.map(() => true), ROOM).size).toBe(1);
+    expect(keptAtFirst(refined, refined.map(() => true), ROOM, CALS).size).toBe(1);
   });
 
   it('keeps ONE ceiling light out of one read in two photos, though no photo named its shape', () => {
@@ -337,7 +353,7 @@ describe('the known room', () => {
     // Every sighting measured, and measured up at the ceiling.
     expect(refined.length).toBeGreaterThan(1);
     for (const d of refined) expect(d.position?.y, d.label).toBeGreaterThan(ROOM.height - 0.5);
-    expect(keptAtFirst(refined, refined.map(() => true), ROOM).size).toBe(1);
+    expect(keptAtFirst(refined, refined.map(() => true), ROOM, CALS).size).toBe(1);
   });
 
   it('keeps TWO beds out of twin singles read twice in one photo', () => {
@@ -350,6 +366,230 @@ describe('the known room', () => {
     });
     const refined = refineDetections([single(-0.6), single(0.6)].flatMap((t) => readTwice(t, 'single bed')), CALS, ROOM);
     expect(refined.length).toBeGreaterThan(2);
-    expect(keptAtFirst(refined, refined.map(() => true), ROOM).size).toBe(2);
+    expect(keptAtFirst(refined, refined.map(() => true), ROOM, CALS).size).toBe(2);
+  });
+});
+
+// ── A lens nobody measured ────────────────────────────────────────────────────
+
+/** A camera `deg` wide, on a phone that did or did not write its focal length. */
+const lens = (deg: number, src?: LensSource): CameraCal => ({
+  k: 2 * Math.tan(((deg / 2) * Math.PI) / 180),
+  aspect: 4 / 3,
+  ...(src ? { lens: src } : {}),
+});
+const every = (c: CameraCal): CalMap => ({ n: c, e: c, s: c, w: c });
+
+/** `t` as a detector sees it in the photo of `slot` taken on `shot`: a box and a
+ *  word, nothing the geometry has not measured yet. */
+function seen(t: Truth, slot: CaptureSlot, shot: CameraCal, label = t.label): Detection {
+  return row({
+    label,
+    category: t.category,
+    box: inPicture(boxFor(t, slot, shot)),
+    slot,
+    shape: undefined,
+    position: undefined,
+    dimMM: undefined,
+    yaw: undefined,
+  });
+}
+
+/** How many pieces start ticked when the photos are read on `cals`. */
+function keptWith(dets: Detection[], cals: CalMap): number {
+  const refined = refineDetections(dets, cals, ROOM);
+  return keptAtFirst(refined, refined.map(() => true), ROOM, cals).size;
+}
+
+const piece = (
+  name: string,
+  category: Truth['category'],
+  shape: Truth['shape'],
+  x: number,
+  z: number,
+  dimMM: [number, number, number],
+): Truth => ({ name, label: name, category, shape, x, z, dimMM, slots: ['n', 'e'] });
+
+describe('findRepeats — a lens nobody measured', () => {
+  // Every photo here is taken on the known room's 106° ultrawide and read by a phone
+  // that wrote no focal length, so the geometry assumes 66°. Measured at the wrong
+  // lens, one piece seen from two walls lands in two places — far enough apart that
+  // the floor says two pieces — and the room gets one of each. What the photos DO
+  // agree on is the lens: at the one they were really taken on, the two sightings
+  // stand on the same floor. So a pair from different photos is compared at every
+  // lens a phone could have, and the best agreement is the answer.
+  //
+  // Each kind is read twice per photo, the second time under another word and a
+  // taller box, so the hard merge keeps all four rows. The bookshelf is not here:
+  // one is cut off by the edge of the east photo at any position this room has, and
+  // the cut-off sighting disagrees at every lens (filed as B2d). Nor are wall pieces:
+  // on an ultrawide, the east photo sees a north-wall piece on the return wall, and
+  // what the geometry does with that is a placement question (B2c), not this one.
+  const KINDS: [Truth, string][] = [
+    [piece('sofa', 'sofa', 'sofa', 1.8, -1.6, [2000, 850, 800]), 'couch'],
+    [piece('wardrobe', 'wardrobe', 'wardrobe', 2.4, -2.65, [1200, 600, 2000]), 'closet'],
+    [piece('armchair', 'chair', 'chair-armchair', 1.5, -1.5, [800, 800, 900]), 'arm chair'],
+    [piece('rug', 'rug', 'rug', 1.5, -1.3, [2000, 1400, 5]), 'area rug'],
+    [piece('coffee table', 'table', 'coffee-table', 1.2, -1.2, [1100, 600, 450]), 'table'],
+    [piece('desk', 'desk', 'desk-standard', 2.2, -2.6, [1400, 700, 750]), 'table'],
+    [piece('fridge', 'fridge', 'fridge', 3.1, -2.6, [700, 700, 1800]), 'refrigerator'],
+    [piece('plant', 'plant', 'plant', 2.5, -2.2, [400, 400, 900]), 'houseplant'],
+    [piece('ottoman', 'ottoman', 'ottoman', 1.3, -1.4, [600, 600, 450]), 'pouf'],
+    [piece('bed', 'bed', 'bed-double', 1.5, -1.5, [1600, 2000, 500]), 'double bed'],
+    [piece('pendant', 'lamp', 'lamp-pendant', 1.5, -1.5, [500, 500, 300]), 'ceiling light'],
+    [piece('fan', 'fan', 'fan', 1.5, -1.5, [1000, 1000, 200]), 'ceiling fan'],
+  ];
+
+  it.each(KINDS)('keeps ONE %s seen from two walls on a lens the phone did not report', (t, second) => {
+    // A rug has no height for a second model to take in, so its second box is the same.
+    const dets = readTwice(t, second, { grow: t.category !== 'rug' });
+    expect(dets).toHaveLength(4);
+    expect(keptWith(dets, every(lens(66, 'assumed')))).toBe(1);
+    // The same rows at the true lens: nothing for the sweep to find.
+    expect(keptWith(dets, CALS)).toBe(1);
+  });
+
+  it.each(KINDS)('…where the fixture shows a %s the unswept rule would double', (t, second) => {
+    // The same rows with the 66° marked measured, which is the one thing that turns
+    // the sweep off: every kind comes back twice. That is the evidence the test above
+    // can fail. The rug is the exception, and it is a regression check only: neither
+    // photo places it, and two unplaced rugs are compared at their starting spots.
+    const dets = readTwice(t, second, { grow: t.category !== 'rug' });
+    expect(keptWith(dets, every(lens(66, 'measured')))).toBe(t.category === 'rug' ? 1 : 2);
+  });
+
+  it('sweeps as wide as a phone lens goes', () => {
+    // An armchair on a 120° shot needs the sweep's widest lens to come back together.
+    const chair = piece('armchair', 'chair', 'chair-armchair', 2, -2, [800, 800, 900]);
+    const dets = (['n', 'e'] as const).map((s) => seen(chair, s, lens(120)));
+    expect(keptWith(dets, every(lens(66, 'assumed')))).toBe(1);
+    expect(keptWith(dets, every(lens(66, 'measured')))).toBe(2);
+    // The narrow end cannot be reached by behaviour: at 30–56° almost nothing in this
+    // room is in two photos at all. So the sweep's own ends are pinned as literals —
+    // and they are the bound the floor-line solve refuses a lens outside, so moving
+    // one moves both.
+    expect(PLAUSIBLE_HFOV_DEG).toEqual({ min: 30, max: 120 });
+    expect([SWEPT_HFOV_DEG[0], SWEPT_HFOV_DEG[SWEPT_HFOV_DEG.length - 1], SWEPT_HFOV_DEG.length]).toEqual([30, 120, 46]);
+  });
+
+  it('holds a photo whose lens was measured where it was measured', () => {
+    const sofa = piece('sofa', 'sofa', 'sofa', 1.8, -1.6, [2000, 850, 800]);
+    const dets = (['n', 'e'] as const).map((s) => seen(sofa, s, CAL));
+    const at = (cals: CalMap) => findRepeats(refineDetections(dets, cals, ROOM), [true, true], ROOM, cals);
+    // Both lenses read off the photos: whatever they say is what the room is built on,
+    // and two places is two sofas.
+    expect(at({ n: lens(66, 'measured'), e: lens(66, 'measured') })).toEqual([null, null]);
+    expect(at({ n: lens(66, 'assumed'), e: lens(66, 'assumed') })).toEqual([1, null]);
+    // One of each: the assumed photo is swept against the measured one, held still —
+    // whichever of the two comes first.
+    expect(at({ n: lens(66, 'assumed'), e: lens(106, 'measured') })).toEqual([1, null]);
+    expect(at({ n: lens(106, 'measured'), e: lens(66, 'assumed') })).toEqual([1, null]);
+  });
+
+  it('never re-measures two rows from the same photo', () => {
+    // Two dining chairs half a metre apart in one photo. One lens made both boxes, so
+    // a lens that brought them together would be one the photo cannot have had.
+    const chair = (label: string, x: number, z: number): Truth => ({
+      name: label, label, category: 'chair', shape: 'chair-dining', x, z, dimMM: [450, 500, 900], slots: ['n'],
+    });
+    const dets = [seen(chair('dining chair', 0.3, -1.8), 'n', CAL), seen(chair('chair', 0.4, -2.3), 'n', CAL)];
+    const refined = refineDetections(dets, CALS, ROOM);
+    expect(refined).toHaveLength(2);
+    expect(findRepeats(refined, [true, true], ROOM, CALS)).toEqual([null, null]);
+  });
+
+  it('pays for the sweep in chairs that happen to line up', () => {
+    // The known cost, recorded so it is a number and not a surprise. Two dining chairs
+    // 1.7 m apart, each seen once, from different walls, on a phone whose lens really
+    // was 66°. Some lens a phone could have puts them on the same floor, and the sweep
+    // cannot tell that from one chair read twice — so the second starts unticked and
+    // one tap puts it back. If this ever comes back [null, null], the rule got better:
+    // update the rate in `lib/repeat-sightings.ts`, which this is one instance of.
+    const chair = (x: number, z: number, slot: CaptureSlot): Truth => ({
+      name: 'dining chair', label: 'dining chair', category: 'chair', shape: 'chair-dining',
+      x, z, dimMM: [450, 500, 900], slots: [slot],
+    });
+    const dets = [seen(chair(-2.35, 0.9, 'w'), 'w', lens(66)), seen(chair(-0.85, 1.7, 's'), 's', lens(66))];
+    const refined = refineDetections(dets, every(lens(66)), ROOM);
+    expect(findRepeats(refined, [true, true], ROOM, {})).toEqual([null, null]);
+    expect(findRepeats(refined, [true, true], ROOM, every(lens(66)))).toEqual([null, 0]);
+  });
+});
+
+// ── Furnished rooms by the hundred ────────────────────────────────────────────
+
+type Tallied = Detection & { _t: number };
+type Tally = { vis: number; multi: number; dup: number; lost: number };
+
+describe('findRepeats — a hundred and fifty furnished rooms', () => {
+  // The rate the doc block in `lib/repeat-sightings.ts` quotes, measured on the
+  // generator in `tests/helpers/furnished-rooms.ts`. A piece is LOST when no row of
+  // it starts ticked, and each extra ticked row of one piece is a DUPLICATE. The
+  // three readings of the same rows are: unswept (no lens handed over), swept (the
+  // lens the phone reported, assumed), and measured (the same lens marked measured),
+  // which must be the unswept reading exactly — that is the gate, at scale.
+  it('prints and holds the rate', { timeout: 300_000 }, () => {
+    const ROOMS = 150;
+    const count = (trueDeg: number, givenDeg: number) => {
+      const given = every(lens(givenDeg));
+      const measured = every(lens(givenDeg, 'measured'));
+      const out = { unswept: blank(), swept: blank(), measured: blank() };
+      for (let sd = 1; sd <= ROOMS; sd++) {
+        const pieces = furnishedRoom(sd * 7919 + 13);
+        const dets: Tallied[] = [];
+        const shots = pieces.map(() => 0);
+        pieces.forEach((p, i) => {
+          for (const s of SWEEP_SLOTS) {
+            const box = boxIn(p, s, lens(trueDeg));
+            if (!box) continue;
+            shots[i]++;
+            dets.push({ label: p.label, conf: 0.9, box, category: p.category, slot: s, shape: p.shape, _t: i } as Tallied);
+          }
+        });
+        const refined = refineDetections(dets, given, ROOM) as Tallied[];
+        const tally = (t: Tally, cals: CalMap) => {
+          const ticks = pieces.map(() => 0);
+          keptAtFirst(refined, refined.map(() => true), ROOM, cals).forEach((i) => ticks[refined[i]._t]++);
+          shots.forEach((n, i) => {
+            if (n === 0) return;
+            t.vis++;
+            if (n >= 2) t.multi++;
+            if (ticks[i] === 0) t.lost++;
+            if (ticks[i] > 1) t.dup += ticks[i] - 1;
+          });
+        };
+        tally(out.unswept, {});
+        tally(out.swept, given);
+        tally(out.measured, measured);
+      }
+      return out;
+    };
+    const blank = (): Tally => ({ vis: 0, multi: 0, dup: 0, lost: 0 });
+
+    const lines: string[] = [];
+    const rows = [
+      [66, 66],
+      [106, 66],
+      [106, 106],
+      [120, 66],
+      [120, 120],
+    ] as const;
+    const got = rows.map(([t, g]) => {
+      const r = count(t, g);
+      lines.push(
+        `true ${t}° read at ${g}°  seen ${r.swept.vis}, in two photos ${r.swept.multi}  ` +
+          `unswept dup ${r.unswept.dup} lost ${r.unswept.lost}  swept dup ${r.swept.dup} lost ${r.swept.lost}`,
+      );
+      expect(r.measured).toEqual(r.unswept);
+      return [r.swept.vis, r.swept.multi, r.unswept.dup, r.unswept.lost, r.swept.dup, r.swept.lost];
+    });
+    console.log(`findRepeats over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
+    expect(got).toEqual([
+      [575, 0, 0, 2, 0, 10],
+      [993, 252, 249, 35, 83, 37],
+      [993, 252, 79, 11, 77, 21],
+      [989, 464, 460, 41, 152, 41],
+      [989, 464, 148, 4, 143, 6],
+    ]);
   });
 });

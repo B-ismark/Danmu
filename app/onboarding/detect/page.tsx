@@ -23,6 +23,8 @@ import {
   heightFromFloorLine,
   findFloorLine,
   imageAspect,
+  pickLens,
+  type CameraCal,
   type CameraView,
   calibrateFromPhoto,
 } from '@/lib/photo-geometry';
@@ -175,7 +177,8 @@ async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> 
     if (pose?.heightM !== undefined) view.height = pose.heightM;
     if (pose?.tiltDeg !== undefined) view.tiltRad = (pose.tiltDeg * Math.PI) / 180;
 
-    let hfov = pose?.focal35mm !== undefined ? hfovFromFocal35(pose.focal35mm, aspect) : null;
+    const exif = pose?.focal35mm !== undefined ? hfovFromFocal35(pose.focal35mm, aspect) : null;
+    let inferred: number | null = null;
     const vFloor = await findFloorLine(e.cap.blob);
 
     // No EXIF: read the lens out of the photo's own perspective. This is the path
@@ -184,16 +187,20 @@ async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> 
     // TILT as well, the only source of one for a photo that was not taken inside
     // this app; a measured device tilt still wins, being a direct observation
     // rather than an inference.
-    if (hfov === null) {
+    if (exif === null) {
       const vp = await calibrateFromPhoto(e.cap.blob);
       if (vp) {
-        hfov = vp.hfovDeg;
+        inferred = vp.hfovDeg;
         if (view.tiltRad === undefined) view.tiltRad = (vp.tiltDeg * Math.PI) / 180;
       }
     }
 
-    if (hfov !== null) {
-      let cal = calFromHfov(hfov, aspect, view);
+    // Only EXIF MEASURED the lens. The vanishing points inferred one, from the
+    // premise that the photo is not square-on to its wall — which the capture flow
+    // asks for — so it is as open to doubt as the default.
+    const picked = pickLens(exif, inferred);
+    if (picked !== null) {
+      let cal: CameraCal = { ...calFromHfov(picked.hfov, aspect, view), lens: picked.lens };
       if (view.height === undefined && vFloor !== null) {
         const solved = heightFromFloorLine(vFloor, e.slot, room.footprint, cal);
         if (solved !== null) cal = { ...cal, height: solved };
@@ -462,7 +469,7 @@ export default function DetectPage() {
           // that is probably another row seen again starts unticked, so one bed
           // photographed from three walls is one bed (lib/repeat-sightings.ts).
           const judged = judgeLabels(refined, calMap, dims);
-          setConfirmed(keptAtFirst(refined, refined.map((d, i) => shouldAutoConfirm(d, judged[i].status)), dims));
+          setConfirmed(keptAtFirst(refined, refined.map((d, i) => shouldAutoConfirm(d, judged[i].status)), dims, calMap));
           if (secondLookFailed) {
             setNotice({
               code: 'SECOND_LOOK_FAILED',
@@ -600,8 +607,9 @@ export default function DetectPage() {
         detections,
         detections.map((d, i) => shouldAutoConfirm(d, (verdicts[i] ?? { status: 'unmeasured' }).status)),
         roomDims,
+        cals,
       ),
-    [detections, verdicts, roomDims],
+    [detections, verdicts, roomDims, cals],
   );
 
   /** A model offered because of what the user just TYPED, rather than because the

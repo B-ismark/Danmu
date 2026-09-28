@@ -51,6 +51,12 @@ export const CAM_HEIGHT = 1.5;
  *  1/k and angular size as k — until the wall clamp breaks the cancellation). */
 const DEFAULT_HFOV_DEG = 66;
 
+/** The horizontal fields of view a phone photograph can plausibly have been taken
+ *  with — from a short telephoto to the widest ultrawide. A lens solved outside it
+ *  was solved from something that was not the floor line; a lens GUESSED inside it
+ *  is one a real phone has. */
+export const PLAUSIBLE_HFOV_DEG = { min: 30, max: 120 } as const;
+
 export type CameraCal = {
   /** tan of half-hFOV × 2 — horizontal tangent span per normalized image unit:
    *  tanX(u) = (u − 0.5) · k */
@@ -63,7 +69,18 @@ export type CameraCal = {
    *  Handheld shots are routinely 5° off, which at 3 m under-reads distance by
    *  19% — the single largest error in this module when it is not known. */
   tiltRad?: number;
+  /** Where `k` came from. Absent means `assumed`. Nothing in this module reads it —
+   *  every lens is used as given — it is for a caller deciding whether a lens may be
+   *  doubted, which is only ever an assumed one. */
+  lens?: LensSource;
 };
+
+/** Whether a photo's lens is known or assumed. `measured` means EXIF gave a focal
+ *  length for this photo; everything else is `assumed`, including the two lenses
+ *  this module solves for (`calibrateFromFloorLine`, and the vanishing points in
+ *  `lib/vanishing-point.ts`), because each is inferred from a premise — a camera
+ *  height, a square-on wall — rather than read. */
+export type LensSource = 'measured' | 'assumed';
 
 export function defaultCal(aspect: number): CameraCal {
   return { k: 2 * Math.tan(((DEFAULT_HFOV_DEG / 2) * Math.PI) / 180), aspect };
@@ -73,6 +90,18 @@ export function defaultCal(aspect: number): CameraCal {
  *  See `hfovFromFocal35` in lib/exif.ts for where the angle comes from. */
 export function calFromHfov(hfovDeg: number, aspect: number, view?: CameraView): CameraCal {
   return { k: 2 * Math.tan(((hfovDeg / 2) * Math.PI) / 180), aspect, ...view };
+}
+
+/** Which lens to read a photo on, and whether it may be doubted: the one EXIF gave,
+ *  else the one inferred from the picture, else none (the caller falls back to the
+ *  floor line, then the default). Only EXIF is `measured` — the inferred lens rests
+ *  on a premise, like every other lens this module solves for. Here rather than on
+ *  the detect screen because a wrong answer switches `lib/repeat-sightings.ts`'s lens
+ *  sweep off for every photo, and nothing on a screen can be tested for that. */
+export function pickLens(exifHfov: number | null, inferredHfov: number | null): { hfov: number; lens: LensSource } | null {
+  if (exifHfov !== null) return { hfov: exifHfov, lens: 'measured' };
+  if (inferredHfov !== null) return { hfov: inferredHfov, lens: 'assumed' };
+  return null;
 }
 
 /** What we know about where the camera was, as opposed to what lens it had. */
@@ -155,9 +184,9 @@ export function calibrateFromFloorLine(
   // b = (0.5 − vFloor)·k / aspect, and 0.5 − vFloor is negative here.
   const k = (b * aspect) / (0.5 - vFloor);
   if (!(k > 0)) return null;
-  // Sanity: equivalent hFOV between 30° and 120°.
+  // Sanity: a lens a phone could have.
   const hfov = (2 * Math.atan(k / 2) * 180) / Math.PI;
-  if (hfov < 30 || hfov > 120) return null;
+  if (hfov < PLAUSIBLE_HFOV_DEG.min || hfov > PLAUSIBLE_HFOV_DEG.max) return null;
   return { k, aspect, ...view };
 }
 
