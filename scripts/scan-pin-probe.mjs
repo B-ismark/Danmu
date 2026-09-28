@@ -10,8 +10,9 @@
 //
 //     PORT=3061 PW_ROOT=/some/scratch node scripts/scan-pin-probe.mjs
 //
-// WHAT IT DOES. Seeds one scanned room — no detector runs — with sixteen pieces over two
-// walls, a landscape photo and a portrait one, and at each viewport:
+// WHAT IT DOES. Seeds one scanned room — no detector runs — with sixteen pieces over four
+// walls, landscape photos on two of them and portrait ones on the other two, and at each
+// viewport:
 //
 //   · scrolls to the end of the page, and checks the photo is on screen and whole —
 //     inside the window and inside every box round it that clips — that the last row of
