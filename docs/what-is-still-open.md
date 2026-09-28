@@ -1641,6 +1641,16 @@ the user went and looked.
   a box past the photo's edge is the point of the walk: the ray through a column beyond the
   frame is still a ray from that lens, and it is how a piece the edge cut is reached. The walk
   stops at the widest of the kind, and `REACH_STEPS` caps the work.
+- **Settling a newly kept piece against the arranged room** (second review of #160). Ticking a
+  row back in on the cached list puts its piece where the photo measured it, settled against the
+  list as the first build is, and moves nothing the person arranged. If that spot now overlaps
+  a piece they moved, **Room check** says so. Nudging the newcomer to a free spot would put it
+  somewhere no photograph saw it, and nudging the arranged pieces would undo someone's work to
+  make room for a tick.
+- **Bringing back a deleted piece when its row is re-worded** (same review). Re-wording a row
+  is about what the piece is; deleting it in the studio was about whether it is in the room,
+  and the first used to undo the second. A tick is how to ask for it back: untick the row and
+  Continue, then tick it on the next visit, and it is built again where the photo saw it.
 - **Comparing floor pieces as their rectangles in the repeat check.** § 46.4: measured level
   or worse on both counts in every reading.
 - **Re-baselining any currently failing assertion.** Every red in this document is
