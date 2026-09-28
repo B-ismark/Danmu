@@ -7245,36 +7245,58 @@ UNplaced row; and a curtain exception nobody had given a ceiling shape, although
 
 ### § 46.1 · Twin beds in a corner come back as ONE — MEASURED, NOT FIXED, and it is not the soft merge
 
-Measured 2026-09-28 against the known room (7 × 6 m, 106° lens), two single beds 900 × 1900
-a hand's width apart against the north wall in the north-east quadrant, each photo read twice
-(`readTwice` in `tests/repeat-sightings.test.ts`), seen from `n` and `e`:
+Measured against the known room (7 × 6 m, 106° lens), two single beds 900 × 1900, 200 mm
+apart, against the north wall in the north-east quadrant, each photo read twice (`readTwice`
+in `tests/repeat-sightings.test.ts`), seen from `n` and `e`. Held as literals by *still loses
+the second of twin beds in a corner* in that file, on the lens as assumed and as measured,
+which give the same rows:
 
 | beds at x = | rows after `refineDetections` | kept at first | truth |
 |---|---|---|---|
-| 1.9 and 3.0 | 2 (both the first bed, from `n`) | 1 | 2 |
-| 1.7 and 2.8 | 4 (the first bed from `n`; one bed from `e`) | 1 | 2 |
+| 1.9 and 3.0 | 2 (the first bed from `n`, read twice) | 1 | 2 |
+| 1.7 and 2.8 | 4 (the first bed from `n` and from `e`, each read twice) | 1 | 2 |
 
-**The cause is upstream of both merges.** Every one of these boxes is cut off by the side of
-its frame, so `geoRefine` measures the sliver it can see (a 900 mm bed decoded **31 mm,
-305 mm, 539 mm** wide) and the placer's wall clamp puts the centre at `wall − depth/2` — so
-both beds decode within a few centimetres of **(2.50, −2.00)**, the corner spot, whatever
-their true x. Two same-kind pieces decoded onto one spot are, to any merge, one piece. In the
-first row the **hard** merge then deletes the second bed outright (it deletes; the soft pass
-only unticks), which predates this work. In the second, the hard merge leaves one `e`
-sighting — which really is the second bed — and the soft pass files it under the first,
-because it decodes onto the same floor. It is unticked, not gone: one tap brings it back.
+**The second bed is deleted, not unticked, and by the hard merge.** Every row left is a
+sighting of the first bed, so no tap on the review screen brings the second one back. Both of
+its sightings go, through two different doors:
 
-**What would fix it**, not built: a clipped box's width is a lower bound
-(`repeat-sightings.ts` already reads it that way for ranking), so a placer that knew the box
-ran out of frame could place the piece's VISIBLE edge rather than its centre and leave the
-far edge open. That is a change to `lib/photo-geometry.ts`'s contract under rule 2, and it
-wants its own measurement, not a line in the duplicate fix.
+- **In the north photo**, both beds run out of the right side of the frame, and the second
+  bed's box lies inside the first's (IoU 0.57 and 0.60 against a bar of 0.5), so the
+  same-photo rule reads them as one object boxed twice.
+- **In the east photo**, the second bed decodes 0.66 and 0.77 m from the first bed's north
+  sighting, under a bed's 0.9 m merge distance and with the same word. That is the floor
+  placer's centre bound: a centre may stand no nearer its wall than half the catalogue depth,
+  and a single bed's catalogue depth is its length, 2000 mm. Seen from its side, the axis
+  toward the camera is the bed's width, so the bound holds it at x = 2.50 when it stands at
+  3.0 or 2.8, half a metre toward the first bed. A photo never measures a floor piece's
+  heading, which is why the bound cannot know which of the bed's two axes it is facing.
 
-**An earlier note of this, in the session that built § 46, was wrong in the way the fixture
-was wrong:** it recorded "twins seen from n+e keep 3", from a probe that put one bed at
-x = −0.6 — behind the east camera, which cannot have seen it, so `inPicture` clamped a
-projection from behind the lens to the whole frame. A fixture must be a photograph that could
-have been taken.
+In the second layout, the east photo's sighting of the FIRST bed is cut by the frame and
+refused, so it has no position for the cross-photo rule to compare, and it survives. The soft
+pass files it under the first bed, which is right.
+
+**What would fix it**, not built: both doors are the hard merge deciding a pair it is not sure
+of. Two boxes that both run out of the frame share their cut edge whatever they are, so their
+overlap is not the evidence it is between two whole boxes; and a distance taken through a bound
+that assumed a heading is a distance nobody measured. Handing such pairs to the soft pass, to
+untick with a reason instead of deleting, is the hard merge's own rule (*a duplicate the user
+deletes in one tap beats a real piece that never appears*) applied to the case that breaks it.
+It changes what the hard merge takes, which `tests/detect-pipeline.test.ts` holds in both
+directions, so it wants its own measurement over the 150 furnished rooms rather than a line in
+the duplicate fix. The side walk (§ 46.2) does not reach it: it widens where the soft pass looks
+for a pair, and it runs after the second bed is gone.
+
+**Both earlier readings of this were wrong**, each in a way worth keeping. The first, in the
+session that built § 46, recorded "twins seen from n+e keep 3", from a probe that put one bed at
+x = −0.6: behind the east camera, which cannot have seen it, so `inPicture` clamped a projection
+from behind the lens to the whole frame. **A fixture must be a photograph that could have been
+taken.** The second was this section's first version. It said both beds decoded within a few
+centimetres of the corner spot (2.50, −2.00), and that the row left from `e` in the second
+layout was the second bed, one tap from back. The first bed's north sighting decodes at
+x = 1.85 and 1.73, and every row left is the first bed's. Re-run at the commit that wrote it
+(`bb1aef2`), the same probe prints the same rows as today, so that version was wrong when it was
+written, not overtaken. Both readings came from probes nobody kept, which is why the table is a
+test now.
 
 ### § 46.2 · A floor piece cut off at the BOTTOM of its photo — MEASURED, NOT BUILT
 

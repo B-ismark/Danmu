@@ -370,6 +370,27 @@ describe('the known room', () => {
     expect(refined.length).toBeGreaterThan(2);
     expect(keptAtFirst(refined, refined.map(() => true), ROOM, CALS).size).toBe(2);
   });
+
+  it('still loses the second of twin beds in a corner, before this runs — § 46.1, filed', () => {
+    // The same pair in the north-east corner, seen from the north and the east. Held
+    // as the defect, in literals, because both earlier readings of it came from probes
+    // nobody kept and both were wrong about which bed was left.
+    const single = (x: number): Truth => ({
+      name: `single ${x}`, label: 'bed', category: 'bed', shape: 'bed-single',
+      x, z: -2.05, dimMM: [900, 1900, 450], slots: ['n', 'e'],
+    });
+    // The lens the phone wrote down changes nothing: the hard merge takes both doors either way.
+    for (const cals of [CALS, every(lens(106, 'measured'))]) {
+      for (const [a, b, rows] of [[1.9, 3.0, 2], [1.7, 2.8, 4]] as const) {
+        const first = readTwice(single(a), 'single bed');
+        const refined = refineDetections([...first, ...readTwice(single(b), 'single bed')], cals, ROOM);
+        expect(refined, `beds at ${a} and ${b}`).toHaveLength(rows);
+        // Every row left is a sighting of the first bed: the second is not unticked, it is gone.
+        for (const d of refined) expect(first.map((f) => f.box)).toContainEqual(d.box);
+        expect(keptAtFirst(refined, refined.map(() => true), ROOM, cals).size).toBe(1);
+      }
+    }
+  });
 });
 
 // ── A lens nobody measured ────────────────────────────────────────────────────
