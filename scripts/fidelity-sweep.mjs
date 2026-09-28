@@ -102,6 +102,34 @@ async function seed(page, rooms) {
 const SCREENS = [
   { key: 'welcome', go: (p) => p.goto(`${BASE}/onboarding/welcome`) },
   { key: 'layout-pick', go: (p) => p.goto(`${BASE}/onboarding/layout-pick`) },
+  // The size fields TYPED: a small room, so every outline redraws at a size no preset
+  // offers and the reset appears beside the note. Per unit, because a legal 3.2 m is
+  // 10.5 in feet and 3.2 cm is no room at all. Filled after the network settles: a
+  // fill that lands before hydration is overwritten by the controlled value.
+  {
+    key: 'layout-pick-typed',
+    go: async (p) => {
+      await p.goto(`${BASE}/onboarding/layout-pick`);
+      await p.waitForLoadState('networkidle').catch(() => {});
+      const typed = { m: ['3.2', '2.6'], cm: ['320', '260'], mm: ['3200', '2600'], ft: ['10.5', '8.5'], in: ['126', '102'] }[UNITS];
+      await p.getByLabel(/^Width in /).fill(typed[0]);
+      await p.getByLabel(/^Depth in /).fill(typed[1]);
+      await p.evaluate(() => document.activeElement?.blur());
+    },
+  },
+  // …and REFUSED, after a press: every sentence the step can say on screen at once,
+  // beside the fields it names. `999999` is out of range in all five units, and an
+  // empty box is the other kind of wrong.
+  {
+    key: 'layout-pick-refused',
+    go: async (p) => {
+      await p.goto(`${BASE}/onboarding/layout-pick`);
+      await p.waitForLoadState('networkidle').catch(() => {});
+      await p.getByLabel(/^Width in /).fill('999999');
+      await p.getByLabel(/^Depth in /).fill('');
+      await p.getByRole('button', { name: /^Start decorating/ }).click();
+    },
+  },
   { key: 'capture', go: (p) => p.goto(`${BASE}/onboarding/capture`) },
   { key: 'workspace', go: (p) => p.goto(`${BASE}/workspace`) },
   { key: 'settings', go: (p) => p.goto(`${BASE}/settings`) },
