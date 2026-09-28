@@ -649,25 +649,41 @@ export default function CapturePage() {
           style={{ flex: 1, gridTemplateColumns: source === 'camera' ? '1fr 360px' : '1fr', minHeight: 0 }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
-            {method}
-            {anyCaptured && (
-              <WallControls square={!!room && room.width === room.depth} onRotate={rotateAll} />
-            )}
+            {/* One centred column, the width of the layout picker's: the scroll box
+                stays window-wide so its scrollbar is at the edge, and what is in it
+                does not grow with the window. At 1920 the drop zone was 1,886px
+                wide, and the buttons that turn the walls sat at the window's far
+                edge, away from the sentence they answer. */}
             <div
               style={{
-                display: 'grid',
-                // auto-fill, not two fixed columns: the gallery now holds one to
-                // four cards plus an add tile, and a 2×2 grid left a lone photo
-                // occupying a quarter of the screen next to three empty cells.
-                gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
-                gap: 8,
-                padding: narrow ? 14 : 16,
-                alignContent: 'start',
+                display: 'flex',
+                flexDirection: 'column',
                 flex: 1,
-                minHeight: 0,
+                width: '100%',
+                maxWidth: 'var(--measure-page)',
+                marginInline: 'auto',
               }}
             >
-              {gallery(false)}
+              {method}
+              {anyCaptured && (
+                <WallControls square={!!room && room.width === room.depth} onRotate={rotateAll} />
+              )}
+              <div
+                style={{
+                  display: 'grid',
+                  // auto-fill, not two fixed columns: the gallery now holds one to
+                  // four cards plus an add tile, and a 2×2 grid left a lone photo
+                  // occupying a quarter of the screen next to three empty cells.
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
+                  gap: 8,
+                  padding: narrow ? 14 : 16,
+                  alignContent: 'start',
+                  flex: 1,
+                  minHeight: 0,
+                }}
+              >
+                {gallery(false)}
+              </div>
             </div>
           </div>
 
