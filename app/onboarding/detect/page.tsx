@@ -342,6 +342,8 @@ export default function DetectPage() {
   // make — the header says what the sizes are instead.
   const [roughSize, setRoughSize] = useState(false);
   const padRef = useRef<HTMLButtonElement>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const photoBoxRef = useRef<HTMLDivElement>(null);
   // Flipped by Stop so an in-flight run stops writing to state.
   const stopped = useRef(false);
   // The detection run, set by the loading effect so **Look again** can start it.
@@ -869,6 +871,44 @@ export default function DetectPage() {
   const keptCount = confirmed.size;
   const photoCount = slots.length;
 
+  // The pinned photo column, measured, for two rules in globals.css that no fixed
+  // number could serve. `--scan-photo-room` is the height of everything in the column
+  // but the photo — the wall buttons, the padding, the tool row — which the photo's cap
+  // leaves room for, because those rows wrap: four walls are two rows of buttons on a
+  // phone, and adding by hand grows the tools by two more lines. Guessed at 200px, the
+  // column outgrew the window, and the box round the photo became a 30px scroll area of
+  // its own that took every swipe and hid the photo's bottom edge. `--scan-pin-h` is the
+  // column's own height, which the list keeps clear of when focus scrolls a row into
+  // view, so a row focused while stacked does not land under the photo.
+  const hasWallButtons = slots.length > 1;
+  const hasPhoto = active !== undefined;
+  useEffect(() => {
+    const pane = paneRef.current;
+    const box = photoBoxRef.current;
+    if (!pane || !box) return;
+    const root = document.documentElement;
+    const publish = () => {
+      const cs = getComputedStyle(box);
+      // The box's padding is room too; its height, squeezed or not, is not.
+      const room = pane.getBoundingClientRect().height - box.getBoundingClientRect().height + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      pane.style.setProperty('--scan-photo-room', `${Math.ceil(room)}px`);
+      root.style.setProperty('--scan-pin-h', `${Math.ceil(pane.getBoundingClientRect().height)}px`);
+    };
+    publish();
+    if (typeof ResizeObserver === 'undefined') return () => root.style.removeProperty('--scan-pin-h');
+    const ro = new ResizeObserver(publish);
+    // Every row, not only the column: a row that wraps inside a column already at its
+    // cap changes nothing about the column's own size.
+    ro.observe(pane);
+    for (const row of pane.children) ro.observe(row);
+    return () => {
+      ro.disconnect();
+      // Removed rather than left: the next page has no column to keep clear of.
+      root.style.removeProperty('--scan-pin-h');
+    };
+    // Re-run when a row comes or goes, so the new one is observed too.
+  }, [hasWallButtons, hasPhoto]);
+
   // Truthful for the path actually taken, and on screen for the whole upload.
   const sendsPhotos = path === 'cloud' || (path === 'checking' && !!apiKey);
   const privacyLine = sendsPhotos
@@ -1024,8 +1064,11 @@ export default function DetectPage() {
 
       {/* .split--stack turns the rail into a sheet under the photo on narrow
           screens; the fixed 380px track left the canvas about 10px wide. */}
-      <div className="split split--stack" style={{ flex: 1, gridTemplateColumns: '1fr 380px', minHeight: 0 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div className="split split--stack scan-split" style={{ flex: 1, gridTemplateColumns: '1fr 380px', minHeight: 0 }}>
+        {/* Pinned while the list scrolls (`.scan-photo-pane`): a long list used to
+            take the photo off screen, so the rows at its end had no picture to be
+            matched against. */}
+        <div ref={paneRef} className="scan-photo-pane" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {slots.length > 1 && (
             <div
               role="group"
@@ -1067,20 +1110,15 @@ export default function DetectPage() {
             </div>
           )}
 
-          <div style={{ flex: 1, padding: 16, minHeight: 0, overflow: 'auto' }}>
+          <div ref={photoBoxRef} style={{ flex: 1, padding: 16, minHeight: 0, overflow: 'auto' }}>
             {active ? (
               // On the page's left edge with the heading, the notice and the wall
               // buttons, rather than centred away from all three.
               <PhotoEditor
                 imageUrl={active.url}
-                // The window, less the rows that go with the photo: the bar, the wall
-                // buttons, this padding and the tool row under it. At 1920 the photo
-                // was drawn 1,508px wide and taller than the window, so the tools for
-                // adding a piece by hand were below the fold and no scroll showed the
-                // photo and them together. Never under 280px, though: a phone on its
-                // side is 390px tall, and a photo too small to draw a box on is worse
-                // than one that scrolls.
-                maxPhotoHeight="max(280px, calc(100dvh - 200px))"
+                // The pinned column's cap, one per layout — beside the list and stacked
+                // over it — so it lives with the rule that pins it (globals.css).
+                maxPhotoHeight="var(--scan-photo-cap)"
                 // Without this every photo on this screen shares one generic alt
                 // string, which is the whole review queue reading identically to a
                 // screen reader. The prop existed; nothing passed it.

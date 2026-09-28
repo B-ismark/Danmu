@@ -93,8 +93,12 @@ const VIEWPORTS = [
   // Where the photo's height cap binds rather than its column.
   [1920, 900],
 ];
-// The scan screen's cap on the photo's height, restated: `maxPhotoHeight` there.
-const capFor = (vh) => Math.max(280, vh - 200);
+// The scan screen's cap on the photo's height, restated: `--scan-photo-cap` in
+// globals.css, beside the list above 720px and stacked over it at 720 and under.
+// `room` is the height of the rows round the photo, which the page measures and
+// publishes as `--scan-photo-room`; the cap is read against it, not re-derived.
+const capFor = (vw, vh, room) =>
+  vw <= 720 ? Math.max(120, Math.min(vh * 0.5 - 140, vh * 0.7 - room)) : Math.max(120, vh - Math.max(200, room));
 
 // [label, category, shape, box] — boxes in the photo's 0..1 space, as detections are.
 const PIECES = [
@@ -272,7 +276,9 @@ function readTags(page) {
     });
     scroller?.scrollTo(was.left, was.top);
     scrollTo(was.x, was.y);
-    return { photo, image, column, ratio, tags, boxes };
+    // The rows round the photo, as the page measured them for the cap.
+    const room = parseFloat(getComputedStyle(document.querySelector('.scan-photo-pane')).getPropertyValue('--scan-photo-room'));
+    return { photo, image, column, ratio, room, tags, boxes };
   });
 }
 
@@ -298,8 +304,8 @@ async function main() {
     // IS the photo; and the photo is drawn as large as its column and its cap allow.
     const apart = Math.max(...['left', 'right', 'top', 'bottom'].map((k) => Math.abs(r.image[k] - photo[k])));
     check(apart <= 0.5, `the frame is the photo, so every box is a share of the picture (${apart.toFixed(1)}px apart)`);
-    check(photo.h <= capFor(vh) + 0.5, `the photo is no taller than its cap (${Math.round(photo.h)} of ${capFor(vh)}px)`);
-    const want = Math.min(r.column, capFor(vh) * r.ratio);
+    check(photo.h <= capFor(vw, vh, r.room) + 0.5, `the photo is no taller than its cap (${Math.round(photo.h)} of ${Math.round(capFor(vw, vh, r.room))}px)`);
+    const want = Math.min(r.column, capFor(vw, vh, r.room) * r.ratio);
     check(Math.abs(photo.w - want) <= 1, `the photo fills its column or its cap, whichever is less (${Math.round(photo.w)} of ${Math.round(want)}px)`);
 
     const places = new Set();

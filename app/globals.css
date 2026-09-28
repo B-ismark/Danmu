@@ -1318,6 +1318,29 @@ textarea.field { border-radius: var(--r-2); }
    that turns those columns into rows lives in the 720px block below. */
 .split { display: grid; min-height: 0; }
 
+/* The scan screen's photo column (onboarding/detect), pinned while the list of found
+   pieces beside it scrolls the page. The photo is how a person tells which box is
+   which row, so it has to be on screen at the END of the list — and it used to have
+   scrolled away by then, at every width. `align-self: start` gives it a height of its
+   own to stick with: stretched to the row, it would have nowhere to go.
+
+   The cap is the window less the rows that go with the photo — the wall buttons, the
+   padding and the tool row under it — and those rows wrap, so the page measures them
+   (`--scan-photo-room`) rather than this guessing: never less than the 200px the photo
+   was designed with, and more when four walls or adding by hand need it. A pinned
+   column has to fit the window, or the box round the photo becomes a scroll area of
+   its own, which takes every swipe that starts on the photo and hides its bottom edge
+   — 25 to 36px of one on a phone, with a fixed allowance and a 280px floor. The floor
+   is 120px now, and only a window too short for even that scrolls the box. At 1920
+   the photo was drawn 1,508px wide and taller than the window.
+
+   `svh`, not `dvh`: the dynamic unit changes as a phone's address bar slides away on
+   the first scroll, which would resize the pinned photo while the list moves. */
+.scan-photo-pane {
+  --scan-photo-cap: max(120px, calc(100svh - max(200px, var(--scan-photo-room, 200px))));
+  position: sticky; top: 0; align-self: start; max-height: 100svh;
+}
+
 /* ── Glasshouse, docked (laptops) ────────────────────────────────────────────
    The rails stay docked — they own their columns, and the room is never under
    them — but the three columns are panes on a wash rather than strips ruled off
@@ -1673,6 +1696,29 @@ textarea.field { border-radius: var(--r-2); }
      ever right about the third child. */
   .split--stack { grid-template-columns: 1fr !important; grid-template-rows: minmax(280px, 55dvh) auto; }
   .split--stack > .rail { border: 0; border-top: 1px solid var(--hairline); height: auto; }
+  /* Stacked, the scan photo is a strip pinned over the list, which scrolls under it,
+     and it is seen whole: about half the screen, so the list keeps the other half.
+     It used to fill a 55dvh row that scrolled away with the page, drawn wider than
+     that row was tall. The shadow is the rail's own top rule at rest, and stays with
+     the strip once rows slide under it. */
+  .split--stack.scan-split { grid-template-rows: auto auto; }
+  .split--stack > .scan-photo-pane {
+    /* Half the screen, unless the rows round the photo leave it less than that inside
+       the strip's 70%. */
+    --scan-photo-cap: max(120px, min(calc(50svh - 140px), calc(70svh - var(--scan-photo-room, 0px))));
+    max-height: 70svh;
+    z-index: var(--z-sticky-local);
+    background: var(--paper);
+    box-shadow: 0 1px 0 var(--hairline);
+  }
+  /* …and what keyboard focus scrolls to in the list stops below the strip, not under
+     it. A margin on the list's own boxes, not padding on the page: as the page's
+     `scroll-padding` it covered the strip's own controls too, which sit in that band
+     by definition, so focusing one — "Place with the keyboard" hands focus to "Add
+     this box" — scrolled the page 150–240px to reveal a button already in view. The
+     height is the page's measure of the strip (`--scan-pin-h`): it wraps and scales,
+     so no fixed number here would be it. */
+  .split--stack.scan-split > .rail * { scroll-margin-top: var(--scan-pin-h, 0px); }
   /* Label/control rows stop being a fixed 220px + 1fr grid. */
   .row-grid { grid-template-columns: 1fr !important; gap: 6px !important; }
   /* A primary action pinned where a thumb can reach it. */
