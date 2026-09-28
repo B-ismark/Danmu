@@ -1009,6 +1009,15 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    it the same ring the text fields get from :focus. */
 .field:focus-visible { border-color: var(--accent-text); box-shadow: 0 0 0 4px var(--accent-tint); }
 .field::placeholder { color: var(--ink-3); }
+/* A box holding something the form cannot use. The sentence under a row of fields
+   says what to type; only the rim can say WHICH box — two sentences under three
+   boxes left the empty one looking exactly like the good one beside it. It keeps
+   its danger rim through focus, because the accent's own focus ring is terracotta
+   and a near neighbour of --danger: a refused box that turned "focused" on the
+   press that refused it would read as fixed. */
+.field[aria-invalid='true'] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+.field[aria-invalid='true']:focus,
+.field[aria-invalid='true']:focus-visible { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger), 0 0 0 4px var(--danger-tint); }
 
 /* Native number spinners are drawn by the platform: grey chrome-blue arrows that
    appear on hover, in a set of fields that are otherwise ours. Both editors that
