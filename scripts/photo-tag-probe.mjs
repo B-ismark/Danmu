@@ -33,6 +33,7 @@
 //     on the photo, and still scrolls nothing sideways;
 //   · no box's press area lies over any tag's X — the tags are raised over every box, and
 //     at 360 the thin lamp's box sits right under the long name's X;
+//   · every tag's X is drawn at least 24 px each side, the WCAG 2.5.8 floor;
 //   · the thin box at the right edge keeps its whole name (a tag that slides has room);
 //   · the small box at the top can still be pressed at its centre, and the press keeps /
 //     un-keeps it (its tag sits below it rather than over it);
@@ -46,18 +47,20 @@
 // Tags overlapping EACH OTHER are counted and printed, not failed: they did before this
 // change too, and `docs/visual-check.md` carries it as known and not fixed here.
 //
-// MEASURED, against two production builds. `main` at `fdd1f20`: 40 passed, 80 failed —
+// MEASURED, against two production builds. `main` at `fdd1f20`: 67 passed, 80 failed —
 // at 360, tags up to 132 px past the right edge, 25 px above the top and 1.8 px below
 // the foot, outlines up to 66 px past the right and 37 px past the foot, a list row's
 // highlight drawn 66 px off the photo, the review scrolling 116 px sideways (158 px at
-// 1280), and a drag that started on a tag drawing nothing. With the fix: 120 passed,
+// 1280), and a drag that started on a tag drawing nothing. With the fix: 147 passed,
 // 0 failed. Overlapping tags went from 5 to 7 on this fixture: the two extra were off
 // the photo before, and are on it now, side by side.
 //
 // The probe was also run against a copy of the fix with two of its parts taken out —
 // tags not raised over the boxes, and the X switched off while drawing. It failed five
 // checks: a box's press area over Grandmother's X at 360 and 768, and an X that removed
-// nothing while drawing, at all three widths. So those two checks can fail.
+// nothing while drawing, at all three widths. So those two checks can fail. The X's
+// size passes on `main` too — it was already 24 px there — so it was run against a copy
+// whose X may shrink, and failed on the long name's: 21.8 px wide at 360, 23.9 at 768.
 
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -107,6 +110,8 @@ const PAST = ['Bookshelf', 'Plant'];
 const TAG_H = 28;
 const OVERLAP = 2;
 const LIFT = TAG_H - OVERLAP;
+// …and the X's floor each side. Whole pixels, so nothing sub-pixel to allow for.
+const X_MIN = 24;
 // Sub-pixel layout: percentages of a fractional width land on 1/64 px.
 const NEAR = 0.75;
 const THIN = 'Floor lamp';
@@ -231,6 +236,7 @@ function readTags(page) {
       return {
         name: x.getAttribute('aria-label').slice('Remove '.length),
         rect: rect(tag),
+        xRect: rect(x),
         ellipsised: name.scrollWidth > name.clientWidth + 0.5,
         pointerEvents: getComputedStyle(tag).pointerEvents,
         xPointerEvents: getComputedStyle(x).pointerEvents,
@@ -319,6 +325,13 @@ async function main() {
             ` (${h.highlight === null ? 'no highlight' : `highlight ${h.highlight > 0.5 ? `+${h.highlight.toFixed(1)}px past` : 'on the photo'}`}, ${h.sideways}px, ${h.page}px)`,
         );
     }
+
+    // The X as drawn, not as written: a flex row can squeeze a box its style sized.
+    for (const t of r.tags)
+      check(
+        t.xRect.w >= X_MIN - 0.01 && t.xRect.h >= X_MIN - 0.01,
+        `${t.name}'s X is at least ${X_MIN} px each side (${t.xRect.w.toFixed(1)} × ${t.xRect.h.toFixed(1)})`,
+      );
 
     const thin = r.tags.find((t) => t.name === THIN);
     check(!!thin && !thin.ellipsised, `${THIN}, thin at the right edge, keeps its whole name`);
