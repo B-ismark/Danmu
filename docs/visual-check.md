@@ -1862,6 +1862,28 @@ the list at every size. A copy with the photo frame `touch-action: none` in ever
 the photo swipe, so that check can fail. A real phone is the unlooked-at half.
 
 ---
+
+### A change made just before the phone backgrounds the browser — this branch, NOT MEASURED
+
+**Where to click.** On a real phone, open a room in the studio. Duplicate a piece, or type a
+new width in the Room section, and at once switch to another app (home gesture or app
+switcher). Leave it a minute, then kill the browser from the app switcher, reopen it and
+open the room again. Do the same with the screen locked instead of switching apps.
+
+**What wrong looks like.**
+- The duplicated piece missing, or the width back to what it was.
+- Worse: the room half-saved — the new width with the old outline, so the room opens a
+  different shape from the size it reports, or pieces standing where the old walls were.
+
+**What was measured, and on what.** Desktop Chromium only, where a reload after duplicating
+and a closed tab after typing a width now keep the change 5 of 5 and no room came back
+half-saved (§ 47 in `docs/what-is-still-open.md`). The save runs on `visibilitychange`, the
+event a phone sends when the browser goes to the background, and the unit test covers that
+event — not the phone. Nothing here says how long a phone lets a hidden page run, so whether
+the one transaction gets to commit before the browser is frozen or killed is exactly what is
+not known. A typed room size on a reload is a known loss (§ 47), not a finding.
+
+---
 ## Look and light
 
 ### High quality is graded again — on a real GPU, in every mood — `c2137c4` on `main` (PR #157)
