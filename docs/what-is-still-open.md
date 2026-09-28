@@ -6238,7 +6238,7 @@ NOT established for either, and the trap has bitten here before: a dirty tree
 from a dead session was once thirteen files all already on `main`. The cheap check says
 these are probably the same story; the expensive one was not run.
 
-**3. The primary shared checkout is CLEAN.** `D:\CODES _AI\Antigravity\Claude\Danmu` is
+**3. The primary shared checkout is CLEAN.** `D:\CODES\0_AI\Antigravity\Claude\Danmu` is
 on branch `work` at `a0fb53d`, which **is an ancestor of `origin/main`**, with no modified
 files and no stashes. It opened this round dirty in ~13 files; nothing is stranded there now.
 
