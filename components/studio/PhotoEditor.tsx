@@ -121,7 +121,10 @@ export function PhotoEditor({
         background: 'var(--ink)',
         cursor: mode === 'add' ? 'crosshair' : 'default',
         userSelect: 'none',
-        touchAction: 'none',
+        // Only while drawing does a finger belong to the photo. Otherwise a swipe on
+        // it is a scroll: on a phone the photo is half the screen, and a page that a
+        // swipe on half the screen cannot move reads as a page that is stuck.
+        touchAction: mode === 'add' ? 'none' : 'manipulation',
         // The tags are raised over the boxes, and that stays in here: the page's own
         // layers (`children`) are raised to the same level after them, so they paint
         // over all of it.
