@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
 import { placeFloorObject, placeWallObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
-import { PART_LIBRARY, defaultDepthFor, sceneShapeFor, type Category, type Shape } from '@/lib/scene-spec';
+import {
+  CATEGORIES,
+  PART_LIBRARY,
+  buildSceneFromRoom,
+  defaultDepthFor,
+  sceneShapeFor,
+  type Category,
+  type Shape,
+} from '@/lib/scene-spec';
+import { toRecord } from '@/lib/detection-record';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
@@ -220,16 +231,23 @@ describe('judgeLabel', () => {
     // The re-entrancy point. A candidate's category picks its anchor and the anchor
     // picks the projection, so the detection offered back has been measured again
     // rather than carrying the numbers taken under the wrong word.
-    const v = judgeLabel(det({ category: 'bed', slot: 'n', box: WALL_BOX }), CALS, ROOM);
+    //
+    // The row carries a bed's shape hint, which is a shape the catalogue knows and so
+    // one `sceneShapeFor` would honour for ANY category — a sofa candidate built as a
+    // double bed — unless it is dropped with the word it came with.
+    const v = judgeLabel(det({ category: 'bed', shape: 'bed-double', slot: 'n', box: WALL_BOX }), CALS, ROOM);
     if (v.status !== 'suspect') throw new Error('expected suspect');
     expect(v.candidates.length).toBeGreaterThan(0);
     for (const c of v.candidates) {
       expect(c.detection.category).toBe(c.category);
-      expect(c.detection.shape).toBeUndefined(); // the shape went with the old word
+      // The shape the new category makes of the row's words — the old category's
+      // hint does not come with it — and that is the shape it was measured as.
+      const shape = sceneShapeFor(c.category, 'thing', undefined);
+      expect(c.detection.shape).toBe(shape);
       expect(c.detection.dimMM).toBeDefined();
-      // Whatever it now measures, it fits the word being offered — otherwise it is
-      // not a repair.
-      expect(sizeFitsLabel(c.category, 'box', c.detection.dimMM![0], c.detection.dimMM![2])).toBe(true);
+      // Whatever it now measures, it fits the word being offered as the shape it
+      // will be built as — otherwise it is not a repair.
+      expect(sizeFitsLabel(c.category, shape, c.detection.dimMM![0], c.detection.dimMM![2])).toBe(true);
     }
     // Most comfortable fit first. The list is re-sorted after re-measuring, so
     // this is a different sort from the one categoriesFittingSize does and needs
@@ -346,5 +364,82 @@ describe('judgeLabel — ceiling items', () => {
     expect(band.min[0]).toBeLessThan(893);
     expect(band.max[0]).toBeGreaterThan(893);
     expect(band.max[2]).toBeGreaterThan(803);
+  });
+});
+
+describe('a repair is built as the shape it was measured as', () => {
+  // A light the detector called a ceiling fan: high in a wide frame, 400-odd mm across,
+  // which no fan is and a pendant is.
+  const LIGHT_BOX: Detection['box'] = [0.45, 0.03, 0.09, 0.14];
+  const fan = det({ label: 'Ceiling fan', category: 'fan', slot: 'n', box: LIGHT_BOX });
+
+  // What accepting it does on the scan screen: the candidate's detection, relabelled
+  // with the category's plain name — then saved and built like any kept row.
+  const accept = (cand: { category: Category; detection: Detection }, label: string) => {
+    const rec = toRecord({ ...cand.detection, label }, 0, true, () => 'u-1');
+    return buildSceneFromRoom({
+      id: 'r',
+      createdAt: 1,
+      name: 'R',
+      layoutId: 'rect',
+      width: ROOM.width,
+      depth: ROOM.depth,
+      height: ROOM.height,
+      detectedObjects: [rec],
+    });
+  };
+
+  it('offers the light as the pendant its words make it, and builds a pendant', () => {
+    const [lamp] = candidatesFor(fan, ['lamp'], WIDE_CALS, ROOM);
+    expect(lamp).toBeDefined();
+    // Measured on the ceiling, width alone — the pendant's plane.
+    expect(lamp.detection.shape).toBe('lamp-pendant');
+    const parts = accept(lamp, 'Lamp');
+    expect(parts).toHaveLength(1);
+    // The defect: a blank shape resolved from "Lamp" at build time is a floor lamp,
+    // so a piece measured on the ceiling stood on the floor at a pendant's width.
+    expect(parts[0].shape).toBe('lamp-pendant');
+  });
+
+  it('judges it against the band of the shape it carries', () => {
+    const [lamp] = candidatesFor(fan, ['lamp'], WIDE_CALS, ROOM, { requireFit: false });
+    const pendant = dimRangeFor('lamp', 'lamp-pendant');
+    const w = lamp.detection.dimMM![0];
+    // Width alone, as a ceiling piece is measured — the height in dimMM is the
+    // catalogue's, not a measurement — and inside the PENDANT's band, whose floor is
+    // not a plain lamp's.
+    expect(pendant.min[0]).not.toBe(dimRangeFor('lamp', 'box').min[0]); // premise
+    expect(lamp.margin).toBeCloseTo(Math.min(w - pendant.min[0], pendant.max[0] - w) / (pendant.max[0] - pendant.min[0]), 9);
+  });
+
+  // 134 mm across: inside a plain lamp's band (from 120) and under any pendant's (from
+  // 150). Judged as the shape it would be built as, it is not a pendant, so it is not
+  // offered as a repair; the looser band would have offered it.
+  it('does not offer a light narrower than any pendant as one', () => {
+    const thin = { ...fan, box: [0.47, 0.03, 0.031, 0.14] as Detection['box'] };
+    const [measured] = candidatesFor(thin, ['lamp'], WIDE_CALS, ROOM, { requireFit: false });
+    expect(measured.detection.dimMM![0]).toBeGreaterThan(dimRangeFor('lamp', 'box').min[0]); // premise
+    expect(measured.detection.dimMM![0]).toBeLessThan(dimRangeFor('lamp', 'lamp-pendant').min[0]); // premise
+    expect(candidatesFor(thin, ['lamp'], WIDE_CALS, ROOM)).toEqual([]);
+  });
+
+  // The fix leans on one fact the scan screen holds: every label it writes onto an
+  // accepted repair is a category's plain name, which never outvotes a shape the row
+  // carries. Read from the screen itself, since that is where the words live — a
+  // label like "Ceiling light" added there would build every accepted lamp as a
+  // pendant whatever it was measured as.
+  it('the scan screen only ever writes labels that leave the shape alone', () => {
+    const src = readFileSync(join(process.cwd(), 'app/onboarding/detect/page.tsx'), 'utf8');
+    const start = src.indexOf('const MANUAL_CATEGORIES');
+    const table = src.slice(start, src.indexOf('\n];', start));
+    const pairs = [...table.matchAll(/\{ value: '([a-z-]+)', label: '([^']+)' \}/g)].map((m) => [m[1], m[2]] as const);
+    expect(pairs.map(([v]) => v).sort()).toEqual([...CATEGORIES].sort());
+    for (const [value, label] of pairs) {
+      const cat = value as Category;
+      for (const shape of new Set(PART_LIBRARY.filter((p) => p.category === cat).map((p) => p.shape))) {
+        if (shape === 'box') continue;
+        expect([cat, label, sceneShapeFor(cat, label, shape)]).toEqual([cat, label, shape]);
+      }
+    }
   });
 });

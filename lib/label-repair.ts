@@ -167,11 +167,19 @@ export function candidatesFor(
 ): LabelCandidate[] {
   const out: LabelCandidate[] = [];
   for (const c of categories) {
-    // The shape goes with the word that is being replaced, so the candidate has
-    // none and scene-spec's own refineShape picks one at build time. The depth hint
-    // goes too: if the old word is wrong, its guess at that word's depth is not
-    // evidence about a different word.
-    const seed: Detection = { ...d, category: c, shape: undefined, dimMM: undefined };
+    // The detector's shape hint goes with the category being replaced, and so does
+    // its depth hint: if the old word is wrong, its guess at that word's shape and
+    // depth is not evidence about a different word. The candidate still needs A
+    // shape, and it carries the one it is MEASURED as — the new category read
+    // through the room's own rule, with the words the row already has, so a
+    // "ceiling fan" offered as a lamp is measured as the pendant those words make
+    // it. Leaving the field blank was the defect: the scan screen relabels an
+    // accepted repair ("Lamp"), and the room resolves a blank shape from THAT word,
+    // so the piece was measured on the ceiling and built as a floor lamp. Every
+    // label the screen applies is its category's plain name, which never outvotes a
+    // shape (`sceneShapeFor`), so carrying it here is what makes the two agree.
+    const shape = sceneShapeFor(c, d.label, undefined);
+    const seed: Detection = { ...d, category: c, shape, dimMM: undefined };
     const trial = geoRefine(seed, cals, room);
     // This word cannot be measured at all under its own anchor — a ceiling
     // category, today. Offering it would mean offering an unmeasured repair.
@@ -180,13 +188,14 @@ export function candidatesFor(
     // a candidate that only fitted the old measurement is not a repair. The axis
     // restriction matters — a ceiling candidate is checked on width, because width
     // is what measuring it as a ceiling item produced.
-    const cAxes = measuredAxes(c, 'box');
-    const misfit = failedAxes(c, 'box', trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
+    // Judged as the shape it was measured as, for the reason `judgeLabel` is.
+    const cAxes = measuredAxes(c, shape);
+    const misfit = failedAxes(c, shape, trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
     if (misfit && requireFit) continue;
     out.push({
       category: c,
       detection: trial,
-      margin: sizeMargin(c, 'box', trial.dimMM[0], trial.dimMM[2], cAxes),
+      margin: sizeMargin(c, shape, trial.dimMM[0], trial.dimMM[2], cAxes),
     });
   }
   // Signed margin, so a candidate that does not fit its own band sorts below every

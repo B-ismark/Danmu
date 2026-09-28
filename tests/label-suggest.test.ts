@@ -11,7 +11,7 @@ import { candidatesFor } from '@/lib/label-repair';
 import type { CameraCal } from '@/lib/photo-geometry';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
-import { PART_LIBRARY } from '@/lib/scene-spec';
+import { PART_LIBRARY, sceneShapeFor } from '@/lib/scene-spec';
 import { footprintForLayout } from '@/lib/footprint';
 
 const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
@@ -93,9 +93,10 @@ describe('suggestFromLabel', () => {
     for (const c of out) {
       expect(c.detection.category, 'the candidate must carry its own category').toBe(c.category);
       expect(c.detection.dimMM, 'a candidate with no measurement must not be offered').toBeDefined();
-      // The shape hint is deliberately dropped so `refineShape` picks one at build
-      // time from the new category.
-      expect(c.detection.shape).toBeUndefined();
+      // The old category's shape hint is dropped, and the candidate carries the shape
+      // the new category makes of the row's words — the one it was measured as, and
+      // the one accepting it builds.
+      expect(c.detection.shape).toBe(sceneShapeFor(c.category, bed.label, undefined));
     }
   });
 
