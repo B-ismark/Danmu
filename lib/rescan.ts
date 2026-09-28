@@ -216,7 +216,9 @@ export function listEditSentence(edit: Pick<ListEdit, 'removed' | 'added' | 'upd
     [
       [edit.removed, 'taken out'],
       [edit.added, 'added'],
-      [edit.updated, 'updated to its new details'],
+      // Not "updated to its new details": "3 updated to its new details" is the
+      // sentence that made, and the count already says which.
+      [edit.updated, 'updated'],
     ] as const
   ).filter(([n]) => n > 0);
   const said = bits.map(([n, verb], i) => (i === 0 ? `${n} ${n === 1 ? 'piece' : 'pieces'} ${verb}` : `${n} ${verb}`));

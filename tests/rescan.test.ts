@@ -325,8 +325,9 @@ describe('listEditSentence', () => {
     [{ removed: 1, added: 2, updated: 0 }, '1 piece taken out and 2 added. Everything else is as you left it.'],
     [
       { removed: 2, added: 1, updated: 1 },
-      '2 pieces taken out, 1 added and 1 updated to its new details. Everything else is as you left it.',
+      '2 pieces taken out, 1 added and 1 updated. Everything else is as you left it.',
     ],
+    [{ removed: 0, added: 0, updated: 3 }, '3 pieces updated. Everything else is as you left it.'],
   ])('%j', (edit, said) => {
     expect(listEditSentence(edit)).toBe(said);
   });
