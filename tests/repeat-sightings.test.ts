@@ -323,6 +323,23 @@ describe('the known room', () => {
     expect(keptAtFirst(refined, refined.map(() => true), ROOM).size).toBe(1);
   });
 
+  it('keeps ONE ceiling light out of one read in two photos, though no photo named its shape', () => {
+    // The on-device detector hands over a category and a word and almost never a
+    // shape, and a ceiling light is a LAMP by category: it is the word that makes it
+    // a pendant, and the room builds the pendant. Measured as the shape-less lamp
+    // instead, each sighting was a floor piece above the horizon, refused, and then
+    // hung by the wall of whichever photo saw it — one light per photo.
+    const light: Truth = {
+      name: 'light', label: 'ceiling light', category: 'lamp', shape: 'lamp-pendant',
+      x: 1.5, z: -1.5, dimMM: [500, 500, 300], slots: ['n', 'e'],
+    };
+    const refined = refineDetections(readTwice(light, 'pendant light'), CALS, ROOM);
+    // Every sighting measured, and measured up at the ceiling.
+    expect(refined.length).toBeGreaterThan(1);
+    for (const d of refined) expect(d.position?.y, d.label).toBeGreaterThan(ROOM.height - 0.5);
+    expect(keptAtFirst(refined, refined.map(() => true), ROOM).size).toBe(1);
+  });
+
   it('keeps TWO beds out of twin singles read twice in one photo', () => {
     // The pair the soft merge must not take: two single beds a hand's width apart
     // against the north wall. Their boxes never meet in the picture, and that gap is

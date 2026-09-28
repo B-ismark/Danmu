@@ -24,7 +24,7 @@
 import { dimRangeFor } from './dimension-ranges';
 import { geoRefine, type CalMap, type RoomDims } from './detect-refine';
 import { anchorFor } from './physics';
-import { CATEGORIES, type Category, type Shape } from './scene-spec';
+import { CATEGORIES, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
 
 /** The axis names this module reasons about. Never depth — see `sizeFitsLabel`. */
@@ -209,7 +209,9 @@ export function candidatesFor(
  *  than a guess. */
 export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVerdict {
   const category = (d.category ?? 'other') as Category;
-  const shape = (d.shape ?? 'box') as Shape;
+  // The same shape `geoRefine` measures it as, so the range it is judged by is the
+  // range of the thing that was measured.
+  const shape = sceneShapeFor(category, d.label, d.shape);
 
   const measured = geoRefine(d, cals, room);
   if (measured === d || !measured.dimMM) return { status: 'unmeasured' };

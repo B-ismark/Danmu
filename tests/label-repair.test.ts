@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
 import { placeFloorObject, placeWallObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
-import { PART_LIBRARY, defaultDepthFor, type Category, type Shape } from '@/lib/scene-spec';
+import { PART_LIBRARY, defaultDepthFor, sceneShapeFor, type Category, type Shape } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
@@ -198,14 +198,21 @@ describe('judgeLabel', () => {
     // pixels that measure 480 x 360 as a hung painting measure 480 x 1680 as
     // something standing on the floor. That is exactly why a repaired word has to
     // be re-measured rather than keeping the numbers taken under the old one.
+    //
+    // And judged as the bed the ROOM would build from that row — `sceneShapeFor`,
+    // not `box`. The row names no shape, which is what the on-device detector
+    // hands over, and a band taken from a shape nothing builds is a band for
+    // nothing.
+    const shape = sceneShapeFor('bed', 'thing', undefined);
+    expect(shape).not.toBe('box'); // premise: a bed with no shape is still built as a bed
     const g = placeFloorObject(WALL_BOX, 'n', ROOM.footprint, CAL, {
-      depthM: defaultDepthFor('bed', 'box') / 1000,
+      depthM: defaultDepthFor('bed', shape) / 1000,
     })!;
     const v = judgeLabel(det({ category: 'bed', slot: 'n', box: WALL_BOX }), CALS, ROOM);
     expect(v.status).toBe('suspect');
     if (v.status !== 'suspect') return;
     expect(v.measured).toEqual({ width: g.widthMM, height: g.heightMM });
-    expect(v.allowed.width).toEqual([dimRangeFor('bed', 'box').min[0], dimRangeFor('bed', 'box').max[0]]);
+    expect(v.allowed.width).toEqual([dimRangeFor('bed', shape).min[0], dimRangeFor('bed', shape).max[0]]);
     expect(v.failed).toEqual(['width', 'height']); // a 480 mm wide, 1.68 m tall bed
   });
 

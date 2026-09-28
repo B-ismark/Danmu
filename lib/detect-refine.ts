@@ -17,7 +17,7 @@
 import { anchorFor } from './physics';
 import { placeCeilingObject, placeFloorObject, placeWallObject, type CameraCal } from './photo-geometry';
 import type { Detection } from './detection';
-import { defaultAxisFor, defaultDepthFor, isRoundPart, type Category, type Shape } from './scene-spec';
+import { defaultAxisFor, defaultDepthFor, isRoundPart, sceneShapeFor, type Category } from './scene-spec';
 import type { CaptureSlot } from './storage';
 import type { Footprint } from './footprint';
 
@@ -65,7 +65,15 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
   const cal = cals[d.slot];
   if (!cal) return d;
   const cat = (d.category ?? 'other') as Category;
-  const shape = (d.shape ?? 'box') as Shape;
+  // The shape the room will BUILD this row as, by the room's own rule — never the
+  // raw hint with `box` for a blank. The on-device detector names almost no shapes,
+  // so that blank was the normal case, and a `ceiling light` came through as a lamp
+  // shaped like a box: a floor piece. Its box is above the horizon, so the floor
+  // placer refused it, and the room then built the pendant the label says it is and
+  // hung it by the wall of whichever photo saw it — one per photo. A row measured as
+  // one shape and built as another is measured on the wrong plane, with the wrong
+  // depth, and compared for repeats as something it is not.
+  const shape = sceneShapeFor(cat, d.label, d.shape);
   const anchor = anchorFor(cat, shape);
   const catalogueDepth = defaultDepthFor(cat, shape);
   // Named for its only consumer. It was `hintedDepth`, read by two branches of
@@ -95,8 +103,8 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
   // this piece in plan — and the two placers differ only in what pins its depth
   // axis. Roundness is read off the SAME (category, shape) pair as the depth, so the
   // number a piece is measured by and the footprint it is inverted as cannot
-  // disagree. A detection with no shape resolves to `box` here, which is exactly
-  // what its depth default already assumes.
+  // disagree — and both are the shape the room builds, so a round table named only
+  // by its word is measured round.
   const foot = { depthM: catalogueDepth / 1000, round: isRoundPart(shape) };
   const g =
     anchor === 'floor'
