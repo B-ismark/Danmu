@@ -299,6 +299,7 @@ export function Inspector() {
           <EditableText
             value={part.name}
             label="Furniture name"
+            className="sentence-case"
             onCommit={(next) => updatePart(id!, { name: next })}
             style={{ flex: 1, minWidth: 0, fontSize: 'var(--fs-lead)', fontWeight: 500, letterSpacing: '-0.01em' }}
             inputStyle={{ fontSize: 'var(--fs-lead)', fontWeight: 500, height: 32 }}
@@ -308,9 +309,14 @@ export function Inspector() {
           {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>From photo</Pill>}
         </div>
 
-        <div className="t-hint sentence-case" style={{ marginTop: 2, paddingLeft: 4 }}>
-          {/* shape ids are hyphenated internally ("chair-armchair") — say it in words */}
-          {part.category} · {part.shape.replace(/-/g, ' ')}
+        <div className="t-hint" style={{ marginTop: 2, paddingLeft: 4 }}>
+          {/* Two labels, not one sentence, so each takes its own capital: "Chair ·
+              Chair armchair". Inline blocks, because `::first-letter` does not reach
+              a plain inline span. Shape ids are hyphenated internally
+              ("chair-armchair"), so the shape is said in words. */}
+          <span className="sentence-case" style={{ display: 'inline-block' }}>{part.category}</span>
+          {' · '}
+          <span className="sentence-case" style={{ display: 'inline-block' }}>{part.shape.replace(/-/g, ' ')}</span>
         </div>
       </div>
 

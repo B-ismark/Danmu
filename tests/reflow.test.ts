@@ -1162,7 +1162,7 @@ describe('a piece row keeps enough width to read the piece name', () => {
     expect(open, 'selected-row actions must take a line of their own').toMatch(/flex-basis:\s*100%/);
     // The name shrinks through a class, not an inline `flex`, so nothing inline can
     // out-rank the rule above.
-    expect(partRow).toContain('className="row-name truncate"');
+    expect(partRow).toMatch(/className="row-name truncate(?: [\w-]+)*"/);
     expect(rule('.row-name')).toMatch(/min-width:\s*0/);
   });
 

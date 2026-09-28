@@ -198,6 +198,22 @@ describe('names read as sentences', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('every place a piece is named uses it', () => {
+    // Pinned per file, so taking the class off one place is a failure and not a quiet
+    // return to lowercase names beside capitalised ones.
+    const SITES: Record<string, number> = {
+      'app/onboarding/detect/page.tsx': 1, // the scan screen's row name
+      'components/studio/PhotoEditor.tsx': 1, // the tag on the photo
+      'components/studio/HoverCard.tsx': 1,
+      'components/studio/PartTree.tsx': 1, // the Catalog row
+      'components/studio/Inspector.tsx': 3, // the name, and the kind line's two labels
+    };
+    for (const [f, n] of Object.entries(SITES)) {
+      const uses = stripComments(readFileSync(join(ROOT, f), 'utf8')).match(/\bsentence-case\b/g) ?? [];
+      expect(uses.length, f).toBe(n);
+    }
+  });
+
   it('the sentence-case utility ups the first letter and nothing else', () => {
     expect(stripComments(CSS)).toMatch(/\.sentence-case::first-letter\s*\{\s*text-transform:\s*uppercase;\s*\}/);
   });
