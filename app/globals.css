@@ -111,6 +111,8 @@
                            bare `zIndex: 1`. */
   --z-canvas-ui: 20;    /* panels floating over the 3D canvas */
   --z-canvas-hint: 30;  /* help affordances — must stay above the panels */
+  --z-canvas-veil: 35;  /* the canvas's loading cover: over everything that floats
+                           on the room, since none of it is about this room yet */
   --z-panel: 40;        /* docked chrome that may overlap canvas UI */
   --z-popover: 50;      /* menus, hover cards, colour popovers */
   --z-overlay: 80;      /* blocking progress overlay */
@@ -244,6 +246,7 @@
   --dur-quick: 120ms;
   --dur-base: 160ms;
   --dur-slow: 300ms;
+  --dur-breathe: 1100ms; /* one half-cycle of a placeholder's breathing */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
 
@@ -408,6 +411,10 @@ h1, h2, h3 { text-wrap: balance; }
 .ds-btn:hover { background: var(--paper-2); transform: translateY(-1px); box-shadow: var(--shadow-lift); }
 .ds-btn:active { transform: translateY(0); box-shadow: var(--shadow-soft); }
 .ds-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+/* Busy is not unavailable. A working button is disabled so a second press cannot
+   start the work twice, and at the disabled rule's half strength its spinner was
+   faint and the button read as switched off. Full strength, a progress cursor. */
+.ds-btn[aria-busy="true"]:disabled { opacity: 1; cursor: progress; }
 /* A button is as wide as what it says. Full width is the phone convention for a
    screen's one primary action — below 600px, Material's compact width class — and
    only there: on a laptop the same bar is 500px of colour around a two-word label.
@@ -495,6 +502,7 @@ h1, h2, h3 { text-wrap: balance; }
 .list-row:focus-visible,
 .card-link:focus-visible,
 .slot-card:focus-visible,
+.idea-card__pick:focus-visible,
 .editable:focus-visible,
 .swatch:focus-visible,
 [role="slider"]:focus-visible,
@@ -547,6 +555,119 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   color: var(--accent-text);
   border-color: var(--accent-text);
   background: var(--accent-tint);
+}
+
+/* ─── Waiting ─────────────────────────────────────────────────────────────
+   A veil is opaque paper over something that is not ready to be seen: the
+   canvas while a room opens (`CanvasVeil`), the studio while it picks its shape.
+   Its words arrive after a beat, so a wait of one frame is a frame of paper and
+   not a flash of text; `both` holds them hidden through the delay. */
+.veil { display: grid; place-items: center; background: var(--paper-2); }
+.veil--over { position: absolute; inset: 0; z-index: var(--z-canvas-veil); }
+.veil__say {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: var(--fs-body); color: var(--ink-3);
+  animation: danmu-arrive var(--dur-slow) var(--ease-out) var(--dur-slow) both;
+}
+@keyframes danmu-arrive { from { opacity: 0; } to { opacity: 1; } }
+
+/* ─── Loading placeholders ────────────────────────────────────────────────
+   The shape of what is coming, breathing, where the empty space would otherwise
+   read as "there is nothing here". Always paired with words somewhere a screen
+   reader hears them (a live region saying what is being fetched), because a
+   placeholder is `aria-hidden` and, under reduced motion, still. */
+.ds-skeleton {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 6px 6px 8px;
+  border-color: var(--hairline);
+  background: var(--paper);
+  animation: danmu-breathe var(--dur-breathe) var(--ease-in-out) infinite alternate;
+}
+.ds-skeleton__block { display: block; width: 100%; border-radius: var(--r-1); background: var(--paper-3); }
+.ds-skeleton__line { display: block; height: 8px; width: 85%; border-radius: var(--r-full); background: var(--paper-3); }
+.ds-skeleton__line--short { width: 50%; }
+@keyframes danmu-breathe { from { opacity: 1; } to { opacity: 0.45; } }
+/* A row still being read, in a list: the height of the row that will replace it. */
+.ds-skeleton--row { height: 44px; padding: 0; border: 0; border-radius: var(--r-2); background: var(--paper-2); }
+
+/* ─── Ideas gallery (`IdeasPanel.tsx`) ────────────────────────────────────
+   A card beside the rail, placed by `useBesideRail`. Two thumbnails a row there,
+   three across a phone: decision D6, four ideas to a page beside a laptop's rail
+   and three on a phone. Every column is `minmax(0, 1fr)` so a long piece name
+   wraps inside its card instead of widening the grid. */
+.ideas-panel {
+  z-index: var(--z-popover);
+  display: flex; flex-direction: column;
+  padding: 0;
+  overflow: auto;
+  box-shadow: var(--shadow-lift);
+}
+.ideas-panel__head {
+  position: sticky; top: 0; z-index: var(--z-sticky-local);
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 10px 8px 14px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--hairline);
+}
+.ideas-panel__title { font-size: var(--fs-small); font-weight: 700; color: var(--ink); }
+.ideas-panel__status {
+  flex: 1; min-width: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--ink-3);
+}
+.ideas-panel__note { display: flex; flex-direction: column; gap: 6px; padding: 14px; overflow-wrap: anywhere; }
+.ideas-grid { display: grid; gap: 8px; padding: 12px; }
+.ideas-grid--wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ideas-grid--phone { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ideas-grid__end { grid-column: 1 / -1; }
+.idea-card {
+  position: relative; min-width: 0;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-2);
+  background: var(--paper);
+  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+.idea-card:hover { box-shadow: var(--shadow-soft); }
+/* The idea on screen. A border AND a ring, so it does not rest on colour alone:
+   the ring doubles the edge's weight. */
+.idea-card--on { border-color: var(--accent-text); box-shadow: 0 0 0 2px var(--accent-tint); }
+.idea-card__pick {
+  display: flex; flex-direction: column; gap: 4px;
+  width: 100%; min-width: 0;
+  padding: 6px 6px 8px;
+  border: 0; border-radius: inherit;
+  background: none;
+  font-family: var(--font-sans); text-align: left; color: var(--ink);
+  cursor: pointer;
+}
+.idea-card__lead {
+  font-size: var(--fs-caption); font-weight: 600; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.idea-card__count { font-size: var(--fs-micro); color: var(--ink-3); }
+/* Three to a row leaves about seventeen characters a line, and the caption's last
+   clause ("facing the TV") is the part that says what the idea is for. */
+.ideas-grid--phone .idea-card__lead { -webkit-line-clamp: 3; }
+.idea-card__heart {
+  position: absolute; top: 3px; right: 3px;
+  width: 26px; height: 26px;
+  border-radius: var(--r-full);
+  background: var(--paper);
+  color: var(--ink-3);
+}
+.idea-card__heart[aria-pressed="true"] { color: var(--accent-text); }
+.ideas-panel__kept {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--hairline);
+}
+.ideas-panel__kept > .ds-label { flex-basis: 100%; }
+.ideas-chip { gap: 0; padding: 0 0 0 10px; max-width: 100%; min-width: 0; box-shadow: none; }
+.ideas-panel__foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 8px 10px 10px 14px;
+  border-top: 1px solid var(--hairline);
 }
 
 .ds-input {

@@ -71,9 +71,16 @@ export function Select<T extends string>({
   const [active, setActive] = useState(0);
   const [box, setBox] = useState<CSSProperties | null>(null);
   const typed = useRef({ q: '', at: 0 });
+  /** Where the list should open, when something other than the chosen option asked
+   *  for it: type-ahead on a Select with nothing chosen yet. */
+  const openAt = useRef<number | null>(null);
 
-  const index = Math.max(0, options.findIndex((o) => o.value === value));
-  const selected = options[index];
+  // A value that is not one of the options shows the placeholder, and it used to
+  // show the FIRST option instead: the ideas gallery's "Keep a piece…" read "Sofa",
+  // which says the sofa is kept. `index` stays 0 for the list's own starting point.
+  const found = options.findIndex((o) => o.value === value);
+  const index = Math.max(0, found);
+  const selected = found >= 0 ? options[found] : undefined;
 
   function place() {
     const r = btn.current?.getBoundingClientRect();
@@ -97,7 +104,8 @@ export function Select<T extends string>({
 
   useEffect(() => {
     if (!open) return;
-    setActive(index);
+    setActive(openAt.current ?? index);
+    openAt.current = null;
     function onDown(e: MouseEvent) {
       if (btn.current?.contains(e.target as Node) || list.current?.contains(e.target as Node)) return;
       setOpen(false);
@@ -144,13 +152,20 @@ export function Select<T extends string>({
     t.q = now - t.at > 1000 ? key : t.q + key;
     t.at = now;
     const q = t.q.toLowerCase();
-    const from = open ? active : index;
+    // With nothing chosen the search starts BEFORE the first option, so a first
+    // option that matches is found first rather than last.
+    const from = open ? active : found < 0 ? -1 : index;
     const cycle = t.q.length > 1 ? 0 : 1;
     for (let n = cycle; n < options.length + cycle; n++) {
       const i = (from + n) % options.length;
       if (options[i].label.toLowerCase().startsWith(q)) {
         if (open) setActive(i);
-        else onChange(options[i].value);
+        // Nothing chosen yet: open ON the match rather than choosing it, for the
+        // reason an arrow opens the list here (see `step`).
+        else if (found < 0) {
+          openAt.current = i;
+          setOpen(true);
+        } else onChange(options[i].value);
         return;
       }
     }
@@ -160,6 +175,9 @@ export function Select<T extends string>({
     const step = (d: number) => {
       e.preventDefault();
       if (open) setActive((a) => Math.min(options.length - 1, Math.max(0, a + d)));
+      // Nothing chosen yet: an arrow opens the list rather than choosing for the
+      // person, since a closed trigger has nothing to step from.
+      else if (found < 0) setOpen(true);
       else {
         const next = Math.min(options.length - 1, Math.max(0, index + d));
         if (next !== index) onChange(options[next].value);

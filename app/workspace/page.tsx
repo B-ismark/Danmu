@@ -13,7 +13,7 @@ import {
   startOfToday,
   type RecencyGroupId,
 } from '@/lib/dates';
-import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
+import { EditableText, IconButton, Pill, Spinner } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
 import { useConfirmDeleteRooms } from '@/components/ui/Confirm';
 import { DocShell } from '@/components/ui/DocShell';
@@ -173,8 +173,10 @@ export default function WorkspacePage() {
       <div style={{ position: 'relative' }}>
         <div>
           {!booted ? (
-            <div style={{ textAlign: 'center', padding: 60, color: 'var(--ink-3)', fontSize: 'var(--fs-body)' }}>
-              Loading rooms…
+            <div className="veil" role="status" style={{ padding: 60, background: 'transparent' }}>
+              <span className="veil__say">
+                <Spinner size={14} /> Loading your rooms…
+              </span>
             </div>
           ) : rooms.length === 0 ? (
             <EmptyState />

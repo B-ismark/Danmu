@@ -172,25 +172,22 @@ export const DIVERSITY_PENALTY = 4;
  *  different question. It is the bar for "have I already shown you this", where the
  *  solver's constant is the bar for "did the pool already hold this". */
 export const REPEAT_SIMILARITY = 0.85;
-/** How many recent offers to avoid repeating. Small on purpose: a long memory
- *  eventually rules out every arrangement a small room actually has, and the fallback
- *  when everything is ruled out is to show a repeat anyway. */
-export const HISTORY_DEPTH = 3;
 
 /**
  * One arrangement this room has already been offered.
  *
  * **It carries the part ids, and that is not bookkeeping.** A `Placement[]` is
  * index-aligned to one particular `parts` array and says so nowhere, while the
- * history that holds it outlives any number of edits to the room: the studio's
- * Shuffle button keeps it in a `useRef` on a component that adding or deleting
- * furniture does not remount. So the two drift, in two different ways and only one
- * of them is loud.
+ * history that holds it can outlive an edit to the room. The Shuffle button this
+ * was written for kept its history across edits and deletions; the ideas gallery
+ * that replaced it starts a new history whenever its room changes, and this check is
+ * still the thing that makes that safe rather than the gallery's bookkeeping. The
+ * two can drift in two different ways and only one of them is loud.
  *
  * · **Different length** — `layoutSimilarity` throws (`lib/layout-offer.ts`,
  *   deliberately, rather than returning a plausible number). Shuffle, delete a
- *   chair, Shuffle again: `layoutSimilarity: 11 placements against 12`, out of a
- *   click handler, no toast and no arrangement.
+ *   chair, Shuffle again gave `layoutSimilarity: 11 placements against 12`, out of
+ *   a click handler, no toast and no arrangement.
  * · **Same length, different order** — nothing throws, and the repeat filter
  *   compares each piece against a *different* piece's old placement. The answer is
  *   meaningless and looks exactly like a working filter.
@@ -226,16 +223,25 @@ export type ShuffleOptions = {
 };
 
 export type ShuffleOutcome = {
-  result: SolveResult;
-  /** What to put in the history, already carrying the ids it is aligned to, so the
-   *  caller cannot record a bare `Placement[]` and reintroduce the drift above. */
-  offer: ShuffleOffer;
   /** How many solves were run and how many survived the fault filter. Reported
    *  rather than discarded because "we tried twelve and none was usable" and "the
    *  first four were all fine" are different facts about a room, and only one of
    *  them is worth telling the user about. */
   tried: number;
   clean: number;
+  /** Every candidate worth SHOWING from this attempt, in offer order: clean, not
+   *  like anything in `history`, and not like an earlier entry of this list. Empty
+   *  when every clean candidate was a repeat, which the gallery counts as a dry
+   *  search.
+   *
+   *  It is the whole pool rather than one winner because the pool was already
+   *  gathered: `MIN_CLEAN` stops the loop at four clean candidates so that
+   *  `orderOffers` has something to choose between, and the Shuffle button this
+   *  replaced applied the first and discarded the other three. A page of ideas is
+   *  those four. There is no longer a `result` or a fallback to a repeat: the one
+   *  caller that wanted a single answer is gone, and a gallery shows a repeat as
+   *  nothing new rather than as an idea. */
+  ideas: SolveResult[];
 };
 
 /** Is this an arrangement the SOLVER thinks is sound?
@@ -406,10 +412,7 @@ export function shuffleRoom(
     diversityPenalty: opts.diversityPenalty ?? DIVERSITY_PENALTY,
   });
 
-  // …then walk that order and pass over anything the user has just been shown.
-  // Falls back to the top-ranked candidate rather than refusing: a repeat is still a
-  // valid room and still different from the one on screen, and "no" to someone who
-  // pressed the button is the worse answer.
+  // …then walk that order and pass over anything the user has already been shown.
   //
   // Only history recorded against THIS furniture is comparable. An entry from before
   // a piece was added or deleted is not stale-but-usable, it is index-aligned to a
@@ -418,19 +421,32 @@ export function shuffleRoom(
   // edited briefly forgets what it was shown, which is the harmless direction.
   const ids = parts.map((p) => p.id);
   const history = (opts.history ?? []).filter((prev) => sameRoom(prev.ids, ids));
-  const fresh = ranked.find(
-    (cand) =>
-      !history.some(
-        (prev) =>
-          layoutSimilarity(cand.placements, prev.placements, {
-            spotM: LAYOUT_SIMILAR_M,
-            yawRad: TURN_EPSILON,
-            movable,
-          }) > REPEAT_SIMILARITY,
-      ),
+  const ideas = showableIdeas(ranked, history, (a, b) =>
+    layoutSimilarity(a, b, { spotM: LAYOUT_SIMILAR_M, yawRad: TURN_EPSILON, movable }) > REPEAT_SIMILARITY,
   );
-  const result = fresh ?? ranked[0];
-  return { result, offer: { ids, placements: result.placements }, tried, clean: clean.length };
+  return { tried, clean: clean.length, ideas };
+}
+
+/** The ranked candidates worth showing, in rank order: each one checked against
+ *  what has been shown already AND against the ideas kept before it.
+ *
+ *  **It has no work to do on today's rooms, and that is measured, not hoped.** The
+ *  clean pool is already mutually unlike (see `DIVERSITY_PENALTY`: none of 66 pairs
+ *  reached `REPEAT_SIMILARITY`), so deleting the check leaves every real-room test
+ *  green. It is pure and exported so `tests/layout-ideas.test.ts` can hand it the
+ *  near-twins the search does not produce, which is the only way to pin it. */
+export function showableIdeas<T extends { placements: Placement[] }>(
+  ranked: readonly T[],
+  shown: readonly { placements: Placement[] }[],
+  repeats: (a: Placement[], b: Placement[]) => boolean,
+): T[] {
+  const ideas: T[] = [];
+  for (const cand of ranked) {
+    if (shown.some((prev) => repeats(cand.placements, prev.placements))) continue;
+    if (ideas.some((kept) => repeats(cand.placements, kept.placements))) continue;
+    ideas.push(cand);
+  }
+  return ideas;
 }
 
 /** The findings a room ALREADY has that no offer can be clean while they stand.
@@ -460,7 +476,8 @@ export function shuffleBlockers(issues: readonly ClearanceIssue[]): ClearanceIss
   });
 }
 
-/** What the panel SAYS when a shuffle finds nothing, given what the room already has.
+/** What the ideas gallery SAYS when its searches find nothing, given what the room
+ *  already has.
  *
  *  Pure, exported and tested for the reason `impossibleClause` is: the sentence and
  *  the call site are two things, and #121 measured the gap — all four call sites of
@@ -502,22 +519,22 @@ export function shuffleBlockers(issues: readonly ClearanceIssue[]): ClearanceIss
  *  Length matters: the four refusal bodies in this panel run 93 to 169 characters and
  *  the wrap at the top of that range is unverified in any browser
  *  (`docs/visual-check.md`), so this stays away from the top. Derived across the five
- *  offered sizes and nine reachable ones: clean is 116 at every size, blocked runs
- *  116-155 before this fix and is re-derived in that doc after it. */
+ *  offered sizes and nine reachable ones when this was Shuffle's toast: clean was 116
+ *  at every size, blocked ran 116-155. The gallery's clean sentence is 107, and the
+ *  blocked one is one character shorter than it was. */
 export function shuffleRefusal(blockers: readonly ClearanceIssue[]): { title: string; message: string } {
   if (blockers.length === 0)
     return {
-      title: 'No new arrangement this time',
-      message:
-        'Every layout it tried left something in the way, so your room is unchanged. Press Shuffle again for a different try.',
+      title: 'No ideas this time',
+      message: 'Every layout it tried left something in the way, so your room is unchanged. Look again for a different try.',
     };
   const more = blockers.length - 1;
   return {
-    title: 'Shuffle cannot arrange around this',
+    title: 'Ideas cannot arrange around this',
     message:
       `Room check reports “${blockers[0].title}”` +
       (more > 0 ? ` and ${more} more` : '') +
-      ', and Shuffle only offers rooms with nothing in the way. Try Fix first.',
+      ', and ideas only include rooms with nothing in the way. Try Fix first.',
   };
 }
 /** The three reasons a piece may not move, for a whole-room shuffle. A thin re-export

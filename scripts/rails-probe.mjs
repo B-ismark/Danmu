@@ -208,10 +208,14 @@ async function main() {
     await ctx.close();
   }
 
-  // ── S4 · the Shuffle label, idle and busy ─────────────────────────────────
+  // ── S4 · the Fix label, idle and busy ─────────────────────────────────────
   //
-  // The busy string is the one this scenario exists for. `Shuffling…` is ~18px wider
-  // than `Shuffle` and it is the tell that has to survive `prefers-reduced-motion`,
+  // Shuffle's `Shuffling…` was the string this scenario was written for; the Ideas
+  // button that replaced Shuffle opens a panel and has no busy label, so the row's
+  // busy string is Fix's `Fixing…` now.
+  //
+  // The busy string is the one this scenario exists for. It is wider than the idle
+  // word and it is the tell that has to survive `prefers-reduced-motion`,
   // where the ring does not turn — so the arithmetic in the PR that widened this row
   // is about the BUSY label, and the first version of this scenario measured the idle
   // one and printed "not counted either way" when it missed the other. That is an
@@ -223,14 +227,14 @@ async function main() {
     const read = () =>
       page.evaluate(() => {
         const btn = [...document.querySelectorAll('button')].find((b) =>
-          /^(Shuffle|Shuffling)/.test(b.textContent?.trim() ?? ''),
+          /^(Fix|Fixing…)$/.test(b.textContent?.trim() ?? ''),
         );
         if (!btn) return null;
         // The span carrying the TEXT. `querySelector('span')` takes the first one,
         // which in the busy state is the spinner — a plausible number about the wrong
         // element, which is worse than no number. A bare text node has no box, so the
         // button is the fallback.
-        const label = [...btn.querySelectorAll('span')].find((s) => /Shuffl/.test(s.textContent ?? ''));
+        const label = [...btn.querySelectorAll('span')].find((s) => /^Fix/.test(s.textContent ?? ''));
         const box = label ?? btn;
         const r = btn.getBoundingClientRect();
         const row = btn.parentElement?.getBoundingClientRect();
@@ -247,7 +251,7 @@ async function main() {
 
     const idle = await read();
     if (!idle) {
-      no('S4', 'precondition: no Shuffle button on the plan tab');
+      no('S4', 'precondition: no Fix button on the plan tab');
     } else {
       note('S4', `idle "${idle.text}" (${idle.measured}): ${idle.scroll} in ${idle.client}, button ${idle.buttonW}px, row ${idle.rowH}px`);
       const cut = idle.scroll > idle.client + 1;
@@ -256,7 +260,7 @@ async function main() {
 
       await page.evaluate(() => {
         const btn = [...document.querySelectorAll('button')].find((b) =>
-          /^Shuffle/.test(b.textContent?.trim() ?? ''),
+          /^Fix$/.test(b.textContent?.trim() ?? ''),
         );
         btn?.click();
       });
@@ -266,7 +270,7 @@ async function main() {
       let busy = null;
       for (let i = 0; i < 60 && !busy; i++) {
         const seen = await read();
-        if (seen && /Shuffling/.test(seen.text)) busy = seen;
+        if (seen && /Fixing/.test(seen.text)) busy = seen;
         else await page.waitForTimeout(25);
       }
 

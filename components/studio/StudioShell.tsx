@@ -23,6 +23,7 @@ import { Fragment, type ReactNode } from 'react';
 import { useStudioLayout } from './NarrowViewportBanner';
 import { DockedShell } from './shells/DockedShell';
 import { SheetShell } from './shells/SheetShell';
+import { Spinner } from '@/components/ui/primitives';
 
 export function StudioShell({
   children,
@@ -44,9 +45,9 @@ export function StudioShell({
 
   if (!ready) {
     return (
-      <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--paper-2)' }}>
-        <span role="status" style={{ fontSize: 'var(--fs-body)', color: 'var(--ink-3)' }}>
-          {loadingLabel}
+      <div className="veil" style={{ height: '100%' }} role="status">
+        <span className="veil__say">
+          <Spinner size={14} /> {loadingLabel}
         </span>
       </div>
     );

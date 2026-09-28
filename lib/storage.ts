@@ -197,7 +197,31 @@ export type LayoutVariant = {
   /** ScenePart[] — stored opaque to avoid a lib cycle (same as saveSceneParts). */
   parts: unknown;
   transforms: Transforms;
+  /** Saved from the ideas gallery's heart rather than "Save current". Optional, so
+   *  every layout saved before it reads as an ordinary one. */
+  favourite?: boolean;
 };
+
+/** A saved layout, made the one way every saver makes it: "Save current" in the
+ *  Layouts tab, the ideas gallery's heart, and a re-scan's "Before re-scan". Three
+ *  hand-built copies of this record were three places for a field to go missing.
+ *  The id carries a random tail after the time, because two saves in the same
+ *  millisecond (a double press) must not overwrite each other. */
+export function newLayout(
+  name: string,
+  parts: unknown,
+  transforms: Transforms,
+  { now = Date.now(), favourite = false }: { now?: number; favourite?: boolean } = {},
+): LayoutVariant {
+  return {
+    id: `l-${now.toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    createdAt: now,
+    parts,
+    transforms,
+    ...(favourite ? { favourite: true } : {}),
+  };
+}
 
 export type RoomSummary = {
   id: string;

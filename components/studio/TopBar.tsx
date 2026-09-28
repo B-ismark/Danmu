@@ -23,15 +23,21 @@ export function TopBar({
 }) {
   const phone = usePhoneStudio();
   const { roomId } = useParams<{ roomId: string }>();
-  const [name, setName] = useState('Living Room');
+  // Null until the room's own name is read. It used to start as "Living Room", so
+  // every room was called that for a moment, and a quick rename could race it.
+  const [name, setName] = useState<string | null>(null);
   const [savedHint, setSavedHint] = useState(false);
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!roomId) return;
-    roomStore.loadRoom(roomId).then((r) => {
-      if (r) setName(r.name);
-    });
+    // A room that is not there, or storage that cannot be read, still gets a name
+    // to show: "Room", the Export menu's fallback too, rather than a loading gap
+    // that never fills.
+    roomStore
+      .loadRoom(roomId)
+      .then((r) => setName(r?.name ?? 'Room'))
+      .catch(() => setName('Room'));
   }, [roomId]);
 
   useEffect(() => () => {
@@ -55,7 +61,13 @@ export function TopBar({
     hintTimer.current = setTimeout(() => setSavedHint(false), 1800);
   }
 
-  const nameField = (style: CSSProperties) => (
+  const nameField = (style: CSSProperties) =>
+    name === null ? (
+      // The same height the name will take, so the bar does not jump when it lands.
+      <span style={{ ...style, display: 'inline-block', height: 28 }} aria-busy="true">
+        <span className="sr-only">Loading the room’s name</span>
+      </span>
+    ) : (
     <EditableText
       value={name}
       label="Room name"
@@ -66,7 +78,7 @@ export function TopBar({
       style={style}
       inputStyle={{ fontSize: 'var(--fs-body)', fontWeight: 500, height: 28, width: 'min(280px, 100%)' }}
     />
-  );
+    );
   const savedStatus = (
     <span className="sr-only" role="status" aria-live="polite">
       {savedHint ? 'Room saved' : ''}

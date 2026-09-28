@@ -24,7 +24,7 @@ import { useScene } from '@/lib/scene-store';
 import { useSettings } from '@/lib/store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useSnapshot } from '@/lib/snapshot';
-import { exportPlanPng } from '@/lib/plan-export';
+import { exportPlanPng, planFileName } from '@/lib/plan-export';
 import { roomStore } from '@/lib/storage';
 import { saveSceneFile } from './SceneFile';
 import { toast } from '@/components/ui/StorageToast';
@@ -94,7 +94,13 @@ export function useExportItems(): ExportItem[] {
     // would ship the room as it was before anyone arranged it. See lib/transforms.
     const scene = currentRoomScene();
     const room = useScene.getState().room;
-    exportPlanPng(scene, room, dimUnit, await freshRoomName());
+    const name = await freshRoomName();
+    // AWAITED. It was not, so an encode failure rejected a promise nobody held: the
+    // `.catch` on the menu item below caught only `freshRoomName`, the menu closed,
+    // no file arrived and nothing was said.
+    await exportPlanPng(scene, room, dimUnit, name);
+    // A download is easy to miss, on a phone most of all, so the file is named.
+    toast({ title: 'Floor plan saved', message: planFileName(name), ttl: 4000 });
   }
 
   const items: ExportItem[] = [

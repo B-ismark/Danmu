@@ -233,10 +233,11 @@ describe('the shuffle gate and the two findings § H.16b added', () => {
         const out = shuffleRoom(parts, room, locked, { attempt });
         if (out) {
           offered++;
-          expect(
-            newRoomFindings(parts, room, out.result).map((f) => f.rule),
-            `${id} attempt ${attempt} was offered while introducing a finding`,
-          ).toEqual([]);
+          for (const idea of out.ideas)
+            expect(
+              newRoomFindings(parts, room, idea).map((f) => f.rule),
+              `${id} attempt ${attempt} was offered while introducing a finding`,
+            ).toEqual([]);
         }
       }
       expect(offered, `${id} ${w}x${d}: Shuffle offered nothing at all in six presses`).toBeGreaterThan(0);
@@ -256,7 +257,9 @@ describe('the shuffle gate and the two findings § H.16b added', () => {
     const locked = parts.map(() => false);
     const out = shuffleRoom(parts, room, locked, { attempt: 0 });
     expect(out, 'no arrangement to test the diff with').not.toBeNull();
-    expect(newRoomFindings(parts, room, out!.result).map((f) => f.rule)).not.toContain('outside-immovable');
+    expect(out!.ideas.length, 'no idea to test the diff with').toBeGreaterThan(0);
+    for (const idea of out!.ideas)
+      expect(newRoomFindings(parts, room, idea).map((f) => f.rule)).not.toContain('outside-immovable');
   });
 
   it('but still refuses an arrangement that puts a piece outside the room', () => {

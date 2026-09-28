@@ -24,6 +24,10 @@ The numbers — 208 versus 228, a grid with three columns versus none, a label's
 | S7 | **measurement, not a gate**: the right rail's fixed stack against the rail's own height at a short window | prints | prints | **NO** — this is F7, unverified either way until it prints |
 | S8 | control — the studio grid has three tracks on a plain load, both builds | PASS | PASS | **NO** — separates "lost the variable" from "never had one" |
 
+**S4 measures Fix now.** Shuffle became the Ideas gallery, whose button has no busy
+label, so S4 reads Fix's `Fixing…` instead of `Shuffling…`. The S4 row above is the
+prediction as it was made.
+
 **S5's pass condition changed after this was written** (PR #158). The standing sentence
 under the dial became an info button's explanation, so S5 now passes when that
 explanation is the button's `aria-describedby` text with nothing hovered or pressed. The

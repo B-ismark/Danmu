@@ -60,7 +60,7 @@ section is yours to fix if you are the one reading it.
 |---|---|---|
 | Sizes and fit | `sizes` | dimension ranges, clamps, clearance, the room report |
 | Drag and selection | `drag` | drag, convoy, rotate, scale, snap, both tabs' pointers |
-| Layout and Shuffle | `layout` | the solver, Shuffle, bands, arrangement, layout rules |
+| Layout and Ideas | `layout` | the solver, the ideas gallery, bands, arrangement, layout rules |
 | Shell and flow | `shell` | rails, panels, capture / detect, copy and CTAs |
 | Look and light | `look` | the 3D render: grading, materials, lights, what the camera sees |
 
@@ -548,7 +548,7 @@ surfaces — including the tucked-chair case, with the premise asserted. `restin
 eleven clauses of its own. Reverting the banner to `collidesAt`, collapsing `restingOn`
 into `findSupportDetailed`, and restoring `aria-live` each go red.
 
-## Layout and Shuffle
+## Layout and Ideas
 
 *Owner: `layout`. The Shuffle item was a look rather than a check, and the look was taken on
 2026-08-30: Shuffle declined to close a 300–400 mm bedside gap, which **confirms the measured
@@ -562,6 +562,27 @@ solver produces no floor collisions at all; what goes through the bed is the LAM
 the nightstand, carried nowhere while the nightstand moved. That fix does want eyes, and it
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
+
+### The ideas gallery replaces Shuffle — this branch, SWEPT, needs a real phone and a real GPU
+
+**Ideas** sits where Shuffle did, beside **Fix**. It opens a card of arrangements: four
+to a page beside a laptop rail, three on a phone, where the card is a sheet resting on
+the bottom bar. Press one and the room takes it; **Back to your room** undoes all of it;
+the heart saves one to Layouts (it shows a small heart there); **Kept in place** keeps a
+piece and asks again from the room on screen. Drag something while it is open and it
+says *The room changed* with **Find new ideas**. `tests/ideas-panel.test.tsx` holds the
+wiring, 7 of 7 mutants caught; looked at in SwiftShader at 1440 and 390.
+
+**Where to click.** Any furnished room → left rail (the Room sheet on a phone) → **Ideas**.
+
+**What wrong looks like.**
+- The room in 3D not matching the highlighted card after a press, or a press that does
+  nothing on a real GPU.
+- Placeholders that breathe forever, or the header's *Finding more…* never going away.
+- On a phone: the card covering the Room / Add / View bar, a caption cut mid-word
+  rather than ellipsised at three lines, or the thumbnails too small to tell apart.
+- A heart that is filled for a layout the Layouts tab no longer has.
+- Keeping a piece and the next ideas moving it anyway.
 
 ### The standing fan is 144 mm shallower than it was, in the plan and in 3D (§ 39)
 
@@ -1645,7 +1666,7 @@ deliberately. And a selection restored onto a room that no longer holds those pi
 back partially — the pieces that survive stay selected and the rest are dropped, rather
 than the whole selection clearing.
 
-### A cleaner cream, a deeper ink, plain copy, and Sun direction behind an info button — PR #158, SWEPT, needs a real phone and a real screen
+### A cleaner cream, a deeper ink, plain copy, and Sun direction behind an info button — `0c3cd64` on `main` (PR #158), SWEPT, needs a real phone and a real screen
 
 The paper family lost about half its yellow and the ink went darker; every contrast
 ratio in `globals.css` went up, and `tests/color-tokens.test.ts` holds the comments to
@@ -1653,10 +1674,7 @@ the tokens. The Room panel's "Facing" dial is **Sun direction** now, with its
 explanation behind an ⓘ that opens on a tap (`InfoTip` in `components/ui/Tooltip.tsx`)
 rather than a line of hint under it. The coach-mark pop-ups and the loading card's
 rotating tips are gone, and visible copy has no em dashes. The room size hint ("“Area
-rug” needs 2.4 m…") shows only once a width or depth is AT that floor. Swept at all
-seven widths: **0 findings**. The small-target count rose 186 → 195, and every one of
-the nine is the Settings unit picker (m · cm · mm · ft · in, 30 px tall), which shorter
-copy above it pulled into the first screen on a phone — it was always that size.
+rug” needs 2.4 m…") shows only once a width or depth is AT that floor.
 
 What a person can see and the sweep cannot:
 - **The cream on a real display**, beside the old one if you have it: it should read as
@@ -1674,6 +1692,25 @@ What a person can see and the sweep cannot:
   row, the title under it, and no tips cycling. Nobody has seen it since the tips went.
 - **The room size hint:** drag a room's width down to its largest piece; the sentence
   appears at the floor and not before.
+
+### Loading states — this branch, PROBED in SwiftShader, needs a real phone and a real GPU
+
+A room opening shows paper and "Opening your room…" over the canvas, then "Building the
+3D view…" until the first frame; a slow Fix or Try a fix puts up "Arranging your room…"
+after 600 ms and replaces it with the result; busy buttons stay at full strength; lists
+being read show breathing rows instead of "No … yet". Probed with the CPU throttled 8×
+(veil: Setting up → Opening → Building, then gone) and with the worker's replies
+delayed 1.8 s (the working toast at 600 ms, then the result), at 1440 and 390.
+`tests/canvas-veil.test.tsx`, `tests/toast-while.test.tsx`,
+`tests/export-menu-wired.test.tsx`: 7 of 7 mutants caught.
+
+**What wrong looks like.**
+- The previous room, or the starter room, visible for a moment when opening a room.
+- A veil that never lifts on a real GPU (the first-frame signal not arriving), or
+  "Building the 3D view…" flashing on every tab switch on a fast machine.
+- A working toast that stays after its result arrives, or appears for a quick Fix.
+- On a phone, the working toast covering the banner's close button (the toast's own
+  top-right placement, which this did not change).
 
 ---
 ## Look and light

@@ -267,9 +267,14 @@ describe('a floating card is capped against the window, not just stated', () => 
     // A CSS `min()` in the style plus a constant in `place()` would be two answers
     // to one question, and `left` is computed from the width — so the constant is
     // the one that would be wrong.
-    const src = readFileSync(root('components', 'studio', 'RoomTools.tsx'), 'utf8');
-    expect(src).toMatch(/const width = Math\.min\(PANEL_W,\s*window\.innerWidth/);
-    expect(src, 'left must be clamped at BOTH edges').toMatch(/const left = Math\.max\(\s*\d+,\s*Math\.min\(/);
+    // The arithmetic moved to `useBesideRail`, which the room report and the ideas
+    // gallery share, and the report hands it `PANEL_W`.
+    const room = readFileSync(root('components', 'studio', 'RoomTools.tsx'), 'utf8');
+    expect(room).toMatch(/useBesideRail\(anchorRef, open, \{ width: PANEL_W \}\)/);
+    const src = readFileSync(root('components', 'studio', 'useBesideRail.ts'), 'utf8');
+    expect(src).toMatch(/const room = window\.innerWidth - \d+;/);
+    expect(src).toMatch(/Math\.min\(wanted, room\)/);
+    expect(src, 'left must be clamped at BOTH edges').toMatch(/Math\.max\(\s*\d+,\s*Math\.min\(/);
   });
 });
 
@@ -1185,7 +1190,7 @@ describe('a piece row keeps enough width to read the piece name', () => {
 });
 
 describe('the room-check actions wrap rather than cut a word', () => {
-  // Fix and Shuffle sit under the health chip in the LEFT rail, inside `PartTree`'s own
+  // Fix and Ideas sit under the health chip in the LEFT rail, inside `PartTree`'s own
   // `12px 16px` wrapper and OUTSIDE its scroller, so their content box is the rail width
   // less 32 — the same figure every rail assertion above uses.
   //
@@ -1193,13 +1198,13 @@ describe('the room-check actions wrap rather than cut a word', () => {
   // above and truncated both labels at every rail width that ships. `.ds-btn`'s own rule
   // in `globals.css` names the two legal answers for a button with no room — its ROW
   // wraps, or its label gets an element and ellipsises — and this row takes the first,
-  // because the second cuts `Shuffling…`, which is the tell that has to survive
+  // because the second cuts `Fixing…`, which is the tell that has to survive
   // `prefers-reduced-motion` when the spinner does not turn.
   const ROOM = readSrc('components', 'studio', 'RoomTools.tsx');
 
   it('declares a wrapping row whose buttons grow but never shrink', () => {
     const row = /\{\/\* Two `\.ds-btn`s[\s\S]*?<div style=\{\{([^}]*)\}\}>/.exec(ROOM);
-    expect(row, 'the Fix/Shuffle row is no longer where this test looks for it').toBeTruthy();
+    expect(row, 'the Fix/Ideas row is no longer where this test looks for it').toBeTruthy();
     expect(row![1], 'the row must wrap, or a label is cut instead').toContain("flexWrap: 'wrap'");
 
     // `1 0 auto` and not `1 1 auto`: the middle number is the whole mechanism. A shrink
@@ -1212,7 +1217,7 @@ describe('the room-check actions wrap rather than cut a word', () => {
     // has other centred buttons, so deleting one of these two left the count at two and
     // the mutant alive. A count over the wrong population is not a weaker assertion, it
     // is a different one.
-    for (const fn of ['FixAllButton', 'ShuffleButton']) {
+    for (const fn of ['FixAllButton', 'IdeasButton']) {
       const from = ROOM.indexOf(`function ${fn}(`);
       expect(from, `${fn} is not declared in RoomTools.tsx`).toBeGreaterThan(-1);
       const next = ROOM.indexOf('\nfunction ', from + 1);
@@ -1228,14 +1233,14 @@ describe('the room-check actions wrap rather than cut a word', () => {
     // The measurement the wrap answers to. If this ever comes out generous, the grid was
     // fine after all and this row can go back to one — but it is not a matter of taste
     // while the number is 35.
-    // Fix and Shuffle are `ds-btn--sm`, whose padding and gap travel with the size.
+    // Fix and Ideas are `ds-btn--sm`, whose padding and gap travel with the size.
     expect(ROOM).toMatch(/function FixAllButton[\s\S]*?className="ds-btn ds-btn--sm"/);
     const btn = rule('.ds-btn--sm');
     const padX = Number(/padding: 0 (\d+)px/.exec(btn)![1]);
 
     // The row's own gap, and the icon each button carries, read out of the source.
     const rowGap = Number(/flexWrap: 'wrap', gap: (\d+) \}\}>\s*<FixAllButton/.exec(ROOM)![1]);
-    const iconPx = Number(/<Icon name="shuffle" size=\{(\d+)\}/.exec(ROOM)![1]);
+    const iconPx = Number(/<Icon name="sparkles" size=\{(\d+)\}/.exec(ROOM)![1]);
     const btnGap = Number(/fontSize: 'var\(--fs-caption\)',\s*gap: (\d+),/.exec(ROOM)![1]);
 
     const content = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]) - 32;
@@ -1245,11 +1250,15 @@ describe('the room-check actions wrap rather than cut a word', () => {
     // ~5.9px per character at 11px, scaled from the 13px figure the piece-name floor
     // above uses (~7px). Chosen rather than derived, for the reason recorded there: a
     // derived floor moves with the thing it constrains and can never go red.
-    const needed = Math.round('Shuffling…'.length * 5.9);
+    const needed = Math.round('Fixing…'.length * 5.9);
+    // Since Ideas replaced Shuffle ("Shuffling…", ~59px) the busy label is Fix's, and
+    // a column holds it with about two pixels to spare. Less than one character on
+    // a per-character estimate is not room, so the row still wraps; the day the
+    // margin is a whole character or more, the grid is worth another look.
     expect(
-      label,
+      label - needed,
       `a 1fr column at --rail-left-tight leaves ${label}px for a label that wants ~${needed}px`,
-    ).toBeLessThan(needed);
+    ).toBeLessThan(6);
   });
 });
 

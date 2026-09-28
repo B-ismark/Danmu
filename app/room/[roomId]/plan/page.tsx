@@ -10,6 +10,7 @@ import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
 import { HoverCard } from '@/components/studio/HoverCard';
 import { CatalogPanel, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { StudioShell } from '@/components/studio/StudioShell';
+import { CanvasVeil } from '@/components/studio/CanvasVeil';
 import { Icon } from '@/components/ui/Icon';
 import { useStudio, useSettings } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
@@ -94,6 +95,7 @@ export default function PlanPage() {
       >
         <PlanView ref={planApi} onViewChange={onViewChange} showComfort={comfort} />
       </div>
+      <CanvasVeil />
 
       {/* Same right-click menu as the 3D tab; it positions itself against this
           element's box. */}

@@ -53,6 +53,13 @@ type SceneState = {
    *  did. Set by `loadFromRoom`, which is the one place the scene changes which
    *  room it is about. */
   loadedRoomId: string | null;
+  /** The room whose WHOLE load has finished: meta, saved scene, transforms, locks
+   *  and parents, the three reads `RoomSync` makes. `loadedRoomId` is set by the
+   *  first of those, so until this matches the route the studio is still showing a
+   *  room that is not the one asked for (the previous one, or the starter), and the
+   *  canvas veil covers it. Set only by `RoomSync`. */
+  hydratedRoomId: string | null;
+  setHydrated: (roomId: string | null) => void;
   ready: boolean;
   setParts: (p: ScenePart[]) => void;
   setRoom: (r: { width: number; depth: number; height: number }) => void;
@@ -102,6 +109,8 @@ export const useScene = create<SceneState>((set, get) => ({
   parts: defaultScene(),
   room: DEFAULT_ROOM,
   loadedRoomId: null,
+  hydratedRoomId: null,
+  setHydrated: (roomId) => set({ hydratedRoomId: roomId }),
   ready: false,
   setParts: (parts) => set({ parts, ready: true }),
   // Dimension edits re-derive the footprint from the current layout preset when

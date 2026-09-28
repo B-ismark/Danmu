@@ -333,7 +333,7 @@ describe('shuffleRoom — the offer, not the search', () => {
     ).toContain('and 3 more,');
     // The empty list is the OTHER sentence, and it must not fall through to this one:
     // forcing that branch open crashes on `blockers[0]`, so the guard is load-bearing.
-    expect(shuffleRefusal([]).title).toBe('No new arrangement this time');
+    expect(shuffleRefusal([]).title).toBe('No ideas this time');
   });
 
   it('a single solve is NOT reliably clean, which is why the pipeline exists', { timeout: 60_000 }, () => {
@@ -374,12 +374,16 @@ describe('shuffleRoom — the offer, not the search', () => {
         const outcome = shuffleRoom(parts, rm, locked, { attempt });
         if (!outcome) continue; // refusing is allowed; offering something broken is not
         offers++;
-        const found = newRoomFindings(parts, rm, outcome.result);
-        expect(
-          found.map((f) => `${f.rule}:${f.partIds.join(',')}`),
-          `${id} attempt ${attempt} introduced a finding`,
-        ).toEqual([]);
-        expect(outcome.result.moved.length, `${id} attempt ${attempt}`).toBeGreaterThan(0);
+        // Every idea offered, not only the first: the gallery shows all of them.
+        expect(outcome.ideas.length, `${id} attempt ${attempt} offered nothing`).toBeGreaterThan(0);
+        for (const idea of outcome.ideas) {
+          const found = newRoomFindings(parts, rm, idea);
+          expect(
+            found.map((f) => `${f.rule}:${f.partIds.join(',')}`),
+            `${id} attempt ${attempt} introduced a finding`,
+          ).toEqual([]);
+          expect(idea.moved.length, `${id} attempt ${attempt}`).toBeGreaterThan(0);
+        }
       }
     }
     // The floor. Without it a build where `shuffleRoom` always returned null would
@@ -407,17 +411,19 @@ describe('shuffleRoom — the offer, not the search', () => {
     // so a build that found a single candidate passed having checked nothing.
     // There must be something to choose between for the claim to mean anything.
     expect(first!.clean, 'needs more than one candidate to prefer between').toBeGreaterThan(1);
-    const second = shuffleRoom(parts, rm, locked, { attempt: 1, history: [first!.offer] });
+    const offered = { ids: parts.map((p) => p.id), placements: first!.ideas[0].placements };
+    const second = shuffleRoom(parts, rm, locked, { attempt: 1, history: [offered] });
     expect(second).not.toBeNull();
-    expect(second!.result.placements).not.toEqual(first!.result.placements);
+    expect(second!.ideas.length).toBeGreaterThan(0);
+    for (const idea of second!.ideas) expect(idea.placements).not.toEqual(first!.ideas[0].placements);
   });
 
   it('is deterministic per (room, attempt), and a new attempt is a new question', () => {
     const { parts, room: rm, locked } = room('rect', 6, 4);
     const a = shuffleRoom(parts, rm, locked, { attempt: 1 });
     const b = shuffleRoom(parts, rm, locked, { attempt: 1 });
-    expect(a!.result.placements).toEqual(b!.result.placements);
+    expect(a!.ideas.map((i) => i.placements)).toEqual(b!.ideas.map((i) => i.placements));
     const c = shuffleRoom(parts, rm, locked, { attempt: 2 });
-    expect(c!.result.placements).not.toEqual(a!.result.placements);
+    expect(c!.ideas[0].placements).not.toEqual(a!.ideas[0].placements);
   });
 });

@@ -7,8 +7,8 @@ import {
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
   Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Pencil, Trash2, RefreshCw,
   Image, Play, Replace, Circle, Sun, Sunrise, Sunset, Moon, Cloud, Compass,
-  RotateCcw, RotateCw, Maximize, Copy, Shuffle, type LucideIcon,
-  Ellipsis, List, SlidersHorizontal,
+  RotateCcw, RotateCw, Maximize, Copy, type LucideIcon,
+  Ellipsis, List, SlidersHorizontal, Heart, Lightbulb,
 } from 'lucide-react';
 
 // Single icon surface for the whole app. Backed by Lucide (MIT, free) — a
@@ -35,8 +35,8 @@ export type IconName =
   | 'rotate-ccw' | 'rotate-cw' | 'fit'
   | 'sun' | 'sunrise' | 'sunset'
   | 'moon' | 'cloud' | 'compass'
-  | 'swap' | 'shuffle' | 'snap-wall' | 'snap-floor'
-  | 'more' | 'list' | 'sliders';
+  | 'swap' | 'snap-wall' | 'snap-floor'
+  | 'more' | 'list' | 'sliders' | 'heart' | 'idea';
 
 const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, LucideIcon> = {
   'arrow-right': ArrowRight, 'arrow-left': ArrowLeft, 'arrow-up-right': ArrowUpRight,
@@ -52,16 +52,25 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, Lu
   key: KeyRound, eye: Eye, 'eye-off': EyeOff,
   info: Info, help: HelpCircle, chart: BarChart3, external: ExternalLink,
   edit: Pencil, trash: Trash2, refresh: RefreshCw, copy: Copy,
-  image: Image, play: Play, swap: Replace, shuffle: Shuffle,
+  image: Image, play: Play, swap: Replace,
   'rotate-ccw': RotateCcw, 'rotate-cw': RotateCw, fit: Maximize,
   sun: Sun, sunrise: Sunrise, sunset: Sunset,
   moon: Moon, cloud: Cloud, compass: Compass,
-  more: Ellipsis, list: List, sliders: SlidersHorizontal,
+  more: Ellipsis, list: List, sliders: SlidersHorizontal, heart: Heart, idea: Lightbulb,
 };
 
-type Props = { name: IconName; size?: number; color?: string; strokeWidth?: number; style?: CSSProperties };
+type Props = {
+  name: IconName;
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+  /** Fill the glyph's shape, for a stateful icon whose ON state is the solid form
+   *  (a saved heart). Lucide draws outlines by default. */
+  filled?: boolean;
+  style?: CSSProperties;
+};
 
-export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.75, style }: Props) {
+export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.75, filled = false, style }: Props) {
   // `display:block` + `flex-shrink:0` fixes two chronic glyph bugs at the source:
   // Lucide's inline SVG baseline (which sat icons slightly low next to text) and
   // icons getting squished in tight flex rows. Callers can still override.
@@ -89,7 +98,7 @@ export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.
   }
 
   const Cmp = MAP[name] ?? Circle;
-  return <Cmp size={size} color={color} strokeWidth={strokeWidth} style={base} />;
+  return <Cmp size={size} color={color} strokeWidth={strokeWidth} fill={filled ? color : 'none'} style={base} />;
 }
 
 /** A furniture category's glyph. One map, so every list that shows a piece — the
