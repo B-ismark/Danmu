@@ -19,6 +19,7 @@ import { anchorFor, findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD
 import { useRoomReport } from './RoomTools';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
+import { onPageLeave } from '@/lib/page-leave';
 
 // The right rail is a DECORATING panel, not a properties palette — and it now
 // practises the disclosure the left rail has always had. Every decorating
@@ -904,18 +905,42 @@ function DimensionEditor({
   }, [partId, valW, valD, valH, dimUnit, prec]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** What the pending commit will do, so that leaving the page can do it now. */
+  const pendingCommit = useRef<(() => void) | null>(null);
+
+  // A size typed and left inside the 120 ms never reached the room: nothing unmounts on a
+  // reload or a closed tab. Committed in the page-leave's first phase, like the Room
+  // section's boxes, so `RoomSync` has it to save (`lib/page-leave.ts`).
+  useEffect(
+    () =>
+      onPageLeave('commit', () => {
+        if (!timer.current) return;
+        clearTimeout(timer.current);
+        timer.current = null;
+        const run = pendingCommit.current;
+        pendingCommit.current = null;
+        run?.();
+      }),
+    [],
+  );
 
   function commitDebounced(idx: 0 | 1 | 2, raw: string) {
     const next = [...local] as [string, string, string];
     next[idx] = raw;
     setLocal(next);
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
+    const run = () => {
       const mm = next.map((s) => toMM(parseFloat(s), dimUnit));
       if (mm.some((n) => Number.isNaN(n) || n <= 0)) return;
       // Clamp into the shape's trustable real-world range — same gate the scale
       // gizmo and every other size path go through.
       onChange(clampDims(category, shape, [mm[0], mm[1], mm[2]]));
+    };
+    pendingCommit.current = run;
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      pendingCommit.current = null;
+      run();
     }, 120);
   }
 

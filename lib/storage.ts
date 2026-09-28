@@ -1,12 +1,29 @@
 'use client';
 
-import { get, set as idbSet, update, del, keys } from 'idb-keyval';
+import {
+  createStore,
+  del as idbDel,
+  get as idbGet,
+  keys as idbKeys,
+  set as idbSet,
+  update as idbUpdate,
+} from 'idb-keyval';
 import { v4 as uuid } from 'uuid';
+
+// Every call in this file goes through ONE connection, the one the room's own load opens.
+// A write on the way out of the page (`lib/page-leave.ts`) has no time to wait for a
+// connection to open: measured in Chromium, a write through a second connection, still
+// opening, was lost on a closed tab 4 of 5 times, and kept 5 of 5 through the open one.
+const keyval = createStore('keyval-store', 'keyval');
+const get = <T>(key: IDBValidKey) => idbGet<T>(key, keyval);
+const update = <T>(key: IDBValidKey, updater: (old: T | undefined) => T) => idbUpdate<T>(key, updater, keyval);
+const del = (key: IDBValidKey) => idbDel(key, keyval);
+const keys = () => idbKeys(keyval);
 
 // Wrap set so QuotaExceededError fires a global event the StorageToast listens to.
 async function set<T>(key: IDBValidKey, value: T): Promise<void> {
   try {
-    await idbSet(key, value);
+    await idbSet(key, value, keyval);
   } catch (e) {
     reportQuota(e);
     throw e;
@@ -264,6 +281,14 @@ export type Transforms = {
   parentIds?: Record<string, string>;
 };
 
+/** What `roomStore.saveOnLeave` writes: whichever of the room's three saves were still
+ *  waiting. The scene is stored opaque, for the reason `saveSceneParts`'s is. */
+export type LeaveWrite = {
+  transforms?: Transforms;
+  parts?: unknown;
+  room?: { edit: (room: RoomData) => RoomData; pin?: unknown };
+};
+
 /** A named furniture-arrangement snapshot ("Layout A / B") — lets the user
  *  save competing arrangements of the same room and flip between them. */
 export type LayoutVariant = {
@@ -474,6 +499,65 @@ export const roomStore = {
   },
   async loadSceneParts<T>(roomId: string): Promise<T | undefined> {
     return get<T>(k(roomId, 'scene'));
+  },
+  /** Everything still waiting to be saved when the page goes away, written in ONE
+   *  transaction, so it lands whole or not at all (`lib/page-leave.ts`).
+   *
+   *  Written as separate saves, the leave kept whichever one a closing page let finish: a
+   *  typed width came back on 4 of 5 closed tabs without the outline and the scene that
+   *  went with it. One transaction cannot land in part.
+   *
+   *  It asks for its commit as soon as its last put is made, because a page being
+   *  reloaded does not wait for one — measured in Chromium, a piece duplicated and
+   *  reloaded straight away was kept 0 of 5 times, and 5 of 5 with the commit asked for.
+   *  With a room edit in it, that commit waits for the room to be read, and a reload
+   *  does not wait for that either (`docs/what-is-still-open.md` § 47): the whole save
+   *  is lost rather than half of it.
+   *
+   *  `room.edit` must be synchronous, as `editRoom`'s is; with no stored room it writes
+   *  no room, and the rest is written as the separate saves would have written it. The
+   *  pin is `RoomSync`'s: the part list to store as the scene when the edit reshaped a
+   *  room the picker built — see there. */
+  async saveOnLeave(roomId: string, w: LeaveWrite): Promise<void> {
+    try {
+      await keyval('readwrite', (store) => new Promise<void>((resolve, reject) => {
+        const tx = store.transaction;
+        tx.oncomplete = () => resolve();
+        tx.onabort = tx.onerror = () => reject(tx.error);
+        const rest = (scene: unknown) => {
+          try {
+            if (w.transforms) store.put(w.transforms, k(roomId, 'transforms'));
+            if (scene !== undefined) store.put(scene, k(roomId, 'scene'));
+            store.put(Date.now(), k(roomId, 'touched'));
+            tx.commit?.();
+          } catch (e) {
+            // A put that throws outright (a value that cannot be stored) must not leave
+            // the ones before it to commit on their own.
+            tx.abort();
+            throw e;
+          }
+        };
+        const room = w.room;
+        if (!room) return rest(w.parts);
+        const read = store.get(k(roomId, 'meta'));
+        read.onsuccess = () => {
+          const old = read.result as RoomData | undefined;
+          if (!old) return rest(w.parts);
+          const written: RoomData = { ...room.edit(migrateRoom(old)), version: ROOM_SCHEMA_VERSION };
+          store.put(written, k(roomId, 'meta'));
+          // A newer part list than the pin is already on its way, and a detected room is
+          // never pinned; only then is it worth asking whether a photo is.
+          if (room.pin === undefined || w.parts !== undefined || written.detectedObjects?.length) {
+            return rest(w.parts);
+          }
+          const photos = store.count(IDBKeyRange.bound(k(roomId, 'cap:'), k(roomId, 'cap:￿')));
+          photos.onsuccess = () => rest(photos.result > 0 ? undefined : room.pin);
+        };
+      }));
+    } catch (e) {
+      reportQuota(e);
+      throw e;
+    }
   },
   /** Drop the room's arrangement — its scene snapshot and its transforms — so the
    *  next load builds from `detectedObjects`. Only `lib/rescan.ts` calls it, and only

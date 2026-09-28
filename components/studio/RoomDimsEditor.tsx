@@ -13,6 +13,7 @@ import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
 import { markRoughSize, roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
+import { onPageLeave } from '@/lib/page-leave';
 import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 import { Icon } from '@/components/ui/Icon';
 
@@ -87,6 +88,27 @@ export function RoomDimsEditor() {
   }, [room.width, room.depth, room.height, dimUnit, prec]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** What the pending commit will do, so that leaving the page can do it now. */
+  const pendingCommit = useRef<((leaving: boolean) => Promise<void>) | null>(null);
+
+  // A closed tab inside the 200 ms lost what was typed: nothing unmounts, so nothing
+  // commits. It commits in the page-leave's FIRST phase, because this commit is what
+  // hands `RoomSync` the new size — and the furniture it carries — to save, and on the
+  // way out it leaves the saving to `RoomSync` alone: a second save of its own, landing
+  // without `RoomSync`'s, stored the new width without its outline. A reload can still
+  // lose it; `lib/page-leave.ts` says why.
+  useEffect(
+    () =>
+      onPageLeave('commit', () => {
+        if (!timer.current) return;
+        clearTimeout(timer.current);
+        timer.current = null;
+        const run = pendingCommit.current;
+        pendingCommit.current = null;
+        void run?.(true);
+      }),
+    [],
+  );
 
   function commit(idx: 0 | 1 | 2, raw: string) {
     const next = [...local] as [string, string, string];
@@ -94,7 +116,7 @@ export function RoomDimsEditor() {
     setLocal(next);
     edited.current.add(ROOM_AXES[idx]);
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
+    const run = async (leaving: boolean) => {
       const batch: Partial<Record<RoomAxis, number>> = {};
       for (const axis of edited.current) {
         batch[axis] = toMM(parseFloat(next[ROOM_AXES.indexOf(axis)]), dimUnit) / 1000;
@@ -197,12 +219,18 @@ export function RoomDimsEditor() {
           if (ov) studio.setPosition(b.id, [ov[0], b.y, ov[2]]);
         }
       }
-      if (roomId) {
+      if (roomId && !leaving) {
         // The mark from the live room, which `setRoom` has just cleared — not the
         // stored one the record still carries (`markRoughSize`).
         const rough = useScene.getState().room.roughSize === true;
         await roomStore.editRoom(roomId, (stored) => markRoughSize({ ...stored, ...r }, rough));
       }
+    };
+    pendingCommit.current = run;
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      pendingCommit.current = null;
+      void run(false);
     }, 200);
   }
 

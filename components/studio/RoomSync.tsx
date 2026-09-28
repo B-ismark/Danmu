@@ -6,7 +6,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { markRoughSize, roomStore } from '@/lib/storage';
+import { markRoughSize, roomStore, type LeaveWrite, type RoomData, type Transforms } from '@/lib/storage';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { livingParents } from '@/lib/rigid-parent';
@@ -14,6 +14,7 @@ import { seedHistory } from '@/lib/history';
 import type { ScenePart } from '@/lib/scene-spec';
 import { normalizeStoredParts } from '@/lib/scene-spec';
 import { toast } from '@/components/ui/StorageToast';
+import { onPageLeave } from '@/lib/page-leave';
 
 const DEBOUNCE_MS = 300;
 
@@ -21,6 +22,36 @@ const DEBOUNCE_MS = 300;
  *  re-declared, so a field added there cannot be silently dropped from the write
  *  below. */
 type SceneRoom = ReturnType<typeof useScene.getState>['room'];
+
+/** The stored room with the live shell written over it — what both of the room's writes
+ *  store, the debounced one and the one on the way out of the page. The rough-size mark
+ *  comes from the live room, never the stored one — see `markRoughSize`: `RoomDimsEditor`
+ *  saves too, and keeping the stored mark would put back one it had just cleared. */
+function withShell(stored: RoomData, room: SceneRoom): RoomData {
+  return markRoughSize(
+    {
+      ...stored,
+      width: room.width,
+      depth: room.depth,
+      height: room.height,
+      wallColors: room.wallColors,
+      footprint: room.footprint,
+      site: room.site,
+    },
+    room.roughSize === true,
+  );
+}
+
+function transformsOf(s: ReturnType<typeof useStudio.getState>): Transforms {
+  return {
+    positions: s.positions,
+    rotations: s.rotations,
+    dims: s.dims,
+    parentIds: s.parentIds,
+    hidden: s.hidden,
+    pinned: s.pinned,
+  };
+}
 
 export function RoomSync() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -137,6 +168,15 @@ export function RoomSync() {
   // Persist transform changes
   useEffect(() => {
     if (!roomId) return;
+    // The write, when the timer fires and on unmount — leaving the room inside the app.
+    // It forgets the timer, so a second call finds nothing to write. Leaving the PAGE is
+    // the way-out save's, below.
+    const flush = () => {
+      if (!transformTimer.current) return;
+      clearTimeout(transformTimer.current);
+      transformTimer.current = null;
+      roomStore.saveTransforms(roomId, transformsOf(useStudio.getState()));
+    };
     const unsub = useStudio.subscribe((state, prev) => {
       if (!ready.current) return;
       if (
@@ -149,33 +189,11 @@ export function RoomSync() {
       )
         return;
       if (transformTimer.current) clearTimeout(transformTimer.current);
-      transformTimer.current = setTimeout(() => {
-        roomStore.saveTransforms(roomId, {
-          positions: state.positions,
-          rotations: state.rotations,
-          dims: state.dims,
-          parentIds: state.parentIds,
-          hidden: state.hidden,
-          pinned: state.pinned,
-        });
-      }, DEBOUNCE_MS);
+      transformTimer.current = setTimeout(flush, DEBOUNCE_MS);
     });
     return () => {
       unsub();
-      if (transformTimer.current) {
-        // Flush immediately on unmount so navigating away before the debounce
-        // settles doesn't lose the last rotation/position/dim change.
-        clearTimeout(transformTimer.current);
-        const s = useStudio.getState();
-        roomStore.saveTransforms(roomId, {
-          positions: s.positions,
-          rotations: s.rotations,
-          dims: s.dims,
-          parentIds: s.parentIds,
-          hidden: s.hidden,
-          pinned: s.pinned,
-        });
-      }
+      flush();
     };
   }, [roomId]);
 
@@ -192,23 +210,8 @@ export function RoomSync() {
       const wasReshaped = reshapedSince.current;
       reshapedSince.current = false;
 
-      // One transaction (`editRoom`), and the rough-size mark from the live room,
-      // never the stored one — see `markRoughSize`: `RoomDimsEditor` saves too, and
-      // keeping the stored mark would put back one it had just cleared.
-      const existing = await roomStore.editRoom(roomId, (stored) =>
-        markRoughSize(
-          {
-            ...stored,
-            width: p.room.width,
-            depth: p.room.depth,
-            height: p.room.height,
-            wallColors: p.room.wallColors,
-            footprint: p.room.footprint,
-            site: p.room.site,
-          },
-          p.room.roughSize === true,
-        ),
-      );
+      // One transaction (`editRoom`).
+      const existing = await roomStore.editRoom(roomId, (stored) => withShell(stored, p.room));
       if (!existing) return;
       // ── A reshaped room has to pin the scene, if it was SEEDED ───────────────
       //
@@ -277,13 +280,20 @@ export function RoomSync() {
       }
     };
 
+    // The pending write, now: see the transform effect's `flush`.
+    const flush = () => {
+      if (!roomTimer.current) return;
+      clearTimeout(roomTimer.current);
+      roomTimer.current = null;
+      void write();
+    };
     const unsub = useScene.subscribe((state, prev) => {
       if (!ready.current) return;
       if (state.room === prev.room) return;
       if (roomTimer.current) clearTimeout(roomTimer.current);
       if (state.room.footprint !== prev.room.footprint) reshapedSince.current = true;
       pendingRoom.current = { room: state.room, parts: state.parts };
-      roomTimer.current = setTimeout(() => void write(), DEBOUNCE_MS);
+      roomTimer.current = setTimeout(flush, DEBOUNCE_MS);
     });
     return () => {
       unsub();
@@ -291,33 +301,67 @@ export function RoomSync() {
       // cleared the timer and wrote nothing, so a wall dragged within the debounce
       // window of leaving the room lost BOTH the outline and the pin — the outline
       // half predates the pin and was silent data loss on its own.
-      if (roomTimer.current) {
-        clearTimeout(roomTimer.current);
-        void write();
-      }
+      flush();
     };
   }, [roomId]);
 
   // Persist scene-part edits (label, shape, dim, deletes, additions)
   useEffect(() => {
     if (!roomId) return;
+    // Same as transforms: leaving within the debounce window otherwise dropped the
+    // last add or delete.
+    const flush = () => {
+      if (!sceneTimer.current) return;
+      clearTimeout(sceneTimer.current);
+      sceneTimer.current = null;
+      roomStore.saveSceneParts(roomId, useScene.getState().parts);
+    };
     const unsub = useScene.subscribe((state, prev) => {
       if (!ready.current) return;
       if (state.parts === prev.parts) return;
       if (sceneTimer.current) clearTimeout(sceneTimer.current);
-      sceneTimer.current = setTimeout(() => {
-        roomStore.saveSceneParts(roomId, state.parts);
-      }, DEBOUNCE_MS);
+      sceneTimer.current = setTimeout(flush, DEBOUNCE_MS);
     });
     return () => {
       unsub();
-      if (sceneTimer.current) {
-        // Flush on unmount, same as transforms: leaving the room within the
-        // debounce window otherwise dropped the last add/delete.
-        clearTimeout(sceneTimer.current);
-        roomStore.saveSceneParts(roomId, useScene.getState().parts);
-      }
+      flush();
     };
+  }, [roomId]);
+
+  // Leaving the PAGE — a reload, a closed tab, a phone backgrounding the browser — which
+  // unmounts nothing (`lib/page-leave.ts`). Whatever the three writes above still have
+  // waiting goes as ONE save, so it lands whole or not at all: as separate saves, the leave
+  // kept whichever one the closing page let finish, and a typed width came back on 4 of 5
+  // closed tabs without the outline and the scene that went with it (§ 47).
+  // It takes what each timer was holding and forgets the timer, as each `flush` does, so
+  // the second of `visibilitychange` and `pagehide` finds nothing to write.
+  useEffect(() => {
+    if (!roomId) return;
+    return onPageLeave('persist', () => {
+      const w: LeaveWrite = {};
+      if (transformTimer.current) {
+        clearTimeout(transformTimer.current);
+        transformTimer.current = null;
+        w.transforms = transformsOf(useStudio.getState());
+      }
+      if (sceneTimer.current) {
+        clearTimeout(sceneTimer.current);
+        sceneTimer.current = null;
+        w.parts = useScene.getState().parts;
+      }
+      if (roomTimer.current) {
+        clearTimeout(roomTimer.current);
+        roomTimer.current = null;
+        const p = pendingRoom.current;
+        pendingRoom.current = null;
+        const wasReshaped = reshapedSince.current;
+        reshapedSince.current = false;
+        // The pin is the room write's own rule, above; `saveOnLeave` asks the same two
+        // questions of the stored room inside its one transaction.
+        if (p) w.room = { edit: (stored) => withShell(stored, p.room), pin: wasReshaped ? p.parts : undefined };
+      }
+      if (w.transforms || w.parts !== undefined || w.room) void roomStore.saveOnLeave(roomId, w);
+    });
   }, [roomId]);
 
   return null;
