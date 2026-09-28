@@ -12,7 +12,7 @@
 // All coordinates are normalized 0..1 in image space — the same convention used
 // by the detection pipeline. The element is responsive to its container.
 
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Detection } from '@/lib/detection';
 import { Icon } from '@/components/ui/Icon';
 import { BOX_BORDER_PX, TAG_HEIGHT_PX, TAG_PAD_Y_PX, TAG_X_PX, boxCss, tagCss, tagSpot } from '@/lib/photo-tag';
@@ -30,18 +30,27 @@ export function PhotoEditor({
   items,
   mode,
   slotLabel,
+  maxPhotoHeight,
   onToggleLock,
   onDelete,
   onAddBox,
+  children,
 }: {
   imageUrl: string;
   items: PhotoEditorItem[];
   mode: Mode;
   /** which wall this photo is, e.g. "Wall 2" — names the image for screen readers */
   slotLabel?: string;
+  /** The tallest the photo may be drawn, as a CSS length. The frame narrows to keep
+   *  the photo's shape, so the boxes, which are shares of the frame, stay on the
+   *  furniture at any size. */
+  maxPhotoHeight?: string;
   onToggleLock: (i: number) => void;
   onDelete: (i: number) => void;
   onAddBox: (box: [number, number, number, number]) => void;
+  /** The page's own layers over the photo, in the same 0..1 space as the boxes and
+   *  painted over all of them. Inside the frame, so they cannot drift off it. */
+  children?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
@@ -49,6 +58,10 @@ export function PhotoEditor({
   // length in pixels, where the box's top is a share of the photo (`lib/photo-tag.ts`).
   // 0 until the image has laid out, which keeps every tag above its box meanwhile.
   const [photoH, setPhotoH] = useState(0);
+  // The photo's own width over height, once it has loaded, keyed by its URL so the
+  // next wall's photo is not sized by the last one's shape.
+  const [shape, setShape] = useState<{ url: string; ratio: number } | null>(null);
+  const ratio = shape?.url === imageUrl ? shape.ratio : null;
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -97,7 +110,12 @@ export function PhotoEditor({
       onPointerLeave={onPointerUp}
       style={{
         position: 'relative',
-        width: '100%',
+        // As wide as the photo is at its tallest, when there is a tallest: the photo
+        // fills the frame's width and the frame is its exact size, so a height limit
+        // narrows both rather than letterboxing the photo inside a frame the boxes are
+        // measured against. Stated as a width, not left to the photo, so a small photo
+        // is still drawn up to the column rather than at its own few hundred pixels.
+        width: ratio && maxPhotoHeight ? `min(100%, calc(${maxPhotoHeight} * ${ratio}))` : '100%',
         // Tokenised: the old near-black #0A0A08 made this read like an annotation
         // tool rather than part of a warm decorating app.
         background: 'var(--ink)',
@@ -105,7 +123,8 @@ export function PhotoEditor({
         userSelect: 'none',
         touchAction: 'none',
         // The tags are raised over the boxes, and that stays in here: the page's own
-        // layers over the photo still paint over all of it, as they do by their order.
+        // layers (`children`) are raised to the same level after them, so they paint
+        // over all of it.
         isolation: 'isolate',
       }}
     >
@@ -117,7 +136,14 @@ export function PhotoEditor({
             ? `Your photo of ${slotLabel}, with found furniture outlined`
             : 'Your room photo, with found furniture outlined'
         }
-        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        // The frame's width at the photo's own height (Preflight makes an image a
+        // block with `height: auto`), so the two are one box and the boxes land on
+        // the furniture.
+        style={{ width: '100%' }}
+        onLoad={(e) => {
+          const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+          if (w > 0 && h > 0) setShape({ url: imageUrl, ratio: w / h });
+        }}
         draggable={false}
       />
 
@@ -146,6 +172,21 @@ export function PhotoEditor({
             zIndex: 'var(--z-photo-raised)',
           }}
         />
+      )}
+
+      {children && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            // Level with the tags and after them, so it paints over them as it did when
+            // it lay outside this frame.
+            zIndex: 'var(--z-photo-raised)',
+          }}
+        >
+          {children}
+        </div>
       )}
     </div>
   );

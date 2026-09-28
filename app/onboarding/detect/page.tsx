@@ -1042,7 +1042,10 @@ export default function DetectPage() {
                     aria-pressed={sel}
                     className="ds-btn"
                     style={{
+                      // Share the row, up to a button's width: two walls at 1920 were
+                      // 751px each for six characters.
                       flex: '1 1 130px',
+                      maxWidth: 240,
                       justifyContent: 'space-between',
                       fontSize: 'var(--fs-small)',
                       background: sel ? 'var(--ink)' : 'var(--paper)',
@@ -1066,19 +1069,28 @@ export default function DetectPage() {
 
           <div style={{ flex: 1, padding: 16, minHeight: 0, overflow: 'auto' }}>
             {active ? (
-              <div style={{ position: 'relative' }}>
-                <PhotoEditor
-                  imageUrl={active.url}
-                  // Without this every photo on this screen shares one generic alt
-                  // string, which is the whole review queue reading identically to a
-                  // screen reader. The prop existed; nothing passed it.
-                  slotLabel={slotLabel(active.slot)}
-                  items={activeDetections.map(({ d, i }) => ({ index: i, d, locked: confirmed.has(i) }))}
-                  mode={adding ? 'add' : 'select'}
-                  onToggleLock={toggleConfirm}
-                  onDelete={deleteDetection}
-                  onAddBox={addManual}
-                />
+              // On the page's left edge with the heading, the notice and the wall
+              // buttons, rather than centred away from all three.
+              <PhotoEditor
+                imageUrl={active.url}
+                // The window, less the rows that go with the photo: the bar, the wall
+                // buttons, this padding and the tool row under it. At 1920 the photo
+                // was drawn 1,508px wide and taller than the window, so the tools for
+                // adding a piece by hand were below the fold and no scroll showed the
+                // photo and them together. Never under 280px, though: a phone on its
+                // side is 390px tall, and a photo too small to draw a box on is worse
+                // than one that scrolls.
+                maxPhotoHeight="max(280px, calc(100dvh - 200px))"
+                // Without this every photo on this screen shares one generic alt
+                // string, which is the whole review queue reading identically to a
+                // screen reader. The prop existed; nothing passed it.
+                slotLabel={slotLabel(active.slot)}
+                items={activeDetections.map(({ d, i }) => ({ index: i, d, locked: confirmed.has(i) }))}
+                mode={adding ? 'add' : 'select'}
+                onToggleLock={toggleConfirm}
+                onDelete={deleteDetection}
+                onAddBox={addManual}
+              >
                 {/* Page-level box layer, in the same normalized space as the
                     editor's own overlays: the row↔box link and the keyboard
                     placement preview. Pointer events off so it never eats a
@@ -1114,7 +1126,7 @@ export default function DetectPage() {
                     }}
                   />
                 )}
-              </div>
+              </PhotoEditor>
             ) : (
               <div className="t-small" style={{ padding: 12 }}>
                 {slots.length === 0 ? 'No wall photos for this room yet.' : 'No photo for this wall yet.'}
@@ -1288,6 +1300,10 @@ function NoticeCard({
     <div
       role={notice.tone === 'error' ? 'alert' : 'status'}
       style={{
+        // As wide as what it says: its text already stops at 68ch, and the card ran on
+        // to the window's edge beside it, 1,884px of tint at 1920.
+        width: 'fit-content',
+        maxWidth: 'calc(100% - 36px)',
         margin: '0 18px 14px',
         border: `1px solid ${tone.border}`,
         background: tone.bg,

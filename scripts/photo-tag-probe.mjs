@@ -2,8 +2,9 @@
 // where a tag goes and `tests/photo-tag.test.ts` sweeps that rule against a model of the
 // layout; this is the check that the model IS the layout — that the flex row, the
 // spacer, `clamp()` and the measured photo height do in Chromium what the sweep says.
-// No gate runs it, and `scripts/fidelity-sweep.mjs` never opens the scan screen, which is
-// how a tag 132 px past the photo on a phone went unseen.
+// No gate runs it. `scripts/fidelity-sweep.mjs` opens the scan screen now, but with no
+// found pieces, so no tag is ever placed there; before that it never opened the screen at
+// all, which is how a tag 132 px past the photo on a phone went unseen.
 //
 // Run: install Playwright OUTSIDE this repo (its own scratch dir, `npm i playwright` then
 // `npx playwright install chromium`), exactly as `scripts/rails-probe.mjs` requires and
@@ -89,7 +90,11 @@ const VIEWPORTS = [
   [360, 780],
   [768, 1024],
   [1280, 900],
+  // Where the photo's height cap binds rather than its column.
+  [1920, 900],
 ];
+// The scan screen's cap on the photo's height, restated: `maxPhotoHeight` there.
+const capFor = (vh) => Math.max(280, vh - 200);
 
 // [label, category, shape, box] — boxes in the photo's 0..1 space, as detections are.
 const PIECES = [
@@ -129,10 +134,12 @@ function check(ok, what) {
 async function seed(page) {
   await page.goto(BASE);
   await page.evaluate(async (pieces) => {
-    const c = new OffscreenCanvas(1600, 1200);
+    // Smaller than the column it is drawn in at the wider viewports, so the check that
+    // it is drawn UP to its column has something to catch.
+    const c = new OffscreenCanvas(800, 600);
     const g = c.getContext('2d');
     g.fillStyle = '#d8cfc0';
-    g.fillRect(0, 0, 1600, 1200);
+    g.fillRect(0, 0, 800, 600);
     const blob = await c.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
     const detectedObjects = pieces.map(([label, category, shape, box], i) => ({
       id: i,
@@ -201,9 +208,8 @@ function readOverflow(page) {
     let scroller = root.parentElement;
     while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowX)) scroller = scroller.parentElement;
     const p = root.getBoundingClientRect();
-    const hl = [...root.parentElement.children].find(
-      (el) => el !== root && el.getAttribute('aria-hidden') === 'true' && getComputedStyle(el).outlineStyle === 'solid',
-    );
+    // The page's layers are drawn inside the editor's frame, over its boxes.
+    const hl = [...root.querySelectorAll('[aria-hidden="true"]')].find((el) => getComputedStyle(el).outlineStyle === 'solid');
     const h = hl?.getBoundingClientRect();
     const doc = document.documentElement;
     return {
@@ -248,6 +254,10 @@ function readTags(page) {
       rect: rect(b.parentElement),
     }));
     const photo = rect(root);
+    const image = rect(img);
+    const pad = getComputedStyle(scroller);
+    const column = scroller.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+    const ratio = img.naturalWidth / img.naturalHeight;
     // Is anything else on top of each X? Scrolled into view first, or a tag at the foot
     // of a photo taller than its scroll box reads as covered by whatever is below it —
     // and put back afterwards, so the next reading starts where this one did.
@@ -262,7 +272,7 @@ function readTags(page) {
     });
     scroller?.scrollTo(was.left, was.top);
     scrollTo(was.x, was.y);
-    return { photo, tags, boxes };
+    return { photo, image, column, ratio, tags, boxes };
   });
 }
 
@@ -283,6 +293,14 @@ async function main() {
     const r = await readTags(page);
     const { photo } = r;
     log(`\n${vw}×${vh} · photo ${Math.round(photo.w)}×${Math.round(photo.h)}`);
+
+    // The boxes are shares of the frame, so they are on the furniture only if the frame
+    // IS the photo; and the photo is drawn as large as its column and its cap allow.
+    const apart = Math.max(...['left', 'right', 'top', 'bottom'].map((k) => Math.abs(r.image[k] - photo[k])));
+    check(apart <= 0.5, `the frame is the photo, so every box is a share of the picture (${apart.toFixed(1)}px apart)`);
+    check(photo.h <= capFor(vh) + 0.5, `the photo is no taller than its cap (${Math.round(photo.h)} of ${capFor(vh)}px)`);
+    const want = Math.min(r.column, capFor(vh) * r.ratio);
+    check(Math.abs(photo.w - want) <= 1, `the photo fills its column or its cap, whichever is less (${Math.round(photo.w)} of ${Math.round(want)}px)`);
 
     const places = new Set();
     for (const t of r.tags) {

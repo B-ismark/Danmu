@@ -260,7 +260,11 @@ export function StepHeader({
       )}
       <h1 style={{ fontSize: 'var(--fs-title)', lineHeight: 1.15, color: 'var(--ink)' }}>{title}</h1>
       {subtitle && (
-        <div className="t-body" style={{ lineHeight: 1.45 }}>{subtitle}</div>
+        // A <p>, so the prose measure applies (`p, li` in globals.css): as a <div> it
+        // ran one 952px line at 1920. Nothing inline here, which would override it.
+        <p className="t-body" style={{ lineHeight: 1.45 }}>
+          {subtitle}
+        </p>
       )}
     </div>
   );
