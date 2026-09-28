@@ -26,6 +26,7 @@ import {
   verticalExtent,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
+import { detectionPartIds } from './detection-record';
 import { clampDims, dimRangeFor } from './dimension-ranges';
 import {
   footArea,
@@ -2448,15 +2449,14 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   }
 
   const parts: ScenePart[] = [];
-  const counters: Record<string, number> = {};
+  const ids = detectionPartIds(dets);
 
-  for (const d of dets) {
+  for (const [i, d] of dets.entries()) {
     const slot = (d.label as string).match(/__slot:([nesw])$/)?.[1] as CaptureSlot | undefined;
     const realSlot: CaptureSlot = slot ?? 'n';
     const cleanLabel = (d.label as string).replace(/__slot:[nesw]$/, '');
     const cat = ((d as { category?: Category }).category ?? 'other') as Category;
     const cfg = CATEGORY_DEFAULTS[cat] ?? CATEGORY_DEFAULTS.other;
-    counters[cat] = (counters[cat] ?? 0) + 1;
     // Prefer the detection's own stable key. The positional `${cat}-${n}` is an
     // ordinal, not an identity, and every per-part user edit — positions,
     // rotations, dims, hidden — is stored in a map keyed by this string. So
@@ -2466,12 +2466,13 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     //
     // Rooms detected before `uid` shipped have none, and fall back to the ordinal
     // — which keeps their existing transforms attached rather than orphaning every
-    // one of them in the name of the fix.
-    const id = (d as { uid?: string }).uid ?? `${cat}-${counters[cat]}`;
+    // one of them in the name of the fix. The rule lives beside the record codec,
+    // because the review screen needs the same answer (`fromRecords`).
+    const id = ids[i];
     // **Only kept pieces go into the room.** An unticked row is a piece the scan
     // screen showed and the user did not keep — a wrong guess, or a second sighting
     // of something already kept — and building it anyway is how one bed seen from
-    // three walls became three beds. The skip is AFTER the counter on purpose: a
+    // three walls became three beds. The skip is AFTER the ids are counted: a
     // room saved before `uid` keys its transforms by that ordinal, so counting only
     // the kept rows would re-point `sofa-2`'s saved move at whatever sofa is kept
     // next. A room saved before this rule has every row kept (`migrateRoom`).

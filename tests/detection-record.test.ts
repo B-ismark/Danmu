@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { cleanLabelOf, fromRecord, toRecord, type SavedDetection } from '@/lib/detection-record';
+import { cleanLabelOf, detectionPartIds, fromRecord, fromRecords, toRecord, type SavedDetection } from '@/lib/detection-record';
+import { buildSceneFromRoom } from '@/lib/scene-spec';
+import type { RoomData } from '@/lib/storage';
 import type { Detection } from '@/lib/detection';
 
 // The codec's whole documented failure mode is having TWO implementations that
@@ -113,5 +115,54 @@ describe('cleanLabelOf', () => {
     // Only at the END, and only a real slot letter — a label is user-editable text.
     expect(cleanLabelOf({ ...full, label: '__slot:n desk' })).toBe('__slot:n desk');
     expect(cleanLabelOf({ ...full, label: 'shelf__slot:x' })).toBe('shelf__slot:x');
+  });
+});
+
+describe('fromRecords — a row keeps the id it builds as', () => {
+  // A list saved before rows carried a uid: two sofas (the first unkept), a table, and
+  // one row with no category at all.
+  const legacy = (over: Partial<SavedDetection>): SavedDetection => ({
+    id: 0,
+    label: 'thing__slot:n',
+    conf: 0.8,
+    locked: true,
+    box: [0.1, 0.5, 0.2, 0.3],
+    ...over,
+  });
+  const rows: SavedDetection[] = [
+    legacy({ category: 'sofa', locked: false }),
+    legacy({ category: 'sofa' }),
+    legacy({ category: 'table' }),
+    legacy({}),
+    legacy({ category: 'table', uid: 'kept-key' }),
+  ];
+  const room = (detectedObjects: SavedDetection[]): RoomData => ({
+    id: 'r',
+    createdAt: 1,
+    name: 'R',
+    layoutId: 'rect',
+    width: 5,
+    depth: 4,
+    height: 2.6,
+    detectedObjects,
+  });
+
+  it('counts every row of a kind, kept or not, the way the room always has', () => {
+    expect(detectionPartIds(rows)).toEqual(['sofa-1', 'sofa-2', 'table-1', 'other-1', 'kept-key']);
+    // …and the room builds the kept ones under exactly those ids.
+    expect(buildSceneFromRoom(room(rows)).map((p) => p.id)).toEqual(['sofa-2', 'table-1', 'other-1', 'kept-key']);
+  });
+
+  // The property: through the review screen and back, a legacy room's pieces are the
+  // same pieces, so the moves stored against them still land on them.
+  it('survives the review screen without re-keying a single piece', () => {
+    const through = fromRecords(rows).map((d, i) => toRecord(d, i, !!rows[i].locked, () => 'minted-fresh'));
+    expect(through.map((r) => r.uid)).toEqual(['sofa-1', 'sofa-2', 'table-1', 'other-1', 'kept-key']);
+    expect(buildSceneFromRoom(room(through)).map((p) => p.id)).toEqual(buildSceneFromRoom(room(rows)).map((p) => p.id));
+  });
+
+  it('reads every other field exactly as fromRecord does', () => {
+    const one = fromRecords([rows[2]])[0];
+    expect({ ...one, uid: undefined }).toEqual(fromRecord(rows[2]));
   });
 });

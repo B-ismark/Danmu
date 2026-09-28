@@ -44,7 +44,7 @@ import {
 } from '@/lib/review-history';
 import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
 import { findRepeats, keptAtFirst } from '@/lib/repeat-sightings';
-import { cleanLabelOf, fromRecord, toRecord } from '@/lib/detection-record';
+import { cleanLabelOf, fromRecords, toRecord } from '@/lib/detection-record';
 import { adoptFreshScan } from '@/lib/rescan';
 import { toast } from '@/components/ui/StorageToast';
 import { formatDim } from '@/lib/units';
@@ -519,7 +519,7 @@ export default function DetectPage() {
       // on arriving — and say so, with the way to look again, because **Re-scan** in
       // the studio lands here and used to show the old list as though it were new.
       if (room?.detectedObjects && room.detectedObjects.length > 0) {
-        setDetections(keyed(room.detectedObjects.map(fromRecord)));
+        setDetections(fromRecords(room.detectedObjects));
         setConfirmed(new Set(room.detectedObjects.map((d, i) => (d.locked ? i : -1)).filter((x) => x >= 0)));
         setPath('cache');
         setNotice({

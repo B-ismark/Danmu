@@ -81,3 +81,27 @@ export function fromRecord(r: SavedDetection): Detection {
     color: r.color,
   };
 }
+
+/** The id each row of a saved list builds as in the room — `buildSceneFromRoom`
+ *  reads it from here, so there is one answer. A row's own `uid` when it has one; a
+ *  row saved before uids shipped has none, and builds under its category's ordinal
+ *  over the WHOLE list, unkept rows included, since that is what every move the user
+ *  made to it is stored under. */
+export function detectionPartIds(rows: readonly { uid?: string; category?: string }[]): string[] {
+  const counters: Record<string, number> = {};
+  return rows.map((r) => {
+    const cat = r.category ?? 'other';
+    counters[cat] = (counters[cat] ?? 0) + 1;
+    return r.uid ?? `${cat}-${counters[cat]}`;
+  });
+}
+
+/** A saved list → the review screen's rows, each carrying the id it already builds
+ *  as. For a row saved before uids that is its ordinal, taken as its uid from here
+ *  on: minting it a fresh key instead — which the screen did — re-keyed the piece the
+ *  first time anyone pressed Continue, and every move, turn and resize the user had
+ *  made to it was left pointing at an id nothing built any more. */
+export function fromRecords(rows: readonly SavedDetection[]): Detection[] {
+  const ids = detectionPartIds(rows);
+  return rows.map((r, i) => ({ ...fromRecord(r), uid: ids[i] }));
+}
