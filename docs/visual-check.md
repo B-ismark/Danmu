@@ -1786,7 +1786,7 @@ in metres and feet; a browser probe walked skip → note → *These are right* �
 skip → typed width → reload, typed on the picker, and skip → capture → scan, 18 of 18 on
 three runs. A real phone, and a person reading the note, are the unlooked-at half.
 
-### A piece's tag stays on the photo — this branch (PR #161), PROBED at 360, 768 and 1280
+### A piece's tag stays on the photo — `ac7104a` on `main` (PR #161), PROBED at 360, 768 and 1280
 
 **Where to click.** The detect screen, with pieces near the photo's right edge and touching
 its top — a picture high on the wall, a pendant, a chair at the side of the frame — and, if
@@ -1825,6 +1825,42 @@ and one whose X may shrink fails two, so those checks can fail. `tests/photo-tag
 sweeps the placement rule over 43,200 box, photo and name cases, laid out from the CSS
 strings the photo is handed, and the outline over 28,800. A real phone, with a real scan's
 boxes, is the unlooked-at half.
+
+### The scan photo stays on screen while the list scrolls — this branch (PR #162), PROBED from 360 to 1920 wide
+
+**Where to click.** *Photograph my real room* → four photos → the scan screen, with enough
+pieces that the list runs past the window. Scroll to the end of the list. Beside the list the
+photo column stays put and fits the window; on a phone the photo is a strip across the top,
+about half the screen, and the list scrolls under it. Swipe on the photo itself: the list
+should move. Turn on **Add a piece by hand**: now a drag on the photo draws a box and the
+page stays still, and the strip grows its picker and **Place with the keyboard** row without
+the photo losing its bottom edge. With a keyboard, Shift+Tab back up the list: every focused
+row should come to rest below the strip, and focusing a button in the strip should not move
+the page at all.
+
+**What wrong looks like.**
+- At the end of the list, the photo gone, cut at its bottom edge, or the last row hidden
+  under the strip.
+- A swipe that starts on the photo doing nothing while **Add a piece by hand** is off, or
+  scrolling the page while it is on.
+- The strip jumping in height while the phone's address bar slides away mid-scroll. The
+  strip is sized in `svh` so that it should not; headless Chromium has no address bar, so
+  this is the one item here nobody has measured at all.
+- The photo's own box scrolling a few pixels inside the strip — a tiny second scroll area
+  that swallows swipes. That was the failure on a phone on its side (844×390) before the cap
+  was measured.
+- A focused row hidden under the strip, or **Add this box** focusing with the page jumping
+  away from the photo.
+- On a short phone (360×640) the photo is 240×180, and 192×144 while adding. Whether that is
+  big enough to draw a box on with a finger is a person's call.
+
+**What was measured, and on what.** SwiftShader, desktop Chromium, seeded photos on four
+walls with 16 pieces, no detector: `scripts/scan-pin-probe.mjs`'s 79 checks at 360×640,
+390×844, 844×390, 768×1024, 700×800, 1280×800 and 1920×900 all pass, with the touch checks
+through raw touch events at the four touch sizes. At `c1bdced` the photo was 0% on screen at
+the end of the list at five of the six sizes then in the probe, and 2% at 1920×900. A copy
+with the photo frame `touch-action: none` in every mode fails the photo swipe, so that check
+can fail. A real phone is the unlooked-at half.
 
 ---
 ## Look and light
