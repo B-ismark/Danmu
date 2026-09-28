@@ -10,8 +10,8 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clear } from 'idb-keyval';
 import { roomStore, type RoomData } from '@/lib/storage';
-import { adoptFreshScan, BEFORE_RESCAN } from '@/lib/rescan';
-import { buildSceneFromRoom } from '@/lib/scene-spec';
+import { adoptEditedList, adoptFreshScan, applyListEdits, BEFORE_RESCAN, listEditSentence } from '@/lib/rescan';
+import { buildSceneFromRoom, type ScenePart } from '@/lib/scene-spec';
 
 type Saved = NonNullable<RoomData['detectedObjects']>[number];
 
@@ -97,5 +97,156 @@ describe('adoptFreshScan', () => {
     const kept = await adoptFreshScan(r, NEW);
     expect(kept).not.toBeNull();
     expect(await roomStore.loadSceneParts(r.id)).toBeUndefined();
+  });
+});
+
+// The cached list: the screen shows the rows the room was already built from, and the
+// person ticks, unticks, deletes, adds or re-words some of them. A room the studio has
+// arranged loads its saved scene over the list, so without `applyListEdits` none of
+// that reached the room while the button promised "Continue with N pieces".
+describe('applyListEdits', () => {
+  const LIST = [det('bed-a', 'bed', -1), det('bed-b', 'bed', 1), { ...det('sofa-a', 'sofa', 0), locked: false }];
+  const R = room({ detectedObjects: LIST });
+  // What the studio saved: the two kept beds, one recoloured, plus a plant from the
+  // library that no row knows about.
+  const built = buildSceneFromRoom(R);
+  const recoloured = { ...built[0], color: '#123456' };
+  const plant = { ...built[1], id: 'lib-plant', name: 'Plant' };
+  const SCENE: ScenePart[] = [recoloured, built[1], plant];
+  const ids = (parts: ScenePart[] | undefined) => parts?.map((p) => p.id);
+
+  it('an unticked row takes its piece out, and only its piece', () => {
+    const edit = applyListEdits(SCENE, R, [LIST[0], { ...LIST[1], locked: false }, LIST[2]]);
+    expect(ids(edit?.parts)).toEqual(['bed-a', 'lib-plant']);
+    // The survivors are the saved pieces themselves, recolour and all — not rebuilds.
+    expect(edit?.parts[0]).toBe(recoloured);
+    expect(edit?.parts[1]).toBe(plant);
+    expect(edit).toMatchObject({ removed: 1, added: 0, updated: 0 });
+  });
+
+  it('a deleted row takes its piece out', () => {
+    expect(ids(applyListEdits(SCENE, R, [LIST[0], LIST[2]])?.parts)).toEqual(['bed-a', 'lib-plant']);
+  });
+
+  it('a newly kept row puts in the piece the studio would have built', () => {
+    const next = [LIST[0], LIST[1], { ...LIST[2], locked: true }];
+    const edit = applyListEdits(SCENE, R, next);
+    const sofa = buildSceneFromRoom({ ...R, detectedObjects: next }).find((p) => p.id === 'sofa-a');
+    expect(ids(edit?.parts)).toEqual(['bed-a', 'bed-b', 'lib-plant', 'sofa-a']);
+    expect(edit?.parts[3]).toEqual(sofa);
+    expect(edit).toMatchObject({ removed: 0, added: 1, updated: 0 });
+  });
+
+  it('a row drawn by hand and kept goes in too', () => {
+    const edit = applyListEdits(SCENE, R, [...LIST, det('drawn', 'table', 0.4)]);
+    expect(ids(edit?.parts)).toEqual(['bed-a', 'bed-b', 'lib-plant', 'drawn']);
+  });
+
+  it('a kept row with new details is rebuilt from them', () => {
+    const next = [{ ...LIST[0], category: 'sofa', label: 'sofa__slot:n' }, LIST[1], LIST[2]];
+    const edit = applyListEdits(SCENE, R, next);
+    const part = edit?.parts.find((p) => p.id === 'bed-a');
+    expect(part?.category).toBe('sofa');
+    expect(edit).toMatchObject({ removed: 0, added: 0, updated: 1 });
+  });
+
+  // Each field that shapes the piece, changed on its own.
+  it.each([
+    ['label', { label: 'bunk bed__slot:n' }],
+    ['category', { category: 'sofa' }],
+    ['box', { box: [0.2, 0.1, 0.4, 0.4] }],
+    ['size', { dimMM: [1400, 2000, 500] }],
+    ['position', { position: { x: -0.5, y: 0, z: 0.4 } }],
+    ['heading', { yaw: 1.2 }],
+    ['shape', { shape: 'bed-double' }],
+  ] as const)('a kept row with a new %s is rebuilt', (_what, change) => {
+    const edit = applyListEdits(SCENE, R, [{ ...LIST[0], ...change } as typeof LIST[0], LIST[1], LIST[2]]);
+    expect(edit).toMatchObject({ removed: 0, added: 0, updated: 1 });
+  });
+
+  // How a row was found, where it sits in the list, and the colour the screen samples
+  // for any row without one are not edits. Counting them would rebuild the recoloured
+  // bed every time someone opened the list to look at it.
+  it('a list that is only looked at changes nothing', () => {
+    const looked = LIST.map((r, i) => ({ ...r, id: i + 7, conf: 0.5, source: 'cloud', color: '#abcdef' }));
+    expect(applyListEdits(SCENE, R, looked)).toBeNull();
+  });
+
+  // The studio is allowed to disagree with the list. A detected piece deleted there
+  // stays deleted while its row is untouched, and unticking that row now changes no
+  // piece at all.
+  it('leaves a piece the studio deleted where the studio left it', () => {
+    const withoutB = [recoloured, plant];
+    expect(applyListEdits(withoutB, R, LIST)).toBeNull();
+    expect(applyListEdits(withoutB, R, [LIST[0], { ...LIST[1], locked: false }, LIST[2]])).toBeNull();
+  });
+
+  // Changed in the list after the studio deleted it: the person has just said what it
+  // is and that they want it, so it comes back — as an addition, not an update.
+  it('a changed row whose piece the studio deleted comes back as an addition', () => {
+    const edit = applyListEdits([recoloured, plant], R, [LIST[0], { ...LIST[1], yaw: 1.2 }, LIST[2]]);
+    expect(ids(edit?.parts)).toEqual(['bed-a', 'lib-plant', 'bed-b']);
+    expect(edit).toMatchObject({ removed: 0, added: 1, updated: 0 });
+  });
+
+  // A scene can hold a piece for a row that is not kept — saved by a build from before
+  // ticks meant anything, open in another tab. Ticking the row must not put in a second
+  // piece under the same id.
+  it('never puts in a second piece under an id the scene already has', () => {
+    const sofa = buildSceneFromRoom({ ...R, detectedObjects: [{ ...LIST[2], locked: true }] })[0];
+    const edit = applyListEdits([...SCENE, sofa], R, [LIST[0], LIST[1], { ...LIST[2], locked: true }]);
+    expect((ids(edit?.parts) ?? []).filter((id) => id === 'sofa-a')).toHaveLength(1);
+  });
+
+  it('an emptied list takes out every row piece and puts in no starter furniture', () => {
+    const edit = applyListEdits(SCENE, R, []);
+    expect(ids(edit?.parts)).toEqual(['lib-plant']);
+    expect(edit).toMatchObject({ removed: 2, added: 0 });
+  });
+});
+
+describe('adoptEditedList', () => {
+  const LIST = [det('bed-a', 'bed', -1), det('bed-b', 'bed', 1)];
+
+  it('carries the edit into a saved scene, and keeps every move', async () => {
+    const r = room({ detectedObjects: LIST });
+    await roomStore.saveRoom(r);
+    await roomStore.saveSceneParts(r.id, buildSceneFromRoom(r));
+    const t = { positions: { 'bed-a': [0.2, 0, 0.3] as [number, number, number] }, rotations: {}, dims: {} };
+    await roomStore.saveTransforms(r.id, t);
+
+    const next = [LIST[0], { ...LIST[1], locked: false }];
+    const edit = await adoptEditedList(r, next);
+
+    expect(edit).toMatchObject({ removed: 1 });
+    expect((await roomStore.loadRoom(r.id))?.detectedObjects).toEqual(next);
+    expect((await roomStore.loadSceneParts<ScenePart[]>(r.id))?.map((p) => p.id)).toEqual(['bed-a']);
+    // Not a re-scan: the arrangement is edited, not replaced, so nothing is kept aside.
+    expect(await roomStore.loadTransforms(r.id)).toEqual(t);
+    expect(await roomStore.listLayouts(r.id)).toEqual([]);
+  });
+
+  it('a room with no saved scene only needs the list, which it is built from', async () => {
+    const r = room({ detectedObjects: LIST });
+    await roomStore.saveRoom(r);
+    // One unticked and one drawn: a scene written here would hold only the drawn piece.
+    const next = [LIST[0], { ...LIST[1], locked: false }, det('drawn', 'table', 0.4)];
+    expect(await adoptEditedList(r, next)).toBeNull();
+    expect((await roomStore.loadRoom(r.id))?.detectedObjects).toEqual(next);
+    expect(await roomStore.loadSceneParts(r.id)).toBeUndefined();
+  });
+});
+
+describe('listEditSentence', () => {
+  it.each([
+    [{ removed: 1, added: 0, updated: 0 }, '1 piece taken out. Everything else is as you left it.'],
+    [{ removed: 0, added: 2, updated: 0 }, '2 pieces added. Everything else is as you left it.'],
+    [{ removed: 1, added: 2, updated: 0 }, '1 piece taken out and 2 added. Everything else is as you left it.'],
+    [
+      { removed: 2, added: 1, updated: 1 },
+      '2 pieces taken out, 1 added and 1 updated to its new details. Everything else is as you left it.',
+    ],
+  ])('%j', (edit, said) => {
+    expect(listEditSentence(edit)).toBe(said);
   });
 });

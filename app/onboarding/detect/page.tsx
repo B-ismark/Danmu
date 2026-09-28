@@ -45,7 +45,7 @@ import {
 import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
 import { findRepeats, keptAtFirst } from '@/lib/repeat-sightings';
 import { cleanLabelOf, fromRecords, toRecord } from '@/lib/detection-record';
-import { adoptFreshScan } from '@/lib/rescan';
+import { adoptEditedList, adoptFreshScan, listEditSentence } from '@/lib/rescan';
 import { toast } from '@/components/ui/StorageToast';
 import { formatDim } from '@/lib/units';
 import type { DimUnit } from '@/lib/store';
@@ -836,7 +836,11 @@ export default function DetectPage() {
             ttl: 14000,
           });
       } else {
-        await roomStore.saveRoom({ ...room, detectedObjects: flat });
+        // The list the room was already built from, edited or not. A room the studio
+        // has arranged loads its saved scene over the list, so the edit has to be
+        // carried into that scene or a tick changed here never reaches the room.
+        const edit = await adoptEditedList(room, flat);
+        if (edit) toast({ title: 'Your room now matches this list', message: listEditSentence(edit), ttl: 9000 });
       }
       router.push(`/room/${roomId}/model`);
     } finally {
