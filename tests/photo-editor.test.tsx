@@ -8,8 +8,8 @@
 // rendered after every box, so that no box's press area lay over another piece's X —
 // and that put every keep toggle first and every Remove after them, so a keyboard went
 // through all the boxes and then back to the first piece to remove anything.
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PhotoEditor, type PhotoEditorItem } from '@/components/studio/PhotoEditor';
 import type { Detection } from '@/lib/detection';
 
@@ -27,14 +27,14 @@ const ITEMS = [
   piece(2, 'picture', [0.7, 0, 0.2, 0.2]),
 ];
 
-function mount(mode: 'select' | 'add') {
+function mount(mode: 'select' | 'add', onDelete: (i: number) => void = () => {}) {
   render(
     <PhotoEditor
       imageUrl="data:image/gif;base64,R0lGODlhAQABAAAAACw="
       items={ITEMS}
       mode={mode}
       onToggleLock={() => {}}
-      onDelete={() => {}}
+      onDelete={onDelete}
       onAddBox={() => {}}
     />,
   );
@@ -51,5 +51,18 @@ describe('the scan photo, by keyboard', () => {
       'picture',
       'Remove picture',
     ]);
+  });
+
+  it('keeps each Remove while a piece is being added by hand, and steps the boxes aside', () => {
+    const onDelete = vi.fn();
+    mount('add', onDelete);
+    for (const b of screen.getAllByRole('button'))
+      expect(b.hasAttribute('disabled'), b.getAttribute('aria-label')!).toBe(!b.getAttribute('aria-label')!.startsWith('Remove'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove floor lamp' }));
+    expect(onDelete).toHaveBeenCalledWith(1);
+    // The body of the tag lets a press through to start a box; the X takes its own.
+    const x = screen.getByRole('button', { name: 'Remove floor lamp' });
+    expect(x.parentElement!.style.pointerEvents).toBe('none');
+    expect(x.style.pointerEvents).toBe('auto');
   });
 });

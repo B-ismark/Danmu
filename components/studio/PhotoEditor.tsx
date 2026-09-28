@@ -268,7 +268,7 @@ function ItemTag({
           alignItems: 'center',
           gap: 4,
           // Like the boxes, the tag steps aside while a new box is being drawn: it sits on
-          // the photo now, so a press on it has to be able to start one.
+          // the photo now, so a press on it has to be able to start one. Its X does not.
           pointerEvents: drawing ? 'none' : 'auto',
         }}
         onPointerDown={(e) => e.stopPropagation()}
@@ -289,7 +289,6 @@ function ItemTag({
         </span>
         <button
           type="button"
-          disabled={drawing}
           title={`Remove ${cleanLabel}`}
           aria-label={`Remove ${cleanLabel}`}
           onMouseEnter={() => setHoverX(true)}
@@ -312,6 +311,10 @@ function ItemTag({
             borderRadius: 'var(--r-1)',
             padding: 0,
             flexShrink: 0,
+            // Pressable while drawing too, as it always was: taking out a wrong piece is
+            // part of adding the right ones, and a press here removes rather than draws
+            // (the tag's own pointer-down stops it reaching the photo).
+            pointerEvents: 'auto',
           }}
         >
           <Icon name="x" size={12} color="var(--on-accent)" />
