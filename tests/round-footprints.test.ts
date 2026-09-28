@@ -110,8 +110,8 @@ describe('§ 32 · roundness is a property of the shape, so every route agrees',
       id: 'r1', createdAt: 0, name: 'Detected', layoutId: 'rect',
       width: 5, depth: 4, height: 2.8,
       detectedObjects: [
-        { id: 0, label: 'ceiling fan__slot:n', conf: 0.9, locked: false, box: [0.4, 0.1, 0.2, 0.2], category: 'fan' },
-        { id: 1, label: 'wardrobe__slot:n', conf: 0.9, locked: false, box: [0.1, 0.3, 0.2, 0.4], category: 'wardrobe' },
+        { id: 0, label: 'ceiling fan__slot:n', conf: 0.9, locked: true, box: [0.4, 0.1, 0.2, 0.2], category: 'fan' },
+        { id: 1, label: 'wardrobe__slot:n', conf: 0.9, locked: true, box: [0.1, 0.3, 0.2, 0.4], category: 'wardrobe' },
       ],
     } as never);
     const fan = parts.find((p) => p.shape === 'fan');

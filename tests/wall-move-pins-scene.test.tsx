@@ -66,7 +66,7 @@ const DETECTED: NonNullable<RoomData['detectedObjects']> = [
     label: 'bed',
     conf: 0.9,
     source: 'cloud',
-    locked: false,
+    locked: true,
     box: [0.3, 0.3, 0.4, 0.4],
     category: 'bed',
     shape: 'bed-double',

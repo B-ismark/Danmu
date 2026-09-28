@@ -340,7 +340,7 @@ export function runPipeline(
   );
   const VERDICTS = judgeLabels(REFINED, cals, ROOM);
   const PARTS = buildSceneFromRoom(
-    roomData(REFINED.map((d, i) => toRecord(d, i, false, () => `uid-${i}`))),
+    roomData(REFINED.map((d, i) => toRecord(d, i, true, () => `uid-${i}`))),
   );
   return { IN, REFINED, VERDICTS, PARTS };
 }

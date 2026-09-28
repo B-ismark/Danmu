@@ -214,7 +214,7 @@ function ItemOverlay({
         }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        {locked && <Icon name="lock" size={9} color="var(--on-accent)" />}
+        {locked && <Icon name="check" size={9} color="var(--on-accent)" />}
         <span style={{ textTransform: 'capitalize' }}>{cleanLabel}</span>
         <span className="mono" style={{ opacity: 0.8 }}>· {(d.conf * 100).toFixed(0)}%</span>
         <button

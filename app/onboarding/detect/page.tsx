@@ -299,8 +299,9 @@ export default function DetectPage() {
   const [saving, setSaving] = useState(false);
   const [slots, setSlots] = useState<SlotEntry[]>([]);
   const [detections, setDetections] = useState<Detection[]>([]);
-  // Persisted as `locked` on RoomData.detectedObjects — "confirmed" is the same
-  // flag in the user's words: a piece they've said is really in the room.
+  // Persisted as `locked` on RoomData.detectedObjects, and it means KEPT: only these
+  // rows are built into the room (`buildSceneFromRoom`). An unkept row stays on the
+  // list, so a wrong guess or a second sighting costs one tap to bring back.
   const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
   const [activeSlot, setActiveSlot] = useState<CaptureSlot>('n');
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -722,7 +723,7 @@ export default function DetectPage() {
     // W/H directly. Works offline, no key needed.
     if (roomDims) det = geoRefine(det, cals, roomDims);
     setDetections((d) => [...d, det]);
-    // A piece the user drew themselves is confirmed by definition.
+    // A piece the user drew themselves is kept by definition.
     setConfirmed((prev) => new Set(prev).add(detections.length));
     setPending(null);
     // Stay armed: whoever is adding by hand is usually adding several.
@@ -816,6 +817,7 @@ export default function DetectPage() {
     .map((d, i) => ({ d, i }))
     .filter((x) => x.d.slot === activeSlot);
   const total = detections.length;
+  const keptCount = confirmed.size;
   const photoCount = slots.length;
 
   // Truthful for the path actually taken, and on screen for the whole upload.
@@ -832,7 +834,16 @@ export default function DetectPage() {
     ? `Looking through your ${photoCount === 1 ? 'photo' : `${photoCount} photos`}…`
     : total === 0
       ? 'No pieces yet'
-      : `${total} ${total === 1 ? 'piece' : 'pieces'} in this room`;
+      : `${keptCount} of ${total} ${total === 1 ? 'piece' : 'pieces'} kept`;
+  // The button says what pressing it will build, because the three outcomes differ
+  // and only one of them is obvious: kept pieces, an empty room when every row was
+  // left out, and the starter arrangement when the list itself is empty.
+  const continueLabel =
+    total === 0
+      ? 'Continue to the studio'
+      : keptCount === 0
+        ? 'Continue with an empty room'
+        : `Continue with ${keptCount} ${keptCount === 1 ? 'piece' : 'pieces'}`;
 
   const linkedBox = linked !== null && detections[linked]?.slot === activeSlot ? detections[linked].box : null;
 
@@ -840,7 +851,7 @@ export default function DetectPage() {
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
       {/* .chrome-bar wraps instead of overflowing when the viewport narrows. */}
       <header className="chrome-bar">
-        {/* No `markHref`, deliberately: this page's whole review — confirmations,
+        {/* No `markHref`, deliberately: this page's whole review — what is kept,
             edits, boxes added by hand — lives in component state until `finish()`
             writes it, so a stray click on a logo would discard it. Back is an
             explicit, high-intent control; a logo is not. */}
@@ -870,7 +881,7 @@ export default function DetectPage() {
         {/* The way out of onboarding is the loudest thing here — it used to be a
             32px ghost-weight button, quieter than the add-a-box tool. */}
         <button onClick={finish} disabled={running || saving} className="ds-btn ds-btn--accent">
-          {saving ? 'Opening your room…' : 'Continue to the studio'}
+          {saving ? 'Opening your room…' : continueLabel}
           <Icon name="arrow-right" size={13} />
         </button>
       </header>
@@ -879,7 +890,7 @@ export default function DetectPage() {
         <StepHeader
           kicker="Last step"
           title="Check your furniture"
-          subtitle="Everything Danmu found, measured at real size. Confirm what’s yours, drop what isn’t, and add anything it missed."
+          subtitle="Everything Danmu found, measured at real size. Only the pieces you keep go into your room, so leave out anything that isn’t yours and add anything it missed."
         />
         {privacyLine && (
           <p
@@ -1142,8 +1153,8 @@ export default function DetectPage() {
               {total > 0 && <span className="section-meta mono">{total}</span>}
             </div>
             <p className="t-meta" style={{ margin: 0, lineHeight: 1.45 }}>
-              Confirmed pieces are the ones you’ve said are really in the room. Danmu confirms the clearest ones for
-              you.
+              Only kept pieces go into your room. Danmu keeps the clearest ones for you; the rest wait here until
+              you say.
             </p>
           </div>
 
@@ -1153,6 +1164,12 @@ export default function DetectPage() {
                 <b style={{ display: 'block', marginBottom: 4, color: 'var(--ink)' }}>Nothing here yet</b>
                 If you continue with an empty list, the studio opens with a starter arrangement instead of your own
                 pieces.
+              </div>
+            )}
+            {total > 0 && keptCount === 0 && !running && (
+              <div className="t-small" style={{ padding: '4px 12px 10px', lineHeight: 1.5 }}>
+                <b style={{ display: 'block', marginBottom: 4, color: 'var(--ink)' }}>Nothing kept yet</b>
+                Your room will open empty. Press + beside a piece to keep it.
               </div>
             )}
             {detections.map((d, i) => (
@@ -1324,12 +1341,12 @@ function DetectionRow({
       {/* Was the whole row as a `div onClick`: unreachable by keyboard and with
           no state announced. Now a real toggle with aria-pressed. */}
       <IconButton
-        icon={confirmed ? 'lock' : 'unlock'}
-        label={`Confirm ${label}`}
+        icon={confirmed ? 'check' : 'plus'}
+        label={`Keep ${label}`}
         title={
           confirmed
-            ? 'Confirmed: this piece goes into your room as measured'
-            : 'Confirm this piece is really in your room'
+            ? 'Kept: this piece goes into your room as measured'
+            : 'Not kept: it stays on this list and out of your room'
         }
         active={confirmed}
         onClick={onToggle}

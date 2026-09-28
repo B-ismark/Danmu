@@ -72,8 +72,45 @@ export type Capture = {
  *  defensively (`wallColors?`, `footprint?`, `hidden?`). A change that is NOT
  *  additive (a renamed field, a units change, a restructured `detectedObjects`)
  *  needs something to branch on, and there was nothing. Records written before
- *  this existed read back as version 0. */
-export const ROOM_SCHEMA_VERSION = 1;
+ *  this existed read back as version 0.
+ *
+ *  **2 is the first non-additive change: `detectedObjects[].locked` changed
+ *  meaning.** Up to 1 it meant "confirmed" and every row went into the room,
+ *  ticked or not, so an unticked row was furniture the user could see in the
+ *  studio. From 2 it means "kept", and only kept rows are built
+ *  (`buildSceneFromRoom`). Read an old record under the new rule and every piece
+ *  someone never ticked would vanish from a room they already made, so
+ *  `migrateRoom` marks every row of a pre-2 record kept — which is exactly what
+ *  it was. */
+export const ROOM_SCHEMA_VERSION = 2;
+
+/** Bring a stored room record up to the current schema. Pure, and the ONLY way a
+ *  stored meta record is read back into the app — `loadRoom` and `renameRoom` both
+ *  go through it. `renameRoom` is the one that matters most: it re-stamps the
+ *  current version, so a rename that skipped this would mark an old room as
+ *  already migrated with its unticked pieces still unticked, and they would drop
+ *  out of the room the next time it opened. */
+export function migrateRoom(rec: RoomData): RoomData {
+  let out = rec;
+  // Strip a legacy `site` down to the one field `Site` still declares.
+  //
+  // This is the line that makes the comment on `Site` true, and it was missing. The
+  // old sun mood stored a latitude and a longitude here; removing them from the
+  // TYPE stopped anything reading them but did nothing about the bytes, and
+  // because they are no longer declared, TypeScript could not see them ride
+  // along. `loadFromRoom` passed the object through by reference, `RoomSync`
+  // re-saved it, and `NorthDial` SPREAD it — so a dial nudge rewrote the
+  // coordinates rather than replacing them, and `buildSceneFile` wrote them into
+  // the file the user hands to someone else. An asymmetric round trip in the
+  // leaking direction: refused on import, exported on save.
+  //
+  // Rebuilt rather than deleted from, so an unknown key cannot survive either.
+  if (out.site) out = { ...out, site: { bearingDeg: out.site.bearingDeg } };
+  if ((out.version ?? 0) < 2 && out.detectedObjects?.length) {
+    out = { ...out, detectedObjects: out.detectedObjects.map((d) => ({ ...d, locked: true })) };
+  }
+  return out;
+}
 
 /** How a room is oriented, for the sun.
  *
@@ -139,6 +176,10 @@ export type RoomData = {
      *  later build must not fail to parse in an earlier one. Absent on rooms saved
      *  before it existed; lib/detect-confidence.ts reads those as 'cloud'. */
     source?: string;
+    /** Kept: the user wants this piece in their room, and only kept rows are
+     *  built into it. The scan screen ticks the confident ones for them
+     *  (`lib/detect-confidence.ts`). It meant "confirmed" before schema 2, when
+     *  every row was built — see `ROOM_SCHEMA_VERSION`. */
     locked: boolean;
     box: [number, number, number, number];
     category?: string;
@@ -243,7 +284,7 @@ export const roomStore = {
   async renameRoom(roomId: string, name: string) {
     const meta = await get<RoomData>(k(roomId, 'meta'));
     if (!meta) return;
-    await set(k(roomId, 'meta'), { ...meta, name, version: ROOM_SCHEMA_VERSION });
+    await set(k(roomId, 'meta'), { ...migrateRoom(meta), name, version: ROOM_SCHEMA_VERSION });
     await touch(roomId);
   },
   /** Land a scene file (`lib/scene-file.ts`) as a brand-new room, and return its id.
@@ -274,21 +315,7 @@ export const roomStore = {
   },
   async loadRoom(roomId: string): Promise<RoomData | undefined> {
     const rec = await get<RoomData>(k(roomId, 'meta'));
-    if (!rec) return rec;
-    // Strip a legacy `site` down to the one field `Site` still declares.
-    //
-    // This is the line that makes the comment above true, and it was missing. The
-    // old sun mood stored a latitude and a longitude here; removing them from the
-    // TYPE stopped anything reading them but did nothing about the bytes, and
-    // because they are no longer declared, TypeScript could not see them ride
-    // along. `loadFromRoom` passed the object through by reference, `RoomSync`
-    // re-saved it, and `NorthDial` SPREAD it — so a dial nudge rewrote the
-    // coordinates rather than replacing them, and `buildSceneFile` wrote them into
-    // the file the user hands to someone else. An asymmetric round trip in the
-    // leaking direction: refused on import, exported on save.
-    //
-    // Rebuilt rather than deleted from, so an unknown key cannot survive either.
-    return rec.site ? { ...rec, site: { bearingDeg: rec.site.bearingDeg } } : rec;
+    return rec ? migrateRoom(rec) : rec;
   },
   async saveCapture(roomId: string, capture: Capture) {
     await set(k(roomId, `cap:${capture.slot}`), capture);

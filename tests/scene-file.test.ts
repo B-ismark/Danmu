@@ -945,8 +945,8 @@ describe('scene file · a detected room reloads as the room that was saved', () 
     depth: 4,
     height: 2.8,
     detectedObjects: [
-      { id: 1, label: 'pendant__slot:n', conf: 0.9, locked: false, box: [0.2, 0.4, 0.3, 0.3], category: 'lamp' },
-      { id: 2, label: 'sofa__slot:n', conf: 0.9, locked: false, box: [0.5, 0.6, 0.3, 0.3], category: 'sofa' },
+      { id: 1, label: 'pendant__slot:n', conf: 0.9, locked: true, box: [0.2, 0.4, 0.3, 0.3], category: 'lamp' },
+      { id: 2, label: 'sofa__slot:n', conf: 0.9, locked: true, box: [0.5, 0.6, 0.3, 0.3], category: 'sofa' },
     ],
   };
 

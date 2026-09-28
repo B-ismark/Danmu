@@ -2410,6 +2410,17 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // — which keeps their existing transforms attached rather than orphaning every
     // one of them in the name of the fix.
     const id = (d as { uid?: string }).uid ?? `${cat}-${counters[cat]}`;
+    // **Only kept pieces go into the room.** An unticked row is a piece the scan
+    // screen showed and the user did not keep — a wrong guess, or a second sighting
+    // of something already kept — and building it anyway is how one bed seen from
+    // three walls became three beds. The skip is AFTER the counter on purpose: a
+    // room saved before `uid` keys its transforms by that ordinal, so counting only
+    // the kept rows would re-point `sofa-2`'s saved move at whatever sofa is kept
+    // next. A room saved before this rule has every row kept (`migrateRoom`).
+    //
+    // The starter branch above reads the RAW list, so a scan where nothing was kept
+    // opens an empty room rather than furniture the user never had.
+    if (!d.locked) continue;
     const aiShape = (d as { shape?: string }).shape as Shape | undefined;
     // Label-based refinement takes priority over the AI's generic shape: the
     // detector often returns shape:'monitor' for a laptop or shape:'mirror' for
@@ -2552,7 +2563,9 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       pos: placement.pos,
       rot: placement.rot,
       dimMM: dim,
-      locked: d.locked,
+      // Every row that reaches here was kept, and `ScenePart.locked` means "from
+      // your photo" — so this is true by construction, not a copy of the tick.
+      locked: true,
       circle: isRoundPart(refined) || undefined,
       wallMounted: mounted || undefined,
       fromDetection: { slot: realSlot, bbox: d.box, conf: d.conf },

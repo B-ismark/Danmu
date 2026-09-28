@@ -493,6 +493,29 @@ the detect page, and they had drifted: the write carried the geometry pass and t
 read did not, so the next press of the always-enabled Finish button wrote
 `undefined` over all of it.
 
+**Only kept pieces go into the room.** The review's tick is persisted as
+`detectedObjects[].locked`, and from `ROOM_SCHEMA_VERSION` 2 that field means
+**kept**: `buildSceneFromRoom` builds a row only when it is set. Before 2 it meant
+"the user confirmed this one" while every row was built regardless, so a room with
+two sightings of one bed got two beds whatever the user ticked — the screen asked a
+question whose answer nothing read. `migrateRoom` marks every row of a pre-2 record
+kept, which is exactly what those rooms rendered, and runs in `loadRoom` and in
+`renameRoom` (a rename rewrites the record at the current version, so an unmigrated
+rename would silently empty a legacy room). Three details are load-bearing and each
+has a test:
+
+- the per-category counter advances **before** the skip, so a legacy ordinal id
+  (`sofa-2`) names the same row whether or not an earlier one is dropped, and a
+  user's moves — stored by id — stay on the piece they were made to;
+- an all-unkept list opens an **empty** room, never the starter arrangement: the
+  starter is for a room with no detections at all, and a user who left everything
+  out has said something different from one who never scanned;
+- an unkept row is not deleted. It stays on the list, so a wrong guess or a second
+  sighting costs one tap to bring back.
+
+The screen's internal names (`confirmed`, `toggleConfirm`, `shouldAutoConfirm`)
+predate this and were left alone on purpose; what the user reads says **keep**.
+
 **`tests/detect-pipeline.test.ts`** regression-tests the whole chain over one
 synthetic room whose contents are known, from analytic ground truth — boxes are
 projected through a test-side camera model, so there is no renderer in CI. With a
@@ -2632,7 +2655,7 @@ dividers. That triple is now `FlowBarLead` in `ui/primitives.tsx`.
 Its `markHref` is **optional on purpose**, and this is the one place in the app
 where the mark is not a link. Capture passes an href because `persistBlob` writes
 every shot to IndexedDB as it is taken, so leaving costs nothing. Detect passes
-none: its entire review — confirmations, edits, hand-drawn boxes — lives in
+none: its entire review — what is kept, edits, hand-drawn boxes — lives in
 component state until `finish()` writes it, and a logo is a low-intent click
 target in a way an explicit Back button is not. Do not "fix" detect's to match.
 

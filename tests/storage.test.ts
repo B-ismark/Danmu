@@ -54,6 +54,44 @@ describe('saveRoom / loadRoom', () => {
     expect(back?.version).toBe(ROOM_SCHEMA_VERSION);
   });
 
+  // Schema 2 changed what `detectedObjects[].locked` means: from "confirmed" (every
+  // row built, ticked or not) to "kept" (only these are built). A record written
+  // before it must read back with every row kept, or opening an old room quietly
+  // deletes every piece nobody got round to ticking.
+  describe('a room saved before "kept" meant kept', () => {
+    const rows = [
+      { id: 0, label: 'bed__slot:n', conf: 0.9, locked: true, box: [0.1, 0.4, 0.3, 0.3] as [number, number, number, number] },
+      { id: 1, label: 'rug__slot:n', conf: 0.5, locked: false, box: [0.5, 0.6, 0.3, 0.3] as [number, number, number, number] },
+    ];
+    // Written raw, the way an older build left it, so `saveRoom`'s stamp cannot help.
+    const writeOld = (version: number | undefined) =>
+      set('room:old:meta', { ...room('old'), version, detectedObjects: rows });
+
+    it.each([[1], [undefined]])('reads version %s back with every row kept', async (version) => {
+      await writeOld(version);
+      const back = await roomStore.loadRoom('old');
+      expect(back?.detectedObjects?.map((d) => d.locked)).toEqual([true, true]);
+      expect(back?.detectedObjects?.map((d) => d.label)).toEqual(['bed__slot:n', 'rug__slot:n']);
+    });
+
+    it('keeps them kept through a rename, which re-stamps the version', async () => {
+      // The rename is the dangerous write: it stamps the record current, so if it
+      // copied the old rows across unmigrated, the next load would believe them.
+      await writeOld(1);
+      await roomStore.renameRoom('old', 'Bedroom');
+      const back = await roomStore.loadRoom('old');
+      expect(back?.name).toBe('Bedroom');
+      expect(back?.version).toBe(ROOM_SCHEMA_VERSION);
+      expect(back?.detectedObjects?.map((d) => d.locked)).toEqual([true, true]);
+    });
+
+    it('leaves a current record alone, so a dropped piece stays dropped', async () => {
+      await roomStore.saveRoom({ ...room('new'), detectedObjects: rows });
+      const back = await roomStore.loadRoom('new');
+      expect(back?.detectedObjects?.map((d) => d.locked)).toEqual([true, false]);
+    });
+  });
+
   it('ignores a rename for a room that is not there', async () => {
     await roomStore.renameRoom('ghost', 'Nope');
     expect(await roomStore.loadRoom('ghost')).toBeUndefined();

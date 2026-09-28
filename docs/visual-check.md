@@ -1356,7 +1356,8 @@ the gap reads.
 ### Whether a rebuilt room LOOKS like the room you photographed
 
 **Where to click.** Any preset → *"Photograph my real room first"* → four real photos of a
-real room → let the detect screen run → **Continue to the studio**.
+real room → let the detect screen run → **Continue with N pieces** (the button counts what
+you kept).
 
 **What wrong looks like.** Furniture at plausible sizes that is nonetheless not your room:
 a sofa on the wrong wall, a piece at the right size in the wrong place, proportions that
@@ -1712,6 +1713,24 @@ delayed 1.8 s (the working toast at 600 ms, then the result), at 1440 and 390.
 - On a phone, the working toast covering the banner's close button (the toast's own
   top-right placement, which this did not change).
 
+### Only kept pieces go into the room — this branch
+
+**Where to click.** Any preset → *"Photograph my real room first"* → photos → the detect
+screen. Untick a piece with its ✓ (it turns to +), then **Continue with N pieces**; then
+untick everything and read the note and the button again.
+
+The review's tick used to be decoration: every row was built whatever it said, so two
+sightings of one bed made two beds. Now a row goes into the room only when it is kept.
+Rooms saved before this open exactly as they did (every row is marked kept on load).
+`tests/scene-build.test.ts` and `tests/storage.test.ts`: 6 of 6 mutants caught.
+
+**What wrong looks like.**
+- A piece you left out standing in the studio, or a kept one missing.
+- The + / ✓ toggle reading as "add a new piece" rather than "keep this one" — the icon is
+  the add-to-library idiom, and whether it reads that way beside a photo is a person's call.
+- "Continue with an empty room" or the *Nothing kept yet* note wrapping badly at 360 px.
+- An old room (made before this) opening with pieces missing.
+
 ---
 ## Look and light
 
@@ -1849,7 +1868,7 @@ wiring; nobody has watched it happen.
 
 **Where to click.** A photographed room with furniture found → studio → move a piece and
 add one from the Library → Room rail → **Re-scan**. The screen should say *Showing your previous
-scan* with **Look again**. Press it, then **Continue to the studio**.
+scan* with **Look again**. Press it, then **Continue with N pieces**.
 
 **What wrong looks like.** The studio still showing the old arrangement after a scan that
 found something different (the saved scene won again); no *Before re-scan* entry under
