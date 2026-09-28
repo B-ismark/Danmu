@@ -241,12 +241,16 @@ describe('applyListEdits', () => {
     expect(applyListEdits(withoutB, R, [LIST[0], { ...LIST[1], locked: false }, LIST[2]])).toBeNull();
   });
 
-  // Changed in the list after the studio deleted it: the person has just said what it
-  // is and that they want it, so it comes back — as an addition, not an update.
-  it('a changed row whose piece the studio deleted comes back as an addition', () => {
-    const edit = applyListEdits([recoloured, plant], R, [LIST[0], { ...LIST[1], yaw: 1.2 }, LIST[2]]);
-    expect(ids(edit?.parts)).toEqual(['bed-a', 'lib-plant', 'bed-b']);
-    expect(edit).toMatchObject({ removed: 0, added: 1, updated: 0 });
+  // Changed in the list after the studio deleted it. The change is about what the
+  // piece is; the delete was about whether it is in the room, and a new word for it
+  // is not a request to put it back — that is what ticking a row is.
+  it('a changed row whose piece the studio deleted stays out', () => {
+    expect(applyListEdits([recoloured, plant], R, [LIST[0], { ...LIST[1], yaw: 1.2 }, LIST[2]])).toBeNull();
+    expect(applyListEdits([recoloured, plant], R, [LIST[0], { ...LIST[1], label: 'bunk bed__slot:n' }, LIST[2]])).toBeNull();
+    // Alongside a real edit, it is still not counted or built.
+    const edit = applyListEdits([recoloured, plant], R, [{ ...LIST[0], yaw: 1.2 }, { ...LIST[1], yaw: 1.2 }, LIST[2]]);
+    expect(ids(edit?.parts)).toEqual(['bed-a', 'lib-plant']);
+    expect(edit).toMatchObject({ removed: 0, added: 0, updated: 1 });
   });
 
   // A scene can hold a piece for a row that is not kept — saved by a build from before

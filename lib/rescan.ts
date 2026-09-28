@@ -96,7 +96,10 @@ export type ListEdit = {
  *  all of that. So only the pieces whose ROWS changed move: a row unticked or deleted
  *  takes its piece out, a row newly kept puts one in, and a row that changed while
  *  kept is rebuilt from its new details. Everything else is left exactly as it was,
- *  including a detected piece the studio deleted whose row nobody touched.
+ *  including a detected piece the studio deleted — whether or not its row changed.
+ *  Re-wording a row is about what the piece is called, and deleting the piece was
+ *  about whether it is in the room; the first used to undo the second, so tidying
+ *  the names on the list put back a chair the person had taken out.
  *
  *  A piece is found by the id its row builds as (`detectionPartIds`), and a new one is
  *  built by `buildSceneFromRoom` against the whole new list, so it is the piece the
@@ -117,12 +120,13 @@ export function applyListEdits(parts: ScenePart[], room: RoomData, next: SavedDe
     const n = now.get(id);
     if (r.locked && (!n?.locked || buildsAs(n) !== buildsAs(r))) out.add(id);
   }
+  const present = new Set(parts.map((p) => p.id));
   for (const [id, n] of now) {
     const r = was.get(id);
-    if (n.locked && (!r?.locked || buildsAs(r) !== buildsAs(n))) into.add(id);
+    // Newly kept goes in; kept and changed is rebuilt only if it is still there.
+    if (n.locked && (!r?.locked || (buildsAs(r) !== buildsAs(n) && present.has(id)))) into.add(id);
   }
   if (out.size === 0 && into.size === 0) return null;
-  const present = new Set(parts.map((p) => p.id));
   // Filtered to the rows going in, which is also what keeps an emptied list — which
   // builds the starter room — from putting starter furniture into anybody's room.
   const built = buildSceneFromRoom({ ...room, detectedObjects: next }).filter((p) => into.has(p.id));
