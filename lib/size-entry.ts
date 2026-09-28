@@ -57,28 +57,36 @@ export function textToMetres(raw: string, unit: DimUnit): number {
   return Number.isFinite(n) ? toMM(n, unit) / 1000 : NaN;
 }
 
-/** `metres` written in `unit` at the fields' precision — and, when the size is one
- *  the room may have, written so it still IS one.
+/** `metres` written in `unit` at the fields' precision — and written so it is a size
+ *  the room may have exactly when `metres` is one.
  *
  *  Nearest rounding alone is not enough, for the reason `boundsToUnit` rounds inward:
  *  a width of exactly 1 m is 3.2808 ft, which the field shows as `3.28`, and 3.28 ft
  *  is 0.9997 m — outside the range. Typing a legal 1 m and then switching to feet
  *  would turn the field red for a number the user never typed. So a legal size that
- *  nearest rounding carries out of range is rounded toward the inside instead. An
- *  illegal one is left at nearest: it is already wrong, and nudging it would make it
- *  a different wrong number. */
+ *  nearest rounding carries out of range is rounded toward the inside instead.
+ *
+ *  And the same rounding can carry an illegal size IN, which is worse: 996 mm is
+ *  refused, and switching to metres showed it as `1.00` — no red, no sentence, and
+ *  a room that saves. That is a size quietly changed to fit, the thing CLAUDE.md
+ *  rule 2 forbids, done by a unit menu. So an illegal size that nearest rounding
+ *  carries into range is rounded away from it, and stays refused in every unit. An
+ *  illegal size that rounds to another illegal one is left at nearest. */
 function metresToText(metres: number, axis: RoomAxis, unit: DimUnit): string {
   const p = precisionFor(unit);
   const v = fromMM(metres * 1000, unit);
   const nearest = v.toFixed(p);
+  const legal = roomAxisWithin(axis, metres);
   const shown = textToMetres(nearest, unit);
-  if (!roomAxisWithin(axis, metres) || roomAxisWithin(axis, shown)) return nearest;
-  // Toward the inside means away from whichever end the rounding crossed — decided
-  // by where the SHOWN number fell, not by where the size sits: 1.0008 m is above the
-  // floor and still rounds below it in feet.
+  if (legal === roomAxisWithin(axis, shown)) return nearest;
+  // Which way is decided by where the SHOWN number fell, not by where the size sits:
+  // 1.0008 m is above the floor and still rounds below it in feet. A legal size goes
+  // back inside across the end it crossed; an illegal one goes back outside across
+  // the end it crossed, and that end is the one nearest the size.
   const f = Math.pow(10, p);
-  const inward = shown < roomAxisRange(axis).min ? Math.ceil(v * f) / f : Math.floor(v * f) / f;
-  return inward.toFixed(p);
+  const { min, max } = roomAxisRange(axis);
+  const up = legal ? shown < min : metres > max;
+  return ((up ? Math.ceil(v * f) : Math.floor(v * f)) / f).toFixed(p);
 }
 
 /** The entry re-expressed in `unit`. A field holding a number is converted; a field
@@ -139,7 +147,12 @@ export function badAxes(text: SizeText, unit: DimUnit): RoomAxis[] {
  *  saved that rounding as the room: 4.24 m for a typed 4237 mm, 6.0015 m for a
  *  6 m preset shown in feet. `good` is the typed size, and it is the whole answer
  *  whenever every field is in range, since a keystroke that lands in range is written
- *  to it exactly and a unit change carries it untouched. */
+ *  to it exactly and a unit change carries it untouched.
+ *
+ *  That rests on a field reading as in range exactly when the size behind it is,
+ *  which is `metresToText`'s job in both directions. When it only held one way, a
+ *  refused 996 mm read `1.00` in metres, passed this check, and saved the LAST good
+ *  width — the preset's 6 m, a number nobody had typed for minutes. */
 export function enteredDims(e: SizeEntry, unit: DimUnit): RoomDims | null {
   if (badAxes(entryInUnit(e, unit).text, unit).length > 0) return null;
   return { ...e.good };

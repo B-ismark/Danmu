@@ -14,7 +14,7 @@ import {
   type SizeText,
 } from '@/lib/size-entry';
 import { ROOM_AXES, roomAxisRange, roomAxisWithin, type RoomDims } from '@/lib/dimension-ranges';
-import { boundsToUnit } from '@/lib/units';
+import { boundsToUnit, fromMM, precisionFor } from '@/lib/units';
 import { offeredSizes } from './helpers/offered-sizes';
 
 const UNITS = ['mm', 'cm', 'm', 'in', 'ft'] as const;
@@ -191,6 +191,41 @@ describe('changing the unit mid-entry', () => {
     for (const unit of UNITS) {
       expect(badAxes(entryInUnit(e, unit).text, unit), unit).toEqual(['width']);
     }
+  });
+
+  // The case above types in the coarsest unit, so nothing it converts to can round it
+  // back in. Typed in a finer one it could: 996 mm read `1.00` in metres, lost its red,
+  // and saved the preset's width. So: one step outside each end, typed in every unit,
+  // read in every other.
+  it('an illegal size stays illegal from every unit into every other, at both ends', () => {
+    let crossings = 0;
+    let pairs = 0;
+    for (const axis of ROOM_AXES) {
+      const i = ROOM_AXES.indexOf(axis);
+      const r = roomAxisRange(axis);
+      for (const from of UNITS) {
+        // The nearest number this unit's field can hold on the wrong side of each end.
+        const f = Math.pow(10, precisionFor(from));
+        const lo = (Math.ceil(fromMM(r.min * 1000, from) * f) - 1) / f;
+        const hi = (Math.floor(fromMM(r.max * 1000, from) * f) + 1) / f;
+        for (const out of [lo, hi]) {
+          const text = out.toFixed(precisionFor(from));
+          const e = typeInto(null, RECT, from, i as 0 | 1 | 2, text);
+          for (const to of UNITS) {
+            const there = entryInUnit(e, to);
+            expect(badAxes(there.text, to), `${axis} ${text} ${from} → ${there.text[i]} ${to}`).toEqual([axis]);
+            expect(enteredDims(e, to), `${axis} ${text} ${from} → ${to}`).toBeNull();
+            pairs++;
+            // Would nearest rounding alone have shown this one as a legal size?
+            const nearest = fromMM(textToMetres(text, from) * 1000, to).toFixed(precisionFor(to));
+            if (roomAxisWithin(axis, textToMetres(nearest, to))) crossings++;
+          }
+        }
+      }
+    }
+    // Every pair was reached, and nearest rounding alone carries this many inside.
+    expect(pairs).toBe(150);
+    expect(crossings).toBe(36);
   });
 });
 
