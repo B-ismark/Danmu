@@ -1,0 +1,118 @@
+// No invisible bytes in the text files this repo keeps.
+//
+// Two ways a file here can be damaged with every other gate still green. A file edited
+// through a script takes on bytes nobody typed: `'\b'` in a Python string is a backspace
+// and `'\0'` a NUL, and neither shows in an editor or a diff. And Windows PowerShell
+// 5.1's `Get-Content` → `Set-Content` round trip (CLAUDE.md, Environment gotchas) turns
+// every em dash into mojibake and prepends a byte-order mark, with `pnpm typecheck`
+// still passing. So every tracked text file is read as BYTES and must be valid UTF-8,
+// with no BOM, no control character but tab, newline and carriage return, and none of the
+// mojibake that round trip makes of any character that is not ASCII.
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const ROOT = join(__dirname, '..');
+// What is NOT text, rather than what is: a list of text suffixes left out `.svg`,
+// `.gitignore` and `LICENSE`, and would leave out the next kind of file too. None of
+// these is tracked today; the list is for the day one is.
+const BINARY = /\.(png|jpe?g|gif|webp|avif|heic|ico|woff2?|ttf|otf|onnx|glb|wasm|pdf|zip|gz|bin|mp4|webm)$/i;
+
+// No pathspec, so there are no glob semantics to get wrong (tests/permissions-policy.test.ts
+// says what one of those cost). A file deleted from the working tree and not yet from the
+// index is listed and cannot be read, and is not this test's business.
+const files = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
+  .split('\0')
+  .filter((f) => f && !BINARY.test(f) && existsSync(join(ROOT, f)));
+
+/** Offsets of the bytes no hand-kept text file should hold. */
+function strayBytes(bytes: Buffer): number[] {
+  const out: number[] = [];
+  bytes.forEach((b, i) => {
+    if ((b < 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d) || b === 0x7f) out.push(i);
+  });
+  return out;
+}
+
+const utf8 = new TextDecoder('utf-8', { fatal: true });
+
+/** A character Windows-1252 decodes a UTF-8 continuation byte (0x80 to 0xBF) to. */
+const CONT = '[\u20ac\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\u017d\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\u017e\u0178\u0081\u008d\u008f\u0090\u009d\u00a0-\u00bf]';
+/** A lead byte read as Windows-1252, then as many continuations as that lead promises. The
+ *  two-byte leads are only `Â` and `Ã`, the ones Latin-1 text makes; the rest of that range
+ *  are letters and signs (`×` is one) that sit before a dash in ordinary prose. */
+const MOJIBAKE = new RegExp(`[\u00c2\u00c3]${CONT}|[\u00e0-\u00ef]${CONT}{2}|[\u00f0-\u00f4]${CONT}{3}`);
+
+describe('tracked text files', () => {
+  it('include the files this is about', () => {
+    // Named files rather than a count: a floor of N passes a listing that has lost the
+    // one directory that matters.
+    for (const f of [
+      'CLAUDE.md',
+      'Design.md',
+      'lib/storage.ts',
+      'app/globals.css',
+      'components/studio/RoomSync.tsx',
+      '.gitignore',
+      'LICENSE',
+    ]) {
+      expect(files).toContain(f);
+    }
+  });
+
+  it('hold no control byte but tab, newline and carriage return', () => {
+    const bad = files.flatMap((f) => {
+      const at = strayBytes(readFileSync(join(ROOT, f)));
+      return at.length ? [`${f} @ ${at.slice(0, 3).join(', ')}`] : [];
+    });
+    expect(bad).toEqual([]);
+  });
+
+  it('hold no C1 control character either', () => {
+    // U+0080 to U+009F are valid UTF-8 and invisible, and the round trip below makes them:
+    // Windows-1252 leaves five bytes undefined, and a right curly quote's last byte is one.
+    const bad = files.filter((f) => /[\u0080-\u009f]/.test(readFileSync(join(ROOT, f), 'utf8')));
+    expect(bad).toEqual([]);
+  });
+
+  it('are UTF-8 with no byte-order mark', () => {
+    const bad = files.filter((f) => {
+      const bytes = readFileSync(join(ROOT, f));
+      if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return true;
+      try {
+        utf8.decode(bytes);
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    expect(bad).toEqual([]);
+  });
+
+  it('hold none of the mojibake a CP1252 round trip makes', () => {
+    const bad = files.filter((f) => MOJIBAKE.test(readFileSync(join(ROOT, f), 'utf8')));
+    expect(bad).toEqual([]);
+  });
+
+  it('would know that mojibake', () => {
+    // The pattern is the round trip's own output: each character's UTF-8 bytes read as
+    // Windows-1252. One of every length of UTF-8 sequence, and the characters this repo
+    // actually writes. Written as escapes, or this file would fail itself.
+    const cp1252 = new TextDecoder('windows-1252');
+    const samples = ['\u2014', '\u2013', '\u00b7', '\u00d7', '\u2248', '\u2264', '\u2192', '\u00e9', '\u201c', '\u201d', '\u2026', '\u00b0', '\u2019', '\u2713', '\u{1f642}'];
+    for (const ch of samples) {
+      expect(MOJIBAKE.test(ch), ch).toBe(false);
+      expect(MOJIBAKE.test(cp1252.decode(Buffer.from(ch, 'utf8'))), ch).toBe(true);
+    }
+    // And not the text it sits beside: a zoom range written `0.4\u00d7\u20134\u00d7` is a
+    // times sign and an en dash, which is what a looser pattern once took for mojibake.
+    expect(MOJIBAKE.test('0.4\u00d7\u20134\u00d7')).toBe(false);
+  });
+
+  it('catch the bytes they are meant to', () => {
+    expect(strayBytes(Buffer.from('a\tb\nc\r\n'))).toEqual([]);
+    expect(strayBytes(Buffer.from('word\bs'))).toEqual([4]);
+    expect(strayBytes(Buffer.from('a\0b\x1b[0m\x7f'))).toEqual([1, 3, 7]);
+  });
+});
