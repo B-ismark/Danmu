@@ -38,10 +38,18 @@
 //             a phone was the first).
 //   stretched on widths of 768 and up, a control, card or paragraph spread wider than
 //             its content can use: a button more than 240px wide whose label and
-//             icon occupy under half of it, a `.ds-card` over 760px, or a paragraph
-//             of running text over ~80 characters a line (WCAG 1.4.8; Bringhurst's
-//             45–75). A thing does not get wider because the window did. Rename
-//             fields, disclosure rows and tiles are not buttons and are skipped.
+//             icon occupy under half of it, a tile (a pressable card, taller than a
+//             button) wider than `--measure-page`, a `.ds-card` over 760px, or a
+//             line of text over ~80 characters (WCAG 1.4.8; Bringhurst's 45–75). A
+//             thing does not get wider because the window did. Rename fields,
+//             disclosure rows and controls laid over something else (a found piece's
+//             box on a photo) are not buttons and are skipped. A line is measured
+//             line by line, from the text that flows in the block itself, so a wide
+//             child is not read as a long line; one line counts, and any block of
+//             text is read, not only a `<p>`: the scan screen's subtitle ran 952px on
+//             one line at 1920 and passed twice over, being a `<div>` and never
+//             wrapping to the two lines the rule used to ask for. And an image, video
+//             or canvas taller than the window, which nobody can see whole.
 //
 // EXIT CODES: 0 clean, 1 findings, 2 the sweep could not run.
 
@@ -74,16 +82,21 @@ mkdirSync(OUT, { recursive: true });
 const LONG_NAME = 'The long living room upstairs, by the window';
 const room = (id, name) => ({ id, createdAt: Date.now(), version: 1, name, layoutId: 'l', width: 6, depth: 5, height: 2.6 });
 
+/** Where `lib/storage.ts` keeps rooms (idb-keyval's defaults): named once, because
+ *  `seed` and `openRoom` both write there, and one left on an old name would open an
+ *  empty room and sweep a screen it never rendered, clean. */
+const IDB = { db: 'keyval-store', store: 'keyval' };
+
 async function seed(page, rooms) {
   await page.evaluate(
-    async ([rooms, units]) => {
+    async ([rooms, units, IDB]) => {
       localStorage.setItem('danmu-settings', JSON.stringify({ state: { dimUnit: units }, version: 0 }));
       await new Promise((res, rej) => {
-        const rq = indexedDB.open('keyval-store');
-        rq.onupgradeneeded = () => rq.result.createObjectStore('keyval');
+        const rq = indexedDB.open(IDB.db);
+        rq.onupgradeneeded = () => rq.result.createObjectStore(IDB.store);
         rq.onsuccess = () => {
-          const tx = rq.result.transaction('keyval', 'readwrite');
-          const st = tx.objectStore('keyval');
+          const tx = rq.result.transaction(IDB.store, 'readwrite');
+          const st = tx.objectStore(IDB.store);
           for (const r of rooms) {
             st.put(r, `room:${r.id}:meta`);
             st.put(Date.now(), `room:${r.id}:touched`);
@@ -94,7 +107,7 @@ async function seed(page, rooms) {
         rq.onerror = () => rej(rq.error);
       });
     },
-    [rooms, UNITS],
+    [rooms, UNITS, IDB],
   );
 }
 
@@ -130,7 +143,10 @@ const SCREENS = [
       await p.getByRole('button', { name: /^Start decorating/ }).click();
     },
   },
-  { key: 'capture', go: (p) => p.goto(`${BASE}/onboarding/capture`) },
+  // With no room open the capture screen is a gate card, and for as long as this list
+  // named that state `capture` the sweep never saw the screen itself: the drop zone
+  // and the instruction line stretched edge to edge at 1920 with every width `ok`.
+  { key: 'capture-no-room', go: (p) => p.goto(`${BASE}/onboarding/capture`) },
   { key: 'workspace', go: (p) => p.goto(`${BASE}/workspace`) },
   { key: 'settings', go: (p) => p.goto(`${BASE}/settings`) },
   { key: 'studio-plan', studio: true, go: (p, id) => p.goto(`${BASE}/room/${id}/plan`) },
@@ -256,7 +272,61 @@ const SCREENS = [
       await p.waitForTimeout(500);
     },
   },
+  // The capture screen with a room open, empty and then with two walls photographed.
+  // Last, because opening a room is what the workspace and settings read too, and the
+  // screens above are swept without one.
+  { key: 'capture', go: async (p, id) => {
+    await openRoom(p, `${id}-cap`);
+    await p.goto(`${BASE}/onboarding/capture`);
+  } },
+  { key: 'capture-photos', go: async (p, id) => {
+    await openRoom(p, `${id}-cap`, ['n', 'e']);
+    await p.goto(`${BASE}/onboarding/capture`);
+  } },
+  // The scan screen for the same two photos. No key is set, so nothing is sent
+  // anywhere: this is the hand-drawn path, with its notice.
+  { key: 'detect', go: async (p, id) => {
+    await openRoom(p, `${id}-cap`, ['n', 'e']);
+    await p.goto(`${BASE}/onboarding/detect`);
+    await p.waitForTimeout(3000);
+  } },
 ];
+
+/** Make `id` the open room, with a plain photo on each of `slots`. The room is written
+ *  here rather than seeded, so the workspace above is swept with the rooms it always was. */
+async function openRoom(page, id, slots = []) {
+  await page.evaluate(
+    async ([id, slots, meta, IDB]) => {
+      localStorage.setItem('danmu-room', JSON.stringify({ state: { roomId: id }, version: 0 }));
+      const photo = async (hue) => {
+        const c = document.createElement('canvas');
+        c.width = 1200;
+        c.height = 900;
+        const g = c.getContext('2d');
+        const grad = g.createLinearGradient(0, 0, 0, 900);
+        grad.addColorStop(0, `hsl(${hue} 20% 80%)`);
+        grad.addColorStop(1, `hsl(${hue} 15% 45%)`);
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 1200, 900);
+        return new Promise((res) => c.toBlob(res, 'image/jpeg', 0.8));
+      };
+      const blobs = await Promise.all(slots.map((_, i) => photo(30 + i * 60)));
+      await new Promise((res, rej) => {
+        const rq = indexedDB.open(IDB.db);
+        rq.onsuccess = () => {
+          const tx = rq.result.transaction(IDB.store, 'readwrite');
+          const st = tx.objectStore(IDB.store);
+          st.put(meta, `room:${id}:meta`);
+          slots.forEach((slot, i) => st.put({ slot, blob: blobs[i], takenAt: Date.now() }, `room:${id}:cap:${slot}`));
+          tx.oncomplete = () => res();
+          tx.onerror = () => rej(tx.error);
+        };
+        rq.onerror = () => rej(rq.error);
+      });
+    },
+    [id, slots, room(id, 'Hall'), IDB],
+  );
+}
 
 async function measure(page) {
   return page.evaluate(() => {
@@ -340,6 +410,15 @@ async function measure(page) {
       }
     });
     if (W >= 768) {
+      // Resolved by the browser, so the rule moves when the token does and speaks
+      // whatever unit it is written in. No fallback: a token that resolves to nothing
+      // is said, rather than quietly replaced by a number that looks like it.
+      const pageProbe = document.createElement('div');
+      pageProbe.style.cssText = 'position:absolute;visibility:hidden;inline-size:var(--measure-page)';
+      document.body.appendChild(pageProbe);
+      const measurePage = pageProbe.getBoundingClientRect().width;
+      pageProbe.remove();
+      if (!measurePage) out.push({ kind: 'stretched', what: '--measure-page resolves to nothing, so no tile was measured' });
       const contentW = (el) => {
         const rg = document.createRange();
         rg.selectNodeContents(el);
@@ -347,36 +426,106 @@ async function measure(page) {
       };
       for (const el of controls) {
         if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') continue;
-        // Not buttons, though they are <button>s: a rename field (`.editable`), a
-        // disclosure ROW (a section header, which spans its panel on purpose), and a
-        // tile taller than any button — a card you press.
+        // Not buttons, though they are <button>s: a rename field (`.editable`) and a
+        // disclosure ROW (a section header, which spans its panel on purpose).
         if (el.classList.contains('editable')) continue;
         if (el.hasAttribute('aria-expanded') && !el.classList.contains('ds-btn')) continue;
-        if (el.getBoundingClientRect().height > 64) continue;
+        // Nor one laid over something else, as the keep toggle over a found piece is:
+        // it is as big as the piece in the photo, which is not a layout's choice.
+        if (getComputedStyle(el).position === 'absolute') continue;
         const w = el.getBoundingClientRect().width;
+        // A tile taller than any button is a card you press: its content is meant to
+        // sit in space, so the question is not how full it is but whether it grew
+        // with the window. The capture screen's drop zone spanned 1,886px at 1920.
+        if (el.getBoundingClientRect().height > 64) {
+          if (measurePage && w > measurePage + 1) out.push({ kind: 'stretched', what: `${label(el).slice(0, 50)} tile ${Math.round(w)}px wide, over --measure-page (${measurePage}px)` });
+          continue;
+        }
         const c = contentW(el);
         if (w > 240 && c < w / 2) out.push({ kind: 'stretched', what: `${label(el)} ${Math.round(w)}px for ${Math.round(c)}px of content` });
+      }
+      // A picture taller than the window cannot be seen whole, and whatever sits under
+      // it is below the fold: the scan screen's tools for drawing a box were, at 1920.
+      // A viewfinder and a canvas are pictures too.
+      for (const el of document.querySelectorAll('img, video, canvas')) {
+        if (!vis(el)) continue;
+        const h = el.getBoundingClientRect().height;
+        const name = `${el.tagName.toLowerCase()}${el.alt ? ` "${el.alt.slice(0, 40)}"` : ''}`;
+        if (h > innerHeight) out.push({ kind: 'stretched', what: `${name} ${Math.round(h)}px tall in a ${innerHeight}px window` });
       }
       for (const el of document.querySelectorAll('.ds-card')) {
         if (!vis(el)) continue;
         const w = el.getBoundingClientRect().width;
         if (w > 760) out.push({ kind: 'stretched', what: `${label(el).slice(0, 50)} card ${Math.round(w)}px wide` });
       }
-      // The measure is read in the paragraph's own `ch`, by a probe set in its own
-      // font, so the rule and the stylesheet's `70ch` speak one unit.
+      // A line of words over 80ch, in any block. Measured by LINE: the text that
+      // flows in the block itself — through its inline children, as a sentence with a
+      // link or a bold word does — grouped by the line it sits on. Not the range of
+      // the block's contents, which is the union of every box inside it, so a caption
+      // beside a wide toolbar read as a line as wide as the toolbar.
       const probe = document.createElement('span');
       probe.style.cssText = 'position:absolute;visibility:hidden;inline-size:80ch;white-space:nowrap';
-      for (const el of document.querySelectorAll('p, li')) {
-        if (!vis(el) || !ownText(el)) continue;
+      // 80ch in the block's own font, measured once per font rather than per block.
+      const limits = new Map();
+      const limitFor = (el, cs) => {
+        const key = [cs.fontFamily, cs.fontSize, cs.fontWeight, cs.fontStretch, cs.fontStyle].join('|');
+        if (!limits.has(key)) {
+          el.appendChild(probe);
+          limits.set(key, probe.getBoundingClientRect().width);
+          probe.remove();
+        }
+        return limits.get(key);
+      };
+      const INLINE = new Set(['inline', 'contents']);
+      // Text inside a field is not laid out as the page's text.
+      const FIELD = new Set(['INPUT', 'SELECT', 'TEXTAREA', 'OPTION']);
+      const flowText = (block) => {
+        const out = [];
+        const walk = document.createTreeWalker(block, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+          acceptNode: (n) => {
+            if (n.nodeType === 3) return n.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+            if (n === block) return NodeFilter.FILTER_SKIP;
+            const cs = getComputedStyle(n);
+            // A block, a positioned box or a field inside is its own measure, or none.
+            if (!INLINE.has(cs.display) || cs.position === 'absolute' || cs.position === 'fixed' || FIELD.has(n.tagName) || n instanceof SVGElement)
+              return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_SKIP;
+          },
+        });
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) out.push(n);
+        return out;
+      };
+      const longestLine = (texts) => {
+        const rects = [];
+        const rg = document.createRange();
+        for (const t of texts) {
+          rg.selectNodeContents(t);
+          for (const r of rg.getClientRects()) if (r.width > 0 && r.height > 0) rects.push(r);
+        }
+        rects.sort((a, b) => a.top - b.top);
+        let best = 0;
+        let line = null;
+        for (const r of rects) {
+          const mid = (r.top + r.bottom) / 2;
+          if (line && mid >= line.top && mid <= line.bottom) {
+            line.left = Math.min(line.left, r.left);
+            line.right = Math.max(line.right, r.right);
+          } else line = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+          best = Math.max(best, line.right - line.left);
+        }
+        return best;
+      };
+      for (const el of document.querySelectorAll('body *')) {
+        if (el instanceof SVGElement || FIELD.has(el.tagName)) continue;
         const cs = getComputedStyle(el);
-        const r = el.getBoundingClientRect();
-        el.appendChild(probe);
-        const limit = probe.getBoundingClientRect().width;
-        probe.remove();
-        const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
-        // Only running text — more than one line of it — has a measure to be too long.
-        if (r.width > limit + 1 && r.height > lh * 1.5)
-          out.push({ kind: 'stretched', what: `${label(el).slice(0, 50)} ${Math.round(r.width)}px, over 80ch (${Math.round(limit)}px)` });
+        if (INLINE.has(cs.display) || !vis(el)) continue;
+        const texts = flowText(el);
+        if (!texts.length) continue;
+        // No wider than the block: a clipped, ellipsised name is as long as it shows.
+        const line = Math.min(longestLine(texts), el.getBoundingClientRect().width);
+        const limit = limitFor(el, cs);
+        if (line > limit + 1)
+          out.push({ kind: 'stretched', what: `${label(el).slice(0, 50)} line ${Math.round(line)}px, over 80ch (${Math.round(limit)}px)` });
       }
     }
     for (let i = 0; i < controls.length; i++)
