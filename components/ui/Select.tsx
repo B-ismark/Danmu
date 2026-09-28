@@ -229,7 +229,10 @@ export function Select<T extends string>({
         title={title}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onKeyDown}
-        className="field"
+        // `select-trigger` is only a hook for the touch rule in globals.css: under a
+        // finger the trigger is 44px tall whatever `height` asked for, because a
+        // minimum wins over an inline height.
+        className="field select-trigger"
         style={{
           width: width ?? '100%',
           height,
@@ -271,6 +274,7 @@ export function Select<T extends string>({
                   id={optionId(i)}
                   role="option"
                   aria-selected={isSel}
+                  className="select-option"
                   onMouseEnter={() => setActive(i)}
                   onClick={() => commit(i)}
                   style={{

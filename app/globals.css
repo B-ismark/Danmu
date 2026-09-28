@@ -1545,6 +1545,10 @@ textarea.field { border-radius: var(--r-2); }
   .num-field > .field { min-height: 44px; }
   /* A section's disclosure row is the thing a thumb opens most in a panel. */
   .rail-section-toggle { min-height: 44px; }
+  /* A dropdown and its rows (`ui/Select`). Both carry an inline height sized for a
+     mouse; a minimum wins over it, so a finger gets 44px without every caller
+     having to know it is on a phone. */
+  .select-trigger, .select-option { min-height: 44px; }
 }
 /* Under a finger the Library's rows are 44px, not a mouse's 32 — and so is every
    small button in the phone's sheet (Fix, Shuffle, Room checks): the sheet is only
