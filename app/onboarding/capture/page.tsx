@@ -125,6 +125,7 @@ export default function CapturePage() {
     roughSize: boolean;
   } | null>(null);
   const [draggingFrom, setDraggingFrom] = useState<CaptureSlot | null>(null);
+  const takesDrop = (e: React.DragEvent) => draggingFrom !== null || carriesFiles(e);
   /** single polite live region for everything that happens without a page change */
   const [announce, setAnnounce] = useState('');
   const dimUnit = useSettings((s) => s.dimUnit);
@@ -555,7 +556,7 @@ export default function CapturePage() {
           onDropFrom={(from) => movePhoto(from, slot)}
         />
       ))}
-      {!allCaptured && <AddTile compact={compact} first={!anyCaptured} onFiles={addFiles} />}
+      {!allCaptured && <AddTile compact={compact} first={!anyCaptured} cardDragging={draggingFrom !== null} onFiles={addFiles} />}
     </>
   );
 
@@ -590,10 +591,14 @@ export default function CapturePage() {
     <div
       // A photo let go anywhere but on a card is added, rather than opened by the
       // browser in place of the app (`looseDropIntent`). A card has already claimed
-      // its own drop by the time one bubbles here.
-      onDragOver={(e) => e.preventDefault()}
+      // its own drop by the time one bubbles here. Only a drag carrying a file, or a
+      // card's own, is the page's to take: text dragged into a field is the field's,
+      // and cancelling that drop is what stops the text landing.
+      onDragOver={(e) => {
+        if (takesDrop(e)) e.preventDefault();
+      }}
       onDrop={(e) => {
-        if (e.defaultPrevented) return;
+        if (e.defaultPrevented || !takesDrop(e)) return;
         e.preventDefault();
         const intent = looseDropIntent({ draggingFrom, hasFiles: !!e.dataTransfer.files?.length });
         if (intent.kind === 'add') void addFiles(e.dataTransfer.files);
@@ -814,14 +819,24 @@ function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps:
   );
 }
 
+/** A drag with a file in it — from the desktop, or a gallery card, which carries its
+ *  own photo as one. `types`, not `files`: during a drag only the kinds are readable. */
+function carriesFiles(e: React.DragEvent): boolean {
+  return Array.from(e.dataTransfer?.types ?? []).includes('Files');
+}
+
 /** The way photos get in, now that there are no bays to drop them onto. */
 function AddTile({
   compact,
   first,
+  cardDragging,
   onFiles,
 }: {
   compact: boolean;
   first: boolean;
+  /** A gallery card is being dragged: letting it go here adds nothing, so the tile
+   *  does not light as though it would. */
+  cardDragging: boolean;
   onFiles: (list: FileList | File[] | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -830,6 +845,7 @@ function AddTile({
   return (
     <div
       onDragOver={(e) => {
+        if (cardDragging || !carriesFiles(e)) return;
         e.preventDefault();
         setOver(true);
       }}
