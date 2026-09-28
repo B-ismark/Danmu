@@ -1826,7 +1826,7 @@ sweeps the placement rule over 43,200 box, photo and name cases, laid out from t
 strings the photo is handed, and the outline over 28,800. A real phone, with a real scan's
 boxes, is the unlooked-at half.
 
-### The scan photo stays on screen while the list scrolls — this branch (PR #162), PROBED from 360 to 1920 wide
+### The scan photo stays on screen while the list scrolls — merged to `main` in `a5c63b2` (PR #162), PROBED from 360 to 1920 wide
 
 **Where to click.** *Photograph my real room* → four photos → the scan screen, with enough
 pieces that the list runs past the window. Scroll to the end of the list. Beside the list the
@@ -1855,12 +1855,11 @@ the page at all.
   big enough to draw a box on with a finger is a person's call.
 
 **What was measured, and on what.** SwiftShader, desktop Chromium, seeded photos on four
-walls with 16 pieces, no detector: `scripts/scan-pin-probe.mjs`'s 79 checks at 360×640,
-390×844, 844×390, 768×1024, 700×800, 1280×800 and 1920×900 all pass, with the touch checks
-through raw touch events at the four touch sizes. At `c1bdced` the photo was 0% on screen at
-the end of the list at five of the six sizes then in the probe, and 2% at 1920×900. A copy
-with the photo frame `touch-action: none` in every mode fails the photo swipe, so that check
-can fail. A real phone is the unlooked-at half.
+walls with 16 pieces, no detector: `scripts/scan-pin-probe.mjs` at 360×640, 390×844,
+844×390, 768×1024, 700×800, 1280×800 and 1920×900, with the touch checks through raw touch
+events at the four touch sizes. Before the change the photo was all but gone at the end of
+the list at every size. A copy with the photo frame `touch-action: none` in every mode fails
+the photo swipe, so that check can fail. A real phone is the unlooked-at half.
 
 ---
 ## Look and light
