@@ -741,11 +741,12 @@ export type GeoPlacement = {
   /** Which way `widthMM` and `heightMM` can be wrong — see `ReadBounds`. The placer
    *  reports it because the placer is the one that knows. */
   bounds: ReadBounds;
-  /** How far, in metres, the piece may stand from `distance` for a reason the photo did
-   *  not show: what the room's bounds moved a floor piece's near face and centre by, and
-   *  no limit at all for one the frame cut at its foot, whose near face was never in the
-   *  picture. Zero where the distance was read off the photo, and on a wall, where the
-   *  distance is the wall's and two pieces are told apart along it, not toward it.
+  /** How far, in metres, the piece's centre may stand from `position` for a reason the
+   *  photo did not show: how far the room's bounds moved a floor piece, on the floor, from
+   *  where the same reading put it with no wall in reach, and no limit at all for one the
+   *  frame cut at its foot, whose near face was never in the picture. Zero where nothing
+   *  stopped it, and on a wall, where the distance is the wall's and two pieces are told
+   *  apart along it, not toward it. Never NaN: a reading that cannot say is no limit.
    *
    *  For the hard merge (`dedupeDetections`), which calls two rows one piece when their
    *  centres agree: a bound stops every piece that runs past it on one line, so two chairs
@@ -1574,12 +1575,13 @@ export function placeFloorObject(
   // A round piece cut at one side, its foot seen, is placed by the radius it is about
   // to be drawn at (`floorFromRoundOneSide`); anything it cannot close falls back to
   // the two tangents.
-  const oneSide = foot.round && cut.left !== cut.right && !cut.bottom && foot.whole
-    ? floorFromRoundOneSide(box, near, cal, cut.left, foot.whole.widthM / 2, frame)
-    : null;
-  const solved = foot.round
-    ? oneSide ?? floorFromRound(box, near, cal)
-    : floorFromBox(box, near, depthM, cal);
+  const solve = (at: number, walls: WallFrame | null) => {
+    const oneSide = foot.round && cut.left !== cut.right && !cut.bottom && foot.whole
+      ? floorFromRoundOneSide(box, at, cal, cut.left, foot.whole.widthM / 2, walls)
+      : null;
+    return foot.round ? oneSide ?? floorFromRound(box, at, cal) : floorFromBox(box, at, depthM, cal);
+  };
+  const solved = solve(near, frame);
   if (!solved) return null;
   // A side the frame cut is a width the photo did not see, and a top it cut is a
   // height it did not — each a lower bound, taken to the whole piece (see `whole`).
@@ -1627,9 +1629,17 @@ export function placeFloorObject(
           height: solved.rises ? { kind: 'upper', floorMM: lensMM } : { kind: 'lower', ceilMM: lensMM },
         };
 
-  // Where the photo put the piece and where the bounds left it: the near face moved by
-  // its two clamps, the centre by its own. A foot the frame cut has no reading to move.
-  const distanceDoubt = cut.bottom ? Infinity : Math.abs(nearAsRead - near) + (solved.d - d);
+  // Where the photo put the piece and where the bounds left it: the same solve from the
+  // near face as read, with no wall to stop the face, the width's growth or the centre,
+  // and the distance between the two centres on the floor. A distance and not a forward
+  // difference, because a face moved along its ray carries the piece across the photo
+  // too, and a round piece's centre moves further than its face does. A foot the frame
+  // cut has no reading to move from, and a reading that does not solve has none either.
+  const free = cut.bottom ? null : solve(nearAsRead, null);
+  const moved = free
+    ? Math.hypot(free.d - d, wholeAlong(free.right, free.widthM, cut.left, cut.right, foot.whole?.widthM).centre - right)
+    : NaN;
+  const distanceDoubt = moved >= 0 ? moved : Infinity;
 
   const { x, z, yaw } = slotToWorld(slot, d, right);
   return {
