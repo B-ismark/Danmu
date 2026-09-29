@@ -26,7 +26,7 @@ import {
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
 import { geoPlace, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
-import { acceptCandidate, judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
+import { acceptCandidate, judgeLabels, measuredPhrase, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
 import { suggestFromLabel } from '@/lib/label-suggest';
 import {
   canRedo,
@@ -1399,15 +1399,15 @@ function DetectionRow({
   // default on screen in the sentence that says "Measured".
   // The same for an axis the photo's edge cut off: its size is an estimate, and
   // `measured` leaves it out rather than print it as a reading.
-  const took =
-    verdict.status === 'suspect'
-      ? [verdict.measured.width, verdict.measured.height]
-          .filter((v): v is number => v !== undefined)
-          .map((v) => formatDim(v, dimUnit))
-          .join(' × ')
-      : '';
-  const cut = verdict.cut ?? [];
-  const cutWord = cut.length === 2 ? 'size' : cut[0];
+  // And an axis read as a limit says so (`measuredPhrase`), because the one number a
+  // limit has is the end it could not be past, and printed alone after "Measured" it
+  // reads as the size.
+  const took = verdict.status === 'suspect' ? measuredPhrase(verdict.measured, dimUnit) : '';
+  // The note covers both: a size the photo's edge cut off and a limit read from a
+  // piece whose foot it cut. To the person they are one fact — this number is not the
+  // camera's measurement of the piece — and it is said the same way.
+  const unsure = [...(verdict.status === 'unmeasured' ? [] : (verdict.bounded ?? [])), ...(verdict.cut ?? [])];
+  const cutWord = unsure.length === 2 ? 'size' : unsure[0];
   return (
     // Hover AND focus drive the same highlight, so a keyboard user gets the
     // row↔photo link too. onFocus/onBlur bubble from the child buttons.
@@ -1479,8 +1479,10 @@ function DetectionRow({
             running out of the picture is grown on that side from the edge the photo
             did see — to a typical size, or to the wall's end, or not at all when what
             it saw was already bigger. A ceiling piece is not grown at all: its width
-            is read on a row the edge moved, long or short. "An estimate" is true of
-            all four; "typical" was true of one. Said here because "Measured" should
+            is read on a row the edge moved, long or short. And a floor piece whose FOOT
+            the edge cut was seen whole but read from the far end of where it could
+            stand, so its width and height are limits (`bounded`). "An estimate" is true
+            of all five; "typical" was true of one. Said here because "Measured" should
             not cover a number the photo did not give. */}
         {cutWord && <RowNote icon="ruler">Runs past the edge of the photo, so its {cutWord} is an estimate</RowNote>}
         {/* The measurement disagreeing with the word. Said out loud rather than
@@ -1501,7 +1503,7 @@ function DetectionRow({
             }}
           >
             <span style={{ flex: '1 1 auto', minWidth: 0 }}>
-              Measured {took} {dimUnit}. {categoryLabel(d.category)} range is {miss}.
+              Measured {took}. {categoryLabel(d.category)} range is {miss}.
             </span>
             {verdict.candidates.slice(0, 2).map((cand) => (
               <button

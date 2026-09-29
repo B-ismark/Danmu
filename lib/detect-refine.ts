@@ -16,6 +16,7 @@
 
 import { anchorFor } from './physics';
 import {
+  AS_READ,
   cutByFrame,
   locateOnWall,
   placeCeilingObject,
@@ -23,6 +24,7 @@ import {
   placeWallObject,
   type CameraCal,
   type MeasuredPlane,
+  type ReadBounds,
 } from './photo-geometry';
 import type { Detection } from './detection';
 import { defaultAxisFor, defaultDepthFor, isRoundPart, sceneShapeFor, type Category, type Shape } from './scene-spec';
@@ -85,8 +87,20 @@ export function measuredPlane(category: Category, shape: Shape): MeasuredPlane {
 }
 
 export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection {
+  return geoMeasure(d, cals, room).row;
+}
+
+/** `geoRefine`, with which way the size it wrote can be wrong (`ReadBounds`): the
+ *  placer's own answer, carried out beside the row for the one reader that needs it —
+ *  `lib/label-repair.ts`, judging a word against the size. `row` is the input itself
+ *  whenever nothing was measured, as `geoRefine`'s is, so the identity test there still
+ *  holds; the bounds are then `AS_READ` and describe nothing. A ceiling row's are
+ *  `AS_READ` too: its width is read on a plane it is on by assumption, and it has no
+ *  height to bound. */
+export function geoMeasure(d: Detection, cals: CalMap, room: RoomDims): { row: Detection; bounds: ReadBounds } {
+  const unmeasured = { row: d, bounds: AS_READ };
   const cal = cals[d.slot];
-  if (!cal) return d;
+  if (!cal) return unmeasured;
   const cat = (d.category ?? 'other') as Category;
   // The shape the room will BUILD this row as, by the room's own rule — never the
   // raw hint with `box` for a blank. The on-device detector names almost no shapes,
@@ -106,16 +120,17 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
 
   if (plane === 'ceiling') {
     const g = placeCeilingObject(d.box, d.slot, room, cal);
-    if (!g) return d;
+    if (!g) return unmeasured;
     // Width is measured. HEIGHT IS NOT — the bbox of something seen from below
     // has a foreshortened diameter in it, not a thickness (see
     // `placeCeilingObject`), so it falls back the same way depth does.
-    return {
+    const row: Detection = {
       ...d,
       position: g.position,
       yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
       dimMM: [g.widthMM, ceilingDepth, d.dimMM?.[2] ?? defaultAxisFor(cat, shape, 2)],
     };
+    return { row, bounds: AS_READ };
   }
 
   // ONE footprint for both placers, because it answers one question — what shape is
@@ -137,13 +152,14 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
     plane === 'floor'
       ? placeFloorObject(d.box, d.slot, room, cal, foot)
       : placeWallObject(d.box, d.slot, room, cal, foot);
-  if (!g) return d;
-  return {
+  if (!g) return unmeasured;
+  const row: Detection = {
     ...d,
     position: g.position,
     yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
     dimMM: [g.widthMM, catalogueDepth, g.heightMM],
   };
+  return { row, bounds: g.bounds };
 }
 
 /** WHERE a wall row is, when `geoRefine` could not measure it — position and heading,

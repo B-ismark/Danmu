@@ -684,9 +684,26 @@ the judge's own strict repairs never reach it. And the scan screen says so on th
 *Runs past the edge of the photo, so its width is an estimate.* An estimate the person can
 see is an estimate. Not "a typical one", which it said first and which was true of one case
 in three: a piece whose visible part is already bigger than typical keeps what was seen, and
-one stopped by the wall's end is neither. A piece cut only at its FOOT gets no note — its
-width and height were seen whole — though its distance is the wall's rather than its own
-(§ 49.10).
+one stopped by the wall's end is neither. A piece cut only at its FOOT was seen whole across
+and to its top, but its distance is the wall's rather than its own, the far
+end of where it could stand, so the judge reads each axis one way — the placer's own
+answer, `GeoPlacement.bounds` (`lib/photo-geometry.ts`), which `geoMeasure` carries out
+beside the row. The width is the most it can be: it may say *too small*, never *too
+big*. The height is the top row read at that distance, and that row's ray rises for a piece
+taller than the lens and falls for a lower one, so a tall piece reads high and a low one low —
+each bounded on its other side by the lens, which is what still makes a low table no wardrobe.
+Judged both ways, six of forty-three correctly named pieces were called the wrong size in
+`tests/label-repair.test.ts`; none are now, at the price of catching 325 of 654 wrong words
+where it caught 476 (§ 49.10). **And the row says so**, because a limit printed as its one
+number is a limit passed off as a size: the verdict carries each axis as the least and the most
+it can be (`LabelVerdict.measured`) and names the axes read as limits (`bounded`), so the
+sentence reads *Measured up to about 1.27 m wide and about 0.27–1.50 m tall* — "about", because
+a limit is only as good as the catalogue depth it was read at — and the row gets the *Runs past
+the edge of the photo, so its … is an estimate* note a side cut gets, naming its size where a
+side cut names its width. To the person they are one fact, that this number is not the camera's
+measurement of the piece. A round piece read with the lens tipped DOWN claims no limit at all:
+its solve's residual crosses the bound, by 35 mm at 20°, and a limit the truth falls outside is
+worse than none.
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,

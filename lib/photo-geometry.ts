@@ -737,6 +737,9 @@ export type GeoPlacement = {
    *  `RoomTools`' `top.distance` is a different type; nothing reads this one at
    *  runtime, and that is correct rather than an oversight. */
   distance: number;
+  /** Which way `widthMM` and `heightMM` can be wrong — see `ReadBounds`. The placer
+   *  reports it because the placer is the one that knows. */
+  bounds: ReadBounds;
 };
 
 /** What a placer needs to know about a piece's PLAN shape: the axis one photograph
@@ -830,6 +833,77 @@ export function cutByFrame(box: readonly [number, number, number, number]): bool
   return c.left || c.right || c.top || c.bottom;
 }
 
+/** Where a piece's true size can be, given a placer's reading `v` on one axis, in mm.
+ *  `exact`: at `v`, as far as the lens and the catalogue depth are right. `upper`: the
+ *  reading is the most it can be, and the truth is in `[floorMM, v]`. `lower`: the
+ *  reading is the least, and the truth is in `[v, ceilMM]`. */
+export type ReadBound =
+  | { kind: 'exact' }
+  | { kind: 'upper'; floorMM: number }
+  | { kind: 'lower'; ceilMM: number };
+
+/** Which way each axis a placer read can be wrong, for the axes the frame did NOT cut —
+ *  those are `cutAxes`'s, and a reader skips them.
+ *
+ *  **Reported BY the placer, never re-derived beside it.** Which distance a piece was
+ *  read at and which face its top row came from are the solve's own steps, and for a
+ *  commit this was a second function that re-asked both from the box. It agreed, and
+ *  it was the same answer written twice — the shape rule 3 keeps finding, one rule in
+ *  two places drifting in the direction nobody looks.
+ *
+ *  **A floor piece cut at its foot is read at an assumed distance**, the far end of
+ *  what the evidence allows (`placeFloorObject`): the ray through the photo's last row,
+ *  or the piece's back on the plaster, whichever is nearer. The real piece can only be
+ *  nearer still, and which way that moves a reading differs by axis:
+ *  - the width is an angle times the distance, so it is read LARGE, and nothing but
+ *    zero bounds it from below;
+ *  - the height is the top row read at that distance. The top row's ray RISES for a
+ *    piece taller than the lens and FALLS for one lower — the test `floorFromBox` uses
+ *    to pick which face the top row came from — and read too far out, a rising ray ends
+ *    too high and a falling one too low. So a tall piece's height is at most what it
+ *    reads, and a low one's at least. **And the other end is not open:** a rising ray
+ *    means the top is above the lens whatever the distance, so a wardrobe cut at its
+ *    foot is still taller than the camera, and a nightstand shorter. That one fact is
+ *    most of what lets the judge still catch a wrong word here.
+ *
+ *  A round piece is the same case on the same two tests: its radius is `near` times an
+ *  angle, and its top row is read at `near` or at `near` plus that diameter, on the same
+ *  rising-or-falling ray. **Except with the lens tipped DOWN**, where `floorFromRound`
+ *  reads its tangents on the top row and carries a residual of its own that crosses the
+ *  bound and grows with the tilt: a standing fan 300 mm off its wall read 637 wide
+ *  against a true 650 at 10° down, a stool 800 mm off read 465 × 721 against 500 × 700
+ *  at 20°, a fan 555 × 947 against 650 × 900 at 25°. A bound that the truth falls
+ *  outside is worse than none — at 20° the row would print *0.72–1.50 m tall* for a
+ *  0.70 m stool — so a round piece read tipped down claims nothing and is judged as
+ *  read, which is what it had before bounds existed (pinned in
+ *  `tests/label-repair.test.ts`). The phone tipped UP, which is how rooms are
+ *  photographed, holds on every row, and so does a box tipped down.
+ *
+ *  **Both directions also lean on the catalogue depth**, because the far end is the
+ *  piece's back on the plaster at its kind's typical depth. A piece deeper than that
+ *  only stands further out than assumed, which moves the reading further toward its
+ *  bound. One SHALLOWER, pushed against the wall, is the case that crosses: its real
+ *  near face is further from the lens than the far end assumed, so it reads short of
+ *  the truth, and by more than it sounds — a 2.0 m sofa 750 mm deep, on a wall two
+ *  metres from a level lens, reads 1680 against a typical sofa's 950, and 600 mm deep
+ *  it reads 1500. Judged both ways the same reading was just as short, so the bound
+ *  costs nothing there; it only fails to fix it (pinned in the same file).
+ *
+ *  Measured, not reasoned (`tests/label-repair.test.ts`): 800 mm off its wall on a
+ *  106° lens, an 800 mm sofa read 333 tall and a 2.0 m wardrobe 2667, and judged both
+ *  ways the judge called each the wrong size for what it was. A wall or ceiling piece
+ *  is on its plane by assumption whatever the frame cuts, so this is the floor's alone. */
+export type ReadBounds = { width: ReadBound; height: ReadBound };
+
+/** Both axes as read: every uncut floor piece, and every wall piece, which is on its
+ *  plane by assumption whatever the frame cuts. One object, handed out by reference by
+ *  every placer and every unmeasured branch, so it is frozen: a reader that edited the
+ *  bounds it was given would otherwise edit them for every piece read after it. */
+export const AS_READ: ReadBounds = Object.freeze({
+  width: Object.freeze({ kind: 'exact' as const }),
+  height: Object.freeze({ kind: 'exact' as const }),
+});
+
 /** One axis of a box the frame may have cut: its centre and length, taken to the
  *  whole piece when a side is cut.
  *
@@ -902,7 +976,7 @@ function floorFromBox(
   near: number,
   depthM: number,
   cal: CameraCal,
-): { d: number; right: number; widthM: number; heightM: number } | null {
+): { d: number; right: number; widthM: number; heightM: number; rises: boolean } | null {
   const [bx, by, bw] = box;
   const far = near + depthM;
   const top = ray(bx + bw / 2, by, cal);
@@ -917,7 +991,7 @@ function floorFromBox(
 
   const span = lateralSpan(box, [near, far], [0, heightM], cal);
   if (!span) return null;
-  return { d: near + depthM / 2, right: span.right, widthM: span.widthM, heightM };
+  return { d: near + depthM / 2, right: span.right, widthM: span.widthM, heightM, rises: top.up > 0 };
 }
 
 /**
@@ -1145,7 +1219,7 @@ function floorFromRound(
   box: [number, number, number, number],
   near: number,
   cal: CameraCal,
-): { d: number; right: number; widthM: number; heightM: number } | null {
+): { d: number; right: number; widthM: number; heightM: number; rises: boolean } | null {
   const [bx, by, bw, bh] = box;
   // Where a tangent line's column is extreme: at the piece's own top when the lens
   // tilts down, its base when the lens tilts up — whichever end `forwardAtHeight`
@@ -1180,7 +1254,7 @@ function floorFromRound(
   const heightM = heightOf(cal) + ((top.up > 0 ? near : near + 2 * radius) / top.fwd) * top.up;
   if (!(heightM > 0)) return null;
 
-  return { d: m * Math.cos(alpha), right: m * Math.sin(alpha), widthM: 2 * radius, heightM };
+  return { d: m * Math.cos(alpha), right: m * Math.sin(alpha), widthM: 2 * radius, heightM, rises: top.up > 0 };
 }
 
 /**
@@ -1297,6 +1371,19 @@ export function placeFloorObject(
   const half = (foot.round ? widthM : depthM) / 2;
   const d = frame ? Math.min(solved.d, Math.max(0.3, frame.distance - half)) : solved.d;
 
+  // Read at the far end of where it could stand, a piece cut at its foot is at most as
+  // wide as it reads, and its height leans the way its top row's ray does (`ReadBounds`).
+  // Asked of `cut.bottom` alone, with or without a wall to stand it against: the ray
+  // through the last row is a far end either way.
+  // Not a round piece read with the lens tipped down: its residual crosses the bound.
+  const lensMM = height * 1000;
+  const bounds: ReadBounds = cut.bottom && !(foot.round && tiltOf(cal) > 0)
+    ? {
+        width: { kind: 'upper', floorMM: 0 },
+        height: solved.rises ? { kind: 'upper', floorMM: lensMM } : { kind: 'lower', ceilMM: lensMM },
+      }
+    : AS_READ;
+
   const { x, z, yaw } = slotToWorld(slot, d, right);
   return {
     position: { x, y: 0, z },
@@ -1304,6 +1391,7 @@ export function placeFloorObject(
     heightMM: Math.round(heightM * 1000),
     yaw,
     distance: d,
+    bounds,
   };
 }
 
@@ -1419,6 +1507,7 @@ export function placeWallObject(
     heightMM: Math.round(heightM * 1000),
     yaw,
     distance: d - depthM / 2,
+    bounds: AS_READ,
   };
 }
 
@@ -1524,8 +1613,9 @@ export function locateOnWall(
 
 /** A ceiling placement carries NO height — see `placeCeilingObject`. Modelled as
  *  an `Omit` rather than a `heightMM` of 0 or null so that nothing downstream can
- *  read a measurement which was never taken. */
-export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM'>;
+ *  read a measurement which was never taken. No `bounds` either, for the same
+ *  reason one level up: half of them would describe that height. */
+export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM' | 'bounds'>;
 
 /**
  * Ceiling-mounted object (fan, pendant): it lies ON the ceiling plane at a known
