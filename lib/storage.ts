@@ -138,6 +138,14 @@ export function migrateRoom(rec: RoomData): RoomData {
   return out;
 }
 
+/** A stored room record after an edit: migrated first, so the edit sees the current
+ *  schema, and stamped current after. The room's two writers (`editRoom` and
+ *  `savePending`) both write through this, so neither can stamp the version without
+ *  migrating — the rename bug `migrateRoom`'s note describes, one writer over. */
+function rewritten(old: RoomData, edit: (room: RoomData) => RoomData): RoomData {
+  return { ...edit(migrateRoom(old)), version: ROOM_SCHEMA_VERSION };
+}
+
 /** How a room is oriented, for the sun.
  *
  *  This carried a `lat` and a `lon` as well, feeding a full solar-position
@@ -357,7 +365,7 @@ export const roomStore = {
     try {
       await update<RoomData>(k(roomId, 'meta'), (old) => {
         if (!old) throw NO_ROOM;
-        written = { ...edit(migrateRoom(old)), version: ROOM_SCHEMA_VERSION };
+        written = rewritten(old, edit);
         return written;
       });
     } catch (e) {
@@ -565,7 +573,7 @@ export const roomStore = {
         read.onsuccess = step(() => {
           const old = read.result as RoomData | undefined;
           if (!old) return rest(w.parts);
-          const written: RoomData = { ...room.edit(migrateRoom(old)), version: ROOM_SCHEMA_VERSION };
+          const written = rewritten(old, room.edit);
           store.put(written, k(roomId, 'meta'));
           // A newer part list than the pin is already on its way, and a detected room is
           // never pinned; only then is it worth asking whether a photo is.
