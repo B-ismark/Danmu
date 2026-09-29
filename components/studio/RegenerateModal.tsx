@@ -60,13 +60,9 @@ export function SwapModelModal({
       <div className="ds-kicker" style={{ marginBottom: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <Icon name="swap" size={13} /> Change the model
       </div>
-      <div id="swap-model-title" className="t-title" style={{ marginBottom: 6 }}>
+      <div id="swap-model-title" className="t-title" style={{ marginBottom: 14 }}>
         {part.name}
       </div>
-      <p className="t-meta" style={{ lineHeight: 1.5, margin: '0 0 14px' }}>
-        It keeps its place, colour and finish. A size typed in the search (&quot;1200mm
-        tall&quot;) carries over.
-      </p>
 
       {/* `draggable` off: this sits in a dialog over the room, so a dragged row has
           nothing that can catch it, and a drag that cannot land is worse than no

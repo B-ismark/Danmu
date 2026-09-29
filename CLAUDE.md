@@ -349,7 +349,7 @@ backend, no account. The 3D studio *is* the product.
    10% in from the edges, so it forgives a piece 20 mm through the plaster.
    **A scene file is an AI hint with a filename.** `lib/scene-file.ts` is the only
    thing here that parses bytes someone else produced, so the same boundary holds:
-   imported sizes go through `clampDims`, and shape / category / decor / finish /
+   imported sizes go through `clampDims`, and shape / category / decor /
    layout are checked against the runtime vocabularies rather than trusted. **An
    out-of-range ceiling is clamped and reported, not fatal**, and that exception is
    the rule working rather than a hole in it: a ceiling was the one *dimension* in a
@@ -361,7 +361,7 @@ backend, no account. The 3D studio *is* the product.
    clamping `1e400` into a legal 12 m ceiling is the one place lossy would be
    dishonest. Those
    vocabularies are `as const` arrays with the unions **derived** from them
-   (`SHAPES`, `CATEGORIES`, `DECOR_KINDS`, `FINISHES`, `LAYOUT_IDS`) — never a union
+   (`SHAPES`, `CATEGORIES`, `DECOR_KINDS`, `LAYOUT_IDS`) — never a union
    beside a hand-kept `Set`, which drifts in the one direction nobody notices: a
    validator quietly refusing a shape the app grew last week. Parsing is lossy on
    purpose and **never silent** — whatever is dropped comes back in `dropped` and is

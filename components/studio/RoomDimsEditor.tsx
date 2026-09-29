@@ -337,7 +337,7 @@ export function RoomDimsEditor() {
         {room.roughSize && (
           <div className="rough-note" role="note">
             <Icon name="info" size={14} />
-            <p className="rough-note__text">Rough sizes, from a typical room of this shape. Enter yours below.</p>
+            <p className="rough-note__text">Typical sizes, not yours yet.</p>
             <button type="button" className="ds-btn ds-btn--ghost ds-btn--sm rough-note__confirm" onClick={confirmSize}>
               These are right
             </button>

@@ -1441,10 +1441,6 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
 
   return (
     <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div className="t-note" style={{ lineHeight: 1.45 }}>
-        Checks for space. Nothing in the room moves.
-      </div>
-
       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {label('What is it')}
         <Select
@@ -1710,7 +1706,7 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
   return (
     <div>
       <TabActions>
-        <span className="t-hint" style={{ flex: 1 }}>Real dimensions, in your unit</span>
+        <span style={{ flex: 1 }} />
         <button onClick={copy} className="ds-btn ds-btn--xs" style={{ fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
           {copied ? 'Copied ✓' : 'Copy'}
         </button>
@@ -1831,27 +1827,20 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
     // in the studio that undo genuinely cannot reverse.
     const ok = await confirm({
       title: `Delete “${v.name}”?`,
-      body: (
-        <>
-          <p style={{ margin: '0 0 8px' }}>
-            Saved layouts are not part of the edit history, so <b>undo will not bring this one back</b>.
-          </p>
-          <p style={{ margin: 0 }}>The furniture in your room stays as it is.</p>
-        </>
-      ),
+      body: <p style={{ margin: 0 }}>Undo will not bring it back.</p>,
       confirmLabel: 'Delete layout',
       danger: true,
     });
     if (!ok) return;
     await roomStore.deleteLayout(roomId, v.id);
     setLayouts((prev) => (prev ?? []).filter((x) => x.id !== v.id));
-    toast({ title: `${v.name} deleted`, message: 'Your room is unchanged.' });
+    toast({ title: `${v.name} deleted` });
   }
 
   return (
     <div>
       <TabActions>
-        <span className="t-hint" style={{ flex: 1 }}>Saved arrangements</span>
+        <span style={{ flex: 1 }} />
         <button onClick={() => void saveCurrent()} className="ds-btn ds-btn--xs" style={{ fontSize: 'var(--fs-micro)', padding: '0 8px' }}>
           <Icon name="plus" size={10} /> Save current
         </button>

@@ -5,7 +5,7 @@
 // double bed, etc).
 
 import { Color } from 'three';
-import { Box, BoxInstances, PlaneInstances, type InstanceItem } from './Box';
+import { Box, BoxInstances, LeafInstances, PlaneInstances, StemInstances, type InstanceItem } from './Box';
 import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
@@ -17,7 +17,6 @@ import {
   fanColumn,
   pendantDrop,
   plantForm,
-  plantLeafRadii,
   isParametric,
   lightFor,
   radiatorFins,
@@ -503,39 +502,31 @@ function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
  *  which is where `plantForm` takes its `tone % …` from. */
 const LEAF_TONES = ['#5D8A5D', '#6E9A66', '#4F7C4F', '#6FA06A', '#4A7048'] as const;
 
-/** Drawn at its own size by `plantForm` — no `FitToDim`, because the leaves are
- *  spheres and a per-axis stretch turned every one of them into a tall oval. */
+/** Drawn at its own size by `plantForm`, which picks a fig, an arching bush or a blend
+ *  of the two from the plant's proportions. No `FitToDim`: a per-axis stretch is what
+ *  squashed the old plant, and a leaf keeps its shape only if it is drawn at its size. */
 function PlantGeo({ part }: { part: ScenePart }) {
   const pot = tint(part);
   const g = plantForm(part.dimMM);
   return (
     <group>
       {/* tapered pot */}
-      <mesh position={[0, g.pot.h / 2, 0]}>
+      <mesh position={[0, g.pot.h / 2, 0]} scale={[g.pot.stretch[0], 1, g.pot.stretch[1]]}>
         <cylinderGeometry args={[g.pot.top, g.pot.bottom, g.pot.h, 20]} />
         <meshStandardMaterial color={pot} {...SURFACE.ceramic} />
       </mesh>
       {/* soil, standing a little proud of the rim — flush with it, the two tops
           z-fight and the soil flickers through the pot's lid */}
-      <mesh position={[0, g.pot.h, 0]}>
+      <mesh position={[0, g.pot.h, 0]} scale={[g.pot.stretch[0], 1, g.pot.stretch[1]]}>
         <cylinderGeometry args={[g.soil.r, g.soil.r, g.soil.t, 20]} />
         <meshStandardMaterial color="#3a2c20" roughness={1} />
       </mesh>
-      {/* stem + crown sway gently from the soil line */}
+      {/* trunk, stalks and leaves sway gently from the soil line */}
       <group position={[0, g.pot.h, 0]}>
         <Sway amp={0.03} speed={0.9}>
           <group position={[0, -g.pot.h, 0]}>
-            <mesh position={[0, (g.stem.y0 + g.stem.y1) / 2, 0]}>
-              <cylinderGeometry args={[g.stem.rTop, g.stem.r, g.stem.y1 - g.stem.y0, 8]} />
-              <meshStandardMaterial color="#4A3526" />
-            </mesh>
-            {g.leaves.map((l, i) => (
-              // A unit sphere, scaled: a resize moves and scales these and rebuilds none.
-              <mesh key={i} position={l.p} scale={plantLeafRadii(l)}>
-                <sphereGeometry args={[1, 14, 12]} />
-                <meshStandardMaterial color={LEAF_TONES[l.tone]} {...SURFACE.foliage} />
-              </mesh>
-            ))}
+            <StemInstances items={g.stems} wood="#4A3526" green="#5B7A45" />
+            <LeafInstances items={g.leaves} tones={LEAF_TONES} surface={SURFACE.foliage} />
           </group>
         </Sway>
       </group>

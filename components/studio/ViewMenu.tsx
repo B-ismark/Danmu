@@ -57,7 +57,6 @@ export function ViewMenu() {
         <div role="group" aria-label="View settings" className="popover view-menu">
           <div className="view-menu__head">
             <span className="section-title">View</span>
-            <span className="t-hint">How the room is drawn on this device</span>
           </div>
           <div className="view-menu__body">
             <ViewOptions />

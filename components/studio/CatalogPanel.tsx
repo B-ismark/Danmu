@@ -299,13 +299,6 @@ export function LibraryBody({ canDrag = false, touch = false }: { canDrag?: bool
       className={touch ? 'catalog-touch' : undefined}
       style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: touch ? '4px 16px 12px' : '0 12px 12px' }}
     >
-      <div className="t-hint" style={{ margin: '0 0 8px', lineHeight: 1.4 }}>
-        {touch
-          ? 'Tap a piece to add it in the first clear spot.'
-          : canDrag
-            ? 'Drag a piece in, or click to add it in the first clear spot. Shift-click to mark several.'
-            : 'Click a piece to add it in the first clear spot. Shift-click to mark several.'}
-      </div>
       <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag && !touch} maxHeight={null} />
     </div>
   );

@@ -258,9 +258,6 @@ export function WallColorsFromPhotos() {
           {busy ? 'Reading your photos…' : 'Use my photos’ colours'}
         </span>
       </button>
-      <p className="t-micro" style={{ margin: '6px 0 0', lineHeight: 1.4 }}>
-        Paints each wall the colour in its photo. Nothing is uploaded. Undo reverts it.
-      </p>
     </div>
   );
 }

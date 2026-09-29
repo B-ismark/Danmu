@@ -197,7 +197,6 @@ describe('applyListEdits', () => {
     const dressed: ScenePart = {
       ...recoloured,
       name: 'Guest bed',
-      finish: 'satin',
       groupId: 'g1',
       decor,
       light,
@@ -208,7 +207,7 @@ describe('applyListEdits', () => {
 
     it('the same model re-measured keeps all of it, name included', () => {
       const part = rebuild({ yaw: 1.2 });
-      expect(part).toMatchObject({ color: '#123456', finish: 'satin', groupId: 'g1', name: 'Guest bed' });
+      expect(part).toMatchObject({ color: '#123456', groupId: 'g1', name: 'Guest bed' });
       expect(part?.decor).toBe(decor);
       expect(part?.light).toBe(light);
       expect(part?.rot).not.toBe(dressed.rot);
@@ -217,13 +216,13 @@ describe('applyListEdits', () => {
     it('new words for the same model are its new name, and the rest stays', () => {
       const part = rebuild({ label: 'my bed__slot:n' });
       expect(part?.shape).toBe(dressed.shape);
-      expect(part).toMatchObject({ name: 'my bed', color: '#123456', finish: 'satin', groupId: 'g1' });
+      expect(part).toMatchObject({ name: 'my bed', color: '#123456', groupId: 'g1' });
       expect(part?.decor).toBe(decor);
     });
 
-    it('a different model keeps its colour, finish and set, and not what belonged to the old model', () => {
+    it('a different model keeps its colour and set, and not what belonged to the old model', () => {
       const part = rebuild({ category: 'sofa', label: 'sofa__slot:n' });
-      expect(part).toMatchObject({ category: 'sofa', name: 'sofa', color: '#123456', finish: 'satin', groupId: 'g1' });
+      expect(part).toMatchObject({ category: 'sofa', name: 'sofa', color: '#123456', groupId: 'g1' });
       expect(part?.decor).toBeUndefined();
       expect(part?.light).toBeUndefined();
     });

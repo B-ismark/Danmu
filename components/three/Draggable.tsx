@@ -34,7 +34,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { TransformControls } from '@react-three/drei';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
-import { Group, Mesh, MeshStandardMaterial, Plane, Vector3 } from 'three';
+import { Group, Mesh, Plane, Vector3 } from 'three';
 import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
 import { claimPressForGizmo, clearGizmoClick, holdPress, releasePress } from '@/lib/gizmo-press';
@@ -68,20 +68,6 @@ import { Highlight } from './Highlight';
 import { Wobble } from './Wobble';
 import { playSound } from '@/lib/sound';
 
-// Roughness/metalness + reflection strength per surface finish. envMapIntensity
-// leans on the scene IBL so 'polished'/'metal' actually catch reflections (the
-// cheap stand-in for clearcoat/physical materials).
-const FINISH_PRESET: Record<'matte' | 'satin' | 'polished' | 'metal', { roughness: number; metalness: number; env: number }> = {
-  matte: { roughness: 0.95, metalness: 0.0, env: 0.5 },
-  satin: { roughness: 0.6, metalness: 0.0, env: 1.0 },
-  polished: { roughness: 0.22, metalness: 0.05, env: 1.6 },
-  metal: { roughness: 0.32, metalness: 0.85, env: 1.8 },
-};
-
-type FinishMat = MeshStandardMaterial & {
-  userData: { __origRough?: number; __origMetal?: number; __origEnv?: number };
-};
-
 // Touch pick-up: dwell time, and how far the finger may drift while dwelling
 // before we decide it is a camera gesture and let go.
 const HOLD_MS = 280;
@@ -102,37 +88,22 @@ function coarsePointer(): boolean {
   return _coarse;
 }
 
-// Applies the part's surface finish to every standard material in the group by
-// overriding roughness/metalness. Caches each material's original values the
-// first time it's touched so 'auto' restores the shape's hand-tuned look. Skips
-// emissive materials (lamp glows, screens) so light sources stay lit. Re-runs
-// when finish/colour/dims change — those recreate the inline materials, so the
-// override is re-applied to the fresh instances.
-function FinishApplier({
+// Every mesh of a part casts and receives. Whether the sun can actually reach a
+// piece is the room's question, not the piece's: the walls and ceiling cast, so a
+// piece on a wall the sun is behind is simply in shadow (`RoomShell.tsx`).
+//
+// It re-runs when the part's meshes can have been replaced. `PartGeometry`
+// dispatches on `part.shape`, so a model change remounts the whole subtree, and a
+// resize can change how many meshes there are (a plant regrows, a shelf gains a
+// module). The Inspector's model picker writes `dimMM` on the PART rather than as
+// a `dims` override, which is why the shape is a key of its own.
+function ShadowCaster({
   groupRef,
-  finish,
-  colorKey,
   dimKey,
   shapeKey,
 }: {
   groupRef: { current: Group | null };
-  finish?: ScenePart['finish'];
-  colorKey?: string;
   dimKey?: string;
-  /** The part's shape, which is NOT read in the body — it is a dependency, and it
-   *  is load-bearing.
-   *
-   *  `PartGeometry` dispatches on `part.shape`, so changing a piece's model remounts
-   *  this whole subtree and its materials come back fresh. The Inspector's model
-   *  picker writes `dimMM` on the PART rather than as a `dims` override, so no other
-   *  key in the dep array below changes — the effect did not re-run, and the FINISH
-   *  was silently lost: pick a new model for a polished piece and it came back matte
-   *  until something else made you recolour it.
-   *
-   *  It arrived alongside a per-piece sun-shadow gate that has since been deleted
-   *  (the room is a closed shell now — see `components/three/RoomShell.tsx`), and it
-   *  is easy to read as the other half of that removal. It is not. The finish bug
-   *  predates the gate and is still here. */
   shapeKey: string;
 }) {
   const invalidate = useThree((s) => s.invalidate);
@@ -142,37 +113,12 @@ function FinishApplier({
     g.traverse((o) => {
       const mesh = o as Mesh;
       if (!(mesh as { isMesh?: boolean }).isMesh) return;
-      // Part meshes cast and receive. Whether the sun can actually reach a piece is
-      // the room's question, not the piece's: the walls and ceiling cast, so a piece
-      // on a wall the sun is behind is simply in shadow (`RoomShell.tsx`).
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      for (const m of mats) {
-        if (!(m instanceof MeshStandardMaterial)) continue;
-        const mat = m as FinishMat;
-        if (mat.emissiveIntensity && mat.emissiveIntensity > 0) continue; // keep lights lit
-        if (mat.userData.__origRough === undefined) {
-          mat.userData.__origRough = mat.roughness;
-          mat.userData.__origMetal = mat.metalness;
-          mat.userData.__origEnv = mat.envMapIntensity;
-        }
-        if (finish && finish !== 'auto') {
-          const p = FINISH_PRESET[finish];
-          mat.roughness = p.roughness;
-          mat.metalness = p.metalness;
-          mat.envMapIntensity = p.env;
-        } else {
-          mat.roughness = mat.userData.__origRough!;
-          mat.metalness = mat.userData.__origMetal ?? 0;
-          mat.envMapIntensity = mat.userData.__origEnv ?? 1;
-        }
-        mat.needsUpdate = true;
-      }
     });
-    // Materials were mutated outside React — nothing else will ask for a repaint.
+    // Meshes were changed outside React, so nothing else will ask for a repaint.
     invalidate();
-  }, [groupRef, finish, colorKey, dimKey, shapeKey, invalidate]);
+  }, [groupRef, dimKey, shapeKey, invalidate]);
   return null;
 }
 
@@ -1319,13 +1265,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         onPointerUp={onPointerUp}
         onWheel={onWheel}
       >
-        <FinishApplier
-          groupRef={ref}
-          finish={part.finish}
-          colorKey={part.color}
-          dimKey={storedDim?.join()}
-          shapeKey={part.shape}
-        />
+        <ShadowCaster groupRef={ref} dimKey={(storedDim ?? part.dimMM).join()} shapeKey={part.shape} />
         {/* The lean while carried and the rock when set down — drawn only, on an
             inner group the transform layers never see (lib/wobble.ts). */}
         <Wobble

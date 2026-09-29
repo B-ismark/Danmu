@@ -42,7 +42,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
-import { useRailIntent } from '@/lib/rail-intent';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { LibraryBody } from '../CatalogPanel';
 import { usePhoneStudio } from '../NarrowViewportBanner';
@@ -80,13 +79,6 @@ function PaneShell({ surface }: { surface: ReactNode }) {
   useEffect(() => {
     if (selected) setTab('details');
   }, [selectedPartId, selectedWall, selected]);
-
-  // A request to open the Room panel at a section (the empty Inspector's "Restyle
-  // it" / "Resize it"). The tree takes the request itself; this only shows it.
-  const wanted = useRailIntent((s) => s.left);
-  useEffect(() => {
-    if (wanted) setTab('room');
-  }, [wanted]);
 
   return (
     <div className="pane-shell">
@@ -180,15 +172,6 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
       setSnap('closed');
     }
   }, [catalogOpen]);
-
-  // The same request as the tablet's, from the empty Details sheet: show Room.
-  const wanted = useRailIntent((s) => s.left);
-  useEffect(() => {
-    if (!wanted) return;
-    setPanel('room');
-    setCatalogOpen(false);
-    setSnap((s) => (s === 'closed' ? 'half' : s));
-  }, [wanted, setCatalogOpen]);
 
   // View holds nothing about a piece, so picking one while it is up swaps it for the
   // piece's Details. Otherwise the sheet goes on showing view settings over the piece

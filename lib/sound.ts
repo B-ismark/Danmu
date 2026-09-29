@@ -255,7 +255,7 @@ export function voice(name: SoundName, opts: SoundOptions = {}): Voice {
         knocks: [{ at: 0, freq: 2600, dur: 0.1, peak: 0.05, attack: 0.02 }],
       };
     case 'brush':
-      // A soft swish — two strokes of a wide brush — for a colour or a finish.
+      // A soft swish — two strokes of a wide brush — for a colour.
       return {
         tones: [],
         knocks: [

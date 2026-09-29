@@ -14,6 +14,9 @@
 
 import type { Category, Shape } from './scene-spec';
 
+// The tier says how wide a band is meant to be, and it is how this table is sorted
+// below. No screen shows it since the Inspector's size note was cut; the tests read it
+// to tell which table answered a lookup.
 export type DimFlex = 'fixed' | 'standard' | 'flexible';
 export type Dim3 = [number, number, number];
 export type DimRange = { flex: DimFlex; min: Dim3; max: Dim3 };
@@ -76,10 +79,8 @@ const BY_SHAPE: Partial<Record<Shape, DimRange>> = {
   // ranges.test.ts` asserts that pair, not the literals, because a later widening
   // of either end is exactly how the absurd size gets back in.
   //
-  // Deliberately NOT retiered to 'standard'. The tier drives one label in the
-  // Inspector ("Made to measure" vs "Typical size range") and is asserted by name
-  // in that test; a sofa genuinely is ordered in custom sizes, and the complaint
-  // here was the number, not the word.
+  // Deliberately NOT retiered to 'standard': a sofa genuinely is ordered in custom
+  // sizes, and the complaint here was the number, not the tier.
   sofa: R('flexible', [1200, 700, 600], [4000, 1150, 1100]),
   'coffee-table': R('flexible', [500, 400, 250], [1800, 1200, 600]),
   'side-table': R('flexible', [250, 250, 350], [800, 800, 800]),
