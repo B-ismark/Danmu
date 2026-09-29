@@ -7895,8 +7895,9 @@ this section said it crossed once, harmlessly, having measured only 10°: the fa
 **637** wide against 650 and **903** tall against 900 there, but at 20° a stool 800 mm out reads
 **465 × 721** against 500 × 700 — called too tall for a stool, on a row printing a height range
 that leaves out its own 700 mm — and at 25° a fan **555 × 947**. So a round piece read tipped
-down claims no bound and is judged as read, as it was before bounds existed; the stool at 20° is
-still accused, on a reading 3% off, as it always was. Box pieces tipped down 10° and 20° hold on
+down claims no side and is judged as read, as it was before bounds existed — while saying its
+distance was assumed (`AT_ASSUMED_DISTANCE`), which is what gives its row the "about" (D8's
+review, below); the stool at 20° is still accused, on a reading 3% off, as it always was. Box pieces tipped down 10° and 20° hold on
 all 11 rows, and keep theirs. **And the bound leans on the catalogue depth**, which is the larger caveat: the far
 end is the piece's back on the plaster at its kind's TYPICAL depth, so a piece shallower than
 typical, pushed against the wall, reads short of the most-it-can-be — a 2.0 m sofa 750 mm deep
@@ -7984,9 +7985,13 @@ tallest, and accepting it would be accused in turn — and nothing else fits tha
 row carries the flag with no chip to press. And the sentence says *Measured about 1.27 × 0.27 m*
 rather than a range, since the number judged is the number printed; one axis names itself,
 *about 2667 mm tall*. `ReadBounds` keeps its ends: the judge now reads only which axes are
-estimates, and the ends are what § 49.14 would build inside. One loose end, filed rather than
-built: a round piece read tipped down claims no bound, so it is judged like the rest but its
-row prints no "about", though its distance was assumed as much as anyone's.
+estimates, and the ends are what § 49.14 would build inside. **The review of D8 found the one
+row that kept printing an estimate as a measurement:** a round piece read tipped down was
+handed `AS_READ`, the bounds of a piece the photo saw whole, because claiming no SIDE and
+claiming no ESTIMATE were one value. They are two now: it gets `AT_ASSUMED_DISTANCE`, a fourth
+`ReadBound` kind that names no side, and its row says *about* with the note, as the 17 rows
+tipped 5°–25° down in the fixture do (pinned). The verdict does not move, since it was already
+judged at the reading.
 
 **§ 49.11 · A ceiling piece cut by the frame is judged on its width — FIXED 2026-09-29, and it
 was wider than filed.** The label check returned no cut axes for a ceiling anchor, because

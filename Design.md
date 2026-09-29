@@ -720,8 +720,9 @@ gets the *Runs past the edge of the photo, so its … is an estimate* note a sid
 naming its size where a side cut names its width. To the person they are one fact, that this
 number is not the camera's measurement of the piece. A round piece read with the lens tipped
 DOWN claims no limit at all: its solve's residual crosses the bound, by 35 mm at 20°, and a
-limit the truth falls outside is worse than none — so it is judged like the rest, and its row
-has no "about".
+limit the truth falls outside is worse than none — so it is judged like the rest, and says it
+was read at an assumed distance (`AT_ASSUMED_DISTANCE`), so its row has the "about" and the note
+too. It went without them for a commit, handed the bounds of a piece seen whole.
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,

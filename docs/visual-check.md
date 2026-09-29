@@ -1983,7 +1983,9 @@ well off its wall may be flagged as well. That is the price the user chose (D8, 
 `docs/what-is-still-open.md`): it starts unticked, and one tap keeps it.
 
 **What wrong looks like.**
-- "about" missing on a foot-cut row, or showing on a row the photo saw whole.
+- "about" missing on a foot-cut row, or showing on a row the photo saw whole. A stool or
+  standing fan shot with the phone tipped DOWN is a foot cut too, and went without it for a
+  commit.
 - A one-axis line reading a bare *2.67 m* with no *wide* or *tall* after it.
 - At 360 px, the warning line and its chips wrapping under the tick or the ✕.
 - A flagged, correctly named piece that takes more than one tap to keep.

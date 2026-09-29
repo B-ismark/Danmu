@@ -865,11 +865,14 @@ export function cutByFrame(box: readonly [number, number, number, number]): bool
 /** Where a piece's true size can be, given a placer's reading `v` on one axis, in mm.
  *  `exact`: at `v`, as far as the lens and the catalogue depth are right. `upper`: the
  *  reading is the most it can be, and the truth is in `[floorMM, v]`. `lower`: the
- *  reading is the least, and the truth is in `[v, ceilMM]`. */
+ *  reading is the least, and the truth is in `[v, ceilMM]`. `assumed`: read at a
+ *  distance the photo did not show, with no side the reading can speak for — an
+ *  estimate all the same, which is the half a reader must not lose (`ReadBounds`). */
 export type ReadBound =
   | { kind: 'exact' }
   | { kind: 'upper'; floorMM: number }
-  | { kind: 'lower'; ceilMM: number };
+  | { kind: 'lower'; ceilMM: number }
+  | { kind: 'assumed' };
 
 /** Which way each axis a placer read can be wrong, for the axes the frame did NOT cut —
  *  those are `cutAxes`'s, and a reader skips them.
@@ -907,10 +910,13 @@ export type ReadBound =
  *  against a true 650 at 10° down, a stool 800 mm off read 465 × 721 against 500 × 700
  *  at 20°, a fan 555 × 947 against 650 × 900 at 25°. A bound that the truth falls
  *  outside is worse than none — at 20° it put a 0.70 m stool at 0.72–1.50 m tall — so
- *  a round piece read tipped down claims nothing, which is what it had before bounds
- *  existed (pinned in `tests/label-repair.test.ts`). Judged at the reading, as every
- *  piece is now (D8), that costs its verdict nothing; it costs the row its "about". The phone tipped UP, which is how rooms are
- *  photographed, holds on every row, and so does a box tipped down.
+ *  a round piece read tipped down claims no side (`AT_ASSUMED_DISTANCE`), pinned in
+ *  `tests/label-repair.test.ts`. **It is still read at an assumed distance**, and for
+ *  a commit it was handed `AS_READ` instead, which says the opposite: the one foot-cut
+ *  row whose sentence printed its estimate as a measurement, without its "about" or
+ *  the note. Judged at the reading, as every piece is now (D8), the two cost its
+ *  verdict the same. The phone tipped UP, which is how rooms are photographed, holds
+ *  on every row, and so does a box tipped down.
  *
  *  **Both directions also lean on the catalogue depth**, because the far end is the
  *  piece's back on the plaster at its kind's typical depth. A piece deeper than that
@@ -936,6 +942,14 @@ export type ReadBounds = { width: ReadBound; height: ReadBound };
 export const AS_READ: ReadBounds = Object.freeze({
   width: Object.freeze({ kind: 'exact' as const }),
   height: Object.freeze({ kind: 'exact' as const }),
+});
+
+/** Both axes read at a distance the photo did not show, on neither side of the truth
+ *  for certain: a round floor piece cut at its foot with the lens tipped down. Frozen
+ *  for the reason `AS_READ` is. */
+export const AT_ASSUMED_DISTANCE: ReadBounds = Object.freeze({
+  width: Object.freeze({ kind: 'assumed' as const }),
+  height: Object.freeze({ kind: 'assumed' as const }),
 });
 
 /** One axis of a box the frame may have cut: its centre and length, taken to the
@@ -1409,14 +1423,17 @@ export function placeFloorObject(
   // wide as it reads, and its height leans the way its top row's ray does (`ReadBounds`).
   // Asked of `cut.bottom` alone, with or without a wall to stand it against: the ray
   // through the last row is a far end either way.
-  // Not a round piece read with the lens tipped down: its residual crosses the bound.
+  // A round piece read with the lens tipped down claims no side, its residual crossing
+  // the bound, but its distance was assumed all the same.
   const lensMM = height * 1000;
-  const bounds: ReadBounds = cut.bottom && !(foot.round && tiltOf(cal) > 0)
-    ? {
-        width: { kind: 'upper', floorMM: 0 },
-        height: solved.rises ? { kind: 'upper', floorMM: lensMM } : { kind: 'lower', ceilMM: lensMM },
-      }
-    : AS_READ;
+  const bounds: ReadBounds = !cut.bottom
+    ? AS_READ
+    : foot.round && tiltOf(cal) > 0
+      ? AT_ASSUMED_DISTANCE
+      : {
+          width: { kind: 'upper', floorMM: 0 },
+          height: solved.rises ? { kind: 'upper', floorMM: lensMM } : { kind: 'lower', ceilMM: lensMM },
+        };
 
   const { x, z, yaw } = slotToWorld(slot, d, right);
   return {

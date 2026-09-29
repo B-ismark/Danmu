@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, measuredPhrase, sizeFitsLabel, type LabelVerdict } from '@/lib/label-repair';
-import { AS_READ, clipToFrame, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
+import { AS_READ, AT_ASSUMED_DISTANCE, clipToFrame, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
   PART_LIBRARY,
@@ -465,15 +465,15 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   });
 
   it('hands out one AS_READ that no reader can edit for the next', () => {
-    expect([Object.isFrozen(AS_READ), Object.isFrozen(AS_READ.width), Object.isFrozen(AS_READ.height)]).toEqual([true, true, true]);
+    for (const b of [AS_READ, AT_ASSUMED_DISTANCE]) expect([Object.isFrozen(b), Object.isFrozen(b.width), Object.isFrozen(b.height)]).toEqual([true, true, true]);
   });
 
-  it('claims no bound for a round piece read with the lens tipped down', () => {
+  it('claims no side for a round piece read with the lens tipped down, and still calls it an estimate', () => {
     // `floorFromRound` reads its tangents on the top row with the lens tipped down and
     // carries a residual of its own that crosses the bound, growing with the tilt. Read
     // as though it held, the stool 20° down was called too tall for a stool, and its row
-    // printed a height range that leaves out its own 700 mm. So it claims nothing and is
-    // judged as read. The crossings are pinned as the reason, so that growing shows.
+    // printed a height range that leaves out its own 700 mm. So it claims no side. The
+    // crossings are pinned as the reason, so that growing shows.
     const crossed = [10, 20, 25].flatMap((t) =>
       roundRows(t)
         .filter(({ truth, read }) => read[0] < truth[0] && read[2] > truth[1])
@@ -486,8 +486,17 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     ]);
     const down = [5, 10, 15, 20, 25].flatMap(roundRows);
     expect(down).toHaveLength(17);
-    for (const { bounds } of down) expect(bounds).toEqual(AS_READ);
-    for (const { d, cal } of down) expect(judgeLabel(d, { n: cal }, ROOM)).not.toHaveProperty('bounded');
+    for (const { bounds } of down) expect(bounds).toBe(AT_ASSUMED_DISTANCE);
+    // Its distance was assumed as much as any foot cut's, so its row says "about" too.
+    // Handed `AS_READ` for a commit, it was the one foot-cut row printed as a measurement.
+    const said = down.map(({ d, cal }) => {
+      const v = judgeLabel(d, { n: cal }, ROOM);
+      const seen = (['width', 'height'] as const).filter((a) => !cutAxes(d.box, 'floor')[a]);
+      expect(v.status !== 'unmeasured' && v.bounded).toEqual(seen);
+      return seen.join('+');
+    });
+    // Every one was seen whole across, so each says "about" on both axes.
+    expect(said.filter((s) => s === 'width+height')).toHaveLength(17);
   });
 
   it('keeps the bound for a box read with the lens tipped down, and judges it at that reading', () => {
