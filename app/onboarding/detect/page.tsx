@@ -1549,10 +1549,14 @@ function DetectionRow({
                 // typed it, so it is offered either way, but they should know the
                 // camera does not agree. `label-suggest` sorts these below the ones
                 // that do fit, so a caveated chip is never the first thing offered.
+                // An `unmeasured` one is caveated too, but not as a misfit: the
+                // camera never saw enough of it to disagree.
                 title={
-                  cand.margin < 0
-                    ? `Use the ${candidateLabel(cand)} model, though what the camera measured is not ${candidateLabel(cand).toLowerCase()}-sized`
-                    : `Use the ${candidateLabel(cand)} model and measure it again`
+                  cand.unmeasured
+                    ? `Use the ${candidateLabel(cand)} model. It runs past the edge of the photo, so its size is an estimate`
+                    : cand.margin < 0
+                      ? `Use the ${candidateLabel(cand)} model, though what the camera measured is not ${candidateLabel(cand).toLowerCase()}-sized`
+                      : `Use the ${candidateLabel(cand)} model and measure it again`
                 }
                 style={{
                   height: 22,

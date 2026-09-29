@@ -44,8 +44,13 @@ export type LabelCandidate = {
   name?: string;
   /** How comfortably the re-measurement sits inside this word's band — the
    *  tightest of the two axes, as a fraction of the band's own span, 0…0.5.
-   *  Ordering only. It is not a probability and there is no prior behind it. */
+   *  Ordering only. It is not a probability and there is no prior behind it.
+   *  `-Infinity` when `unmeasured`: there is no margin, and it sorts last. */
   margin: number;
+  /** Every axis this word is read on runs out of the photo, so the camera has no say
+   *  in whether it fits — only ever offered for a word the user TYPED
+   *  (`requireFit: false`). A caller says so rather than calling it a misfit. */
+  unmeasured?: true;
 };
 
 export type LabelVerdict =
@@ -292,8 +297,23 @@ export function candidatesFor(
       // Every axis this kind is read on runs out of the photo under ITS anchor — a
       // wall word's height takes the bottom cut a floor word's does not. Nothing was
       // measured, so nothing can fit: kept, it fitted vacuously and its margin was
-      // Infinity, so the one repair with no evidence sorted first.
-      if (cAxes.length === 0) continue;
+      // Infinity, so the one repair with no evidence sorted first. Now it never fits,
+      // which keeps it out of the judge's repairs; a word the user TYPED is still
+      // offered, last and flagged, because the camera cannot object to it and dropping
+      // it left a lamp called "ceiling fan" — a top-cut fan being the usual case,
+      // since any edge takes a ceiling piece's width.
+      if (cAxes.length === 0) {
+        trials.push({
+          category: c,
+          detection: trial,
+          ...('name' in t && t.name ? { name: t.name } : {}),
+          margin: -Infinity,
+          unmeasured: true,
+          fits: false,
+          first: n === 0,
+        });
+        continue;
+      }
       const fits =!failedAxes(c, t.shape, trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
       trials.push({
         category: c,

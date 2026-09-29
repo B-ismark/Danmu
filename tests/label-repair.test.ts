@@ -312,14 +312,17 @@ describe('judgeLabel — a box the edge of the photo cut', () => {
     expect(categoriesFittingSize(100, 2300, undefined, ['height'])).toContain('curtain');
   });
 
-  it('never offers a word the photo measured nothing of', () => {
+  it('never ranks a word the photo measured nothing of above one it measured', () => {
     // Off the left and the foot. As a floor word the foot is not a size cut, so a
     // wardrobe is still judged on its height; as a wall word it is, so a painting has
-    // no axis left — it cannot fit, and it used to fit vacuously and sort first.
+    // no axis left — it cannot fit, and it used to fit vacuously and sort first. The
+    // judge's repairs drop it; a word the user TYPED keeps it, last and flagged,
+    // because dropping it left a lamp called "ceiling fan" (`tests/label-suggest.test.ts`).
     const box: Detection['box'] = [0, 0.5, 0.3, 0.5];
     const d = det({ category: 'bed', slot: 'n', box });
-    const offered = candidatesFor(d, ['painting', 'wardrobe'], CALS, ROOM, { requireFit: false }).map((c) => c.category);
-    expect(offered).toEqual(['wardrobe']);
+    const offered = candidatesFor(d, ['painting', 'wardrobe'], CALS, ROOM, { requireFit: false });
+    expect(offered.map((c) => [c.category, c.unmeasured ?? false])).toEqual([['wardrobe', false], ['painting', true]]);
+    expect(candidatesFor(d, ['painting'], CALS, ROOM)).toEqual([]);
   });
 });
 
