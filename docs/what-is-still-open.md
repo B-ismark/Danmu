@@ -7801,11 +7801,21 @@ walks a cut side past the frame for the repeat check. With the growth giving the
 place, the walk takes 2 at 106° and 1 at 120° on a measured lens (it took 21 and 14). Deleting
 it is a separate change and wants the whole rate table re-read, not one column.
 
-**§ 49.7 · A height cut at the top grows with no ceiling above it — NOT BUILT.** A wall piece
-cut at the bottom stops at the floor; anything cut at the top stops at nothing, so a typical
-2.1 m wardrobe in a 2.0 m attic would read taller than the room. `lib/clearance.ts`
-would report it — which is the rule, never silently resize — but the growth itself should
-stop at the ceiling the way the downward growth stops at the floor.
+**§ 49.7 · A height cut at the top grows with no ceiling above it — FIXED 2026-09-29.** A wall
+piece cut at the bottom stopped at the floor, and anything cut at the top stopped at nothing:
+in `tests/photo-geometry.test.ts` a curtain hung from 0.8 m and running out of the top of the
+frame read **2300 mm** grown to a typical 2.3 m, its top **300 mm through** a 2.8 m ceiling,
+and a wardrobe cut at the top in a 2.2 m room read **2300**, 100 mm through. Now **2000** and
+**2200**, each ending at the ceiling. `placeFloorObject` and `placeWallObject` take
+`room: { height; footprint }`, the shape `placeCeilingObject` already took, and it is
+required, because an optional ceiling is a hole a caller can fall through in silence (the
+lesson of § 44b). A ceiling lower than what the photo saw bounds nothing — the measured part
+stays, which is the rule that a bound may falsify an assumption and never a measurement. No
+pipeline fixture moved: the pinned tables in `tests/scan-tilted-room.test.ts` and
+`tests/detect-pipeline.test.ts` pass unchanged.
+Mutation-tested against the whole file with and without the new tests: 6 faults, all caught,
+5 of them only by the new tests. One of the five was older than this change: an uncut floor
+piece grown to the typical height anyway went unnoticed by every test until now.
 
 **§ 49.8 · Scale without a lens — IDEAS, unmeasured.** The real photos carried no focal length
 (nor did the four in `tests/exif-in-the-wild.test.ts`), so the assumed lens is the normal

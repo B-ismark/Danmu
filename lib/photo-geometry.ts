@@ -1186,7 +1186,10 @@ function floorFromRound(
 export function placeFloorObject(
   box: [number, number, number, number],
   slot: CaptureSlot,
-  footprint: Footprint,
+  /** The same room the other two placers take: the polygon for the walls, and the
+   *  ceiling's height, which is where a piece the top of the frame cut stops
+   *  growing. Both required, so no caller can leave the ceiling out by accident. */
+  room: { height: number; footprint: Footprint },
   cal: CameraCal,
   foot: PieceFootprint,
 ): GeoPlacement | null {
@@ -1217,7 +1220,7 @@ export function placeFloorObject(
   // for it would be a bound overruling a measurement on an input nothing checked.
   // The lower guard is arithmetic (a face at the lens mirrors the piece) and owes
   // the room nothing, so it is not conditional.
-  const frame = wallFrame(slot, footprint);
+  const frame = wallFrame(slot, room.footprint);
   near = Math.max(near, 0.3);
   if (frame) near = Math.min(near, frame.distance);
 
@@ -1245,7 +1248,12 @@ export function placeFloorObject(
   const across = wholeAlong(solved.right, solved.widthM, cut.left, cut.right, foot.whole?.widthM, frame?.left, frame?.right);
   const right = across.centre;
   const widthM = across.length;
-  const heightM = cut.top && foot.whole ? Math.max(solved.heightM, foot.whole.heightM) : solved.heightM;
+  // It stands on the floor, so its top is its height, and a typical one grown past
+  // the ceiling would be a wardrobe through the slab. The growth stops there, as the
+  // width's stops at the corner; what was seen is kept whatever the ceiling says.
+  const heightM = cut.top && foot.whole
+    ? Math.max(solved.heightM, Math.min(foot.whole.heightM, room.height))
+    : solved.heightM;
   if (widthM <= 0.01 || heightM <= 0.01) return null;
 
   // The CENTRE is measurement plus assumption, so it gets its own bound: the
@@ -1318,10 +1326,11 @@ export function placeFloorObject(
 export function placeWallObject(
   box: [number, number, number, number],
   slot: CaptureSlot,
-  /** The polygon, and nothing else — the plane this inverts against and the ends
-   *  `onFramedSurface` bounds it by are one answer from one function now, so they
-   *  cannot describe two different walls. A width/depth cannot be passed here. */
-  footprint: Footprint,
+  /** The polygon — the plane this inverts against and the ends `onFramedSurface`
+   *  bounds it by are one answer from one function now, so they cannot describe two
+   *  different walls, and a width/depth cannot be passed here — and the ceiling's
+   *  height, where a piece the top of the frame cut stops growing. */
+  room: { height: number; footprint: Footprint },
   cal: CameraCal,
   foot: PieceFootprint,
 ): GeoPlacement | null {
@@ -1331,7 +1340,7 @@ export function placeWallObject(
   // `placementForSlot` arranges it at its catalogue size, and `lib/label-repair.ts`
   // reads that object identity as unmeasurable. There is no honest substitute for a
   // plane — the bounding box was the substitute, and it is what this retired.
-  const frame = wallFrame(slot, footprint);
+  const frame = wallFrame(slot, room.footprint);
   if (!frame) return null;
   const d = frame.distance;
   const uC = bx + bw / 2;
@@ -1361,15 +1370,17 @@ export function placeWallObject(
   // `onFramedSurface`: refused rather than clamped, and it is the SIZE that was wrong.
   // Asked of the part IN VIEW, before a cut side grows it toward the frame's edge: the
   // gate tests what the photo put on the wall, and the growth is not something it saw.
-  if (!onFramedSurface(span.right, slot, footprint)) return null;
+  if (!onFramedSurface(span.right, slot, room.footprint)) return null;
 
   // Cut off by the frame, a side is a width the photo did not see and a top or bottom
   // is a height it did not: both take the whole piece, growing from the edge it did
   // see (see `whole`). A curtain cut off at the foot of a photo tipped up at the
-  // ceiling is the ordinary case, and it came back a third short.
+  // ceiling is the ordinary case, and it came back a third short. Up and down the
+  // wall the growth stops at the floor and at the ceiling, as across it stops at the
+  // corners.
   const cut = frameCuts(box);
   const across = wholeAlong(span.right, span.widthM, cut.left, cut.right, foot.whole?.widthM, frame.left, frame.right);
-  const up = wholeAlong((yTop + yBottom) / 2, yTop - yBottom, cut.bottom, cut.top, foot.whole?.heightM, 0);
+  const up = wholeAlong((yTop + yBottom) / 2, yTop - yBottom, cut.bottom, cut.top, foot.whole?.heightM, 0, room.height);
   const right = across.centre;
   const widthM = across.length;
   const heightM = up.length;

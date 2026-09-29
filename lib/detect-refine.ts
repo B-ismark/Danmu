@@ -123,8 +123,8 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
   };
   const g =
     anchor === 'floor'
-      ? placeFloorObject(d.box, d.slot, room.footprint, cal, foot)
-      : placeWallObject(d.box, d.slot, room.footprint, cal, foot);
+      ? placeFloorObject(d.box, d.slot, room, cal, foot)
+      : placeWallObject(d.box, d.slot, room, cal, foot);
   if (!g) return d;
   return {
     ...d,

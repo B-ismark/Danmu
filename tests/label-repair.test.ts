@@ -192,7 +192,7 @@ describe('judgeLabel', () => {
   });
 
   it('clears a word the measurement agrees with', () => {
-    const g = placeWallObject(WALL_BOX, 'n', ROOM.footprint, CAL, {
+    const g = placeWallObject(WALL_BOX, 'n', ROOM, CAL, {
       depthM: defaultDepthFor('painting', 'painting') / 1000,
     })!;
     expect(sizeFitsLabel('painting', 'painting', g.widthMM, g.heightMM)).toBe(true); // premise
@@ -216,7 +216,7 @@ describe('judgeLabel', () => {
     // nothing.
     const shape = sceneShapeFor('bed', 'thing', undefined);
     expect(shape).not.toBe('box'); // premise: a bed with no shape is still built as a bed
-    const g = placeFloorObject(WALL_BOX, 'n', ROOM.footprint, CAL, {
+    const g = placeFloorObject(WALL_BOX, 'n', ROOM, CAL, {
       depthM: defaultDepthFor('bed', shape) / 1000,
     })!;
     const v = judgeLabel(det({ category: 'bed', slot: 'n', box: WALL_BOX }), CALS, ROOM);

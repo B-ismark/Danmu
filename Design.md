@@ -656,8 +656,11 @@ So a cut axis is a **lower bound**, and the placers treat it as one (`frameCuts`
   saw neither end, so it grows evenly and slides back inside the wall if that took it past
   one, keeping the span it saw either way. A typical piece SMALLER than what was seen is no
   bound at all, because a bound may falsify a guess and never a measurement;
-- **a cut height** grows the same way — a cut top upward, and a wall piece cut at the
-  bottom downward, never through the floor. Upward nothing bounds it yet (§ 49.7);
+- **a cut height** grows the same way — a cut top upward, never through the ceiling, and a
+  wall piece cut at the bottom downward, never through the floor. The ceiling is the room's
+  `height`, which all three placers take beside the polygon now, required rather than
+  optional so that no caller can leave it out. A ceiling lower than what the photo saw
+  bounds nothing: it stops the growth, and the seen part stays;
 - **a floor piece cut at the bottom** has no measured distance at all: the last row of pixels
   is the photo's, not the piece's foot, so the ray through it bounds the near face from
   beyond. The tighter bound is the piece's back on the plaster, so it stands as far back as
