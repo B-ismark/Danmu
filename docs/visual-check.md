@@ -1992,6 +1992,11 @@ carry it into the coffee table.
   state reading as a slightly darker selection rather than light red with *blocked* in the tag.
 - A base floating above the floor, showing through a wall, or catching a press meant for the
   piece beside it.
+- **On a phone, a blank band over the toolbar after tapping a piece**, with the Move / Scale /
+  Rotate row gone off the top. That was the Room list scrolling the tapped piece's row into view
+  inside the closed sheet, which slid the whole room up by the sheet's height (384 px at
+  390 × 844, measured headless). The stage now cannot scroll; tap three pieces in a row and the
+  room should not move.
 
 ### A day/night clock with a sun arc over the room, pieces that sway when carried, and sounds — merged to `main` in `4ccbdc1` ([PR #176](https://github.com/B-ismark/Danmu/pull/176)), SEEN HEADLESS ONLY, needs real ears and a real trackpad
 

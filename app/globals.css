@@ -1521,11 +1521,18 @@ textarea.field { border-radius: var(--r-2); }
    The toolbar is a grid ROW rather than `position: fixed` — bars in flow are what
    iOS Safari's collapsing toolbar leaves alone — and it clears the home indicator
    with the safe-area inset (`viewport-fit=cover`, app/layout.tsx). */
+/* `clip`, not `hidden`: a `hidden` box is still a scroll container, and the closed
+   sheet waits just below the stage's bottom edge. Selecting a piece in the room
+   scrolls its row in the Room list into view, `scrollIntoView` scrolls every
+   ancestor that can scroll, and so the stage slid up by the sheet's height — the
+   room and its chrome pushed off the top, a blank band of hidden sheet over the
+   toolbar. `clip` cuts the same edge and cannot be scrolled at all. `hidden` stays
+   first as the fallback for an engine without `clip`. */
 .sheet-shell {
-  position: relative; height: 100%; min-height: 0; overflow: hidden;
+  position: relative; height: 100%; min-height: 0; overflow: hidden; overflow: clip;
   display: grid; grid-template-rows: minmax(0, 1fr) auto;
 }
-.sheet-shell__stage { grid-row: 1; position: relative; min-height: 0; display: grid; overflow: hidden; }
+.sheet-shell__stage { grid-row: 1; position: relative; min-height: 0; display: grid; overflow: hidden; overflow: clip; }
 .phone-toolbar {
   display: flex; justify-content: center; gap: 4px;
   padding: 6px 12px max(6px, env(safe-area-inset-bottom));
