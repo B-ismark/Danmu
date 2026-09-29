@@ -462,11 +462,11 @@ export const roomStore = {
   /** Whether this room holds any photograph, without reading one.
    *
    *  `loadCaptures` above fans out over multi-megabyte blobs; the only question here
-   *  is whether a SCAN could still be coming, which the key list answers on its own.
-   *  `RoomSync` uses it to tell a room built from the picker — no photos, no
-   *  detections, the one `defaultScene` re-seeds on every open — from a room that has
-   *  been photographed and not yet scanned, where pinning the scene would make that
-   *  first scan invisible forever. */
+   *  is whether the room has photos at all, which the key list answers on its own.
+   *  The wall-colour button reads it, to offer colours from photos only where there
+   *  are photos. `savePending` below asks the same question inside its own
+   *  transaction, with a key range, because the answer decides whether it pins the
+   *  scene there. */
   async hasCaptures(roomId: string): Promise<boolean> {
     const prefix = k(roomId, 'cap:');
     return (await keys()).some((key) => typeof key === 'string' && key.startsWith(prefix));

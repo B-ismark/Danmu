@@ -2504,8 +2504,8 @@ holds **no photographs**.
   HAS been scanned, never what is about to be. A room with four photographs and no
   detections is precisely the room a first scan is coming to, and a pinned scene would have
   made *Detect furniture* — a shipped button on `/workspace`, and *Re-scan* inside the
-  studio — silently do nothing, for good. `roomStore.hasCaptures` reads the key list rather
-  than the blobs.
+  studio — silently do nothing, for good. `roomStore.savePending` counts the room's photo
+  keys inside its own transaction rather than reading the blobs.
 
 Two more defects the review found in the same function, both fixed: the effect's cleanup
 **cleared its timer and wrote nothing** while the two either side of it flush, so a wall
