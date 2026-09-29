@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { PLANT_POT_H, PLANT_POT_R, PART_LIBRARY, isParametric, plantForm, type PlantLeaf } from '@/lib/scene-spec';
+import {
+  PLANT_LEAF_TONES, PLANT_MAX_LEAVES, PLANT_POT_H, PLANT_POT_R, PART_LIBRARY, isParametric, plantForm, plantLeafRadii,
+  type PlantLeaf,
+} from '@/lib/scene-spec';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 
 // "The plant model looks squeezed." `PlantGeo` drew one fixed 880 × 700 × 1940 plant and
@@ -137,7 +142,10 @@ describe('a plant drawn at its own size', () => {
   it('is one head of foliage, not loose balls: every leaf touches the rest', () => {
     // Connectivity over overlap, from the core outward. A leaf that touches nothing is a
     // green ball floating beside the plant, which is what a spacing bug looks like first.
-    for (const dim of plants()) {
+    // The two extra sizes sit just inside the round regime (2.18 : 1 against
+    // `PLANT_HEAD_ASPECT`'s 2.2), where a tip capped to the ellipse's curvature stood
+    // clear of the head until the chain joined it. The 5-step grid never lands there.
+    for (const dim of [...plants(), [467, 1017, 2600], [1017, 467, 2600]] as Array<[number, number, number]>) {
       const g = plantForm(dim);
       const L = g.leaves;
       const seen = new Set([0]);
@@ -210,5 +218,58 @@ describe('a plant drawn at its own size', () => {
     const lowest = Math.min(...g.leaves.map((l) => l.p[1] - l.r));
     expect(lowest - g.pot.h, 'bare trunk above the soil, m').toBeGreaterThan(0.3);
     expect(g.leaves.length, 'a head, not a single ball').toBeGreaterThan(8);
+  });
+
+  it('stays inside the ellipse the plan draws, not merely its box', () => {
+    // `plant` is a round shape: the plan, collision and clearance all see the w × d
+    // ELLIPSE. The head filled the box, so at 600 × 300 a tip leaf stood 14.5 mm past
+    // the outline and at 300 × 1200 × 2000 one stood 94 mm past it: foliage through a
+    // wall the plan swore was clear. Every leaf's widest section is checked here.
+    let checked = 0;
+    for (const dim of plants()) {
+      const A = dim[0] / 2000, E = dim[1] / 2000;
+      for (const l of plantForm(dim).leaves) {
+        const [rx, , rz] = radii(l);
+        for (let k = 0; k < 48; k++) {
+          const t = (k / 48) * Math.PI * 2;
+          const x = l.p[0] + rx * Math.cos(t), z = l.p[2] + rz * Math.sin(t);
+          expect((x / A) ** 2 + (z / E) ** 2, `${dim.join('×')} leaf past the outline`).toBeLessThanOrEqual(1 + 1e-6);
+        }
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(2000);
+  });
+
+  it('draws each leaf from the radii the scene uses', () => {
+    // One sphere scaled per leaf, so the arithmetic that sizes it is here and not in TSX.
+    for (const l of plantForm(lib).leaves) expect(plantLeafRadii(l)).toEqual(radii(l));
+  });
+
+  it("has one green in the renderer's palette per tone", () => {
+    // `tone` is an index into `LEAF_TONES` in the renderer, which this file cannot import.
+    // One colour short and a leaf's colour is undefined, which three draws as white.
+    const src = readFileSync(join(process.cwd(), 'components', 'three', 'DynamicPart.tsx'), 'utf8');
+    const row = src.match(/const LEAF_TONES = \[([^\]]*)\]/);
+    expect(row, 'LEAF_TONES not found').not.toBeNull();
+    expect(row![1].match(/#[0-9a-fA-F]{6}/g)?.length).toBe(PLANT_LEAF_TONES);
+  });
+
+  it('gives every leaf a tone the scene has', () => {
+    for (const dim of plants()) for (const l of plantForm(dim).leaves) {
+      expect(l.tone).toBeGreaterThanOrEqual(0);
+      expect(l.tone).toBeLessThan(PLANT_LEAF_TONES);
+    }
+  });
+
+  it('stays finite for a size no field allows', () => {
+    // A zero side is outside the band, but a scene file or a stale override can still
+    // hand one in before it is clamped. The leaf count divided by it and came back
+    // Infinity, and the loop that places leaves never ended: a frozen tab.
+    for (const dim of [[0, 400, 1600], [400, 0, 1600], [400, 400, 0], [0, 0, 0], [1e9, 1e9, 1e9]] as Array<[number, number, number]>) {
+      const g = plantForm(dim);
+      expect(g.leaves.length, dim.join('×')).toBeLessThanOrEqual(PLANT_MAX_LEAVES);
+      for (const l of g.leaves) for (const v of [...l.p, l.r]) expect(Number.isFinite(v), dim.join('×')).toBe(true);
+    }
   });
 });

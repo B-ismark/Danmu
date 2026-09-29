@@ -405,6 +405,16 @@ export const PLANT_POT_H = 0.42;
 export const PLANT_POT_R = 0.21;
 /** How lopsided a leafy head may be before its balls stop shrinking to stay round. */
 export const PLANT_HEAD_ASPECT = 2.2;
+/** How many shades of green `PlantGeo` cycles a plant's leaves through. `tone` is an
+ *  index into that palette, so the count lives beside the arithmetic that takes it. */
+export const PLANT_LEAF_TONES = 5;
+/** The most leaf balls a plant draws. The legal range tops out near 45; this is the
+ *  function's own bound, so a size that slipped past the clamp (a corrupt saved dim)
+ *  draws a coarse plant instead of looping forever. */
+export const PLANT_MAX_LEAVES = 60;
+/** The most balls in the chain that joins a capped tip leaf back to the head, per end.
+ *  A bound, not a tuning: the legal range needs two at most. */
+export const PLANT_TIP_LINKS = 4;
 
 /** One ball of a plant's foliage: centre and radius, metres, standing on y = 0. */
 export type PlantLeaf = {
@@ -433,12 +443,17 @@ export type PlantLeaf = {
 export function plantForm(dimMM: [number, number, number]): {
   pot: { top: number; bottom: number; h: number };
   soil: { r: number; t: number };
-  stem: { r: number; y0: number; y1: number };
+  /** `r` at the soil, `rTop` where it meets the head: a trunk thins as it rises. */
+  stem: { r: number; rTop: number; y0: number; y1: number };
   leaves: PlantLeaf[];
 } {
-  const w = dimMM[0] / 1000;
-  const d = dimMM[1] / 1000;
-  const h = dimMM[2] / 1000;
+  // Every legal size is well above 10 mm, but a scene file or a stale override can hand
+  // in a zero or a NaN before the clamp sees it. A zero side divides the ellipse test by
+  // zero, so such a side draws as 10 mm: a speck of plant rather than NaN geometry.
+  const side = (mm: number) => (Number.isFinite(mm) ? Math.max(mm, 10) : 10) / 1000;
+  const w = side(dimMM[0]);
+  const d = side(dimMM[1]);
+  const h = side(dimMM[2]);
   const R = Math.min(w, d) / 2;
   const top = Math.min(PLANT_POT_R, R * 0.72);
   const potH = Math.min(PLANT_POT_H, h * 0.2, top * 2.4);
@@ -459,15 +474,88 @@ export function plantForm(dimMM: [number, number, number]): {
   // ball is pressed flat on the thin side rather than poking out of the box.
   const b = 0.55 * Math.max(Math.min(A, C, E), Math.max(A, C, E) / PLANT_HEAD_ASPECT);
   const leaves: PlantLeaf[] = [];
-  const at = (ux: number, uy: number, uz: number, r: number, tone: number) => {
-    const rx = Math.min(r, A);
+  // `plant` is a ROUND shape: the plan, hit-testing, collision and clearance all read its
+  // footprint as the w × d ELLIPSE, not the box. So no leaf may reach past that ellipse,
+  // and the box-filling rule above is not enough on its own: centres on a shrunken
+  // ellipse, each pushed out by its radius, overshoot it on the diagonals whenever w ≠ d
+  // (14 mm at 600 × 300, 94 mm at 300 × 1200). So a ball that pokes out is corrected,
+  // one of three ways:
+  //
+  //  · At the ends of the LONG horizontal axis the ellipse is tighter than a ball: its
+  //    radius of curvature there is min²/max. A ball touching the end from inside fits
+  //    only if it is no bigger than that, so those two balls are capped to it, and a
+  //    short chain joins them back to the head (below). They still touch the box, so the
+  //    plant still fills it; they are just smaller balls.
+  //  · Past `PLANT_HEAD_ASPECT` (a `slab`), a ball is pressed flat on the thin side
+  //    instead, tips included: the one regime where a leaf may stop being round.
+  //  · Any other ball is moved INWARD along its own direction until it fits. It is not
+  //    shrunk, so a leaf stays round.
+  const curl = Math.min(A, E) ** 2 / Math.max(A, E);
+  const slab = Math.max(A, E) > PLANT_HEAD_ASPECT * Math.min(A, E);
+  // How far past the outline a leaf's widest section reaches (1 = touching it): the
+  // largest value of the ellipse's own equation round the leaf's rim. A coarse sweep finds
+  // the worst stretch of rim and a golden-section search refines it, because a sweep
+  // alone misses the peak between two samples — 24 of them let a leaf out by 0.6%.
+  const reachOut = (cx: number, cz: number, rx: number, rz: number) => {
+    const f = (t: number) => ((cx + rx * Math.cos(t)) / A) ** 2 + ((cz + rz * Math.sin(t)) / E) ** 2;
+    const step = (2 * Math.PI) / 36;
+    let best = 0;
+    for (let k = 1; k < 36; k++) if (f(k * step) > f(best * step)) best = k;
+    let lo = (best - 1) * step;
+    let hi = (best + 1) * step;
+    const g = (Math.sqrt(5) - 1) / 2;
+    for (let k = 0; k < 40; k++) {
+      const m1 = hi - g * (hi - lo);
+      const m2 = lo + g * (hi - lo);
+      if (f(m1) < f(m2)) lo = m1;
+      else hi = m2;
+    }
+    return Math.max(f(best * step), f((lo + hi) / 2));
+  };
+  const inside = (cx: number, cz: number, rx: number, rz: number) => reachOut(cx, cz, rx, rz) <= 1 + 1e-9;
+  const at = (ux: number, uy: number, uz: number, r0: number, tone: number) => {
+    const tip = uy === 0 && uz === 0 ? A >= E : uy === 0 && ux === 0 ? E > A : false;
+    const r = tip && !slab ? Math.min(r0, curl) : r0;
+    let rx = Math.min(r, A);
     const ry = Math.min(r, C);
-    const rz = Math.min(r, E);
+    let rz = Math.min(r, E);
+    let cx = (A - rx) * ux;
+    let cz = (E - rz) * uz;
+    if (!inside(cx, cz, rx, rz)) {
+      if (slab) {
+        // Past `PLANT_HEAD_ASPECT` a ball may be pressed flat, and here it must be: a
+        // ball as wide as the slab fits only at its very middle, so pulling balls in
+        // stacked every one of them there (100 × 650: fourteen balls at the origin and
+        // two loose tips). So a ball keeps its place and its length and is pressed on
+        // the thin side, to the widest it can be and still fit.
+        let lo = 0;
+        let hi = A >= E ? rz : rx;
+        for (let k = 0; k < 30; k++) {
+          const mid = (lo + hi) / 2;
+          if (A >= E ? inside(cx, cz, rx, mid) : inside(cx, cz, mid, rz)) lo = mid;
+          else hi = mid;
+        }
+        if (A >= E) rz = lo;
+        else rx = lo;
+      } else {
+        // Otherwise the ball stays round and is moved INWARD along its own direction,
+        // a fraction `s` of the way out, bisected, until it fits.
+        let lo = 0;
+        let hi = 1;
+        for (let k = 0; k < 20; k++) {
+          const mid = (lo + hi) / 2;
+          if (inside(cx * mid, cz * mid, rx, rz)) lo = mid;
+          else hi = mid;
+        }
+        cx *= lo;
+        cz *= lo;
+      }
+    }
     leaves.push({
-      p: [(A - rx) * ux, yc + (C - ry) * uy, (E - rz) * uz],
+      p: [cx, yc + (C - ry) * uy, cz],
       r,
       squash: [rx / r, ry / r, rz / r],
-      tone: tone % 5,
+      tone: tone % PLANT_LEAF_TONES,
     });
   };
   // A shell, no solid core: the shell alone stops every sight line through the head
@@ -478,6 +566,46 @@ export function plantForm(dimMM: [number, number, number]): {
   at(0, 0, 1, b, 3);
   at(0, 0, -1, b, 4);
   at(0, 1, 0, b, 3);
+  // A capped tip is a small ball at the very end of a long, thin head, and just inside the
+  // round regime (467 × 1017, 2.18 : 1) the balls nearest it had to be pulled so far in to
+  // fit that it stood clear of all of them: a loose green bead beside the plant. So it is
+  // joined back to the head by a short chain along the long axis. Each link is the largest
+  // round ball that fits where it stands, centred one radius in from the last, so each
+  // overlaps the one before it. The chain stops once a link is full size, or at the middle
+  // of the head. No legal size needs more than two links an end.
+  if (!slab && curl < b) {
+    const L = Math.max(A, E);
+    const sx = A >= E ? 1 : 0;
+    const sz = 1 - sx;
+    const fit = (c: number) => {
+      let lo = 0;
+      let hi = b;
+      for (let k = 0; k < 20; k++) {
+        const r = (lo + hi) / 2;
+        if (inside(c * sx, c * sz, Math.min(r, A), Math.min(r, E))) lo = r;
+        else hi = r;
+      }
+      return lo;
+    };
+    for (const sign of [1, -1]) {
+      let c = L - curl;
+      let prev = curl;
+      for (let k = 0; k < PLANT_TIP_LINKS; k++) {
+        c -= prev;
+        if (c <= 0) break;
+        const r = fit(c);
+        const ry = Math.min(r, C);
+        leaves.push({
+          p: [sign * c * sx, yc, sign * c * sz],
+          r,
+          squash: [Math.min(r, A) / r, ry / r, Math.min(r, E) / r],
+          tone: (k + 2) % PLANT_LEAF_TONES,
+        });
+        if (r >= b * 0.999) break;
+        prev = r;
+      }
+    }
+  }
   // The rest spread evenly over the egg (a Fibonacci sphere), as many as it takes for
   // balls this size to cover a head this shape, and each a little bigger or smaller than
   // the last so it reads as foliage rather than a pattern.
@@ -487,7 +615,8 @@ export function plantForm(dimMM: [number, number, number]): {
   // Surface area of the egg in units of one ball's silhouette (Knud Thomsen's formula).
   const area = 4 * Math.PI * Math.pow((Math.pow(A * C, 1.6) + Math.pow(A * E, 1.6) + Math.pow(C * E, 1.6)) / 3, 1 / 1.6);
   const disc = Math.PI * Math.sqrt(ax * cy * ez * b);
-  const n = Math.max(8, Math.round((area / disc) * 0.7));
+  const want = Math.round((area / disc) * 0.7);
+  const n = Math.min(PLANT_MAX_LEAVES - leaves.length, Math.max(8, want));
   const golden = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < n; i++) {
     const uy = 1 - ((i + 0.5) / n) * 2;
@@ -498,9 +627,16 @@ export function plantForm(dimMM: [number, number, number]): {
   return {
     pot: { top, bottom: top * 0.76, h: potH },
     soil: { r: top * 0.92, t: soilT },
-    stem: { r: Math.max(0.004, R * 0.06), y0: potH, y1: yc },
+    stem: { r: Math.max(0.004, R * 0.06), rTop: Math.max(0.004, R * 0.06) * 0.8, y0: potH, y1: yc },
     leaves,
   };
+}
+
+/** A leaf's radius on each axis, metres: what a UNIT sphere is scaled by to draw it.
+ *  Drawing every leaf as one unit sphere scaled means a resize changes a scale and
+ *  rebuilds no geometry. */
+export function plantLeafRadii(l: PlantLeaf): [number, number, number] {
+  return [l.r * l.squash[0], l.r * l.squash[1], l.r * l.squash[2]];
 }
 
 /** Where the bulb sits inside each fixture, in the part's local metres. These

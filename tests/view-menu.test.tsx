@@ -9,12 +9,18 @@ import 'fake-indexeddb/auto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useStudio } from '@/lib/store';
+import { useScene } from '@/lib/scene-store';
+import type { ScenePart } from '@/lib/scene-spec';
+import { viewportAt } from './helpers/mount';
 import { stripComments } from './helpers/source';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('view-room', 'model'));
 
 const { ViewMenu } = await import('@/components/studio/ViewMenu');
+const { StudioHelp } = await import('@/components/studio/StudioHelp');
+const { StudioShell } = await import('@/components/studio/StudioShell');
 
 const code = (rel: string) => stripComments(readFileSync(join(process.cwd(), rel), 'utf8'));
 
@@ -44,6 +50,46 @@ describe('the gear', () => {
     expect(screen.queryByRole('group', { name: 'View settings' })).toBeNull();
   });
 
+  it('and Help lets go the same way, so the two never stack', () => {
+    // Help had Esc and no outside press, so opening View over it left both open, with
+    // Help's card painted on top of View's. A real press is a pointerdown and then a
+    // click; the down is what lets the open one go.
+    render(
+      <>
+        <ViewMenu />
+        <StudioHelp />
+      </>,
+    );
+    const help = screen.getByRole('button', { name: 'How this works' });
+    fireEvent.click(help);
+    expect(help.getAttribute('aria-expanded')).toBe('true');
+    const gear = screen.getByRole('button', { name: 'View settings' });
+    fireEvent.pointerDown(gear);
+    fireEvent.click(gear);
+    expect(help.getAttribute('aria-expanded')).toBe('false');
+    expect(gear.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.pointerDown(help);
+    fireEvent.click(help);
+    expect(gear.getAttribute('aria-expanded')).toBe('false');
+    expect(help.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it("Help's Escape still belongs to a field being typed in first", () => {
+    render(
+      <>
+        <input aria-label="A field" />
+        <StudioHelp />
+      </>,
+    );
+    const help = screen.getByRole('button', { name: 'How this works' });
+    fireEvent.click(help);
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'A field' }), { key: 'Escape' });
+    expect(help.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(help.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(help);
+  });
+
   it('sits left of help in the top bar', () => {
     const src = code('app/room/[roomId]/layout.tsx');
     const at = (tag: string) => src.indexOf(tag);
@@ -66,6 +112,31 @@ describe('where the view controls live', () => {
     expect(files).toEqual(expect.arrayContaining(['components/studio/shells/shell-parts.tsx', 'components/studio/Inspector.tsx', 'app/room/[roomId]/layout.tsx']));
     const homes = files.filter((f) => code(f).includes('<ViewOptions')).sort();
     expect(homes).toEqual(['components/studio/ViewMenu.tsx', 'components/studio/shells/SheetShell.tsx']);
+  });
+
+  it('picking a piece while the View sheet is up swaps it for that piece', () => {
+    // The toolbar trades View for the piece's own button once something is selected,
+    // so a sheet left on View would show view settings with no button pressed, over
+    // the piece just chosen.
+    const sofa = { id: 'sofa-1', name: 'Sofa', shape: 'sofa', category: 'sofa', dimMM: [2000, 900, 850], pos: [0, 0, 0], rot: 0, color: '#b07a52' } as unknown as ScenePart;
+    useScene.getState().setParts([sofa]);
+    useStudio.setState({ selectedPartId: null, selection: [], selectedWall: null, catalogOpen: false });
+    const restore = viewportAt(390, { touch: true });
+    try {
+      render(
+        <StudioShell loadingLabel="Building your room">
+          <main>room</main>
+        </StudioShell>,
+      );
+      const view = screen.getByRole('button', { name: 'View' });
+      fireEvent.click(view);
+      expect(view.getAttribute('aria-expanded')).toBe('true');
+      act(() => useStudio.getState().setSelected('sofa-1'));
+      expect(screen.getByRole('button', { name: 'Sofa' }).getAttribute('aria-expanded')).toBe('true');
+    } finally {
+      restore();
+      useStudio.setState({ selectedPartId: null, selection: [] });
+    }
   });
 
   it("the phone's View button opens the View sheet, not Details", () => {

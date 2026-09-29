@@ -1566,8 +1566,9 @@ shape still untested.
   declared 500. Every assertion about this function read `tip`, so the file was green
   about a quantity the fan does not have. The inner end is pinned at the hub too,
   because a tip-only assertion passes for a blade of the right length in the wrong place.
-- **Parametric shapes** (`isParametric` — fourteen of them, and the list is not
-  restated here because every prose copy of it has gone stale at least once)
+- **Parametric shapes** (`isParametric` — neither listed nor counted here: every prose
+  copy of the list went stale at least once, and so did the count, which read fourteen
+  for a commit after `plant` made it fifteen)
   rebuild from effective dimensions instead of stretching: sofa tiles seat
   modules from width, bookshelf derives shelves from height, wardrobe derives
   door bays from width, etc. The scale gizmo live-stretches; commit converts
@@ -2149,9 +2150,10 @@ room switcher · **Export**. The gear (`ViewMenu.tsx`) holds how the room is dra
 this device (floor grid, decor, sounds, quality) and links to Settings for units,
 detection and storage. Those are app settings, and a second copy of them here would
 be a second place to keep in step. The gear and Help sit together because they are
-the same kind of control: one you open, read and close. All three popovers share
-their dismissal (`usePopoverDismiss`): a press outside, or Escape, which returns
-focus to the trigger. It was undo/redo, a room switcher, Rescan, Save file and Snapshot — with
+the same kind of control: one you open, read and close. Every top-bar popover (View,
+Help, Export, and the phone's More) shares its dismissal (`usePopoverDismiss`): a
+press outside, or Escape, which returns focus to the trigger. So opening one closes
+whichever was open, rather than stacking Help's card over View's. It was undo/redo, a room switcher, Rescan, Save file and Snapshot — with
 Snapshot styled as the primary action, which downloading a PNG is not. Undo/redo went
 to `CanvasView`, Rescan to the rail, and every "take this away with you" action
 collapsed into one `ExportMenu.tsx`: the 3D snapshot (3D tab only — it captures that

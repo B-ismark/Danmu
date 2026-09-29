@@ -190,6 +190,17 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
     setSnap((s) => (s === 'closed' ? 'half' : s));
   }, [wanted, setCatalogOpen]);
 
+  // View holds nothing about a piece, so picking one while it is up swaps it for the
+  // piece's Details. Otherwise the sheet goes on showing view settings over the piece
+  // you just chose, and the only sign you chose it is the dot on another button. Room
+  // and the Library stay put: the Catalog's rows ARE how you pick from Room, and
+  // swapping the list away under the finger that just used it would be worse.
+  const selectedPartId = useStudio((s) => s.selectedPartId);
+  const selectedWallId = useStudio((s) => s.selectedWall);
+  useEffect(() => {
+    if (selected && panelRef.current === 'view') setPanel('details');
+  }, [selected, selectedPartId, selectedWallId]);
+
   const show = (p: Panel) => {
     // Pressing the button for the sheet already showing lowers it: a toolbar item
     // that only ever opens leaves the close button as the one way down.

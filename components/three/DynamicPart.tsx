@@ -17,6 +17,7 @@ import {
   fanColumn,
   pendantDrop,
   plantForm,
+  plantLeafRadii,
   isParametric,
   lightFor,
   radiatorFins,
@@ -498,8 +499,9 @@ function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 }
 
 // ─── Plant ──────────────────────────────────────────────────────────────
-/** The five greens a plant's leaves cycle through, lightest to darkest in no order. */
-const LEAF_TONES = ['#5D8A5D', '#6E9A66', '#4F7C4F', '#6FA06A', '#4A7048'];
+/** The greens a plant's leaves cycle through, in no order. One per `PLANT_LEAF_TONES`,
+ *  which is where `plantForm` takes its `tone % …` from. */
+const LEAF_TONES = ['#5D8A5D', '#6E9A66', '#4F7C4F', '#6FA06A', '#4A7048'] as const;
 
 /** Drawn at its own size by `plantForm` — no `FitToDim`, because the leaves are
  *  spheres and a per-axis stretch turned every one of them into a tall oval. */
@@ -524,12 +526,13 @@ function PlantGeo({ part }: { part: ScenePart }) {
         <Sway amp={0.03} speed={0.9}>
           <group position={[0, -g.pot.h, 0]}>
             <mesh position={[0, (g.stem.y0 + g.stem.y1) / 2, 0]}>
-              <cylinderGeometry args={[g.stem.r * 0.8, g.stem.r, g.stem.y1 - g.stem.y0, 8]} />
+              <cylinderGeometry args={[g.stem.rTop, g.stem.r, g.stem.y1 - g.stem.y0, 8]} />
               <meshStandardMaterial color="#4A3526" />
             </mesh>
             {g.leaves.map((l, i) => (
-              <mesh key={i} position={l.p} scale={l.squash}>
-                <sphereGeometry args={[l.r, 14, 12]} />
+              // A unit sphere, scaled: a resize moves and scales these and rebuilds none.
+              <mesh key={i} position={l.p} scale={plantLeafRadii(l)}>
+                <sphereGeometry args={[1, 14, 12]} />
                 <meshStandardMaterial color={LEAF_TONES[l.tone]} {...SURFACE.foliage} />
               </mesh>
             ))}

@@ -275,13 +275,14 @@ export function Inspector() {
   // the outer rail is the wrong box. If the `overflow` ever moves, the class moves
   // with it, because it is the scrollbar that makes the two boxes differ.
   //
-  // `flex: 0 0 auto`, not `height: 100%` and not `0 1 auto`. This pane is no longer a
-  // direct child of `.rail`: it shares a scroll region with the View section (see
-  // `shell-parts.tsx`). `height: 100%` inside that region would claim all of it and
-  // push its sibling out, which is the defect that region exists to fix — and `0 1
-  // auto` is the same mistake from the other end. Inside a column that scrolls, only
-  // a child that CAN shrink does: `ViewSection` is a `RailSection` at a fixed
-  // `flex: 0 0 auto` 277px, so a shrinkable Inspector absorbed the whole shortfall.
+  // `flex: 0 0 auto`, not `height: 100%` and not `0 1 auto`. This pane is not a direct
+  // child of `.rail`: it sits in a scroll region (see `shell-parts.tsx`), which it
+  // shared with a View section until View moved to the top bar's gear (`ViewMenu`).
+  // `height: 100%` inside that region would claim all of it and push any sibling out,
+  // which is the defect that region exists to fix — and `0 1 auto` is the same mistake
+  // from the other end. Inside a column that scrolls, only a child that CAN shrink
+  // does: the View section was a `RailSection` at a fixed `flex: 0 0 auto` 277px, so a
+  // shrinkable Inspector absorbed the whole shortfall.
   // Measured at 1100 × 420 with a piece selected: the scroller was 234px holding
   // 277px and the Inspector was **0** — and scrolling revealed nothing, because there
   // was no Inspector height to scroll to. Neither child shrinks now; the content

@@ -20,7 +20,8 @@ export type RoomFacts = {
   depthMM: number;
   /** Floor actually enclosed by the walls, m². */
   areaM2: number;
-  /** The room still stands at its shape's typical size, so every number is a guess. */
+  /** The room still stands at its shape's typical size, so its size and area are
+   *  guesses. The piece count is not. */
   rough: boolean;
 };
 

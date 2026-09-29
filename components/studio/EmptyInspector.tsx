@@ -24,6 +24,7 @@ import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
 import { useRailIntent, type LeftSection } from '@/lib/rail-intent';
 import { useMediaQuery } from '@/lib/use-media-query';
+import { useStudioLayout } from './NarrowViewportBanner';
 import { formatArea, formatDim } from '@/lib/units';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { roomFacts } from '@/lib/room-facts';
@@ -35,15 +36,18 @@ export function EmptyInspector() {
   const touch = useMediaQuery('(pointer: coarse)');
   const leftOpen = useStudio((s) => s.railLeftOpen);
   const toggleRail = useStudio((s) => s.toggleRail);
+  const { layout } = useStudioLayout();
   const askLeft = useRailIntent((s) => s.askLeft);
   const facts = roomFacts(room, count);
   const pick = touch ? 'Tap' : 'Click';
 
   const goTo = (section: LeftSection) => {
     askLeft(section);
-    // On a laptop the left rail may be shut; on a tablet or phone there is no rail
-    // to open, and the shell switches to its Room panel on the same request.
-    if (!leftOpen) toggleRail('left');
+    // On a laptop the left rail may be shut, so it opens. On a tablet or phone there
+    // is no rail to open, and the shell switches to its Room panel on the same
+    // request. It must not toggle there anyway: `railLeftOpen` is persisted, so a
+    // press on a tablet would quietly shut the laptop's rail for next time.
+    if (layout !== 'stacked' && !leftOpen) toggleRail('left');
   };
 
   return (

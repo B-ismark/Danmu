@@ -19,8 +19,9 @@
 // INSIDE a rail's clipping box. This one hangs from the top bar the way Export's
 // does, over nothing that clips it.
 //
-// A phone has no room for a second trigger, so there the same `ViewOptions` is a
-// group inside the More menu (`StudioMoreMenu`).
+// A phone has no room in its top bar for a second trigger, so there the same
+// `ViewOptions` is its own sheet, opened from the toolbar's View button
+// (`SheetShell`).
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';

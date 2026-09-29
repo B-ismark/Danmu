@@ -146,10 +146,21 @@ head; a pot that reads as a tube or as a bucket; a head that floats off its trun
 sizes (one side under half the other) are allowed to press balls flat on the thin side —
 that is by design and is the one place a ball may be anything but round.
 
+**The open question, and it is a taste call.** The head is at most twice as tall as the plant
+is wide, and the rest is bare trunk. So a 300 × 300 × 2000 plant is a 600 mm ball on 1.3 m of
+stem, and that may read as a lollipop rather than a slim plant. Nothing measures whether it
+looks like a plant. If it does not, the ratio is `headH` in `plantForm`.
+
+**Also look at a plant beside a wall in 2D Plan, from above.** The plan draws a plant as the
+w × d ellipse, and the leaves now stay inside that ellipse rather than filling its box. Before
+the review fix they stood up to 94 mm past it at 300 × 1200. Wrong would be leaves showing past
+the drawn outline, or a long thin plant whose end leaves look detached from the head.
+
 **Settled without eyes.** Draws 1.00 × 1.00 × 1.00 of its box
 (`tests/footprint-fidelity.test.tsx`); round leaves at nine ordinary shapes, no sight line
-through the head from front, side or above, and every leaf joined to the rest across 126 legal
-sizes (`tests/plant-form.test.ts`, mutation-checked).
+through the head from front, side or above, every leaf inside the plan's ellipse, and every
+leaf joined to the rest across 126 legal sizes plus the two that need the tip chain
+(`tests/plant-form.test.ts`, mutation-checked).
 
 ### Six pieces changed size — a plant, three chairs and two lamps
 
@@ -1002,13 +1013,17 @@ real finger and a real screen reader.
 **Where to click.**
 - **Laptop.** Press the gear, then toggle each control. Press outside it and it should
   close. Open it again and press Escape: it should close with focus back on the gear.
+  Open `?`, then press the gear: Help should close as View opens, and the other way round.
 - **Laptop, rails shut.** Collapse both rails. Hover each strip icon, then press Style on
   the left strip.
 - **Laptop, nothing selected.** Press **Resize it** in the right rail, with the left rail
   shut and again with it open.
 - **Tablet (600–1023px).** Open the Details tab with nothing selected and press
   **Resize it**.
-- **Phone.** Press the toolbar's **View**.
+- **Laptop, right rail shut, a piece selected.** Press the piece's icon on the strip with the
+  keyboard (Tab to it, Enter). The rail opens and the next Tab moves on inside it.
+- **Phone.** Press the toolbar's **View**. Then, with the sheet up, tap a piece in the room:
+  the sheet should become that piece's Details.
 
 **What wrong looks like.**
 - A strip tooltip that opens over the next icon or off the window's edge.
@@ -1018,15 +1033,23 @@ real finger and a real screen reader.
 - The gear's card cut off at a narrow laptop width, or overlapping the room switcher.
 - The phone's View sheet taller than its controls with a scrollbar anyway.
 - A screen reader announcing a strip icon as "button" with no name.
+- Help's card and View's card on screen at once.
 
 **Settled without eyes.** Each strip icon asks for its section and opens the rail. The tree
 takes that request once and focuses the section. Side tooltips are placed beside their
 trigger and capped to the room on that side. The empty state's floor area is the polygon's
 (16.5 m² for a 5 × 4 L, not 20), and **Resize it** leaves an open rail open. `ViewOptions`
-has exactly two homes, found by sweeping the tree. All of this is in
+has exactly two homes, found by sweeping the tree. From the review: Help closes when View
+opens and the other way round, Help's Esc still belongs to a field being typed in first, a
+phone View sheet swaps to Details on a pick, a tablet press leaves the saved laptop rail
+alone, the right strip lands focus in the panel it opened (once), and its badge caps at 99+.
+In headless Chromium, Help and the gear closed each other both ways at 1440px, and the gear's
+card sat inside the window at 600px (x 87–387) and 700px (x 187–487). All of this is in
 `tests/collapsed-rails.test.tsx`, `tests/empty-inspector.test.tsx`,
 `tests/view-menu.test.tsx`, `tests/room-facts.test.ts` and `tests/rail-intent.test.ts`,
-and every assertion was mutation-checked: 30 mutants, all caught. One survived the first run (the strip tooltips placed above their icons), and it has its own test now.
+and every assertion was mutation-checked: 30 mutants, all caught, plus 7 more on the review’s
+fixes. Two survived their first run (the strip tooltips placed above their icons, and the
+focus landing firing again on a later open from the chevron), and each has its own test now.
 
 ### One type scale, and piece names you can read at laptop width — `c2137c4` on `main` (PR #157), SWEPT, wants a hand on a real mouse and a real phone
 

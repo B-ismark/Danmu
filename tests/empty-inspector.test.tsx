@@ -10,6 +10,7 @@ import { useSettings, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { useRailIntent } from '@/lib/rail-intent';
 import { footprintForLayout } from '@/lib/footprint';
+import { viewportAt } from './helpers/mount';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('empty-room', 'model'));
 
@@ -39,7 +40,9 @@ describe('the Inspector with nothing selected', () => {
     expect(card.textContent).not.toMatch(/\b20(\.0)?\s*m²/);
   });
 
-  it('marks every number as approximate while the room is at its typical size', () => {
+  it('marks both measurements as approximate while the room is at its typical size', () => {
+    // The size and the area are guesses until someone sets the walls. The piece count
+    // is not a guess, so it is never marked.
     useScene.setState({ room: { ...useScene.getState().room, roughSize: true } });
     render(<Inspector />);
     expect((screen.getByRole('region', { name: 'This room' }).textContent?.match(/≈/g) ?? []).length).toBe(2);
@@ -62,5 +65,20 @@ describe('the Inspector with nothing selected', () => {
     fireEvent.click(screen.getByRole('button', { name: /Resize it/ }));
     expect(useStudio.getState().railLeftOpen).toBe(true);
     expect(useRailIntent.getState().left).toBe('room');
+  });
+
+  it('on a tablet asks for the Room panel and leaves the saved rail alone', () => {
+    // There is no rail to open at a stacked width: the shell switches to its Room tab on
+    // the request. `railLeftOpen` is persisted, so toggling it here would shut the
+    // laptop's rail for the next visit, from a press on a different device's layout.
+    const restore = viewportAt(800, { touch: true });
+    try {
+      render(<Inspector />);
+      fireEvent.click(screen.getByRole('button', { name: /Restyle it/ }));
+      expect(useRailIntent.getState().left).toBe('style');
+      expect(useStudio.getState().railLeftOpen).toBe(false);
+    } finally {
+      restore();
+    }
   });
 });

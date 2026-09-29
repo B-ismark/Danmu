@@ -20,7 +20,7 @@
 //    computed-value time, which is `none`, which stacks the rails and the canvas one per
 //    row. Double-click reset took the same path;
 //  · the first move of an opening gesture re-seeded from `measure()` behind `if (m)`, which
-//    passes for the CLOSED rail's 37px and seeds a width below the rail's own floor.
+//    passes for the CLOSED rail's 44px and seeds a width below the rail's own floor.
 //
 // **What this file cannot see, and it is most of the pixels.** jsdom has no layout, so
 // `getBoundingClientRect()` is all zeros and `getComputedStyle` resolves no `var()`. Every
@@ -97,7 +97,7 @@ function stubLayout({ railPx }: { railPx: number }): () => void {
   const realCS = window.getComputedStyle.bind(window);
   const realRect = Element.prototype.getBoundingClientRect;
   const TOKENS: Record<string, string> = {
-    '--rail-closed': '37px',
+    '--rail-closed': '44px',
     '--rail-left-min': '228px',
     '--rail-right-min': '276px',
     '--rail-left-tight': '208px',
@@ -300,7 +300,7 @@ describe('a move that arrives before the open has laid out is refused, not seede
     useStudio.setState({ ...OPEN, railLeftOpen: false });
     mount();
     // The rail still measures `--rail-closed` because React has not re-rendered yet.
-    const undo = stubLayout({ railPx: 37 });
+    const undo = stubLayout({ railPx: 44 });
 
     const el = sashEl('left');
     fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
@@ -589,13 +589,13 @@ describe('a width written from outside a gesture still reaches the element', () 
 
 describe('opening a rail publishes a width inside its own range', () => {
   /** The rail's measured width depends on whether it is OPEN, which the fixed-width stub
-   *  above cannot express — and that difference is the whole subject here. 37px is
+   *  above cannot express — and that difference is the whole subject here. 44px is
    *  `--rail-closed`; 208px is `--rail-left-tight`, what the compact step renders. */
   function stubTogglingLayout(): () => void {
     const realCS = window.getComputedStyle.bind(window);
     const realRect = Element.prototype.getBoundingClientRect;
     const TOKENS: Record<string, string> = {
-      '--rail-closed': '37px',
+      '--rail-closed': '44px',
       '--rail-left-min': '228px',
       '--rail-left-tight': '208px',
       '--rail-max-share': '0.4',
@@ -611,7 +611,7 @@ describe('opening a rail publishes a width inside its own range', () => {
     }) as typeof window.getComputedStyle;
     Element.prototype.getBoundingClientRect = function rect(this: Element) {
       if (!this.classList?.contains('rail')) return realRect.call(this);
-      const w = useStudio.getState().railLeftOpen ? 208 : 37;
+      const w = useStudio.getState().railLeftOpen ? 208 : 44;
       return { x: 0, y: 0, top: 0, left: 0, right: w, bottom: 0, width: w, height: 0, toJSON: () => ({}) } as DOMRect;
     };
     return () => {
@@ -622,9 +622,9 @@ describe('opening a rail publishes a width inside its own range', () => {
 
   it('Enter on a closed sash does not publish aria-valuenow below aria-valuemin', () => {
     // The same impossible-slider defect the compact step had, through the door nobody
-    // opened: while a rail is shut its measured width is `--rail-closed` (37px), and
+    // opened: while a rail is shut its measured width is `--rail-closed` (44px), and
     // NEITHER toggle path calls `sync`. So the render that opens the rail starts
-    // publishing the trio again from a measurement taken while it was closed — 37 against
+    // publishing the trio again from a measurement taken while it was closed — 44 against
     // a minimum of 208 — and a ResizeObserver closes it a frame later, in a browser that
     // has one. `open` is a dependency of the measuring effect for this reason.
     // BEFORE the mount, and that is the whole fixture: the attribute is rendered from
@@ -651,7 +651,7 @@ describe('opening a rail publishes a width inside its own range', () => {
     expect(Number.isFinite(now) && Number.isFinite(min), 'the trio is incomplete on an open rail').toBe(true);
     // **The VALUE, not the ordering**, and the difference is a mutation that survived:
     // `narrowest()` is `min(floor, width)`, so `valuemin <= valuenow` is true of the
-    // stale closed measurement too — 37 within [37, 440] is a perfectly ordered range
+    // stale closed measurement too — 44 within [44, 440] is a perfectly ordered range
     // describing a rail that is 208px wide. Asserting the width the rail is actually
     // rendering is what catches an effect that did not re-measure.
     expect(now, 'the open rail still publishes the width it had while SHUT').toBe(208);

@@ -8,7 +8,7 @@
 // copies would be in the measurements too. Same argument as `StudioShell` itself
 // existing: two copies of a layout is two places for it to drift.
 
-import { type ReactNode } from 'react';
+import { type ReactNode, useLayoutEffect, useRef } from 'react';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { useRailIntent, type LeftSection } from '@/lib/rail-intent';
@@ -142,7 +142,7 @@ function LeftRailStrip() {
     toggleRail('left');
   };
   return (
-    <nav className="rail-strip" aria-label="Room panel">
+    <div className="rail-strip" role="group" aria-label="Room panel">
       <StripButton icon="ruler" tip="Room" label="Open the room's size and walls" side="left" onClick={() => openAt('room')} />
       <StripButton icon="palette" tip="Style" label="Open the room's style and light" side="left" onClick={() => openAt('style')} />
       <StripButton
@@ -155,15 +155,14 @@ function LeftRailStrip() {
       />
       <span className="rail-strip__rule" aria-hidden="true" />
       <RoomHealthDot />
-    </nav>
+    </div>
   );
 }
 
 /** The right rail shut: what is selected, if anything, and Add. Add is here because
  *  it is the one action the right rail's footer offers whatever is selected; the
  *  Library it opens floats over the canvas and needs no open rail. */
-function RightRailStrip() {
-  const toggleRail = useStudio((s) => s.toggleRail);
+function RightRailStrip({ onOpen }: { onOpen: () => void }) {
   const catalogOpen = useStudio((s) => s.catalogOpen);
   const setCatalogOpen = useStudio((s) => s.setCatalogOpen);
   const selectedId = useStudio((s) => s.selectedPartId);
@@ -182,15 +181,15 @@ function RightRailStrip() {
           : null;
 
   return (
-    <nav className="rail-strip" aria-label="Details panel">
+    <div className="rail-strip" role="group" aria-label="Details panel">
       {sel && (
         <StripButton
           icon={sel.icon}
           tip={`Edit ${sel.name}`}
           label={`Open the details panel for ${sel.name}`}
           side="right"
-          onClick={() => toggleRail('right')}
-          badge={count > 1 ? count : undefined}
+          onClick={onOpen}
+          badge={count > 1 ? (count > 99 ? '99+' : count) : undefined}
           active
         />
       )}
@@ -202,7 +201,7 @@ function RightRailStrip() {
         onClick={() => setCatalogOpen(!catalogOpen)}
         expanded={catalogOpen}
       />
-    </nav>
+    </div>
   );
 }
 
@@ -220,7 +219,31 @@ function RightRailStrip() {
  *  `display: flex; flex-direction: column; height: 100%`, so this needs no
  *  absolute positioning in a container that clips. */
 export function RightRailBody({ open }: { open: boolean }): ReactNode {
-  if (!open) return <RightRailStrip />;
+  const toggleRail = useStudio((s) => s.toggleRail);
+  // Opening from the strip's selection icon lands focus on the panel it opened. The
+  // strip button that was pressed has just unmounted, so focus would otherwise fall to
+  // the page, and the next Tab would start again from the top bar. Same reason, and the
+  // same landing, as the left rail's (`PartTree`). Only from the strip: the rail's own
+  // chevron is still mounted and keeps its focus.
+  const land = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open || !land.current) return;
+    land.current = false;
+    scrollRef.current
+      ?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      ?.focus({ preventScroll: true });
+  }, [open]);
+  if (!open) {
+    return (
+      <RightRailStrip
+        onOpen={() => {
+          land.current = true;
+          toggleRail('right');
+        }}
+      />
+    );
+  }
   return (
     <>
       <SelectionHeader />
@@ -240,7 +263,7 @@ export function RightRailBody({ open }: { open: boolean }): ReactNode {
 
           One scroll box rather than a height cap on the View section, because a cap
           is a number that has to be re-derived every time either panel grows. */}
-      <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+      <div ref={scrollRef} style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
         <Inspector />
       </div>
       <RailFooter />

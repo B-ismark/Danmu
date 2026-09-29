@@ -15,11 +15,12 @@
 // two used to describe the same app differently and nobody comparing them was
 // looking at both.
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
 import { HelpCard, HelpGroup, HelpLine, Kb } from './HelpCard';
 import { isTypingOrDialog } from './KeyboardShortcuts';
+import { usePopoverDismiss } from './usePopoverDismiss';
 import { usePhoneStudio, useStudioLayout } from './NarrowViewportBanner';
 import { useMediaQuery } from '@/lib/use-media-query';
 
@@ -40,8 +41,8 @@ export function StudioHelp({
 
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
-  // Read through a ref so the Escape listener below can close a controlled card
-  // without re-subscribing on every render of its owner.
+  // Read through a ref so a close can reach a controlled card's owner without the
+  // dismiss listeners re-subscribing on every render of it.
   const control = useRef({ controlled: openProp !== undefined, onOpenChange });
   control.current = { controlled: openProp !== undefined, onOpenChange };
   const setOpen = (next: boolean) => {
@@ -50,29 +51,15 @@ export function StudioHelp({
   };
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  // Esc closes help before it reaches the global "deselect" binding. Capture on
-  // window runs first and stops the event from ever bubbling back there.
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return;
-      // Escape belongs to a field being edited, or to a dialog in front of us,
-      // before it belongs to the help card.
-      if (isTypingOrDialog(e.target)) return;
-      // See ExportMenu: a plain stop still lets a sibling capture listener on
-      // window fire, so one Esc closed both popovers.
-      e.stopImmediatePropagation();
-      e.stopPropagation();
-      if (control.current.controlled) control.current.onOpenChange?.(false);
-      else setOpenState(false);
-      btnRef.current?.focus();
-    }
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [open]);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Esc, or a press anywhere outside the card, closes it, before Esc reaches the
+  // global "deselect" binding. The same hook as the other top-bar popovers, so
+  // opening View closes Help rather than stacking the two.
+  usePopoverDismiss(open, () => setOpen(false), wrapRef, btnRef, (e) => isTypingOrDialog(e.target));
 
   return (
-    <div className="popover-anchor">
+    <div ref={wrapRef} className="popover-anchor">
       {/* A question mark, not a sentence. "How this works" spent 150px saying what
           the universal glyph says in 30, on a control most people press once. The
           accessible name still carries the words. */}

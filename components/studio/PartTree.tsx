@@ -547,7 +547,7 @@ export function PartTree() {
           <LightingPicker />
           {/* The room is closed to the sun now, so a sun mood in a room with no
               opening has nothing to come through. Said in the same 10.5px --ink-3
-              hint voice the View section uses, directly under the control that
+              hint voice the view settings use, directly under the control that
               raises the question, and worded about the ROOM rather than about the
               renderer — on Fast quality there are no cast shadows at all, so a
               sentence claiming the room is unlit would be wrong half the time

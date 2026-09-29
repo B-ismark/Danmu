@@ -9,9 +9,12 @@ import { footprintForLayout, type LayoutId } from '@/lib/footprint';
 
 // The live store always carries the polygon (`RoomShape.footprint` is required), so the
 // fixture does too, built by the same function the store builds it with.
-const room = (layoutId: LayoutId, extra: { footprint?: Array<[number, number]>; roughSize?: true } = {}) => ({
-  width: 5,
-  depth: 4,
+const room = (
+  layoutId: LayoutId,
+  extra: { footprint?: Array<[number, number]>; roughSize?: true; width?: number; depth?: number } = {},
+) => ({
+  width: extra.width ?? 5,
+  depth: extra.depth ?? 4,
   layoutId,
   footprint: extra.footprint ?? footprintForLayout(layoutId, 5, 4),
   roughSize: extra.roughSize,
@@ -28,9 +31,12 @@ describe('roomFacts', () => {
   });
 
   it("a drawn footprint wins over the preset's outline", () => {
-    // A 3 × 2 m rectangle drawn inside a room whose box still says 5 × 4.
-    const drawn: Array<[number, number]> = [[-1.5, -1], [1.5, -1], [1.5, 1], [-1.5, 1]];
-    expect(roomFacts(room('custom', { footprint: drawn }), 0).areaM2).toBeCloseTo(6, 9);
+    // A drawn L, 3 × 2 m overall, with its box saying 3 × 2 as the store's would. A box
+    // that disagreed with its own outline was a room no screen can make, and it proved
+    // only that the area is not `width × depth` of a DIFFERENT box. The rectangle this
+    // box describes would read 6 m²; the L encloses 4.5.
+    const drawn: Array<[number, number]> = [[-1.5, -1], [1.5, -1], [1.5, 0], [0, 0], [0, 1], [-1.5, 1]];
+    expect(roomFacts(room('custom', { footprint: drawn, width: 3, depth: 2 }), 0).areaM2).toBeCloseTo(4.5, 9);
   });
 
   it('gives the overall size in millimetres for formatDim, and the piece count as handed', () => {

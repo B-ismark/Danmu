@@ -55,6 +55,17 @@ describe('the left rail, shut', () => {
     expect(document.activeElement).toBe(toggle);
     expect(useRailIntent.getState().left, 'taken, not left for the next mount').toBeNull();
   });
+
+  it('a tree already on screen takes a request that arrives later', () => {
+    // The empty Inspector's paths ask while the left rail is OPEN, so the tree is
+    // mounted before the request, not by it.
+    render(<PartTree />);
+    act(() => useRailIntent.getState().askLeft('style'));
+    const toggle = screen.getByRole('button', { name: /^Style/ });
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(toggle);
+    expect(useRailIntent.getState().left).toBeNull();
+  });
 });
 
 describe('the right rail, shut', () => {
@@ -70,6 +81,39 @@ describe('the right rail, shut', () => {
     render(<RightRailBody open={false} />);
     fireEvent.click(screen.getByRole('button', { name: 'Open the details panel for Sofa' }));
     expect(useStudio.getState().railRightOpen).toBe(true);
+  });
+
+  it('opening from the selection icon lands focus in the panel it opened', () => {
+    // The icon that was pressed unmounts with the strip; without a landing, focus
+    // falls to the page and the next Tab starts again at the top bar.
+    function Rail() {
+      return <RightRailBody open={useStudio((s) => s.railRightOpen)} />;
+    }
+    act(() => useStudio.getState().setSelected('sofa-1'));
+    const { container } = render(<Rail />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open the details panel for Sofa' }));
+    expect(document.activeElement).not.toBe(document.body);
+    expect(container.contains(document.activeElement)).toBe(true);
+
+    // Taken once: shut it and open it again the other way, from the rail's own
+    // chevron, and focus stays on the chevron that was pressed.
+    const chevron = document.createElement('button');
+    document.body.appendChild(chevron);
+    act(() => useStudio.setState({ railRightOpen: false }));
+    chevron.focus();
+    act(() => useStudio.setState({ railRightOpen: true }));
+    expect(document.activeElement).toBe(chevron);
+    chevron.remove();
+  });
+
+  it('caps the selection count on its badge, as the catalog icon does', () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({ ...sofa, id: `sofa-${i}` }));
+    act(() => {
+      useScene.getState().setParts(many);
+      useStudio.setState({ selectedPartId: 'sofa-0', selection: many.map((p) => p.id) });
+    });
+    render(<RightRailBody open={false} />);
+    expect(screen.getByRole('button', { name: /120 selected pieces/ }).textContent).toBe('99+');
   });
 });
 
