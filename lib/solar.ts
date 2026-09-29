@@ -11,8 +11,8 @@
 // "precision the sun cannot use is precision not worth holding"; solar accuracy
 // the *user* cannot check is accuracy not worth holding either.
 //
-// So the four moments that apparatus existed to reach — sunrise, noon, golden
-// hour, sunset — are fixed angles in `Room`'s `LIGHTING` table now, and what
+// So the moments that apparatus existed to reach — sunrise, noon, golden hour,
+// sunset — are points on one typical day in `lib/lighting-moods.ts` now, and what
 // survives here is the part that was never a guess: the axis convention, and the
 // warm-to-white ramp shared with the room's own lamps.
 //

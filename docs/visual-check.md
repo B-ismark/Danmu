@@ -1974,6 +1974,42 @@ real phone, with a real scan, is the unlooked-at half.
 ---
 ## Look and light
 
+### A day/night clock with a sun arc over the room, pieces that sway when carried, and sounds — branch `claude/affectionate-ritchie-ilawx1` ([PR #176](https://github.com/B-ismark/Danmu/pull/176)), SEEN HEADLESS ONLY, needs real ears and a real trackpad
+
+**Where to click.** Open any room in **3D Model**. A dashed path circles over the room with the
+sun and a clock pill on it; drag the sun along it from morning to evening, then press **Night**
+in **Style → Light** and drag the moon. Press **Overcast**, then grab the sun again. Turn the
+room with **Plan top faces**. Carry the sofa quickly across the floor and let go; carry it into
+the coffee table. In **2D Plan**, drag a piece and drag a wall. Add a piece from the Library,
+delete it, recolour one, turn one with R, press Undo and Redo. **View → Sounds** switches it off.
+
+**What wrong looks like.**
+- The arc or the pill leaving the canvas, sitting under the floating toolbar, or reading as a
+  construction line scored across the walls. Measured headless at 1440 × 900 on a 5 × 4 m room:
+  noon pill at y 235, 18:30 at y 387, the moon at 22:12 on its own path, and 06:40 pinned to the
+  right edge rather than gone — the three fixes this needed (halo not dome, ghosted behind the
+  walls, held inside the frame) were each found by looking, so look at a rotated and a zoomed
+  view too, and at a tall room.
+- **Since the review round** the path is a ring on the eaves rather than a halo 0.9 m up, and it
+  gives way: faint with a piece selected, gone while one is carried, full only when reached.
+  Measured headless on the same room: noon pill at y 292, 06:40 at y 324 (it used to land by the
+  sofa at y 660), class `sun-arc--quiet` with the sofa selected and `--away` while it was carried;
+  a handle scrub 06:40 → 06:15 came back with ONE undo. Wrong would be the ring reading as a line
+  scored across the back wall at noon, the pill fading while you are aiming at it, or a track
+  pull in **Style → Light** taking more than one Undo to put back.
+- The moon off its dashes, or the handle jumping to the other horizon as a drag reaches 19:30.
+- A seam in the sky while scrubbing — a colour that jumps rather than eases.
+- A carried piece leaning INTO its travel (towed by its top), tipping visibly past a few
+  degrees, still rocking after half a second, or swaying on a wall piece or a lamp on a table.
+  It now tips onto its low corner, so NO corner of a carried sofa should ever go under the floor
+  (headless, the sofa's legs stayed clear mid-carry); a long piece should lean visibly less than
+  a chair, and a rug not at all.
+- **Sound, which nothing headless can hear:** anything that clicks harshly, anything louder
+  than a notification, a buzz while dragging fast, the glide hanging on after the hand stops,
+  two sounds for one press (a touch pick-up used to pop twice; the move/rotate gizmo used to
+  knock down without a pop up), or ANY sound while a room opens or while an undo restores it. The
+  sunrise and sunset cues should be felt rather than noticed.
+
 ### A piece cut at its foot is judged where it would stand against its wall — merged to `main` in `12b0209` (PR #170), NOT PROBED
 
 **Where to click.** *Photograph my real room* → a photo whose bottom edge cuts off the foot of

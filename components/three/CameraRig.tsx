@@ -155,6 +155,9 @@ function KeyboardNav({
     }
     function down(e: KeyboardEvent) {
       if (isTyping(e.target)) return;
+      // A slider owns its arrows — the sun's handle, the rail's day track. Without
+      // this, stepping the clock from the keyboard also slid the camera sideways.
+      if ((e.target as Element | null)?.closest?.('[role="slider"], input[type="range"]')) return;
       const k = e.key.toLowerCase();
       if (!NAV_KEYS.has(k)) return;
       e.preventDefault(); // stop arrow-key page scroll

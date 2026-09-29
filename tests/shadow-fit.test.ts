@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { shadowFit } from '@/lib/shadow-fit';
 import { sunDirection } from '@/lib/solar';
-import { LIGHTING, KEY_DIR } from '@/lib/lighting-moods';
+import { KEY_DIR, keyAt } from '@/lib/lighting-moods';
 
 // The sun's shadow camera, fitted to the room.
 //
@@ -67,15 +67,15 @@ function reach(
  *  the studio moods' key light is blocked by the same shell and fitted by the same
  *  camera, and its elevation (~54°) is not one of the presets'. */
 const DIRS: Array<{ name: string; dir: [number, number, number] }> = [
-  ...Object.entries(LIGHTING).flatMap(([id, mood]) => {
-    if (!mood.sun) return [];
-    // Four bearings, because the dial rotates every angle together and a term that
-    // depended on azimuth would be right at one bearing and wrong at the others.
-    return [0, 37, 143, -90].map((bearing) => {
-      const dir = sunDirection(mood.sun!.elevationDeg, mood.sun!.azimuthDeg, bearing);
-      return { name: `${id} @ ${bearing}°`, dir: dir! };
-    });
-  }),
+  // Every half hour of the day the key light is up — sun by day, moon by night —
+  // at four bearings, because the room's bearing turns the whole path and a term
+  // that depended on azimuth would be right at one bearing and wrong at the others.
+  ...Array.from({ length: 48 }, (_, i) => i / 2).flatMap((hour) =>
+    [0, 37, 143, -90].flatMap((bearing) => {
+      const k = keyAt(hour, bearing);
+      return k ? [{ name: `${k.body} at ${hour}h @ ${bearing}°`, dir: k.dir }] : [];
+    }),
+  ),
   { name: 'studio key', dir: KEY_DIR },
 ];
 

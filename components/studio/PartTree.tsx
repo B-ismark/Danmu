@@ -12,12 +12,10 @@ import Link from 'next/link';
 import { RoomDimsEditor } from './RoomDimsEditor';
 import { RailSection } from './RailSection';
 import { RoomTools } from './RoomTools';
-import { NorthDial } from './NorthDial';
 import { WallColorsFromPhotos } from './WallColorsFromPhotos';
 import { LightingPicker } from './LightingPicker';
 import { duplicateSelection, removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
-import { LIGHTING } from '@/lib/lighting-moods';
 import { isAperture } from '@/lib/apertures';
 import { groupRows, type TreeRow } from '@/lib/part-rows';
 import type { ScenePart } from '@/lib/scene-spec';
@@ -126,7 +124,7 @@ export function PartTree() {
   // rule 2's "say so, never silently" — and the predicate comes from
   // `lib/apertures.ts` so the sentence cannot disagree with the geometry that cuts
   // the holes.
-  const sunHasNoWayIn = !!LIGHTING[lighting].sun && !parts.some(isAperture);
+  const sunHasNoWayIn = lighting === 'daylight' && !parts.some(isAperture);
 
   function applyTheme(theme: Theme) {
     // One store write for one gesture. The old per-part `updatePart` loop fired
@@ -136,6 +134,7 @@ export function PartTree() {
       parts: s.parts.map((p) => (p.locked ? p : { ...p, color: themeColorFor(p.category, theme) })),
     }));
     setLighting(theme.lighting);
+    if (theme.hour !== undefined) useStudio.getState().setHour(theme.hour);
     toast({
       title: `${theme.label} applied`,
       message: 'Recoloured everything except the pieces from your photo, and set the light to match.',
@@ -422,15 +421,6 @@ export function PartTree() {
           }
         >
           <RoomDimsEditor />
-          {/* Which way the room faces. It used to live inside the Lighting mood
-              that consumed it, alongside a latitude and a longitude; it is a
-              property of the ROOM — `lib/storage.ts` says so in as many words —
-              so it belongs with the room's other dimensions. NorthDial renders
-              its own section, labelled "Sun direction", with its explanation
-              behind an info button. */}
-          <div style={{ marginTop: 12 }}>
-            <NorthDial />
-          </div>
           {/* Reads the room's real wall colours out of its capture photos. In the
               body rather than beside Re-scan because `RailSection` carries ONE
               header action and Re-scan is it — and this is an in-place async
@@ -529,7 +519,7 @@ export function PartTree() {
             the user could not see. Same construction as the swatch row above: one
             line of 32px targets, no words, name on hover and on focus. */}
         <div style={{ marginTop: 12 }}>
-          <span id="lighting-label" className="ds-label" style={{ display: 'block', marginBottom: 8 }}>Lighting</span>
+          <span id="lighting-label" className="ds-label" style={{ display: 'block', marginBottom: 8 }}>Light</span>
           <LightingPicker />
           {/* The room is closed to the sun now, so a sun mood in a room with no
               opening has nothing to come through. Said in the same 10.5px --ink-3

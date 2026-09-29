@@ -2,7 +2,7 @@
 // The info button that replaced the standing hint under the sun dial. It has to
 // open under a finger, which is the one thing `Tooltip` deliberately cannot do
 // (it latches closed on press), so the gesture sequences are the assertions.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { InfoTip } from '@/components/ui/Tooltip';
@@ -131,23 +131,22 @@ describe('InfoTip', () => {
   });
 });
 
-describe('the sun dial explains itself behind an info button', () => {
-  const SRC = readFileSync('components/studio/NorthDial.tsx', 'utf8');
-  it('is labelled Sun direction, with the explanation in an InfoTip', () => {
-    expect(SRC).toMatch(/>Sun direction</);
-    expect(SRC).not.toMatch(/>Facing</);
-    expect(SRC).toMatch(/<InfoTip label="About sun direction">\{about\}<\/InfoTip>/);
+describe('the sun dial is gone, and its two jobs have new homes', () => {
+  // The dial did two things: it SHOWED where the light came from and it SET which
+  // way the room faces. The arc over the room shows it now (components/three/
+  // SunArc.tsx), and the rail's daylight control sets the bearing. Both have to be
+  // reachable without a pointer, or deleting the dial deleted a control.
+  const ARC = readFileSync('components/three/SunArc.tsx', 'utf8');
+  const PICKER = readFileSync('components/studio/LightingPicker.tsx', 'utf8');
+  it('leaves no dial behind', () => {
+    expect(existsSync('components/studio/NorthDial.tsx')).toBe(false);
   });
-  it('the dial answers to its visible label', () => {
-    // Voice control finds a control by the words on screen (WCAG 2.5.3).
-    expect(SRC).toMatch(/role="slider"[\s\S]{0,400}aria-label="Sun direction[^"]*"/);
+  it('makes the sun on its arc a keyboard slider for the time of day', () => {
+    expect(ARC).toMatch(/role="slider"[\s\S]{0,120}tabIndex=\{0\}[\s\S]{0,80}aria-label="Time of day"/);
+    expect(ARC).toMatch(/onKeyDown=/);
   });
-  it('has no standing hint under the dial', () => {
-    // The section component, not `Dial` below it, whose own t-micro is the
-    // bearing readout.
-    const section = SRC.slice(SRC.indexOf('export function NorthDial'), SRC.indexOf('function Dial('));
-    expect(section.length).toBeGreaterThan(200);
-    expect(section).not.toMatch(/\{hint\}/);
-    expect(section).not.toMatch(/className="t-micro"/);
+  it('keeps the bearing settable, both ways, by name', () => {
+    expect(PICKER).toMatch(/aria-label="Turn the room anticlockwise"/);
+    expect(PICKER).toMatch(/aria-label="Turn the room clockwise"/);
   });
 });

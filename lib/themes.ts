@@ -42,20 +42,24 @@ type Tones = {
   neutral: string;
 };
 
-export type Theme = { id: string; label: string; lighting: Lighting; swatch: [string, string, string]; tones: Tones };
+/** `hour` is where on the clock a daylight theme sets the sun, and is absent for
+ *  an overcast one (overcast is hour-blind, so a theme that set one would move a
+ *  control the light does not read). */
+export type Theme = { id: string; label: string; lighting: Lighting; hour?: number; swatch: [string, string, string]; tones: Tones };
 
 export const THEMES: Theme[] = [
   {
     id: 'warm-min',
     label: 'Warm Minimal',
-    lighting: 'day',
+    lighting: 'daylight',
+    hour: 12.8,
     swatch: ['#E8DCC8', '#C9A87C', '#6F5436'],
     tones: { wood: '#C9A87C', soft: '#E6DAC6', accent: '#C57B53', neutral: '#D8CDBA' },
   },
   {
     id: 'cool-neutral',
     label: 'Cool Neutral',
-    lighting: 'cool',
+    lighting: 'overcast',
     // Illustrative rather than exhaustive, as every row here is: three of the four
     // tones would not read as a palette at 18px. Pale cool, sage, charcoal.
     swatch: ['#DCE4E2', '#A9C4C0', '#5B554E'],
@@ -64,14 +68,19 @@ export const THEMES: Theme[] = [
   {
     id: 'heritage',
     label: 'Heritage',
-    lighting: 'evening',
+    // Lamp-lit, which is what its old Evening mood was: the night end of the clock.
+    lighting: 'daylight',
+    hour: 22.2,
     swatch: ['#C99A5B', '#8A4B2A', '#3E2417'],
     tones: { wood: '#6F4A2F', soft: '#9A5A3C', accent: '#B08D4F', neutral: '#7A5238' },
   },
   {
     id: 'afro-mod',
     label: 'Afro-Modern',
-    lighting: 'day',
+    // Late-afternoon gold rather than a second Midday: two themes setting the same
+    // light is the overlap `tests/themes.test.ts` was written about.
+    lighting: 'daylight',
+    hour: 17.2,
     swatch: ['#D98E5A', '#B5482E', '#2E2A26'],
     tones: { wood: '#7A4327', soft: '#C16B43', accent: '#B5482E', neutral: '#8A5A3C' },
   },

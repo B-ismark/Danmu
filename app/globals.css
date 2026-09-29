@@ -1795,3 +1795,87 @@ textarea.field { border-radius: var(--r-2); }
     danmu-vignette-slide 7s ease-in-out infinite,
     danmu-vignette-reupholster 7s ease-in-out infinite;
 }
+
+/* ── The sun on its arc (components/three/SunArc.tsx) ─────────────────────────
+   A drei `Html` overlay pinned to where the key light comes from: the body glyph
+   in a glowing disc, the clock in a pill beside it. Sits on the room, so it wears
+   the floating-chrome rim; the glow is the one thing here that says "grab me". */
+.sun-arc {
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: grab; touch-action: none; user-select: none;
+  border-radius: var(--r-full);
+  outline-offset: 3px;
+}
+.sun-arc:active { cursor: grabbing; }
+.sun-arc__body {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  border-radius: var(--r-full);
+  color: var(--accent-text);
+  background: var(--paper);
+  border: 1px solid var(--edge);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent), var(--shadow-float);
+  transition: transform var(--dur-quick) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+.sun-arc:hover .sun-arc__body,
+.sun-arc:focus-visible .sun-arc__body { transform: scale(1.08); }
+.sun-arc:active .sun-arc__body { transform: scale(0.96); }
+.sun-arc__time {
+  padding: 3px 9px;
+  font-size: var(--fs-caption); font-weight: 700;
+  color: var(--on-ink);
+  background: var(--ink);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-float);
+  white-space: nowrap;
+}
+.sun-arc--night .sun-arc__body {
+  color: var(--ink-2);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--paper) 18%, transparent), var(--shadow-float);
+}
+.sun-arc--muted .sun-arc__body { color: var(--ink-3); box-shadow: var(--shadow-float); }
+/* Giving way to the furniture (see the contract in SunArc.tsx). Quiet while a
+   piece is selected — still there, still grabbable, not competing with it — and
+   away while anything else is carried, where it must not catch the pointer. */
+.sun-arc { transition: opacity var(--dur-base) var(--ease-out); }
+.sun-arc--quiet { opacity: 0.5; }
+.sun-arc--away { opacity: 0; pointer-events: none; }
+/* Only the disc is the handle. The time beside it is a label, and a label the
+   size of a word should not be a patch of wall or TV nobody can click through. */
+.sun-arc__time { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sun-arc, .sun-arc__body { transition: none; }
+}
+
+/* ── The day as a track (components/studio/LightingPicker.tsx) ────────────────
+   A native range, painted as the sky it scrubs: night at both ends, gold at the
+   horizons, paper at noon. The stops are tokens, so the track sits in the palette
+   rather than beside it. */
+.day-track {
+  -webkit-appearance: none; appearance: none;
+  height: 6px; margin: 0;
+  border-radius: var(--r-full);
+  background: linear-gradient(90deg,
+    var(--ink) 0%, var(--ink-2) 20%, var(--accent) 27%, var(--paper-3) 40%,
+    var(--paper) 53%, var(--paper-3) 66%, var(--accent) 79%, var(--ink-2) 86%, var(--ink) 100%);
+  border: 1px solid var(--edge);
+  cursor: pointer;
+}
+.day-track::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px;
+  border-radius: var(--r-full);
+  background: var(--paper);
+  border: 2px solid var(--accent-text);
+  box-shadow: var(--shadow-soft);
+  transition: transform var(--dur-quick) var(--ease-out);
+}
+.day-track::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: var(--r-full);
+  background: var(--paper);
+  border: 2px solid var(--accent-text);
+  box-shadow: var(--shadow-soft);
+}
+.day-track:active::-webkit-slider-thumb { transform: scale(1.15); }
+.day-track:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; }
