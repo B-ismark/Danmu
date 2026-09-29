@@ -270,6 +270,13 @@ describe('scene file · what never leaves', () => {
     expect(sceneFileJson(file)).not.toContain('fromDetection');
   });
 
+  it('does not write out the sheen a room saved before the Finish row went', () => {
+    const old = { ...SOFA, finish: 'polished' } as ScenePart;
+    const file = buildSceneFile(ROOM, [old], NO_TRANSFORMS, 1);
+    expect('finish' in file.parts[0]).toBe(false);
+    expect(sceneFileJson(file)).not.toContain('finish');
+  });
+
   it('has no room for a photo anywhere in the serialised form', () => {
     // The privacy line this format is built around: a file is for sending to
     // someone, and the captures are pictures of the inside of a home.
@@ -466,9 +473,10 @@ describe('scene file · a file is untrusted input', () => {
     expect(withParts([rawPart({ color: '#AABBCC' })]).file.parts[0].color).toBe('#aabbcc');
   });
 
-  it('forgets an unknown finish', () => {
-    expect(withParts([rawPart({ finish: 'holographic' })]).file.parts[0].finish).toBeUndefined();
-    expect(withParts([rawPart({ finish: 'matte' })]).file.parts[0].finish).toBe('matte');
+  it('reads no sheen from a file written while pieces had one', () => {
+    // The Finish row is gone. A file from before still opens, and the value is not
+    // carried into the room.
+    expect('finish' in withParts([rawPart({ finish: 'matte' })]).file.parts[0]).toBe(false);
   });
 
   it('gives a piece a fresh id when its own is missing or already taken', () => {

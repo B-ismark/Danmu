@@ -10,7 +10,7 @@
 // ─── What travels, and what deliberately does not ───────────────────────────
 //
 // **The room and its furniture.** Name, footprint, wall paint, site, and every
-// piece with its size, position, rotation, colour, finish, decor and light.
+// piece with its size, position, rotation, colour, decor and light.
 //
 // **Not the photographs.** `Capture` blobs stay behind. This is the one decision in
 // here worth defending: a file exists to be sent to someone, and the photos are of
@@ -44,11 +44,9 @@
 import {
   CATEGORIES,
   DECOR_KINDS,
-  FINISHES,
   SHAPES,
   type Category,
   type DecorItem,
-  type Finish,
   type PartLight,
   type ScenePart,
   type Shape,
@@ -209,6 +207,9 @@ export function buildSceneFile(
       // points at a bounding box in a photo the file does not carry, so keeping it
       // would be a reference into nothing.
       const { fromDetection: _drop, ...part } = resolved;
+      // A room saved while pieces had a sheen setting (Matte, Satin, …) can still
+      // carry one. Nothing reads it any more, so it is not written out either.
+      delete (part as { finish?: unknown }).finish;
       if (hidden?.[part.id]) (part as SceneFilePart).hidden = true;
       if (relation[part.id]) (part as SceneFilePart).parentId = relation[part.id];
       return part as SceneFilePart;
@@ -680,9 +681,6 @@ function readPart(
 
   const colour = hex(v.color);
   if (colour) part.color = colour;
-
-  const finish = oneOf<Finish>(v.finish, FINISHES);
-  if (finish) part.finish = finish;
 
   const groupId = str(v.groupId);
   if (groupId) part.groupId = groupId;

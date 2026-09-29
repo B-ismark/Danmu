@@ -2,10 +2,10 @@ import { create } from 'zustand';
 
 // "Open the left rail AT this section": one request, taken once.
 //
-// Asked for by a collapsed rail's icons (press Style on the strip and the rail
-// opens on Style, not wherever it was left) and by the empty Inspector's
-// "restyle the room" path, which is aimed at a section in the OTHER rail. The
-// piece tree owns which of its sections are open. It is local state and
+// Asked for by a collapsed rail's icons: press Style on the strip and the rail
+// opens on Style, not wherever it was left. That strip only exists where a rail
+// can shut, so the tablet and phone shells, whose panel is always open, have no
+// consumer of it. The piece tree owns which of its sections are open. It is local state and
 // deliberately unpersisted (see `PartTree`), so a caller outside it cannot set
 // that directly. It leaves a request here and the tree takes it.
 //

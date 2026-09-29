@@ -961,11 +961,7 @@ export default function DetectPage() {
         <StepHeader
           kicker="Last step"
           title="Check your furniture"
-          subtitle={
-            roughSize
-              ? 'Everything Danmu found, sized for a typical room of this shape, so sizes are rough. Only the pieces you keep go into your room, so leave out anything that isn’t yours and add anything it missed.'
-              : 'Everything Danmu found, measured at real size. Only the pieces you keep go into your room, so leave out anything that isn’t yours and add anything it missed.'
-          }
+          subtitle={roughSize ? 'Keep what’s yours. Sizes are rough until you set the room’s size.' : 'Keep what’s yours.'}
         />
         {privacyLine && (
           <p
@@ -1236,24 +1232,19 @@ export default function DetectPage() {
               <h2 className="section-title">Your pieces</h2>
               {total > 0 && <span className="section-meta mono">{total}</span>}
             </div>
-            <p className="t-meta" style={{ margin: 0, lineHeight: 1.45 }}>
-              Only kept pieces go into your room. Danmu keeps the clearest ones for you; the rest wait here until
-              you say.
-            </p>
           </div>
 
           <div className="list" style={{ padding: 10, gap: 4 }}>
             {total === 0 && !running && (
               <div className="t-small" style={{ padding: '14px 12px', lineHeight: 1.5 }}>
                 <b style={{ display: 'block', marginBottom: 4, color: 'var(--ink)' }}>Nothing here yet</b>
-                If you continue with an empty list, the studio opens with a starter arrangement instead of your own
-                pieces.
+                Continue for a starter arrangement.
               </div>
             )}
             {total > 0 && keptCount === 0 && !running && (
               <div className="t-small" style={{ padding: '4px 12px 10px', lineHeight: 1.5 }}>
                 <b style={{ display: 'block', marginBottom: 4, color: 'var(--ink)' }}>Nothing kept yet</b>
-                Your room will open empty. Press + beside a piece to keep it.
+                Your room will open empty.
               </div>
             )}
             {detections.map((d, i) => (
@@ -1283,7 +1274,6 @@ export default function DetectPage() {
       {running && (
         <LoadingOverlay
           title="Finding your furniture"
-          description={`Danmu checks your ${photoCount === 1 ? 'photo' : `${photoCount} photos`} together, so a piece seen twice is counted once.`}
           note={
             sendsPhotos
               ? 'Your wall photos go to Google once for this step. Nothing else leaves your device.'

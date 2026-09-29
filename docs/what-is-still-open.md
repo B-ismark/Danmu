@@ -3059,11 +3059,12 @@ widened for them.
   every shape over a list of the ones somebody noticed.
 - **`plant` is resolved, and it was not one of the two ways out this entry offered.** It
   listed shrinking the plant or restating its box as the only options, and that was a
-  choice between two squashes. `plantForm` (`lib/scene-spec.ts`) draws it AT its `dimMM`
-  instead, with round leaves: the head takes the box's proportions and each leaf stays a
-  sphere. It stays inside the w × d ellipse the plan draws, not only the box, because
-  `plant` is a round shape. `tests/plant-form.test.ts` holds both, and the 260 mm budget
-  is deleted.
+  choice between two squashes. `plantForm` (`lib/plant-form.ts`) draws it AT its `dimMM`
+  instead. The first version was a head of round leaf balls, which stopped the squash and
+  read as topiary. It is now leaf-shaped leaves on stalks, and the box's proportions choose
+  the habit: a fig, an arching bush or a blend. It stays inside the w × d ellipse the plan
+  draws, not only the box, because `plant` is a round shape. `tests/plant-form.test.ts`
+  holds both, and the 260 mm budget is deleted.
 
 **The other five of the "six renderers" are not defects at their authored size**, which the
 row above could not have told you and is worth recording: `chair-armchair` fills its box

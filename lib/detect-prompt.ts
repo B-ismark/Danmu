@@ -2,8 +2,8 @@
 //
 // Lifted out of `lib/detection.ts` for the reason Phase 1 lifted `geoRefine` out
 // of the detect screen: it was the one part of that module nothing could test,
-// because importing `lib/detection.ts` drags in the Gemini SDK and the quota
-// store. Nothing here talks to the network.
+// because importing `lib/detection.ts` drags in the Gemini SDK. Nothing here
+// talks to the network.
 //
 // WHAT IT GOT WRONG BEFORE, and it was a lie the model was asked to act on: the
 // first line read "You will receive 4 photos of a single room, one per wall
@@ -148,7 +148,7 @@ Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by vis
 
 /** The rows of the reply this prompt asked for, as the geometry can use them. Here
  *  rather than beside the call for the reason the prompt is (the top of this file):
- *  its test should not have to load the Gemini SDK and the quota store.
+ *  its test should not have to load the Gemini SDK.
  *
  *  NOT deduped here. Merging two detections is a decision about what EXISTS, and it
  *  used to be taken on the model's own guessed `position` — the exact numbers the

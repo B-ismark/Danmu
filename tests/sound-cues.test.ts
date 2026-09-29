@@ -65,7 +65,6 @@ describe('what each change sounds like', () => {
     expect(cue({ parts: [sofa] }, { parts: [sofa, vase] })).toBe('place');
     expect(cue({}, { parts: [sofa] })).toBe('remove');
     expect(cue({}, { parts: [{ ...sofa, color: '#123456' }, vase] })).toBe('brush');
-    expect(cue({}, { parts: [{ ...sofa, finish: 'gloss' }, vase] })).toBe('brush');
     expect(cue({}, { wallColors: { 2: '#ffeedd' } })).toBe('brush');
     expect(cue({}, { parts: [sofa, { ...vase, decor: [{ kind: 'book' }] }] })).toBe('place');
     expect(cue({}, { parts: [{ ...sofa, groupId: 'g' }, { ...vase, groupId: 'g' }] })).toBe('snap');

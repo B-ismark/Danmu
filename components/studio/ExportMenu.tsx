@@ -31,7 +31,7 @@ import { toast } from '@/components/ui/StorageToast';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { usePopoverDismiss } from './usePopoverDismiss';
 
-export type ExportItem = { icon: IconName; label: string; hint: string; onClick: () => void };
+export type ExportItem = { icon: IconName; label: string; onClick: () => void };
 
 /** The three exports, as rows anything can render — the Export menu here, and the
  *  phone app bar's More menu (`StudioMoreMenu`), which has no room for a second
@@ -110,7 +110,6 @@ export function useExportItems(): ExportItem[] {
           {
             icon: 'image' as IconName,
             label: 'This 3D view',
-            hint: 'PNG of the room as you are looking at it',
             onClick: () => {
               // The name rides the same request that bumps the token, because
               // the capture inside the canvas cannot load the room itself.
@@ -127,17 +126,15 @@ export function useExportItems(): ExportItem[] {
     {
       icon: 'grid',
       label: 'Floor plan',
-      hint: 'To-scale PNG, measured in ' + dimUnit,
       // `run` discards what `onClick` returns, so the promise is caught HERE. Handing
       // `planPng` over bare made a throw an unhandled rejection.
       onClick: () => void planPng().catch(reportExportFailure('the floor plan')),
     },
     {
       icon: 'download',
-      label: 'The room itself',
-      // The one download you can open again — said plainly, because "keep or send"
-      // does not distinguish it from the PNGs above it.
-      hint: 'A file you can reopen here, or send to someone',
+      // The one download you can open again, so its name says it is a file rather
+      // than a picture like the two above it.
+      label: 'Room file',
       onClick: () => {
         // No `.catch`: `saveSceneFile` catches and toasts for itself, and its own
         // docblock says the caller does not have to. A guard here would double the
@@ -218,7 +215,7 @@ export function ExportMenu() {
               className="list-row"
               style={{
                 display: 'flex',
-                alignItems: 'flex-start',
+                alignItems: 'center',
                 gap: 9,
                 textAlign: 'left',
                 width: '100%',
@@ -230,10 +227,7 @@ export function ExportMenu() {
               }}
             >
               <Icon name={it.icon} size={13} />
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--ink)' }}>{it.label}</span>
-                <span className="t-hint" style={{ lineHeight: 1.4 }}>{it.hint}</span>
-              </span>
+              <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700, color: 'var(--ink)', minWidth: 0 }}>{it.label}</span>
             </button>
           ))}
         </div>

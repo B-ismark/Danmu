@@ -1068,18 +1068,15 @@ describe('the inspector folds its options away', () => {
 
   it('names the state in the collapsed row — the summary is the point of the fold', () => {
     // A folded row that said only "Colour" would force the expand just to see
-    // where you stand. RailSection's meta is the derived state: swatch + name +
-    // finish for paint, "Suggested · 3" for props.
-    expect(INSPECTOR).toMatch(/finishLabel=\{part\.finish/);
+    // where you stand. RailSection's meta is the derived state: swatch + name
+    // for paint, "Suggested · 3" for props.
     expect(INSPECTOR).toMatch(/meta=\{summary\}/);
   });
 
-  it('keeps Finish inside the Colour decision', () => {
-    // Five near-synonym chips competing with the real verbs was a section
-    // looking for a reason; as half of the material decision they are one
-    // click away, and the choice still shows in the collapsed summary.
-    expect(INSPECTOR).not.toMatch(/Section label="Finish"/);
-    expect(INSPECTOR).toMatch(/function FinishChips/);
+  it('has no sheen control', () => {
+    // A Finish row (Auto / Matte / Satin / Polished / Metal) sat inside Colour and
+    // was removed in review: it changed nothing a person could see.
+    expect(INSPECTOR).not.toMatch(/Finish/);
   });
 });
 

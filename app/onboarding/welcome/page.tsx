@@ -105,10 +105,7 @@ export default function WelcomePage() {
             <span className="ds-label" style={{ color: 'var(--accent-text)' }}>Start here</span>
           </div>
 
-          <h2 style={{ fontSize: 'var(--fs-title)', margin: '6px 0 6px' }}>Build your first room</h2>
-          <p className="t-body" style={{ lineHeight: 1.55, margin: '0 0 22px' }}>
-            Free, with no key needed to start.
-          </p>
+          <h2 style={{ fontSize: 'var(--fs-title)', margin: '6px 0 22px' }}>Build your first room</h2>
 
           <button
             onClick={() => router.push('/onboarding/layout-pick')}
@@ -155,9 +152,10 @@ export default function WelcomePage() {
                     aria-label="Google Gemini API key (optional)"
                     // The verdict below is colour + wording; aria-invalid is what
                     // actually reaches assistive tech, and the hint it points at
-                    // names the expected format instead of just saying "check it".
+                    // names the expected format instead of just saying "check it". It
+                    // shows only when the format is wrong, the one time it is needed.
                     aria-invalid={keyState === 'check'}
-                    aria-describedby="welcome-key-hint"
+                    aria-describedby={keyState === 'check' ? 'welcome-key-hint' : undefined}
                     className="ds-input"
                     style={{ paddingRight: 44, height: 44 }}
                   />
@@ -206,9 +204,11 @@ export default function WelcomePage() {
                   </span>
                 </div>
 
-                <p id="welcome-key-hint" className="t-meta" style={{ lineHeight: 1.5, margin: '10px 0 0' }}>
-                  Gemini keys start with “AIza”. You can add one later in Settings.
-                </p>
+                {keyState === 'check' && (
+                  <p id="welcome-key-hint" className="t-meta" style={{ lineHeight: 1.5, margin: '10px 0 0' }}>
+                    Gemini keys start with “AIza”.
+                  </p>
+                )}
 
                 <a
                   href="https://aistudio.google.com/app/apikey"

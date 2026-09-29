@@ -7,7 +7,6 @@ import { useSettings, useRoom } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { validateKey, type KeyFailure, type KeyResult } from '@/lib/validate-key';
 import { UNIT_OPTIONS } from '@/lib/units';
-import { quotaLimit, useQuota } from '@/lib/quota';
 import { Icon } from '@/components/ui/Icon';
 import { Dot, IconButton, Segmented } from '@/components/ui/primitives';
 import { useConfirm, useConfirmDeleteRooms } from '@/components/ui/Confirm';
@@ -52,7 +51,6 @@ export default function SettingsPage() {
   const s = useSettings();
   const roomId = useRoom((r) => r.roomId);
   const setRoomId = useRoom((r) => r.setRoomId);
-  const bumpQuota = useQuota((q) => q.bump);
   const confirm = useConfirm();
   const confirmDelete = useConfirmDeleteRooms();
   const router = useRouter();
@@ -100,10 +98,6 @@ export default function SettingsPage() {
     if (testing || !s.apiKey) return;
     setTesting(true);
     s.setKeyValid(null, null);
-    // Testing spends one real request against the same daily allowance
-    // detection uses. Counting it here is the difference between "detection
-    // stopped working today" being explainable and being a mystery.
-    bumpQuota('flash');
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const r = await Promise.race<KeyResult>([
@@ -173,8 +167,6 @@ export default function SettingsPage() {
   }
 
   const failure = KEY_FAILURE[(s.keyValidReason ?? 'unknown') as KeyFailure] ?? KEY_FAILURE.unknown;
-  const unitLabel = UNIT_OPTIONS.find((u) => u.id === s.dimUnit)?.label ?? s.dimUnit;
-  const dailyDetections = quotaLimit('flash');
 
   return (
     // "Close" is gone: the breadcrumb's "Rooms" is the way back, and a page that
@@ -183,15 +175,12 @@ export default function SettingsPage() {
       <div>
         {/* The route had no heading element at all — no document outline, and the
             display serif (which globals.css hangs off h1/h2/h3) never rendered. */}
-        <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginBottom: 8 }}>Settings</h1>
-        <p className="t-body" style={{ lineHeight: 1.55, margin: 0, maxWidth: 'var(--measure-text)' }}>
-          Everything here is kept in this browser. There is no account to manage.
-        </p>
+        <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', margin: 0 }}>Settings</h1>
 
         <SecHeader
           eyebrow="Detection"
           title="Connect a detection key (optional)."
-          desc="Used only to recognise furniture in photos of your room. Everything else works without one."
+          desc="Recognises furniture in photos of your room."
         />
 
         <Row label="Access key" controlId={KEY_INPUT_ID}>
@@ -311,23 +300,15 @@ export default function SettingsPage() {
           >
             <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, marginBottom: 4 }}>Where your key goes</div>
             <p className="t-note" style={{ lineHeight: 1.55, margin: 0 }}>
-              The key is stored in this browser and never sent to Danmu. Pressing Test sends it directly to Google.
-              Running detection sends it to Google with your photos. Nothing else leaves your device. You can restrict
-              the key to this site in your provider&apos;s console.
+              Kept in this browser. Sent only to Google: on Test, and with your photos when detection runs.
+              You can restrict the key to this site in Google&apos;s console.
             </p>
           </div>
 
-          <p className="t-hint" style={{ margin: '10px 0 0', lineHeight: 1.5, maxWidth: 'var(--measure-text-sm)' }}>
-            A free key allows about {dailyDetections} detections a day, and each test uses one. If detection stops
-            responding late in the day, the daily limit is the likely cause.
-          </p>
         </Row>
 
         <SecHeader eyebrow="Workspace" title="Preferences." desc="" />
-        <Row
-          label="Dimension units"
-          hint="Sizes are stored in millimetres. Changing units only changes how they are shown."
-        >
+        <Row label="Dimension units">
           {/* This replaced a Metric/Imperial switch that was wired to a store
               field nothing read — a units control that changed nothing, on a
               product whose promise is that its dimensions are trustworthy. */}
@@ -337,19 +318,18 @@ export default function SettingsPage() {
             onChange={(u) => s.setDimUnit(u)}
             options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.id }))}
           />
-          <div className="t-hint" style={{ marginTop: 8 }}>Showing sizes in {unitLabel}.</div>
         </Row>
 
         <SecHeader
           eyebrow="Data"
           title="Local-first storage."
-          desc="Rooms are stored in this browser. Clearing this site's data in your browser deletes them."
+          desc="Clearing this site's data in your browser deletes your rooms."
         />
         <Row
           label={room ? 'Delete this room' : 'Delete a room'}
           hint={
             room
-              ? `Removes “${room.name}”: its shape, wall colours, photos, detections, furniture and saved layouts. Recoverable for 30 days.`
+              ? 'Recoverable for 30 days.'
               : room === undefined
                 ? 'Finding the open room…'
                 : unreadable
