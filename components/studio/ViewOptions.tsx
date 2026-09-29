@@ -54,7 +54,8 @@
 // width this app runs at.
 
 import { type ReactNode } from 'react';
-import { useStudio } from '@/lib/store';
+import { useSettings, useStudio } from '@/lib/store';
+import { playSound } from '@/lib/sound';
 import { Segmented, Toggle } from '@/components/ui/primitives';
 
 export function ViewOptions() {
@@ -65,6 +66,8 @@ export function ViewOptions() {
   const quality = useStudio((s) => s.quality);
   const setQuality = useStudio((s) => s.setQuality);
 
+  const sound = useSettings((s) => s.sound);
+  const setSound = useSettings((s) => s.setSound);
   const hi = quality === 'high';
 
   return (
@@ -84,6 +87,17 @@ export function ViewOptions() {
           hint="Books, plants and props on surfaces"
           on={dressed}
           onToggle={toggleDressed}
+        />
+        <SwitchRow
+          label="Sounds"
+          hint="Soft taps as you pick up, set down and scrub the sun"
+          on={sound}
+          onToggle={() => {
+            const next = !sound;
+            setSound(next);
+            // Turning it on answers with a sound, so you hear what you chose.
+            if (next) playSound('select');
+          }}
         />
       </Group>
 

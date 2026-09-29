@@ -1,192 +1,238 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { LIGHTINGS, type Lighting } from '@/lib/store';
-import { LIGHTING, moodSunDirection } from '@/lib/lighting-moods';
-import { sunDirection } from '@/lib/solar';
+import { LIGHTINGS } from '@/lib/store';
+import {
+  SKY_KEYS,
+  SUNRISE_H,
+  SUNSET_H,
+  NOON_H,
+  TIME_STOPS,
+  formatClock,
+  hourOnDayArc,
+  hourOnNightArc,
+  keyAt,
+  legacyLighting,
+  lightingAt,
+  mixHex,
+  moonAt,
+  skyAt,
+  sunAt,
+  wrapHour,
+} from '@/lib/lighting-moods';
+import { THEMES } from '@/lib/themes';
 
-// One lighting mood is described in three places:
+// The light is a CLOCK now: one hour (0–24) that the sky, the sun and the moon are
+// all derived from, plus Overcast, which ignores it. It used to be five fixed moods
+// and the old ids are still out there in localStorage and in live undo stacks, so
+// half of this file is about the clock and half about getting from the old world to
+// it without anyone's room going dark.
 //
-//   · `LIGHTINGS` in `lib/store.ts` — the vocabulary, and the persisted value.
-//   · `LIGHTING` in `lib/lighting-moods.ts` — what the mood looks like, and where
-//     a sun mood's light comes from.
-//   · `MOODS` in `components/studio/LightingPicker.tsx` — its label, its hint and
-//     its icon. (It was `ViewOptions.tsx` until the moods moved into the Style
-//     section; this line said so for one commit after it stopped being true.)
+// What the compiler cannot see, and so what is pinned here:
 //
-// The first two are importable, so the assertions about them are real assertions
-// about real values. The mood table was inside `components/three/Room.tsx` when
-// this file was first written, which forced these checks to parse the component's
-// source with regexes — brittle, and testing a *transcript* of the data rather
-// than the data. Moving the table to `lib/` was the right fix for a reason that
-// has nothing to do with tests (the north dial needs the same rows, and cannot
-// import R3F), and it made this suite honest as a side effect. **If a check here
-// ever needs a regex again, that is the signal the data is in the wrong place.**
-//
-// `LightingPicker` still gets read as text, because it is a client component
-// holding icon names; that one check is the exception and says so.
-//
-// All three are typed `Record<Lighting, …>`, so a missing OR extra mood is
-// already a compile error. What this file tests is what the compiler cannot see:
-//
-//   1. A sun mood whose elevation is at or below the horizon. `sunDirection`
-//      returns null there — deliberately, a light shining up through the floor is
-//      worse than no light — and `Room` renders no key light at all. The mood
-//      appears in the panel, is selectable, and does nothing. Nothing throws,
-//      nothing logs, and a screenshot of it looks like a dim room.
-//   2. Four sun moods that all arrive from the same direction, which would be
-//      four names for one picture.
-//   3. A mood that is neither a studio look nor a sun angle, or somehow both.
+//   1. A seam. The sky is blended between keyframes; a table out of order, or a
+//      blend that does not wrap at midnight, jumps — and a jump is invisible in any
+//      screenshot of one moment. So the day is walked minute by minute.
+//   2. A sun that shines up through the floor, or a key light that switches on at
+//      full strength the instant it clears the horizon.
+//   3. The named stops drifting off the pictures they replaced.
+//   4. A retired id that maps to nothing, which used to take the scene down on the
+//      first paint (`Room` indexed a mood table by it).
 
 const src = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8');
 const PICKER = src('components', 'studio', 'LightingPicker.tsx');
-const TOOLTIP = src('components', 'ui', 'Tooltip.tsx');
 
-/** The moods that name a sun angle, as `[name, angle]`. */
-const suns = (Object.entries(LIGHTING) as Array<[Lighting, (typeof LIGHTING)[Lighting]]>)
-  .flatMap(([name, mood]) => (mood.sun ? [[name, mood.sun] as const] : []));
+/** A colour distance, 0–441, crude and sufficient for "did this jump". */
+function dist(a: string, b: string): number {
+  const n = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [n(a), n(b)];
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+}
 
-describe('the lighting moods', () => {
-  it('describes exactly the vocabulary, with no row left over', () => {
-    // Belt and braces: `Record<Lighting, Mood>` makes both directions a type
-    // error for an object literal, but nothing stops a future table being built
-    // by a function or spread, where excess-property checking does not apply.
-    expect(Object.keys(LIGHTING).sort()).toEqual([...LIGHTINGS].sort());
+describe('the two kinds of light', () => {
+  it('are daylight, which follows the clock, and overcast, which does not', () => {
+    expect([...LIGHTINGS]).toEqual(['daylight', 'overcast']);
+    const a = lightingAt('overcast', 7, 0);
+    const b = lightingAt('overcast', 22, 0);
+    expect(a).toEqual(b);
+    expect(a.key?.body).toBe('studio');
+    expect(lightingAt('daylight', 7, 0)).not.toEqual(lightingAt('daylight', 22, 0));
+  });
+});
+
+describe('the day', () => {
+  it('puts the sun up between sunrise and sunset and nowhere else', () => {
+    // Walked at five-minute steps, the resolution a drag lands on.
+    let up = 0;
+    for (let m = 0; m < 24 * 60; m += 5) {
+      const h = m / 60;
+      const inDay = h > SUNRISE_H && h < SUNSET_H;
+      expect(sunAt(h).elevationDeg > 0, `${formatClock(h)}`).toBe(inDay);
+      if (inDay) up++;
+    }
+    // 06:00–19:30 exclusive at 5-minute steps.
+    expect(up).toBe(161);
   });
 
-  it('gives every mood a label, a hint and an icon', () => {
-    // The one source-level check, because `LightingPicker` is a client component
-    // and its `MOODS` holds icon names rather than data worth importing here.
-    //
-    // The `hint` matters as much as the label and is asserted with it: the control
-    // is icon-only, so the label is all a sighted user gets from the tooltip, and
-    // "Sunrise" versus "Sunset" is a difference of DIRECTION that no glyph and no
-    // one-word label conveys. The hint is the half of the accessible name that
-    // says "from the east".
-    const start = PICKER.indexOf('const MOODS: Record<Lighting, { label: string; hint: string; icon: IconName }> = {');
-    expect(start, 'MOODS should be a Record keyed by Lighting — that is the exhaustiveness check').toBeGreaterThan(-1);
-    const inner = PICKER.slice(start, PICKER.indexOf('\n};', start));
-    const named = [...inner.matchAll(/^ {2}(\w+): \{ label: '[^']+', hint: '[^']+',/gm)].map((m) => m[1]);
-    expect(named.sort()).toEqual([...LIGHTINGS].sort());
+  it('peaks due south at solar noon, and rises and sets on the two sides of north', () => {
+    const noon = sunAt(NOON_H);
+    expect(noon.azimuthDeg).toBeCloseTo(180, 9);
+    expect(noon.elevationDeg).toBeCloseTo(60, 9);
+    expect(sunAt(SUNRISE_H).azimuthDeg).toBeLessThan(90);
+    expect(sunAt(SUNSET_H).azimuthDeg).toBeGreaterThan(270);
   });
 
-  it('reads its own name out on focus, not only on hover', () => {
-    // An icon-only control whose name lives in a native `title` is unreadable to
-    // anyone tabbing through — `title` never appears on keyboard focus. So the
-    // tooltip has to be ours, and it has to open on focus as well as on hover.
-    // Both are single properties that read as harmless to delete, which is why
-    // they are pinned here rather than trusted.
-    expect(PICKER, 'the picker should use ui/Tooltip, not a native title').toMatch(
-      /import \{ Tooltip \} from '@\/components\/ui\/Tooltip'/,
-    );
-    expect(TOOLTIP, 'Tooltip must open on focus').toMatch(/onFocus=\{open\}/);
-    // `leave`, not `close`. The two differ: `close` only hides the bubble, while
-    // `leave` also clears the press latch that stops a click from immediately
-    // reopening it (pointerdown → mousedown → focus are separate native events, so
-    // `onPointerDown={close}` was undone one event later by `onFocus={open}`).
-    // Blur has to be the re-arming one, because a control can be left by the
-    // pointer or by Tab and either ends the press.
-    expect(TOOLTIP, 'Tooltip must dismiss on blur').toMatch(/onBlur=\{leave\}/);
-    expect(TOOLTIP, 'leaving must clear the press latch, not just the bubble').toMatch(
-      /const leave = useCallback\(\(\) => \{\s*pressedRef\.current = false;\s*setBox\(null\);/,
-    );
-    // `position: fixed`, because every consumer sits in `.rail`, which is
-    // `overflow: hidden` — an absolutely-positioned bubble is clipped at the
-    // rail's edge, the failure `Select.tsx` and `RoomTools.tsx` both hit.
-    expect(TOOLTIP).toMatch(/position: 'fixed'/);
-  });
-
-  it('makes every mood exactly one of a studio look or a sun angle', () => {
-    for (const [name, mood] of Object.entries(LIGHTING)) {
-      const kinds = [mood.key ? 'key' : null, mood.sun ? 'sun' : null].filter(Boolean);
-      expect(kinds, `${name} should name a key light or a sun angle, not ${kinds.length}`).toHaveLength(1);
+  it('brings the moon round the same arc through the night', () => {
+    expect(moonAt(12).elevationDeg).toBeLessThan(0);
+    expect(moonAt(0).elevationDeg).toBeGreaterThan(20);
+    // Never both up: the key light is one body at a time.
+    for (let m = 0; m < 24 * 60; m += 5) {
+      const h = m / 60;
+      expect(sunAt(h).elevationDeg > 0 && moonAt(h).elevationDeg > 0, formatClock(h)).toBe(false);
     }
   });
 
-  it('puts every sun preset above the horizon, where it actually casts', () => {
-    // The silent one. `sunDirection` returns null at or below 0°, so a preset
-    // authored at, say, `elevationDeg: 0` for "just on the horizon" would ship a
-    // mood with no key light: selectable, plausible-looking, and doing nothing.
-    //
-    // Two studio looks (Evening, Cool), three sun angles (Day, Sunrise, Sunset).
-    // The count is asserted so that deleting the sun moods entirely cannot make
-    // this pass by leaving nothing to check — the failure mode of every "for each
-    // of the things I found" test.
-    //
-    // It was four. `Day` and `Noon` were merged (two names for bright overhead
-    // light, and the survivor is the sun because a direction is the point), as
-    // were `Golden` and `Sunset`. So `day` is a sun angle now, not a studio look.
-    expect(suns).toHaveLength(3);
-
-    for (const [name, { azimuthDeg, elevationDeg }] of suns) {
-      expect(
-        sunDirection(elevationDeg, azimuthDeg),
-        `${name} is at ${elevationDeg}° — at or below the horizon, so it casts no light`,
-      ).not.toBeNull();
+  it('inverts the arc exactly, for the handle that drags along it', () => {
+    for (const t of [0, 0.13, 0.5, 0.87, 1]) {
+      const h = hourOnDayArc(t);
+      expect(sunAt(h).azimuthDeg).toBeCloseTo(65 + t * 230, 9);
+      const n = hourOnNightArc(t);
+      expect(moonAt(n).azimuthDeg).toBeCloseTo(65 + t * 230, 9);
     }
   });
 
-  it('spreads the sun presets around the room rather than stacking them', () => {
-    const azimuths = suns.map(([, a]) => a.azimuthDeg).sort((x, y) => x - y);
-    for (let i = 1; i < azimuths.length; i++) {
-      expect(
-        azimuths[i] - azimuths[i - 1],
-        `two presets are ${azimuths[i - 1]}° and ${azimuths[i]}° — the same direction`,
-      ).toBeGreaterThan(30);
+  it('fades the key light in at the horizon instead of switching it on', () => {
+    // The largest step in key intensity between neighbouring minutes, all day. A
+    // light that snaps on at 0.25 as the sun clears the horizon is the defect.
+    let worst = 0;
+    let prev = keyAt(0, 0)?.intensity ?? 0;
+    for (let m = 1; m <= 24 * 60; m++) {
+      const cur = keyAt(m / 60, 0)?.intensity ?? 0;
+      worst = Math.max(worst, Math.abs(cur - prev));
+      prev = cur;
+    }
+    expect(worst).toBeLessThan(0.02);
+  });
+
+  it('never points a key light below the floor', () => {
+    for (let m = 0; m < 24 * 60; m += 5) {
+      const k = keyAt(m / 60, 0);
+      if (k) expect(k.dir[1], formatClock(m / 60)).toBeGreaterThan(0);
     }
   });
 
-  it('gives them usefully different heights, not one height and four bearings', () => {
-    // Elevation is what sets shadow length and colour temperature, so four
-    // presets at the same height would differ only in direction — half a set.
-    const elevations = suns.map(([, a]) => a.elevationDeg);
-    expect(Math.max(...elevations) - Math.min(...elevations)).toBeGreaterThan(30);
+  it('turns the whole day with the room, and half a turn reverses it', () => {
+    const at0 = keyAt(10, 0)!;
+    const at180 = keyAt(10, 180)!;
+    expect(at0.dir[0]).toBeCloseTo(-at180.dir[0], 12);
+    expect(at0.dir[2]).toBeCloseTo(-at180.dir[2], 12);
+    expect(at0.dir[1]).toBeCloseTo(at180.dir[1], 12);
+    expect(lightingAt('overcast', 10, 0).key).toEqual(lightingAt('overcast', 10, 137).key);
+  });
+});
+
+describe('the sky', () => {
+  it('has its keyframes in order, starting at midnight', () => {
+    expect(SKY_KEYS[0].h).toBe(0);
+    for (let i = 1; i < SKY_KEYS.length; i++) expect(SKY_KEYS[i].h).toBeGreaterThan(SKY_KEYS[i - 1].h);
+    expect(SKY_KEYS[SKY_KEYS.length - 1].h).toBeLessThan(24);
   });
 
-  it('no longer carries the mood that needed a latitude and a clock', () => {
-    // The collapse's own guard. `'sun'` was one mood driven by four typed facts;
-    // re-adding it by name would quietly reintroduce a `Site.lat`, a `Site.lon`, a
-    // geolocation permission and a device-orientation read, none of which this app
-    // has any more.
-    expect(LIGHTINGS as readonly string[]).not.toContain('sun');
+  it('lands exactly on each keyframe', () => {
+    for (const k of SKY_KEYS) {
+      const s = skyAt(k.h);
+      expect(s.bg, `${k.h}h`).toBe(k.bg.toLowerCase());
+      expect(s.exposure).toBeCloseTo(k.exposure, 12);
+    }
   });
 
-  // ── The bearing belongs to the sun ─────────────────────────────────────────
-  //
-  // These two moved here from `tests/sun-shadow.test.ts`, which went when the room
-  // became a closed shell and the per-piece shadow gate it tested became
-  // unnecessary. They are not about that gate: they are about the north dial, and
-  // they were the only assertions in that file that outlived it.
-
-  it('turns the sun with the room and leaves the studio rig alone', () => {
-    // The rig is fixed relative to the ROOM, so turning the north dial must move a
-    // sun mood's light and not a studio mood's — otherwise the dial appears to
-    // relight a room lit by nothing outdoors. A studio mood answering `null` here
-    // is the mechanism, and asserting it that way rather than comparing two vectors
-    // is what keeps this true if the rig's own angle is ever retuned.
-    for (const id of LIGHTINGS) {
-      const isSun = !!LIGHTING[id].sun;
-      const at0 = moodSunDirection(id, 0);
-      const at137 = moodSunDirection(id, 137);
-      if (!isSun) {
-        expect(at0, `${id} is a studio look and must not answer for the sun`).toBeNull();
-        expect(at137, `${id} at a bearing`).toBeNull();
-      } else {
-        expect(at0, `${id} is a sun angle and must answer`).not.toBeNull();
-        expect(at137, `${id} must follow the dial`).not.toEqual(at0);
+  it('has no seam anywhere in the day, midnight included', () => {
+    // The largest background step between neighbouring minutes. The dusk rows are
+    // the steepest part of the day by design — paper to near-black in about three
+    // hours — and that is ~1.8 per minute at the steepest; a seam is a whole row's
+    // difference in one step, which is well over 100.
+    let worst = 0;
+    let at = '';
+    for (let m = 0; m < 24 * 60; m++) {
+      const d = dist(skyAt(m / 60).bg, skyAt((m + 1) / 60).bg);
+      if (d > worst) {
+        worst = d;
+        at = formatClock(m / 60);
       }
     }
+    expect(worst, `steepest minute at ${at}`).toBeLessThan(6);
   });
 
-  it('makes half a turn of the dial reverse the sun', () => {
-    // The dial's own sanity check, and it is the asymmetric case: a bearing term
-    // that was dropped rather than sign-flipped would leave both of these equal,
-    // and a bearing applied twice would leave them equal too.
-    const at0 = moodSunDirection('day', 0)!;
-    const at180 = moodSunDirection('day', 180)!;
-    expect(at0[0]).toBeCloseTo(-at180[0], 12);
-    expect(at0[2]).toBeCloseTo(-at180[2], 12);
-    // Height is a property of the angle, not of which way the room faces.
-    expect(at0[1]).toBeCloseTo(at180[1], 12);
+  it('is darker at night than at noon, and lets the lamps do the work after dark', () => {
+    expect(skyAt(0).hemi[2]).toBeLessThan(skyAt(NOON_H).hemi[2] / 4);
+    expect(skyAt(22.2).envMul).toBeLessThan(skyAt(NOON_H).envMul / 2);
+  });
+});
+
+describe('the named times', () => {
+  it('are four, in order, and each in its own part of the day', () => {
+    expect(TIME_STOPS.map((t) => t.id)).toEqual(['morning', 'midday', 'evening', 'night']);
+    const [morning, midday, evening, night] = TIME_STOPS.map((t) => t.hour);
+    expect(sunAt(morning).elevationDeg).toBeGreaterThan(5);
+    expect(sunAt(morning).azimuthDeg).toBeLessThan(135);
+    expect(sunAt(midday).elevationDeg).toBeGreaterThan(50);
+    expect(sunAt(evening).elevationDeg).toBeGreaterThan(5);
+    expect(sunAt(evening).azimuthDeg).toBeGreaterThan(225);
+    expect(sunAt(night).elevationDeg).toBeLessThan(0);
+  });
+
+  it('each have a glyph and a hint in the picker', () => {
+    // The one source-level check: `STOP_UI` is a Record keyed by stop id, which is
+    // the exhaustiveness check, and its hint is the half of the accessible name that
+    // says "from the east" — no glyph conveys a direction.
+    const start = PICKER.indexOf('const STOP_UI: Record<TimeStopId, { hint: string; icon: IconName }> = {');
+    expect(start).toBeGreaterThan(-1);
+    const inner = PICKER.slice(start, PICKER.indexOf('\n};', start));
+    const named = [...inner.matchAll(/^ {2}(\w+): \{ hint: '[^']+', icon: '[^']+' \}/gm)].map((m) => m[1]);
+    expect(named).toEqual(TIME_STOPS.map((t) => t.id));
+  });
+});
+
+describe('the clock face', () => {
+  it('reads 24-hour, zero-padded, and wraps at midnight', () => {
+    expect(formatClock(7.6)).toBe('07:36');
+    expect(formatClock(18.5)).toBe('18:30');
+    expect(formatClock(23.999)).toBe('00:00');
+    expect(formatClock(-0.5)).toBe('23:30');
+    expect(wrapHour(25)).toBe(1);
+  });
+
+  it('blends colours through their midpoint', () => {
+    expect(mixHex('#000000', '#ffffff', 0.5)).toBe('#808080');
+    expect(mixHex('#102030', '#102030', 0.3)).toBe('#102030');
+  });
+});
+
+describe('getting from five moods to the clock', () => {
+  it('maps every retired mood onto the stop that is its picture', () => {
+    expect(legacyLighting('day')).toEqual({ lighting: 'daylight', hour: 12.8 });
+    expect(legacyLighting('sunrise')).toEqual({ lighting: 'daylight', hour: 7.6 });
+    expect(legacyLighting('sunset')).toEqual({ lighting: 'daylight', hour: 18.5 });
+    expect(legacyLighting('evening')).toEqual({ lighting: 'daylight', hour: 22.2 });
+    expect(legacyLighting('cool')).toEqual({ lighting: 'overcast' });
+    // Each old sun stop lands on a named time, so the picker shows it pressed.
+    for (const id of ['day', 'sunrise', 'sunset', 'evening']) {
+      expect(TIME_STOPS.map((t) => t.hour), id).toContain(legacyLighting(id)!.hour);
+    }
+  });
+
+  it('refuses what it does not know rather than guessing', () => {
+    // `'sun'` was a latitude and a clock — there is no honest "the one you meant".
+    for (const junk of ['sun', 'noon', 'golden', '', 42, null, undefined, {}]) {
+      expect(legacyLighting(junk), String(junk)).toBeNull();
+    }
+    for (const id of LIGHTINGS) expect(legacyLighting(id)).toEqual({ lighting: id });
+  });
+
+  it('gives every daylight theme an hour, and no overcast one', () => {
+    for (const t of THEMES) {
+      if (t.lighting === 'daylight') expect(t.hour, t.id).toBeTypeOf('number');
+      else expect(t.hour, t.id).toBeUndefined();
+    }
   });
 });

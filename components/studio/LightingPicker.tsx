@@ -1,69 +1,108 @@
 'use client';
 
-// The lighting moods, as five glyphs on one row.
+// The daylight control in the rail's Style section: four named times of day and
+// Overcast as one row of glyphs, a 24-hour track under them, and which way the
+// room faces.
 //
-// It was a `Segmented` of `icon + word` pairs. Seven of those needed two rows of
-// a 260px rail even after the labels were merged down to five, and it sat in the
-// View section while the theme swatches sat in Style — two controls that answer
-// the same question ("how should this room look?") in two different drawers. Both
-// now live in Style, and this one is built to match the swatch row beside it: one
-// line of round-cornered targets, no wrapping, no words.
+// The BIG control for the day is the sun on its arc over the room
+// (`components/three/SunArc.tsx`) — that is where you drag the day through. This
+// is its companion for the moments you want by name, for keyboard and
+// screen-reader use through native controls, and for the one fact the arc cannot
+// set, the room's bearing.
 //
-// **Dropping the words does not drop the labels.** Each button keeps its
+// **Dropping the words does not drop the labels.** Each glyph keeps its
 // `aria-label`, and the name a sighted user cannot read off the glyph comes back
-// on hover AND on keyboard focus through `ui/Tooltip` — see that file for why the
-// native `title` was not enough for a control whose glyph IS its whole label.
-//
-// The icons therefore have to carry the distinction on their own, which is the
-// real constraint on how many moods this control can hold. Five is comfortable
-// (sun, moon, cloud, sunrise, sunset are five different silhouettes); the seven
-// it replaced were not, because `sun`, `sun-medium` and `sun-dim` differ only in
-// the length of their rays and read as one icon at 14px. That is a reason to keep
-// the set small, not a reason to add a sixth glyph.
+// on hover AND on keyboard focus through `ui/Tooltip`. Five is still the ceiling
+// on the row, for the reason it always was: the tight rail holds five 32px
+// targets exactly, and `sun`, `sun-medium` and `sun-dim` read as one icon at 14px.
 
-import { useStudio, LIGHTINGS, type Lighting } from '@/lib/store';
+import { useStudio } from '@/lib/store';
+import { useScene } from '@/lib/scene-store';
+import {
+  DEFAULT_BEARING_DEG,
+  TIME_STOPS,
+  formatClock,
+  isDaytime,
+  type TimeStopId,
+} from '@/lib/lighting-moods';
+import { playSound } from '@/lib/sound';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { Tooltip } from '@/components/ui/Tooltip';
 
-// A `Record` keyed by the union, so a mood added to `LIGHTINGS` is a compile
-// error here rather than a mood with no way to reach it. Order comes from
-// `LIGHTINGS` itself, for the same reason.
-const MOODS: Record<Lighting, { label: string; hint: string; icon: IconName }> = {
-  day: { label: 'Day', hint: 'Overhead sun, from the south', icon: 'sun' },
-  evening: { label: 'Evening', hint: 'Dim, lit by the lamps', icon: 'moon' },
-  cool: { label: 'Cool', hint: 'Flat overcast, no direction', icon: 'cloud' },
-  sunrise: { label: 'Sunrise', hint: 'Low sun from the east', icon: 'sunrise' },
-  sunset: { label: 'Sunset', hint: 'Low sun from the west', icon: 'sunset' },
+// A `Record` keyed by the stop ids, so a stop added to `TIME_STOPS` is a compile
+// error here rather than a stop with no glyph.
+const STOP_UI: Record<TimeStopId, { hint: string; icon: IconName }> = {
+  morning: { hint: 'Low sun from the east', icon: 'sunrise' },
+  midday: { hint: 'High sun from the south', icon: 'sun' },
+  evening: { hint: 'Low gold sun from the west', icon: 'sunset' },
+  night: { hint: 'Moonlight, lit by the lamps', icon: 'moon' },
 };
+
+/** Eight points, because sixteen would be precision the sentence around it does
+ *  not have. Takes a TRUE bearing, clockwise from north. */
+const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+export function compassName(deg: number): string {
+  return COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
 
 export function LightingPicker() {
   const lighting = useStudio((s) => s.lighting);
   const setLighting = useStudio((s) => s.setLighting);
+  const hour = useStudio((s) => s.hour);
+  const setHour = useStudio((s) => s.setHour);
+  const site = useScene((s) => s.room.site);
+  const setSite = useScene((s) => s.setSite);
+  const bearingDeg = site?.bearingDeg ?? DEFAULT_BEARING_DEG;
+  const overcast = lighting === 'overcast';
+
+  /** Turn the room an eighth. Snaps to the nearest compass point first, so a
+   *  bearing a photo supplied (213°) steps to 225° and then by whole points. */
+  const turn = (dir: 1 | -1) => {
+    const onPoint = bearingDeg % 45 === 0;
+    const next = onPoint ? bearingDeg + 45 * dir : (dir > 0 ? Math.ceil(bearingDeg / 45) : Math.floor(bearingDeg / 45)) * 45;
+    // Read through `getState` rather than closing over `site`, so a fast double
+    // press cannot spread one render's site over the rest.
+    setSite({ ...useScene.getState().room.site, bearingDeg: ((next % 360) + 360) % 360 });
+    playSound('tick', { brightness: 0.4 });
+  };
+
+  const glyphs: Array<{ id: string; label: string; hint: string; icon: IconName; active: boolean; pick: () => void }> = [
+    ...TIME_STOPS.map((t) => ({
+      id: t.id,
+      label: `${t.label} · ${formatClock(t.hour)}`,
+      hint: STOP_UI[t.id].hint,
+      icon: STOP_UI[t.id].icon,
+      active: !overcast && Math.abs(hour - t.hour) < 0.05,
+      pick: () => {
+        setLighting('daylight');
+        setHour(t.hour);
+      },
+    })),
+    {
+      id: 'overcast',
+      label: 'Overcast',
+      hint: 'Flat light, no sun',
+      icon: 'cloud',
+      active: overcast,
+      pick: () => setLighting('overcast'),
+    },
+  ];
 
   return (
-    // `flex` with `wrap`, not a grid: five 32px targets need 176px and the tight
-    // rail affords 176px of content, so this fits on one row everywhere the studio
-    // runs. `wrap` is the honest fallback rather than a promise it never needs —
-    // browser zoom reaches widths no media query names, and a wrapped second row
-    // of icons is still usable where a clipped one is not.
-    <div
-      role="group"
-      aria-label="Lighting"
-      style={{ display: 'flex', flexWrap: 'wrap', gap: 4, minWidth: 0 }}
-    >
-      {LIGHTINGS.map((id) => {
-        const m = MOODS[id];
-        const active = lighting === id;
-        return (
-          <Tooltip key={id} label={m.label}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+      {/* `flex` with `wrap`, not a grid: five 32px targets need 176px and the tight
+          rail affords 176px of content, so this fits on one row everywhere the
+          studio runs. `wrap` is the honest fallback for browser zoom. */}
+      <div role="group" aria-label="Time of day" style={{ display: 'flex', flexWrap: 'wrap', gap: 4, minWidth: 0 }}>
+        {glyphs.map((m) => (
+          <Tooltip key={m.id} label={m.label}>
             <button
               type="button"
-              onClick={() => setLighting(id)}
-              aria-pressed={active}
-              // The name, and the only one — there is no visible text to fall
-              // back on. The hint rides along because the glyph cannot say
-              // "from the east", which is the part that actually distinguishes
-              // Sunrise from Sunset.
+              onClick={() => {
+                m.pick();
+                playSound('chime');
+              }}
+              aria-pressed={m.active}
               aria-label={`${m.label}: ${m.hint}`}
               style={{
                 width: 32,
@@ -74,9 +113,9 @@ export function LightingPicker() {
                 flexShrink: 0,
                 borderRadius: 'var(--r-2)',
                 // `--edge` and not a hairline: this is interactive.
-                border: `1px solid ${active ? 'var(--accent)' : 'var(--edge)'}`,
-                background: active ? 'var(--accent-tint)' : 'var(--paper)',
-                color: active ? 'var(--accent-text)' : 'var(--ink-2)',
+                border: `1px solid ${m.active ? 'var(--accent)' : 'var(--edge)'}`,
+                background: m.active ? 'var(--accent-tint)' : 'var(--paper)',
+                color: m.active ? 'var(--accent-text)' : 'var(--ink-2)',
                 cursor: 'pointer',
                 padding: 0,
               }}
@@ -84,8 +123,56 @@ export function LightingPicker() {
               <Icon name={m.icon} size={15} />
             </button>
           </Tooltip>
-        );
-      })}
+        ))}
+      </div>
+
+      {/* The whole day as a track. A native range, so arrows, Page and Home/End
+          are the platform's own and a screen reader announces the clock. */}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span className="sr-only">Time of day</span>
+        <Icon name={isDaytime(hour) ? 'sun' : 'moon'} size={13} />
+        <input
+          type="range"
+          className="day-track"
+          min={0}
+          max={24}
+          step={1 / 12}
+          value={hour}
+          aria-valuetext={formatClock(hour)}
+          onChange={(e) => {
+            if (overcast) setLighting('daylight');
+            const next = Number(e.target.value);
+            if (Math.floor(next) !== Math.floor(hour)) playSound('tick', { brightness: isDaytime(next) ? 0.6 : 0 });
+            setHour(next);
+          }}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <span className="mono t-micro" style={{ minWidth: 34, textAlign: 'right', color: overcast ? 'var(--ink-3)' : 'var(--ink)' }}>
+          {formatClock(hour)}
+        </span>
+      </label>
+
+      {/* Which way the room faces — the one input the sun still takes from the
+          user, because it is the only one whose effect is visible at furniture
+          scale: it changes WHICH WALL the light comes through. It was the Sun
+          direction dial in the Room section; the arc over the room now shows the
+          answer, so what is left here is the setting, one compass point a press. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <span className="t-micro" style={{ flexShrink: 0 }}>Plan top faces</span>
+        <button type="button" className="icon-btn" aria-label="Turn the room anticlockwise" onClick={() => turn(-1)} style={{ width: 26, height: 26 }}>
+          <Icon name="rotate-ccw" size={12} />
+        </button>
+        <span
+          className="t-micro"
+          aria-live="polite"
+          style={{ flex: 1, minWidth: 0, textAlign: 'center', color: 'var(--ink)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          {compassName(bearingDeg)}
+        </span>
+        <button type="button" className="icon-btn" aria-label="Turn the room clockwise" onClick={() => turn(1)} style={{ width: 26, height: 26 }}>
+          <Icon name="rotate-cw" size={12} />
+        </button>
+      </div>
     </div>
   );
 }

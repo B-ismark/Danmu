@@ -47,7 +47,7 @@ import { Group } from 'three';
 // does not change often enough to justify a matchMedia listener inside every
 // animated part. Lazy so it is never touched during SSR.
 let _reduced: boolean | null = null;
-function reducedMotion(): boolean {
+export function reducedMotion(): boolean {
   if (_reduced === null) {
     _reduced =
       typeof window !== 'undefined' &&

@@ -30,6 +30,7 @@ function snapshot(over: Partial<Snapshot> = {}): Snapshot {
     parts: sc.parts,
     room: sc.room,
     lighting: t.lighting,
+    hour: t.hour,
     hidden: t.hidden,
     selectedPartId: t.selectedPartId,
     selection: t.selection,
@@ -158,16 +159,22 @@ describe('what a snapshot covers', () => {
     expect(useStudio.getState().parentIds).toEqual({});
   });
 
-  it('carries the lighting mood, so undoing a theme does not leave its light', () => {
+  it('carries the lighting and the clock, so undoing a theme does not leave its light', () => {
+    // A theme sets both in one gesture (Heritage is daylight at 22:12), so an undo
+    // that put back only the kind would leave the room in the theme's night.
     seedHistory();
     const originalLighting = useStudio.getState().lighting;
-    useStudio.getState().setLighting('evening');
+    const originalHour = useStudio.getState().hour;
+    useStudio.getState().setLighting('overcast');
+    useStudio.getState().setHour(originalHour + 5);
     useHistory.getState().push(snapshot());
 
     const restored = useHistory.getState().undo();
     expect(restored?.lighting).toBe(originalLighting);
+    expect(restored?.hour).toBe(originalHour);
     applySnapshot(restored!);
     expect(useStudio.getState().lighting).toBe(originalLighting);
+    expect(useStudio.getState().hour).toBe(originalHour);
   });
 
   it('restores structure as well as transforms', () => {

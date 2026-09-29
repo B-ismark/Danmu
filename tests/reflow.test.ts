@@ -17,7 +17,10 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { LIGHTINGS } from '@/lib/store';
+import { TIME_STOPS } from '@/lib/lighting-moods';
+
+/** The picker's glyph row: the four named times, and Overcast. */
+const GLYPHS = TIME_STOPS.length + 1;
 
 const root = (...p: string[]) => join(process.cwd(), ...p);
 
@@ -218,7 +221,7 @@ describe('Segmented can lay its options out on more than one row', () => {
     const picker = readSrc('components', 'studio', 'LightingPicker.tsx');
     const size = Number(/\n\s+width: (\d+),\n\s+height: \1,/.exec(picker)![1]);
     const gap = Number(/flexWrap: 'wrap', gap: (\d+)/.exec(picker)![1]);
-    const count = LIGHTINGS.length;
+    const count = GLYPHS;
     const needed = count * size + (count - 1) * gap;
     expect(railFloor('rail-left') - 32).toBeGreaterThanOrEqual(needed);
   });
@@ -1045,7 +1048,7 @@ describe('the rail asks about itself', () => {
     const picker = readSrc('components', 'studio', 'LightingPicker.tsx');
     const size = Number(/\n\s+width: (\d+),\n\s+height: \1,/.exec(picker)![1]);
     const gap = Number(/flexWrap: 'wrap', gap: (\d+)/.exec(picker)![1]);
-    const needed = LIGHTINGS.length * size + (LIGHTINGS.length - 1) * gap;
+    const needed = GLYPHS * size + (GLYPHS - 1) * gap;
     const tightLeft = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]);
     expect(tightLeft - 32).toBeGreaterThanOrEqual(needed);
   });

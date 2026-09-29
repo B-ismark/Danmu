@@ -2,34 +2,28 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { DEFAULT_HOUR, legacyLighting, wrapHour } from './lighting-moods';
 
 // Studio view + interaction state. Mostly session-scoped: only the handful of
 // fields in STUDIO_PREFS below survive a reload (see the persist config at the
 // bottom of this store). Everything else — selection, transforms, camera, open
 // drawers — is either per-room (saved by RoomSync) or genuinely ephemeral.
 type ViewPreset = 'free' | 'front' | 'top' | 'iso';
-/** Scene lighting moods — each drives lights, environment + background in Room.
+/** The two kinds of light — each drives lights, environment + background in Room.
  *
  *  An `as const` array with the union derived from it, for the reason
  *  `SHAPES`/`LAYOUT_IDS` are: a persisted value has to be checked against the
  *  vocabulary at runtime (see `merge` at the bottom of this store), and a union
  *  beside a hand-kept list drifts in the direction nobody notices.
  *
- *  Three of the five are sun angles: `LIGHTING` in `lib/lighting-moods.ts` gives
- *  each an azimuth and an elevation, and the key light's direction, colour and
- *  strength are derived from those two numbers. (That table is a `lib/` module
- *  rather than part of the 3D scene because the north dial reads the same rows to
- *  draw the sun on its rim.) There used to be a single 'sun' mood driven by a
- *  latitude, a longitude, a date and a clock — four facts the user could not
- *  verify from inside a room they were arranging furniture in.
- *
- *  It replaced that with seven, which was too many in the other direction: `Day`
- *  and `Noon` were two names for bright overhead light, and `Golden` and `Sunset`
- *  two for low western light. Each pair is now one mood. `day` and `sunset` kept
- *  their ids so the merge costs nobody their stored preference; `noon` and
- *  `golden` are gone, and the `merge` below is what stops a browser holding
- *  either of them from indexing a row that no longer exists. */
-export const LIGHTINGS = ['day', 'evening', 'cool', 'sunrise', 'sunset'] as const;
+ *  `daylight` follows the clock (`hour`, below): sky, sun and moon are all derived
+ *  from it in `lib/lighting-moods.ts`. `overcast` is the flat studio look and is
+ *  hour-blind. There used to be five fixed moods here — three sun angles and two
+ *  studio looks — and before THAT a single 'sun' mood driven by a latitude, a
+ *  longitude, a date and a clock. The five became stops on one clock
+ *  (`TIME_STOPS`), and `legacyLighting` is what maps a browser still holding one
+ *  of their ids onto it. */
+export const LIGHTINGS = ['daylight', 'overcast'] as const;
 export type Lighting = (typeof LIGHTINGS)[number];
 /** Render quality — 'high' enables soft cast shadows, ambient occlusion and
  *  per-part procedural material maps. */
@@ -83,8 +77,13 @@ type StudioState = {
    *  dragged on a monitor stays a ceiling rather than a promise on a laptop. */
   railLeftW: number | null;
   railRightW: number | null;
-  /** scene lighting mood */
+  /** scene lighting kind */
   lighting: Lighting;
+  /** The time of day the daylight is drawn at, in hours [0, 24). Ignored while
+   *  `lighting` is `overcast`. A preference like the lighting kind, and in history
+   *  beside it: a theme sets both in one gesture, so undoing the theme has to put
+   *  both back. */
+  hour: number;
   /** render quality (soft shadows + AO + material maps on 'high') */
   quality: Quality;
   /** auto set-dressing — decorative props on furniture surfaces */
@@ -163,6 +162,8 @@ type StudioState = {
   /** Commit a dragged rail width. `null` restores the token default. */
   setRailWidth: (side: 'left' | 'right', px: number | null) => void;
   setLighting: (l: Lighting) => void;
+  /** Wrapped into [0, 24), so a drag past midnight is a time and not an error. */
+  setHour: (h: number) => void;
   setQuality: (q: Quality) => void;
   toggleDressed: () => void;
   frameSelected: () => void;
@@ -188,6 +189,7 @@ type StudioState = {
  *  the last is per-room, owned by RoomSync. */
 const STUDIO_PREFS = [
   'lighting',
+  'hour',
   'quality',
   'dressed',
   'snapMode',
@@ -220,7 +222,8 @@ export const useStudio = create<StudioState>()(
   railRightOpen: true,
   railLeftW: null,
   railRightW: null,
-  lighting: 'day',
+  lighting: 'daylight',
+  hour: DEFAULT_HOUR,
   quality: 'high',
   dressed: true,
   catalogOpen: false,
@@ -309,6 +312,7 @@ export const useStudio = create<StudioState>()(
     set(side === 'left' ? { railLeftW: w } : { railRightW: w });
   },
   setLighting: (l) => set({ lighting: l }),
+  setHour: (h) => set({ hour: Number.isFinite(h) ? wrapHour(h) : DEFAULT_HOUR }),
   setQuality: (q) => set({ quality: q }),
   toggleDressed: () => set((s) => ({ dressed: !s.dressed })),
   loadTransforms: (data) =>
@@ -338,19 +342,21 @@ export const useStudio = create<StudioState>()(
       partialize: (s) =>
         Object.fromEntries(STUDIO_PREFS.map((key) => [key, s[key]])) as Partial<StudioState>,
       // localStorage holds whatever vocabulary the app had when it was last
-      // written, and `Room` indexes its mood table by this value — so a browser
-      // carrying the retired `'sun'` mood would look up a row that no longer
-      // exists and take the whole scene down on the first paint. The persisted
-      // value is therefore checked against `LIGHTINGS` rather than trusted, the
-      // same boundary an imported scene file crosses.
-      //
-      // It is a fall back to the default, not a remap: `'sun'` had no fixed
-      // angle of its own (it was a latitude and a clock), so there is no honest
-      // "the one you meant" among the four that replaced it.
+      // written, and `Room` derives its whole light from this value — so it is
+      // checked rather than trusted, the same boundary an imported scene file
+      // crosses. A retired mood id is mapped onto the clock by `legacyLighting`
+      // (the old Sunrise is a morning hour, the old Cool is overcast), and anything
+      // it does not know falls back to the default rather than being guessed at.
       merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<StudioState>;
-        const known = p.lighting !== undefined && (LIGHTINGS as readonly string[]).includes(p.lighting);
-        return { ...current, ...p, lighting: known ? (p.lighting as Lighting) : current.lighting };
+        const p = (persisted ?? {}) as Partial<StudioState> & { lighting?: unknown; hour?: unknown };
+        const legacy = legacyLighting(p.lighting);
+        const storedHour = typeof p.hour === 'number' && Number.isFinite(p.hour) ? wrapHour(p.hour) : undefined;
+        return {
+          ...current,
+          ...p,
+          lighting: legacy?.lighting ?? current.lighting,
+          hour: legacy?.hour ?? storedHour ?? current.hour,
+        };
       },
     },
   ),
@@ -407,11 +413,17 @@ type SettingsState = {
    *  fact about the person using it, not about the room, so it belongs with the
    *  other per-device preferences rather than being asked again per room. */
   stepFree: boolean;
+  /** Interface sounds — pick-up, set-down, snap, the sun's hour ticks
+   *  (`lib/sound.ts`). A property of the person and their surroundings, not of the
+   *  room, so it lives here. On by default: they are quiet enough to sit under
+   *  anything else playing, and the switch is in Settings and the View panel. */
+  sound: boolean;
   setApiKey: (k: string) => void;
   setDimUnit: (u: DimUnit) => void;
   setKeyValid: (v: boolean | null, reason?: string | null) => void;
   setCamHeight: (m: number) => void;
   setStepFree: (on: boolean) => void;
+  setSound: (on: boolean) => void;
 };
 
 /** Bounds on the remembered camera height. Outside these it is a typo, and a
@@ -429,6 +441,7 @@ export const useSettings = create<SettingsState>()(
       camHeightM: 1.5,
       camHeightSet: false,
       stepFree: false,
+      sound: true,
       // Setting a new key invalidates the cached test result.
       setApiKey: (k) => set({ apiKey: k, keyValid: null, keyValidReason: null }),
       setDimUnit: (u) => set({ dimUnit: u }),
@@ -439,6 +452,7 @@ export const useSettings = create<SettingsState>()(
           camHeightSet: true,
         }),
       setStepFree: (on) => set({ stepFree: on }),
+      setSound: (on) => set({ sound: on }),
     }),
     {
       name: 'danmu-settings',
