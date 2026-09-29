@@ -78,10 +78,14 @@ export type LabelVerdict =
       candidates: LabelCandidate[];
       cut?: SizeAxis[];
     };
-// `cut`, on every status: the axes the edge of the photo cut off, whose size is the
-// kind's typical one grown from the edge the photo saw (`PieceFootprint.whole`) rather
-// than a measurement. Absent when the box is whole — a row that says it was measured
-// has to be able to say which part of it was not.
+// `cut`, on every status: the axes the edge of the photo cut off, and so not a
+// measurement. Absent when the box is whole — a row that says it was measured has to
+// be able to say which part of it was not. What the number on a cut axis IS differs by
+// plane, and a reader must not treat the two alike. On a floor or wall piece it is the
+// kind's typical size grown from the edge the photo saw (`PieceFootprint.whole`), so
+// what was seen is a lower bound. On a CEILING piece nothing is grown: the width is
+// read on a row the cut moved off the disc's centre, long or short, and bounds nothing
+// either way (§ 49.11) — so "at least this big" is not a reading of it (§ 49.5).
 
 /** Does a measured W × H sit inside the band for this word?
  *

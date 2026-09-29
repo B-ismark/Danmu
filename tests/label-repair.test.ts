@@ -445,6 +445,10 @@ describe('judgeLabel — a ceiling piece the edge of the photo cut', () => {
     const side = fan(1.8, -2);
     expect(frameCuts(side.box)).toEqual({ left: false, right: true, top: false, bottom: false });
     expect(read(side)).toBe(1402);
+    const further = fan(2.4, -2);
+    expect(frameCuts(further.box)).toEqual({ left: false, right: true, top: false, bottom: false });
+    expect(read(further)).toBe(935);
+    expect(judgeLabel(further, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
     expect(judgeLabel(side, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
     // And its mirror image, off the left.
     const left = fan(-1.8, -2);
@@ -459,6 +463,35 @@ describe('judgeLabel — a ceiling piece the edge of the photo cut', () => {
     expect(read(top)).toBe(1748);
     expect(read(top)).toBeGreaterThan(dimRangeFor('fan', 'fan').max[0]);
     expect(judgeLabel(top, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+    // Nearer, longer; further out, where the frame only grazes it, nearly right — and
+    // still not judged, which is the price: one edge cannot say how much it took.
+    expect(read(fan(0, -0.9))).toBe(2498);
+    const grazed = fan(0, -1.8);
+    expect(frameCuts(grazed.box).top).toBe(true);
+    expect(read(grazed)).toBe(1196);
+    expect(judgeLabel(grazed, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+  });
+
+  it('is still BUILT from the cut width, clamped to the band — § 49.13, measured and not fixed', () => {
+    // Not judged is not not used: the room is built from what `geoRefine` wrote, and
+    // the clamp hides by how much. A literal on purpose, so the fix turns it red.
+    const build = (d: Detection) =>
+      buildSceneFromRoom({
+        id: 'r',
+        createdAt: 1,
+        name: 'R',
+        layoutId: 'rect',
+        width: deep.width,
+        depth: deep.depth,
+        height: deep.height,
+        detectedObjects: [toRecord(geoRefine(d, WIDE_CALS, deep), 0, true, () => 'u-1')],
+      });
+    const [top] = build(fan(0, -1.2));
+    expect(top.shape).toBe('fan');
+    expect(top.dimMM[0]).toBe(1500);
+    expect(top.dimMM[0]).toBe(dimRangeFor('fan', 'fan').max[0]);
+    // A side cut inside the band goes in as read.
+    expect(build(fan(1.8, -2))[0].dimMM[0]).toBe(1402);
   });
 
   it('gives no verdict on a fan cut at the bottom, from a phone pointed at the ceiling', () => {
