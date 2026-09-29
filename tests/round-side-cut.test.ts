@@ -289,6 +289,37 @@ describe('a round floor piece cut at one side of the photo (§ 49.9)', () => {
     expect(cell(tipped.filter((r) => !r.topInPhoto))).toEqual({ n: 12, dOff: 0, latOff: 0, dMM: 0, latMM: 0, wMM: 0, hMM: 461 });
   });
 
+  it('is exact close up and tipped steeply down, where the height took more passes than it had', () => {
+    // Where the seen side is extreme at the piece's top, the height is a fixed point of the
+    // tangency, and the first version iterated it and stopped at eight passes. Close to the
+    // lens and tipped steeply its rate nears one, so there the count and not the photo set
+    // the answer: on this grid five stopped on the count, and three of them by more than a
+    // millimetre, a 900 mm round table 300 tall, 800 mm out at 40° down, read 988 × 215 and
+    // 62 mm along the wall. It is bisected now. None of the fixture's rows is tipped past
+    // 10°, so without this the bisection is a line nothing measures. The count is a literal,
+    // so a grid that stopped reaching the case would say so.
+    const room = ROOMS[1];
+    let n = 0;
+    for (const deg of [25, 30, 35, 40]) for (const dist of [0.8, 1.2]) for (const lateral of [1.2, 1.8])
+      for (const dia of [0.25, 0.4, 0.6, 0.9]) for (const h of [0.3, 0.5, 0.9]) {
+        const cal = { ...WIDE, tiltRad: (deg * Math.PI) / 180 };
+        const pts = floorCylinderPoints(lateral, -dist, dia, h);
+        const uv = pts.map((p) => project('n', ...p, cal));
+        const box = framedExtent(uv);
+        if (!box) continue;
+        const cut = frameCuts(box);
+        if (!cut.right || cut.left || cut.bottom || cut.top || !pts.some((p, i) => p[1] === h && inPhoto(uv[i]))) continue;
+        n++;
+        const where = `${dia * 1000} × ${h * 1000} at ${deg}° down, ${dist} m out, ${lateral} m across`;
+        const g = placeFloorObject(box, 'n', room, cal, { depthM: dia, round: true, whole: { widthM: dia, heightM: h } });
+        expect(g, where).not.toBeNull();
+        expect([g!.widthMM, g!.heightMM], where).toEqual([Math.round(dia * 1000), Math.round(h * 1000)]);
+        // The rim is a 720-gon, which sits a few microns inside the circle.
+        expect(Math.hypot(g!.position.x - lateral, g!.position.z + dist), where).toBeLessThan(1e-5);
+      }
+    expect(n).toBe(93);
+  });
+
   it('stops the typical radius at the side wall', () => {
     // The typical radius is an assumption, so the side wall bounds it, as it bounds a
     // typical width grown from the edge the photo saw. For one commit nothing did, and 33
@@ -332,11 +363,13 @@ describe('a round floor piece cut at one side of the photo (§ 49.9)', () => {
     // piece of the typical radius would need its far rim below the floor, so the one-sided
     // solve has no height to give. The two tangents still answer, and the piece is drawn at
     // its typical width from the edge the photo saw, as it was before § 49.9. No row of the
-    // fixture reaches this, so without it the fallback is a line nothing runs.
+    // fixture reaches this, so without it the fallback is a line nothing runs. Tipped 10°
+    // down the height is bisected, and it is the bracket's floor that has none to give.
     const whole = { widthM: 0.4, heightM: 0.5 };
+    for (const cal of [WIDE, { ...WIDE, tiltRad: (10 * Math.PI) / 180 }])
     for (const box of [[0.97, 0.92, 0.03, 0.03], [0, 0.92, 0.03, 0.03]] as Array<[number, number, number, number]>) {
-      const drawn = placeFloorObject(box, 'n', ROOMS[1], WIDE, { depthM: 0.4, round: true, whole })!;
-      const tangents = placeFloorObject(box, 'n', ROOMS[1], WIDE, { depthM: 0.4, round: true })!;
+      const drawn = placeFloorObject(box, 'n', ROOMS[1], cal, { depthM: 0.4, round: true, whole })!;
+      const tangents = placeFloorObject(box, 'n', ROOMS[1], cal, { depthM: 0.4, round: true })!;
       const seenEdge = tangents.position.x - Math.sign(tangents.position.x) * (tangents.widthMM / 2000);
       expect([drawn.position.z, drawn.heightMM, drawn.widthMM]).toEqual([tangents.position.z, tangents.heightMM, 400]);
       expect(drawn.position.x - Math.sign(drawn.position.x) * 0.2).toBeCloseTo(seenEdge, 3);

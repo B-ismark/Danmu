@@ -1436,7 +1436,15 @@ function floorFromRound(
  * `tests/round-side-cut.test.ts`), the last row is where the frame's edge meets the
  * rim, so the centre is solved for that instead. The height is re-read the same
  * way, on the rim or the frame's edge, and wherever an edge is read at the top it is
- * iterated, because the tangency's own height is the answer.
+ * bisected, because the tangency's own height is the answer. **Bisected, not
+ * iterated:** the first version iterated it and answered on the eighth pass whether or
+ * not it had settled, and it is a fixed point whose rate nears one close to the lens
+ * tipped steeply, so there the count and not the photo set the answer — a 900 mm round
+ * table 300 tall, 800 mm out at 40° down on the ultrawide, read 988 × 215. Swept over
+ * five lenses, 40° up to 40° down and four sizes each way, 268 of 14,478 side-cut round
+ * pieces stopped on the count, and at their typical size 3,278 of 4,826 read exact;
+ * bisected, 3,310, and on all 14,478 the bisection agrees to a millimetre with the
+ * iteration run until it settles.
  *
  * **Only with the foot in the photo**, and that gate is measured: cut at the foot as
  * well, `near` is a bound from beyond rather than a rim, and this read worse there
@@ -1570,12 +1578,28 @@ function floorFromRoundOneSide(
   // solved for; where both are at the floor, one pass does.
   let at = radiusAt(0);
   let h = heightFor(at);
-  for (let it = 0; (inTop || outTop) && it < 8; it++) {
+  if (inTop || outTop) {
+    // How far the height read off the disc at `y` stands above `y`: zero at the answer.
+    const gap = (y: number) => heightFor(radiusAt(y)) - y;
+    // The answer is above the floor, and the lens's height is the first guess at a top,
+    // doubled until the height read there comes back below it: a falling top row reads the
+    // piece shorter than the lens, so the first guess holds, and a rising one taller. A
+    // piece past a hundred metres tall is not furniture.
+    let lo = 0;
+    let hi = H;
+    if (!(gap(lo) > 0)) return null;
+    while (!(gap(hi) < 0)) {
+      if (hi > 100) return null;
+      lo = hi;
+      hi *= 2;
+    }
+    while (hi - lo > 1e-9) {
+      const mid = (lo + hi) / 2;
+      if (gap(mid) > 0) lo = mid;
+      else hi = mid;
+    }
+    h = (lo + hi) / 2;
     at = radiusAt(h);
-    const hh = heightFor(at);
-    const settled = Math.abs(hh - h) < 1e-6;
-    h = hh;
-    if (settled) break;
   }
   if (!(h > 0)) return null;
   return { d: at.cf, right: sg * at.cr, widthM: 2 * at.rho, heightM: h, rises };
