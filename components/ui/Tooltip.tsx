@@ -41,17 +41,35 @@ const ONE_LINE = 28;
 type BubbleBox = {
   left: number;
   top: number;
-  place: 'top' | 'bottom';
+  place: Placement;
   /** The cap actually applied, so the style and the clamp read one number. */
   width: number;
   /** The height it was placed for: `ONE_LINE` until the bubble has been measured. */
   height: number;
 };
 
+/** `left` / `right` are for a trigger in a vertical strip — a collapsed rail's
+ *  icons — where a bubble above or below would sit on the next icon down, which is
+ *  the one the pointer is travelling to. Side bubbles are `Tooltip`'s only. */
+type Placement = 'top' | 'bottom' | 'left' | 'right';
+
 /** Where a bubble goes for a trigger at `r`: `position: fixed` coordinates, kept
  *  inside the viewport. Shared by `Tooltip` and `InfoTip` so the two bubbles land
  *  by one rule. */
-function placeBubble(r: DOMRect, placement: 'top' | 'bottom', height = ONE_LINE): BubbleBox {
+function placeBubble(r: DOMRect, placement: Placement, height = ONE_LINE): BubbleBox {
+  if (placement === 'left' || placement === 'right') {
+    // Beside the trigger, vertically centred on it, and never wider than the room
+    // on that side: the bubble is a label, so it wraps rather than runs off-screen.
+    const room = placement === 'right' ? window.innerWidth - MARGIN - (r.right + OFFSET) : r.left - OFFSET - MARGIN;
+    const half = height / 2;
+    return {
+      left: placement === 'right' ? r.right + OFFSET : r.left - OFFSET,
+      top: Math.min(Math.max(MARGIN + half, r.top + r.height / 2), window.innerHeight - MARGIN - half),
+      place: placement,
+      width: Math.max(0, Math.min(CAP, room)),
+      height,
+    };
+  }
   // Measured against the viewport because the bubble is `fixed`. Height is not
   // known before paint, so a bubble is first placed for one line and the
   // transform does the rest. A one-line `Tooltip` never needs more; `InfoTip`'s
@@ -87,7 +105,12 @@ function bubbleStyle(box: BubbleBox): CSSProperties {
     position: 'fixed',
     left: box.left,
     top: box.top,
-    transform: `translate(-50%, ${box.place === 'top' ? '-100%' : '0'})`,
+    transform:
+      box.place === 'right'
+        ? 'translate(0, -50%)'
+        : box.place === 'left'
+          ? 'translate(-100%, -50%)'
+          : `translate(-50%, ${box.place === 'top' ? '-100%' : '0'})`,
     zIndex: 'var(--z-popover)',
     background: 'var(--ink)',
     color: 'var(--on-ink)',
@@ -119,7 +142,7 @@ export function Tooltip({
   label: string;
   /** One focusable, hoverable element. */
   children: ReactNode;
-  placement?: 'top' | 'bottom';
+  placement?: Placement;
 }) {
   const wrapRef = useRef<HTMLSpanElement>(null);
   const [box, setBox] = useState<BubbleBox | null>(null);

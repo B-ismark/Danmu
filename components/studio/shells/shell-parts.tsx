@@ -8,16 +8,17 @@
 // copies would be in the measurements too. Same argument as `StudioShell` itself
 // existing: two copies of a layout is two places for it to drift.
 
-import { useState, type ReactNode } from 'react';
+import { type ReactNode, useLayoutEffect, useRef } from 'react';
 import { useStudio } from '@/lib/store';
-import { Icon } from '@/components/ui/Icon';
+import { useScene } from '@/lib/scene-store';
+import { useRailIntent, type LeftSection } from '@/lib/rail-intent';
+import { CATEGORY_ICON, Icon, type IconName } from '@/components/ui/Icon';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { PartTree } from '../PartTree';
 import { Inspector } from '../Inspector';
-import { RailSection } from '../RailSection';
 import { RailFooter } from '../RailFooter';
 import { SelectionHeader } from '../SelectionHeader';
 import { RoomHealthDot } from '../RoomTools';
-import { ViewOptions } from '../ViewOptions';
 
 export type RailSide = 'left' | 'right';
 
@@ -49,9 +50,12 @@ export function RailToggle({
     <div
       style={{
         display: 'flex',
-        justifyContent: side === 'left' ? 'flex-end' : 'flex-start',
+        // Centred over the icon strip when shut, so the chevron lines up with the
+        // icons under it rather than hugging one edge of a 44px column.
+        justifyContent: !open ? 'center' : side === 'left' ? 'flex-end' : 'flex-start',
         padding: 6,
-        borderBottom: open ? '1px solid var(--hairline)' : 0,
+        // Always: a shut rail is no longer empty below this row (see the strips).
+        borderBottom: '1px solid var(--hairline)',
         flexShrink: 0,
       }}
     >
@@ -70,15 +74,133 @@ export function RailToggle({
   );
 }
 
-/** The piece tree, or — when the rail is shut — the one thing that must not be
- *  hidden with it. That state being always visible is the whole reason it moved
- *  out of a canvas dock. */
+/** The piece tree, or, when the rail is shut, its icon strip. */
 export function LeftRailBody({ open }: { open: boolean }): ReactNode {
-  return open ? (
-    <PartTree />
-  ) : (
-    <div style={{ padding: '8px 0' }}>
+  return open ? <PartTree /> : <LeftRailStrip />;
+}
+
+// ─── Collapsed rails ─────────────────────────────────────────────────────────
+//
+// A shut rail used to be a tall empty pill with a chevron at the top: the room
+// gained 37px and the panel told you nothing about what was in it. The pattern
+// every tool people know settles on for this is an ICON STRIP rather than an empty
+// band: VS Code's activity bar, Material's collapsed navigation rail ("it should
+// not be hidden"), Figma's and JetBrains' tool-window stripes. So a shut rail keeps
+// one icon per thing it holds, and each icon is a way back in that lands where it
+// names. Style opens the rail on Style, not on wherever it was left.
+//
+// Every icon carries its name as an `aria-label`, and a SIDE tooltip on hover or
+// focus. A bubble above or below would sit on the next icon down, which is the one
+// the pointer is travelling to.
+
+function StripButton({
+  icon,
+  label,
+  tip,
+  side,
+  onClick,
+  badge,
+  expanded,
+  active = false,
+}: {
+  icon: IconName;
+  /** The accessible name — a sentence where the glyph needs one. */
+  label: string;
+  /** The bubble: the short name, read at a glance. */
+  tip: string;
+  side: RailSide;
+  onClick: () => void;
+  badge?: ReactNode;
+  expanded?: boolean;
+  active?: boolean;
+}) {
+  return (
+    <Tooltip label={tip} placement={side === 'left' ? 'right' : 'left'}>
+      <button
+        type="button"
+        className={`icon-btn rail-strip__btn${active ? ' is-active' : ''}`}
+        aria-label={label}
+        aria-expanded={expanded}
+        onClick={onClick}
+      >
+        <Icon name={icon} size={16} />
+        {badge != null && <span className="rail-strip__badge mono" aria-hidden="true">{badge}</span>}
+      </button>
+    </Tooltip>
+  );
+}
+
+/** The left rail shut: Room, Style and Catalog, then the room's health. The dot is
+ *  the one thing that must not be hidden with the rail, and it is the reason the
+ *  report moved out of a canvas dock in the first place. */
+function LeftRailStrip() {
+  const toggleRail = useStudio((s) => s.toggleRail);
+  const askLeft = useRailIntent((s) => s.askLeft);
+  const count = useScene((s) => s.parts.length);
+  const openAt = (section: LeftSection) => {
+    askLeft(section);
+    toggleRail('left');
+  };
+  return (
+    <div className="rail-strip" role="group" aria-label="Room panel">
+      <StripButton icon="ruler" tip="Room" label="Open the room's size and walls" side="left" onClick={() => openAt('room')} />
+      <StripButton icon="palette" tip="Style" label="Open the room's style and light" side="left" onClick={() => openAt('style')} />
+      <StripButton
+        icon="list"
+        tip={`Catalog · ${count} ${count === 1 ? 'piece' : 'pieces'}`}
+        label={`Open the catalog, ${count} ${count === 1 ? 'piece' : 'pieces'} in this room`}
+        side="left"
+        onClick={() => openAt('pieces')}
+        badge={count > 0 ? (count > 99 ? '99+' : count) : undefined}
+      />
+      <span className="rail-strip__rule" aria-hidden="true" />
       <RoomHealthDot />
+    </div>
+  );
+}
+
+/** The right rail shut: what is selected, if anything, and Add. Add is here because
+ *  it is the one action the right rail's footer offers whatever is selected; the
+ *  Library it opens floats over the canvas and needs no open rail. */
+function RightRailStrip({ onOpen }: { onOpen: () => void }) {
+  const catalogOpen = useStudio((s) => s.catalogOpen);
+  const setCatalogOpen = useStudio((s) => s.setCatalogOpen);
+  const selectedId = useStudio((s) => s.selectedPartId);
+  const selectedWall = useStudio((s) => s.selectedWall);
+  const count = useStudio((s) => s.selection.length);
+  const part = useScene((s) => (selectedId ? s.parts.find((p) => p.id === selectedId) : undefined));
+
+  // The selection, drawn as a lit icon: the panel it would open is about it.
+  const sel: { icon: IconName; name: string } | null =
+    count > 1
+      ? { icon: 'layers', name: `${count} selected pieces` }
+      : part
+        ? { icon: CATEGORY_ICON[part.category] ?? 'cube', name: part.name }
+        : selectedWall != null
+          ? { icon: 'ruler', name: `Wall ${selectedWall + 1}` }
+          : null;
+
+  return (
+    <div className="rail-strip" role="group" aria-label="Details panel">
+      {sel && (
+        <StripButton
+          icon={sel.icon}
+          tip={`Edit ${sel.name}`}
+          label={`Open the details panel for ${sel.name}`}
+          side="right"
+          onClick={onOpen}
+          badge={count > 1 ? (count > 99 ? '99+' : count) : undefined}
+          active
+        />
+      )}
+      <StripButton
+        icon="plus"
+        tip="Add a piece"
+        label="Add a piece to the room"
+        side="right"
+        onClick={() => setCatalogOpen(!catalogOpen)}
+        expanded={catalogOpen}
+      />
     </div>
   );
 }
@@ -97,12 +219,38 @@ export function LeftRailBody({ open }: { open: boolean }): ReactNode {
  *  `display: flex; flex-direction: column; height: 100%`, so this needs no
  *  absolute positioning in a container that clips. */
 export function RightRailBody({ open }: { open: boolean }): ReactNode {
-  if (!open) return null;
+  const toggleRail = useStudio((s) => s.toggleRail);
+  // Opening from the strip's selection icon lands focus on the panel it opened. The
+  // strip button that was pressed has just unmounted, so focus would otherwise fall to
+  // the page, and the next Tab would start again from the top bar. Same reason, and the
+  // same landing, as the left rail's (`PartTree`). Only from the strip: the rail's own
+  // chevron is still mounted and keeps its focus.
+  const land = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open || !land.current) return;
+    land.current = false;
+    scrollRef.current
+      ?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      ?.focus({ preventScroll: true });
+  }, [open]);
+  if (!open) {
+    return (
+      <RightRailStrip
+        onOpen={() => {
+          land.current = true;
+          toggleRail('right');
+        }}
+      />
+    );
+  }
   return (
     <>
       <SelectionHeader />
-      {/* The Inspector and the View section share ONE scroll region, and the footer
-          stays pinned below it — the same shape the left rail has had all along.
+      {/* The Inspector owns ONE scroll region, and the footer stays pinned below
+          it — the same shape the left rail has had all along. (It shared that box
+          with a View section until View moved to the top bar's gear; see
+          `ViewMenu`. The reasoning below is why it is a box at all.)
 
           Before this they were two siblings of `.rail` directly, and only one of them
           could give: `RailSection` is `flex: 0 0 auto` when it is not `grow`, and
@@ -115,27 +263,10 @@ export function RightRailBody({ open }: { open: boolean }): ReactNode {
 
           One scroll box rather than a height cap on the View section, because a cap
           is a number that has to be re-derived every time either panel grows. */}
-      <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+      <div ref={scrollRef} style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
         <Inspector />
-        <ViewSection />
       </div>
       <RailFooter />
     </>
-  );
-}
-
-/** The View panel (Floor grid / Decor / Quality), which used to be the LEFT
- *  rail's own section. It lives between the Inspector and the pinned footer so
- *  that, with nothing selected, it sits directly on top of Add, and with a piece
- *  or a wall selected it sits underneath the panel's last section (Exact size /
- *  the wall's height). Open by default rather than matching the left rail's old
- *  `view: false`: the controls are the useful half of the no-selection state,
- *  and the disclosure still exists for the tall-selection case. */
-function ViewSection() {
-  const [open, setOpen] = useState(true);
-  return (
-    <RailSection title="View" open={open} onToggle={() => setOpen((v) => !v)} divider={false}>
-      <ViewOptions />
-    </RailSection>
   );
 }

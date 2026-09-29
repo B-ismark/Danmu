@@ -230,7 +230,8 @@ export function useRoomReport() {
   return { report, problems, effParts };
 }
 
-/** The health chip reduced to what fits a 37px rail. Same number, same colours. */
+/** The health chip reduced to what fits a shut rail's strip (`--rail-closed`). Same
+ *  number, same colours. */
 export function RoomHealthDot() {
   const { problems } = useRoomReport();
   const ok = problems === 0;

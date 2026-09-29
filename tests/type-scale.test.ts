@@ -181,7 +181,7 @@ describe('text styles', () => {
     // move one into a class for each one you add.
     let n = 0;
     for (const f of TSX) n += (readFileSync(join(ROOT, f), 'utf8').match(/style=\{\{/g) ?? []).length;
-    expect(n, `${n} inline styles — lower the ceiling if you retired some`).toBeLessThanOrEqual(727);
+    expect(n, `${n} inline styles — lower the ceiling if you retired some`).toBeLessThanOrEqual(721);
   });
 });
 

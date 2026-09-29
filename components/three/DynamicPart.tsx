@@ -16,6 +16,8 @@ import {
   fanBlade,
   fanColumn,
   pendantDrop,
+  plantForm,
+  plantLeafRadii,
   isParametric,
   lightFor,
   radiatorFins,
@@ -353,6 +355,14 @@ function shade(hex: string, pct: number): string {
  *  outlined a 400 mm pot around a 1.9 m plant, and every clearance, collision and picking
  *  answer used the outline.
  *
+ *  **It fixes the size and not the shape, and the plant is why that matters.** The scale
+ *  is per axis, so it is only honest for geometry that reads as right when stretched —
+ *  boxes and cylinders do. A sphere does not: the plant's leaf balls came out as tall
+ *  ovals at ×0.45 wide and ×0.82 tall, and "the plant looks squeezed" was this function
+ *  working exactly as written. The plant is drawn by `plantForm` now and does not use it.
+ *  The office chair's 30 mm casters are the only spheres left under it — too small to
+ *  read as squashed. A round thing big enough to see does not belong here.
+ *
  *  `natural` is the extent the children actually occupy, in metres, as **[x, y, z]** —
  *  MEASURED by `tests/footprint-fidelity.test.tsx` rather than added up from the literals.
  *  That distinction is not pedantry: the literals here are sphere centres and radii, and the
@@ -489,47 +499,47 @@ function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 }
 
 // ─── Plant ──────────────────────────────────────────────────────────────
+/** The greens a plant's leaves cycle through, in no order. One per `PLANT_LEAF_TONES`,
+ *  which is where `plantForm` takes its `tone % …` from. */
+const LEAF_TONES = ['#5D8A5D', '#6E9A66', '#4F7C4F', '#6FA06A', '#4A7048'] as const;
+
+/** Drawn at its own size by `plantForm` — no `FitToDim`, because the leaves are
+ *  spheres and a per-axis stretch turned every one of them into a tall oval. */
 function PlantGeo({ part }: { part: ScenePart }) {
   const pot = tint(part);
-  // Tapered pot + soil + a clustered canopy of varied-green blobs (was a single
-  // ball that read as a lollipop).
-  const blobs: Array<{ p: [number, number, number]; r: number; c: string }> = [
-    { p: [0, 1.55, 0], r: 0.34, c: '#5D8A5D' },
-    { p: [0.22, 1.42, 0.08], r: 0.24, c: '#6E9A66' },
-    { p: [-0.2, 1.48, -0.06], r: 0.22, c: '#4F7C4F' },
-    { p: [0.04, 1.74, -0.1], r: 0.2, c: '#6FA06A' },
-    { p: [-0.06, 1.3, 0.18], r: 0.18, c: '#4A7048' },
-  ];
+  const g = plantForm(part.dimMM);
   return (
-    <FitToDim natural={[0.88, 1.94, 0.7]} part={part}>
-        {/* tapered pot */}
-        <mesh position={[0, 0.18, 0]}>
-          <cylinderGeometry args={[0.21, 0.16, 0.36, 20]} />
-          <meshStandardMaterial color={pot} {...SURFACE.ceramic} />
-        </mesh>
-        {/* soil */}
-        <mesh position={[0, 0.355, 0]}>
-          <cylinderGeometry args={[0.2, 0.2, 0.03, 20]} />
-          <meshStandardMaterial color="#3a2c20" roughness={1} />
-        </mesh>
-        {/* stem + canopy sway gently from the soil line */}
-        <group position={[0, 0.37, 0]}>
-          <Sway amp={0.03} speed={0.9}>
-            <group position={[0, -0.37, 0]}>
-              <mesh position={[0, 0.95, 0]}>
-                <cylinderGeometry args={[0.02, 0.025, 1.2, 8]} />
-                <meshStandardMaterial color="#4A3526" />
+    <group>
+      {/* tapered pot */}
+      <mesh position={[0, g.pot.h / 2, 0]}>
+        <cylinderGeometry args={[g.pot.top, g.pot.bottom, g.pot.h, 20]} />
+        <meshStandardMaterial color={pot} {...SURFACE.ceramic} />
+      </mesh>
+      {/* soil, standing a little proud of the rim — flush with it, the two tops
+          z-fight and the soil flickers through the pot's lid */}
+      <mesh position={[0, g.pot.h, 0]}>
+        <cylinderGeometry args={[g.soil.r, g.soil.r, g.soil.t, 20]} />
+        <meshStandardMaterial color="#3a2c20" roughness={1} />
+      </mesh>
+      {/* stem + crown sway gently from the soil line */}
+      <group position={[0, g.pot.h, 0]}>
+        <Sway amp={0.03} speed={0.9}>
+          <group position={[0, -g.pot.h, 0]}>
+            <mesh position={[0, (g.stem.y0 + g.stem.y1) / 2, 0]}>
+              <cylinderGeometry args={[g.stem.rTop, g.stem.r, g.stem.y1 - g.stem.y0, 8]} />
+              <meshStandardMaterial color="#4A3526" />
+            </mesh>
+            {g.leaves.map((l, i) => (
+              // A unit sphere, scaled: a resize moves and scales these and rebuilds none.
+              <mesh key={i} position={l.p} scale={plantLeafRadii(l)}>
+                <sphereGeometry args={[1, 14, 12]} />
+                <meshStandardMaterial color={LEAF_TONES[l.tone]} {...SURFACE.foliage} />
               </mesh>
-              {blobs.map((b, i) => (
-                <mesh key={i} position={b.p}>
-                  <sphereGeometry args={[b.r, 14, 12]} />
-                  <meshStandardMaterial color={b.c} {...SURFACE.foliage} />
-                </mesh>
-              ))}
-            </group>
-          </Sway>
-        </group>
-    </FitToDim>
+            ))}
+          </group>
+        </Sway>
+      </group>
+    </group>
   );
 }
 

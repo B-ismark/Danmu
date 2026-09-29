@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, type KeyboardEvent } from 'react';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { bestMatch, type LocalMatch } from '@/lib/shape-search';
@@ -19,6 +19,7 @@ import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
 import { isAperture } from '@/lib/apertures';
 import { groupRows, type TreeRow } from '@/lib/part-rows';
 import type { ScenePart } from '@/lib/scene-spec';
+import { useRailIntent, type LeftSection } from '@/lib/rail-intent';
 
 // This rail is the accessible twin of the 3D canvas. A WebGL canvas exposes
 // nothing to assistive tech — no children, no roles, no focus — so a piece that
@@ -53,9 +54,30 @@ export function PartTree() {
   // Local, not persisted: which drawer you left open is not a preference worth
   // remembering across rooms, and `partialize` should stay about how the room
   // LOOKS. Room and Catalog open by default — the dimensions and the piece list
-  // are what the rail is for; Style is occasional (View moved to the right rail).
+  // are what the rail is for; Style is occasional. (View is
+  // behind the top bar's gear; see `ViewMenu`.)
   const [sec, setSec] = useState({ room: true, style: false, pieces: true });
   const toggle = (k: keyof typeof sec) => setSec((v) => ({ ...v, [k]: !v[k] }));
+  // A request to open ON a section, from a collapsed rail's icon or the empty
+  // Inspector (see `lib/rail-intent.ts`). Taken once, then the section is opened,
+  // scrolled to and focused — the strip that was pressed has just unmounted, so
+  // focus would otherwise fall to the page.
+  const wanted = useRailIntent((s) => s.left);
+  const [landOn, setLandOn] = useState<LeftSection | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const s = wanted && useRailIntent.getState().takeLeft();
+    if (!s) return;
+    setSec((v) => ({ ...v, [s]: true }));
+    setLandOn(s);
+  }, [wanted]);
+  useLayoutEffect(() => {
+    if (!landOn) return;
+    const el = rootRef.current?.querySelector<HTMLElement>(`[data-rail-section="${landOn}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+    el?.querySelector<HTMLElement>('.rail-section-toggle')?.focus({ preventScroll: true });
+    setLandOn(null);
+  }, [landOn]);
   const listRef = useRef<HTMLDivElement>(null);
   // Where a Shift-range starts. Every plain click moves it; a range never does, so
   // Shift-clicking twice re-measures from the same place instead of crawling down
@@ -357,7 +379,7 @@ export function PartTree() {
   }, [rows, parts, selection, selectedId]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}>
+    <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}>
       {/* The room's state, always on screen — see RoomTools. Above the sections
           because it is about the whole room, not one of its parts. */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
@@ -367,6 +389,7 @@ export function PartTree() {
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
         <RailSection
           title="Room"
+          anchor="room"
           // NOT `/ 1000`. `RoomShape.width` is METRES (see `lib/scene-store.ts`),
           // so the divide rendered every room as `0.0×0.0m` — a 7.5 m room reported
           // as 0.0. It read as plausible chrome rather than as a bug, which is what
@@ -431,6 +454,7 @@ export function PartTree() {
 
         <RailSection
           title="Style"
+          anchor="style"
           meta={activeTheme ? THEMES.find((t) => t.id === activeTheme)?.label : undefined}
           open={sec.style}
           onToggle={() => toggle('style')}
@@ -523,7 +547,7 @@ export function PartTree() {
           <LightingPicker />
           {/* The room is closed to the sun now, so a sun mood in a room with no
               opening has nothing to come through. Said in the same 10.5px --ink-3
-              hint voice the View section uses, directly under the control that
+              hint voice the view settings use, directly under the control that
               raises the question, and worded about the ROOM rather than about the
               renderer — on Fast quality there are no cast shadows at all, so a
               sentence claiming the room is unlit would be wrong half the time
@@ -566,6 +590,7 @@ export function PartTree() {
 
         <RailSection
           title="Catalog"
+          anchor="pieces"
           meta={<span className="mono">{parts.length}</span>}
           open={sec.pieces}
           onToggle={() => toggle('pieces')}
