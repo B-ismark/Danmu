@@ -1,12 +1,13 @@
-// § 49.9, measured and not built: a ROUND floor piece the photo's side edge cuts off.
+// § 49.9: a ROUND floor piece the photo's side edge cuts off.
 //
 // `floorFromRound` solves a disc from its box's two sides as the disc's two tangents. When
-// the frame cuts one side, that side is the photo's edge, not the disc's. The filed idea
-// was to solve from the one real side and the catalogue diameter instead. It was built and
-// measured in two rounds, and what the measurement found is three mechanisms rather than
-// one. That is the reason it is not shipped, and `docs/what-is-still-open.md` § 49.9 has
-// the numbers. This fixture pins what the placer does TODAY, so the next attempt has
-// something to beat and has to say what it moved.
+// the frame cuts one side, that side is the photo's edge, not the disc's, and the piece
+// stood where a much narrower one would before `wholeAlong` drew it at its typical width
+// there. With its foot in the photo it is now placed by the size it is drawn at
+// (`floorFromRoundOneSide`): the one real side, the near rim and the typical radius. Cut at
+// its foot as well it is not, because there that read worse than the two tangents, and
+// those rows are the control: they must not move. `docs/what-is-still-open.md` § 49.9 has
+// the numbers either side of the change.
 //
 // Every round kind the scan measures on the floor stands as a cylinder at 0.6, 0.8, 1 and
 // 1.25 times its typical width, each only where its band allows it, so no width is clamped
@@ -25,7 +26,7 @@
 // Only the right edge is swept; the left is its mirror, and one test says so.
 // Printed on every green run (see `--disableConsoleIntercept` in CLAUDE.md).
 import { describe, expect, it } from 'vitest';
-import { CAM_HEIGHT, frameCuts, wallFrame, type CameraCal } from '@/lib/photo-geometry';
+import { CAM_HEIGHT, frameCuts, placeFloorObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
 import { defaultAxisFor, type Category, type Shape } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import { geoMeasure, type RoomDims } from '@/lib/detect-refine';
@@ -149,7 +150,7 @@ function cell(rows: Row[]): Cell {
   };
 }
 
-describe('a round floor piece cut at one side of the photo, as placed today (§ 49.9)', () => {
+describe('a round floor piece cut at one side of the photo (§ 49.9)', () => {
   const rows = measure(1);
   const pick = (room: number, foot: boolean, tilt: number) =>
     rows.filter((r) => r.room === room && r.foot === foot && r.tilt === tilt);
@@ -175,20 +176,23 @@ describe('a round floor piece cut at one side of the photo, as placed today (§ 
   });
 
   it('pins the table, so a change to the round placer has to say what it moved', () => {
+    // Side only, placed by the size it is drawn at. Before, along the wall: 53 / 266 mm in
+    // the 4 m room, 53 / 119 / 265 in the 5 m, and 11 / 131, 15 / 20 / 80 rows off.
     expect(table(4, false)).toEqual({
-      0: { n: 60, dOff: 8, latOff: 11, dMM: 47, latMM: 53, wMM: 89, hMM: 17 },
+      0: { n: 60, dOff: 8, latOff: 13, dMM: 39, latMM: 66, wMM: 89, hMM: 10 },
       [-10]: { n: 0, dOff: 0, latOff: 0, dMM: 0, latMM: 0, wMM: 0, hMM: 0 },
-      10: { n: 135, dOff: 10, latOff: 131, dMM: 49, latMM: 266, wMM: 84, hMM: 145 },
+      10: { n: 135, dOff: 9, latOff: 71, dMM: 46, latMM: 133, wMM: 84, hMM: 151 },
     });
+    // Cut at the foot as well, still the two tangents: these must not move.
     expect(table(4, true)).toEqual({
       0: { n: 143, dOff: 101, latOff: 101, dMM: 341, latMM: 376, wMM: 103, hMM: 141 },
       [-10]: { n: 134, dOff: 96, latOff: 117, dMM: 261, latMM: 303, wMM: 161, hMM: 107 },
       10: { n: 69, dOff: 41, latOff: 47, dMM: 153, latMM: 130, wMM: 83, hMM: 157 },
     });
     expect(table(5, false)).toEqual({
-      0: { n: 79, dOff: 0, latOff: 15, dMM: 23, latMM: 53, wMM: 75, hMM: 16 },
-      [-10]: { n: 31, dOff: 6, latOff: 20, dMM: 59, latMM: 119, wMM: 118, hMM: 8 },
-      10: { n: 84, dOff: 1, latOff: 80, dMM: 42, latMM: 265, wMM: 82, hMM: 123 },
+      0: { n: 79, dOff: 1, latOff: 17, dMM: 13, latMM: 62, wMM: 80, hMM: 9 },
+      [-10]: { n: 31, dOff: 5, latOff: 14, dMM: 54, latMM: 93, wMM: 109, hMM: 17 },
+      10: { n: 84, dOff: 2, latOff: 48, dMM: 49, latMM: 142, wMM: 82, hMM: 127 },
     });
     expect(table(5, true)).toEqual({
       0: { n: 66, dOff: 35, latOff: 35, dMM: 130, latMM: 134, wMM: 86, hMM: 33 },
@@ -212,8 +216,12 @@ describe('a round floor piece cut at one side of the photo, as placed today (§ 
     // lens), so of the four offsets only the sliver keeps it in the photo, and the bottom
     // row is otherwise where the frame's edge crosses the base, further off than the near
     // face. The one-sided solve as first written read it as the near face and came back
-    // further out than the solve it replaced. On the slivers, where that premise holds, the
-    // placer today is already close, level: 25 mm / 35 mm.
+    // further out than the solve it replaced; it solves for that crossing now.
+    //
+    // The slivers are where the one-sided solve COSTS, and the reason is on the box: a
+    // sliver's frame edge nearly is its second tangent, so the two tangents nearly measured
+    // its radius, and the typical radius replaces that on a piece that is not typical. Level
+    // there, 25 / 35 mm became 30 / 76 in distance / along the wall.
     const side = rows.filter((r) => !r.foot);
     expect(side.every((r) => r.nearestInPhoto === (r.s === -1.5))).toBe(true);
     const hidden = TILTS.map((t) => {
@@ -221,7 +229,7 @@ describe('a round floor piece cut at one side of the photo, as placed today (§ 
       return [seen.length, seen.filter((r) => !r.nearestInPhoto).length];
     });
     expect(hidden).toEqual([[139, 100], [31, 27], [219, 157]]);
-    expect(cell(side.filter((r) => r.nearestInPhoto && r.tilt === 0))).toEqual({ n: 39, dOff: 2, latOff: 2, dMM: 25, latMM: 35, wMM: 68, hMM: 4 });
+    expect(cell(side.filter((r) => r.nearestInPhoto && r.tilt === 0))).toEqual({ n: 39, dOff: 3, latOff: 14, dMM: 30, latMM: 76, wMM: 74, hMM: 13 });
   });
 
   it('tipped up in the 4 m room, shows no floor at all, so every piece is cut at its foot too', () => {
@@ -244,10 +252,27 @@ describe('a round floor piece cut at one side of the photo, as placed today (§ 
     ]).toEqual([[0, 134, 0], [31, 0]]);
   });
 
-  it('at a level lens and a typical size, is off where nothing is assumed', () => {
-    // Side only, level, a typical size: no catalogue number can be wrong here, so what is
-    // left is the frame's edge read as a tangent, which is what § 49.9 was filed for.
+  it('at a level lens and a typical size, is exact', () => {
+    // Side only, level, a typical size: no catalogue number can be wrong here, so all that
+    // was left was the frame's edge read as a tangent, which is what § 49.9 was filed for —
+    // 25 mm in distance and 64 along the wall. Placed by the size it is drawn at, nothing is.
     const clean = rows.filter((r) => !r.foot && r.tilt === 0 && r.typical);
-    expect(cell(clean)).toEqual({ n: 37, dOff: 0, latOff: 7, dMM: 25, latMM: 64, wMM: 0, hMM: 19 });
+    expect(cell(clean)).toEqual({ n: 37, dOff: 0, latOff: 0, dMM: 0, latMM: 0, wMM: 0, hMM: 0 });
+  });
+
+  it('falls back to the two tangents where the typical size cannot close the box', () => {
+    // A flat sliver at the frame's edge: its top row sits so close to its bottom one that a
+    // piece of the typical radius would need its far rim below the floor, so the one-sided
+    // solve has no height to give. The two tangents still answer, and the piece is drawn at
+    // its typical width from the edge the photo saw, as it was before § 49.9. No row of the
+    // fixture reaches this, so without it the fallback is a line nothing runs.
+    const whole = { widthM: 0.4, heightM: 0.5 };
+    for (const box of [[0.97, 0.92, 0.03, 0.03], [0, 0.92, 0.03, 0.03]] as Array<[number, number, number, number]>) {
+      const drawn = placeFloorObject(box, 'n', ROOMS[1], WIDE, { depthM: 0.4, round: true, whole })!;
+      const tangents = placeFloorObject(box, 'n', ROOMS[1], WIDE, { depthM: 0.4, round: true })!;
+      const seenEdge = tangents.position.x - Math.sign(tangents.position.x) * (tangents.widthMM / 2000);
+      expect([drawn.position.z, drawn.heightMM, drawn.widthMM]).toEqual([tangents.position.z, tangents.heightMM, 400]);
+      expect(drawn.position.x - Math.sign(drawn.position.x) * 0.2).toBeCloseTo(seenEdge, 3);
+    }
   });
 });

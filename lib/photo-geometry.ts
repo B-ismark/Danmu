@@ -1277,6 +1277,10 @@ function onFramedSurface(right: number, slot: CaptureSlot, footprint: Footprint)
  * fixed-point refinement was tried and does not converge for a tall thin cylinder,
  * so it is not shipped on the strength of a guess; the residual is recorded in
  * `docs/what-is-still-open.md` instead.
+ *
+ * **Both edges are tangents only when the frame cut neither side.** Cut at one, that
+ * edge is the photo's, and reading it as the piece's put the centre and the width
+ * wherever the frame happened to end — `floorFromRoundOneSide`, below, is that case.
  */
 function floorFromRound(
   box: [number, number, number, number],
@@ -1318,6 +1322,113 @@ function floorFromRound(
   if (!(heightM > 0)) return null;
 
   return { d: m * Math.cos(alpha), right: m * Math.sin(alpha), widthM: 2 * radius, heightM, rises: top.up > 0 };
+}
+
+/**
+ * A ROUND floor piece the frame cut at ONE side, its foot in the photo: one real
+ * tangent, the near rim, and the kind's typical radius — **placed by the size it is
+ * drawn at.** `wholeAlong` already draws such a piece at its typical width, grown
+ * from the edge the photo saw; `floorFromRound` placed it by reading the frame's
+ * edge as its second tangent, so the piece stood where a much narrower one would
+ * and was then drawn wider there. Placing it by the drawn radius is what makes the
+ * two one answer.
+ *
+ * In the lens's floor frame, mirrored so the piece runs toward +r (`sg`), the edge
+ * the photo saw is the line `r = aIn·(c·f + s·(H − y))` at the height `y` where its
+ * column is extreme — the piece's top tipped down, its base otherwise, as in
+ * `floorFromRound`. The centre is `ρ` beyond that line, and the near rim is `near`:
+ * two equations, the centre closed by them.
+ *
+ * `ρ` is the typical radius or the smallest that still reaches the frame's edge,
+ * whichever is larger — a piece is at least as wide as the photo shows it. And when
+ * the rim's nearest point is itself past the frame's edge, which it is unless only
+ * a sliver was cut (the frame hides it at `(k/2)·cos(tilt)` radii in, measured in
+ * `tests/round-side-cut.test.ts`), the last row is where the frame's edge meets the
+ * rim, so the centre is solved for that instead. The height is re-read the same
+ * way, on the rim or the frame's edge, and tipped down it is iterated because the
+ * tangency's own height is the answer.
+ *
+ * **Only with the foot in the photo**, and that gate is measured: cut at the foot as
+ * well, `near` is a bound from beyond rather than a rim, and this read worse there
+ * than the two-tangent one, 272 / 285 mm off → 310 / 323 in distance / along the
+ * wall. With the foot seen it takes the along-wall error from 178 mm to 107, and is
+ * exact level at a typical size. What it costs is the catalogue: level, on a piece
+ * far from its kind's typical size, the typical radius is the wrong one, 49 mm →
+ * 87 along the wall on those rows (§ 49.9, `docs/what-is-still-open.md`).
+ */
+function floorFromRoundOneSide(
+  box: [number, number, number, number],
+  near: number,
+  cal: CameraCal,
+  cutLeft: boolean,
+  typicalRadius: number,
+): { d: number; right: number; widthM: number; heightM: number; rises: boolean } | null {
+  const [bx, by, bw] = box;
+  const H = heightOf(cal);
+  const t = tiltOf(cal);
+  const c = Math.cos(t);
+  const s = Math.sin(t);
+  const sg = cutLeft ? -1 : 1;
+  const aIn = sg * tanX(cutLeft ? bx + bw : bx, cal);
+  const aOut = sg * tanX(cutLeft ? bx : bx + bw, cal);
+  const top = ray(bx + bw / 2, by, cal);
+  if (!(top.fwd > 0)) return null;
+  const rises = top.up > 0;
+  const qIn = Math.sqrt(1 + aIn * aIn * c * c);
+  const qOut = Math.sqrt(1 + aOut * aOut * c * c);
+  // No tolerance: where a rim point sits on the frame's edge, it IS where the edge crosses
+  // the rim, so both branches that ask this give one answer there.
+  const inFrame = (r: number, f: number, y: number) => r <= aOut * (c * f + s * (H - y));
+  // Where the frame's edge at height `y` crosses the rim: the two forward distances.
+  const meet = (cr: number, cf: number, rho: number, y: number): [number, number] | null => {
+    const al = aOut * c;
+    const be = aOut * s * (H - y) - cr;
+    const A = 1 + al * al;
+    const B = 2 * (al * be - cf);
+    const C = be * be + cf * cf - rho * rho;
+    const disc = B * B - 4 * A * C;
+    if (!(disc >= 0)) return null;
+    const q = Math.sqrt(disc);
+    return [(-B - q) / (2 * A), (-B + q) / (2 * A)];
+  };
+
+  let h = 0;
+  let at: { cf: number; cr: number; rho: number } | null = null;
+  for (let it = 0; it < 8; it++) {
+    const yT = s > 0 ? h : 0;
+    const crAt = (cf: number, rho: number) => aIn * (c * cf + s * (H - yT)) + rho * qIn;
+    const den = qOut + qIn - (aOut - aIn) * c;
+    const rhoMin = den > 1e-9 ? ((aOut - aIn) * (c * near + s * (H - yT))) / den : 0;
+    const rho = Math.max(typicalRadius, rhoMin);
+    let cf = near + rho;
+    if (!inFrame(crAt(cf, rho), cf - rho, 0)) {
+      let lo = near;
+      let hi = near + rho;
+      for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        const m = meet(crAt(mid, rho), mid, rho, 0);
+        if ((m ? m[0] : mid - rho) < near) lo = mid;
+        else hi = mid;
+      }
+      cf = (lo + hi) / 2;
+    }
+    const cr = crAt(cf, rho);
+    at = { cf, cr, rho };
+    let hh = H;
+    for (let j = 0; j < 6; j++) {
+      let f = rises ? cf - rho : cf + rho;
+      if (!inFrame(cr, f, hh)) {
+        const m = meet(cr, cf, rho, hh);
+        if (m) f = rises ? m[0] : m[1];
+      }
+      hh = H + (f / top.fwd) * top.up;
+    }
+    const settled = Math.abs(hh - h) < 1e-6;
+    h = hh;
+    if (settled || s <= 0) break;
+  }
+  if (!at || !(h > 0)) return null;
+  return { d: at.cf, right: sg * at.cr, widthM: 2 * at.rho, heightM: h, rises };
 }
 
 /**
@@ -1400,8 +1511,14 @@ export function placeFloorObject(
   const cut = frameCuts(box);
   if (cut.bottom && frame) near = Math.min(near, Math.max(0.3, frame.distance - depthM));
 
+  // A round piece cut at one side, its foot seen, is placed by the radius it is about
+  // to be drawn at (`floorFromRoundOneSide`); anything it cannot close falls back to
+  // the two tangents.
+  const oneSide = foot.round && cut.left !== cut.right && !cut.bottom && foot.whole
+    ? floorFromRoundOneSide(box, near, cal, cut.left, foot.whole.widthM / 2)
+    : null;
   const solved = foot.round
-    ? floorFromRound(box, near, cal)
+    ? oneSide ?? floorFromRound(box, near, cal)
     : floorFromBox(box, near, depthM, cal);
   if (!solved) return null;
   // A side the frame cut is a width the photo did not see, and a top it cut is a

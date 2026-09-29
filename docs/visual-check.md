@@ -2048,6 +2048,30 @@ cannot answer is a real reply.
   come back.
 - **The part only a real reply answers:** how often a real scan sets pieces aside at all.
 
+### A plant or floor lamp cut by the side of the photo stands where the photo shows it — this branch (§ 49.9), NOT PROBED
+
+**Where to click.** *Photograph my real room* → a photo in which a plant, a floor lamp, a
+standing fan or a stool runs off the LEFT or RIGHT side of the frame with its foot still in the
+picture → the scan screen → **Open the studio**, on the **3D Model** tab and the **2D Plan**.
+Compare where it stands with the photo: how far out from its wall, and where along it.
+
+**What wrong looks like.**
+- The piece standing well out into the room when the photo shows it by its wall.
+- The side the photo saw not where the photo shows it. The piece grows toward the cut side,
+  and the side that was in view stays put.
+- A round piece whose base is ALSO below the photo moving at all. Those stay on the old
+  reading on purpose (§ 49.9 in `docs/what-is-still-open.md`).
+- **The part only a real room answers:** a plant much smaller or larger than a typical one, shot
+  level, now stands up to a hand's width off along the wall (on the fixture, 49 → 87 mm on
+  pieces off typical), because it is placed by the typical size it is drawn at. Before, it
+  stood where a narrower piece would and was drawn wider there. Which reads better in a real
+  room is a person's call.
+
+**What was measured, and on what.** `tests/round-side-cut.test.ts`, 389 rows cut at the side
+only, in two rooms at three tilts: along the wall 178 → 107 mm on average, exact at a level
+lens and a typical size, and the 568 rows cut at the foot as well unchanged. No browser run,
+and no test renders the room.
+
 ---
 
 ### High quality is graded again — on a real GPU, in every mood — `c2137c4` on `main` (PR #157)
