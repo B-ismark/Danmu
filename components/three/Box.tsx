@@ -24,9 +24,10 @@ import { Edges, RoundedBox } from '@react-three/drei';
 // come off the `ThreeElements` map instead.
 import type { ThreeElements } from '@react-three/fiber';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
-import { Color, DoubleSide, Euler, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
+import { BufferGeometry, Color, DoubleSide, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
 import { PHYSICAL_SURFACES, SURFACE, type SurfaceKey } from './materials';
 import { DETAIL } from '@/lib/scene-palette';
+import { LEAF_MESH, PLANT_STEM_TAPER, type PlantLeaf, type PlantStem } from '@/lib/plant-form';
 
 /** Below this (metres) the clamped bevel is invisible — skip RoundedBox. */
 const BEVEL_FLOOR = 0.05;
@@ -137,7 +138,7 @@ const _c = new Color();
 /** Writes one transform (and optional colour) per item into the InstancedMesh.
  *  Runs in a layout effect, never per frame — the geometry is static once the
  *  part's dims are resolved. */
-function useInstanceTransforms(items: InstanceItem[]) {
+function useInstanceTransforms(items: readonly InstanceItem[], colorOf?: (i: number) => string) {
   const ref = useRef<InstancedMesh | null>(null);
   useLayoutEffect(() => {
     const mesh = ref.current;
@@ -152,8 +153,9 @@ function useInstanceTransforms(items: InstanceItem[]) {
       // variation, which is what makes the whole set a single upload.
       _s.set(it.size[0] || 1e-4, it.size[1] || 1e-4, it.size[2] || 1);
       mesh.setMatrixAt(i, _m.compose(_p, _q, _s));
-      if (it.color) {
-        mesh.setColorAt(i, _c.set(it.color));
+      const color = colorOf?.(i) ?? it.color;
+      if (color) {
+        mesh.setColorAt(i, _c.set(color));
         tinted = true;
       }
     }
@@ -163,6 +165,9 @@ function useInstanceTransforms(items: InstanceItem[]) {
     // InstancedMesh keeps its own bounds; without this the whole set can be
     // frustum-culled from the wrong place.
     mesh.computeBoundingSphere();
+    // `colorOf` is read, not depended on: callers pass a fresh closure each render, and
+    // the colours follow the items.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
   return ref;
 }
@@ -207,6 +212,53 @@ export function PlaneInstances({ items, color, surface }: InstancedProps) {
     <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
       <planeGeometry args={[1, 1]} />
       <InstanceMaterial color={color} side={DoubleSide} envMapIntensity={0.5} surface={surface} />
+    </instancedMesh>
+  );
+}
+
+// ─── Plant parts ─────────────────────────────────────────────────────────────
+
+let leafGeometry: BufferGeometry | null = null;
+/** The unit leaf from `LEAF_MESH`, built once and shared by every plant in the room. */
+function unitLeaf(): BufferGeometry {
+  if (!leafGeometry) {
+    leafGeometry = new BufferGeometry();
+    leafGeometry.setAttribute('position', new Float32BufferAttribute([...LEAF_MESH.positions], 3));
+    leafGeometry.setIndex([...LEAF_MESH.index]);
+    leafGeometry.computeVertexNormals();
+  }
+  return leafGeometry;
+}
+
+/** One draw call for every leaf of a plant: the unit leaf, placed per `plantForm`, each
+ *  in the palette tone it names. */
+export function LeafInstances({
+  items,
+  tones,
+  surface,
+}: {
+  items: readonly PlantLeaf[];
+  tones: readonly string[];
+  surface?: InstancedProps['surface'];
+}) {
+  const ref = useInstanceTransforms(items, (i) => tones[items[i].tone % tones.length]);
+  if (items.length === 0) return null;
+  return (
+    <instancedMesh ref={ref} args={[unitLeaf(), undefined, items.length]} castShadow receiveShadow>
+      <InstanceMaterial color="#ffffff" side={DoubleSide} envMapIntensity={0.5} surface={surface} />
+    </instancedMesh>
+  );
+}
+
+/** One draw call for a plant's trunk and stalks: a unit cylinder tapering to
+ *  `PLANT_STEM_TAPER` at its top, wood-coloured for the trunk and green for the rest. */
+export function StemInstances({ items, wood, green }: { items: readonly PlantStem[]; wood: string; green: string }) {
+  const ref = useInstanceTransforms(items, (i) => (items[i].wood ? wood : green));
+  if (items.length === 0) return null;
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
+      <cylinderGeometry args={[PLANT_STEM_TAPER, 1, 1, 7]} />
+      <InstanceMaterial color="#ffffff" roughness={0.8} envMapIntensity={0.5} />
     </instancedMesh>
   );
 }

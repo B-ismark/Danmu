@@ -127,40 +127,49 @@ min, library and max sizes, and that `desk-standard` is behaviourally identical 
 over 0, all three sizes) — both measured by `tests/footprint-fidelity.test.tsx`. The open
 question is purely whether the new proportions look like furniture. PR #124.
 
-### The plant is redrawn at its own size, with round leaves — branch `claude/affectionate-ritchie-ilawx1`
+### The plant is a real plant now, and its box picks which one — branch `claude/affectionate-ritchie-ilawx1`
 
-**Looked at, and it was wrong: "the plant model looks squeezed".** The item below predicted
-it ("a squashed shrub is the risk") and its advice — fix the catalogue size, not the renderer
-— was the wrong half. `FitToDim` scales per axis, so ANY resize squashes a sphere again, and
-the catalogue number was never the defect. `plantForm` (`lib/scene-spec.ts`) draws the plant
-at its declared size instead, and `plant` is parametric, so a resize redraws it rather than
-stretching it: a slim trunk and an egg-shaped head of leaf balls, every one round at any
-ordinary plant shape, the pot capped at 420 mm tall and 420 mm across the rim.
+**Looked at twice, and both times it was wrong in a different way.** First: "the plant model
+looks squeezed". `FitToDim` scaled one fixed drawing per axis, and PR #179 (`5114b5f` on
+`main`) answered that with a head of round leaf balls drawn at the plant's own size. Walked
+here, the balls were round and the head was full, but it read as topiary: "can't we make it
+look more like an actual plant". What makes a plant read as a plant is its silhouette. So
+`plantForm` (`lib/plant-form.ts`) now draws leaf-shaped leaves on stalks, and the box's
+proportions choose the habit rather than stretching one drawing. Tall for its spread, it is
+a fig: a bare trunk, then broad leaves spiralling up the top. Squat, it is an arching bush:
+stems fanning out of the soil, one slim leaf each. In between, it is a blend: a short trunk
+that branches. A very long, narrow box is a row of plants in a trough; a very low, wide one
+is a rosette in a shallow bowl. Every leaf is the same unit leaf scaled evenly, so nothing is
+ever squashed, and a resize redraws the plant.
 
-**Where to click.** Open a seeded living room in **3D Model** — the plant stands in a corner by
-the screen. Then select it, **Scale** it wider and shorter (say 800 × 800 × 1000) and taller
-and narrower (300 × 300 × 2000), and look again each time.
+**Where to click.** Open a seeded living room in **3D Model**. The plant stands in a corner by
+the screen, and at its catalogue 400 × 400 × 1600 it should be a fig. Select it, **Scale** it
+to 800 × 800 × 900 (a bush) and 600 × 600 × 1200 (the blend), then 300 × 300 × 2000 (a slim
+fig) and 1200 × 300 × 900 (a trough of three). Look again each time, and once while dragging a
+Scale handle, where the plant regrows under the pointer.
 
-**What wrong looks like.** Any leaf ball that is an oval; daylight through the middle of the
-head; a pot that reads as a tube or as a bucket; a head that floats off its trunk. Lopsided
-sizes (one side under half the other) are allowed to press balls flat on the thin side —
-that is by design and is the one place a ball may be anything but round.
-
-**The open question, and it is a taste call.** The head is at most twice as tall as the plant
-is wide, and the rest is bare trunk. So a 300 × 300 × 2000 plant is a 600 mm ball on 1.3 m of
-stem, and that may read as a lollipop rather than a slim plant. Nothing measures whether it
-looks like a plant. If it does not, the ratio is `headH` in `plantForm`.
+**What wrong looks like.** A leaf floating off its stalk, or a stalk starting in mid-air; a
+leaf poking through the pot; a fig whose trunk shows through a gap in its leaves at eye
+height; a bush that reads as a spiky ball rather than leaves arching out; a visible jump in
+the plant's character partway through a Scale drag. The blend is the one nobody has judged
+against the real thing, so give it the longest look.
 
 **Also look at a plant beside a wall in 2D Plan, from above.** The plan draws a plant as the
-w × d ellipse, and the leaves now stay inside that ellipse rather than filling its box. Before
-the review fix they stood up to 94 mm past it at 300 × 1200. Wrong would be leaves showing past
-the drawn outline, or a long thin plant whose end leaves look detached from the head.
+w × d ellipse, and every leaf is solved to stay inside it. The outermost leaves touch the
+outline, so the 3D plant fills the circle the plan draws. Wrong would be a leaf past the
+outline, or a plant that sits in the middle of a circle much bigger than it looks.
 
-**Settled without eyes.** Draws 1.00 × 1.00 × 1.00 of its box
-(`tests/footprint-fidelity.test.tsx`); round leaves at nine ordinary shapes, no sight line
-through the head from front, side or above, every leaf inside the plan's ellipse, and every
-leaf joined to the rest across 126 legal sizes plus the two that need the tip chain
-(`tests/plant-form.test.ts`, mutation-checked).
+**Settled without eyes.** Draws its box on all three axes (`tests/footprint-fidelity.test.tsx`).
+Across 126 legal sizes plus two low troughs, `tests/plant-form.test.ts` checks that:
+
+- no leaf is distorted;
+- every point of every leaf is inside the ellipse, under the top of the box and out of the pot;
+- the leaves span at least 92% of an ordinary plant's outline, and at least 90% of any legal one;
+- every leaf is on a stalk, and every stalk starts in the soil, on the trunk or on another stalk;
+- the habit only moves from bush toward fig as a plant grows taller;
+- the pose three draws is the pose the checks measure.
+
+Each check was mutation-tested, and all 19 deliberate breaks were caught.
 
 ### Six pieces changed size — a plant, three chairs and two lamps
 
@@ -1001,7 +1010,7 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
-### View behind a gear, collapsed rails as icon strips, a designed empty panel — branch `claude/affectionate-ritchie-ilawx1` (PR #179)
+### View behind a gear, collapsed rails as icon strips, a designed empty panel — merged to `main` in `5114b5f` (PR #179)
 
 **Asked for, and walked once in headless Chromium.** The View controls (floor grid, decor,
 sounds, quality) moved from the right rail's foot to a gear left of `?`. A shut rail is a
@@ -2059,7 +2068,7 @@ real phone, with a real scan, is the unlooked-at half.
 ---
 ## Look and light
 
-### The day track as a slider over the canvas, a frosted base under the selection, no streaks while carrying — branch `claude/affectionate-ritchie-ilawx1`, SEEN HEADLESS ONLY
+### The day track as a slider over the canvas, a frosted base under the selection, no streaks while carrying — merged to `main` in `b955aac` (PR #178), SEEN HEADLESS ONLY
 
 **Where to click.** Open any room in **3D Model** on a wide window, then on a phone. Under the
 Move / Scale / Rotate row there is a dashed track with the sun and a clock pill: a shallow

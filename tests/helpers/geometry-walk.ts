@@ -15,6 +15,12 @@
 
 import { Euler, Matrix4, Vector3 } from 'three';
 import { isValidElement, type ReactNode } from 'react';
+import { LEAF_MESH, PLANT_STEM_TAPER } from '@/lib/plant-form';
+
+const UNIT_LEAF: Array<[number, number, number]> = [];
+for (let i = 0; i < LEAF_MESH.positions.length; i += 3) {
+  UNIT_LEAF.push([LEAF_MESH.positions[i], LEAF_MESH.positions[i + 1], LEAF_MESH.positions[i + 2]]);
+}
 
 /** A primitive's footprint: its projection onto the floor, as a convex point set. */
 export type Prim = {
@@ -246,6 +252,21 @@ export function walk(node: ReactNode): WalkReport {
         const child = xform(m, it.pos, it.rot);
         const [w, h, d] = it.size;
         push(rep.prims, name, name === 'BoxInstances' ? boxCorners(w, h, d) : boxCorners(w, h, 0), child, spun);
+      }
+      return;
+    }
+
+    if (name === 'LeafInstances' || name === 'StemInstances') {
+      // The plant's two instanced sets. Each item is a unit mesh scaled by `size`, turned
+      // by `rot` and set at `pos`, exactly as `useInstanceTransforms` composes it; the unit
+      // leaf's points are `LEAF_MESH`'s, the same array the drawn geometry is built from.
+      if (!Array.isArray(props.items)) {
+        bump(rep.unhandled, `${name}.items`);
+        return;
+      }
+      const unit = name === 'LeafInstances' ? UNIT_LEAF : rings(PLANT_STEM_TAPER, 1, 1);
+      for (const it of props.items as Array<{ pos: number[]; size: number[]; rot?: number[] }>) {
+        push(rep.prims, name, unit, xform(m, it.pos, it.rot, it.size), spun);
       }
       return;
     }
