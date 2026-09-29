@@ -8049,8 +8049,9 @@ reasoning:
   centre behind that point as "a column line's other half". A 3 m disc centred 100 mm ahead of a
   lens tipped down 5° is behind it and entirely real, since the frame shows only the part well
   ahead of both. The filter is deleted; asking each candidate what box it draws already rejects
-  the other half. 22 discs when measured; 13 of them, every one on the 120° lens tipped down, are
-  tall enough to read under the sliver rule below, and 2 more sit over the lens.
+  the other half. It refused 22 discs when measured. Put back today, it would refuse 13 tall
+  enough to read under the sliver rule below, every one on the 120° lens tipped down, and change
+  2 more over the lens.
 
 **Two rules the review added, each measured.**
 - **A sliver is not solved.** Every candidate stands on the far edge, which the fit never checks,

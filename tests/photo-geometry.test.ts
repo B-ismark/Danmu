@@ -1710,8 +1710,9 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
     // Tipped down 5°, every column's line meets the slab 114 mm ahead of the lens. A
     // 3 m disc centred 100 mm ahead is behind that point, and a 120° frame still shows
     // only the part of it well ahead of both. The first version refused every centre
-    // behind the pivot: in the wider sweep that was 13 discs tall enough to read, every
-    // one on this lens tipped down, and 2 more over the lens.
+    // behind the pivot. Restoring that filter today refuses 13 discs tall enough to read
+    // in the wider sweep, every one on this lens tipped down, and changes 2 more over the
+    // lens.
     const cal: CameraCal = { k: 2 * Math.tan((60 * Math.PI) / 180), aspect: 4 / 3, tiltRad: (5 * Math.PI) / 180 };
     expect(RISE * Math.tan(cal.tiltRad!), 'premise: the pivot is past the centre').toBeGreaterThan(0.1);
     const box = bboxOfCeilingDiscInFrame('n', 0, -0.1, 3, cal, SQUARE.height)!;
