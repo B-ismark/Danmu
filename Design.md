@@ -541,6 +541,17 @@ decision it makes.
    First-come was only safe while every row with a position had been measured — a
    located row arriving first ate the measurement, and the piece went into the room
    at its catalogue size.
+   **A place the room's walls decided is not a place the photo gave**, and the
+   cross-photo rule no longer treats it as one. The floor placer stops a piece at the
+   wall it runs past, and a bound stops every piece that runs past it on the same line:
+   two chairs one behind the other, read on a lens assumed narrower than it was, came
+   out on one spot, and the merge deleted one. So each measured row carries its
+   `distanceDoubt` — how far its bounds moved it, and no limit for a piece the frame cut
+   at its foot, whose near face was never in the picture — and two rows are one piece
+   by place only when their distance plus both doubts is inside the tier. What the hard
+   merge no longer takes goes to the soft pass below, which starts it unticked with a
+   reason: a duplicate the user unticks in one tap beats a real piece that never
+   appears.
 4. **Build** — `buildSceneFromRoom` clamps, snaps and settles. It reads only the two
    axes a photograph can locate: `groundY` owns Y outright, and the placement gate
    used to test Y as well, so a fan the model put 3.2 m up in a 2.8 m room lost its
@@ -649,16 +660,19 @@ held as literals in `tests/repeat-sightings.test.ts`):
   typical piece's place, and the walk asks about the longer ones.
 
 Together they take the repeats left ticked, at an ultrawide read as the assumed 66°, from
-247 to 5 (106°) and 452 to 19 (120°). The price is 21 real pieces across the table's five
+247 to 5 (106°) and 455 to 21 (120°). The price is 16 real pieces across the table's five
 readings started unticked — each with its reason, one tap from back — and none on a lens
-EXIF measured. Three things it does not reach are filed in `docs/what-is-still-open.md`
-§ 46, measured and not fixed: twin beds in a corner come back as one, in one of the two
-layouts measured — the other was the fixture's (§ 46.1, § 49.16); a box cut at
-the BOTTOM of its photo is not walked, because doing so bought little and walking both
-edges is a grid that did not finish (§ 46.2); and under a wrong lens the HARD merge deletes
-3.7–4.2% of an ultrawide room's pieces outright, nearly all dining chairs, before this pass
-ever sees them (§ 46.3). § 46.1 and § 46.3 are one fix — the hard merge deciding a pair on
-a distance nobody measured.
+EXIF measured. It sees more rows than it did: until the hard merge stopped deciding pairs
+on a place a bound gave (step 3, above), it deleted 3.7–4.2% of an ultrawide room's pieces
+outright under a wrong lens, nearly all dining chairs, before this pass ever saw them
+(§ 46.3), and one of twin beds in a corner (§ 46.1). Those pieces have rows now, and most
+start unticked here, so a person gets them back with one tap. Two of the 91 the table
+used to lose that way are still gone, and they are one curtain read on two lenses: a narrow
+lens presses every offset along a wall toward the middle, and its twin came within a
+curtain's merge distance, which no bound had any part in. What it does not reach is filed
+in `docs/what-is-still-open.md` § 46: the first of those twin beds still starts unticked
+(§ 46.1), and a box cut at the BOTTOM of its photo is not walked, because doing so bought
+little and walking both edges is a grid that did not finish (§ 46.2).
 
 ### A box the edge of the photo cut
 

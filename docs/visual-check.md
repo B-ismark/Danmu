@@ -1786,8 +1786,8 @@ came back as two ticked beds. Now a row that shares a quarter of its floor with 
 of the same kind starts unticked and names the row it repeats — nothing is deleted.
 Probed by seeding the review list directly (a real scan cannot be driven headless): the
 caption wraps under the name at 360, the header reads *3 of 4 pieces kept*, no overflow
-at seven widths. The case it cannot reach — twin beds in a corner, where the hard merge deletes one before this runs —
-is `docs/what-is-still-open.md` § 46.1.
+at seven widths. Twin beds in a corner, where the hard merge used to delete one before this
+ran, now reach it: the first bed starts unticked as the second bed again (`docs/what-is-still-open.md` § 46.1).
 
 **What wrong looks like.**
 - Two ticked beds where the room has one, or a real second chair starting unticked.
@@ -2074,6 +2074,27 @@ Compare where it stands with the photo: how far out from its wall, and where alo
 only, in two rooms at three tilts: along the wall 178 → 103 mm on average, exact at a level
 lens and a typical size, none past the side wall, and the 568 rows cut at the foot as well
 unchanged. No browser run, and no test renders the room.
+
+### Chairs across a table both come back, and a repeat starts unticked rather than vanishing — this branch (§ 46.3), NOT PROBED
+
+**Where to click.** *Photograph my real room* → photograph a dining table with chairs on both
+sides of it, from the wall behind one row of chairs and from a side wall, on a phone that writes
+no focal length (most do not) → the scan screen. Count the chair rows against the chairs in the
+room, then tick back any that start unticked and count again.
+
+**What wrong looks like.**
+- Fewer chair rows, ticked and unticked together, than chairs in the room. A chair with no row
+  at all is the defect this fixes. Before it, a narrow reading of an ultrawide put two chairs one
+  behind the other on one spot by the far wall, and one of them was deleted.
+- A chair that starts unticked with a reason naming a chair it is not. The soft pass now sees
+  pairs the hard merge used to take, so it has more rows to judge.
+- More ticked duplicates than before. The fixture measured 51 → 57 across its five readings, so
+  a few more is the price, and many more is not.
+
+**What was measured, and on what.** `tests/repeat-sightings.test.ts`, 150 generated rooms read
+five ways: pieces with no row at all fell from 91 to 2, the two being one curtain on two lenses.
+`tests/distance-doubt.test.ts` holds the two chair pairs. No browser run, and no test drives the
+scan screen with a real photo.
 
 ---
 
