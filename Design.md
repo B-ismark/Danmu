@@ -686,8 +686,9 @@ see is an estimate. Not "a typical one", which it said first and which was true 
 in three: a piece whose visible part is already bigger than typical keeps what was seen, and
 one stopped by the wall's end is neither. A piece cut only at its FOOT gets no note — its
 width and height were seen whole — but its distance is the wall's rather than its own, the far
-end of where it could stand, so the judge reads each axis one way (`readBounds`,
-`lib/photo-geometry.ts`). The width is the most it can be: it may say *too small*, never *too
+end of where it could stand, so the judge reads each axis one way — the placer's own
+answer, `GeoPlacement.bounds` (`lib/photo-geometry.ts`), which `geoMeasure` carries out
+beside the row. The width is the most it can be: it may say *too small*, never *too
 big*. The height is the top row read at that distance, and that row's ray rises for a piece
 taller than the lens and falls for a lower one, so a tall piece reads high and a low one low —
 each bounded on its other side by the lens, which is what still makes a low table no wardrobe.

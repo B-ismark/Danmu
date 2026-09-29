@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
-import { cutAxes, frameCuts, placeFloorObject, placeWallObject, readBounds, wallFrame, type CameraCal } from '@/lib/photo-geometry';
+import { cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
   PART_LIBRARY,
   buildSceneFromRoom,
+  defaultAxisFor,
   defaultDepthFor,
   sceneShapeFor,
   type Category,
@@ -14,11 +15,11 @@ import {
 } from '@/lib/scene-spec';
 import { toRecord } from '@/lib/detection-record';
 import { dimRangeFor } from '@/lib/dimension-ranges';
-import { geoRefine, type CalMap, type RoomDims } from '@/lib/detect-refine';
+import { geoMeasure, geoRefine, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { footprintForLayout, type Footprint } from '@/lib/footprint';
-import { bboxOfCeilingDisc, bboxOfFloorBox, bboxOfWallSolid } from './helpers/project';
+import { bboxOfCeilingDisc, bboxOfFloorBox, bboxOfFloorCylinder, bboxOfWallSolid } from './helpers/project';
 
 /** The framed wall's distance, read from the polygon. `wallDistance` — the
  *  `depth/2` / `width/2` pair every placer used to measure from — is deleted; this
@@ -330,8 +331,10 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   // A box that reaches the bottom of the photo has no seen near edge, so
   // `placeFloorObject` reads it at the far end of where it could stand — the last row's
   // ray, or its back on the plaster. Seven pieces, projected from the truth 0, 300 and
-  // 800 mm off the north wall on the 106° lens, level and tilted 10° and 20° down; kept
-  // are the rows the frame cut at the foot and not the top, that the placer measured.
+  // 800 mm off the north wall on the 106° lens, level and tipped UP 10° and 20° — a
+  // negative `tiltRad`, the phone angled to get the ceiling in, which is how people
+  // photograph a room; kept are the rows the frame cut at the foot and not the top,
+  // that the placer measured.
   const clip = ([x, y, w, h]: readonly number[]): Detection['box'] => {
     const x0 = Math.max(0, x), y0 = Math.max(0, y);
     return [x0, y0, Math.min(1, x + w) - x0, Math.min(1, y + h) - y0];
@@ -358,25 +361,25 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         const box = boxOf(category, shape, w, h, gap, cal);
         const c = frameCuts(box);
         const d = det({ category, shape, slot: 'n', box });
-        const read = geoRefine(d, { n: cal }, ROOM).dimMM;
-        return c.bottom && !c.top && read ? [{ d, cal, truth: [w, h] as const, read }] : [];
+        const { row, bounds } = geoMeasure(d, { n: cal }, ROOM);
+        const read = row.dimMM;
+        return c.bottom && !c.top && read ? [{ d, cal, truth: [w, h] as const, read, bounds }] : [];
       }),
     ),
   );
 
-  it('reads each axis on the side readBounds says, never the other', () => {
-    expect(ROWS).toHaveLength(44);
+  /** Where each uncut axis's truth sits against the bound the placer reported. */
+  const tally = (rows: ReadonlyArray<{ d: Detection; truth: readonly [number, number]; read: readonly number[]; bounds: ReadBounds }>) => {
     const t = { widthLarge: 0, widthCut: 0, heightLow: 0, heightHigh: 0, exact: 0 };
-    for (const { d, cal, truth, read } of ROWS) {
-      const bound = readBounds(d.box, 'floor', cal);
+    for (const { d, truth, read, bounds } of rows) {
       if (cutAxes(d.box, 'floor').width) t.widthCut++;
       else {
         // The most it can be: at or above the truth.
-        expect(bound.width.kind).toBe('upper');
+        expect(bounds.width.kind).toBe('upper');
         expect(read[0]).toBeGreaterThanOrEqual(truth[0]);
         if (read[0] > truth[0]) t.widthLarge++;
       }
-      const h = bound.height;
+      const h = bounds.height;
       if (read[2] < truth[1]) {
         t.heightLow++;
         // Read low, and bounded above by the lens: a falling top ray is below it.
@@ -386,8 +389,72 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         expect(h.kind === 'upper' && truth[1] >= h.floorMM).toBe(true);
       } else t.exact++;
     }
+    return t;
+  };
+
+  it('reads each axis on the side its placer says, never the other', () => {
+    expect(ROWS).toHaveLength(44);
     // Every direction the rule allows is exercised, so the fixture can tell them apart.
-    expect(t).toEqual({ widthLarge: 14, widthCut: 16, heightLow: 16, heightHigh: 12, exact: 16 });
+    expect(tally(ROWS)).toEqual({ widthLarge: 14, widthCut: 16, heightLow: 16, heightHigh: 12, exact: 16 });
+  });
+
+  // The round placer is a different solve — tangents to a circle, not corners of a box —
+  // so it is asked the same question on its own fixture: every round floor kind as a
+  // cylinder of its catalogue width and height, on the same walls and tilts.
+  const ROUND: Array<[Category, Shape]> = [['fan', 'fan-standing'], ['plant', 'plant'], ['lamp', 'lamp-floor'], ['chair', 'stool']];
+  const roundRows = (tiltDeg: number) =>
+    ROUND.flatMap(([category, shape]) =>
+      [0, 0.3, 0.8].flatMap((gap) => {
+        const cal = calAt(tiltDeg);
+        const dia = defaultAxisFor(category, shape, 0), h = defaultAxisFor(category, shape, 2);
+        const z = -(wallD('n', ROOM) - gap - dia / 2000);
+        const box = clip(bboxOfFloorCylinder('n', 0.3, z, dia / 1000, h / 1000, cal));
+        const c = frameCuts(box);
+        const d = det({ category, shape, slot: 'n', box });
+        const { row, bounds } = geoMeasure(d, { n: cal }, ROOM);
+        const read = row.dimMM;
+        return c.bottom && !c.top && read ? [{ d, cal, truth: [dia, h] as const, read, bounds }] : [];
+      }),
+    );
+
+  it('reads a round piece on the same sides, and never calls it the wrong size', () => {
+    const rows = [0, -10, -20].flatMap(roundRows);
+    expect(rows).toHaveLength(29);
+    expect(tally(rows)).toEqual({ widthLarge: 26, widthCut: 1, heightLow: 11, heightHigh: 12, exact: 6 });
+    expect(rows.filter(({ d, cal }) => judgeLabel(d, { n: cal }, ROOM).status === 'suspect')).toEqual([]);
+  });
+
+  it('pins the one place a round reading crosses its bound: the lens tipped down', () => {
+    // `floorFromRound` reads its tangents on the top row with the lens tipped down and
+    // carries a residual of its own there. Of the five rows 10° down, one crosses: a
+    // standing fan 300 mm off its wall, 13 mm narrower than the most it can be and 3 mm
+    // taller than the least. Pinned so that growing shows, and still no accusation.
+    const rows = roundRows(10);
+    expect(rows).toHaveLength(5);
+    const crossed = rows.filter(({ truth, read, bounds }) =>
+      read[0] < truth[0] || (bounds.height.kind === 'lower' ? read[2] > truth[1] : read[2] < truth[1]),
+    );
+    expect(crossed.map(({ d, truth, read }) => [d.shape, truth[0], read[0], truth[1], read[2]])).toEqual([
+      ['fan-standing', 650, 637, 900, 903],
+    ]);
+    expect(rows.filter(({ d, cal }) => judgeLabel(d, { n: cal }, ROOM).status === 'suspect')).toEqual([]);
+  });
+
+  it('pins where the bound leans on the catalogue depth: a shallow piece on the wall', () => {
+    // The far end is the piece's back on the plaster at its kind's TYPICAL depth. A sofa
+    // shallower than a typical sofa's 950, pushed against the wall, has its near face
+    // further out than that, so it reads short of the most-it-can-be the bound claims.
+    const level = calAt(0);
+    const read = (depthM: number) => {
+      const z = -(wallD('n', ROOM) - depthM / 2);
+      const box = clip(bboxOfFloorBox('n', 0.3, z, 2.0, 0.8, depthM, level));
+      const { row, bounds } = geoMeasure(det({ category: 'sofa', shape: 'sofa', slot: 'n', box }), { n: level }, ROOM);
+      expect(frameCuts(box)).toMatchObject({ bottom: true, left: false, right: false });
+      expect(bounds.width.kind).toBe('upper');
+      return row.dimMM![0];
+    };
+    expect(defaultDepthFor('sofa', 'sofa')).toBe(950);
+    expect([read(0.95), read(0.75), read(0.6)]).toEqual([2000, 1680, 1500]);
   });
 
   it('never calls a correct word the wrong size here', () => {

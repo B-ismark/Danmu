@@ -7853,7 +7853,7 @@ whose box reaches the bottom of the photo has no seen near edge, so its distance
 near face is held to `max(0.3, wall − depth)`, the piece stood back against its wall, and read
 there. This was filed as *its width and height are an upper bound*. Measured on seven pieces
 projected from the truth 0, 300 and 800 mm off the north wall of a 6 × 4 m room on the 106°
-lens, level and tilted 10° and 20° down — the 44 rows cut at the foot and not the top
+lens, level and tipped UP 10° and 20° — the 44 rows cut at the foot and not the top
 (`tests/label-repair.test.ts`) — the width is an upper bound (14 read large, 14 exact, 16 cut at
 the side), but **the height is not**. It is the top row read at the far distance, and that
 row's ray rises for a piece taller than the lens and falls for a lower one: a tall piece reads
@@ -7862,12 +7862,26 @@ HIGH (12 rows) and a low one LOW (16) — an 800 mm sofa 800 mm out read **333**
 wherever the piece stands, so the wardrobe is still taller than the lens and the sofa shorter.
 Judged both ways, **6 of the 44 correctly named pieces were called the wrong size** — the sofa
 too short, the wardrobe too tall at all three tilts, a desk at two — and each of those
-rows started unticked. Now `readBounds` (`lib/photo-geometry.ts`) says which side each axis can
-speak for, and `judgeLabel` accuses only where nowhere the piece could truly be is inside the
-band: **0 of 44**. A word the reading could still be is scored on the band's edge, margin 0,
+rows started unticked. Now the floor placer reports which side each axis can speak for
+(`GeoPlacement.bounds`, typed `ReadBounds` in `lib/photo-geometry.ts`), `geoMeasure` carries it
+out beside the row, and `judgeLabel` accuses only where nowhere the piece could truly be is
+inside the band: **0 of 44**. The first version re-derived those sides in a function of its own
+beside the placer, from the box; it agreed, and it was the same answer written twice. A word the reading could still be is scored on the band's edge, margin 0,
 rather than outside it — the scan screen hangs *the camera does not agree* on a negative margin,
 and it would have hung it on the right word. The row still gets no note, because its width and
 height were in view.
+
+**Round pieces are a different solve and were measured separately:** a standing fan, plant,
+floor lamp and stool as cylinders of their catalogue size, same walls — 29 rows level and
+tipped up, every reading on the side its bound says, 0 accused. Tipped DOWN 10°, where
+`floorFromRound` reads its tangents on the top row, one row of five crosses: the fan 300 mm out
+reads **637** wide against 650 and **903** tall against 900, 13 mm and 3 mm the wrong side, no
+accusation. **And the bound leans on the catalogue depth**, which is the larger caveat: the far
+end is the piece's back on the plaster at its kind's TYPICAL depth, so a piece shallower than
+typical, pushed against the wall, reads short of the most-it-can-be — a 2.0 m sofa 750 mm deep
+reads **1680** against a typical sofa's 950, and 600 mm deep **1500**. The two-sided judge read
+it just as short, so the bound costs nothing there; it only fails to fix it. All three are
+pinned in `tests/label-repair.test.ts`.
 
 **The price, measured on the same fixture:** every other category's word on every row, 665
 judged — **485 caught before, 328 now.** The 157 between are words one photograph cannot rule
