@@ -215,24 +215,22 @@ export function RoomSync() {
       // Re-derived, not trusted. See `normalizeStoredParts` — this snapshot can be
       // older than the derivation that replaced the stored flag.
       if (savedScene) setParts(normalizeStoredParts(savedScene));
-      if (t) {
-        loadTransforms(t);
-        if (t.hidden) setHiddenMap(t.hidden);
-      }
-      // Unconditional, for the reason `parentIds` below is and `hidden` above is
-      // not: the store outlives the navigation, so a room with no saved `pinned`
-      // of its own — every room saved before this shipped, and every room where
-      // nothing has been locked — would otherwise inherit the PREVIOUS room's
-      // locks. Ids are `${category}-${counter}` and collide across rooms by
-      // construction, so the inherited entry does not even miss: it silently
-      // exempts a different sofa from Suggest, in a room the user never locked
-      // anything in. Outside the `if (t)` as well as inside it, because `t` is
-      // undefined for a room that has never been edited at all.
+      // Every override is reset, whether or not this room saved any: the store outlives
+      // the navigation, and `t` is undefined for a room that has never been edited at
+      // all. Ids are `${category}-${counter}` and collide across rooms by construction,
+      // so an inherited entry does not even miss — it lands on a different sofa, in a
+      // room the user never touched. The positions, turns, sizes and hidden pieces were
+      // reset only when this room had saved transforms of its own, so opening a room
+      // never edited showed the last room's moves and sizes on its pieces, and its first
+      // save stored them there. A size typed just before leaving made it certain: it is
+      // committed on the way out (`RoomDimsEditor`, `Inspector`), into this same store.
+      loadTransforms(t ?? {});
+      setHiddenMap(t?.hidden ?? {});
+      // The locks, for the same reason: a room with no saved `pinned` of its own would
+      // otherwise inherit the PREVIOUS room's, and silently exempt a different sofa from
+      // Suggest.
       setPinnedMap(t?.pinned ?? {});
-      // Unconditional, unlike `hidden` above: part ids are deterministic
-      // (`${category}-${counter}`), so a room with no saved transforms of its
-      // own would otherwise inherit whatever `parentIds` the PREVIOUS room
-      // left live in the store. `snapshotDescendants` re-validates every edge
+      // And the rigid-parent edges. `snapshotDescendants` re-validates every edge
       // physically before trusting it, so a leaked entry can't cause a wrong
       // cascade — but there's no reason to leave it live when a clean reset
       // costs nothing.

@@ -231,6 +231,35 @@ describe('RoomSync, when nothing leaves', () => {
   });
 });
 
+describe('RoomSync, opening a room never edited', () => {
+  // The store outlives the navigation, and part ids collide across rooms by
+  // construction. The load reset the overrides only for a room with saved transforms of
+  // its own, so a room never edited opened with the last room's moves, turns, sizes and
+  // hidden pieces on its own pieces, and its first save stored them.
+  it('shows none of the last room’s changes, and saves none of them', async () => {
+    useScene.setState({ parts: [] });
+    await roomStore.destroyRoom(ROOM_ID);
+    await roomStore.saveRoom(room());
+    const left = {
+      positions: { 'sofa-1': [1, 0, 1] as [number, number, number] },
+      rotations: { 'sofa-1': 1 },
+      dims: { 'sofa-1': [1980, 950, 880] as [number, number, number] },
+      hidden: { 'sofa-1': true },
+    };
+    useStudio.setState(left);
+    render(<RoomSync />);
+    await waitFor(() => expect(useScene.getState().hydratedRoomId).toBe(ROOM_ID), { timeout: 2000 });
+    const s = useStudio.getState();
+    expect([s.positions, s.rotations, s.dims, s.hidden]).toEqual([{}, {}, {}, {}]);
+    const id = useScene.getState().parts[0].id;
+    act(() => useStudio.getState().setPosition(id, [0.25, 0, 0.25]));
+    await waitFor(async () => expect(await roomStore.loadTransforms(ROOM_ID)).toBeDefined(), { timeout: 2000 });
+    const saved = (await roomStore.loadTransforms(ROOM_ID))!;
+    expect(Object.keys(saved.positions)).toEqual([id]);
+    expect([saved.rotations, saved.dims, saved.hidden]).toEqual([{}, {}, {}]);
+  });
+});
+
 describe('the size boxes', () => {
   it('commit what was typed when the page is left inside their 200 ms, and leave the saving to RoomSync', async () => {
     await mount(
