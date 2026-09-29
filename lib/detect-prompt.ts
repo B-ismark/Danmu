@@ -24,6 +24,22 @@ export type PromptRoom = { width: number; depth: number; height: number; layoutI
 
 const SLOT_NAME: Record<CaptureSlot, string> = { n: 'NORTH', e: 'EAST', s: 'SOUTH', w: 'WEST' };
 
+/** A wall as a reply may name it. The prompt asks for `"n"`, but it also calls the
+ *  walls NORTH, EAST, SOUTH and WEST, and heads each photo `--- N WALL ---`, so a
+ *  reply in either form is the prompt's own words read back, not a guess about which
+ *  wall was meant. A Map rather than an object, so `"constructor"` is not a wall. */
+const SLOT_OF = new Map<string, CaptureSlot>(
+  (Object.entries(SLOT_NAME) as [CaptureSlot, string][]).flatMap(([code, name]) => [
+    [code, code],
+    [name.toLowerCase(), code],
+  ]),
+);
+
+/** The wall code a reply's `slot` names, or undefined when it names none. */
+export function slotOf(v: unknown): CaptureSlot | undefined {
+  return typeof v === 'string' ? SLOT_OF.get(v.trim().toLowerCase()) : undefined;
+}
+
 /** Where the lens points and which way the image runs, per wall. The camera
  *  POSITION is stated once in the opening line instead of hiding in the `n`
  *  entry, which is where it used to live — a set without a north photo never
@@ -149,18 +165,22 @@ Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by vis
  *  with no box in frame is dropped, as a row with no box always was, and so is a
  *  sliver, by the rule the on-device rows are dropped by.
  *
- *  So is a row naming a wall that was not photographed (§ 49.17). Its box is a box on
- *  a picture that does not exist, and it has no camera to be measured by, so it kept
- *  the model's own size and place and was built as though it were read off a photo.
- *  `sent` is required rather than defaulted to all four walls, because the default
- *  is the check switched off. */
+ *  So is a row naming a wall that was not photographed (§ 49.17), read through
+ *  `slotOf`. Its box is a box on a picture that does not exist, and it has no
+ *  camera to be measured by, so it kept the model's own size and place and was
+ *  built as though it were read off a photo. `sent` is required rather than
+ *  defaulted to all four walls, because the default is the check switched off. */
 export function cloudRows(parsed: readonly unknown[], sent: readonly CaptureSlot[]): Detection[] {
   return (parsed as Detection[]).flatMap((d) => {
-    const box = d && Array.isArray(d.box) && sent.includes(d.slot) ? boxInPhoto(d.box) : null;
+    const slot = d ? slotOf(d.slot) : undefined;
+    if (!slot || !sent.includes(slot) || !Array.isArray(d.box)) return [];
+    const box = boxInPhoto(d.box);
     // Stamped here, and called only by `readCloudReply`, which only
     // `detectAcrossImages` calls, so nothing but the reply to a Gemini call can
-    // claim its output came from Gemini.
-    return box ? [{ ...d, box, source: 'cloud' as const }] : [];
+    // claim its output came from Gemini. The slot is written back as its code:
+    // the saved record carries it as a `__slot:x` suffix that reads back only
+    // `[nesw]`, and `cals[d.slot]` is keyed the same way.
+    return box ? [{ ...d, slot, box, source: 'cloud' as const }] : [];
   });
 }
 

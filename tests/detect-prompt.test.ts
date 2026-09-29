@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { buildDetectPrompt, cloudRows, readCloudReply } from '@/lib/detect-prompt';
+import { buildDetectPrompt, cloudRows, readCloudReply, slotOf } from '@/lib/detect-prompt';
 import { detectionBox } from '@/lib/local-detect';
+import { fromRecord, toRecord } from '@/lib/detection-record';
 import { SLIVER } from '@/lib/photo-geometry';
 import { stripComments } from './helpers/source';
 import { CATALOG_SHAPES_ORDERED } from '@/lib/scene-spec';
@@ -196,12 +197,32 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
     // with `__slot:north` left in the label.
     const walls = ['n', 'e', 's', 'w', 'north', 'N', '', undefined, 0];
     const kept = cloudRows(walls.map((slot) => row([0.1, 0.2, 0.3, 0.4], { slot })), ['n', 'e']);
-    expect(kept.map((d) => d.slot)).toEqual(['n', 'e']);
-    // Every wall of the four, sent alone, keeps its own row and no other.
+    // `north` and `N` are the prompt's own words for `n` (`slotOf`), and are kept as it.
+    expect(kept.map((d) => d.slot)).toEqual(['n', 'e', 'n', 'n']);
+    // Every wall of the four, sent alone, keeps its own rows and no other.
+    const own = { n: ['n', 'n', 'n'], e: ['e'], s: ['s'], w: ['w'] };
     for (const sent of ['n', 'e', 's', 'w'] as const) {
-      expect(cloudRows(walls.map((slot) => row([0.1, 0.2, 0.3, 0.4], { slot })), [sent]).map((d) => d.slot)).toEqual([sent]);
+      expect(cloudRows(walls.map((slot) => row([0.1, 0.2, 0.3, 0.4], { slot })), [sent]).map((d) => d.slot)).toEqual(own[sent]);
     }
     expect(cloudRows([row([0.1, 0.2, 0.3, 0.4])], [])).toEqual([]);
+  });
+
+  it('reads a wall in the words the prompt uses for it, and nothing else', () => {
+    // The prompt asks for "n" but calls the walls NORTH… and heads each photo
+    // "--- N WALL ---", so those are its vocabulary read back.
+    for (const [code, name] of [['n', 'north'], ['e', 'east'], ['s', 'south'], ['w', 'west']] as const) {
+      for (const v of [code, code.toUpperCase(), name, name.toUpperCase(), ` ${name[0].toUpperCase()}${name.slice(1)} `]) {
+        expect(slotOf(v)).toBe(code);
+      }
+    }
+    for (const v of ['nw', 'northeast', 'north wall', 'wall n', 'constructor', 'toString', '__proto__', '', 'x', null, undefined, 0, ['n'], { n: 1 }]) {
+      expect(slotOf(v)).toBeUndefined();
+    }
+    // Written back as its code, so the saved `__slot:x` suffix and the camera map
+    // both read it — `N` used to come back from a save labelled `Sofa__slot:N`.
+    const [d] = cloudRows([row([0.1, 0.2, 0.3, 0.4], { slot: 'North' })], ['n']);
+    expect(d.slot).toBe('n');
+    expect(fromRecord(toRecord(d, 0, false, () => 'u')).label).toBe('Sofa');
   });
 
   it('drops a sliver by the rule the on-device rows are dropped by', () => {
@@ -255,7 +276,7 @@ describe('readCloudReply: a reply with nothing to act on is not an empty room', 
   });
 
   it('refuses a list that files every row under walls nobody photographed (§ 49.17)', () => {
-    const elsewhere = [row([0.1, 0.2, 0.3, 0.4], { slot: 's' }), row([0.5, 0.2, 0.3, 0.4], { slot: 'north' })];
+    const elsewhere = [row([0.1, 0.2, 0.3, 0.4], { slot: 's' }), row([0.5, 0.2, 0.3, 0.4], { slot: 'up' })];
     expect(unreadable(JSON.stringify(elsewhere))).toMatch(/no box inside the photos/);
     const reply = readCloudReply(JSON.stringify([...elsewhere, row([0.2, 0.3, 0.1, 0.1])]), ['n']);
     expect('rows' in reply && reply.rows.map((d) => [d.slot, d.box])).toEqual([['n', [0.2, 0.3, 0.1, 0.1]]]);
