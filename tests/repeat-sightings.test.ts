@@ -27,7 +27,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { geoRefine, refineDetections, type CalMap } from '@/lib/detect-refine';
+import { dedupeDetections, geoLocate, geoMeasure, geoRefine, refineDetections, type CalMap } from '@/lib/detect-refine';
 import { findRepeats, keptAtFirst, REPEAT_SHARE, sameButColor, sweptSolids, SWEPT_HFOV_DEG } from '@/lib/repeat-sightings';
 import { footArea, footFromPart, footIntersectionArea } from '@/lib/geometry';
 import {
@@ -35,11 +35,13 @@ import {
   calFromHfov,
   calibrateFromFloorLine,
   fitHeightToFloorLine,
+  frameCuts,
   PLAUSIBLE_HFOV_DEG,
   wallFrame,
   type CameraCal,
   type LensSource,
 } from '@/lib/photo-geometry';
+import { anchorFor } from '@/lib/physics';
 import { startingSpot } from '@/lib/scene-spec';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
@@ -425,26 +427,36 @@ describe('the known room', () => {
     expect(keptAtFirst(refined, refined.map(() => true), ROOM, CALS).size).toBe(2);
   });
 
-  it('still loses the second of twin beds in a corner, before this runs — § 46.1, filed', () => {
+  it('no longer deletes one of twin beds in a corner: the first starts unticked — § 46.1', () => {
     // The same pair in the north-east corner, seen from the north and the east. Held
-    // as the defect, in literals, because both earlier readings of it came from probes
-    // nobody kept and both were wrong about which bed was left.
+    // in literals, because both earlier readings of it came from probes nobody kept and
+    // both were wrong about which bed was left.
     const single = (x: number): Truth => ({
       name: `single ${x}`, label: 'bed', category: 'bed', shape: 'bed-single',
       x, z: -2.05, dimMM: [900, 1900, 450], slots: ['n', 'e'],
     });
-    // The lens the phone wrote down changes nothing: the hard merge takes both doors either way.
-    // WHICH bed is left is the survivor the merge keeps, and a sighting the frame did not
-    // cut outranks one it did (`survivorRank`): at 1.9 and 3.0 the first bed's east view
-    // is cut by the photo's side and the second bed's is whole, so the second is kept and
-    // the FIRST is the one gone. Before that rank the first bed's cut view was kept.
+    // This was a DELETION: the hard merge took every row of the first bed, so there was
+    // nothing left to tick. The east photo sees both beds end-on, and the bed nearer the
+    // lens is held by the room's east wall half its catalogue length from it, which put
+    // it on the spot the far bed was read at. A place a bound held is not a place the
+    // photo gave (`distanceDoubt`), so the hard merge no longer calls the two one piece
+    // there. What is left is the soft pass's call, and it still makes it: the first bed
+    // starts unticked, as a repeat of the second, and is one tap from back. The lens the
+    // phone wrote down changes nothing either way.
     for (const cals of [CALS, every(lens(106, 'measured'))]) {
       const first = readTwice(single(1.9), 'single bed');
       const second = readTwice(single(3.0), 'single bed');
       const refined = refineDetections([...first, ...second], cals, ROOM);
-      expect(refined).toHaveLength(4);
-      // Every row left is a sighting of one bed: the other is not unticked, it is gone.
-      for (const d of refined) expect(second.map((f) => f.box)).toContainEqual(d.box);
+      const of = (bed: Detection[], d: Detection) => bed.some((f) => f.box === d.box);
+      const whose = refined.map((d) => (of(first, d) ? 'first' : of(second, d) ? 'second' : 'neither'));
+      expect(whose).toEqual(['first', 'first', 'first', 'second', 'second', 'second', 'second']);
+      const repeats = findRepeats(refined, refined.map(() => true), ROOM, cals);
+      refined.forEach((d, i) => {
+        if (whose[i] !== 'first') return;
+        const j = repeats[i];
+        expect(j, `row ${i}`).not.toBeNull();
+        expect(whose[j!], `row ${i}`).toBe('second');
+      });
       expect(keptAtFirst(refined, refined.map(() => true), ROOM, cals).size).toBe(1);
     }
   });
@@ -465,7 +477,11 @@ describe('the known room', () => {
       const refined = refineDetections([...first, ...second], cals, ROOM);
       const of = (bed: Detection[], d: Detection) => bed.some((f) => f.box === d.box);
       const whose = refined.map((d) => (of(first, d) ? 'first' : of(second, d) ? 'second' : 'neither'));
-      expect(whose).toEqual(['first', 'first', 'first', 'first', 'second', 'second']);
+      // The last row is new: the second bed's east view, which the east wall's centre
+      // bound held at x 2.50 and the hard merge then joined to the same bed's north view
+      // by that place. Right, for a reason the photo did not give (§ 46.1, above), so it
+      // stays a row now and the soft pass unticks it as a repeat. Both beds are kept.
+      expect(whose).toEqual(['first', 'first', 'first', 'first', 'second', 'second', 'second']);
       expect(keptAtFirst(refined, refined.map(() => true), ROOM, cals).size).toBe(2);
     }
   });
@@ -722,7 +738,13 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
   // loses exactly the pieces that one loses — that is the gate, at scale.
   // GONE counts the pieces with no row at all once `refineDetections` has run: the
   // hard merge took every sighting of them into a neighbour's. No reading of the
-  // ticks can bring one back, and under a wrong lens they are nearly all the losses.
+  // ticks can bring one back. It was 1 / 37 / 9 / 42 / 2 down the rows while the hard
+  // merge took a place a bound held for a place the photo gave (§ 46.1, § 46.3):
+  // chairs one behind another, all stopped on the one line. Those pieces have rows
+  // now, and most of them start unticked, so LOST barely moves (swept, 117 → 113 over
+  // the five rows, one of them up by one at 120° read at 66°, not traced): they are one
+  // tap from back instead of gone. The one left under a narrow lens is a curtain, two
+  // curtains on one wall pressed together along it, which is not a distance at all.
   it('prints and holds the rate', { timeout: 300_000 }, () => {
     const ROOMS = 150;
     const count = (trueDeg: number, givenDeg: number) => {
@@ -787,11 +809,96 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
     });
     console.log(`findRepeats over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
     expect(got).toEqual([
-      [575, 0, 1, 0, 2, 0, 10, 0, 2],
-      [993, 252, 37, 247, 37, 5, 41, 216, 37],
-      [993, 252, 9, 7, 11, 3, 20, 5, 11],
-      [989, 464, 42, 452, 43, 19, 42, 423, 43],
-      [989, 464, 2, 36, 4, 24, 4, 34, 4],
+      [575, 0, 0, 0, 2, 0, 10, 0, 2],
+      [993, 252, 1, 247, 37, 5, 41, 216, 37],
+      [993, 252, 0, 9, 11, 5, 15, 7, 11],
+      [989, 464, 1, 455, 45, 21, 43, 426, 45],
+      [989, 464, 0, 38, 4, 26, 4, 36, 4],
+    ]);
+  });
+
+  // The rate above is shot level. Tip the phone up and the frame's bottom edge climbs
+  // off the floor: a foot the photo cuts off has no near face to read, so its place is
+  // a guess and no bound held it (`distanceDoubt` Infinity), and a guess never merges on
+  // distance. The fear was that a tipped-up room trades the pieces the hard merge no
+  // longer takes for pieces it cannot take at all, and so for ticked repeats. Measured
+  // against the merge as it was (no doubt handed over), at 5°, 10° and 15° up, the lens
+  // read right and read narrow: pieces with no row fall from 13 / 28 / 11 / 17 / 5 / 11 to
+  // 0 / 1 / 1 / 2 / 0 / 0, and lost moves by one, down once and up once. Repeats are the
+  // same in four readings, and two and three more in the lens read right at 5° and 15°.
+  //
+  // Those five are floor lamps, and they were one repeat, not five, until a round piece's
+  // sides came to be read at their own ends (§ 49.9). Each pair has a sighting cut at the
+  // foot, standing at the distance that left assumed, 220 to 340 mm from the other. Read
+  // on its top row, a 300 mm lamp tipped up came out 370 to 650 mm across in those pairs,
+  // and the two circles overlapped because they read too wide. Cut at the foot alone it
+  // reads 310 to 350 now, and cut at a side as well 120 to 300, the frame's edge still
+  // taken for a tangent. The soft pass compares a foot-cut row at its assumed distance,
+  // which is the gap, filed as § 46.5. With the lens read narrow the merge as it was
+  // pays the same.
+  it('costs at most three more ticked repeats with the phone tipped up, where the frame cuts most feet', { timeout: 300_000 }, () => {
+    const asItWas = (dets: Detection[], cals: CalMap) => {
+      const measured = new Set<Detection>();
+      const placed = dets.map((d) => {
+        const g = geoMeasure(d, cals, ROOM);
+        if (g.row === d) return geoLocate(d, cals, ROOM);
+        measured.add(g.row);
+        return g.row;
+      });
+      return dedupeDetections(placed, measured);
+    };
+    const tipped = (deg: number, up: number): CameraCal => ({ ...lens(deg), tiltRad: (-up * Math.PI) / 180 });
+    const lines: string[] = [];
+    const got = ([[5, 106], [5, 66], [10, 106], [10, 66], [15, 106], [15, 66]] as const).map(([up, givenDeg]) => {
+      const truth = tipped(106, up);
+      const given = every(tipped(givenDeg, up));
+      const r = { vis: 0, footCut: 0, was: { gone: 0, dup: 0, lost: 0 }, now: { gone: 0, dup: 0, lost: 0 } };
+      for (let sd = 1; sd <= 150; sd++) {
+        const pieces = furnishedRoom(sd * 7919 + 13);
+        const dets: Tallied[] = [];
+        const shots = pieces.map(() => 0);
+        pieces.forEach((p, i) => {
+          for (const s of SWEEP_SLOTS) {
+            const box = boxIn(p, s, truth);
+            if (!box) continue;
+            shots[i]++;
+            dets.push({ label: p.label, conf: 0.9, box, category: p.category, slot: s, shape: p.shape, _t: i } as Tallied);
+            if (anchorFor(p.category, p.shape) === 'floor' && frameCuts(box).bottom) r.footCut++;
+          }
+        });
+        shots.forEach((n) => {
+          if (n > 0) r.vis++;
+        });
+        const read = [
+          [r.was, asItWas(dets, given) as Tallied[]],
+          [r.now, refineDetections(dets, given, ROOM) as Tallied[]],
+        ] as const;
+        for (const [t, refined] of read) {
+          const rowed = new Set(refined.map((d) => d._t));
+          const ticks = pieces.map(() => 0);
+          keptAtFirst(refined, refined.map(() => true), ROOM, given).forEach((i) => ticks[refined[i]._t]++);
+          shots.forEach((n, i) => {
+            if (n === 0) return;
+            if (!rowed.has(i)) t.gone++;
+            if (ticks[i] === 0) t.lost++;
+            if (ticks[i] > 1) t.dup += ticks[i] - 1;
+          });
+        }
+      }
+      lines.push(
+        `tipped ${up}° up, true 106° read at ${givenDeg}°  seen ${r.vis}, cut at the foot ${r.footCut}  ` +
+          `gone ${r.was.gone} → ${r.now.gone}  dup ${r.was.dup} → ${r.now.dup}  lost ${r.was.lost} → ${r.now.lost}`,
+      );
+      return [r.vis, r.footCut, r.was.gone, r.now.gone, r.was.dup, r.now.dup, r.was.lost, r.now.lost];
+    });
+    console.log(`the hard merge, tipped up, over 150 furnished rooms:\n  ${lines.join('\n  ')}`);
+    expect(got).toEqual([
+      [970, 448, 13, 0, 7, 9, 22, 21],
+      [970, 448, 28, 1, 10, 10, 37, 37],
+      [946, 541, 11, 1, 3, 3, 19, 19],
+      [946, 541, 17, 2, 3, 3, 24, 24],
+      [898, 609, 5, 0, 3, 6, 10, 11],
+      [898, 609, 11, 0, 6, 6, 17, 17],
     ]);
   });
 });
@@ -891,11 +998,20 @@ describe('findRepeats — a lens a floor line tied to the height', () => {
       return [r.vis, r.held.dup, r.held.lost, r.tied.dup, r.tied.lost];
     });
     console.log(`findRepeats with a floor line, over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
+    // HELD's 16 on the first row was 26 for one commit, while a round piece cut at one side
+    // was placed by its typical radius with nothing stopping it at the side wall (§ 49.9):
+    // ten plants and floor lamps, cut at one side in one photo and whole in another, grown
+    // through the wall in a camera whose scale the line got wrong. Stopped at the wall, it
+    // is 16 again, and only that bound moves it. TIED, the sweep the app runs, moved at
+    // neither step, and nor did a lens known with the height assumed at any of 1.3, 1.5 and
+    // 1.7 m — measured, dup and lost identical row for row. LOST fell by 1, 3, 0 and 1 on
+    // both readings when the hard merge stopped joining pieces by a place a bound held
+    // (§ 46.3): pieces it had deleted came back as rows, and a few of them ticked.
     expect(got).toEqual([
-      [1000, 16, 13, 4, 13],
-      [993, 4, 25, 5, 16],
+      [1000, 16, 12, 4, 12],
+      [993, 4, 22, 5, 13],
       [968, 14, 20, 15, 18],
-      [979, 25, 17, 25, 17],
+      [979, 25, 16, 25, 16],
     ]);
   });
 });

@@ -741,6 +741,17 @@ export type GeoPlacement = {
   /** Which way `widthMM` and `heightMM` can be wrong — see `ReadBounds`. The placer
    *  reports it because the placer is the one that knows. */
   bounds: ReadBounds;
+  /** How far, in metres, the piece's centre may stand from `position` for a reason the
+   *  photo did not show: how far the room's bounds moved a floor piece, on the floor, from
+   *  where the same reading put it with no wall in reach, and no limit at all for one the
+   *  frame cut at its foot, whose near face was never in the picture. Zero where nothing
+   *  stopped it, and on a wall, where the distance is the wall's and two pieces are told
+   *  apart along it, not toward it. Never NaN: a reading that cannot say is no limit.
+   *
+   *  For the hard merge (`dedupeDetections`), which calls two rows one piece when their
+   *  centres agree: a bound stops every piece that runs past it on one line, so two chairs
+   *  one behind the other came out on the same spot and one of them was deleted (§ 46.3). */
+  distanceDoubt: number;
 };
 
 /** What a placer needs to know about a piece's PLAN shape: the axis one photograph
@@ -920,18 +931,25 @@ export type ReadBound =
  *  A round piece is the same case on the same two tests: its radius is `near` times an
  *  angle, and its top row is read at `near` or at `near` plus that diameter, on the same
  *  rising-or-falling ray. **Except with the lens tipped DOWN**, where `floorFromRound`
- *  reads its tangents on the top row and carries a residual of its own that crosses the
- *  bound and grows with the tilt: a standing fan 300 mm off its wall read 637 wide
+ *  read its tangents on the top row and carried a residual of its own that crossed the
+ *  bound and grew with the tilt: a standing fan 300 mm off its wall read 637 wide
  *  against a true 650 at 10° down, a stool 800 mm off read 465 × 721 against 500 × 700
  *  at 20°, a fan 555 × 947 against 650 × 900 at 25°. A bound that the truth falls
  *  outside is worse than none — at 20° it put a 0.70 m stool at 0.72–1.50 m tall — so
- *  a round piece read tipped down claims no side (`AT_ASSUMED_DISTANCE`), pinned in
- *  `tests/label-repair.test.ts`. **It is still read at an assumed distance**, and for
- *  a commit it was handed `AS_READ` instead, which says the opposite: the one foot-cut
- *  row whose sentence printed its estimate as a measurement, without its "about" or
- *  the note. Judged at the reading, as every piece is now (D8), the two cost its
- *  verdict the same. The phone tipped UP, which is how rooms are photographed, holds
- *  on every row, and so does a box tipped down.
+ *  a round piece read tipped down claims no side (`AT_ASSUMED_DISTANCE`). Each side is
+ *  read at the end its column is extreme in the photo now (§ 49.9), and not one of that
+ *  fixture's seventeen rows crosses; the exception stays until a measurement of its own
+ *  retires it, because three rows that stopped crossing are not one (filed, § 49.9;
+ *  pinned in `tests/label-repair.test.ts`). **It is still read at an assumed
+ *  distance**, and for a commit it was handed `AS_READ` instead, which says the
+ *  opposite: the one foot-cut row whose sentence printed its estimate as a measurement,
+ *  without its "about" or the note. Judged at the reading, as every piece is now (D8),
+ *  the two cost its verdict the same. With the phone level or tipped UP, which is how
+ *  rooms are photographed, the round rows hold but three, all one case: a stool the frame
+ *  shows only the top of, whose box's sides are where its seat crosses the frame's
+ *  bottom and not the tangents they are read as (§ 49.20, pinned in the same file). A box
+ *  tipped down holds on a fixture that still clips the silhouette rather than boxing what
+ *  the photo draws, which is the same section's to fix.
  *
  *  **Both directions also lean on the catalogue depth**, because the far end is the
  *  piece's back on the plaster at its kind's typical depth. A piece deeper than that
@@ -1264,19 +1282,50 @@ function onFramedSurface(right: number, slot: CaptureSlot, footprint: Footprint)
  * width errors under the old model, a floor lamp at +81% and a plant at +54%, are
  * the two the fix does not have to trust a default for.
  *
- * The bbox's edges are the circle's tangent lines, so they give the centre's
- * azimuth `α` and the half-tangent-angle `β` directly, and the near rim closes it:
- * `near = m·cos α − ρ` with `ρ = m·sin β`, hence `m = near / (cos α − sin β)`.
- * Exact at a level lens.
+ * The bbox's two sides are the circle's tangent lines on the floor plan, and the
+ * near rim closes it: the disc tangent to both lines whose nearest point is `near`,
+ * its centre and radius in closed form. Exact at a level lens.
  *
- * **The one term here that is approximate, measured rather than assumed.** A
- * vertical tangent line's image column varies with row, and the row at which the
- * tangency actually falls is not the bbox's own top row, so under tilt `α` and `β`
- * are read a little off. Measured at 5°: a plant reads +9.8% (was +24%) and a tall
- * floor lamp +37% (was +73%) — exact level, roughly twice as good tilted. A
- * fixed-point refinement was tried and does not converge for a tall thin cylinder,
- * so it is not shipped on the strength of a guess; the residual is recorded in
- * `docs/what-is-still-open.md` instead.
+ * **Under tilt, each side is read at the end of the piece where its column is
+ * extreme in the photo**, because that is where the box's edge came from. A side of
+ * a round piece is a vertical line on it, and its column `r / zc` is extreme where
+ * `zc` is — the rule `lateralSpan` applies to a box's corners: tipped down, the side
+ * facing out of the photo's centre is extreme at the piece's top and the side facing
+ * in at its base, tipped up the reverse. The first version read both sides on the
+ * box's top row, and a piece seen whole to one side of the photo came back wide by an
+ * amount that grew with the tilt: a 400 mm plant 3.6 m out and 1.2 m to the side read 420
+ * at 5° down and 501 at 20° up, and a fixed point on that model did not converge for a
+ * tall thin cylinder. Read at its own end, it is exact at every tilt pinned in
+ * `tests/photo-geometry.test.ts`.
+ *
+ * **Where the frame hid that end, the side is read where the frame's row crosses it.**
+ * A row of the image is a plane through the lens's right axis, so along it `(H − y)/f`
+ * is one number, `τ`, and the side's column there sweeps `r = a·(c + s·τ)·f`: a line
+ * through the lens, where the rim line at the hidden end is not. Reading the hidden end
+ * anyway measured WORSE than the top row it replaced — on the foot-cut round rows
+ * against their wall at 20° up, 173 mm of width off on average against 56 — and looked
+ * exact for a commit, because that fixture boxed what the photo never showed:
+ * `clipToFrame` of the whole silhouette keeps a hidden extreme's column, the § 49.16
+ * defect in a third fixture. Boxed as the photo draws it, the crossing is exact on
+ * every one of those rows but a stool the frame left only the top of, the extremes of
+ * its seat's rim on the frame's bottom row or past it, so no side of it is in the photo
+ * at all (§ 49.20). Where the crossing falls off the piece, below its foot or above its
+ * top, the side is whole in the photo and is read at that end instead; the loop below
+ * settles which.
+ *
+ * **The height is solved, not iterated.** Once each side's read is chosen, every line is
+ * linear in the height and so is the height in the radius, so the pair closes in one
+ * division; only the choice of read is iterated, and it has three values a side. The first
+ * version iterated the height itself to 1e-9 in at most twenty passes, and that is a
+ * fixed point whose rate is the very term the division is by: close to the lens, tipped
+ * steeply down, it ran at 0.9 to 0.997 a pass, and swept over six lenses, −60° to 60°
+ * and pieces 0.2 to 1.2 m across, 2,993 of 48,261 round pieces the photo showed WHOLE
+ * came back unmeasured, each within millimetres of its size when the count ran out. The
+ * division reads 48,160 of them exact and refuses none with its rim clear of the lens.
+ *
+ * **Both edges are tangents only when the frame cut neither side.** Cut at one, that
+ * edge is the photo's, and reading it as the piece's put the centre and the width
+ * wherever the frame happened to end — `floorFromRoundOneSide`, below, is that case.
  */
 function floorFromRound(
   box: [number, number, number, number],
@@ -1284,40 +1333,280 @@ function floorFromRound(
   cal: CameraCal,
 ): { d: number; right: number; widthM: number; heightM: number; rises: boolean } | null {
   const [bx, by, bw, bh] = box;
-  // Where a tangent line's column is extreme: at the piece's own top when the lens
-  // tilts down, its base when the lens tilts up — whichever end `forwardAtHeight`
-  // makes nearest.
-  const vEdge = tiltOf(cal) > 0 ? by : by + bh;
-  const eL = ray(bx, vEdge, cal);
-  const eR = ray(bx + bw, vEdge, cal);
-  if (!(eL.fwd > 0) || !(eR.fwd > 0)) return null;
-
-  const alpha = (Math.atan2(eR.right, eR.fwd) + Math.atan2(eL.right, eL.fwd)) / 2;
-  const beta = (Math.atan2(eR.right, eR.fwd) - Math.atan2(eL.right, eL.fwd)) / 2;
-  // There is no `beta > 0` guard here, and there was one for a commit. A zero- or
-  // negative-width bbox gives `beta <= 0`, hence `radius <= 0`, hence a width the
-  // shared check at the bottom of `placeFloorObject` already refuses — so the guard
-  // refused nothing that was not refused anyway, and mutation said so: deleting it
-  // failed no test, including the one written for it. The behaviour is pinned in
-  // `tests/photo-geometry.test.ts` where it belongs, on the answer rather than on the
-  // line that was supposed to produce it.
-  //
-  // Not reachable, and the same note as `zMin` above applies. `den` is
-  // `cos α − sin β`, which is ≤ 0 only when the lens is inside the circle — that
-  // needs `α + β ≥ 90°`, i.e. a tangent leaving the frame's own half-angle. The
-  // widest lens this app will accept is 150° from an EXIF focal length and 120° from
-  // the floor-line solve, so `α + β ≤ 75°`. It guards a division, not a behaviour.
-  const den = Math.cos(alpha) - Math.sin(beta);
-  if (!(den > 1e-6)) return null;
-  const m = near / den;
-  const radius = m * Math.sin(beta);
-
+  const H = heightOf(cal);
+  const t = tiltOf(cal);
+  const c = Math.cos(t);
+  const s = Math.sin(t);
   const top = ray(bx + bw / 2, by, cal);
   if (!(top.fwd > 0)) return null;
-  const heightM = heightOf(cal) + ((top.up > 0 ? near : near + 2 * radius) / top.fwd) * top.up;
-  if (!(heightM > 0)) return null;
+  const rises = top.up > 0;
+  const cut = frameCuts(box);
+  // Each side, and the row the frame cut it at if the frame hid its extreme end: the top
+  // row when it is extreme at the top, the bottom row at its base.
+  const sideOf = (a: number, atTop: boolean) => {
+    const edge = ray(bx + bw / 2, atTop ? by : by + bh, cal);
+    const hidden = s !== 0 && (atTop ? cut.top : cut.bottom);
+    return { a, atTop, tau: hidden && edge.fwd > 0 ? -edge.up / edge.fwd : null };
+  };
+  const aL = tanX(bx, cal);
+  const aR = tanX(bx + bw, cal);
+  const left = sideOf(aL, s !== 0 && aL < 0 === s > 0);
+  const right = sideOf(aR, s !== 0 && aR > 0 === s > 0);
+  type Side = ReturnType<typeof sideOf>;
+  // Where a side is read: the rim at its base or its top, or the frame's row across it.
+  type Read = 'base' | 'top' | 'row';
+  // A side's line on the floor plan, `r = m·f + b0 + b1·h` in the height `h`, with
+  // `q = √(1 + m²)`. Only a rim read at the top moves with the height.
+  const lineOf = ({ a, tau }: Side, read: Read) => {
+    const m = read === 'row' ? a * (c + s * (tau as number)) : a * c;
+    return { m, b0: read === 'row' ? 0 : a * s * H, b1: read === 'top' ? -a * s : 0, q: Math.hypot(1, m) };
+  };
+  // The top row's ray, as the rise in height per metre forward.
+  const u = top.up / top.fwd;
+  // Tangent to both lines, its near rim on `near`, and standing as tall as the top row
+  // says: the near rim rising and the far rim falling. The radius is linear in the height
+  // and the height in the radius, so the two close in one division. No guard on `D`:
+  // `qL + mL` and `qR − mR` are each `(1 ± sin θ) / cos θ` of a slope's angle, positive for
+  // any finite slope. The height's divisor can reach zero, and then the answer is not
+  // finite, which the check below refuses.
+  const discFor = (readL: Read, readR: Read) => {
+    const L = lineOf(left, readL);
+    const R = lineOf(right, readR);
+    const D = L.q + R.q - (R.m - L.m);
+    const r0 = ((R.m - L.m) * near + R.b0 - L.b0) / D;
+    const r1 = (R.b1 - L.b1) / D;
+    const h = rises ? H + near * u : (H + u * (near + 2 * r0)) / (1 - 2 * u * r1);
+    const radius = r0 + r1 * h;
+    const cf = near + radius;
+    return { h, radius, cf, cr: L.m * cf + L.b0 + L.b1 * h + radius * L.q };
+  };
+  type Disc = ReturnType<typeof discFor>;
+  // How a side is read given a disc: at its extreme end, or, where the frame hid that end,
+  // on the frame's row while the row crosses the side on the piece, at the tangency.
+  const extreme = (side: Side): Read => (side.atTop ? 'top' : 'base');
+  const readOf = (side: Side, inward: 1 | -1, disc: Disc): Read => {
+    if (side.tau === null) return extreme(side);
+    const m = side.a * (c + s * side.tau);
+    const y = H - side.tau * (disc.cf + (inward * disc.radius * m) / Math.hypot(1, m));
+    return y < 0 ? 'base' : y > disc.h ? 'top' : 'row';
+  };
+  let readL: Read = left.tau === null ? extreme(left) : 'row';
+  let readR: Read = right.tau === null ? extreme(right) : 'row';
+  let disc = discFor(readL, readR);
+  // Nine passes are every pairing of the two sides' reads, so a choice that has not come
+  // back to itself by then is cycling, and answering on whichever pass the count stopped
+  // on would be answering on a parity.
+  let settled = false;
+  for (let it = 0; !settled && it < 9; it++) {
+    const nextL = readOf(left, 1, disc);
+    const nextR = readOf(right, -1, disc);
+    settled = nextL === readL && nextR === readR;
+    if (!settled) disc = discFor((readL = nextL), (readR = nextR));
+  }
+  const { h: heightM, radius } = disc;
+  // The radius is not refused for being negative here: a box cut at one side and at its
+  // foot solves to a disc of no size between its one real side and the frame's edge, and
+  // `wholeAlong` grows it from that side to the kind's width (§ 49.9). Where nothing
+  // grows it, the width check in `placeFloorObject` refuses it.
+  if (!settled || !(heightM > 0) || !Number.isFinite(heightM + radius)) return null;
 
-  return { d: m * Math.cos(alpha), right: m * Math.sin(alpha), widthM: 2 * radius, heightM, rises: top.up > 0 };
+  return { d: disc.cf, right: disc.cr, widthM: 2 * radius, heightM, rises };
+}
+
+/**
+ * A ROUND floor piece the frame cut at ONE side, its foot in the photo: one real
+ * tangent, the near rim, and the kind's typical radius — **placed by the size it is
+ * drawn at.** `wholeAlong` already draws such a piece at its typical width, grown
+ * from the edge the photo saw; `floorFromRound` placed it by reading the frame's
+ * edge as its second tangent, so the piece stood where a much narrower one would
+ * and was then drawn wider there. Placing it by the drawn radius is what makes the
+ * two one answer.
+ *
+ * In the lens's floor frame, mirrored so the piece runs toward +r (`sg`), the edge
+ * the photo saw is the line `r = aIn·(c·f + s·(H − y))` at the height `y` where its
+ * column is extreme, by `floorFromRound`'s rule: for a piece standing in one half of the
+ * photo, its base tipped down and its top tipped up. The centre is `ρ` beyond that line,
+ * and the near rim is `near`: two equations, the centre closed by them. The first version
+ * read the seen edge at the piece's top tipped down and at its base otherwise, the
+ * opposite ends, and it cost what a centre read on the wrong line costs: along the wall,
+ * the 59 pieces of typical size whose top is in the photo were 149 mm out on average and
+ * are exact now, and at every size tipped 10° down 130 and 139 mm in the two rooms, 59
+ * and 62 now (`tests/round-side-cut.test.ts`).
+ *
+ * `ρ` is the typical radius or the smallest that still reaches the frame's edge,
+ * whichever is larger — a piece is at least as wide as the photo shows it. And when
+ * the rim's nearest point is itself past the frame's edge, which it is unless only
+ * a sliver was cut (the frame hides it at `(k/2)·cos(tilt)` radii in, measured in
+ * `tests/round-side-cut.test.ts`), the last row is where the frame's edge meets the
+ * rim, so the centre is solved for that instead. The height is re-read the same
+ * way, on the rim or the frame's edge, and wherever an edge is read at the top it is
+ * bisected, because the tangency's own height is the answer. **Bisected, not
+ * iterated:** the first version iterated it and answered on the eighth pass whether or
+ * not it had settled, and it is a fixed point whose rate nears one close to the lens
+ * tipped steeply, so there the count and not the photo set the answer — a 900 mm round
+ * table 300 tall, 800 mm out at 40° down on the ultrawide, read 988 × 215. Swept over
+ * five lenses, 40° up to 40° down and four sizes each way, 268 of 14,478 side-cut round
+ * pieces stopped on the count, and at their typical size 3,278 of 4,826 read exact;
+ * bisected, 3,310, and on all 14,478 the bisection agrees to a millimetre with the
+ * iteration run until it settles.
+ *
+ * **Only with the foot in the photo**, and that gate is measured: cut at the foot as
+ * well, `near` is a bound from beyond rather than a rim, and this read worse there
+ * than the two-tangent one, 272 / 285 mm off → 310 / 323 in distance / along the
+ * wall. With the foot seen it takes the along-wall error from 178 mm to 107, and is
+ * exact level at a typical size. What it costs is the catalogue: level, on a piece
+ * far from its kind's typical size, the typical radius is the wrong one, 49 mm →
+ * 87 along the wall on those rows (§ 49.9, `docs/what-is-still-open.md`).
+ *
+ * **The typical radius stops at the side wall**, as `wholeAlong` stops a typical
+ * width grown from a seen edge, and for the same reason: it is an assumption, and
+ * the size the photo shows is kept whatever the wall says. `wholeAlong` cannot do it
+ * here, because the width it is handed is already the typical one and so has nothing
+ * left to grow. For one commit nothing did, and 33 of the fixture's pieces stood
+ * through the wall, by up to 337 mm. The wall BEHIND it is left to the centre clamp
+ * in `placeFloorObject`: bounding the radius there as well was measured, and it read
+ * the tilted rows worse, 130 → 149 mm along the wall tipped down in the 4 m room.
+ *
+ * A box the top of the frame cut as well is let through. Tipped down, a tall piece at
+ * the side leans out past the side edge before it reaches the top one: swept at 20°,
+ * 30° and 40° down with every round kind at its tallest, every box the top cut was cut
+ * at the foot too. Tipped up, the seen edge is read at the top, where a top the frame cut
+ * would hide it, and that is not reached either: swept at 5° to 40° up on three lenses
+ * in rooms 4 to 7 m deep, every kind at its tallest, no box cut at one side with its foot
+ * in the photo was cut at the top, and from 30° up none showed its foot at all.
+ */
+function floorFromRoundOneSide(
+  box: [number, number, number, number],
+  near: number,
+  cal: CameraCal,
+  cutLeft: boolean,
+  typicalRadius: number,
+  frame: WallFrame | null,
+): { d: number; right: number; widthM: number; heightM: number; rises: boolean } | null {
+  const [bx, by, bw] = box;
+  const H = heightOf(cal);
+  const t = tiltOf(cal);
+  const c = Math.cos(t);
+  const s = Math.sin(t);
+  const sg = cutLeft ? -1 : 1;
+  const aIn = sg * tanX(cutLeft ? bx + bw : bx, cal);
+  const aOut = sg * tanX(cutLeft ? bx : bx + bw, cal);
+  const top = ray(bx + bw / 2, by, cal);
+  if (!(top.fwd > 0)) return null;
+  const rises = top.up > 0;
+  // The height each edge's column is extreme at. An edge of a round piece is a vertical line
+  // on it, so its column `r / zc` is extreme where `zc` is, and which end that is goes by the
+  // sign of its tangent — the rule `lateralSpan` applies to a box's corners. The frame's edge
+  // is positive in this mirrored frame, so the piece reaches it first at the end where `zc` is
+  // least: its top tipped down. The seen edge is positive too whenever the piece stands in one
+  // half of the photo, and then it is extreme where `zc` is greatest: its BASE tipped down.
+  const inTop = s !== 0 && aIn < 0 === s > 0;
+  const outTop = s > 0;
+  const qIn = Math.sqrt(1 + aIn * aIn * c * c);
+  const qOut = Math.sqrt(1 + aOut * aOut * c * c);
+  const den = qOut + qIn - (aOut - aIn) * c;
+  // The framed wall's end on the side the piece runs toward, where the typical radius
+  // stops growing. Inert with no wall to measure it from.
+  const end = frame ? sg * (cutLeft ? frame.left : frame.right) : Infinity;
+  // No tolerance: where a rim point sits on the frame's edge, it IS where the edge crosses
+  // the rim, so both branches that ask this give one answer there.
+  const inFrame = (r: number, f: number, y: number) => r <= aOut * (c * f + s * (H - y));
+  // Where the frame's edge at height `y` crosses the rim: the two forward distances.
+  const meet = (cr: number, cf: number, rho: number, y: number): [number, number] | null => {
+    const al = aOut * c;
+    const be = aOut * s * (H - y) - cr;
+    const A = 1 + al * al;
+    const B = 2 * (al * be - cf);
+    const C = be * be + cf * cf - rho * rho;
+    const disc = B * B - 4 * A * C;
+    if (!(disc >= 0)) return null;
+    const q = Math.sqrt(disc);
+    return [(-B - q) / (2 * A), (-B + q) / (2 * A)];
+  };
+  // The disc of radius `rho` whose seen edge is on its tangent at height `yT` and whose
+  // last row in the photo is `near`: its near rim, or where the frame's edge crosses the
+  // rim when the rim's nearest point is out of the photo.
+  const disc = (rho: number, yT: number) => {
+    const crAt = (cf: number) => aIn * (c * cf + s * (H - yT)) + rho * qIn;
+    let cf = near + rho;
+    if (!inFrame(crAt(cf), cf - rho, 0)) {
+      let lo = near;
+      let hi = near + rho;
+      for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        const m = meet(crAt(mid), mid, rho, 0);
+        if ((m ? m[0] : mid - rho) < near) lo = mid;
+        else hi = mid;
+      }
+      cf = (lo + hi) / 2;
+    }
+    return { cf, cr: crAt(cf), rho };
+  };
+  const fits = (p: { cf: number; cr: number; rho: number }) => p.cr + p.rho <= end;
+  // The radius: the typical one, but never smaller than the one the photo shows reaching
+  // the frame's edge, and never so large it stands through the side wall. The wall bounds
+  // the ASSUMPTION only; what the photo showed is kept whatever the wall says.
+  const radiusAt = (h: number) => {
+    const yIn = inTop ? h : 0;
+    const yOut = outTop ? h : 0;
+    const rhoMin = den > 1e-9 ? ((aOut - aIn) * c * near + s * (aOut * (H - yOut) - aIn * (H - yIn))) / den : 0;
+    const typical = disc(Math.max(typicalRadius, rhoMin), yIn);
+    if (fits(typical) || !(typicalRadius > rhoMin)) return typical;
+    // Never below the radius the photo shows, so a piece seen reaching past the wall keeps
+    // the size it was seen at.
+    let lo = rhoMin;
+    let hi = typicalRadius;
+    for (let i = 0; i < 50; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(disc(mid, yIn))) lo = mid;
+      else hi = mid;
+    }
+    return disc(lo, yIn);
+  };
+  // The height it stands to, read where its top row's ray meets the rim — nearest it
+  // rising, furthest falling — or the frame's edge where that point is out of the photo.
+  const heightFor = ({ cf, cr, rho }: { cf: number; cr: number; rho: number }) => {
+    let hh = H;
+    for (let j = 0; j < 6; j++) {
+      let f = rises ? cf - rho : cf + rho;
+      if (!inFrame(cr, f, hh)) {
+        const m = meet(cr, cf, rho, hh);
+        if (m) f = rises ? m[0] : m[1];
+      }
+      hh = H + (f / top.fwd) * top.up;
+    }
+    return hh;
+  };
+
+  // Where an edge is extreme at the piece's top, the tangency's height is the answer being
+  // solved for; where both are at the floor, one pass does.
+  let at = radiusAt(0);
+  let h = heightFor(at);
+  if (inTop || outTop) {
+    // How far the height read off the disc at `y` stands above `y`: zero at the answer.
+    const gap = (y: number) => heightFor(radiusAt(y)) - y;
+    // The answer is above the floor, and the lens's height is the first guess at a top,
+    // doubled until the height read there comes back below it: a falling top row reads the
+    // piece shorter than the lens, so the first guess holds, and a rising one taller. A
+    // piece past a hundred metres tall is not furniture.
+    let lo = 0;
+    let hi = H;
+    if (!(gap(lo) > 0)) return null;
+    while (!(gap(hi) < 0)) {
+      if (hi > 100) return null;
+      lo = hi;
+      hi *= 2;
+    }
+    while (hi - lo > 1e-9) {
+      const mid = (lo + hi) / 2;
+      if (gap(mid) > 0) lo = mid;
+      else hi = mid;
+    }
+    h = (lo + hi) / 2;
+    at = radiusAt(h);
+  }
+  if (!(h > 0)) return null;
+  return { d: at.cf, right: sg * at.cr, widthM: 2 * at.rho, heightM: h, rises };
 }
 
 /**
@@ -1365,6 +1654,7 @@ export function placeFloorObject(
   if (bottom.up >= -0.02) return null; // at or above the horizon — not on the floor
   let near = (height / -bottom.up) * bottom.fwd;
   if (!(near > 0)) return null;
+  const nearAsRead = near;
 
   // TWO clamps, against two different walls, because there are now two kinds of
   // wrong and only one of them is the photograph's fault.
@@ -1400,9 +1690,16 @@ export function placeFloorObject(
   const cut = frameCuts(box);
   if (cut.bottom && frame) near = Math.min(near, Math.max(0.3, frame.distance - depthM));
 
-  const solved = foot.round
-    ? floorFromRound(box, near, cal)
-    : floorFromBox(box, near, depthM, cal);
+  // A round piece cut at one side, its foot seen, is placed by the radius it is about
+  // to be drawn at (`floorFromRoundOneSide`); anything it cannot close falls back to
+  // the two tangents.
+  const solve = (at: number, walls: WallFrame | null) => {
+    const oneSide = foot.round && cut.left !== cut.right && !cut.bottom && foot.whole
+      ? floorFromRoundOneSide(box, at, cal, cut.left, foot.whole.widthM / 2, walls)
+      : null;
+    return foot.round ? oneSide ?? floorFromRound(box, at, cal) : floorFromBox(box, at, depthM, cal);
+  };
+  const solved = solve(near, frame);
   if (!solved) return null;
   // A side the frame cut is a width the photo did not see, and a top it cut is a
   // height it did not — each a lower bound, taken to the whole piece (see `whole`).
@@ -1438,8 +1735,9 @@ export function placeFloorObject(
   // wide as it reads, and its height leans the way its top row's ray does (`ReadBounds`).
   // Asked of `cut.bottom` alone, with or without a wall to stand it against: the ray
   // through the last row is a far end either way.
-  // A round piece read with the lens tipped down claims no side, its residual crossing
-  // the bound, but its distance was assumed all the same.
+  // A round piece read with the lens tipped down claims no side, as it did while its
+  // top-row read crossed the bound, until that is measured away (`ReadBounds`); its
+  // distance was assumed all the same.
   const lensMM = height * 1000;
   const bounds: ReadBounds = !cut.bottom
     ? AS_READ
@@ -1450,6 +1748,18 @@ export function placeFloorObject(
           height: solved.rises ? { kind: 'upper', floorMM: lensMM } : { kind: 'lower', ceilMM: lensMM },
         };
 
+  // Where the photo put the piece and where the bounds left it: the same solve from the
+  // near face as read, with no wall to stop the face, the width's growth or the centre,
+  // and the distance between the two centres on the floor. A distance and not a forward
+  // difference, because a face moved along its ray carries the piece across the photo
+  // too, and a round piece's centre moves further than its face does. A foot the frame
+  // cut has no reading to move from, and a reading that does not solve has none either.
+  const free = cut.bottom ? null : solve(nearAsRead, null);
+  const moved = free
+    ? Math.hypot(free.d - d, wholeAlong(free.right, free.widthM, cut.left, cut.right, foot.whole?.widthM).centre - right)
+    : NaN;
+  const distanceDoubt = moved >= 0 ? moved : Infinity;
+
   const { x, z, yaw } = slotToWorld(slot, d, right);
   return {
     position: { x, y: 0, z },
@@ -1458,6 +1768,7 @@ export function placeFloorObject(
     yaw,
     distance: d,
     bounds,
+    distanceDoubt,
   };
 }
 
@@ -1574,6 +1885,7 @@ export function placeWallObject(
     yaw,
     distance: d - depthM / 2,
     bounds: AS_READ,
+    distanceDoubt: 0,
   };
 }
 
@@ -1681,7 +1993,7 @@ export function locateOnWall(
  *  an `Omit` rather than a `heightMM` of 0 or null so that nothing downstream can
  *  read a measurement which was never taken. No `bounds` either, for the same
  *  reason one level up: half of them would describe that height. */
-export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM' | 'bounds'>;
+export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM' | 'bounds' | 'distanceDoubt'>;
 
 /**
  * Ceiling-mounted object (fan, pendant): it lies ON the ceiling plane at a known

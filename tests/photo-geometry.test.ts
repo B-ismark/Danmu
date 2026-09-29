@@ -632,31 +632,62 @@ describe('placeFloorObject over solids', () => {
     expect(asBox.widthMM).toBeLessThan(400 * 0.75);
   });
 
-  it('is approximate for a round footprint under TILT, and here is how much', () => {
-    // The one term in this fix that is not exact, measured rather than described. A
-    // vertical tangent line's image column varies with the row, and the row at which
-    // the tangency actually falls is not the bbox's own top row, so the azimuths are
-    // read a little off. A 400 mm plant 1.5 m away: +6% of width at 5°, +13% at 12°,
-    // and under 30 mm of position throughout.
+  it('is exact for a round footprint under TILT too, each side read at its own end', () => {
+    // A side of a round piece is a vertical line on it, and its column is extreme at one
+    // end of that line: which end goes by the tilt and by the half of the photo the side is
+    // in. The first version read both sides on the box's top row, and this test pinned what
+    // that cost as a band, with a floor under it so that the day it became exact the floor
+    // would say so. It did. Read at their own ends, the sides give the size exactly and the
+    // position to a hundredth of a millimetre, at every tilt here.
     //
-    // Bounded on BOTH sides. A floor under it, because the day someone makes this
-    // exact the floor is what tells them — a bound that only caps an error cannot
-    // notice it being fixed, and a stale "approximate" note is how a solved problem
-    // stays open.
-    let worstWidth = 0;
-    let worstPos = 0;
-    for (const deg of [5, -5, 12, -12]) {
-      const c = cal(deg);
-      const g = placeFloorObject(bboxOfFloorCylinder('n', 0.5, -1.5, 0.4, 0.9, c), 'n', ROOM, c, {
-        depthM: 0.4,
-        round: true,
-      })!;
-      worstWidth = Math.max(worstWidth, Math.abs(g.widthMM - 400) / 400);
-      worstPos = Math.max(worstPos, Math.hypot(g.position.x - 0.5, g.position.z + 1.5));
+    // The piece is whole in the photo, which is asserted, and that took moving it. The band
+    // was measured on a plant 1.5 m out on the 1.2 lens, whose box ran past the frame's
+    // bottom at every tilt — a box no detector returns, whose bottom edge is a base the photo
+    // did not show. So on the ultrawide, 3.6 m out in a deeper room, where the frame's bottom
+    // at 20° up still clears its foot. There, straddling the view axis the first version was
+    // nearly right, its two sides' errors cancelling; to one side, a 400 mm plant read 420 at
+    // 5° down and 501 at 20° up, and stood 67 mm from where it was.
+    const DEEP = { width: 6, depth: 8, height: 2.8, footprint: footprintForLayout('rect', 6, 8) };
+    for (const lateral of [0, 1.2, -1.2]) {
+      for (const deg of [5, -5, 12, -12, 20, -20]) {
+        const c = { ...WIDE, tiltRad: (deg * Math.PI) / 180 };
+        const box = bboxOfFloorCylinder('n', lateral, -3.6, 0.4, 0.9, c);
+        const where = `${lateral} m, ${deg}°`;
+        expect(frameCuts(box), where).toEqual({ left: false, right: false, top: false, bottom: false });
+        const g = placeFloorObject(box, 'n', DEEP, c, { depthM: 0.4, round: true })!;
+        expect([g.widthMM, g.heightMM], where).toEqual([400, 900]);
+        expect(Math.hypot(g.position.x - lateral, g.position.z + 3.6), where).toBeLessThan(1e-5);
+      }
     }
-    expect(worstWidth).toBeGreaterThan(0.02);
-    expect(worstWidth).toBeLessThan(0.2);
-    expect(worstPos).toBeLessThan(0.05);
+  });
+
+  it('is exact close up and tipped steeply down, on the widest lenses', () => {
+    // Where the test above does not reach, and where the first version of the per-side read
+    // failed. It iterated the height to 1e-9 in twenty passes, and close to the lens, tipped
+    // steeply down, that fixed point runs at 0.9 a pass and slower: 73 of these pieces, whole
+    // in the photo, came back unmeasured, each within millimetres of its size when the count
+    // ran out. The height is solved in one division now, so every one is exact. The count is
+    // a literal, so the grid cannot quietly lose the pieces it is here for.
+    const DEEP = { width: 6, depth: 8, height: 2.8, footprint: footprintForLayout('rect', 6, 8) };
+    let whole = 0;
+    for (const lens of [66, 106, 120])
+      for (const deg of [25, 35, 45])
+        for (const dist of [1.0, 1.5])
+          for (const lateral of [-1.5, -0.6, 0, 0.6, 1.5])
+            for (const dia of [0.25, 0.5, 0.9])
+              for (const h of [0.4, 0.9]) {
+                const c = { k: 2 * Math.tan(((lens / 2) * Math.PI) / 180), aspect: 4 / 3, tiltRad: (deg * Math.PI) / 180 };
+                const box = bboxOfFloorCylinder('n', lateral, -dist, dia, h, c);
+                const cut = frameCuts(box);
+                if (cut.left || cut.right || cut.top || cut.bottom) continue;
+                whole++;
+                const where = `${lens}°, ${deg}° down, ${dist} m, ${lateral} m, ${dia} × ${h}`;
+                const g = placeFloorObject(box, 'n', DEEP, c, { depthM: dia, round: true });
+                expect(g, where).not.toBeNull();
+                expect([g!.widthMM, g!.heightMM], where).toEqual([Math.round(dia * 1000), Math.round(h * 1000)]);
+                expect(Math.hypot(g!.position.x - lateral, g!.position.z + dist), where).toBeLessThan(1e-5);
+              }
+    expect(whole).toBe(370);
   });
 
   it('refuses a box with no width, on both branches', () => {

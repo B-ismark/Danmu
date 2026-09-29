@@ -541,6 +541,19 @@ decision it makes.
    First-come was only safe while every row with a position had been measured — a
    located row arriving first ate the measurement, and the piece went into the room
    at its catalogue size.
+   **A place the room's walls decided is not a place the photo gave**, and the
+   cross-photo rule no longer treats it as one. The floor placer stops a piece at the
+   wall it runs past, and a bound stops every piece that runs past it on the same line:
+   two chairs one behind the other, read on a lens assumed narrower than it was, came
+   out on one spot, and the merge deleted one. So each measured row carries its
+   `distanceDoubt` — how far, on the floor, its bounds moved it from where the same
+   reading lands with no wall in reach, and no limit for a piece the frame cut at its
+   foot, whose near face was never in the picture — and two rows are one piece by place
+   only when their distance plus both doubts is inside the tier. What the hard merge no
+   longer takes across photos goes to the soft pass below, which starts it unticked with
+   a reason: a duplicate the user unticks in one tap beats a real piece that never
+   appears. Two rows of one photo it keeps apart stay two ticked rows, since that pass
+   never compares them.
 4. **Build** — `buildSceneFromRoom` clamps, snaps and settles. It reads only the two
    axes a photograph can locate: `groundY` owns Y outright, and the placement gate
    used to test Y as well, so a fan the model put 3.2 m up in a 2.8 m room lost its
@@ -649,16 +662,19 @@ held as literals in `tests/repeat-sightings.test.ts`):
   typical piece's place, and the walk asks about the longer ones.
 
 Together they take the repeats left ticked, at an ultrawide read as the assumed 66°, from
-247 to 5 (106°) and 452 to 19 (120°). The price is 21 real pieces across the table's five
+247 to 5 (106°) and 455 to 21 (120°). The price is 16 real pieces across the table's five
 readings started unticked — each with its reason, one tap from back — and none on a lens
-EXIF measured. Three things it does not reach are filed in `docs/what-is-still-open.md`
-§ 46, measured and not fixed: twin beds in a corner come back as one, in one of the two
-layouts measured — the other was the fixture's (§ 46.1, § 49.16); a box cut at
-the BOTTOM of its photo is not walked, because doing so bought little and walking both
-edges is a grid that did not finish (§ 46.2); and under a wrong lens the HARD merge deletes
-3.7–4.2% of an ultrawide room's pieces outright, nearly all dining chairs, before this pass
-ever sees them (§ 46.3). § 46.1 and § 46.3 are one fix — the hard merge deciding a pair on
-a distance nobody measured.
+EXIF measured. It sees more rows than it did: until the hard merge stopped deciding pairs
+on a place a bound gave (step 3, above), it deleted 3.7–4.2% of an ultrawide room's pieces
+outright under a wrong lens, nearly all dining chairs, before this pass ever saw them
+(§ 46.3), and one of twin beds in a corner (§ 46.1). Those pieces have rows now, and most
+start unticked here, so a person gets them back with one tap. Two of the 91 the table
+used to lose that way are still gone, and they are one curtain read on two lenses: a narrow
+lens presses every offset along a wall toward the middle, and its twin came within a
+curtain's merge distance, which no bound had any part in. What it does not reach is filed
+in `docs/what-is-still-open.md` § 46: the first of those twin beds still starts unticked
+(§ 46.1), and a box cut at the BOTTOM of its photo is not walked, because doing so bought
+little and walking both edges is a grid that did not finish (§ 46.2).
 
 ### A box the edge of the photo cut
 
@@ -704,8 +720,18 @@ Two readers follow the placers. Which placer a row went through is one function'
 `measuredPlane` (`lib/detect-refine.ts`) — the anchor, except that a curtain on a ceiling
 track is still read on its wall — and the refine pass, the judge and the repeat-sighting
 matcher all ask it rather than re-deriving it. `judgeLabel` (`lib/label-repair.ts`) no longer judges a word
-on a cut axis — grown to a typical size, it would pass every word that asked, the catalogue
-judging the catalogue — and reports the axes it skipped as `cut`. A ceiling piece is never
+on a cut axis both ways — grown to a typical size, it would pass every word that asked, the catalogue
+judging the catalogue — and reports the axes it skipped as `cut`. It judges one on its HIGH
+side alone (§ 49.5): the typical size a cut axis grows to is inside the band, so a reading
+past a word's top can only be the part the photo saw, and a piece is at least that big. That
+reading accuses the word and is printed as one — *at least 1.96 m wide* — and it is the
+verdict's `atLeast`. Not a ceiling piece's width, below, and not on a piece its placer
+read at a distance the photo did not show — a floor piece cut at its foot, asked of the
+placer's own `ReadBounds` rather than of the box — whose whole axes are judged both ways at
+that reading (D8) and whose cut ones not at all, since what the photo saw from an assumed
+distance bounds nothing from below. The repairs it offers are held to the same rule each
+under its OWN anchor, never the wrong word's: a wall word reads a cut foot at the wall's
+distance, and asking a wardrobe to fit that reading ruled the right word out. A ceiling piece is never
 grown, but any edge of the frame on it takes its one axis all the same: the placer reads its
 distance on the box's centre row, and a cut moves that row off the disc's centre. A cut at the
 TOP, the usual one, is now read from the three edges the photo saw instead and comes out right
@@ -738,10 +764,13 @@ estimate passed off as a size: the sentence reads *Measured about 1.27 × 0.27 m
 gets the *Runs past the edge of the photo, so its … is an estimate* note a side cut gets,
 naming its size where a side cut names its width. To the person they are one fact, that this
 number is not the camera's measurement of the piece. A round piece read with the lens tipped
-DOWN claims no limit at all: its solve's residual crosses the bound, by 35 mm at 20°, and a
-limit the truth falls outside is worse than none — so it is judged like the rest, and says it
-was read at an assumed distance (`AT_ASSUMED_DISTANCE`), so its row has the "about" and the note
-too. It went without them for a commit, handed the bounds of a piece seen whole.
+DOWN claims no limit at all. Its solve read each side on the box's top row, and its residual
+crossed the bound, by 35 mm at 20°; a limit the truth falls outside is worse than none. Each
+side is read at the end where its column is extreme in the photo now, and not one row of that
+fixture crosses, but the exception stays until a measurement of its own retires it (§ 49.9).
+So it is judged like the rest, and says it was read at an assumed distance
+(`AT_ASSUMED_DISTANCE`), so its row has the "about" and the note too. It went without them for
+a commit, handed the bounds of a piece seen whole.
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,
@@ -1043,10 +1072,17 @@ a millimetre except the fan and the three whose real depth differs from the defa
 | the ceiling fan | 0.1136 m | its own documented allowance — a disc spanning a range of distances, read at one row. The LARGEST error at zero yaw |
 | the sofa | exactly 0.0500 m | half the gap between its real 850 mm depth and the catalogue's 950 |
 | the TV and the painting | 11 mm and 5 mm | the same gap on a wall piece (80 against 60, 40 against 30), plus the small lateral term that rides it. Pinned as a RATIO to half the gap — measured 1.000 to 1.130 — rather than as three figures to re-fit |
-| a round footprint under tilt | +6% of width at 5°, +13% at 12° | the one approximate term: a vertical tangent line's image column varies with the row, and the row where tangency falls is not the bbox's own top row. Exact at a level lens |
 
 Seven of the eleven pieces have no depth gap at all and every one of them is exact — including
-both round pieces, which owe the catalogue nothing, and the deep air conditioner.
+both round pieces, which owe the catalogue nothing, and the deep air conditioner. A fourth row
+used to read *a round footprint under tilt, +6% of width at 5° and +13% at 12°*: a vertical
+side's image column changes with the row, and the solve read both sides on the box's top row.
+Each side is read at the end where its column is extreme now, so a round piece the photo shows
+whole is exact where it is pinned: 3.6 m out at 5° to 20° up and down on the ultrawide, and
+1 to 1.5 m out at 25° to 45° down on the 66°, 106° and 120° lenses. The second grid is the one
+the first version failed, iterating the height when it could be solved in one division
+(§ 49.9). Those two percentages came from a box running past the frame, which no photo draws
+(§ 49.16).
 
 **Two clamps now, against two different walls, and keeping them apart is not tidiness.** The
 near face is measured, so it is bounded by the plaster — that is the clamp this function

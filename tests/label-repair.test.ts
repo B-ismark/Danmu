@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, measuredPhrase, sizeFitsLabel, type LabelVerdict } from '@/lib/label-repair';
-import { AS_READ, AT_ASSUMED_DISTANCE, clipToFrame, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
+import { AS_READ, AT_ASSUMED_DISTANCE, CAM_HEIGHT, clipToFrame, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
   PART_LIBRARY,
@@ -19,7 +19,7 @@ import { geoMeasure, geoRefine, type CalMap, type RoomDims } from '@/lib/detect-
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { footprintForLayout, type Footprint } from '@/lib/footprint';
-import { bboxOfCeilingDiscInFrame, bboxOfFloorBox, bboxOfFloorCylinder, bboxOfWallSolid } from './helpers/project';
+import { bboxOfCeilingDiscInFrame, bboxOfFloorBox, bboxOfWallSolid, floorCylinderPoints, framedExtent, project } from './helpers/project';
 
 /** The framed wall's distance, read from the polygon. `wallDistance` — the
  *  `depth/2` / `width/2` pair every placer used to measure from — is deleted; this
@@ -347,7 +347,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   // negative `tiltRad`, the phone angled to get the ceiling in, which is how people
   // photograph a room; kept are the rows the frame cut at the foot and not the top,
   // that the placer measured. Tipped up, eight of the box projections and three of the
-  // round ones stand wholly below the frame, and `clipToFrame` drops them as the scan
+  // round ones stand wholly below the frame, and the fixture drops them as the scan
   // does. Five were counted here, read off boxes of negative height, until the fixture
   // cut its boxes with the pipeline's own function rather than a copy of it.
   const PIECES: Array<[Category, Shape, number, number]> = [
@@ -387,25 +387,27 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     ),
   );
 
-  /** Where each uncut axis's truth sits against the bound the placer reported. */
+  /** Where each uncut axis's truth sits against the bound the placer reported, and every
+   *  row that breaks its bound, by name: counted rather than asserted row by row, so a
+   *  break is pinned where it happens instead of stopping the tally at the first one. */
   const tally = (rows: ReadonlyArray<{ d: Detection; truth: readonly [number, number]; read: readonly number[]; bounds: ReadBounds }>) => {
-    const t = { widthLarge: 0, widthCut: 0, heightLow: 0, heightHigh: 0, exact: 0 };
+    const t = { widthLarge: 0, widthCut: 0, heightLow: 0, heightHigh: 0, exact: 0, broken: [] as Array<[string, string, number, number]> };
     for (const { d, truth, read, bounds } of rows) {
       if (cutAxes(d.box, 'floor').width) t.widthCut++;
       else {
         // The most it can be: at or above the truth.
         expect(bounds.width.kind).toBe('upper');
-        expect(read[0]).toBeGreaterThanOrEqual(truth[0]);
         if (read[0] > truth[0]) t.widthLarge++;
+        if (read[0] < truth[0]) t.broken.push([d.shape!, 'width', read[0], truth[0]]);
       }
       const h = bounds.height;
       if (read[2] < truth[1]) {
         t.heightLow++;
         // Read low, and bounded above by the lens: a falling top ray is below it.
-        expect(h.kind === 'lower' && truth[1] <= h.ceilMM).toBe(true);
+        if (!(h.kind === 'lower' && truth[1] <= h.ceilMM)) t.broken.push([d.shape!, 'height', read[2], truth[1]]);
       } else if (read[2] > truth[1]) {
         t.heightHigh++;
-        expect(h.kind === 'upper' && truth[1] >= h.floorMM).toBe(true);
+        if (!(h.kind === 'upper' && truth[1] >= h.floorMM)) t.broken.push([d.shape!, 'height', read[2], truth[1]]);
       } else t.exact++;
     }
     return t;
@@ -414,12 +416,16 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   it('reads each axis on the side its placer says, never the other', () => {
     expect(ROWS).toHaveLength(39);
     // Every direction the rule allows is exercised, so the fixture can tell them apart.
-    expect(tally(ROWS)).toEqual({ widthLarge: 13, widthCut: 14, heightLow: 13, heightHigh: 12, exact: 14 });
+    expect(tally(ROWS)).toEqual({ widthLarge: 13, widthCut: 14, heightLow: 13, heightHigh: 12, exact: 14, broken: [] });
   });
 
   // The round placer is a different solve — tangents to a circle, not corners of a box —
   // so it is asked the same question on its own fixture: every round floor kind as a
-  // cylinder of its catalogue width and height, on the same walls and tilts.
+  // cylinder of its catalogue width and height, on the same walls and tilts. Boxed as the
+  // photo draws it, the outline inside the frame (`framedExtent`, § 49.16), and not as
+  // the whole silhouette clipped to the frame, which this fixture did until § 49.9 was
+  // measured on it: a round piece's side is a tangent at the end where its column is
+  // extreme, and the clip kept that end's column where the frame had hidden it.
   const ROUND: Array<[Category, Shape]> = [['fan', 'fan-standing'], ['plant', 'plant'], ['lamp', 'lamp-floor'], ['chair', 'stool']];
   const roundRows = (tiltDeg: number) =>
     ROUND.flatMap(([category, shape]) =>
@@ -427,7 +433,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         const cal = calAt(tiltDeg);
         const dia = defaultAxisFor(category, shape, 0), h = defaultAxisFor(category, shape, 2);
         const z = -(wallD('n', ROOM) - gap - dia / 2000);
-        const box = clip(bboxOfFloorCylinder('n', 0.3, z, dia / 1000, h / 1000, cal));
+        const box = framedExtent(floorCylinderPoints(0.3, z, dia / 1000, h / 1000).map((p) => project('n', ...p, cal)));
         if (!box) return [];
         const c = frameCuts(box);
         const d = det({ category, shape, slot: 'n', box });
@@ -439,27 +445,47 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
 
   it('reads a round piece on the same sides, and judges it at that reading (D8)', () => {
     const rows = [0, -10, -20].flatMap(roundRows);
-    expect(rows).toHaveLength(28);
-    expect(tally(rows)).toEqual({ widthLarge: 25, widthCut: 1, heightLow: 10, heightHigh: 12, exact: 6 });
+    // 30 rows where the clipped silhouette gave 28: a standing fan and a stool 800 mm off
+    // the wall, tipped 10° up, which the clip boxed so the placer could not read them.
+    expect(rows).toHaveLength(30);
+    // Three readings break their bound, and all three are the same case: a stool the
+    // frame shows only the top of, its box 2% and 5% of the frame tall with the legs
+    // below it. That box's sides are where the seat crosses the frame's bottom, not the
+    // tangents the solve reads them as, so it reads narrower than the far end allows, and
+    // the one against its wall reads 4 mm over a height its bound calls the least it can
+    // be. It is § 49.20, filed with the same fixture's box rows, which still clip. Every
+    // other row tipped up and against its wall reads exact, where the sides read on their
+    // top row put a plant 15 and 21 mm wide and a floor lamp 23 and 32 (§ 49.9).
+    expect(tally(rows)).toEqual({
+      widthLarge: 19,
+      widthCut: 0,
+      heightLow: 8,
+      heightHigh: 13,
+      exact: 9,
+      broken: [
+        ['stool', 'width', 427, 500],
+        ['stool', 'width', 489, 500],
+        ['stool', 'height', 704, 700],
+      ],
+    });
     // The price of taking its back on the wall as evidence is steeper here than on the
-    // box pieces: 12 of 28 correctly named, where judged only on the side the reading
+    // box pieces: 9 of 30 correctly named, where judged only on the side the reading
     // speaks for it was none. Two things make it so, and both are real rather than the
     // fixture's. A round piece's far end is its own diameter off the wall, so 300 mm
     // out is a larger share of its distance than of a sofa's; and a standing fan's
     // typical 650 × 900 is its band's widest and shortest, as a stool's 500 nearly is,
-    // so even against the wall a reading a few percent off puts it outside.
+    // so even against the wall a reading a few percent off puts it outside. It was 11
+    // until each side was read at its own end: the two floor lamps 800 mm out, tipped up,
+    // read 615 and 638 mm across on their top row, past the band's 600, and read 567 now.
     expect(rows.filter(({ d, cal }) => judgeLabel(d, { n: cal }, ROOM).status === 'suspect').map((r) => r.at)).toEqual([
       'fan-standing 0° up, 0.3 m out',
       'fan-standing 0° up, 0.8 m out',
       'stool 0° up, 0.3 m out',
-      'fan-standing 10° up, 0 m out',
       'fan-standing 10° up, 0.3 m out',
-      'lamp-floor 10° up, 0.8 m out',
-      'stool 10° up, 0 m out',
+      'fan-standing 10° up, 0.8 m out',
       'stool 10° up, 0.3 m out',
-      'fan-standing 20° up, 0 m out',
+      'stool 10° up, 0.8 m out',
       'fan-standing 20° up, 0.3 m out',
-      'lamp-floor 20° up, 0.8 m out',
       'stool 20° up, 0 m out',
     ]);
   });
@@ -469,21 +495,23 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   });
 
   it('claims no side for a round piece read with the lens tipped down, and still calls it an estimate', () => {
-    // `floorFromRound` reads its tangents on the top row with the lens tipped down and
-    // carries a residual of its own that crosses the bound, growing with the tilt. Read
-    // as though it held, the stool 20° down was called too tall for a stool, and its row
-    // printed a height range that leaves out its own 700 mm. So it claims no side. The
-    // crossings are pinned as the reason, so that growing shows.
-    const crossed = [10, 20, 25].flatMap((t) =>
+    // `floorFromRound` read its tangents on the top row with the lens tipped down and
+    // carried a residual of its own that crossed the bound, growing with the tilt: a
+    // standing fan 300 mm off its wall read 637 wide against 650 at 10°, a stool 800 mm
+    // off 465 × 721 against 500 × 700 at 20°, a fan 555 × 947 against 650 × 900 at 25°.
+    // Read as though it held, the stool 20° down was called too tall for a stool, and
+    // its row printed a height range that leaves out its own 700 mm. So it claims no
+    // side. Each side is read at the end its column is extreme in the photo now (§ 49.9),
+    // and not one of these seventeen crosses, on either axis: the width under its truth,
+    // or the height on the far side of it from the lens. The exception stays all the
+    // same: three rows that stopped crossing are not the measurement that would retire
+    // it, which is filed as its own (§ 49.9).
+    const crossed = [5, 10, 15, 20, 25].flatMap((t) =>
       roundRows(t)
-        .filter(({ truth, read }) => read[0] < truth[0] && read[2] > truth[1])
+        .filter(({ truth, read }) => read[0] < truth[0] || (truth[1] > CAM_HEIGHT * 1000 ? read[2] < truth[1] : read[2] > truth[1]))
         .map(({ d, truth, read }) => [t, d.shape, truth[0], read[0], truth[1], read[2]]),
     );
-    expect(crossed).toEqual([
-      [10, 'fan-standing', 650, 637, 900, 903],
-      [20, 'stool', 500, 465, 700, 721],
-      [25, 'fan-standing', 650, 555, 900, 947],
-    ]);
+    expect(crossed).toEqual([]);
     const down = [5, 10, 15, 20, 25].flatMap(roundRows);
     expect(down).toHaveLength(17);
     for (const { bounds } of down) expect(bounds).toBe(AT_ASSUMED_DISTANCE);
@@ -518,7 +546,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
       ),
     );
     expect(rows).toHaveLength(11);
-    expect(tally(rows)).toEqual({ widthLarge: 6, widthCut: 4, heightLow: 9, heightHigh: 1, exact: 1 });
+    expect(tally(rows)).toEqual({ widthLarge: 6, widthCut: 4, heightLow: 9, heightHigh: 1, exact: 1, broken: [] });
     const flagged = rows.flatMap(({ d, cal, read, at }) => {
       const v = judgeLabel(d, { n: cal }, ROOM);
       return v.status === 'suspect' ? [[at, v.failed, read[2]]] : [];
@@ -659,6 +687,17 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     // how often it is among the two chips the scan screen shows. Judged only on the
     // side each reading could speak for, it caught 309, 56 first and 122 of the two:
     // D8 puts the right word in the two chips far more often and first slightly less.
+    // D8 alone caught 439, 53 first and 171 of the two. The high side of a cut axis
+    // (§ 49.5) catches 93 more, all wall words, and with every repair held to what the
+    // photo saw under that repair's OWN anchor the right word is first on 83 and among
+    // the two on 208. Its first version asked every repair to fit what the wrong
+    // word's anchor read — a wall word reads a foot the frame cut at the wall's
+    // distance — and got 80 and 192. It is 209 since a round piece's sides are read at
+    // their own ends (§ 49.9), and that one is not a better reading: a wardrobe tipped up
+    // and called a lamp reads as a round lamp 2420 wide where it read 2392, past a
+    // shelf's 2400, so the words to try — still picked on THIS word's reading — lose the
+    // shelf, and the wardrobe moves up into the second chip. Read as a shelf, it is
+    // 1464. That pick is filed with § 49.5's.
     let caught = 0, first = 0, shown = 0;
     for (const { d, cal } of ROWS) {
       for (const category of CATEGORIES) {
@@ -671,7 +710,27 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         if (i === 0 || i === 1) shown++;
       }
     }
-    expect([caught, first, shown]).toEqual([439, 53, 171]);
+    expect([caught, first, shown]).toEqual([532, 83, 209]);
+  });
+
+  it("keeps the right word when only the wrong word's anchor read it too big (§ 49.5)", () => {
+    // A wardrobe 300 mm off its wall, the frame cutting its foot, called a TV. A TV is
+    // read on the wall, so what the photo saw is read at the wall's distance and is
+    // past the tallest TV: caught. Read as a wardrobe it stands nearer, and fits. The
+    // first reading is the TV's to be accused by, not the wardrobe's to be ruled out by
+    // — and ruling it out on that reading is what took it off this row's chips.
+    const level = calAt(0);
+    const box = boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.3, level);
+    const v = judgeLabel(det({ category: 'tv', slot: 'n', box }), { n: level }, ROOM);
+    if (v.status !== 'suspect') throw new Error(`expected a suspect verdict, got ${v.status}`);
+    expect([v.atLeast, v.measured.height]).toEqual([['height'], 2813]);
+    // 2813 is past the tallest wardrobe too, which is how it was ruled out; read as a
+    // wardrobe, where it stands, it is 2136 of a true 2000.
+    expect(dimRangeFor('wardrobe', 'wardrobe').max[2]).toBeLessThan(2813);
+    expect(v.candidates.slice(0, 2).map((c) => [c.category, c.detection.dimMM?.[2]])).toEqual([
+      ['curtain', 2784],
+      ['wardrobe', 2136],
+    ]);
   });
 
   it('catches most of the wrong words in the fixture', () => {
@@ -681,17 +740,31 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     // 130 between are words one photograph cannot rule out once the piece may stand
     // anywhere nearer, and taking its back on the wall as evidence rules them out
     // anyway. That trade is the user's call, D8 in § 49.10.
-    let judged = 0, caught = 0;
+    // The high side of a cut axis (§ 49.5) takes it to 532 of 669, for no correct word
+    // more: every one of the 93 is a WALL word — a wall piece's bottom row is its
+    // height, so the foot the frame cut is a height cut for it, and what the photo saw
+    // of a wardrobe is too tall for a TV. 72 of them had no verdict at all, cut at the
+    // side as well. The correct words here are floor words cut at the foot, which it
+    // leaves alone: what they saw is bounded both ways.
+    // And the two notes on a size never meet: a floor word here is read "about", a wall
+    // word "at least", and a verdict saying both would leave `measuredPhrase` choosing
+    // one. Counted, so the zero is over a fixture where each note is common.
+    let judged = 0, caught = 0, about = 0, atLeast = 0, both = 0;
     for (const { d, cal } of ROWS) {
       for (const category of CATEGORIES) {
         if (category === 'other' || category === d.category) continue;
         const v = judgeLabel(det({ category, slot: 'n', box: d.box }), { n: cal }, ROOM);
         if (v.status === 'unmeasured') continue;
         judged++;
-        if (v.status === 'suspect') caught++;
+        if (v.status !== 'suspect') continue;
+        caught++;
+        if (v.bounded?.length) about++;
+        if (v.atLeast?.length) atLeast++;
+        if (v.bounded?.length && v.atLeast?.length) both++;
       }
     }
-    expect([judged, caught]).toEqual([597, 439]);
+    expect([judged, caught]).toEqual([669, 532]);
+    expect([about, atLeast, both]).toEqual([363, 124, 0]);
   });
 });
 
@@ -885,8 +958,146 @@ describe('judgeLabel — on the plane its placer read it on', () => {
     expect(v.status).toBe('suspect');
     if (v.status !== 'suspect') return;
     expect(v.cut).toEqual(['height']);
-    expect(v.failed).toEqual(['width']);
-    expect(Object.keys(v.measured)).toEqual(['width']);
+    // The height the top cut is a lower bound, and the 1.51 m of cloth the photo saw is
+    // already past a pendant's 900 mm top, so it accuses the word too (§ 49.5) — as what
+    // was seen, "at least", not as the height the placer grew.
+    expect(v.failed).toEqual(['width', 'height']);
+    expect(v.atLeast).toEqual(['height']);
+    expect(v.measured).toEqual({ width: 1349, height: 1507 });
+    expect(measuredPhrase(v, 'm')).toBe('1.35 m wide and at least 1.50 m tall');
+  });
+});
+
+describe('judgeLabel — the high side of a cut axis (§ 49.5)', () => {
+  // What a placer writes on a cut axis is the part the photo saw, grown to the kind's
+  // typical size where that is larger and there is room — and the typical size is inside
+  // the band. So a reading past the band's TOP can only be the part the photo saw, and
+  // a piece is at least as big as the part of it in the picture. The low side says
+  // nothing: short of a band is the typical size, or a wall's end stopping it.
+  const deep: RoomDims = { width: 6, depth: 6, height: 2.8, footprint: footprintForLayout('rect', 6, 6) };
+  const cals: CalMap = { n: WIDE };
+  const suspect = (v: LabelVerdict) => {
+    if (v.status !== 'suspect') throw new Error(`expected a suspect verdict, got ${v.status}`);
+    return v;
+  };
+  const sofaDepth = defaultDepthFor('sofa', 'sofa') / 1000;
+  // A 2.0 m sofa against the north wall, its right end past the frame; its foot is in
+  // the picture, so its distance is read and what it saw across is a size.
+  const sofa = seen(clip(bboxOfFloorBox('n', 1.9, -(wallD('n', deep) - sofaDepth / 2), 2.0, 0.8, sofaDepth, WIDE)));
+  // A 900 × 2100 door from a phone tipped up 20°: the bottom of the frame cuts it, so
+  // its height is the part above the frame's edge.
+  const up20: CameraCal = { ...WIDE, tiltRad: (-20 * Math.PI) / 180 };
+  const doorAt = (x: number) => seen(clip(bboxOfWallSolid('n', 'n', x, 1.05, wallD('n', deep), 0.9, 2.1, 0.05, up20)));
+
+  it('calls a sofa cut at the side too wide for a chair, on the part the photo saw', () => {
+    expect(frameCuts(sofa)).toEqual({ left: false, right: true, top: false, bottom: false });
+    const v = suspect(judgeLabel(det({ category: 'chair', slot: 'n', box: sofa }), cals, deep));
+    const { candidates, ...rest } = v;
+    // The height alone fits a chair, so this was `ok` while a cut axis said nothing.
+    expect(rest).toEqual({
+      status: 'suspect',
+      failed: ['width'],
+      allowed: { width: [380, 600], height: [750, 1100] },
+      measured: { width: 1955, height: 905 },
+      atLeast: ['width'],
+      cut: ['width'],
+    });
+    // Both chips: a chest freezer is this size too, and a size cannot tell them apart.
+    expect(candidates.slice(0, 2).map((c) => [c.category, c.detection.shape])).toEqual([
+      ['fridge', 'chest-freezer'],
+      ['sofa', 'sofa'],
+    ]);
+    // Rounded down: 1955 mm was seen, and "at least 1.96 m" is five more.
+    expect(measuredPhrase(v, 'm')).toBe('at least 1.95 m wide and 0.91 m tall');
+  });
+
+  it('leaves the sofa its own word: what it saw is inside a sofa', () => {
+    expect(judgeLabel(det({ category: 'sofa', slot: 'n', box: sofa }), cals, deep)).toEqual({ status: 'ok', cut: ['width'] });
+  });
+
+  it('calls a door cut at the foot too tall for a TV, and leaves the door alone', () => {
+    const box = doorAt(0);
+    expect(frameCuts(box)).toEqual({ left: false, right: false, top: false, bottom: true });
+    const ask = (category: Category) => judgeLabel(det({ category, slot: 'n', box }), { n: up20 }, deep);
+    expect(ask('door')).toEqual({ status: 'ok', cut: ['height'] });
+    // 1.98 m of it is in the picture, and a mirror goes to 2.0 m: still no finding.
+    expect(ask('mirror')).toEqual({ status: 'ok', cut: ['height'] });
+    const tv = suspect(ask('tv'));
+    expect([tv.failed, tv.atLeast, tv.measured]).toEqual([['height'], ['height'], { width: 915, height: 1960 }]);
+    expect(tv.candidates[0].category).toBe('door');
+    expect(measuredPhrase(tv, 'm')).toBe('0.92 m wide and at least 1.96 m tall');
+  });
+
+  it('judges a row cut on every axis it had, once what it saw is too big', () => {
+    // Cut at the side as well: nothing is measured, and the door gets no verdict. A TV
+    // had none either — and 1.96 m of it is in the picture.
+    const box = doorAt(2.5);
+    expect(frameCuts(box)).toEqual({ left: false, right: true, top: false, bottom: true });
+    expect(judgeLabel(det({ category: 'door', slot: 'n', box }), { n: up20 }, deep)).toEqual({ status: 'unmeasured', cut: ['width', 'height'] });
+    const tv = suspect(judgeLabel(det({ category: 'tv', slot: 'n', box }), { n: up20 }, deep));
+    expect([tv.failed, tv.atLeast, tv.measured, tv.cut]).toEqual([['height'], ['height'], { height: 1960 }, ['width', 'height']]);
+    expect(measuredPhrase(tv, 'm')).toBe('at least 1.96 m tall');
+  });
+
+  it('never reads a ceiling piece cut by the frame as "at least"', () => {
+    // A 1.5 m fan cut at the top and the side reads 1648, past the widest fan there is.
+    // That is the middle row the cut moved, not a part of the fan (§ 49.11).
+    const box = bboxOfCeilingDiscInFrame('n', 1.6, -2, 1.5, WIDE, deep.height)!;
+    const fan = det({ category: 'fan', shape: 'fan', slot: 'n', box });
+    expect(frameCuts(box)).toEqual({ left: false, right: true, top: true, bottom: false });
+    expect(geoRefine(fan, cals, deep).dimMM![0]).toBe(1648);
+    expect(1648).toBeGreaterThan(dimRangeFor('fan', 'fan').max[0]);
+    expect(judgeLabel(fan, cals, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+  });
+
+  it("offers only words the part it saw fits, asked under each word's own anchor", () => {
+    // A fridge takes the height, so it is among the words to try. Stood upright, what
+    // the photo saw across is a metre past the widest fridge, so the fridge offered is
+    // the kind that is that wide: a chest freezer. Asked of the plain fridge's band
+    // before the kinds were measured, the whole word was ruled out.
+    const d = det({ label: 'chair', category: 'chair', slot: 'n', box: sofa });
+    const tried = categoriesFittingSize(1955, 905, 'chair', ['height']);
+    expect(tried).toEqual(expect.arrayContaining(['fridge', 'sofa']));
+    const offered = candidatesFor(d, tried, cals, deep);
+    expect(offered.find((c) => c.category === 'fridge')?.detection.shape).toBe('chest-freezer');
+    expect(offered.map((c) => c.category)).toContain('sofa');
+  });
+
+
+  it('still offers a typed word the part it saw rules out, last and not as unmeasured', () => {
+    const d = det({ label: 'sofa', category: 'sofa', slot: 'n', box: sofa });
+    // Every kind of chair is tried, "sofa" naming none, and none is 1.96 m across.
+    expect(candidatesFor(d, ['chair'], cals, deep)).toEqual([]);
+    const [chair] = candidatesFor(d, ['chair'], cals, deep, { requireFit: false });
+    expect(chair.margin).toBeLessThan(0);
+    expect(chair.unmeasured).toBeUndefined();
+    // A misfit sorts by its WORST axis, whichever kind of evidence that is. As an
+    // ottoman, what the photo saw across is past the widest ottoman, and the height it
+    // saw whole is further still out of an ottoman's band: the height sets the margin.
+    const [ottoman] = candidatesFor(d, ['ottoman'], cals, deep, { requireFit: false });
+    const r = dimRangeFor('ottoman', ottoman.detection.shape as Shape);
+    const [w, , h] = ottoman.detection.dimMM!;
+    expect([w > r.max[0], h > r.max[2]]).toEqual([true, true]);
+    expect(ottoman.margin).toBeCloseTo((r.max[2] - h) / (r.max[2] - r.min[2]), 9);
+    expect(ottoman.margin).toBeLessThan((r.max[0] - w) / (r.max[0] - r.min[0]));
+    // With nothing measured under the typed word's anchor, the part it saw still speaks.
+    const door = det({ label: 'door', category: 'door', slot: 'n', box: doorAt(2.5) });
+    const [tv] = candidatesFor(door, ['tv'], { n: up20 }, deep, { requireFit: false });
+    expect([tv.margin < 0, tv.unmeasured]).toEqual([true, undefined]);
+    const [same] = candidatesFor(door, ['door'], { n: up20 }, deep, { requireFit: false });
+    expect(same.unmeasured).toBe(true);
+  });
+
+  it('says "at least" of the part it saw, and names each axis beside a size', () => {
+    const v = (measured: { width?: number; height?: number }, atLeast: Array<'width' | 'height'>) =>
+      ({ status: 'suspect', failed: atLeast, allowed: { width: [0, 0], height: [0, 0] }, measured, candidates: [], atLeast }) as Extract<
+        LabelVerdict,
+        { status: 'suspect' }
+      >;
+    expect(measuredPhrase(v({ width: 2100 }, ['width']), 'm')).toBe('at least 2.10 m wide');
+    expect(measuredPhrase(v({ width: 1000, height: 1780 }, ['width', 'height']), 'm')).toBe('at least 1.00 × 1.78 m');
+    expect(measuredPhrase(v({ width: 1200, height: 2100 }, ['height']), 'm')).toBe('1.20 m wide and at least 2.10 m tall');
+    expect(measuredPhrase(v({ width: 1955, height: 450 }, ['width']), 'mm')).toBe('at least 1955 mm wide and 450 mm tall');
   });
 });
 

@@ -1882,8 +1882,10 @@ came back as two ticked beds. Now a row that shares a quarter of its floor with 
 of the same kind starts unticked and names the row it repeats — nothing is deleted.
 Probed by seeding the review list directly (a real scan cannot be driven headless): the
 caption wraps under the name at 360, the header reads *3 of 4 pieces kept*, no overflow
-at seven widths. The case it cannot reach — twin beds in a corner, where the hard merge deletes one before this runs —
-is `docs/what-is-still-open.md` § 46.1.
+at seven widths. Twin beds in a corner, where the hard merge used to delete one before this
+ran, now reach it, and it gets them wrong: the first bed starts unticked as the second bed
+again. That is a known fault, the rest of `docs/what-is-still-open.md` § 46.1, and not what
+right looks like, so seeing it is no reason to delete this item.
 
 **What wrong looks like.**
 - Two ticked beds where the room has one, or a real second chair starting unticked.
@@ -2191,7 +2193,7 @@ the Inspector. Then **Rescan** into the scan screen and read the tags on each ph
 - **The part only a real room answers:** whether any such room exists at all. It depends on
   what Gemini wrote for a wall before § 49.17, which nobody recorded.
 
-### A scan that left pieces out says how many — this branch (§ 49.19), PROBED WITH A STUBBED REPLY
+### A scan that left pieces out says how many — `408cdbe` on `main` (PR #173, § 49.19), PROBED WITH A STUBBED REPLY
 
 **Where to click.** A room with two or more wall photos and a Google key → the scan screen.
 Probed in Chromium at 360 × 640 and 1280 × 800 with the reply stubbed: five rows, two kept,
@@ -2207,6 +2209,90 @@ cannot answer is a real reply.
 - The card after a reload of a room already scanned: the count is not saved, so it should not
   come back.
 - **The part only a real reply answers:** how often a real scan sets pieces aside at all.
+
+### A plant or floor lamp cut by the side of the photo stands where the photo shows it — this branch (§ 49.9), NOT PROBED
+
+**Where to click.** *Photograph my real room* → a photo in which a plant, a floor lamp, a
+standing fan or a stool runs off the LEFT or RIGHT side of the frame with its foot still in the
+picture → the scan screen → **Open the studio**, on the **3D Model** tab and the **2D Plan**.
+Compare where it stands with the photo: how far out from its wall, and where along it.
+
+**What wrong looks like.**
+- The piece standing well out into the room when the photo shows it by its wall.
+- The side the photo saw not where the photo shows it. The piece grows toward the cut side,
+  and the side that was in view stays put.
+- A round piece whose base is ALSO below the photo moving at all. Those stay on the old
+  reading on purpose (§ 49.9 in `docs/what-is-still-open.md`).
+- A piece in a corner poking through the side wall, in the plan most plainly. It grows to a
+  typical size toward the cut side and must stop at the wall; the first version of this branch
+  did not, and a small plant by the wall came out 400 mm wide and 297 mm into the next room.
+- **The part only a real room answers:** a plant much smaller or larger than a typical one, shot
+  level, now stands up to a hand's width off along the wall (on the fixture, 49 → 80 mm on
+  pieces off typical), because it is placed by the typical size it is drawn at. Before, it
+  stood where a narrower piece would and was drawn wider there. Which reads better in a real
+  room is a person's call.
+
+**What was measured, and on what.** `tests/round-side-cut.test.ts`, 389 rows cut at the side
+only, in two rooms at three tilts: along the wall 178 → 103 mm on average, exact at a level
+lens and a typical size, none past the side wall, and the 568 rows cut at the foot as well
+unchanged. No browser run, and no test renders the room.
+
+### Chairs across a table both come back, and a repeat starts unticked rather than vanishing — this branch (§ 46.3), NOT PROBED
+
+**Where to click.** *Photograph my real room* → photograph a dining table with chairs on both
+sides of it, from the wall behind one row of chairs and from a side wall, on a phone that writes
+no focal length (most do not) → the scan screen. Count the chair rows against the chairs in the
+room, then tick back any that start unticked and count again.
+
+**What wrong looks like.**
+- Fewer chair rows, ticked and unticked together, than chairs in the room. A chair with no row
+  at all is the defect this fixes. Before it, a narrow reading of an ultrawide put two chairs one
+  behind the other on one spot by the far wall, and one of them was deleted.
+- A chair that starts unticked with a reason naming a chair it is not. The soft pass now sees
+  pairs the hard merge used to take, so it has more rows to judge.
+- More ticked duplicates than before. The fixture measured 51 → 57 across its five readings, so
+  a few more is the price, and many more is not.
+
+**What was measured, and on what.** `tests/repeat-sightings.test.ts`, 150 generated rooms read
+five ways: pieces with no row at all fell from 91 to 2, the two being one curtain on two lenses.
+`tests/distance-doubt.test.ts` holds the two chair pairs. No browser run, and no test drives the
+scan screen with a real photo.
+
+### A piece the photo cut off can still be too big for its word, and says "at least" — this branch (§ 49.5), NOT PROBED
+
+**Where to click.** *Photograph my real room* → a photo in which a sofa or a bed runs off the
+LEFT or RIGHT side of the frame with its foot in the picture, and one taken with the phone
+tipped up so the bottom of the frame cuts a door or a tall mirror → the scan screen. A rename
+alone changes only the row's word, so rename the sofa's row to **Chair** and press the
+**Use Chair?** chip it offers, then the door's to **TV** and **Use TV?** (each carries a "?":
+the camera already disagrees). Each row should then be flagged, the sofa with a line like
+*Measured at least 1.95 m wide and 0.91 m tall. Chair range is 0.38–0.60 m wide.*, with the
+ruler note *Runs past the edge of the photo, so its width is an estimate* under it, and a sofa
+among its two chips. On the test fixture those are a **chest freezer** and then the sofa,
+because a chest freezer is that size too.
+
+**What wrong looks like.**
+- "at least" on the axis the photo saw whole, or missing on the one it cut.
+- "at least" and "about" on one line. They come from rows that exclude each other.
+- A "×" after "at least" when only one axis was cut: *at least 1.96 × 0.91 m* claims the height
+  is a lower bound too.
+- **The part only a person answers:** whether *at least 1.96 m* beside *its width is an
+  estimate* reads as one fact or as two that disagree. The number is what the photo saw, and
+  the note is about the piece as built, which may be wider still.
+- A number after "at least" that is larger than the photo could have shown. It rounds down:
+  1955 mm is *1.95 m*.
+- A correctly named piece flagged as too big, where the camera was read right. The measured
+  price is only where the lens or the tilt was read wrong: a fridge or a dining chair, 16 across
+  seven readings of 150 rooms; and on an **upload from a tipped phone**, which the app reads as
+  level, a wall piece at the very edge of its band, 2–20 of about 180 per reading. Each starts
+  **unticked** — a flagged row the detector found is never ticked for you; one you drew stays
+  ticked — so it is a press to keep, not a loss.
+- **The part only a person answers, again:** whether a chest freezer offered first for a sofa
+  reads as a helpful second guess or as the app not knowing what a sofa is.
+
+**What was measured, and on what.** `tests/label-repair-population.test.ts`, 150 generated
+rooms read seven ways, and every wall kind at the edges of its own band photographed tipped.
+No browser run, and no test renders the sentence the page builds from `measuredPhrase`.
 
 ---
 

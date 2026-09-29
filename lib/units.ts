@@ -55,6 +55,16 @@ export function formatDim(valueMM: number, unit: DimUnit): string {
   return v.toFixed(precisionFor(unit));
 }
 
+/** `formatDim`, rounded DOWN: for a number printed after "at least", which rounding to
+ *  nearest can carry past what was measured — 1955 mm is "1.96 m", and "at least
+ *  1.96 m" claims 5 mm the photo never showed. The nudge keeps a value that is exactly
+ *  on a step from falling to the one below it: 1150 mm is 1.15 m, and 1.15 × 100 is
+ *  114.99999999999999 in binary, which floors to "1.14". */
+export function formatDimDown(valueMM: number, unit: DimUnit): string {
+  const scale = 10 ** precisionFor(unit);
+  return (Math.floor(fromMM(valueMM, unit) * scale + 1e-9) / scale).toFixed(precisionFor(unit));
+}
+
 /** Decimals implied by a step, so 0.01 steps don't produce 2.7300000000000004.
  *  Lives here rather than in `NumberField` because `boundToUnit` below rounds to
  *  the step's precision and the stepper's own output uses this same call — two
