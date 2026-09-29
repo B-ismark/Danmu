@@ -26,7 +26,7 @@ import {
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
 import { geoPlace, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
-import { acceptCandidate, judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
+import { acceptCandidate, judgeLabels, measuredPhrase, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
 import { suggestFromLabel } from '@/lib/label-suggest';
 import {
   canRedo,
@@ -153,20 +153,6 @@ function categoryLabel(cat?: string): string {
  *  name when it was measured as one ("Double bed"), else its category's. */
 function candidateLabel(cand: LabelCandidate): string {
   return cand.name ?? categoryLabel(cand.category);
-}
-
-/** What the camera measured, as the words after "Measured": "1.20 × 0.45 m" when both
- *  are sizes, "up to 2.56 m wide and 1.50–2.67 m tall" once either is a limit. Ends that
- *  print the same number are one number — a span narrower than the unit shows is a
- *  size on screen. */
-function measuredPhrase(m: Extract<LabelVerdict, { status: 'suspect' }>['measured'], unit: DimUnit): string {
-  const read = (span: [number, number] | undefined, word: string) =>
-    span ? [{ lo: formatDim(span[0], unit), hi: formatDim(span[1], unit), zero: span[0] <= 0, word }] : [];
-  const axes = [...read(m.width, 'wide'), ...read(m.height, 'tall')];
-  if (axes.every((a) => a.lo === a.hi)) return `${axes.map((a) => a.hi).join(' × ')} ${unit}`;
-  return axes
-    .map((a) => `${a.lo === a.hi ? a.hi : a.zero ? `up to ${a.hi}` : `${a.lo}–${a.hi}`} ${unit} ${a.word}`)
-    .join(' and ');
 }
 
 // Per-photo camera calibration: read what each photo can tell, and let
@@ -1413,11 +1399,9 @@ function DetectionRow({
   // default on screen in the sentence that says "Measured".
   // The same for an axis the photo's edge cut off: its size is an estimate, and
   // `measured` leaves it out rather than print it as a reading.
-  // And an axis read as a limit says so — "up to 2.56 m wide", "1.50–2.67 m tall" —
-  // because the one number a limit has is the end it could not be past, and printed
-  // alone after "Measured" it reads as the size. Worded per axis once either is a
-  // span: "up to 2.56 × 1.50–2.67" would leave the reader to work out what "up to"
-  // governs.
+  // And an axis read as a limit says so (`measuredPhrase`), because the one number a
+  // limit has is the end it could not be past, and printed alone after "Measured" it
+  // reads as the size.
   const took = verdict.status === 'suspect' ? measuredPhrase(verdict.measured, dimUnit) : '';
   // The note covers both: a size the photo's edge cut off and a limit read from a
   // piece whose foot it cut. To the person they are one fact — this number is not the

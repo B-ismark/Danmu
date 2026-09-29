@@ -7879,15 +7879,23 @@ said none of this** for a commit: its width and height were in view, so it got n
 the edge* note, and the sentence printed each limit as its one number — *Measured 2.76 m* for a
 height that is at most 2.76 and at least the lens. The verdict now carries each axis as the
 least and the most it can be and names the axes read as limits (`bounded`); the row reads
-*Measured up to 1.27 m wide and 0.27–1.50 m tall*, and a foot cut gets the same note a side cut
-does.
+*Measured up to about 1.27 m wide and about 0.27–1.50 m tall*, and a foot cut gets the *runs past
+the edge* note a side cut does. **"About" is the second review's**: the first wording, *up to
+1.27 m*, stated a ceiling, and the limit leans on the catalogue depth (below), so a 2.0 m sofa
+shallower than typical reads 1680 and would have been told it is at most 1.68 m. The phrase is
+in `lib/label-repair.ts` (`measuredPhrase`) rather than the page, where no test reached it.
 
 **Round pieces are a different solve and were measured separately:** a standing fan, plant,
 floor lamp and stool as cylinders of their catalogue size, same walls — 29 rows level and
-tipped up, every reading on the side its bound says, 0 accused. Tipped DOWN 10°, where
-`floorFromRound` reads its tangents on the top row, one row of five crosses: the fan 300 mm out
-reads **637** wide against 650 and **903** tall against 900, 13 mm and 3 mm the wrong side, no
-accusation. **And the bound leans on the catalogue depth**, which is the larger caveat: the far
+tipped up, every reading on the side its bound says, 0 accused. Tipped DOWN, where
+`floorFromRound` reads its tangents on the top row, it does not hold, and the first version of
+this section said it crossed once, harmlessly, having measured only 10°: the fan 300 mm out reads
+**637** wide against 650 and **903** tall against 900 there, but at 20° a stool 800 mm out reads
+**465 × 721** against 500 × 700 — called too tall for a stool, on a row printing a height range
+that leaves out its own 700 mm — and at 25° a fan **555 × 947**. So a round piece read tipped
+down claims no bound and is judged as read, as it was before bounds existed; the stool at 20° is
+still accused, on a reading 3% off, as it always was. Box pieces tipped down 10° and 20° hold on
+all 11 rows, and keep theirs. **And the bound leans on the catalogue depth**, which is the larger caveat: the far
 end is the piece's back on the plaster at its kind's TYPICAL depth, so a piece shallower than
 typical, pushed against the wall, reads short of the most-it-can-be — a 2.0 m sofa 750 mm deep
 reads **1680** against a typical sofa's 950, and 600 mm deep **1500**. The two-sided judge read
@@ -7923,9 +7931,12 @@ radiator before a water dispenser).
 deep standing against a wall 2 m from the lens reaches the lens, and the projection gave it a
 NaN width — read as *cut*, at x = 0. It is dropped (`box.every(Number.isFinite)`), which is why
 the fixture is 43 rows and not the 44 the first version of this section said; the six false
-accusations were never on it, and every other figure above is re-taken. The fixture lists seven
-pieces and holds six: every row of the bed stands partly behind the lens, and the others the
-frame cuts at the top, so none was ever kept.
+accusations were never on it, and every other figure above is re-taken. The bed is gone from
+the fixture now, and the fixture THROWS on any piece that does not stand wholly in front of the
+lens, rather than filtering it: the bed's other rows stood behind the camera and gave finite
+boxes, which the placer refused or the frame cut at the top — kept out by luck, which a change
+to either would have ended in silence. (The first version of this note said all of them were
+cut at the top; the second review found one refused instead.)
 
 **§ 49.11 · A ceiling piece cut by the frame is judged on its width — FIXED 2026-09-29, and it
 was wider than filed.** The label check returned no cut axes for a ceiling anchor, because
@@ -8005,4 +8016,5 @@ reading]` for a height whose top ray rose, `[reading, lens]` for one whose ray f
 first thing to fix before trusting those figures: three of the six pieces are the catalogue's
 typical height exactly (nightstand, bookshelf, desk), so on those a typical size cannot be wrong.
 It wants pieces off typical in both directions, and a look at what it does to a correct row the
-user already sees as *up to N wide*, since the number built would no longer be the number printed.
+user already sees as *up to about N wide*, since the number built would no longer be the number
+printed.

@@ -697,9 +697,13 @@ Judged both ways, six of forty-three correctly named pieces were called the wron
 where it caught 476 (§ 49.10). **And the row says so**, because a limit printed as its one
 number is a limit passed off as a size: the verdict carries each axis as the least and the most
 it can be (`LabelVerdict.measured`) and names the axes read as limits (`bounded`), so the
-sentence reads *Measured up to 1.27 m wide and 0.27–1.50 m tall*, and the row gets the same
-*Runs past the edge of the photo, so its size is an estimate* a side cut gets — to the person
-they are one fact, that this number is not the camera's measurement of the piece.
+sentence reads *Measured up to about 1.27 m wide and about 0.27–1.50 m tall* — "about", because
+a limit is only as good as the catalogue depth it was read at — and the row gets the *Runs past
+the edge of the photo, so its … is an estimate* note a side cut gets, naming its size where a
+side cut names its width. To the person they are one fact, that this number is not the camera's
+measurement of the piece. A round piece read with the lens tipped DOWN claims no limit at all:
+its solve's residual crosses the bound, by 35 mm at 20°, and a limit the truth falls outside is
+worse than none.
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,

@@ -26,6 +26,8 @@ import { geoMeasure, measuredPlane, type CalMap, type RoomDims } from './detect-
 import { AS_READ, cutAxes, type ReadBound, type ReadBounds } from './photo-geometry';
 import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
+import { formatDim } from './units';
+import type { DimUnit } from './store';
 
 /** The axis names this module reasons about. Never depth — see `sizeFitsLabel`. */
 export type SizeAxis = 'width' | 'height';
@@ -218,7 +220,9 @@ function sizeStrain(category: Category, shape: Shape, widthMM: number, heightMM:
   return Math.min(w, h);
 }
 
-/** Which categories could be this size, most comfortable fit first.
+/** Which categories could be this size, most comfortable fit first, ties to the band
+ *  the reading sits nearer — `byFit`, the order `candidatesFor` gives the same words, so
+ *  the two exported rankings of one question cannot disagree.
  *
  *  Judged on the CATEGORY band (`dimRangeFor(c, 'box')`, which resolves to the
  *  per-category entry) rather than on any one shape's, because a candidate has no
@@ -237,9 +241,14 @@ export function categoriesFittingSize(
   bound: ReadBounds = AS_READ,
 ): Category[] {
   const fits = (c: Category) => !failedAxes(c, 'box', widthMM, heightMM, bound).some((a) => axes.includes(a));
-  return CATEGORIES.filter((c) => c !== 'other' && c !== exclude && fits(c)).sort(
-    (a, b) => sizeMargin(b, 'box', widthMM, heightMM, axes, bound) - sizeMargin(a, 'box', widthMM, heightMM, axes, bound),
-  );
+  const rank = (c: Category): Ranked => ({
+    margin: sizeMargin(c, 'box', widthMM, heightMM, axes, bound),
+    strain: sizeStrain(c, 'box', widthMM, heightMM, axes),
+  });
+  return CATEGORIES.filter((c) => c !== 'other' && c !== exclude && fits(c))
+    .map((c) => ({ c, ...rank(c) }))
+    .sort(byFit)
+    .map(({ c }) => c);
 }
 
 type Kinds = {
@@ -292,7 +301,7 @@ function namesAKind(c: Category, label: string): boolean {
  *  two. `strain` (`sizeStrain`) is not evidence against any of them, only which the
  *  reading is nearer, which is the most one photograph can say among words it cannot
  *  rule out. Measured on the foot-cut fixture in `tests/label-repair.test.ts`, the
- *  right word comes first for 56 of the 328 wrong words caught, from 37. */
+ *  right word comes first for 56 of the 325 wrong words caught, from 37. */
 type Ranked = { margin: number; strain: number };
 function byFit(a: Ranked, b: Ranked): number {
   return b.margin - a.margin || b.strain - a.strain;
@@ -334,6 +343,8 @@ export function candidatesFor(
   { requireFit = true }: { requireFit?: boolean } = {},
 ): LabelCandidate[] {
   const out: Array<LabelCandidate & { strain: number }> = [];
+  // No lens, no measurement: `geoMeasure` hands every seed back and nothing is offered.
+  if (!cals[d.slot]) return out;
   for (const c of categories) {
     // The detector's shape hint goes with the category being replaced, and so does
     // its depth hint: if the old word is wrong, its guess at that word's shape and
@@ -430,6 +441,27 @@ export function acceptCandidate(row: Detection, cand: LabelCandidate, label: str
   // row's from earlier, so the row's own is always the newer answer.
   const { color: _stale, ...measured } = cand.detection;
   return { ...measured, label, ...(row.color === undefined ? {} : { color: row.color }) };
+}
+
+/** What the camera measured, as the words after "Measured": "1.20 × 0.45 m" when both
+ *  are sizes, "up to about 2.56 m wide and about 1.50–2.67 m tall" once either is a
+ *  limit. Ends that print the same number are one number — a span narrower than the
+ *  unit shows is a size on screen. Worded per axis once either is a span: "up to 2.56 ×
+ *  1.50–2.67" would leave the reader to work out what "up to" governs.
+ *
+ *  **"About", because the limit is only as good as the catalogue depth** it was read
+ *  at (`ReadBounds`): a 2.0 m sofa shallower than a typical one, pushed against its
+ *  wall, reads 1680, so a bare *up to 1.68 m* would state a ceiling the sofa is past.
+ *  Here rather than in the page, because it is a displayed measurement's arithmetic,
+ *  and the page is where no test can reach it. */
+export function measuredPhrase(m: Extract<LabelVerdict, { status: 'suspect' }>['measured'], unit: DimUnit): string {
+  const read = (span: [number, number] | undefined, word: string) =>
+    span ? [{ lo: formatDim(span[0], unit), hi: formatDim(span[1], unit), zero: span[0] <= 0, word }] : [];
+  const axes = [...read(m.width, 'wide'), ...read(m.height, 'tall')];
+  if (axes.every((a) => a.lo === a.hi)) return `${axes.map((a) => a.hi).join(' × ')} ${unit}`;
+  return axes
+    .map((a) => `${a.lo === a.hi ? a.hi : a.zero ? `up to about ${a.hi}` : `about ${a.lo}–${a.hi}`} ${unit} ${a.word}`)
+    .join(' and ');
 }
 
 /** Judge the word a detector used against the size the camera measured.

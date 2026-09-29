@@ -868,13 +868,16 @@ export type ReadBound =
  *
  *  A round piece is the same case on the same two tests: its radius is `near` times an
  *  angle, and its top row is read at `near` or at `near` plus that diameter, on the same
- *  rising-or-falling ray. **The one place the direction does not quite hold** is a round
- *  piece with the lens tipped DOWN, where `floorFromRound` reads its tangents on the top
- *  row and carries a residual of its own: 10° down, a standing fan 300 mm off its wall
- *  read 637 wide against a true 650 and 903 tall against 900 — 13 mm under the most it
- *  can be and 3 mm over the least, the one crossing in its sweep, and no accusation
- *  (pinned in `tests/label-repair.test.ts`). The phone tipped UP, which is how rooms are
- *  photographed, holds on every row.
+ *  rising-or-falling ray. **Except with the lens tipped DOWN**, where `floorFromRound`
+ *  reads its tangents on the top row and carries a residual of its own that crosses the
+ *  bound and grows with the tilt: a standing fan 300 mm off its wall read 637 wide
+ *  against a true 650 at 10° down, a stool 800 mm off read 465 × 721 against 500 × 700
+ *  at 20°, a fan 555 × 947 against 650 × 900 at 25°. A bound that the truth falls
+ *  outside is worse than none — at 20° the row would print *0.72–1.50 m tall* for a
+ *  0.70 m stool — so a round piece read tipped down claims nothing and is judged as
+ *  read, which is what it had before bounds existed (pinned in
+ *  `tests/label-repair.test.ts`). The phone tipped UP, which is how rooms are
+ *  photographed, holds on every row, and so does a box tipped down.
  *
  *  **Both directions also lean on the catalogue depth**, because the far end is the
  *  piece's back on the plaster at its kind's typical depth. A piece deeper than that
@@ -893,8 +896,13 @@ export type ReadBound =
 export type ReadBounds = { width: ReadBound; height: ReadBound };
 
 /** Both axes as read: every uncut floor piece, and every wall piece, which is on its
- *  plane by assumption whatever the frame cuts. */
-export const AS_READ: ReadBounds = { width: { kind: 'exact' }, height: { kind: 'exact' } };
+ *  plane by assumption whatever the frame cuts. One object, handed out by reference by
+ *  every placer and every unmeasured branch, so it is frozen: a reader that edited the
+ *  bounds it was given would otherwise edit them for every piece read after it. */
+export const AS_READ: ReadBounds = Object.freeze({
+  width: Object.freeze({ kind: 'exact' as const }),
+  height: Object.freeze({ kind: 'exact' as const }),
+});
 
 /** One axis of a box the frame may have cut: its centre and length, taken to the
  *  whole piece when a side is cut.
@@ -1367,8 +1375,9 @@ export function placeFloorObject(
   // wide as it reads, and its height leans the way its top row's ray does (`ReadBounds`).
   // Asked of `cut.bottom` alone, with or without a wall to stand it against: the ray
   // through the last row is a far end either way.
+  // Not a round piece read with the lens tipped down: its residual crosses the bound.
   const lensMM = height * 1000;
-  const bounds: ReadBounds = cut.bottom
+  const bounds: ReadBounds = cut.bottom && !(foot.round && tiltOf(cal) > 0)
     ? {
         width: { kind: 'upper', floorMM: 0 },
         height: solved.rises ? { kind: 'upper', floorMM: lensMM } : { kind: 'lower', ceilMM: lensMM },

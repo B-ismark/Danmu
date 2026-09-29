@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel, type LabelVerdict } from '@/lib/label-repair';
-import { cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
+import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, measuredPhrase, sizeFitsLabel, type LabelVerdict } from '@/lib/label-repair';
+import { AS_READ, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
   PART_LIBRARY,
@@ -150,6 +150,17 @@ describe('sizeFitsLabel', () => {
 });
 
 describe('categoriesFittingSize', () => {
+  it('breaks a tie the way candidatesFor does, not by the catalogue', () => {
+    // The coffee table cut at its foot, 300 mm off its wall: up to 1273 wide, at least
+    // 265 tall. Most words fit it only on their band's edge, margin 0, so among those
+    // the order is the tie-break's alone — the band the reading is nearer first. By the
+    // catalogue's order a sofa and a TV came third and fourth.
+    const bound: ReadBounds = { width: { kind: 'upper', floorMM: 0 }, height: { kind: 'lower', ceilMM: 1500 } };
+    const fits = categoriesFittingSize(1273, 265, 'table', ['width', 'height'], bound);
+    expect(fits.slice(0, 4)).toEqual(['fan', 'painting', 'plant', 'ac']);
+    expect(fits).not.toEqual(CATEGORIES.filter((c) => fits.includes(c)));
+  });
+
   it('offers curtain for the 1400 × 2300 that is not a bed', () => {
     const fits = categoriesFittingSize(1400, 2300, 'bed');
     expect(fits).toContain('curtain');
@@ -332,7 +343,7 @@ describe('judgeLabel — a box the edge of the photo cut', () => {
 describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   // A box that reaches the bottom of the photo has no seen near edge, so
   // `placeFloorObject` reads it at the far end of where it could stand — the last row's
-  // ray, or its back on the plaster. Seven pieces, projected from the truth 0, 300 and
+  // ray, or its back on the plaster. Six pieces, projected from the truth 0, 300 and
   // 800 mm off the north wall on the 106° lens, level and tipped UP 10° and 20° — a
   // negative `tiltRad`, the phone angled to get the ceiling in, which is how people
   // photograph a room; kept are the rows the frame cut at the foot and not the top,
@@ -348,11 +359,17 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     ['wardrobe', 'wardrobe', 1200, 2000],
     ['shelf', 'bookshelf', 800, 1800],
     ['desk', 'desk-standard', 1200, 750],
-    ['bed', 'bed-double', 1600, 500],
   ];
   const calAt = (tiltDeg: number): CameraCal => ({ ...WIDE, tiltRad: (tiltDeg * Math.PI) / 180 });
   const boxOf = (category: Category, shape: Shape, w: number, h: number, gap: number, cal: CameraCal) => {
     const depth = defaultDepthFor(category, shape) / 1000;
+    // A piece must stand wholly in front of the lens, or its corners project from at or
+    // behind the camera and the box is one no photograph makes. A double bed was here,
+    // 2 m deep against a wall 2 m away: at the wall its foot reached the lens and gave
+    // a NaN width, read as "cut" at x = 0, counted in every figure below; further out it
+    // stood behind the camera and gave finite boxes that were refused or cut at the top
+    // by luck. So it fails here, loudly, rather than being filtered out downstream.
+    if (wallD('n', ROOM) - gap - depth <= 0) throw new Error(`${shape} ${gap} m off the wall reaches the lens`);
     const z = -(wallD('n', ROOM) - gap - depth / 2);
     return clip(bboxOfFloorBox('n', 0.3, z, w / 1000, h / 1000, depth, cal));
   };
@@ -361,13 +378,6 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
       [0, 0.3, 0.8].flatMap((gap) => {
         const cal = calAt(tiltDeg);
         const box = boxOf(category, shape, w, h, gap, cal);
-        // A piece so deep that its foot reaches the lens has corners at or behind the
-        // camera, and no box: the double bed on its wall, 2 m deep from 2 m away. It
-        // was a row here — a NaN width, read as "cut" at x = 0 — and every count below
-        // was taken with it. No photograph produces one. The bed's other rows stand
-        // partly behind the lens too, and the frame cuts them at the top, so none is
-        // kept: the fixture holds six pieces, not the seven listed.
-        if (!box.every(Number.isFinite)) return [];
         const c = frameCuts(box);
         const d = det({ category, shape, slot: 'n', box });
         const { row, bounds } = geoMeasure(d, { n: cal }, ROOM);
@@ -433,19 +443,49 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     expect(rows.filter(({ d, cal }) => judgeLabel(d, { n: cal }, ROOM).status === 'suspect')).toEqual([]);
   });
 
-  it('pins the one place a round reading crosses its bound: the lens tipped down', () => {
+  it('hands out one AS_READ that no reader can edit for the next', () => {
+    expect([Object.isFrozen(AS_READ), Object.isFrozen(AS_READ.width), Object.isFrozen(AS_READ.height)]).toEqual([true, true, true]);
+  });
+
+  it('claims no bound for a round piece read with the lens tipped down', () => {
     // `floorFromRound` reads its tangents on the top row with the lens tipped down and
-    // carries a residual of its own there. Of the five rows 10° down, one crosses: a
-    // standing fan 300 mm off its wall, 13 mm narrower than the most it can be and 3 mm
-    // taller than the least. Pinned so that growing shows, and still no accusation.
-    const rows = roundRows(10);
-    expect(rows).toHaveLength(5);
-    const crossed = rows.filter(({ truth, read, bounds }) =>
-      read[0] < truth[0] || (bounds.height.kind === 'lower' ? read[2] > truth[1] : read[2] < truth[1]),
+    // carries a residual of its own that crosses the bound, growing with the tilt. Read
+    // as though it held, the stool 20° down was called too tall for a stool, and its row
+    // printed a height range that leaves out its own 700 mm. So it claims nothing and is
+    // judged as read. The crossings are pinned as the reason, so that growing shows.
+    const crossed = [10, 20, 25].flatMap((t) =>
+      roundRows(t)
+        .filter(({ truth, read }) => read[0] < truth[0] && read[2] > truth[1])
+        .map(({ d, truth, read }) => [t, d.shape, truth[0], read[0], truth[1], read[2]]),
     );
-    expect(crossed.map(({ d, truth, read }) => [d.shape, truth[0], read[0], truth[1], read[2]])).toEqual([
-      ['fan-standing', 650, 637, 900, 903],
+    expect(crossed).toEqual([
+      [10, 'fan-standing', 650, 637, 900, 903],
+      [20, 'stool', 500, 465, 700, 721],
+      [25, 'fan-standing', 650, 555, 900, 947],
     ]);
+    const down = [5, 10, 15, 20, 25].flatMap(roundRows);
+    expect(down).toHaveLength(17);
+    for (const { bounds } of down) expect(bounds).toEqual(AS_READ);
+    for (const { d, cal } of down) expect(judgeLabel(d, { n: cal }, ROOM)).not.toHaveProperty('bounded');
+  });
+
+  it('keeps the bound for a box read with the lens tipped down, where it holds', () => {
+    // Only the round solve crosses. The box pieces 10° and 20° down read on the side
+    // their bound says, every row.
+    const rows = [10, 20].flatMap((t) =>
+      PIECES.flatMap(([category, shape, w, h]) =>
+        [0, 0.3, 0.8].flatMap((gap) => {
+          const cal = calAt(t);
+          const box = boxOf(category, shape, w, h, gap, cal);
+          const c = frameCuts(box);
+          const d = det({ category, shape, slot: 'n', box });
+          const { row, bounds } = geoMeasure(d, { n: cal }, ROOM);
+          return c.bottom && !c.top && row.dimMM ? [{ d, cal, truth: [w, h] as const, read: row.dimMM, bounds }] : [];
+        }),
+      ),
+    );
+    expect(rows).toHaveLength(11);
+    expect(tally(rows)).toEqual({ widthLarge: 6, widthCut: 4, heightLow: 9, heightHigh: 1, exact: 1 });
     expect(rows.filter(({ d, cal }) => judgeLabel(d, { n: cal }, ROOM).status === 'suspect')).toEqual([]);
   });
 
@@ -511,6 +551,16 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     expect(failed(on(boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.3, level), 'nightstand'))).toEqual(['height']);
   });
 
+  it('words a limit as a limit, and a size as a size', () => {
+    // Arithmetic for the screen, so it lives where a test reaches it.
+    expect(measuredPhrase({ width: [1200, 1200], height: [450, 450] }, 'm')).toBe('1.20 × 0.45 m');
+    expect(measuredPhrase({ width: [0, 1273], height: [265, 1500] }, 'm')).toBe('up to about 1.27 m wide and about 0.27–1.50 m tall');
+    expect(measuredPhrase({ height: [1500, 2756] }, 'mm')).toBe('about 1500–2756 mm tall');
+    expect(measuredPhrase({ width: [1200, 1200], height: [1500, 2124] }, 'm')).toBe('1.20 m wide and about 1.50–2.12 m tall');
+    // Ends the unit prints as one number are one number: a size on screen.
+    expect(measuredPhrase({ width: [1401, 1403] }, 'm')).toBe('1.40 m');
+  });
+
   it('says which of its numbers are limits, and on which side', () => {
     // What the scan screen prints after "Measured". A limit printed as its one number
     // reads as a size, so the verdict carries where the truth can be: the least and the
@@ -564,7 +614,8 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   });
 
   it('breaks a tie between kinds of one word the way it breaks one between words', () => {
-    // A 300 mm cube 300 mm off the wall, called a TV. As a fridge it reads 417 wide, too
+    // A 300 × 300 mm box at a table's typical 600 mm depth, 300 mm off the wall, called a
+    // TV — the depth matters, because the reading is taken at it. As a fridge it reads 417 wide, too
     // narrow for any fridge, so the word's other kinds are measured: a radiator reads
     // 466 × 295 and a water dispenser 447 × 140, and both fit only on their band's edge
     // (margin 0). By the catalogue's order the water dispenser came first. By how far

@@ -86,7 +86,7 @@ for (const [w, h] of VIEWPORTS) {
   // A limit printed as its one number reads as a size: the tall piece called a nightstand
   // is read from the far end of where it could stand, so both its numbers are limits.
   const limits = rows.find((x) => x.text.startsWith('Nightstand'));
-  check(/Measured up to [\d.]+ \S+ wide and [\d.]+–[\d.]+ \S+ tall\./.test(limits?.text ?? ''), `Nightstand: says its limits ("Measured${(limits?.text ?? '').split('Measured')[1]?.slice(0, 70)}")`);
+  check(/Measured up to about [\d.]+ \S+ wide and about [\d.]+–[\d.]+ \S+ tall\./.test(limits?.text ?? ''), `Nightstand: says its limits ("Measured${(limits?.text ?? '').split('Measured')[1]?.slice(0, 70)}")`);
   const sideways = await page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth);
   check(sideways <= 0, `no sideways scroll (${sideways})`);
   const list = await page.$('.rail--right .list');
