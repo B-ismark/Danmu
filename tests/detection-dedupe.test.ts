@@ -183,6 +183,50 @@ describe('dedupeDetections — which sighting survives', () => {
   });
 });
 
+describe('dedupeDetections — a place the photo did not give', () => {
+  // `doubt` is how far each row's centre may be from where its photo put it (the
+  // placer's `distanceDoubt`), and the second rule spends it: two rows are one piece by
+  // place only when their centres agree with both doubts added. Chairs, whose tier is
+  // 0.35 m, 0.1 m apart in two photos, so the same-photo rule cannot reach them.
+  const chair = (slot: Detection['slot'], x: number) =>
+    det({ label: 'dining chair', category: 'chair', slot, position: { x, y: 0.45, z: -2.75 } });
+  const a = chair('n', 0);
+  const b = chair('e', 0.1);
+
+  it('keeps two chairs a bound stopped on one spot', () => {
+    expect(dedupeDetections([a, b], undefined, new Map([[a, 0.25], [b, 0.25]]))).toHaveLength(2);
+  });
+
+  it('spends the doubt as a distance, so a bound that barely moved a piece still merges', () => {
+    // 0.1 + 0.12 + 0.12 is inside the tier, 0.1 + 0.13 + 0.13 is not. A doubt of a few
+    // centimetres costs a merge those few centimetres, not the merge.
+    expect(dedupeDetections([a, b], undefined, new Map([[a, 0.12], [b, 0.12]]))).toHaveLength(1);
+    expect(dedupeDetections([a, b], undefined, new Map([[a, 0.13], [b, 0.13]]))).toHaveLength(2);
+  });
+
+  it('reads the doubt of both rows, the founder’s and the one asked', () => {
+    expect(dedupeDetections([a, b], undefined, new Map([[a, 0.3]]))).toHaveLength(2);
+    expect(dedupeDetections([a, b], undefined, new Map([[b, 0.3]]))).toHaveLength(2);
+  });
+
+  it('never merges by place a row whose distance nothing measured', () => {
+    const on = chair('e', 0);
+    expect(dedupeDetections([a, on], undefined, new Map([[on, Infinity]]))).toHaveLength(2);
+  });
+
+  it('is the rule as it was without the map', () => {
+    expect(dedupeDetections([a, b])).toHaveLength(1);
+    expect(dedupeDetections([a, b], undefined, new Map())).toHaveLength(1);
+  });
+
+  it('leaves the same-photo rule alone: one box drawn twice is one piece, however far off', () => {
+    // Two boxes nearly the same in one photo are one piece by the picture, not by place.
+    const once = det({ label: 'dining chair', category: 'chair', slot: 'n', box: [0.4, 0.5, 0.1, 0.2], position: { x: 0, y: 0.45, z: -2.75 } });
+    const again = det({ label: 'chair', category: 'chair', slot: 'n', box: [0.41, 0.5, 0.1, 0.2], position: { x: 0, y: 0.45, z: -2.75 } });
+    expect(dedupeDetections([once, again], undefined, new Map([[once, Infinity], [again, Infinity]]))).toHaveLength(1);
+  });
+});
+
 describe('mergeDistanceFor', () => {
   // The regression this whole tier exists for. Four chairs tucked around a table
   // at 0.55 m centres collapsed to TWO under the old flat 0.6 m: the first ate

@@ -96,9 +96,17 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
  *  whenever nothing was measured, as `geoRefine`'s is, so the identity test there still
  *  holds; the bounds are then `AS_READ` and describe nothing. A ceiling row's are
  *  `AS_READ` too: its width is read on a plane it is on by assumption, and it has no
- *  height to bound. */
-export function geoMeasure(d: Detection, cals: CalMap, room: RoomDims): { row: Detection; bounds: ReadBounds } {
-  const unmeasured = { row: d, bounds: AS_READ };
+ *  height to bound.
+ *
+ *  `distanceDoubt` is the placer's too (`GeoPlacement.distanceDoubt`), for the hard
+ *  merge: zero for a row nothing measured, and for a ceiling row, which is on its slab
+ *  by assumption like a wall row on its wall. */
+export function geoMeasure(
+  d: Detection,
+  cals: CalMap,
+  room: RoomDims,
+): { row: Detection; bounds: ReadBounds; distanceDoubt: number } {
+  const unmeasured = { row: d, bounds: AS_READ, distanceDoubt: 0 };
   const cal = cals[d.slot];
   if (!cal) return unmeasured;
   const cat = (d.category ?? 'other') as Category;
@@ -130,7 +138,7 @@ export function geoMeasure(d: Detection, cals: CalMap, room: RoomDims): { row: D
       yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
       dimMM: [g.widthMM, ceilingDepth, d.dimMM?.[2] ?? defaultAxisFor(cat, shape, 2)],
     };
-    return { row, bounds: AS_READ };
+    return { row, bounds: AS_READ, distanceDoubt: 0 };
   }
 
   // ONE footprint for both placers, because it answers one question — what shape is
@@ -159,7 +167,7 @@ export function geoMeasure(d: Detection, cals: CalMap, room: RoomDims): { row: D
     yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
     dimMM: [g.widthMM, catalogueDepth, g.heightMM],
   };
-  return { row, bounds: g.bounds };
+  return { row, bounds: g.bounds, distanceDoubt: g.distanceDoubt };
 }
 
 /** WHERE a wall row is, when `geoRefine` could not measure it — position and heading,
@@ -356,9 +364,30 @@ export function sameThingKey(label: string): string {
  *  It decides which row is handed back and never which rows merge, so the same list
  *  gives the same number of rows with the set or without it.
  *
+ *  `doubt` is how far each row's centre may be from where its photo put it
+ *  (`GeoPlacement.distanceDoubt`), and rule 2 adds both rows' to their distance before it
+ *  asks the tier: two rows are one place only if they would still be one place wherever
+ *  the photos put them. **A bound is not a measurement, and it stops every piece that
+ *  runs past it on one line.** Two dining chairs one behind the other, both read past the
+ *  far wall on a lens assumed narrower than it was, were both stopped a quarter of a metre
+ *  off the plaster, on the same spot, and the second was deleted; so was a chair the
+ *  bottom of the frame cut, placed at the far end of where it could stand and so onto the
+ *  chair across the table; and so was a single bed seen from its side, held half its
+ *  catalogue LENGTH off the wall and so half a metre toward its twin (§ 46.3, § 46.1). A
+ *  row the frame cut at its foot has no reading to be sure of, so it never merges by
+ *  place. What rule 2 no longer takes it leaves to `lib/repeat-sightings.ts`, which
+ *  starts the repeat unticked and says why — the rule this file argues throughout, applied
+ *  to the case that broke it. A doubt of a few centimetres, a shallow sofa's centre held
+ *  on its wall, costs a merge those few centimetres and no more. Without the map every
+ *  distance counts as read, which is the rule as it was.
+ *
  *  Exported for tests: this is pure logic that decides what the user gets from the
  *  one call that spends their quota. */
-export function dedupeDetections(items: Detection[], measured?: ReadonlySet<Detection>): Detection[] {
+export function dedupeDetections(
+  items: Detection[],
+  measured?: ReadonlySet<Detection>,
+  doubt?: ReadonlyMap<Detection, number>,
+): Detection[] {
   // A group is compared through the row that FOUNDED it across photos, and through
   // every row in it within one, and hands back its survivor.
   const groups: Detection[][] = [];
@@ -379,7 +408,7 @@ export function dedupeDetections(items: Detection[], measured?: ReadonlySet<Dete
       if (sameThingKey(o.label) !== sameThingKey(d.label)) return false;
       if (!o.position || !d.position) return false;
       const dist = Math.hypot(o.position.x - d.position.x, o.position.z - d.position.z);
-      return dist < mergeDistanceFor(d.category);
+      return dist + (doubt?.get(o) ?? 0) + (doubt?.get(d) ?? 0) < mergeDistanceFor(d.category);
     });
     if (at < 0) {
       groups.push([d]);
@@ -436,14 +465,17 @@ function survivorRank(d: Detection, measured: ReadonlySet<Detection> | undefined
  *  wrong here — see the note on `confirmed` in app/onboarding/detect/page.tsx. */
 export function refineDetections(dets: Detection[], cals: CalMap, room: RoomDims | null): Detection[] {
   if (!room) return dedupeDetections(dets);
-  // `geoPlace` written out, because the merge needs to know which rows it measured and
-  // `geoPlace`'s answer cannot say: a located row is a new object too.
+  // `geoPlace` written out, because the merge needs to know which rows it measured, and
+  // how sure each one's place is, and `geoPlace`'s answer cannot say: a located row is a
+  // new object too.
   const measured = new Set<Detection>();
+  const doubt = new Map<Detection, number>();
   const placed = dets.map((d) => {
-    const m = geoRefine(d, cals, room);
-    if (m === d) return geoLocate(d, cals, room);
-    measured.add(m);
-    return m;
+    const g = geoMeasure(d, cals, room);
+    if (g.row === d) return geoLocate(d, cals, room);
+    measured.add(g.row);
+    if (g.distanceDoubt > 0) doubt.set(g.row, g.distanceDoubt);
+    return g.row;
   });
-  return dedupeDetections(placed, measured);
+  return dedupeDetections(placed, measured, doubt);
 }

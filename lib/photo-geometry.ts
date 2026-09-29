@@ -741,6 +741,16 @@ export type GeoPlacement = {
   /** Which way `widthMM` and `heightMM` can be wrong — see `ReadBounds`. The placer
    *  reports it because the placer is the one that knows. */
   bounds: ReadBounds;
+  /** How far, in metres, the piece may stand from `distance` for a reason the photo did
+   *  not show: what the room's bounds moved a floor piece's near face and centre by, and
+   *  no limit at all for one the frame cut at its foot, whose near face was never in the
+   *  picture. Zero where the distance was read off the photo, and on a wall, where the
+   *  distance is the wall's and two pieces are told apart along it, not toward it.
+   *
+   *  For the hard merge (`dedupeDetections`), which calls two rows one piece when their
+   *  centres agree: a bound stops every piece that runs past it on one line, so two chairs
+   *  one behind the other came out on the same spot and one of them was deleted (§ 46.3). */
+  distanceDoubt: number;
 };
 
 /** What a placer needs to know about a piece's PLAN shape: the axis one photograph
@@ -1525,6 +1535,7 @@ export function placeFloorObject(
   if (bottom.up >= -0.02) return null; // at or above the horizon — not on the floor
   let near = (height / -bottom.up) * bottom.fwd;
   if (!(near > 0)) return null;
+  const nearAsRead = near;
 
   // TWO clamps, against two different walls, because there are now two kinds of
   // wrong and only one of them is the photograph's fault.
@@ -1616,6 +1627,10 @@ export function placeFloorObject(
           height: solved.rises ? { kind: 'upper', floorMM: lensMM } : { kind: 'lower', ceilMM: lensMM },
         };
 
+  // Where the photo put the piece and where the bounds left it: the near face moved by
+  // its two clamps, the centre by its own. A foot the frame cut has no reading to move.
+  const distanceDoubt = cut.bottom ? Infinity : Math.abs(nearAsRead - near) + (solved.d - d);
+
   const { x, z, yaw } = slotToWorld(slot, d, right);
   return {
     position: { x, y: 0, z },
@@ -1624,6 +1639,7 @@ export function placeFloorObject(
     yaw,
     distance: d,
     bounds,
+    distanceDoubt,
   };
 }
 
@@ -1740,6 +1756,7 @@ export function placeWallObject(
     yaw,
     distance: d - depthM / 2,
     bounds: AS_READ,
+    distanceDoubt: 0,
   };
 }
 
@@ -1847,7 +1864,7 @@ export function locateOnWall(
  *  an `Omit` rather than a `heightMM` of 0 or null so that nothing downstream can
  *  read a measurement which was never taken. No `bounds` either, for the same
  *  reason one level up: half of them would describe that height. */
-export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM' | 'bounds'>;
+export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM' | 'bounds' | 'distanceDoubt'>;
 
 /**
  * Ceiling-mounted object (fan, pendant): it lies ON the ceiling plane at a known
