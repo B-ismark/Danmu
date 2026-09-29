@@ -989,7 +989,7 @@ What the sweep cannot tell you, and a person can:
 - **On a phone** the 3D tab's Move / Scale / Rotate read in full, with the W / S / R
   keycaps gone. Wrong looks like "M…".
 
-### Pointing at a piece on a narrow list leaves its name readable — this branch, PROBED at 1024–1440
+### Pointing at a piece on a narrow list leaves its name readable — merged to `main` in `960036a` (PR #165), PROBED at 1024–1440
 
 **Where to click.** Any furnished room, either tab, in a window 1024–1279 px wide (or a
 wider one with the left list dragged to its narrowest). Move the pointer down the piece
