@@ -823,8 +823,10 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
   // distance. The fear was that a tipped-up room trades the pieces the hard merge no
   // longer takes for pieces it cannot take at all, and so for ticked repeats. Measured
   // against the merge as it was (no doubt handed over), at 5°, 10° and 15° up, the lens
-  // read right and read narrow: pieces with no row fall from 13 / 28 / 11 / 17 / 5 / 11 to
-  // 0 / 1 / 1 / 2 / 0 / 0, and lost moves by one, down once and up once. Repeats are the
+  // read right and read narrow: pieces with no row fall from 13 / 28 / 11 / 17 / 5 / 10 to
+  // 0 / 1 / 1 / 2 / 0 / 0, and lost moves by one, down once and up once. (The last was 11
+  // until a foot-cut box's side was read where the frame crosses it, § 49.20: the merge as
+  // it was deletes one piece fewer.) Repeats are the
   // same in four readings, and two and three more in the lens read right at 5° and 15°.
   //
   // Those five are floor lamps, and they were one repeat, not five, until a round piece's
@@ -898,7 +900,7 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
       [946, 541, 11, 1, 3, 3, 19, 19],
       [946, 541, 17, 2, 3, 3, 24, 24],
       [898, 609, 5, 0, 3, 6, 10, 11],
-      [898, 609, 11, 0, 6, 6, 17, 17],
+      [898, 609, 10, 0, 6, 6, 17, 17],
     ]);
   });
 });

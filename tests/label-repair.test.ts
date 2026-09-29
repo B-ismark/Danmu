@@ -418,34 +418,38 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   it('reads each axis on the side its placer says, never the other', () => {
     expect(ROWS).toHaveLength(39);
     // Every direction the rule allows is exercised, so the fixture can tell them apart.
-    // Boxed as the photo draws them, fourteen widths read below the truth under a bound
-    // that calls them the most the piece can be. Cut at its foot, a box's side is where
-    // its outline crosses the frame's bottom row, and the placer reads it as the corner
-    // below the frame (§ 49.20). The whole box clipped to the frame, as this fixture
-    // boxed it before, kept that corner's column, and seven of its fourteen side cuts.
-    expect(tally(ROWS)).toEqual({
-      widthLarge: 14,
-      widthCut: 7,
-      heightLow: 13,
-      heightHigh: 12,
-      exact: 14,
-      broken: [
-        ['nightstand', 'width', 425, 450],
-        ['coffee-table', 'width', 859, 1000],
-        ['coffee-table', 'width', 859, 1000],
-        ['wardrobe', 'width', 1110, 1200],
-        ['bookshelf', 'width', 766, 800],
-        ['desk-standard', 'width', 1090, 1200],
-        ['sofa', 'width', 803, 2000],
-        ['sofa', 'width', 803, 2000],
-        ['wardrobe', 'width', 881, 1200],
-        ['wardrobe', 'width', 1121, 1200],
-        ['bookshelf', 'width', 644, 800],
-        ['bookshelf', 'width', 787, 800],
-        ['desk-standard', 'width', 673, 1200],
-        ['desk-standard', 'width', 673, 1200],
-      ],
-    });
+    // Boxed as the photo draws them — the whole box clipped to the frame, as this fixture
+    // boxed it before, kept the column of a corner below the frame, and seven of its
+    // fourteen side cuts. Cut at its foot, a box's side is where its outline crosses the
+    // frame's bottom row, and the placer reads it there (§ 49.20): read at the corner
+    // below the frame instead, fourteen of these widths came out below the truth under a
+    // bound that calls them the most the piece can be, a 2 m sofa at 803 mm.
+    expect(tally(ROWS)).toEqual({ widthLarge: 19, widthCut: 7, heightLow: 13, heightHigh: 12, exact: 14, broken: [] });
+  });
+
+  it('reads a piece cut at its foot and standing on its wall at its own size, tipped either way', () => {
+    // Against its wall a foot-cut box is read where it stands, so nothing is bounded and
+    // the reading is the truth — IF each side is read where the photo draws it. Tipped,
+    // one side's column comes from a corner at the foot, which the frame cut; read there,
+    // 46 of these 57 came out narrow, a nightstand 436 for its 450 at 5° up (§ 49.20).
+    const at: string[] = [];
+    let exact = 0;
+    for (const tiltDeg of [0, -5, -10, -15, -20, -25, 5, 10, 20]) {
+      for (const [category, shape, w, h] of PIECES) {
+        for (const x of [0.3, -0.9, 1.2]) {
+          const cal = calAt(tiltDeg);
+          const depth = defaultDepthFor(category, shape) / 1000;
+          const box = bboxOfFloorBoxInFrame('n', x, -(wallD('n', ROOM) - depth / 2), w / 1000, h / 1000, depth, cal);
+          if (!box) continue;
+          const c = frameCuts(box);
+          if (!c.bottom || c.top || c.left || c.right) continue;
+          const read = geoMeasure(det({ category, shape, slot: 'n', box }), { n: cal }, ROOM).row.dimMM!;
+          if (read[0] === w && read[2] === h) exact++;
+          else at.push(`${shape} ${-tiltDeg}° up at x ${x}: ${read[0]} × ${read[2]}`);
+        }
+      }
+    }
+    expect([exact, at]).toEqual([57, []]);
   });
 
   // The round placer is a different solve — tangents to a circle, not corners of a box —
@@ -606,18 +610,19 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     expect([read(0.95), read(0.75), read(0.6)]).toEqual([2000, 1680, 1500]);
   });
 
-  it('calls ten correct words the wrong size, the price of D8', () => {
-    // Judged at the reading on the uncut axes, ten of the thirty-nine readings of a
-    // correctly named piece fall outside its own band. Judged only on the side the reading
-    // could speak for, none did; the user chose to catch the wrong words that let
-    // through, and pay this for it (D8). It was six, every one a piece 800 mm off its
-    // wall, while the fixture clipped its boxes; four more are widths read short (§ 49.20).
+  it('calls six correct words the wrong size, the price of D8', () => {
+    // Judged at the reading on the uncut axes, six of the thirty-nine readings of a
+    // correctly named piece fall outside its own band, every one of them a height read
+    // 800 mm off its wall. Judged only on the side the reading could speak for, none did;
+    // the user chose to catch the wrong words that let through, and pay this for it (D8).
+    // Boxed as the photo draws them it was ten until a foot-cut box's side was read where
+    // the frame crosses it: four more were widths read short (§ 49.20).
     const twoSided = ROWS.filter(({ d, read }) => {
       const r = dimRangeFor(d.category, d.shape as Shape);
       const w = !cutAxes(d.box, 'floor').width && (read[0] < r.min[0] || read[0] > r.max[0]);
       return w || read[2] < r.min[2] || read[2] > r.max[2];
     });
-    expect(twoSided).toHaveLength(10);
+    expect(twoSided).toHaveLength(6);
     expect(ROWS.filter(({ d, cal }) => judgeLabel(d, { n: cal }, ROOM).status === 'suspect')).toEqual(twoSided);
   });
 
@@ -728,7 +733,8 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     // shelf's 2400, so the words to try — still picked on THIS word's reading — lose the
     // shelf, and the wardrobe moves up into the second chip. Read as a shelf, it is
     // 1464. That pick is filed with § 49.5's. Boxed as the photo draws them (§ 49.20),
-    // 539, 48 and 172: a width read short takes the right word off the chips.
+    // 539, 48 and 172, because a width read short takes the right word off the chips; with
+    // a foot-cut box's side read where the frame crosses it, 556, 64 and 217.
     let caught = 0, first = 0, shown = 0;
     for (const { d, cal } of ROWS) {
       for (const category of CATEGORIES) {
@@ -741,7 +747,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         if (i === 0 || i === 1) shown++;
       }
     }
-    expect([caught, first, shown]).toEqual([539, 48, 172]);
+    expect([caught, first, shown]).toEqual([556, 64, 217]);
   });
 
   it("keeps the right word when only the wrong word's anchor read it too big (§ 49.5)", () => {
@@ -781,7 +787,12 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     // word "at least", and a verdict saying both would leave `measuredPhrase` choosing
     // one. Counted, so the zero is over a fixture where each note is common.
     // Boxed as the photo draws them (§ 49.20), 539 of 680, and fewer wall words caught at
-    // least as big: seven fewer rows are cut at the side.
+    // least as big: seven fewer rows are cut at the side. With a foot-cut box's side read
+    // where the frame crosses it, 556 of 704. 24 more are judged, a bed or a rug named on a
+    // piece cut at its foot: stood at that word's depth, its near foot is behind the plane
+    // of a lens tipped up, and read over the WHOLE side face that corner gave no reading at
+    // all. Eight wrong words fit now that the width is read true, and one fridge is caught
+    // that was not.
     let judged = 0, caught = 0, about = 0, atLeast = 0, both = 0;
     for (const { d, cal } of ROWS) {
       for (const category of CATEGORIES) {
@@ -796,8 +807,8 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         if (v.bounded?.length && v.atLeast?.length) both++;
       }
     }
-    expect([judged, caught]).toEqual([680, 539]);
-    expect([about, atLeast, both]).toEqual([382, 94, 0]);
+    expect([judged, caught]).toEqual([704, 556]);
+    expect([about, atLeast, both]).toEqual([399, 94, 0]);
   });
 });
 

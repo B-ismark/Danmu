@@ -113,12 +113,12 @@ describe('a floor piece cut at its foot, built at typical instead of at its read
   });
 
   it('builds MORE off-typical pieces more than 10% off at typical than at the reading', () => {
-    expect(out.width.off.off).toEqual([96, 123, 106]);
+    expect(out.width.off.off).toEqual([87, 118, 91]);
     expect(out.height.off.off).toEqual([90, 135, 75]);
-    // …while on the typical rows it cannot miss, which is what the first measurement saw,
-    // except where the reading it is held inside is short of the truth: 17 widths, boxed
-    // as the photo draws them, each read short by § 49.20.
-    expect(out.width.typical.off.slice(0, 2)).toEqual([48, 17]);
+    // …while on the typical rows it cannot miss, which is what the first measurement saw.
+    // Boxed as the photo draws them it missed 17 widths until a foot-cut box's side was
+    // read where the frame crosses it (§ 49.20): the reading it was held inside was short.
+    expect(out.width.typical.off.slice(0, 2)).toEqual([43, 0]);
     expect(out.height.typical.off.slice(0, 2)).toEqual([54, 0]);
   });
 });
