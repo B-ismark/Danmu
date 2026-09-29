@@ -862,14 +862,12 @@ function DimensionEditor({
   const prec = precisionFor(dimUnit);
   const step = stepFor(dimUnit);
   const range = dimRangeFor(category, shape);
-  /** The bounds for one axis, in the field's own unit. ONE call, read by the
-   *  stepper and by the sentence under it — they were two derivations, the arrows
-   *  on `boundsToUnit` and the sentence on `formatDim`, so the sentence printed
-   *  numbers the arrows could not reach: in feet a dining chair advertised
-   *  1.25-1.97 wide while the stepper stopped at 1.3 and 1.9, in ~270 combinations
-   *  across the catalog, with no tell that the arrow had stopped early.
-   *  `RoomDimsEditor` has read one call for both since the metre/centimetre bug;
-   *  this is the copy that was not converted. */
+  /** The bounds for one axis, in the field's own unit, which is what the stepper
+   *  stops at. There is no standing sentence quoting them any more, the same call
+   *  `RoomDimsEditor` made: the fields and `clampDims` already keep a size sane, and
+   *  a range printed under every piece was reading as a warning nobody had earned.
+   *  The sentence it replaced was also the one place the two had disagreed (in feet a
+   *  dining chair advertised 1.25-1.97 wide while the arrows stopped at 1.3 and 1.9). */
   const bound = (i: 0 | 1 | 2) => boundsToUnit(range.min[i], range.max[i], dimUnit);
   // Open by default. It was collapsed on the reasoning that typing millimetres is
   // the rare path — true of typing, and beside the point for READING: the three
@@ -950,9 +948,6 @@ function DimensionEditor({
   }
 
   const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
-  // The tier, in plain language: this is the promise that a size can't go silly.
-  const tier =
-    range.flex === 'fixed' ? 'Standard product size' : range.flex === 'standard' ? 'Typical size range' : 'Made to measure';
 
   return (
     <div className="section" style={{ background: 'var(--paper)' }}>
@@ -981,7 +976,6 @@ function DimensionEditor({
           </span>
         )}
       </button>
-      <div className="t-hint" style={{ marginTop: 4, paddingLeft: 22 }}>{tier}</div>
 
       {open && (
         <>
@@ -993,9 +987,9 @@ function DimensionEditor({
                     these are measurements. The stepper is ours — the native one
                     is suppressed app-wide (see globals.css). */}
                 {/* Bounded by the piece's OWN range, in the field's own unit — the
-                    same numbers `clampDims` enforces on commit and the same ones the
-                    sentence below prints, so the arrows stop where the clamp would
-                    have stopped them instead of walking out and snapping back.
+                    same numbers `clampDims` enforces on commit, so the arrows stop
+                    where the clamp would have stopped them instead of walking out and
+                    snapping back.
                     `0.001` was a floor in no unit at all: a millimetre to someone
                     working in metres, a micrometre to someone in millimetres, and
                     there was no ceiling whatsoever. `boundsToUnit` rounds inward, so a
@@ -1015,17 +1009,6 @@ function DimensionEditor({
                 />
               </label>
             ))}
-          </div>
-
-          {/* The values every edit is clamped into. */}
-          <div className="t-micro" style={{ marginTop: 8, lineHeight: 1.6 }}>
-            Anything you type lands inside{' '}
-            <span className="mono">
-              {bound(0).min}–{bound(0).max} wide ·{' '}
-              {bound(1).min}–{bound(1).max} deep ·{' '}
-              {bound(2).min}–{bound(2).max} tall
-            </span>{' '}
-            ({dimUnit}).
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
@@ -1294,8 +1277,7 @@ function MountHeightRow({
   // earlier bound defects lived.
   //
   // So compare in MILLIMETRES, where the arithmetic is exact and nothing rounds,
-  // and display through `formatDim` — which is what the size range two hundred
-  // lines above this already does.
+  // and display through `formatDim`.
   const typedMM = toMM(parseFloat(draft), dimUnit);
   // DERIVED, not stored. A `useState` flag here would be cleared by the resync
   // effect above the moment the commit moved the piece — the message would
