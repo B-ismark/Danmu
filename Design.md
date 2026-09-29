@@ -727,7 +727,8 @@ out of `clearance.ts` and a comment asking that they be kept in step.
 
 ### The calibration ladder
 
-`buildCals` (detect page) resolves one `CameraCal` per photo. The wall-floor line
+`calForPhoto` (`lib/photo-geometry.ts`) resolves one `CameraCal` per photo, from what the
+detect screen's `buildCals` read out of it. The wall-floor line
 ties focal length, camera height and tilt together in **one** equation, so it can
 solve for exactly one unknown — which one depends on what the photo already told
 us:

@@ -397,7 +397,7 @@ type SettingsState = {
    *
    *  The difference matters downstream and cannot be recovered from the number
    *  itself: a photo whose height is merely the default should let the wall-floor
-   *  line SOLVE for the height (see `buildCals` on the detect screen), while a
+   *  line SOLVE for the height (see `calForPhoto` in lib/photo-geometry.ts), while a
    *  height the user stated should not be overruled by a luminance heuristic that
    *  can lock onto a rug edge. Without this flag every photo carried a height and
    *  the solve was unreachable. */

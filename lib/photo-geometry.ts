@@ -116,6 +116,55 @@ export function pickLens(exifHfov: number | null, inferredHfov: number | null): 
 /** What we know about where the camera was, as opposed to what lens it had. */
 export type CameraView = { height?: number; tiltRad?: number };
 
+/** What one photograph told the scan screen about its camera, before anything is
+ *  decided from it. Every field is a reading or nothing; `calForPhoto` decides. */
+export type PhotoFacts = {
+  aspect: number;
+  /** A height and a tilt measured at capture, where the capture screen had them. */
+  view: CameraView;
+  /** The lens EXIF gave, as a horizontal field of view in degrees. */
+  exifHfov: number | null;
+  /** The lens and tilt the photo's own perspective gave (`calibrateFromPhoto`).
+   *  Read only when EXIF had no lens. */
+  vanishing: Pick<VanishingCalibration, 'hfovDeg' | 'tiltDeg'> | null;
+  /** The wall-floor line's row (`findFloorLine`). */
+  floorLine: number | null;
+};
+
+/**
+ * One photo's camera, from what it told us. Deterministic at every step: no model
+ * decides a number here, and each rung is a measurement or an honest default.
+ *
+ * The wall-floor line ties lens, camera height and tilt together in ONE equation, so
+ * it can solve for exactly one unknown. Which one depends on what the photo already
+ * told us:
+ *
+ *   · a lens, from EXIF or the vanishing points → spend the line on the CAMERA
+ *     HEIGHT, which is otherwise a flat guess and scales every measurement;
+ *   · no lens → spend it on the LENS, at the assumed height;
+ *   · neither → a typical phone lens.
+ *
+ * Tilt is never solved from the line. It comes from the phone's sensors at capture,
+ * or from the vanishing points for a photo taken elsewhere (a measured tilt wins,
+ * being an observation rather than an inference), or it is assumed level.
+ *
+ * This was the scan screen's own code. It lives here so a test runs the ladder the
+ * app runs, rather than a copy of it that can drift.
+ */
+export function calForPhoto(f: PhotoFacts, slot: CaptureSlot, footprint: Footprint): CameraCal {
+  const view: CameraView = { ...f.view };
+  const vp = f.exifHfov === null ? f.vanishing : null;
+  if (vp && view.tiltRad === undefined) view.tiltRad = (vp.tiltDeg * Math.PI) / 180;
+  const picked = pickLens(f.exifHfov, vp ? vp.hfovDeg : null);
+  if (picked !== null) {
+    const cal: CameraCal = { ...calFromHfov(picked.hfov, f.aspect, view), lens: picked.lens };
+    if (view.height !== undefined || f.floorLine === null) return cal;
+    return fitHeightToFloorLine(f.floorLine, slot, footprint, cal) ?? cal;
+  }
+  const solved = f.floorLine !== null ? calibrateFromFloorLine(f.floorLine, slot, footprint, f.aspect, view) : null;
+  return solved ?? { ...defaultCal(f.aspect), ...view };
+}
+
 const heightOf = (cal: CameraCal) => cal.height ?? CAM_HEIGHT;
 const tiltOf = (cal: CameraCal) => cal.tiltRad ?? 0;
 
@@ -171,7 +220,7 @@ function bAtFloorLine(height: number, d: number, tiltRad: number): number {
  * argument.
  *
  * Null when the footprint cannot say where the wall is — which joins the four
- * nulls this already returns, and `buildCals` falls back to `defaultCal` exactly
+ * nulls this already returns, and `calForPhoto` falls back to `defaultCal` exactly
  * as it does for an implausible floor line. There is no honest fallback for a
  * plane, and the bounding box is the thing being retired.
  */
