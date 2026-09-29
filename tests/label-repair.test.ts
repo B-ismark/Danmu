@@ -509,7 +509,36 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     const level = calAt(0);
     const box = boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.8, level);
     const v = judgeLabel(det({ category: 'nightstand', slot: 'n', box }), { n: level }, ROOM);
-    expect(v.status === 'suspect' && v.candidates.map((c) => c.category)).toContain('wardrobe');
+    // First, and not merely listed: five words tie on the band's edge here, and the scan
+    // screen shows two chips. Ordered by the catalogue the wardrobe came last; by how
+    // far each word's band is from the reading as read, it comes first.
+    expect(v.status === 'suspect' && v.candidates.map((c) => [c.category, c.margin])).toEqual([
+      ['wardrobe', 0],
+      ['plant', 0],
+      ['shelf', 0],
+      ['fridge', 0],
+      ['lamp', 0],
+    ]);
+  });
+
+  it('puts the right word where the scan screen shows it more often', () => {
+    // Of the wrong words caught on the fixture, how often the right one is first, and
+    // how often it is among the two chips the scan screen shows. Ties broken by the
+    // catalogue's order: 37 first and 112 of the two. Broken by a share of each band's
+    // span: 47 and 130. By the factor the reading would have to move: 56 and 130.
+    let caught = 0, first = 0, shown = 0;
+    for (const { d, cal } of ROWS) {
+      for (const category of CATEGORIES) {
+        if (category === 'other' || category === d.category) continue;
+        const v = judgeLabel(det({ category, slot: 'n', box: d.box }), { n: cal }, ROOM);
+        if (v.status !== 'suspect') continue;
+        caught++;
+        const i = v.candidates.findIndex((c) => c.category === d.category);
+        if (i === 0) first++;
+        if (i === 0 || i === 1) shown++;
+      }
+    }
+    expect([caught, first, shown]).toEqual([328, 56, 130]);
   });
 
   it('still catches half the wrong words in the fixture', () => {

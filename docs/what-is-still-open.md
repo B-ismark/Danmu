@@ -7868,8 +7868,14 @@ out beside the row, and `judgeLabel` accuses only where nowhere the piece could 
 inside the band: **0 of 44**. The first version re-derived those sides in a function of its own
 beside the placer, from the box; it agreed, and it was the same answer written twice. A word the reading could still be is scored on the band's edge, margin 0,
 rather than outside it — the scan screen hangs *the camera does not agree* on a negative margin,
-and it would have hung it on the right word. The row still gets no note, because its width and
-height were in view.
+and it would have hung it on the right word. **That makes ties, and the tie was the next
+defect:** every word a bounded reading could still be scores 0, so the list fell back on the
+catalogue's order, and the wardrobe called a nightstand came last of five words when the scan
+screen shows two. Ties now go to the word whose band is nearest the reading as read, measured
+as the factor the reading would have to move by — as a share of each band's span it made a
+wide band look near, and a plant beat the wardrobe. Of the 328 wrong words caught, the right one
+now comes **first for 56** (37 before) and is **among the two chips for 130** (112). The row
+still gets no note, because its width and height were in view.
 
 **Round pieces are a different solve and were measured separately:** a standing fan, plant,
 floor lamp and stool as cylinders of their catalogue size, same walls — 29 rows level and

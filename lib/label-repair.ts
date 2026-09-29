@@ -172,8 +172,8 @@ function readAxes(category: Category, shape: Shape, box: Detection['box']): { me
 function axisMargin(v: number, lo: number, hi: number, b: ReadBound = { kind: 'exact' }): number {
   const span = hi - lo;
   if (!(span > 0)) return 0;
-  const [a, z] = truthSpan(v, b);
-  const t = z < lo || a > hi ? v : Math.min(Math.max(v, lo, a), hi, z);
+  const [, z] = truthSpan(v, b);
+  const t = outside(v, lo, hi, b) ? v : Math.min(Math.max(v, lo), hi, z);
   return Math.min(t - lo, hi - t) / span;
 }
 
@@ -188,6 +188,20 @@ function sizeMargin(
   const r = dimRangeFor(category, shape);
   const w = axes.includes('width') ? axisMargin(widthMM, r.min[0], r.max[0], bound.width) : Infinity;
   const h = axes.includes('height') ? axisMargin(heightMM, r.min[2], r.max[2], bound.height) : Infinity;
+  return Math.min(w, h);
+}
+
+/** How far a reading sits from a band as read, whatever its bound: the log of the
+ *  factor it would have to move by, 0 inside, more negative further out — the tightest
+ *  of the axes, as `sizeMargin` takes. Scale-free on purpose. Taken as a share of the
+ *  band's span, like the margin, it made a WIDE band look near: a wardrobe read 2667
+ *  tall sat behind a plant read 2756, 67 mm past the tallest wardrobe against 156 past
+ *  the tallest plant, because a plant's band is 2.4 times as tall. */
+function sizeStrain(category: Category, shape: Shape, widthMM: number, heightMM: number, axes: readonly SizeAxis[]): number {
+  const r = dimRangeFor(category, shape);
+  const off = (v: number, lo: number, hi: number) => -Math.abs(Math.log(v / Math.min(Math.max(v, lo), hi)));
+  const w = axes.includes('width') ? off(widthMM, r.min[0], r.max[0]) : 0;
+  const h = axes.includes('height') ? off(heightMM, r.min[2], r.max[2]) : 0;
   return Math.min(w, h);
 }
 
@@ -255,11 +269,27 @@ function namesAKind(c: Category, label: string): boolean {
   return sceneShapeFor(c, label, undefined) !== k.plain || k.plainNames.some((n) => l.includes(n));
 }
 
+/** A candidate's place in the list: the more comfortable fit first, and between two
+ *  the bound makes equally comfortable, the one its reading sits nearer as read.
+ *
+ *  The second key is what a bound costs the ordering. Every word a bounded reading
+ *  could still be — outside its band on the side the truth may be — scores 0, on the
+ *  band's edge, so a wardrobe read 2667 tall tied with every other tall word, and the
+ *  list fell back on the catalogue's order: last of five, and the scan screen shows
+ *  two. `strain` (`sizeStrain`) is not evidence against any of them, only which the
+ *  reading is nearer, which is the most one photograph can say among words it cannot
+ *  rule out. Measured on the foot-cut fixture in `tests/label-repair.test.ts`, the
+ *  right word comes first for 56 of the 328 wrong words caught, from 37. */
+type Ranked = { margin: number; strain: number };
+function byFit(a: Ranked, b: Ranked): number {
+  return b.margin - a.margin || b.strain - a.strain;
+}
+
 /** The first try when it is among `ts` — the words' own kind — else the most
  *  comfortable fit. */
-function preferFirst<T extends { first: boolean; margin: number }>(ts: T[]): T | undefined {
+function preferFirst<T extends Ranked & { first: boolean }>(ts: T[]): T | undefined {
   if (ts[0]?.first) return ts[0];
-  return ts.reduce<T | undefined>((a, b) => (!a || b.margin > a.margin ? b : a), undefined);
+  return ts.reduce<T | undefined>((a, b) => (!a || byFit(b, a) < 0 ? b : a), undefined);
 }
 
 /** Build a repair candidate for each of `categories`: re-categorised AND
@@ -290,7 +320,7 @@ export function candidatesFor(
   room: RoomDims,
   { requireFit = true }: { requireFit?: boolean } = {},
 ): LabelCandidate[] {
-  const out: LabelCandidate[] = [];
+  const out: Array<LabelCandidate & { strain: number }> = [];
   for (const c of categories) {
     // The detector's shape hint goes with the category being replaced, and so does
     // its depth hint: if the old word is wrong, its guess at that word's shape and
@@ -315,7 +345,7 @@ export function candidatesFor(
     const kinds = kindsOf(c);
     const own = { shape: worded, ...(worded === kinds.plain ? {} : { name: kinds.variants.find((v) => v.shape === worded)?.name }) };
     const tries = namesAKind(c, d.label) ? [own] : [own, ...kinds.variants];
-    const trials: Array<LabelCandidate & { fits: boolean; first: boolean }> = [];
+    const trials: Array<LabelCandidate & { fits: boolean; first: boolean; strain: number }> = [];
     for (const [n, t] of tries.entries()) {
       const seed: Detection = { ...d, category: c, shape: t.shape, dimMM: undefined };
       // With the placer's own answer to which way that size can be wrong.
@@ -343,6 +373,7 @@ export function candidatesFor(
           detection: trial,
           ...('name' in t && t.name ? { name: t.name } : {}),
           margin: -Infinity,
+          strain: -Infinity,
           unmeasured: true,
           fits: false,
           first: n === 0,
@@ -355,6 +386,7 @@ export function candidatesFor(
         detection: trial,
         ...('name' in t && t.name ? { name: t.name } : {}),
         margin: sizeMargin(c, t.shape, trial.dimMM[0], trial.dimMM[2], cAxes, cBound),
+        strain: sizeStrain(c, t.shape, trial.dimMM[0], trial.dimMM[2], cAxes),
         fits,
         first: n === 0,
       });
@@ -366,9 +398,8 @@ export function candidatesFor(
     out.push(cand);
   }
   // Signed margin, so a candidate that does not fit its own band sorts below every
-  // one that does, without needing to be flagged.
-  out.sort((a, b) => b.margin - a.margin);
-  return out;
+  // one that does, without needing to be flagged; ties by `strain` (`byFit`).
+  return out.sort(byFit).map(({ strain: _strain, ...cand }) => cand);
 }
 
 /** The row accepting `cand` leaves in place of `row`, called `label`: the candidate's
