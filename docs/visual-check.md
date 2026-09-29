@@ -1972,7 +1972,7 @@ real phone, with a real scan, is the unlooked-at half.
 ---
 ## Look and light
 
-### A day/night clock with a sun arc over the room, pieces that sway when carried, and sounds — branch `claude/affectionate-ritchie-ilawx1`, SEEN HEADLESS ONLY, needs real ears and a real trackpad
+### A day/night clock with a sun arc over the room, pieces that sway when carried, and sounds — branch `claude/affectionate-ritchie-ilawx1` ([PR #176](https://github.com/B-ismark/Danmu/pull/176)), SEEN HEADLESS ONLY, needs real ears and a real trackpad
 
 **Where to click.** Open any room in **3D Model**. A dashed path circles over the room with the
 sun and a clock pill on it; drag the sun along it from morning to evening, then press **Night**
