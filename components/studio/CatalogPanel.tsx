@@ -32,6 +32,7 @@ import { LibraryPicker } from './LibraryPicker';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 import { announce } from '@/lib/announce';
 import { usePhoneStudio } from './NarrowViewportBanner';
+import { usePublishedBox } from './CanvasChrome';
 
 /** The id the pages put on their canvas element, so the rail's trigger can bring
  *  the panel into view when the studio is stacked and the rail sits below the
@@ -199,6 +200,8 @@ export function CatalogPanel({
 }) {
   const setOpen = useStudio((s) => s.setCatalogOpen);
   const phone = usePhoneStudio();
+  // Its width, so the sun's row over the canvas keeps clear of it (`CanvasDay`).
+  const boxRef = usePublishedBox('--canvas-panel-width', null);
 
   // Esc closes it, like every other panel in the studio (Look, Room, help). It
   // yields to a field being edited or a dialog in front — so Esc out of the search
@@ -223,6 +226,7 @@ export function CatalogPanel({
 
   return (
     <div
+      ref={boxRef}
       className="ds-card"
       style={{
         position: 'absolute',

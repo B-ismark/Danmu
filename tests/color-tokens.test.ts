@@ -188,14 +188,8 @@ describe('scene-palette really does match the CSS', () => {
     ['accent', 'accent'],
     ['accentHover', 'accent-2'],
     ['invalid', 'danger'],
+    ['glass', 'paper'],
     ['locked', 'locked'],
-    // Both studio tabs draw the same alignment guide — the plan from the CSS
-    // token, the 3D scene from here — so the two greens have to be one green.
-    ['snapEdge', 'snap-edge'],
-    ['snapCenter', 'snap-center'],
-    // The sun path is drawn in ink over a light sky and in paper over a dark one.
-    ['sunPathOnLight', 'ink'],
-    ['sunPathOnDark', 'paper'],
   ];
 
   it.each(pairs)('SCENE.%s is --%s', (key, token) => {
@@ -313,9 +307,9 @@ describe('OKLCH round trips', () => {
 });
 
 describe('the live-measure tags carry legible text', () => {
-  // components/three/MeasureGuides.tsx draws two DOM overlays over the canvas while
-  // a piece is being dragged: a gap label on each guide line and the piece's own
-  // size tag. Both are 10–11px bold — normal-size text under WCAG, so 4.5:1, not
+  // components/three/DragTag.tsx draws a DOM overlay over the canvas while a piece
+  // is being dragged: the piece's own size tag. (It drew a gap label on each wall
+  // guide too, until those lines went.) It is 11px bold — normal-size text under WCAG, so 4.5:1, not
   // the 3:1 that large text gets.
   //
   // The gap label used to paint `--on-accent` (#FFFFFF) on `SCENE.accentHover`, the
@@ -352,7 +346,7 @@ describe('the live-measure tags carry legible text', () => {
 
 describe('the live-measure tags are checked in the COMPONENT, not only in the tokens', () => {
   // Everything above compares tokens to tokens. All of it passes with
-  // MeasureGuides.tsx reverted to the exact pairing it was written to retire —
+  // DragTag.tsx (then MeasureGuides.tsx) reverted to the exact pairing it was written to retire —
   // `color: 'var(--on-accent)'` over `background: color`, white on the sage accent
   // at 3.89:1 — because none of it reads the component. Worse, the sage tripwire up
   // there asserts that pairing is under 4.5:1, which was TRUE while the bug shipped:
@@ -360,7 +354,7 @@ describe('the live-measure tags are checked in the COMPONENT, not only in the to
   //
   // A regex over source, deliberately and named as such: the assertion is about how
   // two values are PAIRED inside one style object, which no import can expose.
-  const SRC = readFileSync(join(process.cwd(), 'components', 'three', 'MeasureGuides.tsx'), 'utf8');
+  const SRC = readFileSync(join(process.cwd(), 'components', 'three', 'DragTag.tsx'), 'utf8');
 
   it('never paints --on-accent unconditionally', () => {
     // The fixed form is `color: live.valid ? 'var(--ink)' : 'var(--on-accent)'`, so

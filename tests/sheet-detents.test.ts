@@ -96,6 +96,19 @@ describe('the stylesheet draws the heights the drag settles on', () => {
     expect(css).toMatch(/--sheet-half: \d+(\.\d+)?%;/);
   });
 
+  it('holds the closed sheet under a stage that cannot be scrolled', () => {
+    // The closed sheet waits just past the stage's bottom edge. `overflow: hidden`
+    // clips it and is STILL a scroll container, so selecting a piece — which scrolls
+    // its Room-list row into view — slid the whole stage up by the sheet's height
+    // and left a blank band over the toolbar. `clip` is the one that cannot scroll.
+    for (const sel of ['.sheet-shell', '.sheet-shell__stage']) {
+      const r = rule(sel);
+      expect(r, sel).toMatch(/overflow: clip;/);
+      // `hidden` may stand before it as a fallback; never after it, where it wins.
+      expect(r.lastIndexOf('overflow: hidden'), sel).toBeLessThan(r.indexOf('overflow: clip'));
+    }
+  });
+
   it('keeps the tap threshold under a finger’s jitter and above zero', () => {
     expect(TAP_PX).toBeGreaterThan(0);
     expect(TAP_PX).toBeLessThanOrEqual(10);

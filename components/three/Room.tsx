@@ -8,7 +8,7 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type M
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, N8AO, SMAA, wrapEffect } from '@react-three/postprocessing';
 import type { EffectComposer as Composer } from 'postprocessing';
-import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Scene, type WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, Color, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Group, type Mesh, type MeshBasicMaterial, type Scene, type WebGLRenderTarget, type WebGLRenderer } from 'three';
 import { useStudio, type Quality } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
@@ -26,8 +26,7 @@ import { pickIdsFrom } from '@/lib/pick-through';
 import { openSceneMenu } from '@/components/studio/SceneContextMenu';
 import { RoomShell } from './RoomShell';
 import { WallHandles } from './WallHandles';
-import { MeasureGuides } from './MeasureGuides';
-import { SunArc } from './SunArc';
+import { DragTag } from './DragTag';
 import { Draggable } from './Draggable';
 import { GradeEffect } from './grade';
 import { PartGeometry } from './DynamicPart';
@@ -281,8 +280,7 @@ export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
           </Draggable>
         ))}
         {dressed && parts.map((part) => <Dressing key={`dress-${part.id}`} part={part} />)}
-        <MeasureGuides />
-        <SunArc />
+        <DragTag />
         <GroundShadows hi={hi} />
       </Suspense>
 
@@ -346,9 +344,9 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
   const lighting = useStudio((s) => s.lighting);
   // The light, all of it, from one derivation: sky colours blended off the
   // clock, and the key light — sun, moon, or overcast's studio key — derived from
-  // the hour and the room's bearing. `SunArc` reads the same `lightingAt`, so the
-  // marker on the arc and the light in the room cannot disagree about where the
-  // sun is. The bearing rotates the whole day's path, so which wall the light comes
+  // the hour and the room's bearing. The sun over the canvas (`SunArc`) reads the
+  // same `lightingAt` for its sky, and the same hour, so the control and the light
+  // in the room cannot disagree about what time it is. The bearing rotates the whole day's path, so which wall the light comes
   // through is still the user's answer.
   const hour = useStudio((s) => s.hour);
   const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
@@ -555,6 +553,21 @@ function KeyLight({
 // outside React, so nothing re-renders and the shadow would stay under the old
 // spot. Subscribing to a boolean rather than the drag-live channel keeps that to
 // two re-renders per drag instead of one per tick.
+//
+// And a pass that re-bakes has to start from a clean sheet, which drei's does not
+// arrange: it renders the scene into its depth target and trusts the renderer to
+// clear it first. That trust holds only while `gl.autoClear` is on, and
+// postprocessing's EffectComposer switches it OFF the moment it mounts — and never
+// back, so 'Fast' inherits it from the 'High' the page opened on. So the target
+// kept every silhouette it had ever held and blurred the lot again each frame: a
+// carried sofa left a trail of grey footprints along its whole path, which vanished
+// on drop only because the next bake happened to paint over them. `clearStale`
+// wipes the target itself, before drei's pass (priority −1 runs ahead of drei's 0),
+// on exactly the frames that pass is about to re-bake. Not on a `frames={1}` frame
+// after the window closes — that bake is the same scene over itself, and clearing
+// there instead of in drei's own render would erase the one shadow on screen.
+const CLEAR = new Color(0, 0, 0);
+const kept = new Color();
 function GroundShadows({ hi }: { hi: boolean }) {
   const footprint = useScene((s) => s.room.footprint);
   const width = useScene((s) => s.room.width);
@@ -582,6 +595,25 @@ function GroundShadows({ hi }: { hi: boolean }) {
   useFrame(() => {
     if (baking) invalidate();
   });
+  const shadows = useRef<Group>(null);
+  const gl = useThree((s) => s.gl);
+  useFrame(() => {
+    if (!(dragging || baking)) return;
+    // The plane drei draws the shadow on is its group's only mesh, and its map is
+    // the depth target's texture — which carries a back-reference to the target.
+    const plane = shadows.current?.children[0] as Mesh | undefined;
+    const rt = (plane?.material as MeshBasicMaterial | undefined)?.map?.renderTarget;
+    if (!rt || !(rt as WebGLRenderTarget).isWebGLRenderTarget) return;
+    const target = rt as WebGLRenderTarget;
+    gl.getClearColor(kept);
+    const alpha = gl.getClearAlpha();
+    const prior = gl.getRenderTarget();
+    gl.setRenderTarget(target);
+    gl.setClearColor(CLEAR, 0);
+    gl.clear(true, true, false);
+    gl.setRenderTarget(prior);
+    gl.setClearColor(kept, alpha);
+  }, -1);
   const b = footprintBounds(footprint);
   // Quantised to 0.5m. `scale` feeds drei's internal useMemo, which allocates two
   // WebGLRenderTargets and never disposes the pair it replaces — so a continuous
@@ -600,6 +632,7 @@ function GroundShadows({ hi }: { hi: boolean }) {
   const spanZ = Math.ceil(b.depth * 2) / 2;
   return (
     <ContactShadows
+      ref={shadows}
       position={[b.cx, 0.004, b.cz]}
       scale={[spanX, spanZ]}
       // 512 on 'Fast' — a quarter of the texels to fill and blur.
