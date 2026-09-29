@@ -556,6 +556,20 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     ]);
   });
 
+  it('breaks a tie between kinds of one word the way it breaks one between words', () => {
+    // A 300 mm cube 300 mm off the wall, called a TV. As a fridge it reads 417 wide, too
+    // narrow for any fridge, so the word's other kinds are measured: a radiator reads
+    // 466 × 295 and a water dispenser 447 × 140, and both fit only on their band's edge
+    // (margin 0). By the catalogue's order the water dispenser came first. By how far
+    // each band is from the reading as read, the radiator's 300 mm floor is 5 mm from
+    // 295 and the dispenser's 900 mm is most of a metre, so the radiator is the kind.
+    const level = calAt(0);
+    const box = boxOf('table', 'coffee-table', 300, 300, 0.3, level);
+    const v = judgeLabel(det({ category: 'tv', slot: 'n', box }), { n: level }, ROOM);
+    const fridge = v.status === 'suspect' ? v.candidates.find((c) => c.category === 'fridge') : undefined;
+    expect([fridge?.detection.shape, fridge?.detection.dimMM, fridge?.margin]).toEqual(['radiator', [466, 200, 295], 0]);
+  });
+
   it('puts the right word where the scan screen shows it more often', () => {
     // Of the wrong words caught on the fixture, how often the right one is first, and
     // how often it is among the two chips the scan screen shows. Ties broken by the

@@ -178,12 +178,15 @@ function readAxes(category: Category, shape: Shape, box: Detection['box']): { me
  *  A bounded reading is scored where the truth would have to be for this word — the
  *  point nearest the reading that is both possible and in the band. A reading inside
  *  the band is that point, so it scores exactly as an exact one; one outside it that the
- *  piece could still be scores 0, on the edge, rather than the negative a misfit gets. */
+ *  piece could still be scores 0, on the edge, rather than the negative a misfit gets.
+ *  That point is the reading clamped to the band, with no end of the possible span in
+ *  it: the reading is always possible and the span is one interval around it, so when
+ *  the two meet, the band's nearer end is inside the span. The first version clamped
+ *  to the span's far end too, and no reading could reach it. */
 function axisMargin(v: number, lo: number, hi: number, b: ReadBound = { kind: 'exact' }): number {
   const span = hi - lo;
   if (!(span > 0)) return 0;
-  const [, z] = truthSpan(v, b);
-  const t = outside(v, lo, hi, b) ? v : Math.min(Math.max(v, lo), hi, z);
+  const t = outside(v, lo, hi, b) ? v : Math.min(Math.max(v, lo), hi);
   return Math.min(t - lo, hi - t) / span;
 }
 
