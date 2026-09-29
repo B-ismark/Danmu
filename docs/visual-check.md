@@ -1988,7 +1988,7 @@ well off its wall may be flagged as well. That is the price the user chose (D8, 
 - At 360 px, the warning line and its chips wrapping under the tick or the ✕.
 - A flagged, correctly named piece that takes more than one tap to keep.
 - **The part only a real room answers:** how often correct pieces get flagged. The fixture says
-  6 of 43 box pieces, every one 800 mm off its wall, and 13 of 29 round ones, some of them
+  6 of 39 box pieces, every one 800 mm off its wall, and 12 of 28 round ones, some of them
   standing against it. Whether that is tolerable in a person's own room is not something a
   test can say.
 

@@ -177,7 +177,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 23 | **§ 46** repeat sightings: what the soft merge reaches, and the pieces the HARD merge deletes before it can | **BUILT, with two items MEASURED and NOT FIXED.** The soft merge (`lib/repeat-sightings.ts`) starts a probable repeat unticked with a reason, for every kind, not only beds; over the 150 furnished rooms it takes the repeats left ticked at an ultrawide read as 66° from **247 to 5** (106°) and **452 to 21** (120°), at a price of 21 real pieces started unticked across the five readings, each one tap from back (numbers since § 49's frame-edge growth, 2026-09-29; before it, 249 → 3 and 460 → 24 at a price of 22). What it cannot reach is a piece with no row: **§ 46.1** twin beds in a corner come back as one, and **§ 46.3** under an ultrawide read as 66° **37 and 42 pieces** of about 990 are deleted outright (35 and 39 before the growth), nearly all dining chairs — both the hard merge deciding a pair on a distance nobody measured (a centre bound, or a box the frame cut). **§ 46.2** is the bottom-edge walk, measured and not built | M — one change to what the hard merge takes, measured over the same 150 rooms and against `tests/detect-pipeline.test.ts` in both directions | § 46.1 and § 46.3 are one piece of work; `tests/repeat-sightings.test.ts` holds both as literals, so the fix turns them red on purpose |
 | 24 | **§ 47** a change made in the last half-second before a reload or a closed tab is lost | **PARTLY FIXED 2026-09-28.** Pending saves now run when the page is hidden or left (`lib/page-leave.ts`), as ONE transaction that asks for its commit at once (`roomStore.savePending`). Measured, change made and page left at once, 5 each: a piece duplicated then reloaded kept **0 → 5**, a typed width then a closed tab **0 → 5**, and no room half-saved (**4 of 10** with three separate saves). **Still lost: a typed room size on a reload, 0 of 5**, whole, because that save reads before it writes. | small, but a design call | — |
 | 25 | **§ 48** a tab left open across the keep-means-keep update can bring unticked pieces back | **WRITTEN DOWN 2026-09-28, NOT FIXED — the user's call.** `migrateRoom` reads a row's `locked` by the version stamp alone, and the previous build stamps `version: 1` on every save. One edit in a tab open across the deployment re-stamps a v2 room, and the next up-to-date load reads every row as kept: the scan list shows unticked rows ticked, and a room with no saved scene is rebuilt with them in it. It fails toward MORE furniture, deletes nothing, and closes itself on a reload. The one fix on offer (a marker the old writers carry through) inverts on the re-scan path, which is why it is not built. | — | — |
-| 26 | **§ 49** a scan tilted up, cut at the frame's edges, with the room size skipped, came back "mostly too small" | **PARTLY FIXED 2026-09-29.** Measured first (`tests/scan-tilted-room.test.ts`, a scan shaped like the reported one, each unknown put right in turn): with the camera and room known the frame edge was the whole remaining error, **7 of 14** pieces more than 10% short. The placers now treat a cut axis as a lower bound and grow it to the kind's typical size from the edge the photo saw, stopped at the wall's end: **0 of 14** short, mean width error **19% → 10%**. As the app reads that scan today, **10 short → 6**, and the price is **4 over → 7**, mean width error **24% → 32%** — the skipped room's walls end past the real ones, so a typical size over-reaches. Still open, in order of what the table says they are worth: the room size (§ 49.3, the user's call), tilt and height (§ 49.2, measured WORSE alone), and two smaller items (§ 49.5, § 49.6 — of the four first filed, § 49.4 is measured and kept and § 49.7 fixed) | § 49.1 (the default lens on an upright photo) FIXED too; § 49.3 is a question for the user; § 49.9–49.12 filed by the review, none a regression; § 49.7 (a top-cut height grows only to the ceiling), § 49.10 (a piece cut at its foot is read at the far end of where it could stand, and judged at that reading by the user's call, D8: 476 of 654 wrong words caught where the one-sided judge caught 325, for 24 of 83 correctly named pieces flagged across box, tipped-down and round rows; exempting round pieces is filed, not built) and § 49.11 (a ceiling piece cut by the frame is not judged on its width) FIXED; § 49.13 (a ceiling piece cut at the TOP is read from the edges the photo saw: 17.9% → 4.1% on 556 discs, exact on all but 43 slivers, and a 1200 mm fan built at 1200 rather than the band's 1500) FIXED, its side and corner cuts measured and not built; § 49.14 (a foot-cut floor piece is still BUILT at its limit, 21 of 43 heights more than 10% off) measured, not built; § 49.15 (a detector's box that ran past the frame: the on-device clamp moved its far edge, the cloud rows were not cut at all; on the top-cut discs at a 1% overrun they read 7.1% and 6.4% off against 4.1%) FIXED, how often it happens in a real scan not measured; § 49.16 (two sweep fixtures box what is out of frame) found by review, not measured | — |
+| 26 | **§ 49** a scan tilted up, cut at the frame's edges, with the room size skipped, came back "mostly too small" | **PARTLY FIXED 2026-09-29.** Measured first (`tests/scan-tilted-room.test.ts`, a scan shaped like the reported one, each unknown put right in turn): with the camera and room known the frame edge was the whole remaining error, **7 of 14** pieces more than 10% short. The placers now treat a cut axis as a lower bound and grow it to the kind's typical size from the edge the photo saw, stopped at the wall's end: **0 of 14** short, mean width error **19% → 10%**. As the app reads that scan today, **10 short → 6**, and the price is **4 over → 7**, mean width error **24% → 32%** — the skipped room's walls end past the real ones, so a typical size over-reaches. Still open, in order of what the table says they are worth: the room size (§ 49.3, the user's call), tilt and height (§ 49.2, measured WORSE alone), and two smaller items (§ 49.5, § 49.6 — of the four first filed, § 49.4 is measured and kept and § 49.7 fixed) | § 49.1 (the default lens on an upright photo) FIXED too; § 49.3 is a question for the user; § 49.9–49.12 filed by the review, none a regression; § 49.7 (a top-cut height grows only to the ceiling), § 49.10 (a piece cut at its foot is read at the far end of where it could stand, and judged at that reading by the user's call, D8: 439 of 597 wrong words caught where the one-sided judge caught 309, for 23 of 78 correctly named pieces flagged across box, tipped-down and round rows; exempting round pieces is filed, not built) and § 49.11 (a ceiling piece cut by the frame is not judged on its width) FIXED; § 49.13 (a ceiling piece cut at the TOP is read from the edges the photo saw: 17.9% → 4.1% on 556 discs, exact on all but 43 slivers, and a 1200 mm fan built at 1200 rather than the band's 1500) FIXED, its side and corner cuts measured and not built; § 49.14 (a foot-cut floor piece is still BUILT at its limit, 19 of 39 heights more than 10% off) measured, not built; § 49.15 (a detector's box that ran past the frame: the on-device clamp moved its far edge, the cloud rows were not cut at all; on the top-cut discs at a 1% overrun they read 7.1% and 6.4% off against 4.1%) FIXED, how often it happens in a real scan not measured; § 49.16 (two sweep fixtures box what is out of frame) found by review, not measured | — |
 | 27 | **§ 45** the sensor grant is site-wide when one route needs it | **MEASURED 2026-09-29, DECIDED AGAINST.** The filed fix was the catch-all excluding the capture route, with the trio granted only there. It was built on a scratch build, and it served exactly the headers it asked for. In Chromium it still **took the grant away from the capture screen**: a permissions policy is fixed when the document is created, and every way into capture is a `<Link>` or `router.push` that keeps the document. Reached from `/workspace` or the shape picker, the document answered `allowsFeature` false; opened directly, it answered true. WebKit was not run. The only way to make the fix true is to make every entry a hard navigation, and any future `<Link>` would break that silently. The price of keeping the grant is written down in § 45. `tests/permissions-policy.test.ts` now counts every policy entry, and `scripts/sensor-policy-probe.mjs` reproduces the measurement | — | — |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
@@ -7854,19 +7854,19 @@ whose box reaches the bottom of the photo has no seen near edge, so its distance
 near face is held to `max(0.3, wall − depth)`, the piece stood back against its wall, and read
 there. This was filed as *its width and height are an upper bound*. Measured on six pieces
 projected from the truth 0, 300 and 800 mm off the north wall of a 6 × 4 m room on the 106°
-lens, level and tipped UP 10° and 20° — the 43 rows cut at the foot and not the top
-(`tests/label-repair.test.ts`) — the width is an upper bound (14 read large, 14 exact, 15 cut at
+lens, level and tipped UP 10° and 20° — the 39 rows cut at the foot and not the top
+(`tests/label-repair.test.ts`) — the width is an upper bound (13 read large, 12 exact, 14 cut at
 the side), but **the height is not**. It is the top row read at the far distance, and that
 row's ray rises for a piece taller than the lens and falls for a lower one: a tall piece reads
-HIGH (12 rows) and a low one LOW (15) — an 800 mm sofa 800 mm out read **333**, a 2.0 m wardrobe
+HIGH (12 rows) and a low one LOW (13) — an 800 mm sofa 800 mm out read **333**, a 2.0 m wardrobe
 **2667**. And the other side is not open: a rising ray means the top is above the camera
 wherever the piece stands, so the wardrobe is still taller than the lens and the sofa shorter.
-Judged both ways, **6 of the 43 correctly named pieces were called the wrong size** — the sofa
+Judged both ways, **6 of the 39 correctly named pieces were called the wrong size** — the sofa
 too short, the wardrobe too tall at all three tilts, a desk at two — and each of those
 rows started unticked. Now the floor placer reports which side each axis can speak for
 (`GeoPlacement.bounds`, typed `ReadBounds` in `lib/photo-geometry.ts`), `geoMeasure` carries it
 out beside the row, and `judgeLabel` accuses only where nowhere the piece could truly be is
-inside the band: **0 of 43**. The first version re-derived those sides in a function of its own
+inside the band: **0 of 39**. The first version re-derived those sides in a function of its own
 beside the placer, from the box; it agreed, and it was the same answer written twice. A word the reading could still be is scored on the band's edge, margin 0,
 rather than outside it — the scan screen hangs *the camera does not agree* on a negative margin,
 and it would have hung it on the right word. **That makes ties, and the tie was the next
@@ -7874,8 +7874,9 @@ defect:** every word a bounded reading could still be scores 0, so the list fell
 catalogue's order, and the wardrobe called a nightstand came last of five words when the scan
 screen shows two. Ties now go to the word whose band is nearest the reading as read, measured
 as the factor the reading would have to move by — as a share of each band's span it made a
-wide band look near, and a plant beat the wardrobe. Of the 325 wrong words caught, the right one
-now comes **first for 56** (37 before) and is **among the two chips for 127** (109). **The row
+wide band look near, and a plant beat the wardrobe. Of the 309 wrong words caught, the right one
+came **first for 56** and was **among the two chips for 122** (37 and 109 before the tie-break,
+taken on the fixture before the correction below and not re-taken). **The row
 said none of this** for a commit: its width and height were in view, so it got no *runs past
 the edge* note, and the sentence printed each limit as its one number — *Measured 2.76 m* for a
 height that is at most 2.76 and at least the lens. The verdict now carries each axis as the
@@ -7887,7 +7888,7 @@ shallower than typical reads 1680 and would have been told it is at most 1.68 m.
 in `lib/label-repair.ts` (`measuredPhrase`) rather than the page, where no test reached it.
 
 **Round pieces are a different solve and were measured separately:** a standing fan, plant,
-floor lamp and stool as cylinders of their catalogue size, same walls — 29 rows level and
+floor lamp and stool as cylinders of their catalogue size, same walls — 28 rows level and
 tipped up, every reading on the side its bound says, 0 accused. Tipped DOWN, where
 `floorFromRound` reads its tangents on the top row, it does not hold, and the first version of
 this section said it crossed once, harmlessly, having measured only 10°: the fan 300 mm out reads
@@ -7903,8 +7904,8 @@ reads **1680** against a typical sofa's 950, and 600 mm deep **1500**. The two-s
 it just as short, so the bound costs nothing there; it only fails to fix it. All three are
 pinned in `tests/label-repair.test.ts`.
 
-**The price, measured on the same fixture:** every other category's word on every row, 654
-judged — **476 caught before, 325 now.** The 151 between are words one photograph cannot rule
+**The price, measured on the same fixture:** every other category's word on every row, 597
+judged — **439 caught before, 309 now.** The 130 between are words one photograph cannot rule
 out once the piece may stand anywhere nearer: a coffee table far off and a nightstand close by
 make the same box. Two options, neither built:
 - **Judge width and height at ONE distance.** Both ride the same unknown, so a word must fit
@@ -7914,7 +7915,7 @@ make the same box. Two options, neither built:
   more, about 7%. Each axis is affine in the distance, so the real version is two intervals
   intersected, not a sweep. Those three figures were taken on the fixture before its bad row
   (below) was dropped and were not re-taken, so read them as a size of the prize, not a pin.
-- **Use "its back is on the wall" as evidence again.** Most of the old 476 came from it. It is
+- **Use "its back is on the wall" as evidence again.** Most of the old 439 came from it. It is
   the assumption the placer already makes, and accusing on it is what called a correct sofa too
   short. That is a trade only the user can weigh: a false *wrong size* leaves a correct piece
   out of the room (D4, only kept pieces go in), and a missed one lets the wrong model in.
@@ -7932,13 +7933,26 @@ radiator before a water dispenser).
 **And the fixture had a bad row, counted in every figure first quoted here.** A double bed 2 m
 deep standing against a wall 2 m from the lens reaches the lens, and the projection gave it a
 NaN width — read as *cut*, at x = 0. It is dropped (`box.every(Number.isFinite)`), which is why
-the fixture is 43 rows and not the 44 the first version of this section said; the six false
+the fixture was 43 rows and not the 44 the first version of this section said; the six false
 accusations were never on it, and every other figure above is re-taken. The bed is gone from
 the fixture now, and the fixture THROWS on any piece that does not stand wholly in front of the
 lens, rather than filtering it: the bed's other rows stood behind the camera and gave finite
 boxes, which the placer refused or the frame cut at the top — kept out by luck, which a change
 to either would have ended in silence. (The first version of this note said all of them were
 cut at the top; the second review found one refused instead.)
+
+**And five more, which were counted until D8's review.** Tipped up, eight of the box
+projections and three of the round ones stand wholly BELOW the frame. The fixture cut its boxes
+with its own copy of the clip, which for those gave a box of negative height, and the placer read
+four of the box rows and one round row off it. A scan never does: `clipToFrame` (§ 49.15) drops a
+box with nothing in the picture. The fixture now cuts with that function, which is 39 box rows and
+28 round, and the figures in this section that describe the fixture today, D8's below and
+§ 49.14's, are re-taken on them. The six false accusations are all still there and the round
+flags lose the one phantom, but **one figure changes its story**: the right word FIRST, which
+read 56 → 65 with D8, reads 56 → 53. The phantom rows carried 12 of D8's 65 and none of the
+one-sided judge's 56, so D8 still puts the right word among the two chips far more often
+(122 → 171) and no longer first more often. The review found it by asking why the fixture
+carried a clip of its own.
 
 **D8, 2026-09-29: judged at the reading, its back on the wall taken as evidence — BUILT.** The
 user's answer to the trade above was *"yeah, you can flag them"*. `judgeLabel` now judges each
@@ -7949,18 +7963,18 @@ reach a test are pinned in `tests/label-repair.test.ts`):
 
 | | correct words flagged | wrong words caught | right word first / in the two chips |
 |---|---|---|---|
-| 43 box rows, level and tipped up | 0 → **6** | 325 → **476** of 654 | 56 → 65 / 127 → 198 |
+| 39 box rows, level and tipped up | 0 → **6** | 309 → **439** of 597 | 56 → 53 / 122 → 171 |
 | 11 box rows, tipped down | 0 → **5** | 84 → **120** of 160 | 0 → 9 / 30 → 42 |
-| 29 round rows, level and tipped up | 0 → **13** | 294 → **332** of 507 | 75 → 75 / 126 → 128 |
+| 28 round rows, level and tipped up | 0 → **12** | 289 → **324** of 490 | 75 → 75 / 126 → 128 |
 
 **The price is larger than the one first put to the user, who was shown the six.** The six are
-the 43 box rows, every one 800 mm off its wall. Tipped down, five of eleven, again all 800 mm
-out, every one read low. And round pieces pay most: 13 of 29 for 38 more catches, because a
+the 39 box rows, every one 800 mm off its wall. Tipped down, five of eleven, again all 800 mm
+out, every one read low. And round pieces pay most: 12 of 28 for 35 more catches, because a
 round piece's far end is its own diameter off the wall, so 300 mm out is a larger share of its
 distance than of a sofa's, and a standing fan's typical 650 × 900 is its band's widest and
 shortest, as a stool's 500 nearly is, so a reading a few percent off puts it outside even
 against the wall. **Exempting round pieces is the obvious follow-up and is not built**: it
-would give back the 13 and 38 catches, and it is the user's to weigh, as D8 was.
+would give back the 12 and 35 catches, and it is the user's to weigh, as D8 was.
 
 Three things went with the bound. The tie-break between words (the factor a reading would have
 to move by, above) is deleted: judged at the reading, every word that fits is inside its band,
@@ -8180,9 +8194,9 @@ the calls.
 has the row say its reading is an estimate, and since D8 judges the word at that reading on
 purpose, the back on the wall taken as evidence. The room is still built
 from it: `geoRefine` writes the reading into `dimMM`, and `buildSceneFromRoom` builds that, clamped
-to the kind's band. Measured on § 49.10's 43 rows, the correct word on each, through `toRecord` and
-`buildSceneFromRoom`: of the 28 widths the photo read as a most-it-can-be, **14 are built more than
-10% wider than the piece** (mean error 21%), and of the 43 heights read as a limit, **21 are built
+to the kind's band. Measured on § 49.10's 39 rows, the correct word on each, through `toRecord` and
+`buildSceneFromRoom`: of the 25 widths the photo read as a most-it-can-be, **13 are built more than
+10% wider than the piece** (mean error 21%), and of the 39 heights read as a limit, **19 are built
 more than 10% off** (12%). Six heights hit the band and are clamped to its edge, which hides by how
 much: the 800 mm sofa read **333** goes in at **600**, the 750 mm desk read **250** at **600**, the
 2.0 m wardrobe read **2667** at **2600**. Not a regression: the two-sided judge read the same
@@ -8190,8 +8204,9 @@ number, and this is what the room was built from before § 49.10 too.
 
 One idea, measured and not built: build a limited axis at the kind's TYPICAL size
 (`defaultAxisFor`), held inside what the photo allows — `[0, reading]` for a width, `[lens,
-reading]` for a height whose top ray rose, `[reading, lens]` for one whose ray fell. On the same rows, widths more than 10% off **14 → 11** (mean
-**21% → 7%**) and heights **21 → 6** (**12% → 7%**). **The fixture flatters it**, and that is the
+reading]` for a height whose top ray rose, `[reading, lens]` for one whose ray fell. On the same rows, widths more than 10% off **13 → 11** (mean
+**21% → 8%**) and heights **19 → 4** (**12% → 6%**). (First taken on 43 rows, four of them the
+phantoms § 49.10 describes: 14 → 11 and 21 → 6.) **The fixture flatters it**, and that is the
 first thing to fix before trusting those figures: three of the six pieces are the catalogue's
 typical height exactly (nightstand, bookshelf, desk), so on those a typical size cannot be wrong.
 It wants pieces off typical in both directions, and a look at what it does to a correct row the

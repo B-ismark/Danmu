@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, measuredPhrase, sizeFitsLabel, type LabelVerdict } from '@/lib/label-repair';
-import { AS_READ, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
+import { AS_READ, clipToFrame, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
   PART_LIBRARY,
@@ -329,6 +329,16 @@ describe('judgeLabel — a box the edge of the photo cut', () => {
   });
 });
 
+// A projected box cut to the photo by the pipeline's own `clipToFrame`, so these
+// fixtures judge the box the scan screen would hand the judge — and a piece standing
+// wholly below the frame is `null` here as it is there, a row no scan produces.
+const clip = (box: readonly number[]): Detection['box'] | null => clipToFrame(box);
+/** A box a test photographs on purpose, which failing to be in the picture is a fixture mistake. */
+const seen = (box: Detection['box'] | null): Detection['box'] => {
+  if (!box) throw new Error('a piece this test photographs is not in the picture');
+  return box;
+};
+
 describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   // A box that reaches the bottom of the photo has no seen near edge, so
   // `placeFloorObject` reads it at the far end of where it could stand — the last row's
@@ -336,11 +346,10 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   // 800 mm off the north wall on the 106° lens, level and tipped UP 10° and 20° — a
   // negative `tiltRad`, the phone angled to get the ceiling in, which is how people
   // photograph a room; kept are the rows the frame cut at the foot and not the top,
-  // that the placer measured.
-  const clip = ([x, y, w, h]: readonly number[]): Detection['box'] => {
-    const x0 = Math.max(0, x), y0 = Math.max(0, y);
-    return [x0, y0, Math.min(1, x + w) - x0, Math.min(1, y + h) - y0];
-  };
+  // that the placer measured. Tipped up, eight of the box projections and three of the
+  // round ones stand wholly below the frame, and `clipToFrame` drops them as the scan
+  // does. Five were counted here, read off boxes of negative height, until the fixture
+  // cut its boxes with the pipeline's own function rather than a copy of it.
   const PIECES: Array<[Category, Shape, number, number]> = [
     ['nightstand', 'nightstand', 450, 550],
     ['sofa', 'sofa', 2000, 800],
@@ -350,7 +359,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     ['desk', 'desk-standard', 1200, 750],
   ];
   const calAt = (tiltDeg: number): CameraCal => ({ ...WIDE, tiltRad: (tiltDeg * Math.PI) / 180 });
-  const boxOf = (category: Category, shape: Shape, w: number, h: number, gap: number, cal: CameraCal) => {
+  const sighting = (category: Category, shape: Shape, w: number, h: number, gap: number, cal: CameraCal) => {
     const depth = defaultDepthFor(category, shape) / 1000;
     // A piece must stand wholly in front of the lens, or its corners project from at or
     // behind the camera and the box is one no photograph makes. A double bed was here,
@@ -362,11 +371,13 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     const z = -(wallD('n', ROOM) - gap - depth / 2);
     return clip(bboxOfFloorBox('n', 0.3, z, w / 1000, h / 1000, depth, cal));
   };
+  const boxOf = (...piece: Parameters<typeof sighting>) => seen(sighting(...piece));
   const ROWS = [0, -10, -20].flatMap((tiltDeg) =>
     PIECES.flatMap(([category, shape, w, h]) =>
       [0, 0.3, 0.8].flatMap((gap) => {
         const cal = calAt(tiltDeg);
-        const box = boxOf(category, shape, w, h, gap, cal);
+        const box = sighting(category, shape, w, h, gap, cal);
+        if (!box) return [];
         const c = frameCuts(box);
         const d = det({ category, shape, slot: 'n', box });
         const { row, bounds } = geoMeasure(d, { n: cal }, ROOM);
@@ -401,9 +412,9 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   };
 
   it('reads each axis on the side its placer says, never the other', () => {
-    expect(ROWS).toHaveLength(43);
+    expect(ROWS).toHaveLength(39);
     // Every direction the rule allows is exercised, so the fixture can tell them apart.
-    expect(tally(ROWS)).toEqual({ widthLarge: 14, widthCut: 15, heightLow: 15, heightHigh: 12, exact: 16 });
+    expect(tally(ROWS)).toEqual({ widthLarge: 13, widthCut: 14, heightLow: 13, heightHigh: 12, exact: 14 });
   });
 
   // The round placer is a different solve — tangents to a circle, not corners of a box —
@@ -417,6 +428,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         const dia = defaultAxisFor(category, shape, 0), h = defaultAxisFor(category, shape, 2);
         const z = -(wallD('n', ROOM) - gap - dia / 2000);
         const box = clip(bboxOfFloorCylinder('n', 0.3, z, dia / 1000, h / 1000, cal));
+        if (!box) return [];
         const c = frameCuts(box);
         const d = det({ category, shape, slot: 'n', box });
         const { row, bounds } = geoMeasure(d, { n: cal }, ROOM);
@@ -427,10 +439,10 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
 
   it('reads a round piece on the same sides, and judges it at that reading (D8)', () => {
     const rows = [0, -10, -20].flatMap(roundRows);
-    expect(rows).toHaveLength(29);
-    expect(tally(rows)).toEqual({ widthLarge: 26, widthCut: 1, heightLow: 11, heightHigh: 12, exact: 6 });
+    expect(rows).toHaveLength(28);
+    expect(tally(rows)).toEqual({ widthLarge: 25, widthCut: 1, heightLow: 10, heightHigh: 12, exact: 6 });
     // The price of taking its back on the wall as evidence is steeper here than on the
-    // box pieces: 13 of 29 correctly named, where judged only on the side the reading
+    // box pieces: 12 of 28 correctly named, where judged only on the side the reading
     // speaks for it was none. Two things make it so, and both are real rather than the
     // fixture's. A round piece's far end is its own diameter off the wall, so 300 mm
     // out is a larger share of its distance than of a sofa's; and a standing fan's
@@ -449,7 +461,6 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
       'fan-standing 20° up, 0.3 m out',
       'lamp-floor 20° up, 0.8 m out',
       'stool 20° up, 0 m out',
-      'stool 20° up, 0.3 m out',
     ]);
   });
 
@@ -488,7 +499,8 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
       PIECES.flatMap(([category, shape, w, h]) =>
         [0, 0.3, 0.8].flatMap((gap) => {
           const cal = calAt(t);
-          const box = boxOf(category, shape, w, h, gap, cal);
+          const box = sighting(category, shape, w, h, gap, cal);
+          if (!box) return [];
           const c = frameCuts(box);
           const d = det({ category, shape, slot: 'n', box });
           const { row, bounds } = geoMeasure(d, { n: cal }, ROOM);
@@ -518,7 +530,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     const level = calAt(0);
     const read = (depthM: number) => {
       const z = -(wallD('n', ROOM) - depthM / 2);
-      const box = clip(bboxOfFloorBox('n', 0.3, z, 2.0, 0.8, depthM, level));
+      const box = seen(clip(bboxOfFloorBox('n', 0.3, z, 2.0, 0.8, depthM, level)));
       const { row, bounds } = geoMeasure(det({ category: 'sofa', shape: 'sofa', slot: 'n', box }), { n: level }, ROOM);
       expect(frameCuts(box)).toMatchObject({ bottom: true, left: false, right: false });
       expect(bounds.width.kind).toBe('upper');
@@ -529,7 +541,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   });
 
   it('calls six correct words the wrong size, the price of D8', () => {
-    // Judged at the reading on the uncut axes, six of the forty-three readings of a
+    // Judged at the reading on the uncut axes, six of the thirty-nine readings of a
     // correctly named piece fall outside its own band, every one of them a piece 800 mm
     // off its wall. Judged only on the side the reading could speak for, none did; the
     // user chose to catch the wrong words that let through, and pay this for it (D8).
@@ -636,7 +648,8 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   it('puts the right word where the scan screen shows it', () => {
     // Of the wrong words caught on the fixture, how often the right one is first, and
     // how often it is among the two chips the scan screen shows. Judged only on the
-    // side each reading could speak for, it caught 325, 56 first and 127 of the two.
+    // side each reading could speak for, it caught 309, 56 first and 122 of the two:
+    // D8 puts the right word in the two chips far more often and first slightly less.
     let caught = 0, first = 0, shown = 0;
     for (const { d, cal } of ROWS) {
       for (const category of CATEGORIES) {
@@ -649,14 +662,14 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         if (i === 0 || i === 1) shown++;
       }
     }
-    expect([caught, first, shown]).toEqual([476, 65, 198]);
+    expect([caught, first, shown]).toEqual([439, 53, 171]);
   });
 
   it('catches most of the wrong words in the fixture', () => {
     // Every other category's word on every row, where its own placer measured it. Of
-    // 654 it catches 476, and accuses six correct words doing it (above). Judged only
-    // on the side each reading could speak for, it caught 325 and accused none: the
-    // 151 between are words one photograph cannot rule out once the piece may stand
+    // 597 it catches 439, and accuses six correct words doing it (above). Judged only
+    // on the side each reading could speak for, it caught 309 and accused none: the
+    // 130 between are words one photograph cannot rule out once the piece may stand
     // anywhere nearer, and taking its back on the wall as evidence rules them out
     // anyway. That trade is the user's call, D8 in § 49.10.
     let judged = 0, caught = 0;
@@ -669,7 +682,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         if (v.status === 'suspect') caught++;
       }
     }
-    expect([judged, caught]).toEqual([654, 476]);
+    expect([judged, caught]).toEqual([597, 439]);
   });
 });
 
@@ -855,11 +868,7 @@ describe('judgeLabel — on the plane its placer read it on', () => {
     // this row with the WALL placer, which saw its width and grew the height the top of
     // the frame cut. Read as a ceiling piece it was "cut" on the width it had measured
     // and silent on the height it had grown.
-    const clip = ([x, y, w, h]: readonly number[]): Detection['box'] => {
-      const x0 = Math.max(0, x), y0 = Math.max(0, y);
-      return [x0, y0, Math.min(1, x + w) - x0, Math.min(1, y + h) - y0];
-    };
-    const box = clip(bboxOfWallSolid('n', 'n', 0.2, 1.75, wallD('n', ROOM), 1.4, 1.9, 0.08, CAL));
+    const box = seen(clip(bboxOfWallSolid('n', 'n', 0.2, 1.75, wallD('n', ROOM), 1.4, 1.9, 0.08, CAL)));
     expect(frameCuts(box)).toEqual({ left: false, right: false, top: true, bottom: false });
     const d = det({ label: 'curtain', category: 'curtain', shape: 'lamp-pendant', slot: 'n', box });
     expect(sceneShapeFor('curtain', d.label, d.shape)).toBe('lamp-pendant');

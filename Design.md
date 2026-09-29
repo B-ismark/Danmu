@@ -707,10 +707,10 @@ assumption the placer makes, and taking it as evidence catches the wrong words a
 the foot otherwise lets through; the price is a correctly named piece that stands nearer the
 room, called the wrong size and left unticked, one tap from kept. Measured in
 `tests/label-repair.test.ts`, against judging each axis only on the side its reading could
-speak for: on 43 box pieces tipped level or up it catches 476 of 654 wrong words where that
-caught 325, and flags 6 of the 43 correct ones, every one 800 mm off its wall; tipped down,
-120 of 160 against 84, and 5 of 11 flagged; and round pieces pay most, 332 of 507 against 294
-for 13 of 29 flagged, because a round piece's far end is its own diameter off the wall and a
+speak for: on 39 box pieces tipped level or up it catches 439 of 597 wrong words where that
+caught 309, and flags 6 of the 39 correct ones, every one 800 mm off its wall; tipped down,
+120 of 160 against 84, and 5 of 11 flagged; and round pieces pay most, 324 of 490 against 289
+for 12 of 28 flagged, because a round piece's far end is its own diameter off the wall and a
 standing fan's typical size sits on its band's edges. The placer still says which way each
 axis could be wrong (`GeoPlacement.bounds`, `lib/photo-geometry.ts`, which `geoMeasure`
 carries out beside the row), and the verdict names the axes it read at an assumed distance
