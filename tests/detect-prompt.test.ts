@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { buildDetectPrompt, cloudRows, readCloudReply } from '@/lib/detect-prompt';
 import { detectionBox } from '@/lib/local-detect';
 import { SLIVER } from '@/lib/photo-geometry';
+import { stripComments } from './helpers/source';
 import { CATALOG_SHAPES_ORDERED } from '@/lib/scene-spec';
 
 const ROOM = { width: 5.6, depth: 4.2, height: 2.8, layoutId: 'rect' as const };
@@ -238,5 +241,40 @@ describe('readCloudReply: a reply with nothing to act on is not an empty room', 
   it('keeps the rows it can use when only some are past the frame', () => {
     const reply = readCloudReply(JSON.stringify([row([412, 300, 520, 260]), row([0.1, 0.2, 0.3, 0.4])]));
     expect('rows' in reply && reply.rows.map((d) => d.box)).toEqual([[0.1, 0.2, 0.3, 0.4]]);
+  });
+});
+
+describe('only the reply to a Gemini call is stamped as the cloud’s', () => {
+  // `cloudRows` says so in a comment, and until the review of D8 nothing held it: a
+  // second caller, or a second stamp, would put "sent to Gemini" on rows that were not.
+  // Comments are stripped and strings kept, since the stamp IS a string.
+  const files: Array<[string, string]> = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(full)) files.push([relative(process.cwd(), full), stripComments(readFileSync(full, 'utf8'))]);
+    }
+  };
+  for (const root of ['app', 'components', 'lib']) walk(join(process.cwd(), root));
+  const count = (re: RegExp) =>
+    Object.fromEntries(files.map(([f, src]) => [f, (src.match(re) ?? []).length]).filter(([, n]) => n));
+
+  it('reads the files it sweeps', () => {
+    const names = files.map(([f]) => f);
+    for (const f of ['lib/detect-prompt.ts', 'lib/detection.ts', 'lib/local-detect.ts', 'app/onboarding/detect/page.tsx']) {
+      expect(names).toContain(f);
+    }
+  });
+
+  it('calls cloudRows only from readCloudReply, and that only from detectAcrossImages', () => {
+    // Its definition and the one call in `readCloudReply`; that definition and the
+    // one call in `detectAcrossImages`.
+    expect(count(/\bcloudRows\s*\(/g)).toEqual({ 'lib/detect-prompt.ts': 2 });
+    expect(count(/\breadCloudReply\s*\(/g)).toEqual({ 'lib/detect-prompt.ts': 1, 'lib/detection.ts': 1 });
+  });
+
+  it('writes the cloud stamp in one place', () => {
+    expect(count(/\bsource\s*:\s*['"`]cloud['"`]/g)).toEqual({ 'lib/detect-prompt.ts': 1 });
   });
 });
