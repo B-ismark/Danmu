@@ -948,8 +948,8 @@ export type ReadBound =
  *  rooms are photographed, the round rows hold but three, all one case: a stool the frame
  *  shows only the top of, whose box's sides are where its seat crosses the frame's
  *  bottom and not the tangents they are read as (pinned in the same file). The box rows
- *  hold at every tilt there, boxed as the photo draws them, since a foot-cut box's side
- *  is read where the frame crosses it (§ 49.20).
+ *  hold at every tilt that file sweeps, 25° up to 20° down, boxed as the photo draws
+ *  them, since a foot-cut box's side is read where the frame crosses it (§ 49.20).
  *
  *  **Both directions also lean on the catalogue depth**, because the far end is the
  *  piece's back on the plaster at its kind's typical depth. A piece deeper than that
@@ -1066,8 +1066,11 @@ function floorFromBox(
   near: number,
   depthM: number,
   cal: CameraCal,
+  /** The bottom row's `(H − y)/f` when the frame cut the piece's foot, else null. The
+   *  caller's, so the cut test and the row are read once. */
+  footRow: number | null,
 ): { d: number; right: number; widthM: number; heightM: number; rises: boolean } | null {
-  const [bx, by, bw, bh] = box;
+  const [bx, by, bw] = box;
   const far = near + depthM;
   const top = ray(bx + bw / 2, by, cal);
   if (!(top.fwd > 0)) return null;
@@ -1080,10 +1083,11 @@ function floorFromBox(
   if (!(heightM > 0)) return null;
 
   // Cut at its foot, the side the photo shows is the part of the piece above the frame's
-  // bottom row, which the row's plane through the lens cuts off the side face.
-  const bottom = ray(bx + bw / 2, by + bh, cal);
+  // bottom row, which the row's plane through the lens cuts off the side face. Nothing
+  // left above it is a box with no height, which a saved record can still hold.
   const side: Array<[number, number]> = [[near, 0], [far, 0], [far, heightM], [near, heightM]];
-  const shown = frameCuts(box).bottom && bottom.fwd > 0 ? aboveRow(side, -bottom.up / bottom.fwd, cal) : side;
+  const shown = footRow === null ? side : aboveRow(side, footRow, cal);
+  if (!shown.length) return null;
   const span = lateralSpan(box, shown, cal);
   if (!span) return null;
   return { d: near + depthM / 2, right: span.right, widthM: span.widthM, heightM, rises: top.up > 0 };
@@ -1133,13 +1137,13 @@ function lateralSpan(
   // Arithmetic protection, and it does not fire now — said plainly rather than left
   // looking tested. A negative `zc` would flip the sign of both silhouette edges and
   // hand back a mirrored piece in silence, so the guard is worth its line. This note
-  // said it never fired, from a sweep of boxes the frame showed whole, and it did: 312
-  // times across the suite while a foot-cut floor piece was read over its WHOLE side
-  // face, where a lens tipped up puts the near foot behind its own plane — on the label
-  // fixture, a bed or a rug named on a smaller piece, so judged as nothing. Read over
-  // the part above the frame's bottom row (§ 49.20) it fires on no input in the suite,
-  // and deleting it fails nothing. Documented instead of given a test that would have
-  // to pretend.
+  // said it never fired, from a sweep of boxes the frame showed whole, and it did:
+  // counted by instrumenting it, 312 times across the suite at 5f00702, while a
+  // foot-cut floor piece was read over its WHOLE side face, where a lens tipped up puts
+  // the near foot behind its own plane — on the label fixture, a bed or a rug named on
+  // a smaller piece, so judged as nothing. Read over the part above the frame's bottom
+  // row (§ 49.20) it fires on no input in the suite, and deleting it fails nothing.
+  // Documented instead of given a test that would have to pretend.
   if (!(zMin > 0)) return null;
 
   const tanL = tanX(bx, cal);
@@ -1732,7 +1736,9 @@ export function placeFloorObject(
     const oneSide = foot.round && cut.left !== cut.right && !cut.bottom && foot.whole
       ? floorFromRoundOneSide(box, at, cal, cut.left, foot.whole.widthM / 2, walls)
       : null;
-    return foot.round ? oneSide ?? floorFromRound(box, at, cal) : floorFromBox(box, at, depthM, cal);
+    // `bottom.fwd > 0` here: the ray points down and `near` came out positive.
+    const footRow = cut.bottom ? -bottom.up / bottom.fwd : null;
+    return foot.round ? oneSide ?? floorFromRound(box, at, cal) : floorFromBox(box, at, depthM, cal, footRow);
   };
   const solved = solve(near, frame);
   if (!solved) return null;

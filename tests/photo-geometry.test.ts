@@ -939,7 +939,7 @@ describe('a box the edge of the photo cut off', () => {
     expect(low.position.y).toBeCloseTo(seen.position.y, 9);
   });
 
-  it('places a floor piece cut at the side from its inner edge, where the box alone reads short or below nothing', () => {
+  it('places a floor piece cut at the side from its inner edge, where the box alone reads short or below nothing; at the corner, § 49.21 is pinned', () => {
     // A bookshelf against the north wall near its east end, on the ultrawide, cut off
     // at the right. The outer edge is the frame, not the near corner `lateralSpan`
     // takes it for, so the box on its own is a sliver — or, nearer the corner, less
@@ -969,6 +969,19 @@ describe('a box the edge of the photo cut off', () => {
     // clipped to the frame, as this fixture boxed it until § 49.20, kept the foot's row,
     // and the edge read exact.
     expect(c.position.x - c.widthMM / 2000).toBeCloseTo(2.3011, 4);
+  });
+
+  it('reads nothing off a foot-cut box with no height, rather than a width of Infinity', () => {
+    // A saved record keeps its box raw when the frame clip refuses it, so a box whose
+    // bottom row is above its top can still reach the placer. Its side has nothing above
+    // the bottom row, so there is no side to read: at 10° and 20° up, an empty side read
+    // as a width of Infinity at no position.
+    const box: [number, number, number, number] = [0.4, 1.0, 0.2, -0.004];
+    expect(frameCuts(box).bottom).toBe(true);
+    for (const tilt of [-10, -20]) {
+      const cal = { ...WIDE, tiltRad: (tilt * Math.PI) / 180 };
+      expect(placeFloorObject(box, 'n', ROOM, cal, { depthM: 0.4 })).toBeNull();
+    }
   });
 
   it('never slides a grown piece off the part of it the photo saw', () => {
