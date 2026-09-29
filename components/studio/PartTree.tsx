@@ -913,6 +913,7 @@ function PartRow({
           label={`Remove ${name}`}
           title="Remove (Del)"
           tone="danger"
+          className="row-remove"
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
@@ -1052,6 +1053,7 @@ function GroupRow({
           label={`Remove these ${total} pieces`}
           title="Remove the whole group (Del)"
           tone="danger"
+          className="row-remove"
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
