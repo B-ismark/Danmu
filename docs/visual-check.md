@@ -968,32 +968,21 @@ halves.*
 
 ### View behind a gear, collapsed rails as icon strips — merged to `main` in `5114b5f` (PR #179)
 
-**Asked for, and walked once in headless Chromium.** The View controls (floor grid, decor,
-sounds, quality) moved from the right rail's foot to a gear left of `?`. A shut rail is a
-44px icon strip rather than an empty pill. (The designed empty panel that shipped with it
-has since been cut back to a mark and one line, on this branch.) Screenshots were taken at 1440 × 900,
-820 × 1000 and a phone width, and each looked right. What is left needs a real mouse, a
-real finger and a real screen reader.
+**Looked at: the gear and the shut rails.** In the walkthrough the gear menu (toggles,
+outside press, Escape, Help and View closing each other) and the collapsed strips
+(tooltips, Style opening Style) both passed on a real mouse. What is left needs a keyboard,
+a real finger and a real screen reader.
 
 **Where to click.**
-- **Laptop.** Press the gear, then toggle each control. Press outside it and it should
-  close. Open it again and press Escape: it should close with focus back on the gear.
-  Open `?`, then press the gear: Help should close as View opens, and the other way round.
-- **Laptop, rails shut.** Collapse both rails. Hover each strip icon, then press Style on
-  the left strip.
 - **Laptop, right rail shut, a piece selected.** Press the piece's icon on the strip with the
   keyboard (Tab to it, Enter). The rail opens and the next Tab moves on inside it.
 - **Phone.** Press the toolbar's **View**. Then, with the sheet up, tap a piece in the room:
   the sheet should become that piece's Details.
 
 **What wrong looks like.**
-- A strip tooltip that opens over the next icon or off the window's edge.
-- The left rail opening on the wrong section, or opening with focus lost to the page (Tab
-  should go on from the Style header).
-- The gear's card cut off at a narrow laptop width, or overlapping the room switcher.
+- The rail opening with focus lost to the page.
 - The phone's View sheet taller than its controls with a scrollbar anyway.
 - A screen reader announcing a strip icon as "button" with no name.
-- Help's card and View's card on screen at once.
 
 **Settled without eyes.** Each strip icon asks for its section and opens the rail. The tree
 takes that request once and focuses the section. Side tooltips are placed beside their
