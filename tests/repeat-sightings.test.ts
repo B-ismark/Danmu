@@ -463,7 +463,8 @@ describe('the known room', () => {
       const first = readTwice(single(1.7), 'single bed');
       const second = readTwice(single(2.8), 'single bed');
       const refined = refineDetections([...first, ...second], cals, ROOM);
-      const whose = refined.map((d) => (first.some((f) => f.box === d.box) ? 'first' : 'second'));
+      const of = (bed: Detection[], d: Detection) => bed.some((f) => f.box === d.box);
+      const whose = refined.map((d) => (of(first, d) ? 'first' : of(second, d) ? 'second' : 'neither'));
       expect(whose).toEqual(['first', 'first', 'first', 'first', 'second', 'second']);
       expect(keptAtFirst(refined, refined.map(() => true), ROOM, cals).size).toBe(2);
     }
