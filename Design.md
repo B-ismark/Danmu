@@ -424,12 +424,20 @@ Furniture detection runs through a fallback chain, best-effort:
    continuing with fewer has always been allowed, the ordinary one-wall run
    described three photographs that did not exist and invited the model to furnish
    them. It now counts them, names the walls nobody photographed as missing, lists
-   only the cameras it has, and constrains the `slot` it will accept back to the
-   ones it sent. The **coordinate system stays whole** — `position` is reported in
-   room coordinates and those are defined by all four wall planes. The reply is
-   read there too (`cloudRows`): a row with no box or no slot is dropped, and every
-   box is cut to the photo, the same way the on-device boxes are (§4, *A box the
-   edge of the photo cut*).
+   only the cameras it has, and asks for a `slot` among the ones it sent. The
+   **coordinate system stays whole** — `position` is reported in room coordinates
+   and those are defined by all four wall planes. The reply is read there too
+   (`cloudRows`): a row with no box is dropped, and so is one filed under a wall
+   that was not photographed — the wall read in the prompt's own words, `n`, `N`,
+   `north` or the photo's heading `N WALL` (`slotOf`) — and every box is cut to the
+   photo, the same way the on-device boxes are (§4, *A box the edge of the photo
+   cut*). With one photo sent there is one wall a row can be on, so its own `slot`
+   decides nothing. The prompt and the reader come from one call, `cloudRequest`,
+   so the walls the model is told about and the walls its reply is held to are one
+   list. A row with no name is named by its category, and the model's `uid` is
+   left off, since the app's uid becomes the piece's id. That sentence said
+   "constrains the slot it will accept back" while only the prompt asked
+   (§ 49.17).
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
    detector is available.
 

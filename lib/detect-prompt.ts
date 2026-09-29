@@ -24,6 +24,36 @@ export type PromptRoom = { width: number; depth: number; height: number; layoutI
 
 const SLOT_NAME: Record<CaptureSlot, string> = { n: 'NORTH', e: 'EAST', s: 'SOUTH', w: 'WEST' };
 
+/** A wall as a reply may name it. The prompt asks for `"n"`, but it also calls the
+ *  walls NORTH, EAST, SOUTH and WEST, and heads each photo `--- N WALL ---`, so a
+ *  reply in any of those forms — `N WALL` and `north wall` included — is the
+ *  prompt's own words read back, not a guess about which wall was meant. A Map
+ *  rather than an object, so `"constructor"` is not a wall. */
+const SLOT_OF = new Map<string, CaptureSlot>(
+  (Object.entries(SLOT_NAME) as [CaptureSlot, string][]).flatMap(([code, name]) => [
+    [code, code],
+    [name.toLowerCase(), code],
+  ]),
+);
+
+/** The wall code a reply's `slot` names, or undefined when it names none. */
+export function slotOf(v: unknown): CaptureSlot | undefined {
+  return typeof v === 'string' ? SLOT_OF.get(v.trim().toLowerCase().replace(/\s+wall$/, '')) : undefined;
+}
+
+/** The wall a reply's row is filed under, among the walls `sent`, or undefined.
+ *  With ONE photo sent the row's own `slot` decides nothing: the prompt asks for a
+ *  box in fractions of that slot's image, and there is no other image for it to be
+ *  on, so a row naming another wall is misfiled rather than off the photos. Dropping
+ *  it would refuse furniture boxed on the only picture there is — and the one-photo
+ *  scan is the ordinary one. With two or more, a row naming a wall nobody
+ *  photographed could be on either, and nothing says which. */
+function wallOf(d: { slot?: unknown }, sent: readonly CaptureSlot[]): CaptureSlot | undefined {
+  if (sent.length === 1) return sent[0];
+  const slot = slotOf(d.slot);
+  return slot && sent.includes(slot) ? slot : undefined;
+}
+
 /** Where the lens points and which way the image runs, per wall. The camera
  *  POSITION is stated once in the opening line instead of hiding in the `n`
  *  entry, which is where it used to live — a set without a north photo never
@@ -147,30 +177,64 @@ Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by vis
  *  image, and a box that runs past the edge describes rows and columns nobody saw —
  *  a cut box's top row is the frame's edge, which the ceiling solve stands on. A row
  *  with no box in frame is dropped, as a row with no box always was, and so is a
- *  sliver, by the rule the on-device rows are dropped by. */
-export function cloudRows(parsed: readonly unknown[]): Detection[] {
+ *  sliver, by the rule the on-device rows are dropped by.
+ *
+ *  So is a row naming a wall that was not photographed (§ 49.17), read through
+ *  `wallOf`. It had no camera to be measured by, so it kept the model's own size and
+ *  place and was built as though it were read off a photo. `sent` is required rather
+ *  than defaulted to all four walls, because the default is the check switched off.
+ *  A row with no name the rest of the app can read is named by its category, or
+ *  dropped when it has neither (`nameOf`). */
+export function cloudRows(parsed: readonly unknown[], sent: readonly CaptureSlot[]): Detection[] {
   return (parsed as Detection[]).flatMap((d) => {
-    const box = d && Array.isArray(d.box) && d.slot ? boxInPhoto(d.box) : null;
+    const slot = filedUnder(d, sent);
+    const label = slot && nameOf(d);
+    if (!slot || label === undefined || !Array.isArray(d.box)) return [];
+    const box = boxInPhoto(d.box);
+    // A `uid` is not the model's to give: the detect screen keeps a row's uid and
+    // it becomes the piece's id in the room, so two rows sent with the same one
+    // would be one piece to every move, turn and resize the user makes.
+    const { uid: _uid, ...row } = d;
     // Stamped here, and called only by `readCloudReply`, which only
     // `detectAcrossImages` calls, so nothing but the reply to a Gemini call can
-    // claim its output came from Gemini.
-    return box ? [{ ...d, box, source: 'cloud' as const }] : [];
+    // claim its output came from Gemini. The slot is written back as its code:
+    // the saved record carries it as a `__slot:x` suffix that reads back only
+    // `[nesw]`, and `cals[d.slot]` is keyed the same way.
+    return box ? [{ ...row, label, slot, box, source: 'cloud' as const }] : [];
   });
+}
+
+/** What a row is called: its own `label`, or its `category` when the model left the
+ *  label out, or undefined when it gave neither. A label that is not a string is not
+ *  a name, and every reader of one assumes it is — the merge folds it with
+ *  `toLowerCase` and the saved record appends the wall to it with `replace`, so one
+ *  numeric label threw out of the scan with the photos already spent. */
+function nameOf(d: { label?: unknown; category?: unknown }): string | undefined {
+  if (typeof d.label === 'string') return d.label;
+  return typeof d.category === 'string' ? d.category : undefined;
+}
+
+/** The first thing `cloudRows` asks of a row: which photographed wall it is filed
+ *  under. Its own function so `readCloudReply` can say which question a refused
+ *  reply failed. */
+function filedUnder(d: unknown, sent: readonly CaptureSlot[]): CaptureSlot | undefined {
+  return d ? wallOf(d as { slot?: unknown }, sent) : undefined;
 }
 
 /** A reply's rows, or why it holds nothing the screen may act on. */
 export type CloudReply = { rows: Detection[] } | { unreadable: string; cause: unknown };
 
-/** What a Gemini reply says. Three kinds of body are not an answer, and each was
- *  once read as an empty room — the detect screen's "nothing stood out in your
- *  photos, which is exactly right for an empty room", with the quota already spent:
- *  a body that is not JSON, JSON that is not a list, and a list none of whose rows
- *  `cloudRows` keeps. The third is the cut's (§ 49.15): a reply in some unit other
- *  than the fractions the prompt asks for can put every box past the frame, and
- *  dropping them row by row left no sign that anything had gone wrong. So it is
- *  unreadable, and the screen offers Retry. An EMPTY list is the one empty reply
- *  that is an answer, and stays one. */
-export function readCloudReply(text: string): CloudReply {
+/** What a Gemini reply says, about the walls in `sent`. Three kinds of body are not
+ *  an answer, and each was once read as an empty room — the detect screen's "nothing
+ *  stood out in your photos, which is exactly right for an empty room", with the
+ *  quota already spent: a body that is not JSON, JSON that is not a list, and a list
+ *  none of whose rows `cloudRows` keeps. The third is the cut's (§ 49.15): a reply in
+ *  some unit other than the fractions the prompt asks for can put every box past the
+ *  frame, and dropping them row by row left no sign that anything had gone wrong.
+ *  A reply filing every row under walls nobody photographed is the same case
+ *  (§ 49.17). So it is unreadable, and the screen offers Retry. An EMPTY list is the
+ *  one empty reply that is an answer, and stays one. */
+export function readCloudReply(text: string, sent: readonly CaptureSlot[]): CloudReply {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -180,9 +244,35 @@ export function readCloudReply(text: string): CloudReply {
   if (!Array.isArray(parsed)) {
     return { unreadable: 'The detection service replied in an unexpected shape.', cause: parsed };
   }
-  const rows = cloudRows(parsed);
+  const rows = cloudRows(parsed, sent);
   if (parsed.length > 0 && rows.length === 0) {
-    return { unreadable: 'The detection service replied with no box inside the photos.', cause: parsed };
+    // Told apart because the fixes differ: a reply in the wrong unit needs the boxes
+    // read differently, one filed under the wrong walls needs the walls. It used to
+    // say "no box" for every one. Asked in `cloudRows`'s order, so the reason is the
+    // first question no row got past.
+    const filed = parsed.filter((d) => filedUnder(d, sent));
+    const unreadable =
+      filed.length === 0
+        ? 'The detection service filed no piece under a wall that was photographed.'
+        : !filed.some((d) => nameOf(d as { label?: unknown }) !== undefined)
+          ? 'The detection service replied with no name for any piece.'
+          : 'The detection service replied with no box inside the photos.';
+    return { unreadable, cause: parsed };
   }
   return { rows };
+}
+
+/** One cloud request's two ends, built from one list of walls: the prompt that tells
+ *  the model which walls were photographed, and the reader that holds its reply to
+ *  them (§ 49.17). One call rather than two, so a caller has no way to hand the
+ *  prompt one list and the reader another — which the first version of this check
+ *  guarded with a regex over `lib/detection.ts`, a test of how the call was spelt
+ *  rather than of which list it used. The list is copied, so a caller changing its
+ *  own array afterwards changes neither end. */
+export function cloudRequest(
+  room: PromptRoom,
+  sent: readonly CaptureSlot[],
+): { prompt: string; read: (text: string) => CloudReply } {
+  const walls = [...sent];
+  return { prompt: buildDetectPrompt(room, walls), read: (text) => readCloudReply(text, walls) };
 }

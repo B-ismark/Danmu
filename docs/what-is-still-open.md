@@ -177,7 +177,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 23 | **§ 46** repeat sightings: what the soft merge reaches, and the pieces the HARD merge deletes before it can | **BUILT, with two items MEASURED and NOT FIXED.** The soft merge (`lib/repeat-sightings.ts`) starts a probable repeat unticked with a reason, for every kind, not only beds; over the 150 furnished rooms it takes the repeats left ticked at an ultrawide read as 66° from **247 to 5** (106°) and **452 to 21** (120°), at a price of 21 real pieces started unticked across the five readings, each one tap from back (numbers since § 49's frame-edge growth, 2026-09-29; before it, 249 → 3 and 460 → 24 at a price of 22). What it cannot reach is a piece with no row: **§ 46.1** twin beds in a corner come back as one, and **§ 46.3** under an ultrawide read as 66° **37 and 42 pieces** of about 990 are deleted outright (35 and 39 before the growth), nearly all dining chairs — both the hard merge deciding a pair on a distance nobody measured (a centre bound, or a box the frame cut). **§ 46.2** is the bottom-edge walk, measured and not built | M — one change to what the hard merge takes, measured over the same 150 rooms and against `tests/detect-pipeline.test.ts` in both directions | § 46.1 and § 46.3 are one piece of work; `tests/repeat-sightings.test.ts` holds both as literals, so the fix turns them red on purpose |
 | 24 | **§ 47** a change made in the last half-second before a reload or a closed tab is lost | **PARTLY FIXED 2026-09-28.** Pending saves now run when the page is hidden or left (`lib/page-leave.ts`), as ONE transaction that asks for its commit at once (`roomStore.savePending`). Measured, change made and page left at once, 5 each: a piece duplicated then reloaded kept **0 → 5**, a typed width then a closed tab **0 → 5**, and no room half-saved (**4 of 10** with three separate saves). **Still lost: a typed room size on a reload, 0 of 5**, whole, because that save reads before it writes. | small, but a design call | — |
 | 25 | **§ 48** a tab left open across the keep-means-keep update can bring unticked pieces back | **WRITTEN DOWN 2026-09-28, NOT FIXED — the user's call.** `migrateRoom` reads a row's `locked` by the version stamp alone, and the previous build stamps `version: 1` on every save. One edit in a tab open across the deployment re-stamps a v2 room, and the next up-to-date load reads every row as kept: the scan list shows unticked rows ticked, and a room with no saved scene is rebuilt with them in it. It fails toward MORE furniture, deletes nothing, and closes itself on a reload. The one fix on offer (a marker the old writers carry through) inverts on the re-scan path, which is why it is not built. | — | — |
-| 26 | **§ 49** a scan tilted up, cut at the frame's edges, with the room size skipped, came back "mostly too small" | **PARTLY FIXED 2026-09-29.** Measured first (`tests/scan-tilted-room.test.ts`, a scan shaped like the reported one, each unknown put right in turn): with the camera and room known the frame edge was the whole remaining error, **7 of 14** pieces more than 10% short. The placers now treat a cut axis as a lower bound and grow it to the kind's typical size from the edge the photo saw, stopped at the wall's end: **0 of 14** short, mean width error **19% → 10%**. As the app reads that scan today, **10 short → 6**, and the price is **4 over → 7**, mean width error **24% → 32%** — the skipped room's walls end past the real ones, so a typical size over-reaches. Still open, in order of what the table says they are worth: the room size (§ 49.3, the user's call), tilt and height (§ 49.2, measured WORSE alone), and two smaller items (§ 49.5, § 49.6 — of the four first filed, § 49.4 is measured and kept and § 49.7 fixed) | § 49.1 (the default lens on an upright photo) FIXED too; § 49.3 is a question for the user; § 49.9–49.12 filed by the review, none a regression; § 49.7 (a top-cut height grows only to the ceiling), § 49.10 (a piece cut at its foot is read at the far end of where it could stand, and judged at that reading by the user's call, D8: 439 of 597 wrong words caught where the one-sided judge caught 309, for 23 of 78 correctly named pieces flagged across box, tipped-down and round rows; exempting round pieces is filed, not built) and § 49.11 (a ceiling piece cut by the frame is not judged on its width) FIXED; § 49.13 (a ceiling piece cut at the TOP is read from the edges the photo saw: 17.9% → 4.1% on 556 discs, exact on all but 43 slivers, and a 1200 mm fan built at 1200 rather than the band's 1500) FIXED, its side and corner cuts measured and not built; § 49.14 (a foot-cut floor piece is still BUILT at its limit, 19 of 39 heights more than 10% off) measured, not built; § 49.15 (a detector's box that ran past the frame: the on-device clamp moved its far edge, the cloud rows were not cut at all; on the top-cut discs at a 1% overrun they read 7.1% and 6.4% off against 4.1%) FIXED, how often it happens in a real scan not measured; § 49.16 (two sweep fixtures box what is out of frame) and § 49.17 (a cloud row's wall is not checked against the photos sent) found by review, not measured | — |
+| 26 | **§ 49** a scan tilted up, cut at the frame's edges, with the room size skipped, came back "mostly too small" | **PARTLY FIXED 2026-09-29.** Measured first (`tests/scan-tilted-room.test.ts`, a scan shaped like the reported one, each unknown put right in turn): with the camera and room known the frame edge was the whole remaining error, **7 of 14** pieces more than 10% short. The placers now treat a cut axis as a lower bound and grow it to the kind's typical size from the edge the photo saw, stopped at the wall's end: **0 of 14** short, mean width error **19% → 10%**. As the app reads that scan today, **10 short → 6**, and the price is **4 over → 7**, mean width error **24% → 32%** — the skipped room's walls end past the real ones, so a typical size over-reaches. Still open, in order of what the table says they are worth: the room size (§ 49.3, the user's call), tilt and height (§ 49.2, measured WORSE alone), and two smaller items (§ 49.5, § 49.6 — of the four first filed, § 49.4 is measured and kept and § 49.7 fixed) | § 49.1 (the default lens on an upright photo) FIXED too; § 49.3 is a question for the user; § 49.9–49.12 filed by the review, none a regression; § 49.7 (a top-cut height grows only to the ceiling), § 49.10 (a piece cut at its foot is read at the far end of where it could stand, and judged at that reading by the user's call, D8: 439 of 597 wrong words caught where the one-sided judge caught 309, for 23 of 78 correctly named pieces flagged across box, tipped-down and round rows; exempting round pieces is filed, not built) and § 49.11 (a ceiling piece cut by the frame is not judged on its width) FIXED; § 49.13 (a ceiling piece cut at the TOP is read from the edges the photo saw: 17.9% → 4.1% on 556 discs, exact on all but 43 slivers, and a 1200 mm fan built at 1200 rather than the band's 1500) FIXED, its side and corner cuts measured and not built; § 49.14 (a foot-cut floor piece is still BUILT at its limit, 19 of 39 heights more than 10% off) measured, not built; § 49.15 (a detector's box that ran past the frame: the on-device clamp moved its far edge, the cloud rows were not cut at all; on the top-cut discs at a 1% overrun they read 7.1% and 6.4% off against 4.1%) FIXED, how often it happens in a real scan not measured; § 49.16 (two sweep fixtures box what is out of frame) found by review, not measured; § 49.17 (a cloud row filed under a wall nobody photographed was built at the model's own size, unjudged) FIXED, the wall now read in the prompt's own words, a one-photo reply's rows kept on that photo, and a nameless row named by its category; § 49.18 (a room saved before that fix reads a `__slot:south` back on the north wall) measured, not built; § 49.19 (a reply's partly dropped rows are dropped in silence) filed | — |
 | 27 | **§ 45** the sensor grant is site-wide when one route needs it | **MEASURED 2026-09-29, DECIDED AGAINST.** The filed fix was the catch-all excluding the capture route, with the trio granted only there. It was built on a scratch build, and it served exactly the headers it asked for. In Chromium it still **took the grant away from the capture screen**: a permissions policy is fixed when the document is created, and every way into capture is a `<Link>` or `router.push` that keeps the document. Reached from `/workspace` or the shape picker, the document answered `allowsFeature` false; opened directly, it answered true. WebKit was not run. The only way to make the fix true is to make every entry a hard navigation, and any future `<Link>` would break that silently. The price of keeping the grant is written down in § 45. `tests/permissions-policy.test.ts` now counts every policy entry, and `scripts/sensor-policy-probe.mjs` reproduces the measurement | — | — |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
@@ -8158,17 +8158,66 @@ read on the middle row.
   and wider than it is. Older than this fix and unchanged by it; the depth to hang it at is the
   catalogue's, which a hanging light does not have per kind yet.
 
-**§ 49.17 · A cloud row's wall is not checked against the photos sent — FOUND BY REVIEW, NOT MEASURED.**
-`cloudRows` keeps any row with a `slot`, and nothing asks whether it is a wall that was
-photographed. The prompt says every slot MUST be one of the codes sent; the code does not hold
-the reply to it. Read, not run: a row naming a wall with no photo has no camera in `geoMeasure`
-or `geoLocate`, so it keeps the model's own size and place and is never judged — a box on a
-photograph that does not exist, built as though it were measured. A slot that is not a code at
-all (`'north'`) is written into the record's `__slot:` suffix, which only reads back `[nesw]`, so
-it comes back on the north wall with the suffix left in its label. Pre-existing: the reply's
-slots were never checked, and § 49.15 changed only its boxes. What it wants is the photographed
-slots passed to `readCloudReply` and a row naming another dropped there, with the same
-unreadable-reply rule when that leaves none; how often Gemini does it is the unmeasured part.
+**§ 49.19 · A cloud reply's dropped rows are dropped in silence — FILED, NOT BUILT.** When SOME of a
+reply's rows are refused, for a wall nobody photographed, no name or no box in frame, `readCloudReply`
+returns the rest as `{ rows }` and nothing records how many went. Only a reply that loses EVERY row
+says so (§ 49.15, § 49.17). So a scan that kept 6 of 9 pieces looks the same as one that found 6. The
+count would have to ride the reply to the detect screen and be said there, beside the list, which is
+a screen change and a sentence to write, not a fix in `lib/`.
+
+**§ 49.18 · A room saved before § 49.17 can carry a wall name its record cannot read — MEASURED, NOT
+BUILT.** Before § 49.17 a cloud row's `slot` was kept as the model wrote it, and `toRecord` writes it
+into the label as `__slot:${slot}`. The read-back only knows single letters, so, measured through
+`fromRecord`: `__slot:s` reads back on the south wall as `Sofa`, while `__slot:S`, `__slot:south` and
+`__slot:SOUTH` read back on the NORTH wall with the suffix left in the label, `Sofa__slot:south`, and
+`__slot:east` the same. The read is written out four times, each with its own `[nesw]`:
+`lib/detection-record.ts` (`SLOT_SUFFIX` and the slot match in `fromRecord`), `lib/scene-spec.ts`
+(`buildSceneFromRoom`, both halves) and `components/studio/PhotoEditor.tsx`. The fix is one reader,
+`slotOf` behind a suffix match, used by all four, with a test that a saved `__slot:south` builds on
+the south wall; the number of rooms it would touch is not knowable from here, since it depends on
+what Gemini wrote before this fix.
+
+**§ 49.17 · A cloud row's wall was not checked against the photos sent — FIXED 2026-09-29.**
+`cloudRows` kept any row with a `slot`, and nothing asked whether it was a wall that was
+photographed. The prompt said every slot MUST be one of the codes sent, and `Design.md` said the
+reply was *constrained* to them; only the prompt asked. Measured by running the rows through the
+pipeline: a sofa filed under `s` when only `n` was sent had no camera (`cals` holds only the walls
+photographed), so `geoPlace` handed it back exactly as the model gave it, 900 × 400 × 400 at its
+guessed place, `judgeLabel` called it `unmeasured`, and the room built it as though it had been
+read off a photograph. A slot written `north` or `N` did the same, and came back from a save on
+the north wall with `__slot:north` left in its label, because the record's suffix reads back only
+`[nesw]`.
+
+Two commits. `cloudRows` and `readCloudReply` take the walls sent — required, since a default of
+all four is the check switched off — and drop a row naming any other; a reply that files every row
+elsewhere is unreadable by § 49.15's rule, not an empty room. `detectAcrossImages` builds one list
+from its photos and hands it to both the prompt and the reply, held by a source pin because the
+call needs the Gemini SDK. Then `slotOf` reads a wall in the prompt's own words — the code, or the
+NORTH…WEST it names the walls by, any case — from a Map derived from `SLOT_NAME`, so
+`"constructor"` is not a wall, and writes the code back. Without the second, the first would have
+dropped every row of a one-photo reply that said `N`, turning a real answer into an unreadable
+one. Mutation 7/7 and 9/9. How often Gemini files a row under an unsent wall, or by name, is
+still unmeasured; both need real replies.
+
+The review of those two commits found the first one had gone too far on the ordinary scan: with
+ONE photo sent, a row filed under `up` or `s` was dropped, and a reply doing that to every row
+read as unreadable, where the code before it had kept them — unmeasured, but in the room. A
+one-photo reply's rows are now filed under that photo whatever wall they name, or none
+(`wallOf`), and so measured by it. The same
+round, one commit each: `slotOf` reads the photo's own heading back, `N WALL` and `north wall`,
+and only a separate trailing `wall` (`nwall` and `walls` name nothing); a refused reply says
+which question no row got past — no photographed wall, then no name, then no box in frame —
+rather than "no box" for all three; `cloudRequest` builds the prompt and the reader from one
+copied list, so a caller has no way to hand them two, and a test of the list replaces the regex
+over `lib/detection.ts`'s spelling; a label that is not a string, measured to throw out of the
+merge (`toLowerCase`) and the saved record (`replace`) after the call was paid for, falls back to
+the category, and a row with neither is dropped; and the model's `uid` is left off, because the
+detect screen keeps a uid it is handed and it becomes the piece's id in the room. Mutation 4/4,
+5/5, 6/6, 8/8 and 2/2.
+
+Not built: a `responseSchema` naming the sent codes as an enum would ask Gemini to hold to them
+itself. Whether it changes what comes back needs real replies, and the reader holds the reply to
+the walls either way.
 
 **§ 49.16 · Two sweep fixtures box what is out of frame too — FOUND BY REVIEW, NOT MEASURED.**
 § 49.13 fixed this for ceiling discs; the same shape is in two fixtures for every other kind.

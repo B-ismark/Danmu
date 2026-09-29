@@ -2,7 +2,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { useQuota } from './quota';
-import { buildDetectPrompt, readCloudReply, type PromptRoom } from './detect-prompt';
+import { cloudRequest, type PromptRoom } from './detect-prompt';
 import type { DetectSource } from './detect-confidence';
 import type { CaptureSlot } from './storage';
 
@@ -104,7 +104,9 @@ export async function detectAcrossImages(
   if (images.length === 0) return [];
 
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = buildDetectPrompt(room, images.map((i) => i.slot));
+  // One list for both ends: the walls the prompt says were photographed are the
+  // walls the reply is held to (§ 49.17).
+  const request = cloudRequest(room, images.map((i) => i.slot));
 
   // Base64 inflates by 4/3, so check the encoded size — the raw byte total was
   // never the limit that mattered. Four untouched 12 MP phone photos are 12-20 MB
@@ -130,7 +132,7 @@ export async function detectAcrossImages(
   const parts: Array<
     | { text: string }
     | { inlineData: { mimeType: string; data: string } }
-  > = [{ text: prompt }];
+  > = [{ text: request.prompt }];
   for (const img of labeled) {
     parts.push({ text: `--- ${img.slot.toUpperCase()} WALL ---` });
     parts.push({ inlineData: { mimeType: img.mime, data: img.data } });
@@ -156,7 +158,7 @@ export async function detectAcrossImages(
   // A body that is not an answer is NOT an empty room: see `readCloudReply`.
   // Throw, so the error path (which offers Retry) owns it. NOT deduped here: see
   // `cloudRows`.
-  const reply = readCloudReply(text);
+  const reply = request.read(text);
   if ('unreadable' in reply) throw new DetectError('BAD_RESPONSE', reply.unreadable, reply.cause);
   return reply.rows;
 }

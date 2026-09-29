@@ -1972,7 +1972,7 @@ real phone, with a real scan, is the unlooked-at half.
 ---
 ## Look and light
 
-### A piece cut at its foot is judged where it would stand against its wall — this branch (D8), NOT PROBED
+### A piece cut at its foot is judged where it would stand against its wall — merged to `main` in `12b0209` (PR #170), NOT PROBED
 
 **Where to click.** *Photograph my real room* → a photo whose bottom edge cuts off the foot of
 a sofa, bed or wardrobe standing a pace out from its wall, and one of a standing fan or a stool
@@ -1993,6 +1993,27 @@ well off its wall may be flagged as well. That is the price the user chose (D8, 
   6 of 39 box pieces, every one 800 mm off its wall, and 12 of 28 round ones, some of them
   standing against it. Whether that is tolerable in a person's own room is not something a
   test can say.
+
+### A cloud scan keeps only the walls you photographed — this branch (§ 49.17), NOT PROBED
+
+**Where to click.** With a Google key in **Settings**, *Photograph my real room* → ONE wall
+only → the scan screen. Every row should belong to that photo: its tag on the picture, and its
+size read off it. Then again with TWO walls. Then go back and forward so the room reloads, and
+read the row names again.
+
+**What wrong looks like.**
+- *Danmu couldn’t make sense of the reply* on photos that plainly have furniture in them. With
+  one wall that should not happen for this reason at all: every row is filed under the one
+  photo, whatever wall it names. With two or more, the reply is refused when no row names a wall
+  you photographed; `n`, `N`, `north` and `N WALL` all read as the north wall, and a real reply
+  in some fourth form would land here.
+- A row with no tag on the photo — a piece filed under a wall nobody photographed, which is
+  what this stops.
+- A name ending in `__slot:` after the reload.
+- A row called by its kind in lower case, `sofa`, is a reply that gave that piece no name. It
+  should be rare; many of them means the reply's shape has changed.
+- **The part only a real reply answers:** how often Gemini files a row under the wrong wall at
+  all. The tests hold what happens when it does, not how often.
 
 ---
 
