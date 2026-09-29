@@ -192,7 +192,8 @@ whether a plant at its declared size still looks like a plant. If any of them lo
 honest fix is the **declared size in `PART_LIBRARY`**, not the renderer — the geometry is
 correct now and the catalogue number is the thing that was never checked against it.
 **Not for the plant**, which was looked at and was squashed: a stretch is a stretch at any
-catalogue size, so it is drawn at its own size now — see the item above.
+catalogue size, so it is drawn at its own size now (`lib/plant-form.ts`), and that drawing
+has been looked at at every size.
 
 ### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
 
@@ -1843,11 +1844,11 @@ gives them back. Type an 80 m width and leave the box: it takes a danger rim, a 
 names the range, and **Start decorating** puts you back in that box rather than building the
 room. Then start **without typing**:
 
-- the studio's Room section opens with a quiet note — *Rough sizes, from a typical room of
-  this shape. Enter yours below.* — and **These are right**; its collapsed size reads
+- the studio's Room section opens with a quiet note — *Typical sizes, not yours yet.* — and
+  **These are right**; its collapsed size reads
   *≈6.0×5.0m*;
 - *"Photograph my real room first"* instead: each wall card's length reads *≈… m wall*, and
-  the scan screen's subtitle says the sizes are for a typical room of this shape;
+  the scan screen's subtitle says the sizes are rough until you set the room's size;
 - **These are right**, or a size typed into those boxes, clears the note and the ≈ for good.
   Dragging a wall does not.
 

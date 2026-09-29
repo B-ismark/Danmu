@@ -301,6 +301,7 @@ export default function SettingsPage() {
             <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, marginBottom: 4 }}>Where your key goes</div>
             <p className="t-note" style={{ lineHeight: 1.55, margin: 0 }}>
               Kept in this browser. Sent only to Google: on Test, and with your photos when detection runs.
+              You can restrict the key to this site in Google&apos;s console.
             </p>
           </div>
 

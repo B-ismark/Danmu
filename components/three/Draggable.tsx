@@ -1265,7 +1265,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         onPointerUp={onPointerUp}
         onWheel={onWheel}
       >
-        <ShadowCaster groupRef={ref} dimKey={storedDim?.join()} shapeKey={part.shape} />
+        <ShadowCaster groupRef={ref} dimKey={(storedDim ?? part.dimMM).join()} shapeKey={part.shape} />
         {/* The lean while carried and the rock when set down — drawn only, on an
             inner group the transform layers never see (lib/wobble.ts). */}
         <Wobble

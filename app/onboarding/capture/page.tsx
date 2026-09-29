@@ -1365,6 +1365,9 @@ function CameraPanel({
           <h2 style={{ fontSize: 'var(--fs-lead)', color: 'var(--ink)' }}>
             {nextLabel ? `Shoot ${nextLabel} with this device` : 'Every wall has a photo'}
           </h2>
+          <p className="t-small" style={{ lineHeight: 1.5, margin: 0 }}>
+            Your photos stay on this device.
+          </p>
           <button className="ds-btn ds-btn--lg ds-btn--accent" disabled={phase === 'starting'} onClick={turnOn}>
             <Icon name="camera" size={14} color="var(--on-accent)" />
             {phase === 'starting' ? 'Starting camera…' : 'Turn on camera'}

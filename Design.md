@@ -210,9 +210,9 @@ A room built at the typical size, because nothing was typed, is **marked rough**
 (`RoomData.roughSize: true`; absent otherwise, so every older room reads as measured).
 The mark is a claim about every number beside it, so it is said wherever a size is: a
 quiet note above the studio's size boxes, a `≈` on the Room section's collapsed size
-and on each capture card's wall length, and the scan screen's subtitle, which would
-otherwise claim "measured at real size" — untrue here, since every size read off a wall
-or the floor line scales with the assumed wall distance. It clears on exactly the two
+and on each capture card's wall length, and the scan screen's subtitle, which says sizes
+are rough until the room's size is set — true, since every size read off a wall or the
+floor line scales with the assumed wall distance. It clears on exactly the two
 answers that mean *this is my room's size*: a size committed in the studio's Room
 section (`setRoom`, even one equal to the typical size) and the note's **These are
 right** (`confirmSize`). A wall drag keeps it — shaping by eye is not measuring. Both
@@ -2257,7 +2257,7 @@ asks about width.
   because the bottom edge is where Hoober measured touches landing least accurately.
   They stop at 128px wide, so three items never become three slabs.
 - **Gestures replace chrome.** The plan's zoom, rotate and fit box is gone on a phone,
-  because pinch zooms and a finger pans. The Library's copy says *tap*, and a tapped
+  because pinch zooms and a finger pans. The Help card says *tap*, and a tapped
   piece drops into the first clear spot, because there is no cursor to drag from.
 
 **The web half of it**, where the platform guidance stops:

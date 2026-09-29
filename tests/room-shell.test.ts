@@ -159,5 +159,8 @@ describe('the per-piece shadow gate is gone, not merely unused', () => {
     const dr = readSrc('components', 'three', 'Draggable.tsx');
     expect(dr).toContain('shapeKey');
     expect(dr).toMatch(/\[groupRef,\s*dimKey,\s*shapeKey,\s*invalidate\]/);
+    // A re-detect can rewrite the authored size with no override and no new shape,
+    // so the size key falls back to `part.dimMM` rather than being undefined there.
+    expect(dr).toContain('dimKey={(storedDim ?? part.dimMM).join()}');
   });
 });

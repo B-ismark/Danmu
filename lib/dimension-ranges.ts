@@ -14,6 +14,9 @@
 
 import type { Category, Shape } from './scene-spec';
 
+// The tier says how wide a band is meant to be, and it is how this table is sorted
+// below. No screen shows it since the Inspector's size note was cut; the tests read it
+// to tell which table answered a lookup.
 export type DimFlex = 'fixed' | 'standard' | 'flexible';
 export type Dim3 = [number, number, number];
 export type DimRange = { flex: DimFlex; min: Dim3; max: Dim3 };
