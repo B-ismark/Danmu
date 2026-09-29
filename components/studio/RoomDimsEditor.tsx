@@ -98,18 +98,25 @@ export function RoomDimsEditor() {
   // used to save the three numbers itself as well, and that save, landing without
   // `RoomSync`'s, stored the new width against the old outline: typed, and reloaded a
   // moment after the 200 ms, the room came back half-resized.
-  useEffect(
-    () =>
-      onPageLeave('commit', () => {
-        if (!timer.current) return;
-        clearTimeout(timer.current);
-        timer.current = null;
-        const run = pendingCommit.current;
-        pendingCommit.current = null;
-        run?.();
-      }),
-    [],
-  );
+  //
+  // And it commits when the boxes go away, too — the Room section closed, or another
+  // room opened. Left to its timer, it ran 200 ms later against whatever room was on
+  // screen by then, so a width typed in one room could land in the next.
+  useEffect(() => {
+    const flush = () => {
+      if (!timer.current) return;
+      clearTimeout(timer.current);
+      timer.current = null;
+      const run = pendingCommit.current;
+      pendingCommit.current = null;
+      run?.();
+    };
+    const off = onPageLeave('commit', flush);
+    return () => {
+      off();
+      flush();
+    };
+  }, []);
 
   function commit(idx: 0 | 1 | 2, raw: string) {
     const next = [...local] as [string, string, string];

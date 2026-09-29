@@ -910,19 +910,24 @@ function DimensionEditor({
 
   // A size typed and left inside the 120 ms never reached the room: nothing unmounts on a
   // reload or a closed tab. Committed in the page-leave's first phase, like the Room
-  // section's boxes, so `RoomSync` has it to save (`lib/page-leave.ts`).
-  useEffect(
-    () =>
-      onPageLeave('commit', () => {
-        if (!timer.current) return;
-        clearTimeout(timer.current);
-        timer.current = null;
-        const run = pendingCommit.current;
-        pendingCommit.current = null;
-        run?.();
-      }),
-    [],
-  );
+  // section's boxes, so `RoomSync` has it to save (`lib/page-leave.ts`). And committed
+  // when the fields go away, for the boxes' reason: left to its timer, it landed in
+  // whichever room was open 120 ms later, on whichever piece there had the same id.
+  useEffect(() => {
+    const flush = () => {
+      if (!timer.current) return;
+      clearTimeout(timer.current);
+      timer.current = null;
+      const run = pendingCommit.current;
+      pendingCommit.current = null;
+      run?.();
+    };
+    const off = onPageLeave('commit', flush);
+    return () => {
+      off();
+      flush();
+    };
+  }, []);
 
   function commitDebounced(idx: 0 | 1 | 2, raw: string) {
     const next = [...local] as [string, string, string];

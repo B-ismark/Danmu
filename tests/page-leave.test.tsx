@@ -110,10 +110,13 @@ async function mount(ui: React.ReactNode, { photographed = false } = {}) {
   if (photographed) {
     await roomStore.saveCapture(ROOM_ID, { slot: 'n', blob: new Blob(['x']), takenAt: 1 });
   }
-  render(ui);
+  const r = render(ui);
   // `ready` gates every subscriber, so a change made before the load lands is ignored.
   await waitFor(() => expect(useScene.getState().hydratedRoomId).toBe(ROOM_ID), { timeout: 2000 });
+  return r;
 }
+
+const wait = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms)));
 
 describe('RoomSync, when the page is left inside the debounce', () => {
   beforeEach(() => cleanup());
@@ -245,7 +248,7 @@ describe('the size boxes', () => {
     fireEvent.change(screen.getByLabelText(/^Width/), { target: { value: '4.5' } });
     const seen: [number, number][] = [];
     for (let t = 0; t < 900; t += 25) {
-      await act(() => new Promise((r) => setTimeout(r, 25)));
+      await wait(25);
       const saved = (await roomStore.loadRoom(ROOM_ID))!;
       const xs = saved.footprint!.map(([x]) => x);
       seen.push([saved.width, Math.max(...xs) - Math.min(...xs)]);
@@ -253,10 +256,32 @@ describe('the size boxes', () => {
     for (const [width, outline] of seen) expect(width).toBeCloseTo(outline, 5);
     expect(seen.at(-1)![0]).toBeCloseTo(4.5, 5);
   });
+
+  // The Room section closed, or another room opened, inside the 200 ms. Left to its
+  // timer, the commit ran afterwards against whatever room was on screen by then.
+  it('commit what was typed when they go away inside their 200 ms, and not again later', async () => {
+    const { rerender } = await mount(
+      <>
+        <RoomSync />
+        <RoomDimsEditor />
+      </>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Width/), { target: { value: '4.5' } });
+    rerender(
+      <>
+        <RoomSync />
+      </>,
+    );
+    expect(useScene.getState().room.width).toBeCloseTo(4.5, 5);
+    // A different room on screen now: nothing typed in the last one lands in it.
+    act(() => useScene.getState().setRoom({ width: 6, depth: 5, height: 2.6 }));
+    await wait(300);
+    expect(useScene.getState().room.width).toBe(6);
+  });
 });
 
-describe('the Exact size fields, when the page is left inside their 120 ms', () => {
-  it('commit what was typed before RoomSync saves', async () => {
+describe('the Exact size fields', () => {
+  it('commit what was typed when the page is left inside their 120 ms, before RoomSync saves', async () => {
     await mount(
       <>
         <RoomSync />
@@ -274,6 +299,29 @@ describe('the Exact size fields, when the page is left inside their 120 ms', () 
     expect(useStudio.getState().dims[part.id]).toBeDefined();
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0][1].transforms?.dims[part.id]).toEqual(useStudio.getState().dims[part.id]);
+  });
+
+  it('commit what was typed when they go away inside their 120 ms, and not again later', async () => {
+    const { rerender } = await mount(
+      <>
+        <RoomSync />
+        <Inspector />
+      </>,
+    );
+    const part = useScene.getState().parts.find((p) => p.category === 'sofa') ?? useScene.getState().parts[0];
+    act(() => useStudio.setState({ selection: [part.id], selectedPartId: part.id }));
+    const width = screen.getAllByRole('spinbutton')[0];
+    fireEvent.change(width, { target: { value: (Number((width as HTMLInputElement).value) * 0.9).toFixed(2) } });
+    rerender(
+      <>
+        <RoomSync />
+      </>,
+    );
+    expect(useStudio.getState().dims[part.id]).toBeDefined();
+    // A different room on screen now, holding a piece with the same id.
+    act(() => useStudio.setState({ dims: {} }));
+    await wait(200);
+    expect(useStudio.getState().dims[part.id]).toBeUndefined();
   });
 });
 
