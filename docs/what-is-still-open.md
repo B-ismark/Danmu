@@ -7684,8 +7684,9 @@ short **10 → 6**, over **4 → 7**, mean width error **24% → 32%**, median w
 position **0.50 → 0.48 m**. The last three are the honest cost: a typical size is only as good
 as the room it is bounded by, and the skipped room's walls end half a metre past the real ones,
 so the garment rack read as a wardrobe grows toward a 2 m wardrobe (+122%) where the true room
-stops it at +56%. The scan screen says *Runs past the edge of the photo, so its width is a
-typical one* on every row it grew, and `judgeLabel` does not judge a word on a grown axis.
+stops it at +56%. The scan screen says *Runs past the edge of the photo, so its width is an
+estimate* on every row it grew (it first said "a typical one", which a piece already wider
+than typical, or stopped by the wall's end, is not), and `judgeLabel` does not judge a word on a grown axis.
 Mutation-tested: 19 mutants on the new guards, 19 caught — two of them only after the
 fixture that could express them was built: a piece cut on both sides in a room whose wall
 runs further one way, and a floor sighting whose seen span reaches past a wall's end.

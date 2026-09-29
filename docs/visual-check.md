@@ -1888,10 +1888,13 @@ not known. A typed room size on a reload is a known loss (§ 47), not a finding.
 ### A piece the photo cut off says so, and comes back a typical size — this branch, PROBED at 360–1280
 
 **Where to click.** *Photograph my real room* → four photos in which something runs off the
-edge of the frame — a wardrobe cut by the side of the photo, a bed whose foot is below the
-bottom edge, a curtain at the corner — then the scan screen, then **Open the studio**. A row
-whose box touches the photo's edge now carries a grey line with a ruler: *"Runs past the edge
-of the photo, so its width is a typical one"* (or *height*, or *size* when both are cut). In
+side or the top of the frame — a wardrobe cut by the side of the photo, a curtain at the
+corner, a tall bookcase whose top is out of shot — then the scan screen, then **Open the
+studio**. A row whose box runs off a side, or off the top, now carries a grey line with a
+ruler: *"Runs past the edge of the photo, so its width is an estimate"* (or *height*, or
+*size* when both are cut). A floor piece cut only at its FOOT — a bed whose end is below the
+photo — gets **no** note, on purpose: its width and height were in view; it is stood back
+against its wall instead (§ 49.10). A wall piece cut at the bottom does get one. In
 the studio that piece should be about its usual size, grown from the side the photo saw
 toward the side it cut, not the sliver that was in the frame. A row cut on every side the
 check could read starts unticked (§ 49 in `docs/what-is-still-open.md`).

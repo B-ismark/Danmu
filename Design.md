@@ -659,8 +659,12 @@ Two readers follow the placers. `judgeLabel` (`lib/label-repair.ts`) no longer j
 on a cut axis — grown to a typical size, it would pass every word that asked, the catalogue
 judging the catalogue — and reports the axes it skipped as `cut`; a row cut on every axis it
 could judge is `unmeasured`, so it starts unticked. And the scan screen says so on the row:
-*Runs past the edge of the photo, so its width is a typical one.* A typical size is a guess
-the person can see is a guess.
+*Runs past the edge of the photo, so its width is an estimate.* An estimate the person can
+see is an estimate. Not "a typical one", which it said first and which was true of one case
+in three: a piece whose visible part is already bigger than typical keeps what was seen, and
+one stopped by the wall's end is neither. A piece cut only at its FOOT gets no note — its
+width and height were seen whole — though its distance is the wall's rather than its own
+(§ 49.10).
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,

@@ -74,7 +74,7 @@ for (const [w, h] of VIEWPORTS) {
     const r = rows.find((x) => x.text.startsWith(label));
     if (!r) { check(false, `${label}: row not found`); continue; }
     if (word) {
-      check(r.note === `Runs past the edge of the photo, so its ${word} is a typical one`, `${label}: note "${r.note}"`);
+      check(r.note === `Runs past the edge of the photo, so its ${word} is an estimate`, `${label}: note "${r.note}"`);
       check(r.noteR <= r.rowR + 0.5 && r.noteL >= r.rowL - 0.5 && !r.clipped, `${label}: note inside its row (${r.noteL?.toFixed(0)}–${r.noteR?.toFixed(0)} in ${r.rowL.toFixed(0)}–${r.rowR.toFixed(0)}, ${r.noteH?.toFixed(0)}px tall)`);
     } else check(r.note === null, `${label}: no note`);
   }
