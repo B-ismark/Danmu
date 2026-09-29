@@ -62,7 +62,7 @@ export type LabelCandidate = {
 
 export type LabelVerdict =
   /** The measurement sits inside the band for the word the detector used. */
-  | { status: 'ok'; cut?: SizeAxis[] }
+  | { status: 'ok'; cut?: SizeAxis[]; bounded?: SizeAxis[] }
   /** Nothing was measured, so there is no evidence and no verdict. A slot with no
    *  calibration, a ceiling anchor, which geoRefine does not measure at all, or a
    *  box the photo's edge cut on every axis it could have judged. */
@@ -74,16 +74,20 @@ export type LabelVerdict =
       failed: SizeAxis[];
       /** What the detector's own word allows, mm, as [min, max] per axis. */
       allowed: { width: [number, number]; height: [number, number] };
-      /** What the camera measured, mm. An axis is ABSENT when it was not observed —
-       *  a ceiling placement measures width only, and an axis the photo's edge cut
-       *  off is a typical size (`cut`). A caller that prints a fallback there is
-       *  printing a catalogue default as a measurement. */
-      measured: { width?: number; height?: number };
+      /** What the camera measured, mm, as the [least, most] the piece can truly be —
+       *  both ends the same number when the reading is a size, and apart on an axis
+       *  in `bounded`. An axis is ABSENT when it was not observed — a ceiling
+       *  placement measures width only, and an axis the photo's edge cut off is a
+       *  typical size (`cut`). A caller that prints a fallback there is printing a
+       *  catalogue default as a measurement, and one that prints only the reading on
+       *  a bounded axis is printing a limit as a size. */
+      measured: { width?: [number, number]; height?: [number, number] };
       /** Better words, most comfortable fit first, each already re-measured under
        *  its own anchor. **Empty is a real answer** — it means nothing in the
        *  vocabulary is that shape, so the finding is a flag with no repair. */
       candidates: LabelCandidate[];
       cut?: SizeAxis[];
+      bounded?: SizeAxis[];
     };
 // `cut`, on every status: the axes the edge of the photo cut off, and so not a
 // measurement. Absent when the box is whole — a row that says it was measured has to
@@ -93,6 +97,12 @@ export type LabelVerdict =
 // what was seen is a lower bound. On a CEILING piece nothing is grown: the width is
 // read on a row the cut moved off the disc's centre, long or short, and bounds nothing
 // either way (§ 49.11) — so "at least this big" is not a reading of it (§ 49.5).
+//
+// `bounded`, on `ok` and `suspect`: the axes the photo DID see whole but read as a limit
+// rather than a size — a floor piece cut at its foot, read at the far end of where it
+// could stand (`ReadBounds`). Never an axis in `cut`. Absent when every axis read is a
+// size. A row that shows no note for it is telling the person a limit is a measurement,
+// which is what the scan screen did for as long as only `cut` reached it.
 
 /** Does a measured W × H sit inside the band for this word?
  *
@@ -452,8 +462,10 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
   const { measured: axes, cut } = readAxes(category, shape, d.box);
   const cutNote = cut.length > 0 ? { cut } : {};
   if (axes.length === 0) return { status: 'unmeasured', ...cutNote };
+  const bounded = axes.filter((a) => bound[a].kind !== 'exact');
+  const notes = { ...cutNote, ...(bounded.length > 0 ? { bounded } : {}) };
   const failed = failedAxes(category, shape, widthMM, heightMM, bound).filter((a) => axes.includes(a));
-  if (failed.length === 0) return { status: 'ok', ...cutNote };
+  if (failed.length === 0) return { status: 'ok', ...notes };
 
   const r = dimRangeFor(category, shape);
   const candidates = candidatesFor(d, categoriesFittingSize(widthMM, heightMM, category, axes, bound), cals, room);
@@ -463,11 +475,11 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
     failed,
     allowed: { width: [r.min[0], r.max[0]], height: [r.min[2], r.max[2]] },
     measured: {
-      ...(axes.includes('width') ? { width: widthMM } : {}),
-      ...(axes.includes('height') ? { height: heightMM } : {}),
+      ...(axes.includes('width') ? { width: truthSpan(widthMM, bound.width) } : {}),
+      ...(axes.includes('height') ? { height: truthSpan(heightMM, bound.height) } : {}),
     },
     candidates,
-    ...cutNote,
+    ...notes,
   };
 }
 

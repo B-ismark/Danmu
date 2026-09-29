@@ -684,8 +684,8 @@ the judge's own strict repairs never reach it. And the scan screen says so on th
 *Runs past the edge of the photo, so its width is an estimate.* An estimate the person can
 see is an estimate. Not "a typical one", which it said first and which was true of one case
 in three: a piece whose visible part is already bigger than typical keeps what was seen, and
-one stopped by the wall's end is neither. A piece cut only at its FOOT gets no note — its
-width and height were seen whole — but its distance is the wall's rather than its own, the far
+one stopped by the wall's end is neither. A piece cut only at its FOOT was seen whole across
+and to its top, but its distance is the wall's rather than its own, the far
 end of where it could stand, so the judge reads each axis one way — the placer's own
 answer, `GeoPlacement.bounds` (`lib/photo-geometry.ts`), which `geoMeasure` carries out
 beside the row. The width is the most it can be: it may say *too small*, never *too
@@ -694,7 +694,12 @@ taller than the lens and falls for a lower one, so a tall piece reads high and a
 each bounded on its other side by the lens, which is what still makes a low table no wardrobe.
 Judged both ways, six of forty-four correctly named pieces were called the wrong size in
 `tests/label-repair.test.ts`; none are now, at the price of catching 328 of 665 wrong words
-where it caught 485 (§ 49.10).
+where it caught 485 (§ 49.10). **And the row says so**, because a limit printed as its one
+number is a limit passed off as a size: the verdict carries each axis as the least and the most
+it can be (`LabelVerdict.measured`) and names the axes read as limits (`bounded`), so the
+sentence reads *Measured up to 1.27 m wide and 0.27–1.50 m tall*, and the row gets the same
+*Runs past the edge of the photo, so its size is an estimate* a side cut gets — to the person
+they are one fact, that this number is not the camera's measurement of the piece.
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,

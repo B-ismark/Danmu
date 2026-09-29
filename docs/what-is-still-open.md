@@ -7874,8 +7874,13 @@ catalogue's order, and the wardrobe called a nightstand came last of five words 
 screen shows two. Ties now go to the word whose band is nearest the reading as read, measured
 as the factor the reading would have to move by — as a share of each band's span it made a
 wide band look near, and a plant beat the wardrobe. Of the 328 wrong words caught, the right one
-now comes **first for 56** (37 before) and is **among the two chips for 130** (112). The row
-still gets no note, because its width and height were in view.
+now comes **first for 56** (37 before) and is **among the two chips for 130** (112). **The row
+said none of this** for a commit: its width and height were in view, so it got no *runs past
+the edge* note, and the sentence printed each limit as its one number — *Measured 2.76 m* for a
+height that is at most 2.76 and at least the lens. The verdict now carries each axis as the
+least and the most it can be and names the axes read as limits (`bounded`); the row reads
+*Measured up to 1.27 m wide and 0.27–1.50 m tall*, and a foot cut gets the same note a side cut
+does.
 
 **Round pieces are a different solve and were measured separately:** a standing fan, plant,
 floor lamp and stool as cylinders of their catalogue size, same walls — 29 rows level and

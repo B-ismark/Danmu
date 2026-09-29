@@ -10,9 +10,12 @@
 //     pnpm exec next build && pnpm exec next start -p 3061
 //     PORT=3061 PW_ROOT=/some/scratch node scripts/cut-note-probe.mjs
 //
-// It seeds one scanned room — no detector runs — with seven boxes on one photo: four
-// touching an edge (the left side twice, the right side, the top-left corner), three well
-// inside — and the one-word "Bed" beside a "Double bed", so a row is found by its own name.
+// It seeds one scanned room — no detector runs — with nine boxes on one photo: four
+// touching a side or the top (the left side twice, the right side, the top-left corner, the
+// first of them also reaching the foot), two standing on the bottom edge and seen whole
+// across — a sofa, and a tall piece called a nightstand, whose "Measured" sentence must say
+// its numbers are limits — and three well inside. The one-word "Bed" sits beside a
+// "Double bed", so a row is found by its own name.
 // VP='[[w,h],…]' narrows the widths, DUMP=1 prints each row's text, SHOTS names the
 // screenshot folder (a temp folder by default).
 import { createRequire } from 'node:module';
@@ -26,10 +29,12 @@ const SHOTS = process.env.SHOTS || join(tmpdir(), 'cut-note-probe');
 mkdirSync(SHOTS, { recursive: true });
 // [label, category, shape, box, expected note word or null]
 const PIECES = [
-  ['Wardrobe', 'wardrobe', 'wardrobe', [0, 0.3, 0.3, 0.7], 'width'],
+  ['Wardrobe', 'wardrobe', 'wardrobe', [0, 0.3, 0.3, 0.7], 'size'],
   ['Picture', 'painting', 'painting', [0, 0, 0.25, 0.25], 'size'],
   ['Curtain', 'curtain', 'curtain', [0.88, 0.02, 0.12, 0.9], 'width'],
-  ['Double bed', 'bed', 'bed-double', [0.3, 0.6, 0.4, 0.4], null],
+  ['Sofa', 'sofa', 'sofa', [0.3, 0.62, 0.4, 0.38], 'size'],
+  ['Nightstand', 'nightstand', 'nightstand', [0.72, 0.1, 0.12, 0.9], 'size'],
+  ['Double bed', 'bed', 'bed-double', [0.3, 0.5, 0.4, 0.4], null],
   ['Floor lamp', 'lamp', 'lamp-floor', [0.8, 0.3, 0.05, 0.5], null],
   ['Mirror', 'mirror', 'mirror', [0.4, 0.1, 0.15, 0.3], null],
   ['Bed', 'bed', undefined, [0, 0.4, 0.2, 0.2], 'width'],
@@ -78,6 +83,10 @@ for (const [w, h] of VIEWPORTS) {
       check(r.noteR <= r.rowR + 0.5 && r.noteL >= r.rowL - 0.5 && !r.clipped, `${label}: note inside its row (${r.noteL?.toFixed(0)}–${r.noteR?.toFixed(0)} in ${r.rowL.toFixed(0)}–${r.rowR.toFixed(0)}, ${r.noteH?.toFixed(0)}px tall)`);
     } else check(r.note === null, `${label}: no note`);
   }
+  // A limit printed as its one number reads as a size: the tall piece called a nightstand
+  // is read from the far end of where it could stand, so both its numbers are limits.
+  const limits = rows.find((x) => x.text.startsWith('Nightstand'));
+  check(/Measured up to [\d.]+ \S+ wide and [\d.]+–[\d.]+ \S+ tall\./.test(limits?.text ?? ''), `Nightstand: says its limits ("Measured${(limits?.text ?? '').split('Measured')[1]?.slice(0, 70)}")`);
   const sideways = await page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth);
   check(sideways <= 0, `no sideways scroll (${sideways})`);
   const list = await page.$('.rail--right .list');

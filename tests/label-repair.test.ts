@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
+import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel, type LabelVerdict } from '@/lib/label-repair';
 import { cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
@@ -223,7 +223,9 @@ describe('judgeLabel', () => {
     const v = judgeLabel(det({ category: 'bed', slot: 'n', box: WALL_BOX }), CALS, ROOM);
     expect(v.status).toBe('suspect');
     if (v.status !== 'suspect') return;
-    expect(v.measured).toEqual({ width: g.widthMM, height: g.heightMM });
+    // A whole box is read as a size, so each axis is one number at both ends.
+    expect(v.measured).toEqual({ width: [g.widthMM, g.widthMM], height: [g.heightMM, g.heightMM] });
+    expect(v.bounded).toBeUndefined();
     expect(v.allowed.width).toEqual([dimRangeFor('bed', shape).min[0], dimRangeFor('bed', shape).max[0]]);
     expect(v.failed).toEqual(['width', 'height']); // a 480 mm wide, 1.68 m tall bed
   });
@@ -479,8 +481,8 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     const wardrobe = det({ category: 'wardrobe', shape: 'wardrobe', slot: 'n', box: boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.8, level) });
     expect(geoRefine(sofa, { n: level }, ROOM).dimMM![2]).toBe(333);
     expect(geoRefine(wardrobe, { n: level }, ROOM).dimMM![2]).toBe(2667);
-    expect(judgeLabel(sofa, { n: level }, ROOM)).toEqual({ status: 'ok', cut: ['width'] });
-    expect(judgeLabel(wardrobe, { n: level }, ROOM)).toEqual({ status: 'ok', cut: ['width'] });
+    expect(judgeLabel(sofa, { n: level }, ROOM)).toEqual({ status: 'ok', cut: ['width'], bounded: ['height'] });
+    expect(judgeLabel(wardrobe, { n: level }, ROOM)).toEqual({ status: 'ok', cut: ['width'], bounded: ['height'] });
     // A word the reading could still be is offered without the "camera does not agree"
     // caveat the scan screen hangs on a negative margin: the bound puts the truth on
     // the band's edge, not outside it.
@@ -500,6 +502,39 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     expect(failed(on(boxOf('table', 'coffee-table', 1000, 450, 0.3, level), 'wardrobe'))).toEqual(['height']);
     // …and the wardrobe's is above it, so it is no nightstand.
     expect(failed(on(boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.3, level), 'nightstand'))).toEqual(['height']);
+  });
+
+  it('says which of its numbers are limits, and on which side', () => {
+    // What the scan screen prints after "Measured". A limit printed as its one number
+    // reads as a size, so the verdict carries where the truth can be: the least and the
+    // most, the same number twice only when the reading is a size.
+    const level = calAt(0);
+    const on = (box: Detection['box'], category: Category) => {
+      const { candidates: _c, ...v } = judgeLabel(det({ category, slot: 'n', box }), { n: level }, ROOM) as Extract<
+        LabelVerdict,
+        { status: 'suspect' }
+      >;
+      return v;
+    };
+    // The wardrobe called a nightstand: its width is cut, so absent; its height is read
+    // high, so it is at most 2756 and at least the 1.5 m lens its top is above.
+    expect(on(boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.8, level), 'nightstand')).toEqual({
+      status: 'suspect',
+      failed: ['height'],
+      allowed: { width: [300, 700], height: [350, 800] },
+      measured: { height: [1500, 2756] },
+      cut: ['width'],
+      bounded: ['height'],
+    });
+    // The coffee table called a wardrobe: seen whole across, so its width is at most what
+    // was read; its top is below the lens, read low, so its height is at least 265.
+    expect(on(boxOf('table', 'coffee-table', 1000, 450, 0.3, level), 'wardrobe')).toEqual({
+      status: 'suspect',
+      failed: ['height'],
+      allowed: { width: [600, 4000], height: [1600, 2600] },
+      measured: { width: [0, 1273], height: [265, 1500] },
+      bounded: ['width', 'height'],
+    });
   });
 
   it('offers the right word back where only the bound lets it fit', () => {
@@ -591,7 +626,11 @@ describe('judgeLabel — ceiling items', () => {
     // Nothing measured a height, so none is reported. A caller printing a fallback
     // here would put a catalogue default on screen after the word "Measured".
     expect(v.measured.height).toBeUndefined();
-    expect(v.measured.width).toBeLessThan(dimRangeFor('fan', 'fan').min[0]);
+    // Read as a size, not a limit: one number at both ends.
+    const [least, most] = v.measured.width!;
+    expect(least).toBe(most);
+    expect(most).toBeLessThan(dimRangeFor('fan', 'fan').min[0]);
+    expect(v.bounded).toBeUndefined();
   });
 
   it('never accuses a ceiling word on a height it did not measure', () => {
