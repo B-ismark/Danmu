@@ -69,8 +69,8 @@ export type CalMap = Partial<Record<CaptureSlot, CameraCal>>;
 // the maths cannot leave the two disagreeing.
 //
 // The CEILING branch is the one place `d.dimMM[1]` still wins, and it is not an
-// oversight: `placeCeilingObject` reads one row of a disc and takes no depth, so
-// nothing there turns a depth into a measurement.
+// oversight: `placeCeilingObject` reads a disc's width off its box and takes no
+// depth, so nothing there turns a depth into a measurement.
 /** Which placer reads a row of this word: the plane it is measured on.
  *
  *  Its anchor's, with one exception. A curtain whose shape resolves to the ceiling is

@@ -275,7 +275,7 @@ describe('geoRefine', () => {
     expect(floor.dimMM![1]).not.toBe(800);
 
     // The ceiling branch is where it survives, and that is not an oversight:
-    // `placeCeilingObject` reads one row of a disc and takes no depth at all, so
+    // `placeCeilingObject` reads a disc's width off its box and takes no depth, so
     // nothing there turns the hint into a measurement. 1100 mm is inside a fan's
     // 900–1500 band, so this is the hint winning rather than a clamp landing on it.
     const ceiling = geoRefine(

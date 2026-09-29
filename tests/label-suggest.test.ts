@@ -13,7 +13,7 @@ import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
 import { PART_LIBRARY, sceneShapeFor } from '@/lib/scene-spec';
 import { footprintForLayout } from '@/lib/footprint';
-import { bboxOfCeilingDisc } from './helpers/project';
+import { bboxOfCeilingDiscInFrame } from './helpers/project';
 
 const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
@@ -187,8 +187,7 @@ describe('suggestFromLabel', () => {
     // candidate with no measured axis then left a lamp called "ceiling fan".
     const deep: RoomDims = { width: 6, depth: 6, height: 2.8, footprint: footprintForLayout('rect', 6, 6) };
     const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
-    const [x, y, w, h] = bboxOfCeilingDisc('n', 0, -1.2, 1.2, wide, deep.height);
-    const box: Detection['box'] = [x, Math.max(0, y), w, y + h - Math.max(0, y)];
+    const box: Detection['box'] = bboxOfCeilingDiscInFrame('n', 0, -1.2, 1.2, wide, deep.height)!;
     const lamp = det({ label: 'lamp', category: 'lamp', slot: 'n', box });
     expect(frameCuts(box)).toEqual({ left: false, right: false, top: true, bottom: false });
     const out = suggestFromLabel(lamp, 'ceiling fan', { n: wide }, deep);
@@ -203,8 +202,7 @@ describe('suggestFromLabel', () => {
     // one is not, and "no margin" must never outrank a real one, fitting or not.
     const deep: RoomDims = { width: 6, depth: 6, height: 2.8, footprint: footprintForLayout('rect', 6, 6) };
     const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
-    const [x, y, w, h] = bboxOfCeilingDisc('n', 0, -1.2, 1.2, wide, deep.height);
-    const box: Detection['box'] = [x, Math.max(0, y), w, y + h - Math.max(0, y)];
+    const box: Detection['box'] = bboxOfCeilingDiscInFrame('n', 0, -1.2, 1.2, wide, deep.height)!;
     const lamp = det({ label: 'lamp', category: 'lamp', slot: 'n', box });
     const out = candidatesFor(lamp, ['fan', 'painting'], { n: wide }, deep, { requireFit: false });
     expect(out.map((c) => c.category)).toEqual(['painting', 'fan']);

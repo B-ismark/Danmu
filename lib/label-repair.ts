@@ -163,9 +163,12 @@ function outside(v: number, lo: number, hi: number, b: ReadBound): boolean {
  *  A ceiling piece is never grown, and its width is the one number it has, so ANY
  *  edge takes it: each moves the box's centre off the disc's, and `placeCeilingObject`
  *  reads its distance on that centre's row, so the width it takes there is neither the
- *  piece's nor a bound on it. A true 1200 mm fan came back 1402 mm cut at the side and
- *  935 cut at the side 600 mm further on, 1748 cut at the top — the usual case, a fan
- *  near a level lens — and 1111 cut at the bottom (`tests/label-repair.test.ts`). */
+ *  piece's nor a bound on it. A true 1200 mm fan comes back 1402 mm cut at the side,
+ *  989 cut at the side 600 mm further on, and 1111 cut at the bottom
+ *  (`tests/label-repair.test.ts`). Cut at the top — the usual case, a fan near a level
+ *  lens — it comes back 1200, read from the three edges the photo saw (§ 49.13), and is
+ *  still not judged: where no disc fits those edges the placer falls back on the
+ *  centre's row, and it does not say which of the two it did. */
 function readAxes(category: Category, shape: Shape, box: Detection['box']): { measured: SizeAxis[]; cut: SizeAxis[] } {
   const plane = measuredPlane(category, shape);
   const seen: readonly SizeAxis[] = plane === 'ceiling' ? ['width'] : ['width', 'height'];
