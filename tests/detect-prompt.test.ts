@@ -228,8 +228,12 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
       for (const v of [code, code.toUpperCase(), name, name.toUpperCase(), ` ${name[0].toUpperCase()}${name.slice(1)} `]) {
         expect(slotOf(v)).toBe(code);
       }
+      // The photo's own heading, `--- N WALL ---`, read back.
+      for (const v of [`${code.toUpperCase()} WALL`, `${name} wall`, `${name}  Wall `]) expect(slotOf(v)).toBe(code);
     }
-    for (const v of ['nw', 'northeast', 'north wall', 'wall n', 'constructor', 'toString', '__proto__', '', 'x', null, undefined, 0, ['n'], { n: 1 }]) {
+    // Only a separate, trailing `wall` is the heading's: `nwall` is no word the prompt
+    // used, and `nor wallth` is `north` only if the word is cut from the middle.
+    for (const v of ['nw', 'northeast', 'wall n', 'wall', ' wall', 'walls', 'n walls', 'north-wall', 'nwall', 'northwall', 'nor wallth', 'constructor', 'toString', '__proto__', '', 'x', null, undefined, 0, ['n'], { n: 1 }]) {
       expect(slotOf(v)).toBeUndefined();
     }
     // Written back as its code, so the saved `__slot:x` suffix and the camera map

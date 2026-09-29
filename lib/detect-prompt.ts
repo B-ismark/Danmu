@@ -26,8 +26,9 @@ const SLOT_NAME: Record<CaptureSlot, string> = { n: 'NORTH', e: 'EAST', s: 'SOUT
 
 /** A wall as a reply may name it. The prompt asks for `"n"`, but it also calls the
  *  walls NORTH, EAST, SOUTH and WEST, and heads each photo `--- N WALL ---`, so a
- *  reply in either form is the prompt's own words read back, not a guess about which
- *  wall was meant. A Map rather than an object, so `"constructor"` is not a wall. */
+ *  reply in any of those forms — `N WALL` and `north wall` included — is the
+ *  prompt's own words read back, not a guess about which wall was meant. A Map
+ *  rather than an object, so `"constructor"` is not a wall. */
 const SLOT_OF = new Map<string, CaptureSlot>(
   (Object.entries(SLOT_NAME) as [CaptureSlot, string][]).flatMap(([code, name]) => [
     [code, code],
@@ -37,7 +38,7 @@ const SLOT_OF = new Map<string, CaptureSlot>(
 
 /** The wall code a reply's `slot` names, or undefined when it names none. */
 export function slotOf(v: unknown): CaptureSlot | undefined {
-  return typeof v === 'string' ? SLOT_OF.get(v.trim().toLowerCase()) : undefined;
+  return typeof v === 'string' ? SLOT_OF.get(v.trim().toLowerCase().replace(/\s+wall$/, '')) : undefined;
 }
 
 /** The wall a reply's row is filed under, among the walls `sent`, or undefined.
