@@ -29,6 +29,7 @@ import { roomStore } from '@/lib/storage';
 import { saveSceneFile } from './SceneFile';
 import { toast } from '@/components/ui/StorageToast';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { usePopoverDismiss } from './usePopoverDismiss';
 
 export type ExportItem = { icon: IconName; label: string; hint: string; onClick: () => void };
 
@@ -154,28 +155,7 @@ export function ExportMenu() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: PointerEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return;
-      // stopImmediatePropagation, not stopPropagation: capture listeners on the
-      // SAME node (window) still run after a plain stop, so one Esc closed this
-      // and the help card together.
-      e.stopImmediatePropagation();
-      e.stopPropagation();
-      setOpen(false);
-      btnRef.current?.focus();
-    }
-    window.addEventListener('pointerdown', onDown, true);
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      window.removeEventListener('pointerdown', onDown, true);
-      window.removeEventListener('keydown', onKey, true);
-    };
-  }, [open]);
+  usePopoverDismiss(open, () => setOpen(false), wrapRef, btnRef);
 
   function run(fn: () => void) {
     setOpen(false);
@@ -189,7 +169,7 @@ export function ExportMenu() {
   // swallow an export. (`saveSceneFile` re-reads the room itself.)
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', display: 'flex' }}>
+    <div ref={wrapRef} className="popover-anchor">
       {/* No aria-haspopup, deliberately, and NOT because "true" is vaguer than
           "menu": in ARIA the two are the same announcement — `true` is defined as
           "the popup is a menu". It would re-promise the arrow-key roving focus the

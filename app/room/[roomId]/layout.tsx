@@ -13,6 +13,7 @@ import {
 import { SoundCues } from '@/components/studio/SoundCues';
 import { RoomSwitcher } from '@/components/studio/RoomSwitcher';
 import { StudioHelp } from '@/components/studio/StudioHelp';
+import { ViewMenu } from '@/components/studio/ViewMenu';
 import { ExportMenu } from '@/components/studio/ExportMenu';
 import { StudioMoreMenu } from '@/components/studio/StudioMoreMenu';
 import { NarrowViewportBanner } from '@/components/studio/NarrowViewportBanner';
@@ -47,8 +48,13 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
         // inside Export — downloading a PNG is not the primary verb of a
         // decoration app, and sibling download buttons are how you end up not
         // knowing the other ones exist.
+        //
+        // View (grid, decor, sounds, quality) is the gear beside Help: both are
+        // controls you open once and walk away from, and the right rail is the
+        // selected piece's panel, not a settings page. See ViewMenu.
         right={
           <>
+            <ViewMenu />
             <StudioHelp />
             <RoomSwitcher />
             <ExportMenu />

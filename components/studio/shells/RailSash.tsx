@@ -202,7 +202,7 @@ export function RailSash({
       window.removeEventListener('resize', sync);
     };
     // `open` is a dependency, not decoration. While the rail is shut `metrics.width` is
-    // the CLOSED width — `--rail-closed`, 37px — and `shown` starts publishing again the
+    // the CLOSED width — `--rail-closed` — and `shown` starts publishing again the
     // instant `open` flips, so Enter or the chevron put `aria-valuenow=37` against an
     // `aria-valuemin` of 208 or 228 for the render after the toggle. That is the same
     // impossible-slider defect the compact step had, through the other door: neither
@@ -279,7 +279,7 @@ export function RailSash({
       // the user actually moves, rather than leaping by the travel during the open.
       //
       // **`if (m)` is not the guard this needs, and that was the defect.** A move
-      // dispatched before the open has laid out measures the CLOSED rail — 37px, a
+      // dispatched before the open has laid out measures the CLOSED rail — `--rail-closed`, a
       // number, so `if (m)` passes — and seeds `startW` at 37 against a floor of 228.
       // Every later move then computes `collapse = 37 + delta < floor - SNAP_PAST_FLOOR`,
       // which is true unless the user has already dragged the width of the rail
@@ -493,7 +493,7 @@ export function RailSash({
     onRestoreWidths();
   }
 
-  // A closed rail has no range to report. It measures `--rail-closed` (37px),
+  // A closed rail has no range to report. It measures `--rail-closed`,
   // which sits BELOW `aria-valuemin`, so claiming the trio there describes an
   // impossible slider — and the sash stays mounted while closed on purpose, since
   // Enter is what restores it. `aria-expanded` on the rail's own toggle is what

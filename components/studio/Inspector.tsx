@@ -13,6 +13,7 @@ import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { SwapModelModal } from './RegenerateModal';
 import { RailSection } from './RailSection';
+import { EmptyInspector } from './EmptyInspector';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { anchorFor, findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
@@ -63,12 +64,9 @@ export function Inspector() {
 
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
 
-  if (!part || !id)
-    return (
-      <div className="t-meta" style={{ padding: 20, textAlign: 'center', lineHeight: 1.5 }}>
-        Nothing selected
-      </div>
-    );
+  // Nothing selected is the state everyone lands in first, so it is designed rather
+  // than a grey line; see EmptyInspector.
+  if (!part || !id) return <EmptyInspector />;
 
   const currentDim = part.dimMM;
   const defaultDim = baseDim ?? part.dimMM;
@@ -277,13 +275,14 @@ export function Inspector() {
   // the outer rail is the wrong box. If the `overflow` ever moves, the class moves
   // with it, because it is the scrollbar that makes the two boxes differ.
   //
-  // `flex: 0 0 auto`, not `height: 100%` and not `0 1 auto`. This pane is no longer a
-  // direct child of `.rail`: it shares a scroll region with the View section (see
-  // `shell-parts.tsx`). `height: 100%` inside that region would claim all of it and
-  // push its sibling out, which is the defect that region exists to fix — and `0 1
-  // auto` is the same mistake from the other end. Inside a column that scrolls, only
-  // a child that CAN shrink does: `ViewSection` is a `RailSection` at a fixed
-  // `flex: 0 0 auto` 277px, so a shrinkable Inspector absorbed the whole shortfall.
+  // `flex: 0 0 auto`, not `height: 100%` and not `0 1 auto`. This pane is not a direct
+  // child of `.rail`: it sits in a scroll region (see `shell-parts.tsx`), which it
+  // shared with a View section until View moved to the top bar's gear (`ViewMenu`).
+  // `height: 100%` inside that region would claim all of it and push any sibling out,
+  // which is the defect that region exists to fix — and `0 1 auto` is the same mistake
+  // from the other end. Inside a column that scrolls, only a child that CAN shrink
+  // does: the View section was a `RailSection` at a fixed `flex: 0 0 auto` 277px, so a
+  // shrinkable Inspector absorbed the whole shortfall.
   // Measured at 1100 × 420 with a piece selected: the scroller was 234px holding
   // 277px and the Inspector was **0** — and scrolling revealed nothing, because there
   // was no Inspector height to scroll to. Neither child shrinks now; the content

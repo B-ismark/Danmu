@@ -8,6 +8,7 @@ import {
   isParametric,
   moduleRangeFor,
   pendantDrop,
+  plantForm,
   radiatorFins,
   stoolSeat,
   windowPanes,
@@ -96,6 +97,11 @@ const CAPS: CapRow[] = [
   { shape: 'door', axis: 2, read: doorHandleY, what: 'the handle height' },
   { shape: 'window', axis: 0, read: (mm) => mm / 1000 / windowPanes(mm), what: 'the pane width' },
   { shape: 'radiator', axis: 0, read: (mm) => mm / 1000 / radiatorFins(mm), what: 'the fin pitch' },
+  {
+    shape: 'plant', axis: 2,
+    read: (mm) => plantForm([authoredDim('plant')[0], authoredDim('plant')[1], mm]).pot.h,
+    what: 'the pot',
+  },
 ];
 
 /** Worst disagreement between drawing at the stored size and drawing at the authored

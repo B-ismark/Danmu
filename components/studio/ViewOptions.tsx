@@ -20,7 +20,18 @@
 // works. Nothing in this file changes what a screenshot of the room would show
 // to someone else.
 //
-// It is now the body of the RIGHT rail's "View" section, and NOT a popover. The
+// **It lives behind the top bar's gear now (`ViewMenu`), and on a phone in the
+// toolbar's own View sheet.** Those are its only two homes, and
+// `tests/view-menu.test.tsx` sweeps the tree to keep it that way. As the last section
+// of the right rail it sat under the selected piece's panel: three values set once
+// and never touched again, taking room from the thing people came to edit, and
+// standing in for an empty state the rail did not have (`EmptyInspector` is that
+// now). The gear's popover is not the popover the paragraphs below argue against:
+// that one hung inside a clipping rail, off a button inside a disclosure. This one
+// hangs off the top bar, which clips nothing, and it is the only disclosure there
+// is. It sits beside Help and Export, and those are the same kind of control.
+//
+// Before that it was the body of the RIGHT rail's "View" section, and NOT a popover. The
 // section moved out of the left rail because the two rails divide the work between
 // them: the left one is what is IN the room, the right one is how it LOOKS, and the
 // three values below are three answers to the second question. (An earlier note

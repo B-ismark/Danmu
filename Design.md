@@ -1602,8 +1602,9 @@ shape still untested.
   declared 500. Every assertion about this function read `tip`, so the file was green
   about a quantity the fan does not have. The inner end is pinned at the hub too,
   because a tip-only assertion passes for a blade of the right length in the wrong place.
-- **Parametric shapes** (`isParametric` — fourteen of them, and the list is not
-  restated here because every prose copy of it has gone stale at least once)
+- **Parametric shapes** (`isParametric` — neither listed nor counted here: every prose
+  copy of the list went stale at least once, and so did the count, which read fourteen
+  for a commit after `plant` made it fifteen)
   rebuild from effective dimensions instead of stretching: sofa tiles seat
   modules from width, bookshelf derives shelves from height, wardrobe derives
   door bays from width, etc. The scale gizmo live-stretches; commit converts
@@ -2115,7 +2116,8 @@ and closes when you are not using it.
   region, with the count in `.section-meta`. Open/closed is **local, not
   persisted**: which drawer you left open is not a preference worth carrying
   between rooms, and `partialize` should stay about how the room *looks*.
-  **View is in the right rail now** — described under that rail below, not here.
+  **View is behind the top bar's gear now** (`ViewMenu`), described under the top
+  bar below. For a while it was the right rail's last section.
   **A rail section's body is inline, never a popover.** `ViewOptions` shipped for
   a while as a "Look" button opening a 300px absolute card inside a 260px rail:
   it was cut off down the left by `PartTree`'s own scroll box, and it was a
@@ -2130,33 +2132,31 @@ and closes when you are not using it.
 - **Re-scan moved here** from the top bar: it changes what is *in* the room, not
   how the app is framed.
 
-### The right rail — the selection, then how the room is drawn
+### The right rail — the selection, or the room at a glance
 
-`SelectionHeader` → `Inspector` → a collapsible **View** section → the pinned
-`RailFooter`. It had no heading of its own for a while, and the paragraph
-describing it was filed under *The left rail* above — which is how the only
-canonical statement of one rail's composition came to sit under the other's name.
+`SelectionHeader` → `Inspector` → the pinned `RailFooter`. It had no heading of its
+own for a while, and the paragraph describing it was filed under *The left rail*
+above, which is how the only canonical statement of one rail's composition came to
+sit under the other's name.
 
-- **View (`ViewOptions`) is the last section before the footer.** With nothing
-  selected it sits directly on top of Add; with a piece or a wall selected it sits
-  under the Inspector's last section. It passes `divider={false}` to `RailSection`,
-  because `.rail-footer`'s own `--paper-2` band already separates it and a hairline
-  directly above that band is the artefact `globals.css` records as having been
-  reported three times as a stray scrollbar.
-- **Why it is on this side, and the reason first written down was wrong.** It was
-  filed as *"about how the SELECTED piece renders as much as how the room does"*.
-  It is not: `ViewOptions` reads exactly three values — `showGrid`, `dressed`,
-  `quality` — and never touches `selectedPartId`. Its own file says so twenty lines
-  above where that claim was repeated. The true reason is the rails' division of
-  labour: the left rail is **what is in the room**, the right rail is **how it
-  looks**, and whether the grid and the props are drawn and how hard the renderer
-  works are three answers to the second question.
-- **Open by default**, unlike the left rail's old `view: false`. The controls are
-  the useful half of the no-selection state. Like every `RailSection` here that is
-  **local, not persisted** — and, because `RightRailBody` returns `null` when the
-  rail is closed and `StudioShell` is mounted per page, it also reopens on a rail
-  collapse and on a 3D ↔ 2D tab switch. Same as the left rail's `sec`; worth knowing
-  before anyone treats the disclosure as a place to hide it for good.
+- **With nothing selected, the Inspector is a designed empty state**
+  (`EmptyInspector.tsx`), not the words *"Nothing selected"* over 700px of blank
+  column. It does NN/g's three jobs for an empty state: it says what the space is for
+  (*"Pick a piece to style it"*), how to fill it (click a piece or its Catalog row; a
+  wall to paint or move it; Shift-click for several), and a way forward. The way
+  forward is the room itself, because with nothing picked the room is what is in
+  front of you: a **This room** card (pieces, overall size, floor area) and two paths,
+  **Restyle it** and **Resize it**, which open the LEFT rail on Style or Room
+  (`lib/rail-intent.ts`). The panel gets no second copy of either control.
+  **The floor area is the footprint polygon's** (`lib/room-facts.ts`), never
+  `width × depth`: an L at 5 × 4 m has 16.5 m² of floor, not 20. **No Add button
+  here**, because Add is the pinned footer directly below it.
+- **View left this rail for the top bar's gear.** It was the last section before the
+  footer, and it filled the no-selection state by standing in for an empty state the
+  rail did not have. Three values set once and never touched again were sitting under
+  the panel people actually came to edit. The reason once given for putting it on
+  this side is worth keeping as a warning: it was filed as *"about how the SELECTED
+  piece renders"*, and `ViewOptions` never reads `selectedPartId`.
 
 **Both rails collapse** (`railLeftOpen` / `railRightOpen`, persisted next to
 `showGrid`). Two fixed rails spend 45% of a 1280px laptop on chrome in an app whose
@@ -2165,10 +2165,31 @@ control that reopens it is always where the rail was — and a **stacked** layou
 never collapses, because there the rails are content below the room rather than
 chrome beside it.
 
-### The studio top bar — three controls, no primary
+**A collapsed rail is an icon strip, `--rail-closed` (44px) wide, not an empty
+band.** VS Code's activity bar, Material 3's navigation rail ("should not be
+hidden"), and Figma's and JetBrains' tool-window stripes all make the same choice:
+a shut panel keeps one icon per thing it holds, and each icon is a way back in that
+lands on what it names. The **left** strip is Room, Style and Catalog (with the
+piece count as a badge), then the room-health dot. The dot is the one thing that
+must not be hidden with the rail. The **right** strip is the current selection, lit,
+when there is one, then **Add**. Pressing Style opens the rail *on Style*: the
+request goes through `lib/rail-intent.ts`, and `PartTree` opens that section,
+scrolls to it and moves focus to its header, because the strip button that was
+pressed has just unmounted. Every icon has an `aria-label` and a **side** tooltip
+(`Tooltip placement="left" | "right"`), since a bubble above or below one icon
+covers the next one down, the one the pointer is moving to.
 
-`Rooms / <name>` as a breadcrumb, the tab switcher, then `?` · room switcher ·
-**Export**. It was undo/redo, a room switcher, Rescan, Save file and Snapshot — with
+### The studio top bar — four controls, no primary
+
+`Rooms / <name>` as a breadcrumb, the tab switcher, then the **View gear** · `?` ·
+room switcher · **Export**. The gear (`ViewMenu.tsx`) holds how the room is drawn on
+this device (floor grid, decor, sounds, quality) and links to Settings for units,
+detection and storage. Those are app settings, and a second copy of them here would
+be a second place to keep in step. The gear and Help sit together because they are
+the same kind of control: one you open, read and close. Every top-bar popover (View,
+Help, Export, and the phone's More) shares its dismissal (`usePopoverDismiss`): a
+press outside, or Escape, which returns focus to the trigger. So opening one closes
+whichever was open, rather than stacking Help's card over View's. It was undo/redo, a room switcher, Rescan, Save file and Snapshot — with
 Snapshot styled as the primary action, which downloading a PNG is not. Undo/redo went
 to `CanvasView`, Rescan to the rail, and every "take this away with you" action
 collapsed into one `ExportMenu.tsx`: the 3D snapshot (3D tab only — it captures that
@@ -2212,6 +2233,10 @@ asks about width.
   provide actions.* Room, Add and View are things you do to this room, so they are
   toolbar items. Material 3 Expressive retired the bottom app bar for the same docked
   toolbar.
+- **View is its own sheet.** The toolbar's View button used to open Details, where
+  View's controls sat under an empty Inspector. With those controls behind the
+  laptop's gear, the phone gets a View sheet of its own rather than a row in More:
+  a sheet is how this layout shows controls, and More is for leaving (help, export).
 - **One primary action, and it is Add.** Apple: specify one primary action. Material:
   one FAB, for the primary or most common action.
 - **The toolbar changes with the selection.** Tap a sofa and it offers the sofa (its

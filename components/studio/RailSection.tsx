@@ -39,6 +39,7 @@ export function RailSection({
    *  band is the defect globals.css documents as reading like a stray scrollbar — so
    *  the section that sits immediately above the footer passes `false` here. */
   divider = true,
+  anchor,
 }: {
   title: string;
   /** The count or state this section is responsible for. Derived, never typed. */
@@ -53,10 +54,14 @@ export function RailSection({
    *  what the section is currently showing. */
   action?: ReactNode;
   divider?: boolean;
+  /** A name for this section that something outside it can find it by — a
+   *  collapsed rail's icon opens the rail and scrolls here (`lib/rail-intent.ts`). */
+  anchor?: string;
 }) {
   const id = useId();
   return (
     <div
+      data-rail-section={anchor}
       style={{
         borderBottom: divider ? '1px solid var(--hairline)' : 'none',
         // A grown section owns the leftover space, but only while it is open —

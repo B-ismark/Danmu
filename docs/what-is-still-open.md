@@ -3057,14 +3057,13 @@ widened for them.
   a laptop does. **This gate found it on its first run**; it sat under the eyeball threshold
   used to draft the very table it belongs to, which is the argument for a budget covering
   every shape over a list of the ones somebody noticed.
-- **`plant` is the one real defect left, and it is a DECISION rather than a fix.** `PlantGeo`
-  is hard-coded metres end to end — canopy blobs of r 0.34 at y 1.55, pot cylinder r 0.21 —
-  and never reads `part.dimMM`. Declared 400 × 400 × 1600, drawn **920 × 720 × 1940**. Both
-  ways out change something a user can see: shrink the plant to its declared box, or restate
-  the box at the size the plant is drawn. The second keeps 3D identical and makes the plan
-  tell the truth, and `plant`'s own max range (1200 × 1200) admits 920 × 720 — but it is a
-  size the user reads, so it is not an implementer's call. Budgeted at its measured 260 mm
-  meanwhile, so it cannot get worse unnoticed.
+- **`plant` is resolved, and it was not one of the two ways out this entry offered.** It
+  listed shrinking the plant or restating its box as the only options, and that was a
+  choice between two squashes. `plantForm` (`lib/scene-spec.ts`) draws it AT its `dimMM`
+  instead, with round leaves: the head takes the box's proportions and each leaf stays a
+  sphere. It stays inside the w × d ellipse the plan draws, not only the box, because
+  `plant` is a round shape. `tests/plant-form.test.ts` holds both, and the 260 mm budget
+  is deleted.
 
 **The other five of the "six renderers" are not defects at their authored size**, which the
 row above could not have told you and is worth recording: `chair-armchair` fills its box
