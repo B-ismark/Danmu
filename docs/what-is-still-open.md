@@ -8189,7 +8189,12 @@ regressed width was mostly outside the frame is dropped where it used to be kept
 rule for both sources (`boxInPhoto`, `SLIVER`), which the first version of the fix was not: the
 cloud rows were cut and kept every sliver the on-device rows dropped (the review of D8). A box that is
 not four finite numbers is dropped too, on the cloud path where it arrives as JSON: `['0.2', '0',
-'1', '1']` coerced into a valid box one frame wide.
+'1', '1']` coerced into a valid box one frame wide. And a reply whose rows ALL drop is not an
+empty room (the same review): answered in some unit other than the fractions the prompt asks for,
+every box can land past the frame, and dropped one by one they left the screen saying *nothing
+stood out, which is exactly right for an empty room*. `readCloudReply` (`lib/detect-prompt.ts`)
+calls that reply unreadable, as it already did a body that was not JSON or not a list, and the
+screen offers Retry; an empty list stays an empty room.
 
 **What it is worth in a real scan is still not measured.** That depends on how often YOLO's or
 Gemini's box overruns the frame, and by how much, which wants real detections rather than a

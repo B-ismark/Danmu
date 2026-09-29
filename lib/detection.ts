@@ -2,7 +2,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { useQuota } from './quota';
-import { buildDetectPrompt, cloudRows, type PromptRoom } from './detect-prompt';
+import { buildDetectPrompt, readCloudReply, type PromptRoom } from './detect-prompt';
 import type { DetectSource } from './detect-confidence';
 import type { CaptureSlot } from './storage';
 
@@ -153,21 +153,12 @@ export async function detectAcrossImages(
     throw classifyDetect(e);
   }
 
-  // A body we cannot parse is NOT an empty room. Returning [] here made the
-  // detect screen show its "All clear — nothing stood out in your photos, which
-  // is exactly right for an empty room" notice after a malformed response, having
-  // already spent the quota. Throw so the error path (which offers Retry) owns it.
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (e) {
-    throw new DetectError('BAD_RESPONSE', 'The detection service replied with something unreadable.', e);
-  }
-  if (!Array.isArray(parsed)) {
-    throw new DetectError('BAD_RESPONSE', 'The detection service replied in an unexpected shape.', parsed);
-  }
-  // NOT deduped here: see `cloudRows`.
-  return cloudRows(parsed);
+  // A body that is not an answer is NOT an empty room: see `readCloudReply`.
+  // Throw, so the error path (which offers Retry) owns it. NOT deduped here: see
+  // `cloudRows`.
+  const reply = readCloudReply(text);
+  if ('unreadable' in reply) throw new DetectError('BAD_RESPONSE', reply.unreadable, reply.cause);
+  return reply.rows;
 }
 
 function blobToBase64(blob: Blob): Promise<string> {

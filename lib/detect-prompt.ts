@@ -151,8 +151,38 @@ Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by vis
 export function cloudRows(parsed: readonly unknown[]): Detection[] {
   return (parsed as Detection[]).flatMap((d) => {
     const box = d && Array.isArray(d.box) && d.slot ? boxInPhoto(d.box) : null;
-    // Stamped here, and called only by `detectAcrossImages`, so nothing but the reply
-    // to a Gemini call can claim its output came from Gemini.
+    // Stamped here, and called only by `readCloudReply`, which only
+    // `detectAcrossImages` calls, so nothing but the reply to a Gemini call can
+    // claim its output came from Gemini.
     return box ? [{ ...d, box, source: 'cloud' as const }] : [];
   });
+}
+
+/** A reply's rows, or why it holds nothing the screen may act on. */
+export type CloudReply = { rows: Detection[] } | { unreadable: string; cause: unknown };
+
+/** What a Gemini reply says. Three kinds of body are not an answer, and each was
+ *  once read as an empty room — the detect screen's "nothing stood out in your
+ *  photos, which is exactly right for an empty room", with the quota already spent:
+ *  a body that is not JSON, JSON that is not a list, and a list none of whose rows
+ *  `cloudRows` keeps. The third is the cut's (§ 49.15): a reply in some unit other
+ *  than the fractions the prompt asks for can put every box past the frame, and
+ *  dropping them row by row left no sign that anything had gone wrong. So it is
+ *  unreadable, and the screen offers Retry. An EMPTY list is the one empty reply
+ *  that is an answer, and stays one. */
+export function readCloudReply(text: string): CloudReply {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    return { unreadable: 'The detection service replied with something unreadable.', cause: e };
+  }
+  if (!Array.isArray(parsed)) {
+    return { unreadable: 'The detection service replied in an unexpected shape.', cause: parsed };
+  }
+  const rows = cloudRows(parsed);
+  if (parsed.length > 0 && rows.length === 0) {
+    return { unreadable: 'The detection service replied with no box inside the photos.', cause: parsed };
+  }
+  return { rows };
 }
