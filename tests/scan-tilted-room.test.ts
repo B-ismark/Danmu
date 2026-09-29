@@ -41,7 +41,7 @@ import { calForPhoto, calFromHfov, wallFrame, wallRowAtHeight, type CameraCal } 
 import { footprintForLayout } from '@/lib/footprint';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot, RoomData } from '@/lib/storage';
-import { ALONG, bboxOfWallSolid, extent, floorBoxCorners, project, type Box } from './helpers/project';
+import { ALONG, bboxOfWallSolid, extent, floorBoxCorners, framedExtent, project, type Box } from './helpers/project';
 
 // ── The real room and the real camera ───────────────────────────────────────
 
@@ -131,26 +131,29 @@ function truthCentre(p: Piece): { x: number; z: number } {
 /** The box a perfect detector draws: every corner of the solid, projected through
  *  the true camera — before the frame has any say. */
 function rawBoxOf(p: Piece): Box {
-  const cal = trueCal(p.slot);
-  if (isFloor(p)) {
-    const c = truthCentre(p);
-    const corners = floorBoxCorners(p.slot, c.x, c.z, p.w / 1000, p.h / 1000, depthM(p));
-    return extent(corners.map((q) => project(p.slot, ...q, cal)));
-  }
-  return bboxOfWallSolid(p.slot, p.slot, p.lateral, p.y ?? 1.2, wallD(p.slot), p.w / 1000, p.h / 1000, depthM(p), cal);
+  if (isFloor(p)) return extent(floorOutline(p));
+  return bboxOfWallSolid(p.slot, p.slot, p.lateral, p.y ?? 1.2, wallD(p.slot), p.w / 1000, p.h / 1000, depthM(p), trueCal(p.slot));
+}
+function floorOutline(p: Piece): Array<[number, number]> {
+  const c = truthCentre(p);
+  const corners = floorBoxCorners(p.slot, c.x, c.z, p.w / 1000, p.h / 1000, depthM(p));
+  return corners.map((q) => project(p.slot, ...q, trueCal(p.slot)));
 }
 
-/** …and the box it can actually draw, clipped to the frame, because nothing outside
- *  the picture can be drawn round. */
+/** …and the box it can actually draw, because nothing outside the picture can be drawn
+ *  round. A floor piece's is its outline inside the frame (`framedExtent`): clipping the
+ *  whole box keeps the column of a foot the frame hid, a side further out than any the
+ *  photo shows (§ 49.20). A wall piece's is still its box clipped, which is what the wall
+ *  placer reads its side face as (§ 49.22). */
 function boxOf(p: Piece): Box | null {
-  const raw = rawBoxOf(p);
-  const u0 = Math.max(0, raw[0]);
-  const v0 = Math.max(0, raw[1]);
-  const u1 = Math.min(1, raw[0] + raw[2]);
-  const v1 = Math.min(1, raw[1] + raw[3]);
+  const box = isFloor(p) ? framedExtent(floorOutline(p)) : clipped(rawBoxOf(p));
   // A sliver at the edge is not something a detector finds.
-  if (u1 - u0 < 0.03 || v1 - v0 < 0.03) return null;
-  return [u0, v0, u1 - u0, v1 - v0];
+  if (!box || box[2] < 0.03 || box[3] < 0.03) return null;
+  return box;
+}
+function clipped([u, v, w, h]: Box): Box {
+  const [u0, v0] = [Math.max(0, u), Math.max(0, v)];
+  return [u0, v0, Math.min(1, u + w) - u0, Math.min(1, v + h) - v0];
 }
 
 /** How much wider a frame this photo would have needed for nothing in it to be cut.

@@ -947,9 +947,9 @@ export type ReadBound =
  *  the two cost its verdict the same. With the phone level or tipped UP, which is how
  *  rooms are photographed, the round rows hold but three, all one case: a stool the frame
  *  shows only the top of, whose box's sides are where its seat crosses the frame's
- *  bottom and not the tangents they are read as (§ 49.20, pinned in the same file). A box
- *  tipped down holds on a fixture that still clips the silhouette rather than boxing what
- *  the photo draws, which is the same section's to fix.
+ *  bottom and not the tangents they are read as (pinned in the same file). The box rows
+ *  hold at every tilt that file sweeps, 25° up to 20° down, boxed as the photo draws
+ *  them, since a foot-cut box's side is read where the frame crosses it (§ 49.20).
  *
  *  **Both directions also lean on the catalogue depth**, because the far end is the
  *  piece's back on the plaster at its kind's typical depth. A piece deeper than that
@@ -1043,8 +1043,17 @@ function ceilingOf(room: { height: number }): number {
  * is. Returns the centre's forward distance, not the near face's.
  *
  * Which corner each silhouette edge came from is `lateralSpan`'s question, below;
- * this function's own job is the two faces and the two heights to hand it. Exact —
- * checked to thirteen digits against a forward-projected box at 0°, ±5° and 12°.
+ * this function's own job is the side face to hand it — the piece's two faces by its
+ * two heights, or, cut at its foot, the part of that face above the frame's bottom row
+ * (`aboveRow`). Exact — checked to thirteen digits against a forward-projected box at
+ * 0°, ±5° and 12°.
+ *
+ * **The cut is the half that was missing** (§ 49.20). A side's column comes from the
+ * corner at the extreme `zc`, and under tilt one side's extreme is at the foot — the
+ * height term `(H − y)·sin t` is largest or smallest there — so with the foot cut it is
+ * a corner the photo never drew. The side the photo DID draw is where the row's plane
+ * through the lens crosses the side face, so reading the whole face read a width short
+ * of the truth under a bound that treats it as a floor — a 2 m sofa at 803 mm.
  *
  * At `depthM: 0` and a level lens this is the arithmetic it replaces, to the last
  * bit. Under tilt it is deliberately NOT, because the old version read the width
@@ -1057,6 +1066,9 @@ function floorFromBox(
   near: number,
   depthM: number,
   cal: CameraCal,
+  /** The bottom row's `(H − y)/f` when the frame cut the piece's foot, else null. The
+   *  caller's, so the cut test and the row are read once. */
+  footRow: number | null,
 ): { d: number; right: number; widthM: number; heightM: number; rises: boolean } | null {
   const [bx, by, bw] = box;
   const far = near + depthM;
@@ -1070,20 +1082,44 @@ function floorFromBox(
   const heightM = heightOf(cal) + ((top.up > 0 ? near : far) / top.fwd) * top.up;
   if (!(heightM > 0)) return null;
 
-  const span = lateralSpan(box, [near, far], [0, heightM], cal);
+  // Cut at its foot, the side the photo shows is the part of the piece above the frame's
+  // bottom row, which the row's plane through the lens cuts off the side face. Nothing
+  // left above it is a box with no height, which a saved record can still hold.
+  const side: Array<[number, number]> = [[near, 0], [far, 0], [far, heightM], [near, heightM]];
+  const shown = footRow === null ? side : aboveRow(side, footRow, cal);
+  if (!shown.length) return null;
+  const span = lateralSpan(box, shown, cal);
   if (!span) return null;
   return { d: near + depthM / 2, right: span.right, widthM: span.widthM, heightM, rises: top.up > 0 };
 }
 
+/** The part of a side face, as `[face, height]` corners, above an image row whose plane
+ *  through the lens has `(H − y)/f = tau` along it. */
+function aboveRow(face: Array<[number, number]>, tau: number, cal: CameraCal): Array<[number, number]> {
+  const H = heightOf(cal);
+  const over = ([f, y]: [number, number]) => y - (H - tau * f);
+  const out: Array<[number, number]> = [];
+  face.forEach((a, i) => {
+    const b = face[(i + 1) % face.length];
+    const [oa, ob] = [over(a), over(b)];
+    if (oa >= 0) out.push(a);
+    if (oa >= 0 !== ob >= 0) out.push([a[0] + ((b[0] - a[0]) * oa) / (oa - ob), a[1] + ((b[1] - a[1]) * oa) / (oa - ob)]);
+  });
+  return out;
+}
+
 /**
- * The lateral offset and width of a box, given the two faces and the two heights
- * its eight corners occupy.
+ * The lateral offset and width of a box, given the part of its side face the photo
+ * shows, as `[face, height]` corners — the whole face's four, or fewer or more where
+ * the frame cut it.
  *
  * Shared by the floor and wall placers because it is the same question for both: an
  * observed bbox edge is a CORNER, and which corner is decided by `zc` — the forward
  * distance after the tilt rotation, which depends on the corner's height as well as
  * its face. So an edge whose observed tangent is positive came from the corner with
- * the smallest `zc`, and a negative one from the largest. No search, no iteration.
+ * the smallest `zc`, and a negative one from the largest. `zc` is linear in both, so
+ * over a clipped face its extremes are still at the corners handed in. No search, no
+ * iteration.
  *
  * Extracted rather than copied. Two placers each holding their own version of this
  * is the shape of scar `lib/layout-rules.ts` and `lib/drag-convoy.ts` both carry —
@@ -1091,20 +1127,23 @@ function floorFromBox(
  */
 function lateralSpan(
   box: [number, number, number, number],
-  faces: [number, number],
-  heights: [number, number],
+  side: Array<[number, number]>,
   cal: CameraCal,
 ): { right: number; widthM: number } | null {
   const [bx, , bw] = box;
-  const zc = faces.flatMap((f) => heights.map((y) => forwardAtHeight(y, f, cal)));
+  const zc = side.map(([f, y]) => forwardAtHeight(y, f, cal));
   const zMin = Math.min(...zc);
   const zMax = Math.max(...zc);
-  // Arithmetic protection, and it does NOT fire — said plainly rather than left
-  // looking tested. A negative `zc` would flip the sign of both silhouette edges
-  // and hand back a mirrored piece in silence, so the guard is worth its line; but
-  // swept over nine tilts from −60° to +60°, a dense grid of boxes and four depths
-  // to 12 m, no input reaches it, and deleting it fails nothing. Documented instead
-  // of given a test that would have to pretend.
+  // Arithmetic protection, and it does not fire now — said plainly rather than left
+  // looking tested. A negative `zc` would flip the sign of both silhouette edges and
+  // hand back a mirrored piece in silence, so the guard is worth its line. This note
+  // said it never fired, from a sweep of boxes the frame showed whole, and it did:
+  // counted by instrumenting it, 312 times across the suite at 5f00702, while a
+  // foot-cut floor piece was read over its WHOLE side face, where a lens tipped up puts
+  // the near foot behind its own plane — on the label fixture, a bed or a rug named on
+  // a smaller piece, so judged as nothing. Read over the part above the frame's bottom
+  // row (§ 49.20) it fires on no input in the suite, and deleting it fails nothing.
+  // Documented instead of given a test that would have to pretend.
   if (!(zMin > 0)) return null;
 
   const tanL = tanX(bx, cal);
@@ -1697,7 +1736,9 @@ export function placeFloorObject(
     const oneSide = foot.round && cut.left !== cut.right && !cut.bottom && foot.whole
       ? floorFromRoundOneSide(box, at, cal, cut.left, foot.whole.widthM / 2, walls)
       : null;
-    return foot.round ? oneSide ?? floorFromRound(box, at, cal) : floorFromBox(box, at, depthM, cal);
+    // `bottom.fwd > 0` here: the ray points down and `near` came out positive.
+    const footRow = cut.bottom ? -bottom.up / bottom.fwd : null;
+    return foot.round ? oneSide ?? floorFromRound(box, at, cal) : floorFromBox(box, at, depthM, cal, footRow);
   };
   const solved = solve(near, frame);
   if (!solved) return null;
@@ -1853,7 +1894,7 @@ export function placeWallObject(
   const yTop = height + ((rTop.up > 0 ? near : d) / rTop.fwd) * rTop.up;
   const yBottom = height + ((rBottom.up > 0 ? d : near) / rBottom.fwd) * rBottom.up;
 
-  const span = lateralSpan(box, [near, d], [yBottom, yTop], cal);
+  const span = lateralSpan(box, [[near, yBottom], [d, yBottom], [d, yTop], [near, yTop]], cal);
   if (!span) return null;
   // A piece whose centre decodes past the ends of the framed wall is not on the framed
   // wall — it is on the RETURN wall, which an ultrawide sees in every ordinary room. See

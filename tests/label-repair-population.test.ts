@@ -117,14 +117,19 @@ describe('the high side of a cut axis, across furnished rooms (§ 49.5)', () => 
     // took it on 2, on the ranking and not the reading: a fridge's box read as a plant now
     // sorts ahead of the fridge, and a plant read at its own size behind a mirror. The
     // correct pieces flagged are the same 107.
+    // Every row moved a little when a foot-cut box's side came to be read where the frame
+    // crosses it (§ 49.20), none of it in the first two columns or in caught newly: 1 to 9
+    // more wrong words judged on each reading, caught already one fewer to nine more, the
+    // right word first on one fewer to two more, and shown on up to 7 more. Why each moved
+    // is not traced.
     expect(out).toEqual([
-      [97, 0, 19743, 15019, 1037, 7691, 9263],
-      [339, 1, 21354, 15389, 925, 3820, 4991],
-      [485, 5, 25002, 18250, 830, 3791, 5053],
-      [132, 0, 21433, 17086, 359, 7381, 9393],
-      [107, 0, 20603, 15790, 853, 7758, 9436],
-      [264, 0, 17828, 13170, 1260, 2476, 6601],
-      [327, 10, 20359, 15741, 851, 5979, 7318],
+      [97, 0, 19748, 15026, 1037, 7693, 9266],
+      [339, 1, 21359, 15388, 925, 3820, 4995],
+      [485, 5, 25004, 18259, 830, 3790, 5060],
+      [132, 0, 21435, 17088, 359, 7381, 9393],
+      [107, 0, 20604, 15791, 853, 7758, 9436],
+      [264, 0, 17837, 13179, 1260, 2476, 6601],
+      [327, 10, 20361, 15743, 851, 5979, 7318],
     ]);
   });
 
