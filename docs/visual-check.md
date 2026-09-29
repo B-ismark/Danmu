@@ -2134,6 +2134,31 @@ five ways: pieces with no row at all fell from 91 to 2, the two being one curtai
 `tests/distance-doubt.test.ts` holds the two chair pairs. No browser run, and no test drives the
 scan screen with a real photo.
 
+### A piece the photo cut off can still be too big for its word, and says "at least" — this branch (§ 49.5), NOT PROBED
+
+**Where to click.** *Photograph my real room* → a photo in which a sofa or a bed runs off the
+LEFT or RIGHT side of the frame with its foot in the picture, and one taken with the phone
+tipped up so the bottom of the frame cuts a door or a tall mirror → the scan screen. Rename the
+sofa to **Chair** and the door to **TV**. Each should be flagged, the sofa with a line like *Measured at least
+1.96 m wide and 0.91 m tall. Chair range is 0.38–0.60 m wide.*, with the ruler note *Runs past
+the edge of the photo, so its width is an estimate* under it, and a sofa offered first.
+
+**What wrong looks like.**
+- "at least" on the axis the photo saw whole, or missing on the one it cut.
+- "at least" and "about" on one line. They come from rows that exclude each other.
+- A "×" after "at least" when only one axis was cut: *at least 1.96 × 0.91 m* claims the height
+  is a lower bound too.
+- **The part only a person answers:** whether *at least 1.96 m* beside *its width is an
+  estimate* reads as one fact or as two that disagree. The number is what the photo saw, and
+  the note is about the piece as built, which may be wider still.
+- A fridge or a dining chair, correctly named, flagged as too wide. That is the price the
+  population measured, only where the lens or the tilt was read wrong, and it should be rare:
+  16 across seven readings of 150 rooms.
+
+**What was measured, and on what.** `tests/label-repair-population.test.ts`, 150 generated
+rooms read seven ways, and every wall kind at the edges of its own band photographed tipped.
+No browser run, and no test renders the sentence the page builds from `measuredPhrase`.
+
 ---
 
 ### High quality is graded again — on a real GPU, in every mood — `c2137c4` on `main` (PR #157)

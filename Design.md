@@ -720,8 +720,13 @@ Two readers follow the placers. Which placer a row went through is one function'
 `measuredPlane` (`lib/detect-refine.ts`) — the anchor, except that a curtain on a ceiling
 track is still read on its wall — and the refine pass, the judge and the repeat-sighting
 matcher all ask it rather than re-deriving it. `judgeLabel` (`lib/label-repair.ts`) no longer judges a word
-on a cut axis — grown to a typical size, it would pass every word that asked, the catalogue
-judging the catalogue — and reports the axes it skipped as `cut`. A ceiling piece is never
+on a cut axis both ways — grown to a typical size, it would pass every word that asked, the catalogue
+judging the catalogue — and reports the axes it skipped as `cut`. It judges one on its HIGH
+side alone (§ 49.5): the typical size a cut axis grows to is inside the band, so a reading
+past a word's top can only be the part the photo saw, and a piece is at least that big. That
+reading accuses the word and is printed as one — *at least 1.96 m wide* — and it is the
+verdict's `atLeast`. Not a ceiling piece's width, below, and not a floor piece cut at its
+foot, which is judged both ways at the reading it is placed by. A ceiling piece is never
 grown, but any edge of the frame on it takes its one axis all the same: the placer reads its
 distance on the box's centre row, and a cut moves that row off the disc's centre. A cut at the
 TOP, the usual one, is now read from the three edges the photo saw instead and comes out right
