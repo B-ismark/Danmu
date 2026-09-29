@@ -155,7 +155,7 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
   const row = (box: unknown, extra: Record<string, unknown> = {}) => ({ label: 'Sofa', category: 'sofa', conf: 0.8, slot: 'n', box, ...extra });
 
   it('stamps every row it keeps as the cloud’s', () => {
-    const [d] = cloudRows([row([0.1, 0.2, 0.3, 0.4])]);
+    const [d] = cloudRows([row([0.1, 0.2, 0.3, 0.4])], ['n']);
     expect(d.source).toBe('cloud');
     expect(d.box).toEqual([0.1, 0.2, 0.3, 0.4]);
     expect(d.label).toBe('Sofa');
@@ -165,10 +165,10 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
     // The prompt asks for fractions of the image; a box past the top describes rows
     // nobody saw, and a cut box's top row is the frame's edge, which the ceiling solve
     // stands on. Measured in tests/photo-geometry.test.ts.
-    const [d] = cloudRows([row([0.4, -0.05, 0.2, 0.35])]);
+    const [d] = cloudRows([row([0.4, -0.05, 0.2, 0.35])], ['n']);
     expect(d.box[1]).toBe(0);
     expect(d.box[1] + d.box[3]).toBeCloseTo(0.3, 12);
-    const [e] = cloudRows([row([0.9, 0.7, 0.3, 0.5])]);
+    const [e] = cloudRows([row([0.9, 0.7, 0.3, 0.5])], ['n']);
     expect(e.box[0] + e.box[2]).toBeCloseTo(1, 12);
     expect(e.box[1] + e.box[3]).toBeCloseTo(1, 12);
   });
@@ -184,16 +184,32 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
       row([0.1, 0.2, 0.3, 0.4], { slot: undefined }),
       null,
       7,
-    ]);
+    ], ['n']);
     expect(kept).toHaveLength(1);
+  });
+
+  it('drops a row filed under a wall that was not photographed (§ 49.17)', () => {
+    // Measured before this: a sofa filed under `s` when only `n` was sent came through
+    // with no camera to be measured by, so it kept the model's 900 × 400 × 400 and its
+    // guessed place, judged `unmeasured` and built as though it had been read off a
+    // photo. `north` and `N` did the same, and came back from a save on the north wall
+    // with `__slot:north` left in the label.
+    const walls = ['n', 'e', 's', 'w', 'north', 'N', '', undefined, 0];
+    const kept = cloudRows(walls.map((slot) => row([0.1, 0.2, 0.3, 0.4], { slot })), ['n', 'e']);
+    expect(kept.map((d) => d.slot)).toEqual(['n', 'e']);
+    // Every wall of the four, sent alone, keeps its own row and no other.
+    for (const sent of ['n', 'e', 's', 'w'] as const) {
+      expect(cloudRows(walls.map((slot) => row([0.1, 0.2, 0.3, 0.4], { slot })), [sent]).map((d) => d.slot)).toEqual([sent]);
+    }
+    expect(cloudRows([row([0.1, 0.2, 0.3, 0.4])], [])).toEqual([]);
   });
 
   it('drops a sliver by the rule the on-device rows are dropped by', () => {
     // 0.2 wide, only 0.005 of it inside the right edge: mostly the model's guess.
-    expect(cloudRows([row([0.995, 0.2, 0.2, 0.4])])).toEqual([]);
-    expect(cloudRows([row([0.4, 0.2, SLIVER, 0.4])])).toEqual([]);
-    expect(cloudRows([row([0.4, 0.2, 0.3, SLIVER])])).toEqual([]);
-    expect(cloudRows([row([0.4, 0.2, 0.011, 0.011])])).toHaveLength(1);
+    expect(cloudRows([row([0.995, 0.2, 0.2, 0.4])], ['n'])).toEqual([]);
+    expect(cloudRows([row([0.4, 0.2, SLIVER, 0.4])], ['n'])).toEqual([]);
+    expect(cloudRows([row([0.4, 0.2, 0.3, SLIVER])], ['n'])).toEqual([]);
+    expect(cloudRows([row([0.4, 0.2, 0.011, 0.011])], ['n'])).toHaveLength(1);
     // One rule, not two that agree today: the same boxes, in the two forms the two
     // detectors hand over, are kept or dropped alike and cut alike. For a commit the
     // cloud rows kept every sliver the on-device rows dropped.
@@ -201,7 +217,7 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
     const sides = [0.005, 0.01, 0.0101, 0.02, 0.3, 1.1];
     let kept = 0, dropped = 0;
     for (const x of ends) for (const y of ends) for (const w of sides) for (const h of sides) {
-      const cloud = cloudRows([row([x, y, w, h])])[0]?.box ?? null;
+      const cloud = cloudRows([row([x, y, w, h])], ['n'])[0]?.box ?? null;
       const local = detectionBox({ x: x + w / 2, y: y + h / 2, w, h, conf: 0.8, label: 'Sofa', category: 'sofa' });
       expect(cloud === null).toBe(local === null);
       if (cloud && local) {
@@ -216,12 +232,12 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
 describe('readCloudReply: a reply with nothing to act on is not an empty room', () => {
   const row = (box: unknown, extra: Record<string, unknown> = {}) => ({ label: 'Sofa', category: 'sofa', conf: 0.8, slot: 'n', box, ...extra });
   const unreadable = (text: string) => {
-    const reply = readCloudReply(text);
+    const reply = readCloudReply(text, ['n']);
     return 'unreadable' in reply ? reply.unreadable : null;
   };
 
   it('reads an empty list as an empty room — the one empty reply that is an answer', () => {
-    expect(readCloudReply('[]')).toEqual({ rows: [] });
+    expect(readCloudReply('[]', ['n'])).toEqual({ rows: [] });
   });
 
   it('refuses a body that is not JSON, and JSON that is not a list', () => {
@@ -238,8 +254,17 @@ describe('readCloudReply: a reply with nothing to act on is not an empty room', 
     expect(unreadable(JSON.stringify([null, 7]))).toMatch(/no box/);
   });
 
+  it('refuses a list that files every row under walls nobody photographed (§ 49.17)', () => {
+    const elsewhere = [row([0.1, 0.2, 0.3, 0.4], { slot: 's' }), row([0.5, 0.2, 0.3, 0.4], { slot: 'north' })];
+    expect(unreadable(JSON.stringify(elsewhere))).toMatch(/no box inside the photos/);
+    const reply = readCloudReply(JSON.stringify([...elsewhere, row([0.2, 0.3, 0.1, 0.1])]), ['n']);
+    expect('rows' in reply && reply.rows.map((d) => [d.slot, d.box])).toEqual([['n', [0.2, 0.3, 0.1, 0.1]]]);
+    // The walls are the ones handed in, not a fixed four.
+    expect(readCloudReply(JSON.stringify(elsewhere), ['s'])).toMatchObject({ rows: [{ slot: 's' }] });
+  });
+
   it('keeps the rows it can use when only some are past the frame', () => {
-    const reply = readCloudReply(JSON.stringify([row([412, 300, 520, 260]), row([0.1, 0.2, 0.3, 0.4])]));
+    const reply = readCloudReply(JSON.stringify([row([412, 300, 520, 260]), row([0.1, 0.2, 0.3, 0.4])]), ['n']);
     expect('rows' in reply && reply.rows.map((d) => d.box)).toEqual([[0.1, 0.2, 0.3, 0.4]]);
   });
 });
@@ -272,6 +297,15 @@ describe('only the reply to a Gemini call is stamped as the cloud’s', () => {
     // one call in `detectAcrossImages`.
     expect(count(/\bcloudRows\s*\(/g)).toEqual({ 'lib/detect-prompt.ts': 2 });
     expect(count(/\breadCloudReply\s*\(/g)).toEqual({ 'lib/detect-prompt.ts': 1, 'lib/detection.ts': 1 });
+  });
+
+  it('holds the reply to the walls the prompt was told were photographed (§ 49.17)', () => {
+    // `detectAcrossImages` needs the Gemini SDK, so its wiring is read rather than run:
+    // one list of walls, taken from the photos sent, handed to both ends.
+    const src = files.find(([f]) => f === 'lib/detection.ts')![1];
+    expect(src.match(/\bconst sent = images\.map\(\(i\) => i\.slot\);/g)).toHaveLength(1);
+    expect(src.match(/\bbuildDetectPrompt\(room, sent\)/g)).toHaveLength(1);
+    expect(src.match(/\breadCloudReply\(text, sent\)/g)).toHaveLength(1);
   });
 
   it('writes the cloud stamp in one place', () => {

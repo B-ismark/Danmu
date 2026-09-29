@@ -104,7 +104,10 @@ export async function detectAcrossImages(
   if (images.length === 0) return [];
 
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = buildDetectPrompt(room, images.map((i) => i.slot));
+  // One list for both ends: the walls the prompt says were photographed are the
+  // walls the reply is held to (§ 49.17).
+  const sent = images.map((i) => i.slot);
+  const prompt = buildDetectPrompt(room, sent);
 
   // Base64 inflates by 4/3, so check the encoded size — the raw byte total was
   // never the limit that mattered. Four untouched 12 MP phone photos are 12-20 MB
@@ -156,7 +159,7 @@ export async function detectAcrossImages(
   // A body that is not an answer is NOT an empty room: see `readCloudReply`.
   // Throw, so the error path (which offers Retry) owns it. NOT deduped here: see
   // `cloudRows`.
-  const reply = readCloudReply(text);
+  const reply = readCloudReply(text, sent);
   if ('unreadable' in reply) throw new DetectError('BAD_RESPONSE', reply.unreadable, reply.cause);
   return reply.rows;
 }

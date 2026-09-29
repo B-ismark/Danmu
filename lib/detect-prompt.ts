@@ -147,10 +147,16 @@ Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by vis
  *  image, and a box that runs past the edge describes rows and columns nobody saw —
  *  a cut box's top row is the frame's edge, which the ceiling solve stands on. A row
  *  with no box in frame is dropped, as a row with no box always was, and so is a
- *  sliver, by the rule the on-device rows are dropped by. */
-export function cloudRows(parsed: readonly unknown[]): Detection[] {
+ *  sliver, by the rule the on-device rows are dropped by.
+ *
+ *  So is a row naming a wall that was not photographed (§ 49.17). Its box is a box on
+ *  a picture that does not exist, and it has no camera to be measured by, so it kept
+ *  the model's own size and place and was built as though it were read off a photo.
+ *  `sent` is required rather than defaulted to all four walls, because the default
+ *  is the check switched off. */
+export function cloudRows(parsed: readonly unknown[], sent: readonly CaptureSlot[]): Detection[] {
   return (parsed as Detection[]).flatMap((d) => {
-    const box = d && Array.isArray(d.box) && d.slot ? boxInPhoto(d.box) : null;
+    const box = d && Array.isArray(d.box) && sent.includes(d.slot) ? boxInPhoto(d.box) : null;
     // Stamped here, and called only by `readCloudReply`, which only
     // `detectAcrossImages` calls, so nothing but the reply to a Gemini call can
     // claim its output came from Gemini.
@@ -161,16 +167,17 @@ export function cloudRows(parsed: readonly unknown[]): Detection[] {
 /** A reply's rows, or why it holds nothing the screen may act on. */
 export type CloudReply = { rows: Detection[] } | { unreadable: string; cause: unknown };
 
-/** What a Gemini reply says. Three kinds of body are not an answer, and each was
- *  once read as an empty room — the detect screen's "nothing stood out in your
- *  photos, which is exactly right for an empty room", with the quota already spent:
- *  a body that is not JSON, JSON that is not a list, and a list none of whose rows
- *  `cloudRows` keeps. The third is the cut's (§ 49.15): a reply in some unit other
- *  than the fractions the prompt asks for can put every box past the frame, and
- *  dropping them row by row left no sign that anything had gone wrong. So it is
- *  unreadable, and the screen offers Retry. An EMPTY list is the one empty reply
- *  that is an answer, and stays one. */
-export function readCloudReply(text: string): CloudReply {
+/** What a Gemini reply says, about the walls in `sent`. Three kinds of body are not
+ *  an answer, and each was once read as an empty room — the detect screen's "nothing
+ *  stood out in your photos, which is exactly right for an empty room", with the
+ *  quota already spent: a body that is not JSON, JSON that is not a list, and a list
+ *  none of whose rows `cloudRows` keeps. The third is the cut's (§ 49.15): a reply in
+ *  some unit other than the fractions the prompt asks for can put every box past the
+ *  frame, and dropping them row by row left no sign that anything had gone wrong.
+ *  A reply filing every row under walls nobody photographed is the same case
+ *  (§ 49.17). So it is unreadable, and the screen offers Retry. An EMPTY list is the
+ *  one empty reply that is an answer, and stays one. */
+export function readCloudReply(text: string, sent: readonly CaptureSlot[]): CloudReply {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -180,7 +187,7 @@ export function readCloudReply(text: string): CloudReply {
   if (!Array.isArray(parsed)) {
     return { unreadable: 'The detection service replied in an unexpected shape.', cause: parsed };
   }
-  const rows = cloudRows(parsed);
+  const rows = cloudRows(parsed, sent);
   if (parsed.length > 0 && rows.length === 0) {
     return { unreadable: 'The detection service replied with no box inside the photos.', cause: parsed };
   }
