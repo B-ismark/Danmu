@@ -2031,7 +2031,7 @@ the Inspector. Then **Rescan** into the scan screen and read the tags on each ph
 - **The part only a real room answers:** whether any such room exists at all. It depends on
   what Gemini wrote for a wall before § 49.17, which nobody recorded.
 
-### A scan that left pieces out says how many — this branch (§ 49.19), PROBED WITH A STUBBED REPLY
+### A scan that left pieces out says how many — `408cdbe` on `main` (PR #173, § 49.19), PROBED WITH A STUBBED REPLY
 
 **Where to click.** A room with two or more wall photos and a Google key → the scan screen.
 Probed in Chromium at 360 × 640 and 1280 × 800 with the reply stubbed: five rows, two kept,
