@@ -44,6 +44,18 @@ function strayBytes(bytes: Buffer): number[] {
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 
+/** Characters that are valid UTF-8 and show as nothing: a zero-width space, the
+ *  direction marks and overrides that make code read differently from how it runs, a
+ *  byte-order mark anywhere, and the noncharacters (U+FDD0 to U+FDEF, and the last two of
+ *  every plane). Not the zero-width joiners, which emoji and some scripts are made of. */
+const INVISIBLE = new RegExp(
+  `[\u200b\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\ufdd0-\ufdef${Array.from(
+    { length: 17 },
+    (_, plane) => `\\u{${plane.toString(16)}fffe}\\u{${plane.toString(16)}ffff}`,
+  ).join('')}]`,
+  'u',
+);
+
 /** A character Windows-1252 decodes a UTF-8 continuation byte (0x80 to 0xBF) to. */
 const CONT = '[\u20ac\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\u017d\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\u017e\u0178\u0081\u008d\u008f\u0090\u009d\u00a0-\u00bf]';
 /** A lead byte read as Windows-1252, then as many continuations as that lead promises. The
@@ -83,6 +95,14 @@ describe('tracked text files', () => {
     expect(bad).toEqual([]);
   });
 
+  it('hold no invisible character', () => {
+    // Valid UTF-8, so the decode below passes them, and none shows in an editor or a diff.
+    // A byte-order mark past the start is a file pasted into another; a noncharacter is
+    // what a string bound written `'\uffff'` becomes when it is typed raw instead.
+    const bad = read.filter(({ text }) => INVISIBLE.test(text)).map(({ f }) => f);
+    expect(bad).toEqual([]);
+  });
+
   it('are UTF-8 with no byte-order mark', () => {
     const bad = read
       .filter(({ bytes }) => {
@@ -116,6 +136,15 @@ describe('tracked text files', () => {
     // And not the text it sits beside: a zoom range written `0.4\u00d7\u20134\u00d7` is a
     // times sign and an en dash, which is what a looser pattern once took for mojibake.
     expect(MOJIBAKE.test('0.4\u00d7\u20134\u00d7')).toBe(false);
+  });
+
+  it('would know an invisible character, and not the joiners', () => {
+    for (const ch of ['\u200b', '\u202e', '\u2066', '\ufeff', '\ufdd0', '\uffff', '\u{1fffe}', '\u{10ffff}']) {
+      expect(INVISIBLE.test(`a${ch}b`), ch.codePointAt(0)!.toString(16)).toBe(true);
+    }
+    for (const ok of ['\u200d', '\u200c', '\u00a0', '\ufffd', '\u{1f642}', '\u{1fffd}']) {
+      expect(INVISIBLE.test(`a${ok}b`), ok.codePointAt(0)!.toString(16)).toBe(false);
+    }
   });
 
   it('catch the bytes they are meant to', () => {

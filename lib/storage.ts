@@ -572,7 +572,7 @@ export const roomStore = {
           if (room.pin === undefined || w.parts !== undefined || written.detectedObjects?.length) {
             return rest(w.parts);
           }
-          const photos = store.count(IDBKeyRange.bound(k(roomId, 'cap:'), k(roomId, 'cap:￿')));
+          const photos = store.count(IDBKeyRange.bound(k(roomId, 'cap:'), k(roomId, 'cap:\uffff')));
           photos.onsuccess = step(() => rest(photos.result > 0 ? undefined : room.pin));
         });
       }));
