@@ -1914,7 +1914,7 @@ not known. A typed room size on a reload is a known loss (§ 47), not a finding.
 
 ---
 
-### A piece the photo cut off says so, and comes back a typical size — this branch, PROBED at 360–1280
+### A piece the photo cut off says so, and comes back a typical size — merged to `main` in `e998926` (PR #164), PROBED at 360–1280
 
 **Where to click.** *Photograph my real room* → four photos in which something runs off the
 side or the top of the frame — a wardrobe cut by the side of the photo, a curtain at the
