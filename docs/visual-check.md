@@ -1972,7 +1972,7 @@ real phone, with a real scan, is the unlooked-at half.
 ---
 ## Look and light
 
-### A piece cut at its foot is judged where it would stand against its wall — this branch (D8), NOT PROBED
+### A piece cut at its foot is judged where it would stand against its wall — merged to `main` in `12b0209` (PR #170), NOT PROBED
 
 **Where to click.** *Photograph my real room* → a photo whose bottom edge cuts off the foot of
 a sofa, bed or wardrobe standing a pace out from its wall, and one of a standing fan or a stool
