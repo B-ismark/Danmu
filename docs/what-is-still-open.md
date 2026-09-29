@@ -177,7 +177,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 23 | **§ 46** repeat sightings: what the soft merge reaches, and the pieces the HARD merge deleted before it could | **BUILT; § 46.3 FIXED 2026-09-29, bar one curtain; § 46.1 no longer a deletion, but its first bed still starts unticked.** The soft merge (`lib/repeat-sightings.ts`) starts a probable repeat unticked with a reason, for every kind, not only beds; over the 150 furnished rooms it takes the repeats left ticked at an ultrawide read as 66° from **247 to 5** (106°) and **455 to 21** (120°), at a price of 16 real pieces started unticked across the five readings, each one tap from back. The hard merge used to delete pieces outright by deciding a pair on a place nobody measured: a centre a wall's bound stopped, or a box the frame cut at its foot. Under an ultrawide read as 66° that was **37 and 42 pieces** of about 990, nearly all dining chairs (**§ 46.3**), and one of twin beds in a corner (**§ 46.1**). It now adds each row's `distanceDoubt` to the distance before it merges, and gone is **91 → 2** across the five readings. The two are one curtain on two lenses, pressed toward its twin along the wall, which no bound gave. The first of the twin beds still starts unticked, the soft pass's call, not traced. **§ 46.2** is the bottom-edge walk, measured and not built. **§ 46.5**, filed: the soft pass compares a foot-cut row at the distance it was given, and 2 and 3 more floor-lamp repeats stay ticked tipped up since § 49.9 read their honest size | the curtain: M, the lens sweep asked by the hard merge; § 46.1's first bed: the soft pass's call, not traced | `tests/repeat-sightings.test.ts` and `tests/distance-doubt.test.ts` hold both as literals |
 | 24 | **§ 47** a change made in the last half-second before a reload or a closed tab is lost | **PARTLY FIXED 2026-09-28.** Pending saves now run when the page is hidden or left (`lib/page-leave.ts`), as ONE transaction that asks for its commit at once (`roomStore.savePending`). Measured, change made and page left at once, 5 each: a piece duplicated then reloaded kept **0 → 5**, a typed width then a closed tab **0 → 5**, and no room half-saved (**4 of 10** with three separate saves). **Still lost: a typed room size on a reload, 0 of 5**, whole, because that save reads before it writes. | small, but a design call | — |
 | 25 | **§ 48** a tab left open across the keep-means-keep update can bring unticked pieces back | **WRITTEN DOWN 2026-09-28, NOT FIXED — the user's call.** `migrateRoom` reads a row's `locked` by the version stamp alone, and the previous build stamps `version: 1` on every save. One edit in a tab open across the deployment re-stamps a v2 room, and the next up-to-date load reads every row as kept: the scan list shows unticked rows ticked, and a room with no saved scene is rebuilt with them in it. It fails toward MORE furniture, deletes nothing, and closes itself on a reload. The one fix on offer (a marker the old writers carry through) inverts on the re-scan path, which is why it is not built. | — | — |
-| 26 | **§ 49** a scan tilted up, cut at the frame's edges, with the room size skipped, came back "mostly too small" | **PARTLY FIXED 2026-09-29.** Measured first (`tests/scan-tilted-room.test.ts`, a scan shaped like the reported one, each unknown put right in turn): with the camera and room known the frame edge was the whole remaining error, **7 of 14** pieces more than 10% short. The placers now treat a cut axis as a lower bound and grow it to the kind's typical size from the edge the photo saw, stopped at the wall's end: **0 of 14** short, mean width error **19% → 10%**. As the app reads that scan today, **10 short → 6**, and the price is **4 over → 7**, mean width error **24% → 32%** — the skipped room's walls end past the real ones, so a typical size over-reaches. Still open, in order of what the table says they are worth: the room size (§ 49.3, the user's call), tilt and height (§ 49.2, measured WORSE alone), and one smaller item (§ 49.6 — of the four first filed, § 49.4 is measured and kept, and § 49.5 and § 49.7 fixed) | § 49.1 (the default lens on an upright photo) FIXED too; § 49.3 is a question for the user; § 49.9–49.12 filed by the review, none a regression; § 49.5 (a cut axis read past its word's top accuses the word, printed *at least*: +359 to +1,260 wrong words caught on each of seven camera readings of 150 furnished rooms, for 0 correct pieces where the camera is read right and at most 10 where it is not, every one a fridge or a dining chair; wall pieces at their band's edges pay only when tipped and read as level; the right word among the two chips more often on every reading, where the first version offered it at all less often on five of seven) FIXED; § 49.7 (a top-cut height grows only to the ceiling), § 49.10 (a piece cut at its foot is read at the far end of where it could stand, and judged at that reading by the user's call, D8: 439 of 597 wrong words caught where the one-sided judge caught 309, for 23 of 78 correctly named pieces flagged across box, tipped-down and round rows; exempting round pieces is filed, not built) and § 49.11 (a ceiling piece cut by the frame is not judged on its width) FIXED; § 49.13 (a ceiling piece cut at the TOP is read from the edges the photo saw: 17.9% → 4.1% on 556 discs, exact on all but 43 slivers, and a 1200 mm fan built at 1200 rather than the band's 1500) FIXED, its side and corner cuts measured and not built; § 49.14 (a foot-cut floor piece is still BUILT at its limit) measured again on pieces off typical both ways, and building at typical DECIDED AGAINST, worse on 65 → 90 widths and 90 → 135 heights; § 49.15 (a detector's box that ran past the frame: the on-device clamp moved its far edge, the cloud rows were not cut at all; on the top-cut discs at a 1% overrun they read 7.1% and 6.4% off against 4.1%) FIXED, how often it happens in a real scan not measured; § 49.16 (two sweep fixtures boxed what is out of frame) FIXED, test-only: the § 46 tables moved by at most 4, and one of § 46.1's two twin-bed layouts turned out to be the fixture's; § 49.17 (a cloud row filed under a wall nobody photographed was built at the model's own size, unjudged) FIXED, the wall now read in the prompt's own words, a one-photo reply's rows kept on that photo, and a nameless row named by its category; § 49.18 (a room saved before that fix read a `__slot:south` back on the north wall, and a re-save stacked a second suffix over it) FIXED, one reader for all four sites and a saved scene's names; a load moves nothing, so an old room's piece reaches its wall only through a rescan; § 49.19 (a reply's partly dropped rows were dropped in silence) FIXED, the scan screen saying how many were left out and why; § 49.9 (a round piece cut at one side) FIXED where the foot is seen, placed by the size it is drawn at and stopped at the side wall: along the wall 178 → 103 mm on the rows cut at the side only and exact level at a typical size, for a level cost of 49 → 80 mm on pieces off typical, the catalogue radius in the position; cut at the foot as well it stays on the two tangents, where the one-sided solve measured 272 / 285 → 310 / 323 mm; tipped, each side is now read at the end its column is extreme: along the wall 103 → 59 mm on the side-only rows, exact on a round piece the photo shows whole at every tilt measured, and the height tipped down 150 → 132 and 126 → 109 mm, the rest a top that left through the side edge (V2, filed); the foot-cut rows moved too, along the wall 200 → 126 mm at their wall and the distance 98 → 128; § 49.20 (a box piece cut at its foot reads narrower than its bound allows, 14 widths below the truth once the fixture's box rows are boxed as drawn, a 2 m sofa read 803 mm, and D8 flagging 10 correct words rather than 6) filed, measured, not fixed | — |
+| 26 | **§ 49** a scan tilted up, cut at the frame's edges, with the room size skipped, came back "mostly too small" | **PARTLY FIXED 2026-09-29.** Measured first (`tests/scan-tilted-room.test.ts`, a scan shaped like the reported one, each unknown put right in turn): with the camera and room known the frame edge was the whole remaining error, **7 of 14** pieces more than 10% short. The placers now treat a cut axis as a lower bound and grow it to the kind's typical size from the edge the photo saw, stopped at the wall's end: **0 of 14** short, mean width error **19% → 10%**. As the app reads that scan today, **10 short → 6**, and the price is **4 over → 7**, mean width error **24% → 32%** — the skipped room's walls end past the real ones, so a typical size over-reaches. Still open, in order of what the table says they are worth: the room size (§ 49.3, the user's call), tilt and height (§ 49.2, measured WORSE alone), and one smaller item (§ 49.6 — of the four first filed, § 49.4 is measured and kept, and § 49.5 and § 49.7 fixed) | § 49.1 (the default lens on an upright photo) FIXED too; § 49.3 is a question for the user; § 49.9–49.12 filed by the review, none a regression; § 49.5 (a cut axis read past its word's top accuses the word, printed *at least*: +359 to +1,260 wrong words caught on each of seven camera readings of 150 furnished rooms, for 0 correct pieces where the camera is read right and at most 10 where it is not, every one a fridge or a dining chair; wall pieces at their band's edges pay only when tipped and read as level; the right word among the two chips more often on every reading, where the first version offered it at all less often on five of seven) FIXED; § 49.7 (a top-cut height grows only to the ceiling), § 49.10 (a piece cut at its foot is read at the far end of where it could stand, and judged at that reading by the user's call, D8: 439 of 597 wrong words caught where the one-sided judge caught 309, for 23 of 78 correctly named pieces flagged across box, tipped-down and round rows; exempting round pieces is filed, not built) and § 49.11 (a ceiling piece cut by the frame is not judged on its width) FIXED; § 49.13 (a ceiling piece cut at the TOP is read from the edges the photo saw: 17.9% → 4.1% on 556 discs, exact on all but 43 slivers, and a 1200 mm fan built at 1200 rather than the band's 1500) FIXED, its side and corner cuts measured and not built; § 49.14 (a foot-cut floor piece is still BUILT at its limit) measured again on pieces off typical both ways, and building at typical DECIDED AGAINST, worse on 65 → 90 widths and 90 → 135 heights; § 49.15 (a detector's box that ran past the frame: the on-device clamp moved its far edge, the cloud rows were not cut at all; on the top-cut discs at a 1% overrun they read 7.1% and 6.4% off against 4.1%) FIXED, how often it happens in a real scan not measured; § 49.16 (two sweep fixtures boxed what is out of frame) FIXED, test-only: the § 46 tables moved by at most 4, and one of § 46.1's two twin-bed layouts turned out to be the fixture's; § 49.17 (a cloud row filed under a wall nobody photographed was built at the model's own size, unjudged) FIXED, the wall now read in the prompt's own words, a one-photo reply's rows kept on that photo, and a nameless row named by its category; § 49.18 (a room saved before that fix read a `__slot:south` back on the north wall, and a re-save stacked a second suffix over it) FIXED, one reader for all four sites and a saved scene's names; a load moves nothing, so an old room's piece reaches its wall only through a rescan; § 49.19 (a reply's partly dropped rows were dropped in silence) FIXED, the scan screen saying how many were left out and why; § 49.9 (a round piece cut at one side) FIXED where the foot is seen, placed by the size it is drawn at and stopped at the side wall: along the wall 178 → 103 mm on the rows cut at the side only and exact level at a typical size, for a level cost of 49 → 80 mm on pieces off typical, the catalogue radius in the position; cut at the foot as well it stays on the two tangents, where the one-sided solve measured 272 / 285 → 310 / 323 mm; tipped, each side is now read at the end its column is extreme: along the wall 103 → 59 mm on the side-only rows, exact on a round piece the photo shows whole at every tilt measured, close up and tipped 45° down since the review found both solves answering on a count there (2,993 of 48,261 whole pieces and 268 of 14,478 side-cut ones), and the height tipped down 150 → 132 and 126 → 109 mm, the rest a top that left through the side edge (V2, filed); the foot-cut rows moved too, along the wall 200 → 126 mm at their wall and the distance 98 → 128; § 49.20 (a box piece cut at its foot reads narrower than its bound allows, 14 widths below the truth once the fixture's box rows are boxed as drawn, a 2 m sofa read 803 mm, and D8 flagging 10 correct words rather than 6) filed, measured, not fixed | — |
 | 27 | **§ 45** the sensor grant is site-wide when one route needs it | **MEASURED 2026-09-29, DECIDED AGAINST.** The filed fix was the catch-all excluding the capture route, with the trio granted only there. It was built on a scratch build, and it served exactly the headers it asked for. In Chromium it still **took the grant away from the capture screen**: a permissions policy is fixed when the document is created, and every way into capture is a `<Link>` or `router.push` that keeps the document. Reached from `/workspace` or the shape picker, the document answered `allowsFeature` false; opened directly, it answered true. WebKit was not run. The only way to make the fix true is to make every entry a hard navigation, and any future `<Link>` would break that silently. The price of keeping the grant is written down in § 45. `tests/permissions-policy.test.ts` now counts every policy entry, and `scripts/sensor-policy-probe.mjs` reproduces the measurement | — | — |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
@@ -7722,6 +7722,11 @@ What the soft pass could do instead is compare a foot-cut row along the whole li
 on, from the last row's ray to its wall, as `distanceDoubt` does for the hard merge (§ 46.3). That
 is not measured and exists in no commit. The main table above did not move.
 
+The review of § 49.9 offered a second cause: a sighting the photo shows whole, whose free solve
+came back unsettled, made `distanceDoubt` infinite and so stayed out of the hard merge. That
+refusal is gone (§ 49.9, the review), and the tipped-up table did not move with it, so on this
+fixture it was none of the five.
+
 ## § 47 · A change made just before a reload is lost — PARTLY FIXED 2026-09-28; a typed room size is still lost on a reload
 
 Every save the studio makes waits first: `RoomSync` writes 300 ms after the last change
@@ -8074,7 +8079,8 @@ commit beyond this text when filed.
 2026-09-29 where its foot is seen, placed by the size it is drawn at; cut at the foot as well it
 stays on the two tangents, where the one-sided solve measured worse. Tipped, each side is now read
 at the end its column is extreme, and a round piece the photo shows whole is exact at every tilt
-measured.**
+measured, close to the lens and tipped steeply down as well since its review found both solves
+answering on a count there.**
 `floorFromRound` solves a round footprint's distance with the tangent form, which treats the
 box's two sides as the disc's silhouette. When the frame cuts one of them, that side is the
 photo's edge rather than the disc's. The review of § 49.0 measured it at **0.16–0.29 m too
@@ -8203,8 +8209,10 @@ tipped down and its bottom row tipped up. `floorFromRoundOneSide` read its seen 
 piece's top tipped down and its base tipped up, the opposite of where that side is extreme for a
 piece standing in one half of the photo. Each side is now read at its own end. Where the frame
 hid that end, the side is read along the frame's row across it, a line through the lens, and where
-that row crosses off the piece, below its foot or above its top, at that end's rim. The solve
-iterates the height, and a solve that does not settle answers nothing.
+that row crosses off the piece, below its foot or above its top, at that end's rim. Only the
+choice of read is iterated, three values a side; once it is made the height closes in one
+division, and a choice still changing after nine passes, every pair there is, answers nothing.
+The one-sided solve bisects its height instead (below).
 
 The first version read a hidden end anyway, and measured WORSE than the top row it replaced: on
 the foot-cut round rows at their wall tipped 20° up, 173 mm of width off on average against 56. It
@@ -8223,7 +8231,8 @@ On this section's fixture, mean error in mm (rows more than 100 mm off), before 
   it, and 436 → 414 on the 60 whose top has left through the frame's side edge. That residual is
   what is still open, below.
 - **Whole in the photo, it is exact** at 5°, 12° and 20° up and down, on the view axis and 1.2 m to
-  either side (`tests/photo-geometry.test.ts`). That test pinned a band of +6% at 5° and +13% at 12°
+  either side, and at 25°, 35° and 45° down 1.0 and 1.5 m out on the 66°, 106° and 120° lenses
+  (`tests/photo-geometry.test.ts`, the second a count of 370 pieces). That test pinned a band of +6% at 5° and +13% at 12°
   until now, measured on a box that ran past the frame's bottom at every tilt (§ 49.16).
 - **Cut at the foot as well, the rows meant not to move did**, because the two tangents read their
   seen side at its own end too. Over the 568: distance 272 → 275, along the wall 285 → 289, width
@@ -8256,13 +8265,53 @@ What it cost elsewhere, each pinned where it moved:
 - **The right word among the two chips** on the D8 fixture went 208 → 209, and not by a better
   reading (§ 49.5, the words to try).
 
-Mutation-tested: 21 faults across both solves, 19 caught. One survivor is the `!settled` refusal,
-which no fixture reaches, as its comment says. The other settles on the height alone and not on
-the disc as well. It is not equivalent: tipped up the height does not depend on the radius, so the
-loop stops one pass early, and on 226 solves across nine suites, every one tipped up and cut at a
-side and the foot, the answer moves by at most 6.4 mm. That is under every pin's rounding, on rows
-whose distance is assumed, and it is counted here rather than pinned by a literal that tests
-nothing else.
+**Then its review found both solves answering on a count — FIXED 2026-09-29.** Each iterated
+the height and answered when the passes ran out, settled or not, and the rate of that fixed point
+nears one close to the lens tipped steeply down, the case no fixture had reached:
+- **`floorFromRound`** iterated to 1e-9 in at most twenty passes, and ran at 0.9 to 0.997 a pass
+  there. Swept over six lenses, 60° up to 60° down and pieces 0.2 to 1.2 m across, **2,993 of
+  48,261** round pieces the photo showed whole came back unmeasured, each within millimetres of its
+  size when the count ran out; on the new grid of 370, tipped 25° to 45° down, 73. Once each
+  side's read is chosen every line is linear in the height, so the height is one division now and
+  only the read is iterated. The sweep reads **48,160** exact; the other 101 all stand the camera
+  inside the piece, the near face at zero, 20 refused and 81 read as no disc.
+- **`floorFromRoundOneSide`** iterated in eight passes and answered on the eighth. Over five
+  lenses, 40° up to 40° down and four sizes each way, **268 of 14,478** side-cut round pieces
+  stopped on the count; at their typical size **3,278 → 3,310** of 4,826 read exact. It is bisected
+  now, between the floor and the lens's height doubled until the read comes back below it, and on
+  all 14,478 it agrees to a millimetre with the old iteration run until it settles. The case the
+  new test holds (`tests/round-side-cut.test.ts`, 93 rows, 25° to 40° down): a 900 mm round table
+  300 tall, 800 mm out at 40° down on the ultrawide, read **988 × 215** and 62 mm along the wall.
+- **Its first probe was § 49.16 again.** It boxed the side-cut rows with the unclipped extent, which
+  no photo draws, and read 5,182 of 17,604 stopped on the count and a stool 429 × 68. Boxed as the
+  photo draws them, the 268 above. It was caught before the numbers reached a commit, and
+  `bboxOfFloorCylinder`, which makes the mistake easy, is still the helper nearest to hand.
+- **Nothing pinned moved** with either fix: the eight scan suites pass as they were.
+- **A test filter of its own read one axis.** `tests/label-repair.test.ts` looked for tipped-down
+  round rows that cross their bound as a width under its truth AND a height over it, which is the
+  crossing only for a piece shorter than the lens. It reads either axis now, the height's side set
+  by `CAM_HEIGHT`, and finds none still; on the code before each side was read at its own end it
+  finds the same three as the old filter.
+
+Mutation-tested: 21 faults across both solves, 19 caught, before the review. One survivor was the
+`!settled` refusal, which no fixture reaches, as its comment says. The other settles on the height
+alone and not on the disc as well. It is not equivalent: tipped up the height does not depend on
+the radius, so the loop stops one pass early, and on 226 solves across nine suites, every one
+tipped up and cut at a side and the foot, the answer moves by at most 6.4 mm. That is under every
+pin's rounding, on rows whose distance is assumed, and it is counted here rather than pinned by a
+literal that tests nothing else. That loop is gone now, and the two rewrites were mutated again:
+- **The closed form, 20 faults, 16 caught.** The four survivors, each measured on an 84,473-row
+  sweep: the `!settled` refusal, reached 57 times, 46 of them a negative height on every read and
+  11 a degenerate or foot-cut close-up where neither read is the truth, and no test fixture reaches
+  it; the finite check, unreachable, its divisor zero only with the near face at zero; and a cap of
+  two passes for nine and a different starting read, each changing none of the 84,473.
+- **The bisection, 8 faults on its first version, 4 caught.** The four survivors said its bracket
+  was more than the rows need: a check at the floor, a start for a rising row, a start past the lens
+  for a falling one, and the doubling. The bracket is the floor and the lens's height now, doubled,
+  and the test that the sliver falls back to the two tangents runs tipped as well. Mutated again,
+  the check and the doubling are caught. The one survivor keeps the floor as the bracket's bottom
+  while doubling, which gives the same answer wherever the gap crosses zero once, and no row in the
+  suites tells the two apart.
 
 **Still open: a top that left through the side edge (V2).** Tipped, a tall piece near the side of
 the photo leans out through the side edge before its top reaches the top edge, so the box's top
@@ -8271,6 +8320,21 @@ anyway, as if the top were seen. On this fixture the 12 typical rows like that a
 and read 461 mm off in height, and the 60 tipped-down side-only rows like it 414. Such a height
 should be reported as cut, a lower bound, as a top-cut height is (§ 49.7). It exists in no commit,
 and it moves what the scan screen accuses, so it is measured on the judge first.
+
+**Also still open: the one-sided solve has no hidden end (V3).** `floorFromRoundOneSide` reads its
+seen side at the end its column is extreme, as `floorFromRound` does, but where the frame's top or
+bottom hid that end it reads the frame's edge as the rim, where `floorFromRound` reads the frame's
+row across the side. The review's probe read a round plant 1.2 m across and 2.6 m tall, on the 66°
+lens tipped 30° to 40° down, at 959 to 1,344 mm wide. Those sizes are the tops of their ranges,
+and the probe did not show which change made them, so it is measured on typical sizes before it is
+fixed. It exists in no commit.
+
+**And the end rule is written out twice.** Which end a side is extreme at,
+`s !== 0 && (a < 0) === (s > 0)`, is spelled out in both round solves, and `lateralSpan` applies
+it to a box's corners its own way. The copies have drifted already: the hidden-end read and the
+settle rule reached `floorFromRound` first, and V3 is the part that did not follow. One helper for
+the rule is the fix, and it belongs with V3, since V3 is the drift it would stop. It exists in no
+commit.
 
 **§ 49.10 · A floor piece cut at its FOOT is read at the far end of where it could stand —
 FIXED 2026-09-29, and the height was the other way round from what was filed. Then judged at

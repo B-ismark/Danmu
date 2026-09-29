@@ -1078,8 +1078,11 @@ both round pieces, which owe the catalogue nothing, and the deep air conditioner
 used to read *a round footprint under tilt, +6% of width at 5° and +13% at 12°*: a vertical
 side's image column changes with the row, and the solve read both sides on the box's top row.
 Each side is read at the end where its column is extreme now, so a round piece the photo shows
-whole is exact at every tilt measured, 5° to 20° up and down (§ 49.9). Those two percentages
-came from a box running past the frame, which no photo draws (§ 49.16).
+whole is exact where it is pinned: 3.6 m out at 5° to 20° up and down on the ultrawide, and
+1 to 1.5 m out at 25° to 45° down on the 66°, 106° and 120° lenses. The second grid is the one
+the first version failed, iterating the height when it could be solved in one division
+(§ 49.9). Those two percentages came from a box running past the frame, which no photo draws
+(§ 49.16).
 
 **Two clamps now, against two different walls, and keeping them apart is not tidiness.** The
 near face is measured, so it is bounded by the plaster — that is the clamp this function
