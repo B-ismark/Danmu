@@ -1399,10 +1399,9 @@ function DetectionRow({
   // default on screen in the sentence that says "Measured".
   // The same for an axis the photo's edge cut off: its size is an estimate, and
   // `measured` leaves it out rather than print it as a reading.
-  // And an axis read as a limit says so (`measuredPhrase`), because the one number a
-  // limit has is the end it could not be past, and printed alone after "Measured" it
-  // reads as the size.
-  const took = verdict.status === 'suspect' ? measuredPhrase(verdict.measured, dimUnit) : '';
+  // And an axis read at a distance the photo did not show says "about"
+  // (`measuredPhrase`): it was judged at that reading, and it is an estimate.
+  const took = verdict.status === 'suspect' ? measuredPhrase(verdict, dimUnit) : '';
   // The note covers both: a size the photo's edge cut off and a limit read from a
   // piece whose foot it cut. To the person they are one fact — this number is not the
   // camera's measurement of the piece — and it is said the same way.

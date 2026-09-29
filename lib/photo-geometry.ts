@@ -892,8 +892,12 @@ export type ReadBound =
  *    too high and a falling one too low. So a tall piece's height is at most what it
  *    reads, and a low one's at least. **And the other end is not open:** a rising ray
  *    means the top is above the lens whatever the distance, so a wardrobe cut at its
- *    foot is still taller than the camera, and a nightstand shorter. That one fact is
- *    most of what lets the judge still catch a wrong word here.
+ *    foot is still taller than the camera, and a nightstand shorter. That fact is what
+ *    let the judge catch a wrong word here while it judged only on the side a reading
+ *    spoke for. It judges at the reading now (D8, § 49.10) and asks only which axes
+ *    are estimates (`kind`); the ends stay the placer's description of its reading,
+ *    and are what building inside that range rather than at its limit would read
+ *    (§ 49.14).
  *
  *  A round piece is the same case on the same two tests: its radius is `near` times an
  *  angle, and its top row is read at `near` or at `near` plus that diameter, on the same
@@ -902,10 +906,10 @@ export type ReadBound =
  *  bound and grows with the tilt: a standing fan 300 mm off its wall read 637 wide
  *  against a true 650 at 10° down, a stool 800 mm off read 465 × 721 against 500 × 700
  *  at 20°, a fan 555 × 947 against 650 × 900 at 25°. A bound that the truth falls
- *  outside is worse than none — at 20° the row would print *0.72–1.50 m tall* for a
- *  0.70 m stool — so a round piece read tipped down claims nothing and is judged as
- *  read, which is what it had before bounds existed (pinned in
- *  `tests/label-repair.test.ts`). The phone tipped UP, which is how rooms are
+ *  outside is worse than none — at 20° it put a 0.70 m stool at 0.72–1.50 m tall — so
+ *  a round piece read tipped down claims nothing, which is what it had before bounds
+ *  existed (pinned in `tests/label-repair.test.ts`). Judged at the reading, as every
+ *  piece is now (D8), that costs its verdict nothing; it costs the row its "about". The phone tipped UP, which is how rooms are
  *  photographed, holds on every row, and so does a box tipped down.
  *
  *  **Both directions also lean on the catalogue depth**, because the far end is the
@@ -915,12 +919,13 @@ export type ReadBound =
  *  near face is further from the lens than the far end assumed, so it reads short of
  *  the truth, and by more than it sounds — a 2.0 m sofa 750 mm deep, on a wall two
  *  metres from a level lens, reads 1680 against a typical sofa's 950, and 600 mm deep
- *  it reads 1500. Judged both ways the same reading was just as short, so the bound
- *  costs nothing there; it only fails to fix it (pinned in the same file).
+ *  it reads 1500. The bound only describes that reading and does not fix it (pinned
+ *  in the same file).
  *
  *  Measured, not reasoned (`tests/label-repair.test.ts`): 800 mm off its wall on a
- *  106° lens, an 800 mm sofa read 333 tall and a 2.0 m wardrobe 2667, and judged both
- *  ways the judge called each the wrong size for what it was. A wall or ceiling piece
+ *  106° lens, an 800 mm sofa reads 333 tall and a 2.0 m wardrobe 2667, and judged at
+ *  those readings the judge calls each the wrong size for what it is: the price of D8,
+ *  pinned in the same file. A wall or ceiling piece
  *  is on its plane by assumption whatever the frame cuts, so this is the floor's alone. */
 export type ReadBounds = { width: ReadBound; height: ReadBound };
 

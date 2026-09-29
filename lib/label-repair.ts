@@ -22,8 +22,8 @@
 // The caller shows the verdict and the user accepts it.
 
 import { dimRangeFor } from './dimension-ranges';
-import { geoMeasure, measuredPlane, type CalMap, type RoomDims } from './detect-refine';
-import { AS_READ, cutAxes, type ReadBound, type ReadBounds } from './photo-geometry';
+import { geoMeasure, geoRefine, measuredPlane, type CalMap, type RoomDims } from './detect-refine';
+import { cutAxes } from './photo-geometry';
 import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
 import { formatDim } from './units';
@@ -31,13 +31,6 @@ import type { DimUnit } from './store';
 
 /** The axis names this module reasons about. Never depth — see `sizeFitsLabel`. */
 export type SizeAxis = 'width' | 'height';
-
-/** Where the truth can be, given reading `v` under bound `b`. */
-function truthSpan(v: number, b: ReadBound): [number, number] {
-  if (b.kind === 'upper') return [Math.min(b.floorMM, v), v];
-  if (b.kind === 'lower') return [v, Math.max(b.ceilMM, v)];
-  return [v, v];
-}
 
 export type LabelCandidate = {
   category: Category;
@@ -76,14 +69,13 @@ export type LabelVerdict =
       failed: SizeAxis[];
       /** What the detector's own word allows, mm, as [min, max] per axis. */
       allowed: { width: [number, number]; height: [number, number] };
-      /** What the camera measured, mm, as the [least, most] the piece can truly be —
-       *  both ends the same number when the reading is a size, and apart on an axis
-       *  in `bounded`. An axis is ABSENT when it was not observed — a ceiling
-       *  placement measures width only, and an axis the photo's edge cut off is a
-       *  typical size (`cut`). A caller that prints a fallback there is printing a
-       *  catalogue default as a measurement, and one that prints only the reading on
-       *  a bounded axis is printing a limit as a size. */
-      measured: { width?: [number, number]; height?: [number, number] };
+      /** What the camera measured, mm — the number the word was judged against. On an
+       *  axis in `bounded` that is the reading at the distance the placer assumed, an
+       *  estimate, and a caller says so (`measuredPhrase`). An axis is ABSENT when it
+       *  was not observed — a ceiling placement measures width only, and an axis the
+       *  photo's edge cut off is a typical size (`cut`). A caller that prints a
+       *  fallback there is printing a catalogue default as a measurement. */
+      measured: { width?: number; height?: number };
       /** Better words, most comfortable fit first, each already re-measured under
        *  its own anchor. **Empty is a real answer** — it means nothing in the
        *  vocabulary is that shape, so the finding is a flag with no repair. */
@@ -100,10 +92,14 @@ export type LabelVerdict =
 // read on a row the cut moved off the disc's centre, long or short, and bounds nothing
 // either way (§ 49.11) — so "at least this big" is not a reading of it (§ 49.5).
 //
-// `bounded`, on `ok` and `suspect`: the axes the photo DID see whole but read as a limit
-// rather than a size — a floor piece cut at its foot, read at the far end of where it
-// could stand (`ReadBounds`). Never an axis in `cut`. Absent when every axis read is a
-// size. A row that shows no note for it is telling the person a limit is a measurement,
+// `bounded`, on `ok` and `suspect`: the axes the photo DID see whole but read at a
+// distance it did not see — a floor piece cut at its foot, read as far back as it could
+// stand (`ReadBounds`). Never an axis in `cut`. Absent when every axis read is a size.
+// **Judged at that reading all the same**, the user's call (D8, § 49.10): its back on
+// the wall is the assumption the placer makes, and taking it as evidence catches the
+// wrong words a photo cut at the foot otherwise lets through, at the price of calling a
+// correct piece that stands nearer the wrong size — left unticked, one tap from kept.
+// A row that shows no note for it is telling the person an estimate is a measurement,
 // which is what the scan screen did for as long as only `cut` reached it.
 
 /** Does a measured W × H sit inside the band for this word?
@@ -119,26 +115,12 @@ export function sizeFitsLabel(category: Category, shape: Shape, widthMM: number,
   return failedAxes(category, shape, widthMM, heightMM).length === 0;
 }
 
-function failedAxes(
-  category: Category,
-  shape: Shape,
-  widthMM: number,
-  heightMM: number,
-  bound: ReadBounds = AS_READ,
-): SizeAxis[] {
+function failedAxes(category: Category, shape: Shape, widthMM: number, heightMM: number): SizeAxis[] {
   const r = dimRangeFor(category, shape);
   const out: SizeAxis[] = [];
-  if (outside(widthMM, r.min[0], r.max[0], bound.width)) out.push('width');
-  if (outside(heightMM, r.min[2], r.max[2], bound.height)) out.push('height');
+  if (widthMM < r.min[0] || widthMM > r.max[0]) out.push('width');
+  if (heightMM < r.min[2] || heightMM > r.max[2]) out.push('height');
   return out;
-}
-
-/** Is `v` evidence that the piece is outside [lo, hi]? Only when nowhere the piece could
- *  truly be is inside it: a reading that is the most a piece can be shows it too small
- *  and, on its own, never too big (§ 49.10). */
-function outside(v: number, lo: number, hi: number, b: ReadBound): boolean {
-  const [a, z] = truthSpan(v, b);
-  return z < lo || a > hi;
 }
 
 /** Which axes a measurement of this word actually observed, and which the photo's
@@ -178,21 +160,11 @@ function readAxes(category: Category, shape: Shape, box: Detection['box']): { me
 }
 
 /** How far inside a band a value sits, as a fraction of the band's span. 0 is on a
- *  bound, 0.5 is dead centre, negative is outside.
- *
- *  A bounded reading is scored where the truth would have to be for this word — the
- *  point nearest the reading that is both possible and in the band. A reading inside
- *  the band is that point, so it scores exactly as an exact one; one outside it that the
- *  piece could still be scores 0, on the edge, rather than the negative a misfit gets.
- *  That point is the reading clamped to the band, with no end of the possible span in
- *  it: the reading is always possible and the span is one interval around it, so when
- *  the two meet, the band's nearer end is inside the span. The first version clamped
- *  to the span's far end too, and no reading could reach it. */
-function axisMargin(v: number, lo: number, hi: number, b: ReadBound = { kind: 'exact' }): number {
+ *  bound, 0.5 is dead centre, negative is outside. */
+function axisMargin(v: number, lo: number, hi: number): number {
   const span = hi - lo;
   if (!(span > 0)) return 0;
-  const t = outside(v, lo, hi, b) ? v : Math.min(Math.max(v, lo), hi);
-  return Math.min(t - lo, hi - t) / span;
+  return Math.min(v - lo, hi - v) / span;
 }
 
 function sizeMargin(
@@ -201,31 +173,16 @@ function sizeMargin(
   widthMM: number,
   heightMM: number,
   axes: readonly SizeAxis[] = ['width', 'height'],
-  bound: ReadBounds = AS_READ,
 ): number {
   const r = dimRangeFor(category, shape);
-  const w = axes.includes('width') ? axisMargin(widthMM, r.min[0], r.max[0], bound.width) : Infinity;
-  const h = axes.includes('height') ? axisMargin(heightMM, r.min[2], r.max[2], bound.height) : Infinity;
+  const w = axes.includes('width') ? axisMargin(widthMM, r.min[0], r.max[0]) : Infinity;
+  const h = axes.includes('height') ? axisMargin(heightMM, r.min[2], r.max[2]) : Infinity;
   return Math.min(w, h);
 }
 
-/** How far a reading sits from a band as read, whatever its bound: the log of the
- *  factor it would have to move by, 0 inside, more negative further out — the tightest
- *  of the axes, as `sizeMargin` takes. Scale-free on purpose. Taken as a share of the
- *  band's span, like the margin, it made a WIDE band look near: a wardrobe read 2667
- *  tall sat behind a plant read 2756, 67 mm past the tallest wardrobe against 156 past
- *  the tallest plant, because a plant's band is 2.4 times as tall. */
-function sizeStrain(category: Category, shape: Shape, widthMM: number, heightMM: number, axes: readonly SizeAxis[]): number {
-  const r = dimRangeFor(category, shape);
-  const off = (v: number, lo: number, hi: number) => -Math.abs(Math.log(v / Math.min(Math.max(v, lo), hi)));
-  const w = axes.includes('width') ? off(widthMM, r.min[0], r.max[0]) : 0;
-  const h = axes.includes('height') ? off(heightMM, r.min[2], r.max[2]) : 0;
-  return Math.min(w, h);
-}
-
-/** Which categories could be this size, most comfortable fit first, ties to the band
- *  the reading sits nearer — `byFit`, the order `candidatesFor` gives the same words, so
- *  the two exported rankings of one question cannot disagree.
+/** Which categories could be this size, most comfortable fit first — `byFit`, the
+ *  order `candidatesFor` gives the same words, so the two exported rankings of one
+ *  question cannot disagree.
  *
  *  Judged on the CATEGORY band (`dimRangeFor(c, 'box')`, which resolves to the
  *  per-category entry) rather than on any one shape's, because a candidate has no
@@ -241,15 +198,10 @@ export function categoriesFittingSize(
   heightMM: number,
   exclude?: Category,
   axes: readonly SizeAxis[] = ['width', 'height'],
-  bound: ReadBounds = AS_READ,
 ): Category[] {
-  const fits = (c: Category) => !failedAxes(c, 'box', widthMM, heightMM, bound).some((a) => axes.includes(a));
-  const rank = (c: Category): Ranked => ({
-    margin: sizeMargin(c, 'box', widthMM, heightMM, axes, bound),
-    strain: sizeStrain(c, 'box', widthMM, heightMM, axes),
-  });
+  const fits = (c: Category) => !failedAxes(c, 'box', widthMM, heightMM).some((a) => axes.includes(a));
   return CATEGORIES.filter((c) => c !== 'other' && c !== exclude && fits(c))
-    .map((c) => ({ c, ...rank(c) }))
+    .map((c) => ({ c, margin: sizeMargin(c, 'box', widthMM, heightMM, axes) }))
     .sort(byFit)
     .map(({ c }) => c);
 }
@@ -294,20 +246,17 @@ function namesAKind(c: Category, label: string): boolean {
   return sceneShapeFor(c, label, undefined) !== k.plain || k.plainNames.some((n) => l.includes(n));
 }
 
-/** A candidate's place in the list: the more comfortable fit first, and between two
- *  the bound makes equally comfortable, the one its reading sits nearer as read.
+/** A candidate's place in the list: the more comfortable fit first.
  *
- *  The second key is what a bound costs the ordering. Every word a bounded reading
- *  could still be — outside its band on the side the truth may be — scores 0, on the
- *  band's edge, so a wardrobe read 2667 tall tied with every other tall word, and the
- *  list fell back on the catalogue's order: last of five, and the scan screen shows
- *  two. `strain` (`sizeStrain`) is not evidence against any of them, only which the
- *  reading is nearer, which is the most one photograph can say among words it cannot
- *  rule out. Measured on the foot-cut fixture in `tests/label-repair.test.ts`, the
- *  right word comes first for 56 of the 325 wrong words caught, from 37. */
-type Ranked = { margin: number; strain: number };
+ *  It had a second key while a bounded reading was judged on the side it could speak
+ *  for: every word such a reading could still be scored 0, on its band's edge, and the
+ *  tie went to the band the reading sat nearer. Judged at the reading (D8), a word that
+ *  fits is inside its band, and that key was 0 for every one of them — measured on the
+ *  foot-cut fixture in `tests/label-repair.test.ts`, it moved no candidate — so it is
+ *  gone with the bound that needed it. */
+type Ranked = { margin: number };
 function byFit(a: Ranked, b: Ranked): number {
-  return b.margin - a.margin || b.strain - a.strain;
+  return b.margin - a.margin;
 }
 
 /** The first try when it is among `ts` — the words' own kind — else the most
@@ -345,7 +294,7 @@ export function candidatesFor(
   room: RoomDims,
   { requireFit = true }: { requireFit?: boolean } = {},
 ): LabelCandidate[] {
-  const out: Array<LabelCandidate & { strain: number }> = [];
+  const out: LabelCandidate[] = [];
   // No lens, no measurement: `geoMeasure` hands every seed back and nothing is offered.
   if (!cals[d.slot]) return out;
   for (const c of categories) {
@@ -372,11 +321,10 @@ export function candidatesFor(
     const kinds = kindsOf(c);
     const own = { shape: worded, ...(worded === kinds.plain ? {} : { name: kinds.variants.find((v) => v.shape === worded)?.name }) };
     const tries = namesAKind(c, d.label) ? [own] : [own, ...kinds.variants];
-    const trials: Array<LabelCandidate & { fits: boolean; first: boolean; strain: number }> = [];
+    const trials: Array<LabelCandidate & { fits: boolean; first: boolean }> = [];
     for (const [n, t] of tries.entries()) {
       const seed: Detection = { ...d, category: c, shape: t.shape, dimMM: undefined };
-      // With the placer's own answer to which way that size can be wrong.
-      const { row: trial, bounds: cBound } = geoMeasure(seed, cals, room);
+      const trial = geoRefine(seed, cals, room);
       // This kind cannot be measured at all under its own anchor — a ceiling kind
       // with no ceiling in frame. Offering it would mean offering an unmeasured repair.
       if (trial === seed || !trial.dimMM) continue;
@@ -400,20 +348,18 @@ export function candidatesFor(
           detection: trial,
           ...('name' in t && t.name ? { name: t.name } : {}),
           margin: -Infinity,
-          strain: -Infinity,
           unmeasured: true,
           fits: false,
           first: n === 0,
         });
         continue;
       }
-      const fits = !failedAxes(c, t.shape, trial.dimMM[0], trial.dimMM[2], cBound).some((a) => cAxes.includes(a));
+      const fits = !failedAxes(c, t.shape, trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
       trials.push({
         category: c,
         detection: trial,
         ...('name' in t && t.name ? { name: t.name } : {}),
-        margin: sizeMargin(c, t.shape, trial.dimMM[0], trial.dimMM[2], cAxes, cBound),
-        strain: sizeStrain(c, t.shape, trial.dimMM[0], trial.dimMM[2], cAxes),
+        margin: sizeMargin(c, t.shape, trial.dimMM[0], trial.dimMM[2], cAxes),
         fits,
         first: n === 0,
       });
@@ -425,8 +371,8 @@ export function candidatesFor(
     out.push(cand);
   }
   // Signed margin, so a candidate that does not fit its own band sorts below every
-  // one that does, without needing to be flagged; ties by `strain` (`byFit`).
-  return out.sort(byFit).map(({ strain: _strain, ...cand }) => cand);
+  // one that does, without needing to be flagged.
+  return out.sort(byFit);
 }
 
 /** The row accepting `cand` leaves in place of `row`, called `label`: the candidate's
@@ -446,25 +392,17 @@ export function acceptCandidate(row: Detection, cand: LabelCandidate, label: str
   return { ...measured, label, ...(row.color === undefined ? {} : { color: row.color }) };
 }
 
-/** What the camera measured, as the words after "Measured": "1.20 × 0.45 m" when both
- *  are sizes, "up to about 2.56 m wide and about 1.50–2.67 m tall" once either is a
- *  limit. Ends that print the same number are one number — a span narrower than the
- *  unit shows is a size on screen. Worded per axis once either is a span: "up to 2.56 ×
- *  1.50–2.67" would leave the reader to work out what "up to" governs.
- *
- *  **"About", because the limit is only as good as the catalogue depth** it was read
- *  at (`ReadBounds`): a 2.0 m sofa shallower than a typical one, pushed against its
- *  wall, reads 1680, so a bare *up to 1.68 m* would state a ceiling the sofa is past.
- *  Here rather than in the page, because it is a displayed measurement's arithmetic,
- *  and the page is where no test can reach it. */
-export function measuredPhrase(m: Extract<LabelVerdict, { status: 'suspect' }>['measured'], unit: DimUnit): string {
-  const read = (span: [number, number] | undefined, word: string) =>
-    span ? [{ lo: formatDim(span[0], unit), hi: formatDim(span[1], unit), zero: span[0] <= 0, word }] : [];
-  const axes = [...read(m.width, 'wide'), ...read(m.height, 'tall')];
-  if (axes.every((a) => a.lo === a.hi)) return `${axes.map((a) => a.hi).join(' × ')} ${unit}`;
-  return axes
-    .map((a) => `${a.lo === a.hi ? a.hi : a.zero ? `up to about ${a.hi}` : `about ${a.lo}–${a.hi}`} ${unit} ${a.word}`)
-    .join(' and ');
+/** What the camera measured, as the words after "Measured": "1.20 × 0.45 m", and
+ *  "about 2.00 × 0.33 m" once either axis is `bounded` — read at a distance the photo did
+ *  not show, so an estimate, and judged as one (D8). One axis names itself, "2.67 m
+ *  tall", since a lone number after "Measured" could be either. Here rather than in the
+ *  page, because it is a displayed measurement's arithmetic, and the page is where no
+ *  test can reach it. */
+export function measuredPhrase(v: Extract<LabelVerdict, { status: 'suspect' }>, unit: DimUnit): string {
+  const { width, height } = v.measured;
+  const read = [width, height].filter((n): n is number => n !== undefined);
+  const word = read.length !== 1 ? '' : width !== undefined ? ' wide' : ' tall';
+  return `${v.bounded?.length ? 'about ' : ''}${read.map((n) => formatDim(n, unit)).join(' × ')} ${unit}${word}`;
 }
 
 /** Judge the word a detector used against the size the camera measured.
@@ -494,27 +432,26 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
   // word. For a ceiling item that is width alone — enough for both ceiling rows of
   // the benchmark (a hook at 100 mm against a fan's 900 mm floor, a fan at 1200 mm
   // against a lamp's 800 mm ceiling), and honest about the rest.
-  // And each only on the side its reading can speak for (`ReadBounds`, the placer's
-  // own): a floor piece cut at its foot is read at the far end of where it could
-  // stand, so its width may say "too small" and never "too big".
+  // A floor piece cut at its foot is read at the far end of where it could stand and
+  // judged there, its back on the wall taken as evidence (D8, see `bounded`).
   const { measured: axes, cut } = readAxes(category, shape, d.box);
   const cutNote = cut.length > 0 ? { cut } : {};
   if (axes.length === 0) return { status: 'unmeasured', ...cutNote };
   const bounded = axes.filter((a) => bound[a].kind !== 'exact');
   const notes = { ...cutNote, ...(bounded.length > 0 ? { bounded } : {}) };
-  const failed = failedAxes(category, shape, widthMM, heightMM, bound).filter((a) => axes.includes(a));
+  const failed = failedAxes(category, shape, widthMM, heightMM).filter((a) => axes.includes(a));
   if (failed.length === 0) return { status: 'ok', ...notes };
 
   const r = dimRangeFor(category, shape);
-  const candidates = candidatesFor(d, categoriesFittingSize(widthMM, heightMM, category, axes, bound), cals, room);
+  const candidates = candidatesFor(d, categoriesFittingSize(widthMM, heightMM, category, axes), cals, room);
 
   return {
     status: 'suspect',
     failed,
     allowed: { width: [r.min[0], r.max[0]], height: [r.min[2], r.max[2]] },
     measured: {
-      ...(axes.includes('width') ? { width: truthSpan(widthMM, bound.width) } : {}),
-      ...(axes.includes('height') ? { height: truthSpan(heightMM, bound.height) } : {}),
+      ...(axes.includes('width') ? { width: widthMM } : {}),
+      ...(axes.includes('height') ? { height: heightMM } : {}),
     },
     candidates,
     ...notes,
