@@ -8,15 +8,24 @@
 // the numbers. This fixture pins what the placer does TODAY, so the next attempt has
 // something to beat and has to say what it moved.
 //
-// Every round floor kind stands as a cylinder at 0.75, 1 and 1.3 times its typical width,
-// clamped to its band, because the fix assumes the typical width and § 49.14 showed that a
-// fixture made mostly of typical pieces cannot tell you whether that assumption is right.
-// Each one is placed 0, 300 and 800 mm off the north wall, on the 106° lens, level and
-// tipped 10° up and down, and moved so that the frame's right or left edge cuts it. The box
-// is the in-frame silhouette (`framedExtent`, § 49.16), not a clamp of the whole one.
+// Every round kind the scan measures on the floor stands as a cylinder at 0.6, 0.8, 1 and
+// 1.25 times its typical width, each only where its band allows it, so no width is clamped
+// back onto another and fewer than a third of the rows are typical: the fix assumes the
+// typical width, and § 49.14 showed that a fixture made mostly of typical pieces cannot
+// tell you whether that assumption is right. `cylinder` is round too and is left out,
+// because no scan reaches it: `sceneShapeFor` takes only a catalogue shape and it is not
+// one. A table lamp stands on the floor here, which is where the floor placer puts one.
+//
+// Each piece is placed 0, 300 and 800 mm off the north wall of a 6 m room 4 m and 5 m
+// deep, on the 106° lens, level and tipped 10° up and down. It is moved across the frame's
+// right edge, where that edge meets the FLOOR under the tilt in question, by -1.5, -0.6,
+// -0.2 and 0.2 radii: a sliver cut off, mostly in, about half, and more out than in. A
+// piece that would stand past the room's side wall is left out. The box is the in-frame
+// silhouette (`framedExtent`, § 49.16), not a clamp of the whole one.
+// Only the right edge is swept; the left is its mirror, and one test says so.
 // Printed on every green run (see `--disableConsoleIntercept` in CLAUDE.md).
 import { describe, expect, it } from 'vitest';
-import { frameCuts, wallFrame, type CameraCal } from '@/lib/photo-geometry';
+import { CAM_HEIGHT, frameCuts, wallFrame, type CameraCal } from '@/lib/photo-geometry';
 import { defaultAxisFor, type Category, type Shape } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import { geoMeasure, type RoomDims } from '@/lib/detect-refine';
@@ -24,26 +33,40 @@ import type { Detection } from '@/lib/detection';
 import { footprintForLayout } from '@/lib/footprint';
 import { floorCylinderPoints, framedExtent, project } from './helpers/project';
 
-const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
+const ROOMS: RoomDims[] = [4, 5].map((depth) => ({ width: 6, depth, height: 2.8, footprint: footprintForLayout('rect', 6, depth) }));
 const WIDE: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
-const KINDS: Array<[Category, Shape]> = [['fan', 'fan-standing'], ['plant', 'plant'], ['lamp', 'lamp-floor'], ['chair', 'stool']];
+const KINDS: Array<[Category, Shape]> = [
+  ['fan', 'fan-standing'],
+  ['plant', 'plant'],
+  ['lamp', 'lamp-floor'],
+  ['lamp', 'lamp-table'],
+  ['chair', 'stool'],
+];
 const TILTS = [0, -10, 10] as const;
 const inPhoto = ([u, v]: [number, number]) => u >= 0 && u <= 1 && v >= 0 && v <= 1;
 
 type Row = {
+  /** The room's depth in metres. */
+  room: number;
   /** Cut at the side only, so its base row is read as seen, or at its foot too, so its
    *  distance is assumed (the piece stood back against its wall, § 49.10). */
   foot: boolean;
   tilt: number;
   gap: number;
+  /** The centre's offset from the frame's edge, in radii. */
+  s: number;
   typical: boolean;
-  /** Centre error in metres: forward, positive toward the far wall, and along it. Only
-   *  their sizes are read. */
+  /** Errors in metres: the centre forward, positive toward the far wall, and along the
+   *  wall, then the width and height it was built at. Only their sizes are pinned; the
+   *  mirror test reads the sign along the wall. */
   dErr: number;
   latErr: number;
-  /** Where the placer stood it, and the width it was built at. */
+  wErr: number;
+  hErr: number;
+  /** Where the placer stood it, the width it was built at, and the wall it stood by. */
   forward: number;
   widthM: number;
+  wall: number;
   /** Facts about the fixture itself, from the forward projection and not from the placer:
    *  whether the point of the base nearest the lens is in the photo, and whether any of
    *  the base is. */
@@ -51,121 +74,180 @@ type Row = {
   baseInPhoto: boolean;
 };
 
-function measure(): Row[] {
+function measure(side: 1 | -1): Row[] {
   const out: Row[] = [];
-  const wd = wallFrame('n', ROOM.footprint)!.distance;
-  for (const tilt of TILTS)
-    for (const [category, shape] of KINDS) {
-      const r = dimRangeFor(category, shape);
-      const typ = defaultAxisFor(category, shape, 0);
-      const h = defaultAxisFor(category, shape, 2) / 1000;
-      for (const fw of [0.75, 1, 1.3])
-        for (const gap of [0, 0.3, 0.8])
-          // The centre's offset from the frame edge's azimuth line, in radii: mostly in the
-          // photo, about half, and more out than in.
-          for (const s of [-0.6, -0.2, 0.2])
-            for (const side of [1, -1]) {
-              const diaMM = Math.min(Math.max(typ * fw, r.min[0]), r.max[0]);
-              const dia = diaMM / 1000;
-              const f = wd - gap - dia / 2;
-              const cal = { ...WIDE, tiltRad: (tilt * Math.PI) / 180 };
-              const x = side * (f * (WIDE.k / 2) + (s * dia) / 2);
+  for (const room of ROOMS) {
+    const wd = wallFrame('n', room.footprint)!.distance;
+    for (const tilt of TILTS) {
+      const t = (tilt * Math.PI) / 180;
+      const cal = { ...WIDE, tiltRad: t };
+      for (const [category, shape] of KINDS) {
+        const r = dimRangeFor(category, shape);
+        const typ = defaultAxisFor(category, shape, 0);
+        const h = defaultAxisFor(category, shape, 2) / 1000;
+        for (const fw of [0.6, 0.8, 1, 1.25]) {
+          const diaMM = typ * fw;
+          if (diaMM < r.min[0] || diaMM > r.max[0]) continue;
+          const dia = diaMM / 1000;
+          for (const gap of [0, 0.3, 0.8]) {
+            const f = wd - gap - dia / 2;
+            // Where the frame's right edge meets the floor at the centre's distance.
+            const edge = (WIDE.k / 2) * (Math.cos(t) * f + Math.sin(t) * CAM_HEIGHT);
+            for (const s of [-1.5, -0.6, -0.2, 0.2]) {
+              const x = side * (edge + (s * dia) / 2);
+              // Near the far wall of the deeper room the frame's edge is past the room's end,
+              // where no piece can stand. The rooms are rectangles, so the half-width is the
+              // side wall.
+              if (Math.abs(x) + dia / 2 > room.width / 2) continue;
               const pts = floorCylinderPoints(x, -f, dia, h);
-              const box = framedExtent(pts.map((p) => project('n', ...p, cal)));
+              const uv = pts.map((p) => project('n', ...p, cal));
+              const box = framedExtent(uv);
               if (!box) continue;
               const c = frameCuts(box);
               if (c.left === c.right || c.top) continue;
               const d: Detection = { label: category, conf: 0.9, category, shape, slot: 'n', box };
-              const { row } = geoMeasure(d, { n: cal }, ROOM);
+              const { row } = geoMeasure(d, { n: cal }, room);
               if (row === d || !row.dimMM || !row.position) continue;
               out.push({
+                room: room.depth,
                 foot: c.bottom,
                 tilt,
                 gap,
-                typical: diaMM === typ,
+                s,
+                typical: fw === 1,
                 dErr: -row.position.z - f,
                 latErr: row.position.x - x,
+                wErr: row.dimMM[0] / 1000 - dia,
+                hErr: row.dimMM[2] / 1000 - h,
                 forward: -row.position.z,
                 widthM: row.dimMM[0] / 1000,
+                wall: wd,
                 nearestInPhoto: inPhoto(project('n', x, 0, -(f - dia / 2), cal)),
-                baseInPhoto: pts.some((p) => p[1] === 0 && inPhoto(project('n', ...p, cal))),
+                baseInPhoto: pts.some((p, i) => p[1] === 0 && inPhoto(uv[i])),
               });
             }
+          }
+        }
+      }
     }
+  }
   return out;
 }
 
-type Cell = { n: number; dOff: number; latOff: number; dMM: number; latMM: number };
+type Cell = { n: number; dOff: number; latOff: number; dMM: number; latMM: number; wMM: number; hMM: number };
 function cell(rows: Row[]): Cell {
-  const mean = (k: 'dErr' | 'latErr') => Math.round((1000 * rows.reduce((a, r) => a + Math.abs(r[k]), 0)) / rows.length);
+  const mean = (k: 'dErr' | 'latErr' | 'wErr' | 'hErr') =>
+    rows.length ? Math.round((1000 * rows.reduce((a, r) => a + Math.abs(r[k]), 0)) / rows.length) : 0;
   return {
     n: rows.length,
     dOff: rows.filter((r) => Math.abs(r.dErr) > 0.1).length,
     latOff: rows.filter((r) => Math.abs(r.latErr) > 0.1).length,
     dMM: mean('dErr'),
     latMM: mean('latErr'),
+    wMM: mean('wErr'),
+    hMM: mean('hErr'),
   };
 }
 
 describe('a round floor piece cut at one side of the photo, as placed today (§ 49.9)', () => {
-  const rows = measure();
-  const table = (foot: boolean) =>
-    Object.fromEntries(TILTS.map((t) => [t, cell(rows.filter((r) => r.foot === foot && r.tilt === t))]));
+  const rows = measure(1);
+  const pick = (room: number, foot: boolean, tilt: number) =>
+    rows.filter((r) => r.room === room && r.foot === foot && r.tilt === tilt);
+  const table = (room: number, foot: boolean) => Object.fromEntries(TILTS.map((t) => [t, cell(pick(room, foot, t))]));
 
   it('prints the measurement', () => {
-    console.log('\n§ 49.9 · round floor pieces cut at one side: rows · distance / lateral more than 100 mm off · mean error (mm)');
-    for (const foot of [false, true])
-      for (const t of TILTS) {
-        const c = cell(rows.filter((r) => r.foot === foot && r.tilt === t));
-        const lens = t === 0 ? 'level     ' : t < 0 ? `${-t}° up    ` : `${t}° down  `;
-        console.log(`  ${foot ? 'side + foot' : 'side only  '} ${lens} n=${String(c.n).padStart(3)}  ${c.dOff} / ${c.latOff}  (${c.dMM} / ${c.latMM})`);
-      }
+    console.log(
+      '\n§ 49.9 · round floor pieces cut at one side: rows · distance / along the wall more than 100 mm off · mean error in mm: distance / along the wall / width / height',
+    );
+    for (const room of [4, 5])
+      for (const foot of [false, true])
+        for (const t of TILTS) {
+          const c = cell(pick(room, foot, t));
+          const lens = t === 0 ? 'level     ' : t < 0 ? `${-t}° up    ` : `${t}° down  `;
+          console.log(
+            `  ${room} m deep  ${foot ? 'side + foot' : 'side only  '} ${lens} n=${String(c.n).padStart(3)}  ${c.dOff} / ${c.latOff}  (${c.dMM} / ${c.latMM} / ${c.wMM} / ${c.hMM})`,
+          );
+        }
+  });
+
+  it('is a fixture whose typical rows are under a third', () => {
+    expect([rows.length, rows.filter((r) => r.typical).length]).toEqual([957, 282]);
   });
 
   it('pins the table, so a change to the round placer has to say what it moved', () => {
-    expect(rows).toHaveLength(644);
-    expect(table(false)).toEqual({
-      0: { n: 54, dOff: 0, latOff: 18, dMM: 42, latMM: 65 },
-      [-10]: { n: 46, dOff: 22, latOff: 24, dMM: 170, latMM: 214 },
-      10: { n: 136, dOff: 8, latOff: 124, dMM: 45, latMM: 246 },
+    expect(table(4, false)).toEqual({
+      0: { n: 60, dOff: 8, latOff: 11, dMM: 47, latMM: 53, wMM: 89, hMM: 17 },
+      [-10]: { n: 0, dOff: 0, latOff: 0, dMM: 0, latMM: 0, wMM: 0, hMM: 0 },
+      10: { n: 135, dOff: 10, latOff: 131, dMM: 49, latMM: 266, wMM: 84, hMM: 145 },
     });
-    expect(table(true)).toEqual({
-      0: { n: 162, dOff: 124, latOff: 122, dMM: 366, latMM: 361 },
-      [-10]: { n: 166, dOff: 138, latOff: 122, dMM: 377, latMM: 347 },
-      10: { n: 80, dOff: 74, latOff: 54, dMM: 297, latMM: 174 },
+    expect(table(4, true)).toEqual({
+      0: { n: 143, dOff: 101, latOff: 101, dMM: 341, latMM: 376, wMM: 103, hMM: 141 },
+      [-10]: { n: 134, dOff: 96, latOff: 117, dMM: 261, latMM: 303, wMM: 161, hMM: 107 },
+      10: { n: 69, dOff: 41, latOff: 47, dMM: 153, latMM: 130, wMM: 83, hMM: 157 },
     });
+    expect(table(5, false)).toEqual({
+      0: { n: 79, dOff: 0, latOff: 15, dMM: 23, latMM: 53, wMM: 75, hMM: 16 },
+      [-10]: { n: 31, dOff: 6, latOff: 20, dMM: 59, latMM: 119, wMM: 118, hMM: 8 },
+      10: { n: 84, dOff: 1, latOff: 80, dMM: 42, latMM: 265, wMM: 82, hMM: 123 },
+    });
+    expect(table(5, true)).toEqual({
+      0: { n: 66, dOff: 35, latOff: 35, dMM: 130, latMM: 134, wMM: 86, hMM: 33 },
+      [-10]: { n: 155, dOff: 129, latOff: 108, dMM: 333, latMM: 318, wMM: 155, hMM: 105 },
+      10: { n: 1, dOff: 0, latOff: 1, dMM: 66, latMM: 200, wMM: 0, hMM: 48 },
+    });
+  });
+
+  it('cut at the left edge instead, is the mirror image', () => {
+    const left = measure(-1);
+    expect(left).toHaveLength(rows.length);
+    const worst = Math.max(...left.map((l, i) => Math.max(Math.abs(l.dErr - rows[i].dErr), Math.abs(l.latErr + rows[i].latErr), Math.abs(l.wErr - rows[i].wErr))));
+    expect(worst).toBeLessThan(1e-9);
   });
 
   // What the candidate ran into, pinned on the fixture's own projection rather than on the
   // placer, so each holds whatever the placer does next.
-  it('hides the point of its base nearest the lens, so its bottom row is not its near face', () => {
-    // A disc's nearest point sits straight ahead of its centre, and at the edge of a 106°
-    // lens that is further out than the edge. The bottom row is then where the frame's edge
-    // crosses the base, further off than the near face: the one-sided solve as first
-    // written read it as the near face, and came back further out than the solve it
-    // replaced. Level and tipped up, every row; tipped down, a fifth.
+  it('hides the point of its base nearest the lens unless only a sliver is cut', () => {
+    // A disc's nearest point sits straight ahead of its centre. It is past the frame's edge
+    // once the centre is more than `(k/2)·cos(tilt)` radii inside it (1.33 level on this
+    // lens), so of the four offsets only the sliver keeps it in the photo, and the bottom
+    // row is otherwise where the frame's edge crosses the base, further off than the near
+    // face. The one-sided solve as first written read it as the near face and came back
+    // further out than the solve it replaced. On the slivers, where that premise holds, the
+    // placer today is already close, level: 25 mm / 35 mm.
+    const side = rows.filter((r) => !r.foot);
+    expect(side.every((r) => r.nearestInPhoto === (r.s === -1.5))).toBe(true);
     const hidden = TILTS.map((t) => {
-      const seen = rows.filter((r) => !r.foot && r.tilt === t);
+      const seen = side.filter((r) => r.tilt === t);
       return [seen.length, seen.filter((r) => !r.nearestInPhoto).length];
     });
-    expect(hidden).toEqual([[54, 54], [46, 46], [136, 28]]);
+    expect(hidden).toEqual([[139, 100], [31, 27], [219, 157]]);
+    expect(cell(side.filter((r) => r.nearestInPhoto && r.tilt === 0))).toEqual({ n: 39, dOff: 2, latOff: 2, dMM: 25, latMM: 35, wMM: 68, hMM: 4 });
   });
 
-  it('tipped up, shows none of its base at all, and the placer stands it on the wall', () => {
-    // Its lowest point in the photo is where its own side leaves through the frame's edge,
-    // above the floor, and no row of it is cut at the foot, so that point is read as a floor
-    // contact, beyond the wall, and the centre's clamp stands the piece against it.
-    const up = rows.filter((r) => !r.foot && r.tilt === -10);
-    expect([up.length, up.filter((r) => !r.baseInPhoto).length]).toEqual([46, 46]);
-    expect(up.filter((r) => Math.abs(r.forward - (2 - r.widthM / 2)) < 0.001).length).toBe(46);
-    // Right only where it was against the wall to begin with.
-    expect(up.filter((r) => r.gap > 0).length).toBe(22);
+  it('tipped up in the 4 m room, shows no floor at all, so every piece is cut at its foot too', () => {
+    // Tipped 10° up on this lens, the bottom of the frame meets the floor beyond a wall 2 m
+    // off, so no floor is in the photo and no piece shows its base, and every one of them
+    // reaches the frame's bottom: its distance is assumed (§ 49.10) rather than read off a
+    // floor contact that is not there. The 5 m room is the control, its wall far enough off
+    // for the floor in front of it to be in the photo, and there every piece cut at the
+    // side only shows its base.
+    //
+    // The first version of this fixture measured the offset from the LEVEL lens's edge,
+    // which tipped up sits wider than where the edge meets the floor, so it stood 46 pieces
+    // with their whole base out of the photo and only their side in it, and the placer read
+    // that side as a floor contact beyond the wall. That box exists, a piece mostly out of
+    // the frame with only its upper part in it, and it is not measured here.
+    const up = (room: number, foot: boolean) => rows.filter((r) => r.room === room && r.foot === foot && r.tilt === -10);
+    expect([
+      [up(4, false).length, up(4, true).length, up(4, true).filter((r) => r.baseInPhoto).length],
+      [up(5, false).length, up(5, false).filter((r) => !r.baseInPhoto).length],
+    ]).toEqual([[0, 134, 0], [31, 0]]);
   });
 
   it('at a level lens and a typical size, is off where nothing is assumed', () => {
     // Side only, level, a typical size: no catalogue number can be wrong here, so what is
     // left is the frame's edge read as a tangent, which is what § 49.9 was filed for.
     const clean = rows.filter((r) => !r.foot && r.tilt === 0 && r.typical);
-    expect(cell(clean)).toEqual({ n: 16, dOff: 0, latOff: 4, dMM: 28, latMM: 81 });
+    expect(cell(clean)).toEqual({ n: 37, dOff: 0, latOff: 7, dMM: 25, latMM: 64, wMM: 0, hMM: 19 });
   });
 });
