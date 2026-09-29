@@ -19,6 +19,7 @@
 
 import { CAM_HEIGHT, type CameraCal } from '@/lib/photo-geometry';
 import type { CaptureSlot } from '@/lib/storage';
+import { convexHull } from './geometry-walk';
 
 export type Box = [number, number, number, number];
 
@@ -128,6 +129,36 @@ export function extent(pts: Array<[number, number]>): Box {
   const u0 = Math.min(...us);
   const v0 = Math.min(...vs);
   return [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
+}
+
+/** The box a detector draws round a solid the frame cuts: what is INSIDE the
+ *  picture, and nothing the photo never showed (§ 49.16). Clamping each projected
+ *  point to the frame and boxing the clamped points keeps extent wherever the
+ *  silhouette crosses an edge at a slant — a point off the left edge but low keeps
+ *  its low `v` after it is pulled onto the edge, though the outline meets that edge
+ *  higher up. A solid in front of the lens projects to a convex set, so its hull
+ *  clipped to the frame IS the in-frame silhouette. Null when none of it is inside. */
+export function framedExtent(pts: Array<[number, number]>): Box | null {
+  let poly = convexHull(pts);
+  if (poly.length < 3) return null;
+  const edges: Array<(q: [number, number]) => number> = [(q) => q[0], (q) => 1 - q[0], (q) => q[1], (q) => 1 - q[1]];
+  for (const inside of edges) {
+    const out: Array<[number, number]> = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      const da = inside(a);
+      const db = inside(b);
+      if (da >= 0) out.push(a);
+      if (da >= 0 !== db >= 0) {
+        const t = da / (da - db);
+        out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      }
+    }
+    poly = out;
+    if (poly.length === 0) return null;
+  }
+  return extent(poly);
 }
 
 /** Which world direction each slot's camera LOOKS, DERIVED from `ALONG` rather than

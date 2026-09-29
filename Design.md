@@ -437,7 +437,17 @@ Furniture detection runs through a fallback chain, best-effort:
    list. A row with no name is named by its category, and the model's `uid` is
    left off, since the app's uid becomes the piece's id. That sentence said
    "constrains the slot it will accept back" while only the prompt asked
-   (§ 49.17).
+   (§ 49.17). A saved row carries its wall as a `__slot:` suffix on its label, and
+   `splitSlotSuffix` (`lib/detection-record.ts`) is its one reader: the record,
+   the room builder, the photo editor and a saved scene's names all call it, and it
+   reads the suffix with `slotOf`, so a room saved before that check, when a wall
+   was kept as the model wrote it, shows its true walls on the scan screen and
+   clean names everywhere. The room builder places such a row where it always
+   stood (`placedSlot`), because a load moves nothing; a rescan is what moves it
+   (§ 49.18). A reply that loses only SOME rows says how many: `readCloudReply`
+   returns the count beside the rows it kept, and the scan screen names it in a calm
+   notice (`lib/set-aside.ts`), so a scan that kept 6 of 9 pieces no longer looks
+   like one that found 6 (§ 49.19).
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
    detector is available.
 
@@ -639,10 +649,11 @@ held as literals in `tests/repeat-sightings.test.ts`):
   typical piece's place, and the walk asks about the longer ones.
 
 Together they take the repeats left ticked, at an ultrawide read as the assumed 66°, from
-247 to 5 (106°) and 452 to 21 (120°). The price is 21 real pieces across the table's five
+247 to 5 (106°) and 452 to 19 (120°). The price is 21 real pieces across the table's five
 readings started unticked — each with its reason, one tap from back — and none on a lens
 EXIF measured. Three things it does not reach are filed in `docs/what-is-still-open.md`
-§ 46, measured and not fixed: twin beds in a corner come back as one (§ 46.1); a box cut at
+§ 46, measured and not fixed: twin beds in a corner come back as one, in one of the two
+layouts measured — the other was the fixture's (§ 46.1, § 49.16); a box cut at
 the BOTTOM of its photo is not walked, because doing so bought little and walking both
 edges is a grid that did not finish (§ 46.2); and under a wrong lens the HARD merge deletes
 3.7–4.2% of an ultrawide room's pieces outright, nearly all dining chairs, before this pass

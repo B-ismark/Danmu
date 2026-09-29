@@ -1,8 +1,11 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { cleanLabelOf, detectionPartIds, fromRecord, fromRecords, toRecord, type SavedDetection } from '@/lib/detection-record';
-import { buildSceneFromRoom } from '@/lib/scene-spec';
+import { buildSceneFromRoom, normalizeStoredParts, type ScenePart } from '@/lib/scene-spec';
 import type { RoomData } from '@/lib/storage';
 import type { Detection } from '@/lib/detection';
+import { stripComments } from './helpers/source';
 
 // The codec's whole documented failure mode is having TWO implementations that
 // drift. So the tests are round-trips over a FULLY populated detection rather than
@@ -121,15 +124,51 @@ describe('toRecord / fromRecord', () => {
     const rec: SavedDetection = { id: 0, label: 'thing', conf: 0.5, locked: false, box: [0, 0, 1, 1] };
     expect(fromRecord(rec).slot).toBe('n');
   });
+
+  // Until § 49.17 a cloud row was saved with whatever the model wrote for its wall,
+  // and the suffix read back only `[nesw]`: every one of these came back on the
+  // north wall, still carrying the suffix in its name.
+  const saved = (label: string): SavedDetection => ({ id: 0, label, conf: 0.5, locked: true, box: [0.3, 0.4, 0.3, 0.3], category: 'sofa' });
+
+  it('reads a wall saved in the scan reader’s other words back as that wall (§ 49.18)', () => {
+    for (const said of ['s', 'S', 'south', 'SOUTH', 'south wall', 'S WALL', ' South ']) {
+      const d = fromRecord(saved(`Sofa__slot:${said}`));
+      expect([said, d.label, d.slot]).toEqual([said, 'Sofa', 's']);
+    }
+    for (const said of ['e', 'East', 'w', 'WEST', 'n', 'north wall']) {
+      expect(fromRecord(saved(`Sofa__slot:${said}`)).slot).toBe(said.trim()[0].toLowerCase());
+    }
+  });
+
+  it('reads the FIRST suffix of a label a re-save stacked, and heals it on the next save', () => {
+    // Saving a `south` row again read it as `n` and wrote that over the top.
+    const stacked = saved('Sofa__slot:south__slot:n');
+    expect(fromRecord(stacked)).toMatchObject({ label: 'Sofa', slot: 's' });
+    expect(toRecord(fromRecord(stacked), 0, true, uid).label).toBe('Sofa__slot:s');
+  });
+
+  it('strips a suffix that names no wall, and answers n for it as for none', () => {
+    for (const said of ['up', 'x', '', 'constructor', 'nwall']) {
+      expect(fromRecord(saved(`Sofa__slot:${said}`))).toMatchObject({ label: 'Sofa', slot: 'n' });
+    }
+  });
 });
 
 describe('cleanLabelOf', () => {
   it('strips a slot suffix and leaves everything else alone', () => {
     expect(cleanLabelOf({ ...full, label: 'sofa__slot:w' })).toBe('sofa');
     expect(cleanLabelOf({ ...full, label: 'sofa' })).toBe('sofa');
-    // Only at the END, and only a real slot letter — a label is user-editable text.
-    expect(cleanLabelOf({ ...full, label: '__slot:n desk' })).toBe('__slot:n desk');
-    expect(cleanLabelOf({ ...full, label: 'shelf__slot:x' })).toBe('shelf__slot:x');
+    expect(cleanLabelOf({ ...full, label: 'sofa_slot:w' })).toBe('sofa_slot:w');
+  });
+
+  it('strips a suffix that names no wall too, and everything after the first (§ 49.18)', () => {
+    // This used to leave both alone, on the ground that a label is user-editable
+    // text. Nobody types `__slot:`; the labels that carry one the old reader could
+    // not read are cloud rows saved before § 49.17 with the model's own word for the
+    // wall, and leaving the suffix on is what put `shelf__slot:x` on screen.
+    expect(cleanLabelOf({ ...full, label: 'shelf__slot:x' })).toBe('shelf');
+    expect(cleanLabelOf({ ...full, label: 'desk__slot:n wall__slot:n' })).toBe('desk');
+    expect(cleanLabelOf({ ...full, label: '__slot:n desk' })).toBe('');
   });
 });
 
@@ -179,5 +218,89 @@ describe('fromRecords — a row keeps the id it builds as', () => {
   it('reads every other field exactly as fromRecord does', () => {
     const one = fromRecords([rows[2]])[0];
     expect({ ...one, uid: undefined }).toEqual(fromRecord(rows[2]));
+  });
+});
+
+describe('one reader of the slot suffix (§ 49.18)', () => {
+  const savedRoom = (label: string): RoomData => ({
+    id: 'r',
+    createdAt: 1,
+    name: 'R',
+    layoutId: 'rect',
+    width: 4,
+    depth: 4,
+    height: 2.6,
+    detectedObjects: [{ id: 0, uid: 'sofa-key', label, conf: 0.9, source: 'cloud', locked: true, box: [0.3, 0.4, 0.3, 0.3], category: 'sofa', dimMM: [2000, 900, 850] }],
+  });
+  const built = (label: string) => {
+    const p = buildSceneFromRoom(savedRoom(label)).find((q) => q.id === 'sofa-key')!;
+    return { name: p.name, slot: p.fromDetection?.slot, pos: p.pos };
+  };
+
+  it('builds a wall saved in words where it has always built, under its own name', () => {
+    // A load moves nothing: a room the user only dragged in is rebuilt on every open
+    // with no saved turn, so re-walling the piece would turn it where it stands. The
+    // scan screen reads the true wall; Continue there is the rebuild.
+    const south = built('Sofa__slot:s');
+    const north = built('Sofa__slot:n');
+    // The two walls build apart, or the comparisons below could not fail.
+    expect(north.pos).not.toEqual(south.pos);
+    expect(south).toMatchObject({ name: 'Sofa', slot: 's' });
+    for (const label of ['Sofa__slot:south', 'Sofa__slot:SOUTH', 'Sofa__slot:S', 'Sofa__slot:south__slot:n', 'Sofa__slot:up']) {
+      expect([label, built(label)]).toEqual([label, north]);
+      expect(fromRecord(savedRoom(label).detectedObjects![0]).slot).toBe(label.includes('up') ? 'n' : 's');
+    }
+    // …and once the scan screen has written it back as a code, it builds on the south wall.
+    const healed = toRecord(fromRecord(savedRoom('Sofa__slot:south').detectedObjects![0]), 0, true, uid);
+    expect(built(healed.label)).toEqual(south);
+  });
+
+  it('cleans the name of a detected piece in a saved scene, and moves nothing', () => {
+    // A room the user has edited opens from its snapshot rather than rebuilding, so
+    // the builder's fix never reaches a piece the old builder already named.
+    const part = buildSceneFromRoom(savedRoom('Sofa__slot:s')).find((q) => q.id === 'sofa-key')!;
+    const old = (name: string): ScenePart => ({ ...part, name, fromDetection: { ...part.fromDetection!, slot: 'n' } });
+    for (const [was, now] of [
+      ['Sofa__slot:south', 'Sofa'],
+      ['Sofa__slot:south__slot:n', 'Sofa'],
+      ['__slot:up', 'sofa'],
+    ]) {
+      const stale = old(was);
+      const [p] = normalizeStoredParts([stale]);
+      expect([was, p.name]).toEqual([was, now]);
+      expect(p).toEqual({ ...stale, name: now });
+    }
+    // A clean piece comes back as itself, which the memoised part list depends on…
+    const clean = old('Sofa');
+    expect(normalizeStoredParts([clean])[0]).toBe(clean);
+    // …and so does one the scan did not build, whatever it is called.
+    const added: ScenePart = { ...clean, name: 'Sofa__slot:south', fromDetection: undefined };
+    expect(normalizeStoredParts([added])[0]).toBe(added);
+    // A stored name that is not a string is read defensively, not split.
+    const odd = { ...clean, name: 7 } as unknown as ScenePart;
+    expect(normalizeStoredParts([odd])[0]).toBe(odd);
+  });
+
+  it('is written out nowhere but lib/detection-record.ts', () => {
+    // Four readers each carried their own `[nesw]`, and that is how a saved word for
+    // a wall came to mean north in all four. `stripComments` keeps strings and regex
+    // literals, so a quoted or matched `__slot` is code and is caught.
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) walk(full);
+        else if (/\.tsx?$/.test(entry)) files.push(relative(process.cwd(), full).split('\\').join('/'));
+      }
+    };
+    for (const root of ['app', 'components', 'lib']) walk(join(process.cwd(), root));
+    expect(files).toEqual(
+      expect.arrayContaining(['lib/scene-spec.ts', 'lib/detect-prompt.ts', 'components/studio/PhotoEditor.tsx', 'app/onboarding/detect/page.tsx']),
+    );
+    const writesIt = (f: string) => stripComments(readFileSync(f, 'utf8')).includes('__slot');
+    // The one home must read as writing it, or a sweep that sees nothing passes.
+    const home = 'lib/detection-record.ts';
+    expect(writesIt(home)).toBe(true);
+    expect(files.filter((f) => f !== home && writesIt(f))).toEqual([]);
   });
 });

@@ -2030,7 +2030,7 @@ well off its wall may be flagged as well. That is the price the user chose (D8, 
   standing against it. Whether that is tolerable in a person's own room is not something a
   test can say.
 
-### A cloud scan keeps only the walls you photographed — this branch (§ 49.17), NOT PROBED
+### A cloud scan keeps only the walls you photographed — `bd09f2f` on `main` (PR #171, § 49.17), NOT PROBED
 
 **Where to click.** With a Google key in **Settings**, *Photograph my real room* → ONE wall
 only → the scan screen. Every row should belong to that photo: its tag on the picture, and its
@@ -2050,6 +2050,39 @@ read the row names again.
   should be rare; many of them means the reply's shape has changed.
 - **The part only a real reply answers:** how often Gemini files a row under the wrong wall at
   all. The tests hold what happens when it does, not how often.
+
+### An old scanned room reads its walls back — `a080c3e` on `main` (PR #172, § 49.18), NOT PROBED
+
+**Where to click.** A room scanned with a Google key BEFORE PR #171 merged, if one exists on a
+real device. Open it on the **3D Model** tab and read the piece names in the **Catalog** rail and
+the Inspector. Then **Rescan** into the scan screen and read the tags on each photo.
+
+**What wrong looks like.**
+- A name ending in `__slot:` anywhere: the rail, the Inspector, a tag on a photo.
+- A piece that has MOVED or TURNED since the last time the room was open, above all one that
+  was dragged but never rotated. Opening a room cleans names and nothing else.
+- After a Rescan and Continue, a piece that did not move to the wall its photo shows. That is
+  the one step allowed to move it.
+- On the scan screen, a row listed under a different wall from the photo its tag sits on.
+- **The part only a real room answers:** whether any such room exists at all. It depends on
+  what Gemini wrote for a wall before § 49.17, which nobody recorded.
+
+### A scan that left pieces out says how many — this branch (§ 49.19), PROBED WITH A STUBBED REPLY
+
+**Where to click.** A room with two or more wall photos and a Google key → the scan screen.
+Probed in Chromium at 360 × 640 and 1280 × 800 with the reply stubbed: five rows, two kept,
+three set aside (two filed under walls nobody photographed, one boxed in pixels),
+and the card read *3 pieces left out*; a reply that lost nothing showed no card. What a stub
+cannot answer is a real reply.
+
+**What wrong looks like.**
+- A count that seems too high for the photos. It counts only rows Google named and Danmu could
+  not place, so a piece Google never saw is not in it, and that is right.
+- The card on a scan where Google's list and Danmu's list are the same length.
+- The card on a scan that used only the on-device detector. It counts Google's rows only.
+- The card after a reload of a room already scanned: the count is not saved, so it should not
+  come back.
+- **The part only a real reply answers:** how often a real scan sets pieces aside at all.
 
 ---
 

@@ -99,9 +99,9 @@ export async function detectAcrossImages(
   apiKey: string,
   images: { slot: CaptureSlot; blob: Blob }[],
   room: PromptRoom = DEFAULT_PROMPT_ROOM,
-): Promise<Detection[]> {
+): Promise<{ rows: Detection[]; dropped: number }> {
   if (!apiKey) throw new DetectError('NO_KEY', 'Add your Google API key in Settings.');
-  if (images.length === 0) return [];
+  if (images.length === 0) return { rows: [], dropped: 0 };
 
   const ai = new GoogleGenAI({ apiKey });
   // One list for both ends: the walls the prompt says were photographed are the
@@ -160,7 +160,9 @@ export async function detectAcrossImages(
   // `cloudRows`.
   const reply = request.read(text);
   if ('unreadable' in reply) throw new DetectError('BAD_RESPONSE', reply.unreadable, reply.cause);
-  return reply.rows;
+  // The count rides out with the rows, so the detect screen can say how many the
+  // reply named that this list does not hold (§ 49.19).
+  return reply;
 }
 
 function blobToBase64(blob: Blob): Promise<string> {

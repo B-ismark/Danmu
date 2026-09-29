@@ -37,9 +37,11 @@ import { footprintForLayout } from '@/lib/footprint';
 import {
   ALONG,
   bboxOfCeilingDisc,
+  bboxOfCeilingDiscInFrame,
   extent,
   floorBoxCorners,
   floorCylinderPoints,
+  framedExtent,
   project,
   yawedPoint,
   type Box,
@@ -137,6 +139,22 @@ export function boxFor(t: Truth, slot: CaptureSlot, cal: CameraCal): Box {
       ? floorPoints(t, slot, true)
       : wallCorners(slot, t.x, t.y ?? 1.2, t.z, wM, hM, t.dimMM[1] / 1000);
   return extent(pts.map((p) => project(slot, ...p, cal)));
+}
+
+/** `boxFor` as a detector hands it back when the frame cuts the piece: the part
+ *  inside the picture (§ 49.16), from the solid's outline rather than from its whole
+ *  box clipped — which keeps extent the photo never showed wherever the outline
+ *  crosses the frame at a slant. Null when none of it is in the picture. */
+export function framedBoxFor(t: Truth, slot: CaptureSlot, cal: CameraCal): Box | null {
+  const anchor = anchorFor(t.category, t.shape);
+  const wM = t.dimMM[0] / 1000;
+  const hM = t.dimMM[2] / 1000;
+  if (anchor === 'ceiling') return bboxOfCeilingDiscInFrame(slot, t.x, t.z, wM, cal, ROOM.height);
+  const pts =
+    anchor === 'floor'
+      ? floorPoints(t, slot, true)
+      : wallCorners(slot, t.x, t.y ?? 1.2, t.z, wM, hM, t.dimMM[1] / 1000);
+  return framedExtent(pts.map((p) => project(slot, ...p, cal)));
 }
 
 /** The XZ point a placer should decode for this piece — which is NOT always the

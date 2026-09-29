@@ -17,29 +17,11 @@
 import { footprintForLayout, type LayoutId } from './footprint';
 import { CATALOG_SHAPES_ORDERED } from './scene-spec';
 import { boxInPhoto } from './photo-geometry';
+import { SLOT_NAME, slotOf } from './slot-names';
 import type { CaptureSlot } from './storage';
 import type { Detection } from './detection';
 
 export type PromptRoom = { width: number; depth: number; height: number; layoutId?: LayoutId };
-
-const SLOT_NAME: Record<CaptureSlot, string> = { n: 'NORTH', e: 'EAST', s: 'SOUTH', w: 'WEST' };
-
-/** A wall as a reply may name it. The prompt asks for `"n"`, but it also calls the
- *  walls NORTH, EAST, SOUTH and WEST, and heads each photo `--- N WALL ---`, so a
- *  reply in any of those forms — `N WALL` and `north wall` included — is the
- *  prompt's own words read back, not a guess about which wall was meant. A Map
- *  rather than an object, so `"constructor"` is not a wall. */
-const SLOT_OF = new Map<string, CaptureSlot>(
-  (Object.entries(SLOT_NAME) as [CaptureSlot, string][]).flatMap(([code, name]) => [
-    [code, code],
-    [name.toLowerCase(), code],
-  ]),
-);
-
-/** The wall code a reply's `slot` names, or undefined when it names none. */
-export function slotOf(v: unknown): CaptureSlot | undefined {
-  return typeof v === 'string' ? SLOT_OF.get(v.trim().toLowerCase().replace(/\s+wall$/, '')) : undefined;
-}
 
 /** The wall a reply's row is filed under, among the walls `sent`, or undefined.
  *  With ONE photo sent the row's own `slot` decides nothing: the prompt asks for a
@@ -198,8 +180,8 @@ export function cloudRows(parsed: readonly unknown[], sent: readonly CaptureSlot
     // Stamped here, and called only by `readCloudReply`, which only
     // `detectAcrossImages` calls, so nothing but the reply to a Gemini call can
     // claim its output came from Gemini. The slot is written back as its code:
-    // the saved record carries it as a `__slot:x` suffix that reads back only
-    // `[nesw]`, and `cals[d.slot]` is keyed the same way.
+    // `cals[d.slot]` is keyed that way, and so is every comparison of two rows'
+    // walls between here and the saved record.
     return box ? [{ ...row, label, slot, box, source: 'cloud' as const }] : [];
   });
 }
@@ -221,8 +203,11 @@ function filedUnder(d: unknown, sent: readonly CaptureSlot[]): CaptureSlot | und
   return d ? wallOf(d as { slot?: unknown }, sent) : undefined;
 }
 
-/** A reply's rows, or why it holds nothing the screen may act on. */
-export type CloudReply = { rows: Detection[] } | { unreadable: string; cause: unknown };
+/** A reply's rows, or why it holds nothing the screen may act on. `dropped` is how
+ *  many of the reply's rows `cloudRows` refused beside the ones it kept (§ 49.19):
+ *  a scan that kept 6 of 9 pieces is not a scan that found 6, and only the screen
+ *  can say so. */
+export type CloudReply = { rows: Detection[]; dropped: number } | { unreadable: string; cause: unknown };
 
 /** What a Gemini reply says, about the walls in `sent`. Three kinds of body are not
  *  an answer, and each was once read as an empty room — the detect screen's "nothing
@@ -259,7 +244,7 @@ export function readCloudReply(text: string, sent: readonly CaptureSlot[]): Clou
           : 'The detection service replied with no box inside the photos.';
     return { unreadable, cause: parsed };
   }
-  return { rows };
+  return { rows, dropped: parsed.length - rows.length };
 }
 
 /** One cloud request's two ends, built from one list of walls: the prompt that tells

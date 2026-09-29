@@ -25,7 +25,7 @@ import { isRoundPart } from '@/lib/scene-spec';
 import type { CameraCal } from '@/lib/photo-geometry';
 import type { CaptureSlot } from '@/lib/storage';
 import { ROOM } from './known-room';
-import { ALONG, project, type Box } from './project';
+import { ALONG, framedExtent, project, type Box } from './project';
 
 /** mulberry32 — small, seedable, and the same sequence on every machine. */
 function rng(seed: number): () => number {
@@ -328,12 +328,8 @@ export function boxIn(p: Placed, s: CaptureSlot, cal: CameraCal): Box | null {
   const uv = pts.map(([x, y, z]) => project(s, x, y, z, cal));
   const framed = uv.filter(([u, v]) => u >= 0 && u <= 1 && v >= 0 && v <= 1).length;
   if (framed / uv.length < 0.3) return null;
-  const us = uv.map((q) => Math.min(1, Math.max(0, q[0])));
-  const vs = uv.map((q) => Math.min(1, Math.max(0, q[1])));
-  const u0 = Math.min(...us);
-  const v0 = Math.min(...vs);
-  const box: Box = [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
-  if (box[2] < 0.03 || box[3] < 0.03) return null;
+  const box = framedExtent(uv);
+  if (!box || box[2] < 0.03 || box[3] < 0.03) return null;
   return box;
 }
 
