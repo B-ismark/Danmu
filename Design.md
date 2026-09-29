@@ -424,12 +424,15 @@ Furniture detection runs through a fallback chain, best-effort:
    continuing with fewer has always been allowed, the ordinary one-wall run
    described three photographs that did not exist and invited the model to furnish
    them. It now counts them, names the walls nobody photographed as missing, lists
-   only the cameras it has, and constrains the `slot` it will accept back to the
-   ones it sent. The **coordinate system stays whole** — `position` is reported in
-   room coordinates and those are defined by all four wall planes. The reply is
-   read there too (`cloudRows`): a row with no box or no slot is dropped, and every
-   box is cut to the photo, the same way the on-device boxes are (§4, *A box the
-   edge of the photo cut*).
+   only the cameras it has, and asks for a `slot` among the ones it sent. The
+   **coordinate system stays whole** — `position` is reported in room coordinates
+   and those are defined by all four wall planes. The reply is read there too
+   (`cloudRows`): a row with no box is dropped, and so is one filed under a wall
+   that was not photographed — the wall read in the prompt's own words, `n`, `N` or
+   `north` (`slotOf`), and held to the same list the prompt was built from — and
+   every box is cut to the photo, the same way the on-device boxes are (§4, *A box
+   the edge of the photo cut*). That sentence said "constrains the slot it will
+   accept back" for months while only the prompt asked (§ 49.17).
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
    detector is available.
 

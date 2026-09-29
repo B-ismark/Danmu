@@ -1994,6 +1994,22 @@ well off its wall may be flagged as well. That is the price the user chose (D8, 
   standing against it. Whether that is tolerable in a person's own room is not something a
   test can say.
 
+### A cloud scan keeps only the walls you photographed — this branch (§ 49.17), NOT PROBED
+
+**Where to click.** With a Google key in **Settings**, *Photograph my real room* → ONE wall
+only → the scan screen. Every row should belong to that photo: its tag on the picture, and its
+size read off it. Then go back and forward so the room reloads, and read the row names again.
+
+**What wrong looks like.**
+- *Danmu couldn’t make sense of the reply* on a photo that plainly has furniture in it. The
+  reply is now refused when every row names a wall you did not photograph, and a wall written
+  `N` or `north` is read as the north wall; a real reply in some third form would land here.
+- A row with no tag on the photo — a piece filed under a wall nobody photographed, which is
+  what this stops.
+- A name ending in `__slot:` after the reload.
+- **The part only a real reply answers:** how often Gemini files a row under the wrong wall at
+  all. The tests hold what happens when it does, not how often.
+
 ---
 
 ### High quality is graded again — on a real GPU, in every mood — `c2137c4` on `main` (PR #157)
