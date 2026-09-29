@@ -692,9 +692,9 @@ beside the row. The width is the most it can be: it may say *too small*, never *
 big*. The height is the top row read at that distance, and that row's ray rises for a piece
 taller than the lens and falls for a lower one, so a tall piece reads high and a low one low —
 each bounded on its other side by the lens, which is what still makes a low table no wardrobe.
-Judged both ways, six of forty-four correctly named pieces were called the wrong size in
-`tests/label-repair.test.ts`; none are now, at the price of catching 328 of 665 wrong words
-where it caught 485 (§ 49.10). **And the row says so**, because a limit printed as its one
+Judged both ways, six of forty-three correctly named pieces were called the wrong size in
+`tests/label-repair.test.ts`; none are now, at the price of catching 325 of 654 wrong words
+where it caught 476 (§ 49.10). **And the row says so**, because a limit printed as its one
 number is a limit passed off as a size: the verdict carries each axis as the least and the most
 it can be (`LabelVerdict.measured`) and names the axes read as limits (`bounded`), so the
 sentence reads *Measured up to 1.27 m wide and 0.27–1.50 m tall*, and the row gets the same

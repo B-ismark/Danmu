@@ -361,6 +361,13 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
       [0, 0.3, 0.8].flatMap((gap) => {
         const cal = calAt(tiltDeg);
         const box = boxOf(category, shape, w, h, gap, cal);
+        // A piece so deep that its foot reaches the lens has corners at or behind the
+        // camera, and no box: the double bed on its wall, 2 m deep from 2 m away. It
+        // was a row here — a NaN width, read as "cut" at x = 0 — and every count below
+        // was taken with it. No photograph produces one. The bed's other rows stand
+        // partly behind the lens too, and the frame cuts them at the top, so none is
+        // kept: the fixture holds six pieces, not the seven listed.
+        if (!box.every(Number.isFinite)) return [];
         const c = frameCuts(box);
         const d = det({ category, shape, slot: 'n', box });
         const { row, bounds } = geoMeasure(d, { n: cal }, ROOM);
@@ -395,9 +402,9 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   };
 
   it('reads each axis on the side its placer says, never the other', () => {
-    expect(ROWS).toHaveLength(44);
+    expect(ROWS).toHaveLength(43);
     // Every direction the rule allows is exercised, so the fixture can tell them apart.
-    expect(tally(ROWS)).toEqual({ widthLarge: 14, widthCut: 16, heightLow: 16, heightHigh: 12, exact: 16 });
+    expect(tally(ROWS)).toEqual({ widthLarge: 14, widthCut: 15, heightLow: 15, heightHigh: 12, exact: 16 });
   });
 
   // The round placer is a different solve — tangents to a circle, not corners of a box —
@@ -460,7 +467,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   });
 
   it('never calls a correct word the wrong size here', () => {
-    // Judged both ways on the uncut axes, six of the forty-four readings of a correctly
+    // Judged both ways on the uncut axes, six of the forty-three readings of a correctly
     // named piece fall outside its own band — which is the defect this fixture exists
     // to show it can express.
     const twoSided = ROWS.filter(({ d, read }) => {
@@ -573,8 +580,8 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   it('puts the right word where the scan screen shows it more often', () => {
     // Of the wrong words caught on the fixture, how often the right one is first, and
     // how often it is among the two chips the scan screen shows. Ties broken by the
-    // catalogue's order: 37 first and 112 of the two. Broken by a share of each band's
-    // span: 47 and 130. By the factor the reading would have to move: 56 and 130.
+    // catalogue's order: 37 first and 109 of the two. Broken by a share of each band's
+    // span: 47 and 127. By the factor the reading would have to move: 56 and 127.
     let caught = 0, first = 0, shown = 0;
     for (const { d, cal } of ROWS) {
       for (const category of CATEGORIES) {
@@ -587,13 +594,13 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         if (i === 0 || i === 1) shown++;
       }
     }
-    expect([caught, first, shown]).toEqual([328, 56, 130]);
+    expect([caught, first, shown]).toEqual([325, 56, 127]);
   });
 
   it('still catches half the wrong words in the fixture', () => {
     // Every other category's word on every row, where its own placer measured it. Of
-    // 665, the rule catches 328; judged both ways it caught 485 and accused six
-    // correct words doing it. The 157 between are words one photograph cannot rule
+    // 654, the rule catches 325; judged both ways it caught 476 and accused six
+    // correct words doing it. The 151 between are words one photograph cannot rule
     // out once the piece may stand anywhere nearer — § 49.10 has the trade.
     let judged = 0, caught = 0;
     for (const { d, cal } of ROWS) {
@@ -605,7 +612,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         if (v.status === 'suspect') caught++;
       }
     }
-    expect([judged, caught]).toEqual([665, 328]);
+    expect([judged, caught]).toEqual([654, 325]);
   });
 });
 
