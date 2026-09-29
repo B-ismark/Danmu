@@ -36,6 +36,23 @@ export const ALONG: Record<CaptureSlot, [number, number]> = {
  *  Honours `cal.height` and `cal.tiltRad`, so one helper generates the level cases
  *  and the tilted ones. */
 export function project(slot: CaptureSlot, x: number, y: number, z: number, cal: CameraCal): [number, number] {
+  const { right, upCam, fwdCam } = toLens(slot, x, y, z, cal);
+  const u = right / fwdCam / cal.k + 0.5;
+  const v = 0.5 - (upCam / fwdCam) * (cal.aspect / cal.k);
+  return [u, v];
+}
+
+/** A world point in the tilted lens's own frame, before the divide that makes it a
+ *  pixel. Split out of `project` for the one caller that has to know which side of
+ *  the lens a point is on: a point BEHIND it (`fwdCam <= 0`) still divides to a
+ *  finite pixel, and that pixel can land inside the frame. */
+function toLens(
+  slot: CaptureSlot,
+  x: number,
+  y: number,
+  z: number,
+  cal: CameraCal,
+): { right: number; upCam: number; fwdCam: number } {
   // world → camera frame (forward, right, up)
   let forward = 0;
   let right = 0;
@@ -65,9 +82,7 @@ export function project(slot: CaptureSlot, x: number, y: number, z: number, cal:
   const s = Math.sin(th);
   const upCam = up * c + forward * s;
   const fwdCam = -up * s + forward * c;
-  const u = right / fwdCam / cal.k + 0.5;
-  const v = 0.5 - (upCam / fwdCam) * (cal.aspect / cal.k);
-  return [u, v];
+  return { right, upCam, fwdCam };
 }
 
 /** Turn the CAMERA by `yawRad` in place, expressed as a rotation of the world.
@@ -369,6 +384,86 @@ export function bboxOfCeilingDisc(
     pts.push(project(slot, ...yawedPoint(p, yawRad), cal));
   }
   return extent(pts);
+}
+
+/** The box a detector draws round a ceiling DISC the frame's edge cuts: the extent of
+ *  the part of it inside the picture.
+ *
+ *  Not `bboxOfCeilingDisc` clipped to the frame, which is what every cut-disc fixture
+ *  here used to be, and which is a box no photograph produces. Clipping a rectangle
+ *  keeps its full width, and a disc's widest points are nearer the lens than its
+ *  centre, so they are the first thing a top edge cuts away: the clipped box went on
+ *  reporting a width the photo never showed. A placer that reads a cut disc from the
+ *  edges the photo DID see is exactly what that fixture cannot test, because it hands
+ *  the placer edges from the part that was cut off.
+ *
+ *  So the extent is taken over what a detector could see: the rim where it is in
+ *  frame and in front of the lens, and the frame's own edges where they cross the
+ *  disc, found by bisection rather than by sampling, so a chord's end is exact. A
+ *  frame corner inside the disc counts as well, for a disc that fills one. Null when
+ *  none of it is in view. The inverse below is this file's own `project` run
+ *  backwards, not the lib's `ray`, for the reason at the top of the file. */
+export function bboxOfCeilingDiscInFrame(
+  slot: CaptureSlot,
+  x: number,
+  z: number,
+  dM: number,
+  cal: CameraCal,
+  ceilingM: number,
+  yawRad = 0,
+): Box | null {
+  const r = dM / 2;
+  const [cx, , cz] = yawedPoint([x, ceilingM, z], yawRad);
+  const inFrame1 = (u: number, v: number) => u >= 0 && u <= 1 && v >= 0 && v <= 1;
+  const pts: Array<[number, number]> = [];
+  for (let i = 0; i < 1440; i++) {
+    const a = (i / 1440) * 2 * Math.PI;
+    const p: [number, number, number] = [x + r * Math.cos(a), ceilingM, z + r * Math.sin(a)];
+    const w = yawedPoint(p, yawRad);
+    if (!(toLens(slot, ...w, cal).fwdCam > 0)) continue;
+    const q = project(slot, ...w, cal);
+    if (inFrame1(q[0], q[1])) pts.push(q);
+  }
+  // Where the pixel (u, v) meets the ceiling, and whether that is on the disc.
+  const onDisc = (u: number, v: number): boolean => {
+    const th = cal.tiltRad ?? 0;
+    const b = ((0.5 - v) * cal.k) / cal.aspect;
+    const up = b * Math.cos(th) - Math.sin(th);
+    if (!(up > 0)) return false;
+    const t = (ceilingM - (cal.height ?? CAM_HEIGHT)) / up;
+    const forward = t * (b * Math.sin(th) + Math.cos(th));
+    const right = t * (u - 0.5) * cal.k;
+    const [ax, az] = ALONG[slot];
+    const [fx, fz] = facing(slot);
+    return Math.hypot(right * ax + forward * fx - cx, right * az + forward * fz - cz) <= r;
+  };
+  const edges: Array<(t: number) => [number, number]> = [
+    (t) => [t, 0],
+    (t) => [t, 1],
+    (t) => [0, t],
+    (t) => [1, t],
+  ];
+  for (const at of edges) {
+    const N = 400;
+    let prev = onDisc(...at(0));
+    if (prev) pts.push(at(0));
+    for (let i = 1; i <= N; i++) {
+      const now = onDisc(...at(i / N));
+      if (now !== prev) {
+        let lo = (i - 1) / N;
+        let hi = i / N;
+        for (let k = 0; k < 50; k++) {
+          const mid = (lo + hi) / 2;
+          if (onDisc(...at(mid)) === prev) lo = mid;
+          else hi = mid;
+        }
+        pts.push(at((lo + hi) / 2));
+      }
+      prev = now;
+    }
+    if (prev) pts.push(at(1));
+  }
+  return pts.length ? extent(pts) : null;
 }
 
 /** Is the whole box inside the frame?

@@ -177,7 +177,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 23 | **§ 46** repeat sightings: what the soft merge reaches, and the pieces the HARD merge deletes before it can | **BUILT, with two items MEASURED and NOT FIXED.** The soft merge (`lib/repeat-sightings.ts`) starts a probable repeat unticked with a reason, for every kind, not only beds; over the 150 furnished rooms it takes the repeats left ticked at an ultrawide read as 66° from **247 to 5** (106°) and **452 to 21** (120°), at a price of 21 real pieces started unticked across the five readings, each one tap from back (numbers since § 49's frame-edge growth, 2026-09-29; before it, 249 → 3 and 460 → 24 at a price of 22). What it cannot reach is a piece with no row: **§ 46.1** twin beds in a corner come back as one, and **§ 46.3** under an ultrawide read as 66° **37 and 42 pieces** of about 990 are deleted outright (35 and 39 before the growth), nearly all dining chairs — both the hard merge deciding a pair on a distance nobody measured (a centre bound, or a box the frame cut). **§ 46.2** is the bottom-edge walk, measured and not built | M — one change to what the hard merge takes, measured over the same 150 rooms and against `tests/detect-pipeline.test.ts` in both directions | § 46.1 and § 46.3 are one piece of work; `tests/repeat-sightings.test.ts` holds both as literals, so the fix turns them red on purpose |
 | 24 | **§ 47** a change made in the last half-second before a reload or a closed tab is lost | **PARTLY FIXED 2026-09-28.** Pending saves now run when the page is hidden or left (`lib/page-leave.ts`), as ONE transaction that asks for its commit at once (`roomStore.savePending`). Measured, change made and page left at once, 5 each: a piece duplicated then reloaded kept **0 → 5**, a typed width then a closed tab **0 → 5**, and no room half-saved (**4 of 10** with three separate saves). **Still lost: a typed room size on a reload, 0 of 5**, whole, because that save reads before it writes. | small, but a design call | — |
 | 25 | **§ 48** a tab left open across the keep-means-keep update can bring unticked pieces back | **WRITTEN DOWN 2026-09-28, NOT FIXED — the user's call.** `migrateRoom` reads a row's `locked` by the version stamp alone, and the previous build stamps `version: 1` on every save. One edit in a tab open across the deployment re-stamps a v2 room, and the next up-to-date load reads every row as kept: the scan list shows unticked rows ticked, and a room with no saved scene is rebuilt with them in it. It fails toward MORE furniture, deletes nothing, and closes itself on a reload. The one fix on offer (a marker the old writers carry through) inverts on the re-scan path, which is why it is not built. | — | — |
-| 26 | **§ 49** a scan tilted up, cut at the frame's edges, with the room size skipped, came back "mostly too small" | **PARTLY FIXED 2026-09-29.** Measured first (`tests/scan-tilted-room.test.ts`, a scan shaped like the reported one, each unknown put right in turn): with the camera and room known the frame edge was the whole remaining error, **7 of 14** pieces more than 10% short. The placers now treat a cut axis as a lower bound and grow it to the kind's typical size from the edge the photo saw, stopped at the wall's end: **0 of 14** short, mean width error **19% → 10%**. As the app reads that scan today, **10 short → 6**, and the price is **4 over → 7**, mean width error **24% → 32%** — the skipped room's walls end past the real ones, so a typical size over-reaches. Still open, in order of what the table says they are worth: the room size (§ 49.3, the user's call), tilt and height (§ 49.2, measured WORSE alone), and two smaller items (§ 49.5, § 49.6 — of the four first filed, § 49.4 is measured and kept and § 49.7 fixed) | § 49.1 (the default lens on an upright photo) FIXED too; § 49.3 is a question for the user; § 49.9–49.12 filed by the review, none a regression; § 49.7 (a top-cut height grows only to the ceiling), § 49.10 (a piece cut at its foot is judged only on the side its reading can speak for) and § 49.11 (a ceiling piece cut by the frame is not judged on its width) FIXED; § 49.13 (the same ceiling piece is still BUILT from the cut width, a 1200 mm fan at the band's 1500) and § 49.14 (a foot-cut floor piece is still BUILT at its limit, 21 of 43 heights more than 10% off) measured, not built | — |
+| 26 | **§ 49** a scan tilted up, cut at the frame's edges, with the room size skipped, came back "mostly too small" | **PARTLY FIXED 2026-09-29.** Measured first (`tests/scan-tilted-room.test.ts`, a scan shaped like the reported one, each unknown put right in turn): with the camera and room known the frame edge was the whole remaining error, **7 of 14** pieces more than 10% short. The placers now treat a cut axis as a lower bound and grow it to the kind's typical size from the edge the photo saw, stopped at the wall's end: **0 of 14** short, mean width error **19% → 10%**. As the app reads that scan today, **10 short → 6**, and the price is **4 over → 7**, mean width error **24% → 32%** — the skipped room's walls end past the real ones, so a typical size over-reaches. Still open, in order of what the table says they are worth: the room size (§ 49.3, the user's call), tilt and height (§ 49.2, measured WORSE alone), and two smaller items (§ 49.5, § 49.6 — of the four first filed, § 49.4 is measured and kept and § 49.7 fixed) | § 49.1 (the default lens on an upright photo) FIXED too; § 49.3 is a question for the user; § 49.9–49.12 filed by the review, none a regression; § 49.7 (a top-cut height grows only to the ceiling), § 49.10 (a piece cut at its foot is judged only on the side its reading can speak for) and § 49.11 (a ceiling piece cut by the frame is not judged on its width) FIXED; § 49.13 (a ceiling piece cut at the TOP is read from the edges the photo saw: 17.9% → exact on 556 discs, and a 1200 mm fan built at 1200 rather than the band's 1500) FIXED, its side and corner cuts measured and not built; § 49.14 (a foot-cut floor piece is still BUILT at its limit, 21 of 43 heights more than 10% off) measured, not built; § 49.15 (the on-device detector moves a box's far edge when it clamps the near one) found, not measured | — |
 | 27 | **§ 45** the sensor grant is site-wide when one route needs it | **MEASURED 2026-09-29, DECIDED AGAINST.** The filed fix was the catch-all excluding the capture route, with the trio granted only there. It was built on a scratch build, and it served exactly the headers it asked for. In Chromium it still **took the grant away from the capture screen**: a permissions policy is fixed when the document is created, and every way into capture is a `<Link>` or `router.push` that keeps the document. Reached from `/workspace` or the shape picker, the document answered `allowsFeature` false; opened directly, it answered true. WebKit was not run. The only way to make the fix true is to make every entry a hard navigation, and any future `<Link>` would break that silently. The price of keeping the grant is written down in § 45. `tests/permissions-policy.test.ts` now counts every policy entry, and `scripts/sensor-policy-probe.mjs` reproduces the measurement | — | — |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
@@ -7978,25 +7978,104 @@ there, and it is then grown to a typical size it may not be. No fixture here mod
 padding, so nothing says whether 1% is too wide, too narrow or right. Changing it is one
 constant and wants real detections to measure against first.
 
-**§ 49.13 · A ceiling piece cut by the frame is placed at the wrong size — MEASURED, NOT
-BUILT.** § 49.11 stops the width being JUDGED. It is still what the scene is built from:
-`geoRefine` writes `placeCeilingObject`'s width into `dimMM`, **1748 mm** for the 1200 mm fan
-cut at the top of a level 106° frame and **2498** 0.9 m from the lens, and `buildSceneFromRoom`
-clamps both into the fan band. So the room gets **1500**, the widest fan in the catalogue: 25%
-oversize, with the clamp hiding by how much (`tests/label-repair.test.ts` pins both, through
-`toRecord` and `buildSceneFromRoom`, as literals the fix turns red; the side-cut 1402 goes in as
-1402). The scene is not the only reader. The repeat check compares footprints built from the
-same width (`solidOf`), and when two rows of one fan merge, `survivorRank` ranks the cut row
-"measured some of it", above a row the ceiling placer refused, so the fabricated width wins the
-merge over the detector's own hint. Found while measuring § 49.11, not fixed with it, because
-it is a different mechanism: this is the placer, and that was the judge. Fixing it at the
-placer fixes all three readers, and the review that found the other two said so. Two ideas,
-neither measured. First, solve a top-cut disc from the edge the photo did see: the box's bottom row is
-the disc's far edge, and with the catalogue diameter that fixes its centre, as `floorFromRound`
-does on the floor. Second, refuse a cut ceiling box and let the catalogue size stand, which
-is what an unmeasurable ceiling piece already gets. Either wants the fixture above extended
-to positions across the frame before it is trusted, and a look at what the tilted-up § 49
-scan does, since tipping the phone up is what takes the ceiling out of the top of the frame.
+**§ 49.13 · A ceiling piece cut by the frame is placed at the wrong size — FIXED for a cut at the
+TOP 2026-09-29; the side and the corner are measured, not built.** § 49.11 stopped the width being
+JUDGED. It was still what the scene is built from: `geoRefine` wrote `placeCeilingObject`'s width
+into `dimMM` and `buildSceneFromRoom` clamped it into the fan band, so a 1200 mm fan cut at the top
+of a level 106° frame went in at **1500**, the widest fan in the catalogue, and the clamp hid by how
+much. The scene was not the only reader: the repeat check builds footprints from the same width
+(`solidOf`), and `survivorRank` ranks a cut row "measured some of it", so the fabricated width won
+a merge over the detector's own hint. Fixing it at the placer fixes all three, which is why it was
+fixed there.
+
+**What was wrong.** The placer reads a disc on its box's middle row, which a whole disc's centre
+sits near. Cut the top off and the box's middle moves out toward the disc's far edge, so the row
+read is further away than the disc and the full angular width is applied there.
+
+**What it does now** (`discUnderTopCut`, `lib/photo-geometry.ts`). Every row of a photo is one
+forward distance on the slab whatever the tilt, so the box's bottom row is the disc's far edge
+exactly and its top row is a known line across it; every column is a line on the slab through one
+point. Each side of the box is then a tangent to the rim or the point where the rim crosses the
+top row, which gives four candidate discs in closed form. The one kept is the one whose predicted
+box is this box, within 2% of the frame (`DISC_FIT`).
+
+**Measured** (`tests/photo-geometry.test.ts`, a 6 × 6 m room, three fan sizes on a grid, level and
+tipped up 10° and 20° and down 5°):
+
+| | width off | centre off | past 10% |
+|---|---|---|---|
+| 556 discs cut at the top, box exact: middle row | 17.9% | 273 mm | 397 |
+| the same, now | 0 | 0 | 0 |
+| 4407 boxes, each seen edge moved up to 2%: middle row | 18.1% | 274 mm | |
+| the same, now | 8.7% | 98 mm | |
+
+The 1200 mm fan in `tests/label-repair.test.ts` reads **1200** at all three distances, where the
+middle row read **1748**, **2498** and **1196**, and is built at **1200**.
+
+**Two things the fixture had to be fixed for first.** Every cut-disc fixture here was the disc's
+own box clipped to the frame. That is a box no photograph produces: a disc's widest points are
+nearer the lens than its centre, so they are the first thing a top edge cuts away, and the clipped
+box kept a width the photo never showed. 415 of the 556 are narrower boxed as they are seen
+(`bboxOfCeilingDiscInFrame`, `tests/helpers/project.ts`; it matches the old helper to 1e-5 on
+every uncut disc). A placer that reads the edges the photo saw cannot be tested on edges from the
+part that was cut off: on the clipped box the solve read the same fan 1645.
+
+**No disc falls back on the middle row, not a refusal.** Built first as a refusal, and
+`tests/repeat-sightings.test.ts` turned red: a second model's box round a pendant light that takes
+in its flex reaches the top of the frame with the whole shade inside it, no disc cut there draws
+it, and a refused row keeps no position (`geoLocate` places only wall rows), so it could not
+merge with the other photo's sighting and the room would have built two lights. On the 126 noisy
+boxes that fall back, the middle row reads 21.6% off, as it always did. Separately, a solved centre
+behind the lens also falls back, since the caller places nothing there: noise puts one there for a
+disc nearly overhead that a tipped-up frame shows a sliver of, and taking it refused 3 of 4402
+noisy boxes in the first sweep, all of which the middle row still read.
+
+**A wider sweep found two filters refusing real discs, and the sweep above could not have.** Its
+grid is one lens, four tilts, three sizes. A throwaway sweep over four lenses (66°, 80°, 106°,
+120°), eight tilts (up to 60° up and 10° down) and six sizes (0.6 to 3 m) in an 8 × 8 m room gave
+6205 exact boxes cut at the top, and 250 of them missed. Two causes, both a filter written from
+reasoning:
+- `frameCuts` counts a box within `FRAME_EDGE` of the top as cut, so a WHOLE disc whose near rim
+  sits just under the frame's edge arrives too, and the filter asking that the top row cross the
+  disc refused it. It now allows the near rim up to `DISC_FIT` past the top row. 150 discs.
+- Tipped down, every column's line meets the slab AHEAD of the lens, and a filter refused any
+  centre behind that point as "a column line's other half". A 3 m disc centred 100 mm ahead of a
+  lens tipped down 5° is behind it and entirely real, since the frame shows only the part well
+  ahead of both. The filter is deleted; asking each candidate what box it draws already rejects
+  the other half. 22 discs.
+
+What is left is **78 discs centred exactly over the lens**, a boundary of the grid rather than a
+region: `placeCeilingObject` places nothing that is not ahead of the lens, so the true disc is not
+taken and the row is read on the middle row (59) or on the nearest disc that fits within
+`DISC_FIT` (19), and keeps its position either way. The same sweep found the mixed candidates'
+larger root fitting none of the 6205 boxes, so it is not computed. The three cases are pinned in
+`tests/photo-geometry.test.ts`, with a disc cut at the top and the bottom, which has no far edge in
+view and is read on the middle row.
+
+**Still open, measured by the same sweep with the box exact:**
+- **Cut at the side.** Middle row, 26.0% off and 290 mm out on 192 discs. The top of the box is
+  then the disc's NEAR edge wherever the frame keeps the point nearest the lens, so the top and
+  bottom rows alone may give the diameter, and the one tangent the side. A different solve, not
+  measured.
+- **Cut at the top and a side.** 29.6% and 323 mm on 510. Two sides of the box are frame edges; this
+  likely needs the catalogue diameter, the first idea this entry used to carry.
+- **Whole discs** are read 9.3% off and 142 mm out on 636, by the same middle row. Both-sides-tangent
+  (the first of the four candidates) is exact on a whole disc as well. Not built here: it is a
+  second mechanism, and it moves the whole-disc figures the suite pins, the known room's fan
+  among them.
+- **The verdict.** A top-cut fan is still not JUDGED (`cutAxes` counts any cut against a ceiling
+  piece's width), because a fallback row's width is the middle row's and the verdict cannot tell
+  the two apart. It could once the placer reports which it did, the way `GeoPlacement.bounds`
+  reports a floor reading's direction.
+
+**§ 49.15 · The on-device detector moves a box's far edge when it clamps the near one — FOUND, NOT
+MEASURED.** `lib/local-detect.ts` builds each box as `[max(0, nx), max(0, ny), min(1, w), min(1, h)]`.
+When a box runs off the top (`ny < 0`) its top is clamped to 0 and its height kept, so its BOTTOM
+moves down by the overrun; off the left, its right edge moves out the same way. The bottom row is
+exactly what the placers measure from: a floor piece's contact with the floor, and a ceiling disc's
+far edge, which § 49.13 now reads to the millimetre. The fix is to clamp both edges and take the
+difference, one line; what it is worth depends on how often YOLO's box overruns the frame, which
+wants real detections rather than a fixture.
 
 **§ 49.14 · A floor piece cut at its foot is BUILT at its limit — MEASURED, NOT BUILT.** § 49.10
 stops a limit being JUDGED as a size, and the row now says it is a limit. The room is still built

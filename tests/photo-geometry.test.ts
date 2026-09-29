@@ -11,6 +11,7 @@ import {
   fitHeightToFloorLine,
   atLens,
   cutAxes,
+  cutByFrame,
   frameCuts,
   locateOnWall,
   placeCeilingObject,
@@ -25,6 +26,7 @@ import { footprintForLayout, type Footprint, type LayoutId } from '@/lib/footpri
 import {
   ALONG,
   bboxOfCeilingDisc,
+  bboxOfCeilingDiscInFrame,
   bboxOfFloorBox,
   bboxOfFloorCylinder,
   bboxOfFloorObject,
@@ -32,6 +34,7 @@ import {
   bboxOfWallSolid,
   inFrame,
   project,
+  type Box,
 } from './helpers/project';
 
 const ROOM = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
@@ -1403,7 +1406,8 @@ describe('placeCeilingObject', () => {
   });
 
   it('puts it on the ceiling plane and inside the room', () => {
-    const box = bboxOfCeilingDisc('e', 1.2, 0, 1.1, WIDE, ROOM.height);
+    // Near enough that the top of the frame cuts it, boxed as a detector would box it.
+    const box = bboxOfCeilingDiscInFrame('e', 1.2, 0, 1.1, WIDE, ROOM.height)!;
     const g = placeCeilingObject(box, 'e', ROOM, WIDE)!;
     expect(g.position.y).toBe(ROOM.height);
     expect(g.distance).toBeLessThanOrEqual(wallD('e', ROOM));
@@ -1478,6 +1482,235 @@ describe('placeCeilingObject', () => {
 // lens's lateral axis only, so `wallFrame.distance` still agrees with `wallDistance`
 // (the gate stays live rather than going inert) and its ends are simply too far away to
 // reach. Nothing is disabled to produce this column.
+describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () => {
+  // One room, one photo, every disc the sweep can put on its ceiling: three sizes on a
+  // 0.5 × 0.1 m grid, level and tipped up 10° and 20° and down 5°, on the 106° lens a
+  // ceiling needs. The 6 m depth is what lets a disc sit near enough for the top of
+  // the frame to cut it and far enough for the rest to be in view.
+  const SQUARE = { height: 2.8, footprint: footprintForLayout('rect', 6, 6) };
+  const RISE = SQUARE.height - CAM_HEIGHT;
+  type Fixture = { cal: CameraCal; D: number; x: number; z: number; box: Box };
+  const fixtures: Fixture[] = [];
+  for (const tiltDeg of [0, -10, -20, 5]) {
+    const cal: CameraCal = { ...WIDE, tiltRad: (tiltDeg * Math.PI) / 180 };
+    for (const D of [0.9, 1.2, 1.5]) {
+      for (let xi = -20; xi <= 20; xi += 5) {
+        for (let zi = 5; zi <= 29; zi++) {
+          const x = xi / 10;
+          const z = -zi / 10;
+          if (Math.abs(x) + D / 2 > 3 || Math.abs(z) + D / 2 > 3) continue;
+          const box = bboxOfCeilingDiscInFrame('n', x, z, D, cal, SQUARE.height);
+          if (box && box[2] > 0.01 && box[3] > 0.01) fixtures.push({ cal, D, x, z, box });
+        }
+      }
+    }
+  }
+  const underTop = (b: Box) => {
+    const c = frameCuts(b);
+    return c.top && !c.left && !c.right && !c.bottom;
+  };
+  const uncut = fixtures.filter((f) => !cutByFrame(f.box));
+  const topCut = fixtures.filter((f) => underTop(f.box));
+
+  /** What the placer read before § 49.13, on every box: the ray through the box's
+   *  middle row, where it meets the slab. Written out here so the BEFORE figures can
+   *  be printed beside the after — and checked against the placer itself on every
+   *  whole disc, where it still reads exactly this, so they are the placer's own
+   *  figures and not a second implementation's. */
+  const middleRow = (b: Box, cal: CameraCal) => {
+    const th = cal.tiltRad ?? 0;
+    const tanUp = ((0.5 - (b[1] + b[3] / 2)) * cal.k) / cal.aspect;
+    const t = RISE / (tanUp * Math.cos(th) - Math.sin(th));
+    return {
+      x: t * (b[0] + b[2] / 2 - 0.5) * cal.k,
+      z: -t * (tanUp * Math.sin(th) + Math.cos(th)),
+      widthMM: Math.round(t * b[2] * cal.k * 1000),
+    };
+  };
+  const readErr = (g: { widthMM: number }, D: number) => Math.abs(g.widthMM / 1000 / D - 1);
+  const posErr = (g: { x: number; z: number }, f: Fixture) => Math.hypot(g.x - f.x, g.z - f.z);
+
+  it('draws the box a detector draws: the disc’s box clipped to the frame is wider', () => {
+    expect([fixtures.length, uncut.length, topCut.length]).toEqual([1894, 636, 556]);
+    // Where nothing is cut the two helpers must agree, which is what validates the
+    // new one against the proven one rather than trusting they were written to match.
+    let worst = 0;
+    for (const f of uncut) {
+      const whole = bboxOfCeilingDisc('n', f.x, f.z, f.D, f.cal, SQUARE.height);
+      worst = Math.max(worst, ...whole.map((v, i) => Math.abs(v - f.box[i])));
+    }
+    expect(worst).toBeLessThan(1e-5);
+    // Where the top is cut, clipping the disc's own box keeps widest points the frame
+    // cut away. 415 of the 556 are narrower drawn as they are seen; the other 141 are
+    // cut short of their widest points, and there the two boxes are one box.
+    const clip = (b: Box): Box => {
+      const y0 = Math.max(0, b[1]);
+      return [b[0], y0, b[2], b[1] + b[3] - y0];
+    };
+    const narrower = topCut.filter((f) => {
+      const clipped = clip(bboxOfCeilingDisc('n', f.x, f.z, f.D, f.cal, SQUARE.height));
+      return f.box[2] < clipped[2] - 1e-6;
+    });
+    expect(narrower).toHaveLength(415);
+  });
+
+  it('reads every other disc on its middle row, as before — which is how the before figures are the placer’s own', () => {
+    // Whole, cut at a side, and cut at the top AND a side: only a cut at the top alone
+    // is solved, so everywhere else the placer must still be the middle row exactly.
+    const rest = fixtures.filter((f) => !underTop(f.box));
+    expect(rest.filter((f) => !cutByFrame(f.box))).toHaveLength(636);
+    let read = 0;
+    for (const f of rest) {
+      const g = placeCeilingObject(f.box, 'n', SQUARE, f.cal);
+      if (!g) continue;
+      read++;
+      const m = middleRow(f.box, f.cal);
+      expect(g.position.x).toBeCloseTo(m.x, 9);
+      expect(g.position.z).toBeCloseTo(m.z, 9);
+      expect(g.widthMM).toBe(m.widthMM);
+    }
+    expect(read).toBe(1338);
+  });
+
+  it('reads a disc the top cut exactly, where the middle row read it 18% wide and 273 mm out', () => {
+    let worstW = 0;
+    let worstP = 0;
+    let beforeW = 0;
+    let beforeP = 0;
+    let beforeOver10 = 0;
+    for (const f of topCut) {
+      const g = placeCeilingObject(f.box, 'n', SQUARE, f.cal)!;
+      worstW = Math.max(worstW, Math.abs(g.widthMM - f.D * 1000));
+      worstP = Math.max(worstP, posErr(g.position, f));
+      const m = middleRow(f.box, f.cal);
+      beforeW += readErr(m, f.D);
+      beforeP += posErr(m, f);
+      if (readErr(m, f.D) > 0.1) beforeOver10++;
+    }
+    const n = topCut.length;
+    console.log(
+      `§ 49.13 · ${n} discs cut at the top · middle row ${((100 * beforeW) / n).toFixed(1)}% wide, ` +
+        `${((1000 * beforeP) / n).toFixed(0)} mm out, ${beforeOver10} past 10% · now worst ${worstW} mm wide, ` +
+        `${(1000 * worstP).toExponential(1)} mm out`,
+    );
+    expect(worstW).toBe(0);
+    // The helper finds a chord's ends by bisection and the rim by 1440 samples, so
+    // exact means to a few thousandths of a millimetre.
+    expect(worstP).toBeLessThan(1e-5);
+    expect((100 * beforeW) / n).toBeCloseTo(17.9, 1);
+    expect((1000 * beforeP) / n).toBeCloseTo(273, 0);
+    expect(beforeOver10).toBe(397);
+  });
+
+  it('with every seen edge moved by up to 2% of the frame, halves both errors and falls back on the middle row for 126', () => {
+    // A cloud model's box is often this far out. Eight draws a disc from a fixed seed;
+    // the cut edge stays where it is, because the frame is not noisy. A box no disc
+    // under the cut draws is read on the middle row, as before — and that is
+    // recognisable from outside, as an answer equal to the middle row's.
+    let seed = 1;
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const NOISE = 0.02;
+    let n = 0;
+    let fellBack = 0;
+    let w = 0;
+    let p = 0;
+    let beforeW = 0;
+    let beforeP = 0;
+    let fallbackW = 0;
+    for (const f of topCut) {
+      for (let k = 0; k < 8; k++) {
+        const j = () => (rand() * 2 - 1) * NOISE;
+        const x0 = f.box[0] + j();
+        const x1 = f.box[0] + f.box[2] + j();
+        const y1 = f.box[1] + f.box[3] + j();
+        const box: Box = [x0, f.box[1], x1 - x0, y1 - f.box[1]];
+        if (!(box[2] > 0.005 && box[3] > 0.005)) continue;
+        n++;
+        const g = placeCeilingObject(box, 'n', SQUARE, f.cal)!;
+        const m = middleRow(box, f.cal);
+        const same = g.widthMM === m.widthMM && Math.abs(g.position.z - m.z) < 1e-9;
+        if (same) {
+          fellBack++;
+          fallbackW += readErr(m, f.D);
+        }
+        w += readErr(g, f.D);
+        p += posErr(g.position, f);
+        beforeW += readErr(m, f.D);
+        beforeP += posErr(m, f);
+      }
+    }
+    console.log(
+      `§ 49.13 · ${n} noisy boxes · middle row ${((100 * beforeW) / n).toFixed(1)}% / ${((1000 * beforeP) / n).toFixed(0)} mm · ` +
+        `now ${((100 * w) / n).toFixed(1)}% / ${((1000 * p) / n).toFixed(0)} mm · ${fellBack} fell back, ` +
+        `read ${((100 * fallbackW) / fellBack).toFixed(1)}% there`,
+    );
+    expect(n).toBe(4407);
+    expect(fellBack).toBe(126);
+    expect((100 * beforeW) / n).toBeCloseTo(18.1, 1);
+    expect((1000 * beforeP) / n).toBeCloseTo(274, 0);
+    expect((100 * w) / n).toBeCloseTo(8.7, 1);
+    expect((1000 * p) / n).toBeCloseTo(98, 0);
+    // Where it falls back it reads as the middle row always did: no better, no worse.
+    expect((100 * fallbackW) / fellBack).toBeCloseTo(21.6, 1);
+  });
+
+  it('falls back on the middle row where no disc under the cut draws the box', () => {
+    // A 500 mm pendant whose whole shade is in frame, boxed by a second model that
+    // took in its flex up to the top of the picture: the box touches the frame's
+    // edge and no disc cut there draws it. Refused, the row would keep no position
+    // and could not merge with the other photo's sighting of the same light.
+    const cal = WIDE;
+    const shade = bboxOfCeilingDiscInFrame('n', 0.5, -2.2, 0.5, cal, SQUARE.height)!;
+    expect(frameCuts(shade).top, 'premise: the shade itself is not cut').toBe(false);
+    const flex: Box = [shade[0], 0, shade[2], shade[1] + shade[3]];
+    const g = placeCeilingObject(flex, 'n', SQUARE, cal)!;
+    const m = middleRow(flex, cal);
+    expect(g.widthMM).toBe(m.widthMM);
+    expect(g.position.z).toBeCloseTo(m.z, 9);
+  });
+
+  it('reads a disc whose centre is behind the pivot, which a lens tipped down puts ahead of it', () => {
+    // Tipped down 5°, every column's line meets the slab 114 mm ahead of the lens. A
+    // 3 m disc centred 100 mm ahead is behind that point, and the frame still shows
+    // only the part of it well ahead of both. The first version refused every centre
+    // behind the pivot, and a wider sweep than the one above found 22 such discs.
+    const cal: CameraCal = { ...WIDE, tiltRad: (5 * Math.PI) / 180 };
+    expect(RISE * Math.tan(cal.tiltRad!), 'premise: the pivot is past the centre').toBeGreaterThan(0.1);
+    const box = bboxOfCeilingDiscInFrame('n', 0, -0.1, 3, cal, SQUARE.height)!;
+    expect(underTop(box), 'premise: cut at the top only').toBe(true);
+    const g = placeCeilingObject(box, 'n', SQUARE, cal)!;
+    expect(g.widthMM).toBe(3000);
+    expect(g.position.x).toBeCloseTo(0, 5);
+    expect(g.position.z).toBeCloseTo(-0.1, 5);
+  });
+
+  it('leaves a disc right over the lens to the middle row, because nothing is placed there', () => {
+    // Its centre is 0 ahead, and `placeCeilingObject` refuses a distance that is not
+    // ahead of the lens — so taking the true disc would drop the row's position, the
+    // thing the fallback exists to keep. 78 of 6205 boxes in the wider sweep.
+    const cal: CameraCal = { k: 2 * Math.tan((40 * Math.PI) / 180), aspect: 4 / 3, tiltRad: (-10 * Math.PI) / 180 };
+    const box = bboxOfCeilingDiscInFrame('n', 0, 0, 3, cal, SQUARE.height)!;
+    expect(underTop(box), 'premise: cut at the top only').toBe(true);
+    const g = placeCeilingObject(box, 'n', SQUARE, cal)!;
+    const m = middleRow(box, cal);
+    expect(g.widthMM).toBe(m.widthMM);
+    expect(g.position.z).toBeCloseTo(m.z, 9);
+  });
+
+  it('reads a disc cut at the top AND the bottom on its middle row', () => {
+    // Tipped 60° up, a 66° frame is filled by a 2 m disc: no far edge in view, so
+    // there is nothing to solve from and the placer must not try.
+    const cal: CameraCal = { k: 2 * Math.tan((33 * Math.PI) / 180), aspect: 4 / 3, tiltRad: (-60 * Math.PI) / 180 };
+    const box = bboxOfCeilingDiscInFrame('n', 0, -1.1, 2, cal, SQUARE.height)!;
+    const cuts = frameCuts(box);
+    expect([cuts.top, cuts.bottom, cuts.left, cuts.right], 'premise: top and bottom').toEqual([true, true, false, false]);
+    const g = placeCeilingObject(box, 'n', SQUARE, cal)!;
+    const m = middleRow(box, cal);
+    expect(g.widthMM).toBe(m.widthMM);
+    expect(g.position.z).toBeCloseTo(m.z, 9);
+  });
+});
+
 describe('the framed surface · what the gate refuses, measured', () => {
   const WIDE: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
   const room = (w: number, d: number, h: number) => ({
@@ -2012,13 +2245,12 @@ describe('the framed surface', () => {
     // are bounds on an assumption rather than the assumption itself, and a polygon that
     // cannot say where the walls are leaves them INERT. `if (!frame) return true` in
     // `onFramedSurface`, and `frame &&` on the forward gate, are both pinned here.
-    // The same 1.1 m disc `'puts it on the ceiling plane and inside the room'` uses. No
-    // `inFrame` premise here, deliberately: a ceiling disc seen from below on a 106°
-    // lens legitimately runs its bbox to the frame's own edge, so that gate is the
-    // wrong question for this fixture. The premise that carries the meaning is the
-    // first assertion — the piece IS measurable in a room whose polygon answers — so a
-    // null in the second line is the footprint's doing and nothing else's.
-    const disc = bboxOfCeilingDisc('e', 1.2, 0, 1.1, WIDE, ROOM.height);
+    // The same 1.1 m disc `'puts it on the ceiling plane and inside the room'` uses,
+    // which the top of a 106° frame cuts — boxed as the part of it in view, which is
+    // the box a detector draws. The premise that carries the meaning is the first
+    // assertion — the piece IS measurable in a room whose polygon answers — so a null
+    // in the second line is the footprint's doing and nothing else's.
+    const disc = bboxOfCeilingDiscInFrame('e', 1.2, 0, 1.1, WIDE, ROOM.height)!;
     const good = placeCeilingObject(disc, 'e', ROOM, WIDE);
     expect(good, 'premise: measurable in a room with a polygon').not.toBeNull();
     const g = placeCeilingObject(disc, 'e', { height: ROOM.height, footprint: BROKEN }, WIDE);

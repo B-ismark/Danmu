@@ -1686,12 +1686,19 @@ export function placeCeilingObject(
   const rise = room.height - heightOf(cal);
   if (!(rise > 0.05)) return null; // camera at or above the slab — not a room
 
+  // A disc the TOP of the frame cut is read from the three edges the photo saw, not
+  // from its box's middle row: see `discUnderTopCut`, and § 49.13 for what the
+  // middle row did to it. A box no such disc draws is read on the middle row as
+  // before — why, and what that costs, is in the same place.
+  const cuts = frameCuts(box);
+  const disc = cuts.top && !cuts.left && !cuts.right && !cuts.bottom ? discUnderTopCut(box, cal, rise) : null;
+
   // The one row that is read. `bh` is used ONLY to find its centre — no height is
   // derived from it, which is the point of the whole function.
   const mid = ray(uC, by + bh / 2, cal);
   if (mid.up <= 0.02) return null; // at or below the horizon — not on the ceiling
   const t = rise / mid.up; // along the ray
-  const d = t * mid.fwd; // forward distance from the camera
+  const d = disc ? disc.forward : t * mid.fwd; // forward distance from the camera
   if (!(d > 0)) return null;
 
   // Nothing on this room's ceiling is beyond the wall being photographed, so a ray
@@ -1706,7 +1713,7 @@ export function placeCeilingObject(
   const frame = wallFrame(slot, room.footprint);
   if (frame && d > frame.distance) return null;
 
-  const right = t * mid.right;
+  const right = disc ? disc.right : t * mid.right;
   // And nothing on this room's ceiling is outside its walls SIDEWAYS either, which is
   // the half of that refusal this function shipped without. Same fixture shape, same
   // arithmetic: a 300 mm vent high on the north wall 770 mm from the north-east corner
@@ -1715,7 +1722,7 @@ export function placeCeilingObject(
   // is read 386 mm wide against a true 300. Printed by `tests/photo-geometry.test.ts`,
   // in the room those fixtures actually use. See `onFramedSurface`.
   if (!onFramedSurface(right, slot, room.footprint)) return null;
-  const widthM = t * (tanX(bx + bw, cal) - tanX(bx, cal));
+  const widthM = disc ? 2 * disc.radius : t * (tanX(bx + bw, cal) - tanX(bx, cal));
   if (widthM <= 0.01) return null;
 
   const { x, z, yaw } = slotToWorld(slot, d, right);
@@ -1728,6 +1735,169 @@ export function placeCeilingObject(
     yaw,
     distance: d,
   };
+}
+
+/** How far, as a share of the frame, a disc's predicted in-frame edges may sit from
+ *  the box's before no disc is taken to fit it. Loose on purpose: a detector's box is
+ *  a few pixels out at best and a cloud model's is often 1–2% of the frame, and the
+ *  fit is how the four readings below are told apart, not a test of the detector. */
+const DISC_FIT = 0.02;
+
+/**
+ * A ceiling DISC the top of the frame cut, read from the three edges of its box that
+ * the photo did see — § 49.13. Its centre on the slab, in the slot's (forward, right)
+ * frame, and its radius; null when no disc fits the box.
+ *
+ * **The middle row is wrong here, and not by a little.** `placeCeilingObject` reads a
+ * whole disc on its box's middle row, which a whole disc's centre sits near. Cut the
+ * top off and the box's middle moves out toward the disc's FAR edge, so the row read
+ * is further away than the disc is and the full angular width is applied there: a
+ * 1200 mm fan read 1748, and the room then built the widest fan in the catalogue.
+ *
+ * **What the photo still says, exactly.** Every row of a photo is one forward distance
+ * on the slab, whatever the tilt — the lens turns about its own right axis — so:
+ *  - the box's BOTTOM row is the disc's far edge, `forward + radius`;
+ *  - its TOP row, the frame's edge, is a line across the disc at a known distance;
+ *  - and every COLUMN is a line on the slab through one point, where the lens's own
+ *    vertical meets it (`rise · tan θ` ahead; the camera itself on a level lens).
+ * Each side of the box is then one of two things. Where the disc's widest point on
+ * that side is still in frame, the side is a TANGENT, a column line touching the rim.
+ * Where the frame cut the widest point away, the side is where the rim crosses the
+ * top row, a point ON the rim. Two sides, two readings each: four candidate discs,
+ * each a closed form, each with the far edge.
+ *
+ * Which of the four is the photo is decided by asking each what box it would give
+ * and keeping the one that gives this one (`DISC_FIT`). Not by where its widest
+ * points fall, which each candidate can satisfy about itself: a tangent line touches
+ * a circle on either side of the point it runs through, and one of those circles is
+ * metres across behind the lens.
+ *
+ * Measured on a disc cut at the top in 556 positions (three sizes, level and tipped
+ * up 10° and 20° and down 5°, 106° lens, 6 × 6 m room), the box drawn as a detector
+ * sees it: the middle row read the width 17.9% off on average and placed the centre
+ * 273 mm out; this reads both exactly. With each seen edge moved at random by up to
+ * 2% of the frame, eight draws a position, the middle row reads 18.1% and 274 mm and
+ * this 8.7% and 98 mm, and finds no disc for 126 of the 4407 boxes.
+ * `tests/photo-geometry.test.ts` holds the sweep.
+ *
+ * **No disc falls back on the middle row, which is what the caller did before**, and
+ * is not a refusal, for a reason that is about the merge rather than the size. A box
+ * touching the top of the frame is not always a disc cut there: a second model's box
+ * round a pendant light that takes in its flex reaches the frame's edge with the
+ * whole shade inside it, and no disc under a cut draws that. Refused, the row keeps
+ * no position — `geoLocate` places only wall rows — so it cannot merge with the
+ * other photo's sighting of the same light, and the room builds two
+ * (`tests/repeat-sightings.test.ts`). On the 126 noisy boxes above, the middle row
+ * reads 21.6% out, as it reads every box cut at the top: no better than before this
+ * existed, and no worse. The width is not judged either way, since `cutAxes` counts
+ * any cut against a ceiling piece's width.
+ */
+function discUnderTopCut(
+  box: readonly [number, number, number, number],
+  cal: CameraCal,
+  rise: number,
+): { forward: number; right: number; radius: number } | null {
+  const [bx, by, bw, bh] = box;
+  const tilt = tiltOf(cal);
+  const cos = Math.cos(tilt);
+  // Where every column's line on the slab passes through.
+  const pivot = rise * Math.tan(tilt);
+  const onSlab = (u: number, v: number) => {
+    const r = ray(u, v, cal);
+    if (!(r.up > 0.02)) return null;
+    return { right: (rise / r.up) * r.right, forward: (rise / r.up) * r.fwd };
+  };
+  const far = onSlab(bx + bw / 2, by + bh)?.forward;
+  const chordL = onSlab(bx, by);
+  const chordR = onSlab(bx + bw, by);
+  if (far === undefined || !chordL || !chordR) return null;
+  const cut = chordL.forward;
+  const gap = far - cut;
+  if (!(gap > 0)) return null;
+  // `frameCuts` counts a box within `FRAME_EDGE` of the top as cut, touched or not, so
+  // a WHOLE disc whose near rim sits just under the frame's edge comes here too, and
+  // there the top row is that rim rather than a line across it. How far past the top
+  // row a disc's near rim may be and still be this box's, at the fit's own tolerance.
+  const touch = onSlab(bx + bw / 2, by + DISC_FIT)?.forward ?? cut;
+  const angle = (u: number) => Math.atan(tanX(u, cal) * cos);
+  const aL = angle(bx);
+  const aR = angle(bx + bw);
+
+  type Disc = { forward: number; right: number; radius: number };
+  const candidates: Disc[] = [];
+  // Both sides tangents: the two column lines and the far edge.
+  {
+    const mid = (aR + aL) / 2;
+    const half = (aR - aL) / 2;
+    const reach = (far - pivot) / (Math.cos(mid) + Math.sin(half));
+    candidates.push({ forward: pivot + reach * Math.cos(mid), right: reach * Math.sin(mid), radius: reach * Math.sin(half) });
+  }
+  // Both sides on the top row: a chord and the far edge.
+  {
+    const half = (chordR.right - chordL.right) / 2;
+    const radius = (half * half + gap * gap) / (2 * gap);
+    candidates.push({ forward: far - radius, right: (chordL.right + chordR.right) / 2, radius });
+  }
+  // One of each. Written for a tangent on the right and mirrored for the left: the
+  // tangent puts the centre at `A − r·B` across, the chord point is then on the rim,
+  // and that is a quadratic in the radius. Its smaller root only: the larger disc
+  // meets the top row with the chord point at the tangent's own end of the chord, so
+  // its box is not this one. Not an assumption — across four lenses, eight tilts and
+  // six sizes, 6205 exact boxes, the larger root never fit once.
+  for (const side of [1, -1] as const) {
+    const a = side * (side === 1 ? aR : aL);
+    const chord = side * (side === 1 ? chordL.right : chordR.right);
+    const A = (far - pivot) * Math.tan(a);
+    const B = Math.tan(a) + 1 / Math.cos(a);
+    const q = chord - A;
+    const qa = B * B;
+    const qb = 2 * q * B - 2 * gap;
+    const qc = q * q + gap * gap;
+    const disc = qb * qb - 4 * qa * qc;
+    if (disc < 0) continue;
+    const radius = (-qb - Math.sqrt(disc)) / (2 * qa);
+    candidates.push({ forward: far - radius, right: side * (A - radius * B), radius });
+  }
+
+  // The box each candidate would give, on the two sides that were read.
+  const column = (right: number, forward: number) => 0.5 + right / ((forward - pivot) * cal.k * cos);
+  const sides = (c: Disc): [number, number] => {
+    const across = c.forward - pivot;
+    const reach = Math.hypot(c.right, across);
+    const onRow = c.radius * c.radius - (cut - c.forward) ** 2;
+    const chordAt = (sign: number) => (onRow >= 0 ? column(c.right + sign * Math.sqrt(onRow), cut) : NaN);
+    // A pivot inside the disc has no tangents, and every column meets the rim: both
+    // sides are then on the top row.
+    if (!(reach > c.radius)) return [chordAt(-1), chordAt(1)];
+    const toward = Math.atan2(c.right, across);
+    const spread = Math.asin(c.radius / reach);
+    const along = Math.sqrt(reach * reach - c.radius * c.radius);
+    const side = (sign: number) => {
+      const t = toward + sign * spread;
+      const f = pivot + along * Math.cos(t);
+      return f >= cut ? column(along * Math.sin(t), f) : chordAt(sign);
+    };
+    return [side(-1), side(1)];
+  };
+  let best: { c: Disc; miss: number } | null = null;
+  for (const c of candidates) {
+    // A disc the top row does not reach is not one the top of the frame cut. A centre
+    // behind the LENS can be real, the fan above your head, but the caller places
+    // nothing there, so taking one would refuse the row where the middle row still had
+    // an answer. Noise puts one there on a lens tipped up, for a disc nearly overhead
+    // that the frame shows only a sliver of. A centre behind the PIVOT is not filtered:
+    // tipped down, the pivot is ahead of the lens, and a big disc nearly overhead has
+    // its centre between the two while the frame shows only the part well ahead of
+    // both. The first version refused those as a column line's other half; `sides`
+    // already rejects that half, since a tangent it cannot see is drawn as a chord.
+    if (!(c.radius > 0) || !(c.forward - c.radius <= touch) || !(c.forward > 0)) continue;
+    // A side the candidate cannot draw is NaN, and NaN fits nothing.
+    const p = sides(c);
+    const miss = Math.max(Math.abs(p[0] - bx), Math.abs(p[1] - (bx + bw)));
+    if (!(miss <= DISC_FIT)) continue;
+    if (!best || miss < best.miss) best = { c, miss };
+  }
+  return best?.c ?? null;
 }
 
 /** Aspect ratio (width / height) of an image blob. Browser only. */
