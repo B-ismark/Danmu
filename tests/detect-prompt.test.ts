@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { buildDetectPrompt, cloudRows, readCloudReply, slotOf } from '@/lib/detect-prompt';
+import { buildDetectPrompt, cloudRequest, cloudRows, readCloudReply, slotOf } from '@/lib/detect-prompt';
 import { detectionBox } from '@/lib/local-detect';
 import { fromRecord, toRecord } from '@/lib/detection-record';
 import { SLIVER } from '@/lib/photo-geometry';
@@ -85,7 +85,7 @@ describe('buildDetectPrompt counts the photos it is actually given', () => {
     expect(p).toContain('W wall at x = -2.80');
   });
 
-  it('constrains the slot it will accept back to the ones it sent', () => {
+  it('asks for a slot among the ones it sent', () => {
     const p = buildDetectPrompt(ROOM, ['n', 'w']);
     expect(p).toContain('slot: the wall where the BEST view appears — one of "n", "w"');
     expect(p).toContain('Every slot you return MUST be one of "n", "w"');
@@ -310,6 +310,19 @@ describe('readCloudReply: a reply with nothing to act on is not an empty room', 
     expect(readCloudReply(JSON.stringify(elsewhere), ['e'])).toMatchObject({ rows: [{ slot: 'e' }, { slot: 'e' }] });
   });
 
+  it('reads a reply against the walls its own prompt named (§ 49.17)', () => {
+    const sent: CaptureSlot[] = ['n', 'e'];
+    const request = cloudRequest(ROOM, sent);
+    expect(request.prompt).toBe(buildDetectPrompt(ROOM, ['n', 'e']));
+    const reply = JSON.stringify([row([0.1, 0.2, 0.3, 0.4], { slot: 'e' }), row([0.5, 0.2, 0.3, 0.4], { slot: 's' })]);
+    expect(request.read(reply)).toEqual(readCloudReply(reply, ['n', 'e']));
+    // The caller's array changing afterwards moves neither end: the prompt is a
+    // string already, and the reader kept its own copy of the walls.
+    sent.splice(0, 2, 's');
+    const after = request.read(reply);
+    expect('rows' in after && after.rows.map((d) => d.slot)).toEqual(['e']);
+  });
+
   it('keeps the rows it can use when only some are past the frame', () => {
     const reply = readCloudReply(JSON.stringify([row([412, 300, 520, 260]), row([0.1, 0.2, 0.3, 0.4])]), ['n']);
     expect('rows' in reply && reply.rows.map((d) => d.box)).toEqual([[0.1, 0.2, 0.3, 0.4]]);
@@ -339,20 +352,15 @@ describe('only the reply to a Gemini call is stamped as the cloud’s', () => {
     }
   });
 
-  it('calls cloudRows only from readCloudReply, and that only from detectAcrossImages', () => {
-    // Its definition and the one call in `readCloudReply`; that definition and the
-    // one call in `detectAcrossImages`.
+  it('calls cloudRows only from readCloudReply, and that only through cloudRequest', () => {
+    // Each is its definition plus one call: `cloudRows` in `readCloudReply`, that and
+    // `buildDetectPrompt` in `cloudRequest`, and `cloudRequest` in
+    // `detectAcrossImages` — so no caller can build a prompt from one list of walls
+    // and read the reply against another (§ 49.17).
     expect(count(/\bcloudRows\s*\(/g)).toEqual({ 'lib/detect-prompt.ts': 2 });
-    expect(count(/\breadCloudReply\s*\(/g)).toEqual({ 'lib/detect-prompt.ts': 1, 'lib/detection.ts': 1 });
-  });
-
-  it('holds the reply to the walls the prompt was told were photographed (§ 49.17)', () => {
-    // `detectAcrossImages` needs the Gemini SDK, so its wiring is read rather than run:
-    // one list of walls, taken from the photos sent, handed to both ends.
-    const src = files.find(([f]) => f === 'lib/detection.ts')![1];
-    expect(src.match(/\bconst sent = images\.map\(\(i\) => i\.slot\);/g)).toHaveLength(1);
-    expect(src.match(/\bbuildDetectPrompt\(room, sent\)/g)).toHaveLength(1);
-    expect(src.match(/\breadCloudReply\(text, sent\)/g)).toHaveLength(1);
+    expect(count(/\breadCloudReply\s*\(/g)).toEqual({ 'lib/detect-prompt.ts': 2 });
+    expect(count(/\bbuildDetectPrompt\s*\(/g)).toEqual({ 'lib/detect-prompt.ts': 2 });
+    expect(count(/\bcloudRequest\s*\(/g)).toEqual({ 'lib/detect-prompt.ts': 1, 'lib/detection.ts': 1 });
   });
 
   it('writes the cloud stamp in one place', () => {

@@ -239,3 +239,18 @@ export function readCloudReply(text: string, sent: readonly CaptureSlot[]): Clou
   }
   return { rows };
 }
+
+/** One cloud request's two ends, built from one list of walls: the prompt that tells
+ *  the model which walls were photographed, and the reader that holds its reply to
+ *  them (§ 49.17). One call rather than two, so a caller has no way to hand the
+ *  prompt one list and the reader another — which the first version of this check
+ *  guarded with a regex over `lib/detection.ts`, a test of how the call was spelt
+ *  rather than of which list it used. The list is copied, so a caller changing its
+ *  own array afterwards changes neither end. */
+export function cloudRequest(
+  room: PromptRoom,
+  sent: readonly CaptureSlot[],
+): { prompt: string; read: (text: string) => CloudReply } {
+  const walls = [...sent];
+  return { prompt: buildDetectPrompt(room, walls), read: (text) => readCloudReply(text, walls) };
+}
