@@ -59,9 +59,13 @@ const INVISIBLE = new RegExp(
 /** A character Windows-1252 decodes a UTF-8 continuation byte (0x80 to 0xBF) to. */
 const CONT = '[\u20ac\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\u017d\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\u017e\u0178\u0081\u008d\u008f\u0090\u009d\u00a0-\u00bf]';
 /** A lead byte read as Windows-1252, then as many continuations as that lead promises. The
- *  two-byte leads are only `Â` and `Ã`, the ones Latin-1 text makes; the rest of that range
- *  are letters and signs (`×` is one) that sit before a dash in ordinary prose. */
-const MOJIBAKE = new RegExp(`[\u00c2\u00c3]${CONT}|[\u00e0-\u00ef]${CONT}{2}|[\u00f0-\u00f4]${CONT}{3}`);
+ *  two-byte leads are the ones this repo's own characters have: Latin-1 (`Â`, `Ã`), a
+ *  combining accent (`Ì`), Greek (`Î`, `Ï`) and Cyrillic (`Ð`, `Ñ`). The rest of that range
+ *  are letters and signs (`×` is one) that sit before a dash in ordinary prose, and a file
+ *  that brings in a character with another lead fails the sweep below until it is added. */
+const MOJIBAKE = new RegExp(
+  `[\u00c2\u00c3\u00cc\u00ce\u00cf\u00d0\u00d1]${CONT}|[\u00e0-\u00ef]${CONT}{2}|[\u00f0-\u00f4]${CONT}{3}`,
+);
 
 describe('tracked text files', () => {
   it('include the files this is about', () => {
@@ -136,6 +140,17 @@ describe('tracked text files', () => {
     // And not the text it sits beside: a zoom range written `0.4\u00d7\u20134\u00d7` is a
     // times sign and an en dash, which is what a looser pattern once took for mojibake.
     expect(MOJIBAKE.test('0.4\u00d7\u20134\u00d7')).toBe(false);
+  });
+
+  it('would know the mojibake of every character the tracked files write', () => {
+    // The list above is chosen, and choosing is how the Greek was missed: `ψ` and `Δ` are
+    // written in 33 files and their round trip starts with a lead the pattern did not have.
+    // So every character that is actually here is asked about as well.
+    const cp1252 = new TextDecoder('windows-1252');
+    const written = new Set(read.flatMap(({ text }) => text.match(/[^\x00-\x7f]/gu) ?? []));
+    expect(written.size).toBeGreaterThan(100);
+    const missed = [...written].filter((ch) => !MOJIBAKE.test(cp1252.decode(Buffer.from(ch, 'utf8'))));
+    expect(missed).toEqual([]);
   });
 
   it('would know an invisible character, and not the joiners', () => {
