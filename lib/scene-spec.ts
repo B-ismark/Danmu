@@ -2769,11 +2769,12 @@ export function isWallMountedPart(cat: Category, shape: Shape): boolean {
  *  ceiling fan sideways onto a wall", so a stale flag does not merely mislabel a piece,
  *  it offers the user a button that ruins it.
  *
- *  Exactly ONE field today, deliberately. Sizes went through `clampDims` when they were
- *  written and shapes were checked against the vocabulary then, so re-deriving those
- *  would be re-litigating a decision rather than closing a gap. If a second field ever
- *  becomes derivable-not-stored, it belongs here rather than at a call site — there are
- *  three call sites and they are the reason this function exists at all. */
+ *  Few fields, deliberately: the mount flag, `circle` below, and a detected piece's
+ *  name. Sizes went through `clampDims` when they were written and shapes were checked
+ *  against the vocabulary then, so re-deriving those would be re-litigating a decision
+ *  rather than closing a gap. If another field ever becomes derivable-not-stored, it
+ *  belongs here rather than at a call site — there are three call sites and they are the
+ *  reason this function exists at all. */
 export function normalizeStoredParts(parts: ScenePart[]): ScenePart[] {
   return parts.map((p) => {
     const derived = isWallMountedPart(p.category, p.shape);
@@ -2783,11 +2784,17 @@ export function normalizeStoredParts(parts: ScenePart[]): ScenePart[] {
     // path happened to set it, so the identical fan is round or square depending on how
     // it got into the room. Nothing has ever let a user choose, so deriving can only
     // correct.
-    if (!!p.wallMounted === derived && !!p.circle === round) return p;
+    // A detected piece built before § 49.18 kept a saved wall suffix the old reader
+    // could not read in its name — `Sofa__slot:south` — and a room the user has edited
+    // opens from this snapshot rather than rebuilding, so the name is cleaned here, the
+    // way the builder now names it. Only the name: the piece stands where the user has
+    // seen it since, and moving furniture on a load is an edit nobody made.
+    const name = p.fromDetection && typeof p.name === 'string' ? splitSlotSuffix(p.name).name || p.category : p.name;
+    if (!!p.wallMounted === derived && !!p.circle === round && name === p.name) return p;
     // `|| undefined` rather than `false`, to match what the builders emit: the flag is
     // optional and floor-standing furniture omits it, so ABSENT and `false` are one
     // answer everywhere that reads it.
-    return { ...p, wallMounted: derived || undefined, circle: round || undefined };
+    return { ...p, name, wallMounted: derived || undefined, circle: round || undefined };
   });
 }
 

@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { cleanLabelOf, detectionPartIds, fromRecord, fromRecords, toRecord, type SavedDetection } from '@/lib/detection-record';
-import { buildSceneFromRoom } from '@/lib/scene-spec';
+import { buildSceneFromRoom, normalizeStoredParts, type ScenePart } from '@/lib/scene-spec';
 import type { RoomData } from '@/lib/storage';
 import type { Detection } from '@/lib/detection';
 import { stripComments } from './helpers/source';
@@ -246,6 +246,32 @@ describe('one reader of the slot suffix (§ 49.18)', () => {
       expect([label, built(label)]).toEqual([label, south]);
     }
     expect(built('Sofa__slot:up')).toEqual(built('Sofa__slot:n'));
+  });
+
+  it('cleans the name of a detected piece in a saved scene, and moves nothing', () => {
+    // A room the user has edited opens from its snapshot rather than rebuilding, so
+    // the builder's fix never reaches a piece the old builder already named.
+    const part = buildSceneFromRoom(savedRoom('Sofa__slot:s')).find((q) => q.id === 'sofa-key')!;
+    const old = (name: string): ScenePart => ({ ...part, name, fromDetection: { ...part.fromDetection!, slot: 'n' } });
+    for (const [was, now] of [
+      ['Sofa__slot:south', 'Sofa'],
+      ['Sofa__slot:south__slot:n', 'Sofa'],
+      ['__slot:up', 'sofa'],
+    ]) {
+      const stale = old(was);
+      const [p] = normalizeStoredParts([stale]);
+      expect([was, p.name]).toEqual([was, now]);
+      expect(p).toEqual({ ...stale, name: now });
+    }
+    // A clean piece comes back as itself, which the memoised part list depends on…
+    const clean = old('Sofa');
+    expect(normalizeStoredParts([clean])[0]).toBe(clean);
+    // …and so does one the scan did not build, whatever it is called.
+    const added: ScenePart = { ...clean, name: 'Sofa__slot:south', fromDetection: undefined };
+    expect(normalizeStoredParts([added])[0]).toBe(added);
+    // A stored name that is not a string is read defensively, not split.
+    const odd = { ...clean, name: 7 } as unknown as ScenePart;
+    expect(normalizeStoredParts([odd])[0]).toBe(odd);
   });
 
   it('is written out nowhere but lib/detection-record.ts', () => {
