@@ -762,38 +762,19 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 }
 .rail-strip__rule { width: 20px; height: 1px; background: var(--hairline); margin: 4px 0; }
 
-/* The right rail with nothing selected (EmptyInspector): a prompt, the room at a
-   glance, and two ways into the whole-room edits. Centred prompt, left-aligned
-   facts and paths, because a centred list is harder to scan than it looks. */
-.empty-inspector { display: flex; flex-direction: column; gap: 18px; padding: 24px 16px 20px; }
-.empty-inspector__hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
+/* The right rail with nothing selected (EmptyInspector): a mark and one line,
+   centred in the top of the column. */
+.empty-inspector {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 12px; padding: 32px 16px 20px;
+}
 .empty-inspector__mark {
-  width: 52px; height: 52px; margin-bottom: 6px; border-radius: var(--r-full);
+  width: 52px; height: 52px; border-radius: var(--r-full);
   display: flex; align-items: center; justify-content: center;
   background: var(--accent-tint); color: var(--accent-text);
   box-shadow: 0 0 0 6px var(--paper-2);
 }
-.empty-inspector__title { margin: 0; font-size: var(--fs-lead); color: var(--ink); }
-.empty-inspector__say { margin: 0; line-height: 1.5; max-width: 34ch; }
-.empty-inspector__card {
-  display: grid; gap: 8px; padding: 12px 14px;
-  background: var(--paper-2); border: 1px solid var(--hairline); border-radius: var(--r-2);
-}
-/* Label left, value right, one fact a row: a row never has to fit three numbers
-   side by side in the narrowest rail, and it reads like a room's spec sheet. */
-.empty-inspector__facts { display: grid; gap: 6px; margin: 0; }
-.empty-inspector__fact { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
-.empty-inspector__fact dd { margin: 0; font-size: var(--fs-small); font-weight: 600; color: var(--ink); text-align: right; overflow-wrap: anywhere; }
-.empty-inspector__paths { display: grid; gap: 2px; }
-.empty-inspector__paths > .ds-label { padding: 0 2px 4px; }
-.empty-inspector__path { min-height: 44px; padding: 7px 8px; }
-.empty-inspector__path-icon {
-  width: 30px; height: 30px; flex-shrink: 0; border-radius: var(--r-2);
-  display: flex; align-items: center; justify-content: center;
-  background: var(--accent-2-tint); color: var(--success-text);
-}
-.empty-inspector__path-go { margin-left: auto; color: var(--ink-3); }
-.empty-inspector__path-label { font-size: var(--fs-small); font-weight: 700; color: var(--ink); }
+.empty-inspector__say { margin: 0; color: var(--ink-2); max-width: 34ch; }
 
 /* The rail/room divider (RailSash). 10px of hit area straddling the rail's own
    border — VS Code ships 4px and has a standing complaint that it cannot be

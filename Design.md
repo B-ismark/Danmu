@@ -2139,18 +2139,14 @@ own for a while, and the paragraph describing it was filed under *The left rail*
 above, which is how the only canonical statement of one rail's composition came to
 sit under the other's name.
 
-- **With nothing selected, the Inspector is a designed empty state**
-  (`EmptyInspector.tsx`), not the words *"Nothing selected"* over 700px of blank
-  column. It does NN/g's three jobs for an empty state: it says what the space is for
-  (*"Pick a piece to style it"*), how to fill it (click a piece or its Catalog row; a
-  wall to paint or move it; Shift-click for several), and a way forward. The way
-  forward is the room itself, because with nothing picked the room is what is in
-  front of you: a **This room** card (pieces, overall size, floor area) and two paths,
-  **Restyle it** and **Resize it**, which open the LEFT rail on Style or Room
-  (`lib/rail-intent.ts`). The panel gets no second copy of either control.
-  **The floor area is the footprint polygon's** (`lib/room-facts.ts`), never
-  `width × depth`: an L at 5 × 4 m has 16.5 m² of floor, not 20. **No Add button
-  here**, because Add is the pinned footer directly below it.
+- **With nothing selected, the Inspector is a mark and one line**
+  (`EmptyInspector.tsx`): *"Click a piece to style it"*, or *Tap* on a touch screen.
+  It was once the words *"Nothing selected"* over 700px of blank column, then for a
+  release a room-at-a-glance card plus two shortcuts into the left rail (Restyle,
+  Resize). Those were cut in review because a panel seen before every pick should
+  not read as instructions, and the left rail already holds both edits under their
+  own names. **No Add button here**, because Add is the pinned footer directly
+  below it.
 - **View left this rail for the top bar's gear.** It was the last section before the
   footer, and it filled the no-selection state by standing in for an empty state the
   rail did not have. Three values set once and never touched again were sitting under

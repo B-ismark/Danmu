@@ -127,50 +127,6 @@ min, library and max sizes, and that `desk-standard` is behaviourally identical 
 over 0, all three sizes) — both measured by `tests/footprint-fidelity.test.tsx`. The open
 question is purely whether the new proportions look like furniture. PR #124.
 
-### The plant is a real plant now, and its box picks which one — branch `claude/affectionate-ritchie-ilawx1`
-
-**Looked at twice, and both times it was wrong in a different way.** First: "the plant model
-looks squeezed". `FitToDim` scaled one fixed drawing per axis, and PR #179 (`5114b5f` on
-`main`) answered that with a head of round leaf balls drawn at the plant's own size. Walked
-here, the balls were round and the head was full, but it read as topiary: "can't we make it
-look more like an actual plant". What makes a plant read as a plant is its silhouette. So
-`plantForm` (`lib/plant-form.ts`) now draws leaf-shaped leaves on stalks, and the box's
-proportions choose the habit rather than stretching one drawing. Tall for its spread, it is
-a fig: a bare trunk, then broad leaves spiralling up the top. Squat, it is an arching bush:
-stems fanning out of the soil, one slim leaf each. In between, it is a blend: a short trunk
-that branches. A very long, narrow box is a row of plants in a trough; a very low, wide one
-is a rosette in a shallow bowl. Every leaf is the same unit leaf scaled evenly, so nothing is
-ever squashed, and a resize redraws the plant.
-
-**Where to click.** Open a seeded living room in **3D Model**. The plant stands in a corner by
-the screen, and at its catalogue 400 × 400 × 1600 it should be a fig. Select it, **Scale** it
-to 800 × 800 × 900 (a bush) and 600 × 600 × 1200 (the blend), then 300 × 300 × 2000 (a slim
-fig) and 1200 × 300 × 900 (a trough of three). Look again each time, and once while dragging a
-Scale handle, where the plant regrows under the pointer.
-
-**What wrong looks like.** A leaf floating off its stalk, or a stalk starting in mid-air; a
-leaf poking through the pot; a fig whose trunk shows through a gap in its leaves at eye
-height; a bush that reads as a spiky ball rather than leaves arching out; a visible jump in
-the plant's character partway through a Scale drag. The blend is the one nobody has judged
-against the real thing, so give it the longest look.
-
-**Also look at a plant beside a wall in 2D Plan, from above.** The plan draws a plant as the
-w × d ellipse, and every leaf is solved to stay inside it. The outermost leaves touch the
-outline, so the 3D plant fills the circle the plan draws. Wrong would be a leaf past the
-outline, or a plant that sits in the middle of a circle much bigger than it looks.
-
-**Settled without eyes.** Draws its box on all three axes (`tests/footprint-fidelity.test.tsx`).
-Across 126 legal sizes plus two low troughs, `tests/plant-form.test.ts` checks that:
-
-- no leaf is distorted;
-- every point of every leaf is inside the ellipse, under the top of the box and out of the pot;
-- the leaves span at least 92% of an ordinary plant's outline, and at least 90% of any legal one;
-- every leaf is on a stalk, and every stalk starts in the soil, on the trunk or on another stalk;
-- the habit only moves from bush toward fig as a plant grows taller;
-- the pose three draws is the pose the checks measure.
-
-Each check was mutation-tested, and all 19 deliberate breaks were caught.
-
 ### Six pieces changed size — a plant, three chairs and two lamps
 
 **MEASURED IN A BROWSER 2026-09-06 — the SIZE half is settled by a second instrument.**
@@ -1010,12 +966,12 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
-### View behind a gear, collapsed rails as icon strips, a designed empty panel — merged to `main` in `5114b5f` (PR #179)
+### View behind a gear, collapsed rails as icon strips — merged to `main` in `5114b5f` (PR #179)
 
 **Asked for, and walked once in headless Chromium.** The View controls (floor grid, decor,
 sounds, quality) moved from the right rail's foot to a gear left of `?`. A shut rail is a
-44px icon strip rather than an empty pill. The right rail with nothing selected is a
-designed empty state rather than "Nothing selected". Screenshots were taken at 1440 × 900,
+44px icon strip rather than an empty pill. (The designed empty panel that shipped with it
+has since been cut back to a mark and one line, on this branch.) Screenshots were taken at 1440 × 900,
 820 × 1000 and a phone width, and each looked right. What is left needs a real mouse, a
 real finger and a real screen reader.
 
@@ -1025,10 +981,6 @@ real finger and a real screen reader.
   Open `?`, then press the gear: Help should close as View opens, and the other way round.
 - **Laptop, rails shut.** Collapse both rails. Hover each strip icon, then press Style on
   the left strip.
-- **Laptop, nothing selected.** Press **Resize it** in the right rail, with the left rail
-  shut and again with it open.
-- **Tablet (600–1023px).** Open the Details tab with nothing selected and press
-  **Resize it**.
 - **Laptop, right rail shut, a piece selected.** Press the piece's icon on the strip with the
   keyboard (Tab to it, Enter). The rail opens and the next Tab moves on inside it.
 - **Phone.** Press the toolbar's **View**. Then, with the sheet up, tap a piece in the room:
@@ -1038,7 +990,6 @@ real finger and a real screen reader.
 - A strip tooltip that opens over the next icon or off the window's edge.
 - The left rail opening on the wrong section, or opening with focus lost to the page (Tab
   should go on from the Style header).
-- **Resize it** closing a rail that was already open.
 - The gear's card cut off at a narrow laptop width, or overlapping the room switcher.
 - The phone's View sheet taller than its controls with a scrollbar anyway.
 - A screen reader announcing a strip icon as "button" with no name.
@@ -1046,16 +997,14 @@ real finger and a real screen reader.
 
 **Settled without eyes.** Each strip icon asks for its section and opens the rail. The tree
 takes that request once and focuses the section. Side tooltips are placed beside their
-trigger and capped to the room on that side. The empty state's floor area is the polygon's
-(16.5 m² for a 5 × 4 L, not 20), and **Resize it** leaves an open rail open. `ViewOptions`
+trigger and capped to the room on that side. `ViewOptions`
 has exactly two homes, found by sweeping the tree. From the review: Help closes when View
 opens and the other way round, Help's Esc still belongs to a field being typed in first, a
-phone View sheet swaps to Details on a pick, a tablet press leaves the saved laptop rail
-alone, the right strip lands focus in the panel it opened (once), and its badge caps at 99+.
+phone View sheet swaps to Details on a pick, the right strip lands focus in the panel it opened (once), and its badge caps at 99+.
 In headless Chromium, Help and the gear closed each other both ways at 1440px, and the gear's
 card sat inside the window at 600px (x 87–387) and 700px (x 187–487). All of this is in
 `tests/collapsed-rails.test.tsx`, `tests/empty-inspector.test.tsx`,
-`tests/view-menu.test.tsx`, `tests/room-facts.test.ts` and `tests/rail-intent.test.ts`,
+`tests/view-menu.test.tsx` and `tests/rail-intent.test.ts`,
 and every assertion was mutation-checked: 30 mutants, all caught, plus 7 more on the review’s
 fixes. Two survived their first run (the strip tooltips placed above their icons, and the
 focus landing firing again on a later open from the chevron), and each has its own test now.
