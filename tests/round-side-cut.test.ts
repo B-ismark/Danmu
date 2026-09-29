@@ -72,10 +72,11 @@ type Row = {
    *  below zero inside the room. */
   past: number;
   /** Facts about the fixture itself, from the forward projection and not from the placer:
-   *  whether the point of the base nearest the lens is in the photo, and whether any of
-   *  the base is. */
+   *  whether the point of the base nearest the lens is in the photo, whether any of the
+   *  base is, and whether any of the top is. */
   nearestInPhoto: boolean;
   baseInPhoto: boolean;
+  topInPhoto: boolean;
 };
 
 function measure(side: 1 | -1): Row[] {
@@ -129,6 +130,7 @@ function measure(side: 1 | -1): Row[] {
                 past: Math.abs(row.position.x) + row.dimMM[0] / 2000 - room.width / 2,
                 nearestInPhoto: inPhoto(project('n', x, 0, -(f - dia / 2), cal)),
                 baseInPhoto: pts.some((p, i) => p[1] === 0 && inPhoto(uv[i])),
+                topInPhoto: pts.some((p, i) => p[1] === h && inPhoto(uv[i])),
               });
             }
           }
@@ -181,27 +183,38 @@ describe('a round floor piece cut at one side of the photo (§ 49.9)', () => {
 
   it('pins the table, so a change to the round placer has to say what it moved', () => {
     // Side only, placed by the size it is drawn at. Before, along the wall: 53 / 266 mm in
-    // the 4 m room, 53 / 119 / 265 in the 5 m, and 11 / 131, 15 / 20 / 80 rows off.
+    // the 4 m room, 53 / 119 / 265 in the 5 m, and 11 / 131, 15 / 20 / 80 rows off. The
+    // tipped cells moved again when the seen side came to be read at the end its column is
+    // extreme, rather than at the piece's top tipped down and its base tipped up, which are
+    // the opposite ends: along the wall 130 → 59 mm tipped down in the 4 m room, and 88 → 53
+    // up and 139 → 62 down in the 5 m; 68 / 13 / 46 rows more than 100 mm off → 24 / 4 / 17.
     expect(table(4, false)).toEqual({
       0: { n: 60, dOff: 8, latOff: 13, dMM: 39, latMM: 66, wMM: 89, hMM: 10 },
       [-10]: { n: 0, dOff: 0, latOff: 0, dMM: 0, latMM: 0, wMM: 0, hMM: 0 },
-      10: { n: 135, dOff: 4, latOff: 68, dMM: 44, latMM: 130, wMM: 80, hMM: 150 },
+      10: { n: 135, dOff: 2, latOff: 24, dMM: 20, latMM: 59, wMM: 75, hMM: 132 },
     });
-    // Cut at the foot as well, still the two tangents: these must not move.
+    // Cut at the foot as well, still the two tangents. Level they cannot move; tipped they
+    // did, because the two tangents read their seen side at its own end too now, and the
+    // frame's edge where the frame's bottom row crosses it, as they did before. The distance
+    // is the one assumed (the piece's back on its wall), so the rows set 300 and 800 mm off
+    // their wall are read at the wrong distance whatever the solve does; on the rows at the
+    // wall, where the assumption is right, along the wall 193 → 121 mm (4 m) and 210 → 133
+    // (5 m) at 10° up, in distance 96 → 133 and 101 → 122. That trade is the frame's edge,
+    // still read as a tangent, and is not this change's to fix (§ 49.9).
     expect(table(4, true)).toEqual({
       0: { n: 143, dOff: 101, latOff: 101, dMM: 341, latMM: 376, wMM: 103, hMM: 141 },
-      [-10]: { n: 134, dOff: 96, latOff: 117, dMM: 261, latMM: 303, wMM: 161, hMM: 107 },
-      10: { n: 69, dOff: 41, latOff: 47, dMM: 153, latMM: 130, wMM: 83, hMM: 157 },
+      [-10]: { n: 134, dOff: 106, latOff: 108, dMM: 289, latMM: 300, wMM: 114, hMM: 106 },
+      10: { n: 69, dOff: 27, latOff: 23, dMM: 110, latMM: 103, wMM: 86, hMM: 148 },
     });
     expect(table(5, false)).toEqual({
       0: { n: 79, dOff: 0, latOff: 11, dMM: 10, latMM: 53, wMM: 67, hMM: 8 },
-      [-10]: { n: 31, dOff: 2, latOff: 13, dMM: 51, latMM: 88, wMM: 102, hMM: 16 },
-      10: { n: 84, dOff: 1, latOff: 46, dMM: 48, latMM: 139, wMM: 79, hMM: 126 },
+      [-10]: { n: 31, dOff: 0, latOff: 4, dMM: 35, latMM: 53, wMM: 74, hMM: 7 },
+      10: { n: 84, dOff: 0, latOff: 17, dMM: 14, latMM: 62, wMM: 76, hMM: 109 },
     });
     expect(table(5, true)).toEqual({
       0: { n: 66, dOff: 35, latOff: 35, dMM: 130, latMM: 134, wMM: 86, hMM: 33 },
-      [-10]: { n: 155, dOff: 129, latOff: 108, dMM: 333, latMM: 318, wMM: 155, hMM: 105 },
-      10: { n: 1, dOff: 0, latOff: 1, dMM: 66, latMM: 200, wMM: 0, hMM: 48 },
+      [-10]: { n: 155, dOff: 123, latOff: 136, dMM: 338, latMM: 349, wMM: 90, hMM: 95 },
+      10: { n: 1, dOff: 1, latOff: 1, dMM: 109, latMM: 112, wMM: 0, hMM: 79 },
     });
   });
 
@@ -264,13 +277,29 @@ describe('a round floor piece cut at one side of the photo (§ 49.9)', () => {
     expect(cell(clean)).toEqual({ n: 37, dOff: 0, latOff: 0, dMM: 0, latMM: 0, wMM: 0, hMM: 0 });
   });
 
+  it('tipped, at a typical size, is exact wherever its top is in the photo', () => {
+    // The tipped half of the test above, and what reading each side at its own end bought:
+    // the seen side read at the opposite end left these 149 mm off along the wall on
+    // average, 39 of the 59 by more than 100 mm. The 12 whose top has left through the
+    // frame's side edge are placed exactly too; only their height is wrong, read off a top
+    // row that is the frame's and not the piece's, and that is filed rather than fixed
+    // (§ 49.9): a top the photo did not see is a height the placer should report as cut.
+    const tipped = rows.filter((r) => !r.foot && r.tilt !== 0 && r.typical);
+    expect(cell(tipped.filter((r) => r.topInPhoto))).toEqual({ n: 59, dOff: 0, latOff: 0, dMM: 0, latMM: 0, wMM: 0, hMM: 0 });
+    expect(cell(tipped.filter((r) => !r.topInPhoto))).toEqual({ n: 12, dOff: 0, latOff: 0, dMM: 0, latMM: 0, wMM: 0, hMM: 461 });
+  });
+
   it('stops the typical radius at the side wall', () => {
     // The typical radius is an assumption, so the side wall bounds it, as it bounds a
     // typical width grown from the edge the photo saw. For one commit nothing did, and 33
     // of these pieces stood through the wall, by up to 337 mm; they stand at it now, and
-    // no piece reaches past it by more than the millimetre a width is rounded to.
+    // no piece reaches past it by more than the millimetre a width is rounded to. Every one
+    // is a piece smaller than its kind's typical size. There are 47 of them since the seen
+    // side came to be read at its own end, the 14 more all tipped: the old read had pulled a
+    // small piece's centre in from the wall, so its typical radius reached the wall less.
     const atWall = rows.filter((r) => r.past > -0.001);
-    expect([atWall.length, atWall.filter((r) => !r.foot).length, Math.max(...rows.map((r) => r.past)) < 0.0006]).toEqual([33, 33, true]);
+    expect([atWall.length, atWall.filter((r) => !r.foot).length, Math.max(...rows.map((r) => r.past)) < 0.0006]).toEqual([47, 47, true]);
+    expect([atWall.filter((r) => r.typical).length, atWall.filter((r) => r.tilt === 0).length]).toEqual([0, 16]);
     // The one the review found: a 180 mm plant 90 mm off the wall, 2.3 m out, cut at the
     // frame's right edge on a level lens. Grown to the typical 400 mm it stood 297 mm
     // through the wall; stopped there it is 185 mm wide, its edge on the plaster.

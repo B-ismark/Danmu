@@ -764,10 +764,13 @@ estimate passed off as a size: the sentence reads *Measured about 1.27 × 0.27 m
 gets the *Runs past the edge of the photo, so its … is an estimate* note a side cut gets,
 naming its size where a side cut names its width. To the person they are one fact, that this
 number is not the camera's measurement of the piece. A round piece read with the lens tipped
-DOWN claims no limit at all: its solve's residual crosses the bound, by 35 mm at 20°, and a
-limit the truth falls outside is worse than none — so it is judged like the rest, and says it
-was read at an assumed distance (`AT_ASSUMED_DISTANCE`), so its row has the "about" and the note
-too. It went without them for a commit, handed the bounds of a piece seen whole.
+DOWN claims no limit at all. Its solve read each side on the box's top row, and its residual
+crossed the bound, by 35 mm at 20°; a limit the truth falls outside is worse than none. Each
+side is read at the end where its column is extreme in the photo now, and not one row of that
+fixture crosses, but the exception stays until a measurement of its own retires it (§ 49.9).
+So it is judged like the rest, and says it was read at an assumed distance
+(`AT_ASSUMED_DISTANCE`), so its row has the "about" and the note too. It went without them for
+a commit, handed the bounds of a piece seen whole.
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,
@@ -1069,10 +1072,14 @@ a millimetre except the fan and the three whose real depth differs from the defa
 | the ceiling fan | 0.1136 m | its own documented allowance — a disc spanning a range of distances, read at one row. The LARGEST error at zero yaw |
 | the sofa | exactly 0.0500 m | half the gap between its real 850 mm depth and the catalogue's 950 |
 | the TV and the painting | 11 mm and 5 mm | the same gap on a wall piece (80 against 60, 40 against 30), plus the small lateral term that rides it. Pinned as a RATIO to half the gap — measured 1.000 to 1.130 — rather than as three figures to re-fit |
-| a round footprint under tilt | +6% of width at 5°, +13% at 12° | the one approximate term: a vertical tangent line's image column varies with the row, and the row where tangency falls is not the bbox's own top row. Exact at a level lens |
 
 Seven of the eleven pieces have no depth gap at all and every one of them is exact — including
-both round pieces, which owe the catalogue nothing, and the deep air conditioner.
+both round pieces, which owe the catalogue nothing, and the deep air conditioner. A fourth row
+used to read *a round footprint under tilt, +6% of width at 5° and +13% at 12°*: a vertical
+side's image column changes with the row, and the solve read both sides on the box's top row.
+Each side is read at the end where its column is extreme now, so a round piece the photo shows
+whole is exact at every tilt measured, 5° to 20° up and down (§ 49.9). Those two percentages
+came from a box running past the frame, which no photo draws (§ 49.16).
 
 **Two clamps now, against two different walls, and keeping them apart is not tidiness.** The
 near face is measured, so it is bounded by the plaster — that is the clamp this function

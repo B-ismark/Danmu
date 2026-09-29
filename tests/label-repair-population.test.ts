@@ -106,12 +106,23 @@ describe('the high side of a cut axis, across furnished rooms (§ 49.5)', () => 
     // first column is the price the judge was already paying, and the second is what
     // this rule adds to it — every one a fridge or a dining chair, read past its width's
     // top on a lens or a tilt the app took wrongly, printed above on every run.
+    // The fifth row, tipped 5° down and read so, moved when a round piece's sides came to
+    // be read at their own ends (§ 49.9), and only on the two words that read a box as
+    // round, a lamp and a plant. Read on its top row, a round piece came out about 5% wide
+    // at that tilt — a plant 421 × 896 for its own 400 × 900 — and 61 of the wrong words
+    // caught were caught by that error alone: 29 standing mirrors and 10 paintings called
+    // a lamp read past a lamp's 600 on it, and fit one read as a round piece reads. Ten
+    // slivers under a dining chair's foot, read 30–45 mm tall, are unmeasured now, and
+    // four rows are caught that were not. The right word lost first place on 82 rows and
+    // took it on 2, on the ranking and not the reading: a fridge's box read as a plant now
+    // sorts ahead of the fridge, and a plant read at its own size behind a mirror. The
+    // correct pieces flagged are the same 107.
     expect(out).toEqual([
       [97, 0, 19743, 15019, 1037, 7691, 9263],
       [339, 1, 21354, 15389, 925, 3820, 4991],
       [485, 5, 25002, 18250, 830, 3791, 5053],
       [132, 0, 21433, 17086, 359, 7381, 9393],
-      [107, 0, 20613, 15843, 867, 7838, 9514],
+      [107, 0, 20603, 15790, 853, 7758, 9436],
       [264, 0, 17828, 13170, 1260, 2476, 6601],
       [327, 10, 20359, 15741, 851, 5979, 7318],
     ]);

@@ -452,38 +452,40 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     // frame shows only the top of, its box 2% and 5% of the frame tall with the legs
     // below it. That box's sides are where the seat crosses the frame's bottom, not the
     // tangents the solve reads them as, so it reads narrower than the far end allows, and
-    // the one against its wall reads 3 mm over a height its bound calls the least it can
-    // be. It is § 49.20, filed with the same fixture's box rows, which still clip.
+    // the one against its wall reads 4 mm over a height its bound calls the least it can
+    // be. It is § 49.20, filed with the same fixture's box rows, which still clip. Every
+    // other row tipped up and against its wall reads exact, where the sides read on their
+    // top row put a plant 15 and 21 mm wide and a floor lamp 23 and 32 (§ 49.9).
     expect(tally(rows)).toEqual({
-      widthLarge: 24,
+      widthLarge: 19,
       widthCut: 0,
-      heightLow: 9,
+      heightLow: 8,
       heightHigh: 13,
-      exact: 8,
+      exact: 9,
       broken: [
-        ['stool', 'width', 438, 500],
-        ['stool', 'width', 493, 500],
-        ['stool', 'height', 703, 700],
+        ['stool', 'width', 427, 500],
+        ['stool', 'width', 489, 500],
+        ['stool', 'height', 704, 700],
       ],
     });
     // The price of taking its back on the wall as evidence is steeper here than on the
-    // box pieces: 11 of 30 correctly named, where judged only on the side the reading
+    // box pieces: 9 of 30 correctly named, where judged only on the side the reading
     // speaks for it was none. Two things make it so, and both are real rather than the
     // fixture's. A round piece's far end is its own diameter off the wall, so 300 mm
     // out is a larger share of its distance than of a sofa's; and a standing fan's
     // typical 650 × 900 is its band's widest and shortest, as a stool's 500 nearly is,
-    // so even against the wall a reading a few percent off puts it outside.
+    // so even against the wall a reading a few percent off puts it outside. It was 11
+    // until each side was read at its own end: the two floor lamps 800 mm out, tipped up,
+    // read 615 and 638 mm across on their top row, past the band's 600, and read 567 now.
     expect(rows.filter(({ d, cal }) => judgeLabel(d, { n: cal }, ROOM).status === 'suspect').map((r) => r.at)).toEqual([
       'fan-standing 0° up, 0.3 m out',
       'fan-standing 0° up, 0.8 m out',
       'stool 0° up, 0.3 m out',
       'fan-standing 10° up, 0.3 m out',
       'fan-standing 10° up, 0.8 m out',
-      'lamp-floor 10° up, 0.8 m out',
       'stool 10° up, 0.3 m out',
       'stool 10° up, 0.8 m out',
       'fan-standing 20° up, 0.3 m out',
-      'lamp-floor 20° up, 0.8 m out',
       'stool 20° up, 0 m out',
     ]);
   });
@@ -493,21 +495,22 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   });
 
   it('claims no side for a round piece read with the lens tipped down, and still calls it an estimate', () => {
-    // `floorFromRound` reads its tangents on the top row with the lens tipped down and
-    // carries a residual of its own that crosses the bound, growing with the tilt. Read
-    // as though it held, the stool 20° down was called too tall for a stool, and its row
-    // printed a height range that leaves out its own 700 mm. So it claims no side. The
-    // crossings are pinned as the reason, so that growing shows.
-    const crossed = [10, 20, 25].flatMap((t) =>
+    // `floorFromRound` read its tangents on the top row with the lens tipped down and
+    // carried a residual of its own that crossed the bound, growing with the tilt: a
+    // standing fan 300 mm off its wall read 637 wide against 650 at 10°, a stool 800 mm
+    // off 465 × 721 against 500 × 700 at 20°, a fan 555 × 947 against 650 × 900 at 25°.
+    // Read as though it held, the stool 20° down was called too tall for a stool, and
+    // its row printed a height range that leaves out its own 700 mm. So it claims no
+    // side. Each side is read at the end its column is extreme in the photo now (§ 49.9),
+    // and not one of these seventeen crosses. The exception stays all the same: three
+    // rows that stopped crossing are not the measurement that would retire it, which is
+    // filed as its own (§ 49.9).
+    const crossed = [5, 10, 15, 20, 25].flatMap((t) =>
       roundRows(t)
         .filter(({ truth, read }) => read[0] < truth[0] && read[2] > truth[1])
         .map(({ d, truth, read }) => [t, d.shape, truth[0], read[0], truth[1], read[2]]),
     );
-    expect(crossed).toEqual([
-      [10, 'fan-standing', 650, 637, 900, 903],
-      [20, 'stool', 500, 465, 700, 721],
-      [25, 'fan-standing', 650, 555, 900, 947],
-    ]);
+    expect(crossed).toEqual([]);
     const down = [5, 10, 15, 20, 25].flatMap(roundRows);
     expect(down).toHaveLength(17);
     for (const { bounds } of down) expect(bounds).toBe(AT_ASSUMED_DISTANCE);
@@ -688,7 +691,12 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     // photo saw under that repair's OWN anchor the right word is first on 83 and among
     // the two on 208. Its first version asked every repair to fit what the wrong
     // word's anchor read — a wall word reads a foot the frame cut at the wall's
-    // distance — and got 80 and 192.
+    // distance — and got 80 and 192. It is 209 since a round piece's sides are read at
+    // their own ends (§ 49.9), and that one is not a better reading: a wardrobe tipped up
+    // and called a lamp reads as a round lamp 2420 wide where it read 2392, past a
+    // shelf's 2400, so the words to try — still picked on THIS word's reading — lose the
+    // shelf, and the wardrobe moves up into the second chip. Read as a shelf, it is
+    // 1464. That pick is filed with § 49.5's.
     let caught = 0, first = 0, shown = 0;
     for (const { d, cal } of ROWS) {
       for (const category of CATEGORIES) {
@@ -701,7 +709,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         if (i === 0 || i === 1) shown++;
       }
     }
-    expect([caught, first, shown]).toEqual([532, 83, 208]);
+    expect([caught, first, shown]).toEqual([532, 83, 209]);
   });
 
   it("keeps the right word when only the wrong word's anchor read it too big (§ 49.5)", () => {
