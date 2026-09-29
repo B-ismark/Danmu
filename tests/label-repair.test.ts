@@ -19,7 +19,7 @@ import { geoMeasure, geoRefine, type CalMap, type RoomDims } from '@/lib/detect-
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { footprintForLayout, type Footprint } from '@/lib/footprint';
-import { bboxOfCeilingDiscInFrame, bboxOfFloorBox, bboxOfFloorCylinder, bboxOfWallSolid } from './helpers/project';
+import { bboxOfCeilingDiscInFrame, bboxOfFloorBox, bboxOfWallSolid, floorCylinderPoints, framedExtent, project } from './helpers/project';
 
 /** The framed wall's distance, read from the polygon. `wallDistance` — the
  *  `depth/2` / `width/2` pair every placer used to measure from — is deleted; this
@@ -347,7 +347,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   // negative `tiltRad`, the phone angled to get the ceiling in, which is how people
   // photograph a room; kept are the rows the frame cut at the foot and not the top,
   // that the placer measured. Tipped up, eight of the box projections and three of the
-  // round ones stand wholly below the frame, and `clipToFrame` drops them as the scan
+  // round ones stand wholly below the frame, and the fixture drops them as the scan
   // does. Five were counted here, read off boxes of negative height, until the fixture
   // cut its boxes with the pipeline's own function rather than a copy of it.
   const PIECES: Array<[Category, Shape, number, number]> = [
@@ -387,25 +387,27 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     ),
   );
 
-  /** Where each uncut axis's truth sits against the bound the placer reported. */
+  /** Where each uncut axis's truth sits against the bound the placer reported, and every
+   *  row that breaks its bound, by name: counted rather than asserted row by row, so a
+   *  break is pinned where it happens instead of stopping the tally at the first one. */
   const tally = (rows: ReadonlyArray<{ d: Detection; truth: readonly [number, number]; read: readonly number[]; bounds: ReadBounds }>) => {
-    const t = { widthLarge: 0, widthCut: 0, heightLow: 0, heightHigh: 0, exact: 0 };
+    const t = { widthLarge: 0, widthCut: 0, heightLow: 0, heightHigh: 0, exact: 0, broken: [] as Array<[string, string, number, number]> };
     for (const { d, truth, read, bounds } of rows) {
       if (cutAxes(d.box, 'floor').width) t.widthCut++;
       else {
         // The most it can be: at or above the truth.
         expect(bounds.width.kind).toBe('upper');
-        expect(read[0]).toBeGreaterThanOrEqual(truth[0]);
         if (read[0] > truth[0]) t.widthLarge++;
+        if (read[0] < truth[0]) t.broken.push([d.shape!, 'width', read[0], truth[0]]);
       }
       const h = bounds.height;
       if (read[2] < truth[1]) {
         t.heightLow++;
         // Read low, and bounded above by the lens: a falling top ray is below it.
-        expect(h.kind === 'lower' && truth[1] <= h.ceilMM).toBe(true);
+        if (!(h.kind === 'lower' && truth[1] <= h.ceilMM)) t.broken.push([d.shape!, 'height', read[2], truth[1]]);
       } else if (read[2] > truth[1]) {
         t.heightHigh++;
-        expect(h.kind === 'upper' && truth[1] >= h.floorMM).toBe(true);
+        if (!(h.kind === 'upper' && truth[1] >= h.floorMM)) t.broken.push([d.shape!, 'height', read[2], truth[1]]);
       } else t.exact++;
     }
     return t;
@@ -414,12 +416,16 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
   it('reads each axis on the side its placer says, never the other', () => {
     expect(ROWS).toHaveLength(39);
     // Every direction the rule allows is exercised, so the fixture can tell them apart.
-    expect(tally(ROWS)).toEqual({ widthLarge: 13, widthCut: 14, heightLow: 13, heightHigh: 12, exact: 14 });
+    expect(tally(ROWS)).toEqual({ widthLarge: 13, widthCut: 14, heightLow: 13, heightHigh: 12, exact: 14, broken: [] });
   });
 
   // The round placer is a different solve — tangents to a circle, not corners of a box —
   // so it is asked the same question on its own fixture: every round floor kind as a
-  // cylinder of its catalogue width and height, on the same walls and tilts.
+  // cylinder of its catalogue width and height, on the same walls and tilts. Boxed as the
+  // photo draws it, the outline inside the frame (`framedExtent`, § 49.16), and not as
+  // the whole silhouette clipped to the frame, which this fixture did until § 49.9 was
+  // measured on it: a round piece's side is a tangent at the end where its column is
+  // extreme, and the clip kept that end's column where the frame had hidden it.
   const ROUND: Array<[Category, Shape]> = [['fan', 'fan-standing'], ['plant', 'plant'], ['lamp', 'lamp-floor'], ['chair', 'stool']];
   const roundRows = (tiltDeg: number) =>
     ROUND.flatMap(([category, shape]) =>
@@ -427,7 +433,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         const cal = calAt(tiltDeg);
         const dia = defaultAxisFor(category, shape, 0), h = defaultAxisFor(category, shape, 2);
         const z = -(wallD('n', ROOM) - gap - dia / 2000);
-        const box = clip(bboxOfFloorCylinder('n', 0.3, z, dia / 1000, h / 1000, cal));
+        const box = framedExtent(floorCylinderPoints(0.3, z, dia / 1000, h / 1000).map((p) => project('n', ...p, cal)));
         if (!box) return [];
         const c = frameCuts(box);
         const d = det({ category, shape, slot: 'n', box });
@@ -439,10 +445,29 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
 
   it('reads a round piece on the same sides, and judges it at that reading (D8)', () => {
     const rows = [0, -10, -20].flatMap(roundRows);
-    expect(rows).toHaveLength(28);
-    expect(tally(rows)).toEqual({ widthLarge: 25, widthCut: 1, heightLow: 10, heightHigh: 12, exact: 6 });
+    // 30 rows where the clipped silhouette gave 28: a standing fan and a stool 800 mm off
+    // the wall, tipped 10° up, which the clip boxed so the placer could not read them.
+    expect(rows).toHaveLength(30);
+    // Three readings break their bound, and all three are the same case: a stool the
+    // frame shows only the top of, its box 2% and 5% of the frame tall with the legs
+    // below it. That box's sides are where the seat crosses the frame's bottom, not the
+    // tangents the solve reads them as, so it reads narrower than the far end allows, and
+    // the one against its wall reads 3 mm over a height its bound calls the least it can
+    // be. It is § 49.20, filed with the same fixture's box rows, which still clip.
+    expect(tally(rows)).toEqual({
+      widthLarge: 24,
+      widthCut: 0,
+      heightLow: 9,
+      heightHigh: 13,
+      exact: 8,
+      broken: [
+        ['stool', 'width', 438, 500],
+        ['stool', 'width', 493, 500],
+        ['stool', 'height', 703, 700],
+      ],
+    });
     // The price of taking its back on the wall as evidence is steeper here than on the
-    // box pieces: 12 of 28 correctly named, where judged only on the side the reading
+    // box pieces: 11 of 30 correctly named, where judged only on the side the reading
     // speaks for it was none. Two things make it so, and both are real rather than the
     // fixture's. A round piece's far end is its own diameter off the wall, so 300 mm
     // out is a larger share of its distance than of a sofa's; and a standing fan's
@@ -452,12 +477,11 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
       'fan-standing 0° up, 0.3 m out',
       'fan-standing 0° up, 0.8 m out',
       'stool 0° up, 0.3 m out',
-      'fan-standing 10° up, 0 m out',
       'fan-standing 10° up, 0.3 m out',
+      'fan-standing 10° up, 0.8 m out',
       'lamp-floor 10° up, 0.8 m out',
-      'stool 10° up, 0 m out',
       'stool 10° up, 0.3 m out',
-      'fan-standing 20° up, 0 m out',
+      'stool 10° up, 0.8 m out',
       'fan-standing 20° up, 0.3 m out',
       'lamp-floor 20° up, 0.8 m out',
       'stool 20° up, 0 m out',
@@ -518,7 +542,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
       ),
     );
     expect(rows).toHaveLength(11);
-    expect(tally(rows)).toEqual({ widthLarge: 6, widthCut: 4, heightLow: 9, heightHigh: 1, exact: 1 });
+    expect(tally(rows)).toEqual({ widthLarge: 6, widthCut: 4, heightLow: 9, heightHigh: 1, exact: 1, broken: [] });
     const flagged = rows.flatMap(({ d, cal, read, at }) => {
       const v = judgeLabel(d, { n: cal }, ROOM);
       return v.status === 'suspect' ? [[at, v.failed, read[2]]] : [];
