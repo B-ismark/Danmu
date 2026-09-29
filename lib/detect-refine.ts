@@ -16,15 +16,16 @@
 
 import { anchorFor } from './physics';
 import {
-  frameCuts,
+  cutByFrame,
   locateOnWall,
   placeCeilingObject,
   placeFloorObject,
   placeWallObject,
   type CameraCal,
+  type MeasuredPlane,
 } from './photo-geometry';
 import type { Detection } from './detection';
-import { defaultAxisFor, defaultDepthFor, isRoundPart, sceneShapeFor, type Category } from './scene-spec';
+import { defaultAxisFor, defaultDepthFor, isRoundPart, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { CaptureSlot } from './storage';
 import type { Footprint } from './footprint';
 
@@ -68,6 +69,21 @@ export type CalMap = Partial<Record<CaptureSlot, CameraCal>>;
 // The CEILING branch is the one place `d.dimMM[1]` still wins, and it is not an
 // oversight: `placeCeilingObject` reads one row of a disc and takes no depth, so
 // nothing there turns a depth into a measurement.
+/** Which placer reads a row of this word: the plane it is measured on.
+ *
+ *  Its anchor's, with one exception. A curtain whose shape resolves to the ceiling is
+ *  still CLOTH ON A WALL — the exception predates the ceiling placer and survives it,
+ *  because the question is "which plane is this object on", and cloth is on the wall
+ *  plane whatever the anchor table calls it. One definition, because every reader of
+ *  a measurement has to agree with the placer that made it: the label check judging
+ *  such a curtain as a ceiling piece called its height unmeasured and its width cut,
+ *  while the wall placer had measured the one and grown the other. */
+export function measuredPlane(category: Category, shape: Shape): MeasuredPlane {
+  const anchor = anchorFor(category, shape);
+  if (anchor === 'ceiling' && category !== 'curtain') return 'ceiling';
+  return anchor === 'floor' ? 'floor' : 'wall';
+}
+
 export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection {
   const cal = cals[d.slot];
   if (!cal) return d;
@@ -81,18 +97,14 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
   // one shape and built as another is measured on the wrong plane, with the wrong
   // depth, and compared for repeats as something it is not.
   const shape = sceneShapeFor(cat, d.label, d.shape);
-  const anchor = anchorFor(cat, shape);
+  const plane = measuredPlane(cat, shape);
   const catalogueDepth = defaultDepthFor(cat, shape);
   // Named for its only consumer. It was `hintedDepth`, read by two branches of
   // three; a name that outlives the second consumer reads as a ladder the other
   // branches are also on.
   const ceilingDepth = d.dimMM?.[1] ?? catalogueDepth;
 
-  // A curtain whose shape resolves to the ceiling is still CLOTH ON A WALL — the
-  // exception predates the ceiling placer and survives it, because the question
-  // that branch answers is "which plane is this object on", and cloth is on the
-  // wall plane whatever the anchor table calls it.
-  if (anchor === 'ceiling' && d.category !== 'curtain') {
+  if (plane === 'ceiling') {
     const g = placeCeilingObject(d.box, d.slot, room, cal);
     if (!g) return d;
     // Width is measured. HEIGHT IS NOT — the bbox of something seen from below
@@ -122,7 +134,7 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
     whole: { widthM: defaultAxisFor(cat, shape, 0) / 1000, heightM: defaultAxisFor(cat, shape, 2) / 1000 },
   };
   const g =
-    anchor === 'floor'
+    plane === 'floor'
       ? placeFloorObject(d.box, d.slot, room, cal, foot)
       : placeWallObject(d.box, d.slot, room, cal, foot);
   if (!g) return d;
@@ -153,9 +165,7 @@ export function geoLocate(d: Detection, cals: CalMap, room: RoomDims): Detection
   if (!cal) return d;
   const cat = (d.category ?? 'other') as Category;
   const shape = sceneShapeFor(cat, d.label, d.shape);
-  const anchor = anchorFor(cat, shape);
-  // The same plane split `geoRefine` makes, curtain exception included.
-  if (anchor === 'floor' || (anchor === 'ceiling' && d.category !== 'curtain')) return d;
+  if (measuredPlane(cat, shape) !== 'wall') return d;
   const g = locateOnWall(d.box, d.slot, room.footprint, cal, {
     depthM: defaultDepthFor(cat, shape) / 1000,
     round: isRoundPart(shape),
@@ -390,8 +400,7 @@ export function dedupeDetections(items: Detection[], measured?: ReadonlySet<Dete
  *  for), some of it (the photo's edge cut it off), or all of it. */
 function survivorRank(d: Detection, measured: ReadonlySet<Detection> | undefined): number {
   if (!measured?.has(d)) return 0;
-  const c = frameCuts(d.box);
-  return c.left || c.right || c.top || c.bottom ? 1 : 2;
+  return cutByFrame(d.box) ? 1 : 2;
 }
 
 /** Detector output → what the review screen shows. The ORDER is the point.

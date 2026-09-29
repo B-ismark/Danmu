@@ -468,6 +468,29 @@ describe('judgeLabel — a ceiling piece the edge of the photo cut', () => {
   });
 });
 
+describe('judgeLabel — on the plane its placer read it on', () => {
+  it('judges a curtain given a ceiling shape as the wall piece it was measured as', () => {
+    // Cloth on a wall whatever the anchor table calls its shape: `geoRefine` measures
+    // this row with the WALL placer, which saw its width and grew the height the top of
+    // the frame cut. Read as a ceiling piece it was "cut" on the width it had measured
+    // and silent on the height it had grown.
+    const clip = ([x, y, w, h]: readonly number[]): Detection['box'] => {
+      const x0 = Math.max(0, x), y0 = Math.max(0, y);
+      return [x0, y0, Math.min(1, x + w) - x0, Math.min(1, y + h) - y0];
+    };
+    const box = clip(bboxOfWallSolid('n', 'n', 0.2, 1.75, wallD('n', ROOM), 1.4, 1.9, 0.08, CAL));
+    expect(frameCuts(box)).toEqual({ left: false, right: false, top: true, bottom: false });
+    const d = det({ label: 'curtain', category: 'curtain', shape: 'lamp-pendant', slot: 'n', box });
+    expect(sceneShapeFor('curtain', d.label, d.shape)).toBe('lamp-pendant');
+    const v = judgeLabel(d, { n: CAL }, ROOM);
+    expect(v.status).toBe('suspect');
+    if (v.status !== 'suspect') return;
+    expect(v.cut).toEqual(['height']);
+    expect(v.failed).toEqual(['width']);
+    expect(Object.keys(v.measured)).toEqual(['width']);
+  });
+});
+
 describe('accepting a repair', () => {
   // The scan screen works its verdicts out from a copy of the rows that ignores
   // colour, so the photo's sample landing does not re-run every check. A candidate can

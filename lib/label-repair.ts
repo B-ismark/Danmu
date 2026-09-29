@@ -22,9 +22,8 @@
 // The caller shows the verdict and the user accepts it.
 
 import { dimRangeFor } from './dimension-ranges';
-import { geoRefine, type CalMap, type RoomDims } from './detect-refine';
-import { anchorFor } from './physics';
-import { cutAxes, frameCuts } from './photo-geometry';
+import { geoRefine, measuredPlane, type CalMap, type RoomDims } from './detect-refine';
+import { cutAxes } from './photo-geometry';
 import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
 
@@ -100,7 +99,10 @@ function failedAxes(category: Category, shape: Shape, widthMM: number, heightMM:
   return out;
 }
 
-/** Which axes a measurement under this word's own anchor actually observed.
+/** Which axes a measurement of this word actually observed, and which the photo's
+ *  edge cut — on the plane the placer read it on (`measuredPlane`), which is not
+ *  always its anchor's: a curtain whose shape resolves to the ceiling is measured on
+ *  the wall, height and all.
  *
  *  A ceiling placement sees WIDTH only: the bbox's vertical extent for something
  *  photographed from below is a foreshortened diameter, not a height (see
@@ -114,29 +116,20 @@ function failedAxes(category: Category, shape: Shape, widthMM: number, heightMM:
  *  whatever word asked — the catalogue judging the catalogue. Left in, it passed
  *  every cut piece on that axis, and before the growth it failed them the other way:
  *  the visible part of a wardrobe is "too small for a wardrobe" because it is part of
- *  one. Which axes a cut takes is `cutAxes`, the placers' own test. */
-function measuredAxes(category: Category, shape: Shape, box: Detection['box']): SizeAxis[] {
-  const seen: readonly SizeAxis[] = anchorFor(category, shape) === 'ceiling' ? ['width'] : ['width', 'height'];
-  const cut = cutOf(category, shape, box);
-  return seen.filter((a) => !cut.includes(a));
-}
-
-/** The axes of `box` the photo's edge cut, on the plane this word is measured on.
+ *  one. Which axes a cut takes is `cutAxes`, the placers' own test.
  *
  *  A ceiling piece is never grown, and its width is the one number it has, so ANY
- *  edge takes it. Every one moves the box's centre off the disc's, and
- *  `placeCeilingObject` reads its distance on that centre's row, so the width it
- *  takes there is neither the piece's nor a bound on it: a true 1200 mm fan came back
- *  1402 mm cut at the side, 1748 cut at the top — the usual case, a fan near a level
- *  lens — and 1111 cut at the bottom (`tests/label-repair.test.ts`). */
-function cutOf(category: Category, shape: Shape, box: Detection['box']): SizeAxis[] {
-  const anchor = anchorFor(category, shape);
-  if (anchor === 'ceiling') {
-    const c = frameCuts(box);
-    return c.left || c.right || c.top || c.bottom ? ['width'] : [];
-  }
-  const cut = cutAxes(box, anchor === 'floor' ? 'floor' : 'wall');
-  return (['width', 'height'] as const).filter((a) => cut[a]);
+ *  edge takes it: each moves the box's centre off the disc's, and `placeCeilingObject`
+ *  reads its distance on that centre's row, so the width it takes there is neither the
+ *  piece's nor a bound on it. A true 1200 mm fan came back 1402 mm cut at the side and
+ *  935 cut at the side 600 mm further on, 1748 cut at the top — the usual case, a fan
+ *  near a level lens — and 1111 cut at the bottom (`tests/label-repair.test.ts`). */
+function readAxes(category: Category, shape: Shape, box: Detection['box']): { measured: SizeAxis[]; cut: SizeAxis[] } {
+  const plane = measuredPlane(category, shape);
+  const seen: readonly SizeAxis[] = plane === 'ceiling' ? ['width'] : ['width', 'height'];
+  const c = cutAxes(box, plane);
+  const cut = (['width', 'height'] as const).filter((a) => c[a]);
+  return { measured: seen.filter((a) => !cut.includes(a)), cut };
 }
 
 /** How far inside a band a value sits, as a fraction of the band's span. 0 is on a
@@ -295,7 +288,7 @@ export function candidatesFor(
       // restriction matters — a ceiling candidate is checked on width, because width
       // is what measuring it as a ceiling item produced.
       // Judged as the shape it was measured as, for the reason `judgeLabel` is.
-      const cAxes = measuredAxes(c, t.shape, d.box);
+      const cAxes = readAxes(c, t.shape, d.box).measured;
       // Every axis this kind is read on runs out of the photo under ITS anchor — a
       // wall word's height takes the bottom cut a floor word's does not. Nothing was
       // measured, so nothing can fit: kept, it fitted vacuously and its margin was
@@ -367,8 +360,7 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
   // word. For a ceiling item that is width alone — enough for both ceiling rows of
   // the benchmark (a hook at 100 mm against a fan's 900 mm floor, a fan at 1200 mm
   // against a lamp's 800 mm ceiling), and honest about the rest.
-  const axes = measuredAxes(category, shape, d.box);
-  const cut = cutOf(category, shape, d.box);
+  const { measured: axes, cut } = readAxes(category, shape, d.box);
   const cutNote = cut.length > 0 ? { cut } : {};
   if (axes.length === 0) return { status: 'unmeasured', ...cutNote };
   const failed = failedAxes(category, shape, widthMM, heightMM).filter((a) => axes.includes(a));

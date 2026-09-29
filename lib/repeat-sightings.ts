@@ -40,7 +40,6 @@
 // tested without a screen.
 
 import { footArea, footFromPart, footIntersectionArea, type Foot } from './geometry';
-import { anchorFor } from './physics';
 import { clampDims, dimRangeFor } from './dimension-ranges';
 import {
   defaultAxisFor,
@@ -52,8 +51,8 @@ import {
   type Category,
   type Shape,
 } from './scene-spec';
-import { geoPlace, geoRefine, sameThingKey, type CalMap, type RoomDims } from './detect-refine';
-import { atLens, frameCuts, PLAUSIBLE_HFOV_DEG } from './photo-geometry';
+import { geoPlace, geoRefine, measuredPlane, sameThingKey, type CalMap, type RoomDims } from './detect-refine';
+import { atLens, cutByFrame, frameCuts, PLAUSIBLE_HFOV_DEG } from './photo-geometry';
 import { sourceOf } from './detect-confidence';
 import type { Detection } from './detection';
 
@@ -94,9 +93,7 @@ function shapeOf(d: Detection): Shape {
 }
 
 function planeOf(d: Detection): Plane {
-  const anchor = anchorFor(d.category as Category, shapeOf(d));
-  if (anchor === 'ceiling' && d.category !== 'curtain') return 'ceiling';
-  return anchor === 'floor' ? 'floor' : 'wall';
+  return measuredPlane(d.category as Category, shapeOf(d));
 }
 
 /** Where the row stands and how big it is, as the room will build it.
@@ -159,13 +156,6 @@ function sharedPart(a: Solid, b: Solid): number {
   if (!(tall > 0)) return 0;
   const lift = Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0)) / tall;
   return plan * lift;
-}
-
-/** Did the photo's edge cut this box? The same test `geoRefine` sizes a cut axis by
- *  (`frameCuts`), so a box this ranks as clipped is one the placers grew. */
-function clipped(box: Detection['box']): boolean {
-  const c = frameCuts(box);
-  return c.left || c.right || c.top || c.bottom;
 }
 
 /** Do two boxes in one photo overlap at all? Touching edges are not overlap: the
@@ -449,7 +439,9 @@ export function findRepeats(
   const score = (i: number) => [
     sourceOf(dets[i]) === 'manual' ? 0 : 1,
     keep[i] ? 0 : 1,
-    clipped(dets[i].box) ? 1 : 0,
+    // The same test `geoRefine` sizes a cut axis by, so a box ranked clipped is one
+    // the placers grew.
+    cutByFrame(dets[i].box) ? 1 : 0,
     -(dets[i].box[2] * dets[i].box[3]),
   ];
   const order = dets

@@ -793,6 +793,10 @@ export const FRAME_EDGE = 0.01;
 
 export type FrameCuts = { left: boolean; right: boolean; top: boolean; bottom: boolean };
 
+/** The plane a placer reads a row on — which is not always its anchor's (see
+ *  `measuredPlane` in `lib/detect-refine.ts`, the one place that decides it). */
+export type MeasuredPlane = 'floor' | 'wall' | 'ceiling';
+
 export function frameCuts(box: readonly [number, number, number, number]): FrameCuts {
   const [x, y, w, h] = box;
   return { left: x <= FRAME_EDGE, right: x + w >= 1 - FRAME_EDGE, top: y <= FRAME_EDGE, bottom: y + h >= 1 - FRAME_EDGE };
@@ -806,13 +810,24 @@ export function frameCuts(box: readonly [number, number, number, number]): Frame
  *  one: a wall piece's height is its top row minus its bottom row, so a lost bottom
  *  row is lost height; a floor piece's height is its top row read at its distance,
  *  and what a lost bottom row costs it is the DISTANCE — which `placeFloorObject`
- *  bounds by the framed wall instead, so its height is read, not assumed. */
+ *  bounds by the framed wall instead, so its height is read, not assumed. A CEILING
+ *  piece has no height to lose and loses its width to any edge (below). */
 export function cutAxes(
   box: readonly [number, number, number, number],
-  plane: 'floor' | 'wall',
+  plane: MeasuredPlane,
 ): { width: boolean; height: boolean } {
   const c = frameCuts(box);
+  // A ceiling piece is read on one row of a disc, its box's centre row, and ANY edge
+  // moves that row off the disc's centre: the width it takes there is neither the
+  // piece's nor a bound on it, and width is the one axis it has.
+  if (plane === 'ceiling') return { width: cutByFrame(box), height: false };
   return { width: c.left || c.right, height: c.top || (plane === 'wall' && c.bottom) };
+}
+
+/** Did the photo's edge cut this box on any side? */
+export function cutByFrame(box: readonly [number, number, number, number]): boolean {
+  const c = frameCuts(box);
+  return c.left || c.right || c.top || c.bottom;
 }
 
 /** One axis of a box the frame may have cut: its centre and length, taken to the
