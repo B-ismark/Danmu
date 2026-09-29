@@ -659,8 +659,12 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     // how often it is among the two chips the scan screen shows. Judged only on the
     // side each reading could speak for, it caught 309, 56 first and 122 of the two:
     // D8 puts the right word in the two chips far more often and first slightly less.
-    // D8 alone caught 439, 53 first and 171 of the two; the high side of a cut axis
-    // (§ 49.5) adds the wall words below, and the right word is first on 27 of them.
+    // D8 alone caught 439, 53 first and 171 of the two. The high side of a cut axis
+    // (§ 49.5) catches 93 more, all wall words, and with every repair held to what the
+    // photo saw under that repair's OWN anchor the right word is first on 83 and among
+    // the two on 208. Its first version asked every repair to fit what the wrong
+    // word's anchor read — a wall word reads a foot the frame cut at the wall's
+    // distance — and got 80 and 192.
     let caught = 0, first = 0, shown = 0;
     for (const { d, cal } of ROWS) {
       for (const category of CATEGORIES) {
@@ -673,7 +677,27 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         if (i === 0 || i === 1) shown++;
       }
     }
-    expect([caught, first, shown]).toEqual([532, 80, 192]);
+    expect([caught, first, shown]).toEqual([532, 83, 208]);
+  });
+
+  it("keeps the right word when only the wrong word's anchor read it too big (§ 49.5)", () => {
+    // A wardrobe 300 mm off its wall, the frame cutting its foot, called a TV. A TV is
+    // read on the wall, so what the photo saw is read at the wall's distance and is
+    // past the tallest TV: caught. Read as a wardrobe it stands nearer, and fits. The
+    // first reading is the TV's to be accused by, not the wardrobe's to be ruled out by
+    // — and ruling it out on that reading is what took it off this row's chips.
+    const level = calAt(0);
+    const box = boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.3, level);
+    const v = judgeLabel(det({ category: 'tv', slot: 'n', box }), { n: level }, ROOM);
+    if (v.status !== 'suspect') throw new Error(`expected a suspect verdict, got ${v.status}`);
+    expect([v.atLeast, v.measured.height]).toEqual([['height'], 2813]);
+    // 2813 is past the tallest wardrobe too, which is how it was ruled out; read as a
+    // wardrobe, where it stands, it is 2136 of a true 2000.
+    expect(dimRangeFor('wardrobe', 'wardrobe').max[2]).toBeLessThan(2813);
+    expect(v.candidates.slice(0, 2).map((c) => [c.category, c.detection.dimMM?.[2]])).toEqual([
+      ['curtain', 2784],
+      ['wardrobe', 2136],
+    ]);
   });
 
   it('catches most of the wrong words in the fixture', () => {
@@ -907,7 +931,7 @@ describe('judgeLabel — on the plane its placer read it on', () => {
     expect(v.failed).toEqual(['width', 'height']);
     expect(v.atLeast).toEqual(['height']);
     expect(v.measured).toEqual({ width: 1349, height: 1507 });
-    expect(measuredPhrase(v, 'm')).toBe('1.35 m wide and at least 1.51 m tall');
+    expect(measuredPhrase(v, 'm')).toBe('1.35 m wide and at least 1.50 m tall');
   });
 });
 
@@ -945,8 +969,13 @@ describe('judgeLabel — the high side of a cut axis (§ 49.5)', () => {
       atLeast: ['width'],
       cut: ['width'],
     });
-    expect(candidates[0].category).toBe('sofa');
-    expect(measuredPhrase(v, 'm')).toBe('at least 1.96 m wide and 0.91 m tall');
+    // Both chips: a chest freezer is this size too, and a size cannot tell them apart.
+    expect(candidates.slice(0, 2).map((c) => [c.category, c.detection.shape])).toEqual([
+      ['fridge', 'chest-freezer'],
+      ['sofa', 'sofa'],
+    ]);
+    // Rounded down: 1955 mm was seen, and "at least 1.96 m" is five more.
+    expect(measuredPhrase(v, 'm')).toBe('at least 1.95 m wide and 0.91 m tall');
   });
 
   it('leaves the sofa its own word: what it saw is inside a sofa', () => {
@@ -988,13 +1017,19 @@ describe('judgeLabel — the high side of a cut axis (§ 49.5)', () => {
     expect(judgeLabel(fan, cals, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
   });
 
-  it('offers only words the part it saw fits', () => {
-    // A fridge takes the height and is far too narrow for what was seen across.
-    expect(categoriesFittingSize(1955, 905, undefined, ['height'])).toContain('fridge');
-    const fits = categoriesFittingSize(1955, 905, undefined, ['height'], ['width']);
-    expect(fits).not.toContain('fridge');
-    expect(fits).toContain('sofa');
+  it("offers only words the part it saw fits, asked under each word's own anchor", () => {
+    // A fridge takes the height, so it is among the words to try. Stood upright, what
+    // the photo saw across is a metre past the widest fridge, so the fridge offered is
+    // the kind that is that wide: a chest freezer. Asked of the plain fridge's band
+    // before the kinds were measured, the whole word was ruled out.
+    const d = det({ label: 'chair', category: 'chair', slot: 'n', box: sofa });
+    const tried = categoriesFittingSize(1955, 905, 'chair', ['height']);
+    expect(tried).toEqual(expect.arrayContaining(['fridge', 'sofa']));
+    const offered = candidatesFor(d, tried, cals, deep);
+    expect(offered.find((c) => c.category === 'fridge')?.detection.shape).toBe('chest-freezer');
+    expect(offered.map((c) => c.category)).toContain('sofa');
   });
+
 
   it('still offers a typed word the part it saw rules out, last and not as unmeasured', () => {
     const d = det({ label: 'sofa', category: 'sofa', slot: 'n', box: sofa });
@@ -1003,6 +1038,15 @@ describe('judgeLabel — the high side of a cut axis (§ 49.5)', () => {
     const [chair] = candidatesFor(d, ['chair'], cals, deep, { requireFit: false });
     expect(chair.margin).toBeLessThan(0);
     expect(chair.unmeasured).toBeUndefined();
+    // A misfit sorts by its WORST axis, whichever kind of evidence that is. As an
+    // ottoman, what the photo saw across is past the widest ottoman, and the height it
+    // saw whole is further still out of an ottoman's band: the height sets the margin.
+    const [ottoman] = candidatesFor(d, ['ottoman'], cals, deep, { requireFit: false });
+    const r = dimRangeFor('ottoman', ottoman.detection.shape as Shape);
+    const [w, , h] = ottoman.detection.dimMM!;
+    expect([w > r.max[0], h > r.max[2]]).toEqual([true, true]);
+    expect(ottoman.margin).toBeCloseTo((r.max[2] - h) / (r.max[2] - r.min[2]), 9);
+    expect(ottoman.margin).toBeLessThan((r.max[0] - w) / (r.max[0] - r.min[0]));
     // With nothing measured under the typed word's anchor, the part it saw still speaks.
     const door = det({ label: 'door', category: 'door', slot: 'n', box: doorAt(2.5) });
     const [tv] = candidatesFor(door, ['tv'], { n: up20 }, deep, { requireFit: false });

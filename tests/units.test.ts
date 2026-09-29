@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { boundsToUnit, decimalsOf, fromMM, stepFor, steppedValue, toMM, formatDim, formatLength, precisionFor } from '@/lib/units';
+import { boundsToUnit, decimalsOf, fromMM, stepFor, steppedValue, toMM, formatDim, formatDimDown, formatLength, precisionFor } from '@/lib/units';
 import { dimRangeFor, roomAxisRange, roomAxisWithin, type RoomAxis } from '@/lib/dimension-ranges';
 import { CATEGORIES, SHAPES } from '@/lib/scene-spec';
 
@@ -175,6 +175,36 @@ describe('formatDim is the only safe way to put a converted length in a sentence
     // and displaying, which is what a caller has to remember to close.
     expect(String(fromMM(10, 'ft'))).toContain('0.032808');
     expect(formatDim(10, 'ft')).toBe('0.03');
+  });
+});
+
+describe('formatDimDown, for a number printed after "at least"', () => {
+  it('never prints more than was measured, and never a whole step less', () => {
+    // Rounding to nearest carries 1955 mm to "1.96 m", and "at least 1.96 m" claims
+    // five millimetres the photo never showed.
+    expect([formatDim(1955, 'm'), formatDimDown(1955, 'm')]).toEqual(['1.96', '1.95']);
+    // Exactly on a step stays there, though 1.15 × 100 is 114.99999999999999 in binary.
+    expect([formatDimDown(1150, 'm'), formatDimDown(290, 'm'), formatDimDown(304.8, 'ft'), formatDimDown(1960, 'm')]).toEqual([
+      '1.15',
+      '0.29',
+      '1.00',
+      '1.96',
+    ]);
+    const units = ['mm', 'cm', 'm', 'ft', 'in'] as const;
+    const samples = [0, 1, 10, 10.5, 15.24, 40, 290, 333, 1150, 1507, 1790, 1955, 12345];
+    let checked = 0;
+    for (const unit of units) {
+      const step = 10 ** -precisionFor(unit);
+      for (const mm of samples) {
+        const shown = Number(formatDimDown(mm, unit));
+        const v = fromMM(mm, unit);
+        expect(shown).toBeLessThanOrEqual(v + 1e-9);
+        expect(v - shown).toBeLessThan(step);
+        expect((formatDimDown(mm, unit).split('.')[1] ?? '').length).toBe(precisionFor(unit));
+        checked++;
+      }
+    }
+    expect(checked).toBe(65);
   });
 });
 

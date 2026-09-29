@@ -32,10 +32,13 @@ const lens = (deg: number, up = 0): CameraCal => ({
 });
 const every = (c: CameraCal): CalMap => ({ n: c, e: c, s: c, w: c });
 
+type Suspect = Extract<LabelVerdict, { status: 'suspect' }>;
 /** Suspect before § 49.5: an axis the judge could already see is out of band. A cut
- *  axis never was, so the axes that are ONLY in `atLeast` are the rule's own. */
-const heldBefore = (v: LabelVerdict) => v.status === 'suspect' && v.failed.some((a) => !(v.atLeast ?? []).includes(a));
-const newlyHeld = (v: LabelVerdict) => v.status === 'suspect' && !heldBefore(v);
+ *  axis never was, so the axes that are ONLY in `atLeast` are the rule's own. Checked
+ *  once against a copy of the judge from before the rule, on every row of the first
+ *  test: the same answer on each correct piece, under all seven cameras. */
+const heldBefore = (v: LabelVerdict): v is Suspect => v.status === 'suspect' && v.failed.some((a) => !(v.atLeast ?? []).includes(a));
+const newlyHeld = (v: LabelVerdict): v is Suspect => v.status === 'suspect' && !heldBefore(v);
 
 describe('the high side of a cut axis, across furnished rooms (§ 49.5)', () => {
   it('catches hundreds more wrong words for a handful of correct ones', { timeout: 120_000 }, () => {
@@ -54,6 +57,9 @@ describe('the high side of a cut axis, across furnished rooms (§ 49.5)', () => 
     for (const [trueDeg, readDeg, up, readUp] of CONFIGS) {
       const given = every(lens(readDeg, readUp));
       let before = 0, price = 0, judged = 0, caught = 0, gain = 0;
+      // Of the wrong words caught, how often the right word is the first chip, and one
+      // of the two the scan screen shows. A verdict is half of what the screen offers.
+      let first = 0, shown = 0;
       // A verdict that says both "at least" and "about" of one row: `measuredPhrase` can
       // print only one, and `readAxes` is what makes that a choice it never faces.
       let both = 0;
@@ -67,7 +73,7 @@ describe('the high side of a cut axis, across furnished rooms (§ 49.5)', () => 
             const right = judgeLabel({ label: p.label, conf: 0.9, box, category: p.category, shape: p.shape, slot } as Detection, given, ROOM);
             if (mixed(right)) both++;
             if (heldBefore(right)) before++;
-            if (newlyHeld(right) && right.status === 'suspect') {
+            if (newlyHeld(right)) {
               price++;
               prices.push(`${p.label} ${slot} ${right.failed} ${JSON.stringify(right.measured)}`);
             }
@@ -79,31 +85,35 @@ describe('the high side of a cut axis, across furnished rooms (§ 49.5)', () => 
               judged++;
               if (heldBefore(v)) caught++;
               else if (newlyHeld(v)) gain++;
+              else continue;
+              const i = v.candidates.findIndex((x) => x.category === p.category);
+              if (i === 0) first++;
+              if (i === 0 || i === 1) shown++;
             }
           }
         }
       }
       console.log(
         `§ 49.5 · ${trueDeg}° read ${readDeg}°, up ${up}° read ${readUp}°: correct flagged ${before} → +${price}; ` +
-          `wrong words ${caught} of ${judged} → +${gain}` +
+          `wrong words ${caught} of ${judged} → +${gain}, the right word first on ${first} and shown on ${shown}` +
           (prices.length ? `\n    ${prices.join('\n    ')}` : ''),
       );
-      out.push([before, price, judged, caught, gain]);
+      out.push([before, price, judged, caught, gain, first, shown]);
       expect(both).toBe(0);
     }
     // [correct pieces the judge already flagged, flagged newly, wrong words judged,
-    // caught already, caught newly]. The first column is the price the judge was already
-    // paying, and the second is what this rule adds to it — every one a fridge or a
-    // dining chair: an oblique side face widens the box past the front, and read as the
-    // part the photo saw, that is past the band.
+    // caught already, caught newly, the right word first, the right word shown]. The
+    // first column is the price the judge was already paying, and the second is what
+    // this rule adds to it — every one a fridge or a dining chair, read past its width's
+    // top on a lens or a tilt the app took wrongly, printed above on every run.
     expect(out).toEqual([
-      [97, 0, 19743, 15019, 1037],
-      [339, 1, 21354, 15389, 925],
-      [485, 5, 25002, 18250, 830],
-      [132, 0, 21433, 17086, 359],
-      [107, 0, 20613, 15843, 867],
-      [264, 0, 17828, 13170, 1260],
-      [327, 10, 20359, 15741, 851],
+      [97, 0, 19743, 15019, 1037, 7691, 9263],
+      [339, 1, 21354, 15389, 925, 3820, 4991],
+      [485, 5, 25002, 18250, 830, 3791, 5053],
+      [132, 0, 21433, 17086, 359, 7381, 9393],
+      [107, 0, 20613, 15843, 867, 7838, 9514],
+      [264, 0, 17828, 13170, 1260, 2476, 6601],
+      [327, 10, 20359, 15741, 851, 5979, 7318],
     ]);
   });
 
