@@ -191,12 +191,16 @@ export function cloudRows(parsed: readonly unknown[], sent: readonly CaptureSlot
     const label = slot && nameOf(d);
     if (!slot || label === undefined || !Array.isArray(d.box)) return [];
     const box = boxInPhoto(d.box);
+    // A `uid` is not the model's to give: the detect screen keeps a row's uid and
+    // it becomes the piece's id in the room, so two rows sent with the same one
+    // would be one piece to every move, turn and resize the user makes.
+    const { uid: _uid, ...row } = d;
     // Stamped here, and called only by `readCloudReply`, which only
     // `detectAcrossImages` calls, so nothing but the reply to a Gemini call can
     // claim its output came from Gemini. The slot is written back as its code:
     // the saved record carries it as a `__slot:x` suffix that reads back only
     // `[nesw]`, and `cals[d.slot]` is keyed the same way.
-    return box ? [{ ...d, label, slot, box, source: 'cloud' as const }] : [];
+    return box ? [{ ...row, label, slot, box, source: 'cloud' as const }] : [];
   });
 }
 

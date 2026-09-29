@@ -207,6 +207,14 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
     expect(rows.map((d, i) => toRecord(d, i, false, () => 'u').label)).toEqual(['sofa__slot:n', 'lamp__slot:n', '__slot:n']);
   });
 
+  it('leaves minting a row’s uid to the app', () => {
+    // The detect screen keeps a uid it is handed, and it becomes the piece's id in
+    // the room: two rows the model gave one uid were one piece to every edit.
+    const rows = cloudRows([row([0.1, 0.2, 0.3, 0.4], { uid: 'sofa-1' }), row([0.5, 0.2, 0.3, 0.4], { uid: 'sofa-1' })], ['n']);
+    expect(rows).toHaveLength(2);
+    for (const d of rows) expect('uid' in d).toBe(false);
+  });
+
   it('drops a row filed under a wall that was not photographed (§ 49.17)', () => {
     // Measured before this: a sofa filed under `s` when only `n` was sent came through
     // with no camera to be measured by, so it kept the model's 900 × 400 × 400 and its
