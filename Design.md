@@ -437,7 +437,11 @@ Furniture detection runs through a fallback chain, best-effort:
    list. A row with no name is named by its category, and the model's `uid` is
    left off, since the app's uid becomes the piece's id. That sentence said
    "constrains the slot it will accept back" while only the prompt asked
-   (§ 49.17).
+   (§ 49.17). A saved row carries its wall as a `__slot:` suffix on its label, and
+   `splitSlotSuffix` (`lib/detection-record.ts`) is its one reader: the record,
+   the room builder, the photo editor and a saved scene's names all call it, and it
+   reads the suffix with `slotOf`, so a room saved before that check, when a wall
+   was kept as the model wrote it, reads its walls back (§ 49.18).
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
    detector is available.
 
