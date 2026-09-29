@@ -3116,8 +3116,14 @@ save of the three numbers stored a new width against the old outline — and the
 when they go away, too, rather than 200 ms later into whichever room is open by then.
 The transaction asks for its commit as soon as its last put is made, on the one
 connection the room's load opened, because a reload does not wait for auto-commit. With
-the room in it, that put waits for a read, and a reload does not wait for that either: a
-typed room size is still lost on a reload, whole (`docs/what-is-still-open.md` § 47).
+the room in it, that put waits for a read, and a reload does not wait for that either, so
+a typed room size was lost on a reload, whole. When the page goes with a room edit waiting,
+`RoomSync` also writes that save to localStorage, which a leaving page can finish because it
+is synchronous (`lib/leave-note.ts`). The next open replays it through the same transaction,
+unless the room has been saved since, so the note never overwrites a newer save. It is
+cleared when its save lands, by the replay, and by the room list for a closed tab's
+(`roomStore.settleLeaveNotes`). A blind put of the room from memory would have been simpler,
+and would put back a rename made in another tab (`docs/what-is-still-open.md` § 47).
 
 ---
 

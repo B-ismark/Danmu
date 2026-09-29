@@ -16,8 +16,9 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { createStore, entries } from 'idb-keyval';
+import { createStore, entries, set } from 'idb-keyval';
 import { onPageLeave } from '@/lib/page-leave';
+import { leaveNoteKey, readLeaveNote, writeLeaveNote } from '@/lib/leave-note';
 import { footprintForLayout } from '@/lib/footprint';
 import { roomStore, type RoomData } from '@/lib/storage';
 import { useScene } from '@/lib/scene-store';
@@ -44,6 +45,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   setVisibility('visible');
+  localStorage.clear();
 });
 
 describe('onPageLeave', () => {
@@ -207,6 +209,104 @@ describe('RoomSync, when the page is left inside the debounce', () => {
     await save.mock.results[0].value;
     expect((await roomStore.loadRoom(ROOM_ID))!.width).toBeCloseTo(5.5, 5);
     expect(await roomStore.loadSceneParts(ROOM_ID)).toBeUndefined();
+  });
+});
+
+// The one save a reload still ended: with a room edit in it, the save reads the stored room
+// before it writes, and a reloading page is gone before the read comes back — a width typed
+// and reloaded at once came back as it was, 0 of 5 in Chromium. So the page also writes the
+// save down where it can finish, and the next open finishes it (`lib/leave-note.ts`).
+describe('RoomSync, when a reload ends the save it started', () => {
+  beforeEach(() => cleanup());
+  const note = () => readLeaveNote(ROOM_ID);
+  const width = (shell: unknown) => (shell as { width: number }).width;
+
+  /** A fresh page: nothing in memory but what storage gives back. */
+  async function reopen() {
+    useScene.setState({ parts: [], hydratedRoomId: null });
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, selection: [], selectedPartId: null });
+    render(<RoomSync />);
+    await waitFor(() => expect(useScene.getState().hydratedRoomId).toBe(ROOM_ID), { timeout: 2000 });
+  }
+
+  it('writes the room change down on the way out, at once, and clears it when the save lands', async () => {
+    await mount(<RoomSync />);
+    const save = vi.spyOn(roomStore, 'savePending');
+    const id = useScene.getState().parts[0].id;
+    useScene.getState().setRoom({ width: 5.5, depth: 5, height: 2.6 });
+    useStudio.getState().setPosition(id, [0.25, 0, 0.25]);
+    leave();
+    const written = note();
+    expect(width(written?.shell)).toBeCloseTo(5.5, 5);
+    expect(written?.transforms?.positions[id]).toEqual([0.25, 0, 0.25]);
+    await save.mock.results[0].value;
+    await waitFor(() => expect(note()).toBeNull());
+  });
+
+  it('writes nothing down for a save with no room change in it, which a reload lets finish', async () => {
+    await mount(<RoomSync />);
+    useStudio.getState().setPosition(useScene.getState().parts[0].id, [0.5, 0, 0.5]);
+    leave();
+    expect(localStorage.getItem(leaveNoteKey(ROOM_ID))).toBeNull();
+  });
+
+  it('writes nothing down when the room is left inside the app, which waits for the save', async () => {
+    const { unmount } = await mount(<RoomSync />);
+    useScene.getState().setRoom({ width: 5.5, depth: 5, height: 2.6 });
+    unmount();
+    expect(localStorage.getItem(leaveNoteKey(ROOM_ID))).toBeNull();
+  });
+
+  it('finishes it on the next open, when the reload ended it', async () => {
+    const { unmount } = await mount(<RoomSync />);
+    // The reload: the save starts, and never lands.
+    const save = vi.spyOn(roomStore, 'savePending').mockImplementation(() => new Promise<void>(() => {}));
+    const id = useScene.getState().parts[0].id;
+    useScene.getState().setRoom({ width: 5.5, depth: 5, height: 2.6 });
+    useStudio.getState().setPosition(id, [0.25, 0, 0.25]);
+    leave();
+    expect(save).toHaveBeenCalledTimes(1);
+    unmount();
+    save.mockRestore();
+    expect((await roomStore.loadRoom(ROOM_ID))!.width).toBe(6);
+
+    await reopen();
+    const saved = (await roomStore.loadRoom(ROOM_ID))!;
+    const xs = saved.footprint!.map(([x]) => x);
+    expect(saved.width).toBeCloseTo(5.5, 5);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(5.5, 5);
+    expect((await roomStore.loadTransforms(ROOM_ID))?.positions[id]).toEqual([0.25, 0, 0.25]);
+    // Reshaped, and built by the picker, so the scene the furniture's ids belong to is pinned.
+    expect(await roomStore.loadSceneParts(ROOM_ID)).toBeDefined();
+    // And the room on screen is the one finished, not the one read before it.
+    expect(useScene.getState().room.width).toBeCloseTo(5.5, 5);
+    expect(useStudio.getState().positions[id]).toEqual([0.25, 0, 0.25]);
+    expect(note()).toBeNull();
+  });
+
+  it('does not put it back over a room saved since, and forgets it', async () => {
+    await roomStore.destroyRoom(ROOM_ID);
+    await roomStore.saveRoom(room());
+    writeLeaveNote(ROOM_ID, {
+      at: Date.now() - 60_000,
+      shell: { ...room(), width: 5.5, footprint: footprintForLayout('rect', 5.5, 5) },
+    });
+    await reopen();
+    expect((await roomStore.loadRoom(ROOM_ID))!.width).toBe(6);
+    expect(useScene.getState().room.width).toBe(6);
+    expect(note()).toBeNull();
+  });
+
+  it('opens the room as stored, and keeps the note for the next open, when it cannot finish it', async () => {
+    await roomStore.destroyRoom(ROOM_ID);
+    await roomStore.saveRoom(room());
+    writeLeaveNote(ROOM_ID, { at: Date.now() + 60_000, shell: { ...room(), width: 5.5 } });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(roomStore, 'savePending').mockRejectedValueOnce(new Error('no'));
+    await reopen();
+    expect(error).toHaveBeenCalled();
+    expect(useScene.getState().room.width).toBe(6);
+    expect(width(note()?.shell)).toBeCloseTo(5.5, 5);
   });
 });
 
@@ -482,6 +582,59 @@ describe('the way-out save', () => {
     ).rejects.toMatchObject({ name: 'DataCloneError' });
     expect(await roomStore.loadTransforms(ROOM_ID)).toBeUndefined();
     expect((await roomStore.loadRoom(ROOM_ID))!.height).toBeCloseTo(2.6, 5);
+  });
+
+  // The replayed leave note's: a room saved after the leave was saved by the save that
+  // landed after all, or by something newer, and either way is not the note's to overwrite.
+  it.each([
+    ['saved after it', 5_001, false],
+    ['saved in the same millisecond', 5_000, true],
+    ['saved before it', 4_999, true],
+  ])('with a time to stand down at, writes nothing for a room %s, and all of it otherwise', async (_, touched, lands) => {
+    await roomStore.destroyRoom(ROOM_ID);
+    await roomStore.saveRoom(room());
+    await set(`room:${ROOM_ID}:touched`, touched, stored);
+    await roomStore.savePending(ROOM_ID, {
+      transforms: T,
+      room: { edit: (r) => ({ ...r, height: 2.9 }) },
+      unlessSavedSince: 5_000,
+    });
+    expect((await roomStore.loadRoom(ROOM_ID))!.height).toBeCloseTo(lands ? 2.9 : 2.6, 5);
+    expect((await roomStore.loadTransforms(ROOM_ID))?.positions.a).toEqual(lands ? [1, 0, 1] : undefined);
+  });
+
+  it('takes the room’s leave note with it when the room is deleted, either way, and no other', async () => {
+    for (const remove of [roomStore.destroyRoom, roomStore.clearRoom]) {
+      await roomStore.saveRoom(room());
+      writeLeaveNote(ROOM_ID, { at: 1, shell: room() });
+      writeLeaveNote('other-room', { at: 1, shell: room() });
+      await remove(ROOM_ID);
+      expect(readLeaveNote(ROOM_ID)).toBeNull();
+      expect(readLeaveNote('other-room')).not.toBeNull();
+    }
+  });
+
+  // A closed tab's note: its save landed, and the page that would have cleared it is gone.
+  it('has the room list clear each note that is done with, and keep each save still owed', async () => {
+    const at = 5_000;
+    const rooms = { saved: 5_001, 'same-ms': 5_000, owed: 4_999, gone: undefined } as const;
+    for (const [id, touched] of Object.entries(rooms)) {
+      await roomStore.destroyRoom(id);
+      if (touched !== undefined) {
+        await roomStore.saveRoom({ ...room(), id });
+        await set(`room:${id}:touched`, touched, stored);
+      }
+      writeLeaveNote(id, { at, shell: room() });
+    }
+    const settle = vi.spyOn(roomStore, 'settleLeaveNotes');
+    await roomStore.listRooms();
+    expect(settle).toHaveBeenCalledTimes(1);
+    await settle.mock.results[0].value;
+    expect(readLeaveNote('saved')).toBeNull();
+    expect(readLeaveNote('gone')).toBeNull();
+    expect(readLeaveNote('same-ms')).not.toBeNull();
+    expect(readLeaveNote('owed')).not.toBeNull();
+    for (const id of Object.keys(rooms)) await roomStore.destroyRoom(id);
   });
 
   it('writes the rest, and no room, when there is no stored room', async () => {

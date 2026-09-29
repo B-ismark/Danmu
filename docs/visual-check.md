@@ -1836,7 +1836,8 @@ room. Then start **without typing**:
   button landing somewhere other than under the sentence, or smaller than a fingertip on a
   phone.
 - The note back after a reload once cleared, or on a room whose size was typed on the
-  picker. (A reload in the half-second after typing is § 47 in the open list, not this.)
+  picker. Since 2026-09-29 that includes a reload in the half-second after typing, which
+  § 47's leave note now keeps, so the note coming back then is a finding too.
 - A ≈ on a measured room, or missing from a rough room's wall lengths.
 - The preview's dimension labels unreadable on a phone or oversized on a desk.
 - In the studio's glass rail the refused rim is the border alone, since the rail owns the
@@ -1943,7 +1944,12 @@ half-saved (§ 47 in `docs/what-is-still-open.md`). The save runs on `visibility
 event a phone sends when the browser goes to the background, and the unit test covers that
 event — not the phone. Nothing here says how long a phone lets a hidden page run, so whether
 the one transaction gets to commit before the browser is frozen or killed is exactly what is
-not known. A typed room size on a reload is a known loss (§ 47), not a finding.
+not known. **Since 2026-09-29 that matters less for a typed room size:** the page also
+writes that save to localStorage the moment it is hidden, synchronously, and the next open
+finishes it (`lib/leave-note.ts`). So a width typed and the browser killed should come back
+even if the transaction never committed. A duplicated piece has no such note, because a save
+with no room edit in it commits at once. Also try **Safari: type a width and reload at
+once**. Desktop Chromium keeps it 5 of 5 now, and WebKit is unmeasured.
 
 ---
 
