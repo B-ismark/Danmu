@@ -14,6 +14,7 @@
 
 import { Children, Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Detection } from '@/lib/detection';
+import { cleanLabelOf } from '@/lib/detection-record';
 import { Icon } from '@/components/ui/Icon';
 import { BOX_BORDER_PX, TAG_HEIGHT_PX, TAG_PAD_Y_PX, TAG_X_PX, boxCss, tagCss, tagSpot } from '@/lib/photo-tag';
 
@@ -212,7 +213,7 @@ export function PhotoEditor({
 function look({ d, locked }: PhotoEditorItem) {
   return {
     fill: locked ? 'var(--locked)' : 'var(--accent-ink)',
-    cleanLabel: d.label.replace(/__slot:[nesw]$/, ''),
+    cleanLabel: cleanLabelOf(d),
   };
 }
 

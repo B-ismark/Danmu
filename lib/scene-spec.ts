@@ -26,7 +26,7 @@ import {
   verticalExtent,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
-import { detectionPartIds } from './detection-record';
+import { detectionPartIds, splitSlotSuffix } from './detection-record';
 import { clampDims, dimRangeFor } from './dimension-ranges';
 import {
   footArea,
@@ -2464,9 +2464,8 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   const ids = detectionPartIds(dets);
 
   for (const [i, d] of dets.entries()) {
-    const slot = (d.label as string).match(/__slot:([nesw])$/)?.[1] as CaptureSlot | undefined;
+    const { name: cleanLabel, slot } = splitSlotSuffix(d.label as string);
     const realSlot: CaptureSlot = slot ?? 'n';
-    const cleanLabel = (d.label as string).replace(/__slot:[nesw]$/, '');
     const cat = ((d as { category?: Category }).category ?? 'other') as Category;
     const cfg = CATEGORY_DEFAULTS[cat] ?? CATEGORY_DEFAULTS.other;
     // Prefer the detection's own stable key. The positional `${cat}-${n}` is an

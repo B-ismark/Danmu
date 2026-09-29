@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { buildDetectPrompt, cloudRequest, cloudRows, readCloudReply, slotOf } from '@/lib/detect-prompt';
+import { buildDetectPrompt, cloudRequest, cloudRows, readCloudReply } from '@/lib/detect-prompt';
+import { slotOf } from '@/lib/slot-names';
 import { detectionBox } from '@/lib/local-detect';
 import { fromRecord, toRecord } from '@/lib/detection-record';
 import { refineDetections } from '@/lib/detect-refine';

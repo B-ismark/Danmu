@@ -19,22 +19,44 @@
 // The slot is smuggled through `label` as a `__slot:x` suffix rather than stored as
 // its own field. That predates this file and is left alone: changing it is a
 // persisted-schema change for cosmetics, and `RoomData.version` exists for the
-// first change that actually needs it.
+// first change that actually needs it. What is NOT left alone is who reads it:
+// `splitSlotSuffix` is the one reader, and the room builder and the photo editor
+// call it rather than carry their own pattern — they used to, four of them, each
+// with its own `[nesw]` (§ 49.18).
 
 import type { DetectSource } from './detect-confidence';
 import { clipToFrame } from './photo-geometry';
+import { slotOf } from './slot-names';
 import type { Detection } from './detection';
 import type { CaptureSlot, RoomData } from './storage';
 
 export type SavedDetection = NonNullable<RoomData['detectedObjects']>[number];
 
-const SLOT_SUFFIX = /__slot:[nesw]$/;
+const SLOT_SUFFIX = '__slot:';
+
+/** A saved label split into the piece's name and the wall its suffix names —
+ *  `undefined` when the suffix names none, which each caller answers for itself.
+ *  Everything from the FIRST suffix on is stripped, whatever it says: the suffix is
+ *  this file's encoding, nobody types it, and what showed when it was left on was
+ *  the encoding itself.
+ *
+ *  Read with `slotOf`, so a suffix in any form the scan reader accepts is that wall.
+ *  Until § 49.17 a cloud row's slot was saved as the model wrote it, and this read
+ *  back only `[nesw]`: `Sofa__slot:south` came back on the NORTH wall, still
+ *  called `Sofa__slot:south`. Only the FIRST suffix is read, because saving that
+ *  row again wrote a second over it — `Sofa__slot:south__slot:n` — and the second
+ *  is the old reader's default, not anything anyone said about the sofa. */
+export function splitSlotSuffix(label: string): { name: string; slot: CaptureSlot | undefined } {
+  const at = label.indexOf(SLOT_SUFFIX);
+  if (at < 0) return { name: label, slot: undefined };
+  return { name: label.slice(0, at), slot: slotOf(label.slice(at + SLOT_SUFFIX.length).split(SLOT_SUFFIX)[0]) };
+}
 
 /** The label without the slot suffix. Exported because the review screen shows it
  *  and the record writes it, and those two disagreeing is how a room full of
  *  furniture came to be named "sofa__slot:n". */
 export function cleanLabelOf(d: Detection): string {
-  return d.label.replace(SLOT_SUFFIX, '');
+  return splitSlotSuffix(d.label).name;
 }
 
 /** Detection → record. `mintUid` supplies a key for a detection that has none;
@@ -45,7 +67,7 @@ export function toRecord(d: Detection, index: number, locked: boolean, mintUid: 
   return {
     id: index,
     uid: d.uid ?? mintUid(),
-    label: `${cleanLabelOf(d)}__slot:${d.slot}`,
+    label: `${cleanLabelOf(d)}${SLOT_SUFFIX}${d.slot}`,
     conf: d.conf,
     source: d.source,
     locked,
@@ -64,9 +86,10 @@ export function toRecord(d: Detection, index: number, locked: boolean, mintUid: 
  *  checks it by round-trip rather than by field list, so a field added to one side
  *  and not the other fails. */
 export function fromRecord(r: SavedDetection): Detection {
+  const { name, slot } = splitSlotSuffix(r.label);
   return {
     uid: r.uid,
-    label: r.label.replace(SLOT_SUFFIX, ''),
+    label: name,
     conf: r.conf,
     // Widened to `string` in the record and narrowed back here, the same way
     // `category` is. An unrecognised value reads as undefined rather than being
@@ -82,7 +105,7 @@ export function fromRecord(r: SavedDetection): Detection {
     // kept, and dropping one would renumber the rest.
     box: clipToFrame(r.box) ?? r.box,
     category: (r.category ?? 'other') as Detection['category'],
-    slot: ((r.label.match(/__slot:([nesw])$/) ?? [])[1] ?? 'n') as CaptureSlot,
+    slot: slot ?? 'n',
     dimMM: r.dimMM,
     position: r.position,
     yaw: r.yaw,
