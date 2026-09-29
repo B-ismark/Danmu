@@ -47,7 +47,7 @@
 // hour as its subject is decoration until something shows it can fail.
 
 import { describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { stripComments } from './helpers/source';
@@ -55,25 +55,38 @@ import { stripComments } from './helpers/source';
 const ROOT = join(__dirname, '..');
 const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8');
 
-/** The `Permissions-Policy` header as this config serves it for every route, parsed into
- *  feature → allowlist. Asking the config what it emits, not what it says. */
-async function servedPolicy(): Promise<Record<string, string>> {
+type HeaderRule = {
+  source: string;
+  has?: unknown[];
+  missing?: unknown[];
+  headers: Array<{ key: string; value: string }>;
+};
+
+/** Every `headers()` rule this config emits. Asking the config what it serves, not what
+ *  its source text says. */
+async function headerRules(): Promise<HeaderRule[]> {
   // The specifier is a variable on purpose. `next.config.mjs` ships no type
   // declarations, so a literal import is a TS7016 error; a computed one resolves at
   // runtime and is typed by the cast below, which is the contract this test relies on.
   // Suppressing TS7016 with a directive would work too and say less about why.
   const spec = '../next.config.mjs';
   const { default: nextConfig } = (await import(spec)) as {
-    default: {
-      headers: () => Promise<
-        Array<{ source: string; headers: Array<{ key: string; value: string }> }>
-      >;
-    };
+    default: { headers: () => Promise<HeaderRule[]> };
   };
-  const routes = await nextConfig.headers();
+  return nextConfig.headers();
+}
+
+/** Header names are case-insensitive on the wire, so they are here. */
+const isPolicy = (h: { key: string }) => h.key.toLowerCase() === 'permissions-policy';
+
+/** The `Permissions-Policy` header as this config serves it for every route, parsed into
+ *  feature → allowlist. Where one rule sets the header twice, Next's `resolve-routes`
+ *  assigns each entry in turn and the LAST is sent, so the last is the one read. */
+async function servedPolicy(): Promise<Record<string, string>> {
+  const routes = await headerRules();
   const all = routes.find((r) => r.source === '/:path*');
   if (!all) throw new Error('no catch-all header route in next.config.mjs');
-  const header = all.headers.find((h) => h.key === 'Permissions-Policy');
+  const header = all.headers.filter(isPolicy).at(-1);
   if (!header) throw new Error('no Permissions-Policy in the catch-all route');
 
   const out: Record<string, string> = {};
@@ -280,6 +293,40 @@ describe('Permissions-Policy is paired with its consumers', () => {
       );
       // …and the two lists must not contradict each other.
       expect(granted.has(f), `${f} is in MUST_BE_DENIED and in FEATURES`).toBe(false);
+    }
+  });
+
+  it('serves the policy once, from the catch-all alone, because a policy belongs to the page', async () => {
+    // The tempting fix for "the sensor trio is granted on every route when only the
+    // capture screen reads it" is to scope the grant to `/onboarding/capture`. It was
+    // built and measured (what-is-still-open § 45): the split headers were served exactly
+    // as written, and in Chromium the capture screen's document still held
+    // `allowsFeature('accelerometer') === false` whenever it was reached from inside the
+    // app. A Permissions-Policy is fixed when the DOCUMENT is created, and every way into
+    // capture is a `<Link>` or a `router.push` — the same document, carrying whatever the
+    // first page loaded said.
+    //
+    // What this test adds to the pairing tests above, which read the catch-all only: the
+    // split that REPLACES `/:path*` already fails them (`servedPolicy` finds no catch-all).
+    // What they cannot see is the policy arriving from somewhere else as well — a second
+    // rule beside an unchanged catch-all, a second entry inside it (the last one is what
+    // is sent), a `has` / `missing` condition that serves the catch-all to some documents
+    // only, or a middleware setting the header on the response.
+    const carrying = (await headerRules()).flatMap((r) =>
+      r.headers.filter(isPolicy).map(() => ({ source: r.source, has: r.has, missing: r.missing })),
+    );
+    expect(carrying).toEqual([{ source: '/:path*', has: undefined, missing: undefined }]);
+
+    // Next 15 reads `middleware`, 16 renames it `proxy`; either may sit at the root or in
+    // `src/`. None exists today, so this costs nothing until one does.
+    const handlers = ['', 'src/']
+      .flatMap((dir) => ['middleware', 'proxy'].map((n) => `${dir}${n}`))
+      .flatMap((base) => ['ts', 'js', 'mjs'].map((ext) => `${base}.${ext}`))
+      .filter((rel) => existsSync(join(ROOT, rel)));
+    for (const rel of handlers) {
+      expect(stripComments(read(rel)), `${rel} must not set the policy per route`).not.toMatch(
+        /permissions-policy/i,
+      );
     }
   });
 

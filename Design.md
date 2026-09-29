@@ -1807,6 +1807,13 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     `tests/permissions-policy.test.ts` now reads the header the config actually
     serves, derives what it should be from the consumers, and fails in both
     directions — which is what the comment claiming to be the guard could not do.
+    **And the grant is site-wide on purpose, which is the third lesson.** Scoping
+    it to the capture route, its only reader, was built and measured
+    (`docs/what-is-still-open.md` § 45): a permissions policy is fixed when the
+    document is created, every way into capture keeps the document it started in,
+    and in Chromium the capture screen reached from the workspace or the shape
+    picker was denied all three. The same test fails if the policy is served from
+    anywhere but the catch-all.
 
   **What survived, and where it went.** `lib/solar.ts` keeps `sunDirection` and
   `daylightKelvin` (68 lines, down from 229) — the axis convention and the colour

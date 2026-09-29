@@ -646,7 +646,13 @@ backend, no account. The 3D studio *is* the product.
    The WebKit half rests on a secondary source that could not be fetched to quote,
    so it is written down as the reason for the SAFE choice rather than as a verified
    fact — the asymmetry decides it either way, and `docs/visual-check.md` carries
-   the item a real phone closes. The guard is
+   the item a real phone closes. **And they are granted site-wide on purpose**,
+   because narrowing them to the route that reads them is a third way to kill the
+   same read: a policy is fixed when the DOCUMENT is created and every way into
+   capture is a `<Link>` or `router.push`, so in Chromium a grant scoped to that
+   route reached only someone who typed its address (built and measured,
+   `docs/what-is-still-open.md` § 45, which also writes down what the wide grant
+   costs). The guard is
    `tests/permissions-policy.test.ts`, which reads the header the config actually
    SERVES, derives what it should be from the consumers, and fails in both
    directions — the old comment in `next.config.mjs` claimed to *be* the guard, and

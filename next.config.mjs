@@ -63,7 +63,7 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'no-referrer' },
-  // The app asks for FOUR powerful features and refuses the rest. Note that
+  // The app asks for FIVE powerful features and refuses the rest. Note that
   // `=(self)` is NOT the same as denying it — it is what lets the feature work on
   // this origin while still blocking it in anything this page embeds.
   //   · camera — the capture screen's live viewfinder.
@@ -71,6 +71,7 @@ const securityHeaders = [
   //     the shutter, read by `lib/device-tilt.ts` for the capture screen. The trio
   //     is a set because the `deviceorientation` event is gated on all of it; see
   //     the note below, which is the whole reason this block has a history.
+  //   · clipboard-write — the Room panel's Copy.
   // That is the list. It does not send anything anywhere; it writes to local
   // storage only. `geolocation` in particular stays DENIED: the sun mood that read
   // a latitude was collapsed to fixed presets and nothing consumes it, and a
@@ -111,6 +112,19 @@ const securityHeaders = [
   // Blink will not use, for a feature that genuinely has a consumer; denying it
   // risks a silently dead tilt read on every iPhone. `docs/visual-check.md` carries
   // the item that closes it, because only a real phone can.
+  //
+  // THIRD, and the one that looks most careful: granting the trio on the capture
+  // route alone, since it is the only reader. That was built and measured
+  // (`docs/what-is-still-open.md` § 45, `scripts/sensor-policy-probe.mjs`), and in
+  // Chromium it took the grant away from the capture screen. A permissions policy
+  // is fixed when the DOCUMENT is created, and every way into capture is a `<Link>`
+  // or `router.push`, which keeps the document it started in — so the route's own
+  // header only ever reached someone who typed its address. Arriving from the
+  // workspace or the shape picker, the document answered `allowsFeature` false for
+  // all three, and Blink dispatches `deviceorientation` only when the first two are
+  // allowed. **A policy belongs to the page, not the route**, and in this app the
+  // page is whichever one the user opened first. So the grant stays on the
+  // catch-all, and a test fails if it ever moves. What that costs is in § 45 too.
   //
   // The old comment here ended "`tests/toolchain.test.ts` has no opinion on a
   // policy that is merely too generous, which is why this comment is the guard."
