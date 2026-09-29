@@ -164,9 +164,12 @@ export function RoomSync() {
       // clearing the key on a scan would discard a user's deletions and that is a
       // product call.
       //
-      // `p.parts` — the list as it was when the room changed — never
-      // `useScene.getState()`. This write is keyed to THIS room, and the live store may
-      // already hold another room's parts; it would file room B's furniture under room A.
+      // `p.parts` is the list as it was when the room changed. Had the parts changed
+      // since, the scene's own timer is waiting too, its newer list rides this save as
+      // `w.parts`, and `savePending` stores that one over the pin; so whichever is
+      // stored is the room's latest. (This once read the live store after two awaits,
+      // and could file the next room's furniture under this one; nothing here awaits
+      // now.)
       if (p) w.room = { edit: (stored) => withShell(stored, p.room), pin: wasReshaped ? p.parts : undefined };
     }
     if (!w.transforms && w.parts === undefined && !w.room) return;

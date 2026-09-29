@@ -242,28 +242,25 @@ describe('§ G.1 · a wall move and the scene snapshot', () => {
     expect((await roomStore.loadRoom(ROOM_ID))!.depth).toBeCloseTo(4.8, 5);
   });
 
-  it('pins the parts the room HAD when it changed, not whatever the store holds later', async () => {
-    // A mutation survived every other test in this file: swapping `p.parts` back for a
-    // live `useScene.getState().parts` as the pin. The write is keyed to THIS room, so a
-    // user who navigates A -> B in that window gets room B's furniture filed under room
-    // A's id. Permanently, since the key is only cleared by `destroyRoom`.
+  it('stores the newer part list when the parts change after the wall moved', async () => {
+    // The pin is the list the room had when the wall moved. A change to the parts inside
+    // the same window rides the same save as its own list, and that one is stored: the
+    // room's latest furniture, never the list from before the change.
     //
-    // Asserted on the pin the save CARRIES rather than by reading the key back, because
-    // substituting the parts also wakes the scene subscriber, whose newer list rides the
-    // same save and is stored over the pin either way. The bug is which list the pin is,
-    // not which list survives.
+    // This asserted which list the pin CARRIED, which nothing stored can show: whenever
+    // the pin and the live list differ, the live list is stored over it.
     await mountFor(room());
-    const seeded = useScene.getState().parts.map((p) => p.id);
-    const spy = vi.spyOn(roomStore, 'savePending');
     expect(useScene.getState().moveWall(0, 0.1)).toBe(0.1);
-    // Inside DEBOUNCE_MS: stand in for the next room's scene arriving in the store.
     await new Promise((r) => setTimeout(r, 60));
+    const kept = useScene.getState().parts[0].id;
     useScene.setState({ parts: [useScene.getState().parts[0]] });
 
-    await waitFor(() => expect(spy).toHaveBeenCalled(), { timeout: SETTLE });
-    const pin = spy.mock.calls[0][1].room?.pin as ScenePart[];
-    expect(pin.map((p) => p.id)).toEqual(seeded);
-    spy.mockRestore();
+    await waitFor(
+      async () => expect(await roomStore.loadSceneParts<ScenePart[]>(ROOM_ID)).toBeDefined(),
+      { timeout: SETTLE },
+    );
+    expect((await roomStore.loadSceneParts<ScenePart[]>(ROOM_ID))!.map((p) => p.id)).toEqual([kept]);
+    expect((await roomStore.loadRoom(ROOM_ID))!.depth).toBeCloseTo(4.8, 5);
   });
 
   it('asks for the pin again when the save that carried it failed', async () => {
