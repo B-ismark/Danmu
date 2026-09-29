@@ -282,9 +282,9 @@ export type Transforms = {
   parentIds?: Record<string, string>;
 };
 
-/** What `roomStore.saveOnLeave` writes: whichever of the room's three saves were still
+/** What `roomStore.savePending` writes: whichever of `RoomSync`'s three saves were still
  *  waiting. The scene is stored opaque, for the reason `saveSceneParts`'s is. */
-export type LeaveWrite = {
+export type PendingWrite = {
   transforms?: Transforms;
   parts?: unknown;
   room?: { edit: (room: RoomData) => RoomData; pin?: unknown };
@@ -500,12 +500,16 @@ export const roomStore = {
   async loadSceneParts<T>(roomId: string): Promise<T | undefined> {
     return get<T>(k(roomId, 'scene'));
   },
-  /** Everything still waiting to be saved when the page goes away, written in ONE
-   *  transaction, so it lands whole or not at all (`lib/page-leave.ts`).
+  /** Everything `RoomSync` has waiting to be saved, written in ONE transaction, so it
+   *  lands whole or not at all — when a debounce comes due, when the room closes, and
+   *  when the page goes away (`lib/page-leave.ts`).
    *
    *  Written as separate saves, the leave kept whichever one a closing page let finish: a
    *  typed width came back on 4 of 5 closed tabs without the outline and the scene that
-   *  went with it. One transaction cannot land in part.
+   *  went with it. The ordinary save had the same seam, only wider — the outline, then
+   *  whether a photo was waiting, then the scene, each its own write, with the furniture
+   *  a wall carried saved on another timer — so a reload anywhere between them brought a
+   *  room back in part. One transaction cannot land in part.
    *
    *  It asks for its commit as soon as its last put is made, because a page being
    *  reloaded does not wait for one — measured in Chromium, a piece duplicated and
@@ -518,7 +522,7 @@ export const roomStore = {
    *  no room, and the rest is written as the separate saves would have written it. The
    *  pin is `RoomSync`'s: the part list to store as the scene when the edit reshaped a
    *  room the picker built — see there. */
-  async saveOnLeave(roomId: string, w: LeaveWrite): Promise<void> {
+  async savePending(roomId: string, w: PendingWrite): Promise<void> {
     try {
       await keyval('readwrite', (store) => new Promise<void>((resolve, reject) => {
         const tx = store.transaction;

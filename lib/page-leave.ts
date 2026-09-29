@@ -21,7 +21,7 @@
 // second event finds nothing, which is why a flush must forget what it wrote. And one
 // flush that throws does not stop the rest: each is its own save.
 //
-// Starting a write is not finishing it, and what a leave saves is `roomStore.saveOnLeave`,
+// Starting a write is not finishing it, and what a leave saves is `roomStore.savePending`,
 // one transaction for everything `RoomSync` still had waiting, so it lands whole or not at
 // all. Measured in Chromium, a change made and left at once, five of each: a duplicated
 // piece kept on a reload 5 of 5 and a typed width on a closed tab 5 of 5, with no room

@@ -123,7 +123,7 @@ describe('RoomSync, when the page is left inside the debounce', () => {
 
   it('starts one save of the transforms at once, and only once', async () => {
     await mount(<RoomSync />);
-    const save = vi.spyOn(roomStore, 'saveOnLeave');
+    const save = vi.spyOn(roomStore, 'savePending');
     const id = useScene.getState().parts[0].id;
     useStudio.getState().setPosition(id, [0.5, 0, 0.5]);
     expect(save).not.toHaveBeenCalled();
@@ -141,7 +141,7 @@ describe('RoomSync, when the page is left inside the debounce', () => {
 
   it('starts the scene write at once', async () => {
     await mount(<RoomSync />);
-    const save = vi.spyOn(roomStore, 'saveOnLeave');
+    const save = vi.spyOn(roomStore, 'savePending');
     const parts = useScene.getState().parts;
     useScene.getState().setParts(parts.slice(1));
     leave();
@@ -154,7 +154,7 @@ describe('RoomSync, when the page is left inside the debounce', () => {
 
   it('starts the room write at once', async () => {
     await mount(<RoomSync />);
-    const save = vi.spyOn(roomStore, 'saveOnLeave');
+    const save = vi.spyOn(roomStore, 'savePending');
     useScene.getState().setRoom({ width: 6, depth: 5, height: 2.9 });
     leave();
     expect(save).toHaveBeenCalledTimes(1);
@@ -164,7 +164,7 @@ describe('RoomSync, when the page is left inside the debounce', () => {
   it('writes nothing when nothing is pending', async () => {
     await mount(<RoomSync />);
     const saves = [
-      vi.spyOn(roomStore, 'saveOnLeave'),
+      vi.spyOn(roomStore, 'savePending'),
       vi.spyOn(roomStore, 'saveTransforms'),
       vi.spyOn(roomStore, 'saveSceneParts'),
       vi.spyOn(roomStore, 'editRoom'),
@@ -176,7 +176,7 @@ describe('RoomSync, when the page is left inside the debounce', () => {
   // The case three separate saves got wrong: a wall moved, and the furniture it carried.
   it('saves a new outline and the furniture it moved as one', async () => {
     await mount(<RoomSync />);
-    const save = vi.spyOn(roomStore, 'saveOnLeave');
+    const save = vi.spyOn(roomStore, 'savePending');
     const id = useScene.getState().parts[0].id;
     expect(await roomStore.loadSceneParts(ROOM_ID)).toBeUndefined();
     useScene.getState().setRoom({ width: 5.5, depth: 5, height: 2.6 });
@@ -198,12 +198,36 @@ describe('RoomSync, when the page is left inside the debounce', () => {
 
   it('pins no scene for a room with a photo waiting to be scanned', async () => {
     await mount(<RoomSync />, { photographed: true });
-    const save = vi.spyOn(roomStore, 'saveOnLeave');
+    const save = vi.spyOn(roomStore, 'savePending');
     useScene.getState().setRoom({ width: 5.5, depth: 5, height: 2.6 });
     leave();
     await save.mock.results[0].value;
     expect((await roomStore.loadRoom(ROOM_ID))!.width).toBeCloseTo(5.5, 5);
     expect(await roomStore.loadSceneParts(ROOM_ID)).toBeUndefined();
+  });
+});
+
+describe('RoomSync, when nothing leaves', () => {
+  // The ordinary save had the leave's seam, only wider: the outline went on the room's
+  // timer and the furniture the wall carried on the transforms' timer, so a reload
+  // between the two brought back the new outline with the pieces where they had stood.
+  // The stored room is read throughout, as in the size boxes' test below.
+  it('saves a new outline and the furniture it moved as one, whichever timer comes due first', async () => {
+    await mount(<RoomSync />);
+    const id = useScene.getState().parts[0].id;
+    useScene.getState().setRoom({ width: 5.5, depth: 5, height: 2.6 });
+    await wait(100);
+    // Its timer is due 100 ms after the room's.
+    useStudio.getState().setPosition(id, [0.25, 0, 0.25]);
+    const seen: [boolean, boolean][] = [];
+    for (let t = 0; t < 800; t += 25) {
+      await wait(25);
+      const xs = (await roomStore.loadRoom(ROOM_ID))!.footprint!.map(([x]) => x);
+      const moved = (await roomStore.loadTransforms(ROOM_ID))?.positions[id] !== undefined;
+      seen.push([Math.abs(Math.max(...xs) - Math.min(...xs) - 5.5) < 1e-6, moved]);
+    }
+    for (const [outline, moved] of seen) expect(outline).toBe(moved);
+    expect(seen.at(-1)).toEqual([true, true]);
   });
 });
 
@@ -215,7 +239,7 @@ describe('the size boxes', () => {
         <RoomDimsEditor />
       </>,
     );
-    const save = vi.spyOn(roomStore, 'saveOnLeave');
+    const save = vi.spyOn(roomStore, 'savePending');
     const edit = vi.spyOn(roomStore, 'editRoom');
     fireEvent.change(screen.getByLabelText(/^Width/), { target: { value: '4.5' } });
     expect(useScene.getState().room.width).toBe(6);
@@ -290,7 +314,7 @@ describe('the Exact size fields', () => {
     );
     const part = useScene.getState().parts.find((p) => p.category === 'sofa') ?? useScene.getState().parts[0];
     act(() => useStudio.setState({ selection: [part.id], selectedPartId: part.id }));
-    const save = vi.spyOn(roomStore, 'saveOnLeave');
+    const save = vi.spyOn(roomStore, 'savePending');
     const width = screen.getAllByRole('spinbutton')[0];
     const typed = (Number((width as HTMLInputElement).value) * 0.9).toFixed(2);
     fireEvent.change(width, { target: { value: typed } });
@@ -349,7 +373,7 @@ describe('the way-out save', () => {
     await roomStore.destroyRoom(ROOM_ID);
     await roomStore.saveRoom(room());
     const { puts, commits } = watchTransactions();
-    await roomStore.saveOnLeave(ROOM_ID, {
+    await roomStore.savePending(ROOM_ID, {
       transforms: T,
       parts: [],
       room: { edit: (r) => ({ ...r, height: 2.9 }) },
@@ -367,7 +391,7 @@ describe('the way-out save', () => {
     await roomStore.destroyRoom(ROOM_ID);
     await roomStore.saveRoom(room());
     await expect(
-      roomStore.saveOnLeave(ROOM_ID, {
+      roomStore.savePending(ROOM_ID, {
         transforms: T,
         room: {
           edit: () => {
@@ -382,7 +406,7 @@ describe('the way-out save', () => {
 
   it('writes the rest, and no room, when there is no stored room', async () => {
     await roomStore.destroyRoom(ROOM_ID);
-    await roomStore.saveOnLeave(ROOM_ID, { transforms: T, room: { edit: (r) => r, pin: [] } });
+    await roomStore.savePending(ROOM_ID, { transforms: T, room: { edit: (r) => r, pin: [] } });
     expect(await roomStore.loadRoom(ROOM_ID)).toBeUndefined();
     expect((await roomStore.loadTransforms(ROOM_ID))?.positions.a).toEqual([1, 0, 1]);
     expect(await roomStore.loadSceneParts(ROOM_ID)).toBeUndefined();
@@ -391,14 +415,14 @@ describe('the way-out save', () => {
   it('pins a newer part list over the pin, and never a detected room', async () => {
     await roomStore.destroyRoom(ROOM_ID);
     await roomStore.saveRoom(room());
-    await roomStore.saveOnLeave(ROOM_ID, { parts: ['newer'], room: { edit: (r) => r, pin: ['older'] } });
+    await roomStore.savePending(ROOM_ID, { parts: ['newer'], room: { edit: (r) => r, pin: ['older'] } });
     expect(await roomStore.loadSceneParts(ROOM_ID)).toEqual(['newer']);
     await roomStore.destroyRoom(ROOM_ID);
     await roomStore.saveRoom({
       ...room(),
       detectedObjects: [{ id: 0, label: 'sofa', conf: 0.9, locked: true, box: [0, 0, 1, 1] }],
     });
-    await roomStore.saveOnLeave(ROOM_ID, { room: { edit: (r) => r, pin: ['older'] } });
+    await roomStore.savePending(ROOM_ID, { room: { edit: (r) => r, pin: ['older'] } });
     expect(await roomStore.loadSceneParts(ROOM_ID)).toBeUndefined();
   });
 });
