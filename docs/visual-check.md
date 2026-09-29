@@ -1863,7 +1863,7 @@ the photo swipe, so that check can fail. A real phone is the unlooked-at half.
 
 ---
 
-### A change made just before the phone backgrounds the browser — this branch, NOT MEASURED
+### A change made just before the phone backgrounds the browser — merged to `main` in `31bac6a` (PR #163), NOT MEASURED
 
 **Where to click.** On a real phone, open a room in the studio. Duplicate a piece, or type a
 new width in the Room section, and at once switch to another app (home gesture or app
