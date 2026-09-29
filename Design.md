@@ -444,7 +444,10 @@ Furniture detection runs through a fallback chain, best-effort:
    was kept as the model wrote it, shows its true walls on the scan screen and
    clean names everywhere. The room builder places such a row where it always
    stood (`placedSlot`), because a load moves nothing; a rescan is what moves it
-   (§ 49.18).
+   (§ 49.18). A reply that loses only SOME rows says how many: `readCloudReply`
+   returns the count beside the rows it kept, and the scan screen names it in a calm
+   notice (`lib/set-aside.ts`), so a scan that kept 6 of 9 pieces no longer looks
+   like one that found 6 (§ 49.19).
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
    detector is available.
 

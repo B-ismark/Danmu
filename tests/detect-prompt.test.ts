@@ -303,7 +303,7 @@ describe('readCloudReply: a reply with nothing to act on is not an empty room', 
   };
 
   it('reads an empty list as an empty room — the one empty reply that is an answer', () => {
-    expect(readCloudReply('[]', ['n'])).toEqual({ rows: [] });
+    expect(readCloudReply('[]', ['n'])).toEqual({ rows: [], dropped: 0 });
   });
 
   it('refuses a body that is not JSON, and JSON that is not a list', () => {
@@ -334,6 +334,7 @@ describe('readCloudReply: a reply with nothing to act on is not an empty room', 
     expect(unreadable(JSON.stringify([...nameless, row([412, 300, 520, 260])]))).toMatch(/no box inside the photos/);
     const reply = readCloudReply(JSON.stringify([...elsewhere, row([0.2, 0.3, 0.1, 0.1])]), ['n', 'e']);
     expect('rows' in reply && reply.rows.map((d) => [d.slot, d.box])).toEqual([['n', [0.2, 0.3, 0.1, 0.1]]]);
+    expect(reply).toMatchObject({ dropped: 2 });
     // The walls are the ones handed in, not a fixed four.
     expect(readCloudReply(JSON.stringify(elsewhere), ['s', 'e'])).toMatchObject({ rows: [{ slot: 's' }] });
     // …and one photo takes every row, whatever wall it names.
@@ -356,6 +357,25 @@ describe('readCloudReply: a reply with nothing to act on is not an empty room', 
   it('keeps the rows it can use when only some are past the frame', () => {
     const reply = readCloudReply(JSON.stringify([row([412, 300, 520, 260]), row([0.1, 0.2, 0.3, 0.4])]), ['n']);
     expect('rows' in reply && reply.rows.map((d) => d.box)).toEqual([[0.1, 0.2, 0.3, 0.4]]);
+  });
+
+  it('counts the rows it set aside beside the ones it kept (§ 49.19)', () => {
+    // One of each refusal, beside two kept rows: a scan that kept 2 of 6 must not
+    // look like one that found 2. A row that is not an object, `null` included, is a
+    // row the reply named too, so it counts.
+    const text = JSON.stringify([
+      row([0.1, 0.2, 0.3, 0.4]),
+      row([0.1, 0.2, 0.3, 0.4], { slot: 's' }),
+      row([0.1, 0.2, 0.3, 0.4], { label: 5, category: null }),
+      row([412, 300, 520, 260]),
+      7,
+      null,
+      row([0.5, 0.2, 0.3, 0.4], { slot: 'e', label: 'Lamp', category: 'lamp' }),
+    ]);
+    const reply = readCloudReply(text, ['n', 'e']);
+    expect('rows' in reply && [reply.rows.map((d) => d.label), reply.dropped]).toEqual([['Sofa', 'Lamp'], 5]);
+    // Nothing refused is nothing to say.
+    expect(readCloudReply(JSON.stringify([row([0.1, 0.2, 0.3, 0.4])]), ['n'])).toMatchObject({ dropped: 0 });
   });
 });
 
