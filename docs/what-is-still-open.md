@@ -8177,7 +8177,8 @@ model and `detectAcrossImages` the Gemini SDK, so the tests hold the two helpers
 the calls.
 
 **§ 49.14 · A floor piece cut at its foot is BUILT at its limit — MEASURED, NOT BUILT.** § 49.10
-stops a limit being JUDGED as a size, and the row now says it is a limit. The room is still built
+has the row say its reading is an estimate, and since D8 judges the word at that reading on
+purpose, the back on the wall taken as evidence. The room is still built
 from it: `geoRefine` writes the reading into `dimMM`, and `buildSceneFromRoom` builds that, clamped
 to the kind's band. Measured on § 49.10's 43 rows, the correct word on each, through `toRecord` and
 `buildSceneFromRoom`: of the 28 widths the photo read as a most-it-can-be, **14 are built more than
