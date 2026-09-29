@@ -169,7 +169,17 @@ export function RoomSync() {
       // already hold another room's parts; it would file room B's furniture under room A.
       if (p) w.room = { edit: (stored) => withShell(stored, p.room), pin: wasReshaped ? p.parts : undefined };
     }
-    if (w.transforms || w.parts !== undefined || w.room) void roomStore.savePending(roomId, w);
+    if (!w.transforms && w.parts === undefined && !w.room) return;
+    roomStore.savePending(roomId, w).catch((e) => {
+      // None of it landed. What is on screen is still whole, and the next save of each
+      // kind writes it whole again — the positions, the scene and the shell are each
+      // written entire — except the pin, which only the reshape knew to ask for. Asked
+      // for again, or the next save stores the new outline with no scene, and the room
+      // re-seeds its furniture against it on the next open. `savePending` has already
+      // said so if the storage is full.
+      if (w.room?.pin !== undefined) reshapedSince.current = true;
+      console.error('[room] could not be saved', e);
+    });
   }, []);
 
   // Initial load: room meta → scene; cached scene parts override; transforms last.

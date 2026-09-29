@@ -266,6 +266,31 @@ describe('§ G.1 · a wall move and the scene snapshot', () => {
     spy.mockRestore();
   });
 
+  it('asks for the pin again when the save that carried it failed', async () => {
+    // None of a failed save lands. Everything else is written whole by the next save of
+    // its kind; the pin is asked for only by the reshape, so a later colour change stored
+    // the new outline with no scene, and the next open re-seeded against it.
+    await mountFor(room());
+    const seeded = useScene.getState().parts.map((p) => p.id);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const spy = vi.spyOn(roomStore, 'savePending').mockRejectedValueOnce(new Error('full'));
+    expect(useScene.getState().moveWall(0, 0.1)).toBe(0.1);
+    await waitFor(() => expect(errors).toHaveBeenCalled(), { timeout: SETTLE });
+    expect(spy.mock.calls[0][1].room?.pin).toBeDefined();
+    expect(await roomStore.loadSceneParts(ROOM_ID)).toBeUndefined();
+
+    const now = useScene.getState().room;
+    useScene.setState({ room: { ...now, wallColors: { 1: '#8f9e83' } } });
+    await waitFor(
+      async () => expect(await roomStore.loadSceneParts<ScenePart[]>(ROOM_ID)).toBeDefined(),
+      { timeout: SETTLE },
+    );
+    expect((await roomStore.loadSceneParts<ScenePart[]>(ROOM_ID))!.map((p) => p.id)).toEqual(seeded);
+    expect((await roomStore.loadRoom(ROOM_ID))!.depth).toBeCloseTo(4.8, 5);
+    spy.mockRestore();
+    errors.mockRestore();
+  });
+
   it('hands the pinned room back on the next open, through the real load path', async () => {
     // The round trip, which nothing else here covers: the two cases above prove the
     // key is WRITTEN, and the consumer is `RoomSync`'s own load
