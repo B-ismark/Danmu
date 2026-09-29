@@ -1998,15 +1998,20 @@ well off its wall may be flagged as well. That is the price the user chose (D8, 
 
 **Where to click.** With a Google key in **Settings**, *Photograph my real room* → ONE wall
 only → the scan screen. Every row should belong to that photo: its tag on the picture, and its
-size read off it. Then go back and forward so the room reloads, and read the row names again.
+size read off it. Then again with TWO walls. Then go back and forward so the room reloads, and
+read the row names again.
 
 **What wrong looks like.**
-- *Danmu couldn’t make sense of the reply* on a photo that plainly has furniture in it. The
-  reply is now refused when every row names a wall you did not photograph, and a wall written
-  `N` or `north` is read as the north wall; a real reply in some third form would land here.
+- *Danmu couldn’t make sense of the reply* on photos that plainly have furniture in them. With
+  one wall that should not happen for this reason at all: every row is filed under the one
+  photo, whatever wall it names. With two or more, the reply is refused when no row names a wall
+  you photographed; `n`, `N`, `north` and `N WALL` all read as the north wall, and a real reply
+  in some fourth form would land here.
 - A row with no tag on the photo — a piece filed under a wall nobody photographed, which is
   what this stops.
 - A name ending in `__slot:` after the reload.
+- A row called by its kind in lower case, `sofa`, is a reply that gave that piece no name. It
+  should be rare; many of them means the reply's shape has changed.
 - **The part only a real reply answers:** how often Gemini files a row under the wrong wall at
   all. The tests hold what happens when it does, not how often.
 
