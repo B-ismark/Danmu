@@ -725,8 +725,13 @@ judging the catalogue — and reports the axes it skipped as `cut`. It judges on
 side alone (§ 49.5): the typical size a cut axis grows to is inside the band, so a reading
 past a word's top can only be the part the photo saw, and a piece is at least that big. That
 reading accuses the word and is printed as one — *at least 1.96 m wide* — and it is the
-verdict's `atLeast`. Not a ceiling piece's width, below, and not a floor piece cut at its
-foot, which is judged both ways at the reading it is placed by. A ceiling piece is never
+verdict's `atLeast`. Not a ceiling piece's width, below, and not on a piece its placer
+read at a distance the photo did not show — a floor piece cut at its foot, asked of the
+placer's own `ReadBounds` rather than of the box — whose whole axes are judged both ways at
+that reading (D8) and whose cut ones not at all, since what the photo saw from an assumed
+distance bounds nothing from below. The repairs it offers are held to the same rule each
+under its OWN anchor, never the wrong word's: a wall word reads a cut foot at the wall's
+distance, and asking a wardrobe to fit that reading ruled the right word out. A ceiling piece is never
 grown, but any edge of the frame on it takes its one axis all the same: the placer reads its
 distance on the box's centre row, and a cut moves that row off the disc's centre. A cut at the
 TOP, the usual one, is now read from the three edges the photo saw instead and comes out right

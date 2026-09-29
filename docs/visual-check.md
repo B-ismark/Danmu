@@ -2138,10 +2138,14 @@ scan screen with a real photo.
 
 **Where to click.** *Photograph my real room* → a photo in which a sofa or a bed runs off the
 LEFT or RIGHT side of the frame with its foot in the picture, and one taken with the phone
-tipped up so the bottom of the frame cuts a door or a tall mirror → the scan screen. Rename the
-sofa to **Chair** and the door to **TV**. Each should be flagged, the sofa with a line like *Measured at least
-1.96 m wide and 0.91 m tall. Chair range is 0.38–0.60 m wide.*, with the ruler note *Runs past
-the edge of the photo, so its width is an estimate* under it, and a sofa offered first.
+tipped up so the bottom of the frame cuts a door or a tall mirror → the scan screen. A rename
+alone changes only the row's word, so rename the sofa's row to **Chair** and press the
+**Use Chair?** chip it offers, then the door's to **TV** and **Use TV?** (each carries a "?":
+the camera already disagrees). Each row should then be flagged, the sofa with a line like
+*Measured at least 1.95 m wide and 0.91 m tall. Chair range is 0.38–0.60 m wide.*, with the
+ruler note *Runs past the edge of the photo, so its width is an estimate* under it, and a sofa
+among its two chips. On the test fixture those are a **chest freezer** and then the sofa,
+because a chest freezer is that size too.
 
 **What wrong looks like.**
 - "at least" on the axis the photo saw whole, or missing on the one it cut.
@@ -2151,9 +2155,16 @@ the edge of the photo, so its width is an estimate* under it, and a sofa offered
 - **The part only a person answers:** whether *at least 1.96 m* beside *its width is an
   estimate* reads as one fact or as two that disagree. The number is what the photo saw, and
   the note is about the piece as built, which may be wider still.
-- A fridge or a dining chair, correctly named, flagged as too wide. That is the price the
-  population measured, only where the lens or the tilt was read wrong, and it should be rare:
-  16 across seven readings of 150 rooms.
+- A number after "at least" that is larger than the photo could have shown. It rounds down:
+  1955 mm is *1.95 m*.
+- A correctly named piece flagged as too big, where the camera was read right. The measured
+  price is only where the lens or the tilt was read wrong: a fridge or a dining chair, 16 across
+  seven readings of 150 rooms; and on an **upload from a tipped phone**, which the app reads as
+  level, a wall piece at the very edge of its band, 2–20 of about 180 per reading. Each starts
+  **unticked** — a flagged row the detector found is never ticked for you; one you drew stays
+  ticked — so it is a press to keep, not a loss.
+- **The part only a person answers, again:** whether a chest freezer offered first for a sofa
+  reads as a helpful second guess or as the app not knowing what a sofa is.
 
 **What was measured, and on what.** `tests/label-repair-population.test.ts`, 150 generated
 rooms read seven ways, and every wall kind at the edges of its own band photographed tipped.
