@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
-import { frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
+import { cutAxes, frameCuts, placeFloorObject, placeWallObject, readBounds, wallFrame, type CameraCal } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
   PART_LIBRARY,
@@ -18,7 +18,7 @@ import { geoRefine, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { footprintForLayout, type Footprint } from '@/lib/footprint';
-import { bboxOfCeilingDisc, bboxOfWallSolid } from './helpers/project';
+import { bboxOfCeilingDisc, bboxOfFloorBox, bboxOfWallSolid } from './helpers/project';
 
 /** The framed wall's distance, read from the polygon. `wallDistance` — the
  *  `depth/2` / `width/2` pair every placer used to measure from — is deleted; this
@@ -323,6 +323,144 @@ describe('judgeLabel — a box the edge of the photo cut', () => {
     const offered = candidatesFor(d, ['painting', 'wardrobe'], CALS, ROOM, { requireFit: false });
     expect(offered.map((c) => [c.category, c.unmeasured ?? false])).toEqual([['wardrobe', false], ['painting', true]]);
     expect(candidatesFor(d, ['painting'], CALS, ROOM)).toEqual([]);
+  });
+});
+
+describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
+  // A box that reaches the bottom of the photo has no seen near edge, so
+  // `placeFloorObject` reads it at the far end of where it could stand — the last row's
+  // ray, or its back on the plaster. Seven pieces, projected from the truth 0, 300 and
+  // 800 mm off the north wall on the 106° lens, level and tilted 10° and 20° down; kept
+  // are the rows the frame cut at the foot and not the top, that the placer measured.
+  const clip = ([x, y, w, h]: readonly number[]): Detection['box'] => {
+    const x0 = Math.max(0, x), y0 = Math.max(0, y);
+    return [x0, y0, Math.min(1, x + w) - x0, Math.min(1, y + h) - y0];
+  };
+  const PIECES: Array<[Category, Shape, number, number]> = [
+    ['nightstand', 'nightstand', 450, 550],
+    ['sofa', 'sofa', 2000, 800],
+    ['table', 'coffee-table', 1000, 450],
+    ['wardrobe', 'wardrobe', 1200, 2000],
+    ['shelf', 'bookshelf', 800, 1800],
+    ['desk', 'desk-standard', 1200, 750],
+    ['bed', 'bed-double', 1600, 500],
+  ];
+  const calAt = (tiltDeg: number): CameraCal => ({ ...WIDE, tiltRad: (tiltDeg * Math.PI) / 180 });
+  const boxOf = (category: Category, shape: Shape, w: number, h: number, gap: number, cal: CameraCal) => {
+    const depth = defaultDepthFor(category, shape) / 1000;
+    const z = -(wallD('n', ROOM) - gap - depth / 2);
+    return clip(bboxOfFloorBox('n', 0.3, z, w / 1000, h / 1000, depth, cal));
+  };
+  const ROWS = [0, -10, -20].flatMap((tiltDeg) =>
+    PIECES.flatMap(([category, shape, w, h]) =>
+      [0, 0.3, 0.8].flatMap((gap) => {
+        const cal = calAt(tiltDeg);
+        const box = boxOf(category, shape, w, h, gap, cal);
+        const c = frameCuts(box);
+        const d = det({ category, shape, slot: 'n', box });
+        const read = geoRefine(d, { n: cal }, ROOM).dimMM;
+        return c.bottom && !c.top && read ? [{ d, cal, truth: [w, h] as const, read }] : [];
+      }),
+    ),
+  );
+
+  it('reads each axis on the side readBounds says, never the other', () => {
+    expect(ROWS).toHaveLength(44);
+    const t = { widthLarge: 0, widthCut: 0, heightLow: 0, heightHigh: 0, exact: 0 };
+    for (const { d, cal, truth, read } of ROWS) {
+      const bound = readBounds(d.box, 'floor', cal);
+      if (cutAxes(d.box, 'floor').width) t.widthCut++;
+      else {
+        // The most it can be: at or above the truth.
+        expect(bound.width.kind).toBe('upper');
+        expect(read[0]).toBeGreaterThanOrEqual(truth[0]);
+        if (read[0] > truth[0]) t.widthLarge++;
+      }
+      const h = bound.height;
+      if (read[2] < truth[1]) {
+        t.heightLow++;
+        // Read low, and bounded above by the lens: a falling top ray is below it.
+        expect(h.kind === 'lower' && truth[1] <= h.ceilMM).toBe(true);
+      } else if (read[2] > truth[1]) {
+        t.heightHigh++;
+        expect(h.kind === 'upper' && truth[1] >= h.floorMM).toBe(true);
+      } else t.exact++;
+    }
+    // Every direction the rule allows is exercised, so the fixture can tell them apart.
+    expect(t).toEqual({ widthLarge: 14, widthCut: 16, heightLow: 16, heightHigh: 12, exact: 16 });
+  });
+
+  it('never calls a correct word the wrong size here', () => {
+    // Judged both ways on the uncut axes, six of the forty-four readings of a correctly
+    // named piece fall outside its own band — which is the defect this fixture exists
+    // to show it can express.
+    const twoSided = ROWS.filter(({ d, read }) => {
+      const r = dimRangeFor(d.category, d.shape as Shape);
+      const w = !cutAxes(d.box, 'floor').width && (read[0] < r.min[0] || read[0] > r.max[0]);
+      return w || read[2] < r.min[2] || read[2] > r.max[2];
+    });
+    expect(twoSided).toHaveLength(6);
+    expect(ROWS.filter(({ d, cal }) => judgeLabel(d, { n: cal }, ROOM).status === 'suspect')).toEqual([]);
+  });
+
+  it('withdraws the two accusations § 49.10 was measured on', () => {
+    const level = calAt(0);
+    // 800 mm off the wall, an 800 mm sofa reads 333 tall — read low, as a piece below
+    // the lens is — and a 2.0 m wardrobe reads 2667, read high. Judged both ways, the
+    // sofa was too short for a sofa and the wardrobe too tall for a wardrobe.
+    const sofa = det({ category: 'sofa', shape: 'sofa', slot: 'n', box: boxOf('sofa', 'sofa', 2000, 800, 0.8, level) });
+    const wardrobe = det({ category: 'wardrobe', shape: 'wardrobe', slot: 'n', box: boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.8, level) });
+    expect(geoRefine(sofa, { n: level }, ROOM).dimMM![2]).toBe(333);
+    expect(geoRefine(wardrobe, { n: level }, ROOM).dimMM![2]).toBe(2667);
+    expect(judgeLabel(sofa, { n: level }, ROOM)).toEqual({ status: 'ok', cut: ['width'] });
+    expect(judgeLabel(wardrobe, { n: level }, ROOM)).toEqual({ status: 'ok', cut: ['width'] });
+    // A word the reading could still be is offered without the "camera does not agree"
+    // caveat the scan screen hangs on a negative margin: the bound puts the truth on
+    // the band's edge, not outside it.
+    const [offer] = candidatesFor(wardrobe, ['wardrobe'], { n: level }, ROOM, { requireFit: false });
+    expect(offer.margin).toBe(0);
+  });
+
+  it('still catches a wrong word on the side the reading speaks for', () => {
+    const level = calAt(0);
+    const on = (box: Detection['box'], category: Category) =>
+      judgeLabel(det({ category, slot: 'n', box }), { n: level }, ROOM);
+    const failed = (v: ReturnType<typeof judgeLabel>) => (v.status === 'suspect' ? v.failed : v.status);
+    // A width read at its largest that is still narrower than any bed.
+    expect(failed(on(boxOf('nightstand', 'nightstand', 450, 550, 0.3, level), 'bed'))).toEqual(['width']);
+    // Heights read at the far end are bounded by the lens on their other side: the
+    // coffee table's top is below the camera wherever it stands, so it is no wardrobe…
+    expect(failed(on(boxOf('table', 'coffee-table', 1000, 450, 0.3, level), 'wardrobe'))).toEqual(['height']);
+    // …and the wardrobe's is above it, so it is no nightstand.
+    expect(failed(on(boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.3, level), 'nightstand'))).toEqual(['height']);
+  });
+
+  it('offers the right word back where only the bound lets it fit', () => {
+    // The wardrobe 800 mm off its wall, called a nightstand: caught on its height. Read
+    // as a wardrobe it is 2667, past the tallest wardrobe — but that reading is the
+    // most it can be, so the repair list still carries the word that was right.
+    const level = calAt(0);
+    const box = boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.8, level);
+    const v = judgeLabel(det({ category: 'nightstand', slot: 'n', box }), { n: level }, ROOM);
+    expect(v.status === 'suspect' && v.candidates.map((c) => c.category)).toContain('wardrobe');
+  });
+
+  it('still catches half the wrong words in the fixture', () => {
+    // Every other category's word on every row, where its own placer measured it. Of
+    // 665, the rule catches 328; judged both ways it caught 485 and accused six
+    // correct words doing it. The 157 between are words one photograph cannot rule
+    // out once the piece may stand anywhere nearer — § 49.10 has the trade.
+    let judged = 0, caught = 0;
+    for (const { d, cal } of ROWS) {
+      for (const category of CATEGORIES) {
+        if (category === 'other' || category === d.category) continue;
+        const v = judgeLabel(det({ category, slot: 'n', box: d.box }), { n: cal }, ROOM);
+        if (v.status === 'unmeasured') continue;
+        judged++;
+        if (v.status === 'suspect') caught++;
+      }
+    }
+    expect([judged, caught]).toEqual([665, 328]);
   });
 });
 

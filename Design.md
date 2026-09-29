@@ -685,8 +685,15 @@ the judge's own strict repairs never reach it. And the scan screen says so on th
 see is an estimate. Not "a typical one", which it said first and which was true of one case
 in three: a piece whose visible part is already bigger than typical keeps what was seen, and
 one stopped by the wall's end is neither. A piece cut only at its FOOT gets no note — its
-width and height were seen whole — though its distance is the wall's rather than its own
-(§ 49.10).
+width and height were seen whole — but its distance is the wall's rather than its own, the far
+end of where it could stand, so the judge reads each axis one way (`readBounds`,
+`lib/photo-geometry.ts`). The width is the most it can be: it may say *too small*, never *too
+big*. The height is the top row read at that distance, and that row's ray rises for a piece
+taller than the lens and falls for a lower one, so a tall piece reads high and a low one low —
+each bounded on its other side by the lens, which is what still makes a low table no wardrobe.
+Judged both ways, six of forty-four correctly named pieces were called the wrong size in
+`tests/label-repair.test.ts`; none are now, at the price of catching 328 of 665 wrong words
+where it caught 485 (§ 49.10).
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,

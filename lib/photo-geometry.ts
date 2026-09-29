@@ -830,6 +830,51 @@ export function cutByFrame(box: readonly [number, number, number, number]): bool
   return c.left || c.right || c.top || c.bottom;
 }
 
+/** Where a piece's true size can be, given a placer's reading `v` on one axis, in mm.
+ *  `exact`: at `v`, as far as the lens and the catalogue depth are right. `upper`: the
+ *  reading is the most it can be, and the truth is in `[floorMM, v]`. `lower`: the
+ *  reading is the least, and the truth is in `[v, ceilMM]`. */
+export type ReadBound =
+  | { kind: 'exact' }
+  | { kind: 'upper'; floorMM: number }
+  | { kind: 'lower'; ceilMM: number };
+
+/** How each measured axis can be wrong, for the axes the frame did NOT cut — those
+ *  are `cutAxes`'s, and a reader skips them.
+ *
+ *  **A floor piece cut at its foot is read at an assumed distance**, the far end of
+ *  what the evidence allows (`placeFloorObject`): the ray through the photo's last row,
+ *  or the piece's back on the plaster, whichever is nearer. The real piece can only be
+ *  nearer still, and which way that moves a reading differs by axis:
+ *  - the width is an angle times the distance, so it is read LARGE, and nothing but
+ *    zero bounds it from below;
+ *  - the height is the top row read at that distance. The top row's ray RISES for a
+ *    piece taller than the lens and FALLS for one lower — the test `floorFromBox` uses
+ *    to pick which face the top row came from — and read too far out, a rising ray ends
+ *    too high and a falling one too low. So a tall piece's height is at most what it
+ *    reads, and a low one's at least. **And the other end is not open:** a rising ray
+ *    means the top is above the lens whatever the distance, so a wardrobe cut at its
+ *    foot is still taller than the camera, and a nightstand shorter. That one fact is
+ *    most of what lets the judge still catch a wrong word here.
+ *
+ *  Measured, not reasoned (`tests/label-repair.test.ts`): 800 mm off its wall on a
+ *  106° lens, an 800 mm sofa read 333 tall and a 2.0 m wardrobe 2667, and judged both
+ *  ways the judge called each the wrong size for what it was. A wall or ceiling piece
+ *  is on its plane by assumption whatever the frame cuts, so this is the floor's alone. */
+export function readBounds(
+  box: readonly [number, number, number, number],
+  plane: MeasuredPlane,
+  cal: CameraCal,
+): { width: ReadBound; height: ReadBound } {
+  if (plane !== 'floor' || !frameCuts(box).bottom) return { width: { kind: 'exact' }, height: { kind: 'exact' } };
+  const [bx, by, bw] = box;
+  const lensMM = heightOf(cal) * 1000;
+  return {
+    width: { kind: 'upper', floorMM: 0 },
+    height: ray(bx + bw / 2, by, cal).up > 0 ? { kind: 'upper', floorMM: lensMM } : { kind: 'lower', ceilMM: lensMM },
+  };
+}
+
 /** One axis of a box the frame may have cut: its centre and length, taken to the
  *  whole piece when a side is cut.
  *

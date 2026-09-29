@@ -23,12 +23,24 @@
 
 import { dimRangeFor } from './dimension-ranges';
 import { geoRefine, measuredPlane, type CalMap, type RoomDims } from './detect-refine';
-import { cutAxes } from './photo-geometry';
+import { cutAxes, readBounds, type CameraCal, type ReadBound } from './photo-geometry';
 import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
 
 /** The axis names this module reasons about. Never depth — see `sizeFitsLabel`. */
 export type SizeAxis = 'width' | 'height';
+
+/** Which way each axis's reading can be wrong (`readBounds`). A whole box on a level
+ *  lens is `exact` on both, which is what every caller that does not ask gets. */
+type AxisBounds = { width: ReadBound; height: ReadBound };
+const EXACT: AxisBounds = { width: { kind: 'exact' }, height: { kind: 'exact' } };
+
+/** Where the truth can be, given reading `v` under bound `b`. */
+function truthSpan(v: number, b: ReadBound): [number, number] {
+  if (b.kind === 'upper') return [Math.min(b.floorMM, v), v];
+  if (b.kind === 'lower') return [v, Math.max(b.ceilMM, v)];
+  return [v, v];
+}
 
 export type LabelCandidate = {
   category: Category;
@@ -100,12 +112,26 @@ export function sizeFitsLabel(category: Category, shape: Shape, widthMM: number,
   return failedAxes(category, shape, widthMM, heightMM).length === 0;
 }
 
-function failedAxes(category: Category, shape: Shape, widthMM: number, heightMM: number): SizeAxis[] {
+function failedAxes(
+  category: Category,
+  shape: Shape,
+  widthMM: number,
+  heightMM: number,
+  bound: AxisBounds = EXACT,
+): SizeAxis[] {
   const r = dimRangeFor(category, shape);
   const out: SizeAxis[] = [];
-  if (widthMM < r.min[0] || widthMM > r.max[0]) out.push('width');
-  if (heightMM < r.min[2] || heightMM > r.max[2]) out.push('height');
+  if (outside(widthMM, r.min[0], r.max[0], bound.width)) out.push('width');
+  if (outside(heightMM, r.min[2], r.max[2], bound.height)) out.push('height');
   return out;
+}
+
+/** Is `v` evidence that the piece is outside [lo, hi]? Only when nowhere the piece could
+ *  truly be is inside it: a reading that is the most a piece can be shows it too small
+ *  and, on its own, never too big (§ 49.10). */
+function outside(v: number, lo: number, hi: number, b: ReadBound): boolean {
+  const [a, z] = truthSpan(v, b);
+  return z < lo || a > hi;
 }
 
 /** Which axes a measurement of this word actually observed, and which the photo's
@@ -133,20 +159,32 @@ function failedAxes(category: Category, shape: Shape, widthMM: number, heightMM:
  *  piece's nor a bound on it. A true 1200 mm fan came back 1402 mm cut at the side and
  *  935 cut at the side 600 mm further on, 1748 cut at the top — the usual case, a fan
  *  near a level lens — and 1111 cut at the bottom (`tests/label-repair.test.ts`). */
-function readAxes(category: Category, shape: Shape, box: Detection['box']): { measured: SizeAxis[]; cut: SizeAxis[] } {
+function readAxes(
+  category: Category,
+  shape: Shape,
+  box: Detection['box'],
+  cal: CameraCal,
+): { measured: SizeAxis[]; cut: SizeAxis[]; bound: AxisBounds } {
   const plane = measuredPlane(category, shape);
   const seen: readonly SizeAxis[] = plane === 'ceiling' ? ['width'] : ['width', 'height'];
   const c = cutAxes(box, plane);
   const cut = (['width', 'height'] as const).filter((a) => c[a]);
-  return { measured: seen.filter((a) => !cut.includes(a)), cut };
+  return { measured: seen.filter((a) => !cut.includes(a)), cut, bound: readBounds(box, plane, cal) };
 }
 
 /** How far inside a band a value sits, as a fraction of the band's span. 0 is on a
- *  bound, 0.5 is dead centre, negative is outside. */
-function axisMargin(v: number, lo: number, hi: number): number {
+ *  bound, 0.5 is dead centre, negative is outside.
+ *
+ *  A bounded reading is scored where the truth would have to be for this word — the
+ *  point nearest the reading that is both possible and in the band. A reading inside
+ *  the band is that point, so it scores exactly as an exact one; one outside it that the
+ *  piece could still be scores 0, on the edge, rather than the negative a misfit gets. */
+function axisMargin(v: number, lo: number, hi: number, b: ReadBound = { kind: 'exact' }): number {
   const span = hi - lo;
   if (!(span > 0)) return 0;
-  return Math.min(v - lo, hi - v) / span;
+  const [a, z] = truthSpan(v, b);
+  const t = z < lo || a > hi ? v : Math.min(Math.max(v, lo, a), hi, z);
+  return Math.min(t - lo, hi - t) / span;
 }
 
 function sizeMargin(
@@ -155,10 +193,11 @@ function sizeMargin(
   widthMM: number,
   heightMM: number,
   axes: readonly SizeAxis[] = ['width', 'height'],
+  bound: AxisBounds = EXACT,
 ): number {
   const r = dimRangeFor(category, shape);
-  const w = axes.includes('width') ? axisMargin(widthMM, r.min[0], r.max[0]) : Infinity;
-  const h = axes.includes('height') ? axisMargin(heightMM, r.min[2], r.max[2]) : Infinity;
+  const w = axes.includes('width') ? axisMargin(widthMM, r.min[0], r.max[0], bound.width) : Infinity;
+  const h = axes.includes('height') ? axisMargin(heightMM, r.min[2], r.max[2], bound.height) : Infinity;
   return Math.min(w, h);
 }
 
@@ -178,10 +217,11 @@ export function categoriesFittingSize(
   heightMM: number,
   exclude?: Category,
   axes: readonly SizeAxis[] = ['width', 'height'],
+  bound: AxisBounds = EXACT,
 ): Category[] {
-  const fits = (c: Category) => !failedAxes(c, 'box', widthMM, heightMM).some((a) => axes.includes(a));
+  const fits = (c: Category) => !failedAxes(c, 'box', widthMM, heightMM, bound).some((a) => axes.includes(a));
   return CATEGORIES.filter((c) => c !== 'other' && c !== exclude && fits(c)).sort(
-    (a, b) => sizeMargin(b, 'box', widthMM, heightMM, axes) - sizeMargin(a, 'box', widthMM, heightMM, axes),
+    (a, b) => sizeMargin(b, 'box', widthMM, heightMM, axes, bound) - sizeMargin(a, 'box', widthMM, heightMM, axes, bound),
   );
 }
 
@@ -261,6 +301,9 @@ export function candidatesFor(
   { requireFit = true }: { requireFit?: boolean } = {},
 ): LabelCandidate[] {
   const out: LabelCandidate[] = [];
+  // No lens, no measurement: `geoRefine` hands every seed back and nothing is offered.
+  const cal = cals[d.slot];
+  if (!cal) return out;
   for (const c of categories) {
     // The detector's shape hint goes with the category being replaced, and so does
     // its depth hint: if the old word is wrong, its guess at that word's shape and
@@ -297,7 +340,7 @@ export function candidatesFor(
       // restriction matters — a ceiling candidate is checked on width, because width
       // is what measuring it as a ceiling item produced.
       // Judged as the shape it was measured as, for the reason `judgeLabel` is.
-      const cAxes = readAxes(c, t.shape, d.box).measured;
+      const { measured: cAxes, bound: cBound } = readAxes(c, t.shape, d.box, cal);
       // Every axis this kind is read on runs out of the photo under ITS anchor — a
       // wall word's height takes the bottom cut a floor word's does not. Nothing was
       // measured, so nothing can fit: kept, it fitted vacuously and its margin was
@@ -318,12 +361,12 @@ export function candidatesFor(
         });
         continue;
       }
-      const fits =!failedAxes(c, t.shape, trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
+      const fits = !failedAxes(c, t.shape, trial.dimMM[0], trial.dimMM[2], cBound).some((a) => cAxes.includes(a));
       trials.push({
         category: c,
         detection: trial,
         ...('name' in t && t.name ? { name: t.name } : {}),
-        margin: sizeMargin(c, t.shape, trial.dimMM[0], trial.dimMM[2], cAxes),
+        margin: sizeMargin(c, t.shape, trial.dimMM[0], trial.dimMM[2], cAxes, cBound),
         fits,
         first: n === 0,
       });
@@ -376,7 +419,8 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
   const shape = sceneShapeFor(category, d.label, d.shape);
 
   const measured = geoRefine(d, cals, room);
-  if (measured === d || !measured.dimMM) return { status: 'unmeasured' };
+  const cal = cals[d.slot];
+  if (measured === d || !measured.dimMM || !cal) return { status: 'unmeasured' };
   const widthMM = measured.dimMM[0];
   const heightMM = measured.dimMM[2];
 
@@ -384,14 +428,17 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
   // word. For a ceiling item that is width alone — enough for both ceiling rows of
   // the benchmark (a hook at 100 mm against a fan's 900 mm floor, a fan at 1200 mm
   // against a lamp's 800 mm ceiling), and honest about the rest.
-  const { measured: axes, cut } = readAxes(category, shape, d.box);
+  // And each only on the side its reading can speak for (`readBounds`): a floor piece
+  // cut at its foot is read at the far end of where it could stand, so its width may
+  // say "too small" and never "too big".
+  const { measured: axes, cut, bound } = readAxes(category, shape, d.box, cal);
   const cutNote = cut.length > 0 ? { cut } : {};
   if (axes.length === 0) return { status: 'unmeasured', ...cutNote };
-  const failed = failedAxes(category, shape, widthMM, heightMM).filter((a) => axes.includes(a));
+  const failed = failedAxes(category, shape, widthMM, heightMM, bound).filter((a) => axes.includes(a));
   if (failed.length === 0) return { status: 'ok', ...cutNote };
 
   const r = dimRangeFor(category, shape);
-  const candidates = candidatesFor(d, categoriesFittingSize(widthMM, heightMM, category, axes), cals, room);
+  const candidates = candidatesFor(d, categoriesFittingSize(widthMM, heightMM, category, axes, bound), cals, room);
 
   return {
     status: 'suspect',
