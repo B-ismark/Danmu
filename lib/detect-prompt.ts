@@ -203,8 +203,11 @@ function filedUnder(d: unknown, sent: readonly CaptureSlot[]): CaptureSlot | und
   return d ? wallOf(d as { slot?: unknown }, sent) : undefined;
 }
 
-/** A reply's rows, or why it holds nothing the screen may act on. */
-export type CloudReply = { rows: Detection[] } | { unreadable: string; cause: unknown };
+/** A reply's rows, or why it holds nothing the screen may act on. `dropped` is how
+ *  many of the reply's rows `cloudRows` refused beside the ones it kept (§ 49.19):
+ *  a scan that kept 6 of 9 pieces is not a scan that found 6, and only the screen
+ *  can say so. */
+export type CloudReply = { rows: Detection[]; dropped: number } | { unreadable: string; cause: unknown };
 
 /** What a Gemini reply says, about the walls in `sent`. Three kinds of body are not
  *  an answer, and each was once read as an empty room — the detect screen's "nothing
@@ -241,7 +244,7 @@ export function readCloudReply(text: string, sent: readonly CaptureSlot[]): Clou
           : 'The detection service replied with no box inside the photos.';
     return { unreadable, cause: parsed };
   }
-  return { rows };
+  return { rows, dropped: parsed.length - rows.length };
 }
 
 /** One cloud request's two ends, built from one list of walls: the prompt that tells

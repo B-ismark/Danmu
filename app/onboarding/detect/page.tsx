@@ -7,6 +7,7 @@ import { v4 as uuid } from 'uuid';
 import { useRoom, useSettings } from '@/lib/store';
 import { roomStore, blobToObjectUrl, type Capture, type CaptureSlot } from '@/lib/storage';
 import { detectAcrossImages, DetectError, type Detection } from '@/lib/detection';
+import { setAsideSentence, setAsideTitle } from '@/lib/set-aside';
 import { CAPTURE_SLOTS } from '@/lib/capture';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { EditableText, FlowBarLead, IconButton, StepHeader } from '@/components/ui/primitives';
@@ -81,6 +82,7 @@ type Notice = {
     | 'NOTHING_FOUND'
     | 'CACHED'
     | 'SECOND_LOOK_FAILED'
+    | 'SOME_SET_ASIDE'
     | 'DAILY_QUOTA'
     | 'RATE_LIMIT'
     | 'INVALID_KEY'
@@ -395,12 +397,18 @@ export default function DetectPage() {
               dets = null;
             }
           }
-          const askCloud = () =>
-            detectAcrossImages(
+          // How many of the reply's rows it refused beside the ones it kept (§ 49.19):
+          // a scan that kept 6 of 9 pieces used to look exactly like one that found 6.
+          let setAside = 0;
+          const askCloud = async () => {
+            const reply = await detectAcrossImages(
               apiKeyRef.current,
               entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })),
               room ? { width: room.width, depth: room.depth, height: room.height, layoutId: room.layoutId } : undefined,
             );
+            setAside = reply.dropped;
+            return reply.rows;
+          };
           let secondLookFailed = false;
           if (!dets) {
             // The photos are about to leave the device. Say so BEFORE the call, so
@@ -447,6 +455,17 @@ export default function DetectPage() {
               body: 'Google’s scan of your photos failed, so this list is only what your browser found. Add anything missing by hand, or press Re-scan later.',
             });
           }
+          if (setAside > 0) {
+            // Before NOTHING_FOUND, which replaces it: an empty list says the more
+            // useful thing, and its body counts these too.
+            setNotice({
+              code: 'SOME_SET_ASIDE',
+              tone: 'calm',
+              kicker: 'Scan finished',
+              title: setAsideTitle(setAside),
+              body: `${setAsideSentence(setAside)} If something is missing from the list, draw a box around it.`,
+            });
+          }
           if (refined.length === 0) {
             // Saying nothing here is how someone who photographed an empty study
             // ends up in a room full of furniture they never owned.
@@ -456,7 +475,7 @@ export default function DetectPage() {
               tone: 'calm',
               kicker: 'Scan finished',
               title: 'Nothing stood out in your photos',
-              body: `Danmu found no furniture in ${entries.length === 1 ? 'your photo' : `your ${entries.length} photos`}. This is common in dim light or with close-up shots. Draw a box around anything you’d like measured.`,
+              body: `Danmu found no furniture in ${entries.length === 1 ? 'your photo' : `your ${entries.length} photos`}. ${setAside > 0 ? `${setAsideSentence(setAside)} ` : ''}This is common in dim light or with close-up shots. Draw a box around anything you’d like measured.`,
             });
           }
         } catch (e) {
