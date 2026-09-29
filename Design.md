@@ -157,10 +157,14 @@ owned by a deterministic geometry engine, not by a model.
    because three invisible row actions held 96px of a ~160px row; they float over
    the row now (`.row-actions`). Floating over a 206px list they covered all but the
    first ~45px of the name under the pointer, so at the list's narrow step
-   (`@container rail (max-width: 240px)`) a pointed-at row shows lock and hide, and
-   Remove waits for the selection, a keyboard focus in the row, or Delete —
-   `scripts/row-hover-probe.mjs` hovers every row and measures what of each name
-   still reads.
+   (`@container rail (max-width: 240px)`) a pointed-at row shows lock and hide and
+   folds Remove (`.row-remove`) to no width. Folded, not `display: none`, so it stays
+   a tab stop and Shift+Tab still reaches it; opened by the selection or a KEYBOARD
+   focus in the row (`:focus-visible`), never by a mouse press, because a press
+   focuses the button it lands on and the Remove it unfolded shoved Hide aside
+   before the release, so the click missed both. `scripts/row-hover-probe.mjs`
+   hovers every row, clicks Hide, walks Tab both ways, and measures what of each
+   name still reads.
 6. **Warm & playful visual direction.** Cream paper, terracotta (`--accent`) +
    sage (`--accent-2`) accents, Nunito (sans) / Fraunces (display) type, generous
    rounding. Matches the soft procedural 3D models.

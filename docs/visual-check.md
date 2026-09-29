@@ -993,29 +993,40 @@ What the sweep cannot tell you, and a person can:
 
 **Where to click.** Any furnished room, either tab, in a window 1024–1279 px wide (or a
 wider one with the left list dragged to its narrowest). Move the pointer down the piece
-rows. Only **lock** and **hide** come up over the end of the name; **remove** waits. Then
-click a row: it opens to two lines with all three under the whole name. Then Tab into a row
-you have not selected: all three come up there too. At 1280 and wider, with the list at its
-usual width, a pointed-at row shows all three, as before.
+rows. Only **lock** and **hide** come up over the end of the name; **remove** waits. Click
+**hide** on a row you have not selected: the piece hides on that one click, and the button
+under the pointer is still the same one (now *show*). Then click a row: it opens to two
+lines with all three under the whole name. Then Tab into a row you have not selected, and
+Shift+Tab back into one from the row below: all three come up, and Shift+Tab lands on
+Remove first. A group's row does the same with its two: **ungroup** shows, its Remove
+waits. At 1280 and wider, with the list at its usual width, a pointed-at row shows all
+three, as before.
 
 **Why.** On that list the three buttons covered all but the first ~45 px of the name they
-floated over — "Coff" for "Coffee table", with a Remove button under the pointer. Leaving
-Remove to the selected row gives the name back 26 px and keeps a delete from turning up
-under a passing pointer. Remove is still one click away (select the row), and Delete
-removes the selected piece.
+floated over — "Coff" for "Coffee table", with a Remove button under the pointer. Folding
+Remove away until the row is selected or reached from the keyboard gives the name back
+26 px and keeps a delete from turning up under a passing pointer. Remove is still one click
+away (select the row), and Delete removes the selected piece.
 
 **What wrong looks like.**
 - A name still cut to four or five letters under the pointer.
+- A click on hide that does nothing, or that leaves Remove where hide was — that was the
+  first version of this change, caught by the review before it merged.
 - The row jumping, or its height changing, as the pointer crosses it.
-- A selected row, or a keyboard-focused one, missing its Remove.
+- A selected row, or a keyboard-focused one, missing its Remove; a screen reader not
+  offering Remove on a row.
 - Remove missing on a pointed-at row at 1280+ with the list at its usual width.
 
 **What was measured, and on what.** SwiftShader, desktop Chromium, the L-shape's fourteen
 starter pieces: `scripts/row-hover-probe.mjs` at 1024, 1100, 1279, 1280, 1440, and 1440 with
-the list dragged to 228 px. Before: 35 passed, 7 failed — on the 206 px list 11 of 14 names
-cut under the pointer, "Coffee table" 45 of 71 px. After: 42 of 42. The CSS rule is held by
-`tests/reflow.test.ts`, which nine mutants of the rule failed. Nobody has done it with a
-real mouse.
+the list dragged to 228 px. On `main` its first version read 35 passed, 7 failed — on the
+206 px list 11 of 14 names cut under the pointer, "Coffee table" 45 of 71 px. The review of
+the first fix found a mouse press unfolding Remove and Shift+Tab stepping past it; the probe
+grew both checks, which read 52 passed, 8 failed on that fix (every narrow list failing
+both), and 60 of 60 now, "Coffee table" 71 of 71 px. The CSS rule is held by
+`tests/reflow.test.ts`, which fifteen mutants of the rule failed. Group rows are not in
+the probe's seeded room, so their half is read from the code, not measured. Nobody has
+done it with a real mouse, or with a screen reader.
 
 ### The laptop studio as panes on a wash — `c2137c4` on `main` (PR #157), SWEPT, needs a real GPU and a Mac
 

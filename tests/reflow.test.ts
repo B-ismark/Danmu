@@ -1188,13 +1188,13 @@ describe('a piece row keeps enough width to read the piece name', () => {
     expect(nameWidth, `a piece name gets ${nameWidth}px at --rail-left-tight`).toBeGreaterThanOrEqual(56);
   });
 
-  it('on the narrow rail a pointed-at row leaves Remove out, and only there', () => {
+  it('on the narrow rail a pointed-at row folds Remove away, and only there', () => {
     // The case the assertion above does not reach, because it measures the row with its
     // actions hidden. Hovered, the float covers the END of the name: at the 206px rail
     // `scripts/row-hover-probe.mjs` measured 45px of "Coffee table"'s 71 left, eleven
-    // names of fourteen cut, with a Remove button beside each. Dropping Remove from the
-    // hover gives back its 24px and the 2px gap. Pinned here as the rule's four parts,
-    // each one a way to put the defect back while leaving a rule that looks like the fix.
+    // names of fourteen cut, with a Remove button beside each. Folding Remove gives back
+    // its 24px and the 2px gap. Pinned here as the rule's parts, each one a way to put a
+    // defect back while leaving a rule that looks like the fix.
     const src = codeOnly(CSS);
     const OPEN = '@container rail (max-width: 240px) {';
     const at = src.indexOf(OPEN);
@@ -1206,27 +1206,42 @@ describe('a piece row keeps enough width to read the piece name', () => {
       else if (src[i] === '}') depth--;
     }
     const narrow = src.slice(at + OPEN.length, i - 1);
-    const SELECTOR = '.list-row:not(.is-selected):not(:focus-within) .row-actions .icon-btn--danger';
+    // Not selected, and no KEYBOARD focus inside: those are the two ways Remove opens.
+    // `:focus-visible`, not `:focus-within` — a mouse press focuses the button it lands
+    // on, so keyed on focus a press on Hide unfolds Remove, shoves Hide sideways before
+    // the release, and the click lands on neither (the probe's "after clicking Hide").
+    const SELECTOR = '.list-row:not(.is-selected):not(:has(:focus-visible)) .row-remove';
     const m = new RegExp(`${SELECTOR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(narrow);
-    // Not selected, and not focused within: those are the two ways Remove is still
-    // reached on this rail, and a rule that hid it there too would delete the button.
-    expect(m, 'the narrow rail has no rule taking Remove off a pointed-at row').toBeTruthy();
-    // `display`, not `opacity` or `visibility`: a transparent button still holds its box.
-    expect(m![1]).toMatch(/display:\s*none/);
+    expect(m, 'the narrow rail has no rule folding Remove on a pointed-at row').toBeTruthy();
+    const body = m![1];
+    // Folded to no width, which is what gives the name its 24px back…
+    expect(body).toMatch(/max-width:\s*0\b/);
+    // …with the ::after hit pad clipped and the pointer refused, or a 44px invisible
+    // Remove sits over Hide…
+    expect(body).toMatch(/overflow:\s*hidden/);
+    expect(body).toMatch(/pointer-events:\s*none/);
+    // …and still a tab stop: `display: none` or `visibility: hidden` takes it out of the
+    // tab order, and Shift+Tab from the row below then steps straight past it.
+    expect(body).not.toMatch(/display:\s*none/);
+    expect(body).not.toMatch(/visibility:\s*hidden/);
     // And nowhere wider — the rule belongs to the rail that is short of room.
-    expect(codeOnly(CSS).split(SELECTOR).length - 1, 'the Remove rule appears outside the 240px query').toBe(1);
-    // The rule reaches Remove by its TONE, so both rows' Remove must carry it and
-    // nothing else in a row may: a second danger button would vanish with it.
-    const tree = codeOnly(readSrc('components', 'studio', 'PartTree.tsx'));
+    expect(src.split('.row-remove').length - 1, '`.row-remove` is styled outside the 240px query').toBe(1);
+    // The rule reaches Remove by a name of its own, so exactly the two Remove buttons may
+    // carry it: anything else given the class would fold away with them.
+    const named = [...tree.matchAll(/className="row-remove"/g)];
+    expect(named.length, 'buttons named `row-remove` in PartTree.tsx').toBe(2);
     for (const fn of ['function PartRow(', 'function GroupRow(']) {
       const from = tree.indexOf(fn);
       expect(from, `${fn} is not declared in PartTree.tsx`).toBeGreaterThan(-1);
       const next = tree.indexOf('\nfunction ', from + 1);
-      const body = tree.slice(from, next === -1 ? undefined : next);
-      const buttons = [...body.matchAll(/<IconButton\b[\s\S]*?\/>/g)].map((b) => b[0]);
-      const danger = buttons.filter((b) => b.includes('tone="danger"'));
-      expect(danger.length, `${fn} has ${danger.length} danger buttons`).toBe(1);
-      expect(danger[0]).toContain('icon="trash"');
+      const fnBody = tree.slice(from, next === -1 ? undefined : next);
+      const hit = fnBody.indexOf('className="row-remove"');
+      expect(hit, `${fn} has no \`row-remove\` button`).toBeGreaterThan(-1);
+      // The element the class sits on, from its own opening tag to the class.
+      const tag = fnBody.slice(fnBody.lastIndexOf('<', hit), hit);
+      expect(tag.startsWith('<IconButton'), `${fn}'s \`row-remove\` is not on an IconButton`).toBe(true);
+      expect(tag).toContain('icon="trash"');
+      expect(tag).toContain('tone="danger"');
     }
   });
 });
