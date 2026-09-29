@@ -1527,6 +1527,8 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
       widthMM: Math.round(t * b[2] * cal.k * 1000),
     };
   };
+  /** Twice `DISC_FIT` (`lib/photo-geometry.ts`): a box shorter than this is not solved. */
+  const SLIVER = 0.04;
   const readErr = (g: { widthMM: number }, D: number) => Math.abs(g.widthMM / 1000 / D - 1);
   const posErr = (g: { x: number; z: number }, f: Fixture) => Math.hypot(g.x - f.x, g.z - f.z);
 
@@ -1572,17 +1574,31 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
     expect(read).toBe(1338);
   });
 
-  it('reads a disc the top cut exactly, where the middle row read it 18% wide and 273 mm out', () => {
+  it('reads a disc the top cut exactly, where the middle row read it 18% wide and 273 mm out — all but the slivers', () => {
     let worstW = 0;
     let worstP = 0;
     let beforeW = 0;
     let beforeP = 0;
     let beforeOver10 = 0;
+    let nowW = 0;
+    let nowP = 0;
+    let nowOver10 = 0;
+    let slivers = 0;
     for (const f of topCut) {
       const g = placeCeilingObject(f.box, 'n', SQUARE, f.cal)!;
-      worstW = Math.max(worstW, Math.abs(g.widthMM - f.D * 1000));
-      worstP = Math.max(worstP, posErr(g.position, f));
       const m = middleRow(f.box, f.cal);
+      if (f.box[3] < SLIVER) {
+        // Too thin to solve from, so read as before (see the noisy sweep below for why).
+        slivers++;
+        expect(g.widthMM).toBe(m.widthMM);
+        expect(g.position.z).toBeCloseTo(m.z, 9);
+      } else {
+        worstW = Math.max(worstW, Math.abs(g.widthMM - f.D * 1000));
+        worstP = Math.max(worstP, posErr(g.position, f));
+      }
+      nowW += readErr(g, f.D);
+      nowP += posErr(g.position, f);
+      if (readErr(g, f.D) > 0.1) nowOver10++;
       beforeW += readErr(m, f.D);
       beforeP += posErr(m, f);
       if (readErr(m, f.D) > 0.1) beforeOver10++;
@@ -1590,9 +1606,11 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
     const n = topCut.length;
     console.log(
       `§ 49.13 · ${n} discs cut at the top · middle row ${((100 * beforeW) / n).toFixed(1)}% wide, ` +
-        `${((1000 * beforeP) / n).toFixed(0)} mm out, ${beforeOver10} past 10% · now worst ${worstW} mm wide, ` +
-        `${(1000 * worstP).toExponential(1)} mm out`,
+        `${((1000 * beforeP) / n).toFixed(0)} mm out, ${beforeOver10} past 10% · now ${((100 * nowW) / n).toFixed(1)}%, ` +
+        `${((1000 * nowP) / n).toFixed(0)} mm, ${nowOver10} past 10%, exact on ${n - slivers} (worst ${worstW} mm wide, ` +
+        `${(1000 * worstP).toExponential(1)} mm out) and ${slivers} slivers as before`,
     );
+    expect(slivers).toBe(43);
     expect(worstW).toBe(0);
     // The helper finds a chord's ends by bisection and the rim by 1440 samples, so
     // exact means to a few thousandths of a millimetre.
@@ -1600,9 +1618,12 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
     expect((100 * beforeW) / n).toBeCloseTo(17.9, 1);
     expect((1000 * beforeP) / n).toBeCloseTo(273, 0);
     expect(beforeOver10).toBe(397);
+    expect((100 * nowW) / n).toBeCloseTo(4.1, 1);
+    expect((1000 * nowP) / n).toBeCloseTo(42, 0);
+    expect(nowOver10).toBe(43);
   });
 
-  it('with every seen edge moved by up to 2% of the frame, halves both errors and falls back on the middle row for 126', () => {
+  it('with every seen edge moved by up to 2% of the frame, halves both errors and reads no box past twice its width', () => {
     // A cloud model's box is often this far out. Eight draws a disc from a fixed seed;
     // the cut edge stays where it is, because the frame is not noisy. A box no disc
     // under the cut draws is read on the middle row, as before — and that is
@@ -1617,6 +1638,12 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
     let beforeW = 0;
     let beforeP = 0;
     let fallbackW = 0;
+    // The tail, which a mean can hide: reads more than twice the real width, and
+    // reads more than 25 points worse than the middle row's on the same box.
+    let over100 = 0;
+    let beforeOver100 = 0;
+    let worse25 = 0;
+    let worst = 0;
     for (const f of topCut) {
       for (let k = 0; k < 8; k++) {
         const j = () => (rand() * 2 - 1) * NOISE;
@@ -1635,6 +1662,10 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
         }
         w += readErr(g, f.D);
         p += posErr(g.position, f);
+        if (readErr(g, f.D) > 1) over100++;
+        if (readErr(m, f.D) > 1) beforeOver100++;
+        if (readErr(g, f.D) - readErr(m, f.D) > 0.25) worse25++;
+        worst = Math.max(worst, readErr(g, f.D));
         beforeW += readErr(m, f.D);
         beforeP += posErr(m, f);
       }
@@ -1642,16 +1673,22 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
     console.log(
       `§ 49.13 · ${n} noisy boxes · middle row ${((100 * beforeW) / n).toFixed(1)}% / ${((1000 * beforeP) / n).toFixed(0)} mm · ` +
         `now ${((100 * w) / n).toFixed(1)}% / ${((1000 * p) / n).toFixed(0)} mm · ${fellBack} fell back, ` +
-        `read ${((100 * fallbackW) / fellBack).toFixed(1)}% there`,
+        `read ${((100 * fallbackW) / fellBack).toFixed(1)}% there · worst ${(100 * worst).toFixed(0)}%, ` +
+        `${over100} past 100% (middle row ${beforeOver100}), ${worse25} more than 25 points worse than the middle row`,
     );
     expect(n).toBe(4407);
-    expect(fellBack).toBe(126);
+    expect(fellBack).toBe(446);
     expect((100 * beforeW) / n).toBeCloseTo(18.1, 1);
     expect((1000 * beforeP) / n).toBeCloseTo(274, 0);
-    expect((100 * w) / n).toBeCloseTo(8.7, 1);
-    expect((1000 * p) / n).toBeCloseTo(98, 0);
+    expect((100 * w) / n).toBeCloseTo(9.5, 1);
+    expect((1000 * p) / n).toBeCloseTo(117, 0);
     // Where it falls back it reads as the middle row always did: no better, no worse.
-    expect((100 * fallbackW) / fellBack).toBeCloseTo(21.6, 1);
+    expect((100 * fallbackW) / fellBack).toBeCloseTo(39.2, 1);
+    // Without the sliver rule: 16 past 100%, the worst 222%, and 60 more than 25 points worse.
+    expect(over100).toBe(0);
+    expect(beforeOver100).toBe(0);
+    expect(worst).toBeLessThan(0.75);
+    expect(worse25).toBe(22);
   });
 
   it('falls back on the middle row where no disc under the cut draws the box', () => {
@@ -1671,13 +1708,15 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
 
   it('reads a disc whose centre is behind the pivot, which a lens tipped down puts ahead of it', () => {
     // Tipped down 5°, every column's line meets the slab 114 mm ahead of the lens. A
-    // 3 m disc centred 100 mm ahead is behind that point, and the frame still shows
+    // 3 m disc centred 100 mm ahead is behind that point, and a 120° frame still shows
     // only the part of it well ahead of both. The first version refused every centre
-    // behind the pivot, and a wider sweep than the one above found 22 such discs.
-    const cal: CameraCal = { ...WIDE, tiltRad: (5 * Math.PI) / 180 };
+    // behind the pivot: in the wider sweep that was 13 discs tall enough to read, every
+    // one on this lens tipped down, and 2 more over the lens.
+    const cal: CameraCal = { k: 2 * Math.tan((60 * Math.PI) / 180), aspect: 4 / 3, tiltRad: (5 * Math.PI) / 180 };
     expect(RISE * Math.tan(cal.tiltRad!), 'premise: the pivot is past the centre').toBeGreaterThan(0.1);
     const box = bboxOfCeilingDiscInFrame('n', 0, -0.1, 3, cal, SQUARE.height)!;
     expect(underTop(box), 'premise: cut at the top only').toBe(true);
+    expect(box[3], 'premise: not a sliver').toBeGreaterThanOrEqual(SLIVER);
     const g = placeCeilingObject(box, 'n', SQUARE, cal)!;
     expect(g.widthMM).toBe(3000);
     expect(g.position.x).toBeCloseTo(0, 5);
@@ -1687,12 +1726,29 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
   it('leaves a disc right over the lens to the middle row, because nothing is placed there', () => {
     // Its centre is 0 ahead, and `placeCeilingObject` refuses a distance that is not
     // ahead of the lens — so taking the true disc would drop the row's position, the
-    // thing the fallback exists to keep. 78 of 6205 boxes in the wider sweep.
+    // thing the fallback exists to keep. 63 of 6205 boxes in the wider sweep, slivers aside.
     const cal: CameraCal = { k: 2 * Math.tan((40 * Math.PI) / 180), aspect: 4 / 3, tiltRad: (-10 * Math.PI) / 180 };
     const box = bboxOfCeilingDiscInFrame('n', 0, 0, 3, cal, SQUARE.height)!;
     expect(underTop(box), 'premise: cut at the top only').toBe(true);
     const g = placeCeilingObject(box, 'n', SQUARE, cal)!;
     const m = middleRow(box, cal);
+    expect(g.widthMM).toBe(m.widthMM);
+    expect(g.position.z).toBeCloseTo(m.z, 9);
+  });
+
+  it('leaves a disc centred behind the lens to the middle row, rather than refusing it', () => {
+    // Tipped 45° up, the frame's top edge looks past the vertical, so a 1.2 m disc
+    // centred 200 mm BEHIND the lens is cut at the top with its far rim well ahead. The
+    // true disc is behind the lens, where nothing is placed; taking it would refuse a
+    // row the middle row places, and lose the position the merge needs. 178 of 473 such
+    // discs in a sweep of lenses tipped up 10° to 75°.
+    const cal: CameraCal = { ...WIDE, tiltRad: (-45 * Math.PI) / 180 };
+    const box = bboxOfCeilingDiscInFrame('n', 0, 0.2, 1.2, cal, SQUARE.height)!;
+    expect(underTop(box), 'premise: cut at the top only').toBe(true);
+    expect(box[3], 'premise: not a sliver').toBeGreaterThanOrEqual(SLIVER);
+    const g = placeCeilingObject(box, 'n', SQUARE, cal)!;
+    const m = middleRow(box, cal);
+    expect(m.z, 'premise: the middle row reads it ahead of the lens').toBeLessThan(0);
     expect(g.widthMM).toBe(m.widthMM);
     expect(g.position.z).toBeCloseTo(m.z, 9);
   });

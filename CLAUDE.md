@@ -85,8 +85,8 @@ backend, no account. The 3D studio *is* the product.
    whole trust boundary: `defaultDepthFor(category, shape)` from the catalogue, never
    `d.dimMM[1]` from the detector, because `depthM` moves a measurement and a depth the
    AI guessed would be an AI-decided one. The CEILING branch is the one place the hint
-   still wins, and that is not an oversight — `placeCeilingObject` reads one row of a
-   disc and takes no depth, so nothing there turns a hint into a measurement. The corollary is the half that is easy to
+   still wins, and that is not an oversight — `placeCeilingObject` reads a disc's
+   width off its box and takes no depth, so nothing there turns a hint into a measurement. The corollary is the half that is easy to
    miss: `geoRefine` writes that same catalogue number into `dimMM[1]`, so the piece is
    DRAWN with the depth it was PLACED by — a hint kept for the render beside a default
    used for the maths leaves the two disagreeing by half their difference, on the one axis

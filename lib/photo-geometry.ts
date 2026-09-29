@@ -711,7 +711,8 @@ function slotToWorld(
 export type GeoPlacement = {
   /** world position — x/z centre; y = 0 floor anchor (floor), mount centre
    *  (wall), or the ceiling plane itself (ceiling — the surface intersected, not an
-   *  estimate; the row of the bbox that is intersected is the MIDDLE one, and
+   *  estimate; the row of the bbox that is intersected is the MIDDLE one, or for a
+   *  disc the top of the frame cut the disc its other three edges draw, and
    *  `placeCeilingObject` is where that matters). Downstream, `groundY` owns this
    *  axis outright. */
   position: { x: number; y: number; z: number };
@@ -820,9 +821,11 @@ export function cutAxes(
   plane: MeasuredPlane,
 ): { width: boolean; height: boolean } {
   const c = frameCuts(box);
-  // A ceiling piece is read on one row of a disc, its box's centre row, and ANY edge
-  // moves that row off the disc's centre: the width it takes there is neither the
-  // piece's nor a bound on it, and width is the one axis it has.
+  // A ceiling piece is read on its box's middle row, and ANY edge moves that row off
+  // the disc's centre: the width it takes there is neither the piece's nor a bound on
+  // it, and width is the one axis it has. A disc the top ALONE cut is solved from its
+  // other three edges instead where one fits (`discUnderTopCut`), but the placement
+  // does not say which of the two it did, so its width counts as cut either way.
   if (plane === 'ceiling') return { width: cutByFrame(box), height: false };
   return { width: c.left || c.right, height: c.top || (plane === 'wall' && c.bottom) };
 }
@@ -1631,7 +1634,8 @@ export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM' | 'bounds'>;
  * measures the near edge and then applies the disc's full angular width at that
  * shorter distance — for a 1.2 m fan 2.5 m away, 0.94 m, a 22% under-read that is
  * further from the truth than the catalogue default it was supposed to improve on.
- * The centre row lands within a few percent.
+ * The centre row lands within a few percent — of a WHOLE disc. Cut the top off and
+ * it does not, which is `discUnderTopCut`'s business.
  *
  * **Width only, and the reason is geometric rather than lazy.** That same plate
  * has no thickness in its bbox: the vertical extent is the foreshortened diameter.
@@ -1686,20 +1690,11 @@ export function placeCeilingObject(
   const rise = room.height - heightOf(cal);
   if (!(rise > 0.05)) return null; // camera at or above the slab — not a room
 
-  // A disc the TOP of the frame cut is read from the three edges the photo saw, not
-  // from its box's middle row: see `discUnderTopCut`, and § 49.13 for what the
-  // middle row did to it. A box no such disc draws is read on the middle row as
-  // before — why, and what that costs, is in the same place.
-  const cuts = frameCuts(box);
-  const disc = cuts.top && !cuts.left && !cuts.right && !cuts.bottom ? discUnderTopCut(box, cal, rise) : null;
-
   // The one row that is read. `bh` is used ONLY to find its centre — no height is
   // derived from it, which is the point of the whole function.
   const mid = ray(uC, by + bh / 2, cal);
-  if (mid.up <= 0.02) return null; // at or below the horizon — not on the ceiling
+  if (mid.up <= HORIZON_UP) return null; // at or below the horizon — not on the ceiling
   const t = rise / mid.up; // along the ray
-  const d = disc ? disc.forward : t * mid.fwd; // forward distance from the camera
-  if (!(d > 0)) return null;
 
   // Nothing on this room's ceiling is beyond the wall being photographed, so a ray
   // that only reaches the ceiling plane out there never touched the ceiling at all.
@@ -1711,6 +1706,22 @@ export function placeCeilingObject(
   // refusing — the same answer `onFramedSurface` gives one axis over, and the
   // opposite of `placeWallObject`'s, which has no plane at all without a frame.
   const frame = wallFrame(slot, room.footprint);
+
+  // Except that a disc the TOP of the frame cut is read from the three edges the
+  // photo saw rather than on that row: see `discUnderTopCut`, and § 49.13 for what
+  // the middle row did to it. Its far rim is the box's bottom row, a point the photo
+  // SAW, so a solved disc whose far rim is past the wall is not taken, and the row
+  // is read on the middle row, gates and all, exactly as it was before — a row the
+  // solve cannot place is not a row to refuse, since a refused ceiling row keeps no
+  // position to merge on. The sideways gate below needs no such fallback: on 365,975
+  // boxes cut at the top (rooms 4 × 3, 6 × 4 and 6 × 6, lenses 80°, 106° and 120°,
+  // level, tipped up 10° and 20° and down 5°), falling back there instead of refusing
+  // changed no reading.
+  const cuts = frameCuts(box);
+  const solved = cuts.top && !cuts.left && !cuts.right && !cuts.bottom ? discUnderTopCut(box, cal, rise) : null;
+  const disc = solved && !(frame && solved.forward + solved.radius > frame.distance) ? solved : null;
+  const d = disc ? disc.forward : t * mid.fwd; // forward distance from the camera
+  if (!(d > 0)) return null;
   if (frame && d > frame.distance) return null;
 
   const right = disc ? disc.right : t * mid.right;
@@ -1742,6 +1753,10 @@ export function placeCeilingObject(
  *  a few pixels out at best and a cloud model's is often 1–2% of the frame, and the
  *  fit is how the four readings below are told apart, not a test of the detector. */
 const DISC_FIT = 0.02;
+
+/** How far above the horizon a ray must point to be read as reaching the ceiling:
+ *  a ray nearer level meets the slab so far off that it cannot be this room's. */
+const HORIZON_UP = 0.02;
 
 /**
  * A ceiling DISC the top of the frame cut, read from the three edges of its box that
@@ -1775,10 +1790,14 @@ const DISC_FIT = 0.02;
  * Measured on a disc cut at the top in 556 positions (three sizes, level and tipped
  * up 10° and 20° and down 5°, 106° lens, 6 × 6 m room), the box drawn as a detector
  * sees it: the middle row read the width 17.9% off on average and placed the centre
- * 273 mm out; this reads both exactly. With each seen edge moved at random by up to
- * 2% of the frame, eight draws a position, the middle row reads 18.1% and 274 mm and
- * this 8.7% and 98 mm, and finds no disc for 126 of the 4407 boxes.
- * `tests/photo-geometry.test.ts` holds the sweep.
+ * 273 mm out, 397 of them more than 10% wide. This reads 513 of the 556 exactly; the
+ * other 43 are slivers (below) and are read on the middle row as before, so over all
+ * of them it is 4.1% and 42 mm, and 43 past 10%. With each seen edge moved at random
+ * by up to 2% of the frame, eight draws a position, the middle row reads 18.1% and
+ * 274 mm and this 9.5% and 117 mm. No box is read past twice its width, which the
+ * middle row never did either; the worst is 74% out, and 22 of the 4407 read more
+ * than 25 points worse than the middle row did. `tests/photo-geometry.test.ts` holds
+ * the sweep.
  *
  * **No disc falls back on the middle row, which is what the caller did before**, and
  * is not a refusal, for a reason that is about the merge rather than the size. A box
@@ -1787,10 +1806,10 @@ const DISC_FIT = 0.02;
  * whole shade inside it, and no disc under a cut draws that. Refused, the row keeps
  * no position — `geoLocate` places only wall rows — so it cannot merge with the
  * other photo's sighting of the same light, and the room builds two
- * (`tests/repeat-sightings.test.ts`). On the 126 noisy boxes above, the middle row
- * reads 21.6% out, as it reads every box cut at the top: no better than before this
- * existed, and no worse. The width is not judged either way, since `cutAxes` counts
- * any cut against a ceiling piece's width.
+ * (`tests/repeat-sightings.test.ts`). Of the 4407 noisy boxes above, 446 are read on
+ * the middle row — slivers, and boxes the solve does not take — and it reads them
+ * 39.2% out, as it did before this existed: no better, and no worse. The width is not
+ * judged either way, since `cutAxes` counts any cut against a ceiling piece's width.
  */
 function discUnderTopCut(
   box: readonly [number, number, number, number],
@@ -1798,13 +1817,20 @@ function discUnderTopCut(
   rise: number,
 ): { forward: number; right: number; radius: number } | null {
   const [bx, by, bw, bh] = box;
+  // A sliver says too little. Every candidate stands on the far edge, which the fit
+  // never checks, and a box's bottom edge is as uncertain as its sides: a box not
+  // twice `DISC_FIT` tall can have its far edge moved by half its height, and the
+  // chord's radius goes as the square of its width over that height. With each seen
+  // edge 2% out and no such rule, the slivers read 16 of 4407 boxes more than twice
+  // their real width, a 900 mm fan as 2900, where the middle row read none so far out.
+  if (!(bh >= 2 * DISC_FIT)) return null;
   const tilt = tiltOf(cal);
   const cos = Math.cos(tilt);
   // Where every column's line on the slab passes through.
   const pivot = rise * Math.tan(tilt);
   const onSlab = (u: number, v: number) => {
     const r = ray(u, v, cal);
-    if (!(r.up > 0.02)) return null;
+    if (!(r.up > HORIZON_UP)) return null;
     return { right: (rise / r.up) * r.right, forward: (rise / r.up) * r.fwd };
   };
   const far = onSlab(bx + bw / 2, by + bh)?.forward;
@@ -1853,9 +1879,9 @@ function discUnderTopCut(
     const qa = B * B;
     const qb = 2 * q * B - 2 * gap;
     const qc = q * q + gap * gap;
-    const disc = qb * qb - 4 * qa * qc;
-    if (disc < 0) continue;
-    const radius = (-qb - Math.sqrt(disc)) / (2 * qa);
+    const det = qb * qb - 4 * qa * qc;
+    if (det < 0) continue;
+    const radius = (-qb - Math.sqrt(det)) / (2 * qa);
     candidates.push({ forward: far - radius, right: side * (A - radius * B), radius });
   }
 
@@ -1884,9 +1910,11 @@ function discUnderTopCut(
     // A disc the top row does not reach is not one the top of the frame cut. A centre
     // behind the LENS can be real, the fan above your head, but the caller places
     // nothing there, so taking one would refuse the row where the middle row still had
-    // an answer. Noise puts one there on a lens tipped up, for a disc nearly overhead
-    // that the frame shows only a sliver of. A centre behind the PIVOT is not filtered:
-    // tipped down, the pivot is ahead of the lens, and a big disc nearly overhead has
+    // an answer. A lens tipped well up sees such discs: of 473 centred behind it, cut
+    // at the top and tall enough to solve, on four lenses tipped up 10° to 75°, the
+    // middle row places 178 ahead of the lens, and without this every one of them was
+    // refused. A centre behind the PIVOT is not filtered: tipped down, the pivot is
+    // ahead of the lens, and a big disc nearly overhead has
     // its centre between the two while the frame shows only the part well ahead of
     // both. The first version refused those as a column line's other half; `sides`
     // already rejects that half, since a tangent it cannot see is drawn as a chord.
