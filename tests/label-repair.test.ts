@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, measuredPhrase, sizeFitsLabel, type LabelVerdict } from '@/lib/label-repair';
-import { AS_READ, AT_ASSUMED_DISTANCE, clipToFrame, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
+import { AS_READ, AT_ASSUMED_DISTANCE, CAM_HEIGHT, clipToFrame, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
   PART_LIBRARY,
@@ -502,12 +502,13 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     // Read as though it held, the stool 20° down was called too tall for a stool, and
     // its row printed a height range that leaves out its own 700 mm. So it claims no
     // side. Each side is read at the end its column is extreme in the photo now (§ 49.9),
-    // and not one of these seventeen crosses. The exception stays all the same: three
-    // rows that stopped crossing are not the measurement that would retire it, which is
-    // filed as its own (§ 49.9).
+    // and not one of these seventeen crosses, on either axis: the width under its truth,
+    // or the height on the far side of it from the lens. The exception stays all the
+    // same: three rows that stopped crossing are not the measurement that would retire
+    // it, which is filed as its own (§ 49.9).
     const crossed = [5, 10, 15, 20, 25].flatMap((t) =>
       roundRows(t)
-        .filter(({ truth, read }) => read[0] < truth[0] && read[2] > truth[1])
+        .filter(({ truth, read }) => read[0] < truth[0] || (truth[1] > CAM_HEIGHT * 1000 ? read[2] < truth[1] : read[2] > truth[1]))
         .map(({ d, truth, read }) => [t, d.shape, truth[0], read[0], truth[1], read[2]]),
     );
     expect(crossed).toEqual([]);

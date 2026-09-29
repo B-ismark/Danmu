@@ -944,8 +944,12 @@ export type ReadBound =
  *  distance**, and for a commit it was handed `AS_READ` instead, which says the
  *  opposite: the one foot-cut row whose sentence printed its estimate as a measurement,
  *  without its "about" or the note. Judged at the reading, as every piece is now (D8),
- *  the two cost its verdict the same. The phone tipped UP, which is how rooms are
- *  photographed, holds on every row, and so does a box tipped down.
+ *  the two cost its verdict the same. With the phone level or tipped UP, which is how
+ *  rooms are photographed, the round rows hold but three, all one case: a stool the frame
+ *  shows only the top of, whose box's sides are where its seat crosses the frame's
+ *  bottom and not the tangents they are read as (§ 49.20, pinned in the same file). A box
+ *  tipped down holds on a fixture that still clips the silhouette rather than boxing what
+ *  the photo draws, which is the same section's to fix.
  *
  *  **Both directions also lean on the catalogue depth**, because the far end is the
  *  piece's back on the plaster at its kind's typical depth. A piece deeper than that
