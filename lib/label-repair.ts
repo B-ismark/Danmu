@@ -287,7 +287,12 @@ export function candidatesFor(
       // is what measuring it as a ceiling item produced.
       // Judged as the shape it was measured as, for the reason `judgeLabel` is.
       const cAxes = measuredAxes(c, t.shape, d.box);
-      const fits = !failedAxes(c, t.shape, trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
+      // Every axis this kind is read on runs out of the photo under ITS anchor — a
+      // wall word's height takes the bottom cut a floor word's does not. Nothing was
+      // measured, so nothing can fit: kept, it fitted vacuously and its margin was
+      // Infinity, so the one repair with no evidence sorted first.
+      if (cAxes.length === 0) continue;
+      const fits =!failedAxes(c, t.shape, trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
       trials.push({
         category: c,
         detection: trial,
