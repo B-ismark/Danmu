@@ -127,6 +127,30 @@ min, library and max sizes, and that `desk-standard` is behaviourally identical 
 over 0, all three sizes) — both measured by `tests/footprint-fidelity.test.tsx`. The open
 question is purely whether the new proportions look like furniture. PR #124.
 
+### The plant is redrawn at its own size, with round leaves — branch `claude/affectionate-ritchie-ilawx1`
+
+**Looked at, and it was wrong: "the plant model looks squeezed".** The item below predicted
+it ("a squashed shrub is the risk") and its advice — fix the catalogue size, not the renderer
+— was the wrong half. `FitToDim` scales per axis, so ANY resize squashes a sphere again, and
+the catalogue number was never the defect. `plantForm` (`lib/scene-spec.ts`) draws the plant
+at its declared size instead, and `plant` is parametric, so a resize redraws it rather than
+stretching it: a slim trunk and an egg-shaped head of leaf balls, every one round at any
+ordinary plant shape, the pot capped at 420 mm tall and 420 mm across the rim.
+
+**Where to click.** Open a seeded living room in **3D Model** — the plant stands in a corner by
+the screen. Then select it, **Scale** it wider and shorter (say 800 × 800 × 1000) and taller
+and narrower (300 × 300 × 2000), and look again each time.
+
+**What wrong looks like.** Any leaf ball that is an oval; daylight through the middle of the
+head; a pot that reads as a tube or as a bucket; a head that floats off its trunk. Lopsided
+sizes (one side under half the other) are allowed to press balls flat on the thin side —
+that is by design and is the one place a ball may be anything but round.
+
+**Settled without eyes.** Draws 1.00 × 1.00 × 1.00 of its box
+(`tests/footprint-fidelity.test.tsx`); round leaves at nine ordinary shapes, no sight line
+through the head from front, side or above, and every leaf joined to the rest across 126 legal
+sizes (`tests/plant-form.test.ts`, mutation-checked).
+
 ### Six pieces changed size — a plant, three chairs and two lamps
 
 **MEASURED IN A BROWSER 2026-09-06 — the SIZE half is settled by a second instrument.**
@@ -191,6 +215,8 @@ declared size — ratio 1.00 on all three axes, gated per shape in
 whether a plant at its declared size still looks like a plant. If any of them look wrong, the
 honest fix is the **declared size in `PART_LIBRARY`**, not the renderer — the geometry is
 correct now and the catalogue number is the thing that was never checked against it.
+**Not for the plant**, which was looked at and was squashed: a stretch is a stretch at any
+catalogue size, so it is drawn at its own size now — see the item above.
 
 ### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
 

@@ -398,6 +398,111 @@ export function doorHandleY(heightMM: number): number {
   return Math.min(1.0, (heightMM / 1000) * 0.45);
 }
 
+// A big floor pot: 420 mm tall, 420 mm across the rim. A 2.6 m plant does not stand
+// in a 520 mm pot, so these are caps rather than proportions — which is what makes the
+// plant parametric under § 36 as well as for its round leaves.
+export const PLANT_POT_H = 0.42;
+export const PLANT_POT_R = 0.21;
+/** How lopsided a leafy head may be before its balls stop shrinking to stay round. */
+export const PLANT_HEAD_ASPECT = 2.2;
+
+/** One ball of a plant's foliage: centre and radius, metres, standing on y = 0. */
+export type PlantLeaf = {
+  p: [number, number, number];
+  r: number;
+  /** Per-axis factor on `r`: [1, 1, 1] — round — at every ordinary plant shape. */
+  squash: [number, number, number];
+  tone: number;
+};
+
+/** A potted plant drawn AT its `dimMM`, in metres: pot, soil, a trunk, and a leafy head
+ *  of round balls whose outermost edges are exactly the declared box — ±w/2, ±d/2, and
+ *  the top leaf touching h.
+ *
+ *  It exists because `PlantGeo` drew one fixed plant (880 × 700 × 1940) and let
+ *  `FitToDim` stretch it into its box, per axis. At the catalogue's 400 × 400 × 1600
+ *  that is ×0.45 wide and ×0.82 tall, so every leaf ball came out as a tall oval and the
+ *  pot as a tube, and that was what "the plant looks squeezed" meant. A sphere is the
+ *  one thing a per-axis scale cannot leave alone, so the plant is parametric and the
+ *  HEAD is what takes the box's proportions: an egg of leaf balls, each one round,
+ *  sized off the head's narrowest half-axis. A slimmer, taller plant gets more of them,
+ *  never ovals — until the box is lopsided past `PLANT_HEAD_ASPECT`, where a ball is
+ *  pressed flat on the thin side rather than multiplied into thousands.
+ *
+ *  The pot is the absolute here (`PLANT_POT_H`, `PLANT_POT_R`). */
+export function plantForm(dimMM: [number, number, number]): {
+  pot: { top: number; bottom: number; h: number };
+  soil: { r: number; t: number };
+  stem: { r: number; y0: number; y1: number };
+  leaves: PlantLeaf[];
+} {
+  const w = dimMM[0] / 1000;
+  const d = dimMM[1] / 1000;
+  const h = dimMM[2] / 1000;
+  const R = Math.min(w, d) / 2;
+  const top = Math.min(PLANT_POT_R, R * 0.72);
+  const potH = Math.min(PLANT_POT_H, h * 0.2, top * 2.4);
+  const soilT = potH * 0.08;
+  // The head is at most twice as tall as the plant's widest side, and always leaves
+  // some trunk.
+  const above = h - potH;
+  const headH = Math.min(above * 0.85, Math.max(w, d) * 2);
+  // Half-axes of the head: A across, C up, E deep.
+  const A = w / 2;
+  const C = headH / 2;
+  const E = d / 2;
+  const yc = h - C;
+  // A leaf ball is sized off the head's narrow side, so at any ordinary plant shape every
+  // one is round. A lopsided box (a 100 mm slab of plant 1.2 m long) would need thousands
+  // of balls that small, so the size has a floor instead — a head never counts as more
+  // than `PLANT_HEAD_ASPECT` times longer than it is thin — and there, and only there, a
+  // ball is pressed flat on the thin side rather than poking out of the box.
+  const b = 0.55 * Math.max(Math.min(A, C, E), Math.max(A, C, E) / PLANT_HEAD_ASPECT);
+  const leaves: PlantLeaf[] = [];
+  const at = (ux: number, uy: number, uz: number, r: number, tone: number) => {
+    const rx = Math.min(r, A);
+    const ry = Math.min(r, C);
+    const rz = Math.min(r, E);
+    leaves.push({
+      p: [(A - rx) * ux, yc + (C - ry) * uy, (E - rz) * uz],
+      r,
+      squash: [rx / r, ry / r, rz / r],
+      tone: tone % 5,
+    });
+  };
+  // A shell, no solid core: the shell alone stops every sight line through the head
+  // (`tests/plant-form.test.ts`), so a core would be meshes filling a hollow nobody sees.
+  // Four round the widest ring and one at the crown: these set the declared box exactly.
+  at(1, 0, 0, b, 0);
+  at(-1, 0, 0, b, 1);
+  at(0, 0, 1, b, 3);
+  at(0, 0, -1, b, 4);
+  at(0, 1, 0, b, 3);
+  // The rest spread evenly over the egg (a Fibonacci sphere), as many as it takes for
+  // balls this size to cover a head this shape, and each a little bigger or smaller than
+  // the last so it reads as foliage rather than a pattern.
+  const ax = Math.min(A, b);
+  const cy = Math.min(C, b);
+  const ez = Math.min(E, b);
+  // Surface area of the egg in units of one ball's silhouette (Knud Thomsen's formula).
+  const area = 4 * Math.PI * Math.pow((Math.pow(A * C, 1.6) + Math.pow(A * E, 1.6) + Math.pow(C * E, 1.6)) / 3, 1 / 1.6);
+  const disc = Math.PI * Math.sqrt(ax * cy * ez * b);
+  const n = Math.max(8, Math.round((area / disc) * 0.7));
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < n; i++) {
+    const uy = 1 - ((i + 0.5) / n) * 2;
+    const ring = Math.sqrt(1 - uy * uy);
+    const t = i * golden;
+    at(Math.cos(t) * ring, uy, Math.sin(t) * ring, b * (0.82 + 0.3 * (((i * 7) % 5) / 4)), i);
+  }
+  return {
+    pot: { top, bottom: top * 0.76, h: potH },
+    soil: { r: top * 0.92, t: soilT },
+    stem: { r: Math.max(0.004, R * 0.06), y0: potH, y1: yc },
+    leaves,
+  };
+}
+
 /** Where the bulb sits inside each fixture, in the part's local metres. These
  *  track the geometry in DynamicPart — a light at the origin would sit on the
  *  floor and illuminate the inside of its own shade.
@@ -1892,6 +1997,10 @@ const PARAMETRIC_SHAPES = new Set<Shape>([
   // — 2.50x and 2.54x respectively, worse than four of the six above. Found by asking
   // what else has this SHAPE rather than by looking for things that looked wrong.
   'window', 'radiator',
+  // …and `plant`, whose leaves are spheres: a per-axis group scale is the one thing a
+  // sphere cannot survive, so a 400 × 400 × 1600 plant drawn from a fixed 880 × 1940
+  // one came out as tall ovals in a tube of a pot. `plantForm` also caps the pot.
+  'plant',
 ]);
 export function isParametric(shape: Shape): boolean {
   return PARAMETRIC_SHAPES.has(shape);
