@@ -16,6 +16,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createStore, entries } from 'idb-keyval';
 import { onPageLeave } from '@/lib/page-leave';
 import { footprintForLayout } from '@/lib/footprint';
 import { roomStore, type RoomData } from '@/lib/storage';
@@ -29,6 +30,8 @@ const { RoomDimsEditor } = await import('@/components/studio/RoomDimsEditor');
 const { Inspector } = await import('@/components/studio/Inspector');
 
 const ROOM_ID = 'leave-room';
+/** The database `lib/storage.ts` writes to, read directly to see everything stored. */
+const stored = createStore('keyval-store', 'keyval');
 
 const leave = () => window.dispatchEvent(new Event('pagehide'));
 
@@ -162,15 +165,15 @@ describe('RoomSync, when the page is left inside the debounce', () => {
   });
 
   it('writes nothing when nothing is pending', async () => {
+    // What is stored, rather than a spy on each save: RoomSync calls one save now, and a
+    // spy on the others could only catch those exact calls coming back.
     await mount(<RoomSync />);
-    const saves = [
-      vi.spyOn(roomStore, 'savePending'),
-      vi.spyOn(roomStore, 'saveTransforms'),
-      vi.spyOn(roomStore, 'saveSceneParts'),
-      vi.spyOn(roomStore, 'editRoom'),
-    ];
+    const save = vi.spyOn(roomStore, 'savePending');
+    const before = await entries(stored);
     leave();
-    for (const s of saves) expect(s).not.toHaveBeenCalled();
+    await wait(50);
+    expect(save).not.toHaveBeenCalled();
+    expect(await entries(stored)).toEqual(before);
   });
 
   // The case three separate saves got wrong: a wall moved, and the furniture it carried.
