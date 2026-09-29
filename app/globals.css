@@ -1834,8 +1834,17 @@ textarea.field { border-radius: var(--r-2); }
   box-shadow: 0 0 0 6px color-mix(in srgb, var(--paper) 18%, transparent), var(--shadow-float);
 }
 .sun-arc--muted .sun-arc__body { color: var(--ink-3); box-shadow: var(--shadow-float); }
+/* Giving way to the furniture (see the contract in SunArc.tsx). Quiet while a
+   piece is selected — still there, still grabbable, not competing with it — and
+   away while anything else is carried, where it must not catch the pointer. */
+.sun-arc { transition: opacity var(--dur-base) var(--ease-out); }
+.sun-arc--quiet { opacity: 0.5; }
+.sun-arc--away { opacity: 0; pointer-events: none; }
+/* Only the disc is the handle. The time beside it is a label, and a label the
+   size of a word should not be a patch of wall or TV nobody can click through. */
+.sun-arc__time { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
-  .sun-arc__body { transition: none; }
+  .sun-arc, .sun-arc__body { transition: none; }
 }
 
 /* ── The day as a track (components/studio/LightingPicker.tsx) ────────────────

@@ -26,9 +26,13 @@
 //     is the moon and a drag moves through the night. The two share one arc, so
 //     crossing between them is the rail's Morning / Night stops, not a drag past
 //     the horizon — a gesture whose meaning flips at an invisible point is one
-//     nobody can learn.
+//     nobody can learn;
+//   · it gives way to the furniture. The room is what people come to arrange and
+//     the sun is a setting on it, so the arc must never be the thing under a hand
+//     that reached for a piece: it rides ABOVE the walls (see `sunArcShape`), vanishes
+//     while anything else is being carried, and quietens while a piece is selected.
 
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Html, Line } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { Vector3, type Camera, type Object3D } from 'three';
@@ -44,9 +48,9 @@ import {
   lightingAt,
   moonAt,
   sunAt,
-  type SkyAngle,
 } from '@/lib/lighting-moods';
 import { SCENE } from '@/lib/scene-palette';
+import { skyPoint, sunArcShape } from '@/lib/sun-arc';
 import { playSound } from '@/lib/sound';
 import { Icon } from '@/components/ui/Icon';
 
@@ -58,17 +62,6 @@ export const SUN_DRAG_ID = '__sun__';
  *  13½-hour day is one every ~8½ minutes, finer than the 5-minute rounding a drag
  *  lands on, so the rounding and not the sampling decides where it stops. */
 const SAMPLES = 96;
-
-/** A direction on the sky that does NOT refuse the horizon. `sunDirection` returns
- *  null at or below 0° on purpose — a light cannot shine up through the floor — but
- *  a path can be drawn there, and the arc's two ends are exactly at 0°. Same axes:
- *  +X east, +Z south, bearing rotating the whole sky. */
-function skyPoint(a: SkyAngle, bearingDeg: number, r: { across: number; up: number }, c: [number, number]): [number, number, number] {
-  const alt = (a.elevationDeg * Math.PI) / 180;
-  const az = ((a.azimuthDeg - bearingDeg) * Math.PI) / 180;
-  const h = Math.cos(alt);
-  return [c[0] + r.across * h * Math.sin(az), r.up * Math.sin(alt), c[1] - r.across * h * Math.cos(az)];
-}
 
 /** Relative luminance of a `#rrggbb`, good enough to decide ink-or-paper. */
 function isDark(hex: string): boolean {
@@ -113,18 +106,17 @@ export function SunArc() {
   const overcast = lighting === 'overcast';
   const day = isDaytime(hour);
 
-  // A halo, not a dome. Centred on the room — its centre rather than the origin,
-  // because a wall dragged out leaves the footprint off-centre — and squashed:
-  //   · ACROSS, just clear of the walls, so the rising and setting ends land
-  //     beside the room rather than sweeping the whole view.
-  //   · UP, far enough that the noon sun clears the top of the walls (sin 60° of
-  //     it is ~0.87, so a ceiling plus 0.9 m peaks about half a metre above it).
-  // The first version was a true hemisphere at 0.62 × the long side + 1.4 m and
-  // was measured in a browser: in a 5 × 4 m room it crossed every wall as a
-  // construction line and put the noon sun under the toolbar, off the canvas.
+  // A halo, not a dome — see `sunArcShape` for why it sits on the eaves.
   const b = footprintBounds(footprint);
-  const center: [number, number] = [b.cx, b.cz];
-  const radius = { across: Math.max(b.width, b.depth) * 0.5 + 0.6, up: roomHeight + 0.9 };
+  const { center, radius } = sunArcShape(b, roomHeight);
+
+  // Giving way. Anything else being carried — a piece, a wall — and the sun is not
+  // there at all, so it can neither catch the pointer nor draw over the size tags.
+  // A piece selected and the sun quietens to a hint; reaching for it (hover,
+  // focus, a drag) brings it back.
+  const otherGesture = useStudio((s) => s.draggingId !== null && s.draggingId !== SUN_DRAG_ID);
+  const pieceInHand = useStudio((s) => s.selection.length > 0 || s.selectedWall !== null);
+  const [reached, setReached] = useState(false);
 
   // The arc, and the hour at each of its points. One list for both the drawing and
   // the drag's hit test, so the handle cannot be dragged to a place the dashes are not.
@@ -149,7 +141,7 @@ export function SunArc() {
     return pts;
     // `center` is rebuilt every render from `b`; its two numbers are the dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [half, bearingDeg, radius.across, radius.up, b.cx, b.cz]);
+  }, [half, bearingDeg, radius.across, radius.up, radius.base, b.cx, b.cz]);
 
   const body = half === 'day' ? sunAt(hour) : moonAt(hour);
   const marker = skyPoint(body, bearingDeg, radius, center);
@@ -193,10 +185,16 @@ export function SunArc() {
   };
 
   const ink = dark ? SCENE.sunPathOnDark : SCENE.sunPathOnLight;
+  const engaged = carrying || reached;
+  const quiet = pieceInHand && !engaged;
+  // At rest the dashes are a hint of the path; reaching for the sun draws it out.
+  // Pale dashes on a night sky read about twice as loud as dark ones by day — the
+  // first night frame looked scored across the room — so the dark case is softer.
+  const strength = (overcast ? 0.4 : engaged ? 1 : quiet ? 0.3 : 0.5) * (dark && !engaged ? 0.65 : 1);
 
   return (
     // `helper`: a saved picture is of the room, not of the controls drawn over it.
-    <group userData={{ helper: true }}>
+    <group userData={{ helper: true }} visible={!otherGesture}>
       {/* Drawn twice. Once THROUGH everything, faint — the arc is a control, and a
           control hidden behind the wall it is about is one you cannot find — and
           once depth-tested at full strength, so the stretch in front of the room is
@@ -210,7 +208,7 @@ export function SunArc() {
         dashSize={0.12}
         gapSize={0.1}
         transparent
-        opacity={overcast ? 0.08 : 0.16}
+        opacity={0.2 * strength}
         depthWrite={false}
         depthTest={false}
         renderOrder={10}
@@ -224,14 +222,24 @@ export function SunArc() {
         dashSize={0.12}
         gapSize={0.1}
         transparent
-        opacity={overcast ? 0.2 : 0.5}
+        opacity={0.55 * strength}
         depthWrite={false}
         renderOrder={11}
         raycast={() => null}
       />
-      <Html position={marker} center zIndexRange={[25, 0]} calculatePosition={keepInFrame}>
+      {/* Under the canvas's own floating panels (`--z-canvas-ui`, 20): pinned to an
+          edge, the handle slides beneath the toolbar and the view buttons rather
+          than over them. It was 25, and sat on top. */}
+      <Html position={marker} center zIndexRange={[15, 0]} calculatePosition={keepInFrame}>
         <div
-          className={`sun-arc${overcast ? ' sun-arc--muted' : ''}${half === 'day' ? '' : ' sun-arc--night'}`}
+          className={`sun-arc${overcast ? ' sun-arc--muted' : ''}${half === 'day' ? '' : ' sun-arc--night'}${
+            quiet ? ' sun-arc--quiet' : ''
+          }${otherGesture ? ' sun-arc--away' : ''}`}
+          aria-hidden={otherGesture || undefined}
+          onPointerEnter={() => setReached(true)}
+          onPointerLeave={() => setReached(false)}
+          onFocus={() => setReached(true)}
+          onBlur={() => setReached(false)}
           role="slider"
           tabIndex={0}
           aria-label="Time of day"
