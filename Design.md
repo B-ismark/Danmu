@@ -1750,13 +1750,25 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     after sael.net's interior study: a dashed path around the room with the sun —
     or at night the moon, on its own lower path — riding it and a clock pill
     beside it. Drag it along the path; it is also a `role="slider"` with arrow,
-    Page and Home/End keys. It is a halo rather than a dome — just clear of the
-    walls across, a ceiling plus 0.9 m up — drawn twice, faint through the walls
-    and clear in front of them, and the pill is held inside the canvas so a sun
-    at the horizon (which runs toward the camera) is pinned to the edge rather
-    than gone. All three of those were measured in a browser, not reasoned.
-    Dragging it while overcast brings the sun back. `'__sun__'` is its
-    `draggingId`, which blocks orbiting and keeps the scrub out of undo.
+    Page and Home/End keys. It is a **ring on the eaves** (`lib/sun-arc.ts`,
+    `sunArcShape` / `skyPoint`): its ends sit on the tops of the walls and it
+    rises at most 0.6 m above them, just clear of the room across — so in plan
+    it never passes over the floor, and a low sun no longer lands beside the
+    sofa. Drawn twice, faint through the walls and clear in front of them, and
+    the pill is held inside the canvas *and clear of the floating chrome*
+    (measured from the `.canvas-chrome` rects) so a sun at the horizon is pinned
+    to the edge rather than gone or under the toolbar. The scrub steps in five
+    minutes and stays inside its own half — day never reaches the horizon hour
+    that belongs to night (`scrubHour`).
+    **It gives way.** Faint while a piece is selected, gone while one is
+    carried, at full strength only when reached (hover, focus, grab); it never
+    starts a gesture from a right button, a second pointer, or a press on the
+    time pill, and Esc mid-drag puts the hour back. Dragging it while overcast
+    brings the sun back. `SUN_DRAG_ID` (`lib/store.ts`, beside `WALL_DRAG_ID`)
+    is its `draggingId`, which blocks orbiting and makes the whole pull ONE undo
+    step — and the rail's day track claims the same id for its own pull, so
+    both are one step. The sky and exposure live in `Daylight` inside
+    `Room.tsx`, so scrubbing re-renders the lights and not the furniture.
   - **The rail keeps the names** (`LightingPicker.tsx`, rail **Style → Light**):
     the four stops and Overcast as five 32px glyphs with tooltips and full
     `aria-label`s, a native 24-hour range for keyboard and screen readers, and
@@ -1768,7 +1780,11 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
 - **Carried pieces sway** (`lib/wobble.ts`, `components/three/Wobble.tsx`). A floor
   piece being dragged lifts 14 mm and leans back against its travel, up to 7°, and
   rocks upright on release — an underdamped spring, ζ ≈ 0.35, two or three rocks
-  inside half a second. **Drawn, never stored**: the lean is an inner group the
+  inside half a second. It tips onto the footprint's **low corner**
+  (`pivotOffset`), never about the middle of its foot, which sank a 2.2 m sofa's
+  corner 134 mm through the floor; and the lean is capped by how far the far edge
+  may RISE (`tiltCap`, 120 mm), so a big piece leans less, which is what weight
+  looks like. Rugs do not sway. **Drawn, never stored**: the lean is an inner group the
   transform layers never see, so nothing reaches positions, collision, the plan or
   a saved file. Off under `prefers-reduced-motion`.
 - **Sound** (`lib/sound.ts`, `lib/sound-cues.ts`, `components/studio/SoundCues.tsx`).
@@ -1789,9 +1805,17 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   an arrow key, a context menu or Suggest sounds the same as one reached by a
   drag. Silent on purpose: opening a room (and the moment after, while it
   settles), whatever an undo restores (the undo has its own sound), and whatever a
-  drag writes along the way (the drag is its pick-up, glide and set-down). The
-  preference is `useSettings().sound`, on by default and switchable in **View**;
-  no `AudioContext` exists until a sound is wanted, which is always inside a press.
+  drag writes along the way (the drag is its pick-up, glide and set-down).
+  **One action, one sound:** `SoundCues` batches every store write in the same
+  task (a microtask) and asks `cueFor` once for the whole batch, so add-and-select
+  is a pop and not a pop and a click. **Only what a person did:** a change more
+  than 6 s after the last press, key or wheel is not cued, which silences a
+  restore, a hydration or anything the app does on its own. A lighting switch
+  made BY a drag (overcast → daylight as the sun is grabbed) is part of that drag,
+  not a chime. The preference is `useSettings().sound`, on by default and
+  switchable in **View**; no `AudioContext` exists until a sound is wanted, which
+  is always inside a press, and it is suspended again after 2 s of quiet or the
+  moment sound is turned off.
   The key light's shadow frustum is fitted per direction, not per room, and the fit
   is `lib/shadow-fit.ts` rather than four expressions in the renderer. A low sun
   sees the room in **elevation** where a high one sees it in **plan**, so the bound

@@ -72,3 +72,44 @@ export function leanFor(vx: number, vz: number, rotY: number): { aboutX: number;
   const m = WOBBLE.maxTilt;
   return { aboutX: clamp(-WOBBLE.gain * lz, m), aboutZ: clamp(WOBBLE.gain * lx, m) };
 }
+
+/** The most the far edge of a piece may rise when it leans, in metres. A lean is
+ *  an angle, so a fixed 7° lifts a 2.2 m sofa's far edge 270 mm and a chair's 60 mm;
+ *  capping the RISE instead lets a big piece lean less, which is what weight looks
+ *  like, while a small one keeps its full sway. */
+export const MAX_RISE_M = 0.12;
+
+/** The largest lean, in radians, for a footprint `extentM` long along the lean. */
+export function tiltCap(extentM: number): number {
+  if (!(extentM > 0)) return WOBBLE.maxTilt;
+  return Math.min(WOBBLE.maxTilt, Math.asin(Math.min(1, MAX_RISE_M / extentM)));
+}
+
+/** Where the inner group must sit so a lean pivots on the footprint's LOW corner
+ *  rather than its middle.
+ *
+ *  Leaning about the foot's centre sinks half the footprint into the floor — a
+ *  2.2 m sofa at 7° put a corner 134 mm through it, far more than the 14 mm lift.
+ *  A piece that tips rests on the edge going down, so that corner is held where it
+ *  was and the rest rises. The rotation is three's default Euler order with no Y
+ *  turn, `R = Rx · Rz`, applied to the corner `p`; the offset is `p − R·p`, so the
+ *  corner maps back onto itself. Continuous through zero — at no lean the offset is
+ *  zero whichever corner is chosen — so a settling rock that swaps sides does not
+ *  jump. Exact under the outer group's scale as well: `S·(p − Rp + Rp) = S·p`.
+ *
+ *  `halfW` / `halfD` are the footprint's half-extents along the piece's own X / Z,
+ *  in the inner group's units. */
+export function pivotOffset(rx: number, rz: number, halfW: number, halfD: number): [number, number, number] {
+  // The corner whose height goes most negative under the lean: see the y row below.
+  const px = rz > 0 ? -halfW : rz < 0 ? halfW : 0;
+  const pz = rx > 0 ? halfD : rx < 0 ? -halfD : 0;
+  const cx = Math.cos(rx);
+  const sx = Math.sin(rx);
+  const cz = Math.cos(rz);
+  const sz = Math.sin(rz);
+  // R·p for p = (px, 0, pz): Rz first, then Rx.
+  const rx0 = px * cz;
+  const ry0 = px * sz * cx - pz * sx;
+  const rz0 = px * sz * sx + pz * cx;
+  return [px - rx0, -ry0, pz - rz0];
+}

@@ -32,11 +32,11 @@
 //     that reached for a piece: it rides ABOVE the walls (see `sunArcShape`), vanishes
 //     while anything else is being carried, and quietens while a piece is selected.
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Html, Line } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { Vector3, type Camera, type Object3D } from 'three';
-import { useStudio } from '@/lib/store';
+import { SUN_DRAG_ID, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { footprintBounds } from '@/lib/footprint';
 import {
@@ -50,13 +50,10 @@ import {
   sunAt,
 } from '@/lib/lighting-moods';
 import { SCENE } from '@/lib/scene-palette';
-import { skyPoint, sunArcShape } from '@/lib/sun-arc';
+import { scrubHour, skyPoint, sunArcShape } from '@/lib/sun-arc';
+import { STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { playSound } from '@/lib/sound';
 import { Icon } from '@/components/ui/Icon';
-
-/** The `draggingId` a sun scrub holds. A sentinel like `'__wall__'`: nothing is a
- *  part with this id, and `gestureOwnedByOther` treats it like any other owner. */
-export const SUN_DRAG_ID = '__sun__';
 
 /** How many points the arc is drawn with, and hit-tested against. 96 over a
  *  13½-hour day is one every ~8½ minutes, finer than the 5-minute rounding a drag
@@ -72,22 +69,50 @@ function isDark(hex: string): boolean {
 
 const _v = new Vector3();
 
-/** Room the pill needs from each edge of the canvas, in CSS pixels: half its
- *  width beside it, the floating toolbar above it, the view gizmo's row below. */
-const FRAME = { x: 56, top: 76, bottom: 28 };
+/** Room the pill needs beside it: half its width, so pinned it is still whole. */
+const HALF_PILL_X = 56;
+/** And above or below it: half its height plus a breath. */
+const HALF_PILL_Y = 24;
 
-/** drei's own placement, then held inside the canvas. The arc's two ends run
- *  toward the camera and leave the frame at sunrise and sunset — and any part of it
- *  can, once the view is orbited — and a handle that leaves the canvas is a control
- *  that has gone. Pinned to the edge it still says where the sun is, the way a map
- *  pins an off-screen marker. Measured: 06:40 in a 5 × 4 m room at the default view
- *  put the whole pill past the right edge. */
-function keepInFrame(el: Object3D, camera: Camera, size: { width: number; height: number }): number[] {
-  _p.setFromMatrixPosition(el.matrixWorld).project(camera);
-  const x = (_p.x + 1) * (size.width / 2);
-  const y = (1 - _p.y) * (size.height / 2);
-  const clamp = (v: number, lo: number, hi: number) => (hi < lo ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
-  return [clamp(x, FRAME.x, size.width - FRAME.x), clamp(y, FRAME.top, size.height - FRAME.bottom)];
+type Insets = { top: number; bottom: number };
+
+/** How far down the canvas's top chrome reaches and how far up its bottom chrome
+ *  does, in CSS pixels from each edge, MEASURED. These were typed-in numbers (76 and
+ *  28) — the height of one row of toolbar — and `.chrome-bar` wraps at every width
+ *  by rule, so on a narrow window its second row covered a pinned handle, which
+ *  under the panels' z-index then simply vanished. */
+function measureInsets(canvas: HTMLElement): Insets {
+  const host = canvas.closest(`#${STUDIO_CANVAS_ID}`);
+  const frame = canvas.getBoundingClientRect();
+  let top = 0;
+  let bottom = 0;
+  host?.querySelectorAll<HTMLElement>('.canvas-chrome').forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.height === 0 || r.width === 0) return;
+    if (r.top - frame.top < frame.height / 2) top = Math.max(top, r.bottom - frame.top);
+    else bottom = Math.max(bottom, frame.bottom - r.top);
+  });
+  return { top, bottom };
+}
+
+/** drei's own placement, then held inside the canvas and clear of its chrome. The
+ *  arc's two ends run toward the camera and leave the frame at sunrise and sunset —
+ *  and any part of it can, once the view is orbited — and a handle that leaves the
+ *  canvas is a control that has gone. Pinned to the edge it still says where the
+ *  sun is, the way a map pins an off-screen marker. Measured: 06:40 in a 5 × 4 m
+ *  room at the default view put the whole pill past the right edge. */
+function keepInFrame(insets: { current: Insets }) {
+  return (el: Object3D, camera: Camera, size: { width: number; height: number }): number[] => {
+    _p.setFromMatrixPosition(el.matrixWorld).project(camera);
+    const x = (_p.x + 1) * (size.width / 2);
+    const y = (1 - _p.y) * (size.height / 2);
+    const clamp = (v: number, lo: number, hi: number) => (hi < lo ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+    const { top, bottom } = insets.current;
+    return [
+      clamp(x, HALF_PILL_X, size.width - HALF_PILL_X),
+      clamp(y, top + HALF_PILL_Y, size.height - bottom - HALF_PILL_Y),
+    ];
+  };
 }
 const _p = new Vector3();
 
@@ -129,7 +154,13 @@ export function SunArc() {
   // swap paths, and jump the handle to the other horizon, under the hand.
   /** Which half of the clock the drag started in, fixed for the gesture. */
   const phase = useRef<'day' | 'night'>('day');
-  const carrying = useStudio((s) => s.draggingId === SUN_DRAG_ID);
+  // THIS handle's gesture, not merely "the clock is being scrubbed": the rail's day
+  // track holds the same `draggingId` for its own drags (so they are one undo step
+  // each too), and a track drag must not freeze this handle's half.
+  const [carrying, setCarrying] = useState(false);
+  /** The gesture in flight: where it started, so Esc can put it back, and whether
+   *  it has moved, so a click is not heard or treated as a scrub. */
+  const gesture = useRef<{ pointerId: number; hour: number; lighting: typeof lighting; moved: boolean } | null>(null);
   const half: 'day' | 'night' = carrying ? phase.current : day ? 'day' : 'night';
   const arc = useMemo(() => {
     const pts: Array<[number, number, number]> = [];
@@ -169,19 +200,79 @@ export function SunArc() {
 
 
   function scrubTo(clientX: number, clientY: number) {
-    const t = tAtPointer(clientX, clientY);
-    const raw = phase.current === 'day' ? hourOnDayArc(t) : hourOnNightArc(t);
-    // Five-minute steps: a clock that reads 17:33 then 17:34 as the hand trembles
-    // is noise, and nothing about furniture turns on a minute.
-    const h = Math.round(raw * 12) / 12;
     // The hour's detent, the air under the scrub and the dawn and dusk cues are
     // `SoundCues`' — they follow the clock whatever moves it.
-    setHour(h);
+    setHour(scrubHour(phase.current, tAtPointer(clientX, clientY)));
   }
 
+  function endGesture(target: Element | null, heard: boolean) {
+    const g = gesture.current;
+    if (!g) return;
+    gesture.current = null;
+    setCarrying(false);
+    if (target?.hasPointerCapture?.(g.pointerId)) target.releasePointerCapture(g.pointerId);
+    if (useStudio.getState().draggingId === SUN_DRAG_ID) setDragging(null);
+    if (heard && g.moved) playSound('drop', { size: 0.2 });
+  }
+
+  // Esc mid-scrub puts the day back where the gesture found it, as it does for a
+  // piece; captured on the window so it is the first thing to see the key and
+  // nothing else also acts on it. And a handle unmounted mid-scrub (the tab
+  // switched, the room closed) must not leave `draggingId` holding the sun, which
+  // would freeze the camera and the undo stack until a reload.
+  useEffect(() => {
+    if (!carrying) return;
+    const onKey = (e: KeyboardEvent) => {
+      const g = gesture.current;
+      if (e.key !== 'Escape' || !g) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setHour(g.hour);
+      setLighting(g.lighting);
+      g.moved = false;
+      endGesture(null, false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carrying]);
+  useEffect(
+    () => () => {
+      if (gesture.current && useStudio.getState().draggingId === SUN_DRAG_ID) useStudio.getState().setDragging(null);
+    },
+    [],
+  );
+
+  // The canvas chrome's reach, kept current as its rows wrap and unwrap.
+  const insets = useRef<Insets>({ top: 76, bottom: 28 });
+  const place = useMemo(() => keepInFrame(insets), []);
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const host = canvas.closest(`#${STUDIO_CANVAS_ID}`);
+    const update = () => {
+      insets.current = measureInsets(canvas);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(canvas);
+    host?.querySelectorAll('.canvas-chrome').forEach((el) => ro.observe(el));
+    // A chrome row that appears later (a selection's header) is a new element.
+    const mo = host ? new MutationObserver(() => {
+      host.querySelectorAll('.canvas-chrome').forEach((el) => ro.observe(el));
+      update();
+    }) : null;
+    if (host) mo?.observe(host, { childList: true, subtree: false });
+    return () => {
+      ro.disconnect();
+      mo?.disconnect();
+    };
+  }, [gl]);
+
   const step = (dh: number) => {
+    // Overcast is switched off by `onKeyDown`, and `SoundCues` answers that change
+    // with its own chime; a tick on top of it would be two sounds for one key.
     setHour(hour + dh);
-    playSound('tick', { brightness: day ? body.elevationDeg / 60 : 0 });
+    if (!overcast) playSound('tick', { brightness: day ? body.elevationDeg / 60 : 0 });
   };
 
   const ink = dark ? SCENE.sunPathOnDark : SCENE.sunPathOnLight;
@@ -230,7 +321,7 @@ export function SunArc() {
       {/* Under the canvas's own floating panels (`--z-canvas-ui`, 20): pinned to an
           edge, the handle slides beneath the toolbar and the view buttons rather
           than over them. It was 25, and sat on top. */}
-      <Html position={marker} center zIndexRange={[15, 0]} calculatePosition={keepInFrame}>
+      <Html position={marker} center zIndexRange={[15, 0]} calculatePosition={place}>
         <div
           className={`sun-arc${overcast ? ' sun-arc--muted' : ''}${half === 'day' ? '' : ' sun-arc--night'}${
             quiet ? ' sun-arc--quiet' : ''
@@ -248,28 +339,44 @@ export function SunArc() {
           aria-valuenow={Math.round(hour * 100) / 100}
           aria-valuetext={`${formatClock(hour)}${overcast ? ', overcast' : day ? '' : ', night'}`}
           onPointerDown={(e) => {
+            // The primary button only. A right-press used to start a scrub, play
+            // the pick, switch an overcast room to daylight — and then open the
+            // scene's menu for whatever piece sat behind the handle.
+            if (e.button !== 0 || gesture.current) return;
             e.preventDefault();
             e.stopPropagation();
             e.currentTarget.setPointerCapture(e.pointerId);
             phase.current = day ? 'day' : 'night';
-            // Grabbing the sun is asking for the sun: an overcast room goes back to
-            // daylight rather than sitting there refusing the gesture.
-            if (overcast) setLighting('daylight');
+            // The gesture's flag first, so every write below lands inside ONE undo
+            // step rather than the lighting switch being scheduled as its own.
             setDragging(SUN_DRAG_ID);
-            playSound('pick');
+            setCarrying(true);
+            gesture.current = { pointerId: e.pointerId, hour, lighting, moved: false };
           }}
           onPointerMove={(e) => {
-            if (useStudio.getState().draggingId !== SUN_DRAG_ID) return;
+            const g = gesture.current;
+            if (!g || g.pointerId !== e.pointerId) return;
+            if (!g.moved) {
+              g.moved = true;
+              // Grabbing the sun and MOVING it is asking for the sun: an overcast
+              // room goes back to daylight rather than refusing the gesture. A
+              // plain click is not asking, and changes nothing.
+              if (overcast) setLighting('daylight');
+              playSound('pick');
+            }
             scrubTo(e.clientX, e.clientY);
           }}
-          onPointerUp={(e) => {
-            if (useStudio.getState().draggingId !== SUN_DRAG_ID) return;
-            e.currentTarget.releasePointerCapture(e.pointerId);
-            setDragging(null);
-            playSound('drop', { size: 0.2 });
-          }}
-          onPointerCancel={() => {
-            if (useStudio.getState().draggingId === SUN_DRAG_ID) setDragging(null);
+          onPointerUp={(e) => endGesture(e.currentTarget, true)}
+          onPointerCancel={(e) => endGesture(e.currentTarget, false)}
+          // Clicks that bubble out of drei's Html land on the canvas wrapper, where
+          // R3F would answer them from the LAST canvas press — which may have been
+          // on the piece now behind this handle — and the wrapper's context menu
+          // would open for it. The handle's presses are its own.
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
           }}
           // Arrows move a quarter of an hour, Shift a whole one; Page a named stop's
           // worth. Home and End are the declared ends, for the reason `RailSash`
@@ -284,6 +391,8 @@ export function SunArc() {
             else if (e.key === 'End') setHour(23.99);
             else return;
             e.preventDefault();
+            // Not also a camera pan: `CameraRig`'s arrow keys listen on the window.
+            e.stopPropagation();
             if (overcast) setLighting('daylight');
           }}
         >

@@ -362,6 +362,12 @@ export const useStudio = create<StudioState>()(
   ),
 );
 
+/** The `draggingId` sentinels: gestures that are not a piece. Nothing is a part
+ *  with either id. Named once, because a copy of the string that drifts turns a
+ *  sun scrub back into "a piece is being carried" wherever the copy lives. */
+export const WALL_DRAG_ID = '__wall__';
+export const SUN_DRAG_ID = '__sun__';
+
 /** Whether some OTHER part/handle currently owns the active drag/gizmo gesture
  *  — the shared gate behind every pointer handler in Pickable/Draggable that
  *  must not let the cursor's screen position steal hover, selection or a new
@@ -416,7 +422,7 @@ type SettingsState = {
   /** Interface sounds — pick-up, set-down, snap, the sun's hour ticks
    *  (`lib/sound.ts`). A property of the person and their surroundings, not of the
    *  room, so it lives here. On by default: they are quiet enough to sit under
-   *  anything else playing, and the switch is in Settings and the View panel. */
+   *  anything else playing, and the switch is in the View panel. */
   sound: boolean;
   setApiKey: (k: string) => void;
   setDimUnit: (u: DimUnit) => void;

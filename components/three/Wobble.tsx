@@ -10,9 +10,11 @@
 // would be telling you something happened that did not. When the drag ends the
 // target falls to zero, and the underdamped spring IS the settle.
 //
-// Floor-standing pieces only. Their origin is their foot (`Highlight` draws the box
-// at `h / 2` for exactly this reason), so a lean about the origin pivots on the
-// floor. A wall piece leaning would swing its back through the plaster, and a
+// Floor-standing pieces only, and not rugs. Their origin is their foot (`Highlight`
+// draws the box at `h / 2` for exactly this reason), and the lean pivots on the
+// footprint's LOW corner rather than that origin (`pivotOffset`): leaning about the
+// middle of the foot sank half of it into the floor, 134 mm for a sofa. A rug is all
+// footprint and no height, so any lean is its far edge flapping up. A wall piece leaning would swing its back through the plaster, and a
 // ceiling piece's origin is its middle — so those two stay still, and are no less
 // alive for it.
 //
@@ -23,23 +25,29 @@
 import { useRef, type MutableRefObject, type ReactNode } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Group } from 'three';
-import { useStudio } from '@/lib/store';
-import { WOBBLE, atRest, leanFor, stepSpring, type Spring } from '@/lib/wobble';
+import { SUN_DRAG_ID, WALL_DRAG_ID, useStudio } from '@/lib/store';
+import { WOBBLE, atRest, leanFor, pivotOffset, stepSpring, tiltCap, type Spring } from '@/lib/wobble';
 import { reducedMotion } from './Motion';
 
 /** Gestures that are not a piece being carried. */
-const NOT_A_PIECE = new Set(['__sun__', '__wall__']);
+const NOT_A_PIECE = new Set([SUN_DRAG_ID, WALL_DRAG_ID]);
 
 export function Wobble({
   targetRef,
   partId,
   enabled,
+  halfW,
+  halfD,
   children,
 }: {
   targetRef: MutableRefObject<Group | null>;
   partId: string;
   /** False for wall and ceiling pieces, which stay still. */
   enabled: boolean;
+  /** The footprint's half-extents along the piece's own X and Z, in metres at the
+   *  group's scale 1 — the corner it tips onto. */
+  halfW: number;
+  halfD: number;
   children: ReactNode;
 }) {
   const inner = useRef<Group>(null);
@@ -75,7 +83,14 @@ export function Wobble({
     s.vx += (vx - s.vx) * k;
     s.vz += (vz - s.vz) * k;
 
-    const lean = carrying ? leanFor(s.vx, s.vz, g.rotation.y) : { aboutX: 0, aboutZ: 0 };
+    const raw = carrying ? leanFor(s.vx, s.vz, g.rotation.y) : { aboutX: 0, aboutZ: 0 };
+    // A turn about X tips the piece along its depth, about Z along its width.
+    const capX = tiltCap(2 * halfD);
+    const capZ = tiltCap(2 * halfW);
+    const lean = {
+      aboutX: Math.max(-capX, Math.min(capX, raw.aboutX)),
+      aboutZ: Math.max(-capZ, Math.min(capZ, raw.aboutZ)),
+    };
     // The piece under the hand lifts; its company only leans.
     const liftTo = dragging === partId ? WOBBLE.lift : 0;
 
@@ -90,14 +105,15 @@ export function Wobble({
       Math.abs(s.vx) < 1e-3 &&
       Math.abs(s.vz) < 1e-3
     ) {
-      const y = Math.max(0, liftTo);
+      const [ox, oy, oz] = pivotOffset(lean.aboutX, lean.aboutZ, halfW, halfD);
+      const y = Math.max(0, liftTo) + oy;
       if (i.rotation.x !== lean.aboutX || i.rotation.z !== lean.aboutZ || i.position.y !== y) {
         s.ax = { x: lean.aboutX, v: 0 };
         s.az = { x: lean.aboutZ, v: 0 };
         s.lift = { x: liftTo, v: 0 };
         i.rotation.x = lean.aboutX;
         i.rotation.z = lean.aboutZ;
-        i.position.y = y;
+        i.position.set(ox, y, oz);
         invalidate();
       }
       return;
@@ -110,7 +126,8 @@ export function Wobble({
     s.lift = stepSpring(s.lift, liftTo, dt, 260, 26);
     i.rotation.x = s.ax.x;
     i.rotation.z = s.az.x;
-    i.position.y = Math.max(0, s.lift.x);
+    const [ox, oy, oz] = pivotOffset(s.ax.x, s.az.x, halfW, halfD);
+    i.position.set(ox, Math.max(0, s.lift.x) + oy, oz);
     invalidate();
   });
 

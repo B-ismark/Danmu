@@ -12,7 +12,9 @@
 // at most ONE cue. One, because a single action routinely changes several things
 // at once — adding a piece also selects it, a theme recolours every wall and moves
 // the clock — and three sounds for one press is a clatter. `PRIORITY` decides
-// which one speaks.
+// which one speaks. Those changes arrive as separate store writes, so the caller
+// (`SoundCues`) collects a whole action's writes and asks once; asked per write,
+// this played "place" and then "select" for one Add.
 //
 // Three things are deliberately silent:
 //   · **Opening a room.** Every part "arrives" when a room loads; that is not
@@ -151,7 +153,11 @@ export function cueFor(prev: CueWorld, next: CueWorld, opts: { afterDrag?: boole
   if (restyled > 0 || differs(prev.wallColors, next.wallColors)) found.push({ name: 'brush' });
 
   // ── The light ──
-  if (prev.lighting !== next.lighting) found.push({ name: next.lighting === 'overcast' ? 'cloud' : 'chime' });
+  // A lighting switch made BY a gesture — grabbing the sun in an overcast room
+  // brings the daylight back — is that gesture's, and it already made its pick.
+  if (prev.lighting !== next.lighting) {
+    if (next.dragging === null) found.push({ name: next.lighting === 'overcast' ? 'cloud' : 'chime' });
+  }
   else {
     const c = clockCue(prev, next);
     if (c) found.push(c);

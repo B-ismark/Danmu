@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { WOBBLE, atRest, leanFor, stepSpring, type Spring } from '@/lib/wobble';
+import { Euler, Vector3 } from 'three';
+import { MAX_RISE_M, WOBBLE, atRest, leanFor, pivotOffset, stepSpring, tiltCap, type Spring } from '@/lib/wobble';
 import { localToWorld } from '@/lib/geometry';
 
 // The give in a carried piece (lib/wobble.ts). Drawn only — nothing here reaches
@@ -79,5 +80,48 @@ describe('the wobble', () => {
     for (let i = 0; i < 30; i++) a = stepSpring(a, 0, 1 / 30);
     for (let i = 0; i < 144; i++) b = stepSpring(b, 0, 1 / 144);
     expect(Math.abs(a.x - b.x)).toBeLessThan(0.004);
+  });
+});
+
+describe('a leaning piece stays on the floor', () => {
+  /** The four bottom corners after the inner group's lean and offset, through
+   *  three's own Euler — not a re-derivation of the matrix `pivotOffset` writes out,
+   *  which would agree with it by construction. */
+  const corners = (rx: number, rz: number, hw: number, hd: number) => {
+    const off = pivotOffset(rx, rz, hw, hd);
+    const e = new Euler(rx, 0, rz);
+    return [[-hw, -hd], [hw, -hd], [-hw, hd], [hw, hd]].map(([x, z]) =>
+      new Vector3(x, 0, z).applyEuler(e).add(new Vector3(...off)),
+    );
+  };
+  const t = WOBBLE.maxTilt;
+  const leans: [number, number][] = [[t, 0], [-t, 0], [0, t], [0, -t], [t, t], [-t, t], [t, -t], [-t, -t], [0.03, -0.05]];
+
+  it('no corner goes below the floor, and the low one rests on it', () => {
+    // A 2.2 m sofa, a chair, a long narrow bench: the sofa is the case that sank
+    // 134 mm when the lean pivoted on the middle of the foot.
+    for (const [hw, hd] of [[1.1, 0.45], [0.25, 0.25], [0.9, 0.2]]) {
+      for (const [rx, rz] of leans) {
+        const ys = corners(rx, rz, hw, hd).map((c) => c.y);
+        expect(Math.min(...ys)).toBeGreaterThan(-1e-9);
+        expect(Math.min(...ys)).toBeLessThan(1e-9);
+      }
+    }
+  });
+
+  it('is no offset at all when upright, from either side', () => {
+    for (const z of [0, 1e-12, -1e-12]) {
+      const o = pivotOffset(z, z, 1.1, 0.45);
+      for (const v of o) expect(Math.abs(v)).toBeLessThan(1e-9);
+    }
+  });
+
+  it('big pieces lean less, small ones keep the full sway', () => {
+    expect(tiltCap(0.5)).toBe(WOBBLE.maxTilt);
+    // A sofa's far edge rises no more than the cap however it is carried.
+    const cap = tiltCap(2.2);
+    expect(cap).toBeLessThan(WOBBLE.maxTilt);
+    expect(2.2 * Math.sin(cap)).toBeCloseTo(MAX_RISE_M, 9);
+    expect(tiltCap(0)).toBe(WOBBLE.maxTilt);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { skyPoint, sunArcShape } from '@/lib/sun-arc';
-import { hourOnDayArc, hourOnNightArc, moonAt, sunAt } from '@/lib/lighting-moods';
+import { scrubHour, skyPoint, sunArcShape } from '@/lib/sun-arc';
+import { hourOnDayArc, hourOnNightArc, isDaytime, moonAt, sunAt } from '@/lib/lighting-moods';
 
 // The sun's handle must never be the thing under a hand that reached for a piece
 // of furniture. Measured in a browser: with the arc stood on the floor, 06:40 in a
@@ -47,8 +47,44 @@ describe('the sun arc', () => {
     const pts = walk('day', 0, off);
     // The rising end is beside the room, not over it.
     const [x0, , z0] = pts[0];
-    expect(Math.hypot(x0 - off.cx, z0 - off.cz)).toBeCloseTo(5 / 2 + 0.6, 9);
+    expect(Math.hypot(x0 - off.cx, z0 - off.cz)).toBeCloseTo(Math.hypot(5, 4) / 2 + 0.35, 9);
     const xs = pts.map((p) => p[0]);
     expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(off.cx, 1);
+  });
+});
+
+describe('scrubbing the arc', () => {
+  it('keeps a day scrub in the day and a night scrub in the night, ends included', () => {
+    for (let i = 0; i <= 200; i++) {
+      const t = i / 200;
+      expect(isDaytime(scrubHour('day', t)), `day t=${t}`).toBe(true);
+      expect(isDaytime(scrubHour('night', t)), `night t=${t}`).toBe(false);
+    }
+  });
+
+  it('lands on five-minute steps', () => {
+    for (const t of [0.013, 0.37, 0.5, 0.91]) {
+      for (const half of ['day', 'night'] as const) {
+        const m = scrubHour(half, t) * 60;
+        expect(Math.abs(m - Math.round(m / 5) * 5), `${half} ${t}`).toBeLessThan(1e-6);
+      }
+    }
+  });
+});
+
+describe('the top view', () => {
+  it('never puts the handle over the floor, looking straight down', () => {
+    // Straight down, a point is over the floor when its x/z is inside the room's
+    // box. Walked for the sun and the moon, at several bearings and room shapes.
+    for (const room of [ROOM, { cx: 0, cz: 0, width: 8, depth: 3 }, { cx: 1, cz: -2, width: 3, depth: 3 }]) {
+      for (const half of ['day', 'night'] as const) {
+        for (const bearing of [0, 45, 133]) {
+          for (const [x, , z] of walk(half, bearing, room)) {
+            const inside = Math.abs(x - room.cx) < room.width / 2 && Math.abs(z - room.cz) < room.depth / 2;
+            expect(inside, `${half} ${bearing}° ${room.width}×${room.depth}`).toBe(false);
+          }
+        }
+      }
+    }
   });
 });

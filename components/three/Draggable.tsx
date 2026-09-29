@@ -796,6 +796,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     started: boolean;
     /** false while a touch is still dwelling — the camera still owns the gesture */
     armed: boolean;
+    /** The pick-up has been heard — a touch hears it at the dwell, a mouse at the
+     *  first move — so the move after a dwell does not play it a second time. */
+    heard: boolean;
     hold: number;
     startClient: [number, number];
     planeY: number;
@@ -1096,6 +1099,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       pointerId: e.pointerId,
       started: false,
       armed: !isTouch,
+      heard: false,
       hold: 0,
       startClient: [e.clientX, e.clientY],
       planeY,
@@ -1144,6 +1148,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         const d = drag.current;
         if (!d) return;
         d.armed = true;
+        d.heard = true;
         playSound('pick');
         // The press has become a pick-up, so the window `holdPress` is for has
         // closed — see the note at the hold itself. Everything below this line is
@@ -1202,7 +1207,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       const dist = Math.hypot(e.clientX - d.startClient[0], e.clientY - d.startClient[1]);
       if (dist < 4) return;
       d.started = true;
-      playSound('pick');
+      if (!d.heard) playSound('pick');
+      d.heard = true;
       // Same as the pick-up above: past here the gesture has done something.
       releasePress(partId);
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
@@ -1299,6 +1305,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // is this part's own resolve while IT is the one being dragged.
   const refused = dragInvalid || blockedHere;
   const highlightState = refused ? 'invalid' : inSelection ? 'selected' : 'hovered';
+  // What this group draws at scale 1 — the effective dim for a parametric piece,
+  // which is rebuilt at it, and the authored one for everything else, which wears
+  // the resize as a group scale. Same split `Highlight` and `CutAway` read below.
+  const renderedDim = isParametric(part.shape) ? (storedDim ?? part.dimMM) : part.dimMM;
 
   return (
     <>
@@ -1321,7 +1331,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         />
         {/* The lean while carried and the rock when set down — drawn only, on an
             inner group the transform layers never see (lib/wobble.ts). */}
-        <Wobble targetRef={ref} partId={partId} enabled={isFloorStanding(part.category, part.shape)}>
+        <Wobble
+          targetRef={ref}
+          partId={partId}
+          enabled={isFloorStanding(part.category, part.shape) && part.category !== 'rug'}
+          halfW={renderedDim[0] / 2000}
+          halfD={renderedDim[1] / 2000}
+        >
           <Pickable partId={partId}>{children}</Pickable>
         </Wobble>
         {/* Wall pieces leave with their wall in the dollhouse cut-away. The depth is
@@ -1361,6 +1377,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             // `setDragging` below must be the LAST word on who owns the gesture.
             claimPressForGizmo();
             gizmoActive.current = true;
+            // `commit()` on the release sets the piece down with a knock, so the
+            // grab is heard too — otherwise the gizmo is the one gesture that lands
+            // without ever having been lifted.
+            playSound('pick');
             setDragging(partId);
             const pp = ref.current?.position;
             dragStartPos.current = pp ? [pp.x, pp.y, pp.z] : null;

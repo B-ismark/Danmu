@@ -4,12 +4,12 @@
 // Replaces the prior hand-coded Sofa/TV/Closet/Chair/etc imports.
 
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, N8AO, SMAA, wrapEffect } from '@react-three/postprocessing';
 import type { EffectComposer as Composer } from 'postprocessing';
 import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Scene, type WebGLRenderer } from 'three';
-import { useStudio } from '@/lib/store';
+import { useStudio, type Quality } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
 import { useRoomScene } from '@/lib/room-scene';
@@ -103,7 +103,6 @@ function FirstFrame({ onFrame }: { onFrame?: () => void }) {
 
 export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
   const hidden = useStudio((s) => s.hidden);
-  const lighting = useStudio((s) => s.lighting);
   const quality = useStudio((s) => s.quality);
   const dressed = useStudio((s) => s.dressed);
   const panKey = useStudio((s) => s.panKeyHeld);
@@ -113,27 +112,6 @@ export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
   const composer = useRef<Composer | null>(null);
   const parts = useScene((s) => s.parts).filter((p) => !hidden[p.id]);
 
-  // The light, all of it, from one derivation: sky colours blended off the
-  // clock, and the key light — sun, moon, or overcast's studio key — derived from
-  // the hour and the room's bearing. `SunArc` reads the same `lightingAt`, so the
-  // marker on the arc and the light in the room cannot disagree about where the
-  // sun is. The bearing rotates the whole day's path, so which wall the light comes
-  // through is still the user's answer.
-  const hour = useStudio((s) => s.hour);
-  const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
-  const L = useMemo(() => lightingAt(lighting, hour, bearingDeg), [lighting, hour, bearingDeg]);
-  const key = L.key;
-  // The environment is BAKED (frames={1}), and re-baking on every frame of a sun
-  // drag would rebuild a cube target per pointer move. Half-hour steps are finer
-  // than anyone can tell apart on a reflection and cost at most 48 bakes a day.
-  const envStep = lighting === 'overcast' ? 'o' : String(Math.round(hour * 2));
-  // The light the room throws back, on the quality where the shell is closed —
-  // see lib/bounce.ts. Resolved parts, so a window stretched in the Inspector is
-  // measured at the size it is drawn.
-  const resolved = useRoomScene();
-  const footprint = useScene((s) => s.room.footprint);
-  const glazing = useMemo(() => glazingArea(resolved), [resolved]);
-  const bounce = hi && key ? bounceIntensity(key.intensity, glazing, footprint) : 0;
   // Drop the upper DPR bound when FPS regresses (large scenes / weak GPUs);
   // AdaptiveDpr cuts further while interacting. Keeps AO affordable.
   const [dprMax, setDprMax] = useState(2);
@@ -265,7 +243,7 @@ export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
       // zero runtime cost: it maps linear HDR lighting to a filmic curve so
       // bright surfaces roll off instead of clipping to flat white.
       // preserveDrawingBuffer OFF; SceneCapture reads the canvas synchronously.
-      gl={{ antialias: true, alpha: true, toneMapping: ACESFilmicToneMapping, toneMappingExposure: L.exposure }}
+      gl={{ antialias: true, alpha: true, toneMapping: ACESFilmicToneMapping }}
       // On-demand rendering: paint only when something actually changed. R3F
       // invalidates itself for every declarative change, drei's Orbit/Transform
       // controls invalidate on move, and the handful of things that mutate the
@@ -288,49 +266,10 @@ export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* Opaque paper background — THE fix for the moving-object "shadow trail":
-          with a transparent canvas the EffectComposer (N8AO) blended each frame
-          over the last, so contact shadows + gizmos smeared. An explicit scene
-          background makes three's WebGLBackground CLEAR the colour buffer at the
-          top of every render call.
-          Still correct under frameloop="demand": the clear is tied to the render
-          CALL, not to the wall clock, so a frame painted on request clears
-          exactly as one painted continuously did. Nothing about this fix depended
-          on how often we paint.
-          (The page's grid-bg sat behind a transparent canvas before; its lines
-          are ~invisible at 0.03 alpha, so matching --paper here is no visible
-          loss and kills the ghosting outright.) */}
-      <color attach="background" args={[L.bg]} />
-
-      {/* Hemisphere (sky → ground gradient) gives soft, directionally-aware
-          ambient — far less flat than a single ambientLight. One key light adds
-          form; a dim back-fill keeps shadowed faces readable. The key light DOES
-          cast a real shadow map on 'high' (see KeyLight); ContactShadows below is
-          the soft contact grounding on top of it, not a replacement for it. */}
-      <hemisphereLight color={L.hemi[0]} groundColor={L.hemi[1]} intensity={L.hemi[2]} />
-      {/* The key light IS the sun by day and the moon by night — and in the gap
-          either side of the horizon there is no key light at all, which is the
-          honest picture of a room at dusk and the reason this is a conditional
-          rather than a dimmer. */}
-      {key && <KeyLight intensity={key.intensity} color={key.color} cast={hi} dir={key.dir} />}
-      <directionalLight position={[-4, 3, -5]} intensity={L.fill.intensity} color={L.fill.color} />
-      {/* Interreflection, which a shadow-mapped rasteriser does not compute: soft,
-          shadowless, the key's own colour, sized by the glass it came through. */}
-      {bounce > 0 && key && <ambientLight intensity={bounce} color={key.color} />}
-
-      {/* Offline studio environment built from emissive panels — gives metals
-          something to reflect and adds soft specular gloss to all standard
-          materials. Baked once, in a layout effect (frames={1}), so it costs
-          nothing per frame and works under frameloop="demand". No CDN/HDR file
-          fetched, so it suits the browser-only architecture.
-          It is NOT dropped on 'Fast': without an environment every metalness > 0
-          surface (chair bases, lamp poles, handles) goes near-black. Halving the
-          cube resolution keeps the bake cheap while preserving that. */}
-      <Environment key={`${envStep}-${quality}`} resolution={hi ? 256 : 128} frames={1}>
-        <Lightformer intensity={0.7 * L.envMul} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={L.env[0]} />
-        <Lightformer intensity={0.35 * L.envMul} position={[5, 2, 3]} scale={[4, 6, 1]} color={L.env[1]} />
-        <Lightformer intensity={0.3 * L.envMul} position={[-5, 2, -3]} scale={[4, 6, 1]} color={L.env[2]} />
-      </Environment>
+      {/* The sky, the sun or moon, the fill and the reflections — everything that
+          follows the clock — in their own component, so a sun scrub re-renders
+          the lights and not every piece of furniture. See `Daylight`. */}
+      <Daylight hi={hi} quality={quality} />
 
       <HoverReset />
       <Suspense fallback={null}>
@@ -395,6 +334,90 @@ export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
       <FirstFrame onFrame={onFirstFrame} />
     </Canvas>
     </div>
+  );
+}
+
+/** Everything in the scene that follows the clock. Its own component because the
+ *  hour changes many times a second under a sun scrub, and when `Room` read it
+ *  every `Draggable` and its geometry re-rendered with each five-minute step.
+ *  Exposure is set on the renderer here rather than through `<Canvas gl>`, which
+ *  `Room` would otherwise have to re-render to change. */
+function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
+  const lighting = useStudio((s) => s.lighting);
+  // The light, all of it, from one derivation: sky colours blended off the
+  // clock, and the key light — sun, moon, or overcast's studio key — derived from
+  // the hour and the room's bearing. `SunArc` reads the same `lightingAt`, so the
+  // marker on the arc and the light in the room cannot disagree about where the
+  // sun is. The bearing rotates the whole day's path, so which wall the light comes
+  // through is still the user's answer.
+  const hour = useStudio((s) => s.hour);
+  const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
+  const L = useMemo(() => lightingAt(lighting, hour, bearingDeg), [lighting, hour, bearingDeg]);
+  const key = L.key;
+  // The environment is BAKED (frames={1}), and re-baking on every frame of a sun
+  // drag would rebuild a cube target per pointer move. Half-hour steps are finer
+  // than anyone can tell apart on a reflection and cost at most 48 bakes a day.
+  const envStep = lighting === 'overcast' ? 'o' : String(Math.round(hour * 2));
+  // The light the room throws back, on the quality where the shell is closed —
+  // see lib/bounce.ts. Resolved parts, so a window stretched in the Inspector is
+  // measured at the size it is drawn.
+  const resolved = useRoomScene();
+  const footprint = useScene((s) => s.room.footprint);
+  const glazing = useMemo(() => glazingArea(resolved), [resolved]);
+  const bounce = hi && key ? bounceIntensity(key.intensity, glazing, footprint) : 0;
+  const gl = useThree((s) => s.gl);
+  const invalidate = useThree((s) => s.invalidate);
+  useLayoutEffect(() => {
+    gl.toneMappingExposure = L.exposure;
+    invalidate();
+  }, [gl, invalidate, L.exposure]);
+
+  return (
+    <>
+      {/* Opaque paper background — THE fix for the moving-object "shadow trail":
+          with a transparent canvas the EffectComposer (N8AO) blended each frame
+          over the last, so contact shadows + gizmos smeared. An explicit scene
+          background makes three's WebGLBackground CLEAR the colour buffer at the
+          top of every render call.
+          Still correct under frameloop="demand": the clear is tied to the render
+          CALL, not to the wall clock, so a frame painted on request clears
+          exactly as one painted continuously did. Nothing about this fix depended
+          on how often we paint.
+          (The page's grid-bg sat behind a transparent canvas before; its lines
+          are ~invisible at 0.03 alpha, so matching --paper here is no visible
+          loss and kills the ghosting outright.) */}
+      <color attach="background" args={[L.bg]} />
+
+      {/* Hemisphere (sky → ground gradient) gives soft, directionally-aware
+          ambient — far less flat than a single ambientLight. One key light adds
+          form; a dim back-fill keeps shadowed faces readable. The key light DOES
+          cast a real shadow map on 'high' (see KeyLight); ContactShadows below is
+          the soft contact grounding on top of it, not a replacement for it. */}
+      <hemisphereLight color={L.hemi[0]} groundColor={L.hemi[1]} intensity={L.hemi[2]} />
+      {/* The key light IS the sun by day and the moon by night — and in the gap
+          either side of the horizon there is no key light at all, which is the
+          honest picture of a room at dusk and the reason this is a conditional
+          rather than a dimmer. */}
+      {key && <KeyLight intensity={key.intensity} color={key.color} cast={hi} dir={key.dir} />}
+      <directionalLight position={[-4, 3, -5]} intensity={L.fill.intensity} color={L.fill.color} />
+      {/* Interreflection, which a shadow-mapped rasteriser does not compute: soft,
+          shadowless, the key's own colour, sized by the glass it came through. */}
+      {bounce > 0 && key && <ambientLight intensity={bounce} color={key.color} />}
+
+      {/* Offline studio environment built from emissive panels — gives metals
+          something to reflect and adds soft specular gloss to all standard
+          materials. Baked once, in a layout effect (frames={1}), so it costs
+          nothing per frame and works under frameloop="demand". No CDN/HDR file
+          fetched, so it suits the browser-only architecture.
+          It is NOT dropped on 'Fast': without an environment every metalness > 0
+          surface (chair bases, lamp poles, handles) goes near-black. Halving the
+          cube resolution keeps the bake cheap while preserving that. */}
+      <Environment key={`${envStep}-${quality}`} resolution={hi ? 256 : 128} frames={1}>
+        <Lightformer intensity={0.7 * L.envMul} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={L.env[0]} />
+        <Lightformer intensity={0.35 * L.envMul} position={[5, 2, 3]} scale={[4, 6, 1]} color={L.env[1]} />
+        <Lightformer intensity={0.3 * L.envMul} position={[-5, 2, -3]} scale={[4, 6, 1]} color={L.env[2]} />
+      </Environment>
+    </>
   );
 }
 

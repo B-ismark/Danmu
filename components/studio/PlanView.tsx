@@ -16,7 +16,7 @@
 // slides along whatever it hit, matching the 3D Draggable.
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { useStudio, useSettings } from '@/lib/store';
+import { useStudio, useSettings, WALL_DRAG_ID } from '@/lib/store';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { DND_MIME, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
@@ -1134,7 +1134,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   function onWallPointerDown(e: React.PointerEvent, index: number) {
     e.stopPropagation();
     setSelectedWall(index);
-    setDragging('__wall__');
+    setDragging(WALL_DRAG_ID);
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const seg = wallSegments(ROOM_DYN.footprint)[index];
     if (!seg) return;

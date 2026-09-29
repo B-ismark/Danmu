@@ -172,3 +172,13 @@ describe('the bookkeeping', () => {
     expect(sizeOf(undefined)).toBe(0.4);
   });
 });
+
+describe('a lighting switch a gesture made', () => {
+  it('is the gesture’s, not a chime of its own', () => {
+    // Grabbing the sun in an overcast room brings the daylight back; the grab has
+    // already been heard as a pick.
+    expect(cue({ lighting: 'overcast', dragging: '__sun__' }, { lighting: 'daylight', dragging: '__sun__' })).toBeNull();
+    // The same switch from a button is a chime.
+    expect(cue({ lighting: 'overcast' }, { lighting: 'daylight' })).toBe('chime');
+  });
+});

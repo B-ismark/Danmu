@@ -16,7 +16,7 @@
 // on the row, for the reason it always was: the tight rail holds five 32px
 // targets exactly, and `sun`, `sun-medium` and `sun-dim` read as one icon at 14px.
 
-import { useStudio } from '@/lib/store';
+import { SUN_DRAG_ID, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import {
   DEFAULT_BEARING_DEG,
@@ -135,9 +135,26 @@ export function LightingPicker() {
           type="range"
           className="day-track"
           min={0}
-          max={24}
+          // One step short of midnight: 24:00 IS 00:00, and a track whose two ends
+          // are the same moment has a stop that says nothing new.
+          max={24 - 1 / 12}
           step={1 / 12}
           value={hour}
+          // A pull along the track is one gesture, so it is one undo step — the
+          // same claim the sun's own handle makes, released wherever the finger
+          // lifts (a range does not capture, so the release may land elsewhere).
+          // Arrows and Page keys stay one step each, which is what they are.
+          onPointerDown={(e) => {
+            if (e.button !== 0 || useStudio.getState().draggingId) return;
+            useStudio.getState().setDragging(SUN_DRAG_ID);
+            const release = () => {
+              window.removeEventListener('pointerup', release, true);
+              window.removeEventListener('pointercancel', release, true);
+              if (useStudio.getState().draggingId === SUN_DRAG_ID) useStudio.getState().setDragging(null);
+            };
+            window.addEventListener('pointerup', release, true);
+            window.addEventListener('pointercancel', release, true);
+          }}
           aria-valuetext={formatClock(hour)}
           onChange={(e) => {
             if (overcast) setLighting('daylight');

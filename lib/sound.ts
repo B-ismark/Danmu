@@ -32,7 +32,7 @@
 // first sound is actually wanted — which is always inside a press, so the
 // browser's autoplay rule is met by construction rather than worked around.
 // `prefers-reduced-motion` does not mute it (motion and sound are different
-// senses), but the setting is one press away in Settings and in the View panel.
+// senses), but the setting is one press away in the View panel (Sounds).
 
 import { useSettings } from './store';
 
@@ -116,6 +116,10 @@ function audio(): AudioContext | null {
   } catch {
     return null;
   }
+  // Switched off is silent NOW, glide included, and the device let go of.
+  useSettings.subscribe((st, prev) => {
+    if (prev.sound && !st.sound) sleep();
+  });
   master = ctx.createGain();
   master.gain.value = MASTER_GAIN;
   master.connect(ctx.destination);
@@ -126,6 +130,32 @@ function audio(): AudioContext | null {
   const data = noise.getChannelData(0);
   for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
   return ctx;
+}
+
+// ── Going idle ─────────────────────────────────────────────────────────────────
+//
+// A running AudioContext holds the audio device open — on a laptop that is the
+// output kept awake, on Bluetooth headphones a link that never sleeps — and the
+// glide's looping noise source ran at zero gain forever once built. So two seconds
+// after the last sound the glide is torn down and the context suspended, and the
+// next sound wakes it. Resumed on anything but `'running'`: iOS has an
+// `'interrupted'` state too (a call, Siri), in which `currentTime` stops, and a
+// frozen clock would make `MIN_GAP_S` refuse every sound after it.
+const IDLE_MS = 2000;
+let idle: ReturnType<typeof setTimeout> | null = null;
+
+function sleep(): void {
+  if (idle) clearTimeout(idle);
+  idle = null;
+  dropGlide();
+  if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {});
+}
+
+function wake(a: AudioContext): void {
+  // Rejected outside a gesture on Safari; the next sound, inside one, retries.
+  if (a.state !== 'running') a.resume().catch(() => {});
+  if (idle) clearTimeout(idle);
+  idle = setTimeout(sleep, IDLE_MS);
 }
 
 /** A pitched blip: `from` Hz gliding to `to` Hz over `dur` s, with a fast attack
@@ -332,9 +362,9 @@ export function playSound(name: SoundName, opts?: SoundOptions): void {
   if (!useSettings.getState().sound) return;
   const a = audio();
   if (!a || !master) return;
-  // A context created outside a gesture starts suspended; every call here is
-  // inside one, so resuming is the browser's own rule being met, not dodged.
-  if (a.state === 'suspended') void a.resume();
+  // A context created outside a gesture starts suspended; resuming is the
+  // browser's own rule being met, not dodged — see `wake`.
+  wake(a);
   const now = a.currentTime;
   if (now - (last[name] ?? -1) < MIN_GAP_S[name]) return;
   last[name] = now;
@@ -379,9 +409,22 @@ export function glideVoice(speed: number, opts: GlideOptions = {}): { gain: numb
   };
 }
 
-let glideNodes: { gain: GainNode; filter: BiquadFilterNode } | null = null;
+type GlideNodes = { src: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode };
+let glideNodes: GlideNodes | null = null;
 
-function glideChain(a: AudioContext): { gain: GainNode; filter: BiquadFilterNode } | null {
+function dropGlide(): void {
+  if (!glideNodes) return;
+  try {
+    glideNodes.src.stop();
+  } catch {
+    // Already stopped.
+  }
+  glideNodes.src.disconnect();
+  glideNodes.gain.disconnect();
+  glideNodes = null;
+}
+
+function glideChain(a: AudioContext): GlideNodes | null {
   if (glideNodes) return glideNodes;
   if (!noise || !master) return null;
   const src = a.createBufferSource();
@@ -394,7 +437,7 @@ function glideChain(a: AudioContext): { gain: GainNode; filter: BiquadFilterNode
   gain.gain.value = 0;
   src.connect(filter).connect(gain).connect(master);
   src.start();
-  glideNodes = { gain, filter };
+  glideNodes = { src, gain, filter };
   return glideNodes;
 }
 
@@ -407,7 +450,7 @@ export function glide(speed: number, opts?: GlideOptions): void {
   if (gain <= 0 && !glideNodes) return;
   const a = audio();
   if (!a) return;
-  if (a.state === 'suspended') void a.resume();
+  wake(a);
   const g = glideChain(a);
   if (!g) return;
   const now = a.currentTime;
