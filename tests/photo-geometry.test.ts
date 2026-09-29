@@ -994,6 +994,23 @@ describe('a box the edge of the photo cut off', () => {
     expect(frameCuts(chest).top).toBe(false);
     expect(placeFloorObject(chest, 'n', low, level, foot)!.heightMM).toBe(900);
   });
+
+  it('grows a cut piece unbounded in a room with no usable height, rather than into NaN', () => {
+    // `migrateRoom` does not validate a height, and `Math.min(x, NaN)` is NaN: before
+    // the guard both placers answered a NaN height, and the wall one a NaN position.
+    const d = wallD('n', ROOM);
+    const wardrobe = clip(bboxOfFloorBox('n', -0.5, -(d - 0.3), 1.0, 2.4, 0.6, level));
+    const curtain = clip(bboxOfWallSolid('n', 'n', 0.2, 1.75, d, 1.4, 1.9, 0.08, level));
+    const whole = { widthM: 1.4, heightM: 2.3 };
+    for (const height of [Number.NaN, 0]) {
+      const room = { ...ROOM, height };
+      const g = placeFloorObject(wardrobe, 'n', room, level, { depthM: 0.6, whole })!;
+      expect(g.heightMM).toBe(2300);
+      const w = placeWallObject(curtain, 'n', room, level, { depthM: 0.08, whole })!;
+      expect(w.heightMM).toBe(2300);
+      expect(w.position.y - w.heightMM / 2000).toBeCloseTo(0.8, 9);
+    }
+  });
 });
 
 /** A truth point given as (lateral, distance from the lens) in the slot's own frame,

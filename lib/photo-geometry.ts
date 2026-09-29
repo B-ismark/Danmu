@@ -827,10 +827,11 @@ export function cutAxes(
  *  edge as the near corner, which it is not — and the uncut edge is still right,
  *  which is why this runs on the signed answer before anything refuses it.
  *
- *  `lo` and `hi` are where the axis ends — the framed wall's two ends, the floor —
- *  and the growth stops there. A piece can carry on past the photo; it cannot carry
- *  on past the corner of the room, and a wardrobe's typical two metres grown from
- *  an edge half a metre from the corner is a wardrobe standing in the next room.
+ *  `lo` and `hi` are where the axis ends — the framed wall's two ends, the floor, the
+ *  ceiling (`ceilingOf`) — and the growth stops there. A piece can carry on past the
+ *  photo; it cannot carry on past the corner of the room, and a wardrobe's typical
+ *  two metres grown from an edge half a metre from the corner is a wardrobe standing
+ *  in the next room.
  *  That bounds the ASSUMPTION only: what was seen is kept whatever the ends say,
  *  because a bound may falsify a guess and never a measurement. */
 function wholeAlong(
@@ -855,6 +856,16 @@ function wholeAlong(
   const room = lowCut ? seen - lo : hi - seen;
   const full = Math.max(length, Math.min(whole, room));
   return { centre: lowCut ? seen - full / 2 : seen + full / 2, length: full };
+}
+
+/** Where an upward growth stops: the room's ceiling, or nowhere.
+ *
+ *  A room with no usable height bounds nothing. That is the rule for a clamp whose
+ *  input cannot be trusted — it goes inert and its arithmetic guard stays — and it
+ *  keeps a missing height from turning a measured piece into NaN; the ceiling placer
+ *  refuses the same input outright, because there the ceiling is its premise. */
+function ceilingOf(room: { height: number }): number {
+  return room.height > 0 ? room.height : Infinity;
 }
 
 /**
@@ -1251,9 +1262,8 @@ export function placeFloorObject(
   // It stands on the floor, so its top is its height, and a typical one grown past
   // the ceiling would be a wardrobe through the slab. The growth stops there, as the
   // width's stops at the corner; what was seen is kept whatever the ceiling says.
-  const heightM = cut.top && foot.whole
-    ? Math.max(solved.heightM, Math.min(foot.whole.heightM, room.height))
-    : solved.heightM;
+  // The same `wholeAlong` the wall placer grows by, so the two cannot drift.
+  const heightM = wholeAlong(solved.heightM / 2, solved.heightM, false, cut.top, foot.whole?.heightM, 0, ceilingOf(room)).length;
   if (widthM <= 0.01 || heightM <= 0.01) return null;
 
   // The CENTRE is measurement plus assumption, so it gets its own bound: the
@@ -1380,7 +1390,7 @@ export function placeWallObject(
   // corners.
   const cut = frameCuts(box);
   const across = wholeAlong(span.right, span.widthM, cut.left, cut.right, foot.whole?.widthM, frame.left, frame.right);
-  const up = wholeAlong((yTop + yBottom) / 2, yTop - yBottom, cut.bottom, cut.top, foot.whole?.heightM, 0, room.height);
+  const up = wholeAlong((yTop + yBottom) / 2, yTop - yBottom, cut.bottom, cut.top, foot.whole?.heightM, 0, ceilingOf(room));
   const right = across.centre;
   const widthM = across.length;
   const heightM = up.length;
