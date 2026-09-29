@@ -290,13 +290,18 @@ describe('readCloudReply: a reply with nothing to act on is not an empty room', 
     // frame, so the cut keeps none of them. Read row by row this was "All clear".
     const pixels = [row([412, 300, 520, 260]), row([90, 610, 180, 140], { label: 'Lamp', category: 'lamp' })];
     expect(unreadable(JSON.stringify(pixels))).toMatch(/no box inside the photos/);
-    expect(unreadable(JSON.stringify([row([0.1, 0.2, 0.3, 0.4], { slot: undefined })]))).toMatch(/no box/);
-    expect(unreadable(JSON.stringify([null, 7]))).toMatch(/no box/);
+    // A box is the question only once a row is on a photographed wall: one of them
+    // past the frame beside one on no wall at all is still a reply about boxes.
+    expect(unreadable(JSON.stringify([row([412, 300, 520, 260]), row([0.1, 0.2, 0.3, 0.4], { slot: 's' })]))).toMatch(/no box inside the photos/);
+    expect(readCloudReply(JSON.stringify([row(undefined), 7]), ['n'])).toMatchObject({ unreadable: expect.stringMatching(/no box/) });
   });
 
   it('refuses a list that files every row under walls nobody photographed (§ 49.17)', () => {
     const elsewhere = [row([0.1, 0.2, 0.3, 0.4], { slot: 's' }), row([0.5, 0.2, 0.3, 0.4], { slot: 'up' })];
-    expect(unreadable(JSON.stringify(elsewhere))).toMatch(/no box inside the photos/);
+    // Said as what it is: every box is in frame, and it was the walls that were wrong.
+    expect(unreadable(JSON.stringify(elsewhere))).toMatch(/filed no piece under a wall that was photographed/);
+    expect(unreadable(JSON.stringify([row([0.1, 0.2, 0.3, 0.4], { slot: undefined })]))).toMatch(/filed no piece/);
+    expect(unreadable(JSON.stringify([null, 7]))).toMatch(/filed no piece/);
     const reply = readCloudReply(JSON.stringify([...elsewhere, row([0.2, 0.3, 0.1, 0.1])]), ['n', 'e']);
     expect('rows' in reply && reply.rows.map((d) => [d.slot, d.box])).toEqual([['n', [0.2, 0.3, 0.1, 0.1]]]);
     // The walls are the ones handed in, not a fixed four.

@@ -185,7 +185,7 @@ Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by vis
  *  than defaulted to all four walls, because the default is the check switched off. */
 export function cloudRows(parsed: readonly unknown[], sent: readonly CaptureSlot[]): Detection[] {
   return (parsed as Detection[]).flatMap((d) => {
-    const slot = d ? wallOf(d, sent) : undefined;
+    const slot = filedUnder(d, sent);
     if (!slot || !Array.isArray(d.box)) return [];
     const box = boxInPhoto(d.box);
     // Stamped here, and called only by `readCloudReply`, which only
@@ -195,6 +195,13 @@ export function cloudRows(parsed: readonly unknown[], sent: readonly CaptureSlot
     // `[nesw]`, and `cals[d.slot]` is keyed the same way.
     return box ? [{ ...d, slot, box, source: 'cloud' as const }] : [];
   });
+}
+
+/** The first thing `cloudRows` asks of a row: which photographed wall it is filed
+ *  under. Its own function so `readCloudReply` can say which question a refused
+ *  reply failed. */
+function filedUnder(d: unknown, sent: readonly CaptureSlot[]): CaptureSlot | undefined {
+  return d ? wallOf(d as { slot?: unknown }, sent) : undefined;
 }
 
 /** A reply's rows, or why it holds nothing the screen may act on. */
@@ -222,7 +229,13 @@ export function readCloudReply(text: string, sent: readonly CaptureSlot[]): Clou
   }
   const rows = cloudRows(parsed, sent);
   if (parsed.length > 0 && rows.length === 0) {
-    return { unreadable: 'The detection service replied with no box inside the photos.', cause: parsed };
+    // Two failures, told apart because the fixes differ: a reply in the wrong unit
+    // needs the boxes read differently, one filed under the wrong walls needs the
+    // walls. It used to say "no box" for both.
+    const unreadable = parsed.some((d) => filedUnder(d, sent))
+      ? 'The detection service replied with no box inside the photos.'
+      : 'The detection service filed no piece under a wall that was photographed.';
+    return { unreadable, cause: parsed };
   }
   return { rows };
 }
