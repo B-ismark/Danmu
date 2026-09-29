@@ -155,7 +155,12 @@ owned by a deterministic geometry engine, not by a model.
    to look at, because the counts do not see an awkward wrap. Its first run found
    the piece catalog cutting names to one letter across the whole 1024–1279px step,
    because three invisible row actions held 96px of a ~160px row; they float over
-   the row now (`.row-actions`).
+   the row now (`.row-actions`). Floating over a 206px list they covered all but the
+   first ~45px of the name under the pointer, so at the list's narrow step
+   (`@container rail (max-width: 240px)`) a pointed-at row shows lock and hide, and
+   Remove waits for the selection, a keyboard focus in the row, or Delete —
+   `scripts/row-hover-probe.mjs` hovers every row and measures what of each name
+   still reads.
 6. **Warm & playful visual direction.** Cream paper, terracotta (`--accent`) +
    sage (`--accent-2`) accents, Nunito (sans) / Fraunces (display) type, generous
    rounding. Matches the soft procedural 3D models.

@@ -1187,6 +1187,48 @@ describe('a piece row keeps enough width to read the piece name', () => {
     // move with the thing it is supposed to constrain and could never go red.
     expect(nameWidth, `a piece name gets ${nameWidth}px at --rail-left-tight`).toBeGreaterThanOrEqual(56);
   });
+
+  it('on the narrow rail a pointed-at row leaves Remove out, and only there', () => {
+    // The case the assertion above does not reach, because it measures the row with its
+    // actions hidden. Hovered, the float covers the END of the name: at the 206px rail
+    // `scripts/row-hover-probe.mjs` measured 45px of "Coffee table"'s 71 left, eleven
+    // names of fourteen cut, with a Remove button beside each. Dropping Remove from the
+    // hover gives back its 24px and the 2px gap. Pinned here as the rule's four parts,
+    // each one a way to put the defect back while leaving a rule that looks like the fix.
+    const src = codeOnly(CSS);
+    const OPEN = '@container rail (max-width: 240px) {';
+    const at = src.indexOf(OPEN);
+    expect(at, 'no 240px container query in globals.css').toBeGreaterThan(-1);
+    let depth = 1;
+    let i = at + OPEN.length;
+    for (; i < src.length && depth > 0; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') depth--;
+    }
+    const narrow = src.slice(at + OPEN.length, i - 1);
+    const SELECTOR = '.list-row:not(.is-selected):not(:focus-within) .row-actions .icon-btn--danger';
+    const m = new RegExp(`${SELECTOR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(narrow);
+    // Not selected, and not focused within: those are the two ways Remove is still
+    // reached on this rail, and a rule that hid it there too would delete the button.
+    expect(m, 'the narrow rail has no rule taking Remove off a pointed-at row').toBeTruthy();
+    // `display`, not `opacity` or `visibility`: a transparent button still holds its box.
+    expect(m![1]).toMatch(/display:\s*none/);
+    // And nowhere wider — the rule belongs to the rail that is short of room.
+    expect(codeOnly(CSS).split(SELECTOR).length - 1, 'the Remove rule appears outside the 240px query').toBe(1);
+    // The rule reaches Remove by its TONE, so both rows' Remove must carry it and
+    // nothing else in a row may: a second danger button would vanish with it.
+    const tree = codeOnly(readSrc('components', 'studio', 'PartTree.tsx'));
+    for (const fn of ['function PartRow(', 'function GroupRow(']) {
+      const from = tree.indexOf(fn);
+      expect(from, `${fn} is not declared in PartTree.tsx`).toBeGreaterThan(-1);
+      const next = tree.indexOf('\nfunction ', from + 1);
+      const body = tree.slice(from, next === -1 ? undefined : next);
+      const buttons = [...body.matchAll(/<IconButton\b[\s\S]*?\/>/g)].map((b) => b[0]);
+      const danger = buttons.filter((b) => b.includes('tone="danger"'));
+      expect(danger.length, `${fn} has ${danger.length} danger buttons`).toBe(1);
+      expect(danger[0]).toContain('icon="trash"');
+    }
+  });
 });
 
 describe('the room-check actions wrap rather than cut a word', () => {

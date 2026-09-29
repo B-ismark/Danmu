@@ -976,7 +976,8 @@ which the sweep could not see until it learned to). SwiftShader, desktop Chromiu
 What the sweep cannot tell you, and a person can:
 - **The catalog's hover actions.** Point at a piece row in the left rail: lock, hide and
   remove fade in OVER the end of the name, on a fade of the row's own colour. Wrong looks
-  like a grey slab, a hard edge, or the name jumping sideways.
+  like a grey slab, a hard edge, or the name jumping sideways. On a narrow list only lock
+  and hide come up — see the next item.
 - **Select a row** (mouse or touch): it opens to two lines — the name keeps the whole
   first line, lock / hide / remove sit right-aligned beneath it. That is also the only
   way a touch screen reaches them. Wrong looks like the buttons sitting on the name, the
@@ -987,6 +988,34 @@ What the sweep cannot tell you, and a person can:
   hovering.
 - **On a phone** the 3D tab's Move / Scale / Rotate read in full, with the W / S / R
   keycaps gone. Wrong looks like "M…".
+
+### Pointing at a piece on a narrow list leaves its name readable — this branch, PROBED at 1024–1440
+
+**Where to click.** Any furnished room, either tab, in a window 1024–1279 px wide (or a
+wider one with the left list dragged to its narrowest). Move the pointer down the piece
+rows. Only **lock** and **hide** come up over the end of the name; **remove** waits. Then
+click a row: it opens to two lines with all three under the whole name. Then Tab into a row
+you have not selected: all three come up there too. At 1280 and wider, with the list at its
+usual width, a pointed-at row shows all three, as before.
+
+**Why.** On that list the three buttons covered all but the first ~45 px of the name they
+floated over — "Coff" for "Coffee table", with a Remove button under the pointer. Leaving
+Remove to the selected row gives the name back 26 px and keeps a delete from turning up
+under a passing pointer. Remove is still one click away (select the row), and Delete
+removes the selected piece.
+
+**What wrong looks like.**
+- A name still cut to four or five letters under the pointer.
+- The row jumping, or its height changing, as the pointer crosses it.
+- A selected row, or a keyboard-focused one, missing its Remove.
+- Remove missing on a pointed-at row at 1280+ with the list at its usual width.
+
+**What was measured, and on what.** SwiftShader, desktop Chromium, the L-shape's fourteen
+starter pieces: `scripts/row-hover-probe.mjs` at 1024, 1100, 1279, 1280, 1440, and 1440 with
+the list dragged to 228 px. Before: 35 passed, 7 failed — on the 206 px list 11 of 14 names
+cut under the pointer, "Coffee table" 45 of 71 px. After: 42 of 42. The CSS rule is held by
+`tests/reflow.test.ts`, which nine mutants of the rule failed. Nobody has done it with a
+real mouse.
 
 ### The laptop studio as panes on a wash — `c2137c4` on `main` (PR #157), SWEPT, needs a real GPU and a Mac
 

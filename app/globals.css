@@ -915,6 +915,17 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
      `padding-left` would land in front of the button and add to it. */
   .rail-section-head { padding-right: 12px; }
   .rail-section-toggle { padding-left: 12px; }
+
+  /* A row's floating actions (`.row-actions`, below) cover the end of the name they
+     float over, and at this width they covered all but its first ~45px: "Coff" for
+     "Coffee table", under the pointer, beside a Remove button. So here a pointed-at row
+     shows the two toggles and not Remove, which gives the name back 26px — ~70px of
+     it now reads, and "Coffee table", the longest starter name, reaches its last
+     letter, which sits in the fade — and keeps a destructive button from turning up
+     under a passing pointer. Remove is still on the selected row's own line, on a
+     keyboard focus inside the row, and on Del. `display`, not `opacity`: an invisible
+     button still holds its 24px. Measured by `scripts/row-hover-probe.mjs`. */
+  .list-row:not(.is-selected):not(:focus-within) .row-actions .icon-btn--danger { display: none; }
 }
 
 .section { padding: 14px 16px; border-bottom: 1px solid var(--hairline); }
@@ -1082,7 +1093,9 @@ textarea.field { border-radius: var(--r-2); }
    pointer either: an invisible delete button is not one anybody means to press.
 
    The fade under them is the row's own ground, layered the way the row paints
-   it, so the name ellipsises into the row instead of into a grey slab. */
+   it, so the name ellipsises into the row instead of into a grey slab. On a
+   narrow rail a pointed-at row leaves Remove out — see the 240px container
+   query above. */
 .list-row { position: relative; --row-ground: var(--paper); }
 .list-row:hover { --row-ground: var(--paper-2); }
 .list-row.is-selected { --row-ground: var(--paper); } /* the tint is layered on top, below */
