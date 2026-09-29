@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDetectPrompt } from '@/lib/detect-prompt';
+import { buildDetectPrompt, cloudRows } from '@/lib/detect-prompt';
 import { CATALOG_SHAPES_ORDERED } from '@/lib/scene-spec';
 
 const ROOM = { width: 5.6, depth: 4.2, height: 2.8, layoutId: 'rect' as const };
@@ -143,5 +143,43 @@ describe('the prompt reads as prose, because the model has to follow it', () => 
     // …and still does when there is more than one.
     expect(buildDetectPrompt(ROOM, ['e', 's'])).toContain('one per wall (EAST, SOUTH)');
     expect(buildDetectPrompt(ROOM, ['e', 's'])).toContain('Each shot frames one wall straight-on');
+  });
+});
+
+describe('cloudRows reads the reply as the geometry can use it', () => {
+  const row = (box: unknown, extra: Record<string, unknown> = {}) => ({ label: 'Sofa', category: 'sofa', conf: 0.8, slot: 'n', box, ...extra });
+
+  it('stamps every row it keeps as the cloud’s', () => {
+    const [d] = cloudRows([row([0.1, 0.2, 0.3, 0.4])]);
+    expect(d.source).toBe('cloud');
+    expect(d.box).toEqual([0.1, 0.2, 0.3, 0.4]);
+    expect(d.label).toBe('Sofa');
+  });
+
+  it('cuts a box that runs past the photo to the photo (§ 49.15)', () => {
+    // The prompt asks for fractions of the image; a box past the top describes rows
+    // nobody saw, and a cut box's top row is the frame's edge, which the ceiling solve
+    // stands on. Measured in tests/photo-geometry.test.ts.
+    const [d] = cloudRows([row([0.4, -0.05, 0.2, 0.35])]);
+    expect(d.box[1]).toBe(0);
+    expect(d.box[1] + d.box[3]).toBeCloseTo(0.3, 12);
+    const [e] = cloudRows([row([0.9, 0.7, 0.3, 0.5])]);
+    expect(e.box[0] + e.box[2]).toBeCloseTo(1, 12);
+    expect(e.box[1] + e.box[3]).toBeCloseTo(1, 12);
+  });
+
+  it('drops a row with no box in the photo, as a row with no box always was', () => {
+    const kept = cloudRows([
+      row([0.1, 0.2, 0.3, 0.4]),
+      row(undefined),
+      row([0.1, 0.2, 0.3]),
+      row([1.2, 0.2, 0.3, 0.4]),
+      row([0.1, 0.2, Number.NaN, 0.4]),
+      row(['0.1', '0.2', '0.3', '0.4']),
+      row([0.1, 0.2, 0.3, 0.4], { slot: undefined }),
+      null,
+      7,
+    ]);
+    expect(kept).toHaveLength(1);
   });
 });

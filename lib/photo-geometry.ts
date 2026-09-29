@@ -795,6 +795,32 @@ export type PieceFootprint = {
  *  next. */
 export const FRAME_EDGE = 0.01;
 
+/** A detector's box, cut to the photo: what lies outside the frame was never seen,
+ *  so a box describes only the part in it. Null when none of it is in frame, or it
+ *  is not a box at all.
+ *
+ *  Both edges are clipped, never the near one moved with the size kept. That is what
+ *  the on-device detector did, and it moves the FAR edge by the overrun: the bottom
+ *  row is where a floor piece meets the floor and where a ceiling disc's far rim is,
+ *  and the top row of a cut box is the frame's own edge, which the ceiling solve
+ *  stands on (`discUnderTopCut`). Measured in `tests/photo-geometry.test.ts`
+ *  (§ 49.15): on the 556 discs the top of the frame cut, a box run 1% past the frame
+ *  read 7.1% off and 102 mm out that way, and 6.4% and 54 mm left unclipped, where
+ *  the box the photo shows reads 4.1% and 42 mm. Clipped, the overrun changes
+ *  nothing. */
+export function clipToFrame(box: readonly number[]): [number, number, number, number] | null {
+  if (box.length !== 4 || !box.every(Number.isFinite)) return null;
+  const [x, y, w, h] = box;
+  const x0 = Math.max(0, x);
+  const y0 = Math.max(0, y);
+  // What each side lost, taken off the size, so a box the frame did not cut comes
+  // back exactly as it went in rather than rebuilt from its corners.
+  const cw = w - (x0 - x) - Math.max(0, x + w - 1);
+  const ch = h - (y0 - y) - Math.max(0, y + h - 1);
+  if (!(cw > 0 && ch > 0)) return null;
+  return [x0, y0, cw, ch];
+}
+
 export type FrameCuts = { left: boolean; right: boolean; top: boolean; bottom: boolean };
 
 /** The plane a placer reads a row on — which is not always its anchor's (see

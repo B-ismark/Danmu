@@ -426,7 +426,10 @@ Furniture detection runs through a fallback chain, best-effort:
    them. It now counts them, names the walls nobody photographed as missing, lists
    only the cameras it has, and constrains the `slot` it will accept back to the
    ones it sent. The **coordinate system stays whole** — `position` is reported in
-   room coordinates and those are defined by all four wall planes.
+   room coordinates and those are defined by all four wall planes. The reply is
+   read there too (`cloudRows`): a row with no box or no slot is dropped, and every
+   box is cut to the photo, the same way the on-device boxes are (§4, *A box the
+   edge of the photo cut*).
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
    detector is available.
 
@@ -645,6 +648,17 @@ wardrobe running off the left of the picture comes back as the part of a wardrob
 it — and every size taken off that box was the part, read as the whole. Photographed the way
 people photograph a room, with the phone tipped up to get the ceiling in, that is most of the
 floor pieces in the picture, and it is where *"mostly too small"* came from.
+
+First the box is cut to the photo (`clipToFrame`, `lib/photo-geometry.ts`). A model's box
+can run past the frame, since it regresses where the piece is rather than where the picture
+ends, and what lies outside the frame was never seen. The on-device detector used to set the
+near edge to the frame and keep the size, which moves the FAR edge by the overrun, and the far
+edge is the row the placers measure from: a floor piece's foot, a ceiling disc's far rim. The
+cloud rows were not cut at all, so a cut box's top row sat outside the picture where the
+ceiling solve reads it as the frame's edge. Both sources now go through the one helper
+(`detectionBox` in `lib/local-detect.ts`, `cloudRows` in `lib/detect-prompt.ts`), which takes
+off each side only what lay outside, so a box the frame did not cut comes back exactly as it
+went in, and a sliver is judged on the part that is in the picture (§ 49.15).
 
 So a cut axis is a **lower bound**, and the placers treat it as one (`frameCuts` and
 `cutAxes` in `lib/photo-geometry.ts`, a box within 1% of the frame being cut):

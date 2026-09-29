@@ -16,7 +16,9 @@
 
 import { footprintForLayout, type LayoutId } from './footprint';
 import { CATALOG_SHAPES_ORDERED } from './scene-spec';
+import { clipToFrame } from './photo-geometry';
 import type { CaptureSlot } from './storage';
+import type { Detection } from './detection';
 
 export type PromptRoom = { width: number; depth: number; height: number; layoutId?: LayoutId };
 
@@ -130,4 +132,26 @@ CRITICAL RULES (REPEAT BEFORE OUTPUT):
 5. Every slot you return MUST be one of ${codes}.
 
 Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by visual prominence (largest first).`;
+}
+
+/** The rows of the reply this prompt asked for, as the geometry can use them. Here
+ *  rather than beside the call for the reason the prompt is (the top of this file):
+ *  its test should not have to load the Gemini SDK and the quota store.
+ *
+ *  NOT deduped here. Merging two detections is a decision about what EXISTS, and it
+ *  used to be taken on the model's own guessed `position` — the exact numbers the
+ *  geometry pass then overwrote. It now runs in lib/detect-refine.ts AFTER
+ *  refinement, which also means the on-device path gets it too.
+ *
+ *  Each box is cut to its photo (`clipToFrame`): the prompt asks for fractions of the
+ *  image, and a box that runs past the edge describes rows and columns nobody saw —
+ *  a cut box's top row is the frame's edge, which the ceiling solve stands on. A row
+ *  with no box in frame is dropped, as a row with no box always was. */
+export function cloudRows(parsed: readonly unknown[]): Detection[] {
+  return (parsed as Detection[]).flatMap((d) => {
+    const box = d && Array.isArray(d.box) && d.slot ? clipToFrame(d.box) : null;
+    // Stamped here, and called only by `detectAcrossImages`, so nothing but the reply
+    // to a Gemini call can claim its output came from Gemini.
+    return box ? [{ ...d, box, source: 'cloud' as const }] : [];
+  });
 }

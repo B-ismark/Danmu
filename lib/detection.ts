@@ -2,7 +2,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { useQuota } from './quota';
-import { buildDetectPrompt, type PromptRoom } from './detect-prompt';
+import { buildDetectPrompt, cloudRows, type PromptRoom } from './detect-prompt';
 import type { DetectSource } from './detect-confidence';
 import type { CaptureSlot } from './storage';
 
@@ -166,15 +166,8 @@ export async function detectAcrossImages(
   if (!Array.isArray(parsed)) {
     throw new DetectError('BAD_RESPONSE', 'The detection service replied in an unexpected shape.', parsed);
   }
-  // NOT deduped here. Merging two detections is a decision about what EXISTS,
-  // and it used to be taken on the model's own guessed `position` — the exact
-  // numbers the geometry pass then overwrote. It now runs in lib/detect-refine.ts
-  // AFTER refinement, which also means the on-device path gets it too.
-  return (parsed as Detection[])
-    .filter((d) => d.box && d.box.length === 4 && d.slot)
-    // Stamped here rather than at the call site, so the one function that talks to
-    // Gemini is the one function that can claim its output came from Gemini.
-    .map((d) => ({ ...d, source: 'cloud' as const }));
+  // NOT deduped here: see `cloudRows`.
+  return cloudRows(parsed);
 }
 
 function blobToBase64(blob: Blob): Promise<string> {

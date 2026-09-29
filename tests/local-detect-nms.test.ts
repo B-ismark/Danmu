@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nms, type RawBox } from '../lib/local-detect';
+import { detectionBox, nms, type RawBox } from '../lib/local-detect';
 
 function box(p: Partial<RawBox> = {}): RawBox {
   return {
@@ -60,5 +60,41 @@ describe('nms', () => {
     const a = nms(set).map((b) => b.conf).sort();
     const b = nms([...set].reverse()).map((b) => b.conf).sort();
     expect(a).toEqual(b);
+  });
+});
+
+// A model regresses a box for a piece the frame cuts, and the box can run past the
+// edge. The clamp this replaced set the near edge to the frame and kept the size,
+// which moved the FAR edge by the overrun — and the far edge is the row the placers
+// measure from (§ 49.15, measured in tests/photo-geometry.test.ts).
+describe('detectionBox', () => {
+  it('turns a centre and size into a corner and size, unchanged inside the frame', () => {
+    const b = detectionBox(box({ x: 0.5, y: 0.5, w: 0.2, h: 0.3 }))!;
+    expect(b[0]).toBeCloseTo(0.4, 12);
+    expect(b[1]).toBeCloseTo(0.35, 12);
+    expect(b[2]).toBe(0.2);
+    expect(b[3]).toBe(0.3);
+  });
+
+  it('keeps the bottom row of a box that ran past the top where the model put it', () => {
+    // Centre 0.2, height 0.5: the model's box spans −0.05 to 0.45.
+    const b = detectionBox(box({ y: 0.2, h: 0.5 }))!;
+    expect(b[1]).toBe(0);
+    expect(b[1] + b[3]).toBeCloseTo(0.45, 12);
+  });
+
+  it('keeps the right edge of a box that ran past the left', () => {
+    // Centre 0.1, width 0.4: −0.1 to 0.3.
+    const b = detectionBox(box({ x: 0.1, w: 0.4 }))!;
+    expect(b[0]).toBe(0);
+    expect(b[0] + b[2]).toBeCloseTo(0.3, 12);
+  });
+
+  it('drops a box whose part in the picture is a sliver, however big the model drew it', () => {
+    // 0.2 wide, but only 0.005 of it inside the right edge.
+    expect(detectionBox(box({ x: 1.095, w: 0.2 }))).toBeNull();
+    // …and a small box inside the frame, as before.
+    expect(detectionBox(box({ w: 0.01 }))).toBeNull();
+    expect(detectionBox(box({ w: 0.011 }))).not.toBeNull();
   });
 });

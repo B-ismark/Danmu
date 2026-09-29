@@ -11,6 +11,7 @@ import {
   fitHeightToFloorLine,
   atLens,
   cutAxes,
+  clipToFrame,
   cutByFrame,
   frameCuts,
   locateOnWall,
@@ -1754,6 +1755,49 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
     expect(g.position.z).toBeCloseTo(m.z, 9);
   });
 
+  it('reads a box a detector ran past the top as the box the photo shows, once clipped (§ 49.15)', () => {
+    // A model regresses a box for a piece the frame cuts, and nothing stops that box
+    // running past the edge. Run every top-cut box past the frame by d, then hand it to
+    // the placer as the on-device detector used to (near edge set to the frame, size
+    // kept, so the far edge moves down by d), as the cloud rows used to (not clipped at
+    // all), and through `clipToFrame`. The solve stands on the far edge, the disc's far
+    // rim, and on the top row, the frame's own edge: the first way moves one, the
+    // second the other.
+    expect(topCut.every((f) => f.box[1] === 0), 'premise: every one of them is cut, not inside the edge band').toBe(true);
+    const run = (f: Fixture, d: number): Box => [f.box[0], -d, f.box[2], f.box[3] + d];
+    const sizeKept = (b: Box): Box => [Math.max(0, Math.min(1, b[0])), Math.max(0, Math.min(1, b[1])), Math.min(1, b[2]), Math.min(1, b[3])];
+    const read = (d: number, hand: (b: Box) => Box) => {
+      let w = 0;
+      let p = 0;
+      let past = 0;
+      for (const f of topCut) {
+        const g = placeCeilingObject(hand(run(f, d)), 'n', SQUARE, f.cal)!;
+        w += readErr(g, f.D);
+        p += posErr(g.position, f);
+        if (readErr(g, f.D) > 0.1) past++;
+      }
+      const n = topCut.length;
+      return `${((100 * w) / n).toFixed(1)}% / ${((1000 * p) / n).toFixed(0)} mm / ${past}`;
+    };
+    const asSeen = read(0, (b) => b);
+    const kept = [read(0.01, sizeKept), read(0.02, sizeKept)];
+    const raw = [read(0.01, (b) => b), read(0.02, (b) => b)];
+    console.log(`§ 49.15 · ${topCut.length} top-cut discs · as seen ${asSeen} · run 1% / 2% past the top: size kept ${kept.join(', ')} · unclipped ${raw.join(', ')}`);
+    expect(asSeen).toBe('4.1% / 42 mm / 43');
+    expect(kept).toEqual(['7.1% / 102 mm / 70', '9.9% / 155 mm / 116']);
+    expect(raw).toEqual(['6.4% / 54 mm / 78', '8.2% / 58 mm / 133']);
+    // Clipped, the overrun is gone: every reading is the one the photo's own box gives.
+    for (const d of [0.005, 0.01, 0.02, 0.05]) {
+      for (const f of topCut) {
+        const g = placeCeilingObject(clipToFrame(run(f, d))!, 'n', SQUARE, f.cal)!;
+        const want = placeCeilingObject(f.box, 'n', SQUARE, f.cal)!;
+        expect(g.widthMM).toBe(want.widthMM);
+        expect(g.position.x).toBeCloseTo(want.position.x, 9);
+        expect(g.position.z).toBeCloseTo(want.position.z, 9);
+      }
+    }
+  });
+
   it('reads a disc cut at the top AND the bottom on its middle row', () => {
     // Tipped 60° up, a 66° frame is filled by a 2 m disc: no far edge in view, so
     // there is nothing to solve from and the placer must not try.
@@ -1765,6 +1809,55 @@ describe('placeCeilingObject · a disc the top of the frame cut (§ 49.13)', () 
     const m = middleRow(box, cal);
     expect(g.widthMM).toBe(m.widthMM);
     expect(g.position.z).toBeCloseTo(m.z, 9);
+  });
+});
+
+describe('clipToFrame · a detector’s box is what is in the photo (§ 49.15)', () => {
+  it('keeps a box inside the frame exactly as it is', () => {
+    // Exactly, not to a tolerance: every whole box in every pinned table passes through
+    // this, and a box rebuilt from its corners moves in its last bit.
+    expect(clipToFrame([0.2, 0.3, 0.4, 0.5])).toEqual([0.2, 0.3, 0.4, 0.5]);
+    expect(clipToFrame([0, 0, 1, 1])).toEqual([0, 0, 1, 1]);
+  });
+
+  it('cuts a box that runs past an edge at that edge, and keeps the far one where it was', () => {
+    // Past the top: the bottom row stays at 0.45. The clamp this replaced kept the
+    // height, which put the bottom at 0.5.
+    const top = clipToFrame([0.2, -0.05, 0.3, 0.5])!;
+    expect(top[1]).toBe(0);
+    expect(top[1] + top[3]).toBeCloseTo(0.45, 12);
+    expect(top[0] + top[2]).toBeCloseTo(0.5, 12);
+    // Past the left: the right edge stays at 0.3.
+    const left = clipToFrame([-0.1, 0.2, 0.4, 0.3])!;
+    expect(left[0]).toBe(0);
+    expect(left[0] + left[2]).toBeCloseTo(0.3, 12);
+    // Past the right and the bottom: cut at 1.
+    const far = clipToFrame([0.7, 0.8, 0.5, 0.4])!;
+    expect(far[0]).toBeCloseTo(0.7, 12);
+    expect(far[0] + far[2]).toBeCloseTo(1, 12);
+    expect(far[1] + far[3]).toBeCloseTo(1, 12);
+    // Past all four: the whole photo.
+    const all = clipToFrame([-0.2, -0.1, 1.5, 1.3])!;
+    expect(all.slice(0, 2)).toEqual([0, 0]);
+    expect(all[2]).toBeCloseTo(1, 12);
+    expect(all[3]).toBeCloseTo(1, 12);
+  });
+
+  it('has no box for one wholly outside the photo, or for something that is not a box', () => {
+    expect(clipToFrame([1.1, 0.2, 0.3, 0.3])).toBeNull();
+    expect(clipToFrame([0.2, -0.5, 0.3, 0.4])).toBeNull();
+    expect(clipToFrame([0.2, 0.2, 0, 0.3])).toBeNull();
+    expect(clipToFrame([0.2, 0.2, -0.1, 0.3])).toBeNull();
+    // Touching the edge from outside is no area either.
+    expect(clipToFrame([1, 0.2, 0.3, 0.3])).toBeNull();
+    expect(clipToFrame([0.2, 0.2, Number.NaN, 0.3])).toBeNull();
+    expect(clipToFrame([0.2, 0.2, Infinity, 0.3])).toBeNull();
+    // Numbers written as text are not a box, even where arithmetic would coerce them
+    // into one: '0.2' + '1' concatenates to 0.21, so this one would come back a box
+    // 1 wide standing at 0.2, running off the photo it was just clipped to.
+    expect(clipToFrame(['0.2', '0', '1', '1'] as unknown as number[])).toBeNull();
+    expect(clipToFrame([0.2, 0.2, 0.3])).toBeNull();
+    expect(clipToFrame([0.2, 0.2, 0.3, 0.3, 0.1])).toBeNull();
   });
 });
 
