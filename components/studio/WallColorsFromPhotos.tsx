@@ -13,9 +13,8 @@
 // region, and that a second polite region here would make a screen reader say
 // things twice.
 //
-// It reads `useParams` itself rather than taking a `roomId` prop, following
-// `RoomDimsEditor` — `PartTree` does not import `next/navigation` and does not
-// need to start.
+// It reads `useParams` itself rather than taking a `roomId` prop — `PartTree`
+// does not import `next/navigation` and does not need to start.
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';

@@ -339,7 +339,7 @@ BOM-less file as the system ANSI codepage, so a room named *"Chambre à coucher"
 or any non-ASCII furniture name mojibakes. `'\n'` line endings are also
 non-canonical for CSV.
 
-**Suggested fix:** Prepend `﻿`, use `\r\n`, and set
+**Suggested fix:** Prepend `\uFEFF` (a byte-order mark), use `\r\n`, and set
 `type: 'text/csv;charset=utf-8'`.
 
 ---

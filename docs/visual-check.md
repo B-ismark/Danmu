@@ -1826,7 +1826,7 @@ sweeps the placement rule over 43,200 box, photo and name cases, laid out from t
 strings the photo is handed, and the outline over 28,800. A real phone, with a real scan's
 boxes, is the unlooked-at half.
 
-### The scan photo stays on screen while the list scrolls — this branch (PR #162), PROBED from 360 to 1920 wide
+### The scan photo stays on screen while the list scrolls — merged to `main` in `a5c63b2` (PR #162), PROBED from 360 to 1920 wide
 
 **Where to click.** *Photograph my real room* → four photos → the scan screen, with enough
 pieces that the list runs past the window. Scroll to the end of the list. Beside the list the
@@ -1855,12 +1855,33 @@ the page at all.
   big enough to draw a box on with a finger is a person's call.
 
 **What was measured, and on what.** SwiftShader, desktop Chromium, seeded photos on four
-walls with 16 pieces, no detector: `scripts/scan-pin-probe.mjs`'s 79 checks at 360×640,
-390×844, 844×390, 768×1024, 700×800, 1280×800 and 1920×900 all pass, with the touch checks
-through raw touch events at the four touch sizes. At `c1bdced` the photo was 0% on screen at
-the end of the list at five of the six sizes then in the probe, and 2% at 1920×900. A copy
-with the photo frame `touch-action: none` in every mode fails the photo swipe, so that check
-can fail. A real phone is the unlooked-at half.
+walls with 16 pieces, no detector: `scripts/scan-pin-probe.mjs` at 360×640, 390×844,
+844×390, 768×1024, 700×800, 1280×800 and 1920×900, with the touch checks through raw touch
+events at the four touch sizes. Before the change the photo was all but gone at the end of
+the list at every size. A copy with the photo frame `touch-action: none` in every mode fails
+the photo swipe, so that check can fail. A real phone is the unlooked-at half.
+
+---
+
+### A change made just before the phone backgrounds the browser — this branch, NOT MEASURED
+
+**Where to click.** On a real phone, open a room in the studio. Duplicate a piece, or type a
+new width in the Room section, and at once switch to another app (home gesture or app
+switcher). Leave it a minute, then kill the browser from the app switcher, reopen it and
+open the room again. Do the same with the screen locked instead of switching apps.
+
+**What wrong looks like.**
+- The duplicated piece missing, or the width back to what it was.
+- Worse: the room half-saved — the new width with the old outline, so the room opens a
+  different shape from the size it reports, or pieces standing where the old walls were.
+
+**What was measured, and on what.** Desktop Chromium only, where a reload after duplicating
+and a closed tab after typing a width now keep the change 5 of 5 and no room came back
+half-saved (§ 47 in `docs/what-is-still-open.md`). The save runs on `visibilitychange`, the
+event a phone sends when the browser goes to the background, and the unit test covers that
+event — not the phone. Nothing here says how long a phone lets a hidden page run, so whether
+the one transaction gets to commit before the browser is frozen or killed is exactly what is
+not known. A typed room size on a reload is a known loss (§ 47), not a finding.
 
 ---
 ## Look and light

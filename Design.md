@@ -2852,6 +2852,23 @@ deleting every piece then reloading brought all the furniture back. Scene parts
 also flush on unmount, the way transforms do, so leaving a room inside the 300ms
 debounce does not drop the last edit.
 
+Leaving the PAGE unmounts nothing, so every pending save also runs when the page is
+hidden or left (`lib/page-leave.ts`). The Room section's size boxes and the Inspector's
+Exact size fields commit first, because that commit is what hands `RoomSync` the change;
+then whatever `RoomSync`'s three writes still had waiting goes as ONE transaction
+(`roomStore.savePending`), so it lands whole or not at all. As separate saves, a closing
+page kept whichever one it let finish, and a typed width came back without the outline
+and the furniture that went with it. It is the same save the debounces make: whichever
+of the three comes due first takes the other two with it, because a wall move saved its
+outline on one timer and the furniture it carried on another, and a reload between them
+brought back one without the other. The size boxes commit and do not save — their own
+save of the three numbers stored a new width against the old outline — and they commit
+when they go away, too, rather than 200 ms later into whichever room is open by then.
+The transaction asks for its commit as soon as its last put is made, on the one
+connection the room's load opened, because a reload does not wait for auto-commit. With
+the room in it, that put waits for a read, and a reload does not wait for that either: a
+typed room size is still lost on a reload, whole (`docs/what-is-still-open.md` § 47).
+
 ---
 
 ## 6a. The scene file — `lib/scene-file.ts`

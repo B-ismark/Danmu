@@ -1,12 +1,29 @@
 'use client';
 
-import { get, set as idbSet, update, del, keys } from 'idb-keyval';
+import {
+  createStore,
+  del as idbDel,
+  get as idbGet,
+  keys as idbKeys,
+  set as idbSet,
+  update as idbUpdate,
+} from 'idb-keyval';
 import { v4 as uuid } from 'uuid';
+
+// Every call in this file goes through ONE connection, the one the room's own load opens.
+// A write on the way out of the page (`lib/page-leave.ts`) has no time to wait for a
+// connection to open: measured in Chromium, a write through a second connection, still
+// opening, was lost on a closed tab 4 of 5 times, and kept 5 of 5 through the open one.
+const keyval = createStore('keyval-store', 'keyval');
+const get = <T>(key: IDBValidKey) => idbGet<T>(key, keyval);
+const update = <T>(key: IDBValidKey, updater: (old: T | undefined) => T) => idbUpdate<T>(key, updater, keyval);
+const del = (key: IDBValidKey) => idbDel(key, keyval);
+const keys = () => idbKeys(keyval);
 
 // Wrap set so QuotaExceededError fires a global event the StorageToast listens to.
 async function set<T>(key: IDBValidKey, value: T): Promise<void> {
   try {
-    await idbSet(key, value);
+    await idbSet(key, value, keyval);
   } catch (e) {
     reportQuota(e);
     throw e;
@@ -121,6 +138,14 @@ export function migrateRoom(rec: RoomData): RoomData {
   return out;
 }
 
+/** A stored room record after an edit: migrated first, so the edit sees the current
+ *  schema, and stamped current after. The room's two writers (`editRoom` and
+ *  `savePending`) both write through this, so neither can stamp the version without
+ *  migrating — the rename bug `migrateRoom`'s note describes, one writer over. */
+function rewritten(old: RoomData, edit: (room: RoomData) => RoomData): RoomData {
+  return { ...edit(migrateRoom(old)), version: ROOM_SCHEMA_VERSION };
+}
+
 /** How a room is oriented, for the sun.
  *
  *  This carried a `lat` and a `lon` as well, feeding a full solar-position
@@ -216,12 +241,13 @@ export type RoomData = {
 
 /** `room` with its rough-size mark set or cleared — the one way a writer spells it.
  *
- *  Two writers save a room's size (`RoomSync`'s debounced shell write and
- *  `RoomDimsEditor`'s own), and both write the mark FROM THE LIVE ROOM rather than
+ *  `RoomSync` saves a room's size, and writes the mark FROM THE LIVE ROOM rather than
  *  carrying the stored one forward: the stored record trails the studio by a save,
  *  so a writer that kept the mark it read would put back one the person had just
- *  cleared. The third writer, the name, touches nothing but the name, and all three
- *  go through `roomStore.editRoom` so none can land between another's read and write. */
+ *  cleared. The other writer, the name, touches nothing but the name, and both go
+ *  through one transaction per write so neither can land between the other's read and
+ *  write. (The size boxes used to save the size themselves as well, and that save,
+ *  landing alone, stored a new width against the old outline.) */
 export function markRoughSize(room: RoomData, rough: boolean): RoomData {
   const { roughSize: _stored, ...rest } = room;
   return rough ? { ...rest, roughSize: true } : rest;
@@ -262,6 +288,14 @@ export type Transforms = {
   /** rigid-parenting relationships (childId -> parentId), same optional/
    *  per-room shape as `hidden` — rooms saved before this shipped have none. */
   parentIds?: Record<string, string>;
+};
+
+/** What `roomStore.savePending` writes: whichever of `RoomSync`'s three saves were still
+ *  waiting. The scene is stored opaque, for the reason `saveSceneParts`'s is. */
+export type PendingWrite = {
+  transforms?: Transforms;
+  parts?: unknown;
+  room?: { edit: (room: RoomData) => RoomData; pin?: unknown };
 };
 
 /** A named furniture-arrangement snapshot ("Layout A / B") — lets the user
@@ -320,19 +354,18 @@ export const roomStore = {
    *  write able to land between — and return it as written, or undefined having
    *  written nothing when there is no such room.
    *
-   *  The studio has three writers of this record: the name (`TopBar`), the size
-   *  (`RoomDimsEditor`) and the shell (`RoomSync`'s debounced save). Each changes a
-   *  field or two of whatever is stored, and as a separate read and write, whichever
-   *  read first and wrote last put back what the other had just changed: a rename
-   *  landing across the save of **These are right** brought the rough-size note back
-   *  with the stored record it had copied. `edit` must be synchronous; it runs inside
-   *  the transaction. */
+   *  The studio has two writers of this record: the name (`TopBar`) and the shell,
+   *  size included (`RoomSync`). Each changes a field or two of whatever is stored,
+   *  and as a separate read and write, whichever read first and wrote last put back
+   *  what the other had just changed: a rename landing across the save of **These
+   *  are right** brought the rough-size note back with the stored record it had
+   *  copied. `edit` must be synchronous; it runs inside the transaction. */
   async editRoom(roomId: string, edit: (room: RoomData) => RoomData): Promise<RoomData | undefined> {
     let written: RoomData | undefined;
     try {
       await update<RoomData>(k(roomId, 'meta'), (old) => {
         if (!old) throw NO_ROOM;
-        written = { ...edit(migrateRoom(old)), version: ROOM_SCHEMA_VERSION };
+        written = rewritten(old, edit);
         return written;
       });
     } catch (e) {
@@ -437,11 +470,11 @@ export const roomStore = {
   /** Whether this room holds any photograph, without reading one.
    *
    *  `loadCaptures` above fans out over multi-megabyte blobs; the only question here
-   *  is whether a SCAN could still be coming, which the key list answers on its own.
-   *  `RoomSync` uses it to tell a room built from the picker — no photos, no
-   *  detections, the one `defaultScene` re-seeds on every open — from a room that has
-   *  been photographed and not yet scanned, where pinning the scene would make that
-   *  first scan invisible forever. */
+   *  is whether the room has photos at all, which the key list answers on its own.
+   *  The wall-colour button reads it, to offer colours from photos only where there
+   *  are photos. `savePending` below asks the same question inside its own
+   *  transaction, with a key range, because the answer decides whether it pins the
+   *  scene there. */
   async hasCaptures(roomId: string): Promise<boolean> {
     const prefix = k(roomId, 'cap:');
     return (await keys()).some((key) => typeof key === 'string' && key.startsWith(prefix));
@@ -474,6 +507,87 @@ export const roomStore = {
   },
   async loadSceneParts<T>(roomId: string): Promise<T | undefined> {
     return get<T>(k(roomId, 'scene'));
+  },
+  /** Everything `RoomSync` has waiting to be saved, written in ONE transaction, so it
+   *  lands whole or not at all — when a debounce comes due, when the room closes, and
+   *  when the page goes away (`lib/page-leave.ts`).
+   *
+   *  Written as separate saves, the leave kept whichever one a closing page let finish: a
+   *  typed width came back on 4 of 5 closed tabs without the outline and the scene that
+   *  went with it. The ordinary save had the same seam, only wider — the outline, then
+   *  whether a photo was waiting, then the scene, each its own write, with the furniture
+   *  a wall carried saved on another timer — so a reload anywhere between them brought a
+   *  room back in part. One transaction cannot land in part.
+   *
+   *  It asks for its commit as soon as its last put is made, because a page being
+   *  reloaded does not wait for one — measured in Chromium, a piece duplicated and
+   *  reloaded straight away was kept 0 of 5 times, and 5 of 5 with the commit asked for.
+   *  With a room edit in it, that commit waits for the room to be read, and a reload
+   *  does not wait for that either (`docs/what-is-still-open.md` § 47): the whole save
+   *  is lost rather than half of it.
+   *
+   *  `room.edit` must be synchronous, as `editRoom`'s is; with no stored room it writes
+   *  no room, and the rest is written as the separate saves would have written it. The
+   *  pin is `RoomSync`'s: the part list to store as the scene when the edit reshaped a
+   *  room the picker built — see there. */
+  async savePending(roomId: string, w: PendingWrite): Promise<void> {
+    try {
+      await keyval('readwrite', (store) => new Promise<void>((resolve, reject) => {
+        const tx = store.transaction;
+        // Why it failed, kept for the rejection: by the time the transaction aborts, its
+        // own `error` is an AbortError at best and null at worst, and neither says what
+        // went wrong — a room edit that threw, or a value that could not be stored.
+        let failure: unknown;
+        const fail = (e: unknown) => {
+          failure ??= e;
+          try {
+            tx.abort();
+          } catch {
+            // Already finishing; its own abort or error will settle this.
+          }
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = (ev) => {
+          failure ??= (ev.target as IDBRequest | null)?.error ?? tx.error;
+        };
+        tx.onabort = () => reject(failure ?? tx.error ?? new Error('The room could not be saved'));
+        // Each step runs in a request's success handler, where a throw would escape as an
+        // uncaught error and abort the transaction with no reason attached; `fail` keeps
+        // the reason and aborts it deliberately, so nothing before it commits on its own.
+        const step = (fn: () => void) => () => {
+          try {
+            fn();
+          } catch (e) {
+            fail(e);
+          }
+        };
+        const rest = (scene: unknown) => {
+          if (w.transforms) store.put(w.transforms, k(roomId, 'transforms'));
+          if (scene !== undefined) store.put(scene, k(roomId, 'scene'));
+          store.put(Date.now(), k(roomId, 'touched'));
+          tx.commit?.();
+        };
+        const room = w.room;
+        if (!room) return step(() => rest(w.parts))();
+        const read = store.get(k(roomId, 'meta'));
+        read.onsuccess = step(() => {
+          const old = read.result as RoomData | undefined;
+          if (!old) return rest(w.parts);
+          const written = rewritten(old, room.edit);
+          store.put(written, k(roomId, 'meta'));
+          // A newer part list than the pin is already on its way, and a detected room is
+          // never pinned; only then is it worth asking whether a photo is.
+          if (room.pin === undefined || w.parts !== undefined || written.detectedObjects?.length) {
+            return rest(w.parts);
+          }
+          const photos = store.count(IDBKeyRange.bound(k(roomId, 'cap:'), k(roomId, 'cap:\uffff')));
+          photos.onsuccess = step(() => rest(photos.result > 0 ? undefined : room.pin));
+        });
+      }));
+    } catch (e) {
+      reportQuota(e);
+      throw e;
+    }
   },
   /** Drop the room's arrangement — its scene snapshot and its transforms — so the
    *  next load builds from `detectedObjects`. Only `lib/rescan.ts` calls it, and only

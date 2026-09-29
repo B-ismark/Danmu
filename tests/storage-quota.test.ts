@@ -15,6 +15,8 @@ const store = new Map<string, unknown>();
 let failNextSet: Error | null = null;
 
 vi.mock('idb-keyval', () => ({
+  // lib/storage.ts passes its one store to every call; the mock ignores it.
+  createStore: () => () => Promise.reject(new Error('unused in this mock')),
   set: (key: string, value: unknown) => {
     if (failNextSet) {
       const e = failNextSet;

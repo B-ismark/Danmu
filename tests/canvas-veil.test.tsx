@@ -76,7 +76,7 @@ describe('the canvas veil', () => {
   it('a room that cannot be read lifts the veil, says so, and saves nothing over it', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(roomStore, 'loadRoom').mockRejectedValue(new Error('blocked'));
-    const saved = vi.spyOn(roomStore, 'saveTransforms');
+    const saved = vi.spyOn(roomStore, 'savePending');
     render(
       <>
         <RoomSync />
