@@ -526,25 +526,43 @@ export const roomStore = {
     try {
       await keyval('readwrite', (store) => new Promise<void>((resolve, reject) => {
         const tx = store.transaction;
-        tx.oncomplete = () => resolve();
-        tx.onabort = tx.onerror = () => reject(tx.error);
-        const rest = (scene: unknown) => {
+        // Why it failed, kept for the rejection: by the time the transaction aborts, its
+        // own `error` is an AbortError at best and null at worst, and neither says what
+        // went wrong — a room edit that threw, or a value that could not be stored.
+        let failure: unknown;
+        const fail = (e: unknown) => {
+          failure ??= e;
           try {
-            if (w.transforms) store.put(w.transforms, k(roomId, 'transforms'));
-            if (scene !== undefined) store.put(scene, k(roomId, 'scene'));
-            store.put(Date.now(), k(roomId, 'touched'));
-            tx.commit?.();
-          } catch (e) {
-            // A put that throws outright (a value that cannot be stored) must not leave
-            // the ones before it to commit on their own.
             tx.abort();
-            throw e;
+          } catch {
+            // Already finishing; its own abort or error will settle this.
           }
         };
+        tx.oncomplete = () => resolve();
+        tx.onerror = (ev) => {
+          failure ??= (ev.target as IDBRequest | null)?.error ?? tx.error;
+        };
+        tx.onabort = () => reject(failure ?? tx.error ?? new Error('The room could not be saved'));
+        // Each step runs in a request's success handler, where a throw would escape as an
+        // uncaught error and abort the transaction with no reason attached; `fail` keeps
+        // the reason and aborts it deliberately, so nothing before it commits on its own.
+        const step = (fn: () => void) => () => {
+          try {
+            fn();
+          } catch (e) {
+            fail(e);
+          }
+        };
+        const rest = (scene: unknown) => {
+          if (w.transforms) store.put(w.transforms, k(roomId, 'transforms'));
+          if (scene !== undefined) store.put(scene, k(roomId, 'scene'));
+          store.put(Date.now(), k(roomId, 'touched'));
+          tx.commit?.();
+        };
         const room = w.room;
-        if (!room) return rest(w.parts);
+        if (!room) return step(() => rest(w.parts))();
         const read = store.get(k(roomId, 'meta'));
-        read.onsuccess = () => {
+        read.onsuccess = step(() => {
           const old = read.result as RoomData | undefined;
           if (!old) return rest(w.parts);
           const written: RoomData = { ...room.edit(migrateRoom(old)), version: ROOM_SCHEMA_VERSION };
@@ -555,8 +573,8 @@ export const roomStore = {
             return rest(w.parts);
           }
           const photos = store.count(IDBKeyRange.bound(k(roomId, 'cap:'), k(roomId, 'cap:￿')));
-          photos.onsuccess = () => rest(photos.result > 0 ? undefined : room.pin);
-        };
+          photos.onsuccess = step(() => rest(photos.result > 0 ? undefined : room.pin));
+        });
       }));
     } catch (e) {
       reportQuota(e);

@@ -399,7 +399,19 @@ describe('the way-out save', () => {
           },
         },
       }),
-    ).rejects.toBeDefined();
+      // The edit's own error, not the abort it caused: that says nothing about why.
+    ).rejects.toThrow('no');
+    expect(await roomStore.loadTransforms(ROOM_ID)).toBeUndefined();
+    expect((await roomStore.loadRoom(ROOM_ID))!.height).toBeCloseTo(2.6, 5);
+  });
+
+  it('lands none of it when a value cannot be stored, and says which', async () => {
+    await roomStore.destroyRoom(ROOM_ID);
+    await roomStore.saveRoom(room());
+    const unstorable = { ...T, positions: { a: () => 0 } } as unknown as typeof T;
+    await expect(
+      roomStore.savePending(ROOM_ID, { transforms: unstorable, room: { edit: (r) => ({ ...r, height: 2.9 }) } }),
+    ).rejects.toMatchObject({ name: 'DataCloneError' });
     expect(await roomStore.loadTransforms(ROOM_ID)).toBeUndefined();
     expect((await roomStore.loadRoom(ROOM_ID))!.height).toBeCloseTo(2.6, 5);
   });
