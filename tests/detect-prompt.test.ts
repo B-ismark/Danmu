@@ -4,6 +4,7 @@ import { join, relative } from 'node:path';
 import { buildDetectPrompt, cloudRequest, cloudRows, readCloudReply, slotOf } from '@/lib/detect-prompt';
 import { detectionBox } from '@/lib/local-detect';
 import { fromRecord, toRecord } from '@/lib/detection-record';
+import { refineDetections } from '@/lib/detect-refine';
 import { SLIVER } from '@/lib/photo-geometry';
 import { stripComments } from './helpers/source';
 import type { CaptureSlot } from '@/lib/storage';
@@ -190,6 +191,22 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
     expect(kept).toHaveLength(1);
   });
 
+  it('names a row the model left unnamed by its category, and drops one with neither', () => {
+    // Measured before this: a label of `undefined`, `65` or `null` threw out of the
+    // merge (`toLowerCase`) and out of the saved record (`replace`), after the call.
+    const rows = cloudRows([
+      row([0.1, 0.2, 0.3, 0.4], { label: undefined }),
+      row([0.1, 0.2, 0.3, 0.4], { label: 65, category: 'lamp' }),
+      row([0.1, 0.2, 0.3, 0.4], { label: '' }),
+      row([0.1, 0.2, 0.3, 0.4], { label: null, category: undefined }),
+      row([0.1, 0.2, 0.3, 0.4], { label: ['Sofa'], category: 3 }),
+    ], ['n']);
+    expect(rows.map((d) => d.label)).toEqual(['sofa', 'lamp', '']);
+    // …and what comes out is safe to merge and to save.
+    expect(() => refineDetections([...rows, ...rows], {}, null)).not.toThrow();
+    expect(rows.map((d, i) => toRecord(d, i, false, () => 'u').label)).toEqual(['sofa__slot:n', 'lamp__slot:n', '__slot:n']);
+  });
+
   it('drops a row filed under a wall that was not photographed (§ 49.17)', () => {
     // Measured before this: a sofa filed under `s` when only `n` was sent came through
     // with no camera to be measured by, so it kept the model's 900 × 400 × 400 and its
@@ -302,6 +319,10 @@ describe('readCloudReply: a reply with nothing to act on is not an empty room', 
     expect(unreadable(JSON.stringify(elsewhere))).toMatch(/filed no piece under a wall that was photographed/);
     expect(unreadable(JSON.stringify([row([0.1, 0.2, 0.3, 0.4], { slot: undefined })]))).toMatch(/filed no piece/);
     expect(unreadable(JSON.stringify([null, 7]))).toMatch(/filed no piece/);
+    // A piece on a photographed wall with no name is the next question, not the box.
+    const nameless = [row([0.1, 0.2, 0.3, 0.4], { label: 5, category: null }), row([412, 300, 520, 260], { slot: 's' })];
+    expect(unreadable(JSON.stringify(nameless))).toMatch(/no name for any piece/);
+    expect(unreadable(JSON.stringify([...nameless, row([412, 300, 520, 260])]))).toMatch(/no box inside the photos/);
     const reply = readCloudReply(JSON.stringify([...elsewhere, row([0.2, 0.3, 0.1, 0.1])]), ['n', 'e']);
     expect('rows' in reply && reply.rows.map((d) => [d.slot, d.box])).toEqual([['n', [0.2, 0.3, 0.1, 0.1]]]);
     // The walls are the ones handed in, not a fixed four.

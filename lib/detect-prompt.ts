@@ -182,19 +182,32 @@ Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by vis
  *  So is a row naming a wall that was not photographed (§ 49.17), read through
  *  `wallOf`. It had no camera to be measured by, so it kept the model's own size and
  *  place and was built as though it were read off a photo. `sent` is required rather
- *  than defaulted to all four walls, because the default is the check switched off. */
+ *  than defaulted to all four walls, because the default is the check switched off.
+ *  A row with no name the rest of the app can read is named by its category, or
+ *  dropped when it has neither (`nameOf`). */
 export function cloudRows(parsed: readonly unknown[], sent: readonly CaptureSlot[]): Detection[] {
   return (parsed as Detection[]).flatMap((d) => {
     const slot = filedUnder(d, sent);
-    if (!slot || !Array.isArray(d.box)) return [];
+    const label = slot && nameOf(d);
+    if (!slot || label === undefined || !Array.isArray(d.box)) return [];
     const box = boxInPhoto(d.box);
     // Stamped here, and called only by `readCloudReply`, which only
     // `detectAcrossImages` calls, so nothing but the reply to a Gemini call can
     // claim its output came from Gemini. The slot is written back as its code:
     // the saved record carries it as a `__slot:x` suffix that reads back only
     // `[nesw]`, and `cals[d.slot]` is keyed the same way.
-    return box ? [{ ...d, slot, box, source: 'cloud' as const }] : [];
+    return box ? [{ ...d, label, slot, box, source: 'cloud' as const }] : [];
   });
+}
+
+/** What a row is called: its own `label`, or its `category` when the model left the
+ *  label out, or undefined when it gave neither. A label that is not a string is not
+ *  a name, and every reader of one assumes it is — the merge folds it with
+ *  `toLowerCase` and the saved record appends the wall to it with `replace`, so one
+ *  numeric label threw out of the scan with the photos already spent. */
+function nameOf(d: { label?: unknown; category?: unknown }): string | undefined {
+  if (typeof d.label === 'string') return d.label;
+  return typeof d.category === 'string' ? d.category : undefined;
 }
 
 /** The first thing `cloudRows` asks of a row: which photographed wall it is filed
@@ -229,12 +242,17 @@ export function readCloudReply(text: string, sent: readonly CaptureSlot[]): Clou
   }
   const rows = cloudRows(parsed, sent);
   if (parsed.length > 0 && rows.length === 0) {
-    // Two failures, told apart because the fixes differ: a reply in the wrong unit
-    // needs the boxes read differently, one filed under the wrong walls needs the
-    // walls. It used to say "no box" for both.
-    const unreadable = parsed.some((d) => filedUnder(d, sent))
-      ? 'The detection service replied with no box inside the photos.'
-      : 'The detection service filed no piece under a wall that was photographed.';
+    // Told apart because the fixes differ: a reply in the wrong unit needs the boxes
+    // read differently, one filed under the wrong walls needs the walls. It used to
+    // say "no box" for every one. Asked in `cloudRows`'s order, so the reason is the
+    // first question no row got past.
+    const filed = parsed.filter((d) => filedUnder(d, sent));
+    const unreadable =
+      filed.length === 0
+        ? 'The detection service filed no piece under a wall that was photographed.'
+        : !filed.some((d) => nameOf(d as { label?: unknown }) !== undefined)
+          ? 'The detection service replied with no name for any piece.'
+          : 'The detection service replied with no box inside the photos.';
     return { unreadable, cause: parsed };
   }
   return { rows };
