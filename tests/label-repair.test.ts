@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
-import { placeFloorObject, placeWallObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
+import { frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
   PART_LIBRARY,
@@ -14,11 +14,11 @@ import {
 } from '@/lib/scene-spec';
 import { toRecord } from '@/lib/detection-record';
 import { dimRangeFor } from '@/lib/dimension-ranges';
-import type { CalMap, RoomDims } from '@/lib/detect-refine';
+import { geoRefine, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { footprintForLayout, type Footprint } from '@/lib/footprint';
-import { bboxOfWallSolid } from './helpers/project';
+import { bboxOfCeilingDisc, bboxOfWallSolid } from './helpers/project';
 
 /** The framed wall's distance, read from the polygon. `wallDistance` — the
  *  `depth/2` / `width/2` pair every placer used to measure from — is deleted; this
@@ -192,7 +192,7 @@ describe('judgeLabel', () => {
   });
 
   it('clears a word the measurement agrees with', () => {
-    const g = placeWallObject(WALL_BOX, 'n', ROOM.footprint, CAL, {
+    const g = placeWallObject(WALL_BOX, 'n', ROOM, CAL, {
       depthM: defaultDepthFor('painting', 'painting') / 1000,
     })!;
     expect(sizeFitsLabel('painting', 'painting', g.widthMM, g.heightMM)).toBe(true); // premise
@@ -216,7 +216,7 @@ describe('judgeLabel', () => {
     // nothing.
     const shape = sceneShapeFor('bed', 'thing', undefined);
     expect(shape).not.toBe('box'); // premise: a bed with no shape is still built as a bed
-    const g = placeFloorObject(WALL_BOX, 'n', ROOM.footprint, CAL, {
+    const g = placeFloorObject(WALL_BOX, 'n', ROOM, CAL, {
       depthM: defaultDepthFor('bed', shape) / 1000,
     })!;
     const v = judgeLabel(det({ category: 'bed', slot: 'n', box: WALL_BOX }), CALS, ROOM);
@@ -312,14 +312,17 @@ describe('judgeLabel — a box the edge of the photo cut', () => {
     expect(categoriesFittingSize(100, 2300, undefined, ['height'])).toContain('curtain');
   });
 
-  it('never offers a word the photo measured nothing of', () => {
+  it('never ranks a word the photo measured nothing of above one it measured', () => {
     // Off the left and the foot. As a floor word the foot is not a size cut, so a
     // wardrobe is still judged on its height; as a wall word it is, so a painting has
-    // no axis left — it cannot fit, and it used to fit vacuously and sort first.
+    // no axis left — it cannot fit, and it used to fit vacuously and sort first. The
+    // judge's repairs drop it; a word the user TYPED keeps it, last and flagged,
+    // because dropping it left a lamp called "ceiling fan" (`tests/label-suggest.test.ts`).
     const box: Detection['box'] = [0, 0.5, 0.3, 0.5];
     const d = det({ category: 'bed', slot: 'n', box });
-    const offered = candidatesFor(d, ['painting', 'wardrobe'], CALS, ROOM, { requireFit: false }).map((c) => c.category);
-    expect(offered).toEqual(['wardrobe']);
+    const offered = candidatesFor(d, ['painting', 'wardrobe'], CALS, ROOM, { requireFit: false });
+    expect(offered.map((c) => [c.category, c.unmeasured ?? false])).toEqual([['wardrobe', false], ['painting', true]]);
+    expect(candidatesFor(d, ['painting'], CALS, ROOM)).toEqual([]);
   });
 });
 
@@ -413,6 +416,114 @@ describe('judgeLabel — ceiling items', () => {
     expect(band.min[0]).toBeLessThan(893);
     expect(band.max[0]).toBeGreaterThan(893);
     expect(band.max[2]).toBeGreaterThan(803);
+  });
+});
+
+describe('judgeLabel — a ceiling piece the edge of the photo cut', () => {
+  // A 1200 mm ceiling fan, projected from the truth. A ceiling piece is read on one
+  // row of its disc and never grown, so an edge of the frame anywhere on it leaves no
+  // width to judge: cut at the side it reads long or short depending on where it
+  // hangs, and cut at the top — a fan near a level lens, the usual case — long.
+  const deep: RoomDims = { width: 6, depth: 6, height: 2.8, footprint: footprintForLayout('rect', 6, 6) };
+  const clip = ([x, y, w, h]: readonly number[]): Detection['box'] => {
+    const x0 = Math.max(0, x), y0 = Math.max(0, y);
+    return [x0, y0, Math.min(1, x + w) - x0, Math.min(1, y + h) - y0];
+  };
+  const fan = (x: number, z: number) =>
+    det({ category: 'fan', shape: 'fan', slot: 'n', box: clip(bboxOfCeilingDisc('n', x, z, 1.2, WIDE, deep.height)) });
+  const read = (d: Detection) => geoRefine(d, WIDE_CALS, deep).dimMM![0];
+
+  it('judges a fan wholly in view', () => {
+    const whole = fan(0, -2);
+    expect(frameCuts(whole.box)).toEqual({ left: false, right: false, top: false, bottom: false });
+    expect(read(whole)).toBe(1145);
+    expect(judgeLabel(whole, WIDE_CALS, deep)).toEqual({ status: 'ok' });
+  });
+
+  it('gives no verdict on a fan cut at the side', () => {
+    // Read 17% long here, and 22% short 600 mm further east: no bound either way.
+    const side = fan(1.8, -2);
+    expect(frameCuts(side.box)).toEqual({ left: false, right: true, top: false, bottom: false });
+    expect(read(side)).toBe(1402);
+    const further = fan(2.4, -2);
+    expect(frameCuts(further.box)).toEqual({ left: false, right: true, top: false, bottom: false });
+    expect(read(further)).toBe(935);
+    expect(judgeLabel(further, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+    expect(judgeLabel(side, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+    // And its mirror image, off the left.
+    const left = fan(-1.8, -2);
+    expect(frameCuts(left.box)).toEqual({ left: true, right: false, top: false, bottom: false });
+    expect(judgeLabel(left, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+  });
+
+  it('withdraws the accusation from a fan cut at the top', () => {
+    const top = fan(0, -1.2);
+    expect(frameCuts(top.box)).toEqual({ left: false, right: false, top: true, bottom: false });
+    // Past the widest fan there is, so this correct fan was called too big for one.
+    expect(read(top)).toBe(1748);
+    expect(read(top)).toBeGreaterThan(dimRangeFor('fan', 'fan').max[0]);
+    expect(judgeLabel(top, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+    // Nearer, longer; further out, where the frame only grazes it, nearly right — and
+    // still not judged, which is the price: one edge cannot say how much it took.
+    expect(read(fan(0, -0.9))).toBe(2498);
+    const grazed = fan(0, -1.8);
+    expect(frameCuts(grazed.box).top).toBe(true);
+    expect(read(grazed)).toBe(1196);
+    expect(judgeLabel(grazed, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+  });
+
+  it('is still BUILT from the cut width, clamped to the band — § 49.13, measured and not fixed', () => {
+    // Not judged is not not used: the room is built from what `geoRefine` wrote, and
+    // the clamp hides by how much. A literal on purpose, so the fix turns it red.
+    const build = (d: Detection) =>
+      buildSceneFromRoom({
+        id: 'r',
+        createdAt: 1,
+        name: 'R',
+        layoutId: 'rect',
+        width: deep.width,
+        depth: deep.depth,
+        height: deep.height,
+        detectedObjects: [toRecord(geoRefine(d, WIDE_CALS, deep), 0, true, () => 'u-1')],
+      });
+    const [top] = build(fan(0, -1.2));
+    expect(top.shape).toBe('fan');
+    expect(top.dimMM[0]).toBe(1500);
+    expect(top.dimMM[0]).toBe(dimRangeFor('fan', 'fan').max[0]);
+    // A side cut inside the band goes in as read.
+    expect(build(fan(1.8, -2))[0].dimMM[0]).toBe(1402);
+  });
+
+  it('gives no verdict on a fan cut at the bottom, from a phone pointed at the ceiling', () => {
+    const steep: CameraCal = { k: 2 * Math.tan(((66 / 2) * Math.PI) / 180), aspect: 4 / 3, tiltRad: (-60 * Math.PI) / 180 };
+    const cals: CalMap = { n: steep };
+    const d = det({ category: 'fan', shape: 'fan', slot: 'n', box: clip(bboxOfCeilingDisc('n', 0, -2, 1.2, steep, deep.height)) });
+    expect(frameCuts(d.box)).toEqual({ left: false, right: false, top: false, bottom: true });
+    expect(geoRefine(d, cals, deep).dimMM![0]).toBe(1111);
+    expect(judgeLabel(d, cals, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+  });
+});
+
+describe('judgeLabel — on the plane its placer read it on', () => {
+  it('judges a curtain given a ceiling shape as the wall piece it was measured as', () => {
+    // Cloth on a wall whatever the anchor table calls its shape: `geoRefine` measures
+    // this row with the WALL placer, which saw its width and grew the height the top of
+    // the frame cut. Read as a ceiling piece it was "cut" on the width it had measured
+    // and silent on the height it had grown.
+    const clip = ([x, y, w, h]: readonly number[]): Detection['box'] => {
+      const x0 = Math.max(0, x), y0 = Math.max(0, y);
+      return [x0, y0, Math.min(1, x + w) - x0, Math.min(1, y + h) - y0];
+    };
+    const box = clip(bboxOfWallSolid('n', 'n', 0.2, 1.75, wallD('n', ROOM), 1.4, 1.9, 0.08, CAL));
+    expect(frameCuts(box)).toEqual({ left: false, right: false, top: true, bottom: false });
+    const d = det({ label: 'curtain', category: 'curtain', shape: 'lamp-pendant', slot: 'n', box });
+    expect(sceneShapeFor('curtain', d.label, d.shape)).toBe('lamp-pendant');
+    const v = judgeLabel(d, { n: CAL }, ROOM);
+    expect(v.status).toBe('suspect');
+    if (v.status !== 'suspect') return;
+    expect(v.cut).toEqual(['height']);
+    expect(v.failed).toEqual(['width']);
+    expect(Object.keys(v.measured)).toEqual(['width']);
   });
 });
 

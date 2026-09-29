@@ -656,18 +656,31 @@ So a cut axis is a **lower bound**, and the placers treat it as one (`frameCuts`
   saw neither end, so it grows evenly and slides back inside the wall if that took it past
   one, keeping the span it saw either way. A typical piece SMALLER than what was seen is no
   bound at all, because a bound may falsify a guess and never a measurement;
-- **a cut height** grows the same way — a cut top upward, and a wall piece cut at the
-  bottom downward, never through the floor. Upward nothing bounds it yet (§ 49.7);
+- **a cut height** grows the same way — a cut top upward, never through the ceiling, and a
+  wall piece cut at the bottom downward, never through the floor. The ceiling is the room's
+  `height`, which all three placers take beside the polygon now, required rather than
+  optional so that no caller can leave it out. A ceiling lower than what the photo saw
+  bounds nothing: it stops the growth, and the seen part stays;
 - **a floor piece cut at the bottom** has no measured distance at all: the last row of pixels
   is the photo's, not the piece's foot, so the ray through it bounds the near face from
   beyond. The tighter bound is the piece's back on the plaster, so it stands as far back as
   the evidence lets it and is sized there — on the same footing as a wall piece, a plane
   assumed rather than a distance seen.
 
-Two readers follow the placers. `judgeLabel` (`lib/label-repair.ts`) no longer judges a word
+Two readers follow the placers. Which placer a row went through is one function's answer,
+`measuredPlane` (`lib/detect-refine.ts`) — the anchor, except that a curtain on a ceiling
+track is still read on its wall — and the refine pass, the judge and the repeat-sighting
+matcher all ask it rather than re-deriving it. `judgeLabel` (`lib/label-repair.ts`) no longer judges a word
 on a cut axis — grown to a typical size, it would pass every word that asked, the catalogue
-judging the catalogue — and reports the axes it skipped as `cut`; a row cut on every axis it
-could judge is `unmeasured`, so it starts unticked. And the scan screen says so on the row:
+judging the catalogue — and reports the axes it skipped as `cut`. A ceiling piece is never
+grown, but any edge of the frame on it takes its one axis all the same: the placer reads its
+distance on the box's centre row, a cut moves that row off the disc's centre, and a 1200 mm fan
+cut at the top of a level frame reads 1748 mm. The scene is still built from it, clamped to the
+band's 1500 (§ 49.13); a row cut on every axis it
+could judge is `unmeasured`, so it starts unticked. A rename still offers the word the person
+typed when the photo measured nothing of it — flagged `unmeasured`, ranked last, and titled
+*its size is an estimate* — because refusing it would hide the one word they asked for, while
+the judge's own strict repairs never reach it. And the scan screen says so on the row:
 *Runs past the edge of the photo, so its width is an estimate.* An estimate the person can
 see is an estimate. Not "a typical one", which it said first and which was true of one case
 in three: a piece whose visible part is already bigger than typical keeps what was seen, and

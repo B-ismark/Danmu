@@ -8,11 +8,12 @@
 import { describe, expect, it } from 'vitest';
 import { categoriesFromLabel, suggestFromLabel } from '@/lib/label-suggest';
 import { candidatesFor } from '@/lib/label-repair';
-import type { CameraCal } from '@/lib/photo-geometry';
+import { frameCuts, type CameraCal } from '@/lib/photo-geometry';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
 import { PART_LIBRARY, sceneShapeFor } from '@/lib/scene-spec';
 import { footprintForLayout } from '@/lib/footprint';
+import { bboxOfCeilingDisc } from './helpers/project';
 
 const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
@@ -176,5 +177,38 @@ describe('suggestFromLabel', () => {
       `fixture no longer exercises requireFit (strict=${strict.length}, lenient=${lenient.length})`,
     ).toBe(true);
     expect(lenient[0].margin).toBeLessThan(0);
+  });
+
+  it('still offers a word the photo cut off on every axis it is read on, flagged', () => {
+    // A ceiling fan near a level ultrawide runs off the top of the frame — the usual
+    // case — and any edge takes a ceiling piece's width, its one axis. The detector
+    // called it a lamp; the user types what it is. Before the fan's cut width stopped
+    // counting as a measurement this offered the fan, as a misfit; dropping every
+    // candidate with no measured axis then left a lamp called "ceiling fan".
+    const deep: RoomDims = { width: 6, depth: 6, height: 2.8, footprint: footprintForLayout('rect', 6, 6) };
+    const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+    const [x, y, w, h] = bboxOfCeilingDisc('n', 0, -1.2, 1.2, wide, deep.height);
+    const box: Detection['box'] = [x, Math.max(0, y), w, y + h - Math.max(0, y)];
+    const lamp = det({ label: 'lamp', category: 'lamp', slot: 'n', box });
+    expect(frameCuts(box)).toEqual({ left: false, right: false, top: true, bottom: false });
+    const out = suggestFromLabel(lamp, 'ceiling fan', { n: wide }, deep);
+    expect(out.map((c) => [c.category, c.unmeasured, c.margin])).toEqual([['fan', true, -Infinity]]);
+    expect(out[0].detection.category).toBe('fan');
+    // The judge's own repairs stay strict: a size the camera never saw proposes nothing.
+    expect(candidatesFor(lamp, ['fan'], { n: wide }, deep)).toEqual([]);
+  });
+
+  it('ranks a word the photo cut off below one it measured', () => {
+    // Same box, offered two words: the one read on the wall is measured, the ceiling
+    // one is not, and "no margin" must never outrank a real one, fitting or not.
+    const deep: RoomDims = { width: 6, depth: 6, height: 2.8, footprint: footprintForLayout('rect', 6, 6) };
+    const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+    const [x, y, w, h] = bboxOfCeilingDisc('n', 0, -1.2, 1.2, wide, deep.height);
+    const box: Detection['box'] = [x, Math.max(0, y), w, y + h - Math.max(0, y)];
+    const lamp = det({ label: 'lamp', category: 'lamp', slot: 'n', box });
+    const out = candidatesFor(lamp, ['fan', 'painting'], { n: wide }, deep, { requireFit: false });
+    expect(out.map((c) => c.category)).toEqual(['painting', 'fan']);
+    expect(out[0].unmeasured).toBeUndefined();
+    expect(out[1].unmeasured).toBe(true);
   });
 });

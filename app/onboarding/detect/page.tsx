@@ -1475,12 +1475,13 @@ function DetectionRow({
             Probably the {inSentence(cleanLabelOf(repeatOf))} from {slotLabel(repeatOf.slot)} again
           </RowNote>
         )}
-        {/* The part of the size the camera did not measure. A piece running out of
-            the picture is grown on that side from the edge the photo did see — to a
-            typical size, or to the wall's end, or not at all when what it saw was
-            already bigger. "An estimate" is true of all three; "typical" was true of
-            one. Said here because "Measured" should not cover a number the photo did
-            not give. */}
+        {/* The part of the size the camera did not measure. A floor or wall piece
+            running out of the picture is grown on that side from the edge the photo
+            did see — to a typical size, or to the wall's end, or not at all when what
+            it saw was already bigger. A ceiling piece is not grown at all: its width
+            is read on a row the edge moved, long or short. "An estimate" is true of
+            all four; "typical" was true of one. Said here because "Measured" should
+            not cover a number the photo did not give. */}
         {cutWord && <RowNote icon="ruler">Runs past the edge of the photo, so its {cutWord} is an estimate</RowNote>}
         {/* The measurement disagreeing with the word. Said out loud rather than
             acted on: a silent re-label is the same mistake as a silent resize.
@@ -1549,10 +1550,14 @@ function DetectionRow({
                 // typed it, so it is offered either way, but they should know the
                 // camera does not agree. `label-suggest` sorts these below the ones
                 // that do fit, so a caveated chip is never the first thing offered.
+                // An `unmeasured` one is caveated too, but not as a misfit: the
+                // camera never saw enough of it to disagree.
                 title={
-                  cand.margin < 0
-                    ? `Use the ${candidateLabel(cand)} model, though what the camera measured is not ${candidateLabel(cand).toLowerCase()}-sized`
-                    : `Use the ${candidateLabel(cand)} model and measure it again`
+                  cand.unmeasured
+                    ? `Use the ${candidateLabel(cand)} model. It runs past the edge of the photo, so its size is an estimate`
+                    : cand.margin < 0
+                      ? `Use the ${candidateLabel(cand)} model, though what the camera measured is not ${candidateLabel(cand).toLowerCase()}-sized`
+                      : `Use the ${candidateLabel(cand)} model and measure it again`
                 }
                 style={{
                   height: 22,
