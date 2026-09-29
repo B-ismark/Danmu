@@ -26,6 +26,13 @@ const files = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'ut
   .split('\0')
   .filter((f) => f && !BINARY.test(f) && existsSync(join(ROOT, f)));
 
+// Read once, for every check below: eight megabytes of text, and each check read all of
+// it again.
+const read = files.map((f) => {
+  const bytes = readFileSync(join(ROOT, f));
+  return { f, bytes, text: bytes.toString('utf8') };
+});
+
 /** Offsets of the bytes no hand-kept text file should hold. */
 function strayBytes(bytes: Buffer): number[] {
   const out: number[] = [];
@@ -62,8 +69,8 @@ describe('tracked text files', () => {
   });
 
   it('hold no control byte but tab, newline and carriage return', () => {
-    const bad = files.flatMap((f) => {
-      const at = strayBytes(readFileSync(join(ROOT, f)));
+    const bad = read.flatMap(({ f, bytes }) => {
+      const at = strayBytes(bytes);
       return at.length ? [`${f} @ ${at.slice(0, 3).join(', ')}`] : [];
     });
     expect(bad).toEqual([]);
@@ -72,26 +79,27 @@ describe('tracked text files', () => {
   it('hold no C1 control character either', () => {
     // U+0080 to U+009F are valid UTF-8 and invisible, and the round trip below makes them:
     // Windows-1252 leaves five bytes undefined, and a right curly quote's last byte is one.
-    const bad = files.filter((f) => /[\u0080-\u009f]/.test(readFileSync(join(ROOT, f), 'utf8')));
+    const bad = read.filter(({ text }) => /[\u0080-\u009f]/.test(text)).map(({ f }) => f);
     expect(bad).toEqual([]);
   });
 
   it('are UTF-8 with no byte-order mark', () => {
-    const bad = files.filter((f) => {
-      const bytes = readFileSync(join(ROOT, f));
-      if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return true;
-      try {
-        utf8.decode(bytes);
-        return false;
-      } catch {
-        return true;
-      }
-    });
+    const bad = read
+      .filter(({ bytes }) => {
+        if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return true;
+        try {
+          utf8.decode(bytes);
+          return false;
+        } catch {
+          return true;
+        }
+      })
+      .map(({ f }) => f);
     expect(bad).toEqual([]);
   });
 
   it('hold none of the mojibake a CP1252 round trip makes', () => {
-    const bad = files.filter((f) => MOJIBAKE.test(readFileSync(join(ROOT, f), 'utf8')));
+    const bad = read.filter(({ text }) => MOJIBAKE.test(text)).map(({ f }) => f);
     expect(bad).toEqual([]);
   });
 
