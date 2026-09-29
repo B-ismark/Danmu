@@ -498,10 +498,7 @@ export default function CapturePage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <Icon name="info" size={14} color="var(--accent-text)" style={{ marginTop: 2 }} />
         <p className="t-small" style={{ margin: 0, lineHeight: 1.45, minWidth: 0 }}>
-          {CAPTURE_METHOD}{' '}
-          <span style={{ color: 'var(--ink-3)' }}>
-            One photo is enough to start. Four give the most accurate room. Add them in any order.
-          </span>
+          {CAPTURE_METHOD}
         </p>
       </div>
       {/* "Chest height" above is the one number the geometry engine cannot see and
@@ -533,7 +530,6 @@ export default function CapturePage() {
           style={{ width: 96 }}
         />
         <span className="t-meta">m</span>
-        <span className="t-hint">Sets the scale of every measurement.</span>
       </div>
     </div>
   );
@@ -1369,9 +1365,6 @@ function CameraPanel({
           <h2 style={{ fontSize: 'var(--fs-lead)', color: 'var(--ink)' }}>
             {nextLabel ? `Shoot ${nextLabel} with this device` : 'Every wall has a photo'}
           </h2>
-          <p className="t-small" style={{ lineHeight: 1.5, margin: 0 }}>
-            Your photos stay on this device. Your browser will ask for permission when you turn the camera on.
-          </p>
           <button className="ds-btn ds-btn--lg ds-btn--accent" disabled={phase === 'starting'} onClick={turnOn}>
             <Icon name="camera" size={14} color="var(--on-accent)" />
             {phase === 'starting' ? 'Starting camera…' : 'Turn on camera'}

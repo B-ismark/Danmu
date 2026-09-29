@@ -24,7 +24,7 @@ import { onPageLeave } from '@/lib/page-leave';
 
 // The right rail is a DECORATING panel, not a properties palette — and it now
 // practises the disclosure the left rail has always had. Every decorating
-// decision folds to ONE summary line: Colour (swatch · name · finish), On the
+// decision folds to ONE summary line: Colour (swatch · name), On the
 // surface ("Suggested · 3"), Exact size (the millimetres). The fold is
 // RailSection, the left rail's own component, and its meta slot carries the
 // derived state — so the row tells you where you stand without spending a
@@ -33,7 +33,8 @@ import { onPageLeave } from '@/lib/page-leave';
 // panel at all any more: it is the rail's pinned footer (`RailFooter`), beside
 // Add, which is what stopped it scrolling away inside this scroll box. The old panel opened a
 // sofa onto 24 swatches, 5 finish chips and 5 prop chips at once — every
-// option, no decision. Nothing was removed, only re-ranked and folded.
+// option, no decision. It was re-ranked and folded. The finish chips went later,
+// at a review that found they changed nothing you could see.
 export function Inspector() {
   const id = useStudio((s) => s.selectedPartId);
   const selectedWall = useStudio((s) => s.selectedWall);
@@ -395,11 +396,6 @@ export function Inspector() {
         fallbackNote="Default for this piece"
         onChange={(c) => updatePart(id!, { color: c })}
         onReset={() => updatePart(id!, { color: undefined })}
-        // Finish rides inside the Colour disclosure — the second half of the same
-        // "how does this material read" decision — and its choice joins the
-        // collapsed row's summary so it stays visible without its own section.
-        finishLabel={part.finish && part.finish !== 'auto' ? FINISH_LABEL[part.finish] : undefined}
-        extra={<FinishChips value={part.finish} onChange={(f) => updatePart(id!, { finish: f })} />}
       />
 
       {isLightFixture(part.shape) && (
@@ -535,54 +531,6 @@ export function Inspector() {
   );
 }
 
-// Surface finish — the material *sheen* (roughness/metalness), distinct from
-// colour. Applied to the part's meshes by Draggable's FinishApplier. 'auto'
-// keeps each shape's hand-tuned default.
-const SURFACE_FINISHES: Array<{ id: NonNullable<ScenePart['finish']>; label: string }> = [
-  { id: 'auto', label: 'Auto' },
-  { id: 'matte', label: 'Matte' },
-  { id: 'satin', label: 'Satin' },
-  { id: 'polished', label: 'Polished' },
-  { id: 'metal', label: 'Metal' },
-];
-
-const FINISH_LABEL = Object.fromEntries(SURFACE_FINISHES.map((f) => [f.id, f.label])) as Record<
-  NonNullable<ScenePart['finish']>,
-  string
->;
-
-// The five sheens as chips — but never a section of their own again. Finish is
-// the second half of the Colour decision (how the same paint reads under
-// light), so the chips live inside the Colour disclosure under their own
-// mini-label, and the chosen one is named in the Colour row's summary.
-function FinishChips({
-  value,
-  onChange,
-}: {
-  value?: ScenePart['finish'];
-  onChange: (f: ScenePart['finish']) => void;
-}) {
-  const active = value ?? 'auto';
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-      {SURFACE_FINISHES.map((f) => {
-        const on = active === f.id;
-        return (
-          <button
-            key={f.id}
-            onClick={() => onChange(f.id)}
-            aria-pressed={on}
-            className={`ds-chip ${on ? 'ds-chip--accent' : ''}`}
-            style={{ cursor: 'pointer', height: 28, fontWeight: 600, background: on ? 'var(--accent-tint)' : 'var(--paper)' }}
-          >
-            {f.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // What a fixture emits, in the units printed on the box it came in. Shown only
 // for lamps (isLightFixture), because everything else emits nothing.
 //
@@ -665,9 +613,6 @@ function LightControls({
           );
         })}
       </div>
-      <p className="t-hint" style={{ margin: '8px 0 0', lineHeight: 1.45 }}>
-        A typical bulb is 400–800 lm.
-      </p>
     </Section>
   );
 }
@@ -708,16 +653,6 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
 
   return (
     <RailSection title="On the surface" meta={summary} open={open} onToggle={() => setOpen((v) => !v)}>
-      {isAuto && (
-        <div className="t-hint" style={{ marginBottom: 8, lineHeight: 1.4 }}>
-          Suggested props.
-        </div>
-      )}
-      {items.length === 0 && !isAuto && (
-        <div className="t-hint" style={{ marginBottom: 8, lineHeight: 1.4 }}>
-          Bare surface.
-        </div>
-      )}
       {items.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
           {items.map((it) => (
@@ -815,10 +750,6 @@ function WallInspector({ index }: { index: number }) {
 
       {/* Move */}
       <Section label="Move wall">
-        <div className="t-hint" style={{ marginBottom: 8, lineHeight: 1.4 }}>
-          Only this wall moves. Anything mounted on it or standing against it
-          moves with it.
-        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           <button onClick={() => moveWallCarrying(index, 0.1)} className="ds-btn ds-btn--sm" style={{ fontSize: 'var(--fs-caption)', justifyContent: 'center', gap: 6 }}>
             <Icon name="plus" size={12} /> Out 10 cm
@@ -1092,8 +1023,8 @@ const SWATCH_NAME = new Map(SWATCHES.map((s) => [s.hex.toLowerCase(), s.name] as
 //
 // The palette is a decision to make, not a state to watch, so it lives behind
 // the rail's standard disclosure. Collapsed, the row is one glanceable summary
-// — swatch, colour name, finish — and the 24 swatches, the finish chips and the
-// custom mixer are one click away instead of permanently on screen. The
+// — swatch and colour name — and the 24 swatches and the custom mixer are one
+// click away instead of permanently on screen. The
 // summary is RailSection's `meta`, derived here so no call site types it.
 function PaintPicker({
   label,
@@ -1103,8 +1034,6 @@ function PaintPicker({
   onChange,
   onReset,
   footer,
-  finishLabel,
-  extra,
 }: {
   label: string;
   /** the user's chosen colour, or undefined while the default applies */
@@ -1115,10 +1044,6 @@ function PaintPicker({
   onChange: (hex: string) => void;
   onReset: () => void;
   footer?: React.ReactNode;
-  /** a non-auto finish to name in the summary (parts; walls have no sheen) */
-  finishLabel?: string;
-  /** body content after the swatch groups — the finish chips for parts */
-  extra?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [mixing, setMixing] = useState(false);
@@ -1149,7 +1074,6 @@ function PaintPicker({
             ) : (
               fallbackNote
             )}
-            {finishLabel && <span style={{ color: 'var(--ink-3)' }}> · {finishLabel}</span>}
           </span>
         </span>
       }
@@ -1184,13 +1108,6 @@ function PaintPicker({
           );
         })}
       </div>
-
-      {extra && (
-        <div style={{ marginTop: 12 }}>
-          <div className="t-micro" style={{ fontWeight: 700, marginBottom: 6 }}>Finish</div>
-          {extra}
-        </div>
-      )}
 
       {/* The two rare paths — a bespoke colour, and the way back — share the last
           row of the open panel. The mixer used to hide behind the swatch itself,

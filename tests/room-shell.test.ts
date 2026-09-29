@@ -151,15 +151,13 @@ describe('the per-piece shadow gate is gone, not merely unused', () => {
     expect(readSrc('components', 'studio', 'PartTree.tsx')).toContain('isAperture');
   });
 
-  it('keeps the dependency that was never about the shadow', () => {
-    // `shapeKey` arrived in the same commit as the gate and looks like the other
-    // half of this removal. It is not: `PartGeometry` dispatches on `part.shape`, and
-    // the Inspector's model picker writes `dimMM` on the part rather than as an
-    // override, so without this dep the effect does not re-run on a model change and
-    // the piece's FINISH is silently lost. That bug predates the gate and is still
-    // live. This assertion exists so the next sweep cannot take it.
+  it('re-casts shadows when a model change replaces the meshes', () => {
+    // `PartGeometry` dispatches on `part.shape`, and the Inspector's model picker
+    // writes `dimMM` on the part rather than as an override, so without the shape as
+    // a dependency the effect does not re-run on a model change and the new meshes
+    // cast no shadow.
     const dr = readSrc('components', 'three', 'Draggable.tsx');
     expect(dr).toContain('shapeKey');
-    expect(dr).toMatch(/dimKey,\s*shapeKey,\s*invalidate\]/);
+    expect(dr).toMatch(/\[groupRef,\s*dimKey,\s*shapeKey,\s*invalidate\]/);
   });
 });

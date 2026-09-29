@@ -89,19 +89,16 @@ export function ViewOptions() {
       <Group label="Display">
         <SwitchRow
           label="Floor grid"
-          hint="A metre grid under the furniture"
           on={showGrid}
           onToggle={toggleGrid}
         />
         <SwitchRow
           label="Decor"
-          hint="Books, plants and props on surfaces"
           on={dressed}
           onToggle={toggleDressed}
         />
         <SwitchRow
           label="Sounds"
-          hint="Soft taps as you pick up, set down and scrub the sun"
           on={sound}
           onToggle={() => {
             const next = !sound;
@@ -122,33 +119,24 @@ export function ViewOptions() {
           onChange={(v) => setQuality(v === 'high' ? 'high' : 'low')}
           stretch
         />
-        <div className="t-micro" style={{ marginTop: 5, lineHeight: 1.4 }}>
-          High adds soft shadows + textured surfaces.
-        </div>
       </Group>
     </div>
   );
 }
 
-/** A named on/off with a line of explanation. Two of these replaced two On/Off
- *  segmented tracks that said nothing about what they did. */
+/** A named on/off. The name is the whole explanation. */
 function SwitchRow({
   label,
-  hint,
   on,
   onToggle,
 }: {
   label: string;
-  hint: string;
   on: boolean;
   onToggle: () => void;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0' }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)' }}>{label}</div>
-        <div className="t-micro" style={{ lineHeight: 1.35 }}>{hint}</div>
-      </div>
+      <div style={{ flex: 1, minWidth: 0, fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)' }}>{label}</div>
       <Toggle on={on} onClick={onToggle} label={label} />
     </div>
   );

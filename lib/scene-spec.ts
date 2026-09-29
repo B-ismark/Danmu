@@ -112,10 +112,6 @@ export const DECOR_KINDS = ['books', 'vase', 'plant', 'bowl', 'candle'] as const
 export type DecorKind = (typeof DECOR_KINDS)[number];
 export type DecorItem = { id: string; kind: DecorKind; x: number; z: number };
 
-/** Surface sheen, overriding each shape's hand-tuned default. `auto` restores it. */
-export const FINISHES = ['auto', 'matte', 'satin', 'polished', 'metal'] as const;
-export type Finish = (typeof FINISHES)[number];
-
 // ─── Light emission ─────────────────────────────────────────────────────────
 // A lamp described the way a lamp on a shelf is described. Until this existed,
 // every "light" in the scene was an emissive material: the fixture LOOKED lit and
@@ -488,10 +484,6 @@ export type ScenePart = {
   /** Body colour (#rrggbb). From photo sampling on detection, or the user's
    *  recolour. When absent the renderer falls back to the per-shape default. */
   color?: string;
-  /** Surface finish (sheen). Overrides material roughness/metalness on the
-   *  part's meshes via Draggable's FinishApplier. 'auto' / undefined keeps each
-   *  shape's hand-tuned default. */
-  finish?: Finish;
   /** User-managed decor collection placed on the part's top surface. When
    *  undefined, an auto-suggested arrangement is shown; once the user edits it
    *  this array (possibly empty) takes over. See components/three/Dressing.tsx. */

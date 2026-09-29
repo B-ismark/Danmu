@@ -1,7 +1,6 @@
 'use client';
 
 import { GoogleGenAI } from '@google/genai';
-import { useQuota } from './quota';
 import { cloudRequest, type PromptRoom } from './detect-prompt';
 import type { DetectSource } from './detect-confidence';
 import type { CaptureSlot } from './storage';
@@ -149,7 +148,6 @@ export async function detectAcrossImages(
 
   let text: string;
   try {
-    useQuota.getState().bump('flash');
     text = await call(PRIMARY_MODEL);
   } catch (e) {
     throw classifyDetect(e);

@@ -77,7 +77,7 @@ export function StudioMoreMenu() {
               size={44}
               stretch
             />
-            <span className="t-hint">{snapHint(snap.id, snap.sub)}</span>
+            {snap.id !== 'off' && <span className="t-hint mono">{snap.sub}</span>}
           </div>
           <div className="ds-label more-menu__heading">Export</div>
           {items.map((it) => (
@@ -93,7 +93,6 @@ export function StudioMoreMenu() {
               <Icon name={it.icon} size={18} />
               <span className="menu-row__text">
                 <span className="menu-row__label">{it.label}</span>
-                <span className="t-hint">{it.hint}</span>
               </span>
             </button>
           ))}
@@ -103,9 +102,3 @@ export function StudioMoreMenu() {
   );
 }
 
-/** "10mm · 15°" as a sentence, from the same table the laptop's chip reads. */
-function snapHint(id: string, sub: string): string {
-  if (id === 'off') return 'Pieces go exactly where you let go.';
-  const [move, turn] = sub.split(' · ');
-  return `Moves in ${move} steps, turns in ${turn}.`;
-}

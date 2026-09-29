@@ -119,7 +119,7 @@ export type ListEdit = {
  *  A rebuilt piece takes the place of the one it replaces, and keeps what the studio
  *  did to it (`carryStudioEdits`). It used to be taken out and appended, rebuilt bare,
  *  so re-wording one kept row on the scan screen moved it to the bottom of the list
- *  and quietly undid its recolour, its finish and the set it was merged into. */
+ *  and quietly undid its recolour and the set it was merged into. */
 export function applyListEdits(parts: ScenePart[], room: RoomData, next: SavedDetection[]): ListEdit | null {
   const before = room.detectedObjects ?? [];
   const was = new Map(detectionPartIds(before).map((id, i) => [id, before[i]]));
@@ -169,7 +169,7 @@ export function applyListEdits(parts: ScenePart[], room: RoomData, next: SavedDe
  *    onto the piece, so a piece whose colour is still the row's has nobody's choice
  *    in it, and follows the row. One that differs was recoloured, or reset, and that
  *    stands.
- *  · **Finish and merged set**, always: neither is something a row has an opinion on.
+ *  · **Merged set**, always: it is not something a row has an opinion on.
  *  · **Decor, light and name**, only while it is the same model. What sits on a
  *    desk and a lamp's brightness belong to that model, and a studio name survives a
  *    rebuild only while the row's words have not changed as well — the scan screen's
@@ -184,7 +184,6 @@ function carryStudioEdits(
 ): ScenePart {
   const out: ScenePart = { ...fresh };
   if (old.color !== was?.color) out.color = old.color;
-  if (old.finish !== undefined) out.finish = old.finish;
   if (old.groupId !== undefined) out.groupId = old.groupId;
   if (old.shape === fresh.shape) {
     if (old.decor !== undefined) out.decor = old.decor;
