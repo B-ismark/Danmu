@@ -661,6 +661,35 @@ describe('placeFloorObject over solids', () => {
     }
   });
 
+  it('is exact close up and tipped steeply down, on the widest lenses', () => {
+    // Where the test above does not reach, and where the first version of the per-side read
+    // failed. It iterated the height to 1e-9 in twenty passes, and close to the lens, tipped
+    // steeply down, that fixed point runs at 0.9 a pass and slower: 73 of these pieces, whole
+    // in the photo, came back unmeasured, each within millimetres of its size when the count
+    // ran out. The height is solved in one division now, so every one is exact. The count is
+    // a literal, so the grid cannot quietly lose the pieces it is here for.
+    const DEEP = { width: 6, depth: 8, height: 2.8, footprint: footprintForLayout('rect', 6, 8) };
+    let whole = 0;
+    for (const lens of [66, 106, 120])
+      for (const deg of [25, 35, 45])
+        for (const dist of [1.0, 1.5])
+          for (const lateral of [-1.5, -0.6, 0, 0.6, 1.5])
+            for (const dia of [0.25, 0.5, 0.9])
+              for (const h of [0.4, 0.9]) {
+                const c = { k: 2 * Math.tan(((lens / 2) * Math.PI) / 180), aspect: 4 / 3, tiltRad: (deg * Math.PI) / 180 };
+                const box = bboxOfFloorCylinder('n', lateral, -dist, dia, h, c);
+                const cut = frameCuts(box);
+                if (cut.left || cut.right || cut.top || cut.bottom) continue;
+                whole++;
+                const where = `${lens}°, ${deg}° down, ${dist} m, ${lateral} m, ${dia} × ${h}`;
+                const g = placeFloorObject(box, 'n', DEEP, c, { depthM: dia, round: true });
+                expect(g, where).not.toBeNull();
+                expect([g!.widthMM, g!.heightMM], where).toEqual([Math.round(dia * 1000), Math.round(h * 1000)]);
+                expect(Math.hypot(g!.position.x - lateral, g!.position.z + dist), where).toBeLessThan(1e-5);
+              }
+    expect(whole).toBe(370);
+  });
+
   it('refuses a box with no width, on both branches', () => {
     // Reachable input, so a real assertion: `addManual` on the detect screen hands
     // over whatever rectangle the user's drag produced, and a press that never moved

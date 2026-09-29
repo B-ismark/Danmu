@@ -1309,6 +1309,16 @@ function onFramedSurface(right: number, slot: CaptureSlot, footprint: Footprint)
  * top, the side is whole in the photo and is read at that end instead; the loop below
  * settles which.
  *
+ * **The height is solved, not iterated.** Once each side's read is chosen, every line is
+ * linear in the height and so is the height in the radius, so the pair closes in one
+ * division; only the choice of read is iterated, and it has three values a side. The first
+ * version iterated the height itself to 1e-9 in at most twenty passes, and that is a
+ * fixed point whose rate is the very term the division is by: close to the lens, tipped
+ * steeply down, it ran at 0.9 to 0.997 a pass, and swept over six lenses, −60° to 60°
+ * and pieces 0.2 to 1.2 m across, 2,993 of 48,261 round pieces the photo showed WHOLE
+ * came back unmeasured, each within millimetres of its size when the count ran out. The
+ * division reads 48,160 of them exact and refuses none with its rim clear of the lens.
+ *
  * **Both edges are tangents only when the frame cut neither side.** Cut at one, that
  * edge is the photo's, and reading it as the piece's put the centre and the width
  * wherever the frame happened to end — `floorFromRoundOneSide`, below, is that case.
@@ -1339,55 +1349,64 @@ function floorFromRound(
   const left = sideOf(aL, s !== 0 && aL < 0 === s > 0);
   const right = sideOf(aR, s !== 0 && aR > 0 === s > 0);
   type Side = ReturnType<typeof sideOf>;
-  type Disc = { cf: number; cr: number; radius: number };
-  // A side's line on the floor plan, `r = m·f + b`, with `q = √(1 + m²)`: the rim at the
-  // end its column is extreme at, or the frame's row across it. `inward` is which way the
-  // disc lies from it, and the row is kept only while it crosses the side on the piece, at
-  // the tangency the previous pass found.
-  const lineOf = ({ a, atTop, tau }: Side, h: number, inward: 1 | -1, prev: Disc | null) => {
-    const rim = (y: number) => ({ m: a * c, b: a * s * (H - y) });
-    let line = tau === null ? rim(atTop ? h : 0) : { m: a * (c + s * tau), b: 0 };
-    if (tau !== null && prev) {
-      const q = Math.hypot(1, line.m);
-      const y = H - tau * (prev.cf + (inward * prev.radius * line.m) / q);
-      if (y < 0) line = rim(0);
-      else if (y > h) line = rim(h);
-    }
-    return { ...line, q: Math.hypot(1, line.m) };
+  // Where a side is read: the rim at its base or its top, or the frame's row across it.
+  type Read = 'base' | 'top' | 'row';
+  // A side's line on the floor plan, `r = m·f + b0 + b1·h` in the height `h`, with
+  // `q = √(1 + m²)`. Only a rim read at the top moves with the height.
+  const lineOf = ({ a, tau }: Side, read: Read) => {
+    const m = read === 'row' ? a * (c + s * (tau as number)) : a * c;
+    return { m, b0: read === 'row' ? 0 : a * s * H, b1: read === 'top' ? -a * s : 0, q: Math.hypot(1, m) };
   };
-  // Tangent to both, its near rim on `near`. No guard on the division: `qL + mL` and
-  // `qR − mR` are each `(1 ± sin θ) / cos θ` of a slope's angle, positive for any finite
-  // slope, and a non-finite one reaches the height check below as NaN.
-  const discAt = (h: number, prev: Disc | null): Disc => {
-    const L = lineOf(left, h, 1, prev);
-    const R = lineOf(right, h, -1, prev);
-    const radius = ((R.m - L.m) * near + R.b - L.b) / (L.q + R.q - (R.m - L.m));
+  // The top row's ray, as the rise in height per metre forward.
+  const u = top.up / top.fwd;
+  // Tangent to both lines, its near rim on `near`, and standing as tall as the top row
+  // says: the near rim rising and the far rim falling. The radius is linear in the height
+  // and the height in the radius, so the two close in one division. No guard on `D`:
+  // `qL + mL` and `qR − mR` are each `(1 ± sin θ) / cos θ` of a slope's angle, positive for
+  // any finite slope. The height's divisor can reach zero, and then the answer is not
+  // finite, which the check below refuses.
+  const discFor = (readL: Read, readR: Read) => {
+    const L = lineOf(left, readL);
+    const R = lineOf(right, readR);
+    const D = L.q + R.q - (R.m - L.m);
+    const r0 = ((R.m - L.m) * near + R.b0 - L.b0) / D;
+    const r1 = (R.b1 - L.b1) / D;
+    const h = rises ? H + near * u : (H + u * (near + 2 * r0)) / (1 - 2 * u * r1);
+    const radius = r0 + r1 * h;
     const cf = near + radius;
-    return { cf, cr: L.m * cf + L.b + radius * L.q, radius };
+    return { h, radius, cf, cr: L.m * cf + L.b0 + L.b1 * h + radius * L.q };
   };
-  // Its top row is the near rim rising and the far rim falling, on the ray through it.
-  const heightAt = (radius: number) => H + ((rises ? near : near + 2 * radius) / top.fwd) * top.up;
-  // Where a side is read at the top, or at a row the frame cut, the answer is part of what
-  // is being solved for; where both are rims at the floor, one pass does.
-  let disc = discAt(0, null);
-  let heightM = heightAt(disc.radius);
-  let settled = !(left.atTop || right.atTop || left.tau !== null || right.tau !== null);
-  for (let it = 0; !settled && it < 20; it++) {
-    const next = discAt(heightM, disc);
-    const nextH = heightAt(next.radius);
-    settled = Math.abs(nextH - heightM) < 1e-9 && Math.abs(next.cf - disc.cf) < 1e-9 && Math.abs(next.cr - disc.cr) < 1e-9;
-    disc = next;
-    heightM = nextH;
+  type Disc = ReturnType<typeof discFor>;
+  // How a side is read given a disc: at its extreme end, or, where the frame hid that end,
+  // on the frame's row while the row crosses the side on the piece, at the tangency.
+  const extreme = (side: Side): Read => (side.atTop ? 'top' : 'base');
+  const readOf = (side: Side, inward: 1 | -1, disc: Disc): Read => {
+    if (side.tau === null) return extreme(side);
+    const m = side.a * (c + s * side.tau);
+    const y = H - side.tau * (disc.cf + (inward * disc.radius * m) / Math.hypot(1, m));
+    return y < 0 ? 'base' : y > disc.h ? 'top' : 'row';
+  };
+  let readL: Read = left.tau === null ? extreme(left) : 'row';
+  let readR: Read = right.tau === null ? extreme(right) : 'row';
+  let disc = discFor(readL, readR);
+  // Nine passes are every pairing of the two sides' reads, so a choice that has not come
+  // back to itself by then is cycling, and answering on whichever pass the count stopped
+  // on would be answering on a parity.
+  let settled = false;
+  for (let it = 0; !settled && it < 9; it++) {
+    const nextL = readOf(left, 1, disc);
+    const nextR = readOf(right, -1, disc);
+    settled = nextL === readL && nextR === readR;
+    if (!settled) disc = discFor((readL = nextL), (readR = nextR));
   }
-  // A solve that did not settle is not an answer, whichever pass the count stopped on.
-  // Measured on the six suites that read the most round pieces, a solve settles within
-  // 14 passes; the 283 that did not were each a box spanning the photo's whole width, so
-  // that neither side was the piece's, and every one had put the height below the floor
-  // already, as the top-row read did for the same boxes. So no fixture reaches the
-  // `settled` half of this — it keeps an oscillating solve from answering on a parity.
-  if (!settled || !(heightM > 0)) return null;
+  const { h: heightM, radius } = disc;
+  // The radius is not refused for being negative here: a box cut at one side and at its
+  // foot solves to a disc of no size between its one real side and the frame's edge, and
+  // `wholeAlong` grows it from that side to the kind's width (§ 49.9). Where nothing
+  // grows it, the width check in `placeFloorObject` refuses it.
+  if (!settled || !(heightM > 0) || !Number.isFinite(heightM + radius)) return null;
 
-  return { d: disc.cf, right: disc.cr, widthM: 2 * disc.radius, heightM, rises };
+  return { d: disc.cf, right: disc.cr, widthM: 2 * radius, heightM, rises };
 }
 
 /**
