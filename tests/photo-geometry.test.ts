@@ -9,6 +9,8 @@ import {
   heightFromFloorLine,
   fitHeightToFloorLine,
   atLens,
+  cutAxes,
+  frameCuts,
   locateOnWall,
   placeCeilingObject,
   placeFloorObject,
@@ -598,8 +600,12 @@ describe('placeFloorObject over solids', () => {
     // width, so the diameter is measured rather than assumed. `depthM` is passed a
     // deliberately WRONG number here to prove it — 2 m of depth on a 400 mm plant —
     // and the answer does not move, because the round branch never reads it.
+    // On the ultrawide, because at 1.2 the plant's foot is below the bottom of the
+    // frame: a box past the frame is not one a detector returns, and one that reaches
+    // its edge is read as cut off there (`frameCuts`), whose near face is bounded
+    // rather than measured.
     for (const lateral of [0, 1.3, -0.7]) {
-      const c = cal(0);
+      const c = WIDE;
       const box = tangentBboxOfCylinder(1.8, lateral, 0.4, 0.9, c);
       const g = placeFloorObject(box, 'n', ROOM.footprint, c, { depthM: 2, round: true })!;
       expect(g.position.x).toBeCloseTo(lateral, 12);
@@ -676,9 +682,10 @@ describe('placeFloorObject over solids', () => {
     // was measured correctly, trading an exact size for an exact position. That is
     // an assumption corrupting an observation, and it is what the first draft of
     // this did — caught here, not reasoned about.
-    const c = cal(0);
-    // A piece hard against the far wall: near face at 3.6, so a 1.0 m depth would put
-    // its back 0.6 m through the plaster of a wall 2 m away.
+    // The ultrawide, so the piece's foot is in the picture (see the round test above).
+    const c = WIDE;
+    // A piece hard against the far wall: near face at 1.8, so a 1.0 m depth would put
+    // its back 0.8 m through the plaster of a wall 2 m away.
     const box = bboxOfFloorBox('n', 0, -1.9, 1.2, 0.95, 0.2, c);
     const tight = placeFloorObject(box, 'n', ROOM.footprint, c, { depthM: 1.0 })!;
     const loose = placeFloorObject(box, 'n', ROOM.footprint, c, { depthM: 0.2 })!;
@@ -758,6 +765,188 @@ describe('placeWallObject over solids', () => {
     // Over-read by a fifth of its width and a third of its height.
     expect(asFlat.widthMM / 800).toBeGreaterThan(1.15);
     expect(asFlat.heightMM / 280).toBeGreaterThan(1.25);
+  });
+});
+
+describe('a box the edge of the photo cut off', () => {
+  // The frame's edge is not an edge of the piece: the piece carries on past it by an
+  // amount the photo does not hold. So a cut axis is a LOWER bound, and the placers
+  // grow it to what a whole one of the kind measures — from the edge the photo DID
+  // see, and never past the wall's end or the floor. What the tests below hold is
+  // that growth and its three limits, each against the answer with no `whole` at all,
+  // so a number here is the placer's own rather than one this file chose.
+  const level: CameraCal = { k: 1.2, aspect: 4 / 3 };
+  /** What a detector returns for a piece running out of the picture: the part of its
+   *  silhouette inside the frame. */
+  const clip = ([x, y, w, h]: readonly number[]): [number, number, number, number] => {
+    const x0 = Math.max(0, x), y0 = Math.max(0, y);
+    return [x0, y0, Math.min(1, x + w) - x0, Math.min(1, y + h) - y0];
+  };
+  const frameN = wallFrame('n', ROOM.footprint)!;
+
+  it('reads a cut from a box within FRAME_EDGE of the frame, and not from one further in', () => {
+    expect(frameCuts([0.01, 0.2, 0.3, 0.3])).toEqual({ left: true, right: false, top: false, bottom: false });
+    expect(frameCuts([0.011, 0.2, 0.3, 0.3]).left).toBe(false);
+    expect(frameCuts([0.6, 0.6, 0.4, 0.4])).toEqual({ left: false, right: true, top: false, bottom: true });
+    expect(frameCuts([0.6, 0.6, 0.38, 0.38])).toEqual({ left: false, right: false, top: false, bottom: false });
+    // A floor piece's bottom is its foot, which says where it stands and not how tall
+    // it is; a wall piece cut at the bottom is short.
+    expect(cutAxes([0.3, 0.5, 0.2, 0.5], 'floor')).toEqual({ width: false, height: false });
+    expect(cutAxes([0.3, 0.5, 0.2, 0.5], 'wall')).toEqual({ width: false, height: true });
+    expect(cutAxes([0, 0, 0.2, 0.5], 'floor')).toEqual({ width: true, height: true });
+  });
+
+  it('grows a wall piece cut at the side from the edge it saw, to a whole one', () => {
+    // A 1 m print whose left half is past the left of the frame.
+    const d = wallD('n', ROOM);
+    const box = clip(bboxOfWallSolid('n', 'n', -1.2, 1.5, d, 1.0, 0.6, 0.03, level));
+    expect(frameCuts(box).left).toBe(true);
+    const foot = { depthM: 0.03 };
+    const seen = placeWallObject(box, 'n', ROOM.footprint, level, foot)!;
+    const grown = placeWallObject(box, 'n', ROOM.footprint, level, { ...foot, whole: { widthM: 0.8, heightM: 0.6 } })!;
+    // Without a whole one to go on, the part in view — and its seen edge is the print's.
+    expect(seen.position.x + seen.widthMM / 2000).toBeCloseTo(-0.7, 9);
+    expect(seen.widthMM).toBeLessThan(800);
+    // With one: the typical 800, still ending where the photo saw it end.
+    expect(grown.widthMM).toBe(800);
+    expect(grown.position.x + grown.widthMM / 2000).toBeCloseTo(-0.7, 9);
+    // The uncut axis is measured, and a typical height does not touch it.
+    expect(grown.heightMM).toBe(seen.heightMM);
+    expect(grown.position.y).toBeCloseTo(seen.position.y, 9);
+    // A whole one SMALLER than the part in view is no bound at all: what was seen stays.
+    const small = placeWallObject(box, 'n', ROOM.footprint, level, { ...foot, whole: { widthM: 0.2, heightM: 0.2 } })!;
+    expect([small.widthMM, small.position.x]).toEqual([seen.widthMM, seen.position.x]);
+  });
+
+  it('stops growing at the end of the wall', () => {
+    const d = wallD('n', ROOM);
+    const box = clip(bboxOfWallSolid('n', 'n', -1.2, 1.5, d, 1.0, 0.6, 0.03, level));
+    // A typical one longer than the plaster between the seen edge and the corner.
+    const g = placeWallObject(box, 'n', ROOM.footprint, level, { depthM: 0.03, whole: { widthM: 3, heightM: 0.6 } })!;
+    expect(g.position.x - g.widthMM / 2000).toBeCloseTo(frameN.left, 9);
+    expect(g.widthMM).toBe(Math.round((-0.7 - frameN.left) * 1000));
+  });
+
+  it('grows a piece cut on both sides evenly, and slides it inside the wall', () => {
+    // The photo saw neither end, so there is no edge to grow from — only the middle it
+    // saw. In a room whose east wall was dragged out, the north wall runs −3 to +6
+    // and a lens at the origin sees about −1.8 to +1.8 of it.
+    const room = dragged('e', 3);
+    const f = wallFrame('n', room.footprint)!;
+    expect([f.left, f.right]).toEqual([-3, 6]); // premise
+    const d = wallD('n', room);
+    const box = clip(bboxOfWallSolid('n', 'n', 0, 1.5, d, 20, 0.6, 0.03, level));
+    expect(frameCuts(box)).toMatchObject({ left: true, right: true });
+    const at = (widthM: number) => {
+      const g = placeWallObject(box, 'n', room.footprint, level, { depthM: 0.03, whole: { widthM, heightM: 0.6 } })!;
+      return [g.position.x - g.widthMM / 2000, g.position.x + g.widthMM / 2000].map((x) => Math.round(x * 1000) / 1000);
+    };
+    expect(at(5)).toEqual([-2.5, 2.5]); // fits: even
+    expect(at(7)).toEqual([-3, 4]); // would pass the west corner: slid back inside
+    expect(at(12)).toEqual([-3, 6]); // longer than the wall: the wall
+    // Shorter than what was seen: what was seen, read where the print's face is,
+    // 30 mm off the plaster (0.6 × 2.97).
+    expect(at(1)).toEqual([-1.782, 1.782]);
+  });
+
+  it('grows a wall piece cut at the bottom downward, and not through the floor', () => {
+    // A curtain from 2.3 m to the floor; a level 1.2 lens sees the wall down to 0.6 m.
+    const d = wallD('n', ROOM);
+    const box = clip(bboxOfWallSolid('n', 'n', 0.2, 1.15, d, 1.4, 2.3, 0.08, level));
+    expect(frameCuts(box)).toEqual({ left: false, right: false, top: false, bottom: true });
+    const foot = { depthM: 0.08 };
+    const seen = placeWallObject(box, 'n', ROOM.footprint, level, foot)!;
+    const top = seen.position.y + seen.heightMM / 2000;
+    expect(top).toBeCloseTo(2.3, 9);
+    const typical = placeWallObject(box, 'n', ROOM.footprint, level, { ...foot, whole: { widthM: 1.4, heightM: 2.2 } })!;
+    expect(typical.heightMM).toBe(2200);
+    expect(typical.position.y + typical.heightMM / 2000).toBeCloseTo(2.3, 9);
+    // A typical one taller than the wall below the seen top stands on the floor.
+    const tall = placeWallObject(box, 'n', ROOM.footprint, level, { ...foot, whole: { widthM: 1.4, heightM: 2.6 } })!;
+    expect(tall.heightMM).toBe(2300);
+    expect(tall.position.y - tall.heightMM / 2000).toBeCloseTo(0, 9);
+    // The width was in view, and is measured whatever the whole one says.
+    expect([typical.widthMM, tall.widthMM]).toEqual([1400, 1400]);
+  });
+
+  it('places a floor piece cut at the side from its inner edge, where the box alone reads short or below nothing', () => {
+    // A bookshelf against the north wall near its east end, on the ultrawide, cut off
+    // at the right. The outer edge is the frame, not the near corner `lateralSpan`
+    // takes it for, so the box on its own is a sliver — or, nearer the corner, less
+    // than nothing, and refused. Its inner edge is its far-left corner, which the photo
+    // did see, so a typical bookshelf grown from there IS this one, to the millimetre.
+    const z = -(wallD('n', ROOM) - 0.175);
+    const foot = { depthM: 0.35 };
+    const whole = { widthM: 0.9, heightM: 1.8 };
+    const box = clip(bboxOfFloorBox('n', 2.5, z, 0.9, 1.8, 0.35, WIDE));
+    expect(frameCuts(box)).toEqual({ left: false, right: true, top: false, bottom: false });
+    expect(placeFloorObject(box, 'n', ROOM.footprint, WIDE, foot)!.widthMM).toBeLessThan(200);
+    const g = placeFloorObject(box, 'n', ROOM.footprint, WIDE, { ...foot, whole })!;
+    expect(g.widthMM).toBe(900);
+    expect(g.position.x).toBeCloseTo(2.5, 9);
+    expect(g.position.z).toBeCloseTo(z, 9);
+    expect(g.heightMM).toBe(1800);
+    // 0.2 m further east. Refused on its own; grown, it stops at the wall's end rather
+    // than stand 150 mm through the east wall.
+    const corner = clip(bboxOfFloorBox('n', 2.7, z, 0.9, 1.8, 0.35, WIDE));
+    expect(placeFloorObject(corner, 'n', ROOM.footprint, WIDE, foot)).toBeNull();
+    const c = placeFloorObject(corner, 'n', ROOM.footprint, WIDE, { ...foot, whole })!;
+    expect(c.position.x - c.widthMM / 2000).toBeCloseTo(2.25, 9);
+    expect(c.position.x + c.widthMM / 2000).toBeCloseTo(frameN.right, 9);
+  });
+
+  it('never slides a grown piece off the part of it the photo saw', () => {
+    // A floor piece's lateral is measured, so a sighting can reach past the end of a
+    // wall the room says is there — here the north wall starts at x = −1 and the photo
+    // saw the piece from about −1.33. Growing it is an assumption; sliding it back
+    // inside the wall would trim what was seen to make room for what was assumed.
+    const room = dragged('w', -2);
+    expect(wallFrame('n', room.footprint)!.left).toBe(-1); // premise
+    const low = { ...WIDE, height: 0.6 }; // low enough that its foot is in frame
+    const box = clip(bboxOfFloorBox('n', 0, -1.3, 10, 0.5, 0.6, low));
+    expect(frameCuts(box)).toEqual({ left: true, right: true, top: false, bottom: false });
+    const foot = { depthM: 0.6 };
+    const seen = placeFloorObject(box, 'n', room.footprint, low, foot)!;
+    const seenLeft = seen.position.x - seen.widthMM / 2000;
+    expect(seenLeft).toBeLessThan(-1.3);
+    const g = placeFloorObject(box, 'n', room.footprint, low, { ...foot, whole: { widthM: 3.5, heightM: 0.5 } })!;
+    expect(g.widthMM).toBe(3500);
+    expect(g.position.x - g.widthMM / 2000).toBeCloseTo(seenLeft, 3);
+  });
+
+  it('bounds the near face of a floor piece cut at the bottom by the wall behind it', () => {
+    // At a level 1.2 lens the floor of this room is never in view: the bottom row of
+    // the frame meets it past the far wall, so every floor piece is cut at the bottom
+    // and its near face is not measured. It is bounded — the piece stands in front of
+    // the wall, so its near face is at most a depth short of it — and for a piece
+    // against the wall that bound is exact.
+    const d = wallD('n', ROOM);
+    const box = clip(bboxOfFloorBox('n', 0.3, -(d - 0.25), 1.2, 0.95, 0.5, level));
+    expect(frameCuts(box).bottom).toBe(true);
+    const g = placeFloorObject(box, 'n', ROOM.footprint, level, { depthM: 0.5 })!;
+    expect(g.distance).toBeCloseTo(d - 0.25, 9);
+    // Measured at the right distance, the width is the piece's — read at the wall
+    // instead it would be a third too wide.
+    expect(g.widthMM).toBe(1200);
+    expect(g.heightMM).toBe(950);
+    expect(g.position.x).toBeCloseTo(0.3, 9);
+  });
+
+  it('grows a floor piece cut at the top to a whole one, and keeps a taller one as seen', () => {
+    // A 2.4 m wardrobe against the wall, whose top runs out of a level 1.2 frame.
+    const d = wallD('n', ROOM);
+    const box = clip(bboxOfFloorBox('n', -0.5, -(d - 0.3), 1.0, 2.4, 0.6, level));
+    expect(frameCuts(box).top).toBe(true);
+    const foot = { depthM: 0.6 };
+    const seen = placeFloorObject(box, 'n', ROOM.footprint, level, foot)!;
+    // The part in view: up to where the frame's top row crosses its near face.
+    expect(seen.heightMM).toBe(2130);
+    const grown = placeFloorObject(box, 'n', ROOM.footprint, level, { ...foot, whole: { widthM: 1.0, heightM: 2.3 } })!;
+    expect(grown.heightMM).toBe(2300);
+    // The width was in view: measured, whatever the typical one says.
+    expect(grown.widthMM).toBe(1000);
+    const short = placeFloorObject(box, 'n', ROOM.footprint, level, { ...foot, whole: { widthM: 1.0, heightM: 1.0 } })!;
+    expect(short.heightMM).toBe(seen.heightMM);
   });
 });
 

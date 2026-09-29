@@ -1385,13 +1385,17 @@ function DetectionRow({
   // Only the axes that were actually measured. A ceiling item is measured on width
   // alone, so printing a "×" and a second number there would put a catalogue
   // default on screen in the sentence that says "Measured".
+  // The same for an axis the photo's edge cut off: its size is a typical one, and
+  // `measured` leaves it out rather than print it as a reading.
   const took =
     verdict.status === 'suspect'
-      ? [
-          formatDim(verdict.measured.width, dimUnit),
-          ...(verdict.measured.height === undefined ? [] : [formatDim(verdict.measured.height, dimUnit)]),
-        ].join(' × ')
+      ? [verdict.measured.width, verdict.measured.height]
+          .filter((v): v is number => v !== undefined)
+          .map((v) => formatDim(v, dimUnit))
+          .join(' × ')
       : '';
+  const cut = verdict.cut ?? [];
+  const cutWord = cut.length === 2 ? 'size' : cut[0];
   return (
     // Hover AND focus drive the same highlight, so a keyboard user gets the
     // row↔photo link too. onFocus/onBlur bubble from the child buttons.
@@ -1462,6 +1466,21 @@ function DetectionRow({
             <Icon name="copy" size={11} style={{ flex: '0 0 auto', marginTop: 2 }} />
             <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
               Probably the {inSentence(cleanLabelOf(repeatOf))} from {slotLabel(repeatOf.slot)} again
+            </span>
+          </div>
+        )}
+        {/* The part of the size the camera did not measure. A piece running out of
+            the picture is given a typical size on that side, grown from the edge the
+            photo did see — said here, because "Measured" should not cover a number
+            the catalogue supplied. Wraps rather than clips, like the note above. */}
+        {cutWord && (
+          <div
+            className="t-hint"
+            style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 3, lineHeight: 1.45 }}
+          >
+            <Icon name="ruler" size={11} style={{ flex: '0 0 auto', marginTop: 2 }} />
+            <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
+              Runs past the edge of the photo, so its {cutWord} is a typical one
             </span>
           </div>
         )}

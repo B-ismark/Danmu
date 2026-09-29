@@ -612,19 +612,67 @@ held as literals in `tests/repeat-sightings.test.ts`):
   corner used to have no position at all, so it had nothing to be compared with;
 - **the side of the frame.** A floor box the side of its photo cut off is not the piece:
   `lateralSpan` reads the frame's edge as a corner, and a fridge in the corner of a 106°
-  photo came back −79 mm wide. `reachedSolids` walks the cut side past the frame to every
-  width the kind's catalogue range could hold, and the pair is compared at each.
+  photo came back −79 mm wide. The placers now grow a cut side to the kind's typical
+  width from the edge the photo saw (see *A box the edge of the photo cut*, below), and
+  `reachedSolids` still walks the cut side past the frame to every width the kind's
+  catalogue range could hold, comparing the pair at each — the growth gives the row a
+  typical piece's place, and the walk asks about the longer ones.
 
 Together they take the repeats left ticked, at an ultrawide read as the assumed 66°, from
-249 to 3 (106°) and 460 to 24 (120°). The price is 22 real pieces across the table's five
+247 to 5 (106°) and 452 to 21 (120°). The price is 21 real pieces across the table's five
 readings started unticked — each with its reason, one tap from back — and none on a lens
 EXIF measured. Three things it does not reach are filed in `docs/what-is-still-open.md`
 § 46, measured and not fixed: twin beds in a corner come back as one (§ 46.1); a box cut at
 the BOTTOM of its photo is not walked, because doing so bought little and walking both
 edges is a grid that did not finish (§ 46.2); and under a wrong lens the HARD merge deletes
-3.5–3.9% of an ultrawide room's pieces outright, nearly all dining chairs, before this pass
+3.7–4.2% of an ultrawide room's pieces outright, nearly all dining chairs, before this pass
 ever sees them (§ 46.3). § 46.1 and § 46.3 are one fix — the hard merge deciding a pair on
 a distance nobody measured.
+
+### A box the edge of the photo cut
+
+The frame's edge is not an edge of the piece. A detector draws round what it can see, so a
+wardrobe running off the left of the picture comes back as the part of a wardrobe that is in
+it — and every size taken off that box was the part, read as the whole. Photographed the way
+people photograph a room, with the phone tipped up to get the ceiling in, that is most of the
+floor pieces in the picture, and it is where *"mostly too small"* came from.
+
+So a cut axis is a **lower bound**, and the placers treat it as one (`frameCuts` and
+`cutAxes` in `lib/photo-geometry.ts`, a box within 1% of the frame being cut):
+
+- **a cut side** keeps the edge the photo DID see — a real edge of the piece — and grows away
+  from it, toward the cut, to at least the kind's typical width (`PieceFootprint.whole`, the
+  catalogue's default, set by `geoRefine`). Never past the end of the framed wall: a piece
+  can carry on past the photo, not past the corner of the room. Cut on both sides, the photo
+  saw neither end, so it grows evenly and slides back inside the wall if that took it past
+  one, keeping the span it saw either way. A typical piece SMALLER than what was seen is no
+  bound at all, because a bound may falsify a guess and never a measurement;
+- **a cut height** grows the same way — a cut top upward, and a wall piece cut at the
+  bottom downward, never through the floor. Upward nothing bounds it yet (§ 49.7);
+- **a floor piece cut at the bottom** has no measured distance at all: the last row of pixels
+  is the photo's, not the piece's foot, so the ray through it bounds the near face from
+  beyond. The tighter bound is the piece's back on the plaster, so it stands as far back as
+  the evidence lets it and is sized there — on the same footing as a wall piece, a plane
+  assumed rather than a distance seen.
+
+Two readers follow the placers. `judgeLabel` (`lib/label-repair.ts`) no longer judges a word
+on a cut axis — grown to a typical size, it would pass every word that asked, the catalogue
+judging the catalogue — and reports the axes it skipped as `cut`; a row cut on every axis it
+could judge is `unmeasured`, so it starts unticked. And the scan screen says so on the row:
+*Runs past the edge of the photo, so its width is a typical one.* A typical size is a guess
+the person can see is a guess.
+
+**Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
+reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,
+the floor line out of three of four, the room size skipped — through the real pipeline, with
+each unknown put right in turn and the table printed on every green run. With the camera and
+room known, the frame edge was the whole of the remaining error: 7 of 14 pieces more than
+10% short before this, **0** after, mean width error 19% → 10%. As the app reads that scan
+today — room skipped, camera guessed — it is 10 short → 6, and the price is paid in the other
+direction: 4 over → 7, mean width error 24% → 32%, because the skipped room's walls end half a
+metre past the real ones and a 900 mm garment rack read as a wardrobe grows toward a 2 m one
+until they stop it. That is the room-size question and not the frame's, and it is filed as
+§ 49 with the rest of what that table found.
 
 **`tests/detect-pipeline.test.ts`** regression-tests the whole chain over one
 synthetic room whose contents are known, from analytic ground truth — boxes are

@@ -1884,6 +1884,42 @@ the one transaction gets to commit before the browser is frozen or killed is exa
 not known. A typed room size on a reload is a known loss (§ 47), not a finding.
 
 ---
+
+### A piece the photo cut off says so, and comes back a typical size — this branch, PROBED at 360–1280
+
+**Where to click.** *Photograph my real room* → four photos in which something runs off the
+edge of the frame — a wardrobe cut by the side of the photo, a bed whose foot is below the
+bottom edge, a curtain at the corner — then the scan screen, then **Open the studio**. A row
+whose box touches the photo's edge now carries a grey line with a ruler: *"Runs past the edge
+of the photo, so its width is a typical one"* (or *height*, or *size* when both are cut). In
+the studio that piece should be about its usual size, grown from the side the photo saw
+toward the side it cut, not the sliver that was in the frame. A row cut on every side the
+check could read starts unticked (§ 49 in `docs/what-is-still-open.md`).
+
+**What wrong looks like.**
+- The note on a row whose box sits well inside the photo, or missing from one that plainly
+  runs off it.
+- At 360 px the note crowding the tick or the ✕, its second line running under the ruler
+  instead of under the words, or the ruler not level with the first line.
+- A grown piece pushing through a side wall, or its visible end moving away from where it
+  stood in the photo — the grown side should be the cut one.
+- A cut piece still coming back a sliver — "mostly too small", the report this answers.
+- **Known and not fixed here:** with the room size skipped, a piece can now come back too
+  BIG rather than too small, because a skipped room's walls are guessed and the grown size is
+  a catalogue typical one (§ 49.3, § 49.4). Whether a real room reads better too big than
+  too small is a person's call.
+
+**What was measured, and on what.** SwiftShader, desktop Chromium, one seeded photo with
+seven boxes, no detector: `scripts/cut-note-probe.mjs`, 48 of 48 checks at 360, 390, 768 and
+1280 px — the note on the four cut rows and on none of the three whole ones, inside its row
+(33 px tall) at every width, no sideways scroll. The note is new, so there is no before run,
+and no mutant was put through the probe. The geometry is measured in
+`tests/scan-tilted-room.test.ts` against a tilted-up, edge-cut fixture shaped like the
+photos behind the report: with the lens and room known, pieces read short 7 → 0 of 14 and
+the typical width error 19% → 10%; with the room skipped, short 10 → 6 and over 4 → 7. A
+real phone, with a real scan, is the unlooked-at half.
+
+---
 ## Look and light
 
 ### High quality is graded again — on a real GPU, in every mood — `c2137c4` on `main` (PR #157)

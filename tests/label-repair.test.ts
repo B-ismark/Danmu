@@ -274,6 +274,45 @@ describe('judgeLabel', () => {
   });
 });
 
+describe('judgeLabel — a box the edge of the photo cut', () => {
+  // A cut axis is grown to the kind's typical size (`PieceFootprint.whole`), so it
+  // comes back inside the band of whatever word asked for it. Judging the word on it
+  // is the catalogue judging the catalogue — the same trap the ceiling rows avoid.
+  const LEFT_CUT: Detection['box'] = [0, 0.4, 0.2, 0.2];
+
+  it('accuses a word only on the axes the photo showed whole', () => {
+    // WALL_BOX called a bed fails on both axes (above). Run it off the left of the
+    // frame and only its height is evidence any more.
+    const v = judgeLabel(det({ category: 'bed', slot: 'n', box: LEFT_CUT }), CALS, ROOM);
+    expect(v.status).toBe('suspect');
+    if (v.status !== 'suspect') return;
+    expect(v.failed).toEqual(['height']);
+    expect(v.cut).toEqual(['width']);
+    // …and the width is not reported as measured, because it was not: printing it
+    // would print the typical bed as what the camera saw.
+    expect(Object.keys(v.measured)).toEqual(['height']);
+  });
+
+  it('says which axis it could not judge on a row it clears', () => {
+    const v = judgeLabel(det({ category: 'painting', shape: 'painting', slot: 'n', box: LEFT_CUT }), CALS, ROOM);
+    expect(v).toEqual({ status: 'ok', cut: ['width'] });
+  });
+
+  it('gives no verdict when the edge cut every axis it could judge', () => {
+    // Off the left and the top: a hung piece of which the photo measured nothing.
+    const box: Detection['box'] = [0, 0, 0.3, 0.3];
+    const v = judgeLabel(det({ category: 'painting', shape: 'painting', slot: 'n', box }), CALS, ROOM);
+    expect(v).toEqual({ status: 'unmeasured', cut: ['width', 'height'] });
+  });
+
+  it('offers a better word on the measured axes alone', () => {
+    // 2.3 m tall and 100 mm wide is no curtain, but with the width cut off only the
+    // 2.3 m is evidence, and a curtain is that tall.
+    expect(categoriesFittingSize(100, 2300)).not.toContain('curtain');
+    expect(categoriesFittingSize(100, 2300, undefined, ['height'])).toContain('curtain');
+  });
+});
+
 describe('judgeLabels', () => {
   it('returns one verdict per detection, in order', () => {
     const dets = [

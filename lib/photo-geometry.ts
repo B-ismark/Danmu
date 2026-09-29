@@ -760,7 +760,93 @@ export type PieceFootprint = {
    *  and inverting one as a box over-reads its depth and comes back ~55% NARROW,
    *  which is worse than the error being fixed. */
   round?: boolean;
+  /** What a WHOLE one of this kind measures, in metres, for the sides the photo's
+   *  edge can cut off (`defaultAxisFor` widths and heights, from the catalogue like
+   *  `depthM`, and never from the detector).
+   *
+   *  Where a box touches the frame, the box ends where the PHOTO does and the piece
+   *  carries on past it, so on that axis the box measures only the part in view: a
+   *  lower bound, and a strict one. Reading it as the whole piece was the largest
+   *  single reason a scan came back "mostly too small" — measured by
+   *  `tests/scan-tilted-room.test.ts`, which is where the numbers are. So a cut axis
+   *  takes the larger of what was seen and this, growing toward the cut edge from
+   *  the edge the photo did see. Absent, a cut axis reports only what is in view,
+   *  which is what a caller asking "how much of it is in this photo" wants. */
+  whole?: { widthM: number; heightM: number };
 };
+
+/** A box this close to the photo's edge is cut off by it: the piece carries on out
+ *  of frame, so on that side the box ends where the photo does, not the piece.
+ *  One definition for every reader — the placers, the label check and the repeat
+ *  check — because two thresholds would let a row be cut for one and whole for the
+ *  next. */
+export const FRAME_EDGE = 0.01;
+
+export type FrameCuts = { left: boolean; right: boolean; top: boolean; bottom: boolean };
+
+export function frameCuts(box: readonly [number, number, number, number]): FrameCuts {
+  const [x, y, w, h] = box;
+  return { left: x <= FRAME_EDGE, right: x + w >= 1 - FRAME_EDGE, top: y <= FRAME_EDGE, bottom: y + h >= 1 - FRAME_EDGE };
+}
+
+/** Which of the two measured axes a cut leaves as a lower bound, on the plane the
+ *  piece is read on.
+ *
+ *  A side cut takes the width, on either plane. A top cut takes the height on
+ *  either. A BOTTOM cut differs by plane, and that is the whole reason this takes
+ *  one: a wall piece's height is its top row minus its bottom row, so a lost bottom
+ *  row is lost height; a floor piece's height is its top row read at its distance,
+ *  and what a lost bottom row costs it is the DISTANCE — which `placeFloorObject`
+ *  bounds by the framed wall instead, so its height is read, not assumed. */
+export function cutAxes(
+  box: readonly [number, number, number, number],
+  plane: 'floor' | 'wall',
+): { width: boolean; height: boolean } {
+  const c = frameCuts(box);
+  return { width: c.left || c.right, height: c.top || (plane === 'wall' && c.bottom) };
+}
+
+/** One axis of a box the frame may have cut: its centre and length, taken to the
+ *  whole piece when a side is cut.
+ *
+ *  The edge the photo DID see is a real edge of the piece, so a piece cut on one
+ *  side keeps that edge and grows away from it, toward the cut. Cut on both, the
+ *  photo saw neither end: it grows evenly about the centre it saw, and slides back
+ *  inside the axis's ends if that took it past one, the span it saw staying inside
+ *  it either way. `length` may
+ *  be at or below zero for a side-cut floor box — `lateralSpan` reads the frame's
+ *  edge as the near corner, which it is not — and the uncut edge is still right,
+ *  which is why this runs on the signed answer before anything refuses it.
+ *
+ *  `lo` and `hi` are where the axis ends — the framed wall's two ends, the floor —
+ *  and the growth stops there. A piece can carry on past the photo; it cannot carry
+ *  on past the corner of the room, and a wardrobe's typical two metres grown from
+ *  an edge half a metre from the corner is a wardrobe standing in the next room.
+ *  That bounds the ASSUMPTION only: what was seen is kept whatever the ends say,
+ *  because a bound may falsify a guess and never a measurement. */
+function wholeAlong(
+  centre: number,
+  length: number,
+  lowCut: boolean,
+  highCut: boolean,
+  whole: number | undefined,
+  lo = -Infinity,
+  hi = Infinity,
+): { centre: number; length: number } {
+  if (whole === undefined || !(lowCut || highCut)) return { centre, length };
+  if (lowCut && highCut) {
+    const full = Math.max(length, Math.min(whole, hi - lo));
+    // The ends widened to hold what was seen, so a slide can never uncover it.
+    const from = Math.min(lo, centre - length / 2);
+    const to = Math.max(hi, centre + length / 2);
+    const start = Math.min(Math.max(centre - full / 2, from), to - full);
+    return { centre: start + full / 2, length: full };
+  }
+  const seen = lowCut ? centre + length / 2 : centre - length / 2;
+  const room = lowCut ? seen - lo : hi - seen;
+  const full = Math.max(length, Math.min(whole, room));
+  return { centre: lowCut ? seen - full / 2 : seen + full / 2, length: full };
+}
 
 /**
  * Lateral offset, width and height of a BOX footprint, given where its near face
@@ -1126,11 +1212,31 @@ export function placeFloorObject(
   near = Math.max(near, 0.3);
   if (frame) near = Math.min(near, frame.distance);
 
+  // CUT OFF AT THE FOOT, the bottom row is the photo's last row, not the piece's: the
+  // piece carries on below the frame, so its near face is NEARER than where that ray
+  // meets the floor. The ray bounds the face from beyond rather than finding it — which
+  // is what leaves this a bound the rule above allows to be tightened: nothing here was
+  // measured, so there is no measurement for an assumption to overrule. The tighter
+  // bound is the piece's back on the plaster. So a piece cut at its foot stands as far
+  // back as the evidence lets it, and its width and height are read there, on the same
+  // footing as a wall piece's are read on the wall — a plane assumed, not a distance
+  // seen. Photographed with the lens tipped up to get the ceiling in, which is how
+  // people photograph a room, that is most of the floor pieces in the picture.
+  const cut = frameCuts(box);
+  if (cut.bottom && frame) near = Math.min(near, Math.max(0.3, frame.distance - depthM));
+
   const solved = foot.round
     ? floorFromRound(box, near, cal)
     : floorFromBox(box, near, depthM, cal);
   if (!solved) return null;
-  const { right, widthM, heightM } = solved;
+  // A side the frame cut is a width the photo did not see, and a top it cut is a
+  // height it did not — each a lower bound, taken to the whole piece (see `whole`).
+  // Before the refusal below, because the visible width of a side-cut box can be
+  // nothing at all while the edge it did see is real.
+  const across = wholeAlong(solved.right, solved.widthM, cut.left, cut.right, foot.whole?.widthM, frame?.left, frame?.right);
+  const right = across.centre;
+  const widthM = across.length;
+  const heightM = cut.top && foot.whole ? Math.max(solved.heightM, foot.whole.heightM) : solved.heightM;
   if (widthM <= 0.01 || heightM <= 0.01) return null;
 
   // The CENTRE is measurement plus assumption, so it gets its own bound: the
@@ -1238,21 +1344,32 @@ export function placeWallObject(
   // opposite choice on the same test. Reading both at the plaster is the old bug.
   const yTop = height + ((rTop.up > 0 ? near : d) / rTop.fwd) * rTop.up;
   const yBottom = height + ((rBottom.up > 0 ? d : near) / rBottom.fwd) * rBottom.up;
-  const heightM = yTop - yBottom;
 
   const span = lateralSpan(box, [near, d], [yBottom, yTop], cal);
   if (!span) return null;
-  const { right, widthM } = span;
-  if (widthM <= 0.01 || heightM <= 0.01) return null;
   // A piece whose centre decodes past the ends of the framed wall is not on the framed
   // wall — it is on the RETURN wall, which an ultrawide sees in every ordinary room. See
   // `onFramedSurface`: refused rather than clamped, and it is the SIZE that was wrong.
-  if (!onFramedSurface(right, slot, footprint)) return null;
+  // Asked of the part IN VIEW, before a cut side grows it toward the frame's edge: the
+  // gate tests what the photo put on the wall, and the growth is not something it saw.
+  if (!onFramedSurface(span.right, slot, footprint)) return null;
+
+  // Cut off by the frame, a side is a width the photo did not see and a top or bottom
+  // is a height it did not: both take the whole piece, growing from the edge it did
+  // see (see `whole`). A curtain cut off at the foot of a photo tipped up at the
+  // ceiling is the ordinary case, and it came back a third short.
+  const cut = frameCuts(box);
+  const across = wholeAlong(span.right, span.widthM, cut.left, cut.right, foot.whole?.widthM, frame.left, frame.right);
+  const up = wholeAlong((yTop + yBottom) / 2, yTop - yBottom, cut.bottom, cut.top, foot.whole?.heightM, 0);
+  const right = across.centre;
+  const widthM = across.length;
+  const heightM = up.length;
+  if (widthM <= 0.01 || heightM <= 0.01) return null;
 
   // The body's centre: its back is on the plaster, so it sits half a depth in.
   const { x, z, yaw } = slotToWorld(slot, d - depthM / 2, right);
   return {
-    position: { x, y: (yTop + yBottom) / 2, z },
+    position: { x, y: up.centre, z },
     widthMM: Math.round(widthM * 1000),
     heightMM: Math.round(heightM * 1000),
     yaw,

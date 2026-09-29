@@ -24,6 +24,7 @@
 import { dimRangeFor } from './dimension-ranges';
 import { geoRefine, type CalMap, type RoomDims } from './detect-refine';
 import { anchorFor } from './physics';
+import { cutAxes } from './photo-geometry';
 import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
 
@@ -50,10 +51,11 @@ export type LabelCandidate = {
 
 export type LabelVerdict =
   /** The measurement sits inside the band for the word the detector used. */
-  | { status: 'ok' }
+  | { status: 'ok'; cut?: SizeAxis[] }
   /** Nothing was measured, so there is no evidence and no verdict. A slot with no
-   *  calibration, or a ceiling anchor, which geoRefine does not measure at all. */
-  | { status: 'unmeasured' }
+   *  calibration, a ceiling anchor, which geoRefine does not measure at all, or a
+   *  box the photo's edge cut on every axis it could have judged. */
+  | { status: 'unmeasured'; cut?: SizeAxis[] }
   /** The measurement is outside the band for the word the detector used. */
   | {
       status: 'suspect';
@@ -61,16 +63,21 @@ export type LabelVerdict =
       failed: SizeAxis[];
       /** What the detector's own word allows, mm, as [min, max] per axis. */
       allowed: { width: [number, number]; height: [number, number] };
-      /** What the camera measured, mm. `height` is ABSENT when the anchor could
-       *  not observe it — a ceiling placement measures width only. A caller that
-       *  prints a fallback there is printing a catalogue default as a
-       *  measurement. */
-      measured: { width: number; height?: number };
+      /** What the camera measured, mm. An axis is ABSENT when it was not observed —
+       *  a ceiling placement measures width only, and an axis the photo's edge cut
+       *  off is a typical size (`cut`). A caller that prints a fallback there is
+       *  printing a catalogue default as a measurement. */
+      measured: { width?: number; height?: number };
       /** Better words, most comfortable fit first, each already re-measured under
        *  its own anchor. **Empty is a real answer** — it means nothing in the
        *  vocabulary is that shape, so the finding is a flag with no repair. */
       candidates: LabelCandidate[];
+      cut?: SizeAxis[];
     };
+// `cut`, on every status: the axes the edge of the photo cut off, whose size is the
+// kind's typical one grown from the edge the photo saw (`PieceFootprint.whole`) rather
+// than a measurement. Absent when the box is whole — a row that says it was measured
+// has to be able to say which part of it was not.
 
 /** Does a measured W × H sit inside the band for this word?
  *
@@ -100,9 +107,27 @@ function failedAxes(category: Category, shape: Shape, widthMM: number, heightMM:
  *  `placeCeilingObject`), so the H that comes back is a catalogue default or the
  *  AI's own hint. Judging a word against either is judging the model's number
  *  against the model's word — they agree by construction, which is the whole
- *  reason this module exists. */
-function measuredAxes(category: Category, shape: Shape): readonly SizeAxis[] {
-  return anchorFor(category, shape) === 'ceiling' ? ['width'] : ['width', 'height'];
+ *  reason this module exists.
+ *
+ *  **An axis the photo's edge cut off is the same case one step removed.** The
+ *  placer grows it to the kind's typical size, so it comes back inside the band of
+ *  whatever word asked — the catalogue judging the catalogue. Left in, it passed
+ *  every cut piece on that axis, and before the growth it failed them the other way:
+ *  the visible part of a wardrobe is "too small for a wardrobe" because it is part of
+ *  one. Which axes a cut takes is `cutAxes`, the placers' own test. */
+function measuredAxes(category: Category, shape: Shape, box: Detection['box']): SizeAxis[] {
+  if (anchorFor(category, shape) === 'ceiling') return ['width'];
+  const cut = cutOf(category, shape, box);
+  return (['width', 'height'] as const).filter((a) => !cut.includes(a));
+}
+
+/** The axes of `box` the photo's edge cut, on the plane this word is measured on. A
+ *  ceiling piece's box is read as one row of a disc and never grown. */
+function cutOf(category: Category, shape: Shape, box: Detection['box']): SizeAxis[] {
+  const anchor = anchorFor(category, shape);
+  if (anchor === 'ceiling') return [];
+  const cut = cutAxes(box, anchor === 'floor' ? 'floor' : 'wall');
+  return (['width', 'height'] as const).filter((a) => cut[a]);
 }
 
 /** How far inside a band a value sits, as a fraction of the band's span. 0 is on a
@@ -137,9 +162,15 @@ function sizeMargin(
  *
  *  `'other'` is never a candidate. Its band is nearly the whole space, so it fits
  *  everything and tells the user nothing. */
-export function categoriesFittingSize(widthMM: number, heightMM: number, exclude?: Category): Category[] {
-  return CATEGORIES.filter((c) => c !== 'other' && c !== exclude && sizeFitsLabel(c, 'box', widthMM, heightMM)).sort(
-    (a, b) => sizeMargin(b, 'box', widthMM, heightMM) - sizeMargin(a, 'box', widthMM, heightMM),
+export function categoriesFittingSize(
+  widthMM: number,
+  heightMM: number,
+  exclude?: Category,
+  axes: readonly SizeAxis[] = ['width', 'height'],
+): Category[] {
+  const fits = (c: Category) => !failedAxes(c, 'box', widthMM, heightMM).some((a) => axes.includes(a));
+  return CATEGORIES.filter((c) => c !== 'other' && c !== exclude && fits(c)).sort(
+    (a, b) => sizeMargin(b, 'box', widthMM, heightMM, axes) - sizeMargin(a, 'box', widthMM, heightMM, axes),
   );
 }
 
@@ -255,7 +286,7 @@ export function candidatesFor(
       // restriction matters — a ceiling candidate is checked on width, because width
       // is what measuring it as a ceiling item produced.
       // Judged as the shape it was measured as, for the reason `judgeLabel` is.
-      const cAxes = measuredAxes(c, t.shape);
+      const cAxes = measuredAxes(c, t.shape, d.box);
       const fits = !failedAxes(c, t.shape, trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
       trials.push({
         category: c,
@@ -318,23 +349,30 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
   const widthMM = measured.dimMM[0];
   const heightMM = measured.dimMM[2];
 
-  // Only the axes this anchor could see may accuse the word. For a ceiling item
-  // that is width alone — enough for both ceiling rows of the benchmark (a hook
-  // at 100 mm against a fan's 900 mm floor, a fan at 1200 mm against a lamp's
-  // 800 mm ceiling), and honest about the rest.
-  const axes = measuredAxes(category, shape);
+  // Only the axes this anchor could see, and the photo did not cut, may accuse the
+  // word. For a ceiling item that is width alone — enough for both ceiling rows of
+  // the benchmark (a hook at 100 mm against a fan's 900 mm floor, a fan at 1200 mm
+  // against a lamp's 800 mm ceiling), and honest about the rest.
+  const axes = measuredAxes(category, shape, d.box);
+  const cut = cutOf(category, shape, d.box);
+  const cutNote = cut.length > 0 ? { cut } : {};
+  if (axes.length === 0) return { status: 'unmeasured', ...cutNote };
   const failed = failedAxes(category, shape, widthMM, heightMM).filter((a) => axes.includes(a));
-  if (failed.length === 0) return { status: 'ok' };
+  if (failed.length === 0) return { status: 'ok', ...cutNote };
 
   const r = dimRangeFor(category, shape);
-  const candidates = candidatesFor(d, categoriesFittingSize(widthMM, heightMM, category), cals, room);
+  const candidates = candidatesFor(d, categoriesFittingSize(widthMM, heightMM, category, axes), cals, room);
 
   return {
     status: 'suspect',
     failed,
     allowed: { width: [r.min[0], r.max[0]], height: [r.min[2], r.max[2]] },
-    measured: { width: widthMM, ...(axes.includes('height') ? { height: heightMM } : {}) },
+    measured: {
+      ...(axes.includes('width') ? { width: widthMM } : {}),
+      ...(axes.includes('height') ? { height: heightMM } : {}),
+    },
     candidates,
+    ...cutNote,
   };
 }
 
