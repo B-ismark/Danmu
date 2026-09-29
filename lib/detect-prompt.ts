@@ -40,6 +40,19 @@ export function slotOf(v: unknown): CaptureSlot | undefined {
   return typeof v === 'string' ? SLOT_OF.get(v.trim().toLowerCase()) : undefined;
 }
 
+/** The wall a reply's row is filed under, among the walls `sent`, or undefined.
+ *  With ONE photo sent the row's own `slot` decides nothing: the prompt asks for a
+ *  box in fractions of that slot's image, and there is no other image for it to be
+ *  on, so a row naming another wall is misfiled rather than off the photos. Dropping
+ *  it would refuse furniture boxed on the only picture there is — and the one-photo
+ *  scan is the ordinary one. With two or more, a row naming a wall nobody
+ *  photographed could be on either, and nothing says which. */
+function wallOf(d: { slot?: unknown }, sent: readonly CaptureSlot[]): CaptureSlot | undefined {
+  if (sent.length === 1) return sent[0];
+  const slot = slotOf(d.slot);
+  return slot && sent.includes(slot) ? slot : undefined;
+}
+
 /** Where the lens points and which way the image runs, per wall. The camera
  *  POSITION is stated once in the opening line instead of hiding in the `n`
  *  entry, which is where it used to live — a set without a north photo never
@@ -166,14 +179,13 @@ Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by vis
  *  sliver, by the rule the on-device rows are dropped by.
  *
  *  So is a row naming a wall that was not photographed (§ 49.17), read through
- *  `slotOf`. Its box is a box on a picture that does not exist, and it has no
- *  camera to be measured by, so it kept the model's own size and place and was
- *  built as though it were read off a photo. `sent` is required rather than
- *  defaulted to all four walls, because the default is the check switched off. */
+ *  `wallOf`. It had no camera to be measured by, so it kept the model's own size and
+ *  place and was built as though it were read off a photo. `sent` is required rather
+ *  than defaulted to all four walls, because the default is the check switched off. */
 export function cloudRows(parsed: readonly unknown[], sent: readonly CaptureSlot[]): Detection[] {
   return (parsed as Detection[]).flatMap((d) => {
-    const slot = d ? slotOf(d.slot) : undefined;
-    if (!slot || !sent.includes(slot) || !Array.isArray(d.box)) return [];
+    const slot = d ? wallOf(d, sent) : undefined;
+    if (!slot || !Array.isArray(d.box)) return [];
     const box = boxInPhoto(d.box);
     // Stamped here, and called only by `readCloudReply`, which only
     // `detectAcrossImages` calls, so nothing but the reply to a Gemini call can

@@ -6,6 +6,7 @@ import { detectionBox } from '@/lib/local-detect';
 import { fromRecord, toRecord } from '@/lib/detection-record';
 import { SLIVER } from '@/lib/photo-geometry';
 import { stripComments } from './helpers/source';
+import type { CaptureSlot } from '@/lib/storage';
 import { CATALOG_SHAPES_ORDERED } from '@/lib/scene-spec';
 
 const ROOM = { width: 5.6, depth: 4.2, height: 2.8, layoutId: 'rect' as const };
@@ -185,7 +186,7 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
       row([0.1, 0.2, 0.3, 0.4], { slot: undefined }),
       null,
       7,
-    ], ['n']);
+    ], ['n', 'e']);
     expect(kept).toHaveLength(1);
   });
 
@@ -199,12 +200,25 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
     const kept = cloudRows(walls.map((slot) => row([0.1, 0.2, 0.3, 0.4], { slot })), ['n', 'e']);
     // `north` and `N` are the prompt's own words for `n` (`slotOf`), and are kept as it.
     expect(kept.map((d) => d.slot)).toEqual(['n', 'e', 'n', 'n']);
-    // Every wall of the four, sent alone, keeps its own rows and no other.
-    const own = { n: ['n', 'n', 'n'], e: ['e'], s: ['s'], w: ['w'] };
-    for (const sent of ['n', 'e', 's', 'w'] as const) {
-      expect(cloudRows(walls.map((slot) => row([0.1, 0.2, 0.3, 0.4], { slot })), [sent]).map((d) => d.slot)).toEqual(own[sent]);
-    }
+    const onWalls = (sent: CaptureSlot[]) =>
+      cloudRows(walls.map((slot) => row([0.1, 0.2, 0.3, 0.4], { slot })), sent).map((d) => d.slot);
+    expect(onWalls(['s', 'w'])).toEqual(['s', 'w']);
+    expect(onWalls(['n', 's'])).toEqual(['n', 's', 'n', 'n']);
+    expect(onWalls(['e', 's', 'w'])).toEqual(['e', 's', 'w']);
     expect(cloudRows([row([0.1, 0.2, 0.3, 0.4])], [])).toEqual([]);
+  });
+
+  it('files every row of a one-photo reply under that photo, whatever wall it names', () => {
+    // The box is in fractions of THE image, and with one attached there is no other
+    // it can be on. Dropping these refused furniture boxed on the only picture, on the
+    // ordinary scan; the review of § 49.17 caught it before it shipped.
+    const walls = ['n', 's', 'north', 'N WALL', 'up', '', undefined, 0];
+    for (const sent of ['n', 'e', 's', 'w'] as const) {
+      const rows = cloudRows(walls.map((slot) => row([0.1, 0.2, 0.3, 0.4], { slot })), [sent]);
+      expect(rows.map((d) => d.slot)).toEqual(walls.map(() => sent));
+    }
+    // It still has to have a box on that photo.
+    expect(cloudRows([row(undefined, { slot: 'e' }), row([1.2, 0.2, 0.3, 0.4], { slot: 'e' })], ['e'])).toEqual([]);
   });
 
   it('reads a wall in the words the prompt uses for it, and nothing else', () => {
@@ -220,7 +234,7 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
     }
     // Written back as its code, so the saved `__slot:x` suffix and the camera map
     // both read it — `N` used to come back from a save labelled `Sofa__slot:N`.
-    const [d] = cloudRows([row([0.1, 0.2, 0.3, 0.4], { slot: 'North' })], ['n']);
+    const [d] = cloudRows([row([0.1, 0.2, 0.3, 0.4], { slot: 'North' })], ['n', 'e']);
     expect(d.slot).toBe('n');
     expect(fromRecord(toRecord(d, 0, false, () => 'u')).label).toBe('Sofa');
   });
@@ -252,8 +266,9 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
 
 describe('readCloudReply: a reply with nothing to act on is not an empty room', () => {
   const row = (box: unknown, extra: Record<string, unknown> = {}) => ({ label: 'Sofa', category: 'sofa', conf: 0.8, slot: 'n', box, ...extra });
+  // Two photos, so a row's own wall decides where it is filed (`wallOf`).
   const unreadable = (text: string) => {
-    const reply = readCloudReply(text, ['n']);
+    const reply = readCloudReply(text, ['n', 'e']);
     return 'unreadable' in reply ? reply.unreadable : null;
   };
 
@@ -278,10 +293,12 @@ describe('readCloudReply: a reply with nothing to act on is not an empty room', 
   it('refuses a list that files every row under walls nobody photographed (§ 49.17)', () => {
     const elsewhere = [row([0.1, 0.2, 0.3, 0.4], { slot: 's' }), row([0.5, 0.2, 0.3, 0.4], { slot: 'up' })];
     expect(unreadable(JSON.stringify(elsewhere))).toMatch(/no box inside the photos/);
-    const reply = readCloudReply(JSON.stringify([...elsewhere, row([0.2, 0.3, 0.1, 0.1])]), ['n']);
+    const reply = readCloudReply(JSON.stringify([...elsewhere, row([0.2, 0.3, 0.1, 0.1])]), ['n', 'e']);
     expect('rows' in reply && reply.rows.map((d) => [d.slot, d.box])).toEqual([['n', [0.2, 0.3, 0.1, 0.1]]]);
     // The walls are the ones handed in, not a fixed four.
-    expect(readCloudReply(JSON.stringify(elsewhere), ['s'])).toMatchObject({ rows: [{ slot: 's' }] });
+    expect(readCloudReply(JSON.stringify(elsewhere), ['s', 'e'])).toMatchObject({ rows: [{ slot: 's' }] });
+    // …and one photo takes every row, whatever wall it names.
+    expect(readCloudReply(JSON.stringify(elsewhere), ['e'])).toMatchObject({ rows: [{ slot: 'e' }, { slot: 'e' }] });
   });
 
   it('keeps the rows it can use when only some are past the frame', () => {
