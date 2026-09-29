@@ -43,7 +43,7 @@ import {
 import { startingSpot } from '@/lib/scene-spec';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
-import { boxFor, CAL, CALS, refinedOnly, ROOM, shots, squareOn, TRUTH, type Truth } from './helpers/known-room';
+import { framedBoxFor, CAL, CALS, refinedOnly, ROOM, shots, squareOn, TRUTH, type Truth } from './helpers/known-room';
 import { boxIn, furnishedRoom, SWEEP_SLOTS } from './helpers/furnished-rooms';
 import { project, type Box } from './helpers/project';
 
@@ -307,7 +307,15 @@ describe('keptAtFirst', () => {
 // ── The known room ────────────────────────────────────────────────────────────
 
 /** What a real detector hands back for a piece that runs out of the picture: the
- *  part it can see. `boxFor` projects the whole solid, frame or not. */
+ *  part it can see, from its outline (§ 49.16). A piece every photo it is filed
+ *  under does not show at all is a fixture error, not a sighting. */
+function framed(t: Truth, slot: CaptureSlot, shot: CameraCal): Box {
+  const b = framedBoxFor(t, slot, shot);
+  if (!b) throw new Error(`${t.name} is not in the photo of ${slot}`);
+  return b;
+}
+
+/** Clip a box to the frame — for a box grown past the edge, like `taller`'s. */
 function inPicture(b: Box): Box {
   const x0 = Math.max(0, b[0]);
   const y0 = Math.max(0, b[1]);
@@ -329,7 +337,7 @@ function taller(b: Box, f: number): Box {
  *  same, for a piece with no height for a second model to take in. */
 function readTwice(t: Truth, second: string, { shot = CAL, grow = true }: { shot?: CameraCal; grow?: boolean } = {}): Detection[] {
   return t.slots.flatMap((slot) => {
-    const seen = inPicture(boxFor(t, slot, shot));
+    const seen = framed(t, slot, shot);
     const unplaced = { slot, shape: undefined, position: undefined, dimMM: undefined, yaw: undefined };
     return [
       row({ category: t.category, label: t.label, box: seen, ...unplaced }),
@@ -431,16 +439,33 @@ describe('the known room', () => {
     // is cut by the photo's side and the second bed's is whole, so the second is kept and
     // the FIRST is the one gone. Before that rank the first bed's cut view was kept.
     for (const cals of [CALS, every(lens(106, 'measured'))]) {
-      for (const [a, b, rows, left] of [[1.9, 3.0, 2, 'second'], [1.7, 2.8, 4, 'first']] as const) {
-        const first = readTwice(single(a), 'single bed');
-        const second = readTwice(single(b), 'single bed');
-        const refined = refineDetections([...first, ...second], cals, ROOM);
-        expect(refined, `beds at ${a} and ${b}`).toHaveLength(rows);
-        // Every row left is a sighting of one bed: the other is not unticked, it is gone.
-        const kept = left === 'first' ? first : second;
-        for (const d of refined) expect(kept.map((f) => f.box), `beds at ${a} and ${b}`).toContainEqual(d.box);
-        expect(keptAtFirst(refined, refined.map(() => true), ROOM, cals).size).toBe(1);
-      }
+      const first = readTwice(single(1.9), 'single bed');
+      const second = readTwice(single(3.0), 'single bed');
+      const refined = refineDetections([...first, ...second], cals, ROOM);
+      expect(refined).toHaveLength(4);
+      // Every row left is a sighting of one bed: the other is not unticked, it is gone.
+      for (const d of refined) expect(second.map((f) => f.box)).toContainEqual(d.box);
+      expect(keptAtFirst(refined, refined.map(() => true), ROOM, cals).size).toBe(1);
+    }
+  });
+
+  it('keeps both of twin beds at 1.7 and 2.8, once the fixture boxes only what the photo shows — § 49.16', () => {
+    // The same pair a little further west. This lost the first bed too, and was held
+    // beside the pair above as the same defect, while the fixture boxed each bed's
+    // whole box clipped to the frame — extent the photo never showed. Boxed from the
+    // outline inside the frame, as a detector draws it, the two beds stay two on
+    // either lens, so this half of § 46.1 was the fixture's.
+    const single = (x: number): Truth => ({
+      name: `single ${x}`, label: 'bed', category: 'bed', shape: 'bed-single',
+      x, z: -2.05, dimMM: [900, 1900, 450], slots: ['n', 'e'],
+    });
+    for (const cals of [CALS, every(lens(106, 'measured'))]) {
+      const first = readTwice(single(1.7), 'single bed');
+      const second = readTwice(single(2.8), 'single bed');
+      const refined = refineDetections([...first, ...second], cals, ROOM);
+      const whose = refined.map((d) => (first.some((f) => f.box === d.box) ? 'first' : 'second'));
+      expect(whose).toEqual(['first', 'first', 'first', 'first', 'second', 'second']);
+      expect(keptAtFirst(refined, refined.map(() => true), ROOM, cals).size).toBe(2);
     }
   });
 });
@@ -455,8 +480,10 @@ const lens = (deg: number, src?: LensSource): CameraCal => ({
 });
 const every = (c: CameraCal): CalMap => ({ n: c, e: c, s: c, w: c });
 /** How many places the bookshelf below could stand, reaching round its cut side: its
- *  own place at a typical bookshelf's width, and 33 longer boxes. */
-const REACHED = 34;
+ *  own place at a typical bookshelf's width, and 32 longer boxes. It was 34 while the
+ *  fixture boxed extent the photo never showed (§ 49.16): the cut box was a little
+ *  taller than the photo's, so one more width stood as a bookshelf. */
+const REACHED = 33;
 
 /** `t` as a detector sees it in the photo of `slot` taken on `shot`: a box and a
  *  word, nothing the geometry has not measured yet. */
@@ -464,7 +491,7 @@ function seen(t: Truth, slot: CaptureSlot, shot: CameraCal, label = t.label): De
   return row({
     label,
     category: t.category,
-    box: inPicture(boxFor(t, slot, shot)),
+    box: framed(t, slot, shot),
     slot,
     shape: undefined,
     position: undefined,
@@ -760,10 +787,10 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
     console.log(`findRepeats over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
     expect(got).toEqual([
       [575, 0, 1, 0, 2, 0, 10, 0, 2],
-      [993, 252, 37, 247, 37, 5, 41, 217, 37],
+      [993, 252, 37, 247, 37, 5, 41, 216, 37],
       [993, 252, 9, 7, 11, 3, 20, 5, 11],
-      [989, 464, 42, 452, 43, 21, 42, 425, 43],
-      [989, 464, 2, 35, 4, 24, 4, 34, 4],
+      [989, 464, 42, 452, 43, 19, 42, 423, 43],
+      [989, 464, 2, 36, 4, 24, 4, 34, 4],
     ]);
   });
 });
@@ -865,9 +892,9 @@ describe('findRepeats — a lens a floor line tied to the height', () => {
     console.log(`findRepeats with a floor line, over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
     expect(got).toEqual([
       [1000, 16, 13, 4, 13],
-      [993, 4, 25, 5, 17],
+      [993, 4, 25, 5, 16],
       [968, 14, 20, 15, 18],
-      [979, 29, 17, 29, 17],
+      [979, 25, 17, 25, 17],
     ]);
   });
 });
