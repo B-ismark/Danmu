@@ -29,6 +29,21 @@ const full: Detection = {
 };
 
 describe('toRecord / fromRecord', () => {
+  it('reads a saved box back cut to its photo, as a fresh scan cuts it (§ 49.15)', () => {
+    const past = toRecord({ ...full, box: [0.8, -0.05, 0.3, 0.5] }, 0, false, uid);
+    const box = fromRecord(past).box;
+    expect(box[0]).toBe(0.8);
+    expect(box[1]).toBe(0);
+    expect(box[2]).toBeCloseTo(0.2, 12);
+    expect(box[3]).toBeCloseTo(0.45, 12);
+    // Once cut, saving and reading again changes nothing, which is what keeps a
+    // re-save from counting as an edit in lib/rescan.ts.
+    expect(fromRecord(toRecord(fromRecord(past), 0, false, uid))).toEqual(fromRecord(past));
+    // A box with nothing in the photo is kept as saved rather than dropped.
+    const outside = toRecord({ ...full, box: [1.2, 0.2, 0.3, 0.4] }, 0, false, uid);
+    expect(fromRecord(outside).box).toEqual([1.2, 0.2, 0.3, 0.4]);
+  });
+
   it('round-trips every field of a fully populated detection', () => {
     expect(fromRecord(toRecord(full, 0, false, uid))).toEqual(full);
   });

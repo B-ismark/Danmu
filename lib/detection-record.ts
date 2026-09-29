@@ -22,6 +22,7 @@
 // first change that actually needs it.
 
 import type { DetectSource } from './detect-confidence';
+import { clipToFrame } from './photo-geometry';
 import type { Detection } from './detection';
 import type { CaptureSlot, RoomData } from './storage';
 
@@ -71,7 +72,15 @@ export function fromRecord(r: SavedDetection): Detection {
     // `category` is. An unrecognised value reads as undefined rather than being
     // trusted, and `sourceOf` then supplies the historical default.
     source: (['local', 'cloud', 'manual'] as const).find((s) => s === r.source) as DetectSource | undefined,
-    box: r.box,
+    // Cut to its photo, as a fresh scan's box is (§ 49.15): a row saved before that
+    // cut may run past the frame, and the review screen re-measures every row from
+    // its box each time it opens. Cutting cannot give back an edge the old
+    // on-device clamp moved, only stop the box describing what nobody saw. Here
+    // rather than on the screen so both ends of `lib/rescan.ts`'s comparison read
+    // the same box, or every such row would count as changed on the next Continue.
+    // A box with nothing in frame is kept as saved: this reads the rows the user
+    // kept, and dropping one would renumber the rest.
+    box: clipToFrame(r.box) ?? r.box,
     category: (r.category ?? 'other') as Detection['category'],
     slot: ((r.label.match(/__slot:([nesw])$/) ?? [])[1] ?? 'n') as CaptureSlot,
     dimMM: r.dimMM,
