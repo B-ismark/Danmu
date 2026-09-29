@@ -27,7 +27,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { refineDetections, type CalMap } from '@/lib/detect-refine';
+import { geoRefine, refineDetections, type CalMap } from '@/lib/detect-refine';
 import { findRepeats, keptAtFirst, REPEAT_SHARE, sameButColor, sweptSolids, SWEPT_HFOV_DEG } from '@/lib/repeat-sightings';
 import { footArea, footFromPart, footIntersectionArea } from '@/lib/geometry';
 import {
@@ -426,13 +426,19 @@ describe('the known room', () => {
       x, z: -2.05, dimMM: [900, 1900, 450], slots: ['n', 'e'],
     });
     // The lens the phone wrote down changes nothing: the hard merge takes both doors either way.
+    // WHICH bed is left is the survivor the merge keeps, and a sighting the frame did not
+    // cut outranks one it did (`survivorRank`): at 1.9 and 3.0 the first bed's east view
+    // is cut by the photo's side and the second bed's is whole, so the second is kept and
+    // the FIRST is the one gone. Before that rank the first bed's cut view was kept.
     for (const cals of [CALS, every(lens(106, 'measured'))]) {
-      for (const [a, b, rows] of [[1.9, 3.0, 2], [1.7, 2.8, 4]] as const) {
+      for (const [a, b, rows, left] of [[1.9, 3.0, 2, 'second'], [1.7, 2.8, 4, 'first']] as const) {
         const first = readTwice(single(a), 'single bed');
-        const refined = refineDetections([...first, ...readTwice(single(b), 'single bed')], cals, ROOM);
+        const second = readTwice(single(b), 'single bed');
+        const refined = refineDetections([...first, ...second], cals, ROOM);
         expect(refined, `beds at ${a} and ${b}`).toHaveLength(rows);
-        // Every row left is a sighting of the first bed: the second is not unticked, it is gone.
-        for (const d of refined) expect(first.map((f) => f.box)).toContainEqual(d.box);
+        // Every row left is a sighting of one bed: the other is not unticked, it is gone.
+        const kept = left === 'first' ? first : second;
+        for (const d of refined) expect(kept.map((f) => f.box), `beds at ${a} and ${b}`).toContainEqual(d.box);
         expect(keptAtFirst(refined, refined.map(() => true), ROOM, cals).size).toBe(1);
       }
     }
@@ -448,8 +454,9 @@ const lens = (deg: number, src?: LensSource): CameraCal => ({
   ...(src ? { lens: src } : {}),
 });
 const every = (c: CameraCal): CalMap => ({ n: c, e: c, s: c, w: c });
-/** How many places the bookshelf below could stand, reaching round its cut side. */
-const REACHED = 25;
+/** How many places the bookshelf below could stand, reaching round its cut side: its
+ *  own place at a typical bookshelf's width, and 33 longer boxes. */
+const REACHED = 34;
 
 /** `t` as a detector sees it in the photo of `slot` taken on `shot`: a box and a
  *  word, nothing the geometry has not measured yet. */
@@ -597,42 +604,47 @@ describe('findRepeats — a lens nobody measured', () => {
   it('reaches round a piece the side of its photo cut off, on a lens that was measured too', () => {
     // A bookshelf near the north-east corner, shot on the 106° by a phone that wrote
     // its focal length. The north photo cuts it off at the right, and that box is not
-    // the piece: the camera reads the frame edge as the far corner, the width comes out
-    // below nothing, and the row is refused on the very lens it was taken on — so it is
-    // built on the north wall, a second bookshelf. The lens is not in doubt; the box
-    // is. So the cut side is grown out of the picture a step at a time, and every
-    // piece it could be — one a bookshelf's size — is a place it might stand.
+    // the piece: the camera reads the frame edge as the far corner, and the width comes
+    // out below nothing. The placer keeps the edge the photo did see and gives the cut
+    // width a bookshelf's typical size (`PieceFootprint.whole`), which stands it close
+    // enough to the east photo's whole view for the hard merge to take the pair, the
+    // whole sighting kept. Before that growth the north row was refused, built on the
+    // north wall, and only the walk below could find it a second bookshelf.
     const shelf = piece('bookshelf', 'shelf', 'bookshelf', 2.5, -1.5, [900, 350, 1800]);
     const dets = (['n', 'e'] as const).map((s) => seen(shelf, s, CAL));
     const cals = every(lens(106, 'measured'));
     const refined = refineDetections(dets, cals, ROOM);
-    expect(refined.map((d) => `${d.slot} ${d.position ? 'placed' : 'refused'}`)).toEqual(['n refused', 'e placed']);
-    expect(keptWith(dets, cals, {})).toBe(2);
-    expect(keptWith(dets, cals)).toBe(1);
+    expect(refined.map((d) => `${d.slot} ${d.position ? 'placed' : 'refused'}`)).toEqual(['e placed']);
+    expect(keptWith(dets, cals, {})).toBe(1);
+    // The cut sighting on its own, as it stands when the two photos use different words
+    // and the hard merge never asks: placed, at the typical width, not the −79 mm one.
+    const north = geoRefine(dets[0], cals, ROOM);
+    expect(north.position).toBeDefined();
+    expect(north.dimMM?.[0]).toBe(900);
     // The whole box is left alone, and the cut one is asked once: it is the box that is
     // short, not the lens that is wrong, so every lens gets the same answer.
-    const [north, east] = refined;
+    const [east] = refined;
     expect(sweptSolids(east, ROOM, cals)).toBeNull();
     const reach = sweptSolids(north, ROOM, cals)!;
     expect(reach).toHaveLength(SWEPT_HFOV_DEG.length);
     expect(reach.every((s) => s === reach[0])).toBe(true);
     expect(reach[0]).toHaveLength(REACHED);
     // …and only a piece a bookshelf's size. The same box with its top pulled down to a
-    // quarter of its height, or pushed up to twice it, is no bookshelf at any width,
-    // so nothing is reached.
+    // quarter of its height, or pushed up to twice it, is no bookshelf at any width, so
+    // nothing is reached: all that is left is the row's own place.
     const [x, y, w, h] = north.box;
     const squat = sweptSolids({ ...north, box: [x, y + 0.75 * h, w, 0.25 * h] }, ROOM, cals)!;
     const towering = sweptSolids({ ...north, box: [x, y - h, w, 2 * h] }, ROOM, cals)!;
-    expect([squat[0].length, towering[0].length]).toEqual([0, 0]);
+    expect([squat[0].length, towering[0].length]).toEqual([1, 1]);
     // A row from the cloud detector arrives with its own guess at where the piece is and
-    // how big, and a box the camera refuses keeps that guess. A longer box the camera
-    // refuses too is a place nothing was reached, not a place to take the guess from.
+    // how big. The box is measured, so the guess is replaced — and the walk re-asks the
+    // camera from the box alone, so the guess reaches none of it either.
     const [guessed] = refineDetections(
       [{ ...dets[0], position: { x: 0, y: 0, z: 0 }, yaw: 0, dimMM: [900, 350, 1800] }],
       cals,
       ROOM,
     );
-    expect(guessed.position).toEqual({ x: 0, y: 0, z: 0 });
+    expect(guessed.position).toEqual(north.position);
     expect(sweptSolids(guessed, ROOM, cals)![0]).toEqual(reach[0]);
   });
 
@@ -748,10 +760,10 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
     console.log(`findRepeats over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
     expect(got).toEqual([
       [575, 0, 1, 0, 2, 0, 10, 0, 2],
-      [993, 252, 35, 249, 35, 3, 37, 217, 35],
-      [993, 252, 9, 23, 11, 1, 21, 2, 11],
-      [989, 464, 39, 460, 41, 24, 41, 431, 41],
-      [989, 464, 2, 43, 4, 23, 6, 29, 4],
+      [993, 252, 37, 247, 37, 5, 41, 217, 37],
+      [993, 252, 9, 7, 11, 3, 20, 5, 11],
+      [989, 464, 42, 452, 43, 21, 42, 425, 43],
+      [989, 464, 2, 35, 4, 24, 4, 34, 4],
     ]);
   });
 });
@@ -852,10 +864,10 @@ describe('findRepeats — a lens a floor line tied to the height', () => {
     });
     console.log(`findRepeats with a floor line, over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
     expect(got).toEqual([
-      [1000, 17, 14, 2, 14],
-      [993, 17, 26, 4, 18],
-      [968, 18, 23, 11, 21],
-      [979, 44, 17, 27, 17],
+      [1000, 16, 13, 4, 13],
+      [993, 4, 25, 5, 17],
+      [968, 14, 20, 15, 18],
+      [979, 29, 17, 29, 17],
     ]);
   });
 });

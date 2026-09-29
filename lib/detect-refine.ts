@@ -16,6 +16,7 @@
 
 import { anchorFor } from './physics';
 import {
+  frameCuts,
   locateOnWall,
   placeCeilingObject,
   placeFloorObject,
@@ -111,7 +112,15 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
   // number a piece is measured by and the footprint it is inverted as cannot
   // disagree — and both are the shape the room builds, so a round table named only
   // by its word is measured round.
-  const foot = { depthM: catalogueDepth / 1000, round: isRoundPart(shape) };
+  //
+  // `whole` is the same catalogue again, for the sides the photo's edge cut off: what
+  // the box did not see is not a size the camera measured, and a cut piece read as
+  // its visible part is the scan coming back too small (`PieceFootprint.whole`).
+  const foot = {
+    depthM: catalogueDepth / 1000,
+    round: isRoundPart(shape),
+    whole: { widthM: defaultAxisFor(cat, shape, 0) / 1000, heightM: defaultAxisFor(cat, shape, 2) / 1000 },
+  };
   const g =
     anchor === 'floor'
       ? placeFloorObject(d.box, d.slot, room.footprint, cal, foot)
@@ -365,9 +374,24 @@ export function dedupeDetections(items: Detection[], measured?: ReadonlySet<Dete
     // across the floor, where it swallowed a second bed the founder was never near.
     // The members are every row that joined, whichever survives, so choosing a
     // survivor never changes a count.
-    if (measured?.has(d) && !measured.has(out[at])) out[at] = d;
+    //
+    // And a sighting that saw the piece WHOLE outranks one the photo's edge cut off, one
+    // step down the same ladder: a cut row is measured, but on its cut side its size is
+    // the catalogue's, grown from the edge it did see (`PieceFootprint.whole`). Before
+    // that growth a cut row was refused outright and so never competed; now it has a
+    // position, and first-come handed the room the typical size where another photo had
+    // measured the real one.
+    if (survivorRank(d, measured) > survivorRank(out[at], measured)) out[at] = d;
   }
   return out;
+}
+
+/** How much of a piece a row measured: nothing (located, or no measurement asked
+ *  for), some of it (the photo's edge cut it off), or all of it. */
+function survivorRank(d: Detection, measured: ReadonlySet<Detection> | undefined): number {
+  if (!measured?.has(d)) return 0;
+  const c = frameCuts(d.box);
+  return c.left || c.right || c.top || c.bottom ? 1 : 2;
 }
 
 /** Detector output → what the review screen shows. The ORDER is the point.

@@ -8,7 +8,7 @@ import { useRoom, useSettings } from '@/lib/store';
 import { roomStore, blobToObjectUrl, type Capture, type CaptureSlot } from '@/lib/storage';
 import { detectAcrossImages, DetectError, type Detection } from '@/lib/detection';
 import { CAPTURE_SLOTS } from '@/lib/capture';
-import { Icon } from '@/components/ui/Icon';
+import { Icon, type IconName } from '@/components/ui/Icon';
 import { EditableText, FlowBarLead, IconButton, StepHeader } from '@/components/ui/primitives';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { Select } from '@/components/ui/Select';
@@ -18,14 +18,9 @@ import { isTypingOrDialog } from '@/components/studio/KeyboardShortcuts';
 import { sampleBoxColor } from '@/lib/color-sample';
 import { localDetectorAvailable, detectLocalAcrossImages } from '@/lib/local-detect';
 import {
-  defaultCal,
-  calFromHfov,
-  calibrateFromFloorLine,
-  fitHeightToFloorLine,
+  calForPhoto,
   findFloorLine,
   imageAspect,
-  pickLens,
-  type CameraCal,
   type CameraView,
   calibrateFromPhoto,
 } from '@/lib/photo-geometry';
@@ -160,21 +155,9 @@ function candidateLabel(cand: LabelCandidate): string {
   return cand.name ?? categoryLabel(cand.category);
 }
 
-// Per-photo camera calibration. Deterministic at every step — no model decides a
-// number here, and each rung of the ladder is a measurement or an honest default.
-//
-// The wall-floor line ties focal length, camera height and tilt together in ONE
-// equation, so it can solve for exactly one unknown. Which one depends on what
-// the photo already told us:
-//
-//   · EXIF gave us the lens  → spend the floor line on the CAMERA HEIGHT, which
-//     is otherwise a flat 1.5 m guess and scales every measurement by ±17%.
-//   · no EXIF                → spend it on the FOCAL LENGTH, assuming 1.5 m.
-//     This is the original behaviour, still correct, just no longer the only path.
-//   · neither                → a typical phone lens, and say so.
-//
-// Tilt is never solved for here: one equation cannot yield two unknowns. It comes
-// from the device sensors at capture time or not at all.
+// Per-photo camera calibration: read what each photo can tell, and let
+// `calForPhoto` decide. The ladder itself, and why it is shaped the way it is, lives
+// there, beside the equations it chooses between.
 async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> {
   const map: CalMap = {};
   for (const e of entries) {
@@ -183,42 +166,13 @@ async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> 
     const view: CameraView = {};
     if (pose?.heightM !== undefined) view.height = pose.heightM;
     if (pose?.tiltDeg !== undefined) view.tiltRad = (pose.tiltDeg * Math.PI) / 180;
-
-    const exif = pose?.focal35mm !== undefined ? hfovFromFocal35(pose.focal35mm, aspect) : null;
-    let inferred: number | null = null;
-    const vFloor = await findFloorLine(e.cap.blob);
-
+    const exifHfov = pose?.focal35mm !== undefined ? hfovFromFocal35(pose.focal35mm, aspect) : null;
+    const floorLine = await findFloorLine(e.cap.blob);
     // No EXIF: read the lens out of the photo's own perspective. This is the path
-    // for an upload whose metadata was stripped somewhere upstream — which is most
-    // of them, and includes anything that went through a messaging app. It gives a
-    // TILT as well, the only source of one for a photo that was not taken inside
-    // this app; a measured device tilt still wins, being a direct observation
-    // rather than an inference.
-    if (exif === null) {
-      const vp = await calibrateFromPhoto(e.cap.blob);
-      if (vp) {
-        inferred = vp.hfovDeg;
-        if (view.tiltRad === undefined) view.tiltRad = (vp.tiltDeg * Math.PI) / 180;
-      }
-    }
-
-    // Only EXIF MEASURED the lens. The vanishing points inferred one, from the
-    // premise that the photo is not square-on to its wall — which the capture flow
-    // asks for — so it is as open to doubt as the default.
-    const picked = pickLens(exif, inferred);
-    if (picked !== null) {
-      let cal: CameraCal = { ...calFromHfov(picked.hfov, aspect, view), lens: picked.lens };
-      if (view.height === undefined && vFloor !== null) {
-        cal = fitHeightToFloorLine(vFloor, e.slot, room.footprint, cal) ?? cal;
-      }
-      map[e.slot] = cal;
-      continue;
-    }
-    map[e.slot] =
-      (vFloor !== null ? calibrateFromFloorLine(vFloor, e.slot, room.footprint, aspect, view) : null) ?? {
-        ...defaultCal(aspect),
-        ...view,
-      };
+    // for an upload whose metadata was stripped somewhere upstream, which is most
+    // of them, including anything that went through a messaging app.
+    const vanishing = exifHfov === null ? await calibrateFromPhoto(e.cap.blob) : null;
+    map[e.slot] = calForPhoto({ aspect, view, exifHfov, vanishing, floorLine }, e.slot, room.footprint);
   }
   return map;
 }
@@ -1378,6 +1332,18 @@ function NoticeCard({
   );
 }
 
+/** A line under a row's name saying why the row is as it is. One markup for every
+ *  such line, so two of them under one name cannot drift apart. Wraps rather than
+ *  clips: a sentence holding a piece name is as long as the name makes it. */
+function RowNote({ icon, children }: { icon: IconName; children: ReactNode }) {
+  return (
+    <div className="t-hint" style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 3, lineHeight: 1.45 }}>
+      <Icon name={icon} size={11} style={{ flex: '0 0 auto', marginTop: 2 }} />
+      <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>{children}</span>
+    </div>
+  );
+}
+
 function DetectionRow({
   d,
   confirmed,
@@ -1431,13 +1397,17 @@ function DetectionRow({
   // Only the axes that were actually measured. A ceiling item is measured on width
   // alone, so printing a "×" and a second number there would put a catalogue
   // default on screen in the sentence that says "Measured".
+  // The same for an axis the photo's edge cut off: its size is an estimate, and
+  // `measured` leaves it out rather than print it as a reading.
   const took =
     verdict.status === 'suspect'
-      ? [
-          formatDim(verdict.measured.width, dimUnit),
-          ...(verdict.measured.height === undefined ? [] : [formatDim(verdict.measured.height, dimUnit)]),
-        ].join(' × ')
+      ? [verdict.measured.width, verdict.measured.height]
+          .filter((v): v is number => v !== undefined)
+          .map((v) => formatDim(v, dimUnit))
+          .join(' × ')
       : '';
+  const cut = verdict.cut ?? [];
+  const cutWord = cut.length === 2 ? 'size' : cut[0];
   return (
     // Hover AND focus drive the same highlight, so a keyboard user gets the
     // row↔photo link too. onFocus/onBlur bubble from the child buttons.
@@ -1501,16 +1471,17 @@ function DetectionRow({
             piece that never appears is worse than a duplicate. Wraps rather than
             clips: the sentence is as long as two piece names make it. */}
         {repeatOf && (
-          <div
-            className="t-hint"
-            style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 3, lineHeight: 1.45 }}
-          >
-            <Icon name="copy" size={11} style={{ flex: '0 0 auto', marginTop: 2 }} />
-            <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
-              Probably the {inSentence(cleanLabelOf(repeatOf))} from {slotLabel(repeatOf.slot)} again
-            </span>
-          </div>
+          <RowNote icon="copy">
+            Probably the {inSentence(cleanLabelOf(repeatOf))} from {slotLabel(repeatOf.slot)} again
+          </RowNote>
         )}
+        {/* The part of the size the camera did not measure. A piece running out of
+            the picture is grown on that side from the edge the photo did see — to a
+            typical size, or to the wall's end, or not at all when what it saw was
+            already bigger. "An estimate" is true of all three; "typical" was true of
+            one. Said here because "Measured" should not cover a number the photo did
+            not give. */}
+        {cutWord && <RowNote icon="ruler">Runs past the edge of the photo, so its {cutWord} is an estimate</RowNote>}
         {/* The measurement disagreeing with the word. Said out loud rather than
             acted on: a silent re-label is the same mistake as a silent resize.
             Wraps rather than clips — the sentence is as long as the unit setting
