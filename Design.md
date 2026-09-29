@@ -546,12 +546,14 @@ decision it makes.
    wall it runs past, and a bound stops every piece that runs past it on the same line:
    two chairs one behind the other, read on a lens assumed narrower than it was, came
    out on one spot, and the merge deleted one. So each measured row carries its
-   `distanceDoubt` — how far its bounds moved it, and no limit for a piece the frame cut
-   at its foot, whose near face was never in the picture — and two rows are one piece
-   by place only when their distance plus both doubts is inside the tier. What the hard
-   merge no longer takes goes to the soft pass below, which starts it unticked with a
-   reason: a duplicate the user unticks in one tap beats a real piece that never
-   appears.
+   `distanceDoubt` — how far, on the floor, its bounds moved it from where the same
+   reading lands with no wall in reach, and no limit for a piece the frame cut at its
+   foot, whose near face was never in the picture — and two rows are one piece by place
+   only when their distance plus both doubts is inside the tier. What the hard merge no
+   longer takes across photos goes to the soft pass below, which starts it unticked with
+   a reason: a duplicate the user unticks in one tap beats a real piece that never
+   appears. Two rows of one photo it keeps apart stay two ticked rows, since that pass
+   never compares them.
 4. **Build** — `buildSceneFromRoom` clamps, snaps and settles. It reads only the two
    axes a photograph can locate: `groundY` owns Y outright, and the placement gate
    used to test Y as well, so a fan the model put 3.2 m up in a 2.8 m room lost its

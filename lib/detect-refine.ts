@@ -375,11 +375,18 @@ export function sameThingKey(label: string): string {
  *  chair across the table; and so was a single bed seen from its side, held half its
  *  catalogue LENGTH off the wall and so half a metre toward its twin (§ 46.3, § 46.1). A
  *  row the frame cut at its foot has no reading to be sure of, so it never merges by
- *  place. What rule 2 no longer takes it leaves to `lib/repeat-sightings.ts`, which
- *  starts the repeat unticked and says why — the rule this file argues throughout, applied
- *  to the case that broke it. A doubt of a few centimetres, a shallow sofa's centre held
- *  on its wall, costs a merge those few centimetres and no more. Without the map every
- *  distance counts as read, which is the rule as it was.
+ *  place. What rule 2 no longer takes ACROSS photos it leaves to `lib/repeat-sightings.ts`,
+ *  which starts the repeat unticked and says why — the rule this file argues throughout,
+ *  applied to the case that broke it. Within one photo there is no such hand-off: that
+ *  pass never compares two rows of the same photo, since two boxes rule 1 did not merge
+ *  are two things there, so a same-photo pair the doubt keeps apart stays two ticked rows.
+ *  That is the chairs one behind the other, and right; how often it is one piece boxed
+ *  twice is not measured. A refusal can also make a row found a group of its own that a
+ *  later sighting then joins, where before it would have stood alone; the population test
+ *  in `tests/repeat-sightings.test.ts` bounds that, since every such join it made wrongly
+ *  would be a piece with no row, and it counts those. A doubt of a few centimetres, a
+ *  shallow sofa's centre held on its wall, costs a merge those few centimetres and no
+ *  more. Without the map every distance counts as read, which is the rule as it was.
  *
  *  Exported for tests: this is pure logic that decides what the user gets from the
  *  one call that spends their quota. */

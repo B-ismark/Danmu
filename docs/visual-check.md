@@ -1787,7 +1787,9 @@ of the same kind starts unticked and names the row it repeats — nothing is del
 Probed by seeding the review list directly (a real scan cannot be driven headless): the
 caption wraps under the name at 360, the header reads *3 of 4 pieces kept*, no overflow
 at seven widths. Twin beds in a corner, where the hard merge used to delete one before this
-ran, now reach it: the first bed starts unticked as the second bed again (`docs/what-is-still-open.md` § 46.1).
+ran, now reach it, and it gets them wrong: the first bed starts unticked as the second bed
+again. That is a known fault, the rest of `docs/what-is-still-open.md` § 46.1, and not what
+right looks like, so seeing it is no reason to delete this item.
 
 **What wrong looks like.**
 - Two ticked beds where the room has one, or a real second chair starting unticked.
