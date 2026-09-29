@@ -123,8 +123,9 @@ export const GUIDE_OVERHANG_M = 0.15;
 /**
  * The two world (x, z) ends of the line to draw for a snap.
  *
- * Here rather than in either renderer because BOTH draw it — `MeasureGuides.tsx`
- * in 3D and `PlanView.tsx` in the plan — and the mapping is easy to get wrong in
+ * Here rather than in the renderer, beside the code that decided the snap. Both
+ * tabs drew it once; the 3D view stopped (its drag reads as the translucent base
+ * under the piece, not as lines — see `DragTag`) and the plan kept it. The mapping is easy to get wrong in
  * a way that looks plausible: for an `x`-axis line the constant is x and the span
  * runs along z, and reading it the other way round produces a guide at right
  * angles to the edge it is claiming to align, which is only obviously wrong if

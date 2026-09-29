@@ -45,9 +45,8 @@
 
   /* Alignment guides while a piece is being dragged: "this edge is level with
      that one". Neither selection (clay) nor hover (sage) nor invalid (red), so a
-     green that is none of them. Both studio tabs draw the same guide — the plan
-     reads these tokens, the 3D scene reads SCENE.snapEdge / .snapCenter, and
-     tests/color-tokens.test.ts holds the two to each other. Guides, never type:
+     green that is none of them. The 2D plan draws them; the 3D view does not —
+     a carried piece there shows its translucent base instead. Guides, never type:
      they are 1.6px lines on a drawing, so no contrast ratio is claimed here. */
   --snap-edge: #1E9E54;
   --snap-center: #27A06A;
@@ -1522,11 +1521,18 @@ textarea.field { border-radius: var(--r-2); }
    The toolbar is a grid ROW rather than `position: fixed` — bars in flow are what
    iOS Safari's collapsing toolbar leaves alone — and it clears the home indicator
    with the safe-area inset (`viewport-fit=cover`, app/layout.tsx). */
+/* `clip`, not `hidden`: a `hidden` box is still a scroll container, and the closed
+   sheet waits just below the stage's bottom edge. Selecting a piece in the room
+   scrolls its row in the Room list into view, `scrollIntoView` scrolls every
+   ancestor that can scroll, and so the stage slid up by the sheet's height — the
+   room and its chrome pushed off the top, a blank band of hidden sheet over the
+   toolbar. `clip` cuts the same edge and cannot be scrolled at all. `hidden` stays
+   first as the fallback for an engine without `clip`. */
 .sheet-shell {
-  position: relative; height: 100%; min-height: 0; overflow: hidden;
+  position: relative; height: 100%; min-height: 0; overflow: hidden; overflow: clip;
   display: grid; grid-template-rows: minmax(0, 1fr) auto;
 }
-.sheet-shell__stage { grid-row: 1; position: relative; min-height: 0; display: grid; overflow: hidden; }
+.sheet-shell__stage { grid-row: 1; position: relative; min-height: 0; display: grid; overflow: hidden; overflow: clip; }
 .phone-toolbar {
   display: flex; justify-content: center; gap: 4px;
   padding: 6px 12px max(6px, env(safe-area-inset-bottom));
@@ -1796,20 +1802,57 @@ textarea.field { border-radius: var(--r-2); }
     danmu-vignette-reupholster 7s ease-in-out infinite;
 }
 
-/* ── The sun on its arc (components/three/SunArc.tsx) ─────────────────────────
-   A drei `Html` overlay pinned to where the key light comes from: the body glyph
-   in a glowing disc, the clock in a pill beside it. Sits on the room, so it wears
-   the floating-chrome rim; the glow is the one thing here that says "grab me". */
-.sun-arc {
-  display: inline-flex; align-items: center; gap: 6px;
+/* ── The day over the canvas (components/studio/SunArc.tsx) ──────────────────
+   A rainbow of dashes under the tool row with the sun riding it, or on a narrow
+   canvas the same track lying flat as a slider. Screen-space, so it holds still
+   while the camera moves. Only the disc and the arc's stroke take the pointer —
+   the sky inside the rainbow is still the room's to orbit. */
+.sun-day {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; justify-content: center;
+  pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-out);
+  --sun-line: var(--ink);
+  --sun-lit: var(--accent);
+}
+/* Itself transparent to the pointer, like the slot round it — spelled against
+   `.canvas-chrome > *`, which hands events back to every direct child. */
+.canvas-chrome > .sun-day { pointer-events: none; }
+.sun-day--on-dark { --sun-line: var(--paper); --sun-lit: var(--paper); }
+.sun-day__box { position: relative; flex: none; }
+.sun-day__svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.sun-day__path {
+  fill: none; stroke: var(--sun-line); stroke-width: 1.5;
+  stroke-dasharray: 5 6; stroke-linecap: round;
+  opacity: 0.35;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.sun-day__travelled {
+  fill: none; stroke: var(--sun-lit); stroke-width: 2.5; stroke-linecap: round;
+  opacity: 0.55;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.sun-day--night .sun-day__travelled { opacity: 0.35; }
+.sun-day--muted .sun-day__travelled { opacity: 0; }
+.sun-day--engaged .sun-day__path { opacity: 0.6; }
+.sun-day--engaged .sun-day__travelled { opacity: 0.85; }
+.sun-day__hit {
+  fill: none; stroke: transparent; stroke-width: 28;
+  pointer-events: stroke; cursor: pointer; touch-action: none;
+}
+.sun-day__handle {
+  position: absolute; left: 0; top: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 34px;
   cursor: grab; touch-action: none; user-select: none;
+  pointer-events: auto;
   border-radius: var(--r-full);
   outline-offset: 3px;
 }
-.sun-arc:active { cursor: grabbing; }
-.sun-arc__body {
+.sun-day__handle:active { cursor: grabbing; }
+.sun-day__body {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px;
+  width: 34px; height: 34px; flex: none;
   border-radius: var(--r-full);
   color: var(--accent-text);
   background: var(--paper);
@@ -1817,34 +1860,35 @@ textarea.field { border-radius: var(--r-2); }
   box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent), var(--shadow-float);
   transition: transform var(--dur-quick) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
-.sun-arc:hover .sun-arc__body,
-.sun-arc:focus-visible .sun-arc__body { transform: scale(1.08); }
-.sun-arc:active .sun-arc__body { transform: scale(0.96); }
-.sun-arc__time {
-  padding: 3px 9px;
+.sun-day__handle:hover .sun-day__body,
+.sun-day__handle:focus-visible .sun-day__body { transform: scale(1.08); }
+.sun-day__handle:active .sun-day__body { transform: scale(0.96); }
+/* Under the disc, not beside it: beside, it ran off the canvas at sunset. And a
+   label, not a handle — a word-sized patch of wall nobody can click through. */
+.sun-day__time {
+  padding: 2px 8px;
   font-size: var(--fs-caption); font-weight: 700;
   color: var(--on-ink);
   background: var(--ink);
   border-radius: var(--r-full);
   box-shadow: var(--shadow-float);
   white-space: nowrap;
+  pointer-events: none;
 }
-.sun-arc--night .sun-arc__body {
+.sun-day--night .sun-day__body {
   color: var(--ink-2);
   box-shadow: 0 0 0 6px color-mix(in srgb, var(--paper) 18%, transparent), var(--shadow-float);
 }
-.sun-arc--muted .sun-arc__body { color: var(--ink-3); box-shadow: var(--shadow-float); }
-/* Giving way to the furniture (see the contract in SunArc.tsx). Quiet while a
-   piece is selected — still there, still grabbable, not competing with it — and
-   away while anything else is carried, where it must not catch the pointer. */
-.sun-arc { transition: opacity var(--dur-base) var(--ease-out); }
-.sun-arc--quiet { opacity: 0.5; }
-.sun-arc--away { opacity: 0; pointer-events: none; }
-/* Only the disc is the handle. The time beside it is a label, and a label the
-   size of a word should not be a patch of wall or TV nobody can click through. */
-.sun-arc__time { pointer-events: none; }
+.sun-day--muted .sun-day__body { color: var(--ink-3); box-shadow: var(--shadow-float); }
+/* Giving way to the furniture (the contract in SunArc.tsx). Quiet while a piece is
+   selected — still there, still grabbable, not competing with it — and away while
+   anything else is carried, where it must not catch the pointer. */
+.sun-day--quiet { opacity: 0.5; }
+.sun-day--away { opacity: 0; }
+.sun-day--away .sun-day__handle,
+.sun-day--away .sun-day__hit { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
-  .sun-arc, .sun-arc__body { transition: none; }
+  .sun-day, .sun-day__body, .sun-day__path, .sun-day__travelled { transition: none; }
 }
 
 /* ── The day as a track (components/studio/LightingPicker.tsx) ────────────────

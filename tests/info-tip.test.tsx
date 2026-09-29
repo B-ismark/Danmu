@@ -133,10 +133,10 @@ describe('InfoTip', () => {
 
 describe('the sun dial is gone, and its two jobs have new homes', () => {
   // The dial did two things: it SHOWED where the light came from and it SET which
-  // way the room faces. The arc over the room shows it now (components/three/
+  // way the room faces. The arc over the canvas shows it now (components/studio/
   // SunArc.tsx), and the rail's daylight control sets the bearing. Both have to be
   // reachable without a pointer, or deleting the dial deleted a control.
-  const ARC = readFileSync('components/three/SunArc.tsx', 'utf8');
+  const ARC = readFileSync('components/studio/SunArc.tsx', 'utf8');
   const PICKER = readFileSync('components/studio/LightingPicker.tsx', 'utf8');
   it('leaves no dial behind', () => {
     expect(existsSync('components/studio/NorthDial.tsx')).toBe(false);

@@ -1491,7 +1491,7 @@ there, still following the hand. Nothing goes red; nothing is announced.
 
 **Wrong.** The piece under the hand runs ahead of its company. Or the size tag and the
 wall-gap labels sit somewhere the piece is not — 3D drew the mesh at the limited position
-while publishing the live channel from the pointer's, so `MeasureGuides` built the OBB at
+while publishing the live channel from the pointer's, so `MeasureGuides` (now `DragTag`) built the OBB at
 a place the piece was not; that is fixed, and this is where it would show.
 
 **Unverified and named as such:** four mutants survive in that change — both `Draggable`
@@ -1974,7 +1974,33 @@ real phone, with a real scan, is the unlooked-at half.
 ---
 ## Look and light
 
-### A day/night clock with a sun arc over the room, pieces that sway when carried, and sounds — branch `claude/affectionate-ritchie-ilawx1` ([PR #176](https://github.com/B-ismark/Danmu/pull/176)), SEEN HEADLESS ONLY, needs real ears and a real trackpad
+### The day track as a slider over the canvas, a frosted base under the selection, no streaks while carrying — branch `claude/affectionate-ritchie-ilawx1`, SEEN HEADLESS ONLY
+
+**Where to click.** Open any room in **3D Model** on a wide window, then on a phone. Under the
+Move / Scale / Rotate row there is a dashed track with the sun and a clock pill: a shallow
+rainbow on the wide window, a flat slider on the phone. Orbit and zoom the camera — the track
+must not move. Drag the sun; press further along the track and it should jump there. Open the
+Library and look again. Select the sofa, carry it across the floor slowly and quickly, then
+carry it into the coffee table.
+
+**What wrong looks like.**
+- The track moving with the camera, sitting under the tools row or the Library, or reading as
+  a curve on a phone. Measured headless: at 390 × 844 the track was flat, 366 px wide, directly
+  under the tools row; a 150 px scrub left from 12:48 landed at 06:30 at the left end.
+- **Grey footprints along a carried piece's path.** That was the soft floor shadow keeping every
+  frame it had ever drawn (the effects pass switches the renderer's auto-clear off). Headless, a
+  sofa carried 14 steps left none, on High; look on **Fast** too, which inherited the fault.
+- The base under a selected piece reading as terracotta rather than frosted, or the refused
+  state reading as a slightly darker selection rather than light red with *blocked* in the tag.
+- A base floating above the floor, showing through a wall, or catching a press meant for the
+  piece beside it.
+- **On a phone, a blank band over the toolbar after tapping a piece**, with the Move / Scale /
+  Rotate row gone off the top. That was the Room list scrolling the tapped piece's row into view
+  inside the closed sheet, which slid the whole room up by the sheet's height (384 px at
+  390 × 844, measured headless). The stage now cannot scroll; tap three pieces in a row and the
+  room should not move.
+
+### A day/night clock with a sun arc over the room, pieces that sway when carried, and sounds — merged to `main` in `4ccbdc1` ([PR #176](https://github.com/B-ismark/Danmu/pull/176)), SEEN HEADLESS ONLY, needs real ears and a real trackpad
 
 **Where to click.** Open any room in **3D Model**. A dashed path circles over the room with the
 sun and a clock pill on it; drag the sun along it from morning to evening, then press **Night**
@@ -1984,6 +2010,8 @@ the coffee table. In **2D Plan**, drag a piece and drag a wall. Add a piece from
 delete it, recolour one, turn one with R, press Undo and Redo. **View → Sounds** switches it off.
 
 **What wrong looks like.**
+- *The arc bullets below describe the ring over the room this branch replaced with the track
+  above; they stand for the history, and the sway and sound bullets still apply.*
 - The arc or the pill leaving the canvas, sitting under the floating toolbar, or reading as a
   construction line scored across the walls. Measured headless at 1440 × 900 on a 5 × 4 m room:
   noon pill at y 235, 18:30 at y 387, the moon at 22:12 on its own path, and 06:40 pinned to the

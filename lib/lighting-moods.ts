@@ -3,7 +3,7 @@ import { daylightKelvin, sunDirection } from './solar';
 import { hexFromKelvin } from './light-units';
 
 // What the room's light looks like at a given moment. Read by the 3D scene
-// (`Room`), by the sun arc drawn over it (`SunArc`), by the rail's daylight
+// (`Room`), by the sun arc over the canvas (`SunArc`), by the rail's daylight
 // control (`LightingPicker`), and by `tests/lighting-moods.test.ts`.
 //
 // ── A clock, not a set of moods ──────────────────────────────────────────────
@@ -384,7 +384,7 @@ export const KEY_DIR: [number, number, number] = [
 
 /** Everything the scene needs to light the room, for one light kind, hour and
  *  bearing. The single derivation `Room` and `SunArc` both read, so the light and
- *  the marker drawn for it cannot disagree about where it is. */
+ *  the control over it cannot disagree about the sky. */
 export function lightingAt(lighting: Lighting, hour: number, northBearingDeg: number): LightState {
   if (lighting === 'overcast') {
     const { key, ...sky } = OVERCAST;

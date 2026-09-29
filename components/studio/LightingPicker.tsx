@@ -4,8 +4,8 @@
 // Overcast as one row of glyphs, a 24-hour track under them, and which way the
 // room faces.
 //
-// The BIG control for the day is the sun on its arc over the room
-// (`components/three/SunArc.tsx`) — that is where you drag the day through. This
+// The BIG control for the day is the sun on its arc over the canvas
+// (`components/studio/SunArc.tsx`) — that is where you drag the day through. This
 // is its companion for the moments you want by name, for keyboard and
 // screen-reader use through native controls, and for the one fact the arc cannot
 // set, the room's bearing.

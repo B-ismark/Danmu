@@ -1,92 +1,117 @@
 'use client';
 
-// Visual feedback for pointer interaction with a part. The studio store already
-// tracks hoveredPartId / selectedPartId (see lib/store.ts) and Pickable writes
-// to them, but nothing was drawn on the mesh — so a user could not SEE what they
-// were touching or what was selected (only the cursor changed + the gizmo
-// appeared). This renders, inside the part's group (so it inherits the live
-// position / rotation / scale), three cues:
+// What a piece looks like while it is under the pointer, selected, carried, or
+// refused: a translucent base under it, the size of its footprint and a little
+// more (see `lib/selection-base.ts` for the why and the measurements).
 //
-//   • hovered  → a soft outlined bounding box (subtle, depth-tested)
-//   • selected → a bright accent bounding box that shows THROUGH occluders
-//                (depthTest off) so the selection is never lost behind a wall,
-//                plus a footprint outline on the resting surface for placement.
+//   • hovered  → a faint frosted base, sage rim
+//   • selected → a clearer frosted base, terracotta rim — the same while carried
+//   • invalid  → light red: the spot it is being carried to will not take it
 //
-// Box dims come from the part's BASE dimMM. The group's runtime scale (set in
-// Draggable from the gizmo) multiplies these the same way it scales the
-// geometry, so the highlight always tracks the real size.
+// Depth-tested, unlike the outlined box it replaced, which drew through walls so a
+// selection was never lost behind one. From the default dollhouse view the near
+// walls are cut away, and the Inspector says what is selected wherever it is; a
+// frame drawn through the plaster read as a construction line over the room.
+//
+// Drawn inside the part's outer group, so it follows the live position and
+// rotation, and outside the `Wobble` group, so it stays put while the piece leans.
+// The outer group wears a resize as a SCALE for most pieces; the base is authored
+// at the real size and undoes that scale, or a piece stretched to twice its height
+// would stand on a slab twice as thick.
 
-import { useMemo } from 'react';
-import { Edges, Line } from '@react-three/drei';
+import { useEffect, useMemo } from 'react';
+import { Edges } from '@react-three/drei';
+import { ExtrudeGeometry, Shape } from 'three';
 import { SCENE } from '@/lib/scene-palette';
+import { selectionBase } from '@/lib/selection-base';
+import type { Anchor } from '@/lib/physics';
+
+function roundedRect(w: number, l: number, r: number): Shape {
+  const s = new Shape();
+  const x = -w / 2;
+  const y = -l / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + l - r);
+  s.quadraticCurveTo(x + w, y + l, x + w - r, y + l);
+  s.lineTo(x + r, y + l);
+  s.quadraticCurveTo(x, y + l, x, y + l - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+
+const noRaycast = () => null;
 
 export function Highlight({
   dimMM,
-  floorStanding,
+  sizeMM,
+  anchor,
   state,
 }: {
+  /** What the piece's group draws at scale 1. */
   dimMM: [number, number, number];
-  floorStanding: boolean;
+  /** Its real size — the resize included. */
+  sizeMM: [number, number, number];
+  anchor: Anchor;
   /** 'invalid' wins over 'selected' wins over 'hovered' — caller decides. */
   state: 'selected' | 'hovered' | 'invalid';
 }) {
-  const w = dimMM[0] / 1000;
-  const d = dimMM[1] / 1000;
-  const h = dimMM[2] / 1000;
+  const base = selectionBase(anchor, sizeMM);
+  const [a, b] = base.size;
 
-  // Floor-standing geometry is anchored base-at-0, so its centre is h/2.
-  // Wall / ceiling-mounted geometry is drawn around the group origin (centre 0).
-  const centerY = floorStanding ? h / 2 : 0;
-  const selected = state !== 'hovered';
-  // All three from lib/scene-palette — the same terracotta / sage / danger the
-  // panels use, so a selection reads identically in the 3D view, the plan and
-  // the inspector.
-  const color = state === 'invalid' ? SCENE.invalid : selected ? SCENE.accent : SCENE.accentHover;
+  const geometry = useMemo(
+    () =>
+      new ExtrudeGeometry(roundedRect(a, b, base.radius), {
+        depth: base.thickness,
+        bevelEnabled: false,
+        curveSegments: 6,
+      }),
+    [a, b, base.radius, base.thickness],
+  );
+  useEffect(() => () => geometry.dispose(), [geometry]);
 
-  // Footprint loop on the resting surface (local y ≈ 0). Only meaningful for
-  // floor / surface-resting parts — wall-mounted items have no footprint.
-  const footprint = useMemo<[number, number, number][]>(() => {
-    const hw = w / 2;
-    const hd = d / 2;
-    const y = 0.004;
-    return [
-      [-hw, y, -hd],
-      [hw, y, -hd],
-      [hw, y, hd],
-      [-hw, y, hd],
-      [-hw, y, -hd],
-    ];
-  }, [w, d]);
+  // From lib/scene-palette. The slab itself is frosted paper, and only its rim
+  // carries the brand hue — sage for a hover, terracotta for a selection, the same
+  // as the plan and the inspector. A refusal is the one state that tints the
+  // slab, because --danger sits a step from --accent on the wheel: a terracotta
+  // slab turning red would be a change of shade nobody reads as "no". Frosted to
+  // red is. Light, not solid: it is a tint on the floor, not a stop sign.
+  const fillColor = state === 'invalid' ? SCENE.invalid : SCENE.glass;
+  const rimColor = state === 'invalid' ? SCENE.invalid : state === 'selected' ? SCENE.accent : SCENE.accentHover;
+  const fill = state === 'invalid' ? 0.3 : state === 'selected' ? 0.55 : 0.3;
+  const rim = state === 'invalid' ? 0.85 : state === 'selected' ? 0.7 : 0.45;
+
+  // Extruded along +Z from the shape's XY plane. A floor or ceiling base is laid
+  // flat (thickness up +Y); a wall base stands as it is, off the plaster toward +Z.
+  const flat = base.plane !== 'wall';
+  const position: [number, number, number] =
+    base.plane === 'floor' ? [0, base.at, 0] : base.plane === 'ceiling' ? [0, base.at - base.thickness, 0] : [0, 0, base.at];
+  const unscale: [number, number, number] = [
+    dimMM[0] / sizeMM[0] || 1,
+    dimMM[2] / sizeMM[2] || 1,
+    dimMM[1] / sizeMM[1] || 1,
+  ];
 
   return (
     // userData.helper lets SceneCapture hide this while it grabs the PNG, so an
     // editor-only cue never bakes into the exported image.
-    <group userData={{ helper: true }}>
-      {/* Bounding box — slightly inflated so its edges sit just outside the mesh. */}
-      <mesh position={[0, centerY, 0]} renderOrder={998}>
-        <boxGeometry args={[w * 1.03, h * 1.03, d * 1.03]} />
-        <meshBasicMaterial
-          transparent
-          opacity={selected ? 0.05 : 0.03}
-          color={color}
-          depthWrite={false}
-          depthTest={!selected}
-        />
-        <Edges threshold={15} renderOrder={999}>
-          <lineBasicMaterial
-            color={color}
-            transparent
-            opacity={selected ? 1 : 0.55}
-            // Selection shows through occluders; hover respects depth so it
-            // does not bleed through other furniture while scrubbing the scene.
-            depthTest={!selected}
-          />
+    <group userData={{ helper: true }} scale={unscale}>
+      <mesh
+        geometry={geometry}
+        position={position}
+        rotation={flat ? [-Math.PI / 2, 0, 0] : [0, 0, 0]}
+        // Not a press target: a margin round a piece must not catch a press meant
+        // for the one beside it, or start a drag of this one from empty floor.
+        raycast={noRaycast}
+        renderOrder={2}
+      >
+        <meshBasicMaterial transparent opacity={fill} color={fillColor} depthWrite={false} />
+        <Edges threshold={20} raycast={noRaycast}>
+          <lineBasicMaterial color={rimColor} transparent opacity={rim} depthWrite={false} />
         </Edges>
       </mesh>
-
-      {selected && floorStanding && (
-        <Line points={footprint} color={color} lineWidth={state === 'invalid' ? 2.5 : 1.5} transparent opacity={state === 'invalid' ? 0.95 : 0.7} />
-      )}
     </group>
   );
 }

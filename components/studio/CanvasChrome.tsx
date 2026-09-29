@@ -11,7 +11,9 @@
 //
 // So there are now three slots and no others:
 //
-//   TOOLS  top-centre  — what you do TO the room. Per tab.
+//   TOOLS  top-centre  — what you do TO the room. Per tab. On the 3D tab it has a
+//                        second row, `CanvasDay`: the sun on its arc, the one
+//                        setting you scrub rather than press.
 //   VIEW   top-right   — how you look at it, plus undo/redo. Per tab.
 //   AIDE   bottom-right— at most ONE thing: an orientation gizmo, or a legend
 //                        that only exists while the shading it explains is on.
@@ -102,7 +104,7 @@ const MIN_TOOLS = 240;
  *  begin below it — `CatalogPanel`, which docks against this same edge — cannot ask
  *  the width about that, and a hand-picked constant would be the "displayed
  *  measurement that is not derived" this repo keeps finding. */
-function usePublishedBox(widthProp: string, heightProp: string) {
+export function usePublishedBox(widthProp: string | null, heightProp: string | null) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -114,8 +116,8 @@ function usePublishedBox(widthProp: string, heightProp: string) {
       // `Math.ceil`, because a fractional reserve can leave a sub-pixel of the
       // two clusters touching — which is exactly the state this exists to end.
       const box = el.getBoundingClientRect();
-      parent.style.setProperty(widthProp, `${Math.ceil(box.width)}px`);
-      parent.style.setProperty(heightProp, `${Math.ceil(box.height)}px`);
+      if (widthProp) parent.style.setProperty(widthProp, `${Math.ceil(box.width)}px`);
+      if (heightProp) parent.style.setProperty(heightProp, `${Math.ceil(box.height)}px`);
     };
     publish();
 
@@ -126,8 +128,8 @@ function usePublishedBox(widthProp: string, heightProp: string) {
       ro.disconnect();
       // Removed rather than zeroed: a stale reserve would keep a gutter open for a
       // cluster that is no longer on the page (the tabs render different ones).
-      parent.style.removeProperty(widthProp);
-      parent.style.removeProperty(heightProp);
+      if (widthProp) parent.style.removeProperty(widthProp);
+      if (heightProp) parent.style.removeProperty(heightProp);
     };
   }, [widthProp, heightProp]);
 
@@ -136,8 +138,11 @@ function usePublishedBox(widthProp: string, heightProp: string) {
 
 /** Top-centre: what you do to the room. */
 export function CanvasTools({ children }: { children: ReactNode }) {
+  // Its height, for the day row under it: the row WRAPS, so it is not one height.
+  const ref = usePublishedBox(null, '--canvas-tools-height');
   return (
     <div
+      ref={ref}
       className="canvas-chrome"
       style={{
         ...BASE,
@@ -172,6 +177,38 @@ export function CanvasTools({ children }: { children: ReactNode }) {
         // gutter, which is not worth a second variable.
         paddingRight: `max(0px, min(${RESERVE}, calc(100% - ${MIN_TOOLS}px)))`,
         flexWrap: 'wrap',
+        justifyContent: 'center',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** How much of the right edge the Library card covers while it is open: its
+ *  published width plus its own edge gap and one more between it and the day. The
+ *  fallback cancels the two gaps, so with nothing docked this is exactly 0. */
+const PANEL_R = `calc(var(--canvas-panel-width, ${-EDGE * 2}px) + ${EDGE * 2}px)`;
+
+/**
+ * Top-centre, second row: the day. Not a fourth slot — it is the TOOLS slot's
+ * lower line, centred on the same span, and the only thing on it is the sun.
+ *
+ * It begins below BOTH top clusters, whichever reaches further down, since the
+ * view cluster wraps too; and its right edge keeps clear of whatever is docked
+ * there (the Library card publishes its width for exactly this). With the Library
+ * open on a mid-sized canvas that leaves too little for an arc, and the sun lies
+ * flat into a plain slider rather than running under the card — see `trackFor`.
+ */
+export function CanvasDay({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="canvas-chrome"
+      style={{
+        ...BASE,
+        top: `calc(${EDGE}px + max(var(--canvas-tools-height, 36px), var(--canvas-view-height, 0px)) + 4px)`,
+        left: `calc(${EDGE}px + ${INSET_L})`,
+        right: `calc(${EDGE}px + ${INSET_R} + ${PANEL_R})`,
         justifyContent: 'center',
       }}
     >

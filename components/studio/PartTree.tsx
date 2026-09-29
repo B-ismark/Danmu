@@ -768,6 +768,10 @@ function PartRow({
   // Scroll into view when selection happens elsewhere (3D click, arrow keys).
   useEffect(() => {
     if (!selected || !ref.current) return;
+    // Not while the list is put away — a phone's closed sheet is inert and off the
+    // bottom edge, and scrolling a row there into view scrolls whatever holds the
+    // sheet instead (see `.sheet-shell__stage` in globals.css).
+    if (ref.current.closest('[inert]')) return;
     // The CSS reduced-motion block can't reach a JS-requested smooth scroll.
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     ref.current.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
