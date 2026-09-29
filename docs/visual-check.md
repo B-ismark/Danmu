@@ -2061,16 +2061,19 @@ Compare where it stands with the photo: how far out from its wall, and where alo
   and the side that was in view stays put.
 - A round piece whose base is ALSO below the photo moving at all. Those stay on the old
   reading on purpose (§ 49.9 in `docs/what-is-still-open.md`).
+- A piece in a corner poking through the side wall, in the plan most plainly. It grows to a
+  typical size toward the cut side and must stop at the wall; the first version of this branch
+  did not, and a small plant by the wall came out 400 mm wide and 297 mm into the next room.
 - **The part only a real room answers:** a plant much smaller or larger than a typical one, shot
-  level, now stands up to a hand's width off along the wall (on the fixture, 49 → 87 mm on
+  level, now stands up to a hand's width off along the wall (on the fixture, 49 → 80 mm on
   pieces off typical), because it is placed by the typical size it is drawn at. Before, it
   stood where a narrower piece would and was drawn wider there. Which reads better in a real
   room is a person's call.
 
 **What was measured, and on what.** `tests/round-side-cut.test.ts`, 389 rows cut at the side
-only, in two rooms at three tilts: along the wall 178 → 107 mm on average, exact at a level
-lens and a typical size, and the 568 rows cut at the foot as well unchanged. No browser run,
-and no test renders the room.
+only, in two rooms at three tilts: along the wall 178 → 103 mm on average, exact at a level
+lens and a typical size, none past the side wall, and the 568 rows cut at the foot as well
+unchanged. No browser run, and no test renders the room.
 
 ---
 
