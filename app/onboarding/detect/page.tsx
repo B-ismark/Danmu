@@ -1402,9 +1402,10 @@ function DetectionRow({
   // And an axis read at a distance the photo did not show says "about"
   // (`measuredPhrase`): it was judged at that reading, and it is an estimate.
   const took = verdict.status === 'suspect' ? measuredPhrase(verdict, dimUnit) : '';
-  // The note covers both: a size the photo's edge cut off and a limit read from a
-  // piece whose foot it cut. To the person they are one fact — this number is not the
-  // camera's measurement of the piece — and it is said the same way.
+  // The note covers both: a size the photo's edge cut off and a size read at the
+  // distance the placer assumed for a piece whose foot it cut. To the person they are
+  // one fact — this number is not the camera's measurement of the piece — and it is
+  // said the same way.
   const unsure = [...(verdict.status === 'unmeasured' ? [] : (verdict.bounded ?? [])), ...(verdict.cut ?? [])];
   const cutWord = unsure.length === 2 ? 'size' : unsure[0];
   return (
@@ -1480,7 +1481,7 @@ function DetectionRow({
             it saw was already bigger. A ceiling piece is not grown at all: its width
             is read on a row the edge moved, long or short. And a floor piece whose FOOT
             the edge cut was seen whole but read from the far end of where it could
-            stand, so its width and height are limits (`bounded`). "An estimate" is true
+            stand, so its width and height are estimates (`bounded`). "An estimate" is true
             of all five; "typical" was true of one. Said here because "Measured" should
             not cover a number the photo did not give. */}
         {cutWord && <RowNote icon="ruler">Runs past the edge of the photo, so its {cutWord} is an estimate</RowNote>}
