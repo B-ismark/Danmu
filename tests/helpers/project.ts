@@ -320,6 +320,22 @@ export function bboxOfFloorBox(
   return extent(floorBoxCorners(slot, x, z, wM, hM, depthM).map((p) => project(slot, ...p, cal)));
 }
 
+/** …and as the photo draws it: the outline inside the frame (`framedExtent`, § 49.16).
+ *  Clipping the whole box to the frame keeps the column of a corner the frame hid, which
+ *  for a piece cut at its foot is a side further out than any the photo shows (§ 49.20).
+ *  Null when none of it is in the picture. */
+export function bboxOfFloorBoxInFrame(
+  slot: CaptureSlot,
+  x: number,
+  z: number,
+  wM: number,
+  hM: number,
+  depthM: number,
+  cal: CameraCal,
+): Box | null {
+  return framedExtent(floorBoxCorners(slot, x, z, wM, hM, depthM).map((p) => project(slot, ...p, cal)));
+}
+
 /** Rim samples of a vertical CYLINDER of diameter `diaM` and height `hM` standing
  *  on the floor, centred in plan on (x, z).
  *

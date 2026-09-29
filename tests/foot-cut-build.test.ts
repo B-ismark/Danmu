@@ -13,13 +13,13 @@
 // `--disableConsoleIntercept` in CLAUDE.md), and the counts are pinned as literals, so
 // a change to the placer that moves them has to say so here.
 import { describe, expect, it } from 'vitest';
-import { clipToFrame, cutAxes, frameCuts, wallFrame, type CameraCal, type ReadBound } from '@/lib/photo-geometry';
+import { cutAxes, frameCuts, wallFrame, type CameraCal, type ReadBound } from '@/lib/photo-geometry';
 import { defaultAxisFor, defaultDepthFor, type Category, type Shape } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import { geoMeasure, type RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
 import { footprintForLayout } from '@/lib/footprint';
-import { bboxOfFloorBox } from './helpers/project';
+import { bboxOfFloorBoxInFrame } from './helpers/project';
 
 const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
 const WIDE: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
@@ -65,8 +65,7 @@ function measure() {
             ] as const;
             if (wd - gap - depth <= 0) continue;
             const cal = { ...WIDE, tiltRad: (tilt * Math.PI) / 180 };
-            const raw = bboxOfFloorBox('n', 0.3, -(wd - gap - depth / 2), truth[0] / 1000, truth[1] / 1000, depth, cal);
-            const box = raw && clipToFrame(raw as Detection['box']);
+            const box = bboxOfFloorBoxInFrame('n', 0.3, -(wd - gap - depth / 2), truth[0] / 1000, truth[1] / 1000, depth, cal);
             if (!box) continue;
             const c = frameCuts(box);
             if (!c.bottom || c.top) continue;
@@ -110,14 +109,16 @@ describe('a floor piece cut at its foot, built at typical instead of at its read
 
   it('is a fixture whose typical rows are a third, not a half', () => {
     expect(rows).toBe(342);
-    expect([out.width.off.n, out.width.typical.n, out.height.off.n, out.height.typical.n]).toEqual([126, 61, 225, 117]);
+    expect([out.width.off.n, out.width.typical.n, out.height.off.n, out.height.typical.n]).toEqual([162, 80, 225, 117]);
   });
 
   it('builds MORE off-typical pieces more than 10% off at typical than at the reading', () => {
-    expect(out.width.off.off).toEqual([65, 90, 69]);
+    expect(out.width.off.off).toEqual([87, 118, 91]);
     expect(out.height.off.off).toEqual([90, 135, 75]);
     // …while on the typical rows it cannot miss, which is what the first measurement saw.
-    expect(out.width.typical.off.slice(0, 2)).toEqual([31, 0]);
+    // Boxed as the photo draws them it missed 17 widths until a foot-cut box's side was
+    // read where the frame crosses it (§ 49.20): the reading it was held inside was short.
+    expect(out.width.typical.off.slice(0, 2)).toEqual([43, 0]);
     expect(out.height.typical.off.slice(0, 2)).toEqual([54, 0]);
   });
 });
