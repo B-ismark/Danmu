@@ -669,7 +669,11 @@ So a cut axis is a **lower bound**, and the placers treat it as one (`frameCuts`
 
 Two readers follow the placers. `judgeLabel` (`lib/label-repair.ts`) no longer judges a word
 on a cut axis — grown to a typical size, it would pass every word that asked, the catalogue
-judging the catalogue — and reports the axes it skipped as `cut`; a row cut on every axis it
+judging the catalogue — and reports the axes it skipped as `cut`. A ceiling piece is never
+grown, but any edge of the frame on it takes its one axis all the same: the placer reads its
+distance on the box's centre row, a cut moves that row off the disc's centre, and a 1200 mm fan
+cut at the top of a level frame reads 1748 mm. The scene is still built from it, clamped to the
+band's 1500 (§ 49.13); a row cut on every axis it
 could judge is `unmeasured`, so it starts unticked. And the scan screen says so on the row:
 *Runs past the edge of the photo, so its width is an estimate.* An estimate the person can
 see is an estimate. Not "a typical one", which it said first and which was true of one case

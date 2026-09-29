@@ -24,7 +24,7 @@
 import { dimRangeFor } from './dimension-ranges';
 import { geoRefine, type CalMap, type RoomDims } from './detect-refine';
 import { anchorFor } from './physics';
-import { cutAxes } from './photo-geometry';
+import { cutAxes, frameCuts } from './photo-geometry';
 import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
 
@@ -116,16 +116,25 @@ function failedAxes(category: Category, shape: Shape, widthMM: number, heightMM:
  *  the visible part of a wardrobe is "too small for a wardrobe" because it is part of
  *  one. Which axes a cut takes is `cutAxes`, the placers' own test. */
 function measuredAxes(category: Category, shape: Shape, box: Detection['box']): SizeAxis[] {
-  if (anchorFor(category, shape) === 'ceiling') return ['width'];
+  const seen: readonly SizeAxis[] = anchorFor(category, shape) === 'ceiling' ? ['width'] : ['width', 'height'];
   const cut = cutOf(category, shape, box);
-  return (['width', 'height'] as const).filter((a) => !cut.includes(a));
+  return seen.filter((a) => !cut.includes(a));
 }
 
-/** The axes of `box` the photo's edge cut, on the plane this word is measured on. A
- *  ceiling piece's box is read as one row of a disc and never grown. */
+/** The axes of `box` the photo's edge cut, on the plane this word is measured on.
+ *
+ *  A ceiling piece is never grown, and its width is the one number it has, so ANY
+ *  edge takes it. Every one moves the box's centre off the disc's, and
+ *  `placeCeilingObject` reads its distance on that centre's row, so the width it
+ *  takes there is neither the piece's nor a bound on it: a true 1200 mm fan came back
+ *  1402 mm cut at the side, 1748 cut at the top — the usual case, a fan near a level
+ *  lens — and 1111 cut at the bottom (`tests/label-repair.test.ts`). */
 function cutOf(category: Category, shape: Shape, box: Detection['box']): SizeAxis[] {
   const anchor = anchorFor(category, shape);
-  if (anchor === 'ceiling') return [];
+  if (anchor === 'ceiling') {
+    const c = frameCuts(box);
+    return c.left || c.right || c.top || c.bottom ? ['width'] : [];
+  }
   const cut = cutAxes(box, anchor === 'floor' ? 'floor' : 'wall');
   return (['width', 'height'] as const).filter((a) => cut[a]);
 }

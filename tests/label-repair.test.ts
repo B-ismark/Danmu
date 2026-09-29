@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
-import { placeFloorObject, placeWallObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
+import { frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
   PART_LIBRARY,
@@ -14,11 +14,11 @@ import {
 } from '@/lib/scene-spec';
 import { toRecord } from '@/lib/detection-record';
 import { dimRangeFor } from '@/lib/dimension-ranges';
-import type { CalMap, RoomDims } from '@/lib/detect-refine';
+import { geoRefine, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { footprintForLayout, type Footprint } from '@/lib/footprint';
-import { bboxOfWallSolid } from './helpers/project';
+import { bboxOfCeilingDisc, bboxOfWallSolid } from './helpers/project';
 
 /** The framed wall's distance, read from the polygon. `wallDistance` — the
  *  `depth/2` / `width/2` pair every placer used to measure from — is deleted; this
@@ -413,6 +413,58 @@ describe('judgeLabel — ceiling items', () => {
     expect(band.min[0]).toBeLessThan(893);
     expect(band.max[0]).toBeGreaterThan(893);
     expect(band.max[2]).toBeGreaterThan(803);
+  });
+});
+
+describe('judgeLabel — a ceiling piece the edge of the photo cut', () => {
+  // A 1200 mm ceiling fan, projected from the truth. A ceiling piece is read on one
+  // row of its disc and never grown, so an edge of the frame anywhere on it leaves no
+  // width to judge: cut at the side it reads long or short depending on where it
+  // hangs, and cut at the top — a fan near a level lens, the usual case — long.
+  const deep: RoomDims = { width: 6, depth: 6, height: 2.8, footprint: footprintForLayout('rect', 6, 6) };
+  const clip = ([x, y, w, h]: readonly number[]): Detection['box'] => {
+    const x0 = Math.max(0, x), y0 = Math.max(0, y);
+    return [x0, y0, Math.min(1, x + w) - x0, Math.min(1, y + h) - y0];
+  };
+  const fan = (x: number, z: number) =>
+    det({ category: 'fan', shape: 'fan', slot: 'n', box: clip(bboxOfCeilingDisc('n', x, z, 1.2, WIDE, deep.height)) });
+  const read = (d: Detection) => geoRefine(d, WIDE_CALS, deep).dimMM![0];
+
+  it('judges a fan wholly in view', () => {
+    const whole = fan(0, -2);
+    expect(frameCuts(whole.box)).toEqual({ left: false, right: false, top: false, bottom: false });
+    expect(read(whole)).toBe(1145);
+    expect(judgeLabel(whole, WIDE_CALS, deep)).toEqual({ status: 'ok' });
+  });
+
+  it('gives no verdict on a fan cut at the side', () => {
+    // Read 17% long here, and 22% short 600 mm further east: no bound either way.
+    const side = fan(1.8, -2);
+    expect(frameCuts(side.box)).toEqual({ left: false, right: true, top: false, bottom: false });
+    expect(read(side)).toBe(1402);
+    expect(judgeLabel(side, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+    // And its mirror image, off the left.
+    const left = fan(-1.8, -2);
+    expect(frameCuts(left.box)).toEqual({ left: true, right: false, top: false, bottom: false });
+    expect(judgeLabel(left, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+  });
+
+  it('withdraws the accusation from a fan cut at the top', () => {
+    const top = fan(0, -1.2);
+    expect(frameCuts(top.box)).toEqual({ left: false, right: false, top: true, bottom: false });
+    // Past the widest fan there is, so this correct fan was called too big for one.
+    expect(read(top)).toBe(1748);
+    expect(read(top)).toBeGreaterThan(dimRangeFor('fan', 'fan').max[0]);
+    expect(judgeLabel(top, WIDE_CALS, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
+  });
+
+  it('gives no verdict on a fan cut at the bottom, from a phone pointed at the ceiling', () => {
+    const steep: CameraCal = { k: 2 * Math.tan(((66 / 2) * Math.PI) / 180), aspect: 4 / 3, tiltRad: (-60 * Math.PI) / 180 };
+    const cals: CalMap = { n: steep };
+    const d = det({ category: 'fan', shape: 'fan', slot: 'n', box: clip(bboxOfCeilingDisc('n', 0, -2, 1.2, steep, deep.height)) });
+    expect(frameCuts(d.box)).toEqual({ left: false, right: false, top: false, bottom: true });
+    expect(geoRefine(d, cals, deep).dimMM![0]).toBe(1111);
+    expect(judgeLabel(d, cals, deep)).toEqual({ status: 'unmeasured', cut: ['width'] });
   });
 });
 
