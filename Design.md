@@ -649,10 +649,11 @@ held as literals in `tests/repeat-sightings.test.ts`):
   typical piece's place, and the walk asks about the longer ones.
 
 Together they take the repeats left ticked, at an ultrawide read as the assumed 66°, from
-247 to 5 (106°) and 452 to 21 (120°). The price is 21 real pieces across the table's five
+247 to 5 (106°) and 452 to 19 (120°). The price is 21 real pieces across the table's five
 readings started unticked — each with its reason, one tap from back — and none on a lens
 EXIF measured. Three things it does not reach are filed in `docs/what-is-still-open.md`
-§ 46, measured and not fixed: twin beds in a corner come back as one (§ 46.1); a box cut at
+§ 46, measured and not fixed: twin beds in a corner come back as one, in one of the two
+layouts measured — the other was the fixture's (§ 46.1, § 49.16); a box cut at
 the BOTTOM of its photo is not walked, because doing so bought little and walking both
 edges is a grid that did not finish (§ 46.2); and under a wrong lens the HARD merge deletes
 3.7–4.2% of an ultrawide room's pieces outright, nearly all dining chairs, before this pass
