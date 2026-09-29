@@ -821,6 +821,21 @@ export function clipToFrame(box: readonly number[]): [number, number, number, nu
   return [x0, y0, cw, ch];
 }
 
+/** The least either side of a detector's box may be, as a share of the photo, once it
+ *  is cut to the photo. Below it the box is a sliver: measured off a handful of pixels,
+ *  or a box that lay mostly past the edge and so is mostly the model's guess. */
+export const SLIVER = 0.01;
+
+/** A detector's box as the scan keeps it: cut to the photo (`clipToFrame`), and null
+ *  when what is left is a `SLIVER` on either side. Both sources read their boxes
+ *  through this one function (`detectionBox` on-device, `cloudRows` from Gemini), so
+ *  the same box is kept or dropped whichever model drew it — for a commit the cloud
+ *  rows kept the slivers the on-device rows dropped. */
+export function boxInPhoto(box: readonly number[]): [number, number, number, number] | null {
+  const cut = clipToFrame(box);
+  return cut && cut[2] > SLIVER && cut[3] > SLIVER ? cut : null;
+}
+
 export type FrameCuts = { left: boolean; right: boolean; top: boolean; bottom: boolean };
 
 /** The plane a placer reads a row on — which is not always its anchor's (see

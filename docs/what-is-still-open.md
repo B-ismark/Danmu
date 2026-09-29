@@ -8185,7 +8185,9 @@ Measured on § 49.13's 556 top-cut discs, each box run past the top by 1% and by
 (`detectionBox`, `cloudRows`). It takes off each side only what lay outside, so a box the frame
 did not cut comes back bit for bit, and clipped, every overrun from 0.5% to 5% reads exactly what
 the photo's own box reads. A sliver is now judged on what is in the picture, so a box whose
-regressed width was mostly outside the frame is dropped where it used to be kept. A box that is
+regressed width was mostly outside the frame is dropped where it used to be kept — and by one
+rule for both sources (`boxInPhoto`, `SLIVER`), which the first version of the fix was not: the
+cloud rows were cut and kept every sliver the on-device rows dropped (the review of D8). A box that is
 not four finite numbers is dropped too, on the cloud path where it arrives as JSON: `['0.2', '0',
 '1', '1']` coerced into a valid box one frame wide.
 

@@ -16,7 +16,7 @@
 
 import { footprintForLayout, type LayoutId } from './footprint';
 import { CATALOG_SHAPES_ORDERED } from './scene-spec';
-import { clipToFrame } from './photo-geometry';
+import { boxInPhoto } from './photo-geometry';
 import type { CaptureSlot } from './storage';
 import type { Detection } from './detection';
 
@@ -143,13 +143,14 @@ Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by vis
  *  geometry pass then overwrote. It now runs in lib/detect-refine.ts AFTER
  *  refinement, which also means the on-device path gets it too.
  *
- *  Each box is cut to its photo (`clipToFrame`): the prompt asks for fractions of the
+ *  Each box is cut to its photo (`boxInPhoto`): the prompt asks for fractions of the
  *  image, and a box that runs past the edge describes rows and columns nobody saw —
  *  a cut box's top row is the frame's edge, which the ceiling solve stands on. A row
- *  with no box in frame is dropped, as a row with no box always was. */
+ *  with no box in frame is dropped, as a row with no box always was, and so is a
+ *  sliver, by the rule the on-device rows are dropped by. */
 export function cloudRows(parsed: readonly unknown[]): Detection[] {
   return (parsed as Detection[]).flatMap((d) => {
-    const box = d && Array.isArray(d.box) && d.slot ? clipToFrame(d.box) : null;
+    const box = d && Array.isArray(d.box) && d.slot ? boxInPhoto(d.box) : null;
     // Stamped here, and called only by `detectAcrossImages`, so nothing but the reply
     // to a Gemini call can claim its output came from Gemini.
     return box ? [{ ...d, box, source: 'cloud' as const }] : [];

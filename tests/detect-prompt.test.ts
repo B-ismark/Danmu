@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildDetectPrompt, cloudRows } from '@/lib/detect-prompt';
+import { detectionBox } from '@/lib/local-detect';
+import { SLIVER } from '@/lib/photo-geometry';
 import { CATALOG_SHAPES_ORDERED } from '@/lib/scene-spec';
 
 const ROOM = { width: 5.6, depth: 4.2, height: 2.8, layoutId: 'rect' as const };
@@ -181,5 +183,29 @@ describe('cloudRows reads the reply as the geometry can use it', () => {
       7,
     ]);
     expect(kept).toHaveLength(1);
+  });
+
+  it('drops a sliver by the rule the on-device rows are dropped by', () => {
+    // 0.2 wide, only 0.005 of it inside the right edge: mostly the model's guess.
+    expect(cloudRows([row([0.995, 0.2, 0.2, 0.4])])).toEqual([]);
+    expect(cloudRows([row([0.4, 0.2, SLIVER, 0.4])])).toEqual([]);
+    expect(cloudRows([row([0.4, 0.2, 0.3, SLIVER])])).toEqual([]);
+    expect(cloudRows([row([0.4, 0.2, 0.011, 0.011])])).toHaveLength(1);
+    // One rule, not two that agree today: the same boxes, in the two forms the two
+    // detectors hand over, are kept or dropped alike and cut alike. For a commit the
+    // cloud rows kept every sliver the on-device rows dropped.
+    const ends = [-0.3, -0.01, -0.005, 0, 0.004, 0.2, 0.5, 0.985, 0.995, 1, 1.2];
+    const sides = [0.005, 0.01, 0.0101, 0.02, 0.3, 1.1];
+    let kept = 0, dropped = 0;
+    for (const x of ends) for (const y of ends) for (const w of sides) for (const h of sides) {
+      const cloud = cloudRows([row([x, y, w, h])])[0]?.box ?? null;
+      const local = detectionBox({ x: x + w / 2, y: y + h / 2, w, h, conf: 0.8, label: 'Sofa', category: 'sofa' });
+      expect(cloud === null).toBe(local === null);
+      if (cloud && local) {
+        for (let i = 0; i < 4; i++) expect(cloud[i]).toBeCloseTo(local[i], 12);
+        kept++;
+      } else dropped++;
+    }
+    expect([kept, dropped]).toEqual([676, 3680]);
   });
 });
