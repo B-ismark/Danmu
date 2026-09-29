@@ -643,6 +643,11 @@ backend, no account. The 3D studio *is* the product.
    is the UNION over engines, never the minimum a spec describes** — and a
    spec citation is exactly what makes a narrowing look justified on the way past.
    All three are `(self)`; `geolocation` stays denied, having no consumer at all.
+   **And they are granted site-wide on purpose** — the third way to kill the same read:
+   a policy is fixed when the DOCUMENT is created, every way into capture is a
+   `<Link>` or `router.push`, so a grant scoped to that route never reaches it
+   (built and measured, `docs/what-is-still-open.md` § 45: SecurityError from the
+   workspace and the shape picker, fine only when the address was typed).
    The WebKit half rests on a secondary source that could not be fetched to quote,
    so it is written down as the reason for the SAFE choice rather than as a verified
    fact — the asymmetry decides it either way, and `docs/visual-check.md` carries

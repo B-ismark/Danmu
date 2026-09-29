@@ -283,6 +283,27 @@ describe('Permissions-Policy is paired with its consumers', () => {
     }
   });
 
+  it('serves the policy from the catch-all alone, because a policy belongs to the page', async () => {
+    // The tempting fix for "the sensor trio is granted on every route when only the
+    // capture screen reads it" is a second rule scoped to `/onboarding/capture`. It was
+    // built and measured (what-is-still-open § 45): the split headers are served exactly
+    // as written, and the grant still never reaches the capture screen from inside the
+    // app. A Permissions-Policy is fixed when the DOCUMENT is created, and every way into
+    // capture is a `<Link>` or a `router.push` — the same document, carrying whatever the
+    // first page loaded said. Opened directly, capture could construct an Accelerometer;
+    // reached from /workspace or the shape picker it threw SecurityError, so the tilt
+    // read went dead for everyone who got there the normal way. Nothing would fail but
+    // this, so this is the whole guard: one route carries the policy, and it is `/:path*`.
+    const spec = '../next.config.mjs';
+    const { default: nextConfig } = (await import(spec)) as {
+      default: { headers: () => Promise<Array<{ source: string; headers: Array<{ key: string }> }>> };
+    };
+    const carrying = (await nextConfig.headers())
+      .filter((r) => r.headers.some((h) => h.key.toLowerCase() === 'permissions-policy'))
+      .map((r) => r.source);
+    expect(carrying).toEqual(['/:path*']);
+  });
+
   it('serves the same policy in both builds', async () => {
     // `next.config.mjs` computes `dev` from `NODE_ENV` at module scope and branches on it
     // for the CSP, so "the header this config actually SERVES" is true of ONE build unless

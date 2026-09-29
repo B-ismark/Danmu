@@ -1093,8 +1093,14 @@ What only a real phone can tell you:
 
 ### The lens tilt read needs a real phone, on BOTH engines — merged to `main` in `17f9d62` (PR #148)
 
-**Where to click.** On an Android phone in Chrome and on an iPhone in Safari: open
-`/onboarding/capture`, tap **Turn on camera**, grant the camera and (on iOS) the
+**Where to click.** On an Android phone in Chrome and on an iPhone in Safari: reach
+the capture screen **by pressing through the app** — the shape picker's *Photograph my
+real room first*, or a half-photographed room's *Resume* pill in the workspace — rather
+than typing its address. A typed address is a
+fresh page and reads the policy the capture route is served with; a press keeps the page
+you started on and reads THAT one, which is how every real visit arrives and the only way
+a policy scoped to the wrong route shows (`docs/what-is-still-open.md` § 45 measured
+exactly that). Then tap **Turn on camera**, grant the camera and (on iOS) the
 motion-and-orientation prompt, then hold the phone upright and take a wall photo with the
 top edge tipped visibly **down**. The photo must arrive carrying a tilt.
 

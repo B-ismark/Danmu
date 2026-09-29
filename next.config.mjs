@@ -112,6 +112,17 @@ const securityHeaders = [
   // risks a silently dead tilt read on every iPhone. `docs/visual-check.md` carries
   // the item that closes it, because only a real phone can.
   //
+  // THIRD, and the one that looks most careful: granting the trio on the capture
+  // route alone, since it is the only reader. That was built and measured
+  // (`docs/what-is-still-open.md` § 45), and it killed the tilt read again. A
+  // permissions policy is fixed when the DOCUMENT is created, and every way into
+  // capture is a `<Link>` or `router.push`, which keeps the document it started in
+  // — so the route's own header only ever reached someone who typed its address.
+  // Arriving from the workspace or the shape picker, `new Accelerometer()` threw
+  // SecurityError. **A policy belongs to the page, not the route**, and in this app
+  // the page is whichever one the user opened first. So the grant stays on the
+  // catch-all, and a test fails if it ever moves.
+  //
   // The old comment here ended "`tests/toolchain.test.ts` has no opinion on a
   // policy that is merely too generous, which is why this comment is the guard."
   // A comment is not a guard — that is the whole lesson, twice over.

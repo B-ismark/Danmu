@@ -178,7 +178,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 24 | **§ 47** a change made in the last half-second before a reload or a closed tab is lost | **PARTLY FIXED 2026-09-28.** Pending saves now run when the page is hidden or left (`lib/page-leave.ts`), as ONE transaction that asks for its commit at once (`roomStore.savePending`). Measured, change made and page left at once, 5 each: a piece duplicated then reloaded kept **0 → 5**, a typed width then a closed tab **0 → 5**, and no room half-saved (**4 of 10** with three separate saves). **Still lost: a typed room size on a reload, 0 of 5**, whole, because that save reads before it writes. | small, but a design call | — |
 | 25 | **§ 48** a tab left open across the keep-means-keep update can bring unticked pieces back | **WRITTEN DOWN 2026-09-28, NOT FIXED — the user's call.** `migrateRoom` reads a row's `locked` by the version stamp alone, and the previous build stamps `version: 1` on every save. One edit in a tab open across the deployment re-stamps a v2 room, and the next up-to-date load reads every row as kept: the scan list shows unticked rows ticked, and a room with no saved scene is rebuilt with them in it. It fails toward MORE furniture, deletes nothing, and closes itself on a reload. The one fix on offer (a marker the old writers carry through) inverts on the re-scan path, which is why it is not built. | — | — |
 | 26 | **§ 49** a scan tilted up, cut at the frame's edges, with the room size skipped, came back "mostly too small" | **PARTLY FIXED 2026-09-29.** Measured first (`tests/scan-tilted-room.test.ts`, a scan shaped like the reported one, each unknown put right in turn): with the camera and room known the frame edge was the whole remaining error, **7 of 14** pieces more than 10% short. The placers now treat a cut axis as a lower bound and grow it to the kind's typical size from the edge the photo saw, stopped at the wall's end: **0 of 14** short, mean width error **19% → 10%**. As the app reads that scan today, **10 short → 6**, and the price is **4 over → 7**, mean width error **24% → 32%** — the skipped room's walls end past the real ones, so a typical size over-reaches. Still open, in order of what the table says they are worth: the room size (§ 49.3, the user's call), tilt and height (§ 49.2, measured WORSE alone), and four smaller items | § 49.1 (the default lens on an upright photo) FIXED too; § 49.3 is a question for the user; § 49.9–49.12 filed by the review, none a regression | — |
-| 27 | **§ 45** the sensor grant is site-wide when one route needs it | **WRITTEN DOWN 2026-09-09 (#148), NOT FIXED; missing from this index until 2026-09-29.** `accelerometer` / `gyroscope` / `magnetometer` are granted on the catch-all `/:path*`, and only the capture screen reads them (`lib/device-tilt.ts`), so every other route holds three sensor permissions it never uses. Not a one-liner: Next applies every matching `headers()` rule, so a route entry beside the catch-all sends the header twice and the first occurrence wins — the catch-all has to EXCLUDE the capture route with a negative-lookahead `source`, and only reading the served headers on a matching and a non-matching path confirms it. `tests/permissions-policy.test.ts` then changes one line, to present on the route and absent elsewhere | a small change plus a browser check | — |
+| 27 | **§ 45** the sensor grant is site-wide when one route needs it | **MEASURED 2026-09-29, DECIDED AGAINST.** The filed fix — the catch-all excluding the capture route, the trio granted only there — was built on a scratch build and served exactly the headers it asked for, and it **killed the tilt read**: a permissions policy is fixed when the document is created, every way into capture is a `<Link>` or `router.push` that keeps the document, and reached from `/workspace` or the shape picker `new Accelerometer()` threw SecurityError (opened directly, it constructed). The only way to make it true is to make every entry a hard navigation, and any future `<Link>` would break it silently. `tests/permissions-policy.test.ts` now fails on the split, 3 of 3 mutants killed | — | — |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
 putting a 1450 mm TV on a 1.2 m wall in the small L and T (`placeNewPart` has no
@@ -7285,33 +7285,56 @@ centre, approximate toward the ends — reachable only through a hand-edited sce
 since `footprintForLayout` is axis-aligned and `offsetWall` translates an edge along its
 own normal.
 
-### 45. The sensor grant is site-wide when one route needs it — NOT fixed, and not a one-liner
+### 45. The sensor grant is site-wide when one route needs it — MEASURED 2026-09-29, DECIDED AGAINST
 
-**Where it stands.** `next.config.mjs` grants `accelerometer` / `gyroscope` /
-`magnetometer` on the catch-all `/:path*`. The only consumer is
+**The concern, as filed on #148.** `next.config.mjs` grants `accelerometer` /
+`gyroscope` / `magnetometer` on the catch-all `/:path*`, and the only consumer is
 `app/onboarding/capture/page.tsx` through `lib/device-tilt.ts`, so every other route
-carries three sensor permissions it never uses — the same "permission with no consumer"
-shape rule 5 argues against, one level down from the feature to the route. It is not
-purely theoretical: `script-src` allows the jsDelivr ORT CDN as the `onnxruntime-web`
-fallback, and a script from that host executes in this origin, where it could construct a
-`Magnetometer` this app never reads directly and only holds open to satisfy WebKit's
-gating of an event on the capture screen.
+carries three sensor permissions it never uses. The threat named was a script from the
+jsDelivr ORT fallback host, which `script-src` allows and which executes in this origin.
 
-**Why it is filed rather than fixed.** Next's `headers()` applies EVERY matching rule,
-so adding a route-specific entry beside the catch-all emits the header **twice**, and a
-feature named in both is resolved by the first occurrence per the structured-field
-parse — which would make the outcome depend on rule order rather than on intent, in the
-direction that fails silently (the route-specific `(self)` ignored, the tilt read dead
-again). Doing it properly means the catch-all EXCLUDING the capture route, i.e. a
-negative-lookahead `source`, and the only honest way to confirm that is to read the
-served response headers on both a matching and a non-matching path. That is a browser
-check, not a test-suite one, so it wants its own change with a
-`docs/visual-check.md` item rather than a line inside an audit batch.
+**The fix it proposed was built on a scratch build and measured, and it would have
+killed the tilt read for almost everyone.** The catch-all became
+`'/:path((?!onboarding/capture$).*)'` with the trio `()`, beside a
+`'/onboarding/capture'` rule carrying them `(self)`. The served headers were exactly
+what the plan asked for — one `Permissions-Policy` per path, the right one on each —
+and Chromium, reading `document.featurePolicy.allowsFeature('accelerometer')` and
+constructing an `Accelerometer`:
 
-**What is done.** `tests/permissions-policy.test.ts` asserts the pairing on the catch-all
-and would need one line changed (assert present on the route with the consumer, absent
-elsewhere) once the header is split, which is a sharper invariant than "present
-somewhere".
+| how the capture screen was reached | same document | `allowsFeature` | `new Accelerometer()` |
+|---|---|---|---|
+| typed into the address bar (hard load) | — | true | constructs |
+| from `/workspace`, by the app's own router | yes | **false** | **SecurityError** |
+| from the shape picker, by the app's own router | yes | **false** | **SecurityError** |
+
+**A permissions policy belongs to the document, not the route.** It is fixed when the
+document is created, and an App Router `<Link>` or `router.push` keeps the document it
+started in, so a header scoped to one route only ever reaches that route's hard loads.
+Every way into capture is soft: `app/workspace/page.tsx`,
+`app/onboarding/detect/page.tsx` and the two studio banners are `<Link>`s, and the
+shape picker is `router.push`. So the tilt read would have been dead for everyone who
+reaches the screen by pressing a button — the same failure rule 5 records twice, this
+time reached by *narrowing a grant to the route that uses it*, which reads as the most
+careful version of the rule. The scoping would not hold the other way either: a
+capture screen opened directly keeps its grant after the app routes away from it. That
+follows from the same mechanism and was not measured separately.
+
+**The only way to make it true** is to make every entry into capture a hard navigation,
+which reloads the app at the one moment someone is about to point a camera — and
+**any future `<Link>` to it would break the tilt read silently**, with nothing on
+screen and nothing in a test. Not worth three permissions that grant nothing without a
+page that asks for them. If the jsDelivr fallback is the real worry, it is better met
+there: `pnpm vendor:ort` already serves the runtime same-origin, and dropping the CDN
+from `script-src` once the vendored copy always ships closes the door this item was
+worried about.
+
+**What is done.** `tests/permissions-policy.test.ts` — *serves the policy from the
+catch-all alone* — fails on the route split, on a second rule beside the catch-all and
+on a key in any case, **3 of 3 mutants killed** (`scratchpad/mut-policy.py` in the
+session that measured it — not in the repo), so the next person to find the "unused"
+grant meets the measurement before the fix. The probe was scratch too: a production
+build, then Playwright reading those two values after a hard load and after
+`window.next.router.push`, with a marker on `window` to prove the document survived.
 
 ## § 46 · Repeat sightings — the soft merge, and the case it cannot reach
 
