@@ -4,20 +4,21 @@
 // width is to "prioritize only the most important items… create a More menu to
 // include additional items"; Material's top app bar does the same with its three
 // dots. What lives here is what a phone uses least: the help card and the three
-// exports. Switching rooms is not here at all — the app bar's back button is that
+// exports. (The laptop's View gear is the phone toolbar's own View sheet.) Switching rooms is not here at all — the app bar's back button is that
 // route, one tap, and a second way to the same place is a row nobody needs.
 //
 // Snap lives here on a phone too. It is set once and left, which is what this
 // menu is for, and on the canvas it took a second row of its own over the room.
 // Here it reaches the 2D tab as well, which never had a way to change it.
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Segmented } from '@/components/ui/primitives';
 import { useStudio } from '@/lib/store';
 import { useExportItems } from './ExportMenu';
 import { StudioHelp } from './StudioHelp';
 import { SNAPS } from './TransformToolbar';
+import { usePopoverDismiss } from './usePopoverDismiss';
 
 export function StudioMoreMenu() {
   const [open, setOpen] = useState(false);
@@ -29,29 +30,10 @@ export function StudioMoreMenu() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: PointerEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return;
-      // See ExportMenu: a plain stop still lets a sibling capture listener fire.
-      e.stopImmediatePropagation();
-      e.stopPropagation();
-      setOpen(false);
-      btnRef.current?.focus();
-    }
-    window.addEventListener('pointerdown', onDown, true);
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      window.removeEventListener('pointerdown', onDown, true);
-      window.removeEventListener('keydown', onKey, true);
-    };
-  }, [open]);
+  usePopoverDismiss(open, () => setOpen(false), wrapRef, btnRef);
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', display: 'flex' }}>
+    <div ref={wrapRef} className="popover-anchor">
       <button
         ref={btnRef}
         type="button"

@@ -13,6 +13,7 @@ import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { SwapModelModal } from './RegenerateModal';
 import { RailSection } from './RailSection';
+import { EmptyInspector } from './EmptyInspector';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { anchorFor, findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
@@ -63,12 +64,9 @@ export function Inspector() {
 
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
 
-  if (!part || !id)
-    return (
-      <div className="t-meta" style={{ padding: 20, textAlign: 'center', lineHeight: 1.5 }}>
-        Nothing selected
-      </div>
-    );
+  // Nothing selected is the state everyone lands in first, so it is designed rather
+  // than a grey line; see EmptyInspector.
+  if (!part || !id) return <EmptyInspector />;
 
   const currentDim = part.dimMM;
   const defaultDim = baseDim ?? part.dimMM;

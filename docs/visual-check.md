@@ -990,6 +990,44 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
+### View behind a gear, collapsed rails as icon strips, a designed empty panel — branch `claude/affectionate-ritchie-ilawx1` (PR #179)
+
+**Asked for, and walked once in headless Chromium.** The View controls (floor grid, decor,
+sounds, quality) moved from the right rail's foot to a gear left of `?`. A shut rail is a
+44px icon strip rather than an empty pill. The right rail with nothing selected is a
+designed empty state rather than "Nothing selected". Screenshots were taken at 1440 × 900,
+820 × 1000 and a phone width, and each looked right. What is left needs a real mouse, a
+real finger and a real screen reader.
+
+**Where to click.**
+- **Laptop.** Press the gear, then toggle each control. Press outside it and it should
+  close. Open it again and press Escape: it should close with focus back on the gear.
+- **Laptop, rails shut.** Collapse both rails. Hover each strip icon, then press Style on
+  the left strip.
+- **Laptop, nothing selected.** Press **Resize it** in the right rail, with the left rail
+  shut and again with it open.
+- **Tablet (600–1023px).** Open the Details tab with nothing selected and press
+  **Resize it**.
+- **Phone.** Press the toolbar's **View**.
+
+**What wrong looks like.**
+- A strip tooltip that opens over the next icon or off the window's edge.
+- The left rail opening on the wrong section, or opening with focus lost to the page (Tab
+  should go on from the Style header).
+- **Resize it** closing a rail that was already open.
+- The gear's card cut off at a narrow laptop width, or overlapping the room switcher.
+- The phone's View sheet taller than its controls with a scrollbar anyway.
+- A screen reader announcing a strip icon as "button" with no name.
+
+**Settled without eyes.** Each strip icon asks for its section and opens the rail. The tree
+takes that request once and focuses the section. Side tooltips are placed beside their
+trigger and capped to the room on that side. The empty state's floor area is the polygon's
+(16.5 m² for a 5 × 4 L, not 20), and **Resize it** leaves an open rail open. `ViewOptions`
+has exactly two homes, found by sweeping the tree. All of this is in
+`tests/collapsed-rails.test.tsx`, `tests/empty-inspector.test.tsx`,
+`tests/view-menu.test.tsx`, `tests/room-facts.test.ts` and `tests/rail-intent.test.ts`,
+and every assertion was mutation-checked: 30 mutants, all caught. One survived the first run (the strip tooltips placed above their icons), and it has its own test now.
+
 ### One type scale, and piece names you can read at laptop width — `c2137c4` on `main` (PR #157), SWEPT, wants a hand on a real mouse and a real phone
 
 Every font size is one of eight steps now and every transition one of three speeds

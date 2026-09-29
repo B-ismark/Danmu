@@ -2,7 +2,7 @@ import type { Category } from '@/lib/scene-spec';
 import type { CSSProperties } from 'react';
 import {
   ArrowRight, ArrowLeft, ArrowUpRight, Check, X, Plus, Minus,
-  Camera, Lock, Unlock, Grid3x3, Layers, Ruler, Settings, Sparkles, Box,
+  Camera, Lock, Unlock, Grid3x3, Layers, Ruler, Settings, Sparkles, Box, Palette, MousePointerClick,
   Download, Share2, FileText, FileArchive, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
   Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Pencil, Trash2, RefreshCw,
@@ -36,7 +36,8 @@ export type IconName =
   | 'sun' | 'sunrise' | 'sunset'
   | 'moon' | 'cloud' | 'compass'
   | 'swap' | 'snap-wall' | 'snap-floor'
-  | 'more' | 'list' | 'sliders' | 'heart' | 'idea';
+  | 'more' | 'list' | 'sliders' | 'heart' | 'idea'
+  | 'palette' | 'pointer';
 
 const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, LucideIcon> = {
   'arrow-right': ArrowRight, 'arrow-left': ArrowLeft, 'arrow-up-right': ArrowUpRight,
@@ -57,6 +58,7 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, Lu
   sun: Sun, sunrise: Sunrise, sunset: Sunset,
   moon: Moon, cloud: Cloud, compass: Compass,
   more: Ellipsis, list: List, sliders: SlidersHorizontal, heart: Heart, idea: Lightbulb,
+  palette: Palette, pointer: MousePointerClick,
 };
 
 type Props = {

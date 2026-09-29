@@ -42,13 +42,15 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
+import { useRailIntent } from '@/lib/rail-intent';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { LibraryBody } from '../CatalogPanel';
 import { usePhoneStudio } from '../NarrowViewportBanner';
 import { LeftRailBody, RightRailBody } from './shell-parts';
+import { ViewOptions } from '../ViewOptions';
 import { cycleSheet, settleSheet, sheetHeights, TAP_PX, type SheetSnap } from '@/lib/sheet-detents';
 
-type Panel = 'room' | 'add' | 'details';
+type Panel = 'room' | 'add' | 'details' | 'view';
 
 function useSelectionName(): { selected: boolean; name: string | null } {
   const selectedPartId = useStudio((s) => s.selectedPartId);
@@ -78,6 +80,13 @@ function PaneShell({ surface }: { surface: ReactNode }) {
   useEffect(() => {
     if (selected) setTab('details');
   }, [selectedPartId, selectedWall, selected]);
+
+  // A request to open the Room panel at a section (the empty Inspector's "Restyle
+  // it" / "Resize it"). The tree takes the request itself; this only shows it.
+  const wanted = useRailIntent((s) => s.left);
+  useEffect(() => {
+    if (wanted) setTab('room');
+  }, [wanted]);
 
   return (
     <div className="pane-shell">
@@ -172,6 +181,15 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
     }
   }, [catalogOpen]);
 
+  // The same request as the tablet's, from the empty Details sheet: show Room.
+  const wanted = useRailIntent((s) => s.left);
+  useEffect(() => {
+    if (!wanted) return;
+    setPanel('room');
+    setCatalogOpen(false);
+    setSnap((s) => (s === 'closed' ? 'half' : s));
+  }, [wanted, setCatalogOpen]);
+
   const show = (p: Panel) => {
     // Pressing the button for the sheet already showing lowers it: a toolbar item
     // that only ever opens leaves the close button as the one way down.
@@ -254,7 +272,7 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
 
   // The toolbar already carries the piece's name, and the panel's own header says
   // it again with its kind beneath; the sheet's title names the panel.
-  const title = panel === 'room' ? 'Room' : panel === 'add' ? 'Library' : selected ? 'Details' : 'View';
+  const title = panel === 'room' ? 'Room' : panel === 'add' ? 'Library' : panel === 'view' ? 'View' : 'Details';
 
   const deselect = () => {
     setSelected(null);
@@ -311,6 +329,11 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
           <div className="rail sheet__rail" hidden={panel !== 'details'}>
             <RightRailBody open />
           </div>
+          {panel === 'view' && (
+            <div className="rail sheet__rail sheet__pad">
+              <ViewOptions />
+            </div>
+          )}
           {panel === 'add' && (
             <div className="rail sheet__rail">
               <LibraryBody touch />
@@ -336,7 +359,9 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
         ) : (
           <>
             <ToolButton icon="plus" label="Add" prominent pressed={open && panel === 'add'} onPress={() => show('add')} />
-            <ToolButton icon="sliders" label="View" pressed={open && panel === 'details'} onPress={() => show('details')} />
+            {/* Its own sheet: the laptop's top-bar gear (ViewMenu). It used to open
+                Details, which held these controls under an empty Inspector. */}
+            <ToolButton icon="sliders" label="View" pressed={open && panel === 'view'} onPress={() => show('view')} />
           </>
         )}
       </nav>

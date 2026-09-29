@@ -72,7 +72,7 @@ export function StudioHelp({
   }, [open]);
 
   return (
-    <div style={{ position: 'relative', display: 'flex' }}>
+    <div className="popover-anchor">
       {/* A question mark, not a sentence. "How this works" spent 150px saying what
           the universal glyph says in 30, on a control most people press once. The
           accessible name still carries the words. */}
@@ -85,15 +85,7 @@ export function StudioHelp({
           aria-expanded={open}
           aria-label="How this works"
           title="How this works"
-          className="icon-btn"
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 'var(--r-full)',
-            border: `1px solid ${open ? 'var(--accent-text)' : 'var(--edge)'}`,
-            background: open ? 'var(--accent-tint)' : 'var(--paper)',
-            color: open ? 'var(--accent-text)' : 'var(--ink-2)',
-          }}
+          className="icon-btn icon-btn--round"
         >
           <Icon name="help" size={14} />
         </button>
