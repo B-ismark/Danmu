@@ -472,7 +472,7 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | Rug zones (`lib/layout-rules.ts` § Where a rug goes) | **A rug goes where its group's rule puts it, and stays out from under what it must not cover.** `rug-group` is an `under` relation: the band is 0.2 m of slack around `rugTarget`'s answer, not a distance between centres, and the rug pays for not being square to the group (`halfTurnCost` — a rug is the same after a half turn). Three rules, by the anchor's role: **seating**, the near edge `RUG_UNDER_SEAT_M` (0.2 m) under the front, so the front legs are on and the back legs off; **a bed**, from a third of the way down (`RUG_BED_START`), so the nightstands at the head stand on bare floor and the rug shows past the sides and the foot; **a dining table**, centred. The long side runs with the group's long side — along a sofa, across a bed, down a table. How far a rug runs past a table or a bed (60 cm, 45–60 cm) is its SIZE, which is the user's and never the solver's to change. `rugKeepsOff` lists what a rug stays out from under — wardrobe/closet, bookshelf, shoe rack, nightstand, fridge and appliances (standing in for a kitchen run and a dresser, which the catalogue has no shape for), and a desk **only when an office chair is in the room** — and `layout-score` also prices a rug over a door's swing; both land in the relation term at `RUG_CLEAR_GAIN`, by the share of the covered piece or swing. The old `near` band (centre within 0.8 m) was satisfied by a rug half under a sofa's BACK and by one under a bed's head with the nightstands on it. Rugs also left the `balance` mass: 5 mm of textile has no visual weight, and 3.8 m² of it pulled a rug 0.42 m off its spot toward the middle of the room. The seeder places the starter living rug with `rugOffset` — the same rule, never a copy. **No rug is a valid answer**: nothing asks for one, and the seeder leaves a group without one rather than force a rug that does not fit. |
 | `lib/rescan.ts` | **A scan that ran replaces the arrangement, and keeps the old one as a layout.** `RoomSync` builds from `detectedObjects` only when there is no saved scene, and a scene is saved on the first add/delete/reshape — so a new scan of a touched room used to be saved and never shown. `adoptFreshScan` writes the previous arrangement (saved scene, or the old detections rebuilt with `buildSceneFromRoom`, plus the whole `Transforms`) as a **Before re-scan** layout, then the new detections, then drops the scene and transforms keys (`roomStore.forgetArrangement`) — in that order, since there is no transaction across keys. The detect screen calls it only when a detection run completed in that visit; Continue on the cached list goes through `adoptEditedList` instead, which keeps the arrangement and moves only the pieces whose rows changed (`applyListEdits`): an unticked row takes its piece out, a newly ticked one puts one in, a re-worded kept row is rebuilt in place with the studio's colour, finish and set carried, and a piece the studio deleted stays deleted. Arriving on a scanned room shows the cached list with a **Look again** button (undoable) rather than re-running on arrival. |
 | `lib/layout-offload.ts` + `lib/layout.worker.ts` | **The arranging engine runs in a Web Worker.** Fix, Ideas, Re-fit and Try a fix call `solveOffThread` / `shuffleOffThread`, which post the same arguments to one reused module worker and resolve with the same answer — the solver is pure and seeded, so moving it changes *when* the answer arrives and nothing about *what* it is. The request types live in `layout-worker-protocol.ts` and name a clone-safe subset of the options (`SolveOptions.pick` is a function and cannot cross). No worker (node tests, SSR, a browser without module workers) or a worker that fails to load or crashes means the call runs **inline** — a slower path, never a dead button — and an in-flight request is re-answered inline rather than left pending. **Because the window stays live, the room can change under a search**, so every press takes a `lib/solve-stamp.ts` stamp (reference identity of the parts, room, transform maps, parents and locks) and an answer whose stamp no longer matches is **not applied** and says so. The ideas gallery is the exception that proves the rule: it applies an idea long after the search, so it compares the room by content at every render instead, and a room that moved on shows "The room changed" rather than any idea. `checkFit` still runs inline — ~330 ms at worst, behind the same busy yield. |
-| `lib/solar.ts` | Sunlight as the two things a room can show you: `sunDirection` (a compass azimuth and an elevation → a unit vector in scene axes, null below the horizon) and `daylightKelvin` (warm at the horizon, neutral overhead, on the same Planckian locus as the lamps). It was a full NOAA / Meeus solar-position calculator accurate to ~0.01°, driven by a latitude, a longitude, a date and a clock; that went, and the file states why in its own header. **Correct is not the same as useful:** nobody arranging furniture can verify a hundredth of a degree, and the four fixed presets in `Room`'s `LIGHTING` table are the four pictures it existed to produce. |
+| `lib/solar.ts` | Sunlight as the two things a room can show you: `sunDirection` (a compass azimuth and an elevation → a unit vector in scene axes, null below the horizon) and `daylightKelvin` (warm at the horizon, neutral overhead, on the same Planckian locus as the lamps). It was a full NOAA / Meeus solar-position calculator accurate to ~0.01°, driven by a latitude, a longitude, a date and a clock; that went, and the file states why in its own header. **Correct is not the same as useful:** nobody arranging furniture can verify a hundredth of a degree. The day it drives now is one typical day in `lib/lighting-moods.ts` — a clock, not a location. |
 | `lib/lighting-moods.ts` | `LIGHTING` — what each of the five moods looks like, and for the three sun angles where the light comes from. Read by the 3D scene, by the north dial that draws the sun on its rim, and by its own test. It was inside `Room.tsx` first, which was wrong the moment a second consumer appeared: a table in one renderer becomes a table each consumer copies (rule 3, the `layout-rules.ts` argument). The dial had drawn the sun for as long as the sun existed, and putting the angles behind an R3F import is what silently dropped the marker. Hex rather than tokens because none of it is reachable from CSS — the `lib/scene-palette.ts` reason, and the reason it belongs in `lib/` beside it. It also owns `moodSunDirection` (mood + room bearing → a unit vector toward the light, `null` for a studio look or a sun below the horizon) and `DEFAULT_BEARING_DEG`. Its second consumer is `NorthDial`, which draws the same angle on its rim; a derivation with two callers drifts in a way nothing catches, and the specific failure here is a bearing sign that disagreed between them — the light in the right place and the marker on the dial in the wrong one. `moodKeyDirection` is gone with the shadow gate that was its only caller. |
 | `lib/part-rows.ts` | `groupRows` — the flat part list as the rows the layer tree draws. A group is nothing but a shared `groupId` (there is no node, no name, no ordering), so the nesting is **derived at read time** rather than stored, and three rules keep it honest: members cluster under their FIRST member so merging never reshuffles the rest of the list; a group of one is not a group, because deleting members leaves a lone part still carrying a `groupId` and a `Group · 1` header would describe something with no behaviour; and a search hides members but never the fact of the group, so a row still reports `3` against one visible member — “this piece is merged with two you cannot see” is exactly what you need before dragging it. Pure and generic over `{ id, groupId }`, so `tests/part-rows.test.ts` runs it without a scene, a store or React. |
 | `lib/shadow-fit.ts` | `shadowFit` — how big the sun's ortho shadow camera has to be for one room, plus the `mapSize`, `near`, `far` and `normalBias` that follow from it. Four expressions inside `KeyLight` until the room became a closed shell; it is geometry with a handedness and a wrong answer is **silent**, because an ortho shadow camera does not complain about what falls outside it — it stops recording it, and a caster that is not in the map casts nothing. The old fit covered how far the tallest piece of furniture could throw a shadow across the floor (`tallest × throwPerMetre`, capped at 6). With the walls casting, every caster and every receiver is inside the room's own box, so that term is gone and the bound is the box: `max(halfDiag, halfDiag·sin(elev) + boxH·cos(elev))`. The height goes on ONE camera axis, not both — three builds the shadow camera's basis from `up × z`, so its x is always horizontal — and getting that wrong is a radius used as a per-axis bound: it asked for 10.5 m where a 12 × 9 m open plan needs 7.5, stepping the map to 2048² for a room that never needed it, and 5.0 m against 3.0 on a small bedroom, which is 2.8× the texel density on the floor someone is looking at. Both forms are azimuth-free, which is what stops the bearing dial reallocating the depth target on every degree of a drag. `tests/shadow-fit.test.ts` does not pin numbers: it projects the room box's corners the way `Object3D.lookAt` does and asserts containment, then asserts tightness against the worst azimuth so that `extent = Infinity` cannot pass. Eleven mutations, each killed by the assertion that owns it — one of which (`max(12, …)` on the light distance) survived, and the constant was **removed** rather than given a test, since the constraint its own comment stated was already satisfied without it. |
@@ -1718,55 +1718,80 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   map) may cast, only on `high`, and only the two brightest in the room.
   `LIGHT_SCALE` re-bases candela into the scene's artistic exposure; the ratios
   between fixtures survive it, which is the part that matters.
-- **Lighting moods** — five, as one row of icon-only buttons
-  (`LightingPicker.tsx`, in the rail's **Style** section →
-  `LIGHTING` in `lib/lighting-moods.ts`). Two are studio looks: Evening / Cool.
-  Three are sun angles: Sunrise / Day / Sunset (see the next two entries).
-  It was seven in a `Segmented` of icon+word pairs inside **View**, which was
-  wrong twice over. Seven needed two rows of a 260px rail, and `sun`,
-  `sun-medium` and `sun-dim` differ only in the length of their rays — three
-  labels over one picture. And a *theme* sets a mood (`applyTheme` calls
-  `setLighting`), so the two controls answered one question from two drawers and
-  picking a theme silently moved a control the user could not see. Day absorbed
-  Noon (two names for bright overhead light; the survivor is the sun, because a
-  direction is the point of daylight) and Sunset absorbed Golden at 8°/272°,
-  which is neither original — Golden's 14° read as afternoon, Sunset's 2° gave
-  2657 K and room-length shadows. The two surviving ids are the two that were
-  already persisted, so no stored preference was orphaned. Dropping the words
-  does not drop the labels: each button keeps its `aria-label` (with the
-  direction, which no glyph can carry) and its name returns on hover **and on
-  focus** through `ui/Tooltip` — a native `title` never appears on keyboard
-  focus, and for an icon-only control the tooltip *is* the label. Every mood's
-  `hemi` / `fill` / `env` / `envMul` / `exposure` terms
-  set the **ambient** conditions only. Evening is deliberately low now — its job
-  is to leave room for the fixtures rather than to be an orange filter over a
-  fully-lit room, so a room with no lamps in it reads as genuinely dim there.
-  Each mood carries an **`envMul`** that scales the `<Environment>` lightformers
-  with it. Dimming the three lights and leaving the environment at full strength
-  is not enough: every material has `envMapIntensity: 0.5`, so the environment
-  supplies most of the light in the scene, and a nominally dark Evening still
-  rendered as a fully-lit amber room. Both halves move together or neither does.
-- **The sun is three of those moods, and they are angles rather than a
-  measurement.** `Sunrise` / `Day` / `Sunset` each carry one azimuth
-  and one elevation in the same `LIGHTING` table (`lib/lighting-moods.ts` — a
-  `lib/` module and not a renderer, because the north dial reads the same rows to
-  draw the sun on its rim), and everything else about the
-  key light is *derived* from those two numbers: its direction through
-  `sunDirection` (which is where the axis convention lives — scene +X east, +Z
-  south, so scene north is −Z), its colour through `daylightKelvin` on the same
-  Planckian locus the lamps use, and its strength through `sin(elevation)`, the
-  first-order air-mass term that makes Sunrise read as sunrise rather than as
-  Day pointed sideways. **When an angle is below the horizon there is no key
-  light at all** — `sunDirection` returns null rather than a downward vector,
-  because a light shining up through the floor is worse than no light. No shipped
-  preset is below it; the branch stays because the function decides, not the call
-  site.
-  The one per-room input is **`Site.bearingDeg`**, which rotates all four
-  together — so *which wall* the light comes through is still the user's answer,
-  and it is set on the dial in the rail's Room section (`NorthDial.tsx`). That is
-  a `role="slider"` with arrow keys, because pointing is otherwise a mouse-only
-  gesture, and it draws the room square in the middle with north on the rim:
-  "which way does the room face" is a picture, not a number between 0 and 359.
+- **The light is a clock** (`lib/lighting-moods.ts`). One hour, 0–24, that the sky,
+  the sun and the moon are all derived from, plus **Overcast**, which ignores it —
+  so `Lighting` is `'daylight' | 'overcast'` and `useStudio.hour` is the rest. It
+  replaced five fixed moods (Sunrise / Day / Sunset / Evening / Cool), and the four
+  named times in the rail — **Morning 07:36, Midday 12:48, Evening 18:30, Night
+  22:12** — are those pictures kept as stops, so `legacyLighting` maps every retired
+  id onto the stop that looks like it and a stored preference lands where it was.
+  - **One typical day, not a place.** Sunrise 06:00, sunset 19:30, the sun on a
+    tilted circle from 65° to 295° peaking 60° due south, the moon on the same
+    circle through the night peaking at 38°. No latitude, no date, no location:
+    the rule that retired the solar calculator — *accuracy the user cannot verify
+    is accuracy not worth holding* — still holds, and what a clock adds is
+    continuity, not precision.
+  - **The sky is a keyframe table** (`SKY_KEYS`) eased hour to hour: background,
+    exposure, hemisphere and fill colours and `envMul`, which scales the
+    `<Environment>` lightformers with it. Dimming the lights and leaving the
+    environment at full strength is not enough — every material has
+    `envMapIntensity: 0.5`, so the environment supplies most of the light, and a
+    nominally dark night still rendered as a lit amber room. After dark the key
+    light is the moon, cool and faint, so the lamps do the work
+    (`components/three/PartLight.tsx`); a room with no lamps is genuinely dim.
+    The test walks the day minute by minute, because a seam is invisible in any
+    screenshot of one moment.
+  - **The key light is derived, not authored**: direction from `sunDirection`
+    (scene +X east, +Z south), colour from `daylightKelvin` on the lamps' Planckian
+    locus, strength from `sin(elevation)` faded in over the last 8° above the
+    horizon, so it never switches on at full strength as the sun clears it. Below
+    the horizon there is no sun light at all.
+  - **The sun arc over the room is the big control** (`components/three/SunArc.tsx`),
+    after sael.net's interior study: a dashed path around the room with the sun —
+    or at night the moon, on its own lower path — riding it and a clock pill
+    beside it. Drag it along the path; it is also a `role="slider"` with arrow,
+    Page and Home/End keys. It is a halo rather than a dome — just clear of the
+    walls across, a ceiling plus 0.9 m up — drawn twice, faint through the walls
+    and clear in front of them, and the pill is held inside the canvas so a sun
+    at the horizon (which runs toward the camera) is pinned to the edge rather
+    than gone. All three of those were measured in a browser, not reasoned.
+    Dragging it while overcast brings the sun back. `'__sun__'` is its
+    `draggingId`, which blocks orbiting and keeps the scrub out of undo.
+  - **The rail keeps the names** (`LightingPicker.tsx`, rail **Style → Light**):
+    the four stops and Overcast as five 32px glyphs with tooltips and full
+    `aria-label`s, a native 24-hour range for keyboard and screen readers, and
+    **Plan top faces** — the room's bearing, one compass point a press.
+  - **`Site.bearingDeg` still turns the whole day** with the room, so which wall
+    the morning comes through is the user's answer. It was the Sun direction dial
+    (`NorthDial.tsx`, deleted); the arc now shows the answer and the rail keeps the
+    setting.
+- **Carried pieces sway** (`lib/wobble.ts`, `components/three/Wobble.tsx`). A floor
+  piece being dragged lifts 14 mm and leans back against its travel, up to 7°, and
+  rocks upright on release — an underdamped spring, ζ ≈ 0.35, two or three rocks
+  inside half a second. **Drawn, never stored**: the lean is an inner group the
+  transform layers never see, so nothing reaches positions, collision, the plan or
+  a saved file. Off under `prefers-reduced-motion`.
+- **Sound** (`lib/sound.ts`, `lib/sound-cues.ts`, `components/studio/SoundCues.tsx`).
+  Every sound is synthesised with Web Audio — no files to fetch, cache or
+  allow-list — short (≤ 0.35 s), quiet, and wood-and-felt: a pop to pick up, a
+  knock to set down that is lower for a bigger piece, a tick when a guide locks, a
+  low double bump when a piece will not go, a swish for colour, a ratchet click per
+  15° of turn, a rising or falling blip for a resize, a run of knocks for a
+  rearrange, two notes falling for undo and rising for redo, a swell of air for
+  Overcast, three high notes rising at sunrise and falling at sunset, and a detent
+  per hour as the clock moves. Under anything being carried — a piece, a wall, the
+  sun — runs the one continuous sound, a **glide** of filtered air whose level
+  follows speed and which fades by itself when the hand stops; the sun's
+  brightens toward noon and goes dark at night.
+  **Heard from the state, not from the gesture.** `cueFor(prev, next)` is pure and
+  returns at most ONE cue per change (adding a piece also selects it; a theme
+  recolours and moves the clock) by `PRIORITY`, so a change reached by the plan,
+  an arrow key, a context menu or Suggest sounds the same as one reached by a
+  drag. Silent on purpose: opening a room (and the moment after, while it
+  settles), whatever an undo restores (the undo has its own sound), and whatever a
+  drag writes along the way (the drag is its pick-up, glide and set-down). The
+  preference is `useSettings().sound`, on by default and switchable in **View**;
+  no `AudioContext` exists until a sound is wanted, which is always inside a press.
   The key light's shadow frustum is fitted per direction, not per room, and the fit
   is `lib/shadow-fit.ts` rather than four expressions in the renderer. A low sun
   sees the room in **elevation** where a high one sees it in **plan**, so the bound
@@ -1880,27 +1905,22 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   room photos. Renaming was not tidying — a module named for the half that was
   deleted is exactly the scar rule 1 of `CLAUDE.md` describes, and the next reader
   cannot tell a deliberate trim from a half-finished deletion. `lib/geolocate.ts`
-  is gone. The bearing dial moved out of the lighting mood that consumed it and
-  into the Room section, where `lib/storage.ts` had always said it belonged: "a
-  property of the room, not of the device".
+  is gone. The bearing moved out of the lighting mood that consumed it and onto
+  the room, where `lib/storage.ts` had always said it belonged: "a property of the
+  room, not of the device" — first as a dial in the Room section, now as the
+  **Plan top faces** turner beside the light, with the sun arc drawing its answer.
 
   **What holds the shape.** `LIGHTINGS` in `lib/store.ts` is an `as const` array
-  with the `Lighting` union derived from it, and its consumers are typed
-  `Record<Lighting, …>` — so a mood missing from the scene table or from the chip
-  set is a compile error rather than an `undefined` row that takes the scene down
-  on first paint. `tests/lighting-moods.test.ts` covers what the compiler cannot
-  see: a sun preset authored at or below the horizon (selectable,
-  plausible-looking, and casting nothing, because `sunDirection` returns null
-  there), four presets arriving from one direction, four presets at one height, a
-  mood that is somehow both a studio look and a sun angle, and a leftover row for
-  a mood that was renamed. It **imports** `LIGHTING` to do that. It could not
-  while the table lived in `Room.tsx` — it parsed the component’s source with
-  regexes, which tests a transcript of the data rather than the data, and *that*
-  is the second reason the table moved to `lib/`. If a check in that file ever
-  needs a regex again, the data is in the wrong place. The persist
-  config carries a `merge` that checks the stored `lighting` against `LIGHTINGS`,
-  because a browser holding the retired `'sun'` would otherwise index a row that
-  no longer exists.
+  with the `Lighting` union derived from it, and `TIME_STOPS` is keyed by id into
+  the picker's `Record<TimeStopId, …>`, so a stop with no glyph is a compile error.
+  `tests/lighting-moods.test.ts` covers what the compiler cannot see: a seam in the
+  sky anywhere in the day (walked minute by minute, midnight included), a sun up
+  outside its day or a moon up beside it, a key light pointing below the floor or
+  switching on at the horizon, the stops drifting off the pictures they replaced,
+  and a retired id — `'sun'` included — mapping to anything but the stop that is
+  its picture, or to nothing at all. The persist config's `merge` runs stored
+  ids through `legacyLighting` and validates the stored hour, because a browser
+  holding a retired mood would otherwise index a row that no longer exists.
 - **Windows and doors are holes in the wall**, not panels in front of it
   (`lib/apertures.ts` → `RoomShell`). Each wall is a `THREE.Shape` with one hole per
   opening; `ShapeGeometry` faces +Z exactly as the `planeGeometry` it replaced, so

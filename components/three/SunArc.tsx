@@ -31,7 +31,7 @@
 import { useMemo, useRef } from 'react';
 import { Html, Line } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
-import { Vector3 } from 'three';
+import { Vector3, type Camera, type Object3D } from 'three';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { footprintBounds } from '@/lib/footprint';
@@ -63,11 +63,11 @@ const SAMPLES = 96;
  *  null at or below 0° on purpose — a light cannot shine up through the floor — but
  *  a path can be drawn there, and the arc's two ends are exactly at 0°. Same axes:
  *  +X east, +Z south, bearing rotating the whole sky. */
-function skyPoint(a: SkyAngle, bearingDeg: number, r: number, c: [number, number]): [number, number, number] {
+function skyPoint(a: SkyAngle, bearingDeg: number, r: { across: number; up: number }, c: [number, number]): [number, number, number] {
   const alt = (a.elevationDeg * Math.PI) / 180;
   const az = ((a.azimuthDeg - bearingDeg) * Math.PI) / 180;
   const h = Math.cos(alt);
-  return [c[0] + r * h * Math.sin(az), r * Math.sin(alt), c[1] - r * h * Math.cos(az)];
+  return [c[0] + r.across * h * Math.sin(az), r.up * Math.sin(alt), c[1] - r.across * h * Math.cos(az)];
 }
 
 /** Relative luminance of a `#rrggbb`, good enough to decide ink-or-paper. */
@@ -79,6 +79,25 @@ function isDark(hex: string): boolean {
 
 const _v = new Vector3();
 
+/** Room the pill needs from each edge of the canvas, in CSS pixels: half its
+ *  width beside it, the floating toolbar above it, the view gizmo's row below. */
+const FRAME = { x: 56, top: 76, bottom: 28 };
+
+/** drei's own placement, then held inside the canvas. The arc's two ends run
+ *  toward the camera and leave the frame at sunrise and sunset — and any part of it
+ *  can, once the view is orbited — and a handle that leaves the canvas is a control
+ *  that has gone. Pinned to the edge it still says where the sun is, the way a map
+ *  pins an off-screen marker. Measured: 06:40 in a 5 × 4 m room at the default view
+ *  put the whole pill past the right edge. */
+function keepInFrame(el: Object3D, camera: Camera, size: { width: number; height: number }): number[] {
+  _p.setFromMatrixPosition(el.matrixWorld).project(camera);
+  const x = (_p.x + 1) * (size.width / 2);
+  const y = (1 - _p.y) * (size.height / 2);
+  const clamp = (v: number, lo: number, hi: number) => (hi < lo ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+  return [clamp(x, FRAME.x, size.width - FRAME.x), clamp(y, FRAME.top, size.height - FRAME.bottom)];
+}
+const _p = new Vector3();
+
 export function SunArc() {
   const lighting = useStudio((s) => s.lighting);
   const hour = useStudio((s) => s.hour);
@@ -86,6 +105,7 @@ export function SunArc() {
   const setLighting = useStudio((s) => s.setLighting);
   const setDragging = useStudio((s) => s.setDragging);
   const footprint = useScene((s) => s.room.footprint);
+  const roomHeight = useScene((s) => s.room.height);
   const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
@@ -93,27 +113,45 @@ export function SunArc() {
   const overcast = lighting === 'overcast';
   const day = isDaytime(hour);
 
-  // Centred on the room and clear of it: half its long side, plus a margin that
-  // keeps the path outside the walls at every bearing. The room's centre rather
-  // than the origin, because a wall dragged out leaves the footprint off-centre.
+  // A halo, not a dome. Centred on the room — its centre rather than the origin,
+  // because a wall dragged out leaves the footprint off-centre — and squashed:
+  //   · ACROSS, just clear of the walls, so the rising and setting ends land
+  //     beside the room rather than sweeping the whole view.
+  //   · UP, far enough that the noon sun clears the top of the walls (sin 60° of
+  //     it is ~0.87, so a ceiling plus 0.9 m peaks about half a metre above it).
+  // The first version was a true hemisphere at 0.62 × the long side + 1.4 m and
+  // was measured in a browser: in a 5 × 4 m room it crossed every wall as a
+  // construction line and put the noon sun under the toolbar, off the canvas.
   const b = footprintBounds(footprint);
   const center: [number, number] = [b.cx, b.cz];
-  const radius = Math.max(b.width, b.depth) * 0.62 + 1.4;
+  const radius = { across: Math.max(b.width, b.depth) * 0.5 + 0.6, up: roomHeight + 0.9 };
 
   // The arc, and the hour at each of its points. One list for both the drawing and
   // the drag's hit test, so the handle cannot be dragged to a place the dashes are not.
+  //
+  // WHICH path is the half of the clock being shown: the sun's by day, the moon's
+  // lower one by night. The first version always drew the sun's, and the moon —
+  // which peaks at 38° against the sun's 60° — rode visibly off the dashes all
+  // night. While the sun is being carried the half is the one the gesture started
+  // in, so a drag that reaches sunset exactly (19:30, the arc's own end) does not
+  // swap paths, and jump the handle to the other horizon, under the hand.
+  /** Which half of the clock the drag started in, fixed for the gesture. */
+  const phase = useRef<'day' | 'night'>('day');
+  const carrying = useStudio((s) => s.draggingId === SUN_DRAG_ID);
+  const half: 'day' | 'night' = carrying ? phase.current : day ? 'day' : 'night';
   const arc = useMemo(() => {
     const pts: Array<[number, number, number]> = [];
     for (let i = 0; i <= SAMPLES; i++) {
       const t = i / SAMPLES;
-      pts.push(skyPoint(sunAt(hourOnDayArc(t)), bearingDeg, radius, center));
+      const a = half === 'day' ? sunAt(hourOnDayArc(t)) : moonAt(hourOnNightArc(t));
+      pts.push(skyPoint(a, bearingDeg, radius, center));
     }
     return pts;
     // `center` is rebuilt every render from `b`; its two numbers are the dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bearingDeg, radius, b.cx, b.cz]);
+  }, [half, bearingDeg, radius.across, radius.up, b.cx, b.cz]);
 
-  const body = day ? sunAt(hour) : moonAt(hour);
+  const body = half === 'day' ? sunAt(hour) : moonAt(hour);
   const marker = skyPoint(body, bearingDeg, radius, center);
   const light = lightingAt(lighting, hour, bearingDeg);
   const dark = isDark(light.bg);
@@ -137,10 +175,6 @@ export function SunArc() {
     return best / SAMPLES;
   }
 
-  /** Whole hours already sounded this drag, so each is ticked once. */
-  const lastTick = useRef<number | null>(null);
-  /** Which half of the clock the drag started in, fixed for the gesture. */
-  const phase = useRef<'day' | 'night'>('day');
 
   function scrubTo(clientX: number, clientY: number) {
     const t = tAtPointer(clientX, clientY);
@@ -148,12 +182,9 @@ export function SunArc() {
     // Five-minute steps: a clock that reads 17:33 then 17:34 as the hand trembles
     // is noise, and nothing about furniture turns on a minute.
     const h = Math.round(raw * 12) / 12;
+    // The hour's detent, the air under the scrub and the dawn and dusk cues are
+    // `SoundCues`' — they follow the clock whatever moves it.
     setHour(h);
-    const whole = Math.floor(h);
-    if (lastTick.current !== whole) {
-      lastTick.current = whole;
-      playSound('tick', { brightness: phase.current === 'day' ? sunAt(h).elevationDeg / 60 : 0 });
-    }
   }
 
   const step = (dh: number) => {
@@ -166,6 +197,11 @@ export function SunArc() {
   return (
     // `helper`: a saved picture is of the room, not of the controls drawn over it.
     <group userData={{ helper: true }}>
+      {/* Drawn twice. Once THROUGH everything, faint — the arc is a control, and a
+          control hidden behind the wall it is about is one you cannot find — and
+          once depth-tested at full strength, so the stretch in front of the room is
+          clear and the stretch behind a wall is a ghost of it. One pass at one
+          strength read as a construction line scored across the plaster. */}
       <Line
         points={arc}
         color={ink}
@@ -174,17 +210,28 @@ export function SunArc() {
         dashSize={0.12}
         gapSize={0.1}
         transparent
-        opacity={overcast ? 0.18 : 0.42}
+        opacity={overcast ? 0.08 : 0.16}
         depthWrite={false}
-        // Never under the room: the arc is a control, and a control hidden behind
-        // the wall it is about is one you cannot reach.
         depthTest={false}
         renderOrder={10}
         raycast={() => null}
       />
-      <Html position={marker} center zIndexRange={[25, 0]}>
+      <Line
+        points={arc}
+        color={ink}
+        lineWidth={1.25}
+        dashed
+        dashSize={0.12}
+        gapSize={0.1}
+        transparent
+        opacity={overcast ? 0.2 : 0.5}
+        depthWrite={false}
+        renderOrder={11}
+        raycast={() => null}
+      />
+      <Html position={marker} center zIndexRange={[25, 0]} calculatePosition={keepInFrame}>
         <div
-          className={`sun-arc${overcast ? ' sun-arc--muted' : ''}${day ? '' : ' sun-arc--night'}`}
+          className={`sun-arc${overcast ? ' sun-arc--muted' : ''}${half === 'day' ? '' : ' sun-arc--night'}`}
           role="slider"
           tabIndex={0}
           aria-label="Time of day"
@@ -197,7 +244,6 @@ export function SunArc() {
             e.stopPropagation();
             e.currentTarget.setPointerCapture(e.pointerId);
             phase.current = day ? 'day' : 'night';
-            lastTick.current = Math.floor(hour);
             // Grabbing the sun is asking for the sun: an overcast room goes back to
             // daylight rather than sitting there refusing the gesture.
             if (overcast) setLighting('daylight');
@@ -234,7 +280,7 @@ export function SunArc() {
           }}
         >
           <span className="sun-arc__body" aria-hidden>
-            <Icon name={overcast ? 'cloud' : day ? 'sun' : 'moon'} size={18} />
+            <Icon name={overcast ? 'cloud' : half === 'day' ? 'sun' : 'moon'} size={18} />
           </span>
           <span className="sun-arc__time mono">{formatClock(hour)}</span>
         </div>

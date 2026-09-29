@@ -63,7 +63,6 @@ export function LightingPicker() {
     // Read through `getState` rather than closing over `site`, so a fast double
     // press cannot spread one render's site over the rest.
     setSite({ ...useScene.getState().room.site, bearingDeg: ((next % 360) + 360) % 360 });
-    playSound('tick', { brightness: 0.4 });
   };
 
   const glyphs: Array<{ id: string; label: string; hint: string; icon: IconName; active: boolean; pick: () => void }> = [
@@ -76,6 +75,10 @@ export function LightingPicker() {
       pick: () => {
         setLighting('daylight');
         setHour(t.hour);
+        // A named time always chimes, even one a few minutes off — `SoundCues` only
+        // hears a JUMP as one, and a press is a press. Same name, so the two
+        // de-duplicate rather than stack.
+        playSound('chime');
       },
     })),
     {
@@ -98,10 +101,7 @@ export function LightingPicker() {
           <Tooltip key={m.id} label={m.label}>
             <button
               type="button"
-              onClick={() => {
-                m.pick();
-                playSound('chime');
-              }}
+              onClick={m.pick}
               aria-pressed={m.active}
               aria-label={`${m.label}: ${m.hint}`}
               style={{
@@ -141,9 +141,7 @@ export function LightingPicker() {
           aria-valuetext={formatClock(hour)}
           onChange={(e) => {
             if (overcast) setLighting('daylight');
-            const next = Number(e.target.value);
-            if (Math.floor(next) !== Math.floor(hour)) playSound('tick', { brightness: isDaytime(next) ? 0.6 : 0 });
-            setHour(next);
+            setHour(Number(e.target.value));
           }}
           style={{ flex: 1, minWidth: 0 }}
         />

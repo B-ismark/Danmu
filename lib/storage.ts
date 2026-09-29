@@ -125,7 +125,7 @@ export function migrateRoom(rec: RoomData): RoomData {
   // TYPE stopped anything reading them but did nothing about the bytes, and
   // because they are no longer declared, TypeScript could not see them ride
   // along. `loadFromRoom` passed the object through by reference, `RoomSync`
-  // re-saved it, and `NorthDial` SPREAD it — so a dial nudge rewrote the
+  // re-saved it, and the bearing dial (then `NorthDial`) SPREAD it — so a nudge rewrote the
   // coordinates rather than replacing them, and `buildSceneFile` wrote them into
   // the file the user hands to someone else. An asymmetric round trip in the
   // leaking direction: refused on import, exported on save.

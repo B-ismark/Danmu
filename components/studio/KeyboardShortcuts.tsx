@@ -29,6 +29,7 @@ import { turnInPlace, refusalCause } from '@/lib/drag-resolve';
 import { planConvoy, travellingWorld } from '@/lib/drag-convoy';
 import { cascadeTransform } from '@/lib/rigid-parent';
 import { turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
+import { playSound } from '@/lib/sound';
 import { useDragLive } from '@/lib/drag-live';
 import { useHistory, applySnapshot, startHistoryRecording } from '@/lib/history';
 import { collidesAt, type ScenePart } from '@/lib/scene-spec';
@@ -615,7 +616,12 @@ export function KeyboardShortcuts() {
           // on release a moment later.
           if (useStudio.getState().draggingId) return;
           const snap = e.shiftKey ? useHistory.getState().redo() : useHistory.getState().undo();
-          if (snap) applySnapshot(snap);
+          if (snap) {
+            applySnapshot(snap);
+            // Its own sound, because what an undo restores is silent on purpose —
+            // see `lib/sound-cues.ts`.
+            playSound(e.shiftKey ? 'redo' : 'undo');
+          }
           return;
         }
         if (e.key === ',') {

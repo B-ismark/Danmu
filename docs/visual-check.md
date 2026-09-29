@@ -1972,6 +1972,31 @@ real phone, with a real scan, is the unlooked-at half.
 ---
 ## Look and light
 
+### A day/night clock with a sun arc over the room, pieces that sway when carried, and sounds — branch `claude/affectionate-ritchie-ilawx1`, SEEN HEADLESS ONLY, needs real ears and a real trackpad
+
+**Where to click.** Open any room in **3D Model**. A dashed path circles over the room with the
+sun and a clock pill on it; drag the sun along it from morning to evening, then press **Night**
+in **Style → Light** and drag the moon. Press **Overcast**, then grab the sun again. Turn the
+room with **Plan top faces**. Carry the sofa quickly across the floor and let go; carry it into
+the coffee table. In **2D Plan**, drag a piece and drag a wall. Add a piece from the Library,
+delete it, recolour one, turn one with R, press Undo and Redo. **View → Sounds** switches it off.
+
+**What wrong looks like.**
+- The arc or the pill leaving the canvas, sitting under the floating toolbar, or reading as a
+  construction line scored across the walls. Measured headless at 1440 × 900 on a 5 × 4 m room:
+  noon pill at y 235, 18:30 at y 387, the moon at 22:12 on its own path, and 06:40 pinned to the
+  right edge rather than gone — the three fixes this needed (halo not dome, ghosted behind the
+  walls, held inside the frame) were each found by looking, so look at a rotated and a zoomed
+  view too, and at a tall room.
+- The moon off its dashes, or the handle jumping to the other horizon as a drag reaches 19:30.
+- A seam in the sky while scrubbing — a colour that jumps rather than eases.
+- A carried piece leaning INTO its travel (towed by its top), tipping visibly past a few
+  degrees, still rocking after half a second, or swaying on a wall piece or a lamp on a table.
+- **Sound, which nothing headless can hear:** anything that clicks harshly, anything louder
+  than a notification, a buzz while dragging fast, the glide hanging on after the hand stops,
+  two sounds for one press, or ANY sound while a room opens or while an undo restores it. The
+  sunrise and sunset cues should be felt rather than noticed.
+
 ### A piece cut at its foot is judged where it would stand against its wall — merged to `main` in `12b0209` (PR #170), NOT PROBED
 
 **Where to click.** *Photograph my real room* → a photo whose bottom edge cuts off the foot of
