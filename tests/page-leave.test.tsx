@@ -331,6 +331,27 @@ describe('the size boxes', () => {
     await wait(300);
     expect(useScene.getState().room.width).toBe(6);
   });
+
+  // Leaving the room unmounts the boxes and RoomSync together, and RoomSync saves in its
+  // own cleanup. In an ordinary effect the boxes committed first only because they sit
+  // above RoomSync in the layout; rendered after it, as here, the typed width reached a
+  // RoomSync that was no longer listening, and the room stayed 6 m wide.
+  it('are saved when the whole room goes away, whichever comes first on screen', async () => {
+    const { unmount } = await mount(
+      <>
+        <RoomSync />
+        <RoomDimsEditor />
+      </>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Width/), { target: { value: '4.5' } });
+    unmount();
+    await waitFor(async () => {
+      const saved = (await roomStore.loadRoom(ROOM_ID))!;
+      expect(saved.width).toBeCloseTo(4.5, 5);
+      const xs = saved.footprint!.map(([x]) => x);
+      expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(4.5, 5);
+    });
+  });
 });
 
 describe('the Exact size fields', () => {
@@ -375,6 +396,21 @@ describe('the Exact size fields', () => {
     act(() => useStudio.setState({ dims: {} }));
     await wait(200);
     expect(useStudio.getState().dims[part.id]).toBeUndefined();
+  });
+
+  it('are saved when the whole room goes away, whichever comes first on screen', async () => {
+    const { unmount } = await mount(
+      <>
+        <RoomSync />
+        <Inspector />
+      </>,
+    );
+    const part = useScene.getState().parts.find((p) => p.category === 'sofa') ?? useScene.getState().parts[0];
+    act(() => useStudio.setState({ selection: [part.id], selectedPartId: part.id }));
+    const width = screen.getAllByRole('spinbutton')[0];
+    fireEvent.change(width, { target: { value: (Number((width as HTMLInputElement).value) * 0.9).toFixed(2) } });
+    unmount();
+    await waitFor(async () => expect((await roomStore.loadTransforms(ROOM_ID))?.dims[part.id]).toBeDefined());
   });
 });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
@@ -912,8 +912,9 @@ function DimensionEditor({
   // reload or a closed tab. Committed in the page-leave's first phase, like the Room
   // section's boxes, so `RoomSync` has it to save (`lib/page-leave.ts`). And committed
   // when the fields go away, for the boxes' reason: left to its timer, it landed in
-  // whichever room was open 120 ms later, on whichever piece there had the same id.
-  useEffect(() => {
+  // whichever room was open 120 ms later, on whichever piece there had the same id. A
+  // layout effect, as the boxes' is, so it commits before `RoomSync` saves.
+  useLayoutEffect(() => {
     const flush = () => {
       if (!timer.current) return;
       clearTimeout(timer.current);

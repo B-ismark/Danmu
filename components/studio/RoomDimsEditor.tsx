@@ -4,7 +4,7 @@
 // Uses the user's selected dim unit. A commit changes the room on screen, and
 // `RoomSync` saves it — the size with the outline it makes, in one write.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
@@ -102,7 +102,14 @@ export function RoomDimsEditor() {
   // And it commits when the boxes go away, too — the Room section closed, or another
   // room opened. Left to its timer, it ran 200 ms later against whatever room was on
   // screen by then, so a width typed in one room could land in the next.
-  useEffect(() => {
+  //
+  // A LAYOUT effect, so that commit comes before `RoomSync` saves, whichever of the two
+  // comes first on screen. Leaving the room unmounts both, and `RoomSync` saves in its
+  // own effect's cleanup: had these boxes cleaned up in an ordinary effect, they would
+  // have run first only because they sit above it in the layout, and below it the typed
+  // width reached a `RoomSync` that was no longer listening. Every layout effect's
+  // cleanup runs before any ordinary one's.
+  useLayoutEffect(() => {
     const flush = () => {
       if (!timer.current) return;
       clearTimeout(timer.current);
