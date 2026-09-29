@@ -52,6 +52,22 @@ export function splitSlotSuffix(label: string): { name: string; slot: CaptureSlo
   return { name: label.slice(0, at), slot: slotOf(label.slice(at + SLOT_SUFFIX.length).split(SLOT_SUFFIX)[0]) };
 }
 
+/** The wall the room builder places a saved row on: the one its suffix names when
+ *  that suffix was written in the record's own form, a single code at the end, and
+ *  `n` for anything else — which is where this row has always been built.
+ *
+ *  Not `splitSlotSuffix(label).slot`, and the difference is the rule that a load
+ *  moves nothing. A room the user only DRAGGED in has no saved scene and is rebuilt
+ *  from this list on every open, with the drag applied over the top; a turn exists
+ *  only if they turned it. So building `Sofa__slot:south` on the south wall now would
+ *  leave it where they dragged it, facing the other way. The scan screen reads the
+ *  true wall (`fromRecord`), and Continue there writes it back as a code, which is
+ *  the rebuild the user asked for. */
+export function placedSlot(label: string): CaptureSlot {
+  const { slot } = splitSlotSuffix(label);
+  return slot && label.endsWith(SLOT_SUFFIX + slot) ? slot : 'n';
+}
+
 /** The label without the slot suffix. Exported because the review screen shows it
  *  and the record writes it, and those two disagreeing is how a room full of
  *  furniture came to be named "sofa__slot:n". */

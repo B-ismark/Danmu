@@ -441,7 +441,10 @@ Furniture detection runs through a fallback chain, best-effort:
    `splitSlotSuffix` (`lib/detection-record.ts`) is its one reader: the record,
    the room builder, the photo editor and a saved scene's names all call it, and it
    reads the suffix with `slotOf`, so a room saved before that check, when a wall
-   was kept as the model wrote it, reads its walls back (§ 49.18).
+   was kept as the model wrote it, shows its true walls on the scan screen and
+   clean names everywhere. The room builder places such a row where it always
+   stood (`placedSlot`), because a load moves nothing; a rescan is what moves it
+   (§ 49.18).
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
    detector is available.
 

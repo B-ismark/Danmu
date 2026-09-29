@@ -237,15 +237,22 @@ describe('one reader of the slot suffix (§ 49.18)', () => {
     return { name: p.name, slot: p.fromDetection?.slot, pos: p.pos };
   };
 
-  it('builds a wall saved in words on that wall, under its own name', () => {
+  it('builds a wall saved in words where it has always built, under its own name', () => {
+    // A load moves nothing: a room the user only dragged in is rebuilt on every open
+    // with no saved turn, so re-walling the piece would turn it where it stands. The
+    // scan screen reads the true wall; Continue there is the rebuild.
     const south = built('Sofa__slot:s');
+    const north = built('Sofa__slot:n');
     // The two walls build apart, or the comparisons below could not fail.
-    expect(built('Sofa__slot:n').pos).not.toEqual(south.pos);
+    expect(north.pos).not.toEqual(south.pos);
     expect(south).toMatchObject({ name: 'Sofa', slot: 's' });
-    for (const label of ['Sofa__slot:south', 'Sofa__slot:SOUTH', 'Sofa__slot:S', 'Sofa__slot:south__slot:n']) {
-      expect([label, built(label)]).toEqual([label, south]);
+    for (const label of ['Sofa__slot:south', 'Sofa__slot:SOUTH', 'Sofa__slot:S', 'Sofa__slot:south__slot:n', 'Sofa__slot:up']) {
+      expect([label, built(label)]).toEqual([label, north]);
+      expect(fromRecord(savedRoom(label).detectedObjects![0]).slot).toBe(label.includes('up') ? 'n' : 's');
     }
-    expect(built('Sofa__slot:up')).toEqual(built('Sofa__slot:n'));
+    // …and once the scan screen has written it back as a code, it builds on the south wall.
+    const healed = toRecord(fromRecord(savedRoom('Sofa__slot:south').detectedObjects![0]), 0, true, uid);
+    expect(built(healed.label)).toEqual(south);
   });
 
   it('cleans the name of a detected piece in a saved scene, and moves nothing', () => {

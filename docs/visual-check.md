@@ -2023,8 +2023,10 @@ the Inspector. Then **Rescan** into the scan screen and read the tags on each ph
 
 **What wrong looks like.**
 - A name ending in `__slot:` anywhere: the rail, the Inspector, a tag on a photo.
-- A piece that has MOVED since the last time the room was open. An edited room opens from its
-  saved scene, and only the names are cleaned there; nothing should change place.
+- A piece that has MOVED or TURNED since the last time the room was open, above all one that
+  was dragged but never rotated. Opening a room cleans names and nothing else.
+- After a Rescan and Continue, a piece that did not move to the wall its photo shows. That is
+  the one step allowed to move it.
 - On the scan screen, a row listed under a different wall from the photo its tag sits on.
 - **The part only a real room answers:** whether any such room exists at all. It depends on
   what Gemini wrote for a wall before § 49.17, which nobody recorded.
