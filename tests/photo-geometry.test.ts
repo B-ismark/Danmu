@@ -29,6 +29,7 @@ import {
   bboxOfCeilingDisc,
   bboxOfCeilingDiscInFrame,
   bboxOfFloorBox,
+  bboxOfFloorBoxInFrame,
   bboxOfFloorCylinder,
   bboxOfFloorObject,
   bboxOfWallPanel,
@@ -812,11 +813,19 @@ describe('a box the edge of the photo cut off', () => {
   // that growth and its three limits, each against the answer with no `whole` at all,
   // so a number here is the placer's own rather than one this file chose.
   const level: CameraCal = { k: 1.2, aspect: 4 / 3 };
-  /** What a detector returns for a piece running out of the picture: the part of its
-   *  silhouette inside the frame. */
+  /** A piece's whole box clipped to the frame, which keeps the column of a corner the
+   *  frame hid: what a detector returns only where the silhouette crosses the edge
+   *  square on, as a wall piece's here does. A floor box is `drawn` instead. */
   const clip = ([x, y, w, h]: readonly number[]): [number, number, number, number] => {
     const x0 = Math.max(0, x), y0 = Math.max(0, y);
     return [x0, y0, Math.min(1, x + w) - x0, Math.min(1, y + h) - y0];
+  };
+  /** What a detector returns for a floor box running out of the picture: the outline
+   *  inside the frame (§ 49.16, § 49.20). A fixture that photographs one and finds it
+   *  out of the picture is a mistake in the fixture. */
+  const drawn = (box: Box | null): Box => {
+    if (!box) throw new Error('a floor box this test photographs is not in the picture');
+    return box;
   };
   const frameN = wallFrame('n', ROOM.footprint)!;
 
@@ -939,7 +948,7 @@ describe('a box the edge of the photo cut off', () => {
     const z = -(wallD('n', ROOM) - 0.175);
     const foot = { depthM: 0.35 };
     const whole = { widthM: 0.9, heightM: 1.8 };
-    const box = clip(bboxOfFloorBox('n', 2.5, z, 0.9, 1.8, 0.35, WIDE));
+    const box = drawn(bboxOfFloorBoxInFrame('n', 2.5, z, 0.9, 1.8, 0.35, WIDE));
     expect(frameCuts(box)).toEqual({ left: false, right: true, top: false, bottom: false });
     expect(placeFloorObject(box, 'n', ROOM, WIDE, foot)!.widthMM).toBeLessThan(200);
     const g = placeFloorObject(box, 'n', ROOM, WIDE, { ...foot, whole })!;
@@ -949,11 +958,17 @@ describe('a box the edge of the photo cut off', () => {
     expect(g.heightMM).toBe(1800);
     // 0.2 m further east. Refused on its own; grown, it stops at the wall's end rather
     // than stand 150 mm through the east wall.
-    const corner = clip(bboxOfFloorBox('n', 2.7, z, 0.9, 1.8, 0.35, WIDE));
+    const corner = drawn(bboxOfFloorBoxInFrame('n', 2.7, z, 0.9, 1.8, 0.35, WIDE));
     expect(placeFloorObject(corner, 'n', ROOM, WIDE, foot)).toBeNull();
     const c = placeFloorObject(corner, 'n', ROOM, WIDE, { ...foot, whole })!;
-    expect(c.position.x - c.widthMM / 2000).toBeCloseTo(2.25, 9);
-    expect(c.position.x + c.widthMM / 2000).toBeCloseTo(frameN.right, 9);
+    // To the millimetre its width is rounded to.
+    expect(c.position.x + c.widthMM / 2000).toBeCloseTo(frameN.right, 3);
+    // Its inner edge reads 51 mm east of the truth's 2.25. Here the frame hid the near
+    // foot through its side, so the box's bottom row is where the outline crosses that
+    // edge and not the foot, and the distance is read there (§ 49.21). The whole box
+    // clipped to the frame, as this fixture boxed it until § 49.20, kept the foot's row,
+    // and the edge read exact.
+    expect(c.position.x - c.widthMM / 2000).toBeCloseTo(2.3011, 4);
   });
 
   it('never slides a grown piece off the part of it the photo saw', () => {
@@ -964,7 +979,7 @@ describe('a box the edge of the photo cut off', () => {
     const room = dragged('w', -2);
     expect(wallFrame('n', room.footprint)!.left).toBe(-1); // premise
     const low = { ...WIDE, height: 0.6 }; // low enough that its foot is in frame
-    const box = clip(bboxOfFloorBox('n', 0, -1.3, 10, 0.5, 0.6, low));
+    const box = drawn(bboxOfFloorBoxInFrame('n', 0, -1.3, 10, 0.5, 0.6, low));
     expect(frameCuts(box)).toEqual({ left: true, right: true, top: false, bottom: false });
     const foot = { depthM: 0.6 };
     const seen = placeFloorObject(box, 'n', room, low, foot)!;
@@ -982,7 +997,7 @@ describe('a box the edge of the photo cut off', () => {
     // the wall, so its near face is at most a depth short of it — and for a piece
     // against the wall that bound is exact.
     const d = wallD('n', ROOM);
-    const box = clip(bboxOfFloorBox('n', 0.3, -(d - 0.25), 1.2, 0.95, 0.5, level));
+    const box = drawn(bboxOfFloorBoxInFrame('n', 0.3, -(d - 0.25), 1.2, 0.95, 0.5, level));
     expect(frameCuts(box).bottom).toBe(true);
     const g = placeFloorObject(box, 'n', ROOM, level, { depthM: 0.5 })!;
     expect(g.distance).toBeCloseTo(d - 0.25, 9);
@@ -996,7 +1011,7 @@ describe('a box the edge of the photo cut off', () => {
   it('grows a floor piece cut at the top to a whole one, and keeps a taller one as seen', () => {
     // A 2.4 m wardrobe against the wall, whose top runs out of a level 1.2 frame.
     const d = wallD('n', ROOM);
-    const box = clip(bboxOfFloorBox('n', -0.5, -(d - 0.3), 1.0, 2.4, 0.6, level));
+    const box = drawn(bboxOfFloorBoxInFrame('n', -0.5, -(d - 0.3), 1.0, 2.4, 0.6, level));
     expect(frameCuts(box).top).toBe(true);
     const foot = { depthM: 0.6 };
     const seen = placeFloorObject(box, 'n', ROOM, level, foot)!;
@@ -1014,7 +1029,7 @@ describe('a box the edge of the photo cut off', () => {
     // The same wardrobe in a 2.2 m room — low, or a rough ceiling guess. Grown to a
     // typical 2.3 m it would stand 100 mm through the slab, and it did.
     const d = wallD('n', ROOM);
-    const box = clip(bboxOfFloorBox('n', -0.5, -(d - 0.3), 1.0, 2.4, 0.6, level));
+    const box = drawn(bboxOfFloorBoxInFrame('n', -0.5, -(d - 0.3), 1.0, 2.4, 0.6, level));
     const foot = { depthM: 0.6, whole: { widthM: 1.0, heightM: 2.3 } };
     const low = { ...ROOM, height: 2.2 };
     const g = placeFloorObject(box, 'n', low, level, foot)!;
@@ -1025,7 +1040,7 @@ describe('a box the edge of the photo cut off', () => {
     expect(lower.heightMM).toBe(2130);
     // Only a cut piece grows at all: one whose top is in view is its own height,
     // however tall a typical one is and however much room the ceiling leaves.
-    const chest = clip(bboxOfFloorBox('n', -0.5, -(d - 0.3), 1.0, 0.9, 0.6, level));
+    const chest = drawn(bboxOfFloorBoxInFrame('n', -0.5, -(d - 0.3), 1.0, 0.9, 0.6, level));
     expect(frameCuts(chest).top).toBe(false);
     expect(placeFloorObject(chest, 'n', low, level, foot)!.heightMM).toBe(900);
   });
@@ -1034,7 +1049,7 @@ describe('a box the edge of the photo cut off', () => {
     // `migrateRoom` does not validate a height, and `Math.min(x, NaN)` is NaN: before
     // the guard both placers answered a NaN height, and the wall one a NaN position.
     const d = wallD('n', ROOM);
-    const wardrobe = clip(bboxOfFloorBox('n', -0.5, -(d - 0.3), 1.0, 2.4, 0.6, level));
+    const wardrobe = drawn(bboxOfFloorBoxInFrame('n', -0.5, -(d - 0.3), 1.0, 2.4, 0.6, level));
     const curtain = clip(bboxOfWallSolid('n', 'n', 0.2, 1.75, d, 1.4, 1.9, 0.08, level));
     const whole = { widthM: 1.4, heightM: 2.3 };
     for (const height of [Number.NaN, 0]) {
