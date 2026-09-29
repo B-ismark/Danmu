@@ -1,7 +1,8 @@
 'use client';
 
 // Edit room shell dimensions (W × D × H). Live updates 3D + 2D.
-// Uses the user's selected dim unit. Writes back to IDB on commit.
+// Uses the user's selected dim unit. A commit changes the room on screen, and
+// `RoomSync` saves it — the size with the outline it makes, in one write.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
@@ -11,14 +12,11 @@ import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis, type RoomRejec
 import { floorHint, floorRefusal, namesTheStop, roomFloors, type FloorAxis } from '@/lib/room-floor';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
-import { markRoughSize, roomStore } from '@/lib/storage';
-import { useParams } from 'next/navigation';
 import { onPageLeave } from '@/lib/page-leave';
 import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 import { Icon } from '@/components/ui/Icon';
 
 export function RoomDimsEditor() {
-  const { roomId } = useParams<{ roomId: string }>();
   const room = useScene((s) => s.room);
   const setRoom = useScene((s) => s.setRoom);
   const confirmSize = useScene((s) => s.confirmSize);
@@ -89,14 +87,17 @@ export function RoomDimsEditor() {
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** What the pending commit will do, so that leaving the page can do it now. */
-  const pendingCommit = useRef<((leaving: boolean) => Promise<void>) | null>(null);
+  const pendingCommit = useRef<(() => void) | null>(null);
 
   // A closed tab inside the 200 ms lost what was typed: nothing unmounts, so nothing
   // commits. It commits in the page-leave's FIRST phase, because this commit is what
-  // hands `RoomSync` the new size — and the furniture it carries — to save, and on the
-  // way out it leaves the saving to `RoomSync` alone: a second save of its own, landing
-  // without `RoomSync`'s, stored the new width without its outline. A reload can still
-  // lose it; `lib/page-leave.ts` says why.
+  // hands `RoomSync` the new size — and the furniture it carries — to save. A reload can
+  // still lose it; `lib/page-leave.ts` says why.
+  //
+  // The saving is `RoomSync`'s alone, on the way out and every other time. This commit
+  // used to save the three numbers itself as well, and that save, landing without
+  // `RoomSync`'s, stored the new width against the old outline: typed, and reloaded a
+  // moment after the 200 ms, the room came back half-resized.
   useEffect(
     () =>
       onPageLeave('commit', () => {
@@ -105,7 +106,7 @@ export function RoomDimsEditor() {
         timer.current = null;
         const run = pendingCommit.current;
         pendingCommit.current = null;
-        void run?.(true);
+        run?.();
       }),
     [],
   );
@@ -116,7 +117,7 @@ export function RoomDimsEditor() {
     setLocal(next);
     edited.current.add(ROOM_AXES[idx]);
     if (timer.current) clearTimeout(timer.current);
-    const run = async (leaving: boolean) => {
+    const run = () => {
       const batch: Partial<Record<RoomAxis, number>> = {};
       for (const axis of edited.current) {
         batch[axis] = toMM(parseFloat(next[ROOM_AXES.indexOf(axis)]), dimUnit) / 1000;
@@ -219,18 +220,12 @@ export function RoomDimsEditor() {
           if (ov) studio.setPosition(b.id, [ov[0], b.y, ov[2]]);
         }
       }
-      if (roomId && !leaving) {
-        // The mark from the live room, which `setRoom` has just cleared — not the
-        // stored one the record still carries (`markRoughSize`).
-        const rough = useScene.getState().room.roughSize === true;
-        await roomStore.editRoom(roomId, (stored) => markRoughSize({ ...stored, ...r }, rough));
-      }
     };
     pendingCommit.current = run;
     timer.current = setTimeout(() => {
       timer.current = null;
       pendingCommit.current = null;
-      void run(false);
+      run();
     }, 200);
   }
 

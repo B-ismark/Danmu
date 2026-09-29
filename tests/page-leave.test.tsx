@@ -204,8 +204,8 @@ describe('RoomSync, when the page is left inside the debounce', () => {
   });
 });
 
-describe('the size boxes, when the page is left inside their 200 ms', () => {
-  it('commit what was typed, and leave the saving to RoomSync', async () => {
+describe('the size boxes', () => {
+  it('commit what was typed when the page is left inside their 200 ms, and leave the saving to RoomSync', async () => {
     await mount(
       <>
         <RoomSync />
@@ -229,6 +229,29 @@ describe('the size boxes, when the page is left inside their 200 ms', () => {
       const xs = saved.footprint!.map(([x]) => x);
       expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(4.5, 5);
     });
+  });
+
+  // Not a leave at all: the size boxes' own save, 200 ms after the keystroke, stored the
+  // width with the old outline, and RoomSync's did not land until 300 ms after that. A
+  // reload anywhere in between brought the room back half-resized. The stored record is
+  // read throughout, so the check does not depend on which moment it happens to land in.
+  it('store the width only with the outline it makes, when nothing leaves', async () => {
+    await mount(
+      <>
+        <RoomSync />
+        <RoomDimsEditor />
+      </>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Width/), { target: { value: '4.5' } });
+    const seen: [number, number][] = [];
+    for (let t = 0; t < 900; t += 25) {
+      await act(() => new Promise((r) => setTimeout(r, 25)));
+      const saved = (await roomStore.loadRoom(ROOM_ID))!;
+      const xs = saved.footprint!.map(([x]) => x);
+      seen.push([saved.width, Math.max(...xs) - Math.min(...xs)]);
+    }
+    for (const [width, outline] of seen) expect(width).toBeCloseTo(outline, 5);
+    expect(seen.at(-1)![0]).toBeCloseTo(4.5, 5);
   });
 });
 

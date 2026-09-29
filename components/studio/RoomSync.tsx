@@ -25,8 +25,8 @@ type SceneRoom = ReturnType<typeof useScene.getState>['room'];
 
 /** The stored room with the live shell written over it — what both of the room's writes
  *  store, the debounced one and the one on the way out of the page. The rough-size mark
- *  comes from the live room, never the stored one — see `markRoughSize`: `RoomDimsEditor`
- *  saves too, and keeping the stored mark would put back one it had just cleared. */
+ *  comes from the live room, never the stored one — see `markRoughSize`: the stored record
+ *  trails the studio by a save, and keeping its mark would put back one just cleared. */
 function withShell(stored: RoomData, room: SceneRoom): RoomData {
   return markRoughSize(
     {

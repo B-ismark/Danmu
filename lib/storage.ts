@@ -233,12 +233,13 @@ export type RoomData = {
 
 /** `room` with its rough-size mark set or cleared — the one way a writer spells it.
  *
- *  Two writers save a room's size (`RoomSync`'s debounced shell write and
- *  `RoomDimsEditor`'s own), and both write the mark FROM THE LIVE ROOM rather than
+ *  `RoomSync` saves a room's size, and writes the mark FROM THE LIVE ROOM rather than
  *  carrying the stored one forward: the stored record trails the studio by a save,
  *  so a writer that kept the mark it read would put back one the person had just
- *  cleared. The third writer, the name, touches nothing but the name, and all three
- *  go through `roomStore.editRoom` so none can land between another's read and write. */
+ *  cleared. The other writer, the name, touches nothing but the name, and both go
+ *  through one transaction per write so neither can land between the other's read and
+ *  write. (The size boxes used to save the size themselves as well, and that save,
+ *  landing alone, stored a new width against the old outline.) */
 export function markRoughSize(room: RoomData, rough: boolean): RoomData {
   const { roughSize: _stored, ...rest } = room;
   return rough ? { ...rest, roughSize: true } : rest;
@@ -345,13 +346,12 @@ export const roomStore = {
    *  write able to land between — and return it as written, or undefined having
    *  written nothing when there is no such room.
    *
-   *  The studio has three writers of this record: the name (`TopBar`), the size
-   *  (`RoomDimsEditor`) and the shell (`RoomSync`'s debounced save). Each changes a
-   *  field or two of whatever is stored, and as a separate read and write, whichever
-   *  read first and wrote last put back what the other had just changed: a rename
-   *  landing across the save of **These are right** brought the rough-size note back
-   *  with the stored record it had copied. `edit` must be synchronous; it runs inside
-   *  the transaction. */
+   *  The studio has two writers of this record: the name (`TopBar`) and the shell,
+   *  size included (`RoomSync`). Each changes a field or two of whatever is stored,
+   *  and as a separate read and write, whichever read first and wrote last put back
+   *  what the other had just changed: a rename landing across the save of **These
+   *  are right** brought the rough-size note back with the stored record it had
+   *  copied. `edit` must be synchronous; it runs inside the transaction. */
   async editRoom(roomId: string, edit: (room: RoomData) => RoomData): Promise<RoomData | undefined> {
     let written: RoomData | undefined;
     try {
