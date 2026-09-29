@@ -27,7 +27,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { geoRefine, refineDetections, type CalMap } from '@/lib/detect-refine';
+import { dedupeDetections, geoLocate, geoMeasure, geoRefine, refineDetections, type CalMap } from '@/lib/detect-refine';
 import { findRepeats, keptAtFirst, REPEAT_SHARE, sameButColor, sweptSolids, SWEPT_HFOV_DEG } from '@/lib/repeat-sightings';
 import { footArea, footFromPart, footIntersectionArea } from '@/lib/geometry';
 import {
@@ -35,11 +35,13 @@ import {
   calFromHfov,
   calibrateFromFloorLine,
   fitHeightToFloorLine,
+  frameCuts,
   PLAUSIBLE_HFOV_DEG,
   wallFrame,
   type CameraCal,
   type LensSource,
 } from '@/lib/photo-geometry';
+import { anchorFor } from '@/lib/physics';
 import { startingSpot } from '@/lib/scene-spec';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
@@ -812,6 +814,82 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
       [993, 252, 0, 9, 11, 5, 15, 7, 11],
       [989, 464, 1, 455, 45, 21, 43, 426, 45],
       [989, 464, 0, 38, 4, 26, 4, 36, 4],
+    ]);
+  });
+
+  // The rate above is shot level. Tip the phone up and the frame's bottom edge climbs
+  // off the floor: a foot the photo cuts off has no near face to read, so its place is
+  // a guess and no bound held it (`distanceDoubt` Infinity), and a guess never merges on
+  // distance. The fear was that a tipped-up room trades the pieces the hard merge no
+  // longer takes for pieces it cannot take at all, and so for ticked repeats. Measured
+  // against the merge as it was (no doubt handed over), at 5°, 10° and 15° up, the lens
+  // read right and read narrow: repeats are one more in one reading and the same in five,
+  // pieces with no row fall from 13 / 28 / 11 / 17 / 5 / 11 to 0 / 1 / 1 / 2 / 0 / 0, and
+  // lost moves by one, down once and up once. At 15° up 609 of the 708 floor rows are cut
+  // at the foot, and it is still the same three repeats.
+  it('costs no more ticked repeats with the phone tipped up, where the frame cuts most feet', { timeout: 300_000 }, () => {
+    const asItWas = (dets: Detection[], cals: CalMap) => {
+      const measured = new Set<Detection>();
+      const placed = dets.map((d) => {
+        const g = geoMeasure(d, cals, ROOM);
+        if (g.row === d) return geoLocate(d, cals, ROOM);
+        measured.add(g.row);
+        return g.row;
+      });
+      return dedupeDetections(placed, measured);
+    };
+    const tipped = (deg: number, up: number): CameraCal => ({ ...lens(deg), tiltRad: (-up * Math.PI) / 180 });
+    const lines: string[] = [];
+    const got = ([[5, 106], [5, 66], [10, 106], [10, 66], [15, 106], [15, 66]] as const).map(([up, givenDeg]) => {
+      const truth = tipped(106, up);
+      const given = every(tipped(givenDeg, up));
+      const r = { vis: 0, footCut: 0, was: { gone: 0, dup: 0, lost: 0 }, now: { gone: 0, dup: 0, lost: 0 } };
+      for (let sd = 1; sd <= 150; sd++) {
+        const pieces = furnishedRoom(sd * 7919 + 13);
+        const dets: Tallied[] = [];
+        const shots = pieces.map(() => 0);
+        pieces.forEach((p, i) => {
+          for (const s of SWEEP_SLOTS) {
+            const box = boxIn(p, s, truth);
+            if (!box) continue;
+            shots[i]++;
+            dets.push({ label: p.label, conf: 0.9, box, category: p.category, slot: s, shape: p.shape, _t: i } as Tallied);
+            if (anchorFor(p.category, p.shape) === 'floor' && frameCuts(box).bottom) r.footCut++;
+          }
+        });
+        shots.forEach((n) => {
+          if (n > 0) r.vis++;
+        });
+        const read = [
+          [r.was, asItWas(dets, given) as Tallied[]],
+          [r.now, refineDetections(dets, given, ROOM) as Tallied[]],
+        ] as const;
+        for (const [t, refined] of read) {
+          const rowed = new Set(refined.map((d) => d._t));
+          const ticks = pieces.map(() => 0);
+          keptAtFirst(refined, refined.map(() => true), ROOM, given).forEach((i) => ticks[refined[i]._t]++);
+          shots.forEach((n, i) => {
+            if (n === 0) return;
+            if (!rowed.has(i)) t.gone++;
+            if (ticks[i] === 0) t.lost++;
+            if (ticks[i] > 1) t.dup += ticks[i] - 1;
+          });
+        }
+      }
+      lines.push(
+        `tipped ${up}° up, true 106° read at ${givenDeg}°  seen ${r.vis}, cut at the foot ${r.footCut}  ` +
+          `gone ${r.was.gone} → ${r.now.gone}  dup ${r.was.dup} → ${r.now.dup}  lost ${r.was.lost} → ${r.now.lost}`,
+      );
+      return [r.vis, r.footCut, r.was.gone, r.now.gone, r.was.dup, r.now.dup, r.was.lost, r.now.lost];
+    });
+    console.log(`the hard merge, tipped up, over 150 furnished rooms:\n  ${lines.join('\n  ')}`);
+    expect(got).toEqual([
+      [970, 448, 13, 0, 7, 8, 22, 21],
+      [970, 448, 28, 1, 9, 9, 37, 37],
+      [946, 541, 11, 1, 3, 3, 19, 19],
+      [946, 541, 17, 2, 3, 3, 24, 24],
+      [898, 609, 5, 0, 3, 3, 10, 11],
+      [898, 609, 11, 0, 3, 3, 17, 17],
     ]);
   });
 });
