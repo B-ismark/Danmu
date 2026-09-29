@@ -12,7 +12,8 @@ import { StudioShell } from '@/components/studio/StudioShell';
 import { CanvasVeil } from '@/components/studio/CanvasVeil';
 import { ViewGizmo } from '@/components/studio/ViewGizmo';
 import { UndoRedo } from '@/components/studio/UndoRedo';
-import { CanvasTools, CanvasView, CanvasAide } from '@/components/studio/CanvasChrome';
+import { CanvasTools, CanvasView, CanvasAide, CanvasDay } from '@/components/studio/CanvasChrome';
+import { SunArc } from '@/components/studio/SunArc';
 
 // No `loading` fallback of its own: `CanvasVeil` covers the canvas until the 3D
 // view has drawn its first frame, which includes the wait for this chunk.
@@ -46,6 +47,12 @@ export default function ModelPage() {
             one up here would be two buttons for one verb. */}
         {!phone && <CatalogToggle />}
       </CanvasTools>
+
+      {/* The day, under the tools: an arc over the room on a wide canvas, a plain
+          slider on a narrow one, and still wherever the camera goes. */}
+      <CanvasDay>
+        <SunArc />
+      </CanvasDay>
 
       <CanvasView>
         <UndoRedo />

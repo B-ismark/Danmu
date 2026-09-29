@@ -6,7 +6,7 @@
 // `var(--accent)`. These are therefore deliberate duplicates of the tokens in
 // app/globals.css and must be kept numerically in sync with them by hand —
 // which is exactly why they live in ONE file instead of being re-declared in
-// DynamicPart, Highlight, RoomShell, WallHandles and MeasureGuides. Before this
+// DynamicPart, Highlight, RoomShell, WallHandles and DragTag. Before this
 // existed there were four different blues for two semantics, so "kept as-is"
 // rendered in three different colours depending on which shape you selected.
 //
@@ -25,6 +25,11 @@ export const SCENE = {
   accentHover: '#5E8B6E',
   /** drag position collides or leaves the room — matches --danger */
   invalid: '#C8472A',
+  /** the frosted slab under a selected or hovered piece — matches --paper. The
+   *  base is glass, and the brand hue is only its rim: --danger and --accent are
+   *  one step apart on the wheel, so a terracotta slab and a refused red slab
+   *  read as the same thing and the refusal said nothing. */
+  glass: '#FBF9F6',
   /** "kept as-is". Warm aubergine, matching --locked; replaced an institutional
    *  blue (#3A78C2 / #6E94C8 / #7AA4D2) that belonged to no part of the brand. */
   locked: '#7A4B63',
@@ -34,23 +39,6 @@ export const SCENE = {
   wall: '#ECE9E1',
   floor: '#D8C9B4',
   ceiling: '#F5F1E8',
-  /** An alignment guide from `lib/item-snap.ts`: "this edge is locked to that
-   *  one". A separate semantic from selection / hover / invalid, and it must read
-   *  as none of them — so a green, deliberately outside the brand's sage.
-   *
-   *  Mirrors `--snap-edge`. The 2D plan draws the same guide from the CSS token
-   *  directly, because it is SVG in the document and can; this copy exists for the
-   *  same reason every other entry here does — a Three.js material cannot. */
-  snapEdge: '#1E9E54',
-  /** …and the centre-line variant, drawn dashed and a shade lighter. Mirrors
-   *  `--snap-center`. */
-  snapCenter: '#27A06A',
-  /** The sun's dashed path over the room (`components/three/SunArc.tsx`). Two,
-   *  because the backdrop behind it runs from `--paper` at midday to near-black at
-   *  night, and one colour vanishes against one end of that. Mirror `--ink` and
-   *  `--paper`. */
-  sunPathOnLight: '#1D1816',
-  sunPathOnDark: '#FBF9F6',
 } as const;
 
 // ─── Furniture detail ───────────────────────────────────────────────────────

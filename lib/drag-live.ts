@@ -2,10 +2,9 @@
 
 // Live drag channel — high-frequency state for the part currently being moved.
 // Kept OUT of useStudio so per-frame updates only re-render the few light
-// consumers (measurement guides, validity tint), never the whole part tree.
+// consumers (the size tag, validity tint), never the whole part tree.
 
 import { create } from 'zustand';
-import type { SnapLine } from './item-snap';
 
 export type DragLiveInfo = {
   partId: string;
@@ -35,8 +34,6 @@ export type DragLiveInfo = {
    *  with a per-part selector so only the pieces whose state actually CHANGES
    *  re-render — the whole point of this channel living outside `useStudio`. */
   blockedIds?: string[];
-  /** item-to-item alignment lines that magnetised this frame */
-  snapLines?: SnapLine[];
 } | null;
 
 // A refusal that OUTLIVES the gesture is not this channel's business, even though it

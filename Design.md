@@ -1246,13 +1246,21 @@ pair and they are **one row**, and the measured one survives in either photo ord
   right-click menu grows a **"Select what's here (n)"** row whenever the surface
   can say what else is under the cursor. It is also the only route on a touch
   screen, which has no modifier keys at all.
-- **What is drawn while you point** — `Highlight.tsx` renders hover (soft,
-  depth-tested) and selection (accent, `depthTest` **off**, so a selection is
-  never lost behind a wall) plus a footprint outline on the resting surface;
-  `MeasureGuides.tsx` draws live dimension lines from the dragged footprint to
-  the nearest wall on all four sides, in the user's display unit. Both size
-  themselves from the part's **base `dimMM`** and let the group's runtime scale
-  multiply them, exactly as the geometry is scaled.
+- **What is drawn while you point** — `Highlight.tsx` renders a translucent
+  **base** under the piece (`lib/selection-base.ts`): a rounded slab a margin past
+  its footprint on the floor, a plate between it and the plaster for a wall piece,
+  one against the slab for a ceiling piece. Frosted paper with a sage rim on hover
+  and a terracotta rim when selected or carried; **light red** (`SCENE.invalid`)
+  when the spot it is being carried to will not take it — the one state that tints
+  the slab, because `--danger` sits a step from `--accent` and a terracotta slab
+  turning red was a change of shade nobody read as "no". Depth-tested, so it never
+  draws through a wall. `DragTag.tsx` floats the live size over a carried piece and,
+  on a refusal, names the member that will not fit. **The 3D view draws no gap or
+  alignment lines** — they read as streaks across the floor once the base was
+  there to say what is moving; the 2D plan keeps them, where a line is a
+  dimension. Both size themselves from the part's **base `dimMM`** and let the
+  group's runtime scale multiply them, exactly as the geometry is scaled (the
+  base undoes that scale, so a stretched piece does not stand on a thickened slab).
   Both read `lib/drag-live.ts`, **not** `useStudio`: a per-frame drag position in
   the main store re-renders the entire part tree, so the high-frequency channel is
   deliberately separate and only these few light consumers subscribe. `<Line>`
@@ -1757,20 +1765,20 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     locus, strength from `sin(elevation)` faded in over the last 8° above the
     horizon, so it never switches on at full strength as the sun clears it. Below
     the horizon there is no sun light at all.
-  - **The sun arc over the room is the big control** (`components/three/SunArc.tsx`),
-    after sael.net's interior study: a dashed path around the room with the sun —
-    or at night the moon, on its own lower path — riding it and a clock pill
-    beside it. Drag it along the path; it is also a `role="slider"` with arrow,
-    Page and Home/End keys. It is a **ring on the eaves** (`lib/sun-arc.ts`,
-    `sunArcShape` / `skyPoint`): its ends sit on the tops of the walls and it
-    rises at most 0.6 m above them, just clear of the room across — so in plan
-    it never passes over the floor, and a low sun no longer lands beside the
-    sofa. Drawn twice, faint through the walls and clear in front of them, and
-    the pill is held inside the canvas *and clear of the floating chrome*
-    (measured from the `.canvas-chrome` rects) so a sun at the horizon is pinned
-    to the edge rather than gone or under the toolbar. The scrub steps in five
-    minutes and stays inside its own half — day never reaches the horizon hour
-    that belongs to night (`scrubHour`).
+  - **The day's track is the big control** (`components/studio/SunArc.tsx`),
+    after sael.net's interior study: a dashed track with the sun — or at night
+    the moon — riding it and a clock pill under it. It is **screen chrome, not a
+    thing in the room**: the TOOLS slot's second row (`CanvasDay` in
+    `CanvasChrome.tsx`), centred between the rails and clear of an open Library,
+    so it is in the same place whatever the camera does. On a wide canvas it is a
+    shallow **rainbow**; below 480 px it is a **flat slider**, because a curve on a
+    phone's width is a slider that looks broken (`lib/sun-arc.ts`, `trackFor`).
+    Either way the value is read off x, the way a slider's is (`tAtX`), so the arc
+    is a slider bent, not a dial. Press anywhere on the track and the sun jumps
+    there; it is also a `role="slider"` with arrow, Page and Home/End keys. The
+    scrub steps in five minutes and stays inside its own half — day never
+    reaches the horizon hour that belongs to night (`scrubHour`). Over a night
+    or dark mood the track and pill turn paper so they still read.
     **It gives way.** Faint while a piece is selected, gone while one is
     carried, at full strength only when reached (hover, focus, grab); it never
     starts a gesture from a right button, a second pointer, or a press on the
@@ -2488,15 +2496,15 @@ outlined box around outlined buttons, which put two boundaries on every control.
   them.
 - **Item-to-item snapping** (`lib/item-snap.ts`), and its **alignment guides draw
   in both tabs**. `resolvePlacement` has always returned the lines that fired and
-  `MeasureGuides.tsx` has always drawn them in 3D; the plan dropped them, so the tab
+  the 3D view used to draw them; the plan dropped them, so the tab
   whose whole premise is that the dimensions are real snapped pieces into line with
-  nothing on screen to say what they had lined up with. `PlanView` keeps them on the
+  nothing on screen to say what they had lined up with. (The 3D view has since
+  stopped drawing them — see "What is drawn while you point" — so the plan is now
+  the one tab that shows what a piece lined up with.) `PlanView` keeps them on the
   drag ref — written from `moveTo`, which is the only thing that knows which of its
   three candidate moves was accepted — and draws them under the wall measurements.
-  The two greens are `--snap-edge` / `--snap-center` for the plan (SVG in the
-  document, so it reads tokens) and `SCENE.snapEdge` / `.snapCenter` for the scene
-  (a Three.js material cannot), pinned to each other by `tests/color-tokens.test.ts`
-  like every other pair in §"Two layers".
+  The two greens are `--snap-edge` / `--snap-center` (SVG in the document, so it
+  reads tokens).
 
 ### One resolve, two surfaces — `lib/drag-resolve.ts`
 Where a dragged piece ends up: grid snap → containment clamp → wall snap
@@ -2700,7 +2708,7 @@ Two properties of a `ConvoyMove` that read as details and are not:
 - **`blocked` only counts if the caller says it.** It was computed in both tabs
   and spoken in one: the plan outlined the member and named it, while the 3D tab
   stopped the set dead with a red tint and no explanation. The name travels on
-  `DragLiveInfo.blockedBy` now and appears in the size tag `MeasureGuides` already
+  `DragLiveInfo.blockedBy` now and appears in the size tag `DragTag` already
   draws — set only when the dragged piece itself fits, because if the thing under
   the hand is the problem then `blocked` is the honest word and naming a member
   points at the wrong piece.

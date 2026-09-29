@@ -616,9 +616,9 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
 //
 // The flag means "is this piece's geometry centred on its origin", and
 // `isWallMountedPart(category, shape)` — i.e. `anchorFor(...) !== 'floor'` — is that
-// question's only answer. Six readers trust it: `floorBlockers`, `isObstacle`,
-// `overlapsSomething`, `layout-score`'s window branch, `layout-solve`'s `movable`
-// mask, and `MeasureGuides`.
+// question's only answer. Five readers trust it: `floorBlockers`, `isObstacle`,
+// `overlapsSomething`, `layout-score`'s window branch and `layout-solve`'s `movable`
+// mask. (A sixth, the 3D tab's wall-gap guides, went with those guides.)
 //
 // A `lamp-pendant` was seeded `wallMounted: false` directly beneath a comment saying
 // "Ceiling-anchored, so `groundY` decides the height", so its `pos[1]` was a mesh

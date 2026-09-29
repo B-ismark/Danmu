@@ -545,8 +545,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     setLive({
       partId,
       // Where the piece IS, which is where it is drawn two dozen lines above.
-      // `MeasureGuides` builds the OBB, the four wall-gap rays and the size tag's
-      // anchor out of these three numbers, so publishing the pointer's position
+      // `DragTag` anchors the size tag on these three numbers (it used to build
+      // four wall-gap rays from them too), so publishing the pointer's position
       // while the mesh sits at the limited one drew every measurement at a place
       // the piece is not — the hand-typed-measurement failure, arriving as a
       // correctly derived number about the wrong spot.
@@ -570,9 +570,6 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // and then dropped on the floor, so the 3D tab refused a set in silence
       // while the plan named the piece — one rule, two consumers, again.
       blockedBy: lead.valid && co.blocked ? co.blocked.name : undefined,
-      // From the settled resolve for the same reason as the position: a guide
-      // asserting two edges are level is a claim about where this piece is.
-      snapLines: lead.snapLines,
     });
     setDragInvalid((prev) => (prev === !valid ? prev : !valid));
     invalidate(); // the object3D moved imperatively — request the repaint
@@ -1348,8 +1345,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         )}
         {(inSelection || isHovered || refused) && (
           <Highlight
-            dimMM={isParametric(part.shape) ? (storedDim ?? part.dimMM) : part.dimMM}
-            floorStanding={isFloorStanding(part.category, part.shape)}
+            dimMM={renderedDim}
+            sizeMM={storedDim ?? part.dimMM}
+            anchor={anchorFor(part.category, part.shape)}
             state={highlightState}
           />
         )}

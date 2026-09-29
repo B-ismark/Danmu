@@ -261,10 +261,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
     convoy: Convoy;
     /**
      * The alignment guides the last accepted resolve produced, so the drawing can
-     * show them. `resolvePlacement` has always returned these and the 3D tab has
-     * always drawn them (`MeasureGuides`); the plan silently dropped them, which
-     * made the shared pipeline's most visible output tab-specific — and this is the
-     * tab where "is that level with the wardrobe?" is the question being asked.
+     * show them. `resolvePlacement` has always returned these. The plan once
+     * dropped them while the 3D tab drew them; now it is the other way round, on
+     * purpose — this is the tab where "is that level with the wardrobe?" is the
+     * question being asked, and in 3D the lines read as streaks over the room.
      *
      * Written from `moveTo`, not from a memo: `moveTo` tries the full move and then
      * each axis alone, so only IT knows which candidate was accepted, and the lines
@@ -1673,7 +1673,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
             // indistinguishable — so the refusal was being signalled by a hue shift
             // nobody with a red-green deficiency can read, on the one surface that
             // has no text tag to fall back on (3D says "… will not fit" out loud in
-            // `MeasureGuides`; the plan only recolours). A blocked piece is always
+            // `DragTag`; the plan only recolours). A blocked piece is always
             // selected, so 2.5 is the weight it is stepping up FROM.
             const strokeW = (blocked ? 4 : isSel ? 2.5 : 1.4) * k;
             const isHovered = hovered === part.id && !isSel;
@@ -1903,11 +1903,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
             <g style={{ pointerEvents: 'none' }}>
               {/* Item-to-item alignment guides, first so the wall measurements
                   above paint over them. `lib/item-snap.ts` produced these, the
-                  shared resolve returned them, and until now only the 3D tab drew
+                  shared resolve returned them, and for a while only the 3D tab drew
                   them — leaving the plan snapping pieces into line with no way to
-                  see what they had lined up with. A centre line is dashed and a
-                  shade lighter, exactly as `MeasureGuides` draws it, so the same
-                  event looks the same in both tabs.
+                  see what they had lined up with. The 3D tab has since stopped
+                  (they read as streaks over the room there), so this is where the
+                  alignment is seen. A centre line is dashed and a shade lighter.
 
                   Where the line's two ends are is `snapGuideEnds` in
                   `lib/item-snap.ts`, beside the code that decided the snap — the
