@@ -27,6 +27,11 @@ export type Snapshot = {
    *  not name. `quality` / `dressed` stay out: they are view preferences, not
    *  part of the design being edited. */
   lighting: Lighting;
+  /** The clock the daylight is drawn at, for the same reason as `lighting`: a
+   *  theme sets both in one gesture. A sun drag lands as ONE entry, because the
+   *  arc holds `draggingId` for the length of the gesture and the stack is gated
+   *  on that. */
+  hour: number;
   /** Which parts are hidden. This is an edit to the arrangement, not a view
    *  preference — it is saved per room alongside the transforms — so it belongs
    *  in history. Without it, pressing H and then Ctrl+Z undid the edit BEFORE the
@@ -139,6 +144,7 @@ function takeSnapshot(): Snapshot {
     parts: sc.parts,
     room: sc.room,
     lighting: t.lighting,
+    hour: t.hour,
     hidden: t.hidden,
     selectedPartId: t.selectedPartId,
     selection: t.selection,
@@ -225,6 +231,7 @@ export function startHistoryRecording() {
       state.dims === prev.dims &&
       state.parentIds === prev.parentIds &&
       state.lighting === prev.lighting &&
+      state.hour === prev.hour &&
       state.hidden === prev.hidden &&
       state.selectedPartId === prev.selectedPartId &&
       state.selection === prev.selection &&
@@ -255,6 +262,7 @@ function sameEdit(a: Snapshot, b: Snapshot): boolean {
     a.parts === b.parts &&
     a.room === b.room &&
     a.lighting === b.lighting &&
+    a.hour === b.hour &&
     a.hidden === b.hidden
   );
 }
@@ -288,6 +296,9 @@ export function applySnapshot(snap: Snapshot) {
   lastSnapshot = snap;
   useStudio.getState().loadTransforms(snap);
   useStudio.getState().setLighting(snap.lighting);
+  // A snapshot from before the clock has no hour; leave the current one alone
+  // rather than write `undefined` into a number.
+  if (typeof snap.hour === 'number') useStudio.getState().setHour(snap.hour);
   useStudio.getState().setHiddenMap(snap.hidden);
   useStudio.getState().setParentIds(snap.parentIds);
   useScene.setState({ parts: snap.parts, room: snap.room });

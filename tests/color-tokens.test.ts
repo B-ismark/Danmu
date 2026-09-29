@@ -193,6 +193,9 @@ describe('scene-palette really does match the CSS', () => {
     // token, the 3D scene from here — so the two greens have to be one green.
     ['snapEdge', 'snap-edge'],
     ['snapCenter', 'snap-center'],
+    // The sun path is drawn in ink over a light sky and in paper over a dark one.
+    ['sunPathOnLight', 'ink'],
+    ['sunPathOnDark', 'paper'],
   ];
 
   it.each(pairs)('SCENE.%s is --%s', (key, token) => {

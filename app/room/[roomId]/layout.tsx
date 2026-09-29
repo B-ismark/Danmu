@@ -10,6 +10,7 @@ import {
   StudioAnnouncer,
   studioSurfaceProps,
 } from '@/components/studio/KeyboardShortcuts';
+import { SoundCues } from '@/components/studio/SoundCues';
 import { RoomSwitcher } from '@/components/studio/RoomSwitcher';
 import { StudioHelp } from '@/components/studio/StudioHelp';
 import { ExportMenu } from '@/components/studio/ExportMenu';
@@ -66,6 +67,7 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
       </div>
       <RoomSync />
       <KeyboardShortcuts />
+      <SoundCues />
       <StudioAnnouncer />
       <NarrowViewportBanner />
     </div>

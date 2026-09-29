@@ -16,7 +16,7 @@
 // slides along whatever it hit, matching the 3D Draggable.
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { useStudio, useSettings } from '@/lib/store';
+import { useStudio, useSettings, WALL_DRAG_ID } from '@/lib/store';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { DND_MIME, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
@@ -37,6 +37,8 @@ import {
 import { refusalAfterGesture, turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { useDragLive } from '@/lib/drag-live';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
+import { playSound } from '@/lib/sound';
+import { sizeOf } from '@/lib/sound-cues';
 import { convoyRestore, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { cascadeTransform } from '@/lib/rigid-parent';
 import { formatDim, formatLength } from '@/lib/units';
@@ -1096,7 +1098,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
     if (!dragRef.current.moved) {
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
-      if (Math.hypot(dx, dy) > 4) dragRef.current.moved = true;
+      if (Math.hypot(dx, dy) > 4) {
+        dragRef.current.moved = true;
+        // Heard the moment it leaves the floor, as in 3D; its glide is SoundCues'.
+        if (dragRef.current.mode === 'translate') playSound('pick');
+      }
     }
     const { id, mode } = dragRef.current;
     const part = parts.find((p) => p.id === id);
@@ -1128,7 +1134,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   function onWallPointerDown(e: React.PointerEvent, index: number) {
     e.stopPropagation();
     setSelectedWall(index);
-    setDragging('__wall__');
+    setDragging(WALL_DRAG_ID);
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const seg = wallSegments(ROOM_DYN.footprint)[index];
     if (!seg) return;
@@ -1200,6 +1206,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
         // merged set would land on one piece and the set could never be clicked at
         // all. See `selDown` and `selectionForPick`.
         setSelection(selectionForPick(parts, clicked, dragRef.current.selDown), clicked);
+      }
+      if (dragRef.current.moved && dragRef.current.mode === 'translate') {
+        const dropped = parts.find((p) => p.id === dragRef.current?.id);
+        playSound(blockedRef.current ? 'blocked' : 'drop', { size: sizeOf(dropped?.dimMM) });
       }
       // The per-gesture convoy snapshot dies with it — see the comment on the ref.
       dragRef.current = null;

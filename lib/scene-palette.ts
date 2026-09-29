@@ -45,6 +45,12 @@ export const SCENE = {
   /** …and the centre-line variant, drawn dashed and a shade lighter. Mirrors
    *  `--snap-center`. */
   snapCenter: '#27A06A',
+  /** The sun's dashed path over the room (`components/three/SunArc.tsx`). Two,
+   *  because the backdrop behind it runs from `--paper` at midday to near-black at
+   *  night, and one colour vanishes against one end of that. Mirror `--ink` and
+   *  `--paper`. */
+  sunPathOnLight: '#1D1816',
+  sunPathOnDark: '#FBF9F6',
 } as const;
 
 // ─── Furniture detail ───────────────────────────────────────────────────────

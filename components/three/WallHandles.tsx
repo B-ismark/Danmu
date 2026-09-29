@@ -41,7 +41,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Plane, Raycaster, Vector2, Vector3 } from 'three';
 import { useScene } from '@/lib/scene-store';
-import { useStudio } from '@/lib/store';
+import { useStudio, WALL_DRAG_ID } from '@/lib/store';
 import { SCENE } from '@/lib/scene-palette';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
@@ -156,7 +156,7 @@ export function WallHandles() {
       attached: selectedWall === null ? [] : wallAttachments(selectedWall),
     };
     pending.current = 0;
-    setDragging('__wall__');
+    setDragging(WALL_DRAG_ID);
     document.body.style.cursor = 'grabbing';
   }
 

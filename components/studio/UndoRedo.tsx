@@ -1,5 +1,6 @@
 'use client';
 
+import { playSound } from '@/lib/sound';
 import { useHistory, applySnapshot } from '@/lib/history';
 import { IconButton } from '@/components/ui/primitives';
 import { usePhoneStudio } from './NarrowViewportBanner';
@@ -20,7 +21,10 @@ export function UndoRedo() {
         title="Undo (Ctrl+Z)"
         onClick={() => {
           const snap = useHistory.getState().undo();
-          if (snap) applySnapshot(snap);
+          if (snap) {
+            applySnapshot(snap);
+            playSound('undo');
+          }
         }}
         disabled={!canUndo}
         size={size}
@@ -32,7 +36,10 @@ export function UndoRedo() {
         title="Redo (Ctrl+Shift+Z)"
         onClick={() => {
           const snap = useHistory.getState().redo();
-          if (snap) applySnapshot(snap);
+          if (snap) {
+            applySnapshot(snap);
+            playSound('redo');
+          }
         }}
         disabled={!canRedo}
         size={size}

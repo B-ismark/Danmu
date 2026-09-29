@@ -65,6 +65,8 @@ import { wouldCreateCycle } from '@/lib/rigid-parent';
 import { convoyRestore, gestureFor, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
+import { Wobble } from './Wobble';
+import { playSound } from '@/lib/sound';
 
 // Roughness/metalness + reflection strength per surface finish. envMapIntensity
 // leans on the scene IBL so 'polished'/'metal' actually catch reflections (the
@@ -233,6 +235,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   /** What the last refusal SAID, so a streak that changes its mind says so and one
    *  that does not stays quiet. See `liveUpdate`. */
   const saidRef = useRef<string | null>(null);
+  /** Whether the last live frame was held by an alignment guide, so the snap
+   *  sound plays on the frame it locks and not on every frame it holds. */
+  const snappedRef = useRef(false);
   const lastValidPos = useRef<[number, number, number] | null>(null);
   // Last collision-free spot DURING the current drag — an invalid drop falls
   // back here (slide up to the obstacle) instead of reverting the whole drag.
@@ -488,6 +493,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     );
     const lead = settle.lead;
     const co = settle.co;
+    // A small tick the moment a guide locks on, and not again while it holds.
+    const snapped = (lead.snapLines?.length ?? 0) > 0;
+    if (snapped && !snappedRef.current) playSound('snap');
+    snappedRef.current = snapped;
     ref.current.position.set(lead.pos[0], lead.pos[1], lead.pos[2]);
     // `settled` is part of the legality question, not a diagnostic: an unsettled
     // frame is one where the lead and its set were resolved at DIFFERENT deltas, and
@@ -706,6 +715,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     });
     if (holdTimer.current) clearTimeout(holdTimer.current);
     holdTimer.current = null;
+    // Heard as well as seen: a set-down whose knock is lower for a bigger piece,
+    // or the low double bump of a piece that would not go.
+    playSound(refusal ? 'blocked' : 'drop', { size: Math.max(...dim) / 2500 });
     if (!refusal) {
       setDragInvalid(false);
       setLive(null);
@@ -784,6 +796,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     started: boolean;
     /** false while a touch is still dwelling — the camera still owns the gesture */
     armed: boolean;
+    /** The pick-up has been heard — a touch hears it at the dwell, a mouse at the
+     *  first move — so the move after a dwell does not play it a second time. */
+    heard: boolean;
     hold: number;
     startClient: [number, number];
     planeY: number;
@@ -1084,6 +1099,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       pointerId: e.pointerId,
       started: false,
       armed: !isTouch,
+      heard: false,
       hold: 0,
       startClient: [e.clientX, e.clientY],
       planeY,
@@ -1132,6 +1148,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         const d = drag.current;
         if (!d) return;
         d.armed = true;
+        d.heard = true;
+        playSound('pick');
         // The press has become a pick-up, so the window `holdPress` is for has
         // closed — see the note at the hold itself. Everything below this line is
         // something to undo rather than nothing.
@@ -1189,6 +1207,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       const dist = Math.hypot(e.clientX - d.startClient[0], e.clientY - d.startClient[1]);
       if (dist < 4) return;
       d.started = true;
+      if (!d.heard) playSound('pick');
+      d.heard = true;
       // Same as the pick-up above: past here the gesture has done something.
       releasePress(partId);
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
@@ -1285,6 +1305,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // is this part's own resolve while IT is the one being dragged.
   const refused = dragInvalid || blockedHere;
   const highlightState = refused ? 'invalid' : inSelection ? 'selected' : 'hovered';
+  // What this group draws at scale 1 — the effective dim for a parametric piece,
+  // which is rebuilt at it, and the authored one for everything else, which wears
+  // the resize as a group scale. Same split `Highlight` and `CutAway` read below.
+  const renderedDim = isParametric(part.shape) ? (storedDim ?? part.dimMM) : part.dimMM;
 
   return (
     <>
@@ -1305,7 +1329,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           dimKey={storedDim?.join()}
           shapeKey={part.shape}
         />
-        <Pickable partId={partId}>{children}</Pickable>
+        {/* The lean while carried and the rock when set down — drawn only, on an
+            inner group the transform layers never see (lib/wobble.ts). */}
+        <Wobble
+          targetRef={ref}
+          partId={partId}
+          enabled={isFloorStanding(part.category, part.shape) && part.category !== 'rug'}
+          halfW={renderedDim[0] / 2000}
+          halfD={renderedDim[1] / 2000}
+        >
+          <Pickable partId={partId}>{children}</Pickable>
+        </Wobble>
         {/* Wall pieces leave with their wall in the dollhouse cut-away. The depth is
             the authored one for a group-scaled piece (the scale carries the rest)
             and the effective one for a parametric piece, which is rebuilt at it. */}
@@ -1343,6 +1377,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             // `setDragging` below must be the LAST word on who owns the gesture.
             claimPressForGizmo();
             gizmoActive.current = true;
+            // `commit()` on the release sets the piece down with a knock, so the
+            // grab is heard too — otherwise the gizmo is the one gesture that lands
+            // without ever having been lifted.
+            playSound('pick');
             setDragging(partId);
             const pp = ref.current?.position;
             dragStartPos.current = pp ? [pp.x, pp.y, pp.z] : null;
