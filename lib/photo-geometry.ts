@@ -43,8 +43,12 @@ import {
  *  known one; this is only the floor. */
 export const CAM_HEIGHT = 1.5;
 
-/** Default horizontal FOV when nothing better is available — typical phone
- *  main camera (~66°). EXIF, then the wall-floor line, replace this. A wall shot
+/** Default FOV across the photo's LONG side when nothing better is available —
+ *  typical phone main camera (~66° held landscape). EXIF, then the wall-floor line,
+ *  replace this. It is the long side's because it is a property of the sensor, not
+ *  of how the phone was held: a photo taken upright has its horizontal field across
+ *  the SHORT side, ~52° on a 4:3 main camera, and reading that as 66° over-reads a
+ *  wall piece by a third (`defaultCal`). A wall shot
  *  in a small room is often taken on the ULTRAWIDE (~106°), which this under-reads
  *  by more than a factor of two: that mis-sizes wall-mounted items directly, and
  *  mis-PLACES floor-standing ones (their size survives, because distance scales as
@@ -91,8 +95,13 @@ export type CameraCal = {
  *  height, a square-on wall — rather than read. */
 export type LensSource = 'measured' | 'assumed';
 
+/** The typical phone lens, laid across the photo's long side. `k` is the horizontal
+ *  span and the vertical one is `k / aspect`, so an upright photo (`aspect < 1`) puts
+ *  the long side's span on the vertical by scaling `k` by the aspect. EXIF needs no
+ *  such care: `hfovFromFocal35` apportions the diagonal by the photo's own aspect. */
 export function defaultCal(aspect: number): CameraCal {
-  return { k: 2 * Math.tan(((DEFAULT_HFOV_DEG / 2) * Math.PI) / 180), aspect };
+  const long = 2 * Math.tan(((DEFAULT_HFOV_DEG / 2) * Math.PI) / 180);
+  return { k: long * Math.min(1, aspect), aspect };
 }
 
 /** Build a calibration from a known horizontal field of view — the EXIF path.

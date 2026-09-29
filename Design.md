@@ -786,7 +786,7 @@ us:
 | EXIF focal length | **camera height** | The lens is known, so the 1.5 m guess (±17% on everything) becomes a measurement. |
 | its own perspective | **camera height** | `lib/vanishing-point.ts` reads the lens out of the geometry — see below. |
 | nothing | **focal length** | The original path, assuming 1.5 m. Still correct, no longer the only one. |
-| neither, or no floor line | — | A typical phone lens (66°), and the room is measured as it always was. |
+| neither, or no floor line | — | A typical phone lens: 66° across the photo's **long** side, so ~52° across an upright 4:3 photo. It is the sensor's field, not the frame's — read upright as 66° across, a wall piece came back a third too big (§ 49.1). |
 
 **The middle rung is for photos that arrive with nothing.** A room is a box: three
 families of parallel lines, mutually perpendicular. With the principal point at

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CAM_HEIGHT,
+  calForPhoto,
   defaultCal,
   calFromHfov,
   wallFrame,
@@ -973,6 +974,80 @@ describe('defaultCal', () => {
     const hfov = (2 * Math.atan(cal.k / 2) * 180) / Math.PI;
     expect(hfov).toBeGreaterThan(55);
     expect(hfov).toBeLessThan(80);
+  });
+
+  const kOf = (hfovDeg: number) => 2 * Math.tan(((hfovDeg / 2) * Math.PI) / 180);
+  const hfovOf = (k: number) => (2 * Math.atan(k / 2) * 180) / Math.PI;
+
+  it('lays the lens across the LONG side, whichever way the phone was held', () => {
+    // The independent half: EXIF's own conversion apportions the 35 mm diagonal by the
+    // photo's aspect, so the same lens held upright has a narrower horizontal field. The
+    // default must turn by the same ratio, and this never reads `defaultCal`'s arithmetic.
+    for (const [wide, tall] of [[4 / 3, 3 / 4], [16 / 9, 9 / 16], [3 / 2, 2 / 3]]) {
+      const exif = kOf(hfovFromFocal35(26, tall)!) / kOf(hfovFromFocal35(26, wide)!);
+      expect(defaultCal(tall).k / defaultCal(wide).k).toBeCloseTo(exif, 9);
+      expect(defaultCal(tall).aspect).toBe(tall);
+      expect(defaultCal(wide).k).toBe(defaultCal(4 / 3).k);
+    }
+    expect(defaultCal(1).k).toBe(defaultCal(4 / 3).k);
+  });
+
+  it('reads an UPRIGHT photo at its real size — measured, against the lens it was taken on', () => {
+    // The phone whose landscape field IS the default, found by bisection on EXIF's
+    // conversion, then held upright. A 4 × 6 m room so a level lens 3 m from the wall
+    // sees a chest of drawers whole; every box is checked uncut, so the error measured
+    // is the lens and nothing else.
+    const landscape = hfovOf(defaultCal(4 / 3).k);
+    let lo = 10;
+    let hi = 60;
+    for (let i = 0; i < 80; i++) {
+      const mid = (lo + hi) / 2;
+      if (hfovFromFocal35(mid, 4 / 3)! > landscape) lo = mid;
+      else hi = mid;
+    }
+    const truth = calFromHfov(hfovFromFocal35(lo, 3 / 4)!, 3 / 4);
+    const fp = footprintForLayout('rect', 4, 6);
+    const d = 3;
+    // What the default returned for this photo before it turned with the phone.
+    const before: CameraCal = { k: defaultCal(4 / 3).k, aspect: 3 / 4 };
+    const pieces = [
+      { name: 'print', wall: true, w: 0.7, h: 0.5, depth: 0.03, box: bboxOfWallSolid('n', 'n', 0.3, 1.5, d, 0.7, 0.5, 0.03, truth) },
+      { name: 'TV', wall: true, w: 1.1, h: 0.65, depth: 0.06, box: bboxOfWallSolid('n', 'n', -0.2, 1.2, d, 1.1, 0.65, 0.06, truth) },
+      { name: 'chest', wall: false, w: 0.8, h: 0.9, depth: 0.45, x: 0.4, z: -d + 0.225, box: bboxOfFloorBox('n', 0.4, -d + 0.225, 0.8, 0.9, 0.45, truth) },
+    ];
+    const read = (cal: CameraCal) =>
+      pieces.map((p) => {
+        const g = (p.wall ? placeWallObject : placeFloorObject)(p.box, 'n', fp, cal, { depthM: p.depth })!;
+        const off = p.wall ? 0 : Math.hypot(g.position.x - p.x!, g.position.z - p.z!);
+        return { name: p.name, w: g.widthMM / (p.w * 1000) - 1, h: g.heightMM / (p.h * 1000) - 1, off };
+      });
+    for (const p of pieces) expect(inFrame(p.box)).toBe(true);
+    const was = read(before);
+    const now = read(defaultCal(3 / 4));
+    const pct = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(0)}%`;
+    console.log(
+      'upright photo on the assumed lens, before → after:\n' +
+        was.map((b, i) => `  ${b.name.padEnd(6)} width ${pct(b.w)} → ${pct(now[i].w)}, height ${pct(b.h)} → ${pct(now[i].h)}${b.off ? `, off by ${b.off.toFixed(2)} → ${now[i].off.toFixed(2)} m` : ''}`).join('\n'),
+    );
+    for (const r of now) {
+      expect(Math.abs(r.w)).toBeLessThan(0.01);
+      expect(Math.abs(r.h)).toBeLessThan(0.01);
+      expect(r.off).toBeLessThan(0.01);
+    }
+    // The fixture can express the defect: read on the old default, the wall pieces
+    // came back a third too big and the chest stood well off its wall.
+    expect(was[0].w).toBeGreaterThan(0.25);
+    expect(was[1].w).toBeGreaterThan(0.25);
+    expect(was[2].off).toBeGreaterThan(0.3);
+  });
+
+  it('is the lens the ladder falls back to for an upright photo with nothing else to go on', () => {
+    const cal = calForPhoto(
+      { aspect: 3 / 4, view: {}, exifHfov: null, vanishing: null, floorLine: null },
+      'n',
+      footprintForLayout('rect', 4, 6),
+    );
+    expect(cal).toEqual(defaultCal(3 / 4));
   });
 });
 
