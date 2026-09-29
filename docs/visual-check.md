@@ -1939,8 +1939,9 @@ corner, a tall bookcase whose top is out of shot — then the scan screen, then 
 studio**. A row whose box runs off a side, or off the top, now carries a grey line with a
 ruler: *"Runs past the edge of the photo, so its width is an estimate"* (or *height*, or
 *size* when both are cut). A floor piece cut only at its FOOT — a bed whose end is below the
-photo — gets **no** note, on purpose: its width and height were in view; it is stood back
-against its wall instead (§ 49.10). A wall piece cut at the bottom does get one. In
+photo — gets one too, since PR #168: its width and height were in view, but its distance was
+assumed, so its size is an estimate (§ 49.10, and the item below). A wall piece cut at the
+bottom does get one. In
 the studio that piece should be about its usual size, grown from the side the photo saw
 toward the side it cut, not the sliver that was in the frame. A row cut on every side the
 check could read starts unticked (§ 49 in `docs/what-is-still-open.md`).
@@ -1970,6 +1971,30 @@ real phone, with a real scan, is the unlooked-at half.
 
 ---
 ## Look and light
+
+### A piece cut at its foot is judged where it would stand against its wall — this branch (D8), NOT PROBED
+
+**Where to click.** *Photograph my real room* → a photo whose bottom edge cuts off the foot of
+a sofa, bed or wardrobe standing a pace out from its wall, and one of a standing fan or a stool
+cut the same way. On the scan screen, a foot-cut row whose word is wrong — a nightstand called a
+bed — should be flagged: *Measured about … m. Bed range is …*, with the ruler note
+*Runs past the edge of the photo, so its size is an estimate*. A correctly named piece standing
+well off its wall may be flagged as well. That is the price the user chose (D8, § 49.10 in
+`docs/what-is-still-open.md`): it starts unticked, and one tap keeps it.
+
+**What wrong looks like.**
+- "about" missing on a foot-cut row, or showing on a row the photo saw whole. A stool or
+  standing fan shot with the phone tipped DOWN is a foot cut too, and went without it for a
+  commit.
+- A one-axis line reading a bare *2.67 m* with no *wide* or *tall* after it.
+- At 360 px, the warning line and its chips wrapping under the tick or the ✕.
+- A flagged, correctly named piece that takes more than one tap to keep.
+- **The part only a real room answers:** how often correct pieces get flagged. The fixture says
+  6 of 39 box pieces, every one 800 mm off its wall, and 12 of 28 round ones, some of them
+  standing against it. Whether that is tolerable in a person's own room is not something a
+  test can say.
+
+---
 
 ### High quality is graded again — on a real GPU, in every mood — `c2137c4` on `main` (PR #157)
 

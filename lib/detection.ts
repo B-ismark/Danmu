@@ -2,7 +2,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { useQuota } from './quota';
-import { buildDetectPrompt, type PromptRoom } from './detect-prompt';
+import { buildDetectPrompt, readCloudReply, type PromptRoom } from './detect-prompt';
 import type { DetectSource } from './detect-confidence';
 import type { CaptureSlot } from './storage';
 
@@ -153,28 +153,12 @@ export async function detectAcrossImages(
     throw classifyDetect(e);
   }
 
-  // A body we cannot parse is NOT an empty room. Returning [] here made the
-  // detect screen show its "All clear — nothing stood out in your photos, which
-  // is exactly right for an empty room" notice after a malformed response, having
-  // already spent the quota. Throw so the error path (which offers Retry) owns it.
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (e) {
-    throw new DetectError('BAD_RESPONSE', 'The detection service replied with something unreadable.', e);
-  }
-  if (!Array.isArray(parsed)) {
-    throw new DetectError('BAD_RESPONSE', 'The detection service replied in an unexpected shape.', parsed);
-  }
-  // NOT deduped here. Merging two detections is a decision about what EXISTS,
-  // and it used to be taken on the model's own guessed `position` — the exact
-  // numbers the geometry pass then overwrote. It now runs in lib/detect-refine.ts
-  // AFTER refinement, which also means the on-device path gets it too.
-  return (parsed as Detection[])
-    .filter((d) => d.box && d.box.length === 4 && d.slot)
-    // Stamped here rather than at the call site, so the one function that talks to
-    // Gemini is the one function that can claim its output came from Gemini.
-    .map((d) => ({ ...d, source: 'cloud' as const }));
+  // A body that is not an answer is NOT an empty room: see `readCloudReply`.
+  // Throw, so the error path (which offers Retry) owns it. NOT deduped here: see
+  // `cloudRows`.
+  const reply = readCloudReply(text);
+  if ('unreadable' in reply) throw new DetectError('BAD_RESPONSE', reply.unreadable, reply.cause);
+  return reply.rows;
 }
 
 function blobToBase64(blob: Blob): Promise<string> {

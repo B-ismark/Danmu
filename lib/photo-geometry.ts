@@ -795,6 +795,47 @@ export type PieceFootprint = {
  *  next. */
 export const FRAME_EDGE = 0.01;
 
+/** A detector's box, cut to the photo: what lies outside the frame was never seen,
+ *  so a box describes only the part in it. Null when none of it is in frame, or it
+ *  is not a box at all.
+ *
+ *  Both edges are clipped, never the near one moved with the size kept. That is what
+ *  the on-device detector did, and it moves the FAR edge by the overrun: the bottom
+ *  row is where a floor piece meets the floor and where a ceiling disc's far rim is,
+ *  and the top row of a cut box is the frame's own edge, which the ceiling solve
+ *  stands on (`discUnderTopCut`). Measured in `tests/photo-geometry.test.ts`
+ *  (§ 49.15): on the 556 discs the top of the frame cut, a box run 1% past the frame
+ *  read 7.1% off and 102 mm out that way, and 6.4% and 54 mm left unclipped, where
+ *  the box the photo shows reads 4.1% and 42 mm. Clipped, the overrun changes
+ *  nothing. */
+export function clipToFrame(box: readonly number[]): [number, number, number, number] | null {
+  if (box.length !== 4 || !box.every(Number.isFinite)) return null;
+  const [x, y, w, h] = box;
+  const x0 = Math.max(0, x);
+  const y0 = Math.max(0, y);
+  // What each side lost, taken off the size, so a box the frame did not cut comes
+  // back exactly as it went in rather than rebuilt from its corners.
+  const cw = w - (x0 - x) - Math.max(0, x + w - 1);
+  const ch = h - (y0 - y) - Math.max(0, y + h - 1);
+  if (!(cw > 0 && ch > 0)) return null;
+  return [x0, y0, cw, ch];
+}
+
+/** The least either side of a detector's box may be, as a share of the photo, once it
+ *  is cut to the photo. Below it the box is a sliver: measured off a handful of pixels,
+ *  or a box that lay mostly past the edge and so is mostly the model's guess. */
+export const SLIVER = 0.01;
+
+/** A detector's box as the scan keeps it: cut to the photo (`clipToFrame`), and null
+ *  when what is left is a `SLIVER` on either side. Both sources read their boxes
+ *  through this one function (`detectionBox` on-device, `cloudRows` from Gemini), so
+ *  the same box is kept or dropped whichever model drew it — for a commit the cloud
+ *  rows kept the slivers the on-device rows dropped. */
+export function boxInPhoto(box: readonly number[]): [number, number, number, number] | null {
+  const cut = clipToFrame(box);
+  return cut && cut[2] > SLIVER && cut[3] > SLIVER ? cut : null;
+}
+
 export type FrameCuts = { left: boolean; right: boolean; top: boolean; bottom: boolean };
 
 /** The plane a placer reads a row on — which is not always its anchor's (see
@@ -839,11 +880,14 @@ export function cutByFrame(box: readonly [number, number, number, number]): bool
 /** Where a piece's true size can be, given a placer's reading `v` on one axis, in mm.
  *  `exact`: at `v`, as far as the lens and the catalogue depth are right. `upper`: the
  *  reading is the most it can be, and the truth is in `[floorMM, v]`. `lower`: the
- *  reading is the least, and the truth is in `[v, ceilMM]`. */
+ *  reading is the least, and the truth is in `[v, ceilMM]`. `assumed`: read at a
+ *  distance the photo did not show, with no side the reading can speak for — an
+ *  estimate all the same, which is the half a reader must not lose (`ReadBounds`). */
 export type ReadBound =
   | { kind: 'exact' }
   | { kind: 'upper'; floorMM: number }
-  | { kind: 'lower'; ceilMM: number };
+  | { kind: 'lower'; ceilMM: number }
+  | { kind: 'assumed' };
 
 /** Which way each axis a placer read can be wrong, for the axes the frame did NOT cut —
  *  those are `cutAxes`'s, and a reader skips them.
@@ -866,8 +910,12 @@ export type ReadBound =
  *    too high and a falling one too low. So a tall piece's height is at most what it
  *    reads, and a low one's at least. **And the other end is not open:** a rising ray
  *    means the top is above the lens whatever the distance, so a wardrobe cut at its
- *    foot is still taller than the camera, and a nightstand shorter. That one fact is
- *    most of what lets the judge still catch a wrong word here.
+ *    foot is still taller than the camera, and a nightstand shorter. That fact is what
+ *    let the judge catch a wrong word here while it judged only on the side a reading
+ *    spoke for. It judges at the reading now (D8, § 49.10) and asks only which axes
+ *    are estimates (`kind`); the ends stay the placer's description of its reading,
+ *    and are what building inside that range rather than at its limit would read
+ *    (§ 49.14).
  *
  *  A round piece is the same case on the same two tests: its radius is `near` times an
  *  angle, and its top row is read at `near` or at `near` plus that diameter, on the same
@@ -876,11 +924,14 @@ export type ReadBound =
  *  bound and grows with the tilt: a standing fan 300 mm off its wall read 637 wide
  *  against a true 650 at 10° down, a stool 800 mm off read 465 × 721 against 500 × 700
  *  at 20°, a fan 555 × 947 against 650 × 900 at 25°. A bound that the truth falls
- *  outside is worse than none — at 20° the row would print *0.72–1.50 m tall* for a
- *  0.70 m stool — so a round piece read tipped down claims nothing and is judged as
- *  read, which is what it had before bounds existed (pinned in
- *  `tests/label-repair.test.ts`). The phone tipped UP, which is how rooms are
- *  photographed, holds on every row, and so does a box tipped down.
+ *  outside is worse than none — at 20° it put a 0.70 m stool at 0.72–1.50 m tall — so
+ *  a round piece read tipped down claims no side (`AT_ASSUMED_DISTANCE`), pinned in
+ *  `tests/label-repair.test.ts`. **It is still read at an assumed distance**, and for
+ *  a commit it was handed `AS_READ` instead, which says the opposite: the one foot-cut
+ *  row whose sentence printed its estimate as a measurement, without its "about" or
+ *  the note. Judged at the reading, as every piece is now (D8), the two cost its
+ *  verdict the same. The phone tipped UP, which is how rooms are photographed, holds
+ *  on every row, and so does a box tipped down.
  *
  *  **Both directions also lean on the catalogue depth**, because the far end is the
  *  piece's back on the plaster at its kind's typical depth. A piece deeper than that
@@ -889,12 +940,13 @@ export type ReadBound =
  *  near face is further from the lens than the far end assumed, so it reads short of
  *  the truth, and by more than it sounds — a 2.0 m sofa 750 mm deep, on a wall two
  *  metres from a level lens, reads 1680 against a typical sofa's 950, and 600 mm deep
- *  it reads 1500. Judged both ways the same reading was just as short, so the bound
- *  costs nothing there; it only fails to fix it (pinned in the same file).
+ *  it reads 1500. The bound only describes that reading and does not fix it (pinned
+ *  in the same file).
  *
  *  Measured, not reasoned (`tests/label-repair.test.ts`): 800 mm off its wall on a
- *  106° lens, an 800 mm sofa read 333 tall and a 2.0 m wardrobe 2667, and judged both
- *  ways the judge called each the wrong size for what it was. A wall or ceiling piece
+ *  106° lens, an 800 mm sofa reads 333 tall and a 2.0 m wardrobe 2667, and judged at
+ *  those readings the judge calls each the wrong size for what it is: the price of D8,
+ *  pinned in the same file. A wall or ceiling piece
  *  is on its plane by assumption whatever the frame cuts, so this is the floor's alone. */
 export type ReadBounds = { width: ReadBound; height: ReadBound };
 
@@ -905,6 +957,14 @@ export type ReadBounds = { width: ReadBound; height: ReadBound };
 export const AS_READ: ReadBounds = Object.freeze({
   width: Object.freeze({ kind: 'exact' as const }),
   height: Object.freeze({ kind: 'exact' as const }),
+});
+
+/** Both axes read at a distance the photo did not show, on neither side of the truth
+ *  for certain: a round floor piece cut at its foot with the lens tipped down. Frozen
+ *  for the reason `AS_READ` is. */
+export const AT_ASSUMED_DISTANCE: ReadBounds = Object.freeze({
+  width: Object.freeze({ kind: 'assumed' as const }),
+  height: Object.freeze({ kind: 'assumed' as const }),
 });
 
 /** One axis of a box the frame may have cut: its centre and length, taken to the
@@ -1378,14 +1438,17 @@ export function placeFloorObject(
   // wide as it reads, and its height leans the way its top row's ray does (`ReadBounds`).
   // Asked of `cut.bottom` alone, with or without a wall to stand it against: the ray
   // through the last row is a far end either way.
-  // Not a round piece read with the lens tipped down: its residual crosses the bound.
+  // A round piece read with the lens tipped down claims no side, its residual crossing
+  // the bound, but its distance was assumed all the same.
   const lensMM = height * 1000;
-  const bounds: ReadBounds = cut.bottom && !(foot.round && tiltOf(cal) > 0)
-    ? {
-        width: { kind: 'upper', floorMM: 0 },
-        height: solved.rises ? { kind: 'upper', floorMM: lensMM } : { kind: 'lower', ceilMM: lensMM },
-      }
-    : AS_READ;
+  const bounds: ReadBounds = !cut.bottom
+    ? AS_READ
+    : foot.round && tiltOf(cal) > 0
+      ? AT_ASSUMED_DISTANCE
+      : {
+          width: { kind: 'upper', floorMM: 0 },
+          height: solved.rises ? { kind: 'upper', floorMM: lensMM } : { kind: 'lower', ceilMM: lensMM },
+        };
 
   const { x, z, yaw } = slotToWorld(slot, d, right);
   return {

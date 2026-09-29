@@ -14,7 +14,7 @@
 // touching a side or the top (the left side twice, the right side, the top-left corner, the
 // first of them also reaching the foot), two standing on the bottom edge and seen whole
 // across — a sofa, and a tall piece called a nightstand, whose "Measured" sentence must say
-// its numbers are limits — and three well inside. The one-word "Bed" sits beside a
+// its numbers are estimates — and three well inside. The one-word "Bed" sits beside a
 // "Double bed", so a row is found by its own name.
 // VP='[[w,h],…]' narrows the widths, DUMP=1 prints each row's text, SHOTS names the
 // screenshot folder (a temp folder by default).
@@ -83,10 +83,11 @@ for (const [w, h] of VIEWPORTS) {
       check(r.noteR <= r.rowR + 0.5 && r.noteL >= r.rowL - 0.5 && !r.clipped, `${label}: note inside its row (${r.noteL?.toFixed(0)}–${r.noteR?.toFixed(0)} in ${r.rowL.toFixed(0)}–${r.rowR.toFixed(0)}, ${r.noteH?.toFixed(0)}px tall)`);
     } else check(r.note === null, `${label}: no note`);
   }
-  // A limit printed as its one number reads as a size: the tall piece called a nightstand
-  // is read from the far end of where it could stand, so both its numbers are limits.
+  // An estimate printed bare reads as a measurement: the tall piece called a nightstand is
+  // read from the far end of where it could stand, and judged at that reading (D8), so the
+  // sentence gives the numbers it was judged on and says "about" of both.
   const limits = rows.find((x) => x.text.startsWith('Nightstand'));
-  check(/Measured up to about [\d.]+ \S+ wide and about [\d.]+–[\d.]+ \S+ tall\./.test(limits?.text ?? ''), `Nightstand: says its limits ("Measured${(limits?.text ?? '').split('Measured')[1]?.slice(0, 70)}")`);
+  check(/Measured about [\d.]+ × [\d.]+ \S+\./.test(limits?.text ?? ''), `Nightstand: says its reading is an estimate ("Measured${(limits?.text ?? '').split('Measured')[1]?.slice(0, 70)}")`);
   const sideways = await page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth);
   check(sideways <= 0, `no sideways scroll (${sideways})`);
   const list = await page.$('.rail--right .list');

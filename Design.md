@@ -426,7 +426,10 @@ Furniture detection runs through a fallback chain, best-effort:
    them. It now counts them, names the walls nobody photographed as missing, lists
    only the cameras it has, and constrains the `slot` it will accept back to the
    ones it sent. The **coordinate system stays whole** — `position` is reported in
-   room coordinates and those are defined by all four wall planes.
+   room coordinates and those are defined by all four wall planes. The reply is
+   read there too (`cloudRows`): a row with no box or no slot is dropped, and every
+   box is cut to the photo, the same way the on-device boxes are (§4, *A box the
+   edge of the photo cut*).
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
    detector is available.
 
@@ -646,6 +649,17 @@ it — and every size taken off that box was the part, read as the whole. Photog
 people photograph a room, with the phone tipped up to get the ceiling in, that is most of the
 floor pieces in the picture, and it is where *"mostly too small"* came from.
 
+First the box is cut to the photo (`clipToFrame`, `lib/photo-geometry.ts`). A model's box
+can run past the frame, since it regresses where the piece is rather than where the picture
+ends, and what lies outside the frame was never seen. The on-device detector used to set the
+near edge to the frame and keep the size, which moves the FAR edge by the overrun, and the far
+edge is the row the placers measure from: a floor piece's foot, a ceiling disc's far rim. The
+cloud rows were not cut at all, so a cut box's top row sat outside the picture where the
+ceiling solve reads it as the frame's edge. Both sources now go through the one helper
+(`detectionBox` in `lib/local-detect.ts`, `cloudRows` in `lib/detect-prompt.ts`), which takes
+off each side only what lay outside, so a box the frame did not cut comes back exactly as it
+went in, and a sliver is judged on the part that is in the picture (§ 49.15).
+
 So a cut axis is a **lower bound**, and the placers treat it as one (`frameCuts` and
 `cutAxes` in `lib/photo-geometry.ts`, a box within 1% of the frame being cut):
 
@@ -686,25 +700,29 @@ the judge's own strict repairs never reach it. And the scan screen says so on th
 see is an estimate. Not "a typical one", which it said first and which was true of one case
 in three: a piece whose visible part is already bigger than typical keeps what was seen, and
 one stopped by the wall's end is neither. A piece cut only at its FOOT was seen whole across
-and to its top, but its distance is the wall's rather than its own, the far
-end of where it could stand, so the judge reads each axis one way — the placer's own
-answer, `GeoPlacement.bounds` (`lib/photo-geometry.ts`), which `geoMeasure` carries out
-beside the row. The width is the most it can be: it may say *too small*, never *too
-big*. The height is the top row read at that distance, and that row's ray rises for a piece
-taller than the lens and falls for a lower one, so a tall piece reads high and a low one low —
-each bounded on its other side by the lens, which is what still makes a low table no wardrobe.
-Judged both ways, six of forty-three correctly named pieces were called the wrong size in
-`tests/label-repair.test.ts`; none are now, at the price of catching 325 of 654 wrong words
-where it caught 476 (§ 49.10). **And the row says so**, because a limit printed as its one
-number is a limit passed off as a size: the verdict carries each axis as the least and the most
-it can be (`LabelVerdict.measured`) and names the axes read as limits (`bounded`), so the
-sentence reads *Measured up to about 1.27 m wide and about 0.27–1.50 m tall* — "about", because
-a limit is only as good as the catalogue depth it was read at — and the row gets the *Runs past
-the edge of the photo, so its … is an estimate* note a side cut gets, naming its size where a
-side cut names its width. To the person they are one fact, that this number is not the camera's
-measurement of the piece. A round piece read with the lens tipped DOWN claims no limit at all:
-its solve's residual crosses the bound, by 35 mm at 20°, and a limit the truth falls outside is
-worse than none.
+and to its top, but its distance is the wall's rather than its own: it is read at the far end
+of where it could stand, its back on the plaster at its kind's typical depth. **It is judged at
+that reading, and that is the user's call (D8, § 49.10).** Its back on the wall is the
+assumption the placer makes, and taking it as evidence catches the wrong words a photo cut at
+the foot otherwise lets through; the price is a correctly named piece that stands nearer the
+room, called the wrong size and left unticked, one tap from kept. Measured in
+`tests/label-repair.test.ts`, against judging each axis only on the side its reading could
+speak for: on 39 box pieces tipped level or up it catches 439 of 597 wrong words where that
+caught 309, and flags 6 of the 39 correct ones, every one 800 mm off its wall; tipped down,
+120 of 160 against 84, and 5 of 11 flagged; and round pieces pay most, 324 of 490 against 289
+for 12 of 28 flagged, because a round piece's far end is its own diameter off the wall and a
+standing fan's typical size sits on its band's edges. The placer still says which way each
+axis could be wrong (`GeoPlacement.bounds`, `lib/photo-geometry.ts`, which `geoMeasure`
+carries out beside the row), and the verdict names the axes it read at an assumed distance
+(`bounded`). **And the row says so**, because an estimate printed as a measurement is an
+estimate passed off as a size: the sentence reads *Measured about 1.27 × 0.27 m*, and the row
+gets the *Runs past the edge of the photo, so its … is an estimate* note a side cut gets,
+naming its size where a side cut names its width. To the person they are one fact, that this
+number is not the camera's measurement of the piece. A round piece read with the lens tipped
+DOWN claims no limit at all: its solve's residual crosses the bound, by 35 mm at 20°, and a
+limit the truth falls outside is worse than none — so it is judged like the rest, and says it
+was read at an assumed distance (`AT_ASSUMED_DISTANCE`), so its row has the "about" and the note
+too. It went without them for a commit, handed the bounds of a piece seen whole.
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,

@@ -42,6 +42,7 @@ import {
   acceptableModel,
   digestMatches,
 } from './model-verify';
+import { boxInPhoto } from './photo-geometry';
 // Served from public/ when the export script has been run locally.
 const LOCAL_BASE = '/models/';
 // Hugging Face mirror, tried only when the local export is absent — lets a
@@ -508,6 +509,17 @@ function containedIn(a: RawBox, b: RawBox): number {
   return overlap(a, b) / (a.w * a.h + 1e-9);
 }
 
+/** A kept candidate as the rest of the app reads a box: corner and size, cut to the
+ *  photo (`clipToFrame`). A model regresses a box for a piece the frame cuts, and
+ *  that box can run past the edge; the old clamp set the near edge to the frame and
+ *  kept the size, which moved the far edge — the one the placers measure from — by
+ *  the overrun. Null for a sliver, judged on what is IN the picture, since a box
+ *  mostly past the edge is mostly the model's guess — the rule the cloud rows share
+ *  (`boxInPhoto`). Exported for tests. */
+export function detectionBox(b: RawBox): [number, number, number, number] | null {
+  return boxInPhoto([b.x - b.w / 2, b.y - b.h / 2, b.w, b.h]);
+}
+
 /** Non-maximum suppression over candidates from BOTH models and every tile.
  *  Exported for tests — it is the step that decides how many boxes the user sees,
  *  and it has to collapse three different kinds of duplicate: two tiles finding
@@ -642,9 +654,8 @@ async function runDetection(
     }
 
     for (const b of nms(merged)) {
-      const nx = b.x - b.w / 2;
-      const ny = b.y - b.h / 2;
-      if (b.w <= 0.01 || b.h <= 0.01) continue;
+      const box = detectionBox(b);
+      if (!box) continue;
       out.push({
         label: b.label,
         // A class score off the detector head, not a probability of correctness.
@@ -652,12 +663,7 @@ async function runDetection(
         // lib/detect-confidence.ts.
         conf: Math.min(1, b.conf),
         source: 'local',
-        box: [
-          Math.max(0, Math.min(1, nx)),
-          Math.max(0, Math.min(1, ny)),
-          Math.min(1, b.w),
-          Math.min(1, b.h),
-        ],
+        box,
         category: b.category,
         slot: img.slot,
         shape: b.shape,
