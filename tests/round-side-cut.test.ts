@@ -68,6 +68,9 @@ type Row = {
   forward: number;
   widthM: number;
   wall: number;
+  /** How far the piece as built reaches past the room's side wall, in metres: at or
+   *  below zero inside the room. */
+  past: number;
   /** Facts about the fixture itself, from the forward projection and not from the placer:
    *  whether the point of the base nearest the lens is in the photo, and whether any of
    *  the base is. */
@@ -123,6 +126,7 @@ function measure(side: 1 | -1): Row[] {
                 forward: -row.position.z,
                 widthM: row.dimMM[0] / 1000,
                 wall: wd,
+                past: Math.abs(row.position.x) + row.dimMM[0] / 2000 - room.width / 2,
                 nearestInPhoto: inPhoto(project('n', x, 0, -(f - dia / 2), cal)),
                 baseInPhoto: pts.some((p, i) => p[1] === 0 && inPhoto(uv[i])),
               });
@@ -181,7 +185,7 @@ describe('a round floor piece cut at one side of the photo (§ 49.9)', () => {
     expect(table(4, false)).toEqual({
       0: { n: 60, dOff: 8, latOff: 13, dMM: 39, latMM: 66, wMM: 89, hMM: 10 },
       [-10]: { n: 0, dOff: 0, latOff: 0, dMM: 0, latMM: 0, wMM: 0, hMM: 0 },
-      10: { n: 135, dOff: 9, latOff: 71, dMM: 46, latMM: 133, wMM: 84, hMM: 151 },
+      10: { n: 135, dOff: 4, latOff: 68, dMM: 44, latMM: 130, wMM: 80, hMM: 150 },
     });
     // Cut at the foot as well, still the two tangents: these must not move.
     expect(table(4, true)).toEqual({
@@ -190,9 +194,9 @@ describe('a round floor piece cut at one side of the photo (§ 49.9)', () => {
       10: { n: 69, dOff: 41, latOff: 47, dMM: 153, latMM: 130, wMM: 83, hMM: 157 },
     });
     expect(table(5, false)).toEqual({
-      0: { n: 79, dOff: 1, latOff: 17, dMM: 13, latMM: 62, wMM: 80, hMM: 9 },
-      [-10]: { n: 31, dOff: 5, latOff: 14, dMM: 54, latMM: 93, wMM: 109, hMM: 17 },
-      10: { n: 84, dOff: 2, latOff: 48, dMM: 49, latMM: 142, wMM: 82, hMM: 127 },
+      0: { n: 79, dOff: 0, latOff: 11, dMM: 10, latMM: 53, wMM: 67, hMM: 8 },
+      [-10]: { n: 31, dOff: 2, latOff: 13, dMM: 51, latMM: 88, wMM: 102, hMM: 16 },
+      10: { n: 84, dOff: 1, latOff: 46, dMM: 48, latMM: 139, wMM: 79, hMM: 126 },
     });
     expect(table(5, true)).toEqual({
       0: { n: 66, dOff: 35, latOff: 35, dMM: 130, latMM: 134, wMM: 86, hMM: 33 },
@@ -221,7 +225,7 @@ describe('a round floor piece cut at one side of the photo (§ 49.9)', () => {
     // The slivers are where the one-sided solve COSTS, and the reason is on the box: a
     // sliver's frame edge nearly is its second tangent, so the two tangents nearly measured
     // its radius, and the typical radius replaces that on a piece that is not typical. Level
-    // there, 25 / 35 mm became 30 / 76 in distance / along the wall.
+    // there, 25 / 35 mm became 25 / 67 in distance / along the wall.
     const side = rows.filter((r) => !r.foot);
     expect(side.every((r) => r.nearestInPhoto === (r.s === -1.5))).toBe(true);
     const hidden = TILTS.map((t) => {
@@ -229,7 +233,7 @@ describe('a round floor piece cut at one side of the photo (§ 49.9)', () => {
       return [seen.length, seen.filter((r) => !r.nearestInPhoto).length];
     });
     expect(hidden).toEqual([[139, 100], [31, 27], [219, 157]]);
-    expect(cell(side.filter((r) => r.nearestInPhoto && r.tilt === 0))).toEqual({ n: 39, dOff: 3, latOff: 14, dMM: 30, latMM: 76, wMM: 74, hMM: 13 });
+    expect(cell(side.filter((r) => r.nearestInPhoto && r.tilt === 0))).toEqual({ n: 39, dOff: 2, latOff: 12, dMM: 25, latMM: 67, wMM: 65, hMM: 12 });
   });
 
   it('tipped up in the 4 m room, shows no floor at all, so every piece is cut at its foot too', () => {
@@ -258,6 +262,40 @@ describe('a round floor piece cut at one side of the photo (§ 49.9)', () => {
     // 25 mm in distance and 64 along the wall. Placed by the size it is drawn at, nothing is.
     const clean = rows.filter((r) => !r.foot && r.tilt === 0 && r.typical);
     expect(cell(clean)).toEqual({ n: 37, dOff: 0, latOff: 0, dMM: 0, latMM: 0, wMM: 0, hMM: 0 });
+  });
+
+  it('stops the typical radius at the side wall', () => {
+    // The typical radius is an assumption, so the side wall bounds it, as it bounds a
+    // typical width grown from the edge the photo saw. For one commit nothing did, and 33
+    // of these pieces stood through the wall, by up to 337 mm; they stand at it now, and
+    // no piece reaches past it by more than the millimetre a width is rounded to.
+    const atWall = rows.filter((r) => r.past > -0.001);
+    expect([atWall.length, atWall.filter((r) => !r.foot).length, Math.max(...rows.map((r) => r.past)) < 0.0006]).toEqual([33, 33, true]);
+    // The one the review found: a 180 mm plant 90 mm off the wall, 2.3 m out, cut at the
+    // frame's right edge on a level lens. Grown to the typical 400 mm it stood 297 mm
+    // through the wall; stopped there it is 185 mm wide, its edge on the plaster.
+    const room = ROOMS[1];
+    const pts = floorCylinderPoints(2.9, -2.3, 0.18, 0.6);
+    const box = framedExtent(pts.map((p) => project('n', ...p, WIDE)))!;
+    expect(frameCuts(box)).toEqual({ left: false, right: true, top: false, bottom: false });
+    const drawn = placeFloorObject(box, 'n', room, WIDE, { depthM: 0.4, round: true, whole: { widthM: 0.4, heightM: 0.6 } })!;
+    expect([drawn.widthMM, +(drawn.position.x + drawn.widthMM / 2000).toFixed(3)]).toEqual([185, 3]);
+  });
+
+  it('keeps the size the photo shows, even where it reaches past the wall', () => {
+    // The wall bounds the assumption and never what was seen. Typed 5.8 m wide, the room's
+    // wall is at 2.9 m and the same plant is seen reaching 2.99: it keeps the 180 mm the
+    // photo shows it at, where the two tangents put it, rather than shrinking to fit. A
+    // typical size smaller than the one seen changes nothing either.
+    const room = { width: 5.8, depth: 5, height: 2.8, footprint: footprintForLayout('rect', 5.8, 5) };
+    const box = framedExtent(floorCylinderPoints(2.9, -2.3, 0.18, 0.6).map((p) => project('n', ...p, WIDE)))!;
+    const tangents = placeFloorObject(box, 'n', room, WIDE, { depthM: 0.4, round: true })!;
+    for (const widthM of [0.4, 0.04]) {
+      const drawn = placeFloorObject(box, 'n', room, WIDE, { depthM: 0.4, round: true, whole: { widthM, heightM: 0.6 } })!;
+      expect(drawn.widthMM).toBe(180);
+      expect(drawn.position.x).toBeCloseTo(tangents.position.x, 6);
+    }
+    expect(tangents.widthMM).toBe(180);
   });
 
   it('falls back to the two tangents where the typical size cannot close the box', () => {

@@ -891,14 +891,15 @@ describe('findRepeats — a lens a floor line tied to the height', () => {
       return [r.vis, r.held.dup, r.held.lost, r.tied.dup, r.tied.lost];
     });
     console.log(`findRepeats with a floor line, over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
-    // HELD's 26 on the first row was 16 until a round piece cut at one side was placed by
-    // its typical radius (§ 49.9). All ten are a plant or floor lamp cut at one side in one
-    // photo and whole in another: a size in metres read into a camera whose scale the line
-    // got wrong, beside a sighting that is wrong by that scale throughout. TIED, the sweep
-    // the app runs, did not move, and neither did a lens known with the height assumed at
-    // any of 1.3, 1.5 and 1.7 m — measured, dup and lost identical row for row.
+    // HELD's 16 on the first row was 26 for one commit, while a round piece cut at one side
+    // was placed by its typical radius with nothing stopping it at the side wall (§ 49.9):
+    // ten plants and floor lamps, cut at one side in one photo and whole in another, grown
+    // through the wall in a camera whose scale the line got wrong. Stopped at the wall, it
+    // is 16 again, and only that bound moves it. TIED, the sweep the app runs, moved at
+    // neither step, and nor did a lens known with the height assumed at any of 1.3, 1.5 and
+    // 1.7 m — measured, dup and lost identical row for row.
     expect(got).toEqual([
-      [1000, 26, 13, 4, 13],
+      [1000, 16, 13, 4, 13],
       [993, 4, 25, 5, 16],
       [968, 14, 20, 15, 18],
       [979, 25, 17, 25, 17],
