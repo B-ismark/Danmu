@@ -354,22 +354,36 @@ export const CROWDED_COVER = 0.6;
  *  `WALK_MIN` above, one file later. */
 export const WALL_GAP = 0.02;
 
-/** How close a piece's back has to be to a wall for that wall to take the piece
- *  with it when it moves, metres. Measured from the piece's near FACE, so it is a
- *  gap, not a centre distance.
+/** How close a piece's back has to be to a wall to read as standing AGAINST it,
+ *  metres — the room report's "Sofa against a wall" as opposed to "in the open".
+ *  Measured from the piece's near FACE, so it is a gap, not a centre distance.
  *
  *  Deliberately looser than `WALL_GAP`, because "against the wall" in a real
  *  arrangement is anything from welded-on to a hand's width off: the settler
  *  leaves exactly `WALL_GAP`, a user dragging by hand leaves whatever the snap
  *  step gave them (50 mm on the coarse setting), and a piece placed from a photo
- *  detection can be a few centimetres out. At `WALL_GAP` exactly, a sofa the user
- *  nudged 30 mm off the plaster would be abandoned by its own wall — and being
- *  left behind is far more surprising than being taken along.
+ *  detection can be a few centimetres out.
  *
- *  Here rather than in `lib/wall-move.ts` for the reason `WALL_GAP` above already
- *  records: this is a number about what a piece needs from the room, every
- *  consumer has to agree on it, and the ones that kept private copies drifted. */
+ *  It USED to be the wall-carry reach as well, and that was the wrong number for
+ *  the other question — see `WALL_CARRY_REACH` below. */
 export const WALL_ATTACH_TOL = 0.12;
+
+/** How close a piece's back has to be to a wall for that wall to take the piece
+ *  with it when it moves, metres, from the near FACE.
+ *
+ *  A walkway, and derived from `WALK_MIN` rather than written down again: a gap
+ *  behind a piece that nobody can walk through is not floor anyone uses, it is the
+ *  piece's own breathing room, and a wall that moves without the piece changes
+ *  exactly that — the plant tucked 200 mm off the plaster ends up marooned half a
+ *  metre into the room, or the wall walks through it. A gap someone CAN walk
+ *  through means the piece stands in the room, and it stays.
+ *
+ *  It was `WALL_ATTACH_TOL`'s 120 mm, and the app's own starter rooms showed why
+ *  that was the wrong question answered well: they stand a plant 200 mm off the
+ *  wall, a floor lamp 345, an armchair and a T's sofa 300 — every one of them left
+ *  behind by its wall on a fresh room, which a user reported as "the walls are not
+ *  moving the models as they should, always". */
+export const WALL_CARRY_REACH = WALK_MIN;
 
 /** How wide a route this particular room can be asked for, metres.
  *

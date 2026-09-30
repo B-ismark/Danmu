@@ -87,7 +87,25 @@ both get *Dining / desk table*; every other kind gets one chip. Press a chip, th
 range, or a chip row that wraps badly now that most kinds have one chip where they had
 up to four.
 
-### A wall stops before it runs into another wall — branch `claude/affectionate-ritchie-ilawx1`
+### A moving wall takes a group, and what stands near it, along — branch `claude/affectionate-ritchie-ilawx1`
+
+**Where to click.** A fresh **Rectangle** room, 2D Plan then 3D. Group the sofa with the
+coffee table (select both, **Group**), then push the sofa's wall out and back with the wall
+handle, the arrow keys and the Inspector's **Out 10 cm**. Then the plant's wall. Then put a
+lamp on a nightstand by the bed wall and move that wall. Then type a new width in Room.
+
+**What changed.** A wall took only the pieces within 12 cm of it, and only those — the rest of a
+group stayed behind, and so did anything standing on a piece it took. It now reaches as far as a
+walkway (60 cm): a gap nobody can walk through behind a piece is the piece's own breathing room,
+and the starter rooms stand a plant, a floor lamp, an armchair and a sofa 20–35 cm off their
+walls. A piece it takes brings the rest of its group and whatever rests on it. If one member of a
+group cannot follow without leaving the room, the whole group stays (`lib/wall-move.ts`).
+
+**What "wrong" looks like.** Half a group moving. A lamp left floating where its nightstand was.
+A piece in the middle of the room (coffee table, dining set) following a wall. A TV on the
+opposite wall leaving its wall because its stand was grouped with the sofa. 3D and 2D disagreeing.
+
+### A wall stops before it runs into another wall — merged in #191 (`4572419`)
 
 **Where to click.** A **T-Shape** room, 3D and then 2D Plan. Drag the wall under one arm of
 the bar north, toward the north wall, as far as it will go. Then drag a side wall of the stem

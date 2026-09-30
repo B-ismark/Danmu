@@ -108,7 +108,7 @@ describe('carryForResize', () => {
     // Against the east wall: 3.0 is the wall, the sofa is 900 deep and turned to
     // face west, so its centre sits 0.45 in from the plaster.
     const sofa = part({ id: 'sofa', pos: [3 - 0.45, 0, 0], rot: Math.PI / 2 });
-    const moved = carryForResize([sofa], before, after);
+    const moved = carryForResize([sofa], before, after, {});
     expect(moved).toHaveLength(1);
     expect(moved[0].id).toBe('sofa');
     expect(moved[0].pos[0]).toBeCloseTo(3 - 0.45 - 0.5, 9);
@@ -117,12 +117,12 @@ describe('carryForResize', () => {
 
   it('leaves a piece in the middle of the room alone', () => {
     const table = part({ id: 'table', pos: [0, 0, 0], dimMM: [600, 600, 400] });
-    expect(carryForResize([table], rect(6, 4), rect(5, 4))).toEqual([]);
+    expect(carryForResize([table], rect(6, 4), rect(5, 4), {})).toEqual([]);
   });
 
   it('never touches y — a wall moving sideways changes nothing about height', () => {
     const sofa = part({ id: 'sofa', pos: [3 - 0.45, 0.31, 0], rot: Math.PI / 2 });
-    const moved = carryForResize([sofa], rect(6, 4), rect(5, 4));
+    const moved = carryForResize([sofa], rect(6, 4), rect(5, 4), {});
     expect(moved[0].pos[1]).toBe(0.31);
   });
 
@@ -131,7 +131,7 @@ describe('carryForResize', () => {
     const after = rect(5, 3);
     // Tucked into the +x / +z corner, small enough to be attached to both walls.
     const stand = part({ id: 'stand', pos: [3 - 0.2, 0, 2 - 0.2], dimMM: [400, 400, 550] });
-    const moved = carryForResize([stand], before, after);
+    const moved = carryForResize([stand], before, after, {});
     expect(moved).toHaveLength(1);
     // Width lost 1 → east wall in by 0.5. Depth lost 1 → south wall in by 0.5.
     expect(moved[0].pos[0]).toBeCloseTo(3 - 0.2 - 0.5, 9);
@@ -140,7 +140,7 @@ describe('carryForResize', () => {
 
   it('carries outward too, so growing the room does not strand a sofa mid-floor', () => {
     const sofa = part({ id: 'sofa', pos: [3 - 0.45, 0, 0], rot: Math.PI / 2 });
-    const moved = carryForResize([sofa], rect(6, 4), rect(8, 4));
+    const moved = carryForResize([sofa], rect(6, 4), rect(8, 4), {});
     expect(moved[0].pos[0]).toBeCloseTo(3 - 0.45 + 1, 9);
   });
 
@@ -151,7 +151,7 @@ describe('carryForResize', () => {
     const before = rect(6, 4);
     const after = rect(0.6, 4);
     const sofa = part({ id: 'sofa', pos: [3 - 0.45, 0, 0], rot: Math.PI / 2 });
-    expect(carryForResize([sofa], before, after)).toEqual([]);
+    expect(carryForResize([sofa], before, after, {})).toEqual([]);
   });
 
   it('leaves a piece that was ALREADY outside to its own move', () => {
@@ -160,7 +160,7 @@ describe('carryForResize', () => {
     const before = rect(6, 4);
     const after = rect(5, 4);
     const stray = part({ id: 'stray', pos: [3.4, 0, 0], rot: Math.PI / 2, dimMM: [400, 400, 400] });
-    const moved = carryForResize([stray], before, after);
+    const moved = carryForResize([stray], before, after, {});
     // It is attached (overlapping the wall counts) and it was not inside, so the
     // was-inside/now-inside guard does not stop it.
     if (moved.length > 0) expect(moved[0].pos[0]).toBeCloseTo(3.4 - 0.5, 9);
@@ -168,12 +168,12 @@ describe('carryForResize', () => {
 
   it('returns nothing when the room did not change', () => {
     const sofa = part({ id: 'sofa', pos: [3 - 0.45, 0, 0], rot: Math.PI / 2 });
-    expect(carryForResize([sofa], rect(6, 4), rect(6, 4))).toEqual([]);
+    expect(carryForResize([sofa], rect(6, 4), rect(6, 4), {})).toEqual([]);
   });
 
   it('returns nothing across a layout change, rather than a wrong answer', () => {
     const sofa = part({ id: 'sofa', pos: [3 - 0.45, 0, 0], rot: Math.PI / 2 });
-    expect(carryForResize([sofa], rect(6, 4), footprintForLayout('l', 6, 4) as Footprint)).toEqual(
+    expect(carryForResize([sofa], rect(6, 4), footprintForLayout('l', 6, 4) as Footprint, {})).toEqual(
       [],
     );
   });

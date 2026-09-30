@@ -161,6 +161,7 @@ export function recarryForResize(
   o: Partial<TransformOverrides>,
   before: Footprint,
   after: Footprint,
+  parentIds: Record<string, string>,
 ): {
   authored: Array<{ id: string; pos: [number, number, number] }>;
   overridden: Array<{ id: string; pos: [number, number, number] }>;
@@ -169,7 +170,7 @@ export function recarryForResize(
   const overridden: Array<{ id: string; pos: [number, number, number] }> = [];
 
   const effective = resolveParts(parts, o);
-  const carried = carryForResize(effective, before, after);
+  const carried = carryForResize(effective, before, after, parentIds);
   if (carried.length === 0) return { authored, overridden };
 
   // The DISPLACEMENT, not the absolute position: `carryForResize` answered about

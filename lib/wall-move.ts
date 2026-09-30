@@ -24,11 +24,20 @@
 //     resized to fit and nothing is silently shoved (CLAUDE.md rule 2) — and the
 //     test is `footInsidePoly`, not `outsideShare`, whose probes sit 10% in from
 //     the edges and forgive a piece 20 mm through the plaster (rule 3).
+//   · **A piece's company travels with it, or none of it does.** A wall claims the
+//     pieces standing at it; each brings the rest of its merged set (`groupId`) and
+//     whatever rests on it (`parentIds`), the two relations a DRAG already carries
+//     (`lib/drag-convoy.ts`). A wall that took only the half of a merged set it was
+//     touching pulled the set apart, which is the one thing merging is for. And the
+//     containment rule above is judged per set: one member that cannot follow keeps
+//     the whole set where it is, rather than leaving a lamp in mid-air over the spot
+//     its nightstand used to be.
 
 import { footFromPart, footInsidePoly, nearestEdge, obbExtentAlong, obbFromPart, type Foot } from './geometry';
 import { wallOutwardNormal, type Footprint } from './footprint';
-import { WALL_ATTACH_TOL } from './layout-rules';
+import { WALL_CARRY_REACH } from './layout-rules';
 import { ridesWall } from './physics';
+import { snapshotDescendants } from './rigid-parent';
 import type { ScenePart } from './scene-spec';
 
 /** A carried piece's new position. `y` is never touched: moving a wall sideways
@@ -60,6 +69,96 @@ function contained(f: Foot, poly: Footprint): boolean {
   );
 }
 
+/** The pieces that travel with `seed`: the rest of each one's merged set, and
+ *  whatever rests on it, closed to a FIXED POINT — a group mate brought along can
+ *  have a lamp on it, and that lamp can belong to a third set. One pass would close
+ *  the first hop and leave the second, the bug `lib/drag-convoy.ts` already met.
+ *
+ *  `admit` is asked about every piece reached this way before it joins; a piece it
+ *  turns away brings nothing of its own. */
+function withCompany(
+  seed: readonly string[],
+  parts: ScenePart[],
+  parentIds: Record<string, string>,
+  admit: (p: ScenePart) => boolean,
+): Set<string> {
+  const byId = new Map(parts.map((p) => [p.id, p]));
+  const out = new Set(seed);
+  const queue = [...seed];
+  const add = (id: string) => {
+    if (out.has(id)) return;
+    const p = byId.get(id);
+    if (!p || !admit(p)) return;
+    out.add(id);
+    queue.push(id);
+  };
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const g = byId.get(id)?.groupId;
+    if (g) for (const p of parts) if (p.groupId === g) add(p.id);
+    for (const d of snapshotDescendants(id, parts, parentIds)) add(d.id);
+  }
+  return out;
+}
+
+/** Which travelling set each of `ids` belongs to: pieces joined by a merged set or
+ *  by resting on one another share a set. Only relations INSIDE `ids` count, so a
+ *  piece whose company stayed behind is a set of its own. */
+function setsOf(ids: ReadonlySet<string>, parts: ScenePart[], parentIds: Record<string, string>): Map<string, string> {
+  const root = new Map<string, string>();
+  for (const id of ids) root.set(id, id);
+  const find = (id: string): string => {
+    let r = id;
+    while (root.get(r) !== r) r = root.get(r)!;
+    root.set(id, r);
+    return r;
+  };
+  const join = (a: string, b: string) => {
+    if (!ids.has(a) || !ids.has(b)) return;
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) root.set(ra, rb);
+  };
+  const firstOfGroup = new Map<string, string>();
+  for (const p of parts) {
+    if (!ids.has(p.id)) continue;
+    if (p.groupId) {
+      const first = firstOfGroup.get(p.groupId);
+      if (first === undefined) firstOfGroup.set(p.groupId, p.id);
+      else join(first, p.id);
+    }
+    for (const d of snapshotDescendants(p.id, parts, parentIds)) join(p.id, d.id);
+  }
+  const out = new Map<string, string>();
+  for (const id of ids) out.set(id, find(id));
+  return out;
+}
+
+/** The ids whose move breaks the containment rule, grown to their whole sets.
+ *  `moved` maps an id to where it would go; ids absent from it are not moving. */
+function heldBack(
+  parts: ScenePart[],
+  moved: ReadonlyMap<string, [number, number, number]>,
+  before: Footprint,
+  after: Footprint,
+  parentIds: Record<string, string>,
+): Set<string> {
+  const failing = new Set<string>();
+  for (const p of parts) {
+    const pos = moved.get(p.id);
+    if (!pos || ridesWall(p.category, p.shape)) continue;
+    const wasInside = contained(footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape), before);
+    const nowInside = contained(footFromPart(pos, p.rot, p.dimMM, p.circle, p.shape), after);
+    if (wasInside && !nowInside) failing.add(p.id);
+  }
+  if (failing.size === 0) return failing;
+  const sets = setsOf(new Set(moved.keys()), parts, parentIds);
+  const bad = new Set([...failing].map((id) => sets.get(id)));
+  const out = new Set<string>();
+  for (const [id, set] of sets) if (bad.has(set)) out.add(id);
+  return out;
+}
+
 /**
  * Ids of the parts that belong to wall `index` and should travel with it.
  *
@@ -73,7 +172,8 @@ function contained(f: Foot, poly: Footprint): boolean {
  *     `lib/apertures.ts` uses to choose the wall a window cuts through. If these
  *     two tests could disagree, a carried window would leave its own hole behind.
  *   · **Standing against the wall** (floor furniture). Decided by the gap from the
- *     piece's near face to the wall plane, plus the requirement that it actually
+ *     piece's near face to the wall plane — under `WALL_CARRY_REACH`, a walkway —
+ *     plus the requirement that it actually
  *     sits along THIS wall's span — in an L-shaped room a sofa in the far wing can
  *     be zero distance from this wall's infinite LINE while having nothing
  *     whatsoever to do with this wall.
@@ -86,7 +186,8 @@ export function attachedToWall(
   parts: ScenePart[],
   poly: Footprint,
   index: number,
-  tol = WALL_ATTACH_TOL,
+  parentIds: Record<string, string>,
+  tol = WALL_CARRY_REACH,
 ): string[] {
   const n = poly.length;
   if (n < 3 || index < 0 || index >= n) return [];
@@ -103,8 +204,17 @@ export function attachedToWall(
   const mx = (a[0] + b[0]) / 2;
   const mz = (a[1] + b[1]) / 2;
 
+  // Something resting on another piece goes where its support goes, never on its
+  // own: a lamp within reach of the wall on a nightstand that is not would be
+  // carried off its nightstand into the air.
+  const resting = new Set<string>();
+  for (const parent of new Set(Object.values(parentIds))) {
+    for (const d of snapshotDescendants(parent, parts, parentIds)) resting.add(d.id);
+  }
+
   const out: string[] = [];
   for (const p of parts) {
+    if (resting.has(p.id)) continue;
     const dx = p.pos[0] - mx;
     const dz = p.pos[2] - mz;
     // `ridesWall`, not `wallMounted`. This branch means "the piece IS part of this
@@ -129,7 +239,19 @@ export function attachedToWall(
     if (along > len / 2 + obbExtentAlong(obb, tx, tz)) continue;
     out.push(p.id);
   }
-  return out;
+  // …and their company. One exception, a piece that IS part of some other wall: a
+  // TV merged with the stand under it goes with its wall, and when THIS wall is
+  // parallel to that one, following the set would pull it off its own plaster.
+  // Across a wall that meets this one at a corner the move only slides it along its
+  // wall, which is where it lives, so it comes.
+  const company = withCompany(out, parts, parentIds, (p) => {
+    if (!ridesWall(p.category, p.shape)) return true;
+    const e = nearestEdge(poly, p.pos[0], p.pos[2]);
+    if (!e) return false;
+    const [px, pz] = wallOutwardNormal(poly, e.index);
+    return Math.abs(px * ox + pz * oz) < 1e-6;
+  });
+  return parts.filter((p) => company.has(p.id)).map((p) => p.id);
 }
 
 /**
@@ -153,26 +275,23 @@ export function carryAttached(
   after: Footprint,
   outward: [number, number],
   delta: number,
+  parentIds: Record<string, string>,
 ): CarriedPos[] {
   if (ids.length === 0 || delta === 0) return [];
   const wanted = new Set(ids);
   const [ox, oz] = outward;
-  const out: CarriedPos[] = [];
+  const moved = new Map<string, [number, number, number]>();
   for (const p of parts) {
-    if (!wanted.has(p.id)) continue;
-    const pos: [number, number, number] = [p.pos[0] + ox * delta, p.pos[1], p.pos[2] + oz * delta];
-    // A piece that rides the wall IS part of it: it goes where the wall goes, and its
-    // footprint sits ON the boundary, where a containment test is a coin flip. That
-    // exemption is for wall riders only — gating it on `wallMounted` skipped the
-    // was-inside/now-inside check for the ceiling family too, so a pendant could be
-    // carried straight out of the room with nothing testing whether it still fitted.
-    if (!ridesWall(p.category, p.shape)) {
-      const wasInside = contained(footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape), before);
-      const nowInside = contained(footFromPart(pos, p.rot, p.dimMM, p.circle, p.shape), after);
-      if (wasInside && !nowInside) continue;
-    }
-    out.push({ id: p.id, pos });
+    if (wanted.has(p.id)) moved.set(p.id, [p.pos[0] + ox * delta, p.pos[1], p.pos[2] + oz * delta]);
   }
+  // A piece that rides the wall IS part of it: it goes where the wall goes, and its
+  // footprint sits ON the boundary, where a containment test is a coin flip. That
+  // exemption is for wall riders only — gating it on `wallMounted` skipped the
+  // was-inside/now-inside check for the ceiling family too, so a pendant could be
+  // carried straight out of the room with nothing testing whether it still fitted.
+  const held = heldBack(parts, moved, before, after, parentIds);
+  const out: CarriedPos[] = [];
+  for (const [id, pos] of moved) if (!held.has(id)) out.push({ id, pos });
   return out;
 }
 
@@ -262,6 +381,7 @@ export function carryForResize(
   parts: ScenePart[],
   before: Footprint,
   after: Footprint,
+  parentIds: Record<string, string>,
 ): CarriedPos[] {
   const deltas = wallDisplacements(before, after);
   if (deltas.length === 0) return [];
@@ -272,25 +392,22 @@ export function carryForResize(
     const d = deltas[i];
     if (d === 0) continue;
     const [ox, oz] = wallOutwardNormal(before, i);
-    for (const id of attachedToWall(parts, before, i)) {
+    for (const id of attachedToWall(parts, before, i, parentIds)) {
       const prev = shift.get(id) ?? [0, 0];
       shift.set(id, [prev[0] + ox * d, prev[1] + oz * d]);
     }
   }
   if (shift.size === 0) return [];
 
-  const out: CarriedPos[] = [];
+  const moved = new Map<string, [number, number, number]>();
   for (const p of parts) {
     const s = shift.get(p.id);
     if (!s) continue;
     if (s[0] === 0 && s[1] === 0) continue;
-    const pos: [number, number, number] = [p.pos[0] + s[0], p.pos[1], p.pos[2] + s[1]];
-    if (!ridesWall(p.category, p.shape)) {
-      const wasInside = contained(footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape), before);
-      const nowInside = contained(footFromPart(pos, p.rot, p.dimMM, p.circle, p.shape), after);
-      if (wasInside && !nowInside) continue;
-    }
-    out.push({ id: p.id, pos });
+    moved.set(p.id, [p.pos[0] + s[0], p.pos[1], p.pos[2] + s[1]]);
   }
+  const held = heldBack(parts, moved, before, after, parentIds);
+  const out: CarriedPos[] = [];
+  for (const [id, pos] of moved) if (!held.has(id)) out.push({ id, pos });
   return out;
 }

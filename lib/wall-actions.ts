@@ -44,7 +44,7 @@ export function wallAttachments(index: number): string[] {
   // said the same thing. Without this a user who backs off a stopped wall, lets go
   // and pushes into it a second time is refused in silence.
   said = null;
-  return attachedToWall(currentRoomScene(), useScene.getState().room.footprint, index);
+  return attachedToWall(currentRoomScene(), useScene.getState().room.footprint, index, useStudio.getState().parentIds);
 }
 
 // ─── The refusal ────────────────────────────────────────────────────────────
@@ -235,7 +235,8 @@ function shapeRefusal(fault: WallFault): string {
 export function moveWallCarrying(index: number, delta: number, ids?: string[]): number {
   const before = useScene.getState().room.footprint;
   const resolved = currentRoomScene();
-  const attached = ids ?? attachedToWall(resolved, before, index);
+  const parentIds = useStudio.getState().parentIds;
+  const attached = ids ?? attachedToWall(resolved, before, index, parentIds);
   // Judged on the prospective polygon, BEFORE the store is asked. `moveWall` runs
   // the same `offsetWall` and applies the same hard bounds, and it returns 0 for
   // every reason without distinguishing them — so asking first is what lets the
@@ -283,7 +284,7 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
   }
   if (attached.length === 0) return applied;
   const after = useScene.getState().room.footprint;
-  const moves = carryAttached(attached, currentRoomScene(), before, after, outward, applied);
+  const moves = carryAttached(attached, currentRoomScene(), before, after, outward, applied, parentIds);
   useStudio.getState().setTransformsFor(moves);
   return applied;
 }
