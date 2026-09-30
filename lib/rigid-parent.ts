@@ -71,6 +71,12 @@ export type DescendantOffset = {
 };
 
 function isPhysicallySupported(child: ScenePart, parent: ScenePart): boolean {
+  // A piece standing on the floor rides nothing, whatever the relation says — the
+  // bar `ridingParents` infers by and rule 1 of `deriveRiderYs`, so the height read
+  // and the carry agree. Without it a chair authored 40 mm up on a mat and then sent
+  // to the Floor kept riding the mat: within `SUPPORT_Y_EPS` of its top, so the mat's
+  // next drag took a chair that no longer stood on it.
+  if (child.pos[1] <= 0) return false;
   const childFoot = footFromPart(child.pos, child.rot, child.dimMM, child.circle, child.shape);
   if (!coversEnoughToSupport(childFoot, footArea(childFoot), parent)) return false;
   // `verticalExtent`, because `pos[1]` is a bottom for a floor anchor and the mesh

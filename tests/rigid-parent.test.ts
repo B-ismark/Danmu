@@ -239,3 +239,16 @@ describe('cascadeTransform: forceRotFor', () => {
     expect('rot' in moves[0]).toBe(false);
   });
 });
+
+describe('snapshotDescendants — a piece on the floor rides nothing (§ H.6.7)', () => {
+  it('drops a link to a support thinner than the height tolerance once the rider is grounded', () => {
+    // A chair authored 40 mm up on a mat, then sent to the Floor. 0 is within
+    // `SUPPORT_Y_EPS` of the mat's 40 mm top, so the height test alone kept the link
+    // and the mat's next drag took a chair that no longer stood on it.
+    const mat = part({ id: 'mat', category: 'other', shape: 'box', pos: [0, 0, 0], dimMM: [1200, 1200, 40] });
+    const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', pos: [0, 0.04, 0], dimMM: [450, 500, 900] });
+    expect(snapshotDescendants('mat', [mat, chair], { chair: 'mat' }).map((d) => d.id)).toEqual(['chair']);
+    const floored = { ...chair, pos: [0, 0, 0] as [number, number, number] };
+    expect(snapshotDescendants('mat', [mat, floored], { chair: 'mat' })).toEqual([]);
+  });
+});
