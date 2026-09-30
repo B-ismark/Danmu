@@ -83,16 +83,18 @@
  * search now offers on every press of every preset, so the trade below does not arise
  * on these rooms; the table is kept for its shape, and nothing here has re-measured it.
  *
- * Raising the cap buys the rest at a price not worth paying — the whole search is
- * synchronous on the main thread. Measured BEFORE the threshold fix, when refusals
- * were commoner, so read it for the shape of the trade rather than for its rows:
+ * Raising the cap buys the rest at a price not worth paying — a longer wait for the
+ * answer. The search has run off the main thread since `layout-offload.ts`, so the
+ * page stays live; the ideas still arrive no sooner. Measured BEFORE the threshold
+ * fix, when refusals were commoner, so read it for the shape of the trade rather
+ * than for its rows:
  *
  *   cap        t 6x5 offers / worst ms     open 6x4 offers / worst ms
  *   12              5/12  ·  2.9 s               8/12  ·  2.1 s
  *   20              7/12  ·  4.7 s              10/12  ·  3.1 s
  *   30             10/12  ·  6.6 s              12/12  ·  5.2 s
  *
- * So 12 stays: a refusal is honest and survivable, a six-second freeze is not.
+ * So 12 stays: a refusal is honest and survivable, a six-second wait is not.
  *
  * **The upstream repair LANDED, and it is why those first numbers moved** (#68, on
  * `main`). `lib/layout-score.ts` no longer exempts a `sharesFloor` pair from
@@ -125,8 +127,9 @@
  * on candidates that have passed the cheap filter — a small price for the one
  * failure it exists to catch. What it is not is *covered*, and
  * `tests/shuffle-gate.test.ts` now pins the agreement it depends on instead: that
- * file goes red the moment either threshold moves, which is the moment this gate
- * starts having work to do again.
+ * file goes red the moment either threshold moves, which is the moment the job this
+ * gate was written for comes back. The `clash-mounted` work above is a different job,
+ * and it has that one now.
  */
 import {
   HARD_TERMS,
@@ -165,32 +168,30 @@ export const MIN_CLEAN = 4;
  *  range is 2–8. Below 0.25 the term never fires at all; above ~8 cost stops
  *  mattering.
  *
- *  **Measured 2026-09-06: on this app's data this term cannot change an outcome, and
- *  that is recorded here rather than acted on.**
+ *  **What it does, measured 2026-09-30: it reorders, rarely, and never more.**
+ *  `orderOffers` scores `cost + DIVERSITY_PENALTY x (closest already picked)`. The first
+ *  pick has `picked = []`, so nothing can move `ranked[0]` — and `ranked[0]` is what a
+ *  caller with no history is handed. After it, the candidates are mostly unlike each
+ *  other already: reconstructed as this loop builds them over six presets x presses
+ *  1–5, **177 pairs, 162 at similarity exactly 0**, the other fifteen 0.100–0.400, and
+ *  **none near `REPEAT_SIMILARITY`**. So the term adds at most 1.6 cost units, against
+ *  idea costs of 2.4–84. End to end, `shuffleRoom` at `diversityPenalty: 0` and at 4,
+ *  each press with the previous press's first idea as history, **differs on 1 of 24
+ *  presses** (`rect` 7.5 x 5.6, press 4): the same four ideas and the same first one,
+ *  with the 8.6 — the one most like what was already picked — moved behind a 9.9
+ *  and a 10.1.
  *
- *  `orderOffers` scores `cost + DIVERSITY_PENALTY x (closest already picked)`. Two
- *  facts make the second half zero almost always. The first pick has `picked = []`,
- *  so nothing can move `ranked[0]` — and `ranked[0]` is what a caller with no history
- *  is handed. And the candidates that reach the ranking are already unlike each other:
- *  instrumented inside this very loop, **40 shuffle calls produced 66 candidate pairs,
- *  of which 61 scored similarity exactly 0**; the five non-zero ones were 0.111, 0.125,
- *  0.200 and 0.400, and **none reached `REPEAT_SIMILARITY`**. So the penalty multiplies
- *  zero in 92% of pairs and contributes at most 1.6 cost units in the rest, against
- *  candidate costs measured between 10 and 75.
+ *  **The figures this replaced said it could not change an outcome at all** (66 pairs,
+ *  61 at zero; 26 of 26 end-to-end pairs byte-identical; costs 10–75). They were
+ *  measured on 2026-09-06 against a search that, it turned out, accepted no steps
+ *  (§ H.6.0), so every candidate was a lightly tidied scatter. They are kept here so
+ *  the next reader knows why § A.2 once said its test could not be written.
  *
- *  End to end: `shuffleRoom` run twice on the same attempt with the previous offer as
- *  history, once at `diversityPenalty: 0` and once at 4, returned **byte-identical
- *  placements in all 26 pairs** over four presets and two sizes.
- *
- *  **So the honest gate is on the AGREEMENT, not on the term** — the same shape as the
- *  note above about `newRoomFindings` rejecting none of 816 candidates.
- *  `tests/layout-shuffle.test.ts` asserts that the clean set stays mutually dissimilar,
- *  which is what makes this inert; the day the search starts producing near-duplicates
- *  that test goes red and this term has work to do. Writing a test that fails at
- *  `diversityPenalty: 0` was the outstanding ask (§ A.2). It cannot be written at this
- *  level against real rooms, and the reason is the measurement above rather than an
- *  absence of effort. The unit behaviour IS pinned, in `tests/layout-offer.test.ts`,
- *  where the fixture supplies the similar candidates this search does not.
+ *  `tests/layout-shuffle.test.ts` now holds both halves: the press the term reorders,
+ *  which fails at `diversityPenalty: 0` (§ A.2's ask), and the bound that the clean set
+ *  stays far from `REPEAT_SIMILARITY`, which goes red the day the search starts
+ *  producing near-duplicates and this term has real work. The unit behaviour is pinned
+ *  in `tests/layout-offer.test.ts`, where the fixture supplies similar candidates.
  */
 export const DIVERSITY_PENALTY = 4;
 /** Above this, two arrangements are the same idea shown twice.
@@ -460,9 +461,9 @@ export function shuffleRoom(
  *  what has been shown already AND against the ideas kept before it.
  *
  *  **It has no work to do on today's rooms, and that is measured, not hoped.** The
- *  clean pool is already mutually unlike (see `DIVERSITY_PENALTY`: none of 66 pairs
- *  reached `REPEAT_SIMILARITY`), so deleting the check leaves every real-room test
- *  green. It is pure and exported so `tests/layout-ideas.test.ts` can hand it the
+ *  clean pool is already mutually unlike (see `DIVERSITY_PENALTY`: none of 177 pairs
+ *  came near `REPEAT_SIMILARITY`, the closest 0.400), so deleting the check leaves
+ *  every real-room test green. It is pure and exported so `tests/layout-ideas.test.ts` can hand it the
  *  near-twins the search does not produce, which is the only way to pin it. */
 export function showableIdeas<T extends { placements: Placement[] }>(
   ranked: readonly T[],

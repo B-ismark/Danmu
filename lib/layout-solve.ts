@@ -1016,8 +1016,10 @@ export function solveLayout(
   // `arrange` and `refit` still read `before`, which carries navigation while no trial
   // does, so a first proposal cheaper than the origin-plus-navigation is taken as
   // downhill. Pricing them the same way moves two fixtures, so it is a measured change
-  // of its own — § H.6 in `docs/what-is-still-open.md`.
-  let bestCost = shuffle ? scoreLayout(model, current, weights) : before;
+  // of its own — § H.6.0 in `docs/what-is-still-open.md`, "Filed, not fixed". A caller
+  // that hands `arrange` or `refit` a `start` is priced from it too: in any mode, a
+  // search that begins somewhere other than `origin` must be priced where it begins.
+  let bestCost = shuffle || opts.start !== undefined ? scoreLayout(model, current, weights) : before;
   let cost = bestCost;
   // The finalists that get the expensive navigability pass. Kept as we go rather
   // than re-running the search: the annealer visits plenty of good, genuinely
@@ -1058,11 +1060,13 @@ export function solveLayout(
   // …and in `shuffle` it is not doing the job this block describes. The groups come
   // from `origin`, the room we were given, while the pass moves the scatter, whose
   // members are nowhere near each other: a multi-piece move, not a group one. It went
-  // live when the search started accepting steps (the block above), not by design,
-  // and it is kept because nothing measured better. Six presets, twenty single solves
-  // and six presses each, groups from `origin` / from the scatter / pass skipped: clean
-  // solves 86 / 83 / 90 of 120, ideas 140 / 140 / 135, mean idea cost 16.7 / 16.6 /
-  // 16.7 — the annealer's own noise.
+  // live when the search started accepting steps (the block above), not by design.
+  // Six presets, twenty single solves and six presses each, groups from `origin` /
+  // from the scatter / pass skipped: clean solves 86 / 83 / 90 of 120, ideas 140 / 140
+  // / 135, mean idea cost 16.7 / 16.6 / 16.7 — the annealer's own noise, with skipping
+  // no worse and `GROUP_STEPS` evaluations cheaper. It stays on here only because
+  // switching it off is a second change to the search, and this one is about the
+  // search's starting price.
   if (groups.length > 0 && !refit) {
     for (let step = 0; step < GROUP_STEPS; step++) {
       const t = step / GROUP_STEPS;
