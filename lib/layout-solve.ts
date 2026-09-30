@@ -994,32 +994,29 @@ export function solveLayout(
   const touchedPrev: Placement[] = new Array(parts.length);
 
   let best = current.map((p) => ({ ...p }));
-  // ── `cost` is the price of `current`, and `bestCost` the price of `best` ─────
+  // ── `cost` must be the price of `current`, and `bestCost` of `best` ───────────
   //
-  // Both start as the price of the layout the search STARTS from, which is why this
-  // is not simply `before`. In `arrange` and `refit` the two are one layout; in
-  // `shuffle` `current` is the scatter, and pricing it as the room we were given
-  // turned the search off. When `before` moved to `origin` (the block above), these
-  // two lines went with it, and so every shuffle step was measured against a tidy
-  // room it was nowhere near: a scatter step costs hundreds, the tidy room ~2, and
-  // `exp(-Δ / temp)` at a temperature of 8 or less is nothing. Measured over five
-  // presets x twelve seeds: **0 accepted steps in 59 of 60 solves**, and the pool
-  // held one finalist, the scatter itself, **labelled with the tidy room's price**
-  // (2.44 against a real 2,161 on `rect` 6 x 4 seed 1). Every idea the gallery showed
-  // was a random scatter tidied by the passes after the pick. Nothing failed: a
-  // scatter that happened to be legal still passed `isCleanShuffle`, the gallery
-  // still filled from more presses, and the whole suite stayed green.
+  // True in `shuffle`; not yet in `arrange` or `refit` (last paragraph). Both start at
+  // the price of the layout the search STARTS from, taken the way every trial below
+  // is. In `shuffle` that is the scatter, and seeding these two from `before` — the
+  // room we were GIVEN — turned the search off: a scatter prices at 25–5,300 against a
+  // tidy room's ~2, so every step read as hundreds uphill and `exp(-Δ / temp)` at a
+  // temperature of 8 or less refused it. Five presets, seeds 1000–1011 (the first
+  // press's): **no step accepted in 59 of 60 solves** (60 of 60 at seeds 1–12), and a
+  // pool of one finalist, the scatter, labelled with the tidy room's price (2.44
+  // against a real 2,161 on `rect` 6 × 4 seed 1). Every idea the gallery showed was a
+  // scatter tidied by the passes after the pick, and nothing failed, because a legal
+  // scatter still passed every gate. These two lines were written when `before` WAS
+  // the start's price and did not move with it to `origin` (the block above).
   //
-  // Started from the scatter's own price, the same presets fill all twelve slots of
-  // three presses (5 to 12 before), the ideas cost about half as much (`rect` 6 x 4
-  // 35.6 → 6.1, `t` 6 x 5 76.6 → 36.3), and ideas with a floor piece through a wall
-  // fall from 24 to 9. `tests/layout-shuffle.test.ts` holds the invariant that would
-  // have caught it: a finalist's `cost` is the cost of its own placements.
+  // Priced as the scatter, a solve accepts 540–1,060 steps, three presses fill every
+  // slot on every preset, and ideas with a floor piece through a wall fall from 24 to
+  // 9. `tests/layout-shuffle.test.ts` holds the invariant.
   //
-  // `arrange` and `refit` keep `before`, which is NOT the same number there either:
-  // `before` carries navigation and every trial below does not. Pricing those two
-  // modes from `scoreLayout` too moves two fixtures, so it is its own measured change
-  // and not this one — see § H.6 in `docs/what-is-still-open.md`.
+  // `arrange` and `refit` still read `before`, which carries navigation while no trial
+  // does, so a first proposal cheaper than the origin-plus-navigation is taken as
+  // downhill. Pricing them the same way moves two fixtures, so it is a measured change
+  // of its own — § H.6 in `docs/what-is-still-open.md`.
   let bestCost = shuffle ? scoreLayout(model, current, weights) : before;
   let cost = bestCost;
   // The finalists that get the expensive navigability pass. Kept as we go rather
@@ -1058,6 +1055,14 @@ export function solveLayout(
   // resize. Hopping between basins is the definition of reinventing the arrangement, so
   // the pass would be spending three hundred evaluations proposing the one thing this
   // mode exists to refuse.
+  // …and in `shuffle` it is not doing the job this block describes. The groups come
+  // from `origin`, the room we were given, while the pass moves the scatter, whose
+  // members are nowhere near each other: a multi-piece move, not a group one. It went
+  // live when the search started accepting steps (the block above), not by design,
+  // and it is kept because nothing measured better. Six presets, twenty single solves
+  // and six presses each, groups from `origin` / from the scatter / pass skipped: clean
+  // solves 86 / 83 / 90 of 120, ideas 140 / 140 / 135, mean idea cost 16.7 / 16.6 /
+  // 16.7 — the annealer's own noise.
   if (groups.length > 0 && !refit) {
     for (let step = 0; step < GROUP_STEPS; step++) {
       const t = step / GROUP_STEPS;

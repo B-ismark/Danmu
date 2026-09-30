@@ -13,40 +13,47 @@
  * ── Why this is a pipeline and not one solve ──────────────────────────────────
  *
  * A single shuffle solve is NOT reliably a room you would want to be shown, and that
- * is measured rather than assumed. Twenty seeds per preset, counting solves that end
- * with every one of `HARD_TERMS` at zero:
+ * is measured rather than assumed. Seeds 1000–1019 per preset, counting solves that
+ * end with every one of `HARD_TERMS` at zero:
  *
- *   rect 6x4  20/20 · rect 7.5x5.6  20/20 · l 6x5  13/20 · t 6x5  6/20
- *   u 6x5  16/20 · open 6x4  12/20
+ *   rect 6x4  20/20 · rect 7.5x5.6  19/20 · l 6x5  18/20 · t 6x5  5/20
+ *   u 6x5  14/20 · open 6x4  10/20
  *
  * The failures are mostly `navigation` — a piece parked so that part of the floor has
- * no route from the door — and on the L they reach 481.8. The rectangles are perfect
- * and every non-rectangular preset is not, which is the tell: a scatter start has to
- * rebuild a whole room inside a step budget (`DEFAULT_STEPS`) that was measured for a
- * search starting from a room that was already nearly right.
+ * no route from the door, in 13 of the T's 15 and 5 of the U's 6 — with `access`
+ * beside it on the open plan, and on the U they reach 1,057. The rectangles are
+ * all but perfect and every non-rectangular preset is not, which is the tell: a
+ * scatter start has to rebuild a whole room inside a step budget (`DEFAULT_STEPS`)
+ * that was measured for a search starting from a room that was already nearly right.
  *
  * **More steps is not the fix, and that is the useful half of the measurement.**
  * Clean seeds against budget, same twenty seeds:
  *
  *   steps      1600    4000    8000   16000
  *   rect      20/20   19/20   20/20   20/20
- *   l         13/20   16/20   17/20   18/20
- *   t          6/20    6/20    8/20    5/20
- *   u         16/20   19/20   17/20   18/20
- *   open      12/20   13/20   13/20   14/20
+ *   l         18/20   16/20   16/20   18/20
+ *   t          5/20    8/20    4/20    7/20
+ *   u         14/20   16/20   18/20   14/20
+ *   open      10/20   13/20   12/20   10/20
  *
- * Ten times the budget buys the L five seeds and the T nothing — it goes DOWN, which
- * is the annealer being chaotic under any change rather than a regression. Paying ten
- * times over for that would be the wrong trade even if the user had not asked for
- * this to stay quick enough to press repeatedly.
+ * Ten times the budget buys the T two seeds and every other preset nothing, and the
+ * budgets between move both ways — the annealer being chaotic under any change rather
+ * than a regression. Paying ten times over for that would be the wrong trade even if
+ * the user had not asked for this to stay quick enough to press repeatedly.
  *
  * What does work is asking more than once and **throwing the faulty answers away**.
- * Attempts yielding at least one candidate the SOLVER calls clean, 25 per preset:
+ * Attempts 1–25 yielding at least one candidate the SOLVER calls clean:
  *
  *   candidates   n=4     n=6     n=8    n=12
- *   t 6x5      21/25   24/25   24/25   25/25
- *   open 6x4   24/25   24/25   24/25   25/25
+ *   t 6x5      21/25   23/25   24/25   25/25
+ *   l 6x5      24/25   25/25   25/25   25/25
  *   others     25/25   25/25   25/25   25/25
+ *
+ * All three tables were re-measured on 2026-09-30, once the search was found to have
+ * been accepting no steps (the offers row below). The tables they replace (`l` 13/20,
+ * `t` 6/20, `open` 12/20 as single solves) reproduce on neither search, so they were
+ * not taken on the broken one: run on it, the single solves read `rect` 6x4 7/20 and
+ * `t` 3/20, most of them declined unmoved. They are older than both.
  *
  * Hence `MAX_CANDIDATES`. The solves are independent, so this is the same search run
  * from more places rather than a longer one — which is exactly what a chaotic
@@ -72,8 +79,9 @@
  * search running, the same twelve presses offer **12/12 on all six** (l, u and t at
  * 6×5, open at 6×4) and hold more ideas between them: 48 / 48 / 48 / 47 / 48 / 38
  * against 28 / 40 / 47 / 20 / 25 / 12, in the order above (four is a full press). The
- * worst press on `t` 6×5 took 4.2 s against 4.5 s (one run each). The cap table below
- * is kept for the shape of the trade, and nothing here has re-measured it.
+ * worst press on `t` 6×5 took 4.2 s against 4.5 s (one run each). At a cap of 12 the
+ * search now offers on every press of every preset, so the trade below does not arise
+ * on these rooms; the table is kept for its shape, and nothing here has re-measured it.
  *
  * Raising the cap buys the rest at a price not worth paying — the whole search is
  * synchronous on the main thread. Measured BEFORE the threshold fix, when refusals
@@ -103,12 +111,14 @@
  * `TUCKED_CLASH_SHARE` now, and `isCleanShuffle` demands `overlap === 0` exactly, so
  * nothing reaching this gate can hold a pair past that bar.
  *
- * **And it has work again.** With the search running, over the six presets above x
- * twenty seeds, it refuses **10 of the 86** candidates that pass `isCleanShuffle`,
- * every one a `clash-mounted` finding — a plant, a lamp, a shelf or a wardrobe
- * standing in front of a mounted TV or painting, which the solver cannot see at all
- * (`RULE_HANDLING['clash-mounted']`, § 17). The "rejected none" above was measured
- * on the search that accepted no steps.
+ * **And it has work.** With the search running, over the six presets above x seeds
+ * 1000–1019, it refuses **10 of the 86** candidates that pass `isCleanShuffle`, every
+ * one a `clash-mounted` finding — a plant, a lamp, a shelf or a wardrobe standing in
+ * front of a mounted TV or painting, which the solver cannot see at all
+ * (`RULE_HANDLING['clash-mounted']`, § 17). That rule is newer than the "rejected
+ * none" above, as `tests/shuffle-gate.test.ts` already says. The search that accepted
+ * no steps sent the gate 34 candidates on the same sweep and it refused 2, the same
+ * kind: a busier search, not a new failure.
  *
  * The gate STAYS, and for the honest reason rather than the flattering one: these
  * two modules have already drifted apart once, and it costs two `analyzeRoom` calls
@@ -370,11 +380,12 @@ export function newRoomFindings(
  * arrangement because the user pressed a button would be the app knowingly handing
  * them a room with a piece blocking the door.
  *
- * **It is not rare on a complex footprint** — 4 of 12 attempts on the `t` preset, 2
- * of 12 on `open`, none at all on `rect`, `l` or `u`. The header has the table and
- * the reason. So the caller's message for `null` is a real piece of UI rather than
- * an edge case, and it must not read as an error: nothing went wrong, the search
- * looked and did not find one it was willing to show.
+ * **It no longer happens on the presets the header measures** — attempts 1–12 return
+ * `null` 0 times on each of the six, against 4 of 12 on `t` and 2 of 12 on `open`
+ * while the search accepted no steps (the header has both). It is still what every
+ * room gets whose candidates all fault, so the caller's message for `null` is a real
+ * piece of UI rather than an edge case, and it must not read as an error: nothing
+ * went wrong, the search looked and did not find one it was willing to show.
  *
  * Deterministic per `(room, attempt)`, like everything else in the solver — a
  * suggestion that differs between two runs of the same room is a slot machine.

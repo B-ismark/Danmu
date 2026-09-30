@@ -3014,14 +3014,18 @@ rug that Ideas left through a wall, and larger than anything the four observatio
 `solveLayout` started a shuffle's `cost` and `bestCost` at `before`, the price of the room
 it was GIVEN, while `current` was the random scatter it was told to start from. So every
 proposal looked hundreds of units uphill (a scatter cost 25–5,300 in these runs, the tidy room ~2) and
-was refused. Over five presets × twelve seeds, **59 of 60 solves accepted no step at all**,
+was refused. Over five presets × seeds 1000–1011 (the first press's), **59 of 60 solves
+accepted no step at all** (60 of 60 at seeds 1–12),
 and the pool held one finalist, the scatter, **labelled with the tidy room's price** (2.44
 against a real 2,161 on `rect` 6 × 4 seed 1). Every idea the gallery ever showed was a
 random scatter tidied by `snapYaws` / `openRoutes`. The two lines that seed the search read
 `before`, which was once the scatter's price (the comment on the invariant says so), so they
 were right until `before` moved to `origin` and wrong from then on. Nothing went red,
-because a scatter that happened to be legal still passed every gate, and every measured
-shuffle number in the repo describes that search.
+because a scatter that happened to be legal still passed every gate. **Not every shuffle
+number in the repo describes that search, and the first draft of this note said it did**:
+the offers row in `lib/layout-shuffle.ts`'s header reproduces on it (five presets of six
+exactly), while the single-solve, step and candidate tables beside it reproduce on neither
+search and are older than both. All three are re-measured there now.
 
 Started from the scatter's own price (arrange and refit unchanged, byte for byte), three
 presses per preset at `rect` / `open` 6 × 4 and `l` / `t` / `u` 6 × 5:
@@ -3033,14 +3037,23 @@ presses per preset at `rect` / `open` 6 × 4 and `l` / `t` / `u` 6 × 5:
 | ideas with a floor piece outside | 6 → 2 | 8 → 2 | 4 → 0 | 0 → 0 | 6 → 5 |
 
 `tests/layout-shuffle.test.ts` asserts the invariant that would have caught it: a
-finalist's `cost` is the cost of its own placements (false on 40 of 40 solves before).
+finalist's `cost` is the solver's own breakdown of its placements less navigation (false on
+40 of 40 solves before), and a second test pins the pool at four finalists where it was one.
+The fix also woke the **group pass** in shuffle, which moves groups read from the room we
+were given while the members are scattered — a multi-piece move rather than a group one.
+Measured against groups from the scatter and against skipping it: 86 / 83 / 90 clean solves
+of 120, 140 / 140 / 135 ideas, mean cost 16.7 / 16.6 / 16.7, so it stays as it is (the
+comment at Pass 0 has the table).
 
 **Filed, not fixed, and measured:** `arrange` and `refit` still start `cost` at `before`,
 and `before` carries the navigation term while no trial does. So a room with stranded floor
 starts the search that many units too high, and the first trial looks cheaper than it is.
 Pricing the start from `scoreLayout` in every mode moves two fixtures
 (`tests/impossible-veto.test.ts` "leaves a legal room legal…" and
-`tests/suggest-tidiness.test.ts` t 6 × 5 seed 5), so it is its own measured change.
+`tests/suggest-tidiness.test.ts` t 6 × 5 seed 5), so it is its own measured change. A
+second symptom of the same mismatch: when nothing beats `before`, the pool's one entry is
+the origin labelled at a price that already includes navigation, and `rated` adds
+navigation again. With one finalist it changes no pick, only the `total` a ranker is shown.
 
 The 9 ideas still left with a floor piece outside are **all the rug**, 27–788 mm through a
 wall. The `outside` term never prices a rug (`isObstacle` excludes it), so nothing in the

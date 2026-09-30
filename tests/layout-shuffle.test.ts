@@ -8,9 +8,11 @@ import {
   NEGLIGIBLE_COST,
   LAYOUT_SIMILAR_M,
   TURN_EPSILON,
+  bestCandidate,
+  type Candidate,
   type SolveResult,
 } from '@/lib/layout-solve';
-import { DEFAULT_WEIGHTS, scoreLayout } from '@/lib/layout-score';
+import { DEFAULT_WEIGHTS } from '@/lib/layout-score';
 import { layoutSimilarity } from '@/lib/layout-offer';
 import {
   isCleanShuffle,
@@ -211,40 +213,65 @@ describe("solveLayout mode: 'shuffle'", () => {
     expect(everMoved, 'no seed moved anything — the assertions above proved nothing').toBeGreaterThan(0);
   });
 
-  it('searches from the scatter it was handed, and prices it as the scatter', { timeout: 120_000 }, () => {
-    // The search ran for weeks without accepting a step. `cost` started at `before`,
-    // the price of the tidy room, while `current` was the scatter, so every proposal
-    // looked hundreds of units uphill and was refused; the pool kept one finalist, the
-    // scatter, under the tidy room's price. Nothing here could see it — a legal scatter
-    // still passed every gate — which is why this asserts the invariant itself.
-    //
-    // `scoreLayout` with no `origin` leaves inertia off, which is what shuffle's own
-    // weights do too, so this is the solver's own number and not a second opinion.
-    const weights = { ...DEFAULT_WEIGHTS, inertia: 0 };
-    const got = ALL.map(([id, w, d]) => {
+  // The search ran for weeks without accepting a step. `cost` started at `before`, the
+  // price of the tidy room, while `current` was the scatter, so every proposal looked
+  // hundreds of units uphill and was refused; the pool kept one finalist, the scatter,
+  // under the tidy room's price. Nothing here could see it — a legal scatter still
+  // passed every gate — so the two tests below assert what the bug broke rather than
+  // what it produced. Both read one sweep of forty solves, taken once.
+  let sweep: Array<{ id: LayoutId; seed: number; rated: readonly Candidate[] }> | undefined;
+  const shuffleSweep = () =>
+    (sweep ??= ALL.flatMap(([id, w, d]) => {
       const { parts, footprint, locked, movable } = room(id, w, d);
-      const pools: number[] = [];
-      let clean = 0;
-      for (let seed = 1; seed <= 8; seed++) {
+      return [1, 2, 3, 4, 5, 6, 7, 8].map((seed) => {
         const start = randomizeStart(parts, footprint, movable, makeRng(seed));
-        const r = solveLayout(parts, footprint, locked, { seed, mode: 'shuffle', start });
-        for (const f of r.finalists) {
-          const own = scoreLayout({ parts, movable, footprint }, f.placements, weights);
-          expect(f.cost, `${id} seed ${seed}: a finalist carries another layout's price`).toBeCloseTo(own, 9);
-        }
-        pools.push(r.finalists.length);
-        if (isCleanShuffle(r)) clean++;
+        let rated: readonly Candidate[] = [];
+        // `pick` is only a window onto the finalists: it answers what the default
+        // picker would, so the solve is the one the Ideas panel runs.
+        solveLayout(parts, footprint, locked, {
+          seed,
+          mode: 'shuffle',
+          start,
+          pick: (r) => {
+            rated = r;
+            return bestCandidate(r);
+          },
+        });
+        return { id, seed, rated };
+      });
+    }));
+
+  it('prices every finalist as its own placements', { timeout: 120_000 }, () => {
+    // `breakdown` is the solver's own full pricing of the finalist — its model, its
+    // weights — so this compares the solver with itself rather than with a copy of its
+    // weight table. `cost` leaves navigation out; the rest of the sum must agree. False
+    // on 40 of 40 before the fix: 2.44 against a real 2,161 on `rect` seed 1.
+    for (const { id, seed, rated } of shuffleSweep()) {
+      for (const c of rated) {
+        expect(c.cost, `${id} seed ${seed}: a finalist carries another layout's price`).toBeCloseTo(
+          c.breakdown.total - c.breakdown.navigation,
+          6,
+        );
       }
-      return [id, pools.join(''), clean];
-    });
-    // Before the fix every pool was `11111111` and the clean counts were 1 / 2 / 2 / 2
-    // / 0: one finalist, the scatter, and whatever of it happened to be legal.
-    expect(got).toEqual([
-      ['rect', '44444444', 8],
-      ['l', '44444444', 7],
-      ['u', '44444444', 7],
-      ['open', '44444444', 6],
-      ['t', '44434444', 2],
+    }
+  });
+
+  it('keeps a pool of finalists, because the search moves', { timeout: 120_000 }, () => {
+    // A search that accepts no step finds no new best, so its pool is the scatter
+    // alone: `11111111` on every preset before the fix. Four is `FINALISTS`.
+    const pools = ALL.map(([id]) => [
+      id,
+      shuffleSweep()
+        .filter((r) => r.id === id)
+        .map((r) => r.rated.length)
+        .join(''),
+    ]);
+    expect(pools).toEqual([
+      ['rect', '44444444'],
+      ['l', '44444444'],
+      ['u', '44444444'],
+      ['open', '44444444'],
+      ['t', '44434444'],
     ]);
   });
 
@@ -376,8 +403,9 @@ describe('shuffleRoom — the offer, not the search', () => {
     // The negative control for the test below, and the finding the filter answers.
     // Without it, "shuffleRoom returns a clean room" reads as a property of
     // `solveLayout` that the filter is not needed for. Measured at 4/20 clean on this
-    // preset (1/20 before the search accepted any steps); asserted loosely because the exact count moves with any re-price of
-    // the cost function, while the fact that raw solves fault does not.
+    // preset and these seeds (1/20 before the search accepted any steps); asserted
+    // loosely because the exact count moves with any re-price of the cost function,
+    // while the fact that raw solves fault does not.
     const { parts, footprint, locked, movable } = room('t', 6, 5);
     let faulted = 0;
     for (let seed = 1; seed <= 20; seed++) {
