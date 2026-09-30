@@ -32,7 +32,6 @@ import {
 } from 'react';
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
-import { hasOverride } from '@/lib/transforms';
 import { formatDim } from '@/lib/units';
 import { CATEGORY_ICON, Icon, type IconName } from '@/components/ui/Icon';
 import {
@@ -341,7 +340,6 @@ function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
   const ids = selectedIds();
   const many = ids.length > 1;
   const groupMembers = part.groupId ? sc.parts.filter((p) => p.groupId === part.groupId).map((p) => p.id) : [];
-  const hasOverrides = hasOverride(partId, s);
   const isHidden = !!s.hidden[partId];
 
   const entries: MenuEntry[] = [
@@ -376,13 +374,16 @@ function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
     });
   }
 
-  if (hasOverrides) {
+  // The Inspector's own words for the same dialog: one action, one name. It took
+  // the slot "Back where it was" held, which was asked to go — undo already reaches
+  // a moved piece, and the Inspector still offers the full reset beside its button.
+  if (!many) {
     entries.push({
       kind: 'item',
-      id: 'reset',
-      label: 'Back where it was',
-      icon: 'refresh',
-      run: () => s.resetTransforms(partId),
+      id: 'swap',
+      label: 'Change the model…',
+      icon: 'swap',
+      run: () => s.setSwapPartId(partId),
     });
   }
 

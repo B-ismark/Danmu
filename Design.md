@@ -1292,7 +1292,15 @@ pair and they are **one row**, and the measured one survives in either photo ord
     (`lib/wall-drag.ts`), and the height the pointer asks for rides into
     `resolvePlacement` as `rawY`, bottom edge on the grid like the Inspector's mount
     height. A set with company is dragged on the floor as before, so it is never pulled
-    apart vertically.
+    apart vertically. **It changes walls by pointing**: when the pointer is on another
+    wall's inner face, more than `WALL_SWITCH_M` (0.15 m) off the current wall's line,
+    the target is laid on THAT wall (`wallDragTarget`), and `resolvePlacement`'s wall
+    snap turns the piece to face the room from it. Its own plane could round a corner
+    and never reach the wall across the room. The margin is what stops a piece held at
+    a corner from flipping walls every frame; the floor and ceiling ask for no switch;
+    an outer face never counts, so from the dollhouse view it is the wall you can see —
+    and a pointer that passes through the piece's own cut-away wall on the way is
+    pointing at that wall, not at the one it reaches next. A lone piece only — a set stays on its wall (`Convoy.leadEdge`).
   - **Rotate is one ring**, drei's `TransformControls` with only the Y axis shown.
   - **Scale is three dots** (`StretchHandles.tsx`, arithmetic in `lib/stretch.ts`),
     one on each face it moves: width, depth, height. Pulling one moves THAT face and
@@ -1316,7 +1324,11 @@ pair and they are **one row**, and the measured one survives in either photo ord
   left-drag pans** — the gesture every 3D tool shares — which freed the right
   button, and **right-click now opens a menu**: the piece under the cursor gets
   the actions that were otherwise a trip to the Inspector or an undiscovered
-  single-key shortcut, empty floor gets the whole-scene ones. The caller passes the
+  single-key shortcut, empty floor gets the whole-scene ones. One of them is
+  **Change the model…**, the Inspector's own button under the Inspector's own name:
+  the swap lives in `lib/swap-model.ts` and its picker is mounted once per room tab
+  (`SwapModelHost`, opened by `useStudio.swapPartId`), so two triggers share one
+  dialog and one set of re-grounding rules. The caller passes the
   piece in rather than the menu finding it, which is why one component serves both
   surfaces without knowing anything about either. This paragraph used to add "both
   surfaces already keep `hoveredPartId` current"; **they did not** — nothing in the
@@ -1394,6 +1406,22 @@ pair and they are **one row**, and the measured one survives in either photo ord
   do not move: those edges stretch, they do not travel. A carried piece that
   would end up outside the room is left where it is and reported by
   `clearance.ts` — never resized, never shoved.
+- **What a wall coming in meets, it pushes** (`pushedByWall`, `lib/wall-move.ts`):
+  a piece the wall or a carried piece reaches, sharing its height and its stretch of
+  wall, is pushed ahead of it, and so is whatever that piece meets — a set whole, with
+  what rests on it. A rug is pushed by the wall and slid over by furniture. A piece on
+  a side wall slides along its wall; one on any other wall cannot move. A piece from
+  your photo is pushed like any other — `ScenePart.locked` means "detected", and the
+  user's own Lock guards against the arranger only. Two pieces that already overlap
+  along the push, a chair tucked under its table, push each other from where they
+  stand rather than one being driven deeper into the other. A piece already through a
+  wall may keep what it overhangs and may not add to it. A drag stops the wall where
+  the first piece runs out of room, and the refusal names it (`pushRefusal` in
+  `lib/wall-actions.ts`); a typed resize cannot stop part-way, so it pushes each set
+  as far as that set has room (`partial`) and `clearance.ts` reports the rest. A drag
+  resolves the push from pointer-down, so drawing the wall back out in the same
+  gesture puts a pushed piece back — and one that never had a position override does
+  not keep one. Any other move of the wall ends that gesture.
 
 ### Multi-select & grouping — `SelectionHeader.tsx`, `PartTree.tsx`
 - Shift-click adds to `selection: string[]`. "Group N" assigns a shared
@@ -3046,7 +3074,7 @@ undo — see `lib/storage.ts`).
 | `lib/scene-palette.ts` | Scene-side semantic colours — the one home for values the 3D layer, the canvas exports and the panels that edit them must agree on, since neither Three.js materials nor a 2D canvas can read a CSS custom property. Exports `SCENE` (selection / hover / locked / shell), `PLAN` (the floor-plan PNG's palette) and `defaultBodyColor(category, shape)`. Kept in sync with `globals.css` by hand, guarded by a test. **`defaultBodyColor` takes BOTH arguments**: within one category the shapes do not match (a dining chair is walnut, an office chair charcoal), and the renderer and the Inspector's "Default for this piece" swatch must return the same value. The predecessor took a single loosely-typed `category` and was keyed on material-group names, so 18 of 22 categories fell through to one tan default. It also carries **`DETAIL`** (the outline every `Box` draws, dark walnut legs, near-black hardware) and **`DECOR`** (the book / pot / vase / pillow sets `Dressing` scatters) — not recolourable, so deliberately out of `defaultBodyColor`, but each was a literal repeated across renderers, which is several values pretending to be one. There were literally two book palettes, six spines in `Dressing` and eight in `BookshelfGeo`, so the books on a shelf did not match the books beside it. A test now scans `components/three/*.tsx` and fails on any hex this module owns, shorthand included. |
 | `lib/fit-check.ts` | **Will this actually fit?** `checkFit` seats one candidate with everything else locked and reports one of four answers with the room report's own reasons. Pure; see §5. |
 | `lib/transforms.ts` | **Which of the two transform layers wins.** `resolvePart` / `resolveParts` merge the authored transform on `ScenePart` with the user's `useStudio` override, and this is the ONLY place that fallback is written — see below. Pure, no React, so the scene file and the wall mover resolve exactly the way the renderer does. It is no longer the whole answer to *where a piece actually is*: see `lib/rider-height.ts`. |
-| `lib/rider-height.ts` | **Where a piece actually is**, which is the merge above plus one thing neither layer holds. A piece standing on a piece the user RESIZED has a stale Y in both — `setDim` settles nothing — so it is derived at read time and never written back (§ 12; a derived Y written into the override map becomes the rider's stored position, and the next read compares it against the AUTHORED support top and concludes the piece rides nothing). `resolveScene` is what any consumer rendering or exporting the room calls, and `tests/room-scene.test.ts` pins the three files still allowed to call the plain merge. The relation is REMEMBERED, not re-derived: `parentIds` unioned with `ridingParents` over the AUTHORED parts, honoured unconditionally when a drag recorded it and gated on the support's top having moved when it is merely inferred — plus `pos[1] <= 0` meaning *on the floor, riding nothing*, which is what makes the Inspector's **Floor** button stick. `riderYs` caches on reference identity because `Room.tsx` mounts a `Draggable` and a `Dressing` per part and both read it: uncached that was `2N + 8` whole-room derivations per store write, 14.3 ms per drag frame at 60 parts. Built and reverted twice before this; `docs/what-is-still-open.md` § 12 carries both defect tables. `ridersOf` walks the same relation the other way — everything standing on a piece, at any depth — for the Inspector's model swap, which must not ask what the new kind stands on with its own riders in the world: a box with a tray on it, swapped for an ottoman, went up onto the tray and wrote the loop *tray on box, box on tray*. |
+| `lib/rider-height.ts` | **Where a piece actually is**, which is the merge above plus one thing neither layer holds. A piece standing on a piece the user RESIZED has a stale Y in both — `setDim` settles nothing — so it is derived at read time and never written back (§ 12; a derived Y written into the override map becomes the rider's stored position, and the next read compares it against the AUTHORED support top and concludes the piece rides nothing). `resolveScene` is what any consumer rendering or exporting the room calls, and `tests/room-scene.test.ts` pins the three files still allowed to call the plain merge. The relation is REMEMBERED, not re-derived: `parentIds` unioned with `ridingParents` over the AUTHORED parts, honoured unconditionally when a drag recorded it and gated on the support's top having moved when it is merely inferred — plus `pos[1] <= 0` meaning *on the floor, riding nothing*, which is what makes the Inspector's **Floor** button stick. `riderYs` caches on reference identity because `Room.tsx` mounts a `Draggable` and a `Dressing` per part and both read it: uncached that was `2N + 8` whole-room derivations per store write, 14.3 ms per drag frame at 60 parts. Built and reverted twice before this; `docs/what-is-still-open.md` § 12 carries both defect tables. `ridersOf` walks the same relation the other way — everything standing on a piece, at any depth — for the model swap (`lib/swap-model.ts`, reached from the Inspector and the right-click menu), which must not ask what the new kind stands on with its own riders in the world: a box with a tray on it, swapped for an ottoman, went up onto the tray and wrote the loop *tray on box, box on tray*. |
 | `lib/room-scene.ts` | The React half of the above: `useRoomScene` (whole scene, memoised), `useRoomPart`, `usePartTransform` (one part, narrow subscription, for `Draggable` and `Dressing`), `useHasOverrides`, and `currentRoomScene()` for pointer handlers. The row here used to say "build a scene from a room / detections", which is `scene-spec`'s job, not this module's. |
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
 | `lib/light-units.ts` | Lumens → candela (isotropic and in-cone), and kelvin → sRGB via the Planckian locus. Pure and tested — the interface between how a lamp is described and how three renders it. |

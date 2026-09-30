@@ -7,6 +7,7 @@ import { PlanViewControls, ComfortLegend } from '@/components/studio/PlanChrome'
 import { CanvasTools, CanvasView, CanvasAide } from '@/components/studio/CanvasChrome';
 import { UndoRedo } from '@/components/studio/UndoRedo';
 import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
+import { SwapModelHost } from '@/components/studio/RegenerateModal';
 import { HoverCard } from '@/components/studio/HoverCard';
 import { CatalogPanel, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { StudioShell } from '@/components/studio/StudioShell';
@@ -100,6 +101,7 @@ export default function PlanPage() {
       {/* Same right-click menu as the 3D tab; it positions itself against this
           element's box. */}
       <SceneContextMenu />
+      <SwapModelHost />
 
       {/* And the same hover card. It only ever worked on the 3D tab because the
           plan never wrote `hoveredPartId`; now that it does, the card is a mount
