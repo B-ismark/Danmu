@@ -24,7 +24,7 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
-import { findSupportDetailed } from '@/lib/physics';
+import { findSupportDetailed, restingOn } from '@/lib/physics';
 import type { ScenePart } from '@/lib/scene-spec';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('seat-swap-room'));
@@ -132,9 +132,17 @@ describe('…and asks with the OUTLINE of the kind it is changing to', () => {
     useStudio.setState({ parentIds: {}, selection: ['corner'], selectedPartId: 'corner' });
     swapTo('Table lamp');
     const s = useStudio.getState();
-    expect(useScene.getState().parts.find((p) => p.id === 'corner')?.shape).toBe('lamp-table');
+    const lamp = useScene.getState().parts.find((p) => p.id === 'corner')!;
+    expect(lamp.shape).toBe('lamp-table');
     expect(s.positions.corner?.[1]).toBe(TOP);
     expect(s.parentIds.corner).toBe('table');
+    // And it is STORED as the outline it was asked as. The swap's patch changes the shape,
+    // and the stored `circle` stayed the laptop's square, so every later reader disagreed
+    // with the answer just acted on — the Inspector's banner, asking the state question
+    // of the stored part, said it was floating.
+    expect(lamp.circle).toBe(true);
+    const on = restingOn([TABLE, lamp], 'corner', s.positions.corner!, lamp.rot, lamp.dimMM, lamp.category, lamp.shape, lamp.circle);
+    expect(on).toEqual({ on: 'part', id: 'table', gap: 0 });
   });
 
   it('and with the TURN the piece keeps, which here keeps a laptop off the table', () => {
@@ -148,13 +156,17 @@ describe('…and asks with the OUTLINE of the kind it is changing to', () => {
     expect(findSupportDetailed([TABLE], self, at[0], at[1], dim, 0, undefined)?.id).toBe('table');
     expect(findSupportDetailed([TABLE], self, at[0], at[1], dim, Math.PI / 2, undefined)).toBeNull();
 
-    const plant: ScenePart = { id: 'corner', name: 'Plant', category: 'plant', shape: 'plant', dimMM: [300, 300, 600], pos: [at[0], 0, at[1]], rot: Math.PI / 2 } as ScenePart;
+    // Round, as `addPart` stores a plant, so the swap has an outline to leave behind.
+    const plant: ScenePart = { id: 'corner', name: 'Plant', category: 'plant', shape: 'plant', dimMM: [300, 300, 600], pos: [at[0], 0, at[1]], rot: Math.PI / 2, circle: true } as ScenePart;
     useScene.setState({ parts: [TABLE, plant] });
     useStudio.setState({ parentIds: {}, selection: ['corner'], selectedPartId: 'corner' });
     swapTo('Laptop');
     const s = useStudio.getState();
-    expect(useScene.getState().parts.find((p) => p.id === 'corner')?.shape).toBe('laptop');
+    const laptop = useScene.getState().parts.find((p) => p.id === 'corner')!;
+    expect(laptop.shape).toBe('laptop');
     expect(s.positions.corner?.[1]).toBe(0);
     expect(s.parentIds.corner).toBeUndefined();
+    // The plant's round outline does not come along: a laptop is a square.
+    expect(laptop.circle).toBeUndefined();
   });
 });

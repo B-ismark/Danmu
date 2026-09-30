@@ -2074,10 +2074,13 @@ table's corner and **Change the model** to a Table lamp.
 
 **What right looks like.** A lamp that is mostly over the table stands on the tabletop; one
 mostly over the floor stands on the floor. The monitor turns to face the side wall and stands
-on the desk while most of it is over the desk.
+on the desk while most of it is over the desk. The swapped-in lamp is drawn round in 2D Plan,
+its Inspector says it is on the table, and dragging the table carries it along.
 
 **What wrong looks like.** A lamp on the floor with most of its base under the tabletop, or
-a monitor on the floor beside a desk it is mostly over.
+a monitor on the floor beside a desk it is mostly over. After the swap: a square lamp in the
+plan, an Inspector saying the lamp is floating, or the table leaving it behind — the store
+kept the old piece's outline until the next reload, and the fix has only a test behind it.
 
 ## Look and light
 

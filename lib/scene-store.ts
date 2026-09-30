@@ -232,8 +232,19 @@ export const useScene = create<SceneState>((set, get) => ({
     set({ room: { ...s.room, footprint: poly, width: b.width, depth: b.depth, layoutId: 'custom' } });
     return delta;
   },
+  // A patch that changes the SHAPE re-derives `circle`, for `addPart`'s reason below: the
+  // Inspector's model swap is such a patch and did not, so a laptop swapped for a table
+  // lamp was stood on a table by a round probe and then stored — drawn, re-checked and
+  // carried — as the laptop's square: the Inspector said it floated and the rigid link
+  // refused it. `normalizeStoredParts` put it right only on the next load.
   updatePart: (id, patch) =>
-    set((s) => ({ parts: s.parts.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
+    set((s) => ({
+      parts: s.parts.map((p) => {
+        if (p.id !== id) return p;
+        const next = { ...p, ...patch };
+        return patch.shape === undefined ? next : { ...next, circle: isRoundPart(next.shape) || undefined };
+      }),
+    })),
   deletePart: (id) => set((s) => ({ parts: s.parts.filter((p) => p.id !== id) })),
   // `circle` is derived here rather than at each caller, because there are three of
   // them — the Catalog panel's `spawn`, the plan's drop and the 3D canvas's drop — and
