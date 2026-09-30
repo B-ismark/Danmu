@@ -54,10 +54,13 @@ screen; and row 17 above.
 - **§ 40** — six more shapes declare a depth their renderer never reads. § 39 was one fan;
   it is a class of seven. Four are already pinned (and the pin is the TIGHT case, ±0.03
   against the band’s ±0.10); two pass by coincidence. `window` declares 60 mm and draws 120.
+  *Put to the user 2026-09-30: not sure, skip it for now. Nothing built.*
 - **§ 41** — the Inspector prints `part.category`, an internal key, as user-facing copy, so
   the Radiator reads **"Fridge · Radiator"**. 13 of 47 catalogue rows; six read "Fridge".
   A second site, `HoverCard.tsx:86`, shows the bare key. **Only looking found this** — it
   typechecks, lints and passes every test, and no assertion in the repo reads the string.
+  *ANSWERED 2026-09-30: the Library shelf name, "Appliances · Radiator", in both places.
+  Not built yet.*
 
 **Row 9 came off this list on 2026-09-05, and how it survived here is the lesson.** The
 header said the drill-in half was open; the table said it was untouched; § H.8, 1,500 lines
@@ -2991,6 +2994,7 @@ Four observations, all the user's, all landing in the same place:
   lift FIXED 2026-09-30, § H.6.3. The solver breaking the set apart FIXED 2026-09-30, § H.6.5.)*
 - a chair put on a couch, then Suggest, ends **through a wall**; *(FIXED 2026-09-30, § H.6.2.)*
 - a couch a few degrees off square is turned to face **away from the TV** it should face;
+  *(FIXED 2026-09-30 for Fix, § H.6.6. Ideas is the open half.)*
 - and generally, *"suggest doesn't really seem to know what to do with groups and their
   rotations."*
 
@@ -3021,7 +3025,8 @@ above:
 3. **A group is not a unit** — *half* true. `proposeGroup` already slides, quarter-turns
    and swaps groups **rigidly**, and one pass moves only groups; the gap is *which* groups
    are seeded as one, and that a group turn pivots on the centroid rather than the anchor.
-   *(A merged set is one body since § H.6.5: every pass moves it through its lead, whole.)*
+   *(A merged set is one body since § H.6.5: every pass moves it through its lead, whole,
+   and its lead is its anchor. What is left is a relation group's turn, § H.6.6.)*
 
 **And the design for all of this already exists:**
 [`docs/research/suggest-and-collision.md`](research/suggest-and-collision.md) — three layers
@@ -3875,7 +3880,9 @@ clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/
   two answers for one pair, deliberately (nobody put the scanned one anywhere), and the drag's
   is the one a person sees happen. Whether a DRAG should also keep a seat down — the ottoman
   staying on the floor, clashing, until it is dragged clear — changes § H.6.4, so it is not
-  decided here.
+  decided here. **Answered 2026-09-30: a drag stays as it is**, so the nudged ottoman goes
+  on top. The user added one thing: Ideas must never show a seat standing on a table or a
+  bed. Not built yet, and to be measured first.
 
 **§ H.6.5 · FIXED 2026-09-30: a merged set is one body to the solver.** The second half of
 the first observation above. Merging says *these belong together as they stand*: a click
@@ -3935,9 +3942,9 @@ measure in a frame.
   On `t` 6 × 4 with a table lamp on the merged table, **none in three presses** (was 2, 1, 1,
   every one broken): of 36 candidates, 23 fail on access and navigation together and 13 on
   navigation alone. The set is a 2.3 × 1.6 m block, and the T has few places to put it
-  and still leave a way through. That is the honest answer to a merge. *Open, the user's
-  call:* whether an empty Ideas panel in a room with a merged set should say that the set
-  moves as one.
+  and still leave a way through. That is the honest answer to a merge. *Answered, the
+  user's call 2026-09-30:* an empty Ideas panel in a room with a merged set says that the
+  set moves as one, and that ungrouping it gives more ideas. Not built yet.
 - **A merged member standing on a piece outside its set follows that piece**, and so leaves
   the set's shape (`carryRiders` runs after every pass). What stands on something goes
   where it goes.
@@ -3976,7 +3983,9 @@ cost an arrangement, or a squaring, and leave the set whole.
   grouped with a bed but standing on a nightstand that is not in the group: the rider pass
   (`carryRiders`) puts it on the nightstand wherever the nightstand went, so the set comes
   back bent by one member. A drag answers the other way and carries it with its group
-  (`lib/drag-convoy.ts`). Which should win is the user's call; either beats a lamp in the air.
+  (`lib/drag-convoy.ts`). **The user's call, 2026-09-30: what it stands on wins**, so
+  Suggest's answer stays. The user also reports a lamp left floating when the nightstand
+  under it is moved, which is a separate bug, not yet reproduced.
 - **A rug going home can take its set into a piece that moved.** A rug grouped with its
   coffee table and left through a wall sends the whole set back, and if another piece has
   moved into the table's old spot the answer now holds a clash. The impossibility veto
@@ -3985,6 +3994,93 @@ cost an arrangement, or a squaring, and leave the set whole.
 - **The snap squares a set to the wall nearest its lead.** A member nearer another wall is
   not asked, so a set that would square against that wall can be turned to the lead's,
   swing the member through the plaster, and be put back unsquared.
+
+**§ H.6.6 · FIXED 2026-09-30: Fix can square a piece where it stands.** The third
+observation above: a couch a few degrees off square, then Fix, and it comes back facing away
+from the TV it should face.
+
+*Measured on `0f76fa4` and on this change*, twelve seeds. The sofa is turned the way the
+rotate handle and the arrow keys turn it (`turnInPlace`), and is `placed`, as `useSuggest`
+calls it. **Not facing** is more than 30° off its television
+(`FACING_HALF_ANGLE`); **away** is more than 90°; **in place** is where it stood, turned
+square. Each preset at its own size:
+
+| Preset, sofa turned | not facing / away / in place, before | after |
+|---|---|---|
+| `t` 5.5 × 4.7, −10° | 3 / 0 / 0 | 0 / 0 / 12 |
+| `t` 5.5 × 4.7, +10° | 4 / 1 / 0 | 0 / 0 / 12 |
+| `l` 6 × 4.7, −10° | 2 / 0 / 0 (Fix acted on 11) | 0 / 0 / 12 |
+| `l` 6 × 4.7, −6° | 1 / 1 / 0 (acted on 11, left 3 crooked) | 0 / 0 / 12 |
+| `t` 5.5 × 4.7 at ±6° | 0 / 0 / 0 | 0 / 0 / 12 |
+
+At 6 × 5, where `tests/suggest-square-in-place.test.ts` pins it, the T with its sofa at −10°
+went from 5 not facing and 3 away to none, and at +10° from 4 to none.
+
+Only the T and the L change, and only where the sofa is through a wall. The turn clamps a
+piece into the room's bounding box and keeps the clamp even when the result is illegal, and
+the T's stem wall and the wall the L's sofa backs onto are not edges of that box, so the
+sofa is left through the plaster. In `rect` and `open` at 6 × 4 every wall is an edge of the
+box, so the turn pulls the sofa 92 mm in at ±6° and 164 mm at ±10°, nothing is at fault,
+and Fix says there is nothing to do, before and after; a test pins that. Also unchanged,
+with nothing at fault: `l` +6° (Fix does nothing) and +10° (in place on 11), `open` 7.5 ×
+5.6 at ±6° (nothing), −10° (10 of the 11 it acts on) and +10° (12).
+
+*Why the search missed it.* The sofa pokes through its wall, so Fix has to act, and the
+search's answers all put it somewhere else. The tidy after the pick squares only what the
+search moved, so the room as it stands with the sofa turned straight is never one of them.
+
+*What changed* (`lib/layout-solve.ts`, `squareFaults`). That room is built after the search
+and rated beside the finalists, priced the same way. Nothing moves; a piece inside
+`SNAP_TOL` is turned square about its centre, or a merged set about its lead, and each turn
+is kept only if it clears a fault, raises none, and is worth more than `KEEP_EPS` (the
+prune puts back a turn worth less). Navigation is left to the rating: judged per turn, one
+grid cell kept the T's sofa at +5° through its wall. Repeated until nothing more is kept,
+because in the T at 5.5 × 4.7 the sofa can only be squared once the crooked dining table
+is. Each rule has a row in the test file on a room where it changes the answer, and each
+was checked by breaking it.
+
+*Arrange solves only.* That is Fix, and fit-check's probe, where it is inert: the probe
+starts at 0° and everything else is locked. A refit already squares a turned sofa where it
+stands and keeps it facing, on every row measured; given this too, only how many other
+pieces a whole-room Re-fit moves changes (12 → 14 on one row, 15 → 12 on another). A shuffle
+is asked for a different room, and given this the T with its sofa at −10° got 1 idea in
+three searches where it had 9. Both exclusions have a test.
+
+*Who can reach it.* The default snap turns in 15° steps, past `SNAP_TOL`'s 12°, so a hand
+turn lands in reach only with **Snap when dragging → Free**, or from a scan or a preset
+angle. And only in a room with a wall its bounding box does not have, as above.
+
+*Still open.*
+- **A sofa 2.5° through its wall.** A turn that small is inside `TURN_EPSILON`, so `moved`
+  would not count it and the candidate does not try it. The search's own answers hit the
+  same wall: in `rect` 6 × 4 with the sofa set at −2.5° (by a scan or a file; a hand turn
+  there is clamped back in), two seeds in three square it by less than `moved` counts, so
+  Fix says there is nothing to do and the sofa stays through the wall. On the commit before
+  as well.
+- **Two crooked pieces where squaring one hurts the other.** The T at 6 × 5 with the sofa at
+  −10° and the dining table at −8°: squaring the sofa raises the table's `access`, squaring
+  the table buys too little, so the search answers as it did.
+- **The walkway repair can still move more.** The T at 6 × 5, sofa +6°: three seeds in six
+  now square the sofa alone where they used to move it. On a fourth the pass that opens
+  walkways, which runs on whatever is picked, also moves six pieces and cuts the stranded
+  floor from 20.1 to 8.7.
+- **Past `SNAP_TOL`.** At −20° in the T, Fix still moves the sofa and 4 seeds in 12 leave it
+  more than 30° off its television. A candidate that squared anything up to 45° closed that
+  and squared an armchair turned 25° in `l`, with nothing else wrong, on 12 of 12 seeds
+  where Fix leaves it alone on 9, so it was declined: past `SNAP_TOL` an angle is a choice.
+- **Ideas.** Measured on `shuffleRoom`'s first three attempts at 6 × 4 (`rect`, `open`) and
+  6 × 5 (`l`, `t`), sofa at 0° or ±6°: `rect` 12 ideas, 3 not facing; `l` 12, 3 (1 away);
+  `open` 12, 5 (2 away); `t` 9, 5 (1 away). Which way a sofa faces in an idea is its own
+  question.
+
+*The plan's P2, covered by § H.6.5 and not built.* P2 was "a group squares about its anchor,
+not its centroid". A merged set's lead is its largest obstacle (`rigidSets`), which in every
+set measured is its anchor; the squaring pass turns the set about it, and the lead's own
+quarter-turn proposals square the set as a whole. A bed merged with a wardrobe wider than it
+would be squared about the wardrobe; not measured. § H.6.5's table shows it: `l` turned −6° and 12°, every one squared back as
+one; `open` −20°, 6 of 7. What is left is `proposeGroup`'s turn of a group made by its
+relations rather than merged, which pivots on the centroid. It is rigid either way, so the
+group keeps its shape; only where it lands differs. Not measured further.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
@@ -7133,7 +7229,10 @@ the rest-pose bounding box of three spokes — an instrument reading, corrected 
 `occupiedPts`. Do not re-file it.
 ---
 
-### § 40 — six more shapes declare a depth their renderer never reads — DECISION
+### § 40 — six more shapes declare a depth their renderer never reads — DECISION, skipped for now
+
+**Put to the user on 2026-09-30, who was not sure and chose to skip it for now.** Nothing is
+built; the item stands as written for when it comes back.
 
 **Found by asking what else has § 39’s shape, once § 39 was built.** § 39 was filed as one
 fan. It is a class of seven, and four of the other six are **already pinned**.
@@ -7208,7 +7307,11 @@ has been for as long as the pins have. Nothing here regressed; it was found by l
 
 ---
 
-### § 41 — the Inspector shows an internal grouping key as copy, and calls six things "Fridge" — DECISION
+### § 41 — the Inspector shows an internal grouping key as copy, and calls six things "Fridge" — ANSWERED 2026-09-30
+
+**The user's call, 2026-09-30: the first row of the table below.** The second line reads
+the piece's Library shelf, *Appliances · Radiator*, and the hover card uses the same name.
+Not built yet.
 
 **Found by looking, on 2026-09-06, which is the only way it could have been found** — it
 typechecks, lints and passes every test, and no assertion in the repo reads this string.
