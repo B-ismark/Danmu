@@ -73,8 +73,7 @@ let gesture: {
 
 /** The sentence for a wall stopped by what it was pushing. */
 function pushRefusal(stop: PushStop): string {
-  if (stop.reason === 'locked') return `That wall stops here: the ${stop.name} is locked.`;
-  if (stop.reason === 'wall') return `That wall stops here: the ${stop.name} hangs on the far wall.`;
+  if (stop.reason === 'wall') return `That wall stops here: the ${stop.name} can't leave its wall.`;
   return `That wall stops here: the ${stop.name} has no more room to move.`;
 }
 
@@ -260,8 +259,10 @@ function shapeRefusal(fault: WallFault): string {
  * A refusal speaks for itself here (see `wallRefusal`), so a caller has nothing to
  * report and only needs to avoid contradicting it.
  *
- * Pass `ids` from `wallAttachments` during a drag; omit it for a one-shot nudge
- * (arrow key, inspector button), where resolving attachment fresh is correct.
+ * Pass `ids` from `wallAttachments` during a drag — the very array it returned,
+ * since the gesture is recognised by identity, not by contents — and omit it for a
+ * one-shot nudge (arrow key, inspector button), where resolving attachment fresh is
+ * correct. A call without that array ends the gesture.
  */
 export function moveWallCarrying(index: number, delta: number, ids?: string[]): number {
   const before = useScene.getState().room.footprint;
@@ -301,6 +302,9 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
   // the pushed stack runs out of room. Resolved from the gesture's start when this
   // is a drag, so the answer depends on where the wall IS, not on the path.
   const g = ids !== undefined && gesture !== null && gesture.ids === ids && gesture.index === index ? gesture : null;
+  // Any other move ends the gesture: its snapshot no longer describes the room, and
+  // a later frame resolved from it would undo this one.
+  if (g === null) gesture = null;
   const base = g ? g.parts : resolved;
   const baseFp = g ? g.footprint : before;
   const baseTotal = g ? g.total : 0;

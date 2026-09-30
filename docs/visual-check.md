@@ -77,49 +77,6 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### A moving wall takes a group, and what stands near it, along — merged in #192 (`7109dfe`)
-
-**Where to click.** A fresh **Rectangle** room, 2D Plan then 3D. Group the sofa with the
-coffee table (select both, **Group**), then push the sofa's wall out and back with the wall
-handle, the arrow keys and the Inspector's **Out 10 cm**. Then the plant's wall. Then put a
-lamp on a nightstand by the bed wall and move that wall. Then type a new width in Room.
-
-**What changed.** A wall took only the pieces within 12 cm of it, and only those — the rest of a
-group stayed behind, and so did anything standing on a piece it took. It now reaches as far as a
-walkway (60 cm): a gap nobody can walk through behind a piece is the piece's own breathing room,
-and the starter rooms stand a plant, a floor lamp, an armchair and a sofa 20–35 cm off their
-walls. A piece it takes brings the rest of its group and whatever rests on it. If one member of a
-group cannot follow without leaving the room, the whole group stays (`lib/wall-move.ts`).
-
-**What "wrong" looks like.** Half a group moving. A lamp left floating where its nightstand was.
-A piece in the middle of the room (coffee table, dining set) following a wall. A TV on the
-opposite wall leaving its wall because its stand was grouped with the sofa. 3D and 2D disagreeing.
-
-**Seen by the user:** the group moving with its wall. Still owed a look: the lamp on the
-nightstand, and a typed width in Room.
-
-### A wall coming in pushes what it meets, and says what stopped it — branch `claude/affectionate-ritchie-ilawx1`
-
-**Where to click.** A fresh **Rectangle** room, 2D Plan then 3D. Drag the sofa's opposite wall
-in towards the sofa, all the way across the room, with the handle and then the arrow keys. Pull
-it back out. Lock the sofa (Inspector) and try again. Then put the coffee table between the wall
-and the sofa and push both.
-
-**What changed.** A wall took its own pieces along and walked straight through everything else.
-It now pushes whatever stands in its way, and whatever that piece meets in turn — a whole set at
-once, with what rests on it. A rug is pushed by the wall only, never by furniture, which slides
-over it. It stops where the stack runs out of room and says which piece stopped it: *"That wall
-stops here: the Sofa is locked."*, *"…the Sofa has no more room to move."*, or *"…the TV hangs
-on the far wall."* A print on a side wall slides along its wall as far as the corner. Drawn back
-out in the same drag, a pushed piece comes back to where it stood (`pushedByWall` in
-`lib/wall-move.ts`).
-
-**What "wrong" looks like.** A wall passing through the sofa. A pushed piece left behind when
-the wall goes back out. A pendant light or a picture high on the wall being shoved by a low
-table. A sentence naming the wrong piece, or none. 2D and 3D disagreeing.
-
-**Probed:** not yet.
-
 ### A wall stops before it runs into another wall — merged in #191 (`4572419`)
 
 **Where to click.** A **T-Shape** room, 3D and then 2D Plan. Drag the wall under one arm of
@@ -177,69 +134,15 @@ in this repo renders geometry.
 
 ## Drag and selection
 
-*Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone.
-The three below are new, and each is here for a specific reason rather than by default. The
-rotate ring, because drei's `TransformControls` is a three.js object with **no DOM**, so
-nothing in Playwright can aim a press at its ring — the 2D half of that defect **is**
-browser-checked and is not in this list. The refusal sentence, because the question it
-raises is a judgement about what the app should do, not a fact a test can settle. The Move / Scale / Rotate item that came later was looked at on a phone and a laptop
-and is gone. The first item now, a TV changing walls, is here for the same reason it
-was: the piece is drawn in WebGL and only a hand on a real pointer can say whether it
-feels right.*
-
-### A TV follows the wall you point at, and right-click can change the model — branch `claude/affectionate-ritchie-ilawx1`
-
-**Where to click.** 3D tab, a fresh **Rectangle** room, then an **L-Shape**. Select the
-**TV · 65″**, press **W**, and drag it: along its wall, round the corner onto the next wall,
-then straight across to the wall facing it. Do the same with the **Framed print**. In the L,
-take the print round the inside corner of the notch. Then right-click the sofa: the menu's
-last line now reads **Change the model…** where it used to read **Back where it was**.
-
-**What changed.** A wall piece was dragged across the plane of its own wall, which could carry
-it round a corner but never across the room: the far wall was not on that plane. It now moves
-onto whichever wall's surface is under the pointer, once the pointer is 15 cm clear of the
-corner the two walls share, so the TV does not flicker between two walls at a corner
-(`wallDragTarget` in `lib/wall-drag.ts`). Pointing at the floor keeps it on its wall. A TV
-**grouped** with its console stays on its wall on purpose: taking one member to the far wall
-would drag the whole set across the room. The right-click entry opens the same picker as the
-Inspector's **Change the model…** button, with the same name (`lib/swap-model.ts`).
-
-**What "wrong" looks like.** The TV jumping to a wall you are not pointing at, or hopping back
-and forth near a corner. The TV facing the wall instead of the room once it arrives. The spot
-you held drifting out from under the pointer after the switch. From the dollhouse view (the
-near walls hidden), the TV going onto a hidden wall instead of the one you can see. In the
-menu: the picker not opening, or the new model floating or sinking where the old one stood.
-
-**Probed in SwiftShader on `c455bad`:** a fresh 5 × 4 room. The TV was dragged from its
-wall onto the door wall, where it landed flush and facing the room at 1.38 m, and then back
-onto its own wall. Right-clicking the sofa shows **Change the model…**, which opens the picker
-titled with the sofa's name. Not probed: the wall across the room, the L's inside corner, the
-dollhouse view, and a real pointer's feel at a corner.
-
-### A short piece climbs a tall one, and the plan cannot show it
-
-**Where to click.** 3D Model, any room with a wardrobe. Drag a nightstand hard into the
-wardrobe's wall and let go. Then look at it in **2D Plan**.
-
-**What to look for.** In 3D, is the nightstand standing on top of the wardrobe at 2.1 m?
-In the plan it draws as an ordinary rectangle inside the wardrobe's outline, because the
-plan has no y — measured, not guessed: the same drag commits `x=−1.60 y=2.10 z=−2.30`,
-and a probe reading only x and z reported it as a collision the app had failed to refuse.
-
-**Why it is here rather than in a test.** Nothing is wrong by the app's own rules — the
-resolve's support step is doing exactly what it says, collision refused every frame on
-the way up (`valid=false, refusal="blocked"` at raw z = −1.9), and the room report is
-right to be quiet because the two no longer share vertical space. The question is whether
-a 550 mm nightstand should be able to climb a 2.1 m wardrobe at all, which is a judgement
-about what the app should do. **Nobody has reported it**; it was found while building the
-control for § 17's curtain drag.
-
-**Where it rides.** Nowhere — no commit changes this. It was found while building the
-control for § 17's curtain drag, on `fix/mounted-clash-and-soft-furnishings`, and the
-behaviour it describes is `lib/drag-resolve.ts`'s support step doing what it has always
-done. This item is here to be *decided*, not to verify a fix.
-
-*Not verified: what this looks like in the 3D tab. Only the committed transform was read.*
+*Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone,
+and so are the four that came after them: Move / Scale / Rotate, a TV changing walls, the
+wall pushing what it meets, and a short piece climbing a tall one. The user looked at each
+of those on 2026-09-30, and ruled that a nightstand may climb a wardrobe. What is left is
+here for a specific reason each. The rotate ring, because drei's `TransformControls` is a
+three.js object with **no DOM**, so nothing in Playwright can aim a press at its ring —
+the 2D half of that defect **is** browser-checked and is not in this list. The refusal
+sentence, because the question it raises is a judgement about what the app should do, not
+a fact a test can settle.*
 
 ### A refusal that names the wall instead of an obstruction that is not there
 

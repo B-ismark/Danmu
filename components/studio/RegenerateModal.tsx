@@ -88,6 +88,9 @@ export function SwapModelHost() {
   useEffect(() => {
     if (gone) useStudio.getState().setSwapPartId(null);
   }, [gone]);
+  // And on leaving the room: the flag lives in a store that outlives this screen,
+  // so a dialog left open would greet the next room that happens to share the id.
+  useEffect(() => () => useStudio.getState().setSwapPartId(null), []);
   if (!id || !part) return null;
   return (
     <SwapModelModal

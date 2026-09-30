@@ -59,13 +59,34 @@ describe('dragging a wall into a sofa', () => {
     expect(useStudio.getState().positions.sofa?.[2]).toBeCloseTo(-1.55, 9);
   });
 
-  it('stops the wall at a locked piece and says so', () => {
-    setRoom([{ ...sofa, locked: true }]);
+  it('stops the wall at a piece hung on the far wall, and says it cannot leave it', () => {
+    // A bed 2 m deep, and a TV low on the South wall across from it: the bed reaches
+    // the TV when the wall is 3.94 m in, before the room's own floor of 2 m.
+    const bed: ScenePart = { ...sofa, id: 'bed', name: 'Bed', category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600] };
+    const tv: ScenePart = {
+      ...sofa, id: 'tv', name: 'TV', category: 'tv', shape: 'tv', wallMounted: true, rot: Math.PI, pos: [0, 0.6, 3 - 0.03], dimMM: [1400, 60, 800],
+    };
+    setRoom([bed, tv]);
     const ids = wallAttachments(0);
-    const applied = moveWallCarrying(0, -3, ids);
-    expect(applied).toBeCloseTo(-2.55, 6);
-    expect(useStudio.getState().positions.sofa).toBeUndefined();
-    expect(heard).toEqual(['That wall stops here: the Sofa is locked.']);
+    const applied = moveWallCarrying(0, -4.5, ids);
+    expect(-applied).toBeCloseTo(3.94, 2);
+    expect(heard).toEqual(["That wall stops here: the TV can't leave its wall."]);
+  });
+
+  it('a nudge between frames ends the drag it interrupted', () => {
+    setRoom();
+    const ids = wallAttachments(0);
+    moveWallCarrying(0, -3, ids);
+    expect(useStudio.getState().positions.sofa?.[2]).toBeCloseTo(0.45, 9);
+    // Back out half a metre by the arrow key: the sofa is against the wall now, so
+    // the wall takes it back with it.
+    moveWallCarrying(0, 0.5);
+    expect(useStudio.getState().positions.sofa?.[2]).toBeCloseTo(-0.05, 9);
+    // In 0.1 again with the old drag's ids: pushed 0.1 from where it stands. A frame
+    // resolved from where that drag began would take the sofa from its first place
+    // with the wall 3.1 m in, and put it at 0.55.
+    moveWallCarrying(0, -0.1, ids);
+    expect(useStudio.getState().positions.sofa?.[2]).toBeCloseTo(0.05, 9);
   });
 
   it('stops where the stack meets the far wall, naming the piece out of room', () => {

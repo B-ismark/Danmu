@@ -123,11 +123,34 @@ describe('the wall stops where the stack runs out of room, and names what stoppe
     expect(z(r.moves, 'sofa')! + 0.45).toBeLessThanOrEqual(3 + 0.002 + 1e-9);
   });
 
-  it('at a locked piece, where it touched it', () => {
+  it('pushes a piece that came from your photo like any other', () => {
+    // `locked` is "detected", not a lock: in a scanned room it is every piece, and
+    // the first version stopped the wall at each one and called it locked.
     const r = pushedByWall([{ ...sofa, locked: true }], ROOM, NORTH, 3, [], {});
-    expect(r.inward).toBeCloseTo(2.55, 6);
-    expect(r.stoppedBy).toEqual({ id: 'sofa', name: 'Sofa', reason: 'locked' });
-    expect(r.moves).toEqual([]);
+    expect(r.stoppedBy).toBeNull();
+    expect(z(r.moves, 'sofa')).toBeCloseTo(0.45, 9);
+  });
+
+  it('a piece already through a side wall stops at the far wall rather than leaving', () => {
+    // Poking 100 mm through the East wall, so it was never "contained" — the first
+    // version took that as licence and pushed it clean out through the South wall.
+    // Its back reaches the South wall 2.7 m after the wall meets it, 2.7 m in.
+    const poke = part({ id: 'poke', name: 'Poke', pos: [2.6, 0, 0], dimMM: [1000, 600, 800] });
+    const r = pushedByWall([poke], ROOM, NORTH, 5.9, [], {});
+    expect(r.stoppedBy).toEqual({ id: 'poke', name: 'Poke', reason: 'room' });
+    expect(r.inward).toBeGreaterThan(5.39);
+    expect(r.inward).toBeLessThan(5.405);
+    expect(z(r.moves, 'poke')! + 0.3).toBeLessThanOrEqual(3 + 0.002 + 1e-6);
+  });
+
+  it('a chair tucked under its table pushes the table, not deeper into it', () => {
+    // The chair's front is under the table's edge: they overlap along the push.
+    const table = part({ id: 'table', pos: [0, 0, -1], dimMM: [1400, 800, 750] });
+    const chair = part({ id: 'chair', pos: [0, 0, -1.45], dimMM: [450, 500, 900] });
+    // The wall meets the chair 1.3 m in; 1.3 m more takes both, as they stood.
+    const r = pushedByWall([table, chair], ROOM, NORTH, 2.6, [], {});
+    expect(z(r.moves, 'chair')).toBeCloseTo(-0.15, 9);
+    expect(z(r.moves, 'table')).toBeCloseTo(0.3, 9);
   });
 
   it('at a piece hung on the far wall, which it cannot slide', () => {
@@ -165,6 +188,29 @@ describe('the wall stops where the stack runs out of room, and names what stoppe
 });
 
 describe('a typed resize pushes too', () => {
+  it('pushes each piece as far as it has room, and one out of room stops nothing', () => {
+    // `long` nearly fills the room North to South: 0.65 m off the North wall — past
+    // the carry's reach, so the North wall pushes it — with 100 mm to give at the
+    // far end. The sofa beside it is 0.75 m off, with plenty. 6 → 4 deep brings that
+    // wall 1 m in: `long` runs out of room after 0.1, and the sofa still goes its
+    // 0.25. Stopping at the first set out of room left it where it stood.
+    const long = part({ id: 'long', pos: [-2, 0, 0.275], dimMM: [600, 5250, 800] });
+    const near = part({ id: 'near', pos: [1.5, 0, -1.8], dimMM: [2000, 900, 800] });
+    const moved = carryForResize([long, near], ROOM, footprintForLayout('rect', 6, 4), {});
+    expect(moved.find((m) => m.id === 'near')?.pos[2]).toBeCloseTo(-1.55, 9);
+  });
+
+  it('pushes a piece out of room as far as the far wall, not nowhere', () => {
+    // The North wall alone, 1 m in: `long` goes the 0.1 it has and stops flush.
+    const long = part({ id: 'long', pos: [-2, 0, 0], dimMM: [600, 5800, 800] });
+    const r = pushedByWall([long], ROOM, NORTH, 1, [], {}, { partial: true });
+    expect(r.stoppedBy).toBeNull();
+    expect(r.inward).toBe(1);
+    expect(z(r.moves, 'long')).toBeGreaterThan(0.0975);
+    expect(z(r.moves, 'long')! + 2.9).toBeLessThanOrEqual(3 + 0.002 + 1e-6);
+  });
+
+
   it('moves a piece the shrinking wall meets, and leaves one it does not', () => {
     // 6 → 4 deep moves the North wall 1 m in. `near` is 0.75 m off it — too far
     // to be carried, near enough to be met.

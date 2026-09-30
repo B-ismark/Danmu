@@ -81,7 +81,7 @@ export function wallUnderPointer(
   dir: Vec3,
   footprint: Footprint,
   roomHeight: number,
-): { index: number; hit: Vec3 } | null {
+): { index: number; hit: Vec3; t: number } | null {
   const n = footprint.length;
   if (n < 3) return null;
   const len = Math.hypot(dir[0], dir[1], dir[2]);
@@ -106,7 +106,27 @@ export function wallUnderPointer(
     if (s < 0 || s > 1) continue;
     best = { index: i, hit, t };
   }
-  return best && { index: best.index, hit: best.hit };
+  return best;
+}
+
+/** How far along the ray it crosses wall `index`, from either side, within the
+ *  wall's length and height; null when it misses. */
+function crossing(origin: Vec3, dir: Vec3, footprint: Footprint, index: number, roomHeight: number): number | null {
+  const a = footprint[index];
+  const b = footprint[(index + 1) % footprint.length];
+  const abx = b[0] - a[0];
+  const abz = b[1] - a[1];
+  // The wall's line as a plane: (p − a) × (b − a) = 0 in the floor.
+  const denom = dir[0] * abz - dir[2] * abx;
+  if (denom === 0) return null;
+  const t = ((a[0] - origin[0]) * abz - (a[1] - origin[2]) * abx) / denom;
+  if (!(t > 0)) return null;
+  const x = origin[0] + dir[0] * t;
+  const y = origin[1] + dir[1] * t;
+  const z = origin[2] + dir[2] * t;
+  if (y < 0 || y > roomHeight) return null;
+  const s = ((x - a[0]) * abx + (z - a[1]) * abz) / (abx * abx + abz * abz);
+  return s < 0 || s > 1 ? null : t;
 }
 
 /** Where a wall drag's pointer asks the piece at `pos` (turned `rot`) to go: onto
@@ -126,7 +146,11 @@ export function wallDragTarget(
 ): Vec3 | null {
   const own = nearestEdge(footprint, pos[0], pos[2]);
   const under = own ? wallUnderPointer(origin, dir, footprint, roomHeight) : null;
-  if (own && under && under.index !== own.index) {
+  // A pointer that passes through the piece's own wall on the way — from outside,
+  // in the dollhouse view, where that wall is the one cut away — is pointing at
+  // that wall, not at the one across the room it happens to reach next.
+  const through = own && under ? crossing(origin, dir, footprint, own.index, roomHeight) : null;
+  if (own && under && under.index !== own.index && (through === null || through > under.t)) {
     // Off the current wall's LINE, not its segment: for the wall round a corner that
     // is the distance from the corner, and the far wall is always clear of it.
     const a = footprint[own.index];

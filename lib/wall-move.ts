@@ -39,7 +39,7 @@
 //     When the stack runs out of room the WALL stops, and says which piece stopped
 //     it; nothing is squeezed, resized or left half through the plaster.
 
-import { footFromPart, footInsidePoly, nearestEdge, obbExtentAlong, obbFromPart, type Foot } from './geometry';
+import { footCorners, footFromPart, footInsidePoly, nearestEdge, obbExtentAlong, obbFromPart, pointInPoly, type Foot } from './geometry';
 import { offsetWall, wallOutwardNormal, type Footprint } from './footprint';
 import { WALL_CARRY_REACH } from './layout-rules';
 import { ridesWall, verticalExtent } from './physics';
@@ -73,6 +73,24 @@ function contained(f: Foot, poly: Footprint): boolean {
     { ...f, hw: Math.max(0, f.hw - CONTAIN_EPS), hd: Math.max(0, f.hd - CONTAIN_EPS) },
     poly,
   );
+}
+
+/** How far the foot reaches past the walls: the sum over its outline's corners of
+ *  how far each is outside the room. Zero when all of it is in. A sum rather than
+ *  the worst corner because a corner already out, carried past the end of its wall,
+ *  gains distance only to second order — the worst-corner form let a piece slip
+ *  2 mm through the far wall before it grew. For a piece
+ *  that STARTS through a wall — a detection that landed in the plaster — where
+ *  "was it contained before" has no useful answer: it may keep the overhang it came
+ *  with, and may not add to it. */
+function overhang(f: Foot, poly: Footprint): number {
+  let out = 0;
+  for (const [x, z] of footCorners({ ...f, hw: Math.max(0, f.hw - CONTAIN_EPS), hd: Math.max(0, f.hd - CONTAIN_EPS) })) {
+    if (pointInPoly(x, z, poly)) continue;
+    const e = nearestEdge(poly, x, z);
+    if (e) out += e.dist;
+  }
+  return out;
 }
 
 /** The pieces that travel with `seed`: the rest of each one's merged set, and
@@ -404,12 +422,13 @@ export function carryForResize(
       shift.set(id, [prev[0] + ox * d, prev[1] + oz * d]);
     }
     // A wall coming in pushes what it meets, as far as there is room for it — a
-    // typed size cannot stop part-way the way a drag does, so what does not fit is
-    // pushed up to where it would leave the room, and `lib/clearance.ts` reports the
-    // rest.
+    // typed size cannot stop part-way the way a drag does, so each set is pushed up
+    // to where it would leave the room (`partial`) and `lib/clearance.ts` reports
+    // the rest. Without `partial` the first set to run out of room froze every
+    // push along the wall, and the wall then walked through pieces with room to go.
     if (d < 0) {
       const byId = new Map(parts.map((p) => [p.id, p]));
-      for (const m of pushedByWall(parts, before, i, -d, carried, parentIds).moves) {
+      for (const m of pushedByWall(parts, before, i, -d, carried, parentIds, { partial: true }).moves) {
         const p = byId.get(m.id)!;
         const prev = shift.get(m.id) ?? [0, 0];
         shift.set(m.id, [prev[0] + m.pos[0] - p.pos[0], prev[1] + m.pos[2] - p.pos[2]]);
@@ -432,9 +451,15 @@ export function carryForResize(
 }
 
 /** Why a wall coming in had to stop. `room`: the pushed stack reached the far side
- *  of the room. `locked`: a locked piece was in its path. `wall`: a piece hung on a
- *  wall the push cannot slide it along — the far wall, parallel to this one. */
-export type PushStop = { id: string; name: string; reason: 'room' | 'locked' | 'wall' };
+ *  of the room. `wall`: a piece hung on a wall the push cannot slide it along — any
+ *  wall not square to this one.
+ *
+ *  There is no `locked`. `ScenePart.locked` means "came out of your photo", not a
+ *  lock, and the user's own Lock (`useStudio.pinned`) guards a piece against the
+ *  arranger only — a hand drag and a wall's carry both move it. A push is the same
+ *  hand, so it does too. The first version stopped at `locked`, which in a scanned
+ *  room was every detected piece, each announced as locked with no way to unlock. */
+export type PushStop = { id: string; name: string; reason: 'room' | 'wall' };
 
 export type WallPush = {
   /** The inward travel the pushes allow: the travel asked for when everything in
@@ -492,6 +517,9 @@ export function pushedByWall(
   inward: number,
   carried: readonly string[],
   parentIds: Record<string, string>,
+  /** A typed resize, which moves the wall the whole way whatever is in front of it:
+   *  never stop, push each set as far as it has room for. */
+  opts: { partial?: boolean } = {},
 ): WallPush {
   const n = poly.length;
   if (!(inward > 0) || n < 3 || index < 0 || index >= n) return { inward: Math.max(0, inward), moves: [], stoppedBy: null };
@@ -525,7 +553,6 @@ export function pushedByWall(
   // A piece hung on a wall slides along it when this wall meets it end-on, and
   // cannot be pushed at all off a wall parallel to this one.
   const pinned = (p: ScenePart): PushStop['reason'] | null => {
-    if (p.locked) return 'locked';
     if (!ridesWall(p.category, p.shape)) return null;
     const e = nearestEdge(poly, p.pos[0], p.pos[2]);
     if (!e) return 'wall';
@@ -533,8 +560,11 @@ export function pushedByWall(
     return Math.abs(px * ox + pz * oz) < 1e-6 ? null : 'wall';
   };
 
-  // Who can push whom: B stands in front of A, across the wall they overlap, and
-  // they overlap in height. `gap` is the air between them along the push.
+  // Who can push whom: B stands further along the push than A, across the wall they
+  // overlap, and they overlap in height. `gap` is the air between them along the
+  // push — none when they already overlap along it too, a chair tucked under its
+  // table: the chair pushes the table from where it is rather than being driven
+  // deeper in. Ordered by near face, ties by id, so each pair points one way.
   const pairs: { a: Band; b: Band; gap: number }[] = [];
   for (const A of bands) {
     if (A.p.category === 'rug') continue;
@@ -543,17 +573,66 @@ export function pushedByWall(
       if (loose.has(A.p.id) && unitOf.get(A.p.id) === unitOf.get(B.p.id)) continue;
       if (B.hi - A.lo <= TOUCH || A.hi - B.lo <= TOUCH) continue;
       if (B.top - A.bottom <= TOUCH || A.top - B.bottom <= TOUCH) continue;
-      if (B.near < A.far - TOUCH) continue;
-      pairs.push({ a: A, b: B, gap: B.near - A.far });
+      if (B.near < A.near - TOUCH || (B.near <= A.near + TOUCH && B.p.id <= A.p.id)) continue;
+      pairs.push({ a: A, b: B, gap: Math.max(0, B.near - A.far) });
     }
   }
   // What the wall itself meets: inside the plane, across its span.
   const facing = bands.filter((B) => loose.has(B.p.id) && B.far > TOUCH && B.hi > -len / 2 + TOUCH && B.lo < len / 2 - TOUCH);
 
+  // A piece hung on a side wall has its depth straddling the plaster, where
+  // containment is a coin flip — so it usually lands on the overhang rule below,
+  // which lets it slide along the wall and stops it at the corner all the same.
+  // (It used to be judged by its line on the plaster instead; the overhang rule
+  // made that a second answer to the same question, and a mutant proved it.)
+  const footAt = (p: ScenePart, at: [number, number, number]) => footFromPart(at, p.rot, p.dimMM, p.circle, p.shape);
+  const byId = new Map(parts.map((p) => [p.id, p]));
+  const members = new Map<string, ScenePart[]>();
+  for (const [id, u] of unitOf) members.set(u, [...(members.get(u) ?? []), byId.get(id)!]);
+  const at = (p: ScenePart, s: number): [number, number, number] => [p.pos[0] - ox * s, p.pos[1], p.pos[2] - oz * s];
+  /** Why piece `p` cannot go `s` along the push, in a room whose wall is at `after`. */
+  const refuses = (p: ScenePart, s: number, after: Footprint): PushStop['reason'] | null => {
+    const why = pinned(p);
+    if (why) return why;
+    const from = footAt(p, p.pos);
+    const to = footAt(p, at(p, s));
+    // Contained before: must stay contained. Through a wall already: may keep what
+    // it overhangs, and may not add to it — or a piece straddling a side wall would
+    // be pushed clean out through the far one.
+    if (contained(from, poly)) return contained(to, after) ? null : 'room';
+    return overhang(to, after) > overhang(from, poly) + 1e-6 ? 'room' : null;
+  };
+
   const solve = (d: number) => {
+    const after = offsetWall(poly, index, -d);
+    // `partial`: how far each set can go, found once per set and capped there. A
+    // set's constraints grow with its own shift, so the room it has is an interval.
+    // Judged against the room as it stood: what limits a pushed set is the far side,
+    // and the wall doing the pushing is the one thing it is moving away from — a set
+    // the wall will pass through anyway fits `after` at no shift at all, and asking
+    // that would pin it where it stands instead of pushing it to the far wall.
+    const caps = new Map<string, number>();
+    const cap = (u: string, s: number) => {
+      if (!opts.partial) return s;
+      const known = caps.get(u);
+      if (known !== undefined) return Math.min(s, known);
+      const fits = (x: number) => members.get(u)!.every((p) => !refuses(p, x, poly));
+      if (fits(s)) return s;
+      let lo = 0;
+      let hi = s;
+      if (!fits(0)) lo = hi = 0;
+      for (let i = 0; i < 40 && hi - lo > 1e-9; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(mid)) lo = mid;
+        else hi = mid;
+      }
+      caps.set(u, lo);
+      return lo;
+    };
     const shift = new Map<string, number>();
-    const need = (B: Band, s: number) => {
+    const need = (B: Band, want: number) => {
       const u = unitOf.get(B.p.id)!;
+      const s = cap(u, want);
       if (s > (shift.get(u) ?? 0) + 1e-9) {
         shift.set(u, s);
         return true;
@@ -571,31 +650,17 @@ export function pushedByWall(
         if (sa > gap && need(B, sa - gap)) changed = true;
       }
     }
-    const after = offsetWall(poly, index, -d);
     let stop: PushStop | null = null;
     const moves: CarriedPos[] = [];
     for (const B of bands) {
       const s = loose.has(B.p.id) ? (shift.get(unitOf.get(B.p.id)!) ?? 0) : 0;
       if (s <= 1e-9) continue;
       const p = B.p;
-      const pos: [number, number, number] = [p.pos[0] - ox * s, p.pos[1], p.pos[2] - oz * s];
-      const why = pinned(p);
-      if (why && !stop) stop = { id: p.id, name: p.name, reason: why };
-      if (!stop) {
-        // A piece hung on a side wall is judged along that wall only — its line on
-        // the plaster, not its depth, which straddles the boundary where containment
-        // is a coin flip. Exempting it outright slid a print past the far corner and
-        // out of the room.
-        const rider = ridesWall(p.category, p.shape);
-        const foot = (at: [number, number, number]) => {
-          const f = footFromPart(at, p.rot, p.dimMM, p.circle, p.shape);
-          return rider ? { ...f, hd: CONTAIN_EPS } : f;
-        };
-        if (contained(foot(p.pos), poly) && !contained(foot(pos), after)) {
-          stop = { id: p.id, name: p.name, reason: 'room' };
-        }
+      if (!stop && !opts.partial) {
+        const why = refuses(p, s, after);
+        if (why) stop = { id: p.id, name: p.name, reason: why };
       }
-      moves.push({ id: p.id, pos });
+      moves.push({ id: p.id, pos: at(p, s) });
     }
     return { moves, stop };
   };

@@ -196,6 +196,20 @@ describe('wallDragTarget — a wall piece follows the wall the pointer is on', (
     expect(t[0]).toBeCloseTo(0.48, 9);
   });
 
+  it('stays on its wall when the pointer reaches it through the cut-away face', () => {
+    // The dollhouse view: the camera outside the South wall, which is the one cut
+    // away, and the pointer on a TV hung on it. The ray goes on to meet the North
+    // wall's inner face — which is not what the pointer is on.
+    const south: V3 = [0, 1.4, 2.95];
+    const cam: V3 = [0, 2, 8];
+    const t = wallDragTarget(cam, [0.5, 1.4 - 2, 2.95 - 8], south, Math.PI, grip, ROOM, H)!;
+    expect(t[2]).toBeCloseTo(2.95, 9);
+    // From higher up, over the top of that wall, the pointer is on the far wall:
+    // the ray clears the cut-away wall at 2.86 m, above its 2.5.
+    const over = wallDragTarget([0, 4, 8], [0, -2.5, -11], south, Math.PI, grip, ROOM, H)!;
+    expect(over[2]).toBeCloseTo(-3, 9);
+  });
+
   it('stays on its wall with the pointer on the floor', () => {
     // Down at the floor near the South wall: the North wall's plane is behind the
     // camera, so the frame is skipped rather than jumping the TV anywhere.
