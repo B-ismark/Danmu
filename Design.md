@@ -1819,6 +1819,18 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   as a per-part `decor` collection. Decor renders as a **sibling** of the part
   (reads transform from the store) so props keep true size on group-scaled parts,
   and opt out of raycasting so they never block selecting the furniture beneath.
+- **What a prop is and where it goes are `lib/decor.ts`**, not the renderer.
+  `decorSpec(item)` draws the prop's size from its id (the seeded stream moved there
+  unchanged, so existing props draw as before), `decorRadius` bounds it in plan, and
+  `arrangeDecor` places the collection in order: each prop keeps its spot, clamped onto
+  the top, if that is clear of the props before it and of every blocker; otherwise it
+  takes the nearest clear lattice spot; otherwise it is left off and listed in
+  `unplaced`, which the Inspector shows as **No room**. The blockers are the pieces
+  standing in the band just above the surface (`decorBlockersBySurface`, read through
+  `useDecorBlockers`, which only changes when something over that surface moves) and
+  the surface's own holes — the L-shaped desk's open corner. **Pieces never stand on
+  props**; `docs/what-is-still-open.md` B.20 says why. The tabletop plant is
+  `PlantBody`, the floor plant's own geometry at tabletop size.
 
 ### Lighting, realism & motion
 - **Fixtures emit real light** (`components/three/PartLight.tsx`, `lib/light-units.ts`).

@@ -2,7 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
-import { useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
+import { useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
+import { arrangeDecor } from '@/lib/decor';
 import { useScene } from '@/lib/scene-store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
@@ -627,6 +628,10 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
   const items = part.decor ?? autoSurfaceDecor(part.category, part.shape, part.dimMM, part.id);
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
+  // The same arrangement the 3D scene draws (`lib/decor.ts`), so a prop that found no
+  // room on the surface is SAID to have found none rather than silently missing.
+  const blockers = useDecorBlockers(part.id);
+  const unplaced = new Set(arrangeDecor(items, part, w, d, blockers).unplaced);
 
   function add(kind: DecorKind) {
     const next: DecorItem = {
@@ -658,6 +663,9 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
           {items.map((it) => (
             <div key={it.id} className="list-row" style={{ cursor: 'default', padding: '5px 8px', background: 'var(--paper-2)' }}>
               <span style={{ flex: 1, fontSize: 'var(--fs-small)', fontWeight: 600 }}>{DECOR_LABEL[it.kind]}</span>
+              {unplaced.has(it.id) && (
+                <span className="t-micro" title="No clear spot left on this surface, so it is not shown">No room</span>
+              )}
               <IconButton
                 icon="x"
                 label={`Remove ${DECOR_LABEL[it.kind].toLowerCase()}`}

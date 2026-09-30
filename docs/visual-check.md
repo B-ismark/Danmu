@@ -99,6 +99,28 @@ room check calling the tucked chair an overlap.
 `tests/foot-cells.test.ts`; the catalogue sweep in `tests/wall-rider-containment.test.ts`
 accepts nine more desk placements and still finds none outside the room.
 
+### Props step aside, say when there is no room, and the tabletop plant is a plant — branch `claude/affectionate-ritchie-ilawx1`
+
+**Where to click.** A bedroom starter, 3D. Look at a nightstand with its lamp. Then select
+a **coffee table**, open **On the surface**, and press **+ Plant**, **+ Vase**, **+ Books**
+and **+ Candle** in turn; then one of each again.
+
+**What changed.** A prop had no size anywhere but its renderer, so nothing could keep it
+clear: a lamp stood through the plant beside it. Sizes and spots are `lib/decor.ts` now,
+and each prop keeps clear of the ones before it and of anything standing on the surface.
+A prop with nowhere left to go is **not drawn**, and its row says **No room**. Pieces do
+not stand on props, books included (`docs/what-is-still-open.md`). The tabletop plant is
+the same leafy plant as the floor-standing one, at tabletop size.
+
+**What "wrong" looks like.** Any prop through another, through the lamp, or over a
+table's edge. A prop that jumps somewhere far off when a closer spot was free. A row
+saying **No room** while its prop is visibly on the table, or a prop missing with no
+label. Props moving about when you drag something that is not over the table. The
+plant reading as a green ball.
+
+**Probed in SwiftShader:** four props handed the same spot on a coffee table stood side
+by side; a nightstand with its lamp in the middle showed both its props as **No room**.
+
 ### Six pieces changed size — a plant, three chairs and two lamps
 
 **MEASURED IN A BROWSER 2026-09-06 — the SIZE half is settled by a second instrument.**

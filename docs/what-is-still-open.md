@@ -1668,6 +1668,25 @@ the user went and looked.
 
     **Committed:** the pull request that adds `scripts/scan-pin-probe.mjs`.
 
+20. **May a piece stand on a prop — a lamp on a stack of books? — OPEN, and the default is
+    no.** Asked 2026-09-30, when the user reported props overlapping the pieces on their
+    surface and said a lamp on books would be fine where a lamp on a plant is not. What
+    shipped: **every prop steps aside, books included** (`lib/decor.ts`), and one that
+    finds no room is not drawn and its row says *No room*.
+
+    The case against, which is why that is the default: the books would stop being
+    decoration and become structure. A rider's height is derived from what it stands on
+    (`lib/rider-height.ts`), and a prop is not a support — it has no part id, it is not in
+    `findSupportDetailed`'s world, and one press of **Clear** deletes it. So the lamp's
+    height would hang off something the user can remove without being told the lamp
+    moves. Doing it properly means props joining the support chain, which is a bigger
+    change than the report.
+
+    What would change the answer: someone wanting the stacked look on purpose. Then the
+    smaller version is a books prop that raises only what is placed on it *by the decor
+    layout* — another prop — rather than furniture. **Committed:** nothing; this is the
+    question.
+
 
 ---
 

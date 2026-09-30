@@ -16,6 +16,7 @@ import { useStudio } from './store';
 import { hasOverride, type TransformOverrides } from './transforms';
 import { riderYs, resolveScene, type SceneContext } from './rider-height';
 import type { ScenePart } from './scene-spec';
+import { decorBlockersBySurface, type DecorBlocker } from './decor';
 
 export type { TransformOverrides } from './transforms';
 export { resolvePart, resolveParts } from './transforms';
@@ -133,4 +134,48 @@ export function currentSceneContext(): SceneContext {
  *  `useRoomScene`, for pointer handlers and one-shot actions. */
 export function currentRoomScene(): ScenePart[] {
   return resolveScene(useScene.getState().parts, currentOverrides(), currentSceneContext());
+}
+
+/** What stands in the way of the props on this surface — a lamp on the nightstand, a
+ *  monitor on the desk — in the surface's own frame (`lib/decor.ts`).
+ *
+ *  The same two moves as `useSettledY`, for the same reasons. The derivation is
+ *  shared: one pass over the room per store change, cached on reference identity. And
+ *  the selector returns a STRING, the blockers rounded to the millimetre, so a
+ *  surface's props re-arrange only when something over THAT surface moves, not on
+ *  every frame of every drag. Hidden pieces are left out: hiding is a way of looking,
+ *  and props stepping round a lamp nobody can see would be the one visible trace of
+ *  it. */
+export function useDecorBlockers(id: string): DecorBlocker[] {
+  const parts = useScene((s) => s.parts);
+  const roomHeight = useScene((s) => s.room.height);
+  const key = useStudio(
+    (s) => decorBlockerKeys(parts, s.positions, s.rotations, s.dims, s.parentIds, roomHeight, s.hidden)[id] ?? '',
+  );
+  return useMemo(() => (key ? (JSON.parse(key) as DecorBlocker[]) : []), [key]);
+}
+
+let lastDecorKey: unknown[] | null = null;
+let lastDecorValue: Record<string, string> = {};
+
+function decorBlockerKeys(
+  parts: ScenePart[],
+  positions: TransformOverrides['positions'],
+  rotations: TransformOverrides['rotations'],
+  dims: TransformOverrides['dims'],
+  parentIds: Record<string, string>,
+  roomHeight: number,
+  hidden: Record<string, boolean>,
+): Record<string, string> {
+  const args = [parts, positions, rotations, dims, parentIds, roomHeight, hidden];
+  if (lastDecorKey && args.every((a, i) => a === lastDecorKey![i])) return lastDecorValue;
+  const scene = resolveScene(parts, { positions, rotations, dims }, { parentIds, roomHeight }).filter((p) => !hidden[p.id]);
+  const mm = (v: number) => Math.round(v * 1000) / 1000;
+  const out: Record<string, string> = {};
+  for (const [surface, list] of Object.entries(decorBlockersBySurface(scene))) {
+    out[surface] = JSON.stringify(list.map((b) => ({ cx: mm(b.cx), cz: mm(b.cz), hw: mm(b.hw), hd: mm(b.hd), rot: mm(b.rot) })));
+  }
+  lastDecorKey = args;
+  lastDecorValue = out;
+  return out;
 }
