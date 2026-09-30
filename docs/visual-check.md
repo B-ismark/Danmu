@@ -614,7 +614,8 @@ each of its chairs, press **Group**. Press **Ideas** and page through every card
 turn the group about 30° in the plan, press **Fix**, and look in 3D. Last, in the
 Catalog press **Keep where it is** on one chair of the group, and press **Fix** and
 **Ideas** again. Do the same once on T-Shape, with a table lamp put on the dining table
-first.
+first. Then group the sofa with the TV on the wall, drag the sofa partly through a wall,
+and open **Room check**.
 
 **What right looks like.**
 - In every idea the table and its chairs sit exactly as you grouped them, wherever the
@@ -624,11 +625,15 @@ first.
 - With one chair kept in place, the whole set stays put, and the rest of the room still
   moves around it.
 - The lamp stays on the table.
+- Room check says the sofa sticks out and to drag it back inside, with no **Try a fix**
+  on that row: the group holds it, because the TV never moves.
 
 **What wrong looks like.**
 - A chair left behind, pushed out, or turned on its own inside a thumbnail or in 3D.
 - A kept chair staying put while the table and the other chairs move away from it.
 - A card whose "N pieces move" counts the set's chairs as not moving when the set did.
+- A **Try a fix** on the grouped sofa, or a sentence telling you to slide it along its
+  wall.
 - **Fewer ideas on T-Shape with the lamp, maybe none.** That is expected and filed
   (§ H.6.5, "Kept, as trades"): a set that cannot come apart has fewer places to go.
   It was counted with the room at 6 × 4 m (none in three presses), not at the preset's

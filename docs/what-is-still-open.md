@@ -3909,7 +3909,9 @@ the squaring pass and its nudges, the prune, a rug sent home, and the explanatio
 A set never swaps places with a piece, and the group pass counts a set as one group
 whatever its relations say. Fix's confine names the whole set when it names a member
 (`withCompany`, read by `RoomTools`), since a confine naming one chair would otherwise hold
-it by the table it is merged with.
+it by the table it is merged with. And Room check offers **Try a fix** on a piece outside
+the room only where `movableFor` lets the solve move it (`lib/clearance.ts`): a sofa merged
+with the TV on the wall is held by its set, so it gets the floor remedy and no button.
 
 *Found by its own tests, and the probe could not see it.* `moved`, the list the answer is
 written from, asked each piece whether it had moved past `MOVE_EPSILON`. A set turned 1°
@@ -3936,7 +3938,7 @@ measure in a frame.
   where it goes.
 - **A lock on one member is a lock on the set**, and so is one member on a wall.
 
-*Tests.* `tests/layout-rigid-sets.test.ts`, 21 tests. Every solve test first shows its fixture can break
+*Tests.* `tests/layout-rigid-sets.test.ts`, 22 tests. Every solve test first shows its fixture can break
 the set: the same room unmerged must come back broken. Mutated, 29 mutants, **26 caught by
 that file alone**. The first pass left 11 alive. Direct tests of the two tidy passes
 (`snapYaws`, `openRoutes`) closed three. Five more were caught only by a scratch sweep over
@@ -3953,6 +3955,14 @@ each got the cheapest press in that sweep that showed it: a rug that has to go h
 - `snap-untouched-one` (the last snap asking the lead alone whether the solve touched it).
   Every pass before it moves a set through `carryUnit` or puts the whole set back, so the
   lead is untouched exactly when the set is.
+
+*Filed, not fixed.* **A lead's proposals can aim at its own set.** `propose`'s neighbour,
+partner and focal targets can pick a member of the lead's own set, and that member moves
+with the lead, so the step is spent going nowhere: a dining table's nearest neighbour is
+nearly always one of its chairs. A leak in the move budget rather than a wrong answer — the
+set still arrives whole. Leaving set members out of those picks changes which moves are
+drawn, so it is a measured change to the search, not a tidy-up, and wants the § H.6.5 table
+run again before and after.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

@@ -656,6 +656,13 @@ export function withRiders(ids: Set<string>, parts: ScenePart[]): Set<string> {
  *  set's walk because its support moving is the set moving, and a rider in a set of
  *  its own brings that set, which is why the two widenings are one loop.
  *
+ *  Not `lib/wall-move.ts`'s private function of the same name, and deliberately not
+ *  merged with it: a wall move walks the STORED rigid-parent links
+ *  (`snapshotDescendants` over `parentIds`, behind an `admit` filter), while a solve
+ *  walks what stands on a piece as the room reads now (`ridingParents`, which
+ *  `carryRiders` reads too). One walk for both would change which pieces one of them
+ *  moves.
+ *
  *  Terminates for `withRiders`' reason: `out` only grows, over a finite room. */
 export function withCompany(ids: Set<string>, parts: ScenePart[]): Set<string> {
   const byGroup = new Map<string, string[]>();
@@ -678,7 +685,8 @@ export function withCompany(ids: Set<string>, parts: ScenePart[]): Set<string> {
 
 /** Which pieces a solve may actually move: not locked, and not wall-mounted — a
  *  door, window, or ceiling fixture rides the wall or ceiling it was placed on,
- *  and sliding one along it is not a layout decision. `solveLayout` derives this
+ *  and sliding one along it is not a layout decision — and not merged with a piece
+ *  that is either, since a merged set moves whole or not at all. `solveLayout` derives this
  *  internally; exported so a caller that needs the same answer BEFORE calling it
  *  — building a `shuffle` `start`, or scoring `layoutSimilarity` — computes it
  *  once, here, rather than re-deriving `!p.wallMounted` a second place. (That
@@ -1187,7 +1195,8 @@ export function solveLayout(
   //
   // Built from the arrangement the user HAS rather than from the relation table, and
   // only from edges that are currently satisfied — see `intactGroups`. A group is a
-  // thing this room already contains, not a thing it ought to.
+  // thing this room already contains, not a thing it ought to. A merged set is always
+  // one, satisfied or not: the user said it belongs together.
   const groups = intactGroups(model, origin, movable);
   // Scratch for undoing a rejected multi-piece proposal. Preallocated: the loop below
   // runs sixteen thousand times and a pair of arrays per step is a pair of arrays per
@@ -2311,7 +2320,10 @@ const GROUP_INTACT_M = 0.5;
 const GROUP_INTACT = bandCost(GROUP_INTACT_M, 0, 0);
 
 /** The groups this room actually contains: connected components of the satisfied
- *  relation edges, movable members only.
+ *  relation edges and of the merged sets, movable members only. A merged set is a
+ *  group however its relations stand, so a room with one always has a group and the
+ *  group pass runs there even when nothing else in it is arranged — the one group a
+ *  scrambled room can still contain, because the user made it.
  *
  *  Movable-only matters and is not a technicality. A sofa `faces` its wall-mounted
  *  screen, so the screen would otherwise join the living group — and then a group move
