@@ -994,8 +994,34 @@ export function solveLayout(
   const touchedPrev: Placement[] = new Array(parts.length);
 
   let best = current.map((p) => ({ ...p }));
-  let bestCost = before;
-  let cost = before;
+  // ── `cost` is the price of `current`, and `bestCost` the price of `best` ─────
+  //
+  // Both start as the price of the layout the search STARTS from, which is why this
+  // is not simply `before`. In `arrange` and `refit` the two are one layout; in
+  // `shuffle` `current` is the scatter, and pricing it as the room we were given
+  // turned the search off. When `before` moved to `origin` (the block above), these
+  // two lines went with it, and so every shuffle step was measured against a tidy
+  // room it was nowhere near: a scatter step costs hundreds, the tidy room ~2, and
+  // `exp(-Δ / temp)` at a temperature of 8 or less is nothing. Measured over five
+  // presets x twelve seeds: **0 accepted steps in 59 of 60 solves**, and the pool
+  // held one finalist, the scatter itself, **labelled with the tidy room's price**
+  // (2.44 against a real 2,161 on `rect` 6 x 4 seed 1). Every idea the gallery showed
+  // was a random scatter tidied by the passes after the pick. Nothing failed: a
+  // scatter that happened to be legal still passed `isCleanShuffle`, the gallery
+  // still filled from more presses, and the whole suite stayed green.
+  //
+  // Started from the scatter's own price, the same presets fill all twelve slots of
+  // three presses (5 to 12 before), the ideas cost about half as much (`rect` 6 x 4
+  // 35.6 → 6.1, `t` 6 x 5 76.6 → 36.3), and ideas with a floor piece through a wall
+  // fall from 24 to 9. `tests/layout-shuffle.test.ts` holds the invariant that would
+  // have caught it: a finalist's `cost` is the cost of its own placements.
+  //
+  // `arrange` and `refit` keep `before`, which is NOT the same number there either:
+  // `before` carries navigation and every trial below does not. Pricing those two
+  // modes from `scoreLayout` too moves two fixtures, so it is its own measured change
+  // and not this one — see § H.6 in `docs/what-is-still-open.md`.
+  let bestCost = shuffle ? scoreLayout(model, current, weights) : before;
+  let cost = bestCost;
   // The finalists that get the expensive navigability pass. Kept as we go rather
   // than re-running the search: the annealer visits plenty of good, genuinely
   // different arrangements on its way down and throwing them away means paying to

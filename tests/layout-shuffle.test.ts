@@ -10,7 +10,7 @@ import {
   TURN_EPSILON,
   type SolveResult,
 } from '@/lib/layout-solve';
-import { DEFAULT_WEIGHTS } from '@/lib/layout-score';
+import { DEFAULT_WEIGHTS, scoreLayout } from '@/lib/layout-score';
 import { layoutSimilarity } from '@/lib/layout-offer';
 import {
   isCleanShuffle,
@@ -157,21 +157,20 @@ describe("solveLayout mode: 'shuffle'", () => {
 
       // Over a sweep of scatters rather than one, because since § 31 a shuffle solve
       // DECLINES rather than hand back an arrangement more impossible than the room
-      // it was given, and roughly half of them would be.
+      // it was given, and a scatter the search cannot rescue would be.
       //
-      // That is not a loss, and the numbers are why. On `rect` 6 x 4, ten seeds,
-      // before the veto: **moved 10, clean 4**. The six that moved and were not clean
-      // carried 520 to 1390 weighted units of `overlap + outside` — furniture well
-      // inside the walls — and `isCleanShuffle` discarded every one. After the veto:
-      // **moved 4, clean 4**, the same four. The search stopped producing answers
-      // that were only ever going to be thrown away, and the button is unchanged:
-      // over five presets x eight presses, `shuffleRoom` offers on 25 of 40 either
-      // way.
+      // **The numbers this comment carried no longer reproduce**: "moved 4, clean 4"
+      // on `rect` 6 x 4 over ten seeds, and 25 of 40 presses offering over five
+      // presets x eight presses. On the code just before the search was fixed (see
+      // "searches from the scatter it was handed" below) the same sweep, seeds 42–51,
+      // read moved 1, clean 0 and 38 of 40, because that search accepted no steps.
+      // Once it ran: **moved 10, clean 9**, and **40 of 40** presses offer. Seed 42 on
+      // `rect`, the decliner this sweep was written for, now moves.
       //
-      // So the honest form of the property is the pipeline's own — twelve tries, as
-      // `MAX_CANDIDATES` allows — rather than a single seed that must not be
-      // unlucky. Seed 42 on `rect` is one of the decliners, which is how this was
-      // found.
+      // So the honest form of the property is still the pipeline's own — twelve tries,
+      // as `MAX_CANDIDATES` allows — rather than a single seed that must not be
+      // unlucky, because declining is still what a solve should do when it cannot
+      // rescue its scatter.
       // Stops at the first mover rather than scoring all twelve. One solve is seconds
       // and four presets x twelve was over this test's own budget under a full-suite
       // run — which is the honest reason, not a flake.
@@ -210,6 +209,43 @@ describe("solveLayout mode: 'shuffle'", () => {
     // than the room it was given, so an individual seed legitimately moves nothing.
     // Without this line every assertion above passes vacuously on five empty lists.
     expect(everMoved, 'no seed moved anything — the assertions above proved nothing').toBeGreaterThan(0);
+  });
+
+  it('searches from the scatter it was handed, and prices it as the scatter', { timeout: 120_000 }, () => {
+    // The search ran for weeks without accepting a step. `cost` started at `before`,
+    // the price of the tidy room, while `current` was the scatter, so every proposal
+    // looked hundreds of units uphill and was refused; the pool kept one finalist, the
+    // scatter, under the tidy room's price. Nothing here could see it — a legal scatter
+    // still passed every gate — which is why this asserts the invariant itself.
+    //
+    // `scoreLayout` with no `origin` leaves inertia off, which is what shuffle's own
+    // weights do too, so this is the solver's own number and not a second opinion.
+    const weights = { ...DEFAULT_WEIGHTS, inertia: 0 };
+    const got = ALL.map(([id, w, d]) => {
+      const { parts, footprint, locked, movable } = room(id, w, d);
+      const pools: number[] = [];
+      let clean = 0;
+      for (let seed = 1; seed <= 8; seed++) {
+        const start = randomizeStart(parts, footprint, movable, makeRng(seed));
+        const r = solveLayout(parts, footprint, locked, { seed, mode: 'shuffle', start });
+        for (const f of r.finalists) {
+          const own = scoreLayout({ parts, movable, footprint }, f.placements, weights);
+          expect(f.cost, `${id} seed ${seed}: a finalist carries another layout's price`).toBeCloseTo(own, 9);
+        }
+        pools.push(r.finalists.length);
+        if (isCleanShuffle(r)) clean++;
+      }
+      return [id, pools.join(''), clean];
+    });
+    // Before the fix every pool was `11111111` and the clean counts were 1 / 2 / 2 / 2
+    // / 0: one finalist, the scatter, and whatever of it happened to be legal.
+    expect(got).toEqual([
+      ['rect', '44444444', 8],
+      ['l', '44444444', 7],
+      ['u', '44444444', 7],
+      ['open', '44444444', 6],
+      ['t', '44434444', 2],
+    ]);
   });
 
   it('is deterministic: same room, same seed, same suggestion', () => {
@@ -339,8 +375,8 @@ describe('shuffleRoom — the offer, not the search', () => {
   it('a single solve is NOT reliably clean, which is why the pipeline exists', { timeout: 60_000 }, () => {
     // The negative control for the test below, and the finding the filter answers.
     // Without it, "shuffleRoom returns a clean room" reads as a property of
-    // `solveLayout` that the filter is not needed for. Measured at 6/20 on this
-    // preset; asserted loosely because the exact count moves with any re-price of
+    // `solveLayout` that the filter is not needed for. Measured at 4/20 clean on this
+    // preset (1/20 before the search accepted any steps); asserted loosely because the exact count moves with any re-price of
     // the cost function, while the fact that raw solves fault does not.
     const { parts, footprint, locked, movable } = room('t', 6, 5);
     let faulted = 0;

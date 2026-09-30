@@ -3009,6 +3009,43 @@ build order being selection first, the split third. This section is the *report*
 is the *plan*, and it should be re-derived against `main` before its rows are executed —
 several of its statuses have moved (row 0 landed, row 3b's dependency is on `main` now).
 
+**§ H.6.0 · FIXED 2026-09-30: the shuffle search accepted no steps.** Found while chasing a
+rug that Ideas left through a wall, and larger than anything the four observations name.
+`solveLayout` started a shuffle's `cost` and `bestCost` at `before`, the price of the room
+it was GIVEN, while `current` was the random scatter it was told to start from. So every
+proposal looked hundreds of units uphill (a scatter cost 25–5,300 in these runs, the tidy room ~2) and
+was refused. Over five presets × twelve seeds, **59 of 60 solves accepted no step at all**,
+and the pool held one finalist, the scatter, **labelled with the tidy room's price** (2.44
+against a real 2,161 on `rect` 6 × 4 seed 1). Every idea the gallery ever showed was a
+random scatter tidied by `snapYaws` / `openRoutes`. The two lines that seed the search read
+`before`, which was once the scatter's price (the comment on the invariant says so), so they
+were right until `before` moved to `origin` and wrong from then on. Nothing went red,
+because a scatter that happened to be legal still passed every gate, and every measured
+shuffle number in the repo describes that search.
+
+Started from the scatter's own price (arrange and refit unchanged, byte for byte), three
+presses per preset at `rect` / `open` 6 × 4 and `l` / `t` / `u` 6 × 5:
+
+| | rect | l | t | u | open |
+|---|---|---|---|---|---|
+| ideas, before → after | 8 → 12 | 9 → 12 | 5 → 12 | 12 → 12 | 8 → 12 |
+| mean idea cost | 35.6 → 6.1 | 42.7 → 18.6 | 76.6 → 36.3 | 13.9 → 12.7 | 47.6 → 23.8 |
+| ideas with a floor piece outside | 6 → 2 | 8 → 2 | 4 → 0 | 0 → 0 | 6 → 5 |
+
+`tests/layout-shuffle.test.ts` asserts the invariant that would have caught it: a
+finalist's `cost` is the cost of its own placements (false on 40 of 40 solves before).
+
+**Filed, not fixed, and measured:** `arrange` and `refit` still start `cost` at `before`,
+and `before` carries the navigation term while no trial does. So a room with stranded floor
+starts the search that many units too high, and the first trial looks cheaper than it is.
+Pricing the start from `scoreLayout` in every mode moves two fixtures
+(`tests/impossible-veto.test.ts` "leaves a legal room legal…" and
+`tests/suggest-tidiness.test.ts` t 6 × 5 seed 5), so it is its own measured change.
+
+The 9 ideas still left with a floor piece outside are **all the rug**, 27–788 mm through a
+wall. The `outside` term never prices a rug (`isObstacle` excludes it), so nothing in the
+search pulls one back in; that is the next item.
+
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
 Their words, kept because the scope is theirs: *"Do a detailed search to the fundamental

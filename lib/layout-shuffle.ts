@@ -64,6 +64,17 @@
  * at `MAX_CANDIDATES = 12`, measured on `main` after the threshold fix below:
  * rect 6×4 12/12, l 12/12, u 12/12, open 10/12, rect 7.5×5.6 9/12, **t 8/12**.
  *
+ * **That row is a search that accepted no steps.** `solveLayout` started a shuffle's
+ * `cost` at the tidy room's price rather than the scatter's, so it refused every
+ * proposal and handed back the scatter, tidied only by the passes after the pick (its
+ * own comment at `bestCost` has the measurement). Re-run on the code just before that
+ * was fixed, the row reads the same on five of six presets (rect 6×4 10/12). With the
+ * search running, the same twelve presses offer **12/12 on all six** (l, u and t at
+ * 6×5, open at 6×4) and hold more ideas between them: 48 / 48 / 48 / 47 / 48 / 38
+ * against 28 / 40 / 47 / 20 / 25 / 12, in the order above (four is a full press). The
+ * worst press on `t` 6×5 took 4.2 s against 4.5 s (one run each). The cap table below
+ * is kept for the shape of the trade, and nothing here has re-measured it.
+ *
  * Raising the cap buys the rest at a price not worth paying — the whole search is
  * synchronous on the main thread. Measured BEFORE the threshold fix, when refusals
  * were commoner, so read it for the shape of the trade rather than for its rows:
@@ -91,6 +102,13 @@
  * because #68 is what closed the gap it was written for. Both modules read
  * `TUCKED_CLASH_SHARE` now, and `isCleanShuffle` demands `overlap === 0` exactly, so
  * nothing reaching this gate can hold a pair past that bar.
+ *
+ * **And it has work again.** With the search running, over the six presets above x
+ * twenty seeds, it refuses **10 of the 86** candidates that pass `isCleanShuffle`,
+ * every one a `clash-mounted` finding — a plant, a lamp, a shelf or a wardrobe
+ * standing in front of a mounted TV or painting, which the solver cannot see at all
+ * (`RULE_HANDLING['clash-mounted']`, § 17). The "rejected none" above was measured
+ * on the search that accepted no steps.
  *
  * The gate STAYS, and for the honest reason rather than the flattering one: these
  * two modules have already drifted apart once, and it costs two `analyzeRoom` calls
