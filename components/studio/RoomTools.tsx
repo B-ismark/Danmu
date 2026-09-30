@@ -71,7 +71,7 @@ import {
   lockedForSolve,
   type MoveReason,
   type SolveResult,
-  withRiders,
+  withCompany,
 } from '@/lib/layout-solve';
 import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
 import { solveOffThread } from '@/lib/layout-offload';
@@ -624,8 +624,10 @@ function useSuggest(appPlaced: AppPlacedRef) {
       // press deciding what it is allowed to touch, not the solver overruling it.
       // Riders of riders come too — `ridingParents` is one flat map, so the walk is
       // to a fixed point, bounded by the fact that `y` strictly increases along an
-      // edge.
-      const confined = only && only.length > 0 ? withRiders(new Set(only), effParts) : null;
+      // edge. And a piece in a merged set brings its set, since the solver moves a set
+      // whole or not at all — a confine naming one chair would otherwise hold it by the
+      // table it is merged with (`withCompany`).
+      const confined = only && only.length > 0 ? withCompany(new Set(only), effParts) : null;
       // Which pieces the user put where they are, rather than the app. An override in
       // `positions` exists only for a piece that has been moved by hand, so this is the
       // store already answering the question — and it is what stops a suggestion
