@@ -78,38 +78,24 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### "Use my own size" in the Library, and a piece that is wider than its space — this branch, NOT LOOKED AT
+### A size box keeps what you are typing through a pause — this branch, NOT LOOKED AT
 
-The Room panel's **Will it fit** tab is gone (the user's call, 2026-09-30); its question is
-asked from the Library now. And no size field lets a piece be made wider than its wall or
-the room any more. Tests hold both; nobody has seen them.
+The "Use my own size" item was looked at on 2026-09-30 and is gone. What the user found
+while looking: type `2`, pause, go on with `.7`, and the box read **2.007** — the pause
+had committed the `2` and the box answered by rewriting itself `2.00` under the caret.
+Both size editors keep the draft as typed now, and tidy it when you leave the box.
 
-**Where to click.** Rectangle with starter furniture.
-1. Open the Library and type `sofa 228x95x83cm`. The hint under the search should change
-   to *"Your size. It goes where it fits, or Danmu says why it can’t."* Press the sofa row.
-2. Lower the ceiling to **2.2 m** in the Room panel, then type `wardrobe 120x60x240cm`
-   and press it. (At the preset's 2.7 m nothing in the Library is too tall: the search
-   row holds a size to the piece's own range, and a wardrobe's tops out at 2.6 m.)
-3. Put the ceiling back, and keep pressing the sofa row until the room is full.
-4. Add a **Curtain**, select it, and in the Inspector's **Exact size** type a width longer
-   than the wall it is on. Then press the width arrow up until it stops.
+**Where to click.** Any room. In the Inspector's **Exact size**, type `2` into Width,
+wait a second, then type `.7`. Do the same in the Room panel's **Height**. Then, on a
+curtain, type `0.1` into Width, wait, and click somewhere else.
 
-**What right looks like.**
-1. The sofa lands in a clear spot inside the walls at exactly the size typed — not in the
-   middle of the coffee table. If it only just fits, a toast says it is tight and why.
-2. A red toast: the wardrobe was **not added**, naming its height (2.40 m) and the
-   ceiling's (2.20 m).
-3. Once there is no floor left: *"There is nowhere clear for a…"*, and either "It would
-   fit this room empty, so it is the other pieces in the way" or the largest floor
-   rectangle — never a claim that there is clear floor beside furniture filling it.
-4. The width is not taken. Under the fields, in amber: *"Curtain can be at most N m wide
-   here. That is the whole length of the wall it hangs on."* The number is one the field
-   will take. The arrow stops at that same number.
+**What right looks like.** The piece (and the room) changes to 2 m during the pause and
+to 2.7 m after — while the box shows exactly what you typed, `2` then `2.7`, and becomes
+`2.70` only once you click away. The curtain's `0.1` stays `0.1` while you are in the box
+and reads `0.40` (the smallest a curtain can be) after you leave it.
 
-**What wrong looks like.** A typed size that lands through a wall or on another piece; a
-refusal that adds the piece anyway; a curtain that silently snaps to the wall's length
-instead of being refused; a sentence that quotes a number the field then refuses; the
-Room panel still showing a fourth tab; the hint wrapping badly on a phone.
+**What wrong looks like.** Digits appearing that you did not type; a box that still shows
+`2` after you have left it; a box that shows one number while the piece is another size.
 
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
@@ -165,7 +151,7 @@ raised was answered on 2026-09-30.*
 
 **The judgement this item used to carry is answered.** The user, 2026-09-30: *"Don't
 allow if it's wider than the available space."* So a curtain can no longer be SIZED
-wider than its wall (see the "Use my own size" item above), and the un-draggable 4 m
+wider than its wall (looked at 2026-09-30), and the un-draggable 4 m
 curtain in a 3 m room cannot be made from the Inspector any more. The drag sentence is
 still worth a look, because a piece CAN still be wider than a wall it is dragged to.
 
