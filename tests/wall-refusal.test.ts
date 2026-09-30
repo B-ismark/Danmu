@@ -8,7 +8,7 @@
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 import { useScene } from '@/lib/scene-store';
-import { useStudio } from '@/lib/store';
+import { useSettings, useStudio } from '@/lib/store';
 import { ANNOUNCE_EVENT } from '@/lib/announce';
 import { footprintForLayout } from '@/lib/footprint';
 import type { ScenePart } from '@/lib/scene-spec';
@@ -379,5 +379,41 @@ describe('the refusal says itself once', () => {
     moveWallCarrying(w, -0.1); // taken: 2.5
     moveWallCarrying(w, -0.3); // refused again, and it is news
     expect(heard.length).toBe(2);
+  });
+});
+
+describe('a wall will not fold the room over itself', () => {
+  function setT() {
+    setRoom(6, 5, []);
+    useScene.setState((s) => ({ room: { ...s.room, layoutId: 't', footprint: footprintForLayout('t', 6, 5) } }));
+    wallAttachments(2);
+  }
+
+  it('stops a T bar wall at the shape limit and says why, with the number in the user unit', () => {
+    setT();
+    useSettings.setState({ dimUnit: 'cm' });
+    // Wall 2 is under the bar's east half; pushed north it would run up through
+    // the north wall. Both sides of the bounding box stay in range the whole way.
+    const applied = moveWallCarrying(2, -5);
+    expect(applied).toBeCloseTo(-(2.25 - 0.6), 6);
+    expect(heard).toHaveLength(1);
+    expect(heard[0]).toBe('That wall stops here: the wall beside it cannot get shorter than 60.0 cm.');
+    expect(moveWallCarrying(2, -0.05)).toBe(0);
+  });
+
+  it('names the gap when a wall runs at a wall it does not share a corner with', () => {
+    setRoom(6, 5, []);
+    useScene.setState((s) => ({ room: { ...s.room, layoutId: 'u', footprint: footprintForLayout('u', 6, 5) } }));
+    wallAttachments(2);
+    useSettings.setState({ dimUnit: 'm' });
+    moveWallCarrying(2, -4);
+    expect(heard.at(-1)).toBe('That wall stops 0.60 m short of another wall.');
+  });
+
+  it('the store refuses a folding step on its own, for any caller that skips the action', () => {
+    setT();
+    const before = useScene.getState().room.footprint;
+    expect(useScene.getState().moveWall(2, -5)).toBe(0);
+    expect(useScene.getState().room.footprint).toBe(before);
   });
 });
