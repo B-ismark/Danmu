@@ -56,7 +56,7 @@ import {
   type ScenePart,
 } from '@/lib/scene-spec';
 import { anchorFor, followsPointerUp, isFloorStanding } from '@/lib/physics';
-import { wallGrip, wallPlaneHit, wallTarget, type WallGrip } from '@/lib/wall-drag';
+import { wallDragTarget, wallGrip, wallPlaneHit, type WallGrip } from '@/lib/wall-drag';
 import { stretchedDim, stretchedOrigin, type StretchAxis } from '@/lib/stretch';
 import { StretchHandles } from './StretchHandles';
 import { CutAway } from './CutAway';
@@ -1246,9 +1246,18 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       const g = ref.current;
       const o = e.ray.origin;
       const dir = e.ray.direction;
-      const hit = wallPlaneHit([o.x, o.y, o.z], [dir.x, dir.y, dir.z], [g.position.x, g.position.y, g.position.z], g.rotation.y);
-      if (!hit) return;
-      const t = wallTarget(hit, d.wall, g.rotation.y);
+      // And the wall is the one under the pointer when that is another one —
+      // `wallDragTarget` holds the switch and its corner margin.
+      const t = wallDragTarget(
+        [o.x, o.y, o.z],
+        [dir.x, dir.y, dir.z],
+        [g.position.x, g.position.y, g.position.z],
+        g.rotation.y,
+        d.wall,
+        footprint,
+        roomHeight,
+      );
+      if (!t) return;
       // Raw, like the floor drag below: the resolve owns the grid, the wall and
       // the floor-to-ceiling clamp.
       wantY.current = t[1];

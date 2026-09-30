@@ -77,7 +77,7 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### A moving wall takes a group, and what stands near it, along — branch `claude/affectionate-ritchie-ilawx1`
+### A moving wall takes a group, and what stands near it, along — merged in #192 (`7109dfe`)
 
 **Where to click.** A fresh **Rectangle** room, 2D Plan then 3D. Group the sofa with the
 coffee table (select both, **Group**), then push the sofa's wall out and back with the wall
@@ -94,6 +94,31 @@ group cannot follow without leaving the room, the whole group stays (`lib/wall-m
 **What "wrong" looks like.** Half a group moving. A lamp left floating where its nightstand was.
 A piece in the middle of the room (coffee table, dining set) following a wall. A TV on the
 opposite wall leaving its wall because its stand was grouped with the sofa. 3D and 2D disagreeing.
+
+**Seen by the user:** the group moving with its wall. Still owed a look: the lamp on the
+nightstand, and a typed width in Room.
+
+### A wall coming in pushes what it meets, and says what stopped it — branch `claude/affectionate-ritchie-ilawx1`
+
+**Where to click.** A fresh **Rectangle** room, 2D Plan then 3D. Drag the sofa's opposite wall
+in towards the sofa, all the way across the room, with the handle and then the arrow keys. Pull
+it back out. Lock the sofa (Inspector) and try again. Then put the coffee table between the wall
+and the sofa and push both.
+
+**What changed.** A wall took its own pieces along and walked straight through everything else.
+It now pushes whatever stands in its way, and whatever that piece meets in turn — a whole set at
+once, with what rests on it. A rug is pushed by the wall only, never by furniture, which slides
+over it. It stops where the stack runs out of room and says which piece stopped it: *"That wall
+stops here: the Sofa is locked."*, *"…the Sofa has no more room to move."*, or *"…the TV hangs
+on the far wall."* A print on a side wall slides along its wall as far as the corner. Drawn back
+out in the same drag, a pushed piece comes back to where it stood (`pushedByWall` in
+`lib/wall-move.ts`).
+
+**What "wrong" looks like.** A wall passing through the sofa. A pushed piece left behind when
+the wall goes back out. A pendant light or a picture high on the wall being shoved by a low
+table. A sentence naming the wrong piece, or none. 2D and 3D disagreeing.
+
+**Probed:** not yet.
 
 ### A wall stops before it runs into another wall — merged in #191 (`4572419`)
 
@@ -157,48 +182,35 @@ The three below are new, and each is here for a specific reason rather than by d
 rotate ring, because drei's `TransformControls` is a three.js object with **no DOM**, so
 nothing in Playwright can aim a press at its ring — the 2D half of that defect **is**
 browser-checked and is not in this list. The refusal sentence, because the question it
-raises is a judgement about what the app should do, not a fact a test can settle. The first item, the Move / Scale / Rotate controls, came later and is here because
-the handles are drawn in WebGL and only a hand on a real pointer can say whether they
-feel right.*
+raises is a judgement about what the app should do, not a fact a test can settle. The Move / Scale / Rotate item that came later was looked at on a phone and a laptop
+and is gone. The first item now, a TV changing walls, is here for the same reason it
+was: the piece is drawn in WebGL and only a hand on a real pointer can say whether it
+feels right.*
 
-### Move has no arrows, a TV rides its wall, and Scale is three dots — merged to `main` in `0ef90b6` (PR #188)
+### A TV follows the wall you point at, and right-click can change the model — branch `claude/affectionate-ritchie-ilawx1`
 
-**Where to click.** 3D tab, a fresh rectangular room.
+**Where to click.** 3D tab, a fresh **Rectangle** room, then an **L-Shape**. Select the
+**TV · 65″**, press **W**, and drag it: along its wall, round the corner onto the next wall,
+then straight across to the wall facing it. Do the same with the **Framed print**. In the L,
+take the print round the inside corner of the notch. Then right-click the sofa: the menu's
+last line now reads **Change the model…** where it used to read **Back where it was**.
 
-1. Select the **Sofa**, press **W**. Nothing should be drawn on it but the selection base.
-   Drag the sofa itself: it slides on the floor exactly as before.
-2. Select the **TV · 65″**, stay in **W**, and drag it **up and to one side** on its wall.
-   Then do the same to the **Framed print**, and try the **Door** (it should only slide
-   along, never lift).
-3. Select the Sofa again and press **S**. Three terracotta dots: one on the arm facing
-   you (width), one on the back or front facing you (depth), one above the seat (height).
-   Pull the arm dot outward, then the height dot up.
-4. Pull the width dot until the arm runs into a wall and let go there.
-5. Press **R**: one ring around the floor, nothing else.
-6. On a **phone**, repeat 3 with a finger.
+**What changed.** A wall piece was dragged across the plane of its own wall, which could carry
+it round a corner but never across the room: the far wall was not on that plane. It now moves
+onto whichever wall's surface is under the pointer, once the pointer is 15 cm clear of the
+corner the two walls share, so the TV does not flicker between two walls at a corner
+(`wallDragTarget` in `lib/wall-drag.ts`). Pointing at the floor keeps it on its wall. A TV
+**grouped** with its console stays on its wall on purpose: taking one member to the far wall
+would drag the whole set across the room. The right-click entry opens the same picker as the
+Inspector's **Change the model…** button, with the same name (`lib/swap-model.ts`).
 
-**What wrong looks like.**
+**What "wrong" looks like.** The TV jumping to a wall you are not pointing at, or hopping back
+and forth near a corner. The TV facing the wall instead of the room once it arrives. The spot
+you held drifting out from under the pointer after the switch. From the dollhouse view (the
+near walls hidden), the TV going onto a hidden wall instead of the one you can see. In the
+menu: the picker not opening, or the new model floating or sinking where the old one stood.
 
-- **Step 2:** the TV peels off the wall, lags behind the finger, or snaps back down on
-  release. Its bottom edge should land on the snap grid (the Inspector's mount height
-  reads a round number with snap on). The door lifting at all is wrong.
-- **Step 3:** the arm you did NOT pull moves. That is the whole point of the change,
-  since the old gizmo grew from the centre. A dot hiding behind the sofa, or hopping to
-  the other side mid-pull, is wrong too.
-- **Step 4:** the sofa jumps back to its old width, or passes into the wall. It should
-  rest touching the wall at the last width that fitted.
-- **Step 6:** a dot too small to hit on the first try, or a pull that orbits the camera
-  instead.
-
-**Probed in SwiftShader on `7aebe30`:** the arm pull took the sofa from 2.20 m to 2.37 m
-wide with its centre moving 85 mm, which is half the growth, so the far arm stood still.
-The height pull went 880 → 900 mm, the top of the sofa's range. A TV dragged up and
-left went to 1.82 m with its wall coordinate unchanged. Steps 4 and 6 and the door were
-not probed.
-
-**Seen by the user on a phone:** dragging a piece and the three scale dots (steps 1, 3
-and 6). Still owed a look: the TV and the door on their wall (step 2) and the arm run into
-a wall (step 4).
+**Probed:** not yet.
 
 ### A short piece climbs a tall one, and the plan cannot show it
 

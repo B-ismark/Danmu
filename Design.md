@@ -1292,7 +1292,14 @@ pair and they are **one row**, and the measured one survives in either photo ord
     (`lib/wall-drag.ts`), and the height the pointer asks for rides into
     `resolvePlacement` as `rawY`, bottom edge on the grid like the Inspector's mount
     height. A set with company is dragged on the floor as before, so it is never pulled
-    apart vertically.
+    apart vertically. **It changes walls by pointing**: when the pointer is on another
+    wall's inner face, more than `WALL_SWITCH_M` (0.15 m) off the current wall's line,
+    the target is laid on THAT wall (`wallDragTarget`), and `resolvePlacement`'s wall
+    snap turns the piece to face the room from it. Its own plane could round a corner
+    and never reach the wall across the room. The margin is what stops a piece held at
+    a corner from flipping walls every frame; the floor and ceiling ask for no switch;
+    an outer face never counts, so from the dollhouse view it is the wall you can see.
+    A lone piece only — a set stays on its wall (`Convoy.leadEdge`).
   - **Rotate is one ring**, drei's `TransformControls` with only the Y axis shown.
   - **Scale is three dots** (`StretchHandles.tsx`, arithmetic in `lib/stretch.ts`),
     one on each face it moves: width, depth, height. Pulling one moves THAT face and
@@ -1316,7 +1323,11 @@ pair and they are **one row**, and the measured one survives in either photo ord
   left-drag pans** — the gesture every 3D tool shares — which freed the right
   button, and **right-click now opens a menu**: the piece under the cursor gets
   the actions that were otherwise a trip to the Inspector or an undiscovered
-  single-key shortcut, empty floor gets the whole-scene ones. The caller passes the
+  single-key shortcut, empty floor gets the whole-scene ones. One of them is
+  **Change the model…**, the Inspector's own button under the Inspector's own name:
+  the swap lives in `lib/swap-model.ts` and its picker is mounted once per room tab
+  (`SwapModelHost`, opened by `useStudio.swapPartId`), so two triggers share one
+  dialog and one set of re-grounding rules. The caller passes the
   piece in rather than the menu finding it, which is why one component serves both
   surfaces without knowing anything about either. This paragraph used to add "both
   surfaces already keep `hoveredPartId` current"; **they did not** — nothing in the
@@ -1394,6 +1405,15 @@ pair and they are **one row**, and the measured one survives in either photo ord
   do not move: those edges stretch, they do not travel. A carried piece that
   would end up outside the room is left where it is and reported by
   `clearance.ts` — never resized, never shoved.
+- **What a wall coming in meets, it pushes** (`pushedByWall`, `lib/wall-move.ts`):
+  a piece the wall or a carried piece reaches, sharing its height and its stretch of
+  wall, is pushed ahead of it, and so is whatever that piece meets — a set whole, with
+  what rests on it. A rug is pushed by the wall and slid over by furniture. A piece on
+  a side wall slides along its wall; one on any other wall cannot move, and nor can a
+  locked piece. The wall stops where the first piece runs out of room and the refusal
+  names it (`pushRefusal` in `lib/wall-actions.ts`). A drag resolves the push from
+  pointer-down, so drawing the wall back out in the same gesture puts a pushed piece
+  back — and one that never had a position override does not keep one.
 
 ### Multi-select & grouping — `SelectionHeader.tsx`, `PartTree.tsx`
 - Shift-click adds to `selection: string[]`. "Group N" assigns a shared

@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { LibraryItem, ScenePart } from '@/lib/scene-spec';
 import { Icon } from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
 import { LibraryPicker } from './LibraryPicker';
+import { useStudio } from '@/lib/store';
+import { useRoomPart } from '@/lib/room-scene';
+import { swapPartModel } from '@/lib/swap-model';
 
 // The ONE way to change which model a piece uses. It used to be two buttons
 // side by side — "Swap model" (browse the catalog) and "AI refine" (describe it)
@@ -25,9 +28,8 @@ import { LibraryPicker } from './LibraryPicker';
 // carries into the swap. `sizeFromQuery` is where that lives, and it clamps.
 //
 // The swap itself is handed back to the caller (`onSwap`), because re-grounding
-// the piece for its new dimensions and mount type is physics the Inspector
-// already owns — doing it twice is how a swapped-in mirror ended up sunk into
-// the floor.
+// the piece for its new dimensions and mount type is physics `lib/swap-model.ts`
+// owns — doing it twice is how a swapped-in mirror ended up sunk into the floor.
 export function SwapModelModal({
   part,
   onClose,
@@ -70,5 +72,31 @@ export function SwapModelModal({
           a thing, and offering the Shift gesture here would lead nowhere. */}
       <LibraryPicker onPick={(item) => onSwap(item, item.dimMM)} initialQuery={query} maxHeight={320} />
     </Modal>
+  );
+}
+
+/** The one mount of the swap dialog on a room tab. The Inspector's button and the
+ *  right-click menu both open it by naming the piece (`setSwapPartId`); a piece
+ *  deleted or undone away while it is open closes it rather than swapping nothing. */
+export function SwapModelHost() {
+  const id = useStudio((s) => s.swapPartId);
+  const part = useRoomPart(id);
+  const close = () => useStudio.getState().setSwapPartId(null);
+  // Cleared, not just hidden: a stale id would reopen the dialog on the piece's
+  // return from an undo, long after anyone asked for it.
+  const gone = !!id && !part;
+  useEffect(() => {
+    if (gone) useStudio.getState().setSwapPartId(null);
+  }, [gone]);
+  if (!id || !part) return null;
+  return (
+    <SwapModelModal
+      part={part}
+      onClose={close}
+      onSwap={(item, dimMM) => {
+        swapPartModel(id, item, dimMM);
+        close();
+      }}
+    />
   );
 }

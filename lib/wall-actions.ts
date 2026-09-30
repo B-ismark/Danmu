@@ -22,13 +22,14 @@
 
 import { useSettings, useStudio } from './store';
 import { currentRoomScene } from './room-scene';
-import { attachedToWall, carryAttached } from './wall-move';
+import { attachedToWall, carryAttached, pushedByWall, type PushStop } from './wall-move';
 import { footprintBounds, offsetWall, wallOutwardNormal, wallTravel, type WallFault } from './footprint';
 import { useScene } from './scene-store';
 import { announce } from './announce';
 import { ROOM_SIDE_EPS, ROOM_SIDE_M, WALL_MIN_M } from './dimension-ranges';
 import { floorRefusal, furnitureFloor, namesTheStop, roomFloor, type FloorAxis } from './room-floor';
 import { formatDim } from './units';
+import type { Footprint } from './footprint';
 import type { ScenePart } from './scene-spec';
 
 /**
@@ -44,7 +45,37 @@ export function wallAttachments(index: number): string[] {
   // said the same thing. Without this a user who backs off a stopped wall, lets go
   // and pushes into it a second time is refused in silence.
   said = null;
-  return attachedToWall(currentRoomScene(), useScene.getState().room.footprint, index, useStudio.getState().parentIds);
+  const parts = currentRoomScene();
+  const footprint = useScene.getState().room.footprint;
+  const ids = attachedToWall(parts, footprint, index, useStudio.getState().parentIds);
+  gesture = { ids, index, parts, footprint, total: 0, pushed: new Set(), overrides: useStudio.getState().positions };
+  return ids;
+}
+
+/** The room as it stood when the current wall drag began, and how far the wall has
+ *  travelled since. What a wall PUSHES is resolved from here with the gesture's
+ *  total, never stepped from the last frame — so drawing the wall back out again
+ *  returns every pushed piece to where it stood, and a frame that stopped does not
+ *  poison the one after it. Keyed by the `ids` array itself: the drag hands the
+ *  same one to every frame, and any other caller does not have it. */
+let gesture: {
+  ids: string[];
+  index: number;
+  parts: ScenePart[];
+  footprint: Footprint;
+  total: number;
+  pushed: Set<string>;
+  /** The position overrides at pointer-down: a piece that had none gets none back
+   *  when it is returned, because a transform write is never free — an override
+   *  pins a piece against a re-detect and persists. */
+  overrides: Record<string, [number, number, number]>;
+} | null = null;
+
+/** The sentence for a wall stopped by what it was pushing. */
+function pushRefusal(stop: PushStop): string {
+  if (stop.reason === 'locked') return `That wall stops here: the ${stop.name} is locked.`;
+  if (stop.reason === 'wall') return `That wall stops here: the ${stop.name} hangs on the far wall.`;
+  return `That wall stops here: the ${stop.name} has no more room to move.`;
 }
 
 // ─── The refusal ────────────────────────────────────────────────────────────
@@ -266,6 +297,19 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
       delta = shape.travel;
     }
   }
+  // Then what stands in the way. A wall coming in pushes it ahead, and stops where
+  // the pushed stack runs out of room. Resolved from the gesture's start when this
+  // is a drag, so the answer depends on where the wall IS, not on the path.
+  const g = ids !== undefined && gesture !== null && gesture.ids === ids && gesture.index === index ? gesture : null;
+  const base = g ? g.parts : resolved;
+  const baseFp = g ? g.footprint : before;
+  const baseTotal = g ? g.total : 0;
+  const push = pushedByWall(base, baseFp, index, -(baseTotal + delta), attached, parentIds);
+  if (push.stoppedBy !== null) {
+    delta = -push.inward - baseTotal;
+    if (Math.abs(delta) <= ROOM_SIDE_EPS) delta = 0;
+    refusal = pushRefusal(push.stoppedBy);
+  }
   if (refusal !== null) say(index, cur, refusal);
   if (delta === 0) return 0;
   // Read before the move: the moved edge translates along this normal and keeps its
@@ -282,9 +326,31 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
     say(index, cur, 'That wall will not move any further.');
     return 0;
   }
-  if (attached.length === 0) return applied;
   const after = useScene.getState().room.footprint;
-  const moves = carryAttached(attached, currentRoomScene(), before, after, outward, applied, parentIds);
-  useStudio.getState().setTransformsFor(moves);
+  const moves = attached.length === 0 ? [] : carryAttached(attached, currentRoomScene(), before, after, outward, applied, parentIds);
+  // The push, at the travel the wall actually took. Recomputed only when the store
+  // clamped something `wallRefusal` did not foresee, which today it never does.
+  const pushes = applied === delta ? push.moves : pushedByWall(base, baseFp, index, -(baseTotal + applied), attached, parentIds).moves;
+  moves.push(...pushes);
+  if (g) {
+    g.total += applied;
+    // A piece pushed on an earlier frame that this travel no longer reaches goes
+    // back to where it stood when the drag began.
+    const now = new Set(pushes.map((m) => m.id));
+    const cleared: string[] = [];
+    for (const id of g.pushed) {
+      if (now.has(id)) continue;
+      const had = g.overrides[id];
+      if (had) moves.push({ id, pos: had });
+      else cleared.push(id);
+    }
+    g.pushed = now;
+    if (cleared.length > 0) {
+      const positions = { ...useStudio.getState().positions };
+      for (const id of cleared) delete positions[id];
+      useStudio.setState({ positions });
+    }
+  }
+  if (moves.length > 0) useStudio.getState().setTransformsFor(moves);
   return applied;
 }

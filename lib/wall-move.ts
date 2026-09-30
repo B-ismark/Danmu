@@ -32,11 +32,17 @@
 //     containment rule above is judged per set: one member that cannot follow keeps
 //     the whole set where it is, rather than leaving a lamp in mid-air over the spot
 //     its nightstand used to be.
+//   · **A wall coming in pushes what it meets; it never walks through it.** The
+//     carry above is for the pieces that BELONG to the wall. Everything else on its
+//     path — a sofa out in the room, the coffee table in front of a carried sofa —
+//     is pushed ahead of it, piece against piece, each set whole (`pushedByWall`).
+//     When the stack runs out of room the WALL stops, and says which piece stopped
+//     it; nothing is squeezed, resized or left half through the plaster.
 
 import { footFromPart, footInsidePoly, nearestEdge, obbExtentAlong, obbFromPart, type Foot } from './geometry';
-import { wallOutwardNormal, type Footprint } from './footprint';
+import { offsetWall, wallOutwardNormal, type Footprint } from './footprint';
 import { WALL_CARRY_REACH } from './layout-rules';
-import { ridesWall } from './physics';
+import { ridesWall, verticalExtent } from './physics';
 import { snapshotDescendants } from './rigid-parent';
 import type { ScenePart } from './scene-spec';
 
@@ -392,9 +398,22 @@ export function carryForResize(
     const d = deltas[i];
     if (d === 0) continue;
     const [ox, oz] = wallOutwardNormal(before, i);
-    for (const id of attachedToWall(parts, before, i, parentIds)) {
+    const carried = attachedToWall(parts, before, i, parentIds);
+    for (const id of carried) {
       const prev = shift.get(id) ?? [0, 0];
       shift.set(id, [prev[0] + ox * d, prev[1] + oz * d]);
+    }
+    // A wall coming in pushes what it meets, as far as there is room for it — a
+    // typed size cannot stop part-way the way a drag does, so what does not fit is
+    // pushed up to where it would leave the room, and `lib/clearance.ts` reports the
+    // rest.
+    if (d < 0) {
+      const byId = new Map(parts.map((p) => [p.id, p]));
+      for (const m of pushedByWall(parts, before, i, -d, carried, parentIds).moves) {
+        const p = byId.get(m.id)!;
+        const prev = shift.get(m.id) ?? [0, 0];
+        shift.set(m.id, [prev[0] + m.pos[0] - p.pos[0], prev[1] + m.pos[2] - p.pos[2]]);
+      }
     }
   }
   if (shift.size === 0) return [];
@@ -410,4 +429,190 @@ export function carryForResize(
   const out: CarriedPos[] = [];
   for (const [id, pos] of moved) if (!held.has(id)) out.push({ id, pos });
   return out;
+}
+
+/** Why a wall coming in had to stop. `room`: the pushed stack reached the far side
+ *  of the room. `locked`: a locked piece was in its path. `wall`: a piece hung on a
+ *  wall the push cannot slide it along — the far wall, parallel to this one. */
+export type PushStop = { id: string; name: string; reason: 'room' | 'locked' | 'wall' };
+
+export type WallPush = {
+  /** The inward travel the pushes allow: the travel asked for when everything in
+   *  the way can go ahead of the wall, less when something cannot. */
+  inward: number;
+  /** Where each pushed piece goes. Absolute, from the `parts` handed in. */
+  moves: CarriedPos[];
+  /** Set when `inward` came back short of the travel asked for. */
+  stoppedBy: PushStop | null;
+};
+
+/** A piece in the moving wall's own frame: `near`/`far` inward from the wall's
+ *  plane, `lo`/`hi` along it from the wall's midpoint, `bottom`/`top` in height. */
+type Band = {
+  p: ScenePart;
+  near: number;
+  far: number;
+  lo: number;
+  hi: number;
+  bottom: number;
+  top: number;
+};
+
+const TOUCH = 1e-6;
+
+/**
+ * What wall `index` pushes ahead of it when it comes `inward` metres into the room.
+ *
+ * `parts` and `poly` are the room as it was BEFORE the travel — for a drag, as it
+ * was at pointer-down, with `inward` the gesture's total. Resolving from the start
+ * rather than stepping from the last frame is what lets a wall pulled back again
+ * put everything it pushed back where it stood: a push is a correction, and
+ * stepping folds every correction into the next frame's base (CLAUDE.md, "restore
+ * what a gesture moved").
+ *
+ * `carried` are the ids `attachedToWall` gave the gesture. They move with the wall,
+ * exactly `inward`, and push what stands in front of them like the wall does — a
+ * sofa carried in against a coffee table takes the table along.
+ *
+ * The model is one-dimensional on purpose. A wall translates along its own normal,
+ * so everything it pushes goes the same way, and two pieces meet only if they
+ * overlap across the wall (along it) and in height: a pendant over a table is not
+ * in the table's way. Rugs are pushed by the wall and by nothing else — furniture
+ * stands on them, it does not shove them.
+ *
+ * Every set goes whole (`setsOf`): a merged set, a lamp on its table. A set that
+ * cannot move, or that would leave the room, stops the wall where it touched —
+ * found by bisection, because every constraint here grows with the travel, so the
+ * travel that fits is one interval.
+ */
+export function pushedByWall(
+  parts: ScenePart[],
+  poly: Footprint,
+  index: number,
+  inward: number,
+  carried: readonly string[],
+  parentIds: Record<string, string>,
+): WallPush {
+  const n = poly.length;
+  if (!(inward > 0) || n < 3 || index < 0 || index >= n) return { inward: Math.max(0, inward), moves: [], stoppedBy: null };
+  const a = poly[index];
+  const b = poly[(index + 1) % n];
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (len < 1e-6) return { inward, moves: [], stoppedBy: null };
+  const tx = (b[0] - a[0]) / len;
+  const tz = (b[1] - a[1]) / len;
+  const [ox, oz] = wallOutwardNormal(poly, index);
+  const mx = (a[0] + b[0]) / 2;
+  const mz = (a[1] + b[1]) / 2;
+
+  const band = (p: ScenePart): Band => {
+    const obb = obbFromPart(p.pos, p.rot, p.dimMM);
+    const dx = p.pos[0] - mx;
+    const dz = p.pos[2] - mz;
+    const c = -(dx * ox + dz * oz);
+    const en = obbExtentAlong(obb, ox, oz);
+    const along = dx * tx + dz * tz;
+    const et = obbExtentAlong(obb, tx, tz);
+    const [bottom, top] = verticalExtent(p.category, p.shape, p.dimMM, p.pos[1]);
+    return { p, near: c - en, far: c + en, lo: along - et, hi: along + et, bottom, top };
+  };
+
+  const fixed = new Set(carried);
+  const bands = parts.map(band);
+  const loose = new Set(parts.filter((p) => !fixed.has(p.id)).map((p) => p.id));
+  const unitOf = setsOf(loose, parts, parentIds);
+
+  // A piece hung on a wall slides along it when this wall meets it end-on, and
+  // cannot be pushed at all off a wall parallel to this one.
+  const pinned = (p: ScenePart): PushStop['reason'] | null => {
+    if (p.locked) return 'locked';
+    if (!ridesWall(p.category, p.shape)) return null;
+    const e = nearestEdge(poly, p.pos[0], p.pos[2]);
+    if (!e) return 'wall';
+    const [px, pz] = wallOutwardNormal(poly, e.index);
+    return Math.abs(px * ox + pz * oz) < 1e-6 ? null : 'wall';
+  };
+
+  // Who can push whom: B stands in front of A, across the wall they overlap, and
+  // they overlap in height. `gap` is the air between them along the push.
+  const pairs: { a: Band; b: Band; gap: number }[] = [];
+  for (const A of bands) {
+    if (A.p.category === 'rug') continue;
+    for (const B of bands) {
+      if (A === B || !loose.has(B.p.id) || B.p.category === 'rug') continue;
+      if (loose.has(A.p.id) && unitOf.get(A.p.id) === unitOf.get(B.p.id)) continue;
+      if (B.hi - A.lo <= TOUCH || A.hi - B.lo <= TOUCH) continue;
+      if (B.top - A.bottom <= TOUCH || A.top - B.bottom <= TOUCH) continue;
+      if (B.near < A.far - TOUCH) continue;
+      pairs.push({ a: A, b: B, gap: B.near - A.far });
+    }
+  }
+  // What the wall itself meets: inside the plane, across its span.
+  const facing = bands.filter((B) => loose.has(B.p.id) && B.far > TOUCH && B.hi > -len / 2 + TOUCH && B.lo < len / 2 - TOUCH);
+
+  const solve = (d: number) => {
+    const shift = new Map<string, number>();
+    const need = (B: Band, s: number) => {
+      const u = unitOf.get(B.p.id)!;
+      if (s > (shift.get(u) ?? 0) + 1e-9) {
+        shift.set(u, s);
+        return true;
+      }
+      return false;
+    };
+    for (const B of facing) need(B, d - Math.max(B.near, 0));
+    const of = (A: Band) => (fixed.has(A.p.id) ? d : (shift.get(unitOf.get(A.p.id)!) ?? 0));
+    // Relaxed to a fixed point. Every push goes the same way and only forward, so
+    // this terminates; the cap is for a float that refuses to settle.
+    for (let round = 0, changed = true; changed && round <= bands.length + 1; round++) {
+      changed = false;
+      for (const { a: A, b: B, gap } of pairs) {
+        const sa = of(A);
+        if (sa > gap && need(B, sa - gap)) changed = true;
+      }
+    }
+    const after = offsetWall(poly, index, -d);
+    let stop: PushStop | null = null;
+    const moves: CarriedPos[] = [];
+    for (const B of bands) {
+      const s = loose.has(B.p.id) ? (shift.get(unitOf.get(B.p.id)!) ?? 0) : 0;
+      if (s <= 1e-9) continue;
+      const p = B.p;
+      const pos: [number, number, number] = [p.pos[0] - ox * s, p.pos[1], p.pos[2] - oz * s];
+      const why = pinned(p);
+      if (why && !stop) stop = { id: p.id, name: p.name, reason: why };
+      if (!stop) {
+        // A piece hung on a side wall is judged along that wall only — its line on
+        // the plaster, not its depth, which straddles the boundary where containment
+        // is a coin flip. Exempting it outright slid a print past the far corner and
+        // out of the room.
+        const rider = ridesWall(p.category, p.shape);
+        const foot = (at: [number, number, number]) => {
+          const f = footFromPart(at, p.rot, p.dimMM, p.circle, p.shape);
+          return rider ? { ...f, hd: CONTAIN_EPS } : f;
+        };
+        if (contained(foot(p.pos), poly) && !contained(foot(pos), after)) {
+          stop = { id: p.id, name: p.name, reason: 'room' };
+        }
+      }
+      moves.push({ id: p.id, pos });
+    }
+    return { moves, stop };
+  };
+
+  const whole = solve(inward);
+  if (!whole.stop) return { inward, moves: whole.moves, stoppedBy: null };
+  let lo = 0;
+  let hi = inward;
+  let best = solve(0);
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    const r = solve(mid);
+    if (r.stop) hi = mid;
+    else {
+      lo = mid;
+      best = r;
+    }
+  }
+  return { inward: lo, moves: best.moves, stoppedBy: solve(hi).stop ?? whole.stop };
 }
