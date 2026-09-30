@@ -40,7 +40,7 @@ import { analyzeRoom } from '@/lib/clearance';
 import {
   costBreakdown,
   DEFAULT_WEIGHTS,
-  hangsFurtherThanLeft,
+  overhangsOffItsSpot,
   NAV_CELL,
   prepare,
   RULE_HANDLING,
@@ -683,11 +683,13 @@ describe('layout-rules · the report and the solver meet cleanly at TUCKED_CLASH
 // `good` placement, and a rug through the plaster is nobody's good placement.
 //
 // The disagreement is bounded, and the bound is the second half of this block: the
-// search forgives a rug the overhang it ALREADY HAD (`LayoutModel.overhang`). Charging
-// that too made **Fix all** pull a forgiven rug off its wall, and made a pinned rug
-// over the skirting refuse every Ideas press — `layout-solve` and `layout-shuffle`
-// hold those two. `costAt` prepares from each part's own `pos`, so a part's `pos` is
-// where the user left it and the placement is where the search is trying it.
+// search forgives a rug the overhang it ALREADY HAD (`LayoutModel.overhang`), on the
+// spot where it has it. Charging that too made **Fix all** pull a forgiven rug off its
+// wall, and made a pinned rug over the skirting refuse every Ideas press —
+// `layout-solve` and `layout-shuffle` hold those two. Forgiving it ANYWHERE the centre
+// stayed on the plan let the search spend it over another wall. `costAt` prepares
+// from each part's own `pos`, so a part's `pos` is where the user left it and the
+// placement is where the search is trying it.
 
 describe('layout-rules · a rug is forgiven by the report and held to the plaster by the search', () => {
   const rug = () => part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [0, 0, 0] });
@@ -722,6 +724,22 @@ describe('layout-rules · a rug is forgiven by the report and held to the plaste
     expect(costAt([leftAt(2.3)], [{ x: 2.5, z: 0, yaw: 0 }]).outside).toBeGreaterThan(0);
   });
 
+  it('and charges the whole measure off that spot — less overhang, or over another wall', () => {
+    // The allowance is one number, how far and not through which wall. Spendable
+    // anywhere, it bought **Fix all** 400 mm through a wall the user never touched
+    // (`tests/layout-solve.test.ts`). Off its spot a rug pays what a rug that started
+    // inside would pay there, whatever it was left with.
+    for (const at of [
+      { x: 2.1, z: 0, yaw: 0 }, // 100 mm through the east wall, part of the way back
+      { x: 0, z: 1.6, yaw: 0 }, // 300 mm through the south wall instead
+      { x: 2.3, z: 0, yaw: Math.PI / 4 }, // turned where it lies: its spot is a turn too
+    ]) {
+      const price = costAt([rug()], [at]).outside;
+      expect(price, `(${at.x}, ${at.z}) is through a wall`).toBeGreaterThan(0);
+      expect(costAt([leftAt(2.3)], [at]).outside, `(${at.x}, ${at.z})`).toBe(price);
+    }
+  });
+
   it('forgives nothing once the centre is off the plan — that is the report’s own finding', () => {
     const off: Placement[] = [{ x: 3.6, z: 0, yaw: 0 }];
     expect(issuesAt([leftAt(2.3)], off).some(containment)).toBe(true);
@@ -743,17 +761,19 @@ describe('layout-rules · a rug is forgiven by the report and held to the plaste
   // no prune, and a rug laid wall to wall has one place that costs it nothing — so
   // the answer must be able to hand that place back, and must never hand back a
   // place that is itself the report's finding.
-  describe('hangsFurtherThanLeft', () => {
+  describe('overhangsOffItsSpot', () => {
     const asks = (p: ScenePart, at: Placement) =>
-      hangsFurtherThanLeft(prepare({ parts: [p], movable: [true], footprint: RECT }), 0, at);
+      overhangsOffItsSpot(prepare({ parts: [p], movable: [true], footprint: RECT }), 0, at);
 
     it('is false where the user left it, so putting it back is always a cure', () => {
       expect(asks(leftAt(2.3), { x: 2.3, z: 0, yaw: 0 })).toBe(false);
     });
 
-    it('is true 5 mm further through, and false for moving it back in', () => {
+    it('is true 5 mm further through, true part of the way back, and false once inside', () => {
       expect(asks(leftAt(2.3), { x: 2.305, z: 0, yaw: 0 })).toBe(true);
-      expect(asks(leftAt(2.3), { x: 2.0, z: 0, yaw: 0 })).toBe(false);
+      expect(asks(leftAt(2.3), { x: 2.1, z: 0, yaw: 0 }), '100 mm through is still through').toBe(true);
+      expect(asks(leftAt(2.3), { x: 0, z: 1.6, yaw: 0 }), 'and so is another wall').toBe(true);
+      expect(asks(leftAt(2.3), { x: 1.99, z: 0, yaw: 0 })).toBe(false);
     });
 
     it('holds a rug laid wall to wall to the one place it fits', () => {

@@ -613,19 +613,26 @@ button** — it used to have none — and pressing it brings the rug back onto t
   the term should keep it in, not make it the only thing the search cares about.
 - **Try a fix** on the rug that spins and reports it found nothing.
 
-**A rug you left over the skirting is yours (review round 1).** The search now only stops a
-rug going FURTHER through a wall than you left it. Three presses to make, on a 6 × 4
-Rectangle with starter furniture:
+**A rug you left over the skirting is yours (review rounds 1 and 2).** Fix all and Ideas
+either leave a rug exactly where you left it or lay it wholly inside the walls — never
+through a wall you did not put it through. Four presses to make, on a 6 × 4 Rectangle with
+starter furniture:
 - Drag the rug so its east edge runs about 30 cm into the wall, centre still on the floor.
   Room check says nothing about it. Push the sofa into the doorway, press **Fix all**: the
   sofa moves, **the rug does not**, and the toast does not claim it brought anything back
   inside the room.
-- Pin that same rug and press **Ideas**: a page of ideas, not *No ideas this time*, and in
-  every card the rug is exactly where you left it.
-- Make the room 4.8 × 3.8 m and the rug as big as it goes (5 × 4 m), so it runs 10 cm up
-  every wall, then press **Ideas** three times: each press shows ideas, the rug never
-  moves, the rest of the room does. Wrong is any press saying *No ideas this time*, or a
-  card where the rug has shifted or turned.
+- Leave that rug unpinned and press **Ideas** three times: a page each time, and in every
+  card the rug is either exactly where you left it or wholly inside the room. Wrong is a
+  card where it runs through any wall — above all the north or south one, which you never
+  put it near. Pin it and press again: a page of ideas, and the rug exactly where you left
+  it in every card.
+- Make the room 5 × 4 m, pick the rug, and in the Inspector make it 5 × 4 m without
+  moving it, so it hangs over whichever wall it sat nearest. Press **Fix all**: the rug
+  stays put. Wrong is the rug sliding along so it runs through a different wall.
+- Make the room 4.8 × 3.8 m, make the rug as big as it goes (5 × 4 m) and drag it to the
+  middle of the room, so it runs 10 cm up every wall, then press **Ideas** three times:
+  each press shows ideas, the rug never moves, the rest of the room does. Wrong is any
+  press saying *No ideas this time*, or a card where the rug has shifted or turned.
 
 ### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 

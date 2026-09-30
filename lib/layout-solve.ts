@@ -47,7 +47,7 @@ import {
   angleDelta,
   bandCost,
   costBreakdown,
-  hangsFurtherThanLeft,
+  overhangsOffItsSpot,
   navigabilityCost,
   NAV_CELL,
   prepare,
@@ -670,8 +670,9 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
  *  A bedside lamp is an ordinary movable piece to the annealer, so a shuffle moved
  *  it independently of the nightstand it stood on and handed back a lamp floating at
  *  550 mm in the middle of the bed with nothing under it. **Nothing in the app could
- *  see that.** Every hard term in `costBreakdown` accumulates inside
- *  `if (!obstacle[i]) continue`, and `isObstacle` requires `pos[1] < 0.05`, so a
+ *  see that.** Every hard term in `costBreakdown` accumulated inside
+ *  `if (!obstacle[i]) continue` (containment is gated on `contained` now, which adds
+ *  a rug and nothing off the floor), and both require `pos[1] < 0.05`, so a
  *  piece standing on furniture is invisible to `overlap`, `outside`, `door`,
  *  `access` and `navigation` alike — which is the whole of `HARD_TERMS`, the entire
  *  list `isCleanShuffle` reads. `lib/clearance.ts` is silent for the same reason,
@@ -1264,12 +1265,13 @@ export function solveLayout(
   // by construction. A piece the prune restored is the user's again.
   winner = snapYaws(model, winner, weights, true, origin);
 
-  // ── A rug that would hang further over the skirting goes back where it was ──
+  // ── A rug the search left through a wall goes back where it was ──
   //
   // After every pass that can move a piece and before anything reads the answer, in
   // every mode. A rug the user left hanging over the walls — or laid wall to wall —
-  // has one place guaranteed to cost it nothing, the place it is standing, and
-  // almost nowhere else: every other spot hangs it further through. The anneal ends
+  // has one place guaranteed to cost it nothing, the place it is standing: it is
+  // forgiven its overhang there and nowhere else. For a rug laid wall to wall, or
+  // bigger than the room, almost every other spot hangs it through. The anneal ends
   // a centimetre or so from there, not ON it, and that residue is the whole defect.
   // Shuffle skips `pruneMoves`, the pass that would offer it its place back; and
   // even the prune cannot see a drift inside `MOVE_EPSILON`, because it only
@@ -1279,12 +1281,12 @@ export function solveLayout(
   // turned every Ideas press into "couldn't find another arrangement" — 4 ideas on
   // the commit before the search held rugs, NULL at every attempt after.
   //
-  // Putting it back is always legal (`hangsFurtherThanLeft`: where it stands prices
-  // to exactly zero), and it is the rule the allowance already states — an idea may
-  // not push a rug further through a wall than the user left it — applied to the
-  // answer instead of left to the search to find by chance. Before the riders,
-  // because a rug can carry them and they must follow it home.
-  winner = winner.map((p, i) => (hangsFurtherThanLeft(model, i, p) ? { ...origin[i] } : p));
+  // Putting it back is always legal (`overhangsOffItsSpot`: where it stands prices
+  // to exactly zero), and it is the rule the containment pass already states — an
+  // idea either leaves a rug where the user left it or lays it inside the walls —
+  // applied to the answer instead of left to the search to find by chance. Before the
+  // riders, because a rug can carry them and they must follow it home.
+  winner = winner.map((p, i) => (overhangsOffItsSpot(model, i, p) ? { ...origin[i] } : p));
 
   // Riders come along BEFORE the answer is measured — see `carryRiders`. It has to
   // sit after the last pass that can move a support (`snapYaws` above) and before
@@ -1400,17 +1402,18 @@ export function solveLayout(
   //
   // (An earlier version of this comment said a rider "gains nothing on any term
   // because it is invisible to all of them", which is wrong and was contradicted by
-  // this branch's own baseline note two files away: only the HARD terms sit behind
-  // `if (!obstacle[i]) continue`, the soft ones score every piece, and the 0.18 that
-  // moved is exactly a rider being scored where it actually ended up.)
+  // this branch's own baseline note two files away: only the HARD terms are gated —
+  // collisions on `obstacle`, containment on `contained` — the soft ones score every
+  // piece, and the 0.18 that moved is exactly a rider being scored where it actually
+  // ended up.)
   //
   // Filtered on what was actually CARRIED rather than on what `ridingParents` calls
   // a rider, and the two are not the same set: `carryRiders` declines a locked piece
-  // and declines one the search was scoring as a floor obstacle. Either of those
-  // moved because the SEARCH decided to move it, so it has a term and deserves its
-  // sentence. Filtering on the geometric map struck them out anyway — a piece moved
-  // by the search with nothing on screen saying why, which is the same silence this
-  // whole review found in the lock.
+  // and declines one the search was holding inside the walls itself (`contained`).
+  // Either of those moved because the SEARCH decided to move it, so it has a term
+  // and deserves its sentence. Filtering on the geometric map struck them out anyway
+  // — a piece moved by the search with nothing on screen saying why, which is the
+  // same silence this whole review found in the lock.
   const decided = moved.filter((i) => !carried.has(i));
   return {
     placements: winner,

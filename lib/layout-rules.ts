@@ -1296,11 +1296,12 @@ export function forgivesOverhang(part: { category: Category; shape: Shape; dimMM
  *  The room report forgives exactly that overhang (`clearance.ts` § 7b calls a rug
  *  outside only when its CENTRE is), and the two are not in conflict: the report is
  *  judging a rug somebody PUT there, and the search is choosing a place nobody chose.
- *  So a rug is held to the plaster only PAST the overhang it already had
- *  (`forgivesOverhang`, and `LayoutModel.overhang` in `layout-score`): an idea may not
- *  push it further through a wall than the user left it, and **Fix all** may not move
- *  a rug the report has just called fine. A rug standing off the plan is the report's
- *  own finding and is forgiven nothing.
+ *  So a rug is forgiven the overhang it already had on the spot it was left, and
+ *  nowhere else (`forgivesOverhang`, and `LayoutModel.overhang` / `outsidePast` in
+ *  `layout-score`): an idea either leaves it exactly there or lays it wholly inside
+ *  the walls — never spends the allowance over another wall — and **Fix all** may not
+ *  move a rug the report has just called fine. A rug standing off the plan is the
+ *  report's own finding and is forgiven nothing.
  *
  *  `lib/clearance.ts` asks this same predicate whether a containment finding is
  *  fixable, and `layout-score`'s `outside` term is gated on it — one set, so the

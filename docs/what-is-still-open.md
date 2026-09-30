@@ -3148,7 +3148,8 @@ on a room whose `outside` is 0 as handed over; the pinned rug's presses are 3 of
 **Then a third regression, found while measuring the second one's limit:** a rug bigger
 than the room. The largest rug the catalogue allows, 5 × 4 m, in a 4.8 × 3.8 rectangle —
 100 mm over every wall, centred, unpinned, carpet nobody trimmed to the plan — returned null
-on 3 of 3 presses; so did the same rug wall to wall in a 5 × 4 and in a 4.5 × 3.5. Not the
+on 3 of 3 presses; so did the same rug wall to wall in a 5 × 4, and 250 mm over every wall
+in a 4.5 × 3.5. Not the
 allowance: every hard term read 0 on the answer that came back, because that answer was the
 room as it stood. The anneal ends the rug near the one spot that costs it nothing rather
 than on it — 8–61 mm off across the finalists of six solves on a 6 × 4 probe; shuffle skips
@@ -3156,7 +3157,7 @@ than on it — 8–61 mm off across the finalists of six solves on a 6 × 4 prob
 pieces past `MOVE_EPSILON` (20 mm); so `outside` rose off zero by that residue, the
 impossibility veto reverted every candidate, and `isCleanShuffle` refused a result that
 moved nothing. `lib/layout-solve.ts` now sends a rug home after the last pass that can move
-it — `hangsFurtherThanLeft` (`lib/layout-score.ts`, sharing `outsidePast` with the
+it — `hangsFurtherThanLeft`, `overhangsOffItsSpot` since round 2 (`lib/layout-score.ts`, sharing `outsidePast` with the
 containment pass so the cure and the charge cannot come apart) — which is always legal,
 because where the rug stands prices to exactly zero by construction. After it, all three
 rooms give **4, 4, 4 ideas and the rug moves in none of them**. The parent also gave 4, 4,
@@ -3169,7 +3170,7 @@ One behaviour change rides it on purpose: a `refit` solve (Fix all's mode, seeds
 moved that rug 0.74–1.11 m on the parent in the 5 × 4 and the 4.8 × 3.8 — it could not see
 a rug, so nothing stopped it going further through every wall — and leaves it put now. A
 rug with room to slide still slides: 6500 × 3000 in a 6 × 4 has 1 m north–south, and refit
-moves it square to z = −0.48, 20 mm inside the south wall, where the parent turned it 16°
+moves it square to z = −0.48, 20 mm inside the north wall, where the parent turned it 16°
 through the walls.
 
 Three smaller findings, each fixed. The report picked a rug by `category` and the search by
@@ -3187,9 +3188,10 @@ all of them started with no overhang to forgive. The user-placed case is held by
 not by a sweep: `tests/layout-solve.test.ts` "Fix all leaves a rug the report forgives
 where the user put it" (seeds 1–3), `tests/layout-shuffle.test.ts` "still offers ideas
 around a pinned rug that hangs over the skirting" and "…when the rug is bigger than the
-room", and a `hangsFurtherThanLeft` describe in `tests/layout-conformance.test.ts`.
+room", and a `hangsFurtherThanLeft` describe (now `overhangsOffItsSpot`) in
+`tests/layout-conformance.test.ts`.
 
-Mutated, every kill named: allowance zeroed — four red; the prepare-side centre check
+Mutated (round 1), every kill named: allowance zeroed — four red; the prepare-side centre check
 dropped — the conformance "no allowance to spend" case and the solve Try-a-fix test; the
 evaluation-side centre check dropped — "forgives nothing once the centre is off the plan";
 the report back to `category` — "the report and the search pick a rug the same way"; the
@@ -3197,6 +3199,87 @@ carry gate back to `obstacle` — the riders test; the homing line removed — t
 the-room test; its centre gate dropped — "never sends a rug back to a centre the user left
 off the plan"; `> 0` as `>= 0` — three red; its rug gate and its containment gate dropped —
 one red each.
+
+**Review round 2 found the allowance too wide in the other direction: one number forgiven
+anywhere the centre stayed on the plan is an allowance the search can SPEND.** The round-1
+repair recorded how far a rug was through the plaster and charged only what exceeded it —
+but `outsideMeasure` is a share of the footprint, with no wall attached to it, so a rug left
+430 mm over the south wall of a 5 × 4 had 430 mm of forgiveness to use anywhere. A refit
+with the rug not placed by hand spent it: seeds 1–3 traded the 430 mm over the south wall
+for **403, 423 and 374 mm through the EAST wall** (keeping 124, 38 and 148 mm of the south),
+at no cost. The unpinned 6 × 4 with the rug 300 mm through the east wall did it in Ideas: press
+2's fourth idea hung it **58 mm through the north wall** instead. Two designs were measured
+and set aside before the one that shipped. A per-wall allowance cannot be written against
+this measure, which has no wall to attribute a share to. And **holding** the rug — leaving
+any rug the report forgives exactly where it lies, and refusing to let the search move it —
+closed the trade and broke `tests/rug-zones.test.ts`: its stray rug, left through the east
+and north walls of a 6 × 5, is the one the rug-zone rule exists to lay in front of the sofa,
+and held it stayed 3.219 m off its target.
+
+**What shipped forgives the overhang on the spot where it was left, and nowhere else**
+(`outsidePast`, `lib/layout-score.ts`). At the rug's own pose — `pos[0]`, `pos[2]` and
+`rot`, compared exactly — it pays what exceeds its recorded overhang, which is zero,
+because the recording and the charge are the same inputs through the same function.
+Anywhere else it pays the whole `outsideMeasure`. So a search answer can only leave a rug
+exactly where the user left it or lay it wholly inside the walls; there is no middle
+position to trade into, and the stray rug is free to go to the sofa. After it: the 5 × 4
+refit stays put at seeds 1–3, placed or not; the 6 × 4 unpinned rug is inside the walls in
+all **12 of 12** ideas over three presses, four ideas each; the bigger-than-the-room presses
+are 4, 4, 4 with the rug unmoved; the 5000 × 4000 rug wall to wall in a 5 × 4 and over
+every wall of a 4.8 × 3.8 gives 4, 4, 4 and of a 4 × 3 gives 4, 3, 4, the rug unmoved in
+every idea; `rug-zones` passes.
+One case moves on purpose: a rug left 300 mm through the east wall of a 6 × 4 and NOT
+dragged there comes 0.4–0.7 m west under a refit (x = 1.425, 1.576, 1.702 at seeds 1–3),
+bought by `relation` against `inertia`, with `outside` 0 before and 0 after — the room
+report had no finding and still has none, and the rug is now wholly on the floor. The same
+rug dragged there stays.
+
+The homing pass is still needed, for a different reason than before: a rug laid wall to
+wall has no inside spot to go to, so the anneal can only leave it a few millimetres off its
+own, which now costs the whole measure. It is renamed for what it asks —
+`overhangsOffItsSpot` (was `hangsFurtherThanLeft`): true when the placement is off the rug's
+own spot and hangs through any wall, not only further than before; false for a piece the
+search does not contain and for a rug whose centre was left off the plan, which is the
+report's finding and is **Try a fix**'s to move. Removed, all three of those rooms return
+null on 3 of 3 presses.
+
+Tests for it: `tests/layout-conformance.test.ts` "and charges the whole measure off that
+spot — less overhang, or over another wall" (a rug moved part of the way back in, moved
+onto another wall, and turned π/4 on its own centre each pay what a rug arriving there
+fresh would); `tests/layout-solve.test.ts` "Fix all does not trade a rug's overhang onto
+another wall" (the 5 × 4 at z = 0.43, seeds 1–3) and the not-placed loop beside the dragged
+one; `tests/layout-shuffle.test.ts` "moves a rug the user left over the skirting only to
+somewhere inside the walls" (twelve ideas, an exact count) and "still offers ideas around a
+rug laid wall to wall". Two assertions were vacuous and are gone: the bigger-than-the-room
+test asked `ideas.length > 0` inside a loop over `ideas` and `moved.length > 0` on a room
+whose other pieces always move.
+
+Mutated (round 2), every kill named: forgiven anywhere the centre is on the plan (round
+1's rule) — four red, among them the whole-measure case, the trade test and "only to
+somewhere inside the walls"; forgiven nowhere — six red, the pinned and bigger-than-the-
+room presses and the dragged Fix all among them; homing removed — the wall-to-wall and
+bigger-than-the-room presses; the spot compared without its turn — the π/4 case; homing's
+centre gate dropped — "never sends a rug back to a centre the user left off the plan".
+
+The smaller round-2 findings are fixed in place: `Design.md`'s rug paragraph, the
+Fix-all figures in `tests/layout-solve.test.ts` (322 / 311 / 356 mm, re-measured at the
+commit that introduced them), three comments in `lib/layout-solve.ts` that still described
+containment as gated on `obstacle`, and the § above's "south" for z = −0.48, which is north.
+
+**Filed, not fixed — two things the review found beside the change.**
+· **`arrange` from a starter plan scores the plan from its own positions**, so a starter
+  rug placed through a wall would arrive with an allowance it was never given by a user.
+  Latent: every seeder places with `footInsidePoly`, so no starter rug has an overhang to
+  record, and the § H.6.1 arrange sweep above is 0 of 15. It becomes real the day a seeder
+  places a rug any other way.
+· **Two sites still pick a rug by `category`:** `lib/drag-resolve.ts`'s containment
+  disjunction (`part.category === 'rug' && …`) and `lib/clearance.ts`'s floor-blocker
+  filter (`p.category !== 'rug'`), where the search and the report's containment rule now
+  read `forgivesOverhang` / `isObstacle`. A rug-shaped piece filed under another category is judged one way by the
+  drag and another by the search. Not widened into this PR because both are the drag's and
+  the report's behaviour rather than the search's; the gravity sites
+  (`lib/drag-resolve.ts`'s support test, `lib/layout-settle.ts`'s drop) stay category-based
+  on purpose — a rug lies on the floor because of what it is, not because of how it scores.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

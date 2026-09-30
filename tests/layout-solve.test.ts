@@ -672,10 +672,11 @@ describe('the solver and the room report agree', () => {
     // whose centre is on the floor, so a user can drag one 300 mm over the skirting
     // and Room check says nothing. When the search charged that overhang in every
     // mode, the next **Fix all** — `refit`, the rug in `placed` because a hand put it
-    // there — pulled it 320 mm off the wall on every seed and the toast called it
-    // "brought furniture back inside the room", overriding a placement the report had
-    // just called fine. `outside` read 208.01 before the press. The search forgives a
-    // rug the overhang it already had (`LayoutModel.overhang`), and charges past it.
+    // there — pulled it off the wall by 322, 311 and 356 mm on seeds 1–3 and the toast
+    // called it "brought furniture back inside the room", overriding a placement the
+    // report had just called fine. `outside` read 208.01 before the press. The search
+    // forgives a rug the overhang it already had (`LayoutModel.overhang`), on the spot
+    // where it has it.
     const base = defaultScene('rect', 6, 4);
     const ri = base.findIndex((p) => p.category === 'rug');
     expect(ri, 'the seeded 6 x 4 has a rug').toBeGreaterThanOrEqual(0);
@@ -690,6 +691,44 @@ describe('the solver and the room report agree', () => {
       const r = solveLayout(parts, RECT, lockedForSolve(parts, {}, null), { seed, mode: 'refit', placed: new Set([rug.id]) });
       expect(r.moved, `seed ${seed}: the rug stays`).not.toContain(ri);
       expect(r.breakdownBefore.outside, `seed ${seed}: nothing to fix`).toBe(0);
+    }
+
+    // The same rug NOT in `placed` — no hand put it there; a resize in the Inspector
+    // writes a size and no position. That rug is **Fix all**'s to lay like any piece
+    // nobody placed, and here the rug rule wants it back in front of the sofa: on
+    // seeds 1–3 it comes 0.4–0.7 m west, bought by `relation` against `inertia`. What
+    // the forgiveness decides is only where it may end — where it was left, or inside
+    // the walls — and `outside` is 0 on both sides, so no toast can say a wall was the
+    // reason.
+    for (const seed of [1, 2, 3]) {
+      const r = solveLayout(parts, RECT, lockedForSolve(parts, {}, null), { seed, mode: 'refit' });
+      const at = r.placements[ri];
+      expect(r.moved, `seed ${seed}, not placed: the rug rule lays it`).toContain(ri);
+      expect(roomContainment([at.x, 0, at.z], at.yaw, rug.dimMM, RECT).box, `seed ${seed}: inside the walls`).toBe(true);
+      expect([r.breakdownBefore.outside, r.breakdownAfter.outside], `seed ${seed}: no wall in it`).toEqual([0, 0]);
+    }
+  });
+
+  it('Fix all does not trade a rug\'s overhang onto another wall', () => {
+    // Review round 2's repro, the reachable way: the seeded 5 x 4 rug resized in the
+    // Inspector to the catalogue's largest, 5 x 4 m, where it lies — 430 mm over the
+    // south wall and flush with the other three, and not in `placed`. The allowance
+    // is one number, how far and not over which wall, and it was forgiven wherever
+    // the centre stayed on the plan; so on seeds 1–3 **Fix all** slid the rug to 124,
+    // 38 and 148 mm over the south wall and 403, 423 and 374 mm through the EAST one —
+    // a wall the user had not touched, and more overhang in total than it started
+    // with. Forgiven only on its own spot, it has nowhere to spend it.
+    const poly = footprintForLayout('rect', 5, 4);
+    const base = defaultScene('rect', 5, 4);
+    const ri = base.findIndex((p) => p.category === 'rug');
+    expect(ri, 'the seeded 5 x 4 has a rug').toBeGreaterThanOrEqual(0);
+    const parts = base.map((p, i) => (i === ri ? { ...p, dimMM: [5000, 4000, p.dimMM[2]] as [number, number, number] } : p));
+    const rug = parts[ri];
+    expect(rug.rot, 'square to the walls').toBe(0);
+    expect(rug.pos[2] * 1000, 'south of centre, so it hangs that far over the south wall').toBeCloseTo(430, 0);
+    for (const seed of [1, 2, 3]) {
+      const r = solveLayout(parts, poly, lockedForSolve(parts, {}, null), { seed, mode: 'refit' });
+      expect(r.placements[ri], `seed ${seed}: the rug lies where it was left`).toEqual({ x: rug.pos[0], z: rug.pos[2], yaw: rug.rot });
     }
   });
 });
