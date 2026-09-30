@@ -685,6 +685,14 @@ under the table's edge rather than on top of it.
 - A lamp or laptop dropped on the table falling to the floor. That is the other half of
   the rule and it must not have moved.
 
+**And one in the 3D tab only, with the Scale tool.** Give the table an odd size in the
+Inspector (1613 mm wide, say), select it and a tucked chair, press **S** for Scale, and
+drag the table by its BODY, not a handle. The set must move, and the Inspector must still
+read 1613 after you let go. Wrong: it reads 1610, or 3D refuses the drag while the same
+drag goes through in the plan. Then pull a scale handle: the size must still step by
+10 mm there. The rule is `gizmoResizing` in `lib/drag-convoy.ts`; `Draggable` is the one
+caller, and nothing mounts it in a test.
+
 ### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 
 **Ideas** sits where Shuffle did, beside **Fix**. It opens a card of arrangements: four

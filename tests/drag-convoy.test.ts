@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planConvoy, resolveConvoy, convoyRestore, gestureFor, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
+import { planConvoy, resolveConvoy, convoyRestore, gestureFor, gizmoResizing, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { resolvePlacement } from '@/lib/drag-resolve';
 import { selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import type { Poly } from '@/lib/geometry';
@@ -1339,6 +1339,18 @@ describe('gestureFor: while the gizmo is active it owns the whole answer', () =>
     // why the mode is not consulted on this path.
     expect(gestureFor(false, 'rotate', false)).toBe('move');
     expect(gestureFor(false, 'translate', true)).toBe('turn');
+  });
+});
+
+describe('gizmoResizing: a body drag with the Scale tool selected is a move', () => {
+  it('only the held scale handles change a size', () => {
+    // The defect: `Draggable` snapped and clamped the size whenever the Scale TOOL was
+    // selected, so dragging the piece's body rounded a 1613 mm table to 1610 and wrote
+    // it back on release.
+    expect(gizmoResizing(false, 'scale')).toBe(false);
+    expect(gizmoResizing(true, 'scale')).toBe(true);
+    expect(gizmoResizing(true, 'translate')).toBe(false);
+    expect(gizmoResizing(true, 'rotate')).toBe(false);
   });
 });
 

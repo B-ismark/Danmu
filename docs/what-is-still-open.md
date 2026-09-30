@@ -3623,6 +3623,13 @@ asks `hasFloorSharers` first.
 - *The 3D tab is not covered by a test.* `tests/seat-swap.test.tsx` mounts the real plan
   page and presses **Change the model**; the model page cannot be mounted here (R3F). The
   drag half is `lib/drag-resolve.ts` and `lib/drag-convoy.ts`, which both tabs call.
+  What both tabs call is not all of it, and review round 2 found the gap: `Draggable`
+  hands the lead's size in from `currentDim()`, which snapped and clamped it whenever the
+  Scale TOOL was selected, handles held or not. A body drag of a 1613 mm table asked for
+  its chairs' forgiveness at 1610, did not get it, and was refused in 3D while the plan
+  moved it; on any piece sized off the grid, the same drag quietly resized it on release.
+  Only held scale handles change a size now (`gizmoResizing`, tested; the one line in
+  `Draggable` that calls it is not, and `docs/visual-check.md` names the look).
 - *A new piece is asked about without its turn.* `placeNewPart` passes the probe no `rot`
   and no `circle`, so a round lamp added at an angle is measured as an unturned square.
   That is older than this fix and not its mechanism; the fix is one line.

@@ -206,6 +206,19 @@ export function gestureFor(
   return rotatedWithoutPointer ? 'turn' : 'move';
 }
 
+/** Whether this frame's size is the gizmo's to change — only while its SCALE handles
+ *  are held. With the Scale tool selected the piece's body can still be dragged, and
+ *  that is a move (`gestureFor`), which must leave the size exactly as it was.
+ *
+ *  `Draggable` asked the tool alone, so a body drag with Scale selected snapped the
+ *  size to the grid and wrote it back on release: a scanned 1613 mm table came out of
+ *  a plain move at 1610. And since `leadInherited` holds only while the lead's size is
+ *  unchanged, that table also lost its tucked chairs in the 3D tab, where the same
+ *  drag in the plan went through — one gesture, two tabs, two answers. */
+export function gizmoResizing(gizmoActive: boolean, gizmoMode: 'translate' | 'rotate' | 'scale'): boolean {
+  return gizmoActive && gizmoMode === 'scale';
+}
+
 /**
  * The world ANY travelling piece resolves against: everything that is not
  * travelling where it stands, and everything that IS travelling **at the position

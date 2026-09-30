@@ -62,7 +62,7 @@ import {
   type Resolved,
 } from '@/lib/drag-resolve';
 import { wouldCreateCycle } from '@/lib/rigid-parent';
-import { convoyRestore, gestureFor, leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
+import { convoyRestore, gestureFor, gizmoResizing, leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 import { Wobble } from './Wobble';
@@ -390,7 +390,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // handlers that can outlive the render that captured it.
     const base = renderBaseDim(part, useStudio.getState());
     let dim = dimFromGroupScale(base, ref.current.scale);
-    if (mode === 'scale') {
+    // Only while the scale handles are held — see `gizmoResizing`.
+    if (gizmoResizing(gizmoActive.current, mode)) {
       // Snap the resulting dims to the increment (TransformControls has no
       // native scaleSnap)…
       if (snapMode !== 'off') {
