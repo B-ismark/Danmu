@@ -78,25 +78,6 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### A size box keeps what you are typing through a pause — this branch, NOT LOOKED AT
-
-The "Use my own size" item was looked at on 2026-09-30 and is gone. What the user found
-while looking: type `2`, pause, go on with `.7`, and the box read **2.007** — the pause
-had committed the `2` and the box answered by rewriting itself `2.00` under the caret.
-Both size editors keep the draft as typed now, and tidy it when you leave the box.
-
-**Where to click.** Any room. In the Inspector's **Exact size**, type `2` into Width,
-wait a second, then type `.7`. Do the same in the Room panel's **Height**. Then, on a
-curtain, type `0.1` into Width, wait, and click somewhere else.
-
-**What right looks like.** The piece (and the room) changes to 2 m during the pause and
-to 2.7 m after — while the box shows exactly what you typed, `2` then `2.7`, and becomes
-`2.70` only once you click away. The curtain's `0.1` stays `0.1` while you are in the box
-and reads `0.40` (the smallest a curtain can be) after you leave it.
-
-**What wrong looks like.** Digits appearing that you did not type; a box that still shows
-`2` after you have left it; a box that shows one number while the piece is another size.
-
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
 **What is already settled.** A newly added fan hangs flush: looked at on the preview and fine.
@@ -2026,30 +2007,6 @@ the riser on top of the monitor when the monitor was listed first — filed ther
 two more of the same kind that are older than this branch: a tray across a coffee table and
 a box beside it can lift the box onto the tray, and a lamp over a box on a table can end up
 inside the box.
-
-### A lamp dropped on a table's corner stands on it — this branch (§ H.6.4 follow-ups), NOT LOOKED AT
-
-Adding a piece, and swapping one in the Inspector, used to ask what it stands on as if it
-were an unturned square. A round lamp mostly over a table's corner went to the floor, and a
-monitor turned to face a side wall was tested across the wrong way.
-
-**Where to click.** In **2D Plan**, drag a **Table lamp** from the Library so its centre
-is just inside a coffee table's corner, then look in 3D. Separately, put a desk against a
-side wall, and drop a **Monitor** near one end of it. Last, select any small piece near a
-table's corner and **Change the model** to a Table lamp. And put a tray on a plain box,
-select the box and **Pick a model** → Ottoman.
-
-**What right looks like.** A lamp that is mostly over the table stands on the tabletop; one
-mostly over the floor stands on the floor. The monitor turns to face the side wall and stands
-on the desk while most of it is over the desk. The swapped-in lamp is drawn round in 2D Plan,
-its Inspector says it is on the table, and dragging the table carries it along. The
-ottoman stays on the floor with the tray on it.
-
-**What wrong looks like.** A lamp on the floor with most of its base under the tabletop, or
-a monitor on the floor beside a desk it is mostly over. After the swap: a square lamp in the
-plan, an Inspector saying the lamp is floating, or the table leaving it behind — the store
-kept the old piece's outline until the next reload, and the fix has only a test behind it.
-An ottoman up on its own tray, with the tray still under it.
 
 ## Look and light
 
