@@ -275,7 +275,7 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     const small = part({ id: 'small', category: 'table', shape: 'desk-standard', dimMM: [700, 500, 750], pos: [0, 0, 0] });
     const c = chair('c', 0, 0);
     // The chair IS a surface the table would stand on: it covers 71% of the table's foot.
-    expect(highestSurfaceUnder([c], small.id, 0, 0, small.dimMM, 0, undefined)).toEqual({ id: 'c', y: 0.85 });
+    expect(highestSurfaceUnder([c], small.id, 0, 0, small.dimMM, 0, undefined, small.shape)).toEqual({ id: 'c', y: 0.85 });
     expect(findSupportDetailed([c], small, 0, 0, small.dimMM, 0, undefined)).toBeNull();
   });
 });
@@ -298,8 +298,8 @@ describe('what a piece is ON, as it stands, is still said truthfully', () => {
   });
 
   it('because the state question has no seat rule, and the drop question does', () => {
-    expect(highestSurfaceUnder([TABLE], up.id, up.pos[0], up.pos[2], up.dimMM, up.rot, up.circle)?.id).toBe('table');
-    expect(findSupportDetailed([TABLE], up, up.pos[0], up.pos[2], up.dimMM, 0, undefined)).toBeNull();
+    expect(highestSurfaceUnder([TABLE], up.id, up.pos[0], up.pos[2], up.dimMM, up.rot, up.circle, up.shape)?.id).toBe('table');
+    expect(findSupportDetailed([TABLE], up, up.pos[0], up.pos[2], up.dimMM, up.rot, up.circle)).toBeNull();
   });
 });
 

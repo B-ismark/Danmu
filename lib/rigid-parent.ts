@@ -277,7 +277,7 @@ export function ridingParents(parts: ScenePart[]): Record<string, string> {
   for (const p of parts) {
     if (!isFloorStanding(p.category, p.shape)) continue;
     if (p.pos[1] <= 0) continue;
-    const s = highestSurfaceUnder(parts, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle);
+    const s = highestSurfaceUnder(parts, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle, p.shape);
     if (!s) continue;
     if (Math.abs(p.pos[1] - s.y) >= SUPPORT_Y_EPS) continue;
     out[p.id] = s.id;

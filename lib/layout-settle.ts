@@ -446,7 +446,7 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
       // answer away whole, so an ottoman on a platform, beside a coffee table standing on
       // that platform, went through the platform to the floor.
       const lifted = found !== null && isSeating(roleOf(p)) && found.y > p.pos[1] + SUPPORT_Y_EPS;
-      const level = lifted ? highestSurfaceUnder(world, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle, p.pos[1] + SUPPORT_Y_EPS) : null;
+      const level = lifted ? highestSurfaceUnder(world, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle, p.shape, p.pos[1] + SUPPORT_Y_EPS) : null;
       const rest = lifted ? (level !== null && level.y > 0.3 ? level : null) : found;
       if (isTabletopProne(p.category) && floor && rest !== null) {
         p.pos[1] = rest.y;

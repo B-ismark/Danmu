@@ -606,7 +606,7 @@ export function restingOn(
   const bottom = verticalExtent(category, shape, dim, pos[1])[0];
   // The highest thing under the footprint whose top the piece could actually be
   // sitting on — anything higher is something it is INSIDE, not something it rests on.
-  const under = highestSurfaceUnder(parts, selfId, pos[0], pos[2], dim, rot, circle, bottom + SUPPORT_Y_EPS);
+  const under = highestSurfaceUnder(parts, selfId, pos[0], pos[2], dim, rot, circle, shape, bottom + SUPPORT_Y_EPS);
   if (under && Math.abs(bottom - under.y) <= SUPPORT_Y_EPS) {
     return { on: 'part', id: under.id, gap: bottom - under.y };
   }
@@ -631,7 +631,10 @@ export function restingOn(
  *  box, it is that box with width and depth swapped. Two of the four callers took
  *  the default. A monitor turned to face a side wall was asked about along the
  *  wrong axis and a round lamp as the square around it — measured, each was stood
- *  on the floor while more than half of it was over a desk or a coffee table.
+ *  on the floor while more than half of it was over a desk or a coffee table. The
+ *  outline is the SHAPE's too, which `SupportSelf` already carried and only the seat
+ *  rule read: an L-desk was measured as its box, and stood on a platform under 31%
+ *  of it — the corner it does not have made up the rest.
  *
  *  **This is the DROP question** — what would this piece land on here — and it
  *  carries the one rule that belongs to landing: a seat is never stood on the
@@ -651,10 +654,12 @@ export function findSupportDetailed(
   // coffee table from a dining table by its dimensions, and the fit test reads the
   // height (`tuckProfile`).
   const selfFit = tuckProfile({ category: self.category, shape: self.shape, dimMM: selfDim });
+  // Built once, with the shape, for both paths below — see the docblock for the L.
+  const me = footFromPart([x, 0, z], selfRot, selfDim, selfCircle, self.shape);
   // Nearly every piece in a room tucks under nothing and has nothing tucked under it,
   // and a drag asks this per frame — so the rule costs those pieces nothing.
   if (!hasFloorSharers(selfFit.role)) {
-    return topSurface(parts, (o) => o.id === self.id, x, z, selfDim, selfRot, selfCircle, Infinity);
+    return topSurface(parts, (o) => o.id === self.id, me, Infinity);
   }
   // A seat never stands on the surface it tucks under. The partner is not a support,
   // so the probe looks past it — and what it may find there is capped by it: nothing
@@ -669,7 +674,6 @@ export function findSupportDetailed(
   // SEAT is below the cap, and only support share keeps a cushion there from holding
   // the table. Both footprints carry their shape, as in `collidesAt`: a chair standing
   // in an L-desk's open corner is inside the desk's box and under none of the desk.
-  const me = footFromPart([x, 0, z], selfRot, selfDim, selfCircle, self.shape);
   const partners = new Set<string>();
   let under = Infinity;
   for (const o of parts) {
@@ -685,7 +689,8 @@ export function findSupportDetailed(
       o.id === self.id ||
       partners.has(o.id) ||
       verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1] >= under,
-    x, z, selfDim, selfRot, selfCircle, Infinity,
+    me,
+    Infinity,
   );
 }
 
@@ -695,9 +700,9 @@ export function findSupportDetailed(
  *  banner must say so. Never ask it where a piece will land — that is
  *  `findSupportDetailed`, and the difference is the seat rule.
  *
- *  The turn and outline are required here for the drop question's reason, one
- *  question over: a banner that read a round lamp as its square said "floating"
- *  about a lamp the drop had just stood on a table's corner. */
+ *  The turn and outline — round, and the shape's own — are required here for the
+ *  drop question's reason, one question over: a banner that read a round lamp as its
+ *  square said "floating" about a lamp the drop had just stood on a table's corner. */
 export function highestSurfaceUnder(
   parts: SupportCandidate[],
   selfId: string,
@@ -706,6 +711,7 @@ export function highestSurfaceUnder(
   selfDim: [number, number, number],
   selfRot: number,
   selfCircle: boolean | undefined,
+  selfShape: Shape | undefined,
   /** Ignore anything whose top is above this. Absent means "no ceiling".
    *
    *  `restingOn` is the caller that needs it, and the reason is that this function
@@ -715,7 +721,7 @@ export function highestSurfaceUnder(
    *  over a desk lamp and the lamp is suddenly reported airborne without moving. */
   maxTop = Infinity,
 ): { id: string; y: number } | null {
-  return topSurface(parts, (o) => o.id === selfId, x, z, selfDim, selfRot, selfCircle, maxTop);
+  return topSurface(parts, (o) => o.id === selfId, footFromPart([x, 0, z], selfRot, selfDim, selfCircle, selfShape), maxTop);
 }
 
 /** The one loop both questions share: the highest floor-standing, non-rug top that
@@ -723,14 +729,9 @@ export function highestSurfaceUnder(
 function topSurface(
   parts: SupportCandidate[],
   skip: (o: SupportCandidate) => boolean,
-  x: number,
-  z: number,
-  selfDim: [number, number, number],
-  selfRot: number,
-  selfCircle: boolean | undefined,
+  mover: Foot,
   maxTop: number,
 ): { id: string; y: number } | null {
-  const mover = footFromPart([x, 0, z], selfRot, selfDim, selfCircle);
   const moverArea = footArea(mover);
   // A footprint with no area has nothing to rest ON — no share of it can meet
   // the bar, and dividing by it would produce Infinity or NaN.
