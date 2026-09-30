@@ -542,11 +542,12 @@ describe('every caller that moves a piece to what it finds', () => {
     // the tray on the floor straight through the ottoman: `[{ id: 'tray', y: 0 }]` on
     // this PR's first commit, `[]` before it and after this one.
     //
-    // A LARGE ottoman on purpose. Under a 550 × 400 × 420 one the tray covers the
-    // whole seat, and `settleHeights` lifts the ottoman onto the tray standing on it —
-    // ottoman to 0.48, tray to 0.90 — for every tray role, before § H.6.3 as well as
-    // after it. That is a separate defect, filed in `docs/what-is-still-open.md`
-    // § H.6.3, and this fixture keeps it out of the one being tested here.
+    // A LARGE ottoman, which kept a second defect out of this test while it was open:
+    // under a 550 × 400 × 420 one the tray covers the whole seat, and `settleHeights`
+    // lifted the ottoman onto the tray standing on it — ottoman to 0.48, tray to 0.90 —
+    // for every tray role. That one is fixed and held in `tests/layout-settle.test.ts`
+    // ("is not held up by what stands on it"); the fixture stays large so this test
+    // keeps asking only the role question.
     const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [750, 450, 60], pos: [0, 0.42, 0] });
     const big = part({ id: 'ottoman', category: 'ottoman', shape: 'ottoman', dimMM: [1200, 1000, 420], pos: [0, 0, 0] });
     expect(roleOf(tray)).toBe('other');

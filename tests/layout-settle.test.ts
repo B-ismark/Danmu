@@ -219,6 +219,29 @@ describe('settleHeights · a rider whose support has moved', () => {
     expect(by.get(lamp.id)?.y, 'and the lamp onto the desk it now stands on').toBeCloseTo(0.75, 9);
   });
 
+  it('is not held up by what stands on it: a tray on an ottoman, in either order', () => {
+    // The probe takes the highest top over the footprint and never asks which way up
+    // the pair is. A 750 × 450 tray covers a 550 × 400 ottoman, so the ottoman took the
+    // tray as its support — 0.48, then the tray 0.90 on top of it, both in the air.
+    const ottoman = part({ category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420], pos: [0, 0, 0] });
+    const tray = (y: number) => part({ category: 'other', shape: 'box', dimMM: [750, 450, 60], pos: [0, y, 0] });
+    const on = tray(0.42);
+    expect(settleHeights([ottoman, on], 2.8)).toEqual([]);
+    expect(settleHeights([on, ottoman], 2.8)).toEqual([]);
+    // From a scan both enter at y = 0 in the detector's order, and a tie keeps it: the
+    // tray listed first took the ottoman's top, and then the ottoman took the tray's. The
+    // tray going UP is the pair to every "stays" above — a probe that refused everything
+    // would pass them.
+    const scanned = tray(0);
+    expect(settleHeights([scanned, ottoman], 2.8)).toEqual([{ id: scanned.id, y: 0.42 }]);
+    expect(settleHeights([ottoman, scanned], 2.8)).toEqual([{ id: scanned.id, y: 0.42 }]);
+    // Standing on is the resting question, read with its tolerance: a tray 20 mm into the
+    // cushion — the ottoman made shorter under it — is still on it, and comes back up to
+    // the top rather than lifting the ottoman over itself.
+    const sunk = tray(0.4);
+    expect(settleHeights([ottoman, sunk], 2.8)).toEqual([{ id: sunk.id, y: 0.42 }]);
+  });
+
   it('measures a mounted piece by its CENTRE, so the ceiling clamp is not off by h/2', () => {
     // `pos[1]` is a bottom for a floor anchor and the mesh CENTRE for every other one.
     // This clamp used to read `p.wallMounted || p.shape === 'fan' || p.shape ===

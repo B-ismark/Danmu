@@ -3658,13 +3658,28 @@ asks `hasFloorSharers` first.
 - *A small low box is still a side table.* `roleOf` asks "under 700 mm both ways" before it
   asks the new height floor, so a 400 × 300 tray reads as a side table. A side table has no
   floor sharers, so nothing here depends on it, and it is older than this fix.
-- **Found while testing, not fixed: an ottoman climbs onto the tray standing on it.**
-  `settleHeights` resolves lowest first and its probe has no below-test, so a
-  tabletop-prone piece can take the piece resting on it as its support. A 750 × 450 tray
-  on a 550 × 400 × 420 ottoman: the ottoman goes to 0.48 m, then the tray to 0.90 m, both in the
-  air. Measured the same before this fix (for every tray size tried), after its first
-  commit (for trays too small to read as a coffee table) and now. A large ottoman the tray
-  covers less than half of is unaffected, which is what the tray test uses.
+- **Found while testing, fixed after it: an ottoman climbed onto the tray standing on it.**
+  `settleHeights` resolves lowest first and its probe had no below-test, so a
+  tabletop-prone piece could take the piece resting on it as its support. A 750 × 450 tray
+  on a 550 × 400 × 420 ottoman: the ottoman went to 0.48 m, then the tray to 0.90 m, both in
+  the air. Reached from a scan, not only from a hand-built fixture: every piece enters at
+  y = 0 and a tie keeps the detector's order, so a tray listed before its ottoman first takes
+  the ottoman's top and the ottoman then takes the tray's (0.48 m, measured). The pass now
+  leaves out of a piece's probe anything whose underside is within `SUPPORT_Y_EPS` of that
+  piece's top, or above it — "standing on" is the resting question, so it reads the resting
+  tolerance. Five mutants of the filter (no filter, no tolerance, tolerance added the wrong
+  way, the piece's bottom for its top, the other piece's top for its underside) all fail
+  `tests/layout-settle.test.ts`. It is only the resting half of a below-test: a support that
+  starts partway up its rider still counts, which is the case parked in that file.
+- **Found while fixing that, not fixed: a drag climbs onto an unlinked rider the same way.**
+  A drag leaves a piece's carried children out of its world only when they are *linked*
+  (`parentIds`, via `snapshotDescendants`), and the support probe asks the same highest-top
+  question with no below-test. A scanned room has no links — the settle pass above writes
+  none — so nudging that ottoman 10 mm with the tray on it puts it at 0.48 m on the tray,
+  reported valid; a 500 mm box under another the same size goes to 0.80 m. Linked (by hand,
+  or after a drag has re-parented the tray), the same nudge stays at 0 m. The fix is the
+  same filter in `findSupportDetailed`'s caller on the drag path, and it is not this
+  commit's mechanism.
 
 Tests: `tests/seat-support.test.ts` (32) and `tests/seat-swap.test.tsx` (3). Every clause is
 a pair, with a table lamp at the same spot that must still land, because a probe that

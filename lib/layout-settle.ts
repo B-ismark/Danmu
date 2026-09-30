@@ -62,7 +62,7 @@ import {
   type Poly,
 } from './geometry';
 import { isObstacle, profilesTuck, tuckProfile, WALL_GAP, type TuckProfile } from './layout-rules';
-import { findSupportDetailed, isFloorStanding, isTabletopProne, MOUNT_PAD, ridesWall, verticalExtent } from './physics';
+import { findSupportDetailed, isFloorStanding, isTabletopProne, MOUNT_PAD, ridesWall, SUPPORT_Y_EPS, verticalExtent } from './physics';
 import type { ScenePart, Shape } from './scene-spec';
 
 // Breathing room kept off a wall comes from `layout-rules` (imported above) rather
@@ -307,6 +307,15 @@ export type HeightFix = {
  *  `MIN_SUPPORT_SHARE` of the mover, above or below — so a lamp resolved before the
  *  desk it stands on can come back resting on itself-from-below.
  *
+ *  **This pass has one below-test of its own, and it is only the resting half.** A
+ *  piece is not held up by what stands on it: anything whose underside is within
+ *  `SUPPORT_Y_EPS` of the piece's top, or above it, is left out of that piece's probe.
+ *  Ascending Y could not give that, because a scan hands every piece in at y = 0 and a
+ *  tie keeps the detector's order — a tray listed before its ottoman took the
+ *  ottoman's top, and then the ottoman took the tray's. It is not the whole below-test
+ *  the next paragraph asks for: a support that starts partway up its rider still
+ *  counts, which is the case parked there.
+ *
  *  **Ascending Y is necessary and it is NOT sufficient, and the earlier wording here
  *  claimed otherwise.** It said "every support has already reached its final height
  *  when the thing riding it asks", which holds only while every support starts BELOW
@@ -365,8 +374,18 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
     const floor = isFloorStanding(p.category, p.shape);
 
     if (p.category !== 'rug') {
+      // Nothing standing on a piece holds it up. The probe takes the highest top over
+      // the footprint and never asks which way up the pair is, so a tray covering an
+      // ottoman was the ottoman's support: it went up onto the tray and the tray up
+      // onto it, both in the air. Reached from a scan, where every piece enters at
+      // y = 0 and the order is the detector's: the tray first takes the ottoman's top,
+      // then the ottoman takes the tray's. "Standing on" is the resting question, so
+      // it reads the resting tolerance — an underside within it of this piece's top,
+      // or anywhere above it, is not under it.
+      const top = verticalExtent(p.category, p.shape, p.dimMM, p.pos[1])[1];
+      const under = work.filter((q) => verticalExtent(q.category, q.shape, q.dimMM, q.pos[1])[0] < top - SUPPORT_Y_EPS);
       const support = floor
-        ? findSupportDetailed(work, p, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
+        ? findSupportDetailed(under, p, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
         : null;
       const y = support !== null && support.y > 0.3 ? support.y : null;
       if (isTabletopProne(p.category) && floor && y !== null) {
