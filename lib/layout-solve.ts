@@ -660,7 +660,7 @@ export function withRiders(ids: Set<string>, parts: ScenePart[]): Set<string> {
 export function withCompany(ids: Set<string>, parts: ScenePart[]): Set<string> {
   const byGroup = new Map<string, string[]>();
   for (const p of parts) {
-    if (p.groupId === undefined) continue;
+    if (!p.groupId) continue;
     const g = byGroup.get(p.groupId);
     if (g) g.push(p.id);
     else byGroup.set(p.groupId, [p.id]);
@@ -669,7 +669,7 @@ export function withCompany(ids: Set<string>, parts: ScenePart[]): Set<string> {
   for (;;) {
     const next = withRiders(out, parts);
     for (const p of parts) {
-      if (p.groupId !== undefined && next.has(p.id)) for (const id of byGroup.get(p.groupId)!) next.add(id);
+      if (p.groupId && next.has(p.id)) for (const id of byGroup.get(p.groupId)!) next.add(id);
     }
     if (next.size === out.size) return out;
     out = next;
@@ -697,7 +697,7 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
   parts.forEach((p, i) => {
     if (p.groupId && !own[i]) held.add(p.groupId);
   });
-  return parts.map((p, i) => own[i] && !(p.groupId !== undefined && held.has(p.groupId)));
+  return parts.map((p, i) => own[i] && !(p.groupId && held.has(p.groupId)));
 }
 
 /** The merged sets a solve moves, each as ONE rigid body.
@@ -728,7 +728,7 @@ export type RigidSets = {
 export function rigidSets(parts: ScenePart[], movable: boolean[]): RigidSets {
   const byGroup = new Map<string, number[]>();
   parts.forEach((p, i) => {
-    if (p.groupId === undefined || !movable[i]) return;
+    if (!p.groupId || !movable[i]) return;
     const g = byGroup.get(p.groupId);
     if (g) g.push(i);
     else byGroup.set(p.groupId, [i]);

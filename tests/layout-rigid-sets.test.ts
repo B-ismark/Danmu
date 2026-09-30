@@ -106,6 +106,16 @@ describe('movableFor: a merged set moves whole or not at all', () => {
     const plain = [a, b, c, d, loose].map(({ groupId: _g, ...p }) => p as ScenePart);
     expect(movableFor(plain, [false, true, false, false, false])).toEqual([true, false, true, true, true]);
   });
+
+  it('an empty group id is no group, as the drag and the room file read it', () => {
+    // `drag-convoy` skips a falsy `groupId` and `scene-file` never writes one, so a
+    // stray '' must not make two unrelated pieces one body here either.
+    const x = part({ id: 'x', category: 'chair', shape: 'chair-dining', groupId: '' });
+    const y = part({ id: 'y', category: 'chair', shape: 'chair-dining', groupId: '', pos: [1, 0, 0] });
+    expect(movableFor([x, y], [true, false])).toEqual([false, true]);
+    expect(rigidSets([x, y], [true, true]).sets).toEqual([]);
+    expect([...withCompany(new Set(['x']), [x, y])]).toEqual(['x']);
+  });
 });
 
 describe('rigidSets: which member leads', () => {
