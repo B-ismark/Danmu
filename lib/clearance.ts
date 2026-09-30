@@ -65,6 +65,7 @@ import {
   type RuleKind,
 } from './layout-rules';
 import { dimRangeFor } from './dimension-ranges';
+import { movableFor } from './layout-solve';
 
 export type ClearanceSeverity = 'error' | 'warn' | 'info';
 
@@ -810,9 +811,10 @@ export function analyzeRoom(
   // `RULE_HANDLING.movable` answers "could rearranging clear it", and the honest
   // answer here depends on the PIECE, not on where it happens to be standing. The
   // first version said `movable: true` for everything, which put a **Try a fix**
-  // button on a wall-mounted TV that `movableFor` (`!locked && !p.wallMounted`) can
-  // never move. A button that spins and then reports it found nothing is the exact
-  // anti-pattern this table exists to prevent.
+  // button on a wall-mounted TV that `movableFor` (not locked, not wall-mounted, and
+  // not merged with a piece that is either) can never move. A button that spins and
+  // then reports it found nothing is the exact anti-pattern this table exists to
+  // prevent.
   //
   // The SECOND version split on geometry — centre off the plan is fixable, merely
   // crossing a wall is not — and a user found it in one screenshot within a day: a
@@ -844,14 +846,28 @@ export function analyzeRoom(
   // of overhang on a sofa. `outsideDeficit` is corner-exact and non-zero as soon as
   // any corner is out, so `outside` is now priced across the whole range in which it
   // is reported. Without that, `movable: true` here would have been a second lie.
-  for (const p of parts) {
+  //
+  // The cost term seeing a piece is half of "could rearranging clear it"; the other
+  // half is whether the solve may move it at all, and that is `movableFor`, the
+  // solver's own answer rather than a copy of it. A sofa merged with a wall-mounted
+  // TV is an obstacle the term prices, and it is held by its set — the solver moves
+  // a set whole or not at all, and never moves the TV — so a button on it would spin
+  // and report nothing. `ScenePart.locked` (from the photo) is read because the
+  // solve reads it too (`lockedForSolve`); the user's own pins live in the studio
+  // store, which this pure report cannot see.
+  const free = movableFor(
+    parts,
+    parts.map((p) => p.locked),
+  );
+  for (const [i, p] of parts.entries()) {
     const c = roomContainment(p.pos, p.rot, p.dimMM, poly, p.circle, p.shape);
     const out = forgivesOverhang(p) ? !c.centre : !(c.box && c.centre);
     if (!out) continue;
     // WHERE it is — the title and the remedy sentence.
     const standing = !c.centre;
     // WHETHER anything can be done — the rule, and so the button.
-    const fixable = containedBySearch(p);
+    const searchable = containedBySearch(p);
+    const fixable = searchable && free[i];
     issues.push({
       id: `${fixable ? 'outside' : 'outside-immovable'}-${p.id}`,
       rule: fixable ? 'outside' : 'outside-immovable',
@@ -866,7 +882,9 @@ export function analyzeRoom(
           : `“${p.name}” crosses a wall: part of it is outside the room.`) +
         (fixable
           ? ' Drag it back inside, or use Try a fix.'
-          : standing
+          : // A floor piece the solve may not move is still a floor piece: the wall
+            // rider's sentence would tell someone to slide a sofa along its wall.
+            standing || searchable
             ? ' Drag it back inside.'
             : ' Turn it, move it along the wall, or give it a wall it fits on.'),
       partIds: [p.id],

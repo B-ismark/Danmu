@@ -215,8 +215,8 @@ export const RULE_HANDLING: Record<
   tv: { costTerm: 'relation', movable: true },
   // Only ever emitted for a piece the solver can BOTH move and price, which is
   // `containedBySearch` — and that predicate is doing two jobs here, both of them
-  // real. `movableFor` is `!locked && !p.wallMounted`, so a wall rider is excluded
-  // from every solve this app runs; and `c.outside` accumulates inside
+  // real. `movableFor` refuses a locked or wall-mounted piece, and any piece merged
+  // with one, so a wall rider is excluded from every solve this app runs; and `c.outside` accumulates inside
   // `if (!m.contained[i]) continue`, so a piece under `OBSTACLE_HEIGHT` and anything
   // standing on a surface are invisible to the term whatever the report says. Both
   // exclusions are in the row's own predicate now, because a `movable: true` that is
@@ -227,7 +227,9 @@ export const RULE_HANDLING: Record<
   // Containment. The two rows are the same fault seen from opposite sides of one
   // question — can the solver do anything — and `clearance.ts` decides which by
   // asking `containedBySearch`, the SAME predicate the `outside` term's containment
-  // pass gates on. That identity is what makes both rows true rather than plausible,
+  // pass gates on, and then `movableFor`, the same answer the solve reads — a sofa
+  // merged with the TV on the wall is priced and still held by its set. That identity
+  // is what makes both rows true rather than plausible,
   // and `tests/layout-conformance.test.ts` pins it with a sofa and a rug. (The term
   // also prices a carried rider, on a pass of its own — and that pass is why a
   // rider's finding is still the second row: see its reason.)
@@ -244,7 +246,10 @@ export const RULE_HANDLING: Record<
       'where its support will carry it, and forgiven what it hangs past the walls ' +
       'on the spot the user left it on — the spot this finding describes — so it ' +
       'costs nothing where it stands and nothing once inside either. No gradient to ' +
-      'descend, and a button here would spin and report nothing. ' +
+      'descend, and a button here would spin and report nothing. The same row covers ' +
+      'a piece the term does price but the solve may not move (`movableFor`): one ' +
+      'from the photo, or one merged with a piece that is from the photo or on a ' +
+      'wall, which the set holds where it stands. ' +
       'Turning it, sliding it along its wall or giving it a wall it fits on is the ' +
       'user’s move, not the annealer’s.',
   },

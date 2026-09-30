@@ -599,6 +599,35 @@ describe('a piece that is not in the room', () => {
     expect(outside([sofa(2.5299, 0, Math.PI / 2)]), '4.9 mm out is within the slack').toEqual([]);
     expect(outside([sofa(2.5301, 0, Math.PI / 2)]).length, '5.1 mm out is not').toBe(1);
   });
+
+  it('offers Try a fix only where the solve may move the piece', () => {
+    // A merged set moves whole or not at all, and the solve never moves a
+    // wall-mounted piece, so a sofa merged with the TV on the wall is held where it
+    // stands. The cost term still sees the sofa — it is an obstacle — which is why
+    // `containedBySearch` alone put a button on it that could only spin. Each row
+    // below differs from the plain sofa by the one thing that holds it.
+    const tv = () =>
+      part({ category: 'tv', shape: 'tv', dimMM: [1200, 60, 700], pos: [0, 1.2, -1.95], wallMounted: true });
+    const ruleOf = (parts: ScenePart[]) => outside(parts).map((i) => i.rule);
+
+    expect(ruleOf([sofa(2.6)]), 'a sofa through the wall, on its own').toEqual(['outside']);
+    expect(ruleOf([sofa(2.6), tv()]), 'beside a TV it is not merged with').toEqual(['outside']);
+    expect(
+      ruleOf([{ ...sofa(2.6), groupId: 'g' }, { ...part({ category: 'plant', shape: 'plant', dimMM: [400, 400, 900], pos: [2, 0, 1] }), groupId: 'g' }]),
+      'merged with another floor piece, the set can still move',
+    ).toEqual(['outside']);
+    expect(ruleOf([{ ...sofa(2.6), groupId: 'g' }, { ...tv(), groupId: 'g' }]), 'merged with the TV').toEqual([
+      'outside-immovable',
+    ]);
+    // `ScenePart.locked` is "from your photo", which `lockedForSolve` holds too.
+    expect(ruleOf([{ ...sofa(2.6), locked: true }]), 'from the photo').toEqual(['outside-immovable']);
+
+    // Still a floor piece: the wall rider's remedy would tell someone to slide a
+    // sofa along its wall.
+    const [held] = outside([{ ...sofa(2.6), groupId: 'g' }, { ...tv(), groupId: 'g' }]);
+    expect(held.detail).toMatch(/ Drag it back inside\.$/);
+    expect(held.detail).not.toMatch(/Try a fix|along the wall/);
+  });
 });
 
 describe('analyzeRoom · crowding names the line it fires on', () => {

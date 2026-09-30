@@ -830,8 +830,9 @@ function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
 // that applied one of those per press and threw the rest away.
 //
 // What never moves: kept pieces, locked ones, wall-mounted fixtures (doors,
-// windows, the ceiling light, the fan). `movableFor` is the one answer to that
-// question and both buttons read it.
+// windows, the ceiling light, the fan), and anything merged with one of those,
+// since a merged set moves whole or not at all. `movableFor` is the one answer to
+// that question and both buttons read it, and so does Room check's Try a fix.
 
 /** Opens the gallery. A toggle rather than an action, so it carries no busy state:
  *  the search runs inside the panel, which says so. Same row contract as Fix. */
