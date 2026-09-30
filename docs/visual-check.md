@@ -77,147 +77,42 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### An L-shaped desk wraps a room's inside corner, and its open corner is floor — branch `claude/affectionate-ritchie-ilawx1`
+### A wall stops before it runs into another wall — branch `claude/affectionate-ritchie-ilawx1`
 
-**Where to click.** An **L-shape** room, 2D Plan. Add an **L-shaped desk**, turn it so its
-open corner faces the room's inside corner, and drag it until that corner of wall sits in
-the desk's open corner. Then the same in 3D. Then push an **Office chair** into the open
-corner of a desk standing in the middle of the room.
+**Where to click.** A **T-Shape** room, 3D and then 2D Plan. Drag the wall under one arm of
+the bar north, toward the north wall, as far as it will go. Then drag a side wall of the stem
+out past the end of the bar. Then open the room from the screenshot that found this (the one
+whose wing lies across the bedroom) and drag the crossing wall back.
 
-**What changed.** Every containment and collision test read the desk's BOX, so the open
-corner counted as desk: the wrap was refused as *blocked*, and a chair tucked into the L
-was *in the way*. They read the two rectangles the desk stands on now
-(`lib/foot-cells.ts`), and the plan draws the L rather than a box.
+**What changed.** A wall drag only checked the room's overall width and depth, so a wall could
+pass straight through another and fold the floor over itself. It now stops 60 cm short of any
+wall it does not share a corner with, and before the wall beside it gets shorter than 60 cm,
+and says which (`wallTravel`, `lib/footprint.ts`). A room that is already folded is left free
+until it is unfolded, so it can be mended.
 
-**What "wrong" looks like.** The tag saying *blocked* with the wall corner in the open
-corner and 20–30 mm of air on both walls. Nudging it 100 mm further so one arm really
-does cross the wall and it NOT going red. The plan outline and the 3D tabletop
-disagreeing about where the notch is. A click in the open corner selecting the desk. A
-room check calling the tucked chair an overlap.
+**What "wrong" looks like.** A wall stopping well short of 60 cm from the next, or stopping
+with no sentence. A fast flick at the plan's lowest zoom getting through where a slow drag
+did not. The folded room refusing to come back. Furniture on the moved wall not following it
+to where it stopped.
 
-**Measured, not seen:** the wrap, the chair and the click are in
-`tests/foot-cells.test.ts`; the catalogue sweep in `tests/wall-rider-containment.test.ts`
-accepts nine more desk placements and still finds none outside the room.
+### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
-### Props step aside, say when there is no room, and the tabletop plant is a plant — branch `claude/affectionate-ritchie-ilawx1`
+**What is already settled.** A newly added fan hangs flush: looked at on the preview and fine.
+What nobody has seen is a room saved BEFORE § 35, because the user checking it had none.
 
-**Where to click.** A bedroom starter, 3D. Look at a nightstand with its lamp. Then select
-a **coffee table**, open **On the surface**, and press **+ Plant**, **+ Vase**, **+ Books**
-and **+ Candle** in turn; then one of each again.
+**Where to click.** A room that was already in this browser before `1d16087` (PR #88) and holds
+a fan or pendant. A fresh room is a different program and cannot show this.
 
-**What changed.** A prop had no size anywhere but its renderer, so nothing could keep it
-clear: a lamp stood through the plant beside it. Sizes and spots are `lib/decor.ts` now,
-and each prop keeps clear of the ones before it and of anything standing on the surface.
-A prop with nowhere left to go is **not drawn**, and its row says **No room**. Pieces do
-not stand on props, books included (`docs/what-is-still-open.md`). The tabletop plant is
-the same leafy plant as the floor-standing one, at tabletop size.
-
-**What "wrong" looks like.** Any prop through another, through the lamp, or over a
-table's edge. A prop that jumps somewhere far off when a closer spot was free. A row
-saying **No room** while its prop is visibly on the table, or a prop missing with no
-label. Props moving about when you drag something that is not over the table. The
-plant reading as a green ball.
-
-**Probed in SwiftShader:** four props handed the same spot on a coffee table stood side
-by side; a nightstand with its lamp in the middle showed both its props as **No room**.
-
-### Six pieces changed size — a plant, three chairs and two lamps
-
-**MEASURED IN A BROWSER 2026-09-06 — the SIZE half is settled by a second instrument.**
-Playwright against the production build of `4533321`, reading the three.js scene graph the
-browser actually built (via three’s `__THREE_DEVTOOLS__` hook and `userData.danmuPartId`)
-rather than the fidelity test’s own JSX walk. Every piece was seeded TWICE — at its
-catalogue size and at a deliberately odd one — so each is compared against ITSELF at another
-size and no table of expected values has to be right for the result to mean something.
-
-**14 of 14 rows at ratio 1.00 on all three axes**: `plant`, `chair-dining`, `chair-office`,
-`chair-armchair`, `lamp-floor`, `lamp-table` and `desk-l`, each at two sizes. (`plant`’s
-depth reads 0.98 — the chord of a polygonised cylinder, not a defect.)
-
-**The probe was wrong first, and how it announced itself is worth keeping.** Its first run
-read a 500 mm dining chair as 2810 mm wide — but with an IDENTICAL A/B ratio at both
-declared sizes. A renderer that ignored `dimMM` could not produce a constant ratio, so the
-contamination had to be in the instrument. The per-child dump found `LineSegmentsGeometry`
-at 1674×1469×**2870** inside the chair’s stamped subtree — room-scale guide lines whose
-height is the CEILING, which is also what pinned `desk-l`’s "height" at a flat 3000 mm
-regardless of what it declared. Excluding line geometry took every row to 1.00.
-
-**Decor is NOT inside the stamped group**, established by the same measurement rather than
-by reading: `desk-l` came back 751 mm tall against a declared 750 with a candle and a
-cylinder sitting on top of it in the screenshot.
-
-**Still open, and it is the whole reason this item exists:** whether a 400 mm plant and a
-500 mm dining chair *look* right at those sizes. A screenshot of all fourteen shows nothing
-obviously broken — every piece is recognisable and proportionate to its neighbours — but
-"draws 400 mm" and "looks like a 400 mm plant" are different claims and only the first is
-measured.
-
-
-**Where to click.** Library → add **Plant**, **Dining chair**, **Office chair**, **Armchair**,
-**Floor lamp**, **Table lamp**. Look at each in 3D beside a piece of known size (a 2 m sofa,
-a 750 mm desk), then switch to **2D Plan** and check the outline matches what 3D draws.
-
-**What changed.** All six renderers were hard-coded metres and never read `part.dimMM`, so
-they drew one fixed size no matter what the piece declared. They are scaled to their declared
-size now. The plant is the extreme: it declared 400 × 400 × 1600 and drew **880 × 700 × 1940**,
-so the plan outlined a 400 mm pot around a 1.9 m plant.
-
-| piece | was drawn | now |
-|---|---|---|
-| Plant | 880 × 700 × 1940 | 400 × 400 × 1600 |
-| Dining chair | 420 × 420 × 1090 | 500 × 500 × 850 |
-| Office chair | 580 × 480 × 1150 | 600 × 600 × 1100 |
-| Armchair | 700 × 700 × 1020 | 700 × 700 × 900 |
-| Floor lamp | 360 × 360 × 1850 | 300 × 300 × 1700 |
-| Table lamp | 280 × 280 × 520 | 250 × 250 × 500 |
-
-**What "wrong" looks like.** The plant is the one to judge first — it loses more than half its
-width and about a fifth of its height, and a squashed shrub is the risk. The dining chair goes
-the other way on the floor axes and **down 240 mm in height**, so check it still reads as a
-dining chair against a table rather than as a stool with a back. The scale is non-uniform
-(each axis maps to its own declared dimension), so anything that looked round from above
-should still look round: the plant, both lamps and the stool are in `ROUND_SHAPES` and the
-plan draws them as ellipses.
-
-**What is already settled and does not need eyes.** That all six now draw at exactly their
-declared size — ratio 1.00 on all three axes, gated per shape in
-`tests/footprint-fidelity.test.tsx`, mutation-verified. What no measurement can answer is
-whether a plant at its declared size still looks like a plant. If any of them look wrong, the
-honest fix is the **declared size in `PART_LIBRARY`**, not the renderer — the geometry is
-correct now and the catalogue number is the thing that was never checked against it.
-**Not for the plant**, which was looked at and was squashed: a stretch is a stretch at any
-catalogue size, so it is drawn at its own size now (`lib/plant-form.ts`), and that drawing
-has been looked at at every size.
-
-### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
-
-**Where to click.** Any room, **3D Model** tab, Library → Appliances → **Ceiling fan**,
-which ships at 200 mm. Look up. Then open a room that was already in this browser before
-today and look at a fan or pendant in that one.
-
-**What changed.** § 35 removed the flat 150 mm drop from `groundY`'s ceiling arm, so a hung
-fixture's top now lands at `roomHeight - MOUNT_PAD` at every size instead of only above
-260 mm. A newly added fan moves up 30 mm and its downrod meets the ceiling.
-
-**What wrong looks like, in a NEW room.** Any daylight between the top of the downrod and
-the slab, or a rod that visibly penetrates it. Neither should be there: the top is 20 mm
-below the ceiling by design, which is the same pad every other clamp uses and is meant to
-read as flush rather than as a gap.
-
-**What is EXPECTED to look wrong, in an old one.** A room already saved keeps its fixture
-where it was, because `pos` is stored and nothing re-places on load — `settleHeights`' cap
-is a maximum and a fixture under it is left alone. So an old fan still hangs 30–55 mm short,
-and a room where someone adds a second fan today shows **one flush and one short, side by
-side**. That is the thing to judge: whether the difference reads as a bug to a user, which
-is not a question the arithmetic can answer. Changing the ceiling height by 1 cm and back
-re-runs `heightForNewCeiling` over the whole room and lifts them all, which is the cheapest
-way to see both states.
-
-**Where it rides.** Merged to `main` in `1d16087` (PR #88).
+**What is EXPECTED to look wrong.** A room already saved keeps its fixture where it was,
+because `pos` is stored and nothing re-places on load — `settleHeights`' cap is a maximum and
+a fixture under it is left alone. So an old fan still hangs 30–55 mm short, and adding a second
+fan today shows **one flush and one short, side by side**. The thing to judge is whether that
+difference reads as a bug to a user. Changing the ceiling height by 1 cm and back re-runs
+`heightForNewCeiling` over the whole room and lifts them all.
 
 **Gates.** `tests/ceiling-fixtures.test.ts` compares each fixture's top to the ROOM across
-both bands and seven ceiling heights — the comparison nothing in this repo made before. It
-cannot see the old-room case, because no test loads a room saved by an older build.
+both bands and seven ceiling heights. It cannot see the old-room case, because no test loads
+a room saved by an older build.
 
 ### A room saved BEFORE § 34 draws its pendant half the size
 

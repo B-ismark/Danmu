@@ -4,6 +4,7 @@
 
 import { footFromPart, footInsidePoly, polyAreaCentroid, polygonSignedArea, polygonWinding, type Poly } from './geometry';
 import type { Shape } from './scene-spec';
+import { ROOM_SIDE_EPS, WALL_MIN_M } from './dimension-ranges';
 
 /** Re-exported rather than defined here. This file and `lib/geometry.ts` each had
  *  their own shoelace loop, and both were answering the same question — which way
@@ -216,6 +217,129 @@ export function offsetWall(poly: Footprint, index: number, delta: number): Footp
   return next;
 }
 
+/** Why a wall stopped short of where it was asked to go: a neighbour wall would get
+ *  shorter than `WALL_MIN_M` (`short`), or two walls would come closer than it
+ *  (`close`). */
+export type WallFault = 'short' | 'close';
+
+function segmentGap(a: [number, number], b: [number, number], c: [number, number], d: [number, number]): number {
+  const cross = (o: [number, number], p: [number, number], q: [number, number]) =>
+    (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+  const d1 = cross(c, d, a);
+  const d2 = cross(c, d, b);
+  const d3 = cross(a, b, c);
+  const d4 = cross(a, b, d);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return 0;
+  const toSeg = (p: [number, number], s: [number, number], e: [number, number]) => {
+    const ex = e[0] - s[0];
+    const ez = e[1] - s[1];
+    const l2 = ex * ex + ez * ez;
+    const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - s[0]) * ex + (p[1] - s[1]) * ez) / l2));
+    return Math.hypot(p[0] - (s[0] + t * ex), p[1] - (s[1] + t * ez));
+  };
+  return Math.min(toSeg(a, c, d), toSeg(b, c, d), toSeg(c, a, b), toSeg(d, a, b));
+}
+
+/** Everything moving wall `index` can shrink, in a fixed order: the two neighbour
+ *  walls' lengths, then the gap from each of the three walls that move (the wall
+ *  and the two that stretch with it) to every wall that shares no corner with it. */
+function wallWatch(poly: Footprint, index: number): Array<{ fault: WallFault; v: number }> {
+  const n = poly.length;
+  const at = (k: number) => ((k % n) + n) % n;
+  const edge = (k: number): [[number, number], [number, number]] => [poly[at(k)], poly[at(k + 1)]];
+  const out: Array<{ fault: WallFault; v: number }> = [];
+  for (const k of [index - 1, index + 1]) {
+    const [a, b] = edge(k);
+    out.push({ fault: 'short', v: Math.hypot(b[0] - a[0], b[1] - a[1]) });
+  }
+  const seen = new Set<string>();
+  for (const e of new Set([at(index - 1), at(index), at(index + 1)])) {
+    for (let f = 0; f < n; f++) {
+      if (f === e || f === at(e + 1) || f === at(e - 1)) continue;
+      const key = e < f ? `${e},${f}` : `${f},${e}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const [a, b] = edge(e);
+      const [c, d] = edge(f);
+      out.push({ fault: 'close', v: segmentGap(a, b, c, d) });
+    }
+  }
+  return out;
+}
+
+/** Whether any two walls that share no corner cross or touch. */
+function foldedAnywhere(poly: Footprint): boolean {
+  const n = poly.length;
+  for (let e = 0; e < n; e++) {
+    for (let f = e + 2; f < n; f++) {
+      if (e === 0 && f === n - 1) continue;
+      if (segmentGap(poly[e], poly[(e + 1) % n], poly[f], poly[(f + 1) % n]) === 0) return true;
+    }
+  }
+  return false;
+}
+
+/** Sampling interval along a move, well under `WALL_MIN_M`: each quantity
+ *  `wallWatch` reads changes by at most twice the distance travelled, so a step this
+ *  size cannot carry a wall from clear of the minimum to through another wall
+ *  without a sample landing in between. That is what catches a single large step —
+ *  a brisk drag at the plan's lowest zoom, or a typed jump — which a check of the
+ *  END position alone would pass, the moved wall having landed clear on the far
+ *  side of the wall it went through. */
+const WALL_SAMPLE_M = WALL_MIN_M / 4;
+
+/**
+ * How much of `delta` wall `index` can travel with the room still a room: no wall
+ * shorter than `WALL_MIN_M`, and no two walls that do not share a corner closer
+ * than it. `travel` is `delta` itself when the whole move fits, and otherwise the
+ * part of it up to the first point that would break a rule, with `fault` naming it.
+ *
+ * **Only a move that makes a quantity WORSE is stopped.** A room that already
+ * breaks a rule — saved before this existed, or opened from a file — can still be
+ * dragged back out of it; stopping every move there would freeze exactly the room
+ * that most needs mending. A room already folded over itself is not judged at all
+ * until it is unfolded (see `foldedAnywhere`).
+ */
+export function wallTravel(poly: Footprint, index: number, delta: number): { travel: number; fault: WallFault | null } {
+  if (delta === 0 || poly.length < 3 || index < 0 || index >= poly.length) return { travel: delta, fault: null };
+  // A room already FOLDED — two walls crossing — is left to the user entirely.
+  // Mending one passes a wall through zero length and out the far side (the spike
+  // a fold leaves shrinks, vanishes and grows again the right way round), and
+  // "never shorter than it was" would forbid exactly that. The rule comes back on
+  // the first move after the room is a room again.
+  if (foldedAnywhere(poly)) return { travel: delta, fault: null };
+  const base = wallWatch(poly, index);
+  const faultAt = (t: number): WallFault | null => {
+    const now = wallWatch(offsetWall(poly, index, t), index);
+    for (let i = 0; i < now.length; i++) {
+      // Strictly under the minimum, so the search lands ON it rather than a
+      // tolerance inside it; the tolerance is only on "worse than before", which is
+      // what lets a wall already sitting on the minimum by float drift move along it.
+      if (now[i].v < WALL_MIN_M && now[i].v < base[i].v - ROOM_SIDE_EPS) return now[i].fault;
+    }
+    return null;
+  };
+  const steps = Math.max(1, Math.ceil(Math.abs(delta) / WALL_SAMPLE_M));
+  let ok = 0;
+  for (let s = 1; s <= steps; s++) {
+    const t = (delta * s) / steps;
+    const fault = faultAt(t);
+    if (fault === null) {
+      ok = t;
+      continue;
+    }
+    let lo = ok;
+    let hi = t;
+    for (let i = 0; i < 48; i++) {
+      const mid = (lo + hi) / 2;
+      if (faultAt(mid) === null) lo = mid;
+      else hi = mid;
+    }
+    return { travel: Math.abs(lo) <= ROOM_SIDE_EPS ? 0 : lo, fault };
+  }
+  return { travel: delta, fault: null };
+}
+
 export function polygonCentroid(poly: Footprint): [number, number] {
   let x = 0;
   let z = 0;
@@ -276,10 +400,11 @@ export function pointInFootprint(x: number, z: number, poly: Footprint): boolean
  *
  *  ── When it gives up ───────────────────────────────────────────────────────
  *
- *  Step 3 exists because step 2's resolution is a real hole and the app can reach it.
- *  `moveWall` accepts any wall drag whose BOUNDING BOX stays inside `ROOM_SIDE_M`;
- *  nothing anywhere floors the width of a leg. So a U whose legs the user has narrowed
- *  to 50 mm is a room this app calls legal and whose entire interior can fall between
+ *  Step 3 exists because step 2's resolution is a real hole and the app can still reach
+ *  it. A wall drag now floors every leg at `WALL_MIN_M` (`wallTravel`, above), but only
+ *  on a drag: a room saved before that rule, or opened from a file, keeps whatever legs
+ *  it had. So a U whose legs were narrowed to 50 mm is a room this app will open and
+ *  whose entire interior can fall between
  *  a 0.1 m grid's samples — and `clampIntoFootprint` would then silently do nothing on
  *  all four of its call sites. `edgeProbe` is O(vertices) and independent of the room's
  *  size, so it closes that without paying for it on the rooms that do not need it.
