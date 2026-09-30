@@ -1377,6 +1377,9 @@ describe('the zero-delta restore does not pin what it did not move', () => {
     expect(carry(c, 'ns', w, [2, 0, 2], [2.5, 0, 2], 0, () => false).moves.map((m) => m.id)).toEqual(['lamp']);
     // And a turn in place is not "home": the lamp swings round with it.
     expect(carry(c, 'ns', w, [2, 0, 2], [2, 0, 2], Math.PI / 2, () => false, 'turn').moves.map((m) => m.id)).toEqual(['lamp']);
+    // A whole turn is: nothing keeps `rot` within one revolution, and the lamp is where
+    // it started — so is its heading.
+    expect(carry(c, 'ns', w, [2, 0, 2], [2, 0, 2], 2 * Math.PI, () => false, 'turn').moves).toEqual([]);
   });
 });
 

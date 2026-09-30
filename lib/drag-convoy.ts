@@ -692,7 +692,12 @@ export function resolveConvoy(input: {
     // now that a rider the room came with is company at all (§ H.6.7): a stretch
     // or a press that never travelled stamped every such lamp. A child that DOES
     // carry one is put back, because an out-and-back drag already wrote it.
-    const home = at[0] === startPos[0] && at[1] === startPos[1] && at[2] === startPos[2] && rot === convoy.leadStart.rot;
+    // Round the circle for the turn, as `leadInherited` reads it: nothing keeps `rot`
+    // within one revolution, and a full turn is home.
+    const turned = rot - convoy.leadStart.rot;
+    const home =
+      at[0] === startPos[0] && at[1] === startPos[1] && at[2] === startPos[2] &&
+      Math.abs(Math.atan2(Math.sin(turned), Math.cos(turned))) < RIGID_EPS;
     return home ? carried.filter((m) => memberHasPosOverride(m.id)) : carried;
   };
 
