@@ -23,7 +23,7 @@ import {
 } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
 import { footFromPart, footInsidePoly } from '@/lib/geometry';
-import { footprintBounds } from '@/lib/footprint';
+import { footprintBounds, roomContainment } from '@/lib/footprint';
 import { footprintForLayout } from '@/lib/footprint';
 import { TWENTY_PIECE_BAR_MS, bestMs, ceilingMs } from './helpers/perf';
 import { defaultScene } from '@/lib/scene-spec';
@@ -638,6 +638,33 @@ describe('the solver and the room report agree', () => {
     console.log(`
   unpriced findings the solver left behind: ${unpriced.length}`);
     for (const u of unpriced.slice(0, 4)) console.log(`    ${u}`);
+  });
+
+  it('a rug standing off the plan gets a Try a fix, and the fix brings it back', () => {
+    // The button half of `containedBySearch`. Before the search priced a rug, the
+    // report filed this one as `outside-immovable` — no button — because `outside`
+    // read zero for a rug wherever it stood, so a confined re-fit had nothing to
+    // descend. The press below is the one `RoomTools` makes: `refit`, everything
+    // but the named piece locked. Measured before it was written: fifteen rugs
+    // pushed 200 mm off five presets (east, south and west), fifteen brought fully
+    // back with no finding left.
+    // The rug is alone on purpose. Beside a sofa the `relation` term pulls a rug
+    // under the seating whether or not `outside` can see it, and that fixture passed
+    // with the containment term switched off for rugs — a fix that works for the
+    // wrong reason certifies nothing about the reason.
+    const door = part({ category: 'door', shape: 'door', dimMM: [900, 50, 2100], pos: [-2, 0, -1.975], wallMounted: true });
+    const rug = part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [3.6, 0, 0] });
+    const parts = [door, rug];
+    const [finding] = analyzeRoom(parts, RECT_ROOM).issues.filter((i) => i.partIds.includes(rug.id));
+    expect(finding?.rule, 'the report files it as the fixable kind').toBe('outside');
+    expect(RULE_HANDLING[finding.rule].movable).toBe(true);
+
+    const r = solveLayout(parts, RECT, lockedForSolve(parts, {}, new Set([rug.id])), { seed: 1, mode: 'refit' });
+    const back = r.placements[1];
+    expect(r.moved, 'the fix moved the rug and only the rug').toEqual([1]);
+    expect(roomContainment([back.x, 0, back.z], back.yaw, rug.dimMM, RECT).box, 'every edge back inside').toBe(true);
+    const after = parts.map((p, i) => ({ ...p, pos: [r.placements[i].x, 0, r.placements[i].z] as [number, number, number], rot: r.placements[i].yaw }));
+    expect(analyzeRoom(after, RECT_ROOM).issues.filter((i) => i.partIds.includes(rug.id))).toEqual([]);
   });
 });
 

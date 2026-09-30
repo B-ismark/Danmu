@@ -23,7 +23,8 @@ import {
   shuffleRefusal,
 } from '@/lib/layout-shuffle';
 import { defaultScene } from '@/lib/scene-spec';
-import { footprintForLayout, pointInFootprint, type LayoutId } from '@/lib/footprint';
+import { footprintForLayout, pointInFootprint, roomContainment, type LayoutId } from '@/lib/footprint';
+import { roleOf } from '@/lib/layout-rules';
 
 /** Every cost term at zero, derived from the weight table so a new term cannot leave
  *  this fixture one key short of the type it claims to be. */
@@ -75,6 +76,28 @@ const room = (id: LayoutId, w: number, d: number) => {
     movable: movableFor(parts, locked),
   };
 };
+
+/** Every preset in `ALL` pressed three times, computed once and shared.
+ *
+ *  Two tests read the same twelve presses — "never offers a room Room check would
+ *  report" and "never offers a rug through the plaster" — and each press is a full
+ *  search, seconds apiece on `t`. The sweep is deterministic per (room, attempt), so
+ *  sharing it changes nothing but the wall clock. */
+let sweepCache: ReturnType<typeof runSweep> | null = null;
+function runSweep() {
+  const out = [];
+  for (const [id, w, d] of ALL) {
+    const { parts, room: rm, locked } = room(id, w, d);
+    for (const attempt of [1, 2, 3]) {
+      out.push({ id, attempt, parts, rm, outcome: shuffleRoom(parts, rm, locked, { attempt }) });
+    }
+  }
+  return out;
+}
+const presetSweep = () => (sweepCache ??= runSweep());
+
+/** How many ideas `presetSweep` offers in the presets that carry a rug. */
+const RUG_IDEAS_CHECKED = 45;
 
 // ── Three tests below USED to carry an explicit 30 s timeout ────────────
 //
@@ -257,14 +280,17 @@ describe("solveLayout mode: 'shuffle'", () => {
       }
     }
     // A loop over whatever `pick` saw passes over an empty list, so the count is the
-    // assertion's own floor: forty solves, one of which (`t` seed 4) keeps three.
-    expect(checked, 'the finalists this sweep compared').toBe(159);
+    // assertion's own floor: forty solves, two of which (`l` seed 7, `open` seed 8)
+    // keep three. It was 159 — `t` seed 4 the one short — until the search priced a
+    // rug through the plaster, which moves any trajectory whose scatter put one there.
+    expect(checked, 'the finalists this sweep compared').toBe(158);
   });
 
   it('keeps a pool of finalists, because the search moves', { timeout: 120_000 }, () => {
     // A search that accepts no step finds no new best, so its pool is the scatter
     // alone: `11111111` on every preset before the fix. Four is `FINALISTS`, the most a
-    // pool keeps; `t` seed 4 fills three, so a full pool is not a property to lean on.
+    // pool keeps; `l` seed 7 and `open` seed 8 fill three (`t` seed 4 did, before the
+    // search priced a rug), so a full pool is not a property to lean on.
     const pools = ALL.map(([id]) => [
       id,
       shuffleSweep()
@@ -274,10 +300,10 @@ describe("solveLayout mode: 'shuffle'", () => {
     ]);
     expect(pools).toEqual([
       ['rect', '44444444'],
-      ['l', '44444444'],
+      ['l', '44444434'],
       ['u', '44444444'],
-      ['open', '44444444'],
-      ['t', '44434444'],
+      ['open', '44444443'],
+      ['t', '44444444'],
     ]);
   });
 
@@ -297,7 +323,9 @@ describe("solveLayout mode: 'shuffle'", () => {
         return bestCandidate(r);
       },
     });
-    expect(rated.length, 'one finalist is the start alone: nothing was accepted').toBe(4);
+    // Three, and the number is the search's trajectory rather than a property of it —
+    // it was four until the search priced a rug. The defect this guards reads ONE.
+    expect(rated.length, 'one finalist is the start alone: nothing was accepted').toBe(3);
   });
 
   it('is deterministic: same room, same seed, same suggestion', () => {
@@ -355,7 +383,7 @@ describe('shuffleRoom — the offer, not the search', () => {
     // is mostly mutually dissimilar, so the penalty mostly multiplies zero. On the search
     // that accepted no steps it multiplied zero everywhere that mattered — 26 of 26
     // end-to-end pairs byte-identical, which is why § A.2's test once could not be
-    // written. On the one that runs it reorders one press in 24 (the test above), and
+    // written. On the one that runs it reorders two presses in 66 (the test above), and
     // this is the bound on how far it can reach.
     //
     // The clean set is rebuilt the way `shuffleRoom` builds it — same seed derivation,
@@ -407,25 +435,31 @@ describe('shuffleRoom — the offer, not the search', () => {
   it('the diversity term reorders a press — the test § A.2 asked for', { timeout: 120_000 }, () => {
     // Fails at `diversityPenalty: 0`, which is the whole ask. It could not be written
     // while the search accepted no steps (every pair came back byte-identical); on the
-    // search that runs, one press of 24 swept (six presets x attempts 2–5, each with
-    // the previous press's first idea as history) comes back in a different order.
-    // Same four ideas, same first one — `picked = []` cannot move `ranked[0]` — and
-    // the term trades the second for a less similar dearer one. The history is built
-    // the way the gallery builds it, press after press, so the fixture is one real
-    // sequence rather than a history chosen to provoke it.
+    // search that runs, two presses of 66 swept (six presets x attempts 2–12, each with
+    // the previous press's first idea as history) come back in a different order —
+    // `rect` 6 x 4 press 7 and this one. Same four ideas, same first one — `picked = []`
+    // cannot move `ranked[0]` — and the term trades the second for a less similar dearer
+    // one. The history is built the way the gallery builds it, press after press, so
+    // the fixture is one real sequence rather than a history chosen to provoke it.
+    //
+    // **Which press it is, is the search's trajectory, not a property of the term.** It
+    // was press 4 of this room until the search priced a rug (§ H.6.1), after which none
+    // of presses 2–5 on any preset reordered and the sweep had to widen to find one. So
+    // if this goes red after a change to the COST, re-run that sweep before concluding
+    // the term broke: the press may simply have moved.
     const { parts, room: r, locked } = room('rect', 7.5, 5.6);
     const ids = parts.map((p) => p.id);
     let prev = shuffleRoom(parts, r, locked, { attempt: 1 });
-    for (let attempt = 2; attempt <= 3; attempt++)
+    for (let attempt = 2; attempt <= 5; attempt++)
       prev = shuffleRoom(parts, r, locked, { attempt, history: [{ ids, placements: prev!.ideas[0].placements }] });
     const history = [{ ids, placements: prev!.ideas[0].placements }];
     const order = (penalty?: number) =>
-      shuffleRoom(parts, r, locked, { attempt: 4, history, diversityPenalty: penalty })!.ideas.map((i) =>
+      shuffleRoom(parts, r, locked, { attempt: 6, history, diversityPenalty: penalty })!.ideas.map((i) =>
         i.after.toFixed(1),
       );
     const withTerm = order();
     const without = order(0);
-    console.log(`  rect 7.5x5.6 attempt 4: penalty ${DIVERSITY_PENALTY} [${withTerm}] · penalty 0 [${without}]`);
+    console.log(`  rect 7.5x5.6 attempt 6: penalty ${DIVERSITY_PENALTY} [${withTerm}] · penalty 0 [${without}]`);
     expect(without, 'the premise: without the term the press ranks on cost alone').toEqual(
       [...without].sort((a, b) => Number(a) - Number(b)),
     );
@@ -486,22 +520,18 @@ describe('shuffleRoom — the offer, not the search', () => {
     // preset that already has a finding is not this button's to answer for; what a
     // shuffle may not do is INTRODUCE one.
     let offers = 0;
-    for (const [id, w, d] of ALL) {
-      const { parts, room: rm, locked } = room(id, w, d);
-      for (const attempt of [1, 2, 3]) {
-        const outcome = shuffleRoom(parts, rm, locked, { attempt });
-        if (!outcome) continue; // refusing is allowed; offering something broken is not
-        offers++;
-        // Every idea offered, not only the first: the gallery shows all of them.
-        expect(outcome.ideas.length, `${id} attempt ${attempt} offered nothing`).toBeGreaterThan(0);
-        for (const idea of outcome.ideas) {
-          const found = newRoomFindings(parts, rm, idea);
-          expect(
-            found.map((f) => `${f.rule}:${f.partIds.join(',')}`),
-            `${id} attempt ${attempt} introduced a finding`,
-          ).toEqual([]);
-          expect(idea.moved.length, `${id} attempt ${attempt}`).toBeGreaterThan(0);
-        }
+    for (const { id, attempt, parts, rm, outcome } of presetSweep()) {
+      if (!outcome) continue; // refusing is allowed; offering something broken is not
+      offers++;
+      // Every idea offered, not only the first: the gallery shows all of them.
+      expect(outcome.ideas.length, `${id} attempt ${attempt} offered nothing`).toBeGreaterThan(0);
+      for (const idea of outcome.ideas) {
+        const found = newRoomFindings(parts, rm, idea);
+        expect(
+          found.map((f) => `${f.rule}:${f.partIds.join(',')}`),
+          `${id} attempt ${attempt} introduced a finding`,
+        ).toEqual([]);
+        expect(idea.moved.length, `${id} attempt ${attempt}`).toBeGreaterThan(0);
       }
     }
     // The floor. Without it a build where `shuffleRoom` always returned null would
@@ -510,6 +540,41 @@ describe('shuffleRoom — the offer, not the search', () => {
     expect(offers, 'the sweep must actually have offers to check').toBeGreaterThanOrEqual(
       ALL.length * 2,
     );
+  });
+
+  it('never offers a rug through the plaster — the one containment Room check forgives', { timeout: 300_000 }, () => {
+    // The test above cannot see this, by design: `clearance.ts` § 7b calls a rug
+    // outside only when its CENTRE is off the plan, because overhang is what a rug is
+    // for when somebody put it there. An Idea is a place nobody chose, so the search
+    // holds a rug to the walls (`containedBySearch`), and this asks whether it did.
+    //
+    // The witness is `roomContainment(...).box` — the drag's strict test, 10 mm of
+    // slack — and NOT `outsideDeficit`, which is the cost term's own instrument: an
+    // idea is only offered once `isCleanShuffle` has seen `outside` at zero, so
+    // asking the term's instrument again would be a check that cannot fail.
+    //
+    // Before the search priced a rug, this sweep found it through a wall in 9 of the
+    // ideas below: rect 6x4 twice (143, 456 mm), l twice (423, 788 mm) and open five
+    // times (27–383 mm), every one with its centre on the floor.
+    let rugIdeas = 0;
+    const through: string[] = [];
+    for (const { id, attempt, parts, rm, outcome } of presetSweep()) {
+      const rugs = parts.map((p, i) => (roleOf(p) === 'rug' ? i : -1)).filter((i) => i >= 0);
+      if (!outcome || rugs.length === 0) continue;
+      for (const [k, idea] of outcome.ideas.entries()) {
+        rugIdeas++;
+        for (const i of rugs) {
+          const at = idea.placements[i];
+          const p = parts[i];
+          const c = roomContainment([at.x, p.pos[1], at.z], at.yaw, p.dimMM, rm.footprint, p.circle);
+          if (!c.box) through.push(`${id} attempt ${attempt} idea ${k + 1}: ${p.name}`);
+        }
+      }
+    }
+    expect(through).toEqual([]);
+    // Exact, not a floor: the presets that carry a rug are rect, l, open and t, and
+    // this is how many ideas those twelve presses offered when it was written.
+    expect(rugIdeas).toBe(RUG_IDEAS_CHECKED);
   });
 
   it('returns null rather than offering a faulted room when nothing can move', () => {

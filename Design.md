@@ -837,6 +837,17 @@ no cost is allowed. Adding one silently is not** — a new finding fails the tes
 someone classifies it, which is what happened to `outside` the moment it was added and
 is the gate working rather than an obstacle to it.
 
+**The one place the two disagree on purpose is a rug's overhang**, and the same file
+holds it as a decision rather than letting it read as a gap: the report forgives a rug
+everything but its centre, because a rug somebody put under a sofa or up to the skirting
+is doing its job; the search charges for the overhang, because an idea is a place nobody
+chose (§ H.6.1). The set the search keeps inside the walls is `containedBySearch`
+(`lib/layout-rules.ts`) — every obstacle and a floor rug — and it is also the set whose
+containment finding gets **Try a fix**, so a finding is fixable exactly when the cost
+term can see the piece. It was `isObstacle` on both sides until then, which is why a rug
+off the plan was filed `outside-immovable` with no button, and why Ideas could leave one
+788 mm through a wall.
+
 One note for anyone extending it: the table is the *only* place a rule's cost term is
 named. An earlier draft let each fixture carry its own copy too, and pointing the door
 rule at a taste weight left every assertion green — the same duplication-that-drifts

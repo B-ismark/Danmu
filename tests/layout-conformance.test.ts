@@ -203,6 +203,24 @@ function cases(): Case[] {
     });
   }
 
+  // A rug is the piece that is NOT an obstacle and is held to the plaster anyway
+  // (`containedBySearch`). Before the search priced it, this pair failed on both
+  // sides at once: the report called the rug `outside-immovable`, so it offered no
+  // fix, and `outside` read 0.000 at x = 3.6 — which is how Ideas came to put a rug
+  // 355 mm through the wall of the open-plan preset. The centre is past x = 3 for the
+  // same reason as the sofa's: the report forgives a rug its overhang, so only a rug
+  // standing off the plan is a finding at all.
+  {
+    const r = part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [0, 0, 0] });
+    out.push({
+      family: 'outside',
+      what: 'a rug standing off the floor plan',
+      parts: [r],
+      bad: [{ x: 3.6, z: 0, yaw: 0 }],
+      good: [{ x: 0, z: 0, yaw: 0 }],
+    });
+  }
+
   // ── Two pieces in the same place ──────────────────────────────────────────
   {
     const s = sofa();
@@ -649,5 +667,38 @@ describe('layout-rules · the report and the solver meet cleanly at TUCKED_CLASH
       costAt(parts, at).overlap,
       'a reported collision must cost more than one unit of taste',
     ).toBeGreaterThan(DEFAULT_WEIGHTS.alignment);
+  });
+});
+
+// ─── The one place the two disagree on purpose ──────────────────────────────
+//
+// Everything above holds the solver to the report. A rug's overhang is the exception,
+// and it is written down as a test so it reads as a decision rather than a gap: the
+// report forgives it (`clearance.ts` § 7b — under the sofa, up to the skirting,
+// across an L's missing corner is what a rug is FOR), and the search charges for it,
+// because the report is judging a rug somebody put there and the search is choosing
+// a place nobody chose (`containedBySearch`). The harness's "charges nothing on that
+// term for the layout it is happy with" is not violated: that asks about each case's
+// `good` placement, and a rug through the plaster is nobody's good placement.
+
+describe('layout-rules · a rug is forgiven by the report and held to the plaster by the search', () => {
+  const rug = () => part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [0, 0, 0] });
+  // Centre at x = 2.3 puts the rug's east edge at 3.3: 300 mm through the east wall
+  // with the centre well on the floor. At x = 1.995 the same edge is 5 mm clear of it.
+  const through: Placement[] = [{ x: 2.3, z: 0, yaw: 0 }];
+  const clear: Placement[] = [{ x: 1.995, z: 0, yaw: 0 }];
+  const containment = (i: { rule: RuleKind }) => i.rule === 'outside' || i.rule === 'outside-immovable';
+
+  it('the report says nothing about a rug 300 mm through a wall', () => {
+    const r = rug();
+    expect(issuesAt([r], through).filter(containment)).toEqual([]);
+  });
+
+  it('the search charges `outside` for it', () => {
+    expect(costAt([rug()], through).outside).toBeGreaterThan(0);
+  });
+
+  it('and charges nothing for the same rug 5 mm clear of the wall', () => {
+    expect(costAt([rug()], clear).outside).toBe(0);
   });
 });

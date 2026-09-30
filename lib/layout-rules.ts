@@ -266,11 +266,11 @@ export const RULE_KINDS = [
   'cut-off',
   'turning',
   // Containment, split by whether the SOLVER can do anything about it rather than
-  // by where the piece sits. `outside` is a piece `isObstacle` accepts, which is
-  // exactly the set `layout-score`'s `outside` term measures, so a cost exists and a
-  // **Try a fix** button is honest. `outside-immovable` is the rest — a wall rider, a
-  // rug, a low piece, anything on a surface — where no arrangement this app can
-  // search will move it and the button would be a lie.
+  // by where the piece sits. `outside` is a piece `containedBySearch` accepts, which
+  // is exactly the set `layout-score`'s `outside` term measures, so a cost exists and
+  // a **Try a fix** button is honest. `outside-immovable` is the rest — a wall rider,
+  // a low piece, anything on a surface — where no arrangement this app can search
+  // will move it and the button would be a lie.
   //
   // The first version split on GEOMETRY (centre off the plan vs merely crossing a
   // wall) and a user found it in one screenshot: a sofa 300 mm through the wall is
@@ -1266,6 +1266,26 @@ export function isObstacle(part: ScenePart): boolean {
     part.pos[1] < 0.05 &&
     part.dimMM[2] / 1000 > OBSTACLE_HEIGHT
   );
+}
+
+/** The pieces the search keeps inside the walls: every obstacle, and a rug.
+ *
+ *  A rug is not an obstacle — it lies under the furniture and a walker steps on it —
+ *  but it is floor the search MOVES, and nothing priced where it went. So Ideas put
+ *  one through the plaster: measured over six presets (rect 6×4 and 7.5×5.6, l, t
+ *  and u at 6×5, open at 6×4), 9 of 72 ideas and 5 of 48 raw shuffles left the rug
+ *  27–788 mm through a wall, every one with its centre still over the floor.
+ *
+ *  The room report forgives exactly that overhang (`clearance.ts` § 7b calls a rug
+ *  outside only when its CENTRE is), and the two are not in conflict: the report is
+ *  judging a rug somebody PUT there, and the search is choosing a place nobody chose.
+ *  An answer the search hands back is its own work, so it is held to the plaster.
+ *
+ *  `lib/clearance.ts` asks this same predicate whether a containment finding is
+ *  fixable, and `layout-score`'s `outside` term is gated on it — one set, so the
+ *  **Try a fix** button appears exactly where the cost can see the piece. */
+export function containedBySearch(part: ScenePart): boolean {
+  return isObstacle(part) || (!part.wallMounted && roleOf(part) === 'rug' && part.pos[1] < 0.05);
 }
 
 /** A part's footprint at a given placement — the one-liner every consumer of this

@@ -566,7 +566,7 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
-### Every idea is now an arranged room, not a tidied scatter — PR #184 (§ H.6.0), needs eyes on every preset
+### Every idea is now an arranged room, not a tidied scatter — `0edf04e` on `main` (PR #184, § H.6.0), needs eyes on every preset
 
 Until this change the search behind **Ideas** accepted no steps: each card was a random
 scatter that the passes after the search had squared up and nudged. Now each one is annealed
@@ -586,11 +586,32 @@ way a chair points.
 **What wrong looks like.**
 - A card that reads as a scatter: big pieces in the middle of the floor, beds or sofas at a
   random angle, a dining chair nowhere near the table.
-- A piece standing through a wall or inside another piece, **other than the rug** — the rug
-  through a wall is known (9 of the sweep's 60 ideas) and is the next fix, so a rug is not a
-  finding here.
+- A piece standing through a wall or inside another piece — **the rug included** now. It was
+  exempt here while it was a known defect (9 of the sweep's 72 ideas); § H.6.1 holds it to
+  the walls, and the item below says what to look for.
 - Four cards on one press that look like the same room.
 - Any preset's gallery coming back with *No ideas this time* on the first press.
+
+### An idea keeps the rug inside the walls — § H.6.1, needs eyes on Open Plan and the L
+
+The search now prices a rug through the plaster exactly as it prices a sofa there. Before, it
+could not see a rug at all, and Ideas put one 27–788 mm through a wall in 9 of 72 ideas —
+five of them on Open Plan — every time with the rug's centre still on the floor, which is
+why Room check (which forgives a rug its overhang) never said a word. None of that is a look.
+
+**Where to click.** Open Plan and L-Shape with starter furniture → **Ideas**, then **More
+ideas** twice. Then drag the rug so its middle is past a wall and open **Room check**.
+
+**What right looks like.** In every card the rug's whole edge is inside the room: it may run
+under the sofa or up to the skirting, never through the wall into the white outside the
+plan. With the rug dragged out, Room check lists it as *Outside the room* **with a Try a fix
+button** — it used to have none — and pressing it brings the rug back onto the floor.
+
+**What wrong looks like.**
+- A card with the rug's edge in the white beyond a wall, in the plan or seen from above in 3D.
+- A rug pressed hard into one corner on every card, as though the walls were pushing it —
+  the term should keep it in, not make it the only thing the search cares about.
+- **Try a fix** on the rug that spins and reports it found nothing.
 
 ### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 

@@ -174,12 +174,17 @@ export const MIN_CLEAN = 4;
  *  caller with no history is handed. After it, the candidates are mostly unlike each
  *  other already: reconstructed as this loop builds them over six presets x presses
  *  1–5, **177 pairs, 162 at similarity exactly 0**, the other fifteen 0.100–0.400, and
- *  **none near `REPEAT_SIMILARITY`**. So the term adds at most 1.6 cost units, against
+ *  **none near `REPEAT_SIMILARITY`** (measured before § H.6.1 priced a rug; the smaller
+ *  reconstruction the test prints, three presets, reads 15 pairs, 13 at 0, worst 0.200
+ *  after it). So the term adds at most 1.6 cost units, against
  *  idea costs of 2.4–84. End to end, `shuffleRoom` at `diversityPenalty: 0` and at 4,
- *  each press with the previous press's first idea as history, **differs on 1 of 24
- *  presses** (`rect` 7.5 x 5.6, press 4): the same four ideas and the same first one,
- *  with the 8.6 — the one most like what was already picked — moved behind a 9.9
- *  and a 10.1.
+ *  each press with the previous press's first idea as history, **differs on 2 of 66
+ *  presses** over six presets x presses 2–12 (`rect` 6 x 4 press 7, `rect` 7.5 x 5.6
+ *  press 6): the same four ideas and the same first one, with one idea — the one most
+ *  like what was already picked — moved behind a slightly dearer one (7.5 behind 8.0).
+ *  It was 1 of 24 over presses 2–5 until the search priced a rug (§ H.6.1), and 0 of
+ *  those 24 since: which press it reorders is the search's trajectory, so the count is
+ *  the stable fact and the press is not.
  *
  *  **The figures this replaced said it could not change an outcome at all** (66 pairs,
  *  61 at zero; 26 of 26 end-to-end pairs byte-identical; costs 10–75). They were

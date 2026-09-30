@@ -53,6 +53,7 @@ import {
   footAt,
   formsRoute,
   isObstacle,
+  containedBySearch,
   placeAffinity,
   relationOptions,
   roleOf,
@@ -207,28 +208,29 @@ export const RULE_HANDLING: Record<
   window: { costTerm: 'window', movable: true },
   tv: { costTerm: 'relation', movable: true },
   // Only ever emitted for a piece the solver can BOTH move and price, which is
-  // `isObstacle` — and that predicate is doing two jobs here, both of them real.
-  // `movableFor` is `!locked && !p.wallMounted`, so a wall rider is excluded from
-  // every solve this app runs; and `c.outside` accumulates inside `if (!obstacle[i])
-  // continue`, so a rug, a piece under `OBSTACLE_HEIGHT` and anything standing on a
-  // surface are invisible to the term whatever the report says. Both exclusions are
-  // in the row's own predicate now, because a `movable: true` that is false for the
-  // piece in front of the user is a button that spins and then says it found
-  // nothing. That is what this table exists to prevent — see `reach` below, which
-  // was the last row to claim a capability it did not have.
+  // `containedBySearch` — and that predicate is doing two jobs here, both of them
+  // real. `movableFor` is `!locked && !p.wallMounted`, so a wall rider is excluded
+  // from every solve this app runs; and `c.outside` accumulates inside
+  // `if (!m.contained[i]) continue`, so a piece under `OBSTACLE_HEIGHT` and anything
+  // standing on a surface are invisible to the term whatever the report says. Both
+  // exclusions are in the row's own predicate now, because a `movable: true` that is
+  // false for the piece in front of the user is a button that spins and then says it
+  // found nothing. That is what this table exists to prevent — see `reach` below,
+  // which was the last row to claim a capability it did not have. A rug was the
+  // third exclusion until the term learned to see one (`containedBySearch`).
   // Containment. The two rows are the same fault seen from opposite sides of one
   // question — can the solver do anything — and `clearance.ts` decides which by
-  // asking `isObstacle`, the SAME predicate the `outside` term below gates on. That
-  // identity is what makes both rows true rather than plausible, and
-  // `tests/layout-conformance.test.ts` pins it.
+  // asking `containedBySearch`, the SAME predicate the `outside` term below gates on.
+  // That identity is what makes both rows true rather than plausible, and
+  // `tests/layout-conformance.test.ts` pins it with a sofa and a rug.
   outside: { costTerm: 'outside', movable: true },
   'outside-immovable': {
     costTerm: null,
     movable: false,
     why:
       'nothing the solver can search will move this piece off the wall it crosses. ' +
-      '`c.outside` accumulates inside `if (!obstacle[i]) continue`, so for a wall ' +
-      'rider, a rug, a piece under `OBSTACLE_HEIGHT` or anything standing on a ' +
+      '`c.outside` accumulates inside `if (!m.contained[i]) continue`, so for a wall ' +
+      'rider, a piece under `OBSTACLE_HEIGHT` or anything standing on a ' +
       'surface the term is identically zero however far out it is — there is no ' +
       'gradient to descend, and a button here would spin and report nothing. ' +
       'Turning it, sliding it along its wall or giving it a wall it fits on is the ' +
@@ -316,6 +318,9 @@ export type LayoutModel = {
   roles: Role[];
   /** Does this piece get in a walker's way? */
   obstacle: boolean[];
+  /** Is this piece held inside the walls? `containedBySearch`: every obstacle, and a
+   *  rug, which is no obstacle but is floor the search moves. */
+  contained: boolean[];
   /** Top of each piece, world Y — a window sightline needs to know. */
   top: number[];
   /** Bounding-circle radius of each footprint, and its area. Both are properties of
@@ -496,6 +501,7 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     profile,
     roles,
     obstacle: parts.map(isObstacle),
+    contained: parts.map(containedBySearch),
     // `verticalExtent`, not `pos[1] + h`. `pos[1]` is a bottom for a floor anchor and the
     // mesh CENTRE for every other one, so the raw sum is wrong by half a height for a
     // television and for the whole ceiling family. `top[i]` is read by the window rule
@@ -712,9 +718,15 @@ export function costBreakdown(
       const tolerance = sharesFloor(roles[i], roles[j]) ? TUCKED_CLASH_SHARE : 0;
       if (share > tolerance) c.overlap += (share - tolerance) / (1 - tolerance);
     }
-    // Containment, and it takes BOTH instruments because neither can do the whole
-    // range. `outsideShare` samples a 3×3 grid whose outermost points sit a third of
-    // the half-extent in from the edge, so for a 2.2 m sofa side-on it reads exactly
+  }
+
+  // Containment is its own pass because its set is not the collision set: a rug is
+  // held inside the walls without being an obstacle (`containedBySearch`).
+  for (let i = 0; i < feet.length; i++) {
+    if (!m.contained[i]) continue;
+    // It takes BOTH instruments because neither can do the whole range. `outsideShare`
+    // samples a 3×3 grid whose outermost points sit a third of the half-extent in from
+    // the edge, so for a 2.2 m sofa side-on it reads exactly
     // 0.000 until ~160 mm is through the plaster — a flat dead band across the whole
     // region where `clearance.ts` reports the piece as crossing a wall. The room check
     // said so and **Fix** moved nothing, because there was nothing to save. The
