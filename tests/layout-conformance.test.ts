@@ -610,9 +610,14 @@ describe('layout-rules · the report and the solver meet cleanly at TUCKED_CLASH
       return TUCKED_CLASH_SHARE + u * (1 - TUCKED_CLASH_SHARE);
     };
     // Above the bar the read-back is exact, and two samples rather than one so a
-    // constant answer cannot satisfy it.
-    expect(readBack(0.9)).toBeCloseTo(0.9, 3);
-    expect(readBack(0.95)).toBeCloseTo(0.95, 3);
+    // constant answer cannot satisfy it. Both short of 1 − 55/420 = 0.869, where the
+    // chair's BACK reaches the table's edge: past that it is not a tuck at all
+    // (`tuckedAt` in `lib/layout-rules.ts`) and is charged its whole share, like any
+    // two pieces in one place — the ramp only ever forgave the part that is by design.
+    expect(readBack(0.855)).toBeCloseTo(0.855, 3);
+    expect(readBack(0.865)).toBeCloseTo(0.865, 3);
+    const deep = tuckedAt(0.9);
+    expect(costAt(deep.parts, deep.at).overlap / w, 'its back is in the table').toBeCloseTo(0.9, 3);
     // Below the bar there is nothing to read back — the charge is 0 by design — so
     // this half asserts that directly instead of running the inversion on a
     // saturated zero, which would agree with anything. (It used to sit inside the

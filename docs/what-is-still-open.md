@@ -5021,6 +5021,22 @@ inherited-overlap set (`overlapsAtStart`) stays, for pairs already past the bar 
 overlaps that are not tucks. `tests/seat-support.test.ts` pins every clause, and each was
 mutated: dropping the predicate, the bar raised to 1 or lowered to 0.5, the branch
 removed, and asking the stored rather than the candidate size all fail it.
+
+**And a tuck is front first (2026-09-30, the next look).** The user pushed a chair in back
+first and its back went up through the desktop: `profilesTuck` read the seat's height
+against the knee room and never which way it faced, so the part of a chair that is taller
+than the seat — its back — was forgiven under the top from any side. `tuckedAt`
+(`lib/layout-rules.ts`) is the pair rule now: roles and heights as before, and, when the
+seat is taller than the knee room, the seat's BACK STRIP (`seatBackShare`: 55/420 of a
+dining chair's depth, 70/480 of an office chair's, measured off their drawings and pinned
+to them by `tests/seat-fit.test.tsx`) may not overlap the surface. Every consumer asks it
+— the drag, Room check, the solver, the settle's pair and destination checks, and
+fit-check — which is the reason it takes both footprints rather than letting each site add
+the facing test itself. Seeded rooms: 8 tucked pairs, 0 facing away, so no starter
+baseline moved; the shuffle's finalists did (158 → 159), because 11 of 158 had a chair in
+back first. Every site was mutated back to the facing-blind rule and each one fails a test;
+two of those tests (the settle's destination check, fit-check's own gate) had to be built,
+because upstream consumers already refuse the case and no search reaches them with it.
 **The mounted ↔ mounted half is still open.**
 
 **2. `lib/physics.ts:216` states the opposite of what the code does.** It says

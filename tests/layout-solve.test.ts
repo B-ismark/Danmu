@@ -136,6 +136,19 @@ describe('scoreLayout', () => {
     expect(clash).toBeGreaterThan(tucked * 5);
   });
 
+  it('fines a chair pushed under a table back-first', () => {
+    // The same chair at the same spot, turned round: its back goes through the top, so
+    // it is not a tuck (`tuckedAt`) and pays its overlap like any pair. Turned the right
+    // way it is free, which is the pair for the test above.
+    const t = diningTable();
+    const chair = part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850], pos: [0, 0, 0] });
+    const m = prepare(ctxOf([t, chair]));
+    const at = (yaw: number) => costBreakdown(m, [{ x: 0, z: 0, yaw: 0 }, { x: 0, z: 0.35, yaw }]).overlap;
+    expect(at(Math.PI)).toBe(0);
+    expect(at(0)).toBeGreaterThan(0);
+    expect(at(Math.PI / 2)).toBeGreaterThan(0);
+  });
+
   it('fines a seat for standing in a surface it does not fit under', () => {
     // The other half of the test above. Same overlap share, a pair whose roles tuck and
     // whose heights do not: a 420 mm ottoman against a coffee table's shelf (§ H.6.4).
@@ -145,8 +158,9 @@ describe('scoreLayout', () => {
     expect(tucksUnder(o, t)).toBe(false);
     expect(tucksUnder(chair, diningTable())).toBe(true);
     // 60% of each seat's depth under its partner: over `CLASH_SHARE`, under the tuck's.
+    // Turned to face it (yaw π on the +z side), since a seat's back is its own matter.
     const into = (m: ReturnType<typeof prepare>, z: number) =>
-      costBreakdown(m, [{ x: 0, z: 0, yaw: 0 }, { x: 0, z, yaw: 0 }]).overlap;
+      costBreakdown(m, [{ x: 0, z: 0, yaw: 0 }, { x: 0, z, yaw: Math.PI }]).overlap;
     expect(into(prepare(ctxOf([diningTable(), chair])), 0.4 + 0.225 - 0.27)).toBe(0);
     expect(into(prepare(ctxOf([t, o])), 0.3 + 0.2 - 0.24)).toBeGreaterThan(0);
   });

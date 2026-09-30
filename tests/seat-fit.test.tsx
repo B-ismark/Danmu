@@ -186,6 +186,43 @@ describe('the fit test reads the furniture as it is drawn', () => {
   });
 });
 
+describe('the back a tuck keeps out from under the top', () => {
+  // `backShare` is the rear share of a seat's depth that stands taller than its tuck —
+  // the strip `tuckedAt` keeps out from under a surface, so a chair pushed in
+  // back-first is not tucked. Read off the drawing like the two heights above: the
+  // frontmost point of anything drawn above `tuckMM`, as a share of the depth from the
+  // back. Too small, and a back goes through a tabletop; so that direction is never
+  // allowed, and the shapes with a case are held to the drawing both ways.
+  function drawnBackShare(shape: Shape, category: Category, dimMM: Dim, tuckMM: number): number {
+    const hd = dimMM[1] / 2000;
+    const above = drawn(shape, category, dimMM).filter((p) => p.y[1] * 1000 > tuckMM + TOLERANCE_MM);
+    if (!above.length) return 0;
+    const front = Math.max(...above.flatMap((p) => occupiedPts(p).map(([, z]) => z)));
+    return Math.max(0, Math.min(1, (front + hd) / (2 * hd)));
+  }
+  const seatBacks = () =>
+    rows
+      .filter((r) => r.kind === 'seat')
+      .map((r) => {
+        const p = tuckProfile(r);
+        return { ...r, share: p.backShare, drawn: drawnBackShare(r.shape, r.category, r.dimMM, p.tuckMM), tolerance: TOLERANCE_MM / r.dimMM[1] };
+      });
+  const say = (r: ReturnType<typeof seatBacks>[number]) =>
+    `${r.shape}/${r.category} h${r.dimMM[2]}: backShare ${r.share.toFixed(3)}, drawn ${r.drawn.toFixed(3)}`;
+
+  it('no seat is taken as having less back than it is drawn with', () => {
+    expect(seatBacks().filter((r) => r.share < r.drawn - r.tolerance).map(say)).toEqual([]);
+  });
+
+  it('the two chairs are measured exactly, and nothing else has a back', () => {
+    const backed = seatBacks().filter((r) => r.drawn > 0);
+    expect([...new Set(backed.map((r) => r.shape))].sort()).toEqual(['chair-dining', 'chair-office']);
+    expect(backed.filter((r) => Math.abs(r.share - r.drawn) > r.tolerance).map(say)).toEqual([]);
+    // Everything else is drawn no taller than its tuck, so it is given no strip at all.
+    expect(seatBacks().filter((r) => r.drawn === 0 && r.share !== 0).map(say)).toEqual([]);
+  });
+});
+
 describe('the catalogue pairings that leave room', () => {
   // What a person meets: the Library's seats against its surfaces, plus a dining table,
   // which the Library only reaches as a desk-category piece and a room reaches as the

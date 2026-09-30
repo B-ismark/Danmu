@@ -6,7 +6,7 @@ import { settleHeights } from '@/lib/layout-settle';
 import { ridingParents } from '@/lib/rigid-parent';
 import { CATEGORIES, PART_LIBRARY, placeNewPart, selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import { footArea, footFromPart, footIntersectionArea, type Poly } from '@/lib/geometry';
-import { isObstacle, isSeating, isSeatRole, roleOf, tucksUnder, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
+import { isObstacle, isSeating, isSeatRole, roleOf, tuckProfile, tucksUnder, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
 import { analyzeRoom, floorBlockers } from '@/lib/clearance';
 import { clampDims } from '@/lib/dimension-ranges';
 
@@ -35,7 +35,10 @@ const TOP = 0.75;
 /** A 1100 × 600 coffee table. Top at 0.42, above `settleHeights`' 0.3 bar. */
 const COFFEE = part({ id: 'coffee', category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [0, 0, 0] });
 
-const chair = (id: string, x: number, z: number, y = 0, rot = 0) =>
+/** A dining chair FACING the table at the origin — its front, local +Z, towards it —
+ *  unless told otherwise. Back-first, its back is through the top, which is not a tuck
+ *  (`tuckedAt`); these fixtures used to face away and nothing could tell. */
+const chair = (id: string, x: number, z: number, y = 0, rot = z > 0 ? Math.PI : 0) =>
   part({ id, category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [x, y, z], rot });
 const lamp = (x: number, z: number, y = 0) =>
   part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [x, y, z] });
@@ -312,7 +315,7 @@ describe('every caller that moves a piece to what it finds', () => {
     const c = chair('c', 0, TUCKED_Z);
     const world = [TABLE, c];
     const r = resolvePlacement({
-      part: c, rawX: 0.01, rawZ: TUCKED_Z, rot: 0, dim: c.dimMM, parts: world, footprint: ROOM, roomHeight: H, snapMode: 'off',
+      part: c, rawX: 0.01, rawZ: TUCKED_Z, rot: c.rot, dim: c.dimMM, parts: world, footprint: ROOM, roomHeight: H, snapMode: 'off',
     });
     expect(r.pos[1]).toBe(0);
     expect(r.supportId).toBeUndefined();
@@ -325,7 +328,7 @@ describe('every caller that moves a piece to what it finds', () => {
     expect(r.valid).toBe(true);
     // The bar is the report's, and past it the drag refuses — still on the floor.
     const deep = resolvePlacement({
-      part: c, rawX: 0, rawZ: DEEP_Z, rot: 0, dim: c.dimMM, parts: world, footprint: ROOM, roomHeight: H, snapMode: 'off',
+      part: c, rawX: 0, rawZ: DEEP_Z, rot: c.rot, dim: c.dimMM, parts: world, footprint: ROOM, roomHeight: H, snapMode: 'off',
     });
     expect(deep.valid).toBe(false);
     expect(deep.refusal).toBe('blocked');
@@ -353,7 +356,7 @@ describe('every caller that moves a piece to what it finds', () => {
     ['merged', 'table'],
     ['merged', 'c1'],
   ] as const)('drag: moving the whole set (%s, grabbed by %s) leaves every chair on the floor', (how, grab) => {
-    const chairs = [chair('c1', -0.4, TUCKED_Z), chair('c2', 0.4, TUCKED_Z), chair('c3', 0, -TUCKED_Z, 0, Math.PI)];
+    const chairs = [chair('c1', -0.4, TUCKED_Z), chair('c2', 0.4, TUCKED_Z), chair('c3', 0, -TUCKED_Z)];
     const plain = [TABLE, ...chairs];
     const world = how === 'merged' ? plain.map((p) => ({ ...p, groupId: 'set' })) : plain;
     const selection = how === 'merged' ? selectionForPick(world, grab, []) : world.map((p) => p.id);
@@ -453,6 +456,24 @@ describe('every caller that moves a piece to what it finds', () => {
     expect(past.lead.refusal).toBe('blocked');
   });
 
+  it('drag: …front first. Back-first or side-on, its back would be through the top', () => {
+    // Looked at on 2026-09-30, the day the drag learnt to tuck: a chair pushed in
+    // back-first slid under, and its top rail stood on the desktop. The roles and the
+    // seat height tuck whichever way it faces; its 850 mm back under a 750 mm top does
+    // not, so the pair is two pieces in one place and the drag refuses it.
+    const at = (rot: number) =>
+      dragSet([TABLE, chair('c', -0.4, 0.45 + 0.25 + 0.05, 0, rot)], 'c', ['c'], 0, TUCKED_Z - (0.45 + 0.25 + 0.05));
+    expect(at(Math.PI)).toMatchObject({ valid: true, lead: { pos: [-0.4, 0, expect.closeTo(TUCKED_Z, 6)] } });
+    expect(at(0)).toMatchObject({ valid: false, lead: { refusal: 'blocked' } });
+    expect(at(Math.PI / 2)).toMatchObject({ valid: false, lead: { refusal: 'blocked' } });
+    // A back that clears the knee room is no back at all: a 750 mm chair, back-first,
+    // under a 900 mm desk with 825 mm under its cable rail.
+    const tall = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1600, 900, 900], pos: [0, 0, 0] });
+    const low = part({ id: 'low', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 750], pos: [-0.4, 0, 0.8], rot: 0 });
+    expect(tuckProfile(low).heightMM).toBeLessThanOrEqual(tuckProfile(tall).kneeMM);
+    expect(dragSet([tall, low], 'low', ['low'], 0, TUCKED_Z - 0.8)).toMatchObject({ valid: true, lead: { pos: [-0.4, 0, expect.closeTo(TUCKED_Z, 6)] } });
+  });
+
   it('drag: …only a seat that fits under that surface', () => {
     // The rule is `tucksUnder`, the report's, not the roles alone: a seat that tucks
     // under a dining table is two pieces in one place when it is pushed into a coffee
@@ -474,10 +495,10 @@ describe('every caller that moves a piece to what it finds', () => {
     // clear a 750 desk's 675 of knee room; stretched to 1300 they do not. Below the
     // support share, so gravity leaves it on the floor and the collision is the answer.
     const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1200, 600, 750], pos: [0, 0, 0] });
-    const c = part({ id: 'c', category: 'chair', shape: 'chair-office', dimMM: [600, 600, 1000], pos: [0, 0, 0.36] });
+    const c = part({ id: 'c', category: 'chair', shape: 'chair-office', dimMM: [600, 600, 1000], pos: [0, 0, 0.36], rot: Math.PI });
     expect(share(c, desk)).toBeLessThan(MIN_SUPPORT_SHARE);
     const at = (h: number) =>
-      resolvePlacement({ part: c, rawX: 0.01, rawZ: 0.36, rot: 0, dim: [600, 600, h], parts: [desk, c], footprint: ROOM, roomHeight: H, snapMode: 'off' });
+      resolvePlacement({ part: c, rawX: 0.01, rawZ: 0.36, rot: c.rot, dim: [600, 600, h], parts: [desk, c], footprint: ROOM, roomHeight: H, snapMode: 'off' });
     expect(tucksUnder(c, desk)).toBe(true);
     expect(at(1000)).toMatchObject({ valid: true, pos: [0.01, 0, 0.36] });
     expect(tucksUnder({ ...c, dimMM: [600, 600, 1300] }, desk)).toBe(false);

@@ -121,38 +121,13 @@ in this repo renders geometry.
 and so are the four that came after them: Move / Scale / Rotate, a TV changing walls, the
 wall pushing what it meets, and a short piece climbing a tall one. The user looked at each
 of those on 2026-09-30, and ruled that a nightstand may climb a wardrobe — and, the same
-day, a wall stopping at the rug it carries and its knob standing clear of the furniture. What is left is
+day, a wall stopping at the rug it carries and its knob standing clear of the furniture — and
+a table carrying a lamp dragging as smoothly as a bare one. What is left is
 here for a specific reason each. The rotate ring, because drei's `TransformControls` is a
 three.js object with **no DOM**, so nothing in Playwright can aim a press at its ring —
 the 2D half of that defect **is** browser-checked and is not in this list. The refusal
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
-
-### A table carrying a lamp drags as smoothly as a bare one — this branch, NOT LOOKED AT
-
-Reported 2026-09-30: dragging a table with a lamp on it felt slow, and the wobble on both
-looked like the reason. It was not. Every frame of a drag that carries company, three
-things in the room rebuilt themselves for no reason: the reflection lighting re-baked, the
-soft floor shadow rebuilt (and leaked) its textures, and every wall re-cut its window
-holes. Counted over the same 20-move drag with `scripts/drag-churn-probe.mjs`: 38 textures
-and 372 buffers before, 0 and 8 after, which is exactly what the drag makes with the lamp
-on the floor. The wobble and the lamp's light cost nothing measurable. A software
-renderer can count calls but cannot say how it feels on a real screen.
-
-**Where to click.** Rectangle with starter furniture, 3D tab, High quality. Drop a table
-lamp on the coffee table, then drag the table around in circles for a few seconds. Then
-drag a window along its wall.
-
-**What right looks like.**
-- The table and lamp move together as smoothly as the table does with the lamp taken off.
-- The lamp still wobbles when the table stops, and still lands on the table.
-- Once you let go, the window's hole in the wall is where the window is, and the room's
-  reflections and floor shadow look the same as before.
-
-**What wrong looks like.**
-- A stutter with the lamp on that goes away with the lamp off.
-- A window whose hole stays behind where it used to be.
-- The floor shadow going blank or blotchy during the drag.
 
 ### A refusal that names the wall instead of an obstruction that is not there
 
@@ -592,6 +567,13 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
   office chair at its Library size does the same under a 750 mm table. *Wrong* looks
   like: the chair jumping onto the tabletop, a *blocked* tag while it is only part way
   in, or it disappearing wholly inside the table.
+  **Front first only — this branch, NOT LOOKED AT.** Looked at 2026-09-30 with the chair
+  turned round: it slid in back first and its back went up through the desktop. The
+  rule now reads which way the seat faces, so back first or side on is *blocked* at the
+  table's edge, and Room check, Suggest and the settle all agree. Turn the chair to face
+  the table and it slides in as above. A chair low enough to clear the underside back
+  and all is not stopped either way. *Wrong* looks like: a chair's back through the top
+  from any side, or a chair facing its table that is refused at the edge.
 - **The ottoman bullet below was looked at on 2026-09-30 and is right:** it stands on the
   coffee table's top.
 - Under the 650 mm desk the office chair's arms would hit the top, so it no longer goes

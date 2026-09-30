@@ -51,12 +51,11 @@ import {
   formsRoute,
   isObstacle,
   isSoftFurnishing,
-  profilesTuck,
   roleOf,
   routeWidth,
   rugOffset,
   tuckProfile,
-  tucksUnder,
+  tuckedAt,
   TUCKED_CLASH_SHARE,
   WALK_COMFORT,
   WALK_MIN,
@@ -1830,8 +1829,8 @@ function seats(part: ScenePart, placed: ScenePart[], poly: Footprint): boolean {
   const area = footArea(foot);
   for (const o of placed) {
     if (o.wallMounted || o.category === 'rug') continue;
-    if (profilesTuck(fit, tuckProfile(o))) continue;
     const other = footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape);
+    if (tuckedAt(fit, foot, tuckProfile(o), other)) continue;
     if (!footOverlap(foot, other, -0.01)) continue;
     const smaller = Math.min(area, footArea(other));
     if (smaller > 0 && footIntersectionArea(foot, other) / smaller > SEED_TOUCH_SHARE) return false;
@@ -3339,9 +3338,10 @@ export function collidesAt(
     // A seat pushed under the surface it tucks under, not yet past the room report's
     // tucked bar, is composition rather than a crash — the report's rule 2 asks the
     // same predicate against the same share, so the pair the drag lets through is the
-    // pair Room check calls fine. The mover's height is the CANDIDATE size, so a chair
-    // stretched taller mid-drag is asked about the chair it is becoming.
-    if (tucksUnder({ ...mover, dimMM }, o)) {
+    // pair Room check calls fine — and `tuckedAt`, so a chair pushed in back-first is
+    // not a tuck. The mover's height is the CANDIDATE size, so a chair stretched taller
+    // mid-drag is asked about the chair it is becoming.
+    if (tuckedAt(tuckProfile({ ...mover, dimMM }), me, tuckProfile(o), theirs)) {
       const smaller = Math.min(footArea(me), footArea(theirs));
       if (smaller > 0 && footIntersectionArea(me, theirs) / smaller < TUCKED_CLASH_SHARE) continue;
     }

@@ -8,7 +8,8 @@
 // clamped on the way in.
 
 import { describe, expect, it } from 'vitest';
-import { checkFit, PROBE_ID, type FitCandidate } from '@/lib/fit-check';
+import { checkFit, overlapsSomething, PROBE_ID, type FitCandidate } from '@/lib/fit-check';
+import { footFromPart } from '@/lib/geometry';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import { tucksUnder } from '@/lib/layout-rules';
 import type { Footprint } from '@/lib/footprint';
@@ -174,6 +175,25 @@ describe('checkFit · being inside something is a no, tucking under is not', () 
     const r = checkFit(chair, [table], ROOM);
     expect(['fits', 'tight']).toContain(r.status);
     expect(r.placement).toBeDefined();
+  });
+});
+
+describe('overlapsSomething · a tuck is front first', () => {
+  // The gate's own answer, asked directly: nothing upstream of it will hand it a chair
+  // pushed in back-first (the solver fines one, the settle moves one), so a search can
+  // never show whether it would have said yes.
+  const table = part({ category: 'table', shape: 'desk-standard', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
+  const chairAt = (rot: number) =>
+    part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 500, 900], pos: [0, 0, 0.45], rot });
+  const asks = (rot: number) => {
+    const c = chairAt(rot);
+    return overlapsSomething(footFromPart(c.pos, c.rot, c.dimMM, c.circle, c.shape), c, [table]);
+  };
+
+  it('lets a chair under its table facing it, and not with its back or its side in', () => {
+    expect(asks(Math.PI)).toBe(false);
+    expect(asks(0)).toBe(true);
+    expect(asks(Math.PI / 2)).toBe(true);
   });
 });
 

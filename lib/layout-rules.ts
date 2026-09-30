@@ -74,7 +74,7 @@
 import type { Category, Shape, ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { WALK_RADIUS } from './clearance-field';
-import { footFromPart, localToWorld, polygonArea, type Foot } from './geometry';
+import { footFromPart, footOverlap, localToWorld, polygonArea, type Foot } from './geometry';
 import { dimRangeFor } from './dimension-ranges';
 
 // ─── Roles ──────────────────────────────────────────────────────────────────
@@ -780,6 +780,12 @@ export interface TuckProfile {
   role: Role;
   tuckMM: number;
   kneeMM: number;
+  /** The piece's full height — for a seat, what its back reaches. */
+  heightMM: number;
+  /** For a seat: the share of its depth, from the BACK, that stands taller than
+   *  `tuckMM` — a dining chair's back, an office chair's backrest. 0 for a seat with
+   *  nothing taller than its tuck, and for every surface. `tuckedAt` reads it. */
+  backShare: number;
 }
 
 type RoleInput = Parameters<typeof roleOf>[0];
@@ -787,7 +793,28 @@ type RoleInput = Parameters<typeof roleOf>[0];
 export function tuckProfile(part: RoleInput): TuckProfile {
   const role = roleOf(part);
   const h = part.dimMM[2];
-  return { role, tuckMM: seatTuckMM(part.shape, h), kneeMM: surfaceKneeMM(part.shape, role, h) };
+  return {
+    role,
+    tuckMM: seatTuckMM(part.shape, h),
+    kneeMM: surfaceKneeMM(part.shape, role, h),
+    heightMM: h,
+    backShare: isSeatRole(role) ? seatBackShare(part.shape) : 0,
+  };
+}
+
+function seatBackShare(shape: Shape): number {
+  switch (shape) {
+    // `DiningChairGeo` is 420 deep; the top rail's front face, the frontmost thing
+    // above the seat, is 155 mm behind the centre — the rear 55 of the 420.
+    case 'chair-dining':
+      return 55 / 420;
+    // `OfficeChairGeo` is 480 deep; the lumbar pad's front face is 170 mm behind the
+    // centre — the rear 70 of the 480. (The armrests top out AT the tuck height.)
+    case 'chair-office':
+      return 70 / 480;
+    default:
+      return 0;
+  }
 }
 
 function seatTuckMM(shape: Shape, h: number): number {
@@ -851,6 +878,43 @@ export function profilesTuck(a: TuckProfile, b: TuckProfile): boolean {
 
 export function tucksUnder(a: RoleInput, b: RoleInput): boolean {
   return profilesTuck(tuckProfile(a), tuckProfile(b));
+}
+
+/** The strip of a seat's footprint its back stands in: `backShare` of the depth at the
+ *  rear (local −Z, `lib/geometry.ts`), the whole width. Null for a seat with no back. */
+export function seatBackFoot(seat: Foot, backShare: number): Foot | null {
+  if (backShare <= 0) return null;
+  const hd = seat.hd * backShare;
+  const off = seat.hd - hd;
+  return { cx: seat.cx - off * Math.sin(seat.rot), cz: seat.cz - off * Math.cos(seat.rot), hw: seat.hw, hd, rot: seat.rot };
+}
+
+/**
+ * `profilesTuck`, for the pair standing where it stands: the seat goes under the
+ * surface, AND the part of it taller than the surface's knee room — its back — is not
+ * under the surface.
+ *
+ * `profilesTuck` alone is blind to which way the seat faces. It answers "does the
+ * front of this chair fit under that table", and a chair pushed in BACKWARDS or side-on
+ * put its 850 mm back through a 750 mm top with every consumer calling it tucked: the
+ * drag let it slide there, Room check said nothing, and the solver charged nothing for
+ * it. Looked at on 2026-09-30, the day the drag was taught to tuck, with the top rail
+ * standing on the desktop beside a plant.
+ *
+ * Every consumer that forgives a tucked pair asks THIS, with the two footprints it
+ * already has — the drag (`collidesAt`), the report (rule 2), the solver's overlap term,
+ * the settle pass and the fit search — so none of them can tuck a chair the others
+ * would call a clash. A seat whose whole height clears the knee has no back to worry
+ * about, and neither does a stool. The strip is taken from `tuckMM`, not from the knee:
+ * everything taller than the tuck, which covers everything taller than the knee.
+ */
+export function tuckedAt(a: TuckProfile, footA: Foot, b: TuckProfile, footB: Foot): boolean {
+  if (!profilesTuck(a, b)) return false;
+  const [seat, seatFoot, surface, surfaceFoot] = isSeatRole(a.role) ? [a, footA, b, footB] : [b, footB, a, footA];
+  if (seat.heightMM <= surface.kneeMM) return true;
+  const back = seatBackFoot(seatFoot, seat.backShare);
+  // The pad `collidesAt` passes, so a back flush with the table's edge is touching.
+  return !back || !footOverlap(back, surfaceFoot, -0.01);
 }
 
 /**
