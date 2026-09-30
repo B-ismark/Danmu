@@ -147,7 +147,22 @@ the way"* when nothing is. The turn reads *"It does not fit at that angle — "*
 same clause. Put a wardrobe where a normal-width curtain wants to go: that one should
 still say "something is in the way".
 
-**Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half on this branch.
+**It also used to vanish, and that is fixed on this branch — NOT LOOKED AT.** Looked at
+2026-09-30: dragged sideways the 5 m curtain *"wasn't moving"*, and pulled toward the
+camera it *"disappeared from my screen"*. Both were one defect. The room clamp was taken
+at the curtain's old angle before its wall was chosen, so it was held to the middle metre
+of its 6 m wall wherever the pointer went — the side wall was never the nearest, and
+past the room's middle the nearest was the near wall, which the see-through view cuts
+away along with the curtain. A wall piece now takes the wall the pointer is at. Do the
+drag above again, and keep going down the side wall toward the camera: the curtain goes
+onto the side wall, red, with the sentence above, and stays on screen the whole way. It
+reaches the near wall only when the pointer is at the near wall — and there it hides with
+the wall, as every window and print does. *Wrong* looks like: the curtain stuck in the
+middle of its wall while the pointer is at a corner, or gone with the pointer nowhere
+near the near wall.
+
+**Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half and the
+wall-from-the-pointer fix on this branch.
 
 ### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye
 

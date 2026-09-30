@@ -199,7 +199,30 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // free pass through the wall.
   const ridesAWall = ridesWall(part.category, part.shape);
   if (ridesAWall) {
-    const snapped = snapToWall([x, 0, z], dim, footprint, wallStandoff(part.shape), input.wallEdge);
+    // From the RAW point, not the clamped one. The clamp above is measured at the
+    // piece's CURRENT angle, which for a rider is the old wall's, and it decides
+    // which wall is nearest before the wall is chosen: a 5 m curtain on a 6 m wall
+    // is held to x ∈ [−0.5, 0.5], so a pointer on the 4 m side wall at x = −3 was
+    // pulled back to −0.5, from where the side wall is never the nearest — and a
+    // step toward the camera then put it on the near wall, which the dollhouse cuts
+    // away. Reported 2026-09-30 as a curtain that disappeared. `snapToWall` slides
+    // the piece along whichever wall it picks on its own, so the old-angle clamp
+    // bought nothing here but the wrong wall.
+    //
+    // Held to the room's BOX, not the box inset by the piece, so a pointer off the
+    // edge of the room still asks from the room's edge. Measured over the
+    // containment sweep (`tests/wall-rider-containment.test.ts`) against the old
+    // clamp, it accepts 141 placements that were refused and refuses 87 that were
+    // accepted, net curtain +44, window +22, painting −3, TV −9. Every one of the
+    // 87 is a piece wider than the wall now chosen: 82 with the pointer OUTSIDE an
+    // L, T or U, where the wall nearest the hand is a stub, and five with it
+    // inside and level with, or nearer to, a wall shorter than the curtain. They are
+    // refused as "wider than that wall", which is true of the wall the hand is at;
+    // the old clamp dragged the pointer back until a longer wall happened to be
+    // nearer. The raw point with no box at all nets painting −9 and TV −12 instead.
+    const ax = Math.max(bnd.minX, Math.min(bnd.maxX, gx));
+    const az = Math.max(bnd.minZ, Math.min(bnd.maxZ, gz));
+    const snapped = snapToWall([ax, 0, az], dim, footprint, wallStandoff(part.shape), input.wallEdge);
     x = snapped.x;
     z = snapped.z;
     if (snapped.rot !== undefined) outRot = snapped.rot;
@@ -276,6 +299,9 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // 18 TV — "wider than the wall it landed on", not a property of curtains), and
   // nothing else moves by one. Both columns are pinned, so the second half of that
   // sentence is a gate and not a memory.
+  // (Those are the figures at the deletion. Choosing a rider's wall from the pointer
+  // rather than from the old-angle clamp — above — shifted the pins since, and the
+  // live withdrawal is 516; the test carries both and the shift between them.)
   //
   // Five of the nine riders in the catalogue — `door`, `ac/ac-unit`, both mirrors
   // and `tv/soundbar`, the pieces that sit in or on the plaster and are the reason

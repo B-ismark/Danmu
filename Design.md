@@ -2761,7 +2761,12 @@ scored in one run rather than an inference from the escape count. Over every pai
 66,150 placements — the catalogue accepts **55,528** with the exemption and **54,958**
 without: removing it costs **exactly** the 570 that were leaving the room — 311
 curtain, 196 window, 45 painting, 18 TV, i.e. *wider than the wall it landed on*
-rather than a property of curtains — and not one placement besides. Five of the nine
+rather than a property of curtains — and not one placement besides. (Figures at the
+deletion. A rider now chooses its wall from the pointer rather than from the room clamp
+taken at its OLD angle, which had held a 5 m curtain to the middle metre of a 6 m wall
+and, past the room's middle, handed it to the cut-away near wall where it vanished —
+2026-09-30. That moved the pins by curtain +44, window +22, painting −3, TV −9, every
+lost placement a piece wider than the wall the hand is at; the test carries both.) Five of the nine
 riders in the catalogue (`door`, `ac/ac-unit`, both mirrors, `tv/soundbar`), the ones
 that sit in or on the plaster and are the reason such an exemption gets written, pass
 the polygon test on their own merits at all 1,575 samples each; the inset was already

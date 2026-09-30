@@ -419,14 +419,30 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // loose floor. The floor was the weaker assertion in both directions: `> 70%`
     // passes on the unfixed build too, where all nine sit at 1575, so it could not
     // tell the two columns apart at all.
-    const KEPT = {
+    //
+    // Two tables, because two changes moved these. `AT_DELETION` is what the four
+    // kept when the exemption went; `WALL_FROM_POINTER` is what choosing a rider's
+    // wall from the pointer, rather than from a clamp taken at its old angle, moved
+    // them by since (2026-09-30, the curtain that jumped onto the cut-away near
+    // wall). That change accepts 141 placements and refuses 87, every one of the 87
+    // a piece wider than the wall the hand is now nearest — see the rider branch of
+    // `resolvePlacement`. Kept apart so the 570 quoted in three documents stays a
+    // measurement of the thing it describes.
+    const AT_DELETION = {
       'curtain/curtain': 1264,
       'other/window': 1379,
       'painting/painting': 1530,
       'tv/tv': 1557,
     } as const;
-    for (const [pair, n] of Object.entries(KEPT)) {
-      expect(accepts.get(pair), `${pair} moved`).toBe(n);
+    const WALL_FROM_POINTER = {
+      'curtain/curtain': 44,
+      'other/window': 22,
+      'painting/painting': -3,
+      'tv/tv': -9,
+    } as const;
+    for (const [pair, n] of Object.entries(AT_DELETION)) {
+      const shift = WALL_FROM_POINTER[pair as keyof typeof WALL_FROM_POINTER];
+      expect(accepts.get(pair), `${pair} moved`).toBe(n + shift);
     }
 
     // …and the sentence the fix is actually defended with, as two numbers measured
@@ -446,21 +462,24 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // from `resolvePlacement`'s containment call and re-running.
     expect(accepts.get('desk/desk-l'), 'the L-shaped desk moved').toBe(1110);
     expect(acceptedBefore, 'the pre-fix column moved').toBe(55537);
-    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(54967);
+    // 54967 at the deletion, + 54 since from `WALL_FROM_POINTER`.
+    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(55021);
 
     // Arithmetic over the pins above, and deliberately not more than that: no source
-    // mutation can reach it, because a wrong `KEPT` fails its own loop first. What
+    // mutation can reach it, because a wrong `AT_DELETION` fails its own loop first. What
     // it guards is the PROSE — 570 is quoted in `Design.md`, in
     // `docs/what-is-still-open.md` and in `drag-resolve.ts`'s own comment, and this
     // is the line that goes red when someone re-measures the pins and leaves those
     // three saying the old number.
-    expect(acceptedBefore - acceptedNow).toBe(570);
+    const shifted = Object.values(WALL_FROM_POINTER).reduce((a, b) => a + b, 0);
+    expect(shifted).toBe(54);
+    expect(acceptedBefore - acceptedNow).toBe(570 - shifted);
     expect(
       every * 4 -
-        (KEPT['curtain/curtain'] +
-          KEPT['other/window'] +
-          KEPT['painting/painting'] +
-          KEPT['tv/tv']),
+        (AT_DELETION['curtain/curtain'] +
+          AT_DELETION['other/window'] +
+          AT_DELETION['painting/painting'] +
+          AT_DELETION['tv/tv']),
     ).toBe(570);
   });
 });
@@ -573,5 +592,59 @@ describe('a refusal says which kind of refusal it is', () => {
     const both = put(curtain, 0.5, 1.2, rect, [curtain, inTheWay]);
     expect(both.valid).toBe(false);
     expect(both.refusal).toBe('wall');
+  });
+});
+
+// ─── Which wall a rider rides is the wall the HAND is at ────────────────────
+//
+// Reported 2026-09-30, on the visual check: a 5 m curtain on the 6 m wall of a
+// 6 × 4 room would not move sideways, and a step toward the camera made it vanish.
+// The containment clamp is taken at the piece's CURRENT angle — the old wall's — and
+// it ran before the wall was chosen, so the 5 m curtain was held to x ∈ [−0.5, 0.5]
+// wherever the pointer went. From there the 4 m side wall is never the nearest, and
+// a pointer past the room's middle picks the near wall, which the dollhouse view
+// cuts away along with everything hung on it: not refused, not red, just gone.
+describe('a wall piece follows the pointer to the wall it is at', () => {
+  const room = footprintForLayout('rect', 6, 4) as Array<[number, number]>;
+  const curtain: ScenePart = { ...mk('curtain', 'curtain', [5000, 120, 2200]), pos: [0, 1.25, -1.9] };
+  const drag = (x: number, z: number) =>
+    resolvePlacement({
+      part: curtain,
+      rawX: x,
+      rawZ: z,
+      rot: 0,
+      dim: curtain.dimMM,
+      parts: [curtain],
+      footprint: room,
+      roomHeight: H,
+      snapMode: 'off',
+    });
+
+  it('goes to the side wall the pointer is on, and says it does not fit there', () => {
+    // Every step down the west wall, including the ones past the middle of the room
+    // that used to hand the curtain to the south wall.
+    for (const z of [-1.5, -0.5, 0, 0.5, 1, 1.5]) {
+      const r = drag(-2.9, z);
+      expect(r.pos[0], `z=${z}: not on the west wall`).toBeLessThan(-2.8);
+      expect(Math.abs(r.pos[2]), `z=${z}: centred on the 4 m wall`).toBeLessThan(1e-6);
+      // Wider than the wall, so refused — and refused for THAT reason, visibly, on a
+      // wall the camera can see.
+      expect(r.valid, `z=${z}`).toBe(false);
+      expect(r.refusal, `z=${z}`).toBe('wall');
+      expect(refusalCause(r)).toBe('it is wider than that wall.');
+    }
+  });
+
+  it('still slides along its own wall, and reaches the near wall only from beside it', () => {
+    // Sideways on the north wall is the full travel the 6 m wall allows a 5 m piece.
+    const west = drag(-2, -1.8);
+    const east = drag(2, -1.8);
+    expect(west.valid && east.valid).toBe(true);
+    expect(west.pos[0]).toBeCloseTo(-0.5, 2);
+    expect(east.pos[0]).toBeCloseTo(0.5, 2);
+    // The near wall is a legal place to hang a curtain; it is only reached when the
+    // pointer is nearer it than to any other wall.
+    const south = drag(0, 1.8);
+    expect(south.pos[2]).toBeGreaterThan(1.8);
   });
 });
