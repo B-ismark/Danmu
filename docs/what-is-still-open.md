@@ -7225,7 +7225,7 @@ sofa, drag an armchair onto the spot it named, press Place, and the sofa is adde
 intersecting the armchair — which is item 1 of this list, reached by a different door.
 Pre-existing, not a regression, and **not fixed here** because it is item 1's decision.
 Latent beside it: `place()` writes no `wallMounted`, harmless only because all ten
-`FIT_KINDS` are floor-anchored — the first wall or ceiling row added to a "will it fit"
+`FIT_KINDS` (`lib/fit-check.ts`) are floor-anchored — the first wall or ceiling row added to a "will it fit"
 panel stores a flag that disagrees with `isWallMountedPart`, and nothing would fail.
 
 **What is pinned and what is not.** `tests/spawn-spread.test.ts`,

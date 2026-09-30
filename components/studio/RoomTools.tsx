@@ -80,7 +80,7 @@ import { newLayout, roomStore, type LayoutVariant, type Transforms } from '@/lib
 import { transformsKey } from '@/lib/layout-ideas';
 import type { Footprint } from '@/lib/footprint';
 import { formatDim, formatLength, fromMM, stepFor, toMM } from '@/lib/units';
-import { checkFit, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
+import { checkFit, FIT_KINDS, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
 import { clampDims } from '@/lib/dimension-ranges';
 import { groundY } from '@/lib/physics';
 import { normalizeStoredParts, PART_LIBRARY } from '@/lib/scene-spec';
@@ -1325,22 +1325,6 @@ const FIT_TONE: Record<FitStatus, { tone: 'sage' | 'warn' | 'danger'; lead: stri
   'no-room': { tone: 'danger', lead: 'No room for it' },
   'too-tall': { tone: 'danger', lead: 'Too tall for this room' },
 };
-
-/** The kinds someone is most likely to be shopping for, and the shape each maps to.
- *  Deliberately short: this is a fit check, not the catalog, and `lib/scene-spec.ts`
- *  is where the full list lives. */
-const FIT_KINDS: Array<{ id: string; label: string; category: ScenePart['category']; shape: ScenePart['shape'] }> = [
-  { id: 'sofa', label: 'Sofa', category: 'sofa', shape: 'sofa' },
-  { id: 'armchair', label: 'Armchair', category: 'chair', shape: 'chair-armchair' },
-  { id: 'bed', label: 'Bed', category: 'bed', shape: 'bed-double' },
-  { id: 'wardrobe', label: 'Wardrobe or dresser', category: 'wardrobe', shape: 'wardrobe' },
-  { id: 'shelf', label: 'Bookcase', category: 'shelf', shape: 'bookshelf' },
-  { id: 'desk', label: 'Desk', category: 'desk', shape: 'desk-standard' },
-  { id: 'dining', label: 'Dining table', category: 'table', shape: 'coffee-table' },
-  { id: 'coffee', label: 'Coffee table', category: 'table', shape: 'coffee-table' },
-  { id: 'chair', label: 'Dining chair', category: 'chair', shape: 'chair-dining' },
-  { id: 'fridge', label: 'Fridge', category: 'fridge', shape: 'fridge' },
-];
 
 /** Nothing anybody buys is over 6 m on a side; a room's own side is capped at 50. */
 const ABSURD_MM = 6000;

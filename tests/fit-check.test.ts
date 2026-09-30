@@ -8,9 +8,9 @@
 // clamped on the way in.
 
 import { describe, expect, it } from 'vitest';
-import { checkFit, PROBE_ID, type FitCandidate } from '@/lib/fit-check';
-import { dimRangeFor } from '@/lib/dimension-ranges';
-import { tucksUnder } from '@/lib/layout-rules';
+import { checkFit, FIT_KINDS, PROBE_ID, type FitCandidate } from '@/lib/fit-check';
+import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
+import { roleOf, tucksUnder } from '@/lib/layout-rules';
 import type { Footprint } from '@/lib/footprint';
 import type { ScenePart } from '@/lib/scene-spec';
 
@@ -205,6 +205,30 @@ describe('checkFit · where the only place is under something', () => {
     const ottoman: FitCandidate = { category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420] };
     expect(tucksUnder(ottoman, table)).toBe(false);
     expect(checkFit(ottoman, [table], room(1.3, 1.0)).status).toBe('no-room');
+  });
+});
+
+describe('the Fit panel’s kinds are the pieces they are called', () => {
+  const kind = (id: string) => {
+    const k = FIT_KINDS.find((f) => f.id === id);
+    if (!k) throw new Error(`no Fit kind ${id}`);
+    return k;
+  };
+
+  it('a dining table is one a dining chair goes under, at a dining table’s height', () => {
+    // It was a `coffee-table`: a shelf under the top, so no chair fitted under a
+    // six-seater the panel had just been told about, and a range that stops at 600 mm,
+    // so pressing Place stood a 750 mm table in the room at 600.
+    const dining = kind('dining');
+    const size: [number, number, number] = [1800, 900, 750];
+    expect(roleOf({ ...dining, dimMM: size })).toBe('dining-table');
+    expect(clampDims(dining.category, dining.shape, size)).toEqual(size);
+    const chair = kind('chair');
+    expect(tucksUnder({ ...chair, dimMM: [500, 500, 850] }, { ...dining, dimMM: size })).toBe(true);
+  });
+
+  it('a coffee table is still a coffee table', () => {
+    expect(roleOf({ ...kind('coffee'), dimMM: [1100, 600, 420] })).toBe('coffee-table');
   });
 });
 

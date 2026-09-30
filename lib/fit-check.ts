@@ -39,6 +39,27 @@ import type { Category, ScenePart, Shape } from './scene-spec';
  *  about it can be recognised, and so it can never collide with a real part. */
 export const PROBE_ID = '__fit-probe__';
 
+/** The kinds someone is most likely to be shopping for, and the shape each maps to —
+ *  the Fit panel's list. Deliberately short: this is a fit check, not the catalog, and
+ *  `lib/scene-spec.ts` is where the full list lives.
+ *
+ *  It lives here rather than in the panel so a test can hold each kind to the piece it
+ *  names. The dining table used to be a `coffee-table`, which is drawn with a shelf
+ *  under its top and whose range stops at 600 mm: a 750 mm table was checked as a piece
+ *  no chair fits under, and placing it clamped it to 600. */
+export const FIT_KINDS: ReadonlyArray<{ id: string; label: string; category: Category; shape: Shape }> = [
+  { id: 'sofa', label: 'Sofa', category: 'sofa', shape: 'sofa' },
+  { id: 'armchair', label: 'Armchair', category: 'chair', shape: 'chair-armchair' },
+  { id: 'bed', label: 'Bed', category: 'bed', shape: 'bed-double' },
+  { id: 'wardrobe', label: 'Wardrobe or dresser', category: 'wardrobe', shape: 'wardrobe' },
+  { id: 'shelf', label: 'Bookcase', category: 'shelf', shape: 'bookshelf' },
+  { id: 'desk', label: 'Desk', category: 'desk', shape: 'desk-standard' },
+  { id: 'dining', label: 'Dining table', category: 'table', shape: 'desk-standard' },
+  { id: 'coffee', label: 'Coffee table', category: 'table', shape: 'coffee-table' },
+  { id: 'chair', label: 'Dining chair', category: 'chair', shape: 'chair-dining' },
+  { id: 'fridge', label: 'Fridge', category: 'fridge', shape: 'fridge' },
+];
+
 export type FitCandidate = {
   category: Category;
   shape: Shape;

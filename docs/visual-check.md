@@ -739,7 +739,8 @@ room with it.
 and drag it over the middle of the coffee table in the plan, then look in 3D. Push a
 dining chair under the dining table and add an **Office chair** under the desk. Then
 select the desk, set its height to 650 mm in the Inspector, and push the office chair
-under it again.
+under it again. Last, in the Room panel's **Will it fit** tab choose **Dining table**,
+type 1800 × 900 × 750 mm, press **Check the room**, then **Put it there**.
 
 **What right looks like.**
 - The ottoman ends up standing on the coffee table's top, like any piece dropped there.
@@ -749,10 +750,13 @@ under it again.
   under: dragged over the desk it lands on the desktop. A desk from about 690 mm up takes
   it again.
 - Suggest and the ideas gallery never park the ottoman inside the coffee table.
+- The Will it fit dining table arrives 750 mm tall, drawn like the starter dining table,
+  and a dining chair pushed under it tucks.
 
 **What wrong looks like.**
 - An ottoman sunk into a coffee table, with the shelf showing through its cushion.
 - A Library-size dining chair or office chair standing on its table or desk.
+- A Will it fit dining table that arrives 600 mm tall, or with a shelf under its top.
 - A starter room that looks different from before. None should: every seat in the starter
   rooms is a dining chair at a dining table, and all of those fit.
 

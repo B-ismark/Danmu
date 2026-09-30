@@ -186,10 +186,11 @@ const ROLE_BY_CATEGORY: Partial<Record<Category, Role>> = {
   painting: 'wall-art',
 };
 
-/** Shapes that mean "a flat top on legs" and nothing more specific than that. The
- *  catalog uses `coffee-table` for a 1.8 m six-seater dining table and
- *  `desk-standard` for the entry literally labelled "Dining / desk table", so for
- *  these the shape is not the answer — the SIZE is. */
+/** Shapes that mean "a flat top on legs" and nothing more specific than that. A
+ *  `table` a scan names no more closely is built as a `desk-standard`, the catalogue's
+ *  "Dining / desk table" is one too, a `coffee-table` stretches to 600 mm, which is
+ *  sitting height, and a `box` is whatever a scan could not name at all — so for these
+ *  the shape is not the answer, the SIZE is. */
 const AMBIGUOUS_TABLE = new Set<Shape>(['coffee-table', 'desk-standard', 'box']);
 
 /** Above this a table is one you sit AT; below it, one you put a mug on. Dining
