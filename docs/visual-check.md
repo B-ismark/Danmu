@@ -77,28 +77,6 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### An L-shaped desk wraps a room's inside corner, and its open corner is floor — branch `claude/affectionate-ritchie-ilawx1`
-
-**Where to click.** An **L-shape** room, 2D Plan. Add an **L-shaped desk**, turn it so its
-open corner faces the room's inside corner, and drag it until that corner of wall sits in
-the desk's open corner. Then the same in 3D. Then push an **Office chair** into the open
-corner of a desk standing in the middle of the room.
-
-**What changed.** Every containment and collision test read the desk's BOX, so the open
-corner counted as desk: the wrap was refused as *blocked*, and a chair tucked into the L
-was *in the way*. They read the two rectangles the desk stands on now
-(`lib/foot-cells.ts`), and the plan draws the L rather than a box.
-
-**What "wrong" looks like.** The tag saying *blocked* with the wall corner in the open
-corner and 20–30 mm of air on both walls. Nudging it 100 mm further so one arm really
-does cross the wall and it NOT going red. The plan outline and the 3D tabletop
-disagreeing about where the notch is. A click in the open corner selecting the desk. A
-room check calling the tucked chair an overlap.
-
-**Measured, not seen:** the wrap, the chair and the click are in
-`tests/foot-cells.test.ts`; the catalogue sweep in `tests/wall-rider-containment.test.ts`
-accepts nine more desk placements and still finds none outside the room.
-
 ### Props step aside, say when there is no room, and the tabletop plant is a plant — branch `claude/affectionate-ritchie-ilawx1`
 
 **Where to click.** A bedroom starter, 3D. Look at a nightstand with its lamp. Then select
@@ -120,74 +98,6 @@ plant reading as a green ball.
 
 **Probed in SwiftShader:** four props handed the same spot on a coffee table stood side
 by side; a nightstand with its lamp in the middle showed both its props as **No room**.
-
-### Six pieces changed size — a plant, three chairs and two lamps
-
-**MEASURED IN A BROWSER 2026-09-06 — the SIZE half is settled by a second instrument.**
-Playwright against the production build of `4533321`, reading the three.js scene graph the
-browser actually built (via three’s `__THREE_DEVTOOLS__` hook and `userData.danmuPartId`)
-rather than the fidelity test’s own JSX walk. Every piece was seeded TWICE — at its
-catalogue size and at a deliberately odd one — so each is compared against ITSELF at another
-size and no table of expected values has to be right for the result to mean something.
-
-**14 of 14 rows at ratio 1.00 on all three axes**: `plant`, `chair-dining`, `chair-office`,
-`chair-armchair`, `lamp-floor`, `lamp-table` and `desk-l`, each at two sizes. (`plant`’s
-depth reads 0.98 — the chord of a polygonised cylinder, not a defect.)
-
-**The probe was wrong first, and how it announced itself is worth keeping.** Its first run
-read a 500 mm dining chair as 2810 mm wide — but with an IDENTICAL A/B ratio at both
-declared sizes. A renderer that ignored `dimMM` could not produce a constant ratio, so the
-contamination had to be in the instrument. The per-child dump found `LineSegmentsGeometry`
-at 1674×1469×**2870** inside the chair’s stamped subtree — room-scale guide lines whose
-height is the CEILING, which is also what pinned `desk-l`’s "height" at a flat 3000 mm
-regardless of what it declared. Excluding line geometry took every row to 1.00.
-
-**Decor is NOT inside the stamped group**, established by the same measurement rather than
-by reading: `desk-l` came back 751 mm tall against a declared 750 with a candle and a
-cylinder sitting on top of it in the screenshot.
-
-**Still open, and it is the whole reason this item exists:** whether a 400 mm plant and a
-500 mm dining chair *look* right at those sizes. A screenshot of all fourteen shows nothing
-obviously broken — every piece is recognisable and proportionate to its neighbours — but
-"draws 400 mm" and "looks like a 400 mm plant" are different claims and only the first is
-measured.
-
-
-**Where to click.** Library → add **Plant**, **Dining chair**, **Office chair**, **Armchair**,
-**Floor lamp**, **Table lamp**. Look at each in 3D beside a piece of known size (a 2 m sofa,
-a 750 mm desk), then switch to **2D Plan** and check the outline matches what 3D draws.
-
-**What changed.** All six renderers were hard-coded metres and never read `part.dimMM`, so
-they drew one fixed size no matter what the piece declared. They are scaled to their declared
-size now. The plant is the extreme: it declared 400 × 400 × 1600 and drew **880 × 700 × 1940**,
-so the plan outlined a 400 mm pot around a 1.9 m plant.
-
-| piece | was drawn | now |
-|---|---|---|
-| Plant | 880 × 700 × 1940 | 400 × 400 × 1600 |
-| Dining chair | 420 × 420 × 1090 | 500 × 500 × 850 |
-| Office chair | 580 × 480 × 1150 | 600 × 600 × 1100 |
-| Armchair | 700 × 700 × 1020 | 700 × 700 × 900 |
-| Floor lamp | 360 × 360 × 1850 | 300 × 300 × 1700 |
-| Table lamp | 280 × 280 × 520 | 250 × 250 × 500 |
-
-**What "wrong" looks like.** The plant is the one to judge first — it loses more than half its
-width and about a fifth of its height, and a squashed shrub is the risk. The dining chair goes
-the other way on the floor axes and **down 240 mm in height**, so check it still reads as a
-dining chair against a table rather than as a stool with a back. The scale is non-uniform
-(each axis maps to its own declared dimension), so anything that looked round from above
-should still look round: the plant, both lamps and the stool are in `ROUND_SHAPES` and the
-plan draws them as ellipses.
-
-**What is already settled and does not need eyes.** That all six now draw at exactly their
-declared size — ratio 1.00 on all three axes, gated per shape in
-`tests/footprint-fidelity.test.tsx`, mutation-verified. What no measurement can answer is
-whether a plant at its declared size still looks like a plant. If any of them look wrong, the
-honest fix is the **declared size in `PART_LIBRARY`**, not the renderer — the geometry is
-correct now and the catalogue number is the thing that was never checked against it.
-**Not for the plant**, which was looked at and was squashed: a stretch is a stretch at any
-catalogue size, so it is drawn at its own size now (`lib/plant-form.ts`), and that drawing
-has been looked at at every size.
 
 ### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
 
