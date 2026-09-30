@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { highestSurfaceUnder, restingOn, verticalExtent, SUPPORT_Y_EPS } from '@/lib/physics';
+import { findSupportDetailed, highestSurfaceUnder, restingOn, verticalExtent, SUPPORT_Y_EPS } from '@/lib/physics';
+import { ridingParents } from '@/lib/rigid-parent';
+import { footArea, footFromPart, footIntersectionArea } from '@/lib/geometry';
 import type { ScenePart } from '@/lib/scene-spec';
 
 // § 37 — "is this piece resting on anything" was a question nothing in this repo could
@@ -43,12 +45,12 @@ describe('restingOn — the question highestSurfaceUnder does not answer', () =>
     //
     // Written the honest way, that absence IS the finding: one call, no `y` anywhere in
     // it, and the answer is the desk regardless of where the lamp is.
-    const under = highestSurfaceUnder([desk], 'lamp', 0, 0, [250, 250, 500], 0, undefined);
+    const under = highestSurfaceUnder([desk], 'lamp', 0, 0, [250, 250, 500], 0, undefined, undefined);
     expect(under?.id).toBe('desk');
     expect(under?.y).toBeCloseTo(DESK_TOP, 9);
     // …so if the footprints ever stopped overlapping, every "floating" clause below
     // would pass for the wrong reason. This is what stops that.
-    expect(highestSurfaceUnder([], 'lamp', 0, 0, [250, 250, 500], 0, undefined)).toBeNull();
+    expect(highestSurfaceUnder([], 'lamp', 0, 0, [250, 250, 500], 0, undefined, undefined)).toBeNull();
   });
 
   it('says a lamp ON the desk is on the desk', () => {
@@ -65,7 +67,7 @@ describe('restingOn — the question highestSurfaceUnder does not answer', () =>
     // user has since resized. The old banner named the desk here.
     const lamp = lampAt(DESK_TOP + 0.35);
     expect(
-      highestSurfaceUnder([desk], 'lamp', 0, 0, lamp.dimMM, 0, undefined)?.id,
+      highestSurfaceUnder([desk], 'lamp', 0, 0, lamp.dimMM, 0, undefined, undefined)?.id,
       'the old question still says "desk", which is why this test is a pair',
     ).toBe('desk');
     expect(ask(lamp, [desk]), 'and the new one says nothing holds it up').toBeNull();
@@ -165,7 +167,7 @@ describe('restingOn — the question highestSurfaceUnder does not answer', () =>
     });
     const lamp = lampAt(DESK_TOP);
     // The old question, and it is the wrong answer for this purpose:
-    const naive = highestSurfaceUnder([desk, monitor], 'lamp', 0, 0, lamp.dimMM, 0, undefined);
+    const naive = highestSurfaceUnder([desk, monitor], 'lamp', 0, 0, lamp.dimMM, 0, undefined, undefined);
     expect(naive?.id, 'the highest top wins, which is the monitor').toBe('monitor');
     // …and the new one, which asks for a support the piece could be resting ON.
     const r = ask(lamp, [desk, monitor]);
@@ -178,7 +180,58 @@ describe('restingOn — the question highestSurfaceUnder does not answer', () =>
     // that a future `restingOn` written without it goes red: a lamp perched on the very
     // lip of a desk is not on the desk, and at the desk's own height it is in mid-air.
     const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0.78, DESK_TOP, 0] });
-    expect(highestSurfaceUnder([desk], 'lamp', 0.78, 0, lamp.dimMM, 0, undefined)).toBeNull();
+    expect(highestSurfaceUnder([desk], 'lamp', 0.78, 0, lamp.dimMM, 0, undefined, undefined)).toBeNull();
     expect(ask(lamp, [desk])).toBeNull();
+  });
+
+  it('reads the piece at the turn it has', () => {
+    // A laptop at the desk's corner, 10 mm in from its end and 120 mm in from its front:
+    // unturned, 53% of it is over the desk; turned a quarter, 46% is. The premise first,
+    // so the pair below is in the band where the turn decides the answer.
+    const at: [number, number, number] = [0.7 - 0.01, DESK_TOP, 0.35 - 0.12];
+    const dim: [number, number, number] = [340, 240, 220];
+    expect(highestSurfaceUnder([desk], 'laptop', at[0], at[2], dim, 0, undefined, undefined)?.id).toBe('desk');
+    expect(highestSurfaceUnder([desk], 'laptop', at[0], at[2], dim, Math.PI / 2, undefined, undefined)).toBeNull();
+
+    const laptop = (rot: number) => part({ id: 'laptop', category: 'monitor', shape: 'laptop', dimMM: dim, pos: at, rot });
+    expect(ask(laptop(0), [desk])?.id).toBe('desk');
+    expect(ask(laptop(Math.PI / 2), [desk])).toBeNull();
+  });
+});
+
+describe('an L-desk is asked about as the L it is, not its box', () => {
+  // The support loop built the mover from its turn and roundness and never its shape,
+  // while every SUPPORT was built with its own. So an L-desk was measured as its box,
+  // and the corner it does not have counted as standing on whatever was under it. Both
+  // directions, each in the band where the two readings disagree — the premise first.
+  const dim: [number, number, number] = [1600, 1400, 750];
+  /** A 350 mm platform covering the desk's plan from `lo` to `hi` along z. */
+  const platform = (lo: number, hi: number) =>
+    part({ id: 'plat', category: 'other', shape: 'box', dimMM: [3000, (hi - lo) * 1000, 350], pos: [0, 0, (lo + hi) / 2] });
+  const share = (plat: ScenePart, shape?: 'desk-l') => {
+    const f = footFromPart([0, 0, 0], 0, dim, undefined, shape);
+    return footIntersectionArea(f, footFromPart(plat.pos, 0, plat.dimMM)) / footArea(f);
+  };
+  const self = { id: 'desk', category: 'desk', shape: 'desk-l' } as const;
+  const raised = part({ id: 'desk', category: 'desk', shape: 'desk-l', dimMM: dim, pos: [0, 0.35, 0] });
+
+  it('over its open corner: more than half its box, a third of it — not held up', () => {
+    const plat = platform(-0.05, 1.7);
+    expect(share(plat)).toBeGreaterThan(0.5);
+    expect(share(plat, 'desk-l')).toBeLessThan(0.4);
+    expect(findSupportDetailed([plat], self, 0, 0, dim, 0, undefined)).toBeNull();
+    expect(highestSurfaceUnder([plat], 'desk', 0, 0, dim, 0, undefined, 'desk-l')).toBeNull();
+    expect(ask(raised, [plat, raised])).toBeNull();
+    expect(ridingParents([plat, raised])).toEqual({});
+  });
+
+  it('under its long arm: less than half its box, two thirds of it — held up', () => {
+    const plat = platform(-1.7, -0.05);
+    expect(share(plat)).toBeLessThan(0.5);
+    expect(share(plat, 'desk-l')).toBeGreaterThan(0.6);
+    expect(findSupportDetailed([plat], self, 0, 0, dim, 0, undefined)?.id).toBe('plat');
+    expect(highestSurfaceUnder([plat], 'desk', 0, 0, dim, 0, undefined, 'desk-l')?.id).toBe('plat');
+    expect(ask(raised, [plat, raised])).toEqual({ on: 'part', id: 'plat', gap: 0 });
+    expect(ridingParents([plat, raised])).toEqual({ desk: 'plat' });
   });
 });

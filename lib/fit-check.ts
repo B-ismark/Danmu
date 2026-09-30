@@ -33,7 +33,7 @@ import { verticalExtent } from './physics';
 import { solveLayout } from './layout-solve';
 import { settleParts } from './layout-settle';
 import type { Placement } from './layout-score';
-import type { Category, ScenePart, Shape } from './scene-spec';
+import { PART_LIBRARY, type Category, type LibraryItem, type ScenePart, type Shape } from './scene-spec';
 
 /** The id the probe piece carries while it is being tried. Distinctive so a finding
  *  about it can be recognised, and so it can never collide with a real part. */
@@ -59,6 +59,27 @@ export const FIT_KINDS: ReadonlyArray<{ id: string; label: string; category: Cat
   { id: 'chair', label: 'Dining chair', category: 'chair', shape: 'chair-dining' },
   { id: 'fridge', label: 'Fridge', category: 'fridge', shape: 'fridge' },
 ];
+
+/** The Library sizes the Fit panel offers for a kind: chips that fill in a piece
+ *  someone has seen before, so they can check the answer against it before trusting
+ *  it with a size they typed.
+ *
+ *  **The same SHAPE, not the same category.** A chip fills in three numbers and the kind
+ *  decides everything else, so the only chip that means what its label says is one the
+ *  check will draw as the same piece. By category, 15 of the 27 chips were some other
+ *  piece — a stool and an office chair offered as armchairs, a washing machine and a
+ *  microwave as fridges, a TV console as a bookcase — and the Dining table was offered a
+ *  coffee table and a side table but never the Library's own dining table, which is filed
+ *  under `desk`. Eleven of the fifteen were outside the kind's range, so pressing one
+ *  filled in a size the panel then called out of range, and **Put it there** would have
+ *  placed a different one.
+ *
+ *  No cap: no kind has more than three. `tests/fit-check.test.ts` pins every kind's list,
+ *  so a Library row that makes one longer is a decision someone makes, not a chip row
+ *  that quietly grows. */
+export function fitPresets(kind: { shape: Shape }): LibraryItem[] {
+  return PART_LIBRARY.filter((p) => p.shape === kind.shape);
+}
 
 export type FitCandidate = {
   category: Category;

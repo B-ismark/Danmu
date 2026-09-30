@@ -80,10 +80,10 @@ import { newLayout, roomStore, type LayoutVariant, type Transforms } from '@/lib
 import { transformsKey } from '@/lib/layout-ideas';
 import type { Footprint } from '@/lib/footprint';
 import { formatDim, formatLength, fromMM, stepFor, toMM } from '@/lib/units';
-import { checkFit, FIT_KINDS, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
+import { checkFit, FIT_KINDS, fitPresets, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
 import { clampDims } from '@/lib/dimension-ranges';
 import { groundY } from '@/lib/physics';
-import { normalizeStoredParts, PART_LIBRARY } from '@/lib/scene-spec';
+import { normalizeStoredParts } from '@/lib/scene-spec';
 import { Select } from '@/components/ui/Select';
 import { NumberField } from '@/components/ui/NumberField';
 import { v4 as uuid } from 'uuid';
@@ -1359,12 +1359,8 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
   ];
   const ready = dimMM.every((v) => Number.isFinite(v) && v > 0);
 
-  // Recognisable sizes from the one catalog, so someone can check the answer
-  // against something they have seen before trusting it with a size they typed.
-  const presets = useMemo(
-    () => PART_LIBRARY.filter((p) => p.category === kind.category).slice(0, 4),
-    [kind.category],
-  );
+  // Recognisable sizes from the one catalog — which ones is `fitPresets`' rule.
+  const presets = useMemo(() => fitPresets(kind), [kind]);
 
   function fill(item: LibraryItem) {
     setW(String(fromMM(item.dimMM[0], dimUnit)));

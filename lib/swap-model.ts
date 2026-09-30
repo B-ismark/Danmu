@@ -11,7 +11,8 @@ import { useStudio } from './store';
 import { useScene } from './scene-store';
 import { currentRoomScene } from './room-scene';
 import { findSupportDetailed, groundY, heightForNewCeiling } from './physics';
-import { isWallMountedPart, type LibraryItem } from './scene-spec';
+import { ridersOf } from './rider-height';
+import { isRoundPart, isWallMountedPart, type LibraryItem } from './scene-spec';
 
 /** Replace piece `id`'s model with `item`, re-grounded for the new size and mount.
  *  `dimOverride` carries a size the picker's search words named — already clamped
@@ -48,7 +49,12 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
   } else {
     // The NEW kind is the one asking: the snapshot still holds the old one under
     // this id, and a swap to a chair must not stand it on the table it tucks under.
-    support = findSupportDetailed(scene, { id, category: item.category, shape: item.shape }, x, z, dimMM, baseRot);
+    // With the new kind's outline too, or a swap to a round piece is asked as the
+    // square around it. Nor on what is standing on it (`ridersOf`): a box with a tray
+    // on it, swapped for an ottoman, went up onto its own tray.
+    const riders = ridersOf(id, scene, useScene.getState().parts, s.parentIds);
+    const world = scene.filter((p) => !riders.has(p.id));
+    support = findSupportDetailed(world, { id, category: item.category, shape: item.shape }, x, z, dimMM, baseRot, isRoundPart(item.shape));
     ny = support !== null && support.y > 0.3 ? support.y : 0;
   }
   s.resetTransforms(id); // drop stale rotate/scale overrides (and any rigid-parenting link)

@@ -3652,19 +3652,85 @@ asks `hasFloorSharers` first.
   outright (`currentDim()` returns the held size, or the stretch in flight), which
   covers the same drag with nothing left to check, so the check went in the merge.
   `docs/visual-check.md` names the look.
-- *A new piece is asked about without its turn.* `placeNewPart` passes the probe no `rot`
-  and no `circle`, so a round lamp added at an angle is measured as an unturned square.
-  That is older than this fix and not its mechanism; the fix is one line.
+- **Fixed after this: a new piece is asked about with its turn and its outline.**
+  `placeNewPart` passed the probe no `rot` and no `circle`, and the Inspector's model swap
+  passed the turn but not the outline, so both asked about an unturned square. The note
+  first filed here guessed the case as "a round lamp added at an angle", which is the one
+  that cannot tell — a circle turned is the same circle. Measured instead, both halves are
+  the floor for a piece more than half over a surface: a 250 mm table lamp 50 mm in from a
+  coffee table's corner (49% of its square over the top, more of the lamp), and a monitor
+  that takes an east wall's heading 20 mm in from the end of a desk turned the same way
+  (48% unturned, 53% turned). The turn also misleads the other way — a laptop turned a
+  quarter at a table's corner reads 53% on unturned and 46% turned. The fix was two
+  arguments; what keeps it is that the probe's turn and outline are **required** now,
+  because the default was the hole and its docblock said a caller without a rotation
+  lost nothing. `tests/new-piece-support.test.ts` and `tests/seat-swap.test.tsx` hold the
+  cases, each proving first that its spot is one where the two readings disagree.
 - *A small low box is still a side table.* `roleOf` asks "under 700 mm both ways" before it
   asks the new height floor, so a 400 × 300 tray reads as a side table. A side table has no
   floor sharers, so nothing here depends on it, and it is older than this fix.
-- **Found while testing, not fixed: an ottoman climbs onto the tray standing on it.**
-  `settleHeights` resolves lowest first and its probe has no below-test, so a
-  tabletop-prone piece can take the piece resting on it as its support. A 750 × 450 tray
-  on a 550 × 400 × 420 ottoman: the ottoman goes to 0.48 m, then the tray to 0.90 m, both in the
-  air. Measured the same before this fix (for every tray size tried), after its first
-  commit (for trays too small to read as a coffee table) and now. A large ottoman the tray
-  covers less than half of is unaffected, which is what the tray test uses.
+- **Found while testing, fixed after it: an ottoman climbed onto the tray standing on it.**
+  `settleHeights` resolves lowest first and its probe had no below-test, so a
+  tabletop-prone piece could take the piece resting on it as its support. A 750 × 450 tray
+  on a 550 × 400 × 420 ottoman: the ottoman went to 0.48 m, then the tray to 0.90 m, both in
+  the air. Reached from a scan, not only from a hand-built fixture: every piece enters at
+  y = 0 and a tie keeps the detector's order, so a tray listed before its ottoman first takes
+  the ottoman's top and the ottoman then takes the tray's (0.48 m, measured). The pass now
+  leaves out of a piece's probe whatever it has itself stood on that piece, directly or down
+  a stack, from its own record, and whatever was already resting on the piece's top when it
+  began. It is only the resting half of a below-test: a support that starts partway up its
+  rider still counts, which is the case parked in that file.
+  **The first version read heights alone, and review found it broke stacks.** It left out
+  anything whose underside was within `SUPPORT_Y_EPS` of the piece's top *or above it*,
+  against the top the piece had BEFORE it settled — in a scan, a piece still on the floor.
+  A riser already stood on a desk then had its underside (0.75) above the waiting monitor's
+  top (0.40), so the monitor went onto the desk through the riser, and a plant through the
+  tray under it; and a piece no taller than the tolerance, 50 mm, the clamp floor for an
+  `other` box, had every support refused it. What the pass stood where is a record now,
+  and the height test is kept for pieces it has not placed, reading "at the top and off the
+  piece's own level" — seven of eight mutants fail `tests/layout-settle.test.ts`; the
+  eighth, "at or above" for "at", differs only for a piece already hanging above another,
+  which no scan hands in.
+- **Found while fixing that, not fixed: a rider listed before its support in a scan's tie
+  goes under it.** Desk, riser and monitor all enter at y = 0, and a tie keeps the
+  detector's order. With the riser listed before the monitor the stack comes out right
+  (riser 0.75, monitor 0.85). With the monitor first, it takes the desk at 0.75 and the
+  riser, which the monitor covers by 80%, then goes on top of the monitor at 1.15 m —
+  three of the six orders, measured the same on the commit before this work, so it is not
+  a regression of the filter. Nothing here can tell a riser from a second monitor by
+  position alone; a fix needs a rule about which pieces go under which, which is the
+  `lib/layout-rules.ts` question the parked case above already asks for.
+- **Found while fixing that, not fixed: a drag climbs onto an unlinked rider the same way.**
+  A drag leaves a piece's carried children out of its world only when they are *linked*
+  (`parentIds`, via `snapshotDescendants`), and the support probe asks the same highest-top
+  question with no below-test. A scanned room has no links — the settle pass above writes
+  none — so nudging that ottoman 10 mm with the tray on it puts it at 0.48 m on the tray,
+  reported valid; a 500 mm box under another the same size goes to 0.80 m. Linked (by hand,
+  or after a drag has re-parented the tray), the same nudge stays at 0 m. The fix is the
+  same filter in `findSupportDetailed`'s caller on the drag path, and it is not this
+  commit's mechanism.
+- **Found in review, not fixed: a tray across two tops is recorded on one of them.** A
+  1100 × 600 × 420 coffee table, a 350 × 350 × 420 box beside it at x = 0.825 and a 750 × 450
+  × 60 tray at x = 0.5 across both (57% of the tray over the table, 30% over the box), all at
+  y = 0. Listed tray first, the tray goes to 0.42 m on the table and the box to 0.48 m, up
+  onto the tray resting on it; listed box first, the box stays down and the tray goes to
+  0.42 m. Measured the same on the commit before this work, so not a regression. The record
+  holds one support per piece, the one `findSupportDetailed` answered, and the tray's is the
+  table, so the box's probe keeps it; the height test would have left it out, but it is read
+  only for pieces the pass has not placed. The likely fix is a record of every top a piece
+  comes to rest at, within `SUPPORT_Y_EPS` of its underside, rather than the one the probe
+  returned — proposed, not built or measured.
+- **Found in review, not fixed: a support that goes up after its rider has settled leaves
+  the rider inside it.** A 250 mm table lamp and a 500 × 400 × 300 box at the same spot over
+  a coffee table, all at y = 0. Listed lamp first, the lamp goes to 0.42 m on the table; the
+  box then goes to 0.42 m on the table too (the lamp covers 31% of it, under the support bar,
+  so it is no support for the box), and the lamp is left at 0.42 m inside the box, whose top
+  is at 0.72. Listed box first, the lamp ends on the box at 0.72 m. Measured the same on the
+  commit before this work. Ascending Y cannot order a tie, which is how a scan hands every
+  piece in, so the answer depends on the detector's order. The fix is to re-ask whatever
+  stood on a piece that later moved, down the record — a fixed point, and whether it ends is
+  the first thing to answer, because the case parked in `lib/layout-settle.ts` is exactly a
+  fixed point that can diverge.
 
 Tests: `tests/seat-support.test.ts` (32) and `tests/seat-swap.test.tsx` (3). Every clause is
 a pair, with a table lamp at the same spot that must still land, because a probe that
@@ -3773,11 +3839,42 @@ clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/
 - **A dining table under 800 mm wide is outside the dining/desk table's range.** The panel
   says so and **Put it there** widens it to 800. Whether a `table` category's range should
   start lower is a separate decision.
-- **A scanned ottoman the tidy-up cannot push clear of a coffee table is lifted onto it.**
-  Measured: in a 1.3 × 1.0 m room the push has nowhere to go, the ottoman is left half over
-  the top, and `settleHeights` stands it there at 0.42 m, where no report sees it. On `main`
-  it stayed on the floor inside the table, which no report saw either. It belongs with the
-  other ottoman-on-a-top fix in `settleHeights`, not here.
+- **A scanned ottoman the tidy-up cannot push clear of a coffee table was lifted onto it —
+  fixed after this, in `settleHeights`.** Measured: in a 1.3 × 1.0 m room the push has
+  nowhere to go, the ottoman is left half over the top, and the settle pass stood it there at
+  0.42 m, where no report saw it (before this fix it stayed on the floor inside the table,
+  which no report saw either). That pass no longer lifts a SEAT (`isSeating`, every role
+  people sit on): a scan reads every floor piece as standing on the floor, which for a seat
+  is the right reading, so the
+  ottoman stays down and Room check reports the clash — measured in the same room, and at
+  1.3 × 0.8 and 1.2 × 0.7. Adding one there still puts it on top, because the user put it
+  there. A seat and not everything that shares floor: a storage box the size of a coffee
+  table reads as one and is still put on a dining table, and a row filed under `other` with a
+  chair's shape is a seat. Four mutants of the gate, each caught by `tests/seat-support.test.ts`.
+  **Review found two edges, and one is fixed.** The gate held only in the branch for pieces
+  standing on the floor, so a seat left hanging 60 mm over the coffee table went UP onto it in
+  the branch for pieces in the air, and one 40 mm up stayed down; "not lifted" is read against
+  where the seat is now, in both branches (five mutants caught). The other is a trade, kept:
+  the gate refuses every lift, a platform or a bed as well as a table, so a seat that really
+  stands on a platform the scan put on the floor stays inside it. Room check names that as a
+  clash (measured on a 3 × 2 m platform and a double bed), where lifting would hide the far
+  commoner overlap on a top.
+  **Review round 2 found two more, both fixed.** The gate first asked `isSeatRole`, the seats
+  that tuck under a surface, so a stool, an armchair or a sofa the detector filed as `other`
+  — tabletop-prone by that category — went up onto the coffee table beside it; it asks
+  `isSeating` now, held to the Library's Seating group by a sweep. And a refused lift threw
+  the probe's answer away whole, so an ottoman already on a 3 × 2 m platform, beside a coffee
+  table standing on it, went through the platform to the floor; it is asked again at its own
+  level and stays on the platform (and 20 mm down, at 0.33 m, it comes up onto it).
+- **Open, and it is the user's call: the first nudge of that scanned ottoman stands it on the
+  coffee table.** Drag gravity asks the drop question, which keeps § H.6.4's answer: a seat
+  dragged over a coffee table it does not fit under goes on top, where the user can see it.
+  So the scanned ottoman Room check reports, nudged 10 mm to deal with it, goes to 0.42 m on
+  the top and the move is valid — measured, the same at 200 mm. A scan and a drag now give
+  two answers for one pair, deliberately (nobody put the scanned one anywhere), and the drag's
+  is the one a person sees happen. Whether a DRAG should also keep a seat down — the ottoman
+  staying on the floor, clashing, until it is dragged clear — changes § H.6.4, so it is not
+  decided here.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

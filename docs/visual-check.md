@@ -77,6 +77,16 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
+### The Will it fit chips are the kind's own sizes — this branch, NOT LOOKED AT
+
+In the Room panel's **Will it fit** tab, step through all ten kinds and read the chip
+row under the size fields. Each kind should offer only pieces of its own kind: Bed gets
+Double, Queen and King; Fridge gets Fridge and French door fridge; Desk and Dining table
+both get *Dining / desk table*; every other kind gets one chip. Press a chip, then
+**Check the room**: "wrong" is any chip that fills in a size the panel then calls out of
+range, or a chip row that wraps badly now that most kinds have one chip where they had
+up to four.
+
 ### A wall stops before it runs into another wall — merged in #191 (`4572419`)
 
 **Where to click.** A **T-Shape** room, 3D and then 2D Plan. Drag the wall under one arm of
@@ -559,7 +569,7 @@ read 1613 after you let go. Wrong: it reads 1610, or 3D refuses the drag while t
 drag goes through in the plan. `Draggable` hands the lead's size to `leadInherited` from
 `currentDim()`, which is the held size since #188, and nothing mounts it in a test.
 
-### A seat goes under a surface only where it fits — § H.6.4, branch `claude/amazing-davinci-m8zqys`, needs eyes in both tabs
+### A seat goes under a surface only where it fits — `1be34c0` on `main` (PR #193, § H.6.4), needs eyes in both tabs
 
 The seat rule asked only which kind of seat goes under which kind of surface. So the
 Library's ottoman "tucked" into the coffee table, straight through its lower shelf, and a
@@ -1963,6 +1973,60 @@ the typical width error 19% → 10%; with the room skipped, short 10 → 6 and o
 real phone, with a real scan, is the unlooked-at half.
 
 ---
+### A scanned seat stays on the floor, and nothing climbs the tray on it — this branch (§ H.6.4 follow-ups), NOT PROBED
+
+Two things the scan's tidy-up used to do to a seat, both only in a scanned room. A tray
+resting on an ottoman lifted the ottoman onto the tray, and the tray onto that, both in the
+air. And an ottoman photographed so close to a coffee table that the room had no space to
+push them apart was stood on the tabletop, where Room check could not see it. Tests hold both;
+nobody has looked at a scanned room with either.
+
+**Where to click.** Scan a small room with an ottoman beside a coffee table, and one with a
+tray on an ottoman. Open the result in 3D and open Room check.
+
+**What right looks like.**
+- The ottoman stands on the floor. The tray, if it came through, sits on the ottoman.
+- An ottoman left overlapping the coffee table is reported by Room check as two pieces in
+  the same place.
+- The same for any seat, whatever the scan called it: a stool or an armchair listed as
+  *Other* stays on the floor beside a coffee table too.
+
+**What wrong looks like.**
+- An ottoman floating half a metre up, or on the coffee table's top.
+- An ottoman overlapping the coffee table with Room check saying nothing.
+
+**Expected, not wrong.** Nudging that ottoman by hand stands it on the coffee table, as
+dragging any ottoman over one does. Whether a drag should keep it down is an open decision
+in `docs/what-is-still-open.md`. A desk with a riser and a monitor scanned together may put
+the riser on top of the monitor when the monitor was listed first — filed there too, with
+two more of the same kind that are older than this branch: a tray across a coffee table and
+a box beside it can lift the box onto the tray, and a lamp over a box on a table can end up
+inside the box.
+
+### A lamp dropped on a table's corner stands on it — this branch (§ H.6.4 follow-ups), NOT LOOKED AT
+
+Adding a piece, and swapping one in the Inspector, used to ask what it stands on as if it
+were an unturned square. A round lamp mostly over a table's corner went to the floor, and a
+monitor turned to face a side wall was tested across the wrong way.
+
+**Where to click.** In **2D Plan**, drag a **Table lamp** from the Library so its centre
+is just inside a coffee table's corner, then look in 3D. Separately, put a desk against a
+side wall, and drop a **Monitor** near one end of it. Last, select any small piece near a
+table's corner and **Change the model** to a Table lamp. And put a tray on a plain box,
+select the box and **Pick a model** → Ottoman.
+
+**What right looks like.** A lamp that is mostly over the table stands on the tabletop; one
+mostly over the floor stands on the floor. The monitor turns to face the side wall and stands
+on the desk while most of it is over the desk. The swapped-in lamp is drawn round in 2D Plan,
+its Inspector says it is on the table, and dragging the table carries it along. The
+ottoman stays on the floor with the tray on it.
+
+**What wrong looks like.** A lamp on the floor with most of its base under the tabletop, or
+a monitor on the floor beside a desk it is mostly over. After the swap: a square lamp in the
+plan, an Inspector saying the lamp is floating, or the table leaving it behind — the store
+kept the old piece's outline until the next reload, and the fix has only a test behind it.
+An ottoman up on its own tray, with the tray still under it.
+
 ## Look and light
 
 ### The day track as a slider over the canvas, a frosted base under the selection, no streaks while carrying — merged to `main` in `b955aac` (PR #178), SEEN HEADLESS ONLY

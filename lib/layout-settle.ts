@@ -61,8 +61,8 @@ import {
   type Foot,
   type Poly,
 } from './geometry';
-import { isObstacle, profilesTuck, tuckProfile, WALL_GAP, type TuckProfile } from './layout-rules';
-import { findSupportDetailed, isFloorStanding, isTabletopProne, MOUNT_PAD, ridesWall, verticalExtent } from './physics';
+import { isObstacle, isSeating, profilesTuck, roleOf, tuckProfile, WALL_GAP, type TuckProfile } from './layout-rules';
+import { findSupportDetailed, highestSurfaceUnder, isFloorStanding, isTabletopProne, MOUNT_PAD, ridesWall, SUPPORT_Y_EPS, verticalExtent } from './physics';
 import type { ScenePart, Shape } from './scene-spec';
 
 // Breathing room kept off a wall comes from `layout-rules` (imported above) rather
@@ -287,8 +287,10 @@ export type HeightFix = {
  *  stand in plan; a rider's height is a CONSEQUENCE of that, so it is answered
  *  afterwards, once. Three things it does, in the order they have to happen:
  *
- *    1. a tabletop-prone piece (monitor, lamp, plant, ottoman) snaps onto the highest
- *       real surface under its footprint — taller than 0.3 m, so a rug is not a table
+ *    1. a tabletop-prone piece (monitor, lamp, plant, a box) snaps onto the highest
+ *       real surface under its footprint — taller than 0.3 m, so a rug is not a table.
+ *       Never a seat, the ottoman included: a seat stays at its own level (the loop says
+ *       why)
  *    2. any other floor-standing piece left above the floor with nothing under it
  *       DROPS. This is the half that fixes the nightstand.
  *    3. the ceiling clamp, so no piece's top pokes through the slab
@@ -307,6 +309,29 @@ export type HeightFix = {
  *  `MIN_SUPPORT_SHARE` of the mover, above or below — so a lamp resolved before the
  *  desk it stands on can come back resting on itself-from-below.
  *
+ *  **This pass has one below-test of its own, and it is only the resting half.** A
+ *  piece is not held up by what stands on it. Ascending Y could not give that, because
+ *  a scan hands every piece in at y = 0 and a tie keeps the detector's order — a tray
+ *  listed before its ottoman took the ottoman's top, and then the ottoman took the
+ *  tray's. So a piece's probe leaves out two things: whatever THIS PASS has stood on
+ *  it, directly or down a stack, read from the pass's own record; and whatever was
+ *  already resting on its top when the pass began — an underside above the piece's
+ *  own and within `SUPPORT_Y_EPS` of its top.
+ *
+ *  **The record, because heights cannot say it.** The first version read heights
+ *  alone — "an underside within the tolerance of this piece's top, or anywhere above
+ *  it" — against the rider's top BEFORE it settles. In a scan that is the top of a
+ *  piece still on the floor, and a support already lifted is far above it: a riser
+ *  stood on a desk has its underside at 0.75, over the 0.40 top of the monitor waiting
+ *  to go onto it, so the monitor was put on the desk through the riser, and a plant
+ *  through the tray under it. The "anywhere above" half also refused every support
+ *  to a piece no taller than the tolerance — a 50 mm box, the clamp floor for `other`,
+ *  was never lifted while a 51 mm one was. Measured, and held in
+ *  `tests/layout-settle.test.ts`.
+ *
+ *  It is not the whole below-test the next paragraph asks for: a support that starts
+ *  partway up its rider still counts, which is the case parked there.
+ *
  *  **Ascending Y is necessary and it is NOT sufficient, and the earlier wording here
  *  claimed otherwise.** It said "every support has already reached its final height
  *  when the thing riding it asks", which holds only while every support starts BELOW
@@ -323,6 +348,16 @@ export type HeightFix = {
  *  `lib/layout-rules.ts` beside the others. Unreachable through `buildSceneFromRoom`,
  *  where everything enters at y = 0; reachable the moment Suggest is wired up, which is
  *  why it is written down rather than left to be rediscovered.
+ *
+ *  **Three more parts answer only for that caller, and a scan cannot reach them.** The
+ *  branch for a piece left in the air: nothing a scan hands in is. The height half of
+ *  `standsOn`: at y = 0 no floor piece's underside is above another's, and a wall piece
+ *  it may catch is one `topSurface` skips anyway. And the outline the seat's re-ask is
+ *  handed: `p.shape` changes the answer only for an L-desk, which is never a seat. The
+ *  first two have tests that call this function directly with pieces off the floor;
+ *  the third has none, because nothing can reach it, and it is passed so this question
+ *  reads the piece the way every other support question does. None of it is dead
+ *  code, and none of it is covered by a scan's test.
  *
  *  Pure: `parts` is not touched — the working copy deep-copies each `pos`, and
  *  `tests/layout-settle.test.ts` asserts it, because dropping the `.map` is otherwise a
@@ -351,6 +386,28 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
   // resolved earlier is already at its final height for the piece above it.
   const work = [...parts].sort((a, b) => a.pos[1] - b.pos[1]).map((p) => ({ ...p, pos: [...p.pos] as [number, number, number] }));
   const out: HeightFix[] = [];
+  // What this pass has stood each piece on, by id — see the docblock for why a height
+  // cannot stand in for it.
+  const stoodOn = new Map<string, string>();
+  // Is `q` standing on `p`, so no support for it? By the record for a piece this pass
+  // has placed, followed down a stack (a record never points at anything whose own
+  // chain reaches the piece recorded, so the walk ends). By the heights for one it has
+  // not: an underside off the piece's own level and at its top. "Off its own level" is
+  // what lets a 50 mm box stand on the coffee table beside it. AT its top, not "at or
+  // above": what hangs clear above a piece is not standing on it, and whether it may
+  // hold it up is the parked question in the docblock. A scan hands every piece in at
+  // y = 0, where the two read the same.
+  const standsOn = (q: ScenePart, p: ScenePart): boolean => {
+    if (stoodOn.has(q.id)) {
+      for (let via = stoodOn.get(q.id); via !== undefined; via = stoodOn.get(via)) {
+        if (via === p.id) return true;
+      }
+      return false;
+    }
+    const [bottom, top] = verticalExtent(p.category, p.shape, p.dimMM, p.pos[1]);
+    const under = verticalExtent(q.category, q.shape, q.dimMM, q.pos[1])[0];
+    return under > bottom && Math.abs(under - top) <= SUPPORT_Y_EPS;
+  };
 
   for (const p of work) {
     const before = p.pos[1];
@@ -365,15 +422,49 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
     const floor = isFloorStanding(p.category, p.shape);
 
     if (p.category !== 'rug') {
-      const support = floor
-        ? findSupportDetailed(work, p, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
-        : null;
-      const y = support !== null && support.y > 0.3 ? support.y : null;
-      if (isTabletopProne(p.category) && floor && y !== null) {
-        p.pos[1] = y;
+      // Nothing standing on a piece holds it up. The probe takes the highest top over
+      // the footprint and never asks which way up the pair is, so a tray covering an
+      // ottoman was the ottoman's support: it went up onto the tray and the tray up
+      // onto it, both in the air. Reached from a scan, where every piece enters at
+      // y = 0 and the order is the detector's: the tray first takes the ottoman's top,
+      // then the ottoman takes the tray's.
+      const world = floor ? work.filter((q) => !standsOn(q, p)) : [];
+      const support = floor ? findSupportDetailed(world, p, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle) : null;
+      const found = support !== null && support.y > 0.3 ? support : null;
+      // A seat is not lifted — any seat (`isSeating`), not only the ones that tuck under
+      // a surface: an armchair, a sofa or a stool the detector filed as `other` is
+      // tabletop-prone by that category, and went up onto the coffee table beside it.
+      // An ottoman is tabletop-prone, and the add path wants that:
+      // dropped over a coffee table it does not fit under, it goes on top, where the
+      // user put it and can see it (§ H.6.4). Here nobody put it anywhere. A scan reads
+      // every floor piece as standing on the floor — what it gets wrong is WHERE on the
+      // floor. A scanned ottoman the tidy-up could not push clear of its coffee table was
+      // stood on the top at 0.42 m, where no report saw it; on the floor it is a clash
+      // `lib/clearance.ts` names.
+      //
+      // Onto ANYTHING, a platform or a bed as much as a table, and that is a trade rather
+      // than an oversight. A seat that really stands on a platform the scan put on the
+      // floor stays inside it — and Room check names that as a clash too (measured on a
+      // 3 × 2 m platform and a double bed). Lifting it instead would put the commoner
+      // overlap, a seat left half over something the tidy-up could not push it clear of,
+      // up on a top where nothing reports it. Wrong and said beats wrong and silent.
+      //
+      // "Lifted" is UP from where it is, so it holds in the branch for pieces left in the
+      // air as well: one hanging 60 mm over a coffee table went up onto it there, and one
+      // 40 mm up stayed down. A seat already on a top, or above one, still comes to rest on
+      // it — asked at its own level, not dropped. The first version threw the refused
+      // answer away whole, so an ottoman on a platform, beside a coffee table standing on
+      // that platform, went through the platform to the floor.
+      const lifted = found !== null && isSeating(roleOf(p)) && found.y > p.pos[1] + SUPPORT_Y_EPS;
+      const level = lifted ? highestSurfaceUnder(world, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle, p.shape, p.pos[1] + SUPPORT_Y_EPS) : null;
+      const rest = lifted ? (level !== null && level.y > 0.3 ? level : null) : found;
+      if (isTabletopProne(p.category) && floor && rest !== null) {
+        p.pos[1] = rest.y;
+        stoodOn.set(p.id, rest.id);
       } else if (floor && p.pos[1] > 0.05) {
         // Nothing under it any more: the floor. This is the nightstand.
-        p.pos[1] = y ?? 0;
+        p.pos[1] = rest?.y ?? 0;
+        if (rest !== null) stoodOn.set(p.id, rest.id);
       }
     }
 

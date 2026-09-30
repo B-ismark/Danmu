@@ -24,7 +24,7 @@
 // changed the constant.
 
 import { describe, it, expect } from 'vitest';
-import { deriveRiderYs, riderRelation, riderYs, resolveScene } from '@/lib/rider-height';
+import { deriveRiderYs, riderRelation, riderYs, resolveScene, ridersOf } from '@/lib/rider-height';
 import { resolveParts, type TransformOverrides } from '@/lib/transforms';
 import { MOUNT_PAD } from '@/lib/physics';
 import type { ScenePart } from '@/lib/scene-spec';
@@ -487,5 +487,34 @@ describe('resolveScene', () => {
       .toEqual([0, 0.9, 0]);
     // …and without it, authored geometry has no edge to offer, so nothing moves.
     expect(resolveScene(parts, o, ctx).find((p) => p.id === 'lamp')!.pos).toEqual([0, 0.75, 0]);
+  });
+});
+
+describe('ridersOf — everything standing on a piece, at any depth', () => {
+  // What the model swap takes out of the world it asks "what would this stand on"
+  // (`tests/seat-swap.test.tsx` holds that call site). A tray on the desk nobody
+  // linked, and a cup a drag put on the tray: authored on the floor across the room,
+  // so only the record and the live scene know where it is.
+  const tray = part({ id: 'tray', category: 'other', shape: 'box', pos: [0, 0.75, 0], dimMM: [500, 350, 40] });
+  const cupAuthored = part({ id: 'cup', category: 'other', shape: 'box', pos: [1.5, 0, 1], dimMM: [80, 80, 100] });
+  const cupLive = { ...cupAuthored, pos: [0, 0.79, 0] as [number, number, number] };
+  const authored = [desk(), tray, cupAuthored];
+  const live = [desk(), tray, cupLive];
+
+  it('takes the unlinked rider from the geometry and the linked one from the record', () => {
+    expect([...ridersOf('desk', live, authored, { cup: 'tray' })].sort()).toEqual(['cup', 'tray']);
+    // Each source alone misses one: the record knows nothing of the tray, and the
+    // authored geometry has the cup on the floor.
+    expect([...ridersOf('desk', live, authored, {})]).toEqual(['tray']);
+  });
+
+  it('is what stands on it, not what it stands on', () => {
+    expect([...ridersOf('tray', live, authored, { cup: 'tray' })]).toEqual(['cup']);
+    expect(ridersOf('cup', live, authored, { cup: 'tray' }).size).toBe(0);
+  });
+
+  it('a link left by a rider since moved off is not one', () => {
+    const moved = [desk(), { ...tray, pos: [1.2, 0, 1.2] as [number, number, number] }, cupLive];
+    expect(ridersOf('desk', moved, authored, { tray: 'desk' }).has('tray')).toBe(false);
   });
 });

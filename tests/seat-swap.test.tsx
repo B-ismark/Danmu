@@ -12,6 +12,13 @@
 // stored disagree — and a unit test of the function cannot see which one a caller
 // passes. Mounted through the real plan page, like `tests/mount-height-refusal.test.tsx`.
 //
+// The same call site had a second hole of the same kind: it handed the probe the new
+// kind's turn but not its OUTLINE, so a swap to a round piece was asked as the square
+// around it. The last block below holds that half.
+//
+// And a third: the snapshot holds what stands ON the piece being swapped, one top up
+// over its own footprint. The block after that holds it.
+//
 // What it does NOT prove: nothing about the 3D tab, whose Inspector is the same
 // component but whose page cannot be mounted here (R3F).
 import 'fake-indexeddb/auto';
@@ -20,6 +27,7 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
+import { findSupportDetailed, restingOn } from '@/lib/physics';
 import type { ScenePart } from '@/lib/scene-spec';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('seat-swap-room'));
@@ -79,7 +87,8 @@ beforeEach(() => {
  *  only lamps are on offer and the row being looked for is not there to press. */
 function swapTo(label: string) {
   render(<PlanPage />);
-  fireEvent.click(screen.getByText('Change the model'));
+  // A generic piece — a scanned box — offers the same swap under another name.
+  fireEvent.click(screen.getByText(/^(Change the model|Generic shape · Pick a model)$/));
   fireEvent.change(screen.getByLabelText('Search the Library'), { target: { value: label } });
   const row = screen.getAllByRole('button').find((b) => b.textContent?.trim() === label);
   expect(row, `no Library row named ${label}`).toBeTruthy();
@@ -109,4 +118,86 @@ describe('Change the model re-grounds for the kind it is changing TO', () => {
     expect(s.positions.lamp?.[1]).toBe(TOP);
     expect(s.parentIds.lamp).toBe('table');
   });
+});
+
+describe('…and asks with the OUTLINE of the kind it is changing to', () => {
+  it('a piece swapped for a table lamp more than half over the table’s corner stands on it', () => {
+    // 50 mm in from the corner on both axes: 49% of the square around a 250 mm lamp is
+    // over the table, and more than half of the lamp. Asked as that square, the swap put
+    // it on the floor.
+    const at: [number, number] = [0.8 - 0.05, 0.45 - 0.05];
+    const lampDim: [number, number, number] = [250, 250, 500];
+    const self = { id: 'corner', category: 'lamp', shape: 'lamp-table' } as const;
+    expect(findSupportDetailed([TABLE], self, at[0], at[1], lampDim, 0, undefined)).toBeNull();
+    expect(findSupportDetailed([TABLE], self, at[0], at[1], lampDim, 0, true)?.id).toBe('table');
+
+    const laptop: ScenePart = { id: 'corner', name: 'Laptop', category: 'monitor', shape: 'laptop', dimMM: [340, 240, 220], pos: [at[0], 0, at[1]], rot: 0 } as ScenePart;
+    useScene.setState({ parts: [TABLE, laptop] });
+    useStudio.setState({ parentIds: {}, selection: ['corner'], selectedPartId: 'corner' });
+    swapTo('Table lamp');
+    const s = useStudio.getState();
+    const lamp = useScene.getState().parts.find((p) => p.id === 'corner')!;
+    expect(lamp.shape).toBe('lamp-table');
+    expect(s.positions.corner?.[1]).toBe(TOP);
+    expect(s.parentIds.corner).toBe('table');
+    // And it is STORED as the outline it was asked as. The swap's patch changes the shape,
+    // and the stored `circle` stayed the laptop's square, so every later reader disagreed
+    // with the answer just acted on — the Inspector's banner, asking the state question
+    // of the stored part, said it was floating.
+    expect(lamp.circle).toBe(true);
+    const on = restingOn([TABLE, lamp], 'corner', s.positions.corner!, lamp.rot, lamp.dimMM, lamp.category, lamp.shape, lamp.circle);
+    expect(on).toEqual({ on: 'part', id: 'table', gap: 0 });
+  });
+
+  it('and with the TURN the piece keeps, which here keeps a laptop off the table', () => {
+    // The other direction, and the parameter that was already passed — pinned beside the
+    // outline so the pair is held, not half of it. A laptop turned a quarter, 10 mm in
+    // from the table's end and 120 mm in from its side: unturned, 53% of it would be
+    // over the table; turned, 46% is, and it stays on the floor.
+    const at: [number, number] = [0.8 - 0.01, 0.45 - 0.12];
+    const dim: [number, number, number] = [340, 240, 220];
+    const self = { id: 'corner', category: 'monitor', shape: 'laptop' } as const;
+    expect(findSupportDetailed([TABLE], self, at[0], at[1], dim, 0, undefined)?.id).toBe('table');
+    expect(findSupportDetailed([TABLE], self, at[0], at[1], dim, Math.PI / 2, undefined)).toBeNull();
+
+    // Round, as `addPart` stores a plant, so the swap has an outline to leave behind.
+    const plant: ScenePart = { id: 'corner', name: 'Plant', category: 'plant', shape: 'plant', dimMM: [300, 300, 600], pos: [at[0], 0, at[1]], rot: Math.PI / 2, circle: true } as ScenePart;
+    useScene.setState({ parts: [TABLE, plant] });
+    useStudio.setState({ parentIds: {}, selection: ['corner'], selectedPartId: 'corner' });
+    swapTo('Laptop');
+    const s = useStudio.getState();
+    const laptop = useScene.getState().parts.find((p) => p.id === 'corner')!;
+    expect(laptop.shape).toBe('laptop');
+    expect(s.positions.corner?.[1]).toBe(0);
+    expect(s.parentIds.corner).toBeUndefined();
+    // The plant's round outline does not come along: a laptop is a square.
+    expect(laptop.circle).toBeUndefined();
+  });
+});
+
+describe('…and nothing standing on the piece holds it up', () => {
+  // A scanned box with a tray on it, picked a model for. The tray covers the whole box
+  // one top up, so asked with it in the world the new ottoman went UP onto its own tray,
+  // at 0.48 — and with the tray linked to the box, the record gained the other half of
+  // a loop: `{ tray: 'box', box: 'tray' }`.
+  const BOX: ScenePart = { id: 'box', name: 'Box', category: 'other', shape: 'box', dimMM: [550, 400, 420], pos: [0, 0, 0], rot: 0 } as ScenePart;
+  const TRAY: ScenePart = { id: 'tray', name: 'Tray', category: 'other', shape: 'box', dimMM: [750, 450, 60], pos: [0, 0.42, 0], rot: 0 } as ScenePart;
+
+  for (const linked of [true, false]) {
+    it(linked ? 'a tray a drag put there' : 'a tray the scan put there, which nothing linked', () => {
+      // The premise: the probe does hand the tray back, and the ottoman is the kind asked.
+      const self = { id: 'box', category: 'ottoman', shape: 'ottoman' } as const;
+      expect(findSupportDetailed([BOX, TRAY], self, 0, 0, [550, 400, 420], 0, undefined)?.id).toBe('tray');
+
+      useScene.setState({ parts: [BOX, TRAY] });
+      useStudio.setState({ parentIds: linked ? { tray: 'box' } : {}, selection: ['box'], selectedPartId: 'box' });
+      swapTo('Ottoman');
+      const s = useStudio.getState();
+      expect(useScene.getState().parts.find((p) => p.id === 'box')?.shape).toBe('ottoman');
+      expect(s.positions.box?.[1]).toBe(0);
+      expect(s.parentIds.box).toBeUndefined();
+      // The tray is left riding it, as it was.
+      expect(s.parentIds.tray).toBe(linked ? 'box' : undefined);
+    });
+  }
 });

@@ -39,7 +39,7 @@
 
 import { footArea, footFromPart } from './geometry';
 import { coversEnoughToSupport, isFloorStanding, MOUNT_PAD, verticalExtent } from './physics';
-import { ridingParents } from './rigid-parent';
+import { ridingParents, snapshotDescendants } from './rigid-parent';
 import { resolvePart, resolveParts, type TransformOverrides } from './transforms';
 import type { ScenePart } from './scene-spec';
 
@@ -105,6 +105,24 @@ export function riderRelation(
   parentIds: Record<string, string>,
 ): Record<string, string> {
   return { ...ridingParents(authored), ...parentIds };
+}
+
+/** Every piece riding `rootId`, however many levels up — the tray on it and the cup on
+ *  the tray. By `riderRelation`, so a rider nobody linked counts as well as one a drag
+ *  did, and each edge re-checked against the LIVE scene (`snapshotDescendants`), so a
+ *  link left behind by a rider since moved off is not one.
+ *
+ *  A piece asking what it would stand on must not ask with these in its world: they
+ *  are over its footprint one top up, so the probe hands one back. The model swap did,
+ *  and stood a box turned ottoman on its own tray — with the carry record gaining a
+ *  loop, the tray on the box and the box on the tray. */
+export function ridersOf(
+  rootId: string,
+  live: ScenePart[],
+  authored: ScenePart[],
+  parentIds: Record<string, string>,
+): Set<string> {
+  return new Set(snapshotDescendants(rootId, live, riderRelation(authored, parentIds)).map((d) => d.id));
 }
 
 /** Is the rider still over enough of its support to be held up by it?
