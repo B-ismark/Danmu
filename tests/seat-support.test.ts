@@ -124,21 +124,21 @@ describe('the fixture sits in the band the two bars disagreed about', () => {
 describe('findSupportDetailed — where a piece would LAND', () => {
   it('a dining chair 60% under its table lands on the floor; a lamp there lands on the table', () => {
     const c = chair('c', 0, TUCKED_Z);
-    expect(findSupportDetailed([TABLE], c, 0, TUCKED_Z, c.dimMM)).toBeNull();
-    expect(findSupportDetailed([TABLE], lamp(0, TUCKED_Z), 0, TUCKED_Z, [500, 500, 500])).toEqual({ id: 'table', y: TOP });
+    expect(findSupportDetailed([TABLE], c, 0, TUCKED_Z, c.dimMM, 0, undefined)).toBeNull();
+    expect(findSupportDetailed([TABLE], lamp(0, TUCKED_Z), 0, TUCKED_Z, [500, 500, 500], 0, undefined)).toEqual({ id: 'table', y: TOP });
   });
 
   it('…and so does one pushed all the way in', () => {
     const c = chair('c', 0, 0);
     expect(share(c, TABLE)).toBe(1);
-    expect(findSupportDetailed([TABLE], c, 0, 0, c.dimMM)).toBeNull();
+    expect(findSupportDetailed([TABLE], c, 0, 0, c.dimMM, 0, undefined)).toBeNull();
   });
 
   it('an ottoman lands on the floor under a table, and a lamp lands on it', () => {
     const o = ottoman(0, 0);
     const l = lamp(0, 0);
-    expect(findSupportDetailed([TABLE], o, 0, 0, o.dimMM)).toBeNull();
-    expect(findSupportDetailed([TABLE], l, 0, 0, l.dimMM)?.id).toBe('table');
+    expect(findSupportDetailed([TABLE], o, 0, 0, o.dimMM, 0, undefined)).toBeNull();
+    expect(findSupportDetailed([TABLE], l, 0, 0, l.dimMM, 0, undefined)?.id).toBe('table');
   });
 
   it('a seat that does not fit under its partner is no partner of it (§ H.6.4)', () => {
@@ -148,7 +148,7 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     // rather than on the floor inside the drawing where every later drag is refused.
     const o = ottoman(0, 0);
     expect([tucksUnder(o, TABLE), tucksUnder(o, COFFEE)]).toEqual([true, false]);
-    expect(findSupportDetailed([COFFEE], o, 0, 0, o.dimMM)).toEqual({ id: 'coffee', y: 0.42 });
+    expect(findSupportDetailed([COFFEE], o, 0, 0, o.dimMM, 0, undefined)).toEqual({ id: 'coffee', y: 0.42 });
     // The same gate on a dining chair, at the one corner of the ranges where it closes:
     // the lowest table (600 mm, its apron's underside at 485) and the tallest chairs,
     // whose seat — the part that goes under — is scaled up past it. The chair with it is
@@ -158,7 +158,7 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     expect(tucksUnder(c, low)).toBe(true);
     const tall = { ...c, dimMM: [500, 500, 1080] as [number, number, number] };
     expect(tucksUnder(tall, low)).toBe(false);
-    expect(findSupportDetailed([low], tall, 0, 0, tall.dimMM)).toEqual({ id: 'low', y: 0.6 });
+    expect(findSupportDetailed([low], tall, 0, 0, tall.dimMM, 0, undefined)).toEqual({ id: 'low', y: 0.6 });
   });
 
   it('only the partner is looked past: a chair over a sofa still stands on the sofa', () => {
@@ -166,7 +166,7 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     // chair with tables and desks and nothing else, so this must keep landing.
     const sofa = part({ id: 'sofa', category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [0, 0, 0] });
     const c = chair('c', 0, 0);
-    expect(findSupportDetailed([sofa], c, 0, 0, c.dimMM)).toEqual({ id: 'sofa', y: 0.88 });
+    expect(findSupportDetailed([sofa], c, 0, 0, c.dimMM, 0, undefined)).toEqual({ id: 'sofa', y: 0.88 });
   });
 
   it('looks PAST the partner to a surface genuinely under the piece', () => {
@@ -174,7 +174,7 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     // the probe must find the platform rather than stopping at "nothing".
     const deck = part({ id: 'deck', category: 'other', shape: 'box', dimMM: [2400, 1500, 50], pos: [0, 0, 0] });
     const c = chair('c', 0, TUCKED_Z, 0.05);
-    expect(findSupportDetailed([TABLE, deck], c, 0, TUCKED_Z, c.dimMM)).toEqual({ id: 'deck', y: 0.05 });
+    expect(findSupportDetailed([TABLE, deck], c, 0, TUCKED_Z, c.dimMM, 0, undefined)).toEqual({ id: 'deck', y: 0.05 });
   });
 
   it('a floor deck is not a coffee table: an ottoman stands on it', () => {
@@ -188,14 +188,14 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     expect(clampDims(deck.category, deck.shape, deck.dimMM)).toEqual(deck.dimMM);
     expect(roleOf(deck)).toBe('other');
     const o = ottoman(0, 0, 0.05);
-    expect(findSupportDetailed([deck], o, 0, 0, o.dimMM)).toEqual({ id: 'deck', y: 0.05 });
+    expect(findSupportDetailed([deck], o, 0, 0, o.dimMM, 0, undefined)).toEqual({ id: 'deck', y: 0.05 });
     // The pair: the lowest real coffee table the catalogue sizes (250 mm) still is one.
     // A box has no shelf and no apron in its drawing, so nothing fits under it, and the
     // ottoman stands on it too — for the fit test's reason rather than the role's.
     const low = part({ id: 'low', category: 'other', shape: 'box', dimMM: [1100, 600, 250], pos: [0, 0, 0] });
     expect(roleOf(low)).toBe('coffee-table');
     expect(tucksUnder(o, low)).toBe(false);
-    expect(findSupportDetailed([low], o, 0, 0, o.dimMM)).toEqual({ id: 'low', y: 0.25 });
+    expect(findSupportDetailed([low], o, 0, 0, o.dimMM, 0, undefined)).toEqual({ id: 'low', y: 0.25 });
   });
 
   it('a platform bigger than any table is not one: an ottoman and a chair stand on it', () => {
@@ -206,9 +206,9 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     const stage = { ...plat, dimMM: [3000, 2000, 700] as [number, number, number] };
     expect([roleOf(plat), roleOf(stage)]).toEqual(['other', 'other']);
     const o = ottoman(0, 0, 0.3);
-    expect(findSupportDetailed([plat], o, 0, 0, o.dimMM)).toEqual({ id: 'plat', y: 0.3 });
+    expect(findSupportDetailed([plat], o, 0, 0, o.dimMM, 0, undefined)).toEqual({ id: 'plat', y: 0.3 });
     const c = chair('c', 0, 0, 0.7);
-    expect(findSupportDetailed([stage], c, 0, 0, c.dimMM)).toEqual({ id: 'plat', y: 0.7 });
+    expect(findSupportDetailed([stage], c, 0, 0, c.dimMM, 0, undefined)).toEqual({ id: 'plat', y: 0.7 });
     expect(settleHeights([stage, c], H)).toEqual([]);
     // The pair: the largest table the catalogue sizes, 2600 × 1500, is still a table,
     // drawn either way round, and 10 mm past it on either side is not.
@@ -264,7 +264,7 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     // old one under the same id. Handed the chair's kind with a lamp's id, it must
     // answer for a chair.
     const asked = { id: 'lamp', category: 'chair', shape: 'chair-dining' } as const;
-    expect(findSupportDetailed([TABLE, lamp(0, 0, TOP)], asked, 0, 0, [500, 500, 850])).toBeNull();
+    expect(findSupportDetailed([TABLE, lamp(0, 0, TOP)], asked, 0, 0, [500, 500, 850], 0, undefined)).toBeNull();
   });
 
   it('works both ways round: a small dining table dropped over a chair does not stand on its seat', () => {
@@ -276,7 +276,7 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     const c = chair('c', 0, 0);
     // The chair IS a surface the table would stand on: it covers 71% of the table's foot.
     expect(highestSurfaceUnder([c], small.id, 0, 0, small.dimMM)).toEqual({ id: 'c', y: 0.85 });
-    expect(findSupportDetailed([c], small, 0, 0, small.dimMM)).toBeNull();
+    expect(findSupportDetailed([c], small, 0, 0, small.dimMM, 0, undefined)).toBeNull();
   });
 });
 
@@ -299,7 +299,7 @@ describe('what a piece is ON, as it stands, is still said truthfully', () => {
 
   it('because the state question has no seat rule, and the drop question does', () => {
     expect(highestSurfaceUnder([TABLE], up.id, up.pos[0], up.pos[2], up.dimMM)?.id).toBe('table');
-    expect(findSupportDetailed([TABLE], up, up.pos[0], up.pos[2], up.dimMM)).toBeNull();
+    expect(findSupportDetailed([TABLE], up, up.pos[0], up.pos[2], up.dimMM, 0, undefined)).toBeNull();
   });
 });
 
@@ -439,17 +439,17 @@ describe('every caller that moves a piece to what it finds', () => {
     const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [900, 600, 60], pos: [-0.4, TOP, TUCKED_Z] });
     const c = chair('c', -0.4, TUCKED_Z);
     expect(share(c, tray)).toBeGreaterThanOrEqual(MIN_SUPPORT_SHARE);
-    expect(findSupportDetailed([TABLE, tray], c, c.pos[0], c.pos[2], c.dimMM)).toBeNull();
+    expect(findSupportDetailed([TABLE, tray], c, c.pos[0], c.pos[2], c.dimMM, 0, undefined)).toBeNull();
     // The pair: a lamp at the same spot stands on the tray, the highest thing there.
-    expect(findSupportDetailed([TABLE, tray], lamp(-0.4, TUCKED_Z), -0.4, TUCKED_Z, [500, 500, 500])).toEqual({ id: 'tray', y: TOP + 0.06 });
+    expect(findSupportDetailed([TABLE, tray], lamp(-0.4, TUCKED_Z), -0.4, TUCKED_Z, [500, 500, 500], 0, undefined)).toEqual({ id: 'tray', y: TOP + 0.06 });
     // "As high as" has no allowance: a placemat 5 mm thick is skipped the same.
     const mat = part({ id: 'mat', category: 'other', shape: 'box', dimMM: [900, 600, 5], pos: [-0.4, TOP, TUCKED_Z] });
-    expect(findSupportDetailed([TABLE, mat], c, c.pos[0], c.pos[2], c.dimMM)).toBeNull();
-    expect(findSupportDetailed([TABLE, mat], lamp(-0.4, TUCKED_Z), -0.4, TUCKED_Z, [250, 250, 500])).toEqual({ id: 'mat', y: TOP + 0.005 });
+    expect(findSupportDetailed([TABLE, mat], c, c.pos[0], c.pos[2], c.dimMM, 0, undefined)).toBeNull();
+    expect(findSupportDetailed([TABLE, mat], lamp(-0.4, TUCKED_Z), -0.4, TUCKED_Z, [250, 250, 500], 0, undefined)).toEqual({ id: 'mat', y: TOP + 0.005 });
     // And only a partner the chair is actually UNDER caps anything. Beside the table, on
     // a shoe rack taller than the tabletop, it stands on the rack.
     const rack = part({ id: 'rack', category: 'shelf', shape: 'shoe-rack', dimMM: [800, 300, 900], pos: [1.5, 0, 0] });
-    expect(findSupportDetailed([TABLE, rack], c, 1.5, 0, c.dimMM)).toEqual({ id: 'rack', y: 0.9 });
+    expect(findSupportDetailed([TABLE, rack], c, 1.5, 0, c.dimMM, 0, undefined)).toEqual({ id: 'rack', y: 0.9 });
   });
 
   it('drag: under two surfaces, the LOWER one is the cap', () => {
@@ -463,9 +463,9 @@ describe('every caller that moves a piece to what it finds', () => {
     expect(share(c, desk)).toBeGreaterThanOrEqual(MIN_SUPPORT_SHARE);
     expect(share(c, dining)).toBeGreaterThan(0);
     expect(share(c, tray)).toBeGreaterThanOrEqual(MIN_SUPPORT_SHARE);
-    expect(findSupportDetailed([desk, dining, tray], c, 0, 0.25, c.dimMM)).toBeNull();
+    expect(findSupportDetailed([desk, dining, tray], c, 0, 0.25, c.dimMM, 0, undefined)).toBeNull();
     // The pair: a lamp there stands on the tray.
-    expect(findSupportDetailed([desk, dining, tray], lamp(0, 0.25), 0, 0.25, [250, 250, 500])).toEqual({ id: 'tray', y: 0.71 });
+    expect(findSupportDetailed([desk, dining, tray], lamp(0, 0.25), 0, 0.25, [250, 250, 500], 0, undefined)).toEqual({ id: 'tray', y: 0.71 });
   });
 
   it('drag: …and a table dropped over a tucked chair does not rest on what is on top of it', () => {
@@ -474,13 +474,13 @@ describe('every caller that moves a piece to what it finds', () => {
     // height, so that is the only height the cap can speak for.
     const c = chair('c', 0, 0);
     const board = part({ id: 'board', category: 'other', shape: 'box', dimMM: [1400, 800, 100], pos: [0, 0.85, 0] });
-    expect(findSupportDetailed([c, board], TABLE, 0, 0, TABLE.dimMM)).toBeNull();
+    expect(findSupportDetailed([c, board], TABLE, 0, 0, TABLE.dimMM, 0, undefined)).toBeNull();
     // A cushion ON the seat is below the cap. What keeps it from holding the table is
     // support share: 450 × 450 under a 1600 × 900 top is 14%. A board that wide on the
     // seat would hold it — the cap does not reach down there.
     const cushion = part({ id: 'cushion', category: 'other', shape: 'box', dimMM: [450, 450, 100], pos: [0, 0.45, 0] });
     expect(share(TABLE, cushion)).toBeLessThan(MIN_SUPPORT_SHARE);
-    expect(findSupportDetailed([c, cushion], TABLE, 0, 0, TABLE.dimMM)).toBeNull();
+    expect(findSupportDetailed([c, cushion], TABLE, 0, 0, TABLE.dimMM, 0, undefined)).toBeNull();
   });
 
   it("drag: an L-desk caps a chair only where the desk is, not where its box is", () => {
@@ -497,20 +497,20 @@ describe('every caller that moves a piece to what it finds', () => {
     expect(footIntersectionArea(seat, box)).toBeGreaterThan(0);
     expect(footIntersectionArea(seat, arms)).toBe(0);
     expect(share(corner, rack)).toBeGreaterThanOrEqual(MIN_SUPPORT_SHARE);
-    expect(findSupportDetailed([desk, rack], corner, -0.35, 0.5, corner.dimMM)).toEqual({ id: 'rack', y: 0.9 });
+    expect(findSupportDetailed([desk, rack], corner, -0.35, 0.5, corner.dimMM, 0, undefined)).toEqual({ id: 'rack', y: 0.9 });
     // The pair: under an arm, the cap still holds. A tray on the arm does not lift the
     // chair tucked beneath it, and a lamp there stands on the tray.
     const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [600, 500, 60], pos: [-0.4, TOP, -0.2] });
     const under = chair('c', -0.4, -0.2);
     expect(footIntersectionArea(footFromPart(under.pos, 0, under.dimMM), arms)).toBeGreaterThan(0);
-    expect(findSupportDetailed([desk, tray], under, -0.4, -0.2, under.dimMM)).toBeNull();
-    expect(findSupportDetailed([desk, tray], lamp(-0.4, -0.2), -0.4, -0.2, [250, 250, 500])).toEqual({ id: 'tray', y: TOP + 0.06 });
+    expect(findSupportDetailed([desk, tray], under, -0.4, -0.2, under.dimMM, 0, undefined)).toBeNull();
+    expect(findSupportDetailed([desk, tray], lamp(-0.4, -0.2), -0.4, -0.2, [250, 250, 500], 0, undefined)).toEqual({ id: 'tray', y: TOP + 0.06 });
     // Both ways round: the desk dropped over the chair in its corner is not capped by
     // it, so it stands on the board resting on the chair's back; over a chair under an
     // arm, it is.
     const board = part({ id: 'board', category: 'other', shape: 'box', dimMM: [1600, 1400, 20], pos: [0, 0.85, 0] });
-    expect(findSupportDetailed([corner, board], desk, 0, 0, desk.dimMM)).toEqual({ id: 'board', y: 0.87 });
-    expect(findSupportDetailed([under, board], desk, 0, 0, desk.dimMM)).toBeNull();
+    expect(findSupportDetailed([corner, board], desk, 0, 0, desk.dimMM, 0, undefined)).toEqual({ id: 'board', y: 0.87 });
+    expect(findSupportDetailed([under, board], desk, 0, 0, desk.dimMM, 0, undefined)).toBeNull();
   });
 
   it('adding: an ottoman dropped over a table goes on the floor; a lamp goes on the table', () => {

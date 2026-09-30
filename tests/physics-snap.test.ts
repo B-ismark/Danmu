@@ -83,19 +83,19 @@ const supportShare = (x: number, z: number, rot: number) => {
 
 describe('support share', () => {
   it('lands a part sitting squarely on the desk', () => {
-    expect(supportY([DESK], LAPTOP_SELF, 0, 0, LAPTOP)).toBeCloseTo(0.75, 6);
+    expect(supportY([DESK], LAPTOP_SELF, 0, 0, LAPTOP, 0, undefined)).toBeCloseTo(0.75, 6);
   });
 
   it('drops a part that is mostly off the edge', () => {
     // 10% of the laptop over the desk. The old centre test said "supported"
     // because the centre was still within half-extents + 5 cm.
-    expect(supportY([DESK], LAPTOP_SELF, overhangX(0.1), 0, LAPTOP)).toBeNull();
+    expect(supportY([DESK], LAPTOP_SELF, overhangX(0.1), 0, LAPTOP, 0, undefined)).toBeNull();
     // 40% is still not enough to hold it up.
-    expect(supportY([DESK], LAPTOP_SELF, overhangX(0.4), 0, LAPTOP)).toBeNull();
+    expect(supportY([DESK], LAPTOP_SELF, overhangX(0.4), 0, LAPTOP, 0, undefined)).toBeNull();
   });
 
   it('holds a part that is mostly on', () => {
-    expect(supportY([DESK], LAPTOP_SELF, overhangX(0.6), 0, LAPTOP)).toBeCloseTo(0.75, 6);
+    expect(supportY([DESK], LAPTOP_SELF, overhangX(0.6), 0, LAPTOP, 0, undefined)).toBeCloseTo(0.75, 6);
   });
 
   it('holds a part sitting on EXACTLY the minimum share', () => {
@@ -107,15 +107,15 @@ describe('support share', () => {
     // test and `lib/rider-height.ts`, so this one boundary answers for all three.
     const x = overhangX(0.5);
     expect(supportShare(x, 0, 0)).toBeCloseTo(0.5, 9);
-    expect(supportY([DESK], LAPTOP_SELF, x, 0, LAPTOP)).toBeCloseTo(0.75, 6);
+    expect(supportY([DESK], LAPTOP_SELF, x, 0, LAPTOP, 0, undefined)).toBeCloseTo(0.75, 6);
   });
 
   it('honours the support rotation', () => {
     // Desk turned a quarter turn is 0.7 m across, not 1.4. A point 0.5 m out is
     // beyond it — the rotation-blind version counted it as over the desk.
     const turned: SupportPart = { ...DESK, rot: Math.PI / 2 };
-    expect(supportY([turned], LAPTOP_SELF, 0.5, 0, LAPTOP)).toBeNull();
-    expect(supportY([turned], LAPTOP_SELF, 0, 0.5, LAPTOP)).toBeCloseTo(0.75, 6);
+    expect(supportY([turned], LAPTOP_SELF, 0.5, 0, LAPTOP, 0, undefined)).toBeNull();
+    expect(supportY([turned], LAPTOP_SELF, 0, 0.5, LAPTOP, 0, undefined)).toBeCloseTo(0.75, 6);
   });
 
   it('honours the mover rotation', () => {
@@ -127,15 +127,15 @@ describe('support share', () => {
     // the old rotation put the last bit of a 0.5 share below the threshold.)
     for (const rot of [Math.PI / 4, -Math.PI / 4, Math.PI / 2, 1.1]) {
       expect(supportShare(overhangX(0.5), 0, rot)).toBeCloseTo(0.5, 9);
-      expect(supportY([DESK], LAPTOP_SELF, overhangX(0.55), 0, LAPTOP, rot)).toBeCloseTo(0.75, 6);
-      expect(supportY([DESK], LAPTOP_SELF, overhangX(0.45), 0, LAPTOP, rot)).toBeNull();
+      expect(supportY([DESK], LAPTOP_SELF, overhangX(0.55), 0, LAPTOP, rot, undefined)).toBeCloseTo(0.75, 6);
+      expect(supportY([DESK], LAPTOP_SELF, overhangX(0.45), 0, LAPTOP, rot, undefined)).toBeNull();
     }
     // Over a CORNER it does matter, and which WAY it is turned matters too —
     // turning one way tucks the laptop's long axis along the desk edge, the other
     // sends it out over the corner. Equal shares here would mean the rotation was
     // ignored; swapped ones would mean the scene's Y-rotation was read mirrored.
-    const turnedIn = supportY([DESK], LAPTOP_SELF, 0.6, 0.3, LAPTOP, Math.PI / 4);
-    const turnedOut = supportY([DESK], LAPTOP_SELF, 0.6, 0.3, LAPTOP, -Math.PI / 4);
+    const turnedIn = supportY([DESK], LAPTOP_SELF, 0.6, 0.3, LAPTOP, Math.PI / 4, undefined);
+    const turnedOut = supportY([DESK], LAPTOP_SELF, 0.6, 0.3, LAPTOP, -Math.PI / 4, undefined);
     expect(turnedIn).not.toBeNull();
     expect(turnedOut).not.toBeNull();
     expect(supportShare(0.6, 0.3, Math.PI / 4)).toBeLessThan(supportShare(0.6, 0.3, -Math.PI / 4));
@@ -143,8 +143,8 @@ describe('support share', () => {
 
   it('picks the highest qualifying surface', () => {
     const shelf: SupportPart = { id: 'shelf', pos: [0, 0.8, 0], dimMM: [800, 400, 40], category: 'shelf', shape: 'bookshelf' };
-    expect(supportY([DESK, shelf], LAPTOP_SELF, 0, 0, LAPTOP)).toBeCloseTo(0.84, 6);
-    expect(supportY([shelf, DESK], LAPTOP_SELF, 0, 0, LAPTOP)).toBeCloseTo(0.84, 6);
+    expect(supportY([DESK, shelf], LAPTOP_SELF, 0, 0, LAPTOP, 0, undefined)).toBeCloseTo(0.84, 6);
+    expect(supportY([shelf, DESK], LAPTOP_SELF, 0, 0, LAPTOP, 0, undefined)).toBeCloseTo(0.84, 6);
   });
 
   it('ignores rugs, wall-mounted pieces and itself', () => {
@@ -157,8 +157,8 @@ describe('support share', () => {
     // `shape: 'tv'` is all the fixture says and `anchorFor` has to work the rest out.
     const rug: SupportPart = { id: 'rug', pos: [0, 0, 0], dimMM: [3000, 2000, 10], category: 'rug', shape: 'rug' };
     const tv: SupportPart = { id: 'tv', pos: [0, 1.3, 0], dimMM: [1400, 60, 800], category: 'tv', shape: 'tv' };
-    expect(supportY([rug, tv], LAPTOP_SELF, 0, 0, LAPTOP)).toBeNull();
-    expect(supportY([DESK], DESK, 0, 0, LAPTOP)).toBeNull();
+    expect(supportY([rug, tv], LAPTOP_SELF, 0, 0, LAPTOP, 0, undefined)).toBeNull();
+    expect(supportY([DESK], DESK, 0, 0, LAPTOP, 0, undefined)).toBeNull();
   });
 });
 
@@ -168,26 +168,26 @@ describe('support share', () => {
 
 describe('findSupportDetailed', () => {
   it('names the supporting id alongside the height', () => {
-    expect(findSupportDetailed([DESK], LAPTOP_SELF, 0, 0, LAPTOP)).toEqual({ id: 'desk', y: 0.75 });
+    expect(findSupportDetailed([DESK], LAPTOP_SELF, 0, 0, LAPTOP, 0, undefined)).toEqual({ id: 'desk', y: 0.75 });
   });
 
   it('stays rotation-correct, as the height alone does', () => {
     const turned: SupportPart = { ...DESK, rot: Math.PI / 2 };
-    expect(findSupportDetailed([turned], LAPTOP_SELF, 0.5, 0, LAPTOP)).toBeNull();
-    expect(findSupportDetailed([turned], LAPTOP_SELF, 0, 0.5, LAPTOP)?.y).toBeCloseTo(0.75, 6);
+    expect(findSupportDetailed([turned], LAPTOP_SELF, 0.5, 0, LAPTOP, 0, undefined)).toBeNull();
+    expect(findSupportDetailed([turned], LAPTOP_SELF, 0, 0.5, LAPTOP, 0, undefined)?.y).toBeCloseTo(0.75, 6);
   });
 
   it('picks the highest qualifying surface, by id', () => {
     const shelf: SupportPart = { id: 'shelf', pos: [0, 0.8, 0], dimMM: [800, 400, 40], category: 'shelf', shape: 'bookshelf' };
-    expect(findSupportDetailed([DESK, shelf], LAPTOP_SELF, 0, 0, LAPTOP)?.id).toBe('shelf');
-    expect(findSupportDetailed([shelf, DESK], LAPTOP_SELF, 0, 0, LAPTOP)?.id).toBe('shelf');
+    expect(findSupportDetailed([DESK, shelf], LAPTOP_SELF, 0, 0, LAPTOP, 0, undefined)?.id).toBe('shelf');
+    expect(findSupportDetailed([shelf, DESK], LAPTOP_SELF, 0, 0, LAPTOP, 0, undefined)?.id).toBe('shelf');
   });
 
   it('breaks a tie between two equal-height supports deterministically (first in order wins)', () => {
     const deskA: SupportPart = { ...DESK, id: 'desk-a' };
     const deskB: SupportPart = { ...DESK, id: 'desk-b' };
-    expect(findSupportDetailed([deskA, deskB], LAPTOP_SELF, 0, 0, LAPTOP)?.id).toBe('desk-a');
-    expect(findSupportDetailed([deskB, deskA], LAPTOP_SELF, 0, 0, LAPTOP)?.id).toBe('desk-b');
+    expect(findSupportDetailed([deskA, deskB], LAPTOP_SELF, 0, 0, LAPTOP, 0, undefined)?.id).toBe('desk-a');
+    expect(findSupportDetailed([deskB, deskA], LAPTOP_SELF, 0, 0, LAPTOP, 0, undefined)?.id).toBe('desk-b');
   });
 });
 

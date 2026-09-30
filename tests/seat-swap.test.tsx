@@ -12,6 +12,10 @@
 // stored disagree — and a unit test of the function cannot see which one a caller
 // passes. Mounted through the real plan page, like `tests/mount-height-refusal.test.tsx`.
 //
+// The same call site had a second hole of the same kind: it handed the probe the new
+// kind's turn but not its OUTLINE, so a swap to a round piece was asked as the square
+// around it. The last block below holds that half.
+//
 // What it does NOT prove: nothing about the 3D tab, whose Inspector is the same
 // component but whose page cannot be mounted here (R3F).
 import 'fake-indexeddb/auto';
@@ -20,6 +24,7 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
+import { findSupportDetailed } from '@/lib/physics';
 import type { ScenePart } from '@/lib/scene-spec';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('seat-swap-room'));
@@ -108,5 +113,48 @@ describe('Change the model re-grounds for the kind it is changing TO', () => {
     expect(useScene.getState().parts.find((p) => p.id === 'lamp')?.shape).toBe('laptop');
     expect(s.positions.lamp?.[1]).toBe(TOP);
     expect(s.parentIds.lamp).toBe('table');
+  });
+});
+
+describe('…and asks with the OUTLINE of the kind it is changing to', () => {
+  it('a piece swapped for a table lamp more than half over the table’s corner stands on it', () => {
+    // 50 mm in from the corner on both axes: 49% of the square around a 250 mm lamp is
+    // over the table, and more than half of the lamp. Asked as that square, the swap put
+    // it on the floor.
+    const at: [number, number] = [0.8 - 0.05, 0.45 - 0.05];
+    const lampDim: [number, number, number] = [250, 250, 500];
+    const self = { id: 'corner', category: 'lamp', shape: 'lamp-table' } as const;
+    expect(findSupportDetailed([TABLE], self, at[0], at[1], lampDim, 0, undefined)).toBeNull();
+    expect(findSupportDetailed([TABLE], self, at[0], at[1], lampDim, 0, true)?.id).toBe('table');
+
+    const laptop: ScenePart = { id: 'corner', name: 'Laptop', category: 'monitor', shape: 'laptop', dimMM: [340, 240, 220], pos: [at[0], 0, at[1]], rot: 0 } as ScenePart;
+    useScene.setState({ parts: [TABLE, laptop] });
+    useStudio.setState({ parentIds: {}, selection: ['corner'], selectedPartId: 'corner' });
+    swapTo('Table lamp');
+    const s = useStudio.getState();
+    expect(useScene.getState().parts.find((p) => p.id === 'corner')?.shape).toBe('lamp-table');
+    expect(s.positions.corner?.[1]).toBe(TOP);
+    expect(s.parentIds.corner).toBe('table');
+  });
+
+  it('and with the TURN the piece keeps, which here keeps a laptop off the table', () => {
+    // The other direction, and the parameter that was already passed — pinned beside the
+    // outline so the pair is held, not half of it. A laptop turned a quarter, 10 mm in
+    // from the table's end and 120 mm in from its side: unturned, 53% of it would be
+    // over the table; turned, 46% is, and it stays on the floor.
+    const at: [number, number] = [0.8 - 0.01, 0.45 - 0.12];
+    const dim: [number, number, number] = [340, 240, 220];
+    const self = { id: 'corner', category: 'monitor', shape: 'laptop' } as const;
+    expect(findSupportDetailed([TABLE], self, at[0], at[1], dim, 0, undefined)?.id).toBe('table');
+    expect(findSupportDetailed([TABLE], self, at[0], at[1], dim, Math.PI / 2, undefined)).toBeNull();
+
+    const plant: ScenePart = { id: 'corner', name: 'Plant', category: 'plant', shape: 'plant', dimMM: [300, 300, 600], pos: [at[0], 0, at[1]], rot: Math.PI / 2 } as ScenePart;
+    useScene.setState({ parts: [TABLE, plant] });
+    useStudio.setState({ parentIds: {}, selection: ['corner'], selectedPartId: 'corner' });
+    swapTo('Laptop');
+    const s = useStudio.getState();
+    expect(useScene.getState().parts.find((p) => p.id === 'corner')?.shape).toBe('laptop');
+    expect(s.positions.corner?.[1]).toBe(0);
+    expect(s.parentIds.corner).toBeUndefined();
   });
 });

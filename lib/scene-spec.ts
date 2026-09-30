@@ -3109,9 +3109,17 @@ export function placeNewPart(
 
   // Only small "goes on a table" items seek a surface; everything else floors. The
   // support probe reads the FINAL point, not the rotation-blind one above: a piece
-  // asks what it can stand on where it is going to be standing.
+  // asks what it can stand on where it is going to be standing — and at the turn and
+  // outline it will be standing with. It used to be asked as an unturned box, so a
+  // monitor turned to face a side wall was tested along the wrong axis, and a table
+  // lamp at a coffee table's corner by the square around it: each was stood on the
+  // floor while more than half of it was over the surface. `addPart` stamps `circle`
+  // from the shape too, so this is the outline the piece is then drawn and dragged
+  // with.
   const [fx, fz] = intoRoom(ax, az, rot);
-  const support = isTabletopProne(cat) ? findSupportDetailed(existing, { id: '__new__', category: cat, shape }, fx, fz, dimMM) : null;
+  const support = isTabletopProne(cat)
+    ? findSupportDetailed(existing, { id: '__new__', category: cat, shape }, fx, fz, dimMM, rot, isRoundPart(shape) || undefined)
+    : null;
   // The id and the height are gated on ONE condition on purpose. A piece whose
   // support fails the 0.3 m bar floors, and recording an edge to something it is not
   // standing on would be worse than recording none: `deriveRiderYs` rule 2 honours a

@@ -2046,6 +2046,24 @@ tray on an ottoman. Open the result in 3D and open Room check.
 - An ottoman floating half a metre up, or on the coffee table's top.
 - An ottoman overlapping the coffee table with Room check saying nothing.
 
+### A lamp dropped on a table's corner stands on it — this branch (§ H.6.4 follow-ups), NOT LOOKED AT
+
+Adding a piece, and swapping one in the Inspector, used to ask what it stands on as if it
+were an unturned square. A round lamp mostly over a table's corner went to the floor, and a
+monitor turned to face a side wall was tested across the wrong way.
+
+**Where to click.** In **2D Plan**, drag a **Table lamp** from the Library so its centre
+is just inside a coffee table's corner, then look in 3D. Separately, put a desk against a
+side wall, and drop a **Monitor** near one end of it. Last, select any small piece near a
+table's corner and **Change the model** to a Table lamp.
+
+**What right looks like.** A lamp that is mostly over the table stands on the tabletop; one
+mostly over the floor stands on the floor. The monitor turns to face the side wall and stands
+on the desk while most of it is over the desk.
+
+**What wrong looks like.** A lamp on the floor with most of its base under the tabletop, or
+a monitor on the floor beside a desk it is mostly over.
+
 ## Look and light
 
 ### The day track as a slider over the canvas, a frosted base under the selection, no streaks while carrying — merged to `main` in `b955aac` (PR #178), SEEN HEADLESS ONLY

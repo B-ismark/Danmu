@@ -16,7 +16,7 @@ import { SwapModelModal } from './RegenerateModal';
 import { RailSection } from './RailSection';
 import { EmptyInspector } from './EmptyInspector';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
-import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
+import { isRoundPart, isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { anchorFor, findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
 import { useRoomReport } from './RoomTools';
 import { wallSegments } from '@/lib/footprint';
@@ -144,7 +144,7 @@ export function Inspector() {
     } else {
       // The NEW kind is the one asking: the snapshot still holds the old one under
       // this id, and a swap to a chair must not stand it on the table it tucks under.
-      support = findSupportDetailed(partSnapshot(), { id: id!, category: item.category, shape: item.shape }, x, z, dimMM, baseRot);
+      support = findSupportDetailed(partSnapshot(), { id: id!, category: item.category, shape: item.shape }, x, z, dimMM, baseRot, isRoundPart(item.shape) || undefined);
       ny = support !== null && support.y > 0.3 ? support.y : 0;
     }
     resetTransforms(id!); // drop stale rotate/scale overrides (and any rigid-parenting link)

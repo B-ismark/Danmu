@@ -624,9 +624,14 @@ export function restingOn(
  *  overhanging a desk "on the desk", and a part perched on the very lip of a
  *  nightstand floated at the nightstand's height with nothing under it.
  *
- *  `rot` on either side is optional and defaults to 0 — at 0/90° the rotated
- *  rectangle and its bounding box are the same, which is the overwhelmingly
- *  common case, so callers that have not got a rotation to hand lose nothing.
+ *  The mover's turn and outline are REQUIRED, `undefined` being a stated answer
+ *  (not round) rather than a forgotten one. They were optional, under a sentence
+ *  saying a caller without a rotation lost nothing because at 0/90° a rectangle is
+ *  its own bounding box — true, and beside the point: at 90° it is not the rot-0
+ *  box, it is that box with width and depth swapped. Two of the four callers took
+ *  the default. A monitor turned to face a side wall was asked about along the
+ *  wrong axis and a round lamp as the square around it — measured, each was stood
+ *  on the floor while more than half of it was over a desk or a coffee table.
  *
  *  **This is the DROP question** — what would this piece land on here — and it
  *  carries the one rule that belongs to landing: a seat is never stood on the
@@ -639,8 +644,8 @@ export function findSupportDetailed(
   x: number,
   z: number,
   selfDim: [number, number, number],
-  selfRot = 0,
-  selfCircle?: boolean,
+  selfRot: number,
+  selfCircle: boolean | undefined,
 ): { id: string; y: number } | null {
   // What the mover IS, read at the size it is being asked at — `roleOf` tells a
   // coffee table from a dining table by its dimensions, and the fit test reads the

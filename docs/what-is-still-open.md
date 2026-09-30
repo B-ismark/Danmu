@@ -3652,9 +3652,20 @@ asks `hasFloorSharers` first.
   outright (`currentDim()` returns the held size, or the stretch in flight), which
   covers the same drag with nothing left to check, so the check went in the merge.
   `docs/visual-check.md` names the look.
-- *A new piece is asked about without its turn.* `placeNewPart` passes the probe no `rot`
-  and no `circle`, so a round lamp added at an angle is measured as an unturned square.
-  That is older than this fix and not its mechanism; the fix is one line.
+- **Fixed after this: a new piece is asked about with its turn and its outline.**
+  `placeNewPart` passed the probe no `rot` and no `circle`, and the Inspector's model swap
+  passed the turn but not the outline, so both asked about an unturned square. The note
+  first filed here guessed the case as "a round lamp added at an angle", which is the one
+  that cannot tell — a circle turned is the same circle. Measured instead, both halves are
+  the floor for a piece more than half over a surface: a 250 mm table lamp 50 mm in from a
+  coffee table's corner (49% of its square over the top, more of the lamp), and a monitor
+  that takes an east wall's heading 20 mm in from the end of a desk turned the same way
+  (48% unturned, 53% turned). The turn also misleads the other way — a laptop turned a
+  quarter at a table's corner reads 53% on unturned and 46% turned. The fix was two
+  arguments; what keeps it is that the probe's turn and outline are **required** now,
+  because the default was the hole and its docblock said a caller without a rotation
+  lost nothing. `tests/new-piece-support.test.ts` and `tests/seat-swap.test.tsx` hold the
+  cases, each proving first that its spot is one where the two readings disagree.
 - *A small low box is still a side table.* `roleOf` asks "under 700 mm both ways" before it
   asks the new height floor, so a 400 × 300 tray reads as a side table. A side table has no
   floor sharers, so nothing here depends on it, and it is older than this fix.
