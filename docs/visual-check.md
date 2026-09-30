@@ -602,6 +602,39 @@ type 1800 × 900 × 750 mm, press **Check the room**, then **Put it there**.
 - A starter room that looks different from before. None should: every seat in the starter
   rooms is a dining chair at a dining table, and all of those fit.
 
+### Suggest and Ideas keep a group whole — this branch (§ H.6.5), NOT LOOKED AT
+
+A group made with **Group N** stayed together when dragged, but Fix and the ideas gallery
+moved each piece on its own: a dining set came back with a chair across the room, or
+turned while the table stayed square. The solver now moves a group as one body. Tests hold
+the shape to a millimetre; nobody has looked at a room with it.
+
+**Where to click.** Open Plan with starter furniture. Click the dining table, shift-click
+each of its chairs, press **Group**. Press **Ideas** and page through every card. Then
+turn the group about 30° in the plan, press **Fix**, and look in 3D. Last, in the
+Catalog press **Keep where it is** on one chair of the group, and press **Fix** and
+**Ideas** again. Do the same once on T-Shape, with a table lamp put on the dining table
+first.
+
+**What right looks like.**
+- In every idea the table and its chairs sit exactly as you grouped them, wherever the
+  set ends up and whichever way it faces.
+- Fix brings the turned set back square, or leaves it turned, but as one piece: no chair
+  squared on its own.
+- With one chair kept in place, the whole set stays put, and the rest of the room still
+  moves around it.
+- The lamp stays on the table.
+
+**What wrong looks like.**
+- A chair left behind, pushed out, or turned on its own inside a thumbnail or in 3D.
+- A kept chair staying put while the table and the other chairs move away from it.
+- A card whose "N pieces move" counts the set's chairs as not moving when the set did.
+- **Fewer ideas on T-Shape with the lamp, maybe none.** That is expected and filed
+  (§ H.6.5, "Kept, as trades"): a set that cannot come apart has fewer places to go.
+  It was counted with the room at 6 × 4 m (none in three presses), not at the preset's
+  own 5.5 × 4.7, so how few is part of the look. The other part is whether an empty
+  gallery reads as broken; the sentence it should say is the user's call.
+
 ### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 
 **Ideas** sits where Shuffle did, beside **Fix**. It opens a card of arrangements: four
