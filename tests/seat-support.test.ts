@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { findSupportDetailed, highestSurfaceUnder, MIN_SUPPORT_SHARE, restingOn } from '@/lib/physics';
 import { resolvePlacement } from '@/lib/drag-resolve';
-import { planConvoy, resolveConvoy } from '@/lib/drag-convoy';
+import { leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld } from '@/lib/drag-convoy';
 import { settleHeights } from '@/lib/layout-settle';
 import { ridingParents } from '@/lib/rigid-parent';
 import { placeNewPart, selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import { footArea, footFromPart, footIntersectionArea, type Poly } from '@/lib/geometry';
-import { TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
+import { roleOf, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
 
 // § H.6.3 — a seat never stands on the surface it tucks under.
 //
@@ -58,6 +58,53 @@ const ROOM: Poly = [
 ];
 const H = 2.5;
 
+/** A set drag the way BOTH tabs run it. The piece under the hand is resolved against
+ *  the company shifted by the attempted delta (`travellingWorld`) and carries the
+ *  overlaps it picked up with (`leadInherited`); then the lead and its set are brought
+ *  to one delta (`settleLead`). `valid` is what a surface accepts: all three agree.
+ *
+ *  The first version of this file resolved the lead against the UNSHIFTED world, with
+ *  no inherited set — a path neither tab takes — and reported a set that both tabs
+ *  refused as moving. `inherit: false` is that omission, kept to prove it mattered. */
+function dragSet(
+  world: ScenePart[],
+  grab: string,
+  selection: readonly string[],
+  dx: number,
+  dz: number,
+  opts: { rot?: number; inherit?: boolean } = {},
+) {
+  const lead = world.find((p) => p.id === grab)!;
+  const convoy = planConvoy({ draggedId: grab, parts: world, selection, parentIds: {}, footprint: ROOM, roomHeight: H });
+  const rot = opts.rot ?? lead.rot;
+  const resolveAt = (x: number, z: number) =>
+    resolvePlacement({
+      part: lead,
+      rawX: x,
+      rawZ: z,
+      rot,
+      dim: lead.dimMM,
+      parts: convoy.travelling.size > 1 ? travellingWorld(convoy, world, x - lead.pos[0], z - lead.pos[2], convoy.own) : world,
+      footprint: ROOM,
+      roomHeight: H,
+      snapMode: 'off',
+      currentY: lead.pos[1],
+      wallEdge: convoy.leadEdge,
+      inherited: opts.inherit === false ? undefined : leadInherited(convoy, rot, lead.dimMM),
+    });
+  const asked = resolveAt(lead.pos[0] + dx, lead.pos[2] + dz);
+  const s = settleLead(
+    resolveAt,
+    (l) =>
+      resolveConvoy({
+        convoy, draggedId: grab, pos: l.pos, rot: l.rot, startPos: lead.pos, parts: world,
+        footprint: ROOM, roomHeight: H, gesture: 'move', memberHasPosOverride: () => false,
+      }),
+    asked,
+  );
+  return { convoy, lead: s.lead, co: s.co, valid: asked.valid && s.lead.valid && s.co.valid && s.settled };
+}
+
 describe('the fixture sits in the band the two bars disagreed about', () => {
   it('60% under: over the support bar, under the tuck bar', () => {
     const s = share(chair('c', 0, TUCKED_Z), TABLE);
@@ -103,6 +150,22 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     const deck = part({ id: 'deck', category: 'other', shape: 'box', dimMM: [3000, 3000, 40], pos: [0, 0, 0] });
     const c = chair('c', 0, TUCKED_Z, 0.04);
     expect(findSupportDetailed([TABLE, deck], c, 0, TUCKED_Z, c.dimMM)).toEqual({ id: 'deck', y: 0.04 });
+  });
+
+  it('a floor deck is not a coffee table: an ottoman stands on it', () => {
+    // `other/box` is one of the shapes `roleOf` reads by size, and its range goes down
+    // to 50 mm, so a 40 mm deck was a COFFEE TABLE — which an ottoman shares a floor
+    // with. The ottoman then sank through the deck to y = 0. The chair fixture above
+    // cannot see this: a chair pairs with dining tables and desks, not coffee tables.
+    const deck = part({ id: 'deck', category: 'other', shape: 'box', dimMM: [3000, 3000, 40], pos: [0, 0, 0] });
+    expect(roleOf(deck)).toBe('other');
+    const o = ottoman(0, 0, 0.04);
+    expect(findSupportDetailed([deck], o, 0, 0, o.dimMM)).toEqual({ id: 'deck', y: 0.04 });
+    // The pair: the lowest real coffee table the catalogue sizes (250 mm) still is one,
+    // and the ottoman still goes under it.
+    const low = part({ id: 'low', category: 'other', shape: 'box', dimMM: [1100, 600, 250], pos: [0, 0, 0] });
+    expect(roleOf(low)).toBe('coffee-table');
+    expect(findSupportDetailed([low], o, 0, 0, o.dimMM)).toBeNull();
   });
 
   it('reads the kind it is HANDED, not the kind stored under that id', () => {
@@ -177,32 +240,141 @@ describe('every caller that moves a piece to what it finds', () => {
   // merged dining set. A merged set travels because a click on it selects the whole
   // group (`selectionForPick`), so that is how the merged case picks its selection:
   // the click, not a list this test writes out.
+  //
+  // And from both ends — grabbing the table, and grabbing a chair — because the two are
+  // different code: the piece under the hand is resolved by the SURFACE, against the
+  // company shifted to where it is going, and every other piece by `resolveConvoy`.
   it.each([
-    ['selected', (ps: ScenePart[]) => ps, (ps: ScenePart[]) => ps.map((p) => p.id)],
-    [
-      'merged',
-      (ps: ScenePart[]) => ps.map((p) => ({ ...p, groupId: 'set' })),
-      (ps: ScenePart[]) => selectionForPick(ps, ps[0].id, []),
-    ],
-  ] as const)('drag: moving the whole set (%s) leaves every chair on the floor', (_, merge, pick) => {
+    ['selected', 'table'],
+    ['selected', 'c1'],
+    ['merged', 'table'],
+    ['merged', 'c1'],
+  ] as const)('drag: moving the whole set (%s, grabbed by %s) leaves every chair on the floor', (how, grab) => {
     const chairs = [chair('c1', -0.4, TUCKED_Z), chair('c2', 0.4, TUCKED_Z), chair('c3', 0, -TUCKED_Z, 0, Math.PI)];
-    const world = merge([TABLE, ...chairs]);
-    const table = world[0];
-    const convoy = planConvoy({ draggedId: table.id, parts: world, selection: pick(world), parentIds: {}, footprint: ROOM, roomHeight: H });
-    const lead = resolvePlacement({
-      part: table, rawX: 0.05, rawZ: 0, rot: 0, dim: table.dimMM, parts: world, footprint: ROOM, roomHeight: H, snapMode: 'off',
-    });
-    const r = resolveConvoy({
-      convoy, draggedId: table.id, pos: lead.pos, rot: lead.rot, startPos: table.pos, parts: world,
-      footprint: ROOM, roomHeight: H, gesture: 'move', memberHasPosOverride: () => false,
-    });
-    const moved = r.moves.filter((m) => m.id !== table.id);
-    // Vacuity: all three chairs travelled, so "none lifted" is about three moves.
-    expect(moved.map((m) => m.id).sort()).toEqual(['c1', 'c2', 'c3']);
-    for (const m of moved) {
-      expect(m.pos[1], m.id).toBe(0);
-      expect(m.pos[0], m.id).toBeCloseTo(chairs.find((c) => c.id === m.id)!.pos[0] + 0.05, 9);
+    const plain = [TABLE, ...chairs];
+    const world = how === 'merged' ? plain.map((p) => ({ ...p, groupId: 'set' })) : plain;
+    const selection = how === 'merged' ? selectionForPick(world, grab, []) : world.map((p) => p.id);
+    const r = dragSet(world, grab, selection, 0.05, 0);
+    expect(r.valid).toBe(true);
+    // Vacuity: everything travelled, so "none lifted" is about every piece.
+    const moved = [r.lead.pos, ...r.co.moves.map((m) => m.pos)];
+    expect([grab, ...r.co.moves.map((m) => m.id)].sort()).toEqual(['c1', 'c2', 'c3', 'table']);
+    for (const [i, at] of moved.entries()) {
+      const id = i === 0 ? grab : r.co.moves[i - 1].id;
+      expect(at[1], id).toBe(0);
+      expect(at[0], id).toBeCloseTo(world.find((p) => p.id === id)!.pos[0] + 0.05, 9);
     }
+  });
+
+  it('drag: the set was refused outright before its overlaps were inherited', () => {
+    // The first version of this file said the set moved — measured on a lead resolved
+    // against the UNSHIFTED world, a path neither tab takes. Resolved the way both
+    // tabs resolve it, the table collided with its own chairs where they were about to
+    // be, and was refused from the first millimetre. Withholding the inherited set is
+    // that world again, and this is the line that proves the fixture can see it.
+    const world = [TABLE, chair('c1', -0.4, TUCKED_Z)];
+    expect(dragSet(world, 'table', ['table', 'c1'], 0.05, 0).valid).toBe(true);
+    expect(dragSet(world, 'table', ['table', 'c1'], 0.05, 0, { inherit: false }).valid).toBe(false);
+  });
+
+  it('drag: a turned table answers for its chairs again', () => {
+    // `leadInherited` holds only while the lead is exactly as it was picked up. A wheel
+    // turn partway through a drag moves its corners, so the forgiveness goes and the
+    // chairs are obstacles once more — refused rather than ploughed through.
+    const world = [TABLE, chair('c1', -0.4, TUCKED_Z)];
+    const convoy = planConvoy({ draggedId: 'table', parts: world, selection: ['table', 'c1'], parentIds: {}, footprint: ROOM, roomHeight: H });
+    expect(leadInherited(convoy, 0, TABLE.dimMM)).toEqual(new Set(['c1']));
+    expect(leadInherited(convoy, Math.PI / 12, TABLE.dimMM)).toBeUndefined();
+    expect(leadInherited(convoy, 0, [1700, 900, 750])).toBeUndefined();
+    expect(dragSet(world, 'table', ['table', 'c1'], 0.05, 0, { rot: Math.PI / 12 }).valid).toBe(false);
+  });
+
+  it('drag: a tucked chair still has a vote — the set stops at a bookcase the chair would hit', () => {
+    // Grabbing the table's far end is the case that went through. The table itself
+    // overlaps nothing it is not travelling with, so it is not refused; the chair was
+    // `startValid: false` for overlapping the table and so could not refuse either —
+    // and was towed into the bookcase, valid and silent.
+    const c1 = chair('c1', -0.4, TUCKED_Z);
+    const shelf = part({ id: 'shelf', category: 'shelf', shape: 'bookshelf', dimMM: [800, 350, 1800], pos: [-0.4, 0, TUCKED_Z + 0.25 + 0.175 + 0.15] });
+    const blocked = dragSet([TABLE, c1, shelf], 'table', ['table', 'c1'], 0, 0.35);
+    expect(blocked.valid).toBe(false);
+    expect(blocked.co.blockedIds).toEqual(['c1']);
+    // The pair: the same drag with the bookcase moved out of the chair's path goes.
+    const clear = dragSet([TABLE, c1, { ...shelf, pos: [2, 0, shelf.pos[2]] }], 'table', ['table', 'c1'], 0, 0.35);
+    expect(clear.valid).toBe(true);
+  });
+
+  it('drag: wall riders are left out of it on both sides — a bookcase over a painting refuses, as before', () => {
+    // A bookcase stood against a wall with a painting behind it overlaps the painting.
+    // The set is refused by either piece, exactly as it was before sets kept their
+    // overlaps, because the painting cannot follow the set exactly: its wall corrects
+    // it, and a wall rider is exempt from the rigidity test for that reason.
+    const art = part({ id: 'art', category: 'painting', shape: 'painting', dimMM: [800, 30, 600], pos: [0, 1.4, -1.965] });
+    const shelf = part({ id: 'shelf', category: 'shelf', shape: 'bookshelf', dimMM: [900, 350, 1800], pos: [0, 0, -1.99 + 0.175] });
+    const world = [shelf, art];
+    const byShelf = dragSet(world, 'shelf', ['shelf', 'art'], 0, -0.009);
+    expect(byShelf.convoy.leadStart.inherited.size).toBe(0);
+    expect(byShelf.convoy.members.map((m) => m.inherited.size)).toEqual([0]);
+    // Toward the wall is where forgiving would plough: the painting is held on the
+    // wall, and it cannot refuse — it starts inside the bookcase, so it has no vote.
+    expect(byShelf.valid).toBe(false);
+    // Grabbed by the painting, forgiving would be sound, since the bookcase follows the
+    // painting's own accepted move. It stays refused all the same: keeping riders out
+    // on both sides keeps the rule one sentence long and this change to floor pieces.
+    const byArt = dragSet(world, 'art', ['shelf', 'art'], 0.1, 0);
+    expect(byArt.convoy.leadStart.inherited.size).toBe(0);
+    expect(byArt.valid).toBe(false);
+  });
+
+  it('drag: a chair on its own is still refused — § 17 is not decided here', () => {
+    // The inherited set is empty when nothing travels with the chair, so the solo nudge
+    // is exactly the "drag: nudging a tucked chair" answer above, reached the app's way.
+    const r = dragSet([TABLE, chair('c1', -0.4, TUCKED_Z)], 'c1', ['c1'], 0.01, 0);
+    expect(r.convoy.leadStart.inherited.size).toBe(0);
+    expect(r.valid).toBe(false);
+  });
+
+  it('drag: a tray on the tabletop does not lift the chair tucked under it', () => {
+    // Looking past the table found whatever else was over the chair. A 900 × 600 tray
+    // on the table covers the tucked chair by well over half, so the chair stood on
+    // the tray, 810 mm up, with the table it is tucked under excluded as a support.
+    const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [900, 600, 60], pos: [-0.4, TOP, TUCKED_Z] });
+    const c = chair('c', -0.4, TUCKED_Z);
+    expect(share(c, tray)).toBeGreaterThanOrEqual(MIN_SUPPORT_SHARE);
+    expect(findSupportDetailed([TABLE, tray], c, c.pos[0], c.pos[2], c.dimMM)).toBeNull();
+    // The pair: a lamp at the same spot stands on the tray, the highest thing there.
+    expect(findSupportDetailed([TABLE, tray], lamp(-0.4, TUCKED_Z), -0.4, TUCKED_Z, [500, 500, 500])).toEqual({ id: 'tray', y: TOP + 0.06 });
+    // "As high as" has no allowance: a placemat 5 mm thick is skipped the same.
+    const mat = part({ id: 'mat', category: 'other', shape: 'box', dimMM: [900, 600, 5], pos: [-0.4, TOP, TUCKED_Z] });
+    expect(findSupportDetailed([TABLE, mat], c, c.pos[0], c.pos[2], c.dimMM)).toBeNull();
+    expect(findSupportDetailed([TABLE, mat], lamp(-0.4, TUCKED_Z), -0.4, TUCKED_Z, [250, 250, 500])).toEqual({ id: 'mat', y: TOP + 0.005 });
+    // And only a partner the chair is actually UNDER caps anything. Beside the table, on
+    // a shoe rack taller than the tabletop, it stands on the rack.
+    const rack = part({ id: 'rack', category: 'shelf', shape: 'shoe-rack', dimMM: [800, 300, 900], pos: [1.5, 0, 0] });
+    expect(findSupportDetailed([TABLE, rack], c, 1.5, 0, c.dimMM)).toEqual({ id: 'rack', y: 0.9 });
+  });
+
+  it('drag: under two surfaces, the LOWER one is the cap', () => {
+    // A chair tucked under a 650 mm desk with its back under the edge of a dining table
+    // beside it. The tray on the desk is below the dining table's top and above the
+    // desk's, so it is on the desk the chair is under, and it does not hold the chair.
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1200, 600, 650], pos: [0, 0, 0] });
+    const dining = { ...TABLE, pos: [0, 0, 0.9] as [number, number, number] };
+    const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [600, 400, 60], pos: [0, 0.65, 0.15] });
+    const c = chair('c', 0, 0.25);
+    expect(share(c, desk)).toBeGreaterThanOrEqual(MIN_SUPPORT_SHARE);
+    expect(share(c, dining)).toBeGreaterThan(0);
+    expect(share(c, tray)).toBeGreaterThanOrEqual(MIN_SUPPORT_SHARE);
+    expect(findSupportDetailed([desk, dining, tray], c, 0, 0.25, c.dimMM)).toBeNull();
+    // The pair: a lamp there stands on the tray.
+    expect(findSupportDetailed([desk, dining, tray], lamp(0, 0.25), 0, 0.25, [250, 250, 500])).toEqual({ id: 'tray', y: 0.71 });
+  });
+
+  it('drag: …and a table dropped over a tucked chair does not rest on the cushion on its seat', () => {
+    // Symmetric, like `sharesFloor`: nothing as high as the partner's own top.
+    const c = chair('c', 0, 0);
+    const cushion = part({ id: 'cushion', category: 'other', shape: 'box', dimMM: [1400, 800, 100], pos: [0, 0.85, 0] });
+    expect(findSupportDetailed([c, cushion], TABLE, 0, 0, TABLE.dimMM)).toBeNull();
   });
 
   it('adding: an ottoman dropped over a coffee table goes on the floor; a lamp goes on the table', () => {
@@ -221,6 +393,23 @@ describe('every caller that moves a piece to what it finds', () => {
     // ON the coffee table.
     expect(settleHeights([COFFEE, ottoman(0, 0)], H)).toEqual([]);
     expect(settleHeights([COFFEE, lamp(0, 0)], H)).toEqual([{ id: 'lamp', y: 0.42 }]);
+  });
+
+  it('settling: a tray on an ottoman stays on it', () => {
+    // A 750 × 450 × 60 tray is `other/box` too, and was read as a coffee table — so the
+    // ottoman under it was its floor-sharer, not its support, and `settleHeights` put
+    // the tray on the floor straight through the ottoman: `[{ id: 'tray', y: 0 }]` on
+    // this PR's first commit, `[]` before it and after this one.
+    //
+    // A LARGE ottoman on purpose. Under the default 550 × 400 one the tray covers the
+    // whole seat, and `settleHeights` lifts the ottoman onto the tray standing on it —
+    // ottoman to 0.48, tray to 0.90 — for every tray role, before § H.6.3 as well as
+    // after it. That is a separate defect, filed in `docs/what-is-still-open.md`
+    // § H.6.3, and this fixture keeps it out of the one being tested here.
+    const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [750, 450, 60], pos: [0, 0.42, 0] });
+    const big = part({ id: 'ottoman', category: 'ottoman', shape: 'ottoman', dimMM: [1200, 1000, 420], pos: [0, 0, 0] });
+    expect(roleOf(tray)).toBe('other');
+    expect(settleHeights([big, tray], H)).toEqual([]);
   });
 
   it('settling: a chair left standing on its table comes down; a lamp there stays', () => {

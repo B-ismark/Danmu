@@ -1420,13 +1420,19 @@ describe("a member's veto is for what this gesture broke", () => {
   });
 
   it('a chair half-tucked under its own table does not freeze it either', () => {
-    // No notch needed for this one. The chair overlaps the table but covers too
-    // little of it to be SUPPORTED by it, so gravity leaves it on the floor and it
-    // collides with the table it is standing under — where it already stood, before
-    // anybody touched anything. A plain rectangular dining room does this.
+    // No notch needed for this one. The chair overlaps the table it stands under —
+    // where it already stood, before anybody touched anything. A plain rectangular
+    // dining room does this.
+    //
+    // It used to be let through by `startValid: false`, which also took away its vote:
+    // the chair could then be towed into anything. The overlap is INHERITED now
+    // (`ConvoyMember.inherited`), so the chair is legal where it stands, keeps its
+    // vote, and the table is simply not in its way — `tests/seat-support.test.ts`
+    // holds the vote half, with a bookcase.
     const world = [diner('t', 3, 2, 'g2'), chair('c', 3, 1.45, 'g2')];
     const convoy = planConvoy({ draggedId: 't', parts: world, selection: ['t', 'c'], parentIds: {}, footprint: ROOM, roomHeight: H });
-    expect(convoy.members.map((m) => m.startValid)).toEqual([false]);
+    expect(convoy.members.map((m) => [...m.inherited])).toEqual([['t']]);
+    expect(convoy.members.map((m) => m.startValid)).toEqual([true]);
     const r = resolveConvoy({
       gesture: 'move',
       convoy,

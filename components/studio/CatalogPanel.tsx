@@ -157,7 +157,7 @@ function spawn(
  *  The sequencing now buys what an older version of this comment wrongly claimed it
  *  already did. That version said `placeNewPart` reads the parts in the room "so each
  *  piece avoids the one before it"; it reads `existing` in exactly ONE place —
- *  `findSupportUnder`, and only when `isTabletopProne(cat)` — so a chair is not one,
+ *  `findSupportDetailed`, and only when `isTabletopProne(cat)` — so a chair is not one,
  *  and four chairs landed at one point all facing the same way. **§ H.3, answered
  *  2026-09-03: fan out from the drop point with a legality gate.** `spawn` asks
  *  `openSpotForNewPart` first, and because each piece is added before the next one is

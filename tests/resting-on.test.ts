@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findSupportDetailed, restingOn, verticalExtent, SUPPORT_Y_EPS } from '@/lib/physics';
+import { highestSurfaceUnder, restingOn, verticalExtent, SUPPORT_Y_EPS } from '@/lib/physics';
 import type { ScenePart } from '@/lib/scene-spec';
 
 // § 37 — "is this piece resting on anything" was a question nothing in this repo could
@@ -11,7 +11,10 @@ import type { ScenePart } from '@/lib/scene-spec';
 // desk. The banner read "On Table — Supported by Table" about a piece in mid-air.
 //
 // So every clause here is written as a PAIR: what the old question answers, and what
-// the new one does. A test that only asserted the new answer would pass against a
+// the new one does. The old question is asked below as `highestSurfaceUnder`, which is
+// that same x/z search without the seat rule § H.6.3 later gave the drop — for a lamp
+// the two agree, and it is the search `restingOn` is itself built on, so it is the one
+// `restingOn` could quietly collapse into. A test that only asserted the new answer would pass against a
 // `restingOn` that had quietly become an alias for the old one.
 //
 // A `//` header rather than a docblock — see `tests/layout-pick.test.ts`.
@@ -24,30 +27,28 @@ const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM:
 /** …whose top is therefore at 0.75. */
 const DESK_TOP = 0.75;
 
-/** Who asks — the probe needs the mover's kind as well as its id (`SupportSelf`). */
-const LAMP_SELF = { id: 'lamp', category: 'lamp', shape: 'lamp-table' } as const;
-
 const lampAt = (y: number) =>
   part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, y, 0] });
 
 const ask = (p: ScenePart, world: ScenePart[]) =>
   restingOn(world, p.id, p.pos, p.rot, p.dimMM, p.category, p.shape, p.circle);
 
-describe('restingOn — the question findSupportDetailed does not answer', () => {
+describe('restingOn — the question highestSurfaceUnder does not answer', () => {
   it('the desk really is under the lamp, and the old question cannot tell how high', () => {
     // The premise AND the point, in one clause. The first version looped over three
     // heights — which could not vary, because `y` only ever reached `dimMM` and
-    // `findSupportDetailed` takes no height at all. Three byte-identical calls under a
-    // title claiming "at every height", against a function with no height parameter.
+    // `highestSurfaceUnder` is never told the lamp's height. Three byte-identical calls
+    // under a title claiming "at every height", against a function with no parameter
+    // for it.
     //
     // Written the honest way, that absence IS the finding: one call, no `y` anywhere in
     // it, and the answer is the desk regardless of where the lamp is.
-    const under = findSupportDetailed([desk], LAMP_SELF, 0, 0, [250, 250, 500], 0, undefined);
+    const under = highestSurfaceUnder([desk], 'lamp', 0, 0, [250, 250, 500], 0, undefined);
     expect(under?.id).toBe('desk');
     expect(under?.y).toBeCloseTo(DESK_TOP, 9);
     // …so if the footprints ever stopped overlapping, every "floating" clause below
     // would pass for the wrong reason. This is what stops that.
-    expect(findSupportDetailed([], LAMP_SELF, 0, 0, [250, 250, 500], 0, undefined)).toBeNull();
+    expect(highestSurfaceUnder([], 'lamp', 0, 0, [250, 250, 500], 0, undefined)).toBeNull();
   });
 
   it('says a lamp ON the desk is on the desk', () => {
@@ -64,7 +65,7 @@ describe('restingOn — the question findSupportDetailed does not answer', () =>
     // user has since resized. The old banner named the desk here.
     const lamp = lampAt(DESK_TOP + 0.35);
     expect(
-      findSupportDetailed([desk], LAMP_SELF, 0, 0, lamp.dimMM, 0, undefined)?.id,
+      highestSurfaceUnder([desk], 'lamp', 0, 0, lamp.dimMM, 0, undefined)?.id,
       'the old question still says "desk", which is why this test is a pair',
     ).toBe('desk');
     expect(ask(lamp, [desk]), 'and the new one says nothing holds it up').toBeNull();
@@ -156,7 +157,7 @@ describe('restingOn — the question findSupportDetailed does not answer', () =>
   it('is not fooled by a TALLER piece overlapping the one it is actually on', () => {
     // The first version of this clause passed ONE candidate, so there was no preference
     // to express and it was input-identical to the clause four above it. With two, it
-    // is the real finding: `findSupportDetailed` maximises `top`, so a monitor standing
+    // is the real finding: `highestSurfaceUnder` maximises `top`, so a monitor standing
     // over the same patch of desk answers "monitor" and a caller comparing the lamp's
     // underside against 1.25 concludes the lamp is airborne — without the lamp moving.
     const monitor = part({
@@ -164,7 +165,7 @@ describe('restingOn — the question findSupportDetailed does not answer', () =>
     });
     const lamp = lampAt(DESK_TOP);
     // The old question, and it is the wrong answer for this purpose:
-    const naive = findSupportDetailed([desk, monitor], LAMP_SELF, 0, 0, lamp.dimMM, 0, undefined);
+    const naive = highestSurfaceUnder([desk, monitor], 'lamp', 0, 0, lamp.dimMM, 0, undefined);
     expect(naive?.id, 'the highest top wins, which is the monitor').toBe('monitor');
     // …and the new one, which asks for a support the piece could be resting ON.
     const r = ask(lamp, [desk, monitor]);
@@ -173,11 +174,11 @@ describe('restingOn — the question findSupportDetailed does not answer', () =>
   });
 
   it('ignores a support whose footprint the piece barely overlaps', () => {
-    // Inherited from `findSupportDetailed`'s `MIN_SUPPORT_SHARE`, and asserted here so
+    // Inherited from `highestSurfaceUnder`'s `MIN_SUPPORT_SHARE`, and asserted here so
     // that a future `restingOn` written without it goes red: a lamp perched on the very
     // lip of a desk is not on the desk, and at the desk's own height it is in mid-air.
     const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0.78, DESK_TOP, 0] });
-    expect(findSupportDetailed([desk], LAMP_SELF, 0.78, 0, lamp.dimMM, 0, undefined)).toBeNull();
+    expect(highestSurfaceUnder([desk], 'lamp', 0.78, 0, lamp.dimMM, 0, undefined)).toBeNull();
     expect(ask(lamp, [desk])).toBeNull();
   });
 });

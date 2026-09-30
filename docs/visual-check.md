@@ -672,13 +672,15 @@ go. Then push one chair well in under the table in the plan and nudge it with an
 key. Then put a table lamp near the table's edge, select it, **Change the model**, and
 pick **Dining chair**. Do each once in the 3D tab too.
 
-**What right looks like.** Every chair stays on the floor through the set drag. The
-nudged chair does not move, which is what a chair tucked a little way in has always
-done. The swapped lamp becomes a chair standing on the floor where the lamp was, tucked
+**What right looks like.** The set moves, dragged by the table and dragged by a chair,
+and every chair stays on the floor through it. Drag the set into a bookcase and it stops
+there, with the chair that hit it outlined and named. The nudged chair does not move,
+which is what a chair tucked a little way in has always done. The swapped lamp becomes a chair standing on the floor where the lamp was, tucked
 under the table's edge rather than on top of it.
 
 **What wrong looks like.**
 - A chair seat level with the tabletop, or a chair's legs standing on the table.
+- The set refusing to move at all, or moving with a chair left behind.
 - The placement banner saying *Floating* about a chair that is on something.
 - A lamp or laptop dropped on the table falling to the floor. That is the other half of
   the rule and it must not have moved.

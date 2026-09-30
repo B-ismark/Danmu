@@ -6,7 +6,7 @@
 // around a spot the first one had been dragged out of. Tracing the callers made it
 // wider in the direction that matters: all THREE placement paths pass the same raw
 // array (`CatalogPanel.spawn`, `PlanView.onDrop`, `Room.onDrop`), and `placeNewPart`
-// reads it for `findSupportUnder` as well as `openSpotForNewPart` reading it for
+// reads it for `findSupportDetailed` as well as `openSpotForNewPart` reading it for
 // `collidesAt`. So the visible failure is not a slightly-off ring, it is a lamp
 // resting at desk height over empty floor.
 //

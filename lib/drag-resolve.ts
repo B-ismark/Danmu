@@ -77,6 +77,13 @@ export type ResolveInput = {
    * is written down.
    */
   wallEdge?: number | null;
+  /**
+   * Company this piece already overlapped when the gesture began, and whose overlap
+   * the gesture therefore did not cause — a chair tucked under the table it is
+   * travelling with. Not an obstacle for this resolve. Built by `planConvoy` and
+   * nowhere else; see `ConvoyMember.inherited` for when it may be trusted.
+   */
+  inherited?: ReadonlySet<string>;
 };
 
 export type Resolved = {
@@ -323,7 +330,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
       !shovedIntoRoom &&
       pointInFootprint(x, z, footprint)) ||
     partInsideRoom([x, y, z], outRot, dim, footprint, part.circle);
-  const collides = collidesAt(parts, part.id, [x, y, z], outRot, dim);
+  const collides = collidesAt(parts, part.id, [x, y, z], outRot, dim, input.inherited);
   // `inRoom` first: see `Resolved.refusal` for why the order is the whole point.
   const refusal: Refusal | undefined = !inRoom
     ? ridesAWall

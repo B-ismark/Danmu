@@ -3278,13 +3278,20 @@ export function openSpotForNewPart(
  *  on both sides, so a nightstand could not be dragged in front of the curtains — in a
  *  room this app seeds that way. `isSoftFurnishing` is the shared answer, and
  *  `lib/clearance.ts`'s mounted-clash rule asks it the same question, so a pair the drag
- *  refuses is a pair the room report names. */
+ *  refuses is a pair the room report names.
+ *
+ *  `ignore` names pieces whose overlap with the mover is not this call's to judge. Its
+ *  one producer is `lib/drag-convoy.ts` — a set that already overlapped when it was
+ *  picked up, a chair tucked under its table, and is translating by one delta so the
+ *  overlap cannot change — and it is deliberately not a `sharesFloor` exemption: a
+ *  chair on its own is still refused, which is § 17's open decision and not this one. */
 export function collidesAt(
   parts: ScenePart[],
   movingId: string,
   pos: [number, number, number],
   rot: number,
   dimMM: [number, number, number],
+  ignore?: ReadonlySet<string>,
 ): boolean {
   const mover = parts.find((p) => p.id === movingId);
   if (!mover) return false;
@@ -3301,6 +3308,7 @@ export function collidesAt(
   for (const o of parts) {
     if (o.id === movingId) continue;
     if (isSoftFurnishing(o)) continue;
+    if (ignore?.has(o.id)) continue;
     const [oyBottom, oyTop] = verticalExtent(o.category, o.shape, o.dimMM, o.pos[1]);
 
     // Vertical separation → no collision (stacking allowed).

@@ -75,6 +75,7 @@ import type { Category, Shape, ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { WALK_RADIUS } from './clearance-field';
 import { footFromPart, localToWorld, polygonArea, type Foot } from './geometry';
+import { dimRangeFor } from './dimension-ranges';
 
 // ─── Roles ──────────────────────────────────────────────────────────────────
 //
@@ -197,6 +198,18 @@ const SIT_AT_HEIGHT = 0.6;
 /** …and under this in both plan directions it is a side table whatever its height:
  *  nothing you can seat two people at is 700 mm square. */
 const SIDE_TABLE_SPAN = 0.7;
+/** …and below this it is not a table at all. The lowest coffee table the catalogue
+ *  will size, read from `lib/dimension-ranges.ts` rather than restated, because the
+ *  question is the same one: how low can a real one be.
+ *
+ *  Unreachable for a `table` or a `desk` — `clampDims` holds both at or above it —
+ *  and the reason it exists is `other/box`, which `AMBIGUOUS_TABLE` admits and whose
+ *  range goes down to 50 mm. Without it a 40 mm floor deck and a 60 mm tray were both
+ *  read as COFFEE TABLES, and since § H.6.3 that is not just a label: an ottoman
+ *  shares a coffee table's floor, so the support probe would not let it stand on the
+ *  deck — it sank 40 mm into it — and would not let the tray rest on an ottoman, so
+ *  `settleHeights` dropped the tray through the ottoman to the floor. */
+const LOWEST_TABLE_M = dimRangeFor('table', 'coffee-table').min[2] / 1000;
 
 /** What this piece is FOR.
  *
@@ -214,6 +227,7 @@ export function roleOf(part: { category: Category; shape: Shape; dimMM: [number,
     const d = part.dimMM[1] / 1000;
     const h = part.dimMM[2] / 1000;
     if (w < SIDE_TABLE_SPAN && d < SIDE_TABLE_SPAN) return 'side-table';
+    if (h < LOWEST_TABLE_M) return 'other';
     if (h < SIT_AT_HEIGHT) return 'coffee-table';
     // Tall enough to sit at. Which of the two it is, is a question about the room
     // rather than the object, and `wallAffinity` already answers it by category:
@@ -682,6 +696,13 @@ export function sharesFloor(a: Role, b: Role): boolean {
     if (b === seat && surfaces.includes(a)) return true;
   }
   return false;
+}
+
+/** Is there any role `sharesFloor` pairs this one with? The cheap question a caller
+ *  asks per frame before paying for the pairwise one — `findSupportDetailed` asks it
+ *  of every dragged piece, and a lamp or a bed has no partner to look for. */
+export function hasFloorSharers(role: Role): boolean {
+  return FLOOR_SHARERS.some(([seat, surfaces]) => seat === role || surfaces.includes(role));
 }
 
 /**

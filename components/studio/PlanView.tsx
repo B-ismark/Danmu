@@ -39,7 +39,7 @@ import { useDragLive } from '@/lib/drag-live';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { playSound } from '@/lib/sound';
 import { sizeOf } from '@/lib/sound-cues';
-import { convoyRestore, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
+import { convoyRestore, leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { cascadeTransform } from '@/lib/rigid-parent';
 import { formatDim, formatLength } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
@@ -598,6 +598,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // Null unless this piece rides a wall and has company: a wall flip mid-drag
       // is a jump the whole set would translate by. See `Convoy.leadEdge`.
       wallEdge: convoy.leadEdge,
+      // The chairs tucked under a table it is dragging with — see `leadInherited`.
+      inherited: leadInherited(convoy, part.rot, part.dimMM),
     });
   }
 

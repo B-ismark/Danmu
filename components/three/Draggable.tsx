@@ -62,7 +62,7 @@ import {
   type Resolved,
 } from '@/lib/drag-resolve';
 import { wouldCreateCycle } from '@/lib/rigid-parent';
-import { convoyRestore, gestureFor, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
+import { convoyRestore, gestureFor, leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 import { Wobble } from './Wobble';
@@ -363,6 +363,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // Null unless this piece rides a wall and has company: a wall flip mid-drag
       // is a jump the whole set would translate by. See `Convoy.leadEdge`.
       wallEdge: convoy().leadEdge,
+      // At the rot and dim being resolved, which a wheel or the gizmo can have
+      // changed since pointer-down — see `leadInherited`.
+      inherited: leadInherited(convoy(), rot, dim),
     });
   }
 

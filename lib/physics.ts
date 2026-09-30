@@ -5,8 +5,8 @@
 
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
-import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea, obbExtentAlong, type Foot } from './geometry';
-import { roleOf, sharesFloor, WALL_GAP } from './layout-rules';
+import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea, footOverlap, obbExtentAlong, type Foot } from './geometry';
+import { hasFloorSharers, roleOf, sharesFloor, WALL_GAP } from './layout-rules';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low' | 'wall-floor';
 
@@ -462,9 +462,10 @@ export const SUPPORT_Y_EPS = 0.05;
 
 /** What a support probe needs to know about a candidate.
  *
- *  Named, because `findSupportUnder` and `findSupportDetailed` had the same shape
- *  written out inline twice and this change had to widen both — which is the drift
- *  this repo keeps finding, one edit before it happens.
+ *  Named, because two support probes had the same shape written out inline twice and
+ *  one change had to widen both — which is the drift this repo keeps finding, one
+ *  edit before it happens. (The second, `findSupportUnder`, was `findSupportDetailed`
+ *  without the id, had no caller outside the tests, and is gone.)
  *
  *  **`shape` is required and `wallMounted` is absent.** `anchorFor` is keyed by SHAPE
  *  first — `fan`, `lamp-pendant`, `door`, `curtain`, `tv`, `mirror`, `painting`,
@@ -497,6 +498,11 @@ export type SupportCandidate = {
  *  closes that for every caller that MOVES a piece to what it finds — drag gravity,
  *  a piece being added, the model swap and `settleHeights` — because that is the
  *  one function they all ask.
+ *
+ *  Excluding the partner alone was not enough, and the first version stopped there:
+ *  the probe then looked PAST the table to whatever else was over the chair, and a
+ *  tray on the tabletop is exactly that. So a tucked seat may also not land on
+ *  anything as high as the partner it is tucked under — see `findSupportDetailed`.
  *
  *  An id alone could not carry it. Two callers ask on behalf of a piece that is NOT
  *  in `parts` in the shape they mean: a piece being added has no entry at all
@@ -535,30 +541,6 @@ export function coversEnoughToSupport(
   if (!(moverArea > 0)) return false;
   const shared = footIntersectionArea(moverFoot, footFromPart(surface.pos, surface.rot ?? 0, surface.dimMM, surface.circle));
   return shared / moverArea >= MIN_SUPPORT_SHARE;
-}
-
-/** Highest world-Y where a part at (x,z) with given XZ footprint would land on
- *  another part's top surface. Wall-mounted + rugs are ignored as supports.
- *  Returns null if nothing holds it up.
- *
- *  Tests how much of the mover ACTUALLY sits on the surface, not just where its
- *  centre point is. The centre test (plus a 5 cm margin) called a laptop 90%
- *  overhanging a desk "on the desk", and a part perched on the very lip of a
- *  nightstand floated at the nightstand's height with nothing under it.
- *
- *  `rot` on either side is optional and defaults to 0 — at 0/90° the rotated
- *  rectangle and its bounding box are the same, which is the overwhelmingly
- *  common case, so callers that have not got a rotation to hand lose nothing. */
-export function findSupportUnder(
-  parts: SupportCandidate[],
-  self: SupportSelf,
-  x: number,
-  z: number,
-  selfDim: [number, number, number],
-  selfRot = 0,
-  selfCircle?: boolean,
-): number | null {
-  return findSupportDetailed(parts, self, x, z, selfDim, selfRot, selfCircle)?.y ?? null;
 }
 
 /** Is this piece actually resting on something, and on what?
@@ -624,14 +606,25 @@ export function restingOn(
   return null;
 }
 
-/** Same test as `findSupportUnder`, but also names which part won — the signal
- *  a rigid-parenting relationship is established from (see `lib/rigid-parent.ts`).
+/** Highest world-Y where a part at (x,z) with given XZ footprint would land on
+ *  another part's top surface, and which part that is — the signal a
+ *  rigid-parenting relationship is established from (see `lib/rigid-parent.ts`).
+ *  Wall-mounted + rugs are ignored as supports. Returns null if nothing holds it up.
+ *
+ *  Tests how much of the mover ACTUALLY sits on the surface, not just where its
+ *  centre point is. The centre test (plus a 5 cm margin) called a laptop 90%
+ *  overhanging a desk "on the desk", and a part perched on the very lip of a
+ *  nightstand floated at the nightstand's height with nothing under it.
+ *
+ *  `rot` on either side is optional and defaults to 0 — at 0/90° the rotated
+ *  rectangle and its bounding box are the same, which is the overwhelmingly
+ *  common case, so callers that have not got a rotation to hand lose nothing.
  *
  *  **This is the DROP question** — what would this piece land on here — and it
  *  carries the one rule that belongs to landing: a seat is never stood on the
- *  surface it tucks under (`SupportSelf`). Every caller that moves a piece to what
- *  it finds asks this: drag gravity, a piece being added, the Inspector's model
- *  swap, and `settleHeights`. */
+ *  surface it tucks under (`SupportSelf`), nor on anything standing as high as that
+ *  surface. Every caller that moves a piece to what it finds asks this: drag gravity,
+ *  a piece being added, the Inspector's model swap, and `settleHeights`. */
 export function findSupportDetailed(
   parts: SupportCandidate[],
   self: SupportSelf,
@@ -644,12 +637,36 @@ export function findSupportDetailed(
   // What the mover IS, read at the size it is being asked at — `roleOf` tells a
   // coffee table from a dining table by its dimensions.
   const selfRole = roleOf({ category: self.category, shape: self.shape, dimMM: selfDim });
+  // Nearly every piece in a room tucks under nothing and has nothing tucked under it,
+  // and a drag asks this per frame — so the rule costs those pieces nothing.
+  if (!hasFloorSharers(selfRole)) {
+    return topSurface(parts, (o) => o.id === self.id, x, z, selfDim, selfRot, selfCircle, Infinity);
+  }
+  // A seat never stands on the surface it tucks under. The partner is not a support,
+  // so the probe looks past it — and what it may find there is capped by it: nothing
+  // whose top is as high as the top of a partner the piece is tucked under. Looking
+  // past the table without the cap found the TRAY on it, and a chair whose footprint
+  // the tray covered by half stood on the tray instead. "Tucked under" is the same
+  // question `collidesAt` asks of the pair on the plan, footprint over footprint with
+  // its flush-touch pad, so a chair merely standing beside its table is not capped.
+  // Symmetric, like `sharesFloor`: a table dropped over a tucked chair does not
+  // come to rest on the cushion on its seat.
+  const me = footFromPart([x, 0, z], selfRot, selfDim, selfCircle);
+  const partners = new Set<string>();
+  let under = Infinity;
+  for (const o of parts) {
+    if (o.id === self.id || !sharesFloor(selfRole, roleOf(o))) continue;
+    partners.add(o.id);
+    if (footOverlap(me, footFromPart(o.pos, o.rot ?? 0, o.dimMM, o.circle), -0.01)) {
+      under = Math.min(under, verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1]);
+    }
+  }
   return topSurface(
     parts,
-    // A seat never stands on the surface it tucks under. The partner is not a
-    // support, so the probe looks past it: to the floor, or to anything else
-    // genuinely under the piece.
-    (o) => o.id === self.id || sharesFloor(selfRole, roleOf(o)),
+    (o) =>
+      o.id === self.id ||
+      partners.has(o.id) ||
+      (under < Infinity && verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1] >= under),
     x, z, selfDim, selfRot, selfCircle, Infinity,
   );
 }
