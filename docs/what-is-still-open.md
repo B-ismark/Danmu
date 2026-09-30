@@ -3706,8 +3706,8 @@ no fixture certifies the interpenetration, and asserts only the reading of the 2
 
 *Measured first: does a piece's height mean what it says?* A fit test compares two heights,
 so both have to be the heights the pieces are drawn at. `tests/drawn-height.test.tsx` walks
-the renderer of every floor-standing shape (35 of them) at the bottom, catalogue and top of
-its height range. **The ottoman did not reach its own**: the welt stopped at 0.9 h, so a tray
+the renderer of every floor-standing shape (35 of them), and the desk-standard drawn as a
+dining table, at the bottom, catalogue and top of its height range. **The ottoman did not reach its own**: the welt stopped at 0.9 h, so a tray
 set on a 420 mm ottoman stood 42 mm above the cushion, and a fit test would have measured a
 seat 10% taller than anyone sees. It is drawn to h now. Eight shapes still miss by more than
 1 mm, and the test holds them as a literal list, so a new miss fails and so does a fixed one
@@ -3758,6 +3758,26 @@ Room check calls it a clash past half, Suggest pays for any overlap, the tidy-up
 two apart, and an ottoman dropped over the table stands on it the way a box would, instead of
 on the floor inside the drawing where every later drag was refused. The starter rooms hold
 only dining chairs at dining tables, and all of those fit, so no built-in room moves.
+
+The Will it fit panel's **Dining table** was drawn as a coffee table, shelf and all, and
+clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/fit-check.ts`).
+
+*What it does not do, each found in review and left as stated:*
+- **It does not know which way a seat faces.** The front 85% is the front because a tucked
+  seat faces its surface; a dining chair backed under a table reads as its seat height, not
+  its back. Nothing in the old rule looked at the turn either.
+- **A room already holding a coffee-table-shaped dining table now reports its chairs.** The
+  panel made those, and a scan whose detector names that shape still can. The drawing has a
+  shelf the chairs pass through, so the report is right; changing a saved piece's shape is the
+  user's call, so nothing migrates it.
+- **A dining table under 800 mm wide is outside the dining/desk table's range.** The panel
+  says so and **Put it there** widens it to 800. Whether a `table` category's range should
+  start lower is a separate decision.
+- **A scanned ottoman the tidy-up cannot push clear of a coffee table is lifted onto it.**
+  Measured: in a 1.3 × 1.0 m room the push has nowhere to go, the ottoman is left half over
+  the top, and `settleHeights` stands it there at 0.42 m, where no report sees it. On `main`
+  it stayed on the floor inside the table, which no report saw either. It belongs with the
+  other ottoman-on-a-top fix in `settleHeights`, not here.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

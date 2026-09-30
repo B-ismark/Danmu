@@ -326,7 +326,7 @@ function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): b
     if (myTop <= itsBottom + 0.005 || itsTop <= myBottom + 0.005) continue;
     // Note the polarity: `profilesTuck` is TRUE for the pairs that legitimately occupy
     // the same square metre — a dining chair under its table, an ottoman low enough for
-    // its coffee table. Those are the ones to SKIP. Reading it as "competes for the
+    // the desk it is pushed under. Those are the ones to SKIP. Reading it as "competes for the
     // floor" and testing `!profilesTuck` inverts the rule exactly, and quietly: it
     // exempts a sofa 31% inside a bed while flagging a correctly tucked chair.
     if (profilesTuck(mine, tuckProfile(other))) continue;

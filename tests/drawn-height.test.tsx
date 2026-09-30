@@ -47,8 +47,16 @@ function drawnTopMM(shape: Shape, category: Category, dimMM: [number, number, nu
   return Math.max(...rep.prims.map((p) => p.y[1])) * 1000;
 }
 
-const rows = SHAPES.filter((shape) => anchorFor(categoryOf(shape), shape) === 'floor').map((shape) => {
-  const category = categoryOf(shape);
+/** Pairs drawn a second way that the Library's own category never reaches. The one
+ *  there is: `PartGeometry` draws a `desk-standard` as a dining table, apron and all,
+ *  when `roleOf` reads it as one, which the Library's desk-category entry never is and
+ *  a room's `table` — the starter rooms', a scan's, the Will it fit panel's — is. */
+const ALSO: Array<[Shape, Category]> = [['desk-standard', 'table']];
+
+const rows = [
+  ...SHAPES.filter((shape) => anchorFor(categoryOf(shape), shape) === 'floor').map((shape): [Shape, Category] => [shape, categoryOf(shape)]),
+  ...ALSO,
+].map(([shape, category]) => {
   const range = dimRangeFor(category, shape);
   const lib = PART_LIBRARY.find((l) => l.shape === shape)?.dimMM ?? range.min;
   const heights = [range.min[2], lib[2], range.max[2]];
@@ -58,9 +66,9 @@ const rows = SHAPES.filter((shape) => anchorFor(categoryOf(shape), shape) === 'f
 
 describe('a floor piece is drawn to the height it declares', () => {
   it('the sweep has a fixed denominator', () => {
-    // Every floor-anchored shape, none skipped. A shape that draws nothing would throw
-    // on `Math.max()` of nothing rather than pass.
-    expect(rows.length).toBe(35);
+    // Every floor-anchored shape, none skipped, and the dining table. A shape that draws
+    // nothing would throw on `Math.max()` of nothing rather than pass.
+    expect(rows.length).toBe(36);
   });
 
   it('the ottoman reaches its own height', () => {
