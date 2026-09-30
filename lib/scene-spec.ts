@@ -3118,7 +3118,7 @@ export function placeNewPart(
   // with.
   const [fx, fz] = intoRoom(ax, az, rot);
   const support = isTabletopProne(cat)
-    ? findSupportDetailed(existing, { id: '__new__', category: cat, shape }, fx, fz, dimMM, rot, isRoundPart(shape) || undefined)
+    ? findSupportDetailed(existing, { id: '__new__', category: cat, shape }, fx, fz, dimMM, rot, isRoundPart(shape))
     : null;
   // The id and the height are gated on ONE condition on purpose. A piece whose
   // support fails the 0.3 m bar floors, and recording an edge to something it is not

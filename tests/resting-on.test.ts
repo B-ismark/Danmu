@@ -181,4 +181,18 @@ describe('restingOn — the question highestSurfaceUnder does not answer', () =>
     expect(highestSurfaceUnder([desk], 'lamp', 0.78, 0, lamp.dimMM, 0, undefined)).toBeNull();
     expect(ask(lamp, [desk])).toBeNull();
   });
+
+  it('reads the piece at the turn it has', () => {
+    // A laptop at the desk's corner, 10 mm in from its end and 120 mm in from its front:
+    // unturned, 53% of it is over the desk; turned a quarter, 46% is. The premise first,
+    // so the pair below is in the band where the turn decides the answer.
+    const at: [number, number, number] = [0.7 - 0.01, DESK_TOP, 0.35 - 0.12];
+    const dim: [number, number, number] = [340, 240, 220];
+    expect(highestSurfaceUnder([desk], 'laptop', at[0], at[2], dim, 0, undefined)?.id).toBe('desk');
+    expect(highestSurfaceUnder([desk], 'laptop', at[0], at[2], dim, Math.PI / 2, undefined)).toBeNull();
+
+    const laptop = (rot: number) => part({ id: 'laptop', category: 'monitor', shape: 'laptop', dimMM: dim, pos: at, rot });
+    expect(ask(laptop(0), [desk])?.id).toBe('desk');
+    expect(ask(laptop(Math.PI / 2), [desk])).toBeNull();
+  });
 });

@@ -7,8 +7,10 @@
 // test first proves the fixture is in that band, since a spot where the box and the
 // real outline agree would pass with the defect back in.
 //
-// The probe's two parameters are required now, so the Inspector's model swap (the
-// other caller that took the default) is held by the compiler rather than by a test.
+// The probe's two parameters are required now. That makes every caller SAY something,
+// and no more: `undefined` still compiles, which is what the two callers that took the
+// default were passing in effect. So the Inspector's model swap, the other one, has its
+// own test — `tests/seat-swap.test.tsx`, for the outline and the turn both.
 
 import { describe, expect, it } from 'vitest';
 import { findSupportDetailed } from '@/lib/physics';

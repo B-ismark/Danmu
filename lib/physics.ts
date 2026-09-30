@@ -601,7 +601,7 @@ export function restingOn(
   dim: [number, number, number],
   category: Category,
   shape: Shape,
-  circle?: boolean,
+  circle: boolean | undefined,
 ): { on: 'floor' | 'part'; id: string | null; gap: number } | null {
   const bottom = verticalExtent(category, shape, dim, pos[1])[0];
   // The highest thing under the footprint whose top the piece could actually be
@@ -693,15 +693,19 @@ export function findSupportDetailed(
  *  about which pairings are allowed. `restingOn` and `ridingParents` ask it: a piece
  *  that is on a surface is on it, however it got there, and the relation and the
  *  banner must say so. Never ask it where a piece will land — that is
- *  `findSupportDetailed`, and the difference is the seat rule. */
+ *  `findSupportDetailed`, and the difference is the seat rule.
+ *
+ *  The turn and outline are required here for the drop question's reason, one
+ *  question over: a banner that read a round lamp as its square said "floating"
+ *  about a lamp the drop had just stood on a table's corner. */
 export function highestSurfaceUnder(
   parts: SupportCandidate[],
   selfId: string,
   x: number,
   z: number,
   selfDim: [number, number, number],
-  selfRot = 0,
-  selfCircle?: boolean,
+  selfRot: number,
+  selfCircle: boolean | undefined,
   /** Ignore anything whose top is above this. Absent means "no ceiling".
    *
    *  `restingOn` is the caller that needs it, and the reason is that this function
