@@ -2912,8 +2912,10 @@ lead's exact delta, so an overlap the set started with cannot grow. Wall riders 
 out on both sides, since their wall discards the wall-normal part of the delta. The
 lead's forgiveness lapses once a wheel turn or a resize changes its footprint. Anything
 outside the set still counts: a bookcase in a chair's path stops the set and names the
-chair. A chair alone has nothing to inherit, so a tucked chair nudged by itself is still
-refused (§ 17).
+chair. A chair alone has nothing to inherit, and needs nothing: `collidesAt` lets a seat
+under the surface it `tucksUnder` up to `TUCKED_CLASH_SHARE`, the room report's own bar
+(§ 17, decided 2026-09-30), so a chair nudged by itself slides under and stays on the
+floor, and one pushed past the bar is refused.
 
 Two properties of a `ConvoyMove` that read as details and are not:
 

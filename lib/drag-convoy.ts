@@ -109,8 +109,10 @@ export type ConvoyMember = {
    * none of its resolves counts as an obstacle.
    *
    * A chair tucked under its table overlaps it: that is what tucked means, and the
-   * room report allows it (`tucksUnder`, `TUCKED_CLASH_SHARE`) while `collidesAt`
-   * does not (§ 17). Selected together the pair refused every drag, from either end —
+   * room report allows it (`tucksUnder`, `TUCKED_CLASH_SHARE`), and so, since § 17 was
+   * decided, does `collidesAt` — below that bar. This is what covers the rest: a pair
+   * already deeper than the bar, and overlaps that are not tucks at all. Before either
+   * existed, selected together the pair refused every drag, from either end —
    * grab the table and it collided with its own chairs where they were about to be;
    * grab a chair and it collided with the table. And each chair was `startValid:
    * false`, so it had no vote on where the set went: a table grabbed by a piece that

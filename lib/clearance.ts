@@ -496,10 +496,11 @@ export function analyzeRoom(
   //   · MOUNTED ↔ MOUNTED. `floorSolids` requires `!wallMounted`, so neither ordering of
   //     such a pair is reachable here and `floorBlockers` excludes both from rule 2. The
   //     seeder ships seven rooms with a framed print inside a window.
-  //   · A TUCKED pair. `collidesAt` has no `tucksUnder` exemption while rule 2 and the
-  //     seeder's own `seats()` both do, so a dining chair under its table is refused by
-  //     the drag and silent in the report BY DESIGN — twenty seeded pairs.
-  // Both are recorded in `docs/what-is-still-open.md` § 17. Neither is this rule's job;
+  //   · (A TUCKED pair was the second, and is not any more: `collidesAt` forgives a
+  //     `tucksUnder` pair below `TUCKED_CLASH_SHARE`, rule 2's own bar, since the user
+  //     decided § 17 that way on 2026-09-30. A chair the drag slides under its table is
+  //     one this report calls fine, and one pushed past the bar is refused and named.)
+  // It is recorded in `docs/what-is-still-open.md` § 17. It is not this rule's job;
   // saying so here is, because the next reader will otherwise read the sentence above
   // as a general guarantee and build on it.
   //

@@ -56,6 +56,8 @@ import {
   routeWidth,
   rugOffset,
   tuckProfile,
+  tucksUnder,
+  TUCKED_CLASH_SHARE,
   WALK_COMFORT,
   WALK_MIN,
   WALL_GAP,
@@ -3286,11 +3288,19 @@ export function openSpotForNewPart(
  *  `lib/clearance.ts`'s mounted-clash rule asks it the same question, so a pair the drag
  *  refuses is a pair the room report names.
  *
+ *  **A tucked seat is not a collision** while it is less than `TUCKED_CLASH_SHARE`
+ *  inside the surface it `tucksUnder` — the room report's own bar, so a chair the drag
+ *  lets under its table is a chair Room check calls fine. That was § 17's open
+ *  decision; the user decided it on 2026-09-30, after the drag had refused every lone
+ *  chair pushed under its table while the report, the seeder and Suggest all tucked
+ *  them. Gravity is untouched: a seat still never STANDS on the surface it tucks
+ *  under (`findSupportDetailed`, § H.6.3), so it slides under and stays on the floor.
+ *
  *  `ignore` names pieces whose overlap with the mover is not this call's to judge. Its
  *  one producer is `lib/drag-convoy.ts` — a set that already overlapped when it was
- *  picked up, a chair tucked under its table, and is translating by one delta so the
- *  overlap cannot change — and it is deliberately not a `tucksUnder` exemption: a
- *  chair on its own is still refused, which is § 17's open decision and not this one. */
+ *  picked up and is translating by one delta, so the overlap cannot change. It covers
+ *  what the tuck rule does not: a pair already deeper than the bar, and pairs that are
+ *  not seats at all. */
 export function collidesAt(
   parts: ScenePart[],
   movingId: string,
@@ -3324,7 +3334,18 @@ export function collidesAt(
     // XZ overlap — exact separating-axis test, over the ROUND footprint where a
     // piece has one. The tiny negative pad lets flush side-by-side placement read
     // as touching, not colliding.
-    if (footOverlap(me, footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape), -0.01)) return true;
+    const theirs = footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape);
+    if (!footOverlap(me, theirs, -0.01)) continue;
+    // A seat pushed under the surface it tucks under, not yet past the room report's
+    // tucked bar, is composition rather than a crash — the report's rule 2 asks the
+    // same predicate against the same share, so the pair the drag lets through is the
+    // pair Room check calls fine. The mover's height is the CANDIDATE size, so a chair
+    // stretched taller mid-drag is asked about the chair it is becoming.
+    if (tucksUnder({ ...mover, dimMM }, o)) {
+      const smaller = Math.min(footArea(me), footArea(theirs));
+      if (smaller > 0 && footIntersectionArea(me, theirs) / smaller < TUCKED_CLASH_SHARE) continue;
+    }
+    return true;
   }
   return false;
 }

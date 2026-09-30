@@ -3559,7 +3559,7 @@ from a side table by its dimensions.
 
 **After, on the same 60 presses:** the same 27 solves. The set dragged by its table is
 valid 11 of 11, and by a deep chair 14 of 14, with 0 chairs lifted either way. The solo
-nudge lifts 0 of 14, and is refused (§ 17, below). No baseline moved.
+nudge lifts 0 of 14, and is refused (§ 17, below — since decided: it slides under). No baseline moved.
 
 *The first commit of this fix refused every one of those set drags*, by the table and by a
 chair alike, 25 of 25, and reported it as "0 chairs lifted". Both halves were true. A
@@ -3631,9 +3631,9 @@ asks `hasFloorSharers` first.
   the overlap term, since the solver is unchanged.
 - *A tucked chair nudged alone is refused now, at any depth.* Past half it used to be
   lifted, and the lift made the move valid. `collidesAt` has no `sharesFloor` exemption, so
-  it is refused like a chair tucked a quarter in always was. That is § 17's open decision,
-  unchanged. `tests/seat-support.test.ts` pins it and says which line to change if § 17
-  is ever decided the other way.
+  it is refused like a chair tucked a quarter in always was. That was § 17's open decision,
+  and **it is decided (2026-09-30): a lone chair now slides under**, up to the report's
+  bar — see § 17.
 - *A room saved with a chair already on its table keeps it there.* The banner still says
   *On Table*, and it rides the table. `settleHeights` would bring it down, but only on the
   detection path (`buildSceneFromRoom`), not on every room open. The first drag of that
@@ -5009,6 +5009,19 @@ places, and both are the app's own presets.** It is narrowed where it is asserte
 Both want the same decision — does `collidesAt` grow the report's exemptions, or does the
 report grow the drag's strictness — and it is the same shape as § 31: a question about
 which of two consumers is right, not a defect in either.
+
+**The tucked half is decided (2026-09-30), by the user: the drag matches Room check.**
+`collidesAt` forgives a `tucksUnder` pair while the overlap is below `TUCKED_CLASH_SHARE`
+of the smaller footprint — rule 2's predicate, bar and `<`, so the two cannot disagree
+about a tuck again. Asked of the mover's CANDIDATE size, so an office chair stretched
+mid-gesture past a desk's knee room stops tucking. Gravity is untouched (§ H.6.3): the
+seat slides under and stays on the floor. It came from a looked-at item — both Library
+chairs read *blocked* against their table — and no room baseline moved. The convoy's
+inherited-overlap set (`overlapsAtStart`) stays, for pairs already past the bar and
+overlaps that are not tucks. `tests/seat-support.test.ts` pins every clause, and each was
+mutated: dropping the predicate, the bar raised to 1 or lowered to 0.5, the branch
+removed, and asking the stored rather than the candidate size all fail it.
+**The mounted ↔ mounted half is still open.**
 
 **2. `lib/physics.ts:216` states the opposite of what the code does.** It says
 `isWallMountedPart` "answers yes for a ceiling fan and a pendant, which `ridesWall` and

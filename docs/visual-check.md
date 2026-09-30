@@ -583,8 +583,15 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
   has done since § H.6.3, because the drag's collision test (`collidesAt`) has no tuck
   exemption. A tucked chair travels only as part of a set. This bullet was written from
   the room report's rule, not from a drag, and "as before" described nothing that had
-  ever happened. Whether a drag should tuck a chair alone is `docs/what-is-still-open.md`
-  § 17's open decision, now with the user.
+  ever happened.
+- **Decided since, and this bullet is the one to look at — this branch, NOT LOOKED AT.**
+  The user chose "make the drag match Room check" (§ 17). Drag the dining chair, alone,
+  into its table from the front: it slides in under the top and stays on the floor,
+  with no *blocked* tag. Keep pushing and it stops about where 85% of the seat is under
+  the table — *blocked* there, and Room check would call that same spot a clash. The
+  office chair at its Library size does the same under a 750 mm table. *Wrong* looks
+  like: the chair jumping onto the tabletop, a *blocked* tag while it is only part way
+  in, or it disappearing wholly inside the table.
 - **The ottoman bullet below was looked at on 2026-09-30 and is right:** it stands on the
   coffee table's top.
 - Under the 650 mm desk the office chair's arms would hit the top, so it no longer goes
