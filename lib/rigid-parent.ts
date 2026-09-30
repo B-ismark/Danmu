@@ -71,7 +71,7 @@ export type DescendantOffset = {
 };
 
 function isPhysicallySupported(child: ScenePart, parent: ScenePart): boolean {
-  const childFoot = footFromPart(child.pos, child.rot, child.dimMM, child.circle);
+  const childFoot = footFromPart(child.pos, child.rot, child.dimMM, child.circle, child.shape);
   if (!coversEnoughToSupport(childFoot, footArea(childFoot), parent)) return false;
   // `verticalExtent`, because `pos[1]` is a bottom for a floor anchor and the mesh
   // CENTRE for every other one. This function has no wall-mounted skip in front of it

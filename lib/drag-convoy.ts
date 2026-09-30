@@ -187,36 +187,21 @@ export type Convoy = {
  *  translation was asked for. Read as a translation, that correction is copied to
  *  the whole selection.
  *
- *  But **while the gizmo is active it owns the entire answer**, and the ref must
- *  not be consulted at all. The gizmo is the one thing here that can be dragged
- *  without `Draggable`'s own pointer-move handler running — that handler returns
- *  early for the whole gizmo gesture — so the single line that clears the ref is
- *  unreachable for its duration. Asking the ref anyway meant a wheel-rotate
- *  followed by a gizmo TRANSLATE reported `'turn'` and carried nobody: select two
- *  chairs, drag one, wheel-notch it, release, then pull the translate arrow, and
- *  the second chair stays behind. Silent, and indistinguishable from the
- *  "sometimes only one moves" report the convoy work exists to end. Found by
- *  danmu-cb in review. */
-export function gestureFor(
-  gizmoActive: boolean,
-  gizmoMode: 'translate' | 'rotate' | 'scale',
-  rotatedWithoutPointer: boolean,
-): 'move' | 'turn' {
-  if (gizmoActive) return gizmoMode === 'translate' ? 'move' : 'turn';
-  return rotatedWithoutPointer ? 'turn' : 'move';
-}
-
-/** Whether this frame's size is the gizmo's to change — only while its SCALE handles
- *  are held. With the Scale tool selected the piece's body can still be dragged, and
- *  that is a move (`gestureFor`), which must leave the size exactly as it was.
+ *  **While the gizmo is active the answer is `'turn'`, and the ref is not
+ *  consulted.** The gizmo is the rotate ring and the stretch handles, and neither
+ *  translates: a stretch moves the piece's origin only to keep the opposite face
+ *  still, and copying that to the rest of the selection would slide every chair
+ *  in it because one was made wider.
  *
- *  `Draggable` asked the tool alone, so a body drag with Scale selected snapped the
- *  size to the grid and wrote it back on release: a scanned 1613 mm table came out of
- *  a plain move at 1610. And since `leadInherited` holds only while the lead's size is
- *  unchanged, that table also lost its tucked chairs in the 3D tab, where the same
- *  drag in the plan went through — one gesture, two tabs, two answers. */
-export function gizmoResizing(gizmoActive: boolean, gizmoMode: 'translate' | 'rotate' | 'scale'): boolean {
-  return gizmoActive && gizmoMode === 'scale';
+ *  It used to have a third answer. A translate gizmo was the one gizmo gesture
+ *  that WAS a move, and asking the ref during it was a hole: `Draggable`'s
+ *  pointer-move handler is the only thing that clears the ref and it never runs
+ *  during a gizmo gesture, so a wheel-rotate followed by a pull on the translate
+ *  arrow reported `'turn'` and left the rest of the selection behind (found by
+ *  danmu-cb in review). The translate gizmo is gone — the piece itself is the
+ *  move handle — so the mode no longer enters into it. */
+export function gestureFor(gizmoActive: boolean, rotatedWithoutPointer: boolean): 'move' | 'turn' {
+  return gizmoActive || rotatedWithoutPointer ? 'turn' : 'move';
 }
 
 /**

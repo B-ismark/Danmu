@@ -1364,5 +1364,5 @@ export function containedBySearch(part: ScenePart): boolean {
  *  module needs, kept here so nobody has to remember that `dimMM` is millimetres
  *  and `pos` is `[x, y, z]`. */
 export function footAt(part: ScenePart, x: number, z: number, yaw: number): Foot {
-  return footFromPart([x, part.pos[1], z], yaw, part.dimMM, part.circle);
+  return footFromPart([x, part.pos[1], z], yaw, part.dimMM, part.circle, part.shape);
 }

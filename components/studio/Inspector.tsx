@@ -2,7 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
-import { useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
+import { useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
+import { arrangeDecor } from '@/lib/decor';
 import { useScene } from '@/lib/scene-store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
@@ -629,6 +630,10 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
   const items = part.decor ?? autoSurfaceDecor(part.category, part.shape, part.dimMM, part.id);
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
+  // The same arrangement the 3D scene draws (`lib/decor.ts`), so a prop that found no
+  // room on the surface is SAID to have found none rather than silently missing.
+  const blockers = useDecorBlockers(part.id);
+  const unplaced = new Set(arrangeDecor(items, part, w, d, blockers).unplaced);
 
   function add(kind: DecorKind) {
     const next: DecorItem = {
@@ -660,6 +665,9 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
           {items.map((it) => (
             <div key={it.id} className="list-row" style={{ cursor: 'default', padding: '5px 8px', background: 'var(--paper-2)' }}>
               <span style={{ flex: 1, fontSize: 'var(--fs-small)', fontWeight: 600 }}>{DECOR_LABEL[it.kind]}</span>
+              {unplaced.has(it.id) && (
+                <span className="t-micro" title="No clear spot left on this surface, so it is not shown">No room</span>
+              )}
               <IconButton
                 icon="x"
                 label={`Remove ${DECOR_LABEL[it.kind].toLowerCase()}`}
@@ -868,8 +876,8 @@ function DimensionEditor({
     const run = () => {
       const mm = next.map((s) => toMM(parseFloat(s), dimUnit));
       if (mm.some((n) => Number.isNaN(n) || n <= 0)) return;
-      // Clamp into the shape's trustable real-world range — same gate the scale
-      // gizmo and every other size path go through.
+      // Clamp into the shape's trustable real-world range — same gate the 3D
+      // stretch handles and every other size path go through.
       onChange(clampDims(category, shape, [mm[0], mm[1], mm[2]]));
     };
     pendingCommit.current = run;
@@ -1151,8 +1159,10 @@ function PaintPicker({
 }
 
 // Numeric mount-height editor for wall/ceiling-mounted parts — bottom edge
-// height off the floor, in the user's display unit. Pairs with the gizmo's
-// Y axis (drag preserves whatever height is set here).
+// height off the floor, in the user's display unit. Pairs with the 3D drag,
+// which slides a wall piece up and down its wall and snaps this same bottom edge
+// to the grid (`rawY` in lib/drag-resolve.ts); a ceiling piece's drag keeps
+// whatever height is set here.
 function MountHeightRow({
   bottomMM,
   maxBottomMM,

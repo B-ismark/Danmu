@@ -3,6 +3,7 @@
 // +X = right (East), +Z = toward South — same axes as the scene.
 
 import { footFromPart, footInsidePoly, polyAreaCentroid, polygonSignedArea, polygonWinding, type Poly } from './geometry';
+import type { Shape } from './scene-spec';
 
 /** Re-exported rather than defined here. This file and `lib/geometry.ts` each had
  *  their own shoelace loop, and both were answering the same question — which way
@@ -538,6 +539,8 @@ export function roomContainment(
   dimMM: [number, number, number],
   poly: Footprint,
   circle?: boolean,
+  /** For the L-shaped desk, whose open corner may wrap a wall's corner. */
+  shape?: Shape,
 ): { box: boolean; centre: boolean } {
   // `footFromPart`, not `obbFromPart` — the drag had the second one and could get
   // away with it, because it never had `circle` in scope. Every other containment
@@ -553,6 +556,7 @@ export function roomContainment(
     rot,
     [dimMM[0] - ROOM_FIT_SLACK_MM, dimMM[1] - ROOM_FIT_SLACK_MM, dimMM[2]],
     circle,
+    shape,
   );
   return { box: footInsidePoly(shrunk, poly), centre: pointInFootprint(pos[0], pos[2], poly) };
 }
@@ -569,7 +573,8 @@ export function partInsideRoom(
   dimMM: [number, number, number],
   poly: Footprint,
   circle?: boolean,
+  shape?: Shape,
 ): boolean {
-  const c = roomContainment(pos, rot, dimMM, poly, circle);
+  const c = roomContainment(pos, rot, dimMM, poly, circle, shape);
   return c.box && c.centre;
 }

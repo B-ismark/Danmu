@@ -1773,7 +1773,7 @@ function dress(
  *  door you can open. */
 function blocksOpening(part: ScenePart, zones: Foot[]): boolean {
   if (zones.length === 0 || part.wallMounted || !isObstacle(part)) return false;
-  const foot = footFromPart(part.pos, part.rot, part.dimMM, part.circle);
+  const foot = footFromPart(part.pos, part.rot, part.dimMM, part.circle, part.shape);
   const area = footArea(foot) || 1;
   for (const zn of zones) {
     if (footIntersectionArea(foot, zn) / area > SEED_TOUCH_SHARE) return true;
@@ -1790,7 +1790,7 @@ function blocksOpening(part: ScenePart, zones: Foot[]): boolean {
  *  Pairs the relation table puts together are exempt — a lamp beside the sofa it
  *  lights is not a corridor. */
 function pinches(part: ScenePart, placed: ScenePart[]): boolean {
-  const foot = footFromPart(part.pos, part.rot, part.dimMM, part.circle);
+  const foot = footFromPart(part.pos, part.rot, part.dimMM, part.circle, part.shape);
   // Only between pieces whose gap is a route someone walks down — `formsRoute`, the
   // same predicate the report and the solver read. Without it this refused to seed a
   // dining chair beside its neighbour, which is not a corridor and is how a table
@@ -1800,7 +1800,7 @@ function pinches(part: ScenePart, placed: ScenePart[]): boolean {
     if (o.wallMounted || o.category === 'rug' || !isObstacle(o)) continue;
     if (!formsRoute(roleOf(o))) continue;
     if (belongTogether(part, o)) continue;
-    const gap = obbGap(foot, footFromPart(o.pos, o.rot, o.dimMM, o.circle));
+    const gap = obbGap(foot, footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape));
     if (gap > 0.12 && gap < WALK_MIN) return true;
   }
   return false;
@@ -1816,7 +1816,7 @@ function pinches(part: ScenePart, placed: ScenePart[]): boolean {
  *  the same figure `lib/layout-settle.ts` names `TOUCH_SHARE`. */
 function seats(part: ScenePart, placed: ScenePart[], poly: Footprint): boolean {
   if (part.wallMounted) return pointInFootprint(part.pos[0], part.pos[2], poly);
-  const foot = footFromPart(part.pos, part.rot, part.dimMM, part.circle);
+  const foot = footFromPart(part.pos, part.rot, part.dimMM, part.circle, part.shape);
   // Corner-exact, NOT the sampled share: `outsideShare`'s outermost samples sit 10%
   // in from the edges, so it forgave a coffee table 20 mm through the wall of the
   // T-shape's stem — and the test that was supposed to catch that asked the same
@@ -1828,7 +1828,7 @@ function seats(part: ScenePart, placed: ScenePart[], poly: Footprint): boolean {
   for (const o of placed) {
     if (o.wallMounted || o.category === 'rug') continue;
     if (sharesFloor(role, roleOf(o))) continue;
-    const other = footFromPart(o.pos, o.rot, o.dimMM, o.circle);
+    const other = footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape);
     if (!footOverlap(foot, other, -0.01)) continue;
     const smaller = Math.min(area, footArea(other));
     if (smaller > 0 && footIntersectionArea(foot, other) / smaller > SEED_TOUCH_SHARE) return false;
@@ -1902,26 +1902,21 @@ export function isParametric(shape: Shape): boolean {
 }
 
 /**
- * A three.js group scale, read back as millimetres.
+ * The three.js group scale that draws a piece authored at `base` at `dim`.
  *
  * The axis mapping is the whole content and it is not the identity: a `dimMM` is
  * `[width, DEPTH, HEIGHT]` while a three.js scale is `(x, y = up, z)`, so depth and
  * height cross over. Getting it backwards swaps a wardrobe's depth with its height
  * — invisible on anything square, gross on anything that is not.
  *
- * Here rather than in the component that uses it, where it was written out three
- * times, because arithmetic that exists only inside a TSX renderer is arithmetic no
- * test can reach. That is the `fanBlade` scar. `renderBaseDim` in lib/transforms.ts
- * is what decides the `base` these take.
+ * Here rather than in the component that uses it, because arithmetic that exists
+ * only inside a TSX renderer is arithmetic no test can reach. That is the
+ * `fanBlade` scar. `renderBaseDim` in lib/transforms.ts is what decides `base`.
+ *
+ * It had an inverse, `dimFromGroupScale`, while drei's scale gizmo wrote the scale
+ * and `Draggable` had to read a size back off it. The stretch handles carry their
+ * size as a number, so nothing reads a scale back any more and the inverse went.
  */
-export function dimFromGroupScale(
-  base: [number, number, number],
-  scale: { x: number; y: number; z: number },
-): [number, number, number] {
-  return [base[0] * scale.x, base[1] * scale.z, base[2] * scale.y];
-}
-
-/** The inverse of `dimFromGroupScale`, in three.js's own `(x, y, z)` order. */
 export function groupScaleForDim(
   base: [number, number, number],
   dim: [number, number, number],
@@ -3205,7 +3200,7 @@ export function openSpotForNewPart(
   /** Would a piece added with this aim stand clear, and inside the room? */
   function clear(aim?: [number, number]): boolean {
     const p = placeNewPart(cat, shape, dimMM, room, existing, aim);
-    if (poly && !footInsidePoly(footFromPart(p.pos, p.rot, dimMM, round), poly as Poly)) return false;
+    if (poly && !footInsidePoly(footFromPart(p.pos, p.rot, dimMM, round, shape), poly as Poly)) return false;
     // **Inside the room is a THREE-dimensional question, and `collidesAt` cannot ask
     // it.** That function permits stacking on purpose — a lamp belongs on a desk — so
     // two pieces at one x/z with non-overlapping vertical extents read as clear. For a
@@ -3304,7 +3299,7 @@ export function collidesAt(
   // the room could collide with a mounted TV or a floating shelf at all. A ceiling
   // fan was never skipped and was mis-measured the same way.
   const [myBottom, myTop] = verticalExtent(mover.category, mover.shape, dimMM, pos[1]);
-  const me = footFromPart(pos, rot, dimMM, mover.circle);
+  const me = footFromPart(pos, rot, dimMM, mover.circle, mover.shape);
   for (const o of parts) {
     if (o.id === movingId) continue;
     if (isSoftFurnishing(o)) continue;
@@ -3318,7 +3313,7 @@ export function collidesAt(
     // XZ overlap — exact separating-axis test, over the ROUND footprint where a
     // piece has one. The tiny negative pad lets flush side-by-side placement read
     // as touching, not colliding.
-    if (footOverlap(me, footFromPart(o.pos, o.rot, o.dimMM, o.circle), -0.01)) return true;
+    if (footOverlap(me, footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape), -0.01)) return true;
   }
   return false;
 }

@@ -320,7 +320,7 @@ export function analyzeRoom(
 
   const solid = floorBlockers(parts);
   const obbs = new Map<string, Foot>();
-  for (const p of solid) obbs.set(p.id, footFromPart(p.pos, p.rot, p.dimMM, p.circle));
+  for (const p of solid) obbs.set(p.id, footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape));
 
   // One raster, read by rules 3, 8, 9 and 10. Its cell index IS the index into
   // `solid`, so a finding can name the pieces it is about.
@@ -510,11 +510,11 @@ export function analyzeRoom(
     .map((p) => ({
       p,
       y: verticalExtent(p.category, p.shape, p.dimMM, p.pos[1]),
-      foot: footFromPart(p.pos, p.rot, p.dimMM, p.circle),
+      foot: footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape),
     }));
   for (const m of mountedSolids) {
     const [mBottom, mTop] = verticalExtent(m.category, m.shape, m.dimMM, m.pos[1]);
-    const mFoot = footFromPart(m.pos, m.rot, m.dimMM, m.circle);
+    const mFoot = footFromPart(m.pos, m.rot, m.dimMM, m.circle, m.shape);
     for (const { p: f, y: [fBottom, fTop], foot } of floorSolids) {
       if (fTop <= mBottom + 0.005 || mTop <= fBottom + 0.005) continue;
       // The same pad `collidesAt` passes, so flush-against reads as touching rather
@@ -841,7 +841,7 @@ export function analyzeRoom(
   // any corner is out, so `outside` is now priced across the whole range in which it
   // is reported. Without that, `movable: true` here would have been a second lie.
   for (const p of parts) {
-    const c = roomContainment(p.pos, p.rot, p.dimMM, poly, p.circle);
+    const c = roomContainment(p.pos, p.rot, p.dimMM, poly, p.circle, p.shape);
     const out = forgivesOverhang(p) ? !c.centre : !(c.box && c.centre);
     if (!out) continue;
     // WHERE it is — the title and the remedy sentence.

@@ -278,6 +278,13 @@ export function ridesWall(category: Category, shape: Shape): boolean {
   return anchorFor(category, shape).startsWith('wall-');
 }
 
+/** True when a drag moves the piece UP the wall as well as along it — every wall
+ *  rider except the ones standing on the floor. A door is `wall-floor`: its
+ *  threshold is the floor, so it slides sideways and never lifts. */
+export function followsPointerUp(category: Category, shape: Shape): boolean {
+  return ridesWall(category, shape) && anchorFor(category, shape) !== 'wall-floor';
+}
+
 // ─── Wall affinity ────────────────────────────────────────────────────────
 // Some items only make sense against / near walls (doors, fridge, wardrobe,
 // bookshelf, bed). Others want to be in the middle of the room (rugs, coffee
@@ -536,10 +543,10 @@ export type SupportSelf = Pick<SupportCandidate, 'id' | 'category' | 'shape'>;
 export function coversEnoughToSupport(
   moverFoot: Foot,
   moverArea: number,
-  surface: { pos: [number, number, number]; rot?: number; dimMM: [number, number, number]; circle?: boolean },
+  surface: { pos: [number, number, number]; rot?: number; dimMM: [number, number, number]; circle?: boolean; shape?: Shape },
 ): boolean {
   if (!(moverArea > 0)) return false;
-  const shared = footIntersectionArea(moverFoot, footFromPart(surface.pos, surface.rot ?? 0, surface.dimMM, surface.circle));
+  const shared = footIntersectionArea(moverFoot, footFromPart(surface.pos, surface.rot ?? 0, surface.dimMM, surface.circle, surface.shape));
   return shared / moverArea >= MIN_SUPPORT_SHARE;
 }
 

@@ -31,6 +31,7 @@ import { useStudio } from '@/lib/store';
 import { roleOf } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
+import { ELL_ARM_DEPTH, ELL_RETURN_WIDTH } from '@/lib/foot-cells';
 
 /** The module ranges the TILING parametric shapes are divided by, resolved once at module
  *  scope so a renderer reads a value rather than doing a table lookup per frame.
@@ -506,18 +507,28 @@ const LEAF_TONES = ['#5D8A5D', '#6E9A66', '#4F7C4F', '#6FA06A', '#4A7048'] as co
  *  of the two from the plant's proportions. No `FitToDim`: a per-axis stretch is what
  *  squashed the old plant, and a leaf keeps its shape only if it is drawn at its size. */
 function PlantGeo({ part }: { part: ScenePart }) {
-  const pot = tint(part);
-  const g = plantForm(part.dimMM);
+  return <PlantBody dimMM={part.dimMM} pot={tint(part)} />;
+}
+
+const NOPICK = () => {};
+
+/** The plant itself, at a size and in a pot colour — shared with the tabletop plant a
+ *  surface's props can carry (`Dressing`), which used to be a cylinder and a ball
+ *  while the floor plant beside it had leaves. `noPick` takes it out of raycasting,
+ *  as every prop is: a prop is dressing on its surface, not a piece to select. */
+export function PlantBody({ dimMM, pot, noPick }: { dimMM: [number, number, number]; pot: string; noPick?: boolean }) {
+  const g = plantForm(dimMM);
+  const pick = noPick ? { raycast: NOPICK } : {};
   return (
     <group>
       {/* tapered pot */}
-      <mesh position={[0, g.pot.h / 2, 0]} scale={[g.pot.stretch[0], 1, g.pot.stretch[1]]}>
+      <mesh position={[0, g.pot.h / 2, 0]} scale={[g.pot.stretch[0], 1, g.pot.stretch[1]]} {...pick}>
         <cylinderGeometry args={[g.pot.top, g.pot.bottom, g.pot.h, 20]} />
         <meshStandardMaterial color={pot} {...SURFACE.ceramic} />
       </mesh>
       {/* soil, standing a little proud of the rim — flush with it, the two tops
           z-fight and the soil flickers through the pot's lid */}
-      <mesh position={[0, g.pot.h, 0]} scale={[g.pot.stretch[0], 1, g.pot.stretch[1]]}>
+      <mesh position={[0, g.pot.h, 0]} scale={[g.pot.stretch[0], 1, g.pot.stretch[1]]} {...pick}>
         <cylinderGeometry args={[g.soil.r, g.soil.r, g.soil.t, 20]} />
         <meshStandardMaterial color="#3a2c20" roughness={1} />
       </mesh>
@@ -525,8 +536,8 @@ function PlantGeo({ part }: { part: ScenePart }) {
       <group position={[0, g.pot.h, 0]}>
         <Sway amp={0.03} speed={0.9}>
           <group position={[0, -g.pot.h, 0]}>
-            <StemInstances items={g.stems} wood="#4A3526" green="#5B7A45" />
-            <LeafInstances items={g.leaves} tones={LEAF_TONES} surface={SURFACE.foliage} />
+            <StemInstances items={g.stems} wood="#4A3526" green="#5B7A45" noPick={noPick} />
+            <LeafInstances items={g.leaves} tones={LEAF_TONES} surface={SURFACE.foliage} noPick={noPick} />
           </group>
         </Sway>
       </group>
@@ -844,9 +855,13 @@ function DeskGeo({ part, locked, lShape }: { part: ScenePart; locked: boolean; l
   // So the long arm now takes `armD` of the depth and the return takes the rest, both
   // within `w x d`. `desk-standard` is untouched by construction: at `lShape === false`
   // `armD === d` and `armZ === 0`, which is the tabletop this function always drew.
-  const armD = lShape ? d * 0.52 : d;
+  //
+  // The proportions live in `lib/foot-cells.ts` now, where the plan's outline and every
+  // containment and collision test read them too — so the notch the room lets a wall
+  // corner into is the notch this draws.
+  const armD = lShape ? d * ELL_ARM_DEPTH : d;
   const armZ = -d / 2 + armD / 2;
-  const armW = w * 0.42;
+  const armW = w * ELL_RETURN_WIDTH;
 
   return (
     <>

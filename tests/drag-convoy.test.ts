@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planConvoy, resolveConvoy, convoyRestore, gestureFor, gizmoResizing, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
+import { planConvoy, resolveConvoy, convoyRestore, gestureFor, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { resolvePlacement } from '@/lib/drag-resolve';
 import { selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import type { Poly } from '@/lib/geometry';
@@ -1315,42 +1315,23 @@ describe('the zero-delta restore does not pin what it did not move', () => {
 
 describe('gestureFor: while the gizmo is active it owns the whole answer', () => {
   // This decision lived inside `Draggable` where nothing could test it, and it
-  // shipped a hole in exactly the place the component made invisible. The wheel and
-  // the two-finger twist set a ref, because both turn a piece while the pointer
-  // stands still; `Draggable`'s pointer-move handler clears that ref — and returns
-  // early for the whole gizmo gesture, so for the gizmo's duration the one line
-  // that clears it is unreachable. Found by danmu-cb in review.
+  // shipped a hole in exactly the place the component made invisible: the wheel and
+  // the two-finger twist set a ref that only `Draggable`'s pointer-move handler
+  // clears, and that handler never runs during a gizmo gesture. Found by danmu-cb
+  // in review, when a gizmo translate still existed and read the stale ref.
 
-  it('a gizmo TRANSLATE is a move even when the wheel has just been used', () => {
-    // The defect, exactly: wheel-rotate mid-drag, release, then pull the translate
-    // arrow. This returned 'turn', so the rest of the selection stayed behind —
-    // silent, and indistinguishable from "sometimes only one moves".
-    expect(gestureFor(true, 'translate', true)).toBe('move');
-  });
-
-  it('a gizmo ROTATE or SCALE is a turn, ref or no ref', () => {
-    expect(gestureFor(true, 'rotate', false)).toBe('turn');
-    expect(gestureFor(true, 'scale', false)).toBe('turn');
-    expect(gestureFor(true, 'rotate', true)).toBe('turn');
+  it('a rotate ring or a stretch handle is a turn, ref or no ref', () => {
+    // A stretch moves the origin only to hold the opposite face still. Read as a
+    // move, the whole selection would slide because one piece got wider.
+    expect(gestureFor(true, false)).toBe('turn');
+    expect(gestureFor(true, true)).toBe('turn');
   });
 
   it('with no gizmo, the ref is the answer', () => {
     // A plain pointer drag is a translation whatever `transformMode` says, which is
-    // why the mode is not consulted on this path.
-    expect(gestureFor(false, 'rotate', false)).toBe('move');
-    expect(gestureFor(false, 'translate', true)).toBe('turn');
-  });
-});
-
-describe('gizmoResizing: a body drag with the Scale tool selected is a move', () => {
-  it('only the held scale handles change a size', () => {
-    // The defect: `Draggable` snapped and clamped the size whenever the Scale TOOL was
-    // selected, so dragging the piece's body rounded a 1613 mm table to 1610 and wrote
-    // it back on release.
-    expect(gizmoResizing(false, 'scale')).toBe(false);
-    expect(gizmoResizing(true, 'scale')).toBe(true);
-    expect(gizmoResizing(true, 'translate')).toBe(false);
-    expect(gizmoResizing(true, 'rotate')).toBe(false);
+    // why the mode is not an input at all.
+    expect(gestureFor(false, false)).toBe('move');
+    expect(gestureFor(false, true)).toBe('turn');
   });
 });
 

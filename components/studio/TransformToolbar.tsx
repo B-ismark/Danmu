@@ -31,8 +31,8 @@ import type { IconName } from '@/components/ui/Icon';
 // readout floating at the bottom-left of the canvas; it belongs on the control
 // that sets it.
 const MODES: Array<{ id: 'translate' | 'rotate' | 'scale'; label: string; key: string; does: string; icon: IconName }> = [
-  { id: 'translate', label: 'Move', key: 'W', does: 'slide it along the floor', icon: 'arrow-up-right' },
-  { id: 'scale', label: 'Scale', key: 'S', does: 'resize it evenly', icon: 'ruler' },
+  { id: 'translate', label: 'Move', key: 'W', does: 'slide it along the floor or its wall', icon: 'arrow-up-right' },
+  { id: 'scale', label: 'Scale', key: 'S', does: 'stretch it from the side you pull', icon: 'ruler' },
   { id: 'rotate', label: 'Rotate', key: 'R', does: 'spin it in place', icon: 'refresh' },
 ];
 

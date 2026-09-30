@@ -467,7 +467,7 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 
 | File | Role |
 |---|---|
-| `lib/geometry.ts` | Oriented rectangles (OBB) in the XZ plane; separating-axis overlap, gaps, face clearance, point-in-poly, nearest-edge. Also `Foot` — a footprint that may be **round**, meaning the ellipse inscribed in the OBB (a true circle when W = D, which is how round parts are authored, and the ellipse the renderer draws if an axis is scaled). A circle's bounding square is 27% bigger than the circle and all of it is in the corners, which is where the chairs go; `collidesAt` used to refuse a chair tucked diagonally under a round table for corners the table does not have. Containment is the exact closed form; two true circles use the closed-form lens area, and anything else round uses an inscribed 32-gon (99.4% of the area — inscribed on purpose, so a round piece is never reported as hitting what it does not touch). **One rotation convention, and it is three.js's:** `rot` is what the renderer assigns to `rotation.y`, so a part's front (local +Z) is `(sin rot, cos rot)`. Rotating the other way is invisible at 0°/180° and inverts every directional answer on the side walls — it was reporting "doors can't open" on wardrobes correctly snapped to the east and west walls. `localToWorld` / `worldToLocal` / `frontVector` are the shared helpers, pinned against three's own `Euler` by a test. |
+| `lib/geometry.ts` | Oriented rectangles (OBB) in the XZ plane; separating-axis overlap, gaps, face clearance, point-in-poly, nearest-edge. Also `Foot` — a footprint that may be **round**, meaning the ellipse inscribed in the OBB (a true circle when W = D, which is how round parts are authored, and the ellipse the renderer draws if an axis is scaled). A circle's bounding square is 27% bigger than the circle and all of it is in the corners, which is where the chairs go; `collidesAt` used to refuse a chair tucked diagonally under a round table for corners the table does not have. Containment is the exact closed form; two true circles use the closed-form lens area, and anything else round uses an inscribed 32-gon (99.4% of the area — inscribed on purpose, so a round piece is never reported as hitting what it does not touch). **One rotation convention, and it is three.js's:** `rot` is what the renderer assigns to `rotation.y`, so a part's front (local +Z) is `(sin rot, cos rot)`. Rotating the other way is invisible at 0°/180° and inverts every directional answer on the side walls — it was reporting "doors can't open" on wardrobes correctly snapped to the east and west walls. `localToWorld` / `worldToLocal` / `frontVector` are the shared helpers, pinned against three's own `Euler` by a test. A `Foot` may also carry **`cells`** — the rectangles a non-rectangular piece actually stands on (`lib/foot-cells.ts`; today only the L-shaped desk, whose open corner is floor). Area, containment, overlap, intersection, point hits, the settle's wall deficits and the clearance raster all read `footCells(f)`, so a desk can wrap a room's inside corner and a chair can tuck into its L; `footCorners` stays the envelope. `footFromPart` takes the part's `shape` for this. Two callers do not pass one and do not need to: `repeat-sightings` builds a circle, and `findSupportDetailed`'s mover is a piece looking for something to stand on, where the envelope is the conservative answer. |
 | `lib/photo-geometry.ts` | Pinhole camera at room centre + entered room dims → ray/plane intersection gives real position + W/H from any bbox. `CameraCal` carries the lens (`k`), and optionally the camera's `height` and `tiltRad`; absent values fall back to 1.5 m and level, which is what it always assumed. Tilt matters: 5° of ordinary handheld droop mis-reads distance by ~20%. Three placers, one per surface: `placeFloorObject` intersects the bbox's **bottom** edge with the floor (a vertical thing standing at one distance), `placeWallObject` uses the wall's known distance, and `placeCeilingObject` intersects the **middle** row with the ceiling plane and returns **no height at all** — a `GeoCeilingPlacement` is an `Omit`, so nothing downstream can read a measurement never taken. The middle row rather than an edge because a ceiling fan is a horizontal PLATE seen obliquely: its image spans a range of distances and the top of the bbox is its nearest rim, which reads a 1.2 m fan as 881 mm — further from the truth than the 1000 mm catalogue default it was meant to improve on. **Except when the top of the frame cuts the disc**, which moves the middle row out toward the far rim (a 1200 mm fan read 1748): then `discUnderTopCut` solves the disc from what the photo did see — the box's bottom row is the far rim exactly, since every image row is one forward distance on the slab, and each side is a tangent or the rim crossing the top row — keeping whichever of the four candidates redraws this box, and falling back on the middle row when none does, when the box is a sliver less than twice the fit's tolerance tall, or when the solved disc fails the middle row's gates or has its far rim past the framed wall (§ 49.13). It also **refuses** an intersection past the far wall instead of clamping to it, unlike the floor: a level 66° camera in a normal room sees no ceiling at all (the vertical half-angle is ~24°, so from 1.5 m a 2.8 m ceiling first enters frame 2.9 m away, past the wall being photographed), so a high pixel there is wall, and clamping it read a picture frame out as an undersized ceiling fan — the width being computed at the clamped distance rather than the real one. Ceilings need an ultrawide, a camera tilted up, or a tall room. **Every plane, bound and clamp in the module comes from `wallFrame(slot, footprint)`**, and the five signatures that used to take a `{width, depth}` now take a `Footprint`, so a bounding box cannot be handed to them. `wallFrame` names a WALL rather than a bound — of the walls facing this slot's camera and reaching the image's centre column, the nearest with nothing in between — so it answers a `t`'s stem at 1.21 m where the box around the room said 2.75, and answers null for the `u`'s north view, where the rig stands the lens on the notch's own wall. Both halves of the old ±half pair (`wallDistance`, `wallSpan`) are deleted. See **The ±half pair, retired** and **…and the box around a room that is not one**. |
 | `lib/exif.ts` | Reads the camera fields a photo carries about itself — 35 mm-equivalent focal length (→ `hfovFromFocal35`), orientation, compass bearing, and the shutter time. Pure byte parsing; browsers expose no EXIF API. **Does not read GPS coordinates**, deliberately: nothing needs them, and moving them from the file into IndexedDB would relocate the exposure rather than remove it. The shutter time is the one field read and then dropped: it exists to put a dropped set of photos back into the order they were shot in (`capture-slots`' `time` rung) and is never persisted or sent, which is what keeps it a weaker exposure than the coordinates next to it. Parsed by hand as UTC rather than by `Date.parse` — the EXIF form is not ISO 8601, so what a built-in does with it is implementation-defined, and the no-clock forms (`0000:00:00 00:00:00`, all spaces) and dates `Date.UTC` would silently roll forward are refused rather than sorted first. |
 | `lib/capture-slots.ts` | **Which wall a photo is**, as a ladder that reports which rung answered: `bearing` (its own compass tag against an anchor derived from the photos already placed), `time` (EXIF shutter order), `order` (arrival), `manual` (the user, who wins). Anchors are averaged as *directions* — 359° and 1° average arithmetically to 180°, the opposite side of the room — and an anchor whose own photos disagree by more than 30° is refused rather than believed, because a slot flips at 45°. Placement is incremental: an arriving photo never moves one already placed, so nothing shuffles under the user and no correction is downgraded to a suggestion. A bearing pointing at a wall that is already taken is **reported, not honoured** — two photos of one wall, or a magnetometer next to a fridge, look identical from here. **Vanishing points are not a rung**, though the plan proposed them: every shot frames one wall straight-on from the middle of a box, so the wall-parallel direction vanishes at infinity and the view axis at the principal point in *every* photo — an identical pair whichever wall is in front of the lens, with nothing in it labelled by world axis. The only signal that survives is that a long wall subtends a wider angle than a short one, which yields an axis and never a direction; the capture screen's wall-length label puts that on screen as a number instead, read from `wallFrame`'s own two ends. It also owns **moving a placed set around** — `rotateSet` / `swapSet` / `clearSlot` / `patchIfSame` / `describePlacement` — which lived in the capture screen as hand-written spreads until a read-through found three bugs in them, all the same shape: a fact about ONE photo written against a SLOT. A quality score, which is async, landed on whichever photo occupied that wall by the time it resolved (so rotating a set mid-scoring relabelled every score); a clash flag outlived the photo it named; and the live region said "0 photo added: ." when every wall was already full. **A clash flag's lifetime is stated there**: it survives a rotation, where both photos move together and the reference is only relabelled, and nothing else — a swap, a delete or a replace means the user is doing the assignment themselves, which is what the flag was asking for. |
@@ -1278,12 +1278,31 @@ pair and they are **one row**, and the measured one survives in either photo ord
 ## 5. The decoration studio
 
 ### Selection & transforms — `Pickable.tsx`, `Draggable.tsx`
-- Click to select, drag to move, gizmo to rotate / scale. The gizmo modes are
+- Click to select, drag to move, a ring to rotate, dots to stretch. The modes are
   **W** move, **R** rotate, **S** scale, armed on the 3D tab only
   (`KeyboardShortcuts.tsx`); **Q** and **E** orbit the camera (`CameraRig.tsx`) and are
   not gizmo keys. Naming them here because "Maya-style modes" was all this said, and
   `Draggable.tsx`'s own header filled the gap with "W=move E=rotate R=scale", which is
   wrong and was believed.
+  - **Move has no handles: the piece is the handle.** The translate gizmo's arrows and
+    planes were clutter over the thing you were trying to see, and a plain drag already
+    did everything they did. A piece that hangs on a wall (`followsPointerUp` in
+    `lib/physics.ts` — a wall rider whose anchor is not `wall-floor`, so a door is out)
+    is dragged across its OWN wall's vertical plane instead of the floor
+    (`lib/wall-drag.ts`), and the height the pointer asks for rides into
+    `resolvePlacement` as `rawY`, bottom edge on the grid like the Inspector's mount
+    height. A set with company is dragged on the floor as before, so it is never pulled
+    apart vertically.
+  - **Rotate is one ring**, drei's `TransformControls` with only the Y axis shown.
+  - **Scale is three dots** (`StretchHandles.tsx`, arithmetic in `lib/stretch.ts`),
+    one on each face it moves: width, depth, height. Pulling one moves THAT face and
+    the opposite face stays where it stands — the old scale gizmo had nine controls on
+    the pivot and grew from the centre. Each dot sits on the camera's side of the
+    piece, except a wall piece's depth dot (always the front) and a ceiling piece's
+    height dot (underneath). Dots are a constant size on screen, larger with a
+    coarse pointer (44 px hit target). The stretch resolves with snap off, as a turn
+    does, so the fixed face does not step; a pull into a wall rests at the last size
+    that fitted rather than being refused.
 - Snap: `off` / `fine` **1 cm · 15°** / `coarse` **5 cm · 45°** — `snapSteps` in
   `lib/drag-resolve.ts`, which is the only home for those four numbers. This line read
   "2.5°" and "7.5°" for both angles; nothing derives them and nothing checked.
@@ -1650,8 +1669,8 @@ shape still untested.
   for a commit after `plant` made it fifteen)
   rebuild from effective dimensions instead of stretching: sofa tiles seat
   modules from width, bookshelf derives shelves from height, wardrobe derives
-  door bays from width, etc. The scale gizmo live-stretches; commit converts
-  scale → dimension and the geometry redraws cleanly.
+  door bays from width, etc. The stretch handles live-stretch the group; commit
+  writes the dimension and the geometry redraws cleanly.
   **How MANY modules is `moduleCount` in `scene-spec.ts`, and it used to be five
   copies of `Math.round(span / nominal)` inline in the renderers.** That expression
   minimises the error in the *count* and says nothing about the *module*, which is
@@ -1800,6 +1819,18 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   as a per-part `decor` collection. Decor renders as a **sibling** of the part
   (reads transform from the store) so props keep true size on group-scaled parts,
   and opt out of raycasting so they never block selecting the furniture beneath.
+- **What a prop is and where it goes are `lib/decor.ts`**, not the renderer.
+  `decorSpec(item)` draws the prop's size from its id (the seeded stream moved there
+  unchanged, so existing props draw as before), `decorRadius` bounds it in plan, and
+  `arrangeDecor` places the collection in order: each prop keeps its spot, clamped onto
+  the top, if that is clear of the props before it and of every blocker; otherwise it
+  takes the nearest clear lattice spot; otherwise it is left off and listed in
+  `unplaced`, which the Inspector shows as **No room**. The blockers are the pieces
+  standing in the band just above the surface (`decorBlockersBySurface`, read through
+  `useDecorBlockers`, which only changes when something over that surface moves) and
+  the surface's own holes — the L-shaped desk's open corner. **Pieces never stand on
+  props**; `docs/what-is-still-open.md` B.20 says why. The tabletop plant is
+  `PlantBody`, the floor plant's own geometry at tabletop size.
 
 ### Lighting, realism & motion
 - **Fixtures emit real light** (`components/three/PartLight.tsx`, `lib/light-units.ts`).
@@ -2860,7 +2891,8 @@ anything wrong; the same press is simply **delivered twice**.
 
 **R3F cannot see the gizmo.** It raycasts `internal.interaction` — the objects
 that carry event handlers — and drei's `<TransformControls>` is a `<primitive>`
-with none, so the ring, the arrows and the planes are transparent to picking. A
+with none, so the rotate ring is transparent to picking (the move arrows and
+planes it also covered are gone). A
 press aimed at a handle goes straight through to whatever furniture sits behind
 it, and that piece starts a direct drag of its own.
 

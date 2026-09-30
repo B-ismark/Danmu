@@ -199,7 +199,7 @@ export function checkFit(
       //
       // `footInsidePoly`, not `outsideShare` — the latter samples, and its samples sit
       // 10% in from the edges, so it forgives a piece 20 mm through the plaster.
-      const foot = footFromPart(settledPart.pos, settledPart.rot, settledPart.dimMM, settledPart.circle);
+      const foot = footFromPart(settledPart.pos, settledPart.rot, settledPart.dimMM, settledPart.circle, settledPart.shape);
       if (!footInsidePoly(foot, room.footprint)) continue;
 
       // …and it must not be INSIDE anything, which is also not something to read off the
@@ -309,7 +309,7 @@ function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): b
     // and testing `!sharesFloor` inverts the rule exactly, and quietly: it exempts a
     // sofa 31% inside a bed while flagging a correctly tucked chair.
     if (sharesFloor(mine, roleOf(other))) continue;
-    const its = footFromPart(other.pos, other.rot, other.dimMM, other.circle);
+    const its = footFromPart(other.pos, other.rot, other.dimMM, other.circle, other.shape);
     if (footIntersectionArea(foot, its) > TOUCH_AREA_M2) return true;
   }
   return false;

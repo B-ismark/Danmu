@@ -36,7 +36,7 @@ import type { ScenePart } from './scene-spec';
 
 /** A part's plan footprint — rectangle, or the inscribed ellipse if it is round. */
 export function footOf(part: ScenePart): Foot {
-  return footFromPart(part.pos, part.rot, part.dimMM, part.circle);
+  return footFromPart(part.pos, part.rot, part.dimMM, part.circle, part.shape);
 }
 
 /**

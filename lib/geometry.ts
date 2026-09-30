@@ -3,6 +3,9 @@
 // polygon. No AI, no approximation hacks: exact separating-axis tests and
 // point/segment math. Everything works in the scene's XZ plane.
 
+import { footCellsLocal } from './foot-cells';
+import type { Shape } from './scene-spec';
+
 export type Vec2 = [number, number];
 
 /** Oriented rectangle: centre, half-extents, rotation (radians, scene yaw). */
@@ -441,10 +444,26 @@ export function rayToBoundary(x: number, z: number, dx: number, dz: number, poly
   return best;
 }
 
-/** A footprint: an oriented box, plus whether the piece draws as a round one.
+/** A footprint: an oriented box, plus whether the piece draws as a round one, plus —
+ *  for the one piece that is neither — the rectangles it is really made of.
  *  Declared here rather than beside `footFromPart` because `footExtentAlong` needs it
- *  and sits with the other projection helpers. */
-export type Foot = OBB & { circle?: boolean };
+ *  and sits with the other projection helpers.
+ *
+ *  `cells` is the L-shaped desk (`lib/foot-cells.ts`). The box stays the envelope and
+ *  keeps answering the questions it answers exactly — how far the piece reaches along
+ *  a direction, since the L touches all four sides of its box — while the questions
+ *  about the open corner (is it in the room, does it hit that, is this point on it,
+ *  how much floor does it cover) read the cells through `footCells`. Never set
+ *  together with `circle`. */
+export type Foot = OBB & { circle?: boolean; cells?: OBB[] };
+
+/** The convex pieces a footprint is made of: its `cells`, or itself. Every
+ *  containment, overlap, area and point test goes through this, so a compound
+ *  footprint is asked each question once per piece and a plain one exactly as
+ *  before. */
+export function footCells(f: Foot): Foot[] {
+  return f.cells ?? [f];
+}
 
 /** Half-extent of a FOOTPRINT projected onto a world direction (dx,dz must be unit) —
  *  the OBB's, or the ellipse's when the piece is round.
@@ -680,7 +699,19 @@ export function distToBoundary(poly: Poly, x: number, z: number): number {
  *  exactly. Every caller uses it to know how much of something is unusable and
  *  which way is in, and one of them runs it tens of thousands of times inside an
  *  annealer, where an exact polygon clip costs far more than the answer is worth. */
-export function outsideShare(f: OBB, poly: Poly, n = 3): number {
+export function outsideShare(f: Foot, poly: Poly, n = 3): number {
+  // A compound footprint is sampled per cell and weighted by area, so the open
+  // corner of an L is not counted as desk hanging through a wall it wraps around.
+  if (f.cells) {
+    let out = 0;
+    let area = 0;
+    for (const c of f.cells) {
+      const a = c.hw * c.hd;
+      out += a * outsideShare(c, poly, n);
+      area += a;
+    }
+    return area > 0 ? out / area : 0;
+  }
   // Wholly inside, proven in two tests rather than n²: the boundary is further
   // away than the footprint's own bounding circle reaches, and the centre is in.
   if (distToBoundary(poly, f.cx, f.cz) >= Math.hypot(f.hw, f.hd)) {
@@ -737,12 +768,28 @@ export function footFromPart(
   rot: number,
   dimMM: [number, number, number],
   circle?: boolean,
+  /** The piece's shape, for the one outline that is not its box. Optional so a
+   *  caller with no shape in hand (a detection, a hypothetical) gets the box — the
+   *  conservative direction, since the box covers the cells. */
+  shape?: Shape,
 ): Foot {
-  return { ...obbFromPart(pos, rot, dimMM), circle };
+  const box: Foot = { ...obbFromPart(pos, rot, dimMM), circle };
+  const local = circle ? undefined : footCellsLocal(shape, dimMM[0] / 1000, dimMM[1] / 1000);
+  if (!local) return box;
+  const c = Math.cos(rot);
+  const s = Math.sin(rot);
+  box.cells = local.map((r) => {
+    const lx = (r.x0 + r.x1) / 2;
+    const lz = (r.z0 + r.z1) / 2;
+    // `localToWorld`, inlined as everywhere else in this file.
+    return { cx: pos[0] + lx * c + lz * s, cz: pos[2] - lx * s + lz * c, hw: (r.x1 - r.x0) / 2, hd: (r.z1 - r.z0) / 2, rot };
+  });
+  return box;
 }
 
 /** Exact plan area, m². */
 export function footArea(f: Foot): number {
+  if (f.cells) return f.cells.reduce((a, c) => a + 4 * c.hw * c.hd, 0);
   return f.circle ? Math.PI * f.hw * f.hd : 4 * f.hw * f.hd;
 }
 
@@ -758,7 +805,10 @@ export function footArea(f: Foot): number {
  *  the exact ellipse, so this never runs in a hot loop. */
 const CIRCLE_SEGMENTS = 32;
 
-/** The footprint as a counter-clockwise convex polygon. Exact for a rectangle. */
+/** The footprint as a counter-clockwise convex polygon. Exact for a rectangle.
+ *  For a compound footprint this is its ENVELOPE, the box — convex callers (the
+ *  separating-axis helpers) need a convex shape, and the ones that care about the
+ *  open corner go through `footCells` instead. */
 export function footCorners(f: Foot, segments = CIRCLE_SEGMENTS): Vec2[] {
   if (!f.circle) return obbCorners(f);
   const c = Math.cos(f.rot);
@@ -785,7 +835,7 @@ export function footCorners(f: Foot, segments = CIRCLE_SEGMENTS): Vec2[] {
  *  Round footprints polygonise, so a circle is tested as a circle rather than as
  *  the bounding square whose corners it does not occupy. */
 export function footInsidePoly(f: Foot, poly: Poly): boolean {
-  return footCorners(f).every(([x, z]) => pointInPoly(x, z, poly));
+  return footCells(f).every((cell) => footCorners(cell).every(([x, z]) => pointInPoly(x, z, poly)));
 }
 
 /** How far the worst corner sits OUTSIDE the polygon, in metres. 0 when wholly in.
@@ -807,10 +857,12 @@ export function footInsidePoly(f: Foot, poly: Poly): boolean {
  *  outside, where the two agree: the shortest way back in. */
 export function outsideDeficit(f: Foot, poly: Poly): number {
   let worst = 0;
-  for (const [x, z] of footCorners(f)) {
-    if (pointInPoly(x, z, poly)) continue;
-    const d = distToBoundary(poly, x, z);
-    if (d > worst) worst = d;
+  for (const cell of footCells(f)) {
+    for (const [x, z] of footCorners(cell)) {
+      if (pointInPoly(x, z, poly)) continue;
+      const d = distToBoundary(poly, x, z);
+      if (d > worst) worst = d;
+    }
   }
   return worst;
 }
@@ -818,6 +870,9 @@ export function outsideDeficit(f: Foot, poly: Poly): number {
 /** Do these two footprints overlap? Falls through to the rectangle fast path
  *  when neither is round, so nothing about rectangles changes. */
 export function footOverlap(a: Foot, b: Foot, pad = 0): boolean {
+  if (a.cells || b.cells) {
+    return footCells(a).some((ca) => footCells(b).some((cb) => footOverlap(ca, cb, pad)));
+  }
   if (!a.circle && !b.circle) return obbOverlap(a, b, pad);
   const ca = footCorners(inflate(a, pad / 2));
   const cb = footCorners(inflate(b, pad / 2));
@@ -826,6 +881,12 @@ export function footOverlap(a: Foot, b: Foot, pad = 0): boolean {
 
 /** Area the two footprints share, m². */
 export function footIntersectionArea(a: Foot, b: Foot): number {
+  // Cells are disjoint, so the pairwise areas sum to the exact shared area.
+  if (a.cells || b.cells) {
+    let sum = 0;
+    for (const ca of footCells(a)) for (const cb of footCells(b)) sum += footIntersectionArea(ca, cb);
+    return sum;
+  }
   if (!a.circle && !b.circle) return obbIntersectionArea(a, b);
   if (gapLowerBound(a, b) > 0) return 0;
   // Two true circles have a closed form — the classic two-circle lens — and every
@@ -864,6 +925,7 @@ function lensArea(a: Foot, b: Foot): number {
  *  approximation, because this one runs per raster cell and the closed form is
  *  cheaper than the 24-gon anyway. */
 export function pointInFoot(x: number, z: number, f: Foot): boolean {
+  if (f.cells) return f.cells.some((c) => pointInObb(x, z, c));
   if (!f.circle) return pointInObb(x, z, f);
   const c = Math.cos(f.rot);
   const s = Math.sin(f.rot);
