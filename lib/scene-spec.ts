@@ -51,10 +51,11 @@ import {
   formsRoute,
   isObstacle,
   isSoftFurnishing,
+  profilesTuck,
   roleOf,
   routeWidth,
   rugOffset,
-  sharesFloor,
+  tuckProfile,
   WALK_COMFORT,
   WALK_MIN,
   WALL_GAP,
@@ -560,7 +561,7 @@ const SEED_WALL_GAP = WALL_GAP;
 const SEED_TOUCH_SHARE = 0.02;
 
 /** How far a dining chair is pushed under the table. Seating tucked under a work
- *  surface is what `sharesFloor` is about — and it is how a laid table looks. */
+ *  surface is what `tucksUnder` is about — and it is how a laid table looks. */
 const CHAIR_TUCK = 0.12;
 
 /** The seeded floor lamp. Named because its own width is part of where it stands:
@@ -1823,11 +1824,11 @@ function seats(part: ScenePart, placed: ScenePart[], poly: Footprint): boolean {
   // forgiving question.
   if (!footInsidePoly(foot, poly as Poly)) return false;
   if (part.category === 'rug') return true;
-  const role = roleOf(part);
+  const fit = tuckProfile(part);
   const area = footArea(foot);
   for (const o of placed) {
     if (o.wallMounted || o.category === 'rug') continue;
-    if (sharesFloor(role, roleOf(o))) continue;
+    if (profilesTuck(fit, tuckProfile(o))) continue;
     const other = footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape);
     if (!footOverlap(foot, other, -0.01)) continue;
     const smaller = Math.min(area, footArea(other));
@@ -3278,7 +3279,7 @@ export function openSpotForNewPart(
  *  `ignore` names pieces whose overlap with the mover is not this call's to judge. Its
  *  one producer is `lib/drag-convoy.ts` — a set that already overlapped when it was
  *  picked up, a chair tucked under its table, and is translating by one delta so the
- *  overlap cannot change — and it is deliberately not a `sharesFloor` exemption: a
+ *  overlap cannot change — and it is deliberately not a `tucksUnder` exemption: a
  *  chair on its own is still refused, which is § 17's open decision and not this one. */
 export function collidesAt(
   parts: ScenePart[],

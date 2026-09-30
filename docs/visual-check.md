@@ -622,6 +622,39 @@ read 1613 after you let go. Wrong: it reads 1610, or 3D refuses the drag while t
 drag goes through in the plan. `Draggable` hands the lead's size to `leadInherited` from
 `currentDim()`, which is the held size since #188, and nothing mounts it in a test.
 
+### A seat goes under a surface only where it fits — § H.6.4, branch `claude/amazing-davinci-m8zqys`, needs eyes in both tabs
+
+The seat rule asked only which kind of seat goes under which kind of surface. So the
+Library's ottoman "tucked" into the coffee table, straight through its lower shelf, and a
+tall chair counted as tucked under a table its seat could not clear. It now asks whether
+this seat clears this surface's underside. Tests hold the heights; nobody has looked at a
+room with it.
+
+**Where to click.** Rectangle with starter furniture. From the Library add an **Ottoman**
+and drag it over the middle of the coffee table in the plan, then look in 3D. Push a
+dining chair under the dining table and add an **Office chair** under the desk. Then
+select the desk, set its height to 650 mm in the Inspector, and push the office chair
+under it again. Last, in the Room panel's **Will it fit** tab choose **Dining table**,
+type 1800 × 900 × 750 mm, press **Check the room**, then **Put it there**.
+
+**What right looks like.**
+- The ottoman ends up standing on the coffee table's top, like any piece dropped there.
+- The dining chair and the office chair at their Library sizes slide under as before and
+  stay on the floor.
+- Under the 650 mm desk the office chair's arms would hit the top, so it no longer goes
+  under: dragged over the desk it lands on the desktop. A desk from about 690 mm up takes
+  it again.
+- Suggest and the ideas gallery never park the ottoman inside the coffee table.
+- The Will it fit dining table arrives 750 mm tall, drawn like the starter dining table,
+  and a dining chair pushed under it tucks.
+
+**What wrong looks like.**
+- An ottoman sunk into a coffee table, with the shelf showing through its cushion.
+- A Library-size dining chair or office chair standing on its table or desk.
+- A Will it fit dining table that arrives 600 mm tall, or with a shelf under its top.
+- A starter room that looks different from before. None should: every seat in the starter
+  rooms is a dining chair at a dining table, and all of those fit.
+
 ### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 
 **Ideas** sits where Shuffle did, beside **Fix**. It opens a card of arrangements: four

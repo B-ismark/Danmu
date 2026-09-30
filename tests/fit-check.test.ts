@@ -8,8 +8,9 @@
 // clamped on the way in.
 
 import { describe, expect, it } from 'vitest';
-import { checkFit, PROBE_ID, type FitCandidate } from '@/lib/fit-check';
-import { dimRangeFor } from '@/lib/dimension-ranges';
+import { checkFit, FIT_KINDS, PROBE_ID, type FitCandidate } from '@/lib/fit-check';
+import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
+import { roleOf, tucksUnder } from '@/lib/layout-rules';
 import type { Footprint } from '@/lib/footprint';
 import type { ScenePart } from '@/lib/scene-spec';
 
@@ -143,7 +144,7 @@ describe('checkFit · being inside something is a no, tucking under is not', () 
   // purpose so an ordinary dining set is not called a collision. Read as a fit answer
   // it let a sofa sit 31% inside a bed and called the room "a bit tight". So this
   // module gates on overlap itself — and then the gate has to know which overlaps are
-  // legitimate, which is what `sharesFloor` is for. Its polarity reads backwards at a
+  // legitimate, which is what `tucksUnder` is for. Its polarity reads backwards at a
   // glance: TRUE means "these two may share the square metre".
 
   it('refuses to put a piece inside a piece', () => {
@@ -160,13 +161,74 @@ describe('checkFit · being inside something is a no, tucking under is not', () 
   });
 
   it('still lets a dining chair tuck under its table', () => {
-    // The pair `sharesFloor` exists for. A chair that may not overlap its table can
+    // The pair `tucksUnder` exists for. A chair that may not overlap its table can
     // never be seated at one, and the answer would be a confident, wrong no.
-    const table = part({ category: 'table', shape: 'coffee-table', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
+    //
+    // A DINING table, drawn with an apron. This fixture was a 750 mm `coffee-table`
+    // shape, which reads as a dining table by its size and is drawn with a coffee
+    // table's shelf a quarter of the way up — nothing tucks under that (§ H.6.4), so
+    // the chair it was seating was one standing beside it.
+    const table = part({ category: 'table', shape: 'desk-standard', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
     const chair: FitCandidate = { category: 'chair', shape: 'chair-dining', dimMM: [450, 500, 900] };
+    expect(tucksUnder(chair, table)).toBe(true);
     const r = checkFit(chair, [table], ROOM);
     expect(['fits', 'tight']).toContain(r.status);
     expect(r.placement).toBeDefined();
+  });
+});
+
+describe('checkFit · where the only place is under something', () => {
+  // The test above is asked in a 6 × 4 m room, where the chair can stand beside the
+  // table and the tuck is never needed. Here the room is one table and a margin, so the
+  // only seat there is has to be under it — and the answer depends on the seat fitting.
+  const room = (w: number, d: number) => ({
+    footprint: [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]] as Footprint,
+    height: 2.6,
+  });
+
+  it('seats a chair under a table it fits under', () => {
+    // 1.5 × 1.0 m round a 1.4 × 0.8 m table: 100 mm each side, and the chair is 450.
+    const table = part({ category: 'table', shape: 'desk-standard', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
+    const chair: FitCandidate = { category: 'chair', shape: 'chair-dining', dimMM: [450, 500, 900] };
+    expect(tucksUnder(chair, table)).toBe(true);
+    const r = checkFit(chair, [table], room(1.5, 1.0));
+    expect(['fits', 'tight']).toContain(r.status);
+  });
+
+  it('does not seat an ottoman inside a coffee table it does not fit under', () => {
+    // 1.3 × 1.0 m round a 1.1 × 0.6 m table: 200 mm each side, and the ottoman is 400.
+    // Its roles tuck; its 420 mm does not clear the shelf (§ H.6.4). Every seat left
+    // reaches under the table, but not far enough for the room report's clash share to
+    // call it, so this is the gate that has to say no — read as the roles alone, it
+    // answered "Yes, it fits" with the ottoman standing in the table.
+    const table = part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [0, 0, 0] });
+    const ottoman: FitCandidate = { category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420] };
+    expect(tucksUnder(ottoman, table)).toBe(false);
+    expect(checkFit(ottoman, [table], room(1.3, 1.0)).status).toBe('no-room');
+  });
+});
+
+describe('the Fit panel’s kinds are the pieces they are called', () => {
+  const kind = (id: string) => {
+    const k = FIT_KINDS.find((f) => f.id === id);
+    if (!k) throw new Error(`no Fit kind ${id}`);
+    return k;
+  };
+
+  it('a dining table is one a dining chair goes under, at a dining table’s height', () => {
+    // It was a `coffee-table`: a shelf under the top, so no chair fitted under a
+    // six-seater the panel had just been told about, and a range that stops at 600 mm,
+    // so pressing Place stood a 750 mm table in the room at 600.
+    const dining = kind('dining');
+    const size: [number, number, number] = [1800, 900, 750];
+    expect(roleOf({ ...dining, dimMM: size })).toBe('dining-table');
+    expect(clampDims(dining.category, dining.shape, size)).toEqual(size);
+    const chair = kind('chair');
+    expect(tucksUnder({ ...chair, dimMM: [500, 500, 850] }, { ...dining, dimMM: size })).toBe(true);
+  });
+
+  it('a coffee table is still a coffee table', () => {
+    expect(roleOf({ ...kind('coffee'), dimMM: [1100, 600, 420] })).toBe('coffee-table');
   });
 });
 

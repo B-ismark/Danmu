@@ -3692,7 +3692,7 @@ height floor removed, the deck clause still passed, because a 3 m deck was alrea
 by the new plan bound. The deck is 2400 × 1500 now, inside a table's plan, so the height is
 what answers.
 
-**§ H.6.4 · OPEN: the seat rule has no fit test.** Found in § H.6.3's second review. A
+**§ H.6.4 · FIXED 2026-09-30: the seat rule has a fit test.** Found in § H.6.3's second review. A
 seat looks past its partner at any height, so an ottoman exactly as tall as its coffee
 table "tucks" into it (a 420 mm ottoman added over a 420 mm table lands at y = 0), and a
 420 mm ottoman over a 250 mm table ends up inside it, where every drag of it is refused as
@@ -3703,6 +3703,81 @@ number exists in the catalogue yet, and a wrong allowance would lift chairs back
 tables, which is the defect § H.6.3 fixed, so it needs measuring before it is written.
 `tests/seat-support.test.ts` uses a 350 mm nesting ottoman under its 420 mm table so that
 no fixture certifies the interpenetration, and asserts only the reading of the 250 mm one.
+
+*Measured first: does a piece's height mean what it says?* A fit test compares two heights,
+so both have to be the heights the pieces are drawn at. `tests/drawn-height.test.tsx` walks
+the renderer of every floor-standing shape (35 of them), and the desk-standard drawn as a
+dining table, at the bottom, catalogue and top of its height range. **The ottoman did not reach its own**: the welt stopped at 0.9 h, so a tray
+set on a 420 mm ottoman stood 42 mm above the cushion, and a fit test would have measured a
+seat 10% taller than anyone sees. It is drawn to h now. Eight shapes still miss by more than
+1 mm, and the test holds them as a literal list, so a new miss fails and so does a fixed one
+left on it:
+
+| Shape | Drawn top against h | Why |
+|---|---|---|
+| rug, plane | fixed thickness | a flat piece, whatever the height field says |
+| bed-single, bed-double | 1.4 h | the headboard, on purpose: h is the mattress top |
+| monitor | 0.96 h + 10 mm, −14 mm at 600 | the screen stops short of the box |
+| laptop | 20 mm + 0.94 h, +13 mm at 150 | h is the lid's length, tilted back from the hinge |
+| air-purifier | h + 14 mm | a control disc sits on the top |
+| water-dispenser | 1.02 h, +24 mm at 1200 | the bottle |
+
+None is a seat or a surface a seat tucks under, so none touches this section. The one that
+could matter elsewhere is the purifier: something set on it lands at h, 14 mm inside the disc.
+
+*The fit test.* Two numbers per piece, both read off the drawings (`tuckProfile` in
+`lib/layout-rules.ts`). For a seat, how high it reaches in the front 85% of its depth — the
+part that goes under when it is pushed in as far as the tuck bar allows: a dining chair's
+seat, an office chair's armrests, an ottoman's whole top. For a surface, how much clear
+height it leaves under its top, away from its legs: a dining table's apron, a desk's cable
+rail, and a coffee table's **lower shelf, at a quarter of its height**. A seat tucks when the
+first is no higher than the second. A shape with no case is taken as solid — as tall as it
+is, nothing under it — which is the direction that tucks nothing.
+
+`tests/seat-fit.test.tsx` walks every shape and category that can be a seat or a surface
+(245 rows) and holds both numbers to the renderer: never a seat lower, or a surface roomier,
+than it is drawn; the five shapes with a case exactly; and a pinned list of the three that
+are more careful than their drawing (a plane, a TV console's toe-kick, a stool read as a
+table). Every consumer that forgave a tucked pair asks it: Room check, Suggest, the tidy-up
+on open, the starter rooms, the fit check and where a dropped piece lands.
+
+What it changes, over every height each piece can be set to:
+
+| Seat | Under | Pushes in |
+|---|---|---|
+| Dining chair | desk, L-desk | always |
+| Dining chair | dining table | all but 3 of 1116 — the tallest chairs at the lowest table |
+| Office chair | desk, L-desk | from a 690 mm desk for the catalogue's chair (965 of 1581) |
+| Office chair | dining table | 765 of 1581 |
+| Ottoman | desk, L-desk, dining table | nearly always (778–800 of 806) |
+| Ottoman | coffee table | **never** — the shelf is in the way |
+| Stool | desk, L-desk, dining table | mostly (1018–1100 of 1271) |
+
+The ottoman at the coffee table is the one a person will notice. It is an ordinary pair now:
+Room check calls it a clash past half, Suggest pays for any overlap, the tidy-up pushes the
+two apart, and an ottoman dropped over the table stands on it the way a box would, instead of
+on the floor inside the drawing where every later drag was refused. The starter rooms hold
+only dining chairs at dining tables, and all of those fit, so no built-in room moves.
+
+The Will it fit panel's **Dining table** was drawn as a coffee table, shelf and all, and
+clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/fit-check.ts`).
+
+*What it does not do, each found in review and left as stated:*
+- **It does not know which way a seat faces.** The front 85% is the front because a tucked
+  seat faces its surface; a dining chair backed under a table reads as its seat height, not
+  its back. Nothing in the old rule looked at the turn either.
+- **A room already holding a coffee-table-shaped dining table now reports its chairs.** The
+  panel made those, and a scan whose detector names that shape still can. The drawing has a
+  shelf the chairs pass through, so the report is right; changing a saved piece's shape is the
+  user's call, so nothing migrates it.
+- **A dining table under 800 mm wide is outside the dining/desk table's range.** The panel
+  says so and **Put it there** widens it to 800. Whether a `table` category's range should
+  start lower is a separate decision.
+- **A scanned ottoman the tidy-up cannot push clear of a coffee table is lifted onto it.**
+  Measured: in a 1.3 × 1.0 m room the push has nowhere to go, the ottoman is left half over
+  the top, and `settleHeights` stands it there at 0.42 m, where no report sees it. On `main`
+  it stayed on the floor inside the table, which no report saw either. It belongs with the
+  other ottoman-on-a-top fix in `settleHeights`, not here.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
@@ -7170,7 +7245,7 @@ sofa, drag an armchair onto the spot it named, press Place, and the sofa is adde
 intersecting the armchair — which is item 1 of this list, reached by a different door.
 Pre-existing, not a regression, and **not fixed here** because it is item 1's decision.
 Latent beside it: `place()` writes no `wallMounted`, harmless only because all ten
-`FIT_KINDS` are floor-anchored — the first wall or ceiling row added to a "will it fit"
+`FIT_KINDS` (`lib/fit-check.ts`) are floor-anchored — the first wall or ceiling row added to a "will it fit"
 panel stores a flag that disagrees with `isWallMountedPart`, and nothing would fail.
 
 **What is pinned and what is not.** `tests/spawn-spread.test.ts`,

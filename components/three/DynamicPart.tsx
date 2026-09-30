@@ -1173,12 +1173,15 @@ function OttomanGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const fabric = body(part, locked);
   const dark = shade(fabric, -14);
   const leg = shade(fabric, -35);
+  // The welt's top is the piece's height. It stopped at 0.9 h, so a tray set on a
+  // 420 mm ottoman stood 42 mm above the cushion: everything else reads `dimMM[2]` as
+  // the top (`verticalExtent`), and only the drawing disagreed.
   return (
     <>
       {/* main upholstered body — raised on legs */}
-      <Box surface="fabric" size={[w, h * 0.78, d]} position={[0, h * 0.49, 0]} color={fabric} roughness={0.97} />
+      <Box surface="fabric" size={[w, h * 0.87, d]} position={[0, h * 0.545, 0]} color={fabric} roughness={0.97} />
       {/* piping welt around top edge */}
-      <Box surface="fabric" size={[w * 1.02, h * 0.04, d * 1.02]} position={[0, h * 0.88, 0]} color={dark} roughness={0.97} />
+      <Box surface="fabric" size={[w * 1.02, h * 0.04, d * 1.02]} position={[0, h * 0.98, 0]} color={dark} roughness={0.97} />
       {/* four short turned legs */}
       {[
         [-w / 2 + 0.06, -d / 2 + 0.06],
@@ -1186,7 +1189,7 @@ function OttomanGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
         [-w / 2 + 0.06, d / 2 - 0.06],
         [w / 2 - 0.06, d / 2 - 0.06],
       ].map(([x, z], i) => (
-        <Box surface="wood" key={i} size={[0.05, h * 0.14, 0.05]} position={[x, h * 0.07, z]} color={leg} roughness={0.7} />
+        <Box surface="wood" key={i} size={[0.05, h * 0.15, 0.05]} position={[x, h * 0.075, z]} color={leg} roughness={0.7} />
       ))}
     </>
   );

@@ -50,7 +50,7 @@ import { isCleanShuffle, newRoomFindings, applyPlacements, shuffleRoom } from '@
 import { lockedForSolve, movableFor, type SolveResult } from '@/lib/layout-solve';
 import { defaultScene, type ScenePart } from '@/lib/scene-spec';
 import { footprintForLayout } from '@/lib/footprint';
-import { sharesFloor, roleOf } from '@/lib/layout-rules';
+import { tucksUnder } from '@/lib/layout-rules';
 
 const CEILING = 2.4;
 const FOOTPRINT = footprintForLayout('rect', 6, 5);
@@ -119,8 +119,8 @@ function resultFor(from: ScenePart[], to: ScenePart[]): SolveResult {
 }
 
 describe('the two modules agree about a tucked pair, which is why the gate is quiet', () => {
-  it('a desk and a dining chair are a sharesFloor pair — the premise of everything below', () => {
-    expect(sharesFloor(roleOf(DESK), roleOf(CHAIR))).toBe(true);
+  it('a desk and a dining chair are a pair that tucks — the premise of everything below', () => {
+    expect(tucksUnder(DESK, CHAIR)).toBe(true);
   });
 
   it('reports a clash EXACTLY where the solver starts charging overlap', () => {

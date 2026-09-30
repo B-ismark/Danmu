@@ -3,7 +3,7 @@ import { defaultScene, PART_LIBRARY } from '../lib/scene-spec';
 import { footprintForLayout, offsetWall, pointInFootprint, type Footprint, type LayoutId } from '../lib/footprint';
 import { LAYOUT_IDS } from '../lib/storage';
 import { footFromPart, footInsidePoly, footIntersectionArea, footArea, distToBoundary, nearestEdge, obbGap } from '../lib/geometry';
-import { isObstacle, relationFor, roleOf, sharesFloor, WALK_MIN } from '../lib/layout-rules';
+import { isObstacle, relationFor, roleOf, sharesFloor, tucksUnder, WALK_MIN } from '../lib/layout-rules';
 import { analyzeRoom } from '../lib/clearance';
 import { anchorFor, ridesWall, verticalExtent } from '../lib/physics';
 import { solveLayout } from '../lib/layout-solve';
@@ -75,7 +75,7 @@ function clashes(parts: ReturnType<typeof defaultScene>): string[] {
     if (!isObstacle(parts[i])) continue;
     for (let j = i + 1; j < parts.length; j++) {
       if (!isObstacle(parts[j])) continue;
-      if (sharesFloor(roleOf(parts[i]), roleOf(parts[j]))) continue;
+      if (tucksUnder(parts[i], parts[j])) continue;
       const a = footFromPart(parts[i].pos, parts[i].rot, parts[i].dimMM, parts[i].circle);
       const b = footFromPart(parts[j].pos, parts[j].rot, parts[j].dimMM, parts[j].circle);
       if (footIntersectionArea(a, b) / Math.min(footArea(a), footArea(b)) > 0.02) {
@@ -444,6 +444,30 @@ describe('starter scene keeps the preset’s promise', () => {
     expect(parts.some((p) => p.category === 'bed')).toBe(true);
     expect(parts.filter((p) => p.category === 'nightstand')).toHaveLength(2);
     expect(parts.some((p) => p.category === 'wardrobe')).toBe(true);
+  });
+
+  it('seats only pieces that fit under what they are seated at', () => {
+    // `seats()` in `lib/scene-spec.ts` asks the fit test before it tucks a chair in,
+    // and today the question cannot come out "no": the seeder puts dining chairs at a
+    // dining table and nothing else under anything. That is what lets § H.6.4 claim no
+    // starter room moved. A seeder that one day pulls an ottoman up to its coffee
+    // table changes this list first, which is the moment that claim needs re-making.
+    const kinds = new Set<string>();
+    let pairs = 0;
+    for (const p of PRESETS) {
+      const parts = seed(p.id, p.w, p.d);
+      for (let i = 0; i < parts.length; i++) {
+        for (let j = i + 1; j < parts.length; j++) {
+          const [ra, rb] = [roleOf(parts[i]), roleOf(parts[j])];
+          if (!sharesFloor(ra, rb)) continue;
+          pairs++;
+          kinds.add([ra, rb].sort().join(' / '));
+          expect(tucksUnder(parts[i], parts[j]), `${p.id}: ${parts[i].name} × ${parts[j].name}`).toBe(true);
+        }
+      }
+    }
+    expect([...kinds]).toEqual(['dining-chair / dining-table']);
+    expect(pairs).toBe(8);
   });
 });
 

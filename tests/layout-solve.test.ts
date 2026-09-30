@@ -22,6 +22,7 @@ import {
   solveLayout,
 } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
+import { tucksUnder } from '@/lib/layout-rules';
 import { footFromPart, footInsidePoly } from '@/lib/geometry';
 import { footprintBounds, roomContainment } from '@/lib/footprint';
 import { footprintForLayout } from '@/lib/footprint';
@@ -51,7 +52,9 @@ function ctxOf(parts: ScenePart[], locked: boolean[] = []): LayoutContext {
 
 const sofa = () => part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [0, 0, 0] });
 const table = () => part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [0, 0, 0] });
-const diningTable = () => part({ category: 'table', shape: 'coffee-table', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
+// Drawn as a dining table. A coffee-table shape at 750 mm keeps its lower shelf, and no
+// chair goes under a shelf (§ H.6.4).
+const diningTable = () => part({ category: 'table', shape: 'desk-standard', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
 const wardrobe = () => part({ category: 'wardrobe', shape: 'wardrobe', dimMM: [2000, 600, 2100], pos: [0, 0, 0] });
 
 describe('scoreLayout', () => {
@@ -117,6 +120,7 @@ describe('scoreLayout', () => {
     // tell the two apart by height rather than treating every table alike.
     const t = diningTable();
     const chair = part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850], pos: [0, 0, 0] });
+    expect(tucksUnder(chair, t)).toBe(true);
     const ctx = ctxOf([t, chair]);
     const tucked = scoreLayout(ctx, [
       { x: 0, z: 0, yaw: 0 },
@@ -130,6 +134,21 @@ describe('scoreLayout', () => {
       { x: 0, z: 0.35, yaw: Math.PI },
     ]);
     expect(clash).toBeGreaterThan(tucked * 5);
+  });
+
+  it('fines a seat for standing in a surface it does not fit under', () => {
+    // The other half of the test above. Same overlap share, a pair whose roles tuck and
+    // whose heights do not: a 420 mm ottoman against a coffee table's shelf (§ H.6.4).
+    const t = part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [0, 0, 0] });
+    const o = part({ category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420], pos: [0, 0, 0] });
+    const chair = part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850], pos: [0, 0, 0] });
+    expect(tucksUnder(o, t)).toBe(false);
+    expect(tucksUnder(chair, diningTable())).toBe(true);
+    // 60% of each seat's depth under its partner: over `CLASH_SHARE`, under the tuck's.
+    const into = (m: ReturnType<typeof prepare>, z: number) =>
+      costBreakdown(m, [{ x: 0, z: 0, yaw: 0 }, { x: 0, z, yaw: 0 }]).overlap;
+    expect(into(prepare(ctxOf([diningTable(), chair])), 0.4 + 0.225 - 0.27)).toBe(0);
+    expect(into(prepare(ctxOf([t, o])), 0.3 + 0.2 - 0.24)).toBeGreaterThan(0);
   });
 
   it('costs a gap you cannot walk through, and neither a flush one nor a clear one', () => {

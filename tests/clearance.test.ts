@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { analyzeRoom, crowdingDetail, floorClearPct, freeFloorFraction } from '@/lib/clearance';
-import { CROWDED_COVER } from '@/lib/layout-rules';
+import { analyzeRoom, CLASH_SHARE, crowdingDetail, floorClearPct, freeFloorFraction } from '@/lib/clearance';
+import { CROWDED_COVER, TUCKED_CLASH_SHARE, tucksUnder } from '@/lib/layout-rules';
 import { pointInObb, pointInPoly, polygonArea, type OBB, type Poly } from '@/lib/geometry';
 import { SHAPES, type ScenePart } from '@/lib/scene-spec';
 import { dimRangeFor, ROOM_HEIGHT_M } from '@/lib/dimension-ranges';
@@ -115,19 +115,43 @@ describe('analyzeRoom', () => {
     // the chair back rises above the top so the vertical test cannot separate
     // them. Four chairs round a dining table is the most ordinary arrangement
     // there is — reporting four errors on it would make the panel cry wolf.
-    const table = part({ category: 'table', shape: 'coffee-table', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
-    const chairs = [0.5, -0.5].map((z) =>
+    //
+    // A table drawn as a dining table, not a coffee-table shape stretched to 750 mm:
+    // that one keeps its lower shelf, so no chair goes under it (§ H.6.4). And pushed in
+    // far enough that only the tuck keeps the report quiet — 300 of each chair's 500 mm
+    // under the top, past `CLASH_SHARE` and short of `TUCKED_CLASH_SHARE`. At ±0.5 the
+    // chairs were 30% in, which is quiet with no exemption at all.
+    const table = part({ category: 'table', shape: 'desk-standard', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
+    const chairs = [0.35, -0.35].map((z) =>
       part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, z] }),
     );
+    expect(chairs.every((c) => tucksUnder(c, table))).toBe(true);
+    const share = 0.3 / 0.5;
+    expect(share).toBeGreaterThan(CLASH_SHARE);
+    expect(share).toBeLessThan(TUCKED_CLASH_SHARE);
     const { issues } = analyzeRoom([table, ...chairs], ROOM);
     expect(issues.find((i) => i.id.startsWith('clash-'))).toBeUndefined();
   });
 
+  it('calls a seat pushed into a surface it does not fit under an ordinary clash', () => {
+    // An ottoman belongs under a coffee table by role, and this one is taller than the
+    // shelf it would have to clear (§ H.6.4). Pushed 60% into the table's side, which a
+    // pair that tucks is allowed and an ordinary pair is not.
+    const table = part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [0, 0, 0] });
+    const ottoman = part({ category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420], pos: [0, 0, 0.26] });
+    expect(tucksUnder(ottoman, table)).toBe(false);
+    const share = (0.3 - (0.26 - 0.2)) / 0.4;
+    expect(share).toBeGreaterThan(CLASH_SHARE);
+    expect(share).toBeLessThan(TUCKED_CLASH_SHARE);
+    expect(analyzeRoom([table, ottoman], ROOM).issues.find((i) => i.id.startsWith('clash-'))).toBeDefined();
+  });
+
   it('still flags a chair buried in a table', () => {
     // The exemption is for tucking in, not for a chair standing in the same
-    // place as the table.
-    const table = part({ category: 'table', shape: 'coffee-table', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
+    // place as the table. A pair that tucks, so what flags it is the bound on how far.
+    const table = part({ category: 'table', shape: 'desk-standard', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
     const chair = part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, 0] });
+    expect(tucksUnder(chair, table)).toBe(true);
     expect(analyzeRoom([table, chair], ROOM).issues.find((i) => i.id.startsWith('clash-'))).toBeDefined();
   });
 
@@ -169,8 +193,9 @@ describe('analyzeRoom', () => {
   // tests/scene-build.test.ts — and here, in what a round piece covers.
 
   it('still flags a chair standing in the middle of a round table', () => {
-    const table = part({ category: 'table', shape: 'coffee-table', dimMM: [1200, 1200, 750], pos: [0, 0, 0], circle: true });
+    const table = part({ category: 'table', shape: 'desk-standard', dimMM: [1200, 1200, 750], pos: [0, 0, 0], circle: true });
     const chair = part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850], pos: [0, 0, 0] });
+    expect(tucksUnder(chair, table)).toBe(true);
     expect(analyzeRoom([table, chair], ROOM).issues.find((i) => i.id.startsWith('clash-'))).toBeDefined();
   });
 

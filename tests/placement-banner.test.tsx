@@ -5,7 +5,7 @@
 //
 // The first attempt at this banner answered the question itself. It ran `collidesAt`
 // and `partInsideRoom` beside the room report, which asks the same two questions with
-// different bars — `collidesAt` deliberately has no `sharesFloor` exemption while the
+// different bars — `collidesAt` deliberately has no `tucksUnder` exemption while the
 // report's rule 2 charges a tucked pair against `TUCKED_CLASH_SHARE`, a divergence
 // `lib/clearance.ts` states in its own words with twenty seeded pairs behind it. So a
 // dining chair pushed under its table got a red *"Blocked"* while Room check said the
@@ -22,7 +22,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
 import { analyzeRoom, CLASH_SHARE } from '@/lib/clearance';
-import { sharesFloor, roleOf, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
+import { tucksUnder, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
 import { footFromPart, footArea, footIntersectionArea } from '@/lib/geometry';
 import { useScene } from '@/lib/scene-store';
 import { useStudio, useSettings } from '@/lib/store';
@@ -38,13 +38,14 @@ const part = (o: Partial<ScenePart> & Pick<ScenePart, 'id' | 'category' | 'shape
   ({ name: o.id, rot: 0, locked: false, ...o }) as ScenePart;
 
 /** A dining table with a chair pushed under it — the exact pair the report forgives
- *  and `collidesAt` refuses. `sharesFloor` is keyed on ROLE, and it is what makes this
- *  pair the interesting one rather than any two overlapping boxes. */
+ *  and `collidesAt` refuses. `tucksUnder` — the roles, and a seat low enough for the
+ *  room under the top — is what makes this pair the interesting one rather than any
+ *  two overlapping boxes. */
 const table = part({ id: 'table', category: 'desk', shape: 'desk-standard', dimMM: [1600, 900, 750], pos: [0, 0, 0] });
 const tuckedChair = part({
   id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850],
   // 0.40, and the two digits are the whole test. The chair must be tucked far enough
-  // that ONLY the `sharesFloor` exemption forgives it, and not so far that it trips
+  // that ONLY the `tucksUnder` exemption forgives it, and not so far that it trips
   // `TUCKED_CLASH_SHARE`:
   //
   //     share < CLASH_SHARE (0.50)          nothing is being forgiven — inert
@@ -100,7 +101,7 @@ describe('the banner agrees with Room check, because it reads Room check', () =>
       .filter((i) => i.partIds.includes('chair') && i.severity !== 'info');
     expect(issues.map((i) => i.rule), 'Room check must be happy with this pair').toEqual([]);
 
-    // …and it is happy BECAUSE of `sharesFloor`. The share has to sit above
+    // …and it is happy BECAUSE of `tucksUnder`. The share has to sit above
     // `CLASH_SHARE`, or nothing is being forgiven.
     const foot = (p: ScenePart) => footFromPart(p.pos, p.rot, p.dimMM, p.circle);
     const chairFoot = foot(tuckedChair);
@@ -109,7 +110,7 @@ describe('the banner agrees with Room check, because it reads Room check', () =>
       .toBeGreaterThan(CLASH_SHARE);
     expect(share, 'above TUCKED_CLASH_SHARE it is a clash by design, exemption or not')
       .toBeLessThan(TUCKED_CLASH_SHARE);
-    expect(sharesFloor(roleOf(tuckedChair), roleOf(table)), 'and the pair must be one that shares floor')
+    expect(tucksUnder(tuckedChair, table), 'and the pair must be one that tucks')
       .toBe(true);
   });
 

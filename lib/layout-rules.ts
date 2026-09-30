@@ -186,10 +186,11 @@ const ROLE_BY_CATEGORY: Partial<Record<Category, Role>> = {
   painting: 'wall-art',
 };
 
-/** Shapes that mean "a flat top on legs" and nothing more specific than that. The
- *  catalog uses `coffee-table` for a 1.8 m six-seater dining table and
- *  `desk-standard` for the entry literally labelled "Dining / desk table", so for
- *  these the shape is not the answer — the SIZE is. */
+/** Shapes that mean "a flat top on legs" and nothing more specific than that. A
+ *  `table` a scan names no more closely is built as a `desk-standard`, the catalogue's
+ *  "Dining / desk table" is one too, a `coffee-table` stretches to 600 mm, which is
+ *  sitting height, and a `box` is whatever a scan could not name at all — so for these
+ *  the shape is not the answer, the SIZE is. */
 const AMBIGUOUS_TABLE = new Set<Shape>(['coffee-table', 'desk-standard', 'box']);
 
 /** Above this a table is one you sit AT; below it, one you put a mug on. Dining
@@ -704,7 +705,10 @@ export function zoneExempt(owner: Role, guest: Role): boolean {
  *  Only seating pushed under a surface genuinely occupies the same square metre as
  *  something else, and that is what this is for.
  *
- *  Read symmetrically — the caller does not know which of the two is the surface. */
+ *  Read symmetrically — the caller does not know which of the two is the surface.
+ *
+ *  This is the ROLES half of the rule. Whether this seat goes under that surface is
+ *  `tucksUnder`, which adds the heights, and that is what every consumer asks. */
 const FLOOR_SHARERS: Array<[Role, Role[]]> = [
   ['dining-chair', ['dining-table', 'desk']],
   ['office-chair', ['dining-table', 'desk']],
@@ -726,13 +730,102 @@ export function hasFloorSharers(role: Role): boolean {
   return FLOOR_SHARERS.some(([seat, surfaces]) => seat === role || surfaces.includes(role));
 }
 
+/** What a piece brings to the question "does this seat go under that surface", in mm.
+ *
+ *  `sharesFloor` answers it for the ROLES — a dining chair belongs under a table — and
+ *  says nothing about this chair and this table, so an ottoman as tall as its coffee
+ *  table "tucked" into it and a 420 mm ottoman stood inside a 250 mm one (§ H.6.4).
+ *  The two numbers here are what the drawings leave room for:
+ *
+ *  - `tuckMM`, for a seat: the highest point of the front `TUCKED_CLASH_SHARE` of its
+ *    depth. That is the part a tuck at the bar puts under the surface; a dining chair's
+ *    back stays out, an office chair's armrests go in.
+ *  - `kneeMM`, for a surface: the lowest underside over its footprint, away from its
+ *    legs. A coffee table's lower shelf is that underside, so nothing goes under one.
+ *
+ *  Both are read off the renderers in `components/three/DynamicPart.tsx`, which is the
+ *  only statement of what a shape draws, so `tests/seat-fit.test.tsx` walks every
+ *  shape and category that can reach a seat or surface role and holds these to the
+ *  drawings. A shape not named below is taken as solid: a seat as tall as it is, a
+ *  surface with nothing under it. That is the direction that tucks nothing, and the
+ *  sweep fails on it the moment a drawing disagrees.
+ *
+ *  Both pieces are read as standing on the same floor, which is what `sharesFloor`
+ *  means; a seat raised on something is not measured against its lift.
+ *
+ *  A pair that shares the roles and not the room is an ordinary pair everywhere: the
+ *  report calls it a clash at `CLASH_SHARE`, the solver charges all of its overlap, the
+ *  settle pass pushes it apart, and gravity lands one on the other like any two pieces.
+ *  The catalogue's own ottoman and coffee table are such a pair. */
+export interface TuckProfile {
+  role: Role;
+  tuckMM: number;
+  kneeMM: number;
+}
+
+type RoleInput = Parameters<typeof roleOf>[0];
+
+export function tuckProfile(part: RoleInput): TuckProfile {
+  const role = roleOf(part);
+  const h = part.dimMM[2];
+  return { role, tuckMM: seatTuckMM(part.shape, h), kneeMM: surfaceKneeMM(part.shape, role, h) };
+}
+
+function seatTuckMM(shape: Shape, h: number): number {
+  switch (shape) {
+    // `DiningChairGeo` is authored 1090 tall with the seat's top at 490; the back
+    // slats, rail and rear legs are all behind the front 85%.
+    case 'chair-dining':
+      return (h * 490) / 1090;
+    // `OfficeChairGeo` is authored 1150 tall; the armrests' top is 640, and they
+    // reach well into the front 85% while the backrest stays behind it.
+    case 'chair-office':
+      return (h * 640) / 1150;
+    default:
+      return h;
+  }
+}
+
+function surfaceKneeMM(shape: Shape, role: Role, h: number): number {
+  switch (shape) {
+    // Drawn as a dining table when that is its role, and as a desk otherwise — the
+    // renderer asks `roleOf` the same question. The dining table's apron hangs 80 mm
+    // under a 35 mm top; the desk's cable rail hangs lowest, 75 mm under its top.
+    case 'desk-standard':
+      return role === 'dining-table' ? h - 115 : h - 75;
+    case 'desk-l':
+      return h - 75;
+    // The lower shelf's underside, at a quarter of the height.
+    case 'coffee-table':
+      return h * 0.25;
+    default:
+      return 0;
+  }
+}
+
+const isSeatRole = (role: Role): boolean => FLOOR_SHARERS.some(([seat]) => seat === role);
+
+/** Does one of these go under the other? `sharesFloor` for the roles, and the seat's
+ *  tuck clearing the surface's knee. Symmetric, like `sharesFloor`; seats and surfaces
+ *  are disjoint role sets, so which is which is never in doubt. Take the profiles when
+ *  asking pairwise in a loop — `tuckProfile` is `roleOf` plus arithmetic. */
+export function profilesTuck(a: TuckProfile, b: TuckProfile): boolean {
+  if (!sharesFloor(a.role, b.role)) return false;
+  const [seat, surface] = isSeatRole(a.role) ? [a, b] : [b, a];
+  return seat.tuckMM <= surface.kneeMM;
+}
+
+export function tucksUnder(a: RoleInput, b: RoleInput): boolean {
+  return profilesTuck(tuckProfile(a), tuckProfile(b));
+}
+
 /**
- * How far a `sharesFloor` pair may be inside one another before it stops being a
- * chair tucked under a table and becomes a chair standing where the table is.
+ * How far a pair that tucks (`tucksUnder`) may be inside one another before it stops
+ * being a chair tucked under a table and becomes a chair standing where the table is.
  *
  * **It lives here, with the predicate, because it is the second half of the same
  * rule and the report and the solver must not answer it separately.** They did.
- * (Some readers of `sharesFloor` deliberately do not consult this at all, among
+ * (Some readers of the fit test deliberately do not consult this at all, among
  * them `lib/layout-settle.ts` — see the note at the end — and the support probe,
  * below.) It was a `TUCKED_CLASH_SHARE` private to `lib/clearance.ts`, and
  * `lib/layout-score.ts`'s overlap term had no threshold at all — a blanket
@@ -762,13 +855,13 @@ export function hasFloorSharers(role: Role): boolean {
  * `lib/physics.ts` is how much of a piece another must cover to hold it up, so a chair
  * tucked between the two bars was a fine arrangement to both consumers of this one and
  * stood on the tabletop by the next drag. `findSupportDetailed` therefore reads
- * `sharesFloor` too: a seat never LANDS on the surface it tucks under (§ H.6.3). It
+ * the fit test too: a seat never LANDS on the surface it tucks under (§ H.6.3). It
  * reads the predicate and not this number — the rule there has no depth at all,
  * because a chair is never meant to stand on its table however far in it is.
  *
  * ── There is a THIRD consumer, and it deliberately does not read this ─────────
  *
- * `lib/layout-settle.ts` keeps its own blanket `sharesFloor` exemption, and that
+ * `lib/layout-settle.ts` keeps its own blanket exemption for a pair that tucks, and that
  * is a decision rather than the same bug left half-fixed. It is not a clash test:
  * its bar is `TOUCH_SHARE` (0.02), deliberately far stricter than the report,
  * because its job on every room open is the cheap guarantee that nothing is inside

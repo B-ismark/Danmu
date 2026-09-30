@@ -28,7 +28,7 @@ import { dimRangeFor } from './dimension-ranges';
 import { footprintBounds, type Footprint } from './footprint';
 import { footFromPart, footInsidePoly, footIntersectionArea, type Foot } from './geometry';
 import { baySides, roomBays } from './room-bays';
-import { isMountedObstruction, roleOf, sharesFloor } from './layout-rules';
+import { isMountedObstruction, profilesTuck, tuckProfile } from './layout-rules';
 import { verticalExtent } from './physics';
 import { solveLayout } from './layout-solve';
 import { settleParts } from './layout-settle';
@@ -38,6 +38,27 @@ import type { Category, ScenePart, Shape } from './scene-spec';
 /** The id the probe piece carries while it is being tried. Distinctive so a finding
  *  about it can be recognised, and so it can never collide with a real part. */
 export const PROBE_ID = '__fit-probe__';
+
+/** The kinds someone is most likely to be shopping for, and the shape each maps to —
+ *  the Fit panel's list. Deliberately short: this is a fit check, not the catalog, and
+ *  `lib/scene-spec.ts` is where the full list lives.
+ *
+ *  It lives here rather than in the panel so a test can hold each kind to the piece it
+ *  names. The dining table used to be a `coffee-table`, which is drawn with a shelf
+ *  under its top and whose range stops at 600 mm: a 750 mm table was checked as a piece
+ *  no chair fits under, and placing it clamped it to 600. */
+export const FIT_KINDS: ReadonlyArray<{ id: string; label: string; category: Category; shape: Shape }> = [
+  { id: 'sofa', label: 'Sofa', category: 'sofa', shape: 'sofa' },
+  { id: 'armchair', label: 'Armchair', category: 'chair', shape: 'chair-armchair' },
+  { id: 'bed', label: 'Bed', category: 'bed', shape: 'bed-double' },
+  { id: 'wardrobe', label: 'Wardrobe or dresser', category: 'wardrobe', shape: 'wardrobe' },
+  { id: 'shelf', label: 'Bookcase', category: 'shelf', shape: 'bookshelf' },
+  { id: 'desk', label: 'Desk', category: 'desk', shape: 'desk-standard' },
+  { id: 'dining', label: 'Dining table', category: 'table', shape: 'desk-standard' },
+  { id: 'coffee', label: 'Coffee table', category: 'table', shape: 'coffee-table' },
+  { id: 'chair', label: 'Dining chair', category: 'chair', shape: 'chair-dining' },
+  { id: 'fridge', label: 'Fridge', category: 'fridge', shape: 'fridge' },
+];
 
 export type FitCandidate = {
   category: Category;
@@ -208,7 +229,7 @@ export function checkFit(
       // collision — the right bar for a panel whose job is to avoid crying wolf. This
       // feature has the opposite error budget: a false alarm costs a shrug, a false
       // "yes, it fits" costs someone a sofa. So a piece that shares the floor with the
-      // candidate may not overlap it at all, and `sharesFloor` is the existing rule for
+      // candidate may not overlap it at all, and `tucksUnder` is the existing rule for
       // which pairs those are — the same one `layout-settle` separates by.
       if (overlapsSomething(foot, settledPart, parts)) continue;
 
@@ -233,7 +254,7 @@ export function checkFit(
 
   // Cost sorts the candidates; the ROOM REPORT decides between them. Those are not the
   // same ranking and cannot be swapped, which cost me a regression worth recording: for
-  // a pair `sharesFloor` exempts — a dining chair and its table — the solver's cheapest
+  // a pair `tucksUnder` exempts — a dining chair and its table — the solver's cheapest
   // answer is the chair at the table's dead centre, because the relation distance is
   // zero there and the overlap it exempts costs nothing. The report calls that same
   // placement a clash. Ranking on cost alone therefore answered "no room" for a chair
@@ -284,7 +305,7 @@ const TOUCH_AREA_M2 = 1e-4;
 
 /** Does the seated candidate share floor with, and overlap, anything already there? */
 function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): boolean {
-  const mine = roleOf(seated);
+  const mine = tuckProfile(seated);
   for (const other of parts) {
     // Mounted pieces are NOT skipped — `isMountedObstruction` is the same predicate the
     // room report's `clash-mounted` rule reads, and it has to be, because `explain`
@@ -303,12 +324,12 @@ function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): b
     const [myBottom, myTop] = verticalExtent(seated.category, seated.shape, seated.dimMM, seated.pos[1]);
     const [itsBottom, itsTop] = verticalExtent(other.category, other.shape, other.dimMM, other.pos[1]);
     if (myTop <= itsBottom + 0.005 || itsTop <= myBottom + 0.005) continue;
-    // Note the polarity: `sharesFloor` is TRUE for the pairs that legitimately occupy
-    // the same square metre — a dining chair under its table, an ottoman under a coffee
-    // table. Those are the ones to SKIP. Reading the name as "competes for the floor"
-    // and testing `!sharesFloor` inverts the rule exactly, and quietly: it exempts a
-    // sofa 31% inside a bed while flagging a correctly tucked chair.
-    if (sharesFloor(mine, roleOf(other))) continue;
+    // Note the polarity: `profilesTuck` is TRUE for the pairs that legitimately occupy
+    // the same square metre — a dining chair under its table, an ottoman low enough for
+    // the desk it is pushed under. Those are the ones to SKIP. Reading it as "competes for the
+    // floor" and testing `!profilesTuck` inverts the rule exactly, and quietly: it
+    // exempts a sofa 31% inside a bed while flagging a correctly tucked chair.
+    if (profilesTuck(mine, tuckProfile(other))) continue;
     const its = footFromPart(other.pos, other.rot, other.dimMM, other.circle, other.shape);
     if (footIntersectionArea(foot, its) > TOUCH_AREA_M2) return true;
   }

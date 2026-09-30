@@ -331,7 +331,7 @@ export function applyPlacements(parts: ScenePart[], result: SolveResult): SceneP
  * solver and a clash in the report.
  *
  * **That gap is closed, and this paragraph described it for longer than it existed.**
- * The report reads the same `TUCKED_CLASH_SHARE` for a `sharesFloor` pair now
+ * The report reads the same `TUCKED_CLASH_SHARE` for a pair that tucks now
  * (`clashShare` in `lib/clearance.ts`), so the solver and Room check agree about a
  * tucked chair at every depth. The disagreement that survived was one layer over —
  * between the tuck bar and the SUPPORT bar, `MIN_SUPPORT_SHARE` (0.5): a chair tucked

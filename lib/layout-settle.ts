@@ -61,7 +61,7 @@ import {
   type Foot,
   type Poly,
 } from './geometry';
-import { isObstacle, roleOf, sharesFloor, WALL_GAP } from './layout-rules';
+import { isObstacle, profilesTuck, tuckProfile, WALL_GAP, type TuckProfile } from './layout-rules';
 import { findSupportDetailed, isFloorStanding, isTabletopProne, MOUNT_PAD, ridesWall, verticalExtent } from './physics';
 import type { ScenePart, Shape } from './scene-spec';
 
@@ -76,7 +76,7 @@ import type { ScenePart, Shape } from './scene-spec';
  *  Deliberately NOT the bar the room report calls a collision at: that one is
  *  `CLASH_SHARE = 0.5` in `lib/clearance.ts` (and, where two pieces legitimately
  *  share floor, `TUCKED_CLASH_SHARE` — which lives in `lib/layout-rules.ts` beside
- *  `sharesFloor` itself, since the solver reads it too; this pass deliberately
+ *  the fit test (`profilesTuck`) itself, since the solver reads it too; this pass deliberately
  *  reads neither, and the constant's own doc says why). This is a settle pass, so it wants the tight epsilon — the same
  *  order as that file's `SWING_CLASH_SHARE`, which exists so a millimetre of
  *  floating-point contact is not a finding.
@@ -86,7 +86,7 @@ import type { ScenePart, Shape } from './scene-spec';
  *  report would call "meeting untidily" at 30% shared footprint gets moved here, so
  *  do not read this number as what the room report considers a clash. Named for what
  *  it is to keep the two from being confused again; pairs that share floor by design
- *  are exempted by `sharesFloor` before this is consulted, not by the threshold. */
+ *  are exempted by `profilesTuck` before this is consulted, not by the threshold. */
 const TOUCH_SHARE = 0.02;
 
 /** How far a piece may be pushed to get out of another's way. Beyond this the room
@@ -151,7 +151,7 @@ export function settleParts(parts: ScenePart[], footprint: Footprint, opts: Sett
   //
   // Everything each part is, computed once. `pushClear` tests up to 160 candidate
   // positions and each one has to be checked against every other part; rebuilding
-  // those parts' footprints, roles and areas per candidate made this pass measure
+  // those parts' footprints, tuck profiles and areas per candidate made this pass measure
   // 78 ms on twenty mutually clashing pieces — on a path that runs during the
   // store's synchronous initial state, so it was a visible stall on opening a room
   // the detector had found duplicates in. Only the mover moves, so only the mover's
@@ -159,7 +159,7 @@ export function settleParts(parts: ScenePart[], footprint: Footprint, opts: Sett
   const world: World = {
     parts: out,
     feet: out.map(footOf),
-    roles: out.map(roleOf),
+    tuck: out.map(tuckProfile),
     obstacle: out.map(isObstacle),
     areas: [],
   };
@@ -189,7 +189,7 @@ export function settleParts(parts: ScenePart[], footprint: Footprint, opts: Sett
         const mover = order[b];
         if (!movable[mover] || !world.obstacle[mover]) continue;
         if (stuck.has(mover)) continue;
-        if (sharesFloor(world.roles[anchor], world.roles[mover])) continue;
+        if (profilesTuck(world.tuck[anchor], world.tuck[mover])) continue;
         if (!clashes(world, anchor, mover)) continue;
         if (pushClear(world, mover, poly, inward)) touched = true;
         else stuck.add(mover);
@@ -206,7 +206,8 @@ export function settleParts(parts: ScenePart[], footprint: Footprint, opts: Sett
 type World = {
   parts: ScenePart[];
   feet: Foot[];
-  roles: ReturnType<typeof roleOf>[];
+  /** Only the mover moves and nothing is resized, so these hold for the whole pass. */
+  tuck: TuckProfile[];
   obstacle: boolean[];
   areas: number[];
 };
@@ -793,14 +794,14 @@ function pushClear(w: World, index: number, poly: Poly, centre: readonly [number
 }
 
 function clearOfAll(w: World, index: number, me: Foot): boolean {
-  const myRole = w.roles[index];
+  const myFit = w.tuck[index];
   // The mover's own area is its footprint's, wherever it stands — a translation does
   // not change it, so the cached value holds for every candidate position.
   const myArea = w.areas[index];
   for (let j = 0; j < w.parts.length; j++) {
     if (j === index) continue;
     if (!w.obstacle[j]) continue;
-    if (sharesFloor(myRole, w.roles[j])) continue;
+    if (profilesTuck(myFit, w.tuck[j])) continue;
     if (shares(me, w.feet[j], Math.min(myArea, w.areas[j]))) return false;
   }
   return true;
