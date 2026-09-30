@@ -579,7 +579,7 @@ backend, no account. The 3D studio *is* the product.
 5. **Local-first.** Rooms → IndexedDB (`lib/storage.ts`); settings + key →
    localStorage — and, between a reload and the room's next open, the one room change the
    reload cut off (`lib/leave-note.ts`: synchronous, so a leaving page can finish writing
-   it; replayed unless the room was saved since, and cleared by the room list otherwise). The only user-data egress is the optional direct Gemini
+   it; replayed part by part, each only if nothing has written that part since, and cleared by the room list once nothing in it is owed). The only user-data egress is the optional direct Gemini
    detection (BYO key). Don't add a backend or send data anywhere else. A room
    leaves as a **file the user saves and hands over themselves**
    (`lib/scene-file.ts`) — that is the sharing story, and it needs no server.

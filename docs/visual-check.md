@@ -1895,8 +1895,10 @@ the one transaction gets to commit before the browser is frozen or killed is exa
 not known. **Since 2026-09-29 that matters less for a typed room size:** the page also
 writes that save to localStorage the moment it is hidden, synchronously, and the next open
 finishes it (`lib/leave-note.ts`). So a width typed and the browser killed should come back
-even if the transaction never committed. A duplicated piece has no such note, because a save
-with no room edit in it commits at once. Also try **Safari: type a width and reload at
+even if the transaction never committed. A duplicated piece has no such note: a save with no
+room edit in it has no read to wait on and asks for its commit at once, which a desktop reload
+lets finish 5 of 5 — but asking is not finishing, so a duplicate missing here is the finding
+that would justify a note for it too (§ 47, "Still open"). Also try **Safari: type a width and reload at
 once**. Desktop Chromium keeps it 5 of 5 now, and WebKit is unmeasured.
 
 ---

@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { markRoughSize, roomStore, type PendingWrite, type RoomData, type Transforms } from '@/lib/storage';
+import { markRoughSize, roomStore, saveTime, type PendingWrite, type RoomData, type Transforms } from '@/lib/storage';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { livingParents } from '@/lib/rigid-parent';
@@ -15,7 +15,7 @@ import type { ScenePart } from '@/lib/scene-spec';
 import { normalizeStoredParts } from '@/lib/scene-spec';
 import { toast } from '@/components/ui/StorageToast';
 import { onPageLeave } from '@/lib/page-leave';
-import { clearLeaveNote, readLeaveNote, writeLeaveNote } from '@/lib/leave-note';
+import { clearLeaveNote, leaveNoteOf, pendingOf, readLeaveNote, writeLeaveNote } from '@/lib/leave-note';
 
 const DEBOUNCE_MS = 300;
 
@@ -181,11 +181,14 @@ export function RoomSync() {
     }
     if (!w.transforms && w.parts === undefined && !w.room) return;
     // The whole save, as data, so a reload that ends it before its read comes back can be
-    // finished by the next open. Cleared once it lands on a page still alive to see it.
-    const at = Date.now();
+    // finished by the next open. Cleared once it lands on a page still alive to see it. The
+    // save and its note share one time, which is what each part the save writes is stamped
+    // with, and what tells the next open whether it landed (`lib/leave-note.ts`).
+    const at = saveTime();
+    w.at = at;
     const noted =
       leaving && shell !== undefined &&
-      writeLeaveNote(roomId, { at, shell, pin: w.room?.pin, transforms: w.transforms, parts: w.parts });
+      writeLeaveNote(roomId, leaveNoteOf(at, shell, { transforms: w.transforms, parts: w.parts, pin: w.room?.pin }));
     roomStore.savePending(roomId, w).then(() => {
       if (noted) clearLeaveNote(roomId, at);
     }).catch((e) => {
@@ -209,22 +212,18 @@ export function RoomSync() {
     let live = true;
     (async () => {
       // The last change made before a reload, if the reload ended its save (`lib/leave-note.ts`):
-      // finished first, so the room read below is the room as it was left. Written only if
-      // nothing has saved the room since. If this fails the note stays for the next open, and
-      // the room opens as it was stored.
+      // finished first, so the room read below is the room as it was left. Each part is
+      // written only if nothing has written it since. One try: if it fails, the room opens as
+      // stored and the note goes, because a change seen missing here and worked past is not
+      // one to put back at some later open. `savePending` has said so if the storage is full.
       const note = readLeaveNote(roomId);
       if (note) {
         try {
-          await roomStore.savePending(roomId, {
-            transforms: note.transforms,
-            parts: note.parts,
-            room: { edit: (stored) => withShell(stored, note.shell as SceneRoom), pin: note.pin },
-            unlessSavedSince: note.at,
-          });
-          clearLeaveNote(roomId, note.at);
+          await roomStore.savePending(roomId, pendingOf(note, (stored, shell) => withShell(stored, shell as SceneRoom)));
         } catch (err) {
           console.error('[room] could not finish the last change before the reload', err);
         }
+        clearLeaveNote(roomId, note.at);
       }
       let loaded: [Awaited<ReturnType<typeof roomStore.loadRoom>>, ScenePart[] | undefined, Awaited<ReturnType<typeof roomStore.loadTransforms>>];
       try {

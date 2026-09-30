@@ -13,34 +13,48 @@
 // localStorage is the one storage a leaving page can finish writing, because it is
 // synchronous. So when the page goes with a room edit waiting, `RoomSync` also writes the
 // whole of that save here, as data, and the next open of the room replays it through the
-// same one-transaction save — unless the room has been saved since, which means either the
-// save landed after all or something newer did. The note never overwrites a newer save; the
-// worst it can do is write again what already landed, which changes nothing.
+// same one-transaction save — each of its parts only if nothing has written that part since.
+//
+// **"Since" is asked of each part, never of the room.** The save has three parts — the
+// shell, the positions, the scene — and `savePending` stamps each one it writes with the
+// moment its data was taken (`stillOwed`, below). The first version asked the room's
+// `touched` stamp instead, which every writer shares and which records when a write
+// COMMITTED rather than how new its data was. So renaming the room, adding a photo, or an
+// older debounced save that happened to commit after the leave each made an owed change
+// look landed, and it was thrown away with nothing said. A rename writes none of the three
+// parts, so it no longer counts; a re-scan writes the scene and the positions, so it still
+// does, for those two and not for the shell.
 //
 // It is transient: written only on the way out, cleared as soon as the save it stands in
-// for lands on a page that is still alive, and cleared by the replay. A CLOSED tab is the
-// one way out that clears neither — its save lands, but the page that would have cleared
-// the note is gone, and nothing reopens the room — so the room list also clears every note
-// whose room has been saved since, or no longer exists (`roomStore.settleLeaveNotes`),
-// rather than a copy of the room waiting indefinitely beside the room itself. It holds the
-// room's shape and furniture, never a photograph (`CLAUDE.md` rule 5).
+// for lands on a page that is still alive, and cleared by the replay, which is given one
+// try — a change the user has now seen missing, and gone on working past, is not one to
+// spring on them at a later open. A CLOSED tab is the one way out that clears neither — its
+// save lands, but the page that would have cleared the note is gone, and nothing reopens the
+// room — so the room list also clears every note that is no longer owed, or whose room no
+// longer exists (`roomStore.settleLeaveNotes`). It holds the room's shape and furniture,
+// never a photograph (`CLAUDE.md` rule 5).
 //
 // The storage is a parameter so the suite can hand it a plain object; the default reads
 // `localStorage` inside a try, because merely touching it throws where site data is blocked.
 
-import type { Transforms } from './storage';
+import type { PendingWrite, RoomData, Transforms } from './storage';
 
 /** Everything the room's one save still had waiting when the page went, as data: the
  *  shell to lay over the stored room rather than the function that lays it. */
-export type LeaveNote<Shell = unknown> = {
-  /** When the page went. A room last saved at or after it has already been saved. */
+export type LeaveNote = {
+  /** When the page went, and what the save it stands in for stamps each part it writes. */
   at: number;
-  shell: Shell;
+  /** The live room's shell. Its three sizes are checked on the way back in; the rest is the
+   *  app's own write, and `RoomSync` is the one reader that knows its type. */
+  shell: unknown;
   /** The part list to store as the scene if the edit reshaped a room the picker built. */
   pin?: unknown;
   transforms?: Transforms;
   parts?: unknown;
 };
+
+/** The three parts of a save that each carry a stamp of their own. */
+export type SavePart = 'room' | 'transforms' | 'scene';
 
 type NoteStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>;
 
@@ -55,12 +69,82 @@ function defaultStorage(): NoteStorage | undefined {
   }
 }
 
+/** The note for the save `RoomSync` is about to start, `at` being the time it stamps. The
+ *  pin is left out when a part list rides the same save, because `savePending` stores that
+ *  list over the pin, and a second copy of the furniture only brings the quota nearer. The
+ *  inverse is `pendingOf`; the two are here together so a field cannot be added to one. */
+export function leaveNoteOf(
+  at: number,
+  shell: unknown,
+  w: { transforms?: Transforms; parts?: unknown; pin?: unknown },
+): LeaveNote {
+  return { at, shell, transforms: w.transforms, parts: w.parts, pin: w.parts === undefined ? w.pin : undefined };
+}
+
+/** The save a note stands in for, to replay: stamped with the note's time, and written only
+ *  where nothing has written since. `edit` lays the note's shell over the stored room. */
+export function pendingOf(note: LeaveNote, edit: (stored: RoomData, shell: unknown) => RoomData): PendingWrite {
+  return {
+    at: note.at,
+    transforms: note.transforms,
+    parts: note.parts,
+    room: { edit: (stored) => edit(stored, note.shell), pin: note.pin },
+    unlessSavedSince: note.at,
+  };
+}
+
+/** Which parts of a save whose data was taken `at` are still owed, given when each part was
+ *  last written (`undefined` where it never has been). Written at or after `at` is written:
+ *  the save a note stands in for stamps exactly `at`, and `roomStore`'s save times never
+ *  repeat within a page, so equal is that save having landed.
+ *
+ *  The pin rides the room edit, and is a scene: owed only while both are. The replay and
+ *  the room list both ask this, so they cannot disagree about which notes are done. */
+export function stillOwed(
+  at: number,
+  has: { room: boolean; transforms: boolean; parts: boolean; pin: boolean },
+  written: Partial<Record<SavePart, unknown>>,
+) {
+  const since = (part: SavePart) => {
+    const t = written[part];
+    return typeof t === 'number' && t >= at;
+  };
+  const room = has.room && !since('room');
+  const scene = !since('scene');
+  return {
+    room,
+    transforms: has.transforms && !since('transforms'),
+    parts: has.parts && scene,
+    pin: has.pin && room && scene,
+  };
+}
+
+/** Whether any of a note's save is still owed. */
+export function noteOwed(note: LeaveNote, written: Partial<Record<SavePart, unknown>>): boolean {
+  const owed = stillOwed(
+    note.at,
+    { room: true, transforms: note.transforms !== undefined, parts: note.parts !== undefined, pin: note.pin !== undefined },
+    written,
+  );
+  return owed.room || owed.transforms || owed.parts;
+}
+
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isSize = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v > 0;
 
-/** A note this app wrote seconds ago, still read as bytes from outside the program: the
- *  three sizes it would lay over the room are checked, and anything malformed is refused
- *  whole rather than half-applied. */
+/** Every number in it is finite. JSON has no NaN, but `1e400` parses to Infinity. */
+function allFinite(v: unknown): boolean {
+  if (typeof v === 'number') return Number.isFinite(v);
+  if (Array.isArray(v)) return v.every(allFinite);
+  if (isRecord(v)) return Object.values(v).every(allFinite);
+  return true;
+}
+
+/** A note this app wrote seconds ago, still read as bytes from outside the program: its
+ *  shape is checked — a time, a shell with three sizes, transforms with positions, lists
+ *  where lists go — and every number in it must be finite, and anything malformed is
+ *  refused whole rather than half-applied. The values within that shape are the app's own
+ *  write, which `writeLeaveNote` refuses to make with a number JSON cannot carry. */
 function parse(raw: string): LeaveNote | null {
   let v: unknown;
   try {
@@ -68,7 +152,7 @@ function parse(raw: string): LeaveNote | null {
   } catch {
     return null;
   }
-  if (!isRecord(v) || typeof v.at !== 'number' || !Number.isFinite(v.at)) return null;
+  if (!isRecord(v) || typeof v.at !== 'number' || !allFinite(v)) return null;
   const shell = v.shell;
   if (!isRecord(shell) || !isSize(shell.width) || !isSize(shell.depth) || !isSize(shell.height)) return null;
   if (v.transforms !== undefined && !(isRecord(v.transforms) && isRecord(v.transforms.positions))) return null;
@@ -77,19 +161,20 @@ function parse(raw: string): LeaveNote | null {
   return v as LeaveNote;
 }
 
-/** Whether a room last saved at `touched` has been saved since a note written `at`. Later,
- *  not at: a save landing in the same millisecond as the leave is written again, which
- *  changes nothing, where treating it as newer could drop one that was lost. The replay and
- *  the room list ask the same question, so they cannot disagree about which notes are done. */
-export const savedSince = (touched: unknown, at: number) => typeof touched === 'number' && touched > at;
+/** JSON writes NaN and Infinity as `null`, which would reach the room as a vertex or a size
+ *  of nothing. Such a note is not written; the save goes on without it. */
+function finiteOnly(_key: string, value: unknown) {
+  if (typeof value === 'number' && !Number.isFinite(value)) throw new RangeError('not a finite number');
+  return value;
+}
 
 /** Write the note, synchronously. False when it could not be written — no storage, a full
- *  one, a value that will not serialise — in which case the save goes on without it, as
- *  it did before there was one. */
+ *  one, a value that will not serialise, or will not serialise as itself — in which case
+ *  the save goes on without it, as it did before there was one. */
 export function writeLeaveNote(roomId: string, note: LeaveNote, storage = defaultStorage()): boolean {
   if (!storage) return false;
   try {
-    storage.setItem(leaveNoteKey(roomId), JSON.stringify(note));
+    storage.setItem(leaveNoteKey(roomId), JSON.stringify(note, finiteOnly));
     return true;
   } catch {
     return false;
@@ -120,7 +205,7 @@ export function clearLeaveNote(roomId: string, at: number, storage = defaultStor
     const note = parse(raw);
     if (!note || note.at === at) storage.removeItem(leaveNoteKey(roomId));
   } catch {
-    // Nothing to do: the note stays, and the next open finds the room already saved.
+    // Nothing to do: the note stays, and the next open finds its parts already written.
   }
 }
 

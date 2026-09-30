@@ -3118,9 +3118,11 @@ the room in it, that put waits for a read, and a reload does not wait for that e
 a typed room size was lost on a reload, whole. When the page goes with a room edit waiting,
 `RoomSync` also writes that save to localStorage, which a leaving page can finish because it
 is synchronous (`lib/leave-note.ts`). The next open replays it through the same transaction,
-unless the room has been saved since, so the note never overwrites a newer save. It is
-cleared when its save lands, by the replay, and by the room list for a closed tab's
-(`roomStore.settleLeaveNotes`). A blind put of the room from memory would have been simpler,
+each part — shell, positions, scene — only if nothing has written that part since, so the note
+never overwrites a newer save and a rename or a photo in between does not cancel it. Every
+writer of those three parts stamps them with the time its data was taken
+(`room:{id}:wrote:{part}`). The replay gets one try. The note is cleared when its save lands,
+by the replay, and by the room list for a closed tab's (`roomStore.settleLeaveNotes`). A blind put of the room from memory would have been simpler,
 and would put back a rename made in another tab (`docs/what-is-still-open.md` § 47).
 
 ---
