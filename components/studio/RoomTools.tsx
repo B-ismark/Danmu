@@ -1074,7 +1074,7 @@ function FixButton({ issue, appPlaced }: { issue: ClearanceIssue; appPlaced: App
       className="ds-btn ds-btn--xs"
       title={
         scope
-          ? 'Move only the pieces named here'
+          ? 'Move only the pieces named here, with their groups and what stands on them'
           : 'Rearrange the unlocked furniture to open the floor up'
       }
       style={{ fontSize: 'var(--fs-micro)', padding: '0 10px', gap: 6, flexShrink: 0, alignSelf: 'flex-start' }}
