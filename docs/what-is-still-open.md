@@ -54,10 +54,13 @@ screen; and row 17 above.
 - **§ 40** — six more shapes declare a depth their renderer never reads. § 39 was one fan;
   it is a class of seven. Four are already pinned (and the pin is the TIGHT case, ±0.03
   against the band’s ±0.10); two pass by coincidence. `window` declares 60 mm and draws 120.
+  *Put to the user 2026-09-30: not sure, skip it for now. Nothing built.*
 - **§ 41** — the Inspector prints `part.category`, an internal key, as user-facing copy, so
   the Radiator reads **"Fridge · Radiator"**. 13 of 47 catalogue rows; six read "Fridge".
   A second site, `HoverCard.tsx:86`, shows the bare key. **Only looking found this** — it
   typechecks, lints and passes every test, and no assertion in the repo reads the string.
+  *ANSWERED 2026-09-30: the Library shelf name, "Appliances · Radiator", in both places.
+  Not built yet.*
 
 **Row 9 came off this list on 2026-09-05, and how it survived here is the lesson.** The
 header said the drill-in half was open; the table said it was untouched; § H.8, 1,500 lines
@@ -3877,7 +3880,9 @@ clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/
   two answers for one pair, deliberately (nobody put the scanned one anywhere), and the drag's
   is the one a person sees happen. Whether a DRAG should also keep a seat down — the ottoman
   staying on the floor, clashing, until it is dragged clear — changes § H.6.4, so it is not
-  decided here.
+  decided here. **Answered 2026-09-30: a drag stays as it is**, so the nudged ottoman goes
+  on top. The user added one thing: Ideas must never show a seat standing on a table or a
+  bed. Not built yet, and to be measured first.
 
 **§ H.6.5 · FIXED 2026-09-30: a merged set is one body to the solver.** The second half of
 the first observation above. Merging says *these belong together as they stand*: a click
@@ -3937,9 +3942,9 @@ measure in a frame.
   On `t` 6 × 4 with a table lamp on the merged table, **none in three presses** (was 2, 1, 1,
   every one broken): of 36 candidates, 23 fail on access and navigation together and 13 on
   navigation alone. The set is a 2.3 × 1.6 m block, and the T has few places to put it
-  and still leave a way through. That is the honest answer to a merge. *Open, the user's
-  call:* whether an empty Ideas panel in a room with a merged set should say that the set
-  moves as one.
+  and still leave a way through. That is the honest answer to a merge. *Answered, the
+  user's call 2026-09-30:* an empty Ideas panel in a room with a merged set says that the
+  set moves as one, and that ungrouping it gives more ideas. Not built yet.
 - **A merged member standing on a piece outside its set follows that piece**, and so leaves
   the set's shape (`carryRiders` runs after every pass). What stands on something goes
   where it goes.
@@ -3978,7 +3983,9 @@ cost an arrangement, or a squaring, and leave the set whole.
   grouped with a bed but standing on a nightstand that is not in the group: the rider pass
   (`carryRiders`) puts it on the nightstand wherever the nightstand went, so the set comes
   back bent by one member. A drag answers the other way and carries it with its group
-  (`lib/drag-convoy.ts`). Which should win is the user's call; either beats a lamp in the air.
+  (`lib/drag-convoy.ts`). **The user's call, 2026-09-30: what it stands on wins**, so
+  Suggest's answer stays. The user also reports a lamp left floating when the nightstand
+  under it is moved, which is a separate bug, not yet reproduced.
 - **A rug going home can take its set into a piece that moved.** A rug grouped with its
   coffee table and left through a wall sends the whole set back, and if another piece has
   moved into the table's old spot the answer now holds a clash. The impossibility veto
@@ -7224,7 +7231,10 @@ the rest-pose bounding box of three spokes — an instrument reading, corrected 
 `occupiedPts`. Do not re-file it.
 ---
 
-### § 40 — six more shapes declare a depth their renderer never reads — DECISION
+### § 40 — six more shapes declare a depth their renderer never reads — DECISION, skipped for now
+
+**Put to the user on 2026-09-30, who was not sure and chose to skip it for now.** Nothing is
+built; the item stands as written for when it comes back.
 
 **Found by asking what else has § 39’s shape, once § 39 was built.** § 39 was filed as one
 fan. It is a class of seven, and four of the other six are **already pinned**.
@@ -7299,7 +7309,11 @@ has been for as long as the pins have. Nothing here regressed; it was found by l
 
 ---
 
-### § 41 — the Inspector shows an internal grouping key as copy, and calls six things "Fridge" — DECISION
+### § 41 — the Inspector shows an internal grouping key as copy, and calls six things "Fridge" — ANSWERED 2026-09-30
+
+**The user's call, 2026-09-30: the first row of the table below.** The second line reads
+the piece's Library shelf, *Appliances · Radiator*, and the hover card uses the same name.
+Not built yet.
 
 **Found by looking, on 2026-09-06, which is the only way it could have been found** — it
 typechecks, lints and passes every test, and no assertion in the repo reads this string.
