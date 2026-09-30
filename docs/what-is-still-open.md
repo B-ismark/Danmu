@@ -3574,15 +3574,30 @@ amount, so nothing new has been let through. Three limits keep it that narrow.
   caps anything: beside the table, a shoe rack taller than the tabletop still holds a
   chair that is over it. Under two partners, the lower one is the cap, so a chair tucked
   under a 650 mm desk with its back under a dining table's edge does not stand on the tray
-  on the desk. The rule is symmetric, like `sharesFloor`: a table dropped over a chair
-  with a cushion on it does not land on the cushion.
+  on the desk. The rule is symmetric, like `sharesFloor`: a table dropped over a tucked
+  chair does not land on what stands on top of it. "Top" is the chair's bounding top, its
+  backrest, because nothing here knows a seat height. A cushion on the SEAT is below the
+  cap, and only support share keeps it from holding the table (a 450 mm cushion is 14% of
+  a 1600 × 900 top). *Corrected in review round 2: this said the cap covered a cushion on
+  the seat. Its test had put the cushion on the backrest, the one height the cap covers.*
 - *A floor deck and a tray were coffee tables.* `roleOf` reads a table-ish piece by its
-  size, and an `other/box` goes down to 50 mm. So a 40 mm floor deck read as a coffee
-  table, and an ottoman could not stand on it; it sank into the deck. A 750 × 450 tray
+  size, and an `other/box` goes down to 50 mm. So a 50 mm floor deck, the thinnest box
+  `clampDims` allows, read as a coffee table, and an ottoman could not stand on it; it sank into the deck. A 750 × 450 tray
   read as one too, and `settleHeights` dropped it through the ottoman under it. Anything
-  lower than the catalogue's lowest coffee table (250 mm, read from
-  `lib/dimension-ranges.ts`) is now `other`. This cannot reach a `table` or a `desk`,
-  because `clampDims` holds both above it.
+  lower than the catalogue's lowest table (250 mm, read from `lib/dimension-ranges.ts`)
+  is now `other`. *Corrected: the first version of this fix and its tests used a 40 mm
+  deck, a size the app cannot make.*
+- *…and so was a platform* (review round 2). A 3 m platform read as a coffee table at
+  300 mm and a dining table at 700, so an ottoman or a chair standing on it was refused
+  its footing, and `settleHeights` dropped the chair inside the box. A box bigger in plan
+  than the largest table the catalogue sizes (2600 × 1500, drawn either way round) is
+  `other` now too. It is the one floor obstacle left `other` on purpose: a coffee table's
+  clearance, and the sofa it belongs beside, describe nothing about a platform.
+  Both bounds are read off the ranges `clampDims` holds tables and desks to, so neither
+  can reach one; a test sweeps every one of those ranges at both ends. The height floor
+  and the 250 mm obstacle height (`isObstacle`, `floorBlockers`) are one boundary written
+  in two places, so a second test sweeps box heights: a box that blocks the floor always
+  has a role that makes room for it.
 
 Pieces with no floor sharers (a lamp, a plant, a monitor) skip all of this; the probe
 asks `hasFloorSharers` first.
@@ -3617,12 +3632,12 @@ asks `hasFloorSharers` first.
 - **Found while testing, not fixed: an ottoman climbs onto the tray standing on it.**
   `settleHeights` resolves lowest first and its probe has no below-test, so a
   tabletop-prone piece can take the piece resting on it as its support. A 750 × 450 tray
-  on a 550 × 400 ottoman: the ottoman goes to 0.48 m, then the tray to 0.90 m, both in the
+  on a 550 × 400 × 420 ottoman: the ottoman goes to 0.48 m, then the tray to 0.90 m, both in the
   air. Measured the same before this fix (for every tray size tried), after its first
   commit (for trays too small to read as a coffee table) and now. A large ottoman the tray
   covers less than half of is unaffected, which is what the tray test uses.
 
-Tests: `tests/seat-support.test.ts` (29) and `tests/seat-swap.test.tsx` (3). Every clause is
+Tests: `tests/seat-support.test.ts` (32) and `tests/seat-swap.test.tsx` (3). Every clause is
 a pair, with a table lamp at the same spot that must still land, because a probe that
 refused everything would pass every "stays on the floor" assertion. 8 of 8 sabotages
 caught: the seat rule deleted; the swap asking with the old kind; `restingOn` or
@@ -3639,7 +3654,26 @@ clauses are what they were written for. The bookcase-and-painting clause was che
 both ways: with riders let in, the bookcase goes 9 mm deeper into the painting and the
 drag is valid. A sixth survivor was a check that could change nothing (the lead asked
 for its overlaps only when it had members; without them its world holds none of the
-pieces it could name), and it is deleted rather than tested.
+pieces it could name), and it is deleted rather than tested. Review round 2 added 13
+on the two new bounds and the sweep, all caught: either plan bound removed, read along one
+axis, made inclusive, or read off the wrong end of the ranges; the height floor removed,
+raised, or read off the highest range; the obstacle height or `floorBlockers`' bar
+lowered; the tray cap removed. One was caught by the wrong test the first time: with the
+height floor removed, the deck clause still passed, because a 3 m deck was already `other`
+by the new plan bound. The deck is 2400 × 1500 now, inside a table's plan, so the height is
+what answers.
+
+**§ H.6.4 · OPEN: the seat rule has no fit test.** Found in § H.6.3's second review. A
+seat looks past its partner at any height, so an ottoman exactly as tall as its coffee
+table "tucks" into it (a 420 mm ottoman added over a 420 mm table lands at y = 0), and a
+420 mm ottoman over a 250 mm table ends up inside it, where every drag of it is refused as
+blocked. The rule was written about seats that go under a top, and nothing asks whether
+this one does. The pair `sharesFloor` names needs a height condition: the seat's top below
+the partner's underside, or, lacking an underside, below its top by some allowance. Neither
+number exists in the catalogue yet, and a wrong allowance would lift chairs back onto
+tables, which is the defect § H.6.3 fixed, so it needs measuring before it is written.
+`tests/seat-support.test.ts` uses a 350 mm nesting ottoman under its 420 mm table so that
+no fixture certifies the interpenetration, and asserts only the reading of the 250 mm one.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

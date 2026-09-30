@@ -155,7 +155,9 @@ const ROLE_BY_SHAPE: Partial<Record<Shape, Role>> = {
   // A pedestal fan is an obstacle standing in the room, so it gets a real role: 'other'
   // means no access zone and nothing it belongs beside, which for a floor-standing
   // piece is not a description, it is a gap. `tests/shape-contract.test.ts` refuses
-  // 'other' for anything `isObstacle` accepts.
+  // 'other' for any catalogue piece `isObstacle` accepts, at its default size; the
+  // boxes `roleOf` reads by size are swept for the same in `tests/seat-support.test.ts`,
+  // up to the plan of the largest table — past that, 'other' is the answer.
   //
   // `chest-freezer` and `tv-console` are deliberately absent: their categories
   // (`fridge`, `shelf`) already answer, and a row here that merely restates the
@@ -198,18 +200,37 @@ const SIT_AT_HEIGHT = 0.6;
 /** …and under this in both plan directions it is a side table whatever its height:
  *  nothing you can seat two people at is 700 mm square. */
 const SIDE_TABLE_SPAN = 0.7;
-/** …and below this it is not a table at all. The lowest coffee table the catalogue
- *  will size, read from `lib/dimension-ranges.ts` rather than restated, because the
- *  question is the same one: how low can a real one be.
+/** Every size the catalogue will give a table or a desk drawn in a table-ish shape —
+ *  the ranges `clampDims` holds those pieces to. The bounds below are read off these
+ *  rather than restated, which is what makes them unreachable for a `table` or a
+ *  `desk` by construction: each of those pieces was clamped into one of them. The
+ *  reason they exist is `other/box`, which `AMBIGUOUS_TABLE` admits and whose range
+ *  runs from 50 mm to 4 m on every axis. */
+const TABLE_RANGES = [...AMBIGUOUS_TABLE].flatMap((s) => (['table', 'desk'] as const).map((c) => dimRangeFor(c, s)));
+/** …and below this it is not a table at all: the lowest table the catalogue will
+ *  size. Without it a 50 mm floor deck and a 60 mm tray were both read as COFFEE
+ *  TABLES, and since § H.6.3 that is not just a label: an ottoman shares a coffee
+ *  table's floor, so the support probe would not let it stand on the deck — it sank
+ *  into it — and would not let the tray rest on an ottoman, so `settleHeights`
+ *  dropped the tray through the ottoman to the floor.
  *
- *  Unreachable for a `table` or a `desk` — `clampDims` holds both at or above it —
- *  and the reason it exists is `other/box`, which `AMBIGUOUS_TABLE` admits and whose
- *  range goes down to 50 mm. Without it a 40 mm floor deck and a 60 mm tray were both
- *  read as COFFEE TABLES, and since § H.6.3 that is not just a label: an ottoman
- *  shares a coffee table's floor, so the support probe would not let it stand on the
- *  deck — it sank 40 mm into it — and would not let the tray rest on an ottoman, so
- *  `settleHeights` dropped the tray through the ottoman to the floor. */
-const LOWEST_TABLE_M = dimRangeFor('table', 'coffee-table').min[2] / 1000;
+ *  It is the same number as `OBSTACLE_HEIGHT` and `floorBlockers`' 250 mm, and that
+ *  is pinned rather than trusted (`tests/seat-support.test.ts`): a box taller than
+ *  those and lower than this would stand in the room with no role to make room for
+ *  it. */
+const LOWEST_TABLE_M = Math.min(...TABLE_RANGES.map((r) => r.min[2])) / 1000;
+/** …and a box bigger in plan than any table the catalogue will size is not one
+ *  either — the other end of the same question. A 3 m platform was a COFFEE TABLE
+ *  at 300 mm and a DINING TABLE at 700, so an ottoman or a chair standing on it was
+ *  refused its footing by the seat rule and `settleHeights` dropped it inside the box.
+ *  Longer side against the longest, shorter against the widest, so the answer does not
+ *  depend on which way round the box was drawn.
+ *
+ *  This is the one obstacle left 'other' on purpose. A coffee table's clearance and
+ *  the sofa it belongs beside describe nothing about a platform, and no role here
+ *  does, which is what 'other' says. */
+const LONGEST_TABLE_M = Math.max(...TABLE_RANGES.map((r) => Math.max(r.max[0], r.max[1]))) / 1000;
+const WIDEST_TABLE_M = Math.max(...TABLE_RANGES.map((r) => Math.min(r.max[0], r.max[1]))) / 1000;
 
 /** What this piece is FOR.
  *
@@ -227,7 +248,7 @@ export function roleOf(part: { category: Category; shape: Shape; dimMM: [number,
     const d = part.dimMM[1] / 1000;
     const h = part.dimMM[2] / 1000;
     if (w < SIDE_TABLE_SPAN && d < SIDE_TABLE_SPAN) return 'side-table';
-    if (h < LOWEST_TABLE_M) return 'other';
+    if (h < LOWEST_TABLE_M || Math.max(w, d) > LONGEST_TABLE_M || Math.min(w, d) > WIDEST_TABLE_M) return 'other';
     if (h < SIT_AT_HEIGHT) return 'coffee-table';
     // Tall enough to sit at. Which of the two it is, is a question about the room
     // rather than the object, and `wallAffinity` already answers it by category:

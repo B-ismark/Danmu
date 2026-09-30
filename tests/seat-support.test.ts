@@ -6,7 +6,9 @@ import { settleHeights } from '@/lib/layout-settle';
 import { ridingParents } from '@/lib/rigid-parent';
 import { placeNewPart, selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import { footArea, footFromPart, footIntersectionArea, type Poly } from '@/lib/geometry';
-import { roleOf, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
+import { isObstacle, roleOf, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
+import { floorBlockers } from '@/lib/clearance';
+import { clampDims } from '@/lib/dimension-ranges';
 
 // § H.6.3 — a seat never stands on the surface it tucks under.
 //
@@ -37,8 +39,11 @@ const chair = (id: string, x: number, z: number, y = 0, rot = 0) =>
   part({ id, category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [x, y, z], rot });
 const lamp = (x: number, z: number, y = 0) =>
   part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [x, y, z] });
+/** A nesting ottoman: 350 mm, so it fits under `COFFEE`. The seat rule has no fit
+ *  test — it would "tuck" one as tall as the table into it just the same — so a fixture
+ *  that did not fit would certify an interpenetration (§ H.6.3, filed). */
 const ottoman = (x: number, z: number, y = 0) =>
-  part({ id: 'ottoman', category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420], pos: [x, y, z] });
+  part({ id: 'ottoman', category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 350], pos: [x, y, z] });
 
 /** Share of `p`'s footprint over `under`'s — the number both bars are written in. */
 function share(p: ScenePart, under: ScenePart): number {
@@ -147,25 +152,90 @@ describe('findSupportDetailed — where a piece would LAND', () => {
   it('looks PAST the partner to a surface genuinely under the piece', () => {
     // A low platform under the whole set. The table is not a support for the chair, so
     // the probe must find the platform rather than stopping at "nothing".
-    const deck = part({ id: 'deck', category: 'other', shape: 'box', dimMM: [3000, 3000, 40], pos: [0, 0, 0] });
-    const c = chair('c', 0, TUCKED_Z, 0.04);
-    expect(findSupportDetailed([TABLE, deck], c, 0, TUCKED_Z, c.dimMM)).toEqual({ id: 'deck', y: 0.04 });
+    const deck = part({ id: 'deck', category: 'other', shape: 'box', dimMM: [2400, 1500, 50], pos: [0, 0, 0] });
+    const c = chair('c', 0, TUCKED_Z, 0.05);
+    expect(findSupportDetailed([TABLE, deck], c, 0, TUCKED_Z, c.dimMM)).toEqual({ id: 'deck', y: 0.05 });
   });
 
   it('a floor deck is not a coffee table: an ottoman stands on it', () => {
     // `other/box` is one of the shapes `roleOf` reads by size, and its range goes down
-    // to 50 mm, so a 40 mm deck was a COFFEE TABLE — which an ottoman shares a floor
-    // with. The ottoman then sank through the deck to y = 0. The chair fixture above
-    // cannot see this: a chair pairs with dining tables and desks, not coffee tables.
-    const deck = part({ id: 'deck', category: 'other', shape: 'box', dimMM: [3000, 3000, 40], pos: [0, 0, 0] });
+    // to 50 mm, so a 50 mm deck — the thinnest box `clampDims` allows — was a COFFEE
+    // TABLE, which an ottoman shares a floor with. The ottoman then sank through the
+    // deck to y = 0. The chair fixture above cannot see this: a chair pairs with dining
+    // tables and desks, not coffee tables. Inside a table's plan on purpose, so it is
+    // the height that answers and not the platform bound below.
+    const deck = part({ id: 'deck', category: 'other', shape: 'box', dimMM: [2400, 1500, 50], pos: [0, 0, 0] });
+    expect(clampDims(deck.category, deck.shape, deck.dimMM)).toEqual(deck.dimMM);
     expect(roleOf(deck)).toBe('other');
-    const o = ottoman(0, 0, 0.04);
-    expect(findSupportDetailed([deck], o, 0, 0, o.dimMM)).toEqual({ id: 'deck', y: 0.04 });
-    // The pair: the lowest real coffee table the catalogue sizes (250 mm) still is one,
-    // and the ottoman still goes under it.
+    const o = ottoman(0, 0, 0.05);
+    expect(findSupportDetailed([deck], o, 0, 0, o.dimMM)).toEqual({ id: 'deck', y: 0.05 });
+    // The pair: the lowest real coffee table the catalogue sizes (250 mm) still is one.
+    // Only the reading is asserted. An ottoman "under" a 250 mm table is inside it, and
+    // the rule has no fit test to say so (§ H.6.3, filed), so asserting where it lands
+    // would certify that.
     const low = part({ id: 'low', category: 'other', shape: 'box', dimMM: [1100, 600, 250], pos: [0, 0, 0] });
     expect(roleOf(low)).toBe('coffee-table');
-    expect(findSupportDetailed([low], o, 0, 0, o.dimMM)).toBeNull();
+  });
+
+  it('a platform bigger than any table is not one: an ottoman and a chair stand on it', () => {
+    // The other end of the deck's question. A 3 m platform read as a COFFEE TABLE at
+    // 300 mm and a DINING TABLE at 700, so the seat rule would not let an ottoman or a
+    // chair stand on it and `settleHeights` dropped the chair inside the box.
+    const plat = part({ id: 'plat', category: 'other', shape: 'box', dimMM: [3000, 3000, 300], pos: [0, 0, 0] });
+    const stage = { ...plat, dimMM: [3000, 2000, 700] as [number, number, number] };
+    expect([roleOf(plat), roleOf(stage)]).toEqual(['other', 'other']);
+    const o = ottoman(0, 0, 0.3);
+    expect(findSupportDetailed([plat], o, 0, 0, o.dimMM)).toEqual({ id: 'plat', y: 0.3 });
+    const c = chair('c', 0, 0, 0.7);
+    expect(findSupportDetailed([stage], c, 0, 0, c.dimMM)).toEqual({ id: 'plat', y: 0.7 });
+    expect(settleHeights([stage, c], H)).toEqual([]);
+    // The pair: the largest table the catalogue sizes, 2600 × 1500, is still a table,
+    // drawn either way round, and 10 mm past it on either side is not.
+    const big = { ...plat, dimMM: [2600, 1500, 700] as [number, number, number] };
+    expect(roleOf(big)).toBe('dining-table');
+    expect(roleOf({ ...big, dimMM: [1500, 2600, 700] })).toBe('dining-table');
+    expect(roleOf({ ...big, dimMM: [2610, 1500, 700] })).toBe('other');
+    expect(roleOf({ ...big, dimMM: [2600, 1510, 700] })).toBe('other');
+    expect(roleOf({ ...big, dimMM: [1500, 2610, 700] })).toBe('other');
+    expect(roleOf({ ...big, dimMM: [1510, 2600, 700] })).toBe('other');
+  });
+
+  it('neither bound can make a table or a desk "other"', () => {
+    // Both are read off the ranges `clampDims` holds tables and desks to, so a real
+    // table at the edge of its own range must still be a table.
+    const edges: Array<[number, number, number]> = [
+      [9000, 9000, 9000],
+      [9000, 9000, 1],
+      [9000, 1, 1],
+      [1, 9000, 9000],
+    ];
+    const roles = new Set<string>();
+    for (const category of ['table', 'desk'] as const) {
+      for (const shape of ['coffee-table', 'desk-standard', 'box'] as const) {
+        for (const e of edges) {
+          const r = roleOf({ category, shape, dimMM: clampDims(category, shape, e) });
+          expect(r, `${category}/${shape} at ${clampDims(category, shape, e).join(' × ')}`).not.toBe('other');
+          roles.add(r);
+        }
+      }
+    }
+    expect([...roles].sort()).toEqual(['coffee-table', 'desk', 'dining-table']);
+  });
+
+  it('a size-read box that blocks the floor always has a role that makes room for it', () => {
+    // `roleOf`'s height floor comes from `lib/dimension-ranges.ts`; `isObstacle`'s and
+    // `floorBlockers`' 250 mm are literals. They describe one boundary: raise the first
+    // above the other two and a box between them stands in the room as 'other' — no
+    // access zone, nothing it belongs beside. Swept at every 10 mm and either side of it.
+    const heights = [...Array.from({ length: 56 }, (_, i) => 50 + i * 10), 249, 251];
+    let blocking = 0;
+    for (const h of heights) {
+      const box = part({ id: 'box', category: 'other', shape: 'box', dimMM: [1100, 600, h], pos: [0, 0, 0] });
+      if (!isObstacle(box) && floorBlockers([box]).length === 0) continue;
+      blocking++;
+      expect(roleOf(box), `${h} mm`).not.toBe('other');
+    }
+    expect(blocking).toBe(36);
   });
 
   it('reads the kind it is HANDED, not the kind stored under that id', () => {
@@ -370,16 +440,24 @@ describe('every caller that moves a piece to what it finds', () => {
     expect(findSupportDetailed([desk, dining, tray], lamp(0, 0.25), 0, 0.25, [250, 250, 500])).toEqual({ id: 'tray', y: 0.71 });
   });
 
-  it('drag: …and a table dropped over a tucked chair does not rest on the cushion on its seat', () => {
-    // Symmetric, like `sharesFloor`: nothing as high as the partner's own top.
+  it('drag: …and a table dropped over a tucked chair does not rest on what is on top of it', () => {
+    // Symmetric, like `sharesFloor`: nothing as high as the partner's own top — its
+    // BOUNDING top, which for a chair is the backrest, 850 mm up. The app has no seat
+    // height, so that is the only height the cap can speak for.
     const c = chair('c', 0, 0);
-    const cushion = part({ id: 'cushion', category: 'other', shape: 'box', dimMM: [1400, 800, 100], pos: [0, 0.85, 0] });
+    const board = part({ id: 'board', category: 'other', shape: 'box', dimMM: [1400, 800, 100], pos: [0, 0.85, 0] });
+    expect(findSupportDetailed([c, board], TABLE, 0, 0, TABLE.dimMM)).toBeNull();
+    // A cushion ON the seat is below the cap. What keeps it from holding the table is
+    // support share: 450 × 450 under a 1600 × 900 top is 14%. A board that wide on the
+    // seat would hold it — the cap does not reach down there.
+    const cushion = part({ id: 'cushion', category: 'other', shape: 'box', dimMM: [450, 450, 100], pos: [0, 0.45, 0] });
+    expect(share(TABLE, cushion)).toBeLessThan(MIN_SUPPORT_SHARE);
     expect(findSupportDetailed([c, cushion], TABLE, 0, 0, TABLE.dimMM)).toBeNull();
   });
 
   it('adding: an ottoman dropped over a coffee table goes on the floor; a lamp goes on the table', () => {
     const room = { width: 6, depth: 4, height: H, footprint: ROOM };
-    const o = placeNewPart('ottoman', 'ottoman', [550, 400, 420], room, [COFFEE], [0, 0]);
+    const o = placeNewPart('ottoman', 'ottoman', [550, 400, 350], room, [COFFEE], [0, 0]);
     expect(o.pos[1]).toBe(0);
     expect(o.supportId).toBeNull();
     const l = placeNewPart('lamp', 'lamp-table', [250, 250, 500], room, [COFFEE], [0, 0]);
@@ -401,7 +479,7 @@ describe('every caller that moves a piece to what it finds', () => {
     // the tray on the floor straight through the ottoman: `[{ id: 'tray', y: 0 }]` on
     // this PR's first commit, `[]` before it and after this one.
     //
-    // A LARGE ottoman on purpose. Under the default 550 × 400 one the tray covers the
+    // A LARGE ottoman on purpose. Under a 550 × 400 × 420 one the tray covers the
     // whole seat, and `settleHeights` lifts the ottoman onto the tray standing on it —
     // ottoman to 0.48, tray to 0.90 — for every tray role, before § H.6.3 as well as
     // after it. That is a separate defect, filed in `docs/what-is-still-open.md`

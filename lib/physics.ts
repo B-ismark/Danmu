@@ -649,8 +649,11 @@ export function findSupportDetailed(
   // the tray covered by half stood on the tray instead. "Tucked under" is the same
   // question `collidesAt` asks of the pair on the plan, footprint over footprint with
   // its flush-touch pad, so a chair merely standing beside its table is not capped.
-  // Symmetric, like `sharesFloor`: a table dropped over a tucked chair does not
-  // come to rest on the cushion on its seat.
+  // Symmetric, like `sharesFloor`: a table dropped over a tucked chair does not come
+  // to rest on what stands on top of the chair. "Top" is the partner's bounding top —
+  // a chair's backrest, since nothing here knows a seat height — so something on the
+  // SEAT is below the cap, and only support share keeps a cushion there from holding
+  // the table.
   const me = footFromPart([x, 0, z], selfRot, selfDim, selfCircle);
   const partners = new Set<string>();
   let under = Infinity;
@@ -666,7 +669,7 @@ export function findSupportDetailed(
     (o) =>
       o.id === self.id ||
       partners.has(o.id) ||
-      (under < Infinity && verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1] >= under),
+      verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1] >= under,
     x, z, selfDim, selfRot, selfCircle, Infinity,
   );
 }
