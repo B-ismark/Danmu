@@ -3317,16 +3317,23 @@ details are load-bearing, and each was mutated:
   more than unpriced — it is a support in its own right. What stands on it was priced, and
   carried, from where the stack below WOULD have put it: a desk → locked tray → lamp, with
   the desk moved, left the tray where it was and carried the lamp off it, over the desk's
-  new spot. Both readers now cascade a non-carried link's children from its real pose. The
+  new spot. Both readers now cascade a non-carried link's children from its real pose, whether
+  the user locked it or the search holds it (the second tested in round 2). The
   carry had that fault before this change as well — the parent tree floats the lamp on 6
   of 6 seeds — so it is fixed here rather than introduced here.
 `carryRiders` also puts a root the caller will not move back on its exact origin, so the
 cost `breakdownAfter` reports is priced from the pose that will be applied. That line is
 the one mutant no test kills: eighty instrumented solves found no such root off its
 origin by even 1e-12, so it is written as one line of agreement-by-construction and is
-labelled here as unkilled rather than tested by a fixture built to reach it. The same
-snap on a locked middle link (round 1) is unkilled for the same reason, and said so here
-rather than given a fixture built to reach it.
+labelled here as unkilled rather than tested by a fixture built to reach it. Since round
+1 the same snap runs on every link the carry does not move, and there the two kinds of
+link differ (*corrected in review round 2*, which said "the same reason" of both). On a
+LOCKED link it is an equivalent mutant, not an unreached one: the search never moves a
+locked piece, so `winner` differs from `origin` only by the yaw fold, and the snap writes
+the raw yaw back. On a CONTAINED link — a crate on a 40 mm platform, which the search does
+move — it would revert a sub-epsilon placement the search had priced, and that feeds
+`breakdownAfter`: the root's unreached case one link up, and unkilled for the root's
+reason.
 
 **The own spot is one turn wide, not one number** (round 1). Rotations in the store are
 unbounded — Spin adds quarter-turns to whatever `rot` was — while the solver hands back every
@@ -3349,9 +3356,11 @@ presses at each of four chair spots on four presets, **375 ideas → 413**, and 
 backrest row `rect` 15 → 32, `l` 27 → 32, `open` 10 → 24, `t` 2 → 12. The other rows moved
 by 0–3 either way, the search's own seed noise; no press refused on `outside`.
 
-`overlap`, `door`, `access` and `navigation` still do not see a rider, on purpose: a
-chair on a sofa does not block a door, and pricing it there would be a second body for
-one piece of floor.
+`overlap`, `door` and `navigation` still do not see a rider as an OBSTACLE, on purpose:
+a chair on a sofa does not block a door, and pricing it there would be a second body for
+one piece of floor. `access` is the exception, and the exception is a defect: it gates only
+the *blockers* on `obstacle[j]`, and prices every owner's zones — every piece but a
+wall-mounted one — at the owner's search placement. See *Filed from review* below.
 
 Tests: `tests/layout-riders.test.ts` "a rider is held inside the walls where the carry
 will put it" — the cost of 75 mm through the wall pinned as a literal (212.132), paid for
@@ -3385,7 +3394,18 @@ fold dropped — both whole-turn cases; the charge measured at the folded angle 
 corner; the locked tray priced through the cascade — the locked-chair, forgiven and
 locked-tray cases; the carry skipping a locked link — the locked-tray solve; the rider's
 own turn dropped from its heading — the turned chair; a link's home read from the root's —
-the tray allowance. The snap on a locked middle link survives, as above.
+the tray allowance. The snap on a middle link survives, as above.
+
+Review round 2 added one, for the half of "a link the carry does not move" that round 1
+left untested: a lamp on a crate on a 40 mm platform, the crate held by the search
+(`containedBySearch`) rather than locked. With the platform at home and the crate 50 mm
+through the wall, the lamp's share is the 141.421 of 25 mm through, read as the difference
+from the same placements with the lamp locked; and six shuffled seeds leave the lamp on the
+crate wherever the search put the crate, with a control that the search did part the crate
+from the platform. Mutated: the carry skipping a contained link, the pricing pass cascading
+it from the platform, and a non-carried link's home forced true — all three caught by it.
+Before it, the review measured all three surviving the rider, conformance, solve and
+bed-rung files.
 
 **Baselines it moved, on a room it was not aimed at.** The scrambled U 6 × 5 bedroom that
 `tests/layout-solve.test.ts` and `tests/bed-rung-safety.test.ts` both pin seeds two lamps on
@@ -3416,7 +3436,7 @@ the premise is wrong and should be restated as "no finding a fix can act on name
 rider", with a sweep over `RULE_HANDLING`'s movable rows behind it. Not widened into this
 change because it corrects a comment about the report, not the search.
 
-**Filed from review round 1 — decided, open, and declined, one each.**
+**Filed from review — one decided, two open, one declined.**
 
 · *Decided: a rider whose centre is off the plan is forgiven on its spot all the same.* A
   rug gets its overhang written down only while its centre is on the plan; a rider gets it
@@ -3426,16 +3446,34 @@ change because it corrects a comment about the report, not the search.
   home and every idea for the room carries that charge, and the impossibility veto refuses
   all of them for a fault no idea could clear. The search now simply never makes it worse;
   Room check still says it is there.
-· *Open: the soft terms still read a rider at the search's own guess for it.* The HARD terms
-  other than `outside` do not see a rider at all — `overlap`, `door`, `access` and
-  `navigation` each gate on `obstacle[i]`, and a piece on a surface is not an obstacle — but
-  the soft ones do: wall affinity reads every piece whose role wants a wall, and a
-  relation (a chair `faces` a table) reads both ends, at the placement the anneal proposed
+· *Open: the soft terms still read a rider at the search's own guess for it.* Three HARD
+  terms do not see a rider at all — `overlap`, `door` and `navigation` each gate on
+  `obstacle[i]`, and a piece on a surface is not an obstacle — but the soft ones do:
+  wall affinity reads every piece whose role wants a wall, and a relation (a chair
+  `faces` a table) reads both ends, at the placement the anneal proposed
   for the rider, which `carryRiders` then throws away. So a carried chair can be scored as
   facing the table from a spot it will never stand on. The general fix is to write the
   carried poses into `feet` before any term is scored, which retires this pass's special
   loop too — and moves every soft term for every rider in every room, so every seeded
   baseline in the suite. That is a different mechanism from this one and its own commit.
+· *Open, and measured in review round 2: `access` prices a rider's zones, and its own
+  support blocks them.* The first version of this section, and of the riders test file's
+  header, said `access` gated on `obstacle[i]` like the other three. It does not: the
+  owner loop prices `zoneGroups[i]` for every piece but a wall-mounted one, and only the
+  pieces standing IN a zone are gated. A microwave (`fridge` / `microwave`, role
+  `appliance`) owns a 500 mm `front` zone, *Can't reach the front of it*, on the floor with
+  `aboveY` 0 — and the desk it stands on is an obstacle, 750 mm tall, whose front edge is
+  160 mm into that zone. So 0.32 of it is taken wherever the pair goes, and at
+  `DEFAULT_WEIGHTS.access` 60 that is **19.2** on every candidate. Measured with
+  `randomizeStart` and 12 shuffle seeds in a 5 × 4 `rect`, bed + desk + microwave on the
+  desk: `breakdownAfter.access` 19.2 on all 12, `isCleanShuffle` **0 of 12**; take the
+  microwave off and it is 12 of 12. The same numbers on this PR's parent, so it is older
+  than this change and not made worse by it: Shuffle refuses every room with a
+  zone-owning appliance on a surface, and has since the zone term was written. The fix
+  is not only a pose (the search also prices those zones at its own guess for the rider,
+  which the carry discards): a zone's floor has to be read from where its owner stands,
+  and a rider's own support chain cannot block it. It moves `access` in every room that
+  has one, so it is its own commit, measured before it is built.
 · *Declined: short-circuiting a chain whose root is at home.* The review's reason was that
   such a chain can only cost zero, yet runs a polygon measure per rider per proposal. Since
   round 1 it does not: a link at its own spot returns `ownSpotCharge[i]`, a number read out
@@ -4540,8 +4578,9 @@ lamps on their own nightstands.
 `costBreakdown` accumulates inside `if (!obstacle[i]) continue`, and `isObstacle` requires
 `pos[1] < 0.05` — so a piece standing on furniture is invisible to `overlap`, `outside`,
 `door`, `access` and `navigation` alike. That is the whole of `HARD_TERMS`, which is the
-entire list `isCleanShuffle` reads, so the gate passed it. `lib/clearance.ts` is silent for
-the same reason. And from directly above, the 2D plan draws a lamp ON a nightstand and a
+entire list `isCleanShuffle` reads, so the gate passed it. (*Corrected later, § H.6.2:*
+not quite `access`, which gates only the pieces standing IN a zone and prices a rider's own
+zones, where its support blocks them.) `lib/clearance.ts` is silent for the same reason. And from directly above, the 2D plan draws a lamp ON a nightstand and a
 lamp INSIDE a bed as the same rectangle. Three independent checks, one blind spot, and it is
 the same one that made the § 17 browser probe report the wrong answer until it started
 reading `y`.

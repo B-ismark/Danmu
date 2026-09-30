@@ -857,18 +857,26 @@ without that, a rug laid wall to wall, or bigger than the room, turned every Ide
 into a refusal. Which rugs are forgiven is one predicate, `forgivesOverhang`, read by
 the report and the search alike. The set the search keeps inside the walls is `containedBySearch`
 (`lib/layout-rules.ts`) — every obstacle and a floor rug — and it is also the set whose
-containment finding gets **Try a fix**, so a finding is fixable exactly when the cost
-term can see the piece. It was `isObstacle` on both sides until then, which is why a rug
-off the plan was filed `outside-immovable` with no button, and why Ideas could leave one
-788 mm through a wall. A piece standing ON another — a chair on a sofa's backrest, a lamp
+containment finding gets **Try a fix**, so for a piece on the floor a finding is fixable
+exactly when the cost term can see it. The rule underneath is *fixable when rearranging
+can clear it*, and the two part company at a rider (below): the term sees it, and its
+finding is still `outside-immovable`, because it is forgiven on the spot it was left and
+nothing the search moves clears a fault that spot already had. It was `isObstacle` on
+both sides until then, which is why a rug off the plan was filed `outside-immovable` with
+no button, and why Ideas could leave one 788 mm through a wall. A piece standing ON another — a chair on a sofa's backrest, a lamp
 on a tray on a desk — is held too, and priced where the carry will put it rather than at
 its own placement: `LayoutModel.carry` is one plan, read by the containment pass and by
 `carryRiders`, walked from the bottom support of each stack. At the support's own spot
 a rider is priced at its own pose exactly, so a chair the user left over the skirting is
-forgiven there the way a rug is, and nowhere else. Before it, a sofa slid flush to a wall
-swung its backrest chair 65–90 mm through the plaster on every Fix all that moved it,
-and Room check could only report it afterwards, as *Sticks out of the room* with no
-**Try a fix** (§ H.6.2).
+forgiven there the way a rug is, and nowhere else. Before the plan, a sofa slid flush to
+a wall swung its backrest chair 65–90 mm through the plaster on every Fix all that moved
+it, and Room check could only report it afterwards, as *Sticks out of the room* with no
+**Try a fix** (§ H.6.2). A link the carry does not move — locked by the user, or held by
+the search itself — is a support in its own right: what stands on a locked tray stays on
+the tray when the desk under it goes, in the price and in the carry alike. Only `outside`
+prices a rider this way; `overlap`, `door` and `navigation` do not see it as an obstacle,
+and `access` prices a rider's own zones at the search's guess for it, blocked by its own
+support — a known leak, filed open in § H.6.2.
 
 One note for anyone extending it: the table is the *only* place a rule's cost term is
 named. An earlier draft let each fixture carry its own copy too, and pointing the door

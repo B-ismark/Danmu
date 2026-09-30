@@ -236,8 +236,9 @@ export const RULE_HANDLING: Record<
     why:
       'nothing the solver can search will move this piece off the wall it crosses. ' +
       'The containment pass accumulates inside `if (!m.contained[i]) continue`, so ' +
-      'for a wall rider or a piece under `OBSTACLE_HEIGHT` the term is identically ' +
-      'zero however far out it is. A piece standing on a surface is priced only ' +
+      'for a wall rider, or a floor piece under `OBSTACLE_HEIGHT` that is not a rug, ' +
+      'the term is identically zero however far out it is. A piece standing on a ' +
+      'surface is not identically zero — it is priced, but only ' +
       'where its support will carry it, and forgiven what it hangs past the walls ' +
       'on the spot the user left it on — the spot this finding describes — so it ' +
       'costs nothing where it stands and nothing once inside either. No gradient to ' +
@@ -384,7 +385,8 @@ export type LayoutModel = {
    *  containment pass charges exactly those links, from the same offsets through the
    *  same arithmetic. So the chair the search priced and the chair the user is shown
    *  cannot come apart. A link the carry does not move is a support in its own right:
-   *  what stands on a locked tray is priced from the tray, not from the desk under it.
+   *  what stands on a locked tray is priced from the tray, not from the desk under it,
+   *  and what stands on a crate the search holds (on a 40 mm platform) from the crate.
    *
    *  A rider is forgiven what it already hung past the walls where the user left it
    *  (`overhang`), on that spot and nowhere else, as a rug is — so a room that already
@@ -718,10 +720,13 @@ function outsidePast(m: LayoutModel, i: number, foot: Foot): number {
  *  that interval, so the fold forgives no float at all). Folded because the solver
  *  hands every answer's yaws back folded (`normaliseYaw`) while a piece's own `rot` is
  *  whatever the user turned it to: a sofa at 2π stands where one at 0 does, and
- *  compared raw it was off its own spot without having moved. Not reached end to end
- *  today — homing and `carryRiders` put an unmoved rug or root back at its raw
- *  `origin` before the answer is priced — but that is two callers' habits holding up
- *  one predicate, and the predicate is where the rule is. */
+ *  compared raw it was off its own spot without having moved. Reached end to end:
+ *  homing (`overhangsOffItsSpot`, through `outsidePast`) asks it of the folded
+ *  answer, and so does every pass priced after the fold. Before it folded, homing
+ *  sent a rug stored at 2π back to its raw `origin` as "moved", which happened to
+ *  price correctly — a missing fold papered over by a caller's reset. That is why its
+ *  tests ask this predicate and `costBreakdown` directly rather than a whole solve,
+ *  which cannot tell the two apart. */
 function atOwnSpot(p: ScenePart, x: number, z: number, yaw: number): boolean {
   return x === p.pos[0] && z === p.pos[2] && angleDelta(yaw, 0) === angleDelta(p.rot, 0);
 }

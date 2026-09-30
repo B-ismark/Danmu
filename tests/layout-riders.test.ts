@@ -13,13 +13,15 @@ import { costBreakdown, DEFAULT_WEIGHTS, NAV_CELL, prepare, type LayoutContext, 
 //
 // ── What this file is guarding, and why nothing else could ──────────────────
 //
-// Every hard term in `costBreakdown` accumulates inside `if (!obstacle[i]) continue`
+// `overlap`, `door` and `navigation` accumulate inside `if (!obstacle[i]) continue`,
 // and `isObstacle` requires `pos[1] < 0.05`, so a piece resting on furniture is
-// invisible to `overlap`, `door`, `access` and `navigation` — four of the five
-// `HARD_TERMS` `isCleanShuffle` reads. The fifth, `outside`, sees a rider only at the
-// pose the carry will give it (`LayoutModel.carry`, the last describe below), and
-// only since a chair on a sofa's backrest was carried through the plaster on every
-// seed that moved the sofa. `lib/clearance.ts` is silent about a lamp inside a bed
+// invisible to three of the five `HARD_TERMS` `isCleanShuffle` reads. `access` gates
+// only the pieces standing IN a zone that way, and prices a rider's own zones at the
+// search's guess for it — where its own support stands in them, a leak filed open in
+// `docs/what-is-still-open.md` § H.6.2 and not guarded here. `outside` sees a rider
+// only at the pose the carry will give it (`LayoutModel.carry`, the last describe
+// below), and only since a chair on a sofa's backrest was carried through the plaster
+// on every seed that moved the sofa. `lib/clearance.ts` is silent about a lamp inside a bed
 // for the same reason (a rider through a WALL it does report, but only once the
 // solve has handed the room over). And the 2D plan draws a lamp ON a nightstand and
 // a lamp INSIDE a bed as the same rectangle, because it is looking down.
@@ -813,6 +815,57 @@ describe('a rider is held inside the walls where the carry will put it', () => {
     const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
     expect(costBreakdown(model, [{ x: 0, z: 0, yaw: 0 }, origin[1], origin[2]], DEFAULT_WEIGHTS, NAV_CELL).outside).toBe(0);
   });
+
+  // The same rule for a link the SEARCH holds rather than the user. A crate standing on
+  // a 40 mm platform is in the band where `ridingParents` and `isObstacle` overlap, so
+  // the search prices it where it put it and the carry leaves it there — and what stands
+  // on it goes from THERE, in both readers. Rare by construction: a contained middle
+  // link needs a support that is not a rug and is under 50 mm tall, and a rug is never
+  // handed out as a support, so this fixture is the only way either branch is reached.
+  it('prices and carries a lamp on a crate the search is holding, from the crate', () => {
+    const mat = part({ id: 'mat', name: 'Platform', category: 'other', shape: 'box', dimMM: [1000, 1000, 40] });
+    const crate = part({
+      id: 'crate', name: 'Crate', category: 'other', shape: 'box', dimMM: [500, 500, 400], pos: [0, 0.04, 0],
+    });
+    const lamp = part({
+      id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.44, -0.1],
+    });
+    const parts = [mat, crate, lamp];
+    expect(ridingParents(parts), 'the fixture must BE a chain').toEqual({ crate: 'mat', lamp: 'crate' });
+    expect(containedBySearch(crate), 'with its middle link held by the search').toBe(true);
+    const locked = lockedForSolve(parts, {}, null);
+    const movable = movableFor(parts, locked);
+    const model = prepare({ parts, movable, footprint: room } as LayoutContext);
+    expect(model.carry.map((c) => c.links.map((l) => [l.i, l.on, l.carried]))).toEqual([[[1, -1, false], [2, 0, true]]]);
+
+    // The platform at home and the crate 50 mm through the north wall, so the lamp on
+    // it is 25 mm through — the desk's lamp's 141.421 above. The control is the same
+    // placements with the lamp locked, which the carry does not price at all, so the
+    // difference is the lamp's own share. Priced from the platform instead of the
+    // crate, the lamp is at home and that share is zero.
+    const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    const at: Placement[] = [origin[0], { x: 0, z: -1.8, yaw: 0 }, origin[2]];
+    const lampLocked = prepare({
+      parts, movable: movableFor(parts, lockedForSolve(parts, { lamp: true }, null)), footprint: room,
+    } as LayoutContext);
+    const share =
+      costBreakdown(model, at, DEFAULT_WEIGHTS, NAV_CELL).outside -
+      costBreakdown(lampLocked, at, DEFAULT_WEIGHTS, NAV_CELL).outside;
+    expect(share).toBeCloseTo(141.421356237, 6);
+
+    // …and the carry agrees: wherever the search leaves the crate, the lamp is on it.
+    let apart = 0;
+    for (let seed = 0; seed < 6; seed++) {
+      const start = randomizeStart(parts, room, movable, makeRng(seed));
+      const r = solveLayout(parts, room, locked, { seed, mode: 'shuffle', start });
+      const [m, c, l] = applyPlacements(parts, r);
+      // THE CONTROL: a crate still at the platform's centre is where the platform's
+      // own cascade would have put it, and passes the assertion below for free.
+      if (Math.hypot(c.pos[0] - m.pos[0], c.pos[2] - m.pos[2]) > 0.05) apart++;
+      expect(restsOn(l, c), `seed ${seed}: the lamp stands on the crate`).toBe(true);
+    }
+    expect(apart, 'the search must actually part the crate from the platform').toBeGreaterThan(1);
+  }, 60000);
 
   // A rider turned on its support is carried turned: its angle is the support's plus
   // its own `relRot`, and so is the footprint priced. Every other fixture in this

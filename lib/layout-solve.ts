@@ -675,9 +675,11 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
  *  a rug and nothing off the floor), and both require `pos[1] < 0.05`, so a
  *  piece standing on furniture is invisible to `overlap`, `outside`, `door`,
  *  `access` and `navigation` alike — which is the whole of `HARD_TERMS`, the entire
- *  list `isCleanShuffle` reads. `lib/clearance.ts` is silent for the same reason,
- *  and from directly above the plan draws a lamp ON a nightstand and a lamp INSIDE
- *  a bed as the same rectangle. Measured on the `u` preset over eight shuffles: a
+ *  list `isCleanShuffle` reads. (Not quite `access`: it gates only the pieces standing
+ *  IN a zone, and prices a rider's own zones where its support blocks them — filed
+ *  open in `docs/what-is-still-open.md` § H.6.2.) `lib/clearance.ts` is silent for
+ *  the same reason, and from directly above the plan draws a lamp ON a nightstand
+ *  and a lamp INSIDE a bed as the same rectangle. Measured on the `u` preset over eight shuffles: a
  *  lamp ended inside the bed twice and inside the wardrobe once, and on the other
  *  five it was merely somewhere else in the room, still in mid-air.
  *
@@ -707,8 +709,8 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
  *  As a finish pass the whole cost is one number: the `u` worst-total baseline moves
  *  0.18, because the lamp is now scored where it will actually be.
  *
- *  **A carried rider is priced by exactly one hard term, `outside`, and the carry
- *  is the reason it can be.** Until it was, a rider was invisible to all five, so
+ *  **A carried rider is held inside the walls by `outside`, and the carry is the
+ *  reason it can be.** Until it was, the containment term could not see a rider, so
  *  the search could slide a sofa flush to the wall with a chair standing on its
  *  backrest and this pass would then swing the chair 65–90 mm through the plaster —
  *  on every seed that moved the sofa, in `rect`, `open` and `t` alike. Room check
@@ -716,9 +718,13 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
  *  the solve had already handed over. The search now prices
  *  each carried rider where THIS pass will put it (`LayoutModel.carry`, one plan
  *  read by both), so it sees the chair go through and stops the sofa short.
- *  `overlap`, `door`, `access` and `navigation` still do not see a rider: a chair on
- *  a sofa does not block a door, and pricing it there would be a second body for
- *  one piece of floor.
+ *  `overlap`, `door` and `navigation` still do not see a rider: a chair on a sofa
+ *  does not block a door, and pricing it there would be a second body for one piece
+ *  of floor. `access` does see one, and wrongly: it prices a rider's OWN zones, at
+ *  the search's guess for it, and the support it stands on is an obstacle standing
+ *  in them — a microwave on a desk costs `access` 19.2 wherever the pair goes, so
+ *  Shuffle refuses every such room (older than this pass; filed in
+ *  `docs/what-is-still-open.md` § H.6.2).
  *
  *  The other half of that sentence was true BY CONSTRUCTION rather than by
  *  coincidence only after a second fix. `ridingParents`' bar is `pos[1] > 0` and
@@ -832,8 +838,10 @@ function carryRiders(model: LayoutModel, origin: Placement[], winner: Placement[
       // …and a rider the search was holding inside the walls stays where the search
       // left it. See the docblock: the two bars overlap on (0, 0.05), and moving a
       // piece the containment term priced, after the last repair pass, is how a chair
-      // ends up through a wall — or a rug, which that term scores and `isObstacle`
-      // does not. Either way, what stands on it goes from where it is.
+      // ends up through a wall — or a rug on a platform, which that term scores and
+      // `isObstacle` does not. And what stands on such a link goes from where it is:
+      // a lamp on a crate on a 40 mm platform (a rug is never handed out as a support,
+      // so it cannot be a middle link).
       if (!link.carried) {
         cascadeFrom(link.i);
         continue;
