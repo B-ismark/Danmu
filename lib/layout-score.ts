@@ -224,19 +224,24 @@ export const RULE_HANDLING: Record<
   // third exclusion until the term learned to see one (`containedBySearch`).
   // Containment. The two rows are the same fault seen from opposite sides of one
   // question — can the solver do anything — and `clearance.ts` decides which by
-  // asking `containedBySearch`, the SAME predicate the `outside` term below gates on.
-  // That identity is what makes both rows true rather than plausible, and
-  // `tests/layout-conformance.test.ts` pins it with a sofa and a rug.
+  // asking `containedBySearch`, the SAME predicate the `outside` term's containment
+  // pass gates on. That identity is what makes both rows true rather than plausible,
+  // and `tests/layout-conformance.test.ts` pins it with a sofa and a rug. (The term
+  // also prices a carried rider, on a pass of its own — and that pass is why a
+  // rider's finding is still the second row: see its reason.)
   outside: { costTerm: 'outside', movable: true },
   'outside-immovable': {
     costTerm: null,
     movable: false,
     why:
       'nothing the solver can search will move this piece off the wall it crosses. ' +
-      '`c.outside` accumulates inside `if (!m.contained[i]) continue`, so for a wall ' +
-      'rider, a piece under `OBSTACLE_HEIGHT` or anything standing on a ' +
-      'surface the term is identically zero however far out it is — there is no ' +
-      'gradient to descend, and a button here would spin and report nothing. ' +
+      'The containment pass accumulates inside `if (!m.contained[i]) continue`, so ' +
+      'for a wall rider or a piece under `OBSTACLE_HEIGHT` the term is identically ' +
+      'zero however far out it is. A piece standing on a surface is priced only ' +
+      'where its support will carry it, and forgiven what it hangs past the walls ' +
+      'on the spot the user left it on — the spot this finding describes — so it ' +
+      'costs nothing where it stands and nothing once inside either. No gradient to ' +
+      'descend, and a button here would spin and report nothing. ' +
       'Turning it, sliding it along its wall or giving it a wall it fits on is the ' +
       'user’s move, not the annealer’s.',
   },
@@ -317,8 +322,10 @@ type CarryLink = {
    *  locked) and not `contained` — a piece the search already holds inside the walls
    *  is left where the search put it, and priced there. */
   carried: boolean;
-  /** Scratch: its footprint for the placements being scored. */
+  /** Scratch: its footprint for the placements being scored… */
   foot: Foot;
+  /** …and whether that is exactly the spot it stands on in `ctx.parts`. */
+  home: boolean;
 };
 export type CarryChain = {
   /** The support at the bottom of the stack. */
@@ -354,6 +361,12 @@ export type LayoutModel = {
    *  solve carries (`carry`), the overhang it has where it stands. Forgiven THERE
    *  and nowhere else (`outsidePast`); see the containment pass. */
   overhang: number[];
+  /** What each piece pays standing exactly on that spot: its measure there less
+   *  `overhang` — so nothing for a forgiven rug or a carried rider, and the whole
+   *  measure for anything else. Measured once, from the pose in `ctx.parts`, so a
+   *  piece the solver hands back at a folded turn (2π as 0) is priced as it stands
+   *  rather than off a sine a hair from zero. */
+  ownSpotCharge: number[];
   /** The pieces standing on other pieces, grouped under the support at the bottom
    *  of each stack, and where each one goes when that support moves.
    *
@@ -361,17 +374,25 @@ export type LayoutModel = {
    *  where the search put it is not where it ends up — and, standing off the floor,
    *  it was never `contained`, so nothing priced where it did end up. The search
    *  pushed a sofa back to the wall with a dining chair left on its backrest, and
-   *  the carry took the chair 80–90 mm through the plaster on every seed that moved
-   *  the sofa — and Room check cannot say so, because it skips anything above the
-   *  floor. Priced where the carry will put it, the chair is what stops the sofa.
+   *  the carry took the chair 65–90 mm through the plaster on every Fix all that
+   *  moved the sofa. Room check did say so — *Sticks out of the room*, with no
+   *  **Try a fix** — but only about a room the solve had already handed over. Priced
+   *  where the carry will put it, the chair is what stops the sofa.
    *
    *  One plan for both readers: `carryRiders` replays `snapshot` through
    *  `cascadeTransform` and writes only the links marked `carried`, and the
    *  containment pass charges exactly those links, from the same offsets through the
    *  same arithmetic. So the chair the search priced and the chair the user is shown
-   *  cannot come apart. A rider is forgiven what it already hung past the walls where
-   *  the user left it (`overhang`), exactly as a rug is, so a room that already had
-   *  one is not a room every idea is refused for. */
+   *  cannot come apart. A link the carry does not move is a support in its own right:
+   *  what stands on a locked tray is priced from the tray, not from the desk under it.
+   *
+   *  A rider is forgiven what it already hung past the walls where the user left it
+   *  (`overhang`), on that spot and nowhere else, as a rug is — so a room that already
+   *  had one is not a room every idea is refused for. With one difference: a rug whose
+   *  CENTRE the user left off the plan is forgiven nothing, because that rug is the
+   *  report's finding and **Try a fix** can move it; a rider has no fix (it goes where
+   *  its support goes, `outside-immovable`), so charging it would refuse every idea
+   *  for a room it was already standing in, and nothing could ever clear the charge. */
   carry: CarryChain[];
   /** Top of each piece, world Y — a window sightline needs to know. */
   top: number[];
@@ -539,9 +560,11 @@ export function prepare(ctx: LayoutContext): LayoutModel {
 
   const contained = parts.map(containedBySearch);
   const poly = ctx.footprint as Poly;
+  const radius = parts.map((p) => Math.hypot(p.dimMM[0], p.dimMM[1]) / 2000);
   // Where a piece stands in `ctx.parts`, built exactly as the scratch feet are filled
-  // for a placement — so a piece left where it stood prices to exactly its own
-  // allowance: the same inputs through the same function, a difference of 0, not 1e-17.
+  // for a placement. `overhang` and `ownSpotCharge` are both measured from it, so a
+  // piece left where it stood prices to exactly its own allowance: the same inputs
+  // through the same function, a difference of 0, not 1e-17.
   const ownFoot = (p: ScenePart): Foot => ({
     cx: p.pos[0],
     cz: p.pos[2],
@@ -550,11 +573,10 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     rot: p.rot,
     circle: p.circle,
   });
-  const radiusOf = (p: ScenePart): number => Math.hypot(p.dimMM[0], p.dimMM[1]) / 2000;
   const overhang = parts.map((p, i) => {
     if (!contained[i] || !forgivesOverhang(p)) return 0;
     if (!pointInPoly(p.pos[0], p.pos[2], poly)) return 0;
-    return outsideMeasure(ownFoot(p), poly, radiusOf(p));
+    return outsideMeasure(ownFoot(p), poly, radius[i]);
   });
 
   // Chained from the bottom of each stack only. **Load-bearing, not an
@@ -576,11 +598,12 @@ export function prepare(ctx: LayoutContext): LayoutModel {
       const i = indexOf.get(d.id)!;
       const p = parts[i];
       const carried = ctx.movable[i] && !contained[i];
-      if (carried) overhang[i] = outsideMeasure(ownFoot(p), poly, radiusOf(p));
-      return { i, on: slot.get(d.parentId) ?? -1, carried, foot: { ...ownFoot(p), cx: 0, cz: 0, rot: 0 } };
+      if (carried) overhang[i] = outsideMeasure(ownFoot(p), poly, radius[i]);
+      return { i, on: slot.get(d.parentId) ?? -1, carried, foot: { ...ownFoot(p), cx: 0, cz: 0, rot: 0 }, home: false };
     });
     carry.push({ root, snapshot, links });
   }
+  const ownSpotCharge = parts.map((p, i) => Math.max(0, outsideMeasure(ownFoot(p), poly, radius[i]) - overhang[i]));
 
   const rugs: number[] = [];
   const rugClear: LayoutModel['rugClear'] = [];
@@ -594,12 +617,13 @@ export function prepare(ctx: LayoutContext): LayoutModel {
 
   return {
     ctx,
-    poly: ctx.footprint as Poly,
+    poly,
     profile,
     roles,
     obstacle: parts.map(isObstacle),
     contained,
     overhang,
+    ownSpotCharge,
     carry,
     // `verticalExtent`, not `pos[1] + h`. `pos[1]` is a bottom for a floor anchor and the
     // mesh CENTRE for every other one, so the raw sum is wrong by half a height for a
@@ -608,7 +632,7 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     // a pendant at 2.65 in a 2.8 m room measured 2.85 instead of 2.75 and was priced as
     // obstructing a sill it hangs 1.3 m above. This was the last un-converted copy.
     top: parts.map((p) => verticalExtent(p.category, p.shape, p.dimMM, p.pos[1])[1]),
-    radius: parts.map((p) => Math.hypot(p.dimMM[0], p.dimMM[1]) / 2000),
+    radius,
     area: parts.map((p) => {
       const a = (p.dimMM[0] / 1000) * (p.dimMM[1] / 1000);
       return (p.circle ? (Math.PI / 4) * a : a) || 1;
@@ -669,7 +693,8 @@ function outsideMeasure(foot: Foot, poly: Poly, radius: number): number {
 
 /** What piece `i` pays for standing at `foot`: its `outsideMeasure`, less
  *  `m.overhang` — which is forgiven only on the spot the rug was left, the exact
- *  position and turn it has in `ctx.parts`. One function for the containment pass and
+ *  position and turn it has in `ctx.parts` (`atOwnSpot`; the price there is
+ *  `m.ownSpotCharge`). One function for the containment pass and
  *  for `overhangsOffItsSpot`, so the solver's "put the rug back" and the price it is
  *  putting it back to avoid cannot come apart.
  *
@@ -684,11 +709,21 @@ function outsideMeasure(foot: Foot, poly: Poly, radius: number): number {
  *  it inside the room — so the stray rug the rug-zone rule lays in front of its sofa
  *  (`tests/rug-zones.test.ts`) still gets there, which a rug held in place could not. */
 function outsidePast(m: LayoutModel, i: number, foot: Foot): number {
-  const measure = outsideMeasure(foot, m.poly, m.radius[i]);
-  const own = m.ctx.parts[i];
-  const atOwnSpot = foot.cx === own.pos[0] && foot.cz === own.pos[2] && foot.rot === own.rot;
-  const forgiven = atOwnSpot ? m.overhang[i] : 0;
-  return Math.max(0, measure - forgiven);
+  if (atOwnSpot(m.ctx.parts[i], foot.cx, foot.cz, foot.rot)) return m.ownSpotCharge[i];
+  return outsideMeasure(foot, m.poly, m.radius[i]);
+}
+
+/** Is `(x, z, yaw)` exactly the spot `p` stands on? Position exactly; the turn
+ *  exactly once both are folded into (−π, π] (`angleDelta(·, 0)`, which is exact on
+ *  that interval, so the fold forgives no float at all). Folded because the solver
+ *  hands every answer's yaws back folded (`normaliseYaw`) while a piece's own `rot` is
+ *  whatever the user turned it to: a sofa at 2π stands where one at 0 does, and
+ *  compared raw it was off its own spot without having moved. Not reached end to end
+ *  today — homing and `carryRiders` put an unmoved rug or root back at its raw
+ *  `origin` before the answer is priced — but that is two callers' habits holding up
+ *  one predicate, and the predicate is where the rule is. */
+function atOwnSpot(p: ScenePart, x: number, z: number, yaw: number): boolean {
+  return x === p.pos[0] && z === p.pos[2] && angleDelta(yaw, 0) === angleDelta(p.rot, 0);
 }
 
 /** Would this rug hang through a wall at `p`, somewhere other than the spot the user
@@ -900,36 +935,46 @@ export function costBreakdown(
     c.outside += outsidePast(m, i, feet[i]);
   }
   // …and a rider where the carry will put it (`m.carry`), not where the search left
-  // it: `cascadeTransform`'s arithmetic from the root's placement, link by link, so a
-  // lamp on a book on a desk follows the desk. A root standing exactly where the user
-  // left it puts its whole stack back exactly where it stood — not a round trip
-  // through the support's frame, which lands a float off and would cost a rider the
-  // allowance it has only there.
+  // it: `cascadeTransform`'s arithmetic from the piece under it, link by link, so a
+  // lamp on a book on a desk follows the desk. A link the carry does not move (locked,
+  // or already held by the search) stays at its placement, and what stands on it goes
+  // from THERE — a lamp on a locked tray stays on the tray when the desk goes. A
+  // support standing exactly where the user left it puts what is on it back exactly
+  // where it stood — not a round trip through the support's frame, which lands a
+  // float off and would cost a rider the allowance it has only there.
   for (const chain of m.carry) {
     const r = placements[chain.root];
-    const own = parts[chain.root];
-    const home = r.x === own.pos[0] && r.z === own.pos[2] && r.yaw === own.rot;
+    const rootHome = atOwnSpot(parts[chain.root], r.x, r.z, r.yaw);
     const { links, snapshot } = chain;
     for (let k = 0; k < links.length; k++) {
       const link = links[k];
       const f = link.foot;
-      if (home) {
-        const p = parts[link.i];
+      const p = parts[link.i];
+      if (!link.carried) {
+        const q = placements[link.i];
+        f.cx = q.x;
+        f.cz = q.z;
+        f.rot = q.yaw;
+        link.home = atOwnSpot(p, q.x, q.z, q.yaw);
+        continue;
+      }
+      const base = link.on < 0 ? null : links[link.on];
+      link.home = base ? base.home : rootHome;
+      if (link.home) {
         f.cx = p.pos[0];
         f.cz = p.pos[2];
         f.rot = p.rot;
       } else {
-        const base = link.on < 0 ? null : links[link.on].foot;
-        const bx = base ? base.cx : r.x;
-        const bz = base ? base.cz : r.z;
-        const brot = base ? base.rot : r.yaw;
+        const bx = base ? base.foot.cx : r.x;
+        const bz = base ? base.foot.cz : r.z;
+        const brot = base ? base.foot.rot : r.yaw;
         const d = snapshot[k];
         const [wx, wz] = localToWorld(brot, d.localOffset[0], d.localOffset[1]);
         f.cx = bx + wx;
         f.cz = bz + wz;
         f.rot = brot + d.relRot;
       }
-      if (link.carried) c.outside += outsidePast(m, link.i, f);
+      c.outside += outsidePast(m, link.i, f);
     }
   }
 

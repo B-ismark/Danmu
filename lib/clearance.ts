@@ -820,9 +820,12 @@ export function analyzeRoom(
   // So the split is `containedBySearch`, and it is the same predicate `layout-score`
   // gates `c.outside` on (`if (!m.contained[i]) continue`). That identity is the whole
   // point: **a containment finding is fixable exactly when the cost term can see the
-  // piece.** For a wall rider, a piece under `OBSTACLE_HEIGHT` or anything standing on
-  // a surface, that term is identically zero however far out it is — so no amount of
-  // searching can improve it, and the honest row has no button. A rug was on that
+  // piece.** For a wall rider or a piece under `OBSTACLE_HEIGHT` that term is
+  // identically zero however far out it is. A piece standing on a surface it prices
+  // only where its support will carry it, forgiving what it hangs past the walls on
+  // the spot the user left it — the spot this finding is about — so there too it is
+  // zero where the piece stands. No amount of searching can improve either, and the
+  // honest row has no button. A rug was on that
   // list until the term learned to see it; a rug standing off the plan is fixable
   // now. Its overhang, which this rule forgives, the search forgives too — on the spot
   // the user left it (`LayoutModel.overhang`), and nowhere else — so an idea either

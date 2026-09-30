@@ -1057,7 +1057,7 @@ describe('the room’s anchor is settled first', () => {
   // other two passes do get identical budgets.
   //
   // What the pass demonstrably still buys HERE is the number of seeds that end SAFE:
-  // 12 of 12 shipped, 9 of 12 with the pool emptied. That is the first test below, and
+  // 11 of 12 shipped, 8 of 12 with the pool emptied. That is the first test below, and
   // it is the only assertion in the file that can see this pass at all.
   const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
@@ -1164,9 +1164,12 @@ describe('the room’s anchor is settled first', () => {
     // buys any other: reclaiming 0.05 m² of stranded floor is worth 6 units, which
     // would pay for 60 cm² of overlap.
     //
-    // The bar is 11 — one seed of slack below 12, deliberately, because a seeded solver
-    // fixture is a canary for chaos rather than a ratchet, and pinning one to its exact
-    // current value is how `main` stayed red across nine merges.
+    // The bar is 11. It was set one seed below 12 while the count read 12, deliberately,
+    // because a seeded solver fixture is a canary for chaos rather than a ratchet, and
+    // pinning one to its exact current value is how `main` stayed red across nine merges.
+    // That seed of slack is spent now — the count is 11 — so this is the floor and nothing
+    // more; the exact count lives in the baseline block below, which goes red on a move in
+    // either direction and is re-recorded there.
     //
     // Re-measured on the tree that un-parked it, because a guard that goes live has to be
     // shown it can fail. Three mutations are caught; the figures they had while this was
@@ -1261,7 +1264,7 @@ describe('the room’s anchor is settled first', () => {
     const { rows } = scrambledU();
     const clean = cleanSeeds(rows);
     expect(rows.length, 'twelve seeds, not whatever the fixture returned').toBe(12);
-    // 9, AND IT NEVER MOVED. This read 8 for one commit, with a note blaming "this
+    // 9 through the winding fix, AND IT NEVER MOVED THEN. This read 8 for one commit, with a note blaming "this
     // fixture's containment and overlap answers" for the drop. That note was wrong twice
     // over, and both halves are worth keeping because the mistake is cheap to repeat.
     //

@@ -710,9 +710,9 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
  *  **A carried rider is priced by exactly one hard term, `outside`, and the carry
  *  is the reason it can be.** Until it was, a rider was invisible to all five, so
  *  the search could slide a sofa flush to the wall with a chair standing on its
- *  backrest and this pass would then swing the chair 80–90 mm through the plaster —
+ *  backrest and this pass would then swing the chair 65–90 mm through the plaster —
  *  on every seed that moved the sofa, in `rect`, `open` and `t` alike. Room check
- *  did say so, as *Outside the room* with no **Try a fix**, but only about a room
+ *  did say so, as *Sticks out of the room* with no **Try a fix**, but only about a room
  *  the solve had already handed over. The search now prices
  *  each carried rider where THIS pass will put it (`LayoutModel.carry`, one plan
  *  read by both), so it sees the chair go through and stops the sofa short.
@@ -772,12 +772,21 @@ function carryRiders(model: LayoutModel, origin: Placement[], winner: Placement[
     // (`LayoutModel.carry`): left a hair off, `breakdownAfter` would price the riders
     // somewhere this pass did not put them — and a rider forgiven its overhang only
     // where it stands would be charged for it.
-    if (!displaced(origin[root], winner[root])) winner[root] = { ...origin[root] };
-    const from = winner[root];
-    const to = new Map(
-      cascadeTransform(
-        parts[root].id,
-        [from.x, parts[root].pos[1], from.z],
+    //
+    // The same holds for every link this pass does NOT move, and each of those is a
+    // support in its own right: what stands on a locked tray stays on the tray when
+    // the desk under it goes, so the cascade starts again from the tray's own
+    // placement. Cascading the desk's whole stack and then skipping the tray carried
+    // the lamp off with the desk — on 6 of 6 shuffled seeds it stood on nothing, a
+    // tray's height above the desk's new spot. The containment pass follows the same
+    // rule (`LayoutModel.carry`).
+    const to = new Map<string, { pos: [number, number, number]; rot?: number }>();
+    const cascadeFrom = (i: number) => {
+      if (!displaced(origin[i], winner[i])) winner[i] = { ...origin[i] };
+      const from = winner[i];
+      const moves = cascadeTransform(
+        parts[i].id,
+        [from.x, parts[i].pos[1], from.z],
         from.yaw,
         snapshot,
         // EVERY child gets an explicit angle, and the alternative is a silent bug that
@@ -792,8 +801,10 @@ function carryRiders(model: LayoutModel, origin: Placement[], winner: Placement[
         // mirror-image reason; this one is unconditional because no rider's angle
         // here is the user's.
         () => true,
-      ).map((mv) => [mv.id, mv]),
-    );
+      );
+      for (const mv of moves) to.set(mv.id, mv);
+    };
+    cascadeFrom(root);
     for (const link of links) {
       // `carried` is `ctx.movable` and not `contained`, decided once in `prepare` so
       // the price and the carry read one flag.
@@ -822,8 +833,11 @@ function carryRiders(model: LayoutModel, origin: Placement[], winner: Placement[
       // left it. See the docblock: the two bars overlap on (0, 0.05), and moving a
       // piece the containment term priced, after the last repair pass, is how a chair
       // ends up through a wall — or a rug, which that term scores and `isObstacle`
-      // does not.
-      if (!link.carried) continue;
+      // does not. Either way, what stands on it goes from where it is.
+      if (!link.carried) {
+        cascadeFrom(link.i);
+        continue;
+      }
       const mv = to.get(parts[link.i].id);
       if (!mv) continue;
       winner[link.i] = { x: mv.pos[0], z: mv.pos[2], yaw: mv.rot ?? winner[link.i].yaw };

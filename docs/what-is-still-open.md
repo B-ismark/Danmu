@@ -3290,9 +3290,9 @@ sofa flush to the wall — a good move for the sofa — and the carry then swung
 through the plaster behind it. Measured with the chair dropped on the backrest of each
 preset's sofa, twelve Fix all presses per room: **12 of 12 through the wall on `rect`
 (65–80 mm), 11 of 11 on `open` (up to 84), 12 of 12 on `t` (up to 90)**; the `l`'s sofa
-never reached a wall behind it. Room check did see it, as `outside-immovable` — *Outside
-the room* with no **Try a fix**, since the search could not hold a rider — but only in a
-room Fix all had already applied.
+never reached a wall behind it. Room check did see it, as `outside-immovable` — *Sticks
+out of the room* with no **Try a fix**, since the search could not hold a rider — but only
+in a room Fix all had already applied.
 
 The search now prices each carried rider at the pose the carry will give it.
 `LayoutModel.carry` (`lib/layout-score.ts`) is built once in `prepare`: one chain per
@@ -3311,13 +3311,32 @@ details are load-bearing, and each was mutated:
   of 400 turned stacks swept, the recomputation lands a few ULPs away, and a rider left
   over the skirting is forgiven only on its own spot (`outsidePast`, the rug's rule), so
   it would have been charged its whole overhang for standing still.
-· **A locked rider is not priced**, because the carry does not move it (LOCK IS A LOCK,
-  `carryRiders`). The flag is `ctx.movable`, decided once, and both readers read it.
+· **A locked rider is not priced by this pass**, because the carry does not move it (LOCK
+  IS A LOCK, `carryRiders`). The flag is `ctx.movable`, decided once, and both readers read
+  it. *Corrected in review round 1:* the first version stopped there, and a locked link is
+  more than unpriced — it is a support in its own right. What stands on it was priced, and
+  carried, from where the stack below WOULD have put it: a desk → locked tray → lamp, with
+  the desk moved, left the tray where it was and carried the lamp off it, over the desk's
+  new spot. Both readers now cascade a non-carried link's children from its real pose. The
+  carry had that fault before this change as well — the parent tree floats the lamp on 6
+  of 6 seeds — so it is fixed here rather than introduced here.
 `carryRiders` also puts a root the caller will not move back on its exact origin, so the
 cost `breakdownAfter` reports is priced from the pose that will be applied. That line is
 the one mutant no test kills: eighty instrumented solves found no such root off its
 origin by even 1e-12, so it is written as one line of agreement-by-construction and is
-labelled here as unkilled rather than tested by a fixture built to reach it.
+labelled here as unkilled rather than tested by a fixture built to reach it. The same
+snap on a locked middle link (round 1) is unkilled for the same reason, and said so here
+rather than given a fixture built to reach it.
+
+**The own spot is one turn wide, not one number** (round 1). Rotations in the store are
+unbounded — Spin adds quarter-turns to whatever `rot` was — while the solver hands back every
+yaw folded to (−π, π]. Compared exactly, a sofa stored at 2π with a chair 75 mm over the
+skirting was forgiven at its raw origin and charged 212.13 at the same pose folded, a hard
+cost for a room nothing had changed. `atOwnSpot` compares the turn after folding both sides
+through `angleDelta(·, 0)`, which is exact on (−π, π]. And what the own spot is charged is
+computed once, in `prepare`, from the piece's own pose (`ownSpotCharge`), because measuring
+at the folded angle is not free either: its sine and cosine land ULPs off the raw one's, and
+218 of 748 turned rugs over the skirting read as moved when they were measured there.
 
 After it, on the same presses: **0 of 12, 0 of 11 and 0 of 11 through the wall**. One
 `t` press of twelve now declines with nothing-moved: the only gains it found needed the
@@ -3354,6 +3373,20 @@ turned-on-the-spot case; the lock read from `contained` alone — the lock cases
 three; the rider pass removed from the cost — four red, the six-seed solve among them.
 The root snap in `carryRiders` survives, as above.
 
+Review round 1 added five, one per finding it fixed: a rug stored a whole turn round read
+as the same spot and a hair of turn as off it, with a second rug on the corner that exposes
+the ULP residue; a desk → locked tray → lamp shuffled on three seeds, the desk moved over a
+metre on each and the tray and lamp exactly where they were; the same stack turned 0.03 rad
+with the lamp over the skirting, its allowance kept when the desk leaves; a chair
+turned 0.5 rad on its sofa, priced to nine places as the floor chair standing where the carry
+puts it; and a support turned a whole turn read as home. Mutated, every kill named, and
+re-run against the final tests rather than the ones each mutant was first written for: the
+fold dropped — both whole-turn cases; the charge measured at the folded angle — the rug
+corner; the locked tray priced through the cascade — the locked-chair, forgiven and
+locked-tray cases; the carry skipping a locked link — the locked-tray solve; the rider's
+own turn dropped from its heading — the turned chair; a link's home read from the root's —
+the tray allowance. The snap on a locked middle link survives, as above.
+
 **Baselines it moved, on a room it was not aimed at.** The scrambled U 6 × 5 bedroom that
 `tests/layout-solve.test.ts` and `tests/bed-rung-safety.test.ts` both pin seeds two lamps on
 nightstands. None of its twenty-four lamps ended through a wall before this change (measured on
@@ -3382,6 +3415,32 @@ naming it in `partIds`. The conclusion drawn from the claim still holds — both
 the premise is wrong and should be restated as "no finding a fix can act on names a
 rider", with a sweep over `RULE_HANDLING`'s movable rows behind it. Not widened into this
 change because it corrects a comment about the report, not the search.
+
+**Filed from review round 1 — decided, open, and declined, one each.**
+
+· *Decided: a rider whose centre is off the plan is forgiven on its spot all the same.* A
+  rug gets its overhang written down only while its centre is on the plan; a rider gets it
+  with no centre gate. That is deliberate and the reason is a button: Room check files a
+  rider through the wall under `outside-immovable`, which has no **Try a fix**, because
+  nothing the search can do moves a rider except moving what it stands on. Charge it at
+  home and every idea for the room carries that charge, and the impossibility veto refuses
+  all of them for a fault no idea could clear. The search now simply never makes it worse;
+  Room check still says it is there.
+· *Open: the soft terms still read a rider at the search's own guess for it.* The HARD terms
+  other than `outside` do not see a rider at all — `overlap`, `door`, `access` and
+  `navigation` each gate on `obstacle[i]`, and a piece on a surface is not an obstacle — but
+  the soft ones do: wall affinity reads every piece whose role wants a wall, and a
+  relation (a chair `faces` a table) reads both ends, at the placement the anneal proposed
+  for the rider, which `carryRiders` then throws away. So a carried chair can be scored as
+  facing the table from a spot it will never stand on. The general fix is to write the
+  carried poses into `feet` before any term is scored, which retires this pass's special
+  loop too — and moves every soft term for every rider in every room, so every seeded
+  baseline in the suite. That is a different mechanism from this one and its own commit.
+· *Declined: short-circuiting a chain whose root is at home.* The review's reason was that
+  such a chain can only cost zero, yet runs a polygon measure per rider per proposal. Since
+  round 1 it does not: a link at its own spot returns `ownSpotCharge[i]`, a number read out
+  of an array, and never reaches `outsideMeasure`. What is left is one pose comparison per
+  link, and a second copy of the home rule to skip it would be a place for the two to drift.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

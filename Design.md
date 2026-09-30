@@ -867,8 +867,8 @@ its own placement: `LayoutModel.carry` is one plan, read by the containment pass
 a rider is priced at its own pose exactly, so a chair the user left over the skirting is
 forgiven there the way a rug is, and nowhere else. Before it, a sofa slid flush to a wall
 swung its backrest chair 65–90 mm through the plaster on every Fix all that moved it,
-and Room check could only report it afterwards, as *Outside the room* with no **Try a
-fix** (§ H.6.2).
+and Room check could only report it afterwards, as *Sticks out of the room* with no
+**Try a fix** (§ H.6.2).
 
 One note for anyone extending it: the table is the *only* place a rule's cost term is
 named. An earlier draft let each fixture carry its own copy too, and pointing the door

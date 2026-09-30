@@ -639,8 +639,8 @@ starter furniture:
 When a solve moves a sofa, anything standing on it rides along. The search could not see
 the rider, so it slid the sofa flush to the wall and the chair on its backrest went 65–90 mm
 through the plaster, on every Fix all that moved the sofa, on Rectangle, Open Plan and
-T-Shape. Room check did list the chair as *Outside the room*, with no **Try a fix**, but only
-after Fix all had put it there. None of it is a look yet.
+T-Shape. Room check did list the chair as *Sticks out of the room*, with no **Try a
+fix**, but only after Fix all had put it there. None of it is a look yet.
 
 **Where to click.** Rectangle with starter furniture, 3D tab. Drag a dining chair onto the
 sofa and let go over the back half of the seat, so it sits up on the sofa near the backrest.
@@ -649,8 +649,8 @@ Then **Ideas**, and **More ideas** twice. Repeat on T-Shape.
 
 **What right looks like.** The chair is still on the sofa wherever the sofa went, and its
 back legs are inside the room. The sofa may stop a hand's width short of the wall to make
-that true. Room check has no *Outside the room* line for the chair. Ideas show a full page
-on each press.
+that true. Room check has no *Sticks out of the room* line for the chair. Ideas show a
+full page on each press.
 
 **What wrong looks like.**
 - The chair's back poking through the wall behind the sofa, seen from the side in 3D, or
