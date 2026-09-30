@@ -5,7 +5,7 @@ import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
 import { arrangeDecor } from '@/lib/decor';
 import { useScene } from '@/lib/scene-store';
-import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
+import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, resyncDraft, tidyDraft, UNIT_OPTIONS } from '@/lib/units';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
 import { ColorPicker } from '@/components/ui/ColorPicker';
@@ -800,13 +800,36 @@ function DimensionEditor({
     fromMM(valH, dimUnit).toFixed(prec),
   ]);
 
+  // The field being typed into keeps its draft while the change is its own debounced
+  // commit coming back. Rewriting it there put the caret after digits nobody typed:
+  // "2" · pause · ".7" read 2.007, because the commit's echo turned "2" into "2.00"
+  // (`resyncDraft`), and on the way to "1.5" a sofa's "1" was clamped to its 1.2 m
+  // floor and the box read "1.20" under the cursor. Leaving the field is where the
+  // draft catches up with what the piece became. Another piece is always news.
+  const shownFor = useRef(partId);
+  const typing = useRef<number | null>(null);
   useEffect(() => {
-    setLocal([
-      fromMM(valW, dimUnit).toFixed(prec),
-      fromMM(valD, dimUnit).toFixed(prec),
-      fromMM(valH, dimUnit).toFixed(prec),
-    ]);
+    const samePiece = shownFor.current === partId;
+    shownFor.current = partId;
+    setLocal((was) =>
+      [valW, valD, valH].map((mm, i) =>
+        !samePiece ? fromMM(mm, dimUnit).toFixed(prec) : i === typing.current ? was[i] : resyncDraft(was[i], mm, dimUnit),
+      ) as [string, string, string],
+    );
   }, [partId, valW, valD, valH, dimUnit, prec]);
+
+  function leave(i: number) {
+    typing.current = null;
+    // A commit still on its timer echoes back through the effect above, and a refused
+    // size stays on screen beside the sentence explaining it — either way the draft is
+    // only tidied. Otherwise it is brought to what the piece is: a clamped "1" reads
+    // "1.20" now, once the person has finished with it.
+    const settled = !timer.current && !refusal;
+    const mm = [valW, valD, valH][i];
+    setLocal((was) =>
+      was.map((d, k) => (k !== i ? d : tidyDraft(settled ? resyncDraft(d, mm, dimUnit) : d, dimUnit))) as [string, string, string],
+    );
+  }
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** What the pending commit will do, so that leaving the page can do it now. */
@@ -923,6 +946,10 @@ function DimensionEditor({
                   step={step}
                   value={local[i]}
                   onChange={(v) => commitDebounced(i as 0 | 1 | 2, v)}
+                  onFocus={() => {
+                    typing.current = i;
+                  }}
+                  onBlur={() => leave(i)}
                   height={34}
                 />
               </label>
