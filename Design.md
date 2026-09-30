@@ -2443,6 +2443,12 @@ outlined box around outlined buttons, which put two boundaries on every control.
   a question about a real product. A user who types the 2700 mm wardrobe off a spec
   sheet and is told about a 2600 mm one has been lied to. The check reports
   `outOfRange` instead, and placing says the size was brought into range.
+  The size chips under the fields are the same rule from the other side: `fitPresets`
+  offers the Library rows of the kind's own **shape**, so every chip is a size the kind
+  takes unchanged and is checked as the piece the kind names. They used to be the rows
+  of its *category*, and 15 of the 27 were some other piece (a stool as an armchair, a
+  microwave as a fridge); 11 of those were outside the kind's range, so a chip filled in
+  a size the panel then called out of range. `tests/fit-check.test.ts` pins every list.
   Two things worth knowing about the search. The starting POINT matters more than the
   RNG seed, because the inertia term charges for movement so every run from one origin
   explores the same neighbourhood. Starts are spread over `room-bays`' rectangles of

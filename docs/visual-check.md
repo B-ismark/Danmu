@@ -77,6 +77,16 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
+### The Will it fit chips are the kind's own sizes — this branch, NOT LOOKED AT
+
+In the Room panel's **Will it fit** tab, step through all ten kinds and read the chip
+row under the size fields. Each kind should offer only pieces of its own kind: Bed gets
+Double, Queen and King; Fridge gets Fridge and French door fridge; Desk and Dining table
+both get *Dining / desk table*; every other kind gets one chip. Press a chip, then
+**Check the room**: "wrong" is any chip that fills in a size the panel then calls out of
+range, or a chip row that wraps badly now that most kinds have one chip where they had
+up to four.
+
 ### A wall stops before it runs into another wall — branch `claude/affectionate-ritchie-ilawx1`
 
 **Where to click.** A **T-Shape** room, 3D and then 2D Plan. Drag the wall under one arm of
