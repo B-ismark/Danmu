@@ -78,7 +78,7 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### A size box keeps what you are typing through a pause — this branch, NOT LOOKED AT
+### A size box keeps what you are typing through a pause — `402893f` on `main` (PR #199), NOT LOOKED AT
 
 The "Use my own size" item was looked at on 2026-09-30 and is gone. What the user found
 while looking: type `2`, pause, go on with `.7`, and the box read **2.007** — the pause
@@ -627,7 +627,7 @@ and open **Room check**. Then ungroup it, group the sofa with an armchair instea
   look. The other part is whether an empty gallery reads as broken. The user chose that
   it says the group moves as one; that sentence is not built yet.
 
-### A lamp goes where its nightstand goes — this branch (§ H.6.7), NOT LOOKED AT
+### A lamp goes where its nightstand goes — `1452946` on `main` (PR #202, § H.6.7), NOT LOOKED AT
 
 Move a nightstand and the lamp on it used to stay behind, floating at nightstand height.
 It happened to every lamp the room came with, because nothing had linked it yet. Tests
@@ -656,7 +656,7 @@ desk, then press **Floor**.
 - A lamp that jumps to the nightstand only after you let go.
 - A lamp that follows the nightstand it was moved off, and not the one it is on.
 
-### Fix squares a slightly turned sofa where it stands — this branch (§ H.6.6), NOT LOOKED AT
+### Fix squares a slightly turned sofa where it stands — `76eaee1` on `main` (PR #201, § H.6.6), NOT LOOKED AT
 
 Turn the sofa a few degrees and press **Fix**, and it could come back somewhere else in the
 room, sometimes facing away from the TV. Fix now also tries the room as it stands with the
@@ -2056,7 +2056,7 @@ the typical width error 19% → 10%; with the room skipped, short 10 → 6 and o
 real phone, with a real scan, is the unlooked-at half.
 
 ---
-### A scanned seat stays on the floor, and nothing climbs the tray on it — this branch (§ H.6.4 follow-ups), NOT PROBED
+### A scanned seat stays on the floor, and nothing climbs the tray on it — `0aa19b2` on `main` (PR #195, § H.6.4 follow-ups), NOT PROBED
 
 Two things the scan's tidy-up used to do to a seat, both only in a scanned room. A tray
 resting on an ottoman lifted the ottoman onto the tray, and the tray onto that, both in the
@@ -2086,7 +2086,7 @@ two more of the same kind that are older than this branch: a tray across a coffe
 a box beside it can lift the box onto the tray, and a lamp over a box on a table can end up
 inside the box.
 
-### A lamp dropped on a table's corner stands on it — this branch (§ H.6.4 follow-ups), NOT LOOKED AT
+### A lamp dropped on a table's corner stands on it — `0aa19b2` on `main` (PR #195, § H.6.4 follow-ups), NOT LOOKED AT
 
 Adding a piece, and swapping one in the Inspector, used to ask what it stands on as if it
 were an unturned square. A round lamp mostly over a table's corner went to the floor, and a
@@ -2252,7 +2252,7 @@ cannot answer is a real reply.
   come back.
 - **The part only a real reply answers:** how often a real scan sets pieces aside at all.
 
-### A plant or floor lamp cut by the side of the photo stands where the photo shows it — this branch (§ 49.9), NOT PROBED
+### A plant or floor lamp cut by the side of the photo stands where the photo shows it — `0fb6a27` on `main` (PR #180, § 49.9), NOT PROBED
 
 **Where to click.** *Photograph my real room* → a photo in which a plant, a floor lamp, a
 standing fan or a stool runs off the LEFT or RIGHT side of the frame with its foot still in the
@@ -2279,7 +2279,7 @@ only, in two rooms at three tilts: along the wall 178 → 103 mm on average, exa
 lens and a typical size, none past the side wall, and the 568 rows cut at the foot as well
 unchanged. No browser run, and no test renders the room.
 
-### Chairs across a table both come back, and a repeat starts unticked rather than vanishing — this branch (§ 46.3), NOT PROBED
+### Chairs across a table both come back, and a repeat starts unticked rather than vanishing — `0fb6a27` on `main` (PR #180, § 46.3), NOT PROBED
 
 **Where to click.** *Photograph my real room* → photograph a dining table with chairs on both
 sides of it, from the wall behind one row of chairs and from a side wall, on a phone that writes
@@ -2300,7 +2300,7 @@ five ways: pieces with no row at all fell from 91 to 2, the two being one curtai
 `tests/distance-doubt.test.ts` holds the two chair pairs. No browser run, and no test drives the
 scan screen with a real photo.
 
-### A piece the photo cut off can still be too big for its word, and says "at least" — this branch (§ 49.5), NOT PROBED
+### A piece the photo cut off can still be too big for its word, and says "at least" — `0fb6a27` on `main` (PR #180, § 49.5), NOT PROBED
 
 **Where to click.** *Photograph my real room* → a photo in which a sofa or a bed runs off the
 LEFT or RIGHT side of the frame with its foot in the picture, and one taken with the phone
