@@ -48,9 +48,10 @@ import {
 import {
   accessZones,
   belongTogether,
+  containedBySearch,
   doorPath,
+  forgivesOverhang,
   formsRoute,
-  isObstacle,
   isMountedObstruction,
   isSoftFurnishing,
   routeWidth,
@@ -816,13 +817,18 @@ export function analyzeRoom(
   // offered nothing. The geometry answers "where is it", which is what the TITLE is
   // for. It does not answer "can this be fixed".
   //
-  // So the split is `isObstacle`, and it is the same predicate `layout-score` gates
-  // `c.outside` on (`if (!obstacle[i]) continue`). That identity is the whole point
-  // and `tests/layout-conformance.test.ts` holds it: **a containment finding is
-  // fixable exactly when the cost term can see the piece.** For a wall rider, a rug,
-  // a piece under `OBSTACLE_HEIGHT` or anything standing on a surface, that term is
-  // identically zero however far out it is — so no amount of searching can improve
-  // it, and the honest row has no button.
+  // So the split is `containedBySearch`, and it is the same predicate `layout-score`
+  // gates `c.outside` on (`if (!m.contained[i]) continue`). That identity is the whole
+  // point: **a containment finding is fixable exactly when the cost term can see the
+  // piece.** For a wall rider, a piece under `OBSTACLE_HEIGHT` or anything standing on
+  // a surface, that term is identically zero however far out it is — so no amount of
+  // searching can improve it, and the honest row has no button. A rug was on that
+  // list until the term learned to see it; a rug standing off the plan is fixable
+  // now. Its overhang, which this rule forgives, the search forgives too — on the spot
+  // the user left it (`LayoutModel.overhang`), and nowhere else — so an idea either
+  // leaves a rug there or lays it inside the walls, and **Fix all** does not move one
+  // this report has just called fine. Which pieces count as a rug is `forgivesOverhang`,
+  // one predicate for this rule and for that allowance.
   //
   // The cost's own dead band was the other half of that report and is fixed in
   // `layout-score.ts`: `outsideShare` samples a grid whose outermost points sit a
@@ -832,12 +838,12 @@ export function analyzeRoom(
   // is reported. Without that, `movable: true` here would have been a second lie.
   for (const p of parts) {
     const c = roomContainment(p.pos, p.rot, p.dimMM, poly, p.circle);
-    const out = p.category === 'rug' ? !c.centre : !(c.box && c.centre);
+    const out = forgivesOverhang(p) ? !c.centre : !(c.box && c.centre);
     if (!out) continue;
     // WHERE it is — the title and the remedy sentence.
     const standing = !c.centre;
     // WHETHER anything can be done — the rule, and so the button.
-    const fixable = isObstacle(p);
+    const fixable = containedBySearch(p);
     issues.push({
       id: `${fixable ? 'outside' : 'outside-immovable'}-${p.id}`,
       rule: fixable ? 'outside' : 'outside-immovable',

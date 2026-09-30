@@ -162,7 +162,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | **4a is MEASURED (2026-09-05) and the recommendation is to retire it — see § 4.6 of the research doc.** Swapping the box for the drawn geometry changes 0.11% of drag positions (189 of 172,032 once the instrument's own 299 are subtracted, 42 shapes, every shape a row) and **3.3% of sampled picking points** (5521 of 166,664 — the larger outcome by an order of magnitude, and not a collision question); every position in the *other* direction traces to a renderer drawing outside its own `dimMM`, which is literals in the wrong place rather than a case for compound footprints. **"Fix the six renderers" is not that work**: the 1120 geometry-only positions come from 20 shapes, the never-read-`dimMM` list is 6 renderers, and the two sets overlap in exactly two — two of the six are in the OPPOSITE column and two differ at no position at all. **~~`desk-l` draws 2.86 m where every consumer reads 1.60 m~~ **FIXED 2026-09-06****, and 32 of 46 shapes escape their box at all. What this row still holds, unmeasured, is `analyzeRoom`'s clearance findings and the solver's cost. Previously: every piece is one box or one ellipse, so a table's legs and a plant's canopy are the same rectangle — and "a sofa's L" was in that sentence for months describing a shape this codebase does not have. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). The duplication this row used to carry — *"six hand-written copies of the vertical-extent rule in five files"* — is **RETIRED (2026-09-04)**: all six call `verticalExtent`, plus a **seventh** the original list never named (`layout-settle.ts:380`), and `layout-score.ts:487` records it in the code. The only raw `pos[1] +` left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset, never an instance of the rule. **This row is smaller than it was**, and the seventh copy is why a grep for the old wording could not have closed it | XL | independent of row 11, but they meet |
 | 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
-| 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade. *(G.3 was a third item carried in this row's header rather than in a row of its own, which is how a done thing hides inside an open one — it shipped in #106 and is recorded in § G.3.)* | Real, but none is a defect a user has reported. **A.2's owed test EXISTS as of 2026-09-30** (§ H.6.0's PR): `tests/layout-shuffle.test.ts` "the diversity term reorders a press" fails at `diversityPenalty: 0`. `shuffleRoom` run twice per press with the previous press's first idea as history, at penalty 0 and at 4, differs on **1 of 24** presses over six presets (`rect` 7.5 × 5.6, press 4: same four ideas, same first, one reordered). The pool it ranks is still mostly unlike itself — **177 pairs, 162 at similarity 0**, the rest 0.100–0.400, none near `REPEAT_SIMILARITY` — so the term adds at most 1.6 against idea costs of 2.4–84, and `ranked[0]` cannot move at all because the first pick has `picked = []`. **The answer this replaced** — "cannot be written at this level", from 26 of 26 end-to-end pairs byte-identical and 61 of 66 pool pairs at zero — was measured on 2026-09-06 against a search that accepted no steps (§ H.6.0), so it described tidied scatters rather than arrangements. The agreement bound stays too: the same file asserts the clean set stays mutually dissimilar, vacuity guard first, and goes red the day the search produces near-duplicates. The UNIT behaviour was already pinned in `tests/layout-offer.test.ts`, where the fixture supplies the similar candidates the search does not. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
+| 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade. *(G.3 was a third item carried in this row's header rather than in a row of its own, which is how a done thing hides inside an open one — it shipped in #106 and is recorded in § G.3.)* | Real, but none is a defect a user has reported. **A.2's owed test EXISTS as of 2026-09-30** (§ H.6.0's PR): `tests/layout-shuffle.test.ts` "the diversity term reorders a press" fails at `diversityPenalty: 0`. `shuffleRoom` run twice per press with the previous press's first idea as history, at penalty 0 and at 4, differs on **2 of 66** presses over six presets × presses 2–12 (`rect` 6 × 4 press 7 and `rect` 7.5 × 5.6 press 6: same four ideas, same first, one reordered). It was 1 of 24 over presses 2–5 (`rect` 7.5 × 5.6 press 4) until the search priced a rug (§ H.6.1) and 0 of those 24 after, so the test now names press 6 and says in its comment that the press is the search's trajectory rather than a property of the term. The pool it ranks is still mostly unlike itself — **177 pairs, 162 at similarity 0**, the rest 0.100–0.400, none near `REPEAT_SIMILARITY` — so the term adds at most 1.6 against idea costs of 2.4–84, and `ranked[0]` cannot move at all because the first pick has `picked = []`. **The answer this replaced** — "cannot be written at this level", from 26 of 26 end-to-end pairs byte-identical and 61 of 66 pool pairs at zero — was measured on 2026-09-06 against a search that accepted no steps (§ H.6.0), so it described tidied scatters rather than arrangements. The agreement bound stays too: the same file asserts the clean set stays mutually dissimilar, vacuity guard first, and goes red the day the search produces near-duplicates. The UNIT behaviour was already pinned in `tests/layout-offer.test.ts`, where the fixture supplies the similar candidates the search does not. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
 | 15 | **E** the jsdom component bucket — **the shim half is DONE 2026-09-03; the coverage half is row 9's** | The count in this row was already stale when it was written: **14 `.test.tsx` files**, not 9, and **ten** hand-rolled the `next/navigation` object rather than five. They had drifted into three formattings of the same object and two different comments explaining it. `vitest.config.ts` now names `setupFiles: ['tests/helpers/setup.ts']` for the two globals — jsdom implements neither, and `lib/use-media-query.ts` calls `window.matchMedia` **unguarded** while every other reader uses `?.`, so `matches: false` changes nothing for the optional readers and unblocks the one that needs it; the `typeof window` guard is what keeps ~115 node-environment files from paying for it. `tests/helpers/mount.ts` owns `navigationMock`, called per file because the room id differs — `vi.mock`'s factory is `async` and `await import()`s it, since vitest hoists the call above every `import` and a static one throws *before initialization*. Both halves gated in `tests/toolchain.test.ts`, because an extraction is undone by one paste | done | **row 9 is what is left of § E** |
 | 16 | **§ A.3** the standalone re-search script — **WRITTEN 2026-09-04** | `scripts/openroutes-sweep.mjs`, plain Node through vite's SSR pipeline, not a Vitest file — a measurement campaign that takes minutes is not a gate. Both reds it was filed to serve had been **green since `4be144c`** and this table's own red list said so while § A.3 still described them reproducing. What the script buys is the part that was never rot: the fixture has been re-hunted by hand FOUR times, each time because a cost-function change moved the space. Run in full: **19 of 54 cut, 532 trials, 1 refusal** — the first two exactly as recorded, the third down from 3, which the test file predicted and refused to quote unmeasured. **The live finding is that one trial**: the fine-grid re-check has a single piece of evidence across the whole grid | done | nothing |
 | 17 | **§ H.10** undo / redo covers selection — **RE-ANSWERED 2026-09-06: the MAIN stack. BUILT, and JUDGED by the user 2026-09-29: CLOSED** | The 2026-09-05 answer here was a separate history, and the user superseded it in their own words: *"in blender, actions and selections are both affectted by undo and redoing so wouldn't it be best to do the same for this platform too?"* So selection rides in the main entry — undoing a move puts back the selection that made it. Two things the earlier note did not have. **Coalescing is not a nicety:** the stack is a ring of `MAX`, so without it clicking around the room 80 times discards every real edit off the far end, and a separate history could not have done that. A run of clicks now replaces one entry, and the first click after an edit always pushes, so an entry holding an edit is never overwritten. **And the staleness hazard has TWO axes, not the one this row named:** part ids, yes — but `selectedWall` is an *index* into `room.footprint`, so it can point past the end. **The reason first written here was wrong and is corrected in #134:** it said "undoing across a layout change leaves a 7 pointing into a four-edge rectangle", which cannot happen — `applySnapshot` restores `snap.room` and validates the index against THAT footprint, and both come out of one `takeSnapshot`, so an index and the polygon it indexes always travel together. The history filter is an honour-system backstop; **the live hazard is upstream and unfixed** — nothing clears `selectedWall` when the footprint changes under it (`lib/store.ts` clears it in three places, none of them a room change), so a stale 7 renders a **"Wall 8" panel in a four-walled room** whose paint button writes `wallColors[7]` and does not throw. Verified by reading `Inspector.tsx:773-774`; **the PATH is verified by nobody** — there is no layout switcher in the studio and `setRoom` rebuilds at the same `layoutId`, so a resize cannot change the edge count. Opening a scene file saved from a differently-shaped room is the one candidate and has never been driven, so no guard is written. Cleared rather than clamped, either way. `lib/history.ts`; 32 tests, boundary cases added in #134 | done | **JUDGED 2026-09-29 — the user tried it: *"It looks good."*** Its item in `visual-check.md` is deleted, because it has been looked at. What follows is how it got there. **Built, driven, not judged** until then — a Playwright probe pressed Undo in a real browser on `4cef13a` and COUNTED the steps: six selection clicks cost **1** undo step, four moves cost **5**. The instrument was the shipped control’s own `disabled` state (`canUndo = past.length >= 2`), so nothing was added to shipped code. What is left is the half a probe cannot take — whether a run of clicks *feels* chatty. This cell said "nobody has pressed Ctrl+Z in a browser" after that stopped being true; see `docs/traps.md` under *a document contradicts itself and nothing conflicted* |
@@ -3041,7 +3041,7 @@ presses per preset at `rect` / `open` 6 × 4 and `l` / `t` / `u` 6 × 5:
 `tests/layout-shuffle.test.ts` asserts the invariant that would have caught it: a
 finalist's `cost` is the solver's own breakdown of its placements less navigation (false on
 40 of 40 solves before); a second pins the pool — four finalists on 39 of those 40 solves,
-three on `t` seed 4, where every one held one; and a third holds that an `arrange` handed a
+three on `t` seed 4 (on `l` seed 7 and `open` seed 8 since § H.6.1), where every one held one; and a third holds that an `arrange` handed a
 `start` is priced from it too, which no caller does yet and a mode-keyed guard would miss.
 The fix also woke the **group pass** in shuffle, which moves groups read from the room we
 were given while the members are scattered — a multi-piece move rather than a group one.
@@ -3063,7 +3063,223 @@ navigation again. With one finalist it changes no pick, only the `total` a ranke
 
 The 9 ideas still left with a floor piece outside are **all the rug**, 27–788 mm through a
 wall. The `outside` term never prices a rug (`isObstacle` excludes it), so nothing in the
-search pulls one back in; that is the next item.
+search pulls one back in; that is the next item. *(FIXED 2026-09-30, § H.6.1 below.)*
+
+**§ H.6.1 · FIXED 2026-09-30: the search holds a rug to the plaster.** `c.outside` was
+accumulated inside the obstacle loop, and a rug is not an obstacle — it lies under the
+furniture and a walker steps on it — so the one term that keeps a piece inside the walls
+could not see the one piece the search moves most freely. The room report forgives the same
+rug (`clearance.ts` § 7b calls a rug outside only when its CENTRE is off the plan, because
+overhang is what a rug is for), and that stays: the report judges a rug somebody PUT there,
+while an Idea is a place nobody chose, so an answer the search hands back is held to the
+walls. The predicate is `containedBySearch` (`lib/layout-rules.ts`), every obstacle and a
+floor rug, and it is read in two places that must agree: `layout-score` gates `c.outside` on
+it in a pass of its own (containment's set is no longer the collision set), and
+`clearance.ts` asks it whether a containment finding is fixable — so a rug standing off the
+plan now gets **Try a fix**, where before it got `outside-immovable` and no button.
+
+Measured over six presets (rect 6 × 4 and 7.5 × 5.6, l / t / u at 6 × 5, open 6 × 4; u has no
+rug; every seeded rug starts fully inside):
+
+| | ideas, 3 presses per preset | raw shuffle solves, seeds 0–7 | `arrange` fixes |
+|---|---|---|---|
+| rug > 5 mm through a wall, before | 9 of 72 (27–788 mm) | 5 of 48 | 0 of 14 |
+| after | **0 of 69** | **0 of 48** | 0 of 15 |
+
+None of the nineteen had its centre off the floor, which is why the report never saw one.
+Twelve presses per preset: **every press still offers**, 12 of 12 on all six; ideas per
+twelve presses 48 / 48 / 48 / 38 → 34 / 48 / 47 → 48 (rect, rect 7.5, l, t, u, open), and
+the slowest press is unchanged (`t`, ~4.5 s). **Not established:** whether the four `t`
+ideas lost are ones that had the rug through a wall. The search's trajectory moves whenever
+a scatter's rug starts through one, so no idea is comparable one-for-one across the change,
+and the census found `t`'s rug out only in raw solves, never in the three presses it swept.
+
+Pinned three ways: a `family: 'outside'` rug case in `tests/layout-conformance.test.ts`
+(red before on all three of its sides: the report said `outside-immovable`, `outside` read
+0.000 at x = 3.6); a describe in the same file holding the one deliberate disagreement —
+the report quiet about a rug 300 mm through a wall, the search charging for it, and
+nothing 5 mm clear of it; and `tests/layout-shuffle.test.ts` "never offers a rug through the
+plaster", over the same twelve presses as the Room-check sweep, witnessed by
+`roomContainment(...).box` rather than the cost's own `outsideDeficit` (an idea is offered
+only once `outside` is zero, so the term's instrument would be a check that cannot fail),
+with an exact count of the 45 rug-carrying ideas it checked. **Try a fix** was measured
+before it was claimed: fifteen rugs pushed 200 mm off five presets (east, south and west),
+each filed `outside`, and a `refit` confined to the rug — the press `RoomTools` makes —
+brought all fifteen fully back with no finding left. `tests/layout-solve.test.ts` holds one
+of them, with the rug alone in the room: beside a sofa the `relation` term pulls a rug under
+the seating whatever `outside` can see, and that first fixture passed with the rug's
+containment switched off. `tests/layout-rules.test.ts` pins the predicate's two exclusions
+(a raised rug, a wall-mounted one).
+
+Mutated, and each kill named: the rug out of `containedBySearch` — conformance case red on
+three assertions, the shuffle sweep red naming exactly the nine census ideas; the score's
+`contained` back to `isObstacle` with the report left fixed — four red, the fix test among
+them; the report's `fixable` back to `isObstacle` with the score left fixed — two red; each
+of the predicate's two guards dropped — one red each.
+
+It moved four trajectory pins in `tests/layout-shuffle.test.ts` (finalists 159 → 158; the
+three-finalist pools moved from `t` seed 4 to `l` seed 7 and `open` seed 8; the `arrange`-
+from-a-start pool 4 → 3) and the diversity press — see row 14. And a fifth, in
+`tests/layout-pick.test.ts`: "a different index gives a different suggestion" moved from
+seed 3 to seed 1, because at seed 3 the scrambled 6 × 4's four finalists now differ only
+in where the floor lamp goes and the prune hands it back, so all four picks come out as
+one suggestion — "a picker chooses a candidate, not an outcome" (`SolveOptions.pick`),
+measured rather than new. Seed 1 gives four finalists and four suggestions; making the
+solver ignore `pick` still turns the test red.
+
+**Review round 1 found the design too wide, and it was: a rug is held only PAST the
+overhang it was left with.** As first committed, `containedBySearch` charged a rug's whole
+overhang in every mode, while the report goes on forgiving everything but its centre — so
+the same rug was "fine" in Room check and a fault to the search. Two regressions came out
+of that seam, both reproduced on the commit and its parent. **Fix all** on a rect 6 × 4
+with the rug dragged 300 mm through the east wall (centre on the floor, report quiet) pulled
+the rug from x = 2.100 to 1.778 against an `outside` of 208.013 and toasted it as "brought
+furniture back inside the room" — a fix for a finding nobody was shown; the parent left it
+alone. And the same rug **pinned** made `shuffleRoom` return null on 3 of 3 presses, with no
+finding for `shuffleRefusal` to name. The repair is the one the review proposed:
+`LayoutModel.overhang` records each rug's own `outsideMeasure` where the user left it, and
+the containment pass charges only what exceeds it, while the centre is on the plan. A rug
+left with its centre OFF the plan is the report's finding and is forgiven nothing, so
+**Try a fix** keeps the whole measure to work with — and a rug left off the plan has no
+allowance at all, or a fix could stop the moment its centre crossed back with 900 mm still
+through the plaster. After it: the Fix all rug stays where the user put it at seeds 1–3,
+on a room whose `outside` is 0 as handed over; the pinned rug's presses are 3 of 3 non-null again.
+
+**Then a third regression, found while measuring the second one's limit:** a rug bigger
+than the room. The largest rug the catalogue allows, 5 × 4 m, in a 4.8 × 3.8 rectangle —
+100 mm over every wall, centred, unpinned, carpet nobody trimmed to the plan — returned null
+on 3 of 3 presses; so did the same rug wall to wall in a 5 × 4, and 250 mm over every wall
+in a 4.5 × 3.5. Not the
+allowance: every hard term read 0 on the answer that came back, because that answer was the
+room as it stood. The anneal ends the rug near the one spot that costs it nothing rather
+than on it — 8–61 mm off across the finalists of six solves on a 6 × 4 probe; shuffle skips
+`pruneMoves`, the pass that would offer it its place back, and even the prune only offers
+pieces past `MOVE_EPSILON` (20 mm); so `outside` rose off zero by that residue, the
+impossibility veto reverted every candidate, and `isCleanShuffle` refused a result that
+moved nothing. `lib/layout-solve.ts` now sends a rug home after the last pass that can move
+it — `hangsFurtherThanLeft`, `overhangsOffItsSpot` since round 2 (`lib/layout-score.ts`, sharing `outsidePast` with the
+containment pass so the cure and the charge cannot come apart) — which is always legal,
+because where the rug stands prices to exactly zero by construction. After it, all three
+rooms give **4, 4, 4 ideas and the rug moves in none of them**. The parent also gave 4, 4,
+4, and **every one of its twelve ideas per room had moved the rug** — through the walls, in
+a room the rug fills. A 6 × 4 probe over sizes the Inspector cannot reach (up to
+6500 × 4500) reads the same: 4, 4, 4 for all five sizes with the homing, null wherever the
+rug fills the room without it.
+
+One behaviour change rides it on purpose: a `refit` solve (Fix all's mode, seeds 1–2)
+moved that rug 0.74–1.11 m on the parent in the 5 × 4 and the 4.8 × 3.8 — it could not see
+a rug, so nothing stopped it going further through every wall — and leaves it put now. A
+rug with room to slide still slides: 6500 × 3000 in a 6 × 4 has 1 m north–south, and refit
+moves it square to z = −0.48, 20 mm inside the north wall, where the parent turned it 16°
+through the walls.
+
+Three smaller findings, each fixed. The report picked a rug by `category` and the search by
+`roleOf`, two copies of one rule: both read `forgivesOverhang` now, so a rug-shaped piece
+filed under another category is judged the same way by both. `containedBySearch` repeated
+`isObstacle`'s floor bar: both read one `onFloor`. And `carryRiders` held back only
+obstacles while the containment term scores `contained`, which differ for a rug riding a
+low plinth — between 0 and 0.05 m a rug is both a rider and scored, so the carry could move
+a rug after the last pass had checked it against the walls. The gate is `contained`;
+`tests/layout-riders.test.ts` builds that rug and pins its precondition.
+
+**The arrange measurement above covered the case that could not show the change.** Every
+rug in "0 of 14 → 0 of 15" was seeded, and the seeder places rugs with `footInsidePoly`, so
+all of them started with no overhang to forgive. The user-placed case is held by fixtures,
+not by a sweep: `tests/layout-solve.test.ts` "Fix all leaves a rug the report forgives
+where the user put it" (seeds 1–3), `tests/layout-shuffle.test.ts` "still offers ideas
+around a pinned rug that hangs over the skirting" and "…when the rug is bigger than the
+room", and a `hangsFurtherThanLeft` describe (now `overhangsOffItsSpot`) in
+`tests/layout-conformance.test.ts`.
+
+Mutated (round 1), every kill named: allowance zeroed — four red; the prepare-side centre check
+dropped — the conformance "no allowance to spend" case and the solve Try-a-fix test; the
+evaluation-side centre check dropped — "forgives nothing once the centre is off the plan";
+the report back to `category` — "the report and the search pick a rug the same way"; the
+carry gate back to `obstacle` — the riders test; the homing line removed — the bigger-than-
+the-room test; its centre gate dropped — "never sends a rug back to a centre the user left
+off the plan"; `> 0` as `>= 0` — three red; its rug gate and its containment gate dropped —
+one red each.
+
+**Review round 2 found the allowance too wide in the other direction: one number forgiven
+anywhere the centre stayed on the plan is an allowance the search can SPEND.** The round-1
+repair recorded how far a rug was through the plaster and charged only what exceeded it —
+but `outsideMeasure` is a share of the footprint, with no wall attached to it, so a rug left
+430 mm over the south wall of a 5 × 4 had 430 mm of forgiveness to use anywhere. A refit
+with the rug not placed by hand spent it: seeds 1–3 traded the 430 mm over the south wall
+for **403, 423 and 374 mm through the EAST wall** (keeping 124, 38 and 148 mm of the south),
+at no cost. The unpinned 6 × 4 with the rug 300 mm through the east wall did it in Ideas: press
+2's fourth idea hung it **58 mm through the north wall** instead. Two designs were measured
+and set aside before the one that shipped. A per-wall allowance cannot be written against
+this measure, which has no wall to attribute a share to. And **holding** the rug — leaving
+any rug the report forgives exactly where it lies, and refusing to let the search move it —
+closed the trade and broke `tests/rug-zones.test.ts`: its stray rug, left through the east
+and north walls of a 6 × 5, is the one the rug-zone rule exists to lay in front of the sofa,
+and held it stayed 3.219 m off its target.
+
+**What shipped forgives the overhang on the spot where it was left, and nowhere else**
+(`outsidePast`, `lib/layout-score.ts`). At the rug's own pose — `pos[0]`, `pos[2]` and
+`rot`, compared exactly — it pays what exceeds its recorded overhang, which is zero,
+because the recording and the charge are the same inputs through the same function.
+Anywhere else it pays the whole `outsideMeasure`. So a search answer can only leave a rug
+exactly where the user left it or lay it wholly inside the walls; there is no middle
+position to trade into, and the stray rug is free to go to the sofa. After it: the 5 × 4
+refit stays put at seeds 1–3, placed or not; the 6 × 4 unpinned rug is inside the walls in
+all **12 of 12** ideas over three presses, four ideas each; the bigger-than-the-room presses
+are 4, 4, 4 with the rug unmoved; the 5000 × 4000 rug wall to wall in a 5 × 4 and over
+every wall of a 4.8 × 3.8 gives 4, 4, 4 and of a 4 × 3 gives 4, 3, 4, the rug unmoved in
+every idea; `rug-zones` passes.
+One case moves on purpose: a rug left 300 mm through the east wall of a 6 × 4 and NOT
+dragged there comes 0.4–0.7 m west under a refit (x = 1.425, 1.576, 1.702 at seeds 1–3),
+bought by `relation` against `inertia`, with `outside` 0 before and 0 after — the room
+report had no finding and still has none, and the rug is now wholly on the floor. The same
+rug dragged there stays.
+
+The homing pass is still needed, for a different reason than before: a rug laid wall to
+wall has no inside spot to go to, so the anneal can only leave it a few millimetres off its
+own, which now costs the whole measure. It is renamed for what it asks —
+`overhangsOffItsSpot` (was `hangsFurtherThanLeft`): true when the placement is off the rug's
+own spot and hangs through any wall, not only further than before; false for a piece the
+search does not contain and for a rug whose centre was left off the plan, which is the
+report's finding and is **Try a fix**'s to move. Removed, all three of those rooms return
+null on 3 of 3 presses.
+
+Tests for it: `tests/layout-conformance.test.ts` "and charges the whole measure off that
+spot — less overhang, or over another wall" (a rug moved part of the way back in, moved
+onto another wall, and turned π/4 on its own centre each pay what a rug arriving there
+fresh would); `tests/layout-solve.test.ts` "Fix all does not trade a rug's overhang onto
+another wall" (the 5 × 4 at z = 0.43, seeds 1–3) and the not-placed loop beside the dragged
+one; `tests/layout-shuffle.test.ts` "moves a rug the user left over the skirting only to
+somewhere inside the walls" (twelve ideas, an exact count) and "still offers ideas around a
+rug laid wall to wall". Two assertions were vacuous and are gone: the bigger-than-the-room
+test asked `ideas.length > 0` inside a loop over `ideas` and `moved.length > 0` on a room
+whose other pieces always move.
+
+Mutated (round 2), every kill named: forgiven anywhere the centre is on the plan (round
+1's rule) — four red, among them the whole-measure case, the trade test and "only to
+somewhere inside the walls"; forgiven nowhere — six red, the pinned and bigger-than-the-
+room presses and the dragged Fix all among them; homing removed — the wall-to-wall and
+bigger-than-the-room presses; the spot compared without its turn — the π/4 case; homing's
+centre gate dropped — "never sends a rug back to a centre the user left off the plan".
+
+The smaller round-2 findings are fixed in place: `Design.md`'s rug paragraph, the
+Fix-all figures in `tests/layout-solve.test.ts` (322 / 311 / 356 mm, re-measured at the
+commit that introduced them), three comments in `lib/layout-solve.ts` that still described
+containment as gated on `obstacle`, and the § above's "south" for z = −0.48, which is north.
+
+**Filed, not fixed — two things the review found beside the change.**
+· **`arrange` from a starter plan scores the plan from its own positions**, so a starter
+  rug placed through a wall would arrive with an allowance it was never given by a user.
+  Latent: every seeder places with `footInsidePoly`, so no starter rug has an overhang to
+  record, and the § H.6.1 arrange sweep above is 0 of 15. It becomes real the day a seeder
+  places a rug any other way.
+· **Two sites still pick a rug by `category`:** `lib/drag-resolve.ts`'s containment
+  disjunction (`part.category === 'rug' && …`) and `lib/clearance.ts`'s floor-blocker
+  filter (`p.category !== 'rug'`), where the search and the report's containment rule now
+  read `forgivesOverhang` / `isObstacle`. A rug-shaped piece filed under another category is judged one way by the
+  drag and another by the search. Not widened into this PR because both are the drag's and
+  the report's behaviour rather than the search's; the gravity sites
+  (`lib/drag-resolve.ts`'s support test, `lib/layout-settle.ts`'s drop) stay category-based
+  on purpose — a rug lies on the floor because of what it is, not because of how it scores.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

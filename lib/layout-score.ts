@@ -41,6 +41,7 @@ import {
   obbGap,
   outsideDeficit,
   outsideShare,
+  pointInPoly,
   polyAreaCentroid,
   polygonWinding,
   type Foot,
@@ -53,6 +54,8 @@ import {
   footAt,
   formsRoute,
   isObstacle,
+  containedBySearch,
+  forgivesOverhang,
   placeAffinity,
   relationOptions,
   roleOf,
@@ -207,28 +210,29 @@ export const RULE_HANDLING: Record<
   window: { costTerm: 'window', movable: true },
   tv: { costTerm: 'relation', movable: true },
   // Only ever emitted for a piece the solver can BOTH move and price, which is
-  // `isObstacle` — and that predicate is doing two jobs here, both of them real.
-  // `movableFor` is `!locked && !p.wallMounted`, so a wall rider is excluded from
-  // every solve this app runs; and `c.outside` accumulates inside `if (!obstacle[i])
-  // continue`, so a rug, a piece under `OBSTACLE_HEIGHT` and anything standing on a
-  // surface are invisible to the term whatever the report says. Both exclusions are
-  // in the row's own predicate now, because a `movable: true` that is false for the
-  // piece in front of the user is a button that spins and then says it found
-  // nothing. That is what this table exists to prevent — see `reach` below, which
-  // was the last row to claim a capability it did not have.
+  // `containedBySearch` — and that predicate is doing two jobs here, both of them
+  // real. `movableFor` is `!locked && !p.wallMounted`, so a wall rider is excluded
+  // from every solve this app runs; and `c.outside` accumulates inside
+  // `if (!m.contained[i]) continue`, so a piece under `OBSTACLE_HEIGHT` and anything
+  // standing on a surface are invisible to the term whatever the report says. Both
+  // exclusions are in the row's own predicate now, because a `movable: true` that is
+  // false for the piece in front of the user is a button that spins and then says it
+  // found nothing. That is what this table exists to prevent — see `reach` below,
+  // which was the last row to claim a capability it did not have. A rug was the
+  // third exclusion until the term learned to see one (`containedBySearch`).
   // Containment. The two rows are the same fault seen from opposite sides of one
   // question — can the solver do anything — and `clearance.ts` decides which by
-  // asking `isObstacle`, the SAME predicate the `outside` term below gates on. That
-  // identity is what makes both rows true rather than plausible, and
-  // `tests/layout-conformance.test.ts` pins it.
+  // asking `containedBySearch`, the SAME predicate the `outside` term below gates on.
+  // That identity is what makes both rows true rather than plausible, and
+  // `tests/layout-conformance.test.ts` pins it with a sofa and a rug.
   outside: { costTerm: 'outside', movable: true },
   'outside-immovable': {
     costTerm: null,
     movable: false,
     why:
       'nothing the solver can search will move this piece off the wall it crosses. ' +
-      '`c.outside` accumulates inside `if (!obstacle[i]) continue`, so for a wall ' +
-      'rider, a rug, a piece under `OBSTACLE_HEIGHT` or anything standing on a ' +
+      '`c.outside` accumulates inside `if (!m.contained[i]) continue`, so for a wall ' +
+      'rider, a piece under `OBSTACLE_HEIGHT` or anything standing on a ' +
       'surface the term is identically zero however far out it is — there is no ' +
       'gradient to descend, and a button here would spin and report nothing. ' +
       'Turning it, sliding it along its wall or giving it a wall it fits on is the ' +
@@ -316,6 +320,15 @@ export type LayoutModel = {
   roles: Role[];
   /** Does this piece get in a walker's way? */
   obstacle: boolean[];
+  /** Is this piece held inside the walls? `containedBySearch`: every obstacle, and a
+   *  rug, which is no obstacle but is floor the search moves. */
+  contained: boolean[];
+  /** How far through the walls each piece is FORGIVEN for being where it stands, on
+   *  the same 0..1 scale the containment pass charges (`outsideMeasure`). Zero for
+   *  everything but a rug (`forgivesOverhang`) whose centre is on the plan where the
+   *  user has it — and for that rug, the overhang it has there. Forgiven THERE and
+   *  nowhere else (`outsidePast`); see the containment pass. */
+  overhang: number[];
   /** Top of each piece, world Y — a window sightline needs to know. */
   top: number[];
   /** Bounding-circle radius of each footprint, and its area. Both are properties of
@@ -496,6 +509,24 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     profile,
     roles,
     obstacle: parts.map(isObstacle),
+    contained: parts.map(containedBySearch),
+    overhang: parts.map((p) => {
+      if (!containedBySearch(p) || !forgivesOverhang(p)) return 0;
+      const poly = ctx.footprint as Poly;
+      if (!pointInPoly(p.pos[0], p.pos[2], poly)) return 0;
+      // Built exactly as the scratch `feet` below are filled for a placement, so a
+      // rug the search leaves where it stood prices to exactly its own allowance —
+      // the same inputs through the same function, so the difference is 0, not 1e-17.
+      const foot: Foot = {
+        cx: p.pos[0],
+        cz: p.pos[2],
+        hw: p.dimMM[0] / 2000,
+        hd: p.dimMM[1] / 2000,
+        rot: p.rot,
+        circle: p.circle,
+      };
+      return outsideMeasure(foot, poly, Math.hypot(p.dimMM[0], p.dimMM[1]) / 2000);
+    }),
     // `verticalExtent`, not `pos[1] + h`. `pos[1]` is a bottom for a floor anchor and the
     // mesh CENTRE for every other one, so the raw sum is wrong by half a height for a
     // television and for the whole ceiling family. `top[i]` is read by the window rule
@@ -537,6 +568,72 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     ex: new Float64Array(parts.length),
     ez: new Float64Array(parts.length),
   };
+}
+
+/** How far a footprint is through the walls, 0..1 — the containment pass's charge.
+ *
+ *  It takes BOTH instruments because neither can do the whole range. `outsideShare`
+ *  samples a 3×3 grid whose outermost points sit a third of the half-extent in from
+ *  the edge, so for a 2.2 m sofa side-on it reads exactly 0.000 until ~160 mm is
+ *  through the plaster — a flat dead band across the whole region where
+ *  `clearance.ts` reports the piece as crossing a wall. The room check said so and
+ *  **Fix** moved nothing, because there was nothing to save. The deficit is
+ *  corner-exact and non-zero the instant any corner is out.
+ *
+ *  `max`, not a sum: they measure the same fault, and the deficit is normalised by
+ *  the piece's own radius so both are the same 0..1 currency. The max is also what
+ *  made this safe to land — it is `>=` the old value for every footprint and every
+ *  polygon, so a term that already cost something costs no less, and the only
+ *  assertions that could move were the ones that read 0.
+ *
+ *  One function for the charge and for a rug's allowance (`LayoutModel.overhang`),
+ *  so the two are the same number for a rug left where it stood. */
+function outsideMeasure(foot: Foot, poly: Poly, radius: number): number {
+  const deficit = outsideDeficit(foot, poly);
+  return Math.min(1, Math.max(outsideShare(foot, poly), radius > 0 ? deficit / radius : 0));
+}
+
+/** What piece `i` pays for standing at `foot`: its `outsideMeasure`, less
+ *  `m.overhang` — which is forgiven only on the spot the rug was left, the exact
+ *  position and turn it has in `ctx.parts`. One function for the containment pass and
+ *  for `overhangsOffItsSpot`, so the solver's "put the rug back" and the price it is
+ *  putting it back to avoid cannot come apart.
+ *
+ *  Only on that spot, because the allowance is one number — how far through, not
+ *  through which wall — and anywhere else it is spendable. Forgiven wherever the
+ *  centre stayed on the plan, it was spent: **Fix all** took a 5 × 4 m rug left 430 mm
+ *  over the south wall of a 5 × 4 room and slid it 374–423 mm through the EAST wall on
+ *  seeds 1–3, and an **Ideas** press moved a rug left 300 mm through the east wall to
+ *  58 mm through the north. The report forgives a rug where somebody PUT it; a place
+ *  the search proposes is a place nobody chose, and it is held to the walls like
+ *  every other. So an answer either leaves the rug exactly where it was left or lays
+ *  it inside the room — so the stray rug the rug-zone rule lays in front of its sofa
+ *  (`tests/rug-zones.test.ts`) still gets there, which a rug held in place could not. */
+function outsidePast(m: LayoutModel, i: number, foot: Foot): number {
+  const measure = outsideMeasure(foot, m.poly, m.radius[i]);
+  const own = m.ctx.parts[i];
+  const atOwnSpot = foot.cx === own.pos[0] && foot.cz === own.pos[2] && foot.rot === own.rot;
+  const forgiven = atOwnSpot ? m.overhang[i] : 0;
+  return Math.max(0, measure - forgiven);
+}
+
+/** Would this rug hang through a wall at `p`, somewhere other than the spot the user
+ *  left it on? Any overhang at all, not only more than it had: off its spot a rug is
+ *  forgiven nothing (`outsidePast`), so a rug moved halfway back in from 300 mm over
+ *  the skirting is still a rug the search put through a wall.
+ *
+ *  False for anything but a rug the containment pass holds (`forgivesOverhang`), and
+ *  false for a rug whose centre the user left off the plan — that one has no legal
+ *  place to go back to, it is the report's finding and **Try a fix**'s to move. For
+ *  every other rug, where it stands in `ctx.parts` prices to exactly zero by
+ *  construction (`m.overhang` is that spot's own measure), so a `true` here is always
+ *  cured by putting it back. `lib/layout-solve.ts` does exactly that, and why it has
+ *  to is written there. */
+export function overhangsOffItsSpot(m: LayoutModel, i: number, p: Placement): boolean {
+  const part = m.ctx.parts[i];
+  if (!m.contained[i] || !forgivesOverhang(part)) return false;
+  if (!pointInPoly(part.pos[0], part.pos[2], m.poly)) return false;
+  return outsidePast(m, i, { ...m.feet[i], cx: p.x, cz: p.z, rot: p.yaw }) > 0;
 }
 
 /** Total cost of an arrangement. Lower is better; zero is unreachable and not
@@ -712,24 +809,21 @@ export function costBreakdown(
       const tolerance = sharesFloor(roles[i], roles[j]) ? TUCKED_CLASH_SHARE : 0;
       if (share > tolerance) c.overlap += (share - tolerance) / (1 - tolerance);
     }
-    // Containment, and it takes BOTH instruments because neither can do the whole
-    // range. `outsideShare` samples a 3×3 grid whose outermost points sit a third of
-    // the half-extent in from the edge, so for a 2.2 m sofa side-on it reads exactly
-    // 0.000 until ~160 mm is through the plaster — a flat dead band across the whole
-    // region where `clearance.ts` reports the piece as crossing a wall. The room check
-    // said so and **Fix** moved nothing, because there was nothing to save. The
-    // deficit is corner-exact and non-zero the instant any corner is out.
-    //
-    // `max`, not a sum: they measure the same fault, and the deficit is normalised by
-    // the piece's own radius so both are the same 0..1 currency. The max is also what
-    // makes this safe to land — it is `>=` the old value for every footprint and every
-    // polygon, so a term that already cost something costs no less, and the only
-    // assertions that can move are the ones that read 0.
-    const deficit = outsideDeficit(feet[i], poly);
-    c.outside += Math.min(
-      1,
-      Math.max(outsideShare(feet[i], poly), radius[i] > 0 ? deficit / radius[i] : 0),
-    );
+  }
+
+  // Containment is its own pass because its set is not the collision set: a rug is
+  // held inside the walls without being an obstacle (`containedBySearch`).
+  for (let i = 0; i < feet.length; i++) {
+    if (!m.contained[i]) continue;
+    // A rug is forgiven the overhang it was left with (`m.overhang`) on the spot it
+    // was left, and nowhere else (`outsidePast` says why). The report forgives a rug's
+    // overhang wherever somebody put it (`clearance.ts` § 7b); charging that same
+    // overhang here made **Fix all** pull a rug off a wall the report had just called
+    // fine, and made a pinned rug hanging over the skirting refuse every Ideas press
+    // with no finding to name (`isCleanShuffle` asks for an absolute zero). A centre
+    // off the plan is the report's finding, so there the rug is forgiven nothing and
+    // **Try a fix** has the whole measure to work with.
+    c.outside += outsidePast(m, i, feet[i]);
   }
 
   // ── Openings: the room's own structure, which nothing may stand in ────────

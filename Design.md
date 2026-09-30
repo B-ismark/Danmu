@@ -837,6 +837,31 @@ no cost is allowed. Adding one silently is not** — a new finding fails the tes
 someone classifies it, which is what happened to `outside` the moment it was added and
 is the gate working rather than an obstacle to it.
 
+**The one place the two disagree on purpose is a rug's overhang**, and the same file
+holds it as a decision rather than letting it read as a gap: the report forgives a rug
+everything but its centre, because a rug somebody put under a sofa or up to the skirting
+is doing its job; the search forgives a rug the overhang it was left with
+(`LayoutModel.overhang`) **on the spot it was left, and nowhere else**, because an idea
+is a place nobody chose (§ H.6.1). So an answer either leaves a rug exactly where the
+user left it or lays it wholly inside the walls. The two agree about every rug the user
+placed — Fix all leaves a dragged rug over the skirting where it is, and a pinned one
+does not stop Ideas — and differ only about where the search may take one. "Nowhere
+else" is the load-bearing half: the allowance is one number, how far and not through
+which wall, and forgiven wherever the centre stayed on the plan it was spent — Fix all
+took a 5 × 4 m rug from 430 mm over one wall to ~400 mm through the next. A rug whose
+centre is off the plan is forgiven nothing, which is what gives **Try a fix** the whole
+measure to work with. Because the one spot that costs such a rug nothing is where it
+stands, and an anneal ends near that spot rather than on it, the solver sends a rug home
+when its answer would leave it through a wall anywhere else (`overhangsOffItsSpot`) —
+without that, a rug laid wall to wall, or bigger than the room, turned every Ideas press
+into a refusal. Which rugs are forgiven is one predicate, `forgivesOverhang`, read by
+the report and the search alike. The set the search keeps inside the walls is `containedBySearch`
+(`lib/layout-rules.ts`) — every obstacle and a floor rug — and it is also the set whose
+containment finding gets **Try a fix**, so a finding is fixable exactly when the cost
+term can see the piece. It was `isObstacle` on both sides until then, which is why a rug
+off the plan was filed `outside-immovable` with no button, and why Ideas could leave one
+788 mm through a wall.
+
 One note for anyone extending it: the table is the *only* place a rule's cost term is
 named. An earlier draft let each fixture carry its own copy too, and pointing the door
 rule at a taste weight left every assertion green — the same duplication-that-drifts

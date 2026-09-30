@@ -70,17 +70,25 @@ describe('SolveOptions.pick', () => {
   });
 
   it('is obeyed — a different index gives a different suggestion', () => {
-    const { finalists } = solve();
+    // Seed 1, not the file's seed 3, because a picker chooses a CANDIDATE and not an
+    // OUTCOME (`SolveOptions.pick`): the prune and the route repair run after it. At
+    // seed 3 this room's four finalists differ only in where the floor lamp goes, and
+    // the prune hands the lamp back to where it stood, so every index post-processes
+    // to one suggestion and "obeyed" cannot be observed. That became true when the
+    // search started holding a rug inside the walls (§ H.6.1) — a seed is a
+    // trajectory, so the precondition is asserted below rather than trusted.
+    const seed = 1;
+    const { finalists } = solve({ seed });
     // Only meaningful when the search actually found alternatives. If it did not, say
     // so rather than passing vacuously over a pool of one.
-    expect(finalists.length, 'seed 3 should leave more than one finalist').toBeGreaterThan(1);
+    expect(finalists.length, 'seed 1 should leave more than one finalist').toBeGreaterThan(1);
     const argmin = finalists.reduce(
       (bi, x, i) => (x.cost < finalists[bi].cost ? i : bi),
       0,
     );
     const other = finalists.findIndex((_, i) => i !== argmin);
-    const a = solve({ pick: () => argmin });
-    const b = solve({ pick: () => other });
+    const a = solve({ seed, pick: () => argmin });
+    const b = solve({ seed, pick: () => other });
     expect(b.placements).not.toEqual(a.placements);
   });
 

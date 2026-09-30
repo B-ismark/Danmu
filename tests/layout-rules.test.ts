@@ -3,8 +3,10 @@ import {
   accessRules,
   accessZones,
   belongTogether,
+  containedBySearch,
   doorPath,
   fixedBand,
+  forgivesOverhang,
   relationFor,
   roleOf,
   roomProfile,
@@ -69,6 +71,51 @@ describe('roleOf', () => {
 
   it('calls anything small enough a side table whatever its height', () => {
     expect(roleOf(part({ category: 'table', shape: 'coffee-table', dimMM: [450, 450, 550] }))).toBe('side-table');
+  });
+});
+
+describe('containedBySearch', () => {
+  // The set the search holds inside the walls, and — through `clearance.ts` — the set
+  // whose containment finding gets a Try a fix. Every obstacle, and a rug on the floor.
+  const rug = (extra: Partial<ScenePart> = {}) =>
+    part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], ...extra });
+
+  it('holds a rug on the floor, which is no obstacle', () => {
+    expect(containedBySearch(rug())).toBe(true);
+  });
+
+  it('holds every obstacle, and nothing low enough to step over', () => {
+    expect(containedBySearch(part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880] }))).toBe(true);
+    // A 100 mm box is under `OBSTACLE_HEIGHT` and not a rug, so the search's term
+    // cannot see it — and the report files its containment finding with no button.
+    expect(containedBySearch(part({ category: 'other', shape: 'box', dimMM: [400, 400, 100] }))).toBe(false);
+  });
+
+  it('does not hold a rug that is not on the floor — it rides whatever it is on', () => {
+    // The same two exclusions `isObstacle` makes, for the same reason: a piece well
+    // off the floor is carried by `carryRiders` rather than placed by the search, and
+    // a wall piece is placed by its wall. Neither is the search's to keep in.
+    expect(containedBySearch(rug({ pos: [0, 0.45, 0] }))).toBe(false);
+    expect(containedBySearch(rug({ wallMounted: true }))).toBe(false);
+  });
+
+  it('holds a rug under the floor bar even when it is riding something', () => {
+    // The band where the two bars overlap: `ridingParents` takes anything above 0,
+    // this takes anything under 50 mm, so a rug on a 30 mm plinth is BOTH. Held here,
+    // and so left where the search put it by `carryRiders`, which is gated on this
+    // same set — `tests/layout-riders.test.ts` holds that half.
+    expect(containedBySearch(rug({ pos: [0, 0.03, 0] }))).toBe(true);
+    expect(containedBySearch(rug({ pos: [0, 0.05, 0] })), 'the bar is strict').toBe(false);
+  });
+});
+
+describe('forgivesOverhang', () => {
+  // One answer to "is this a rug" for the report's centre-only rule and the search's
+  // allowance. It used to be `category === 'rug'` in one and `roleOf` in the other.
+  it('is a rug by role, whatever its category says', () => {
+    expect(forgivesOverhang(part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10] }))).toBe(true);
+    expect(forgivesOverhang(part({ category: 'other', shape: 'rug', dimMM: [2000, 1400, 10] }))).toBe(true);
+    expect(forgivesOverhang(part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880] }))).toBe(false);
   });
 });
 

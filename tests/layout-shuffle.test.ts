@@ -23,7 +23,8 @@ import {
   shuffleRefusal,
 } from '@/lib/layout-shuffle';
 import { defaultScene } from '@/lib/scene-spec';
-import { footprintForLayout, pointInFootprint, type LayoutId } from '@/lib/footprint';
+import { footprintForLayout, pointInFootprint, roomContainment, type LayoutId } from '@/lib/footprint';
+import { roleOf } from '@/lib/layout-rules';
 
 /** Every cost term at zero, derived from the weight table so a new term cannot leave
  *  this fixture one key short of the type it claims to be. */
@@ -75,6 +76,29 @@ const room = (id: LayoutId, w: number, d: number) => {
     movable: movableFor(parts, locked),
   };
 };
+
+/** Every preset in `ALL` pressed three times, computed once and shared.
+ *
+ *  Two tests read the same fifteen presses (five presets × three) — "never offers a
+ *  room Room check would
+ *  report" and "never offers a rug through the plaster" — and each press is a full
+ *  search, seconds apiece on `t`. The sweep is deterministic per (room, attempt), so
+ *  sharing it changes nothing but the wall clock. */
+let sweepCache: ReturnType<typeof runSweep> | null = null;
+function runSweep() {
+  const out = [];
+  for (const [id, w, d] of ALL) {
+    const { parts, room: rm, locked } = room(id, w, d);
+    for (const attempt of [1, 2, 3]) {
+      out.push({ id, attempt, parts, rm, outcome: shuffleRoom(parts, rm, locked, { attempt }) });
+    }
+  }
+  return out;
+}
+const presetSweep = () => (sweepCache ??= runSweep());
+
+/** How many ideas `presetSweep` offers in the presets that carry a rug. */
+const RUG_IDEAS_CHECKED = 45;
 
 // ── Three tests below USED to carry an explicit 30 s timeout ────────────
 //
@@ -257,14 +281,17 @@ describe("solveLayout mode: 'shuffle'", () => {
       }
     }
     // A loop over whatever `pick` saw passes over an empty list, so the count is the
-    // assertion's own floor: forty solves, one of which (`t` seed 4) keeps three.
-    expect(checked, 'the finalists this sweep compared').toBe(159);
+    // assertion's own floor: forty solves, two of which (`l` seed 7, `open` seed 8)
+    // keep three. It was 159 — `t` seed 4 the one short — until the search priced a
+    // rug through the plaster, which moves any trajectory whose scatter put one there.
+    expect(checked, 'the finalists this sweep compared').toBe(158);
   });
 
   it('keeps a pool of finalists, because the search moves', { timeout: 120_000 }, () => {
     // A search that accepts no step finds no new best, so its pool is the scatter
     // alone: `11111111` on every preset before the fix. Four is `FINALISTS`, the most a
-    // pool keeps; `t` seed 4 fills three, so a full pool is not a property to lean on.
+    // pool keeps; `l` seed 7 and `open` seed 8 fill three (`t` seed 4 did, before the
+    // search priced a rug), so a full pool is not a property to lean on.
     const pools = ALL.map(([id]) => [
       id,
       shuffleSweep()
@@ -274,10 +301,10 @@ describe("solveLayout mode: 'shuffle'", () => {
     ]);
     expect(pools).toEqual([
       ['rect', '44444444'],
-      ['l', '44444444'],
+      ['l', '44444434'],
       ['u', '44444444'],
-      ['open', '44444444'],
-      ['t', '44434444'],
+      ['open', '44444443'],
+      ['t', '44444444'],
     ]);
   });
 
@@ -297,7 +324,9 @@ describe("solveLayout mode: 'shuffle'", () => {
         return bestCandidate(r);
       },
     });
-    expect(rated.length, 'one finalist is the start alone: nothing was accepted').toBe(4);
+    // Three, and the number is the search's trajectory rather than a property of it —
+    // it was four until the search priced a rug. The defect this guards reads ONE.
+    expect(rated.length, 'one finalist is the start alone: nothing was accepted').toBe(3);
   });
 
   it('is deterministic: same room, same seed, same suggestion', () => {
@@ -355,7 +384,7 @@ describe('shuffleRoom — the offer, not the search', () => {
     // is mostly mutually dissimilar, so the penalty mostly multiplies zero. On the search
     // that accepted no steps it multiplied zero everywhere that mattered — 26 of 26
     // end-to-end pairs byte-identical, which is why § A.2's test once could not be
-    // written. On the one that runs it reorders one press in 24 (the test above), and
+    // written. On the one that runs it reorders two presses in 66 (the test above), and
     // this is the bound on how far it can reach.
     //
     // The clean set is rebuilt the way `shuffleRoom` builds it — same seed derivation,
@@ -407,25 +436,31 @@ describe('shuffleRoom — the offer, not the search', () => {
   it('the diversity term reorders a press — the test § A.2 asked for', { timeout: 120_000 }, () => {
     // Fails at `diversityPenalty: 0`, which is the whole ask. It could not be written
     // while the search accepted no steps (every pair came back byte-identical); on the
-    // search that runs, one press of 24 swept (six presets x attempts 2–5, each with
-    // the previous press's first idea as history) comes back in a different order.
-    // Same four ideas, same first one — `picked = []` cannot move `ranked[0]` — and
-    // the term trades the second for a less similar dearer one. The history is built
-    // the way the gallery builds it, press after press, so the fixture is one real
-    // sequence rather than a history chosen to provoke it.
+    // search that runs, two presses of 66 swept (six presets x attempts 2–12, each with
+    // the previous press's first idea as history) come back in a different order —
+    // `rect` 6 x 4 press 7 and this one. Same four ideas, same first one — `picked = []`
+    // cannot move `ranked[0]` — and the term trades the second for a less similar dearer
+    // one. The history is built the way the gallery builds it, press after press, so
+    // the fixture is one real sequence rather than a history chosen to provoke it.
+    //
+    // **Which press it is, is the search's trajectory, not a property of the term.** It
+    // was press 4 of this room until the search priced a rug (§ H.6.1), after which none
+    // of presses 2–5 on any preset reordered and the sweep had to widen to find one. So
+    // if this goes red after a change to the COST, re-run that sweep before concluding
+    // the term broke: the press may simply have moved.
     const { parts, room: r, locked } = room('rect', 7.5, 5.6);
     const ids = parts.map((p) => p.id);
     let prev = shuffleRoom(parts, r, locked, { attempt: 1 });
-    for (let attempt = 2; attempt <= 3; attempt++)
+    for (let attempt = 2; attempt <= 5; attempt++)
       prev = shuffleRoom(parts, r, locked, { attempt, history: [{ ids, placements: prev!.ideas[0].placements }] });
     const history = [{ ids, placements: prev!.ideas[0].placements }];
     const order = (penalty?: number) =>
-      shuffleRoom(parts, r, locked, { attempt: 4, history, diversityPenalty: penalty })!.ideas.map((i) =>
+      shuffleRoom(parts, r, locked, { attempt: 6, history, diversityPenalty: penalty })!.ideas.map((i) =>
         i.after.toFixed(1),
       );
     const withTerm = order();
     const without = order(0);
-    console.log(`  rect 7.5x5.6 attempt 4: penalty ${DIVERSITY_PENALTY} [${withTerm}] · penalty 0 [${without}]`);
+    console.log(`  rect 7.5x5.6 attempt 6: penalty ${DIVERSITY_PENALTY} [${withTerm}] · penalty 0 [${without}]`);
     expect(without, 'the premise: without the term the press ranks on cost alone').toEqual(
       [...without].sort((a, b) => Number(a) - Number(b)),
     );
@@ -486,22 +521,18 @@ describe('shuffleRoom — the offer, not the search', () => {
     // preset that already has a finding is not this button's to answer for; what a
     // shuffle may not do is INTRODUCE one.
     let offers = 0;
-    for (const [id, w, d] of ALL) {
-      const { parts, room: rm, locked } = room(id, w, d);
-      for (const attempt of [1, 2, 3]) {
-        const outcome = shuffleRoom(parts, rm, locked, { attempt });
-        if (!outcome) continue; // refusing is allowed; offering something broken is not
-        offers++;
-        // Every idea offered, not only the first: the gallery shows all of them.
-        expect(outcome.ideas.length, `${id} attempt ${attempt} offered nothing`).toBeGreaterThan(0);
-        for (const idea of outcome.ideas) {
-          const found = newRoomFindings(parts, rm, idea);
-          expect(
-            found.map((f) => `${f.rule}:${f.partIds.join(',')}`),
-            `${id} attempt ${attempt} introduced a finding`,
-          ).toEqual([]);
-          expect(idea.moved.length, `${id} attempt ${attempt}`).toBeGreaterThan(0);
-        }
+    for (const { id, attempt, parts, rm, outcome } of presetSweep()) {
+      if (!outcome) continue; // refusing is allowed; offering something broken is not
+      offers++;
+      // Every idea offered, not only the first: the gallery shows all of them.
+      expect(outcome.ideas.length, `${id} attempt ${attempt} offered nothing`).toBeGreaterThan(0);
+      for (const idea of outcome.ideas) {
+        const found = newRoomFindings(parts, rm, idea);
+        expect(
+          found.map((f) => `${f.rule}:${f.partIds.join(',')}`),
+          `${id} attempt ${attempt} introduced a finding`,
+        ).toEqual([]);
+        expect(idea.moved.length, `${id} attempt ${attempt}`).toBeGreaterThan(0);
       }
     }
     // The floor. Without it a build where `shuffleRoom` always returned null would
@@ -511,6 +542,155 @@ describe('shuffleRoom — the offer, not the search', () => {
       ALL.length * 2,
     );
   });
+
+  it('never offers a rug through the plaster — the one containment Room check forgives', { timeout: 300_000 }, () => {
+    // The test above cannot see this, by design: `clearance.ts` § 7b calls a rug
+    // outside only when its CENTRE is off the plan, because overhang is what a rug is
+    // for when somebody put it there. An Idea is a place nobody chose, so the search
+    // holds a rug to the walls (`containedBySearch`), and this asks whether it did.
+    //
+    // The witness is `roomContainment(...).box` — the drag's strict test, 10 mm of
+    // slack — and NOT `outsideDeficit`, which is the cost term's own instrument: an
+    // idea is only offered once `isCleanShuffle` has seen `outside` at zero, so
+    // asking the term's instrument again would be a check that cannot fail.
+    //
+    // Before the search priced a rug, this sweep found it through a wall in 9 of the
+    // ideas below: rect 6x4 twice (143, 456 mm), l twice (423, 788 mm) and open five
+    // times (27–383 mm), every one with its centre on the floor.
+    let rugIdeas = 0;
+    const through: string[] = [];
+    for (const { id, attempt, parts, rm, outcome } of presetSweep()) {
+      const rugs = parts.map((p, i) => (roleOf(p) === 'rug' ? i : -1)).filter((i) => i >= 0);
+      if (!outcome || rugs.length === 0) continue;
+      for (const [k, idea] of outcome.ideas.entries()) {
+        rugIdeas++;
+        for (const i of rugs) {
+          const at = idea.placements[i];
+          const p = parts[i];
+          const c = roomContainment([at.x, p.pos[1], at.z], at.yaw, p.dimMM, rm.footprint, p.circle);
+          if (!c.box) through.push(`${id} attempt ${attempt} idea ${k + 1}: ${p.name}`);
+        }
+      }
+    }
+    expect(through).toEqual([]);
+    // Exact, not a floor: the presets that carry a rug are rect, l, open and t, and
+    // this is how many ideas their twelve presses offered when it was written.
+    expect(rugIdeas).toBe(RUG_IDEAS_CHECKED);
+  });
+
+  it('still offers ideas around a pinned rug that hangs over the skirting', () => {
+    // The limit of the test above. Room check forgives a rug its overhang, so a user
+    // can pin one 300 mm through the east wall and see no finding at all. When the
+    // search charged that overhang, `isCleanShuffle` (which asks for `outside` at an
+    // absolute zero) refused every candidate, and with no finding to name
+    // `shuffleRefusal` could only say something was in the way: 3 of 3 presses came
+    // back null. The rug is forgiven the overhang it already had.
+    const { parts: base, room: rm } = room('rect', 6, 4);
+    const ri = base.findIndex((p) => roleOf(p) === 'rug');
+    expect(ri, 'the seeded 6 x 4 has a rug').toBeGreaterThanOrEqual(0);
+    expect(base[ri].rot, 'square to the walls, so its half-width is dimMM[0] / 2').toBe(0);
+    const parts = base.map((p, i) =>
+      i === ri ? { ...p, pos: [3.3 - p.dimMM[0] / 2000, p.pos[1], p.pos[2]] as [number, number, number] } : p,
+    );
+    const rug = parts[ri];
+    expect(roomContainment(rug.pos, rug.rot, rug.dimMM, rm.footprint).box, 'the fixture is through the wall').toBe(false);
+    const locked = lockedForSolve(parts, { [rug.id]: true }, null);
+    for (const attempt of [1, 2, 3]) {
+      // Non-null is the whole claim: `shuffleRoom` returns null when no candidate is
+      // clean, and a clean candidate is an idea.
+      expect(shuffleRoom(parts, rm, locked, { attempt }), `press ${attempt}`).not.toBeNull();
+    }
+  }, 60_000);
+
+  it('moves a rug the user left over the skirting only to somewhere inside the walls', () => {
+    // Review round 2's repro. The same rug, 300 mm through the east wall, NOT pinned.
+    // The search forgave it that overhang as one number — how far, not over which
+    // wall — wherever its centre stayed on the plan, so press 2's fourth idea laid it
+    // 58 mm through the NORTH wall, which the user had never put it near. Forgiven
+    // only on its own spot, an idea either leaves it exactly there or lays it inside
+    // the room. Every one of these twelve does the second; the count is measured,
+    // and pinned so a search change that starts leaving it put is a decision.
+    const { parts: base, room: rm } = room('rect', 6, 4);
+    const ri = base.findIndex((p) => roleOf(p) === 'rug');
+    const parts = base.map((p, i) =>
+      i === ri ? { ...p, pos: [3.3 - p.dimMM[0] / 2000, p.pos[1], p.pos[2]] as [number, number, number] } : p,
+    );
+    const rug = parts[ri];
+    const locked = lockedForSolve(parts, {}, null);
+    expect(locked[ri], 'nothing pins it').toBe(false);
+    let laidInside = 0;
+    for (const attempt of [1, 2, 3]) {
+      const outcome = shuffleRoom(parts, rm, locked, { attempt });
+      expect(outcome, `press ${attempt}`).not.toBeNull();
+      expect(outcome!.ideas.length, `press ${attempt}: four, as before`).toBe(4);
+      for (const [k, idea] of outcome!.ideas.entries()) {
+        const at = idea.placements[ri];
+        const left = at.x === rug.pos[0] && at.z === rug.pos[2] && at.yaw === rug.rot;
+        const inside = roomContainment([at.x, rug.pos[1], at.z], at.yaw, rug.dimMM, rm.footprint).box;
+        expect(left || inside, `press ${attempt} idea ${k + 1}: where it was left, or inside the walls`).toBe(true);
+        if (inside) laidInside++;
+      }
+    }
+    expect(laidInside, 'ideas that laid the rug inside the walls').toBe(12);
+  }, 60_000);
+
+  it('still offers ideas when the rug is bigger than the room', () => {
+    // The largest rug the catalogue allows (5 x 4 m, `dimension-ranges.ts`) in a
+    // 4.8 x 3.8 room: 100 mm over every wall, centred, NOT pinned — carpet nobody
+    // trimmed to the plan, and a room and rug the Inspector can both reach. Every spot
+    // but the one it is on hangs it further through a wall, and the anneal ends near
+    // that spot rather than on it. Shuffle has no prune to hand it back, so that
+    // residue tripped the impossibility veto, every candidate was reverted to the room
+    // as it stood, and 3 of 3 presses came back null. (Before the search held rugs
+    // they offered 4 ideas each, and all twelve had moved the rug through the walls.)
+    // The rug goes home (`overhangsOffItsSpot`); the rest of the room is rearranged.
+    const { parts: base, room: rm } = room('rect', 4.8, 3.8);
+    const ri = base.findIndex((p) => roleOf(p) === 'rug');
+    expect(ri, 'the seeded 4.8 x 3.8 has a rug').toBeGreaterThanOrEqual(0);
+    const parts = base.map((p, i) =>
+      i === ri
+        ? { ...p, dimMM: [5000, 4000, p.dimMM[2]] as [number, number, number], pos: [0, p.pos[1], 0] as [number, number, number], rot: 0 }
+        : p,
+    );
+    const locked = lockedForSolve(parts, {}, null);
+    expect(locked[ri], 'the rug is free to move — nothing pins it').toBe(false);
+    for (const attempt of [1, 2, 3]) {
+      // Non-null already says there are ideas and that each moves something
+      // (`isCleanShuffle` refuses one that moves nothing); what is left to say is
+      // which piece did not.
+      const outcome = shuffleRoom(parts, rm, locked, { attempt });
+      expect(outcome, `press ${attempt}`).not.toBeNull();
+      for (const idea of outcome!.ideas) {
+        expect(idea.moved, `press ${attempt}: the rug stays where it was left`).not.toContain(ri);
+      }
+    }
+  }, 60_000);
+
+  it('still offers ideas around a rug laid wall to wall', () => {
+    // A 5 x 4 m rug in a 5 x 4 room, flush on all four walls. Room check calls it
+    // inside, and every spot but this one hangs it through a wall. The anneal ends a
+    // centimetre or so from here, shuffle has no prune to hand the spot back, and
+    // without the homing 3 of 3 presses came back null — the same as the rug bigger
+    // than the room above, from the other side of the report's slack.
+    const { parts: base, room: rm } = room('rect', 5, 4);
+    const ri = base.findIndex((p) => roleOf(p) === 'rug');
+    expect(ri, 'the seeded 5 x 4 has a rug').toBeGreaterThanOrEqual(0);
+    const parts = base.map((p, i) =>
+      i === ri
+        ? { ...p, dimMM: [5000, 4000, p.dimMM[2]] as [number, number, number], pos: [0, p.pos[1], 0] as [number, number, number], rot: 0 }
+        : p,
+    );
+    const rug = parts[ri];
+    expect(roomContainment(rug.pos, rug.rot, rug.dimMM, rm.footprint).box, 'flush is inside').toBe(true);
+    const locked = lockedForSolve(parts, {}, null);
+    for (const attempt of [1, 2, 3]) {
+      const outcome = shuffleRoom(parts, rm, locked, { attempt });
+      expect(outcome, `press ${attempt}`).not.toBeNull();
+      for (const idea of outcome!.ideas) {
+        expect(idea.moved, `press ${attempt}: the rug goes home`).not.toContain(ri);
+      }
+    }
+  }, 60_000);
 
   it('returns null rather than offering a faulted room when nothing can move', () => {
     const { parts, room: rm } = room('rect', 6, 4);

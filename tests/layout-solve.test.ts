@@ -23,7 +23,7 @@ import {
 } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
 import { footFromPart, footInsidePoly } from '@/lib/geometry';
-import { footprintBounds } from '@/lib/footprint';
+import { footprintBounds, roomContainment } from '@/lib/footprint';
 import { footprintForLayout } from '@/lib/footprint';
 import { TWENTY_PIECE_BAR_MS, bestMs, ceilingMs } from './helpers/perf';
 import { defaultScene } from '@/lib/scene-spec';
@@ -638,6 +638,98 @@ describe('the solver and the room report agree', () => {
     console.log(`
   unpriced findings the solver left behind: ${unpriced.length}`);
     for (const u of unpriced.slice(0, 4)) console.log(`    ${u}`);
+  });
+
+  it('a rug standing off the plan gets a Try a fix, and the fix brings it back', () => {
+    // The button half of `containedBySearch`. Before the search priced a rug, the
+    // report filed this one as `outside-immovable` — no button — because `outside`
+    // read zero for a rug wherever it stood, so a confined re-fit had nothing to
+    // descend. The press below is the one `RoomTools` makes: `refit`, everything
+    // but the named piece locked. Measured before it was written: fifteen rugs
+    // pushed 200 mm off five presets (east, south and west), fifteen brought fully
+    // back with no finding left.
+    // The rug is alone on purpose. Beside a sofa the `relation` term pulls a rug
+    // under the seating whether or not `outside` can see it, and that fixture passed
+    // with the containment term switched off for rugs — a fix that works for the
+    // wrong reason certifies nothing about the reason.
+    const door = doorPart(-2);
+    const rug = part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [3.6, 0, 0] });
+    const parts = [door, rug];
+    const [finding] = analyzeRoom(parts, RECT_ROOM).issues.filter((i) => i.partIds.includes(rug.id));
+    expect(finding?.rule, 'the report files it as the fixable kind').toBe('outside');
+    expect(RULE_HANDLING[finding.rule].movable).toBe(true);
+
+    const r = solveLayout(parts, RECT, lockedForSolve(parts, {}, new Set([rug.id])), { seed: 1, mode: 'refit' });
+    const back = r.placements[1];
+    expect(r.moved, 'the fix moved the rug and only the rug').toEqual([1]);
+    expect(roomContainment([back.x, 0, back.z], back.yaw, rug.dimMM, RECT).box, 'every edge back inside').toBe(true);
+    const after = parts.map((p, i) => ({ ...p, pos: [r.placements[i].x, p.pos[1], r.placements[i].z] as [number, number, number], rot: r.placements[i].yaw }));
+    expect(analyzeRoom(after, RECT_ROOM).issues.filter((i) => i.partIds.includes(rug.id))).toEqual([]);
+  });
+
+  it('Fix all leaves a rug the report forgives where the user put it', () => {
+    // The other side of the rug's containment. The report forgives overhang on a rug
+    // whose centre is on the floor, so a user can drag one 300 mm over the skirting
+    // and Room check says nothing. When the search charged that overhang in every
+    // mode, the next **Fix all** — `refit`, the rug in `placed` because a hand put it
+    // there — pulled it off the wall by 322, 311 and 356 mm on seeds 1–3 and the toast
+    // called it "brought furniture back inside the room", overriding a placement the
+    // report had just called fine. `outside` read 208.01 before the press. The search
+    // forgives a rug the overhang it already had (`LayoutModel.overhang`), on the spot
+    // where it has it.
+    const base = defaultScene('rect', 6, 4);
+    const ri = base.findIndex((p) => p.category === 'rug');
+    expect(ri, 'the seeded 6 x 4 has a rug').toBeGreaterThanOrEqual(0);
+    expect(base[ri].rot, 'square to the walls, so its half-width is dimMM[0] / 2').toBe(0);
+    const parts = base.map((p, i) =>
+      i === ri ? { ...p, pos: [3.3 - p.dimMM[0] / 2000, p.pos[1], p.pos[2]] as [number, number, number] } : p,
+    );
+    const rug = parts[ri];
+    expect(roomContainment(rug.pos, rug.rot, rug.dimMM, RECT).box, 'the fixture really is through the wall').toBe(false);
+    expect(analyzeRoom(parts, RECT_ROOM).issues.filter((i) => i.partIds.includes(rug.id)), 'and forgiven').toEqual([]);
+    for (const seed of [1, 2, 3]) {
+      const r = solveLayout(parts, RECT, lockedForSolve(parts, {}, null), { seed, mode: 'refit', placed: new Set([rug.id]) });
+      expect(r.moved, `seed ${seed}: the rug stays`).not.toContain(ri);
+      expect(r.breakdownBefore.outside, `seed ${seed}: nothing to fix`).toBe(0);
+    }
+
+    // The same rug NOT in `placed` — no hand put it there; a resize in the Inspector
+    // writes a size and no position. That rug is **Fix all**'s to lay like any piece
+    // nobody placed, and here the rug rule wants it back in front of the sofa: on
+    // seeds 1–3 it comes 0.4–0.7 m west, bought by `relation` against `inertia`. What
+    // the forgiveness decides is only where it may end — where it was left, or inside
+    // the walls — and `outside` is 0 on both sides, so no toast can say a wall was the
+    // reason.
+    for (const seed of [1, 2, 3]) {
+      const r = solveLayout(parts, RECT, lockedForSolve(parts, {}, null), { seed, mode: 'refit' });
+      const at = r.placements[ri];
+      expect(r.moved, `seed ${seed}, not placed: the rug rule lays it`).toContain(ri);
+      expect(roomContainment([at.x, 0, at.z], at.yaw, rug.dimMM, RECT).box, `seed ${seed}: inside the walls`).toBe(true);
+      expect([r.breakdownBefore.outside, r.breakdownAfter.outside], `seed ${seed}: no wall in it`).toEqual([0, 0]);
+    }
+  });
+
+  it('Fix all does not trade a rug\'s overhang onto another wall', () => {
+    // Review round 2's repro, the reachable way: the seeded 5 x 4 rug resized in the
+    // Inspector to the catalogue's largest, 5 x 4 m, where it lies — 430 mm over the
+    // south wall and flush with the other three, and not in `placed`. The allowance
+    // is one number, how far and not over which wall, and it was forgiven wherever
+    // the centre stayed on the plan; so on seeds 1–3 **Fix all** slid the rug to 124,
+    // 38 and 148 mm over the south wall and 403, 423 and 374 mm through the EAST one —
+    // a wall the user had not touched, and more overhang in total than it started
+    // with. Forgiven only on its own spot, it has nowhere to spend it.
+    const poly = footprintForLayout('rect', 5, 4);
+    const base = defaultScene('rect', 5, 4);
+    const ri = base.findIndex((p) => p.category === 'rug');
+    expect(ri, 'the seeded 5 x 4 has a rug').toBeGreaterThanOrEqual(0);
+    const parts = base.map((p, i) => (i === ri ? { ...p, dimMM: [5000, 4000, p.dimMM[2]] as [number, number, number] } : p));
+    const rug = parts[ri];
+    expect(rug.rot, 'square to the walls').toBe(0);
+    expect(rug.pos[2] * 1000, 'south of centre, so it hangs that far over the south wall').toBeCloseTo(430, 0);
+    for (const seed of [1, 2, 3]) {
+      const r = solveLayout(parts, poly, lockedForSolve(parts, {}, null), { seed, mode: 'refit' });
+      expect(r.placements[ri], `seed ${seed}: the rug lies where it was left`).toEqual({ x: rug.pos[0], z: rug.pos[2], yaw: rug.rot });
+    }
   });
 });
 
