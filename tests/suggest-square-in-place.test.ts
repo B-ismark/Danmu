@@ -260,8 +260,11 @@ describe('Fix on a sofa a few degrees off square', () => {
       }
       // Nothing in either room is at fault, so nothing is turned, the L's armchair included:
       // it is authored 8° off square, inside `SNAP_TOL`. Identical on the commit before, both
-      // rooms: the T's two seeds that act are the search's own.
-      expect({ none, candidates }).toEqual({ none: id === 't' ? 10 : 12, candidates: 0 });
+      // rooms: the T's seeds that act are the search's own. There were two (seeds 2 and 8)
+      // until a seat tucked only front first (`tuckedAt`), which changes which seat spots the
+      // search may take, so it walks other paths: four now (2, 3, 5, 6), from the same 22.0
+      // the T starts at, its walkway fault. `candidates` is the rule here, and it is 0 on both.
+      expect({ none, candidates }).toEqual({ none: id === 't' ? 8 : 12, candidates: 0 });
     });
   }
 
@@ -279,9 +282,12 @@ describe('Fix on a sofa a few degrees off square', () => {
         if (Math.hypot(sofa.pos[0] - start.pos[0], sofa.pos[2] - start.pos[2]) < 1e-9 && offSquare(sofa.rot) < 1e-6) inPlace++;
       }
     }
-    // A shuffle is not meant to hand back the room it was given. 9 ideas and none of them
-    // this, the same as on the commit before. With the candidate offered to a shuffle as
-    // well, this room gets 1 idea: measured, and the reason the shuffle is left out.
-    expect({ n, inPlace }).toEqual({ n: 9, inPlace: 0 });
+    // A shuffle is not meant to hand back the room it was given. 8 ideas and none of them
+    // this, the same as on the commit before. (9 until a seat tucked only front first,
+    // which moves the search's paths; `inPlace` is the rule, and it is 0 on both.) With the
+    // candidate offered to a shuffle as well, this room got 1 idea (measured before the
+    // front-first rule, not re-measured since), and that is the
+    // reason the shuffle is left out.
+    expect({ n, inPlace }).toEqual({ n: 8, inPlace: 0 });
   });
 });
