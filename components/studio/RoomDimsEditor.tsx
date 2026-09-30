@@ -196,7 +196,7 @@ export function RoomDimsEditor() {
       if (afterFp !== beforeFp) {
         const { parts, setParts } = useScene.getState();
         const studio = useStudio.getState();
-        const { authored, overridden } = recarryForResize(parts, studio, beforeFp, afterFp);
+        const { authored, overridden } = recarryForResize(parts, studio, beforeFp, afterFp, studio.parentIds);
         if (authored.length > 0) {
           // Identity preserved for a part that did not move, like the regrade
           // below: `RoomSync` saves on every `parts` identity change, and a piece
