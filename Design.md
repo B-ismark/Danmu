@@ -1278,12 +1278,31 @@ pair and they are **one row**, and the measured one survives in either photo ord
 ## 5. The decoration studio
 
 ### Selection & transforms — `Pickable.tsx`, `Draggable.tsx`
-- Click to select, drag to move, gizmo to rotate / scale. The gizmo modes are
+- Click to select, drag to move, a ring to rotate, dots to stretch. The modes are
   **W** move, **R** rotate, **S** scale, armed on the 3D tab only
   (`KeyboardShortcuts.tsx`); **Q** and **E** orbit the camera (`CameraRig.tsx`) and are
   not gizmo keys. Naming them here because "Maya-style modes" was all this said, and
   `Draggable.tsx`'s own header filled the gap with "W=move E=rotate R=scale", which is
   wrong and was believed.
+  - **Move has no handles: the piece is the handle.** The translate gizmo's arrows and
+    planes were clutter over the thing you were trying to see, and a plain drag already
+    did everything they did. A piece that hangs on a wall (`followsPointerUp` in
+    `lib/physics.ts` — a wall rider whose anchor is not `wall-floor`, so a door is out)
+    is dragged across its OWN wall's vertical plane instead of the floor
+    (`lib/wall-drag.ts`), and the height the pointer asks for rides into
+    `resolvePlacement` as `rawY`, bottom edge on the grid like the Inspector's mount
+    height. A set with company is dragged on the floor as before, so it is never pulled
+    apart vertically.
+  - **Rotate is one ring**, drei's `TransformControls` with only the Y axis shown.
+  - **Scale is three dots** (`StretchHandles.tsx`, arithmetic in `lib/stretch.ts`),
+    one on each face it moves: width, depth, height. Pulling one moves THAT face and
+    the opposite face stays where it stands — the old scale gizmo had nine controls on
+    the pivot and grew from the centre. Each dot sits on the camera's side of the
+    piece, except a wall piece's depth dot (always the front) and a ceiling piece's
+    height dot (underneath). Dots are a constant size on screen, larger with a
+    coarse pointer (44 px hit target). The stretch resolves with snap off, as a turn
+    does, so the fixed face does not step; a pull into a wall rests at the last size
+    that fitted rather than being refused.
 - Snap: `off` / `fine` **1 cm · 15°** / `coarse` **5 cm · 45°** — `snapSteps` in
   `lib/drag-resolve.ts`, which is the only home for those four numbers. This line read
   "2.5°" and "7.5°" for both angles; nothing derives them and nothing checked.
@@ -1650,8 +1669,8 @@ shape still untested.
   for a commit after `plant` made it fifteen)
   rebuild from effective dimensions instead of stretching: sofa tiles seat
   modules from width, bookshelf derives shelves from height, wardrobe derives
-  door bays from width, etc. The scale gizmo live-stretches; commit converts
-  scale → dimension and the geometry redraws cleanly.
+  door bays from width, etc. The stretch handles live-stretch the group; commit
+  writes the dimension and the geometry redraws cleanly.
   **How MANY modules is `moduleCount` in `scene-spec.ts`, and it used to be five
   copies of `Math.round(span / nominal)` inline in the renderers.** That expression
   minimises the error in the *count* and says nothing about the *module*, which is
@@ -2846,7 +2865,8 @@ anything wrong; the same press is simply **delivered twice**.
 
 **R3F cannot see the gizmo.** It raycasts `internal.interaction` — the objects
 that carry event handlers — and drei's `<TransformControls>` is a `<primitive>`
-with none, so the ring, the arrows and the planes are transparent to picking. A
+with none, so the rotate ring is transparent to picking (the move arrows and
+planes it also covered are gone). A
 press aimed at a handle goes straight through to whatever furniture sits behind
 it, and that piece starts a direct drag of its own.
 

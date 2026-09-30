@@ -866,8 +866,8 @@ function DimensionEditor({
     const run = () => {
       const mm = next.map((s) => toMM(parseFloat(s), dimUnit));
       if (mm.some((n) => Number.isNaN(n) || n <= 0)) return;
-      // Clamp into the shape's trustable real-world range — same gate the scale
-      // gizmo and every other size path go through.
+      // Clamp into the shape's trustable real-world range — same gate the 3D
+      // stretch handles and every other size path go through.
       onChange(clampDims(category, shape, [mm[0], mm[1], mm[2]]));
     };
     pendingCommit.current = run;
@@ -1149,8 +1149,10 @@ function PaintPicker({
 }
 
 // Numeric mount-height editor for wall/ceiling-mounted parts — bottom edge
-// height off the floor, in the user's display unit. Pairs with the gizmo's
-// Y axis (drag preserves whatever height is set here).
+// height off the floor, in the user's display unit. Pairs with the 3D drag,
+// which slides a wall piece up and down its wall and snaps this same bottom edge
+// to the grid (`rawY` in lib/drag-resolve.ts); a ceiling piece's drag keeps
+// whatever height is set here.
 function MountHeightRow({
   bottomMM,
   maxBottomMM,

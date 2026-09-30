@@ -250,7 +250,44 @@ The three below are new, and each is here for a specific reason rather than by d
 rotate ring, because drei's `TransformControls` is a three.js object with **no DOM**, so
 nothing in Playwright can aim a press at its ring — the 2D half of that defect **is**
 browser-checked and is not in this list. The refusal sentence, because the question it
-raises is a judgement about what the app should do, not a fact a test can settle.*
+raises is a judgement about what the app should do, not a fact a test can settle. The first item, the Move / Scale / Rotate controls, came later and is here because
+the handles are drawn in WebGL and only a hand on a real pointer can say whether they
+feel right.*
+
+### Move has no arrows, a TV rides its wall, and Scale is three dots — branch `claude/affectionate-ritchie-ilawx1`
+
+**Where to click.** 3D tab, a fresh rectangular room.
+
+1. Select the **Sofa**, press **W**. Nothing should be drawn on it but the selection base.
+   Drag the sofa itself: it slides on the floor exactly as before.
+2. Select the **TV · 65″**, stay in **W**, and drag it **up and to one side** on its wall.
+   Then do the same to the **Framed print**, and try the **Door** (it should only slide
+   along, never lift).
+3. Select the Sofa again and press **S**. Three terracotta dots: one on the arm facing
+   you (width), one on the back or front facing you (depth), one above the seat (height).
+   Pull the arm dot outward, then the height dot up.
+4. Pull the width dot until the arm runs into a wall and let go there.
+5. Press **R**: one ring around the floor, nothing else.
+6. On a **phone**, repeat 3 with a finger.
+
+**What wrong looks like.**
+
+- **Step 2:** the TV peels off the wall, lags behind the finger, or snaps back down on
+  release. Its bottom edge should land on the snap grid (the Inspector's mount height
+  reads a round number with snap on). The door lifting at all is wrong.
+- **Step 3:** the arm you did NOT pull moves. That is the whole point of the change,
+  since the old gizmo grew from the centre. A dot hiding behind the sofa, or hopping to
+  the other side mid-pull, is wrong too.
+- **Step 4:** the sofa jumps back to its old width, or passes into the wall. It should
+  rest touching the wall at the last width that fitted.
+- **Step 6:** a dot too small to hit on the first try, or a pull that orbits the camera
+  instead.
+
+**Probed in SwiftShader on `7aebe30`:** the arm pull took the sofa from 2.20 m to 2.37 m
+wide with its centre moving 85 mm, which is half the growth, so the far arm stood still.
+The height pull went 880 → 900 mm, the top of the sofa's range. A TV dragged up and
+left went to 1.82 m with its wall coordinate unchanged. Steps 4 and 6 and the door were
+not probed.
 
 ### A short piece climbs a tall one, and the plan cannot show it
 
@@ -427,8 +464,8 @@ re-seeded room** and reports it as what the user got back.
 **Where to click.** 3D tab. Put a nightstand hard against the head of a bed, select the
 **bed**, press **R** for rotate. The ring is drawn around the bed and sweeps over the
 nightstand. Press **on the ring, at a point where it crosses the nightstand**, and drag to
-turn the bed. Do it again in **W** (move) mode, where the arrows and the flat translate
-squares reach over the same neighbour.
+turn the bed. (Move mode used to have arrows and flat squares reaching over the same
+neighbour; it has no handles now, so only the ring is left to check.)
 
 **What wrong looks like.** Three separate things, and only the first is the reported one:
 

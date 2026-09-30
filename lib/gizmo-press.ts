@@ -11,8 +11,8 @@
 // is delivered twice, because R3F cannot see the gizmo at all:
 //
 //   · R3F raycasts `internal.interaction` — the objects that carry event handlers.
-//     drei's `<TransformControls>` is a `<primitive>` with none, so the ring, the
-//     arrows and the planes are transparent to picking. A press aimed at a handle
+//     drei's `<TransformControls>` is a `<primitive>` with none, so the rotate ring
+//     — all that is left of it — is transparent to picking. A press aimed at a handle
 //     goes straight through to whatever furniture sits behind it, and that piece
 //     starts a direct drag of its own.
 //   · `Draggable.onPointerDown` already has three guards that would refuse such a

@@ -11,7 +11,7 @@
 // stamped in that component's own `onPointerDown` — and that handler does not always
 // run. Once a piece is selected the gizmo appears, and R3F cannot see the gizmo: drei's
 // `TransformControls` is a `<primitive>` with no handlers, so its invisible translate
-// plane sits over the selected furniture and takes the press without R3F dispatching
+// plane (gone now; the rotate ring is the same kind of object) sat over the selected furniture and takes the press without R3F dispatching
 // anything to the mesh underneath. The DOM click still arrives at the mesh. So `onClick`
 // ran with a `selDown` left over from the LAST press that did reach it — `[]`, from
 // before anything was selected — and `selectionForPick` concluded the pick came from
