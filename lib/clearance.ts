@@ -824,10 +824,10 @@ export function analyzeRoom(
   // a surface, that term is identically zero however far out it is — so no amount of
   // searching can improve it, and the honest row has no button. A rug was on that
   // list until the term learned to see it; a rug standing off the plan is fixable
-  // now. Its overhang, which this rule forgives, the search forgives too up to where
-  // the user had it (`LayoutModel.overhang`) and charges past that — so an idea
-  // cannot push a rug through the plaster, and **Fix all** does not move one this
-  // report has just called fine. Which pieces count as a rug is `forgivesOverhang`,
+  // now. Its overhang, which this rule forgives, the search forgives too — on the spot
+  // the user left it (`LayoutModel.overhang`), and nowhere else — so an idea either
+  // leaves a rug there or lays it inside the walls, and **Fix all** does not move one
+  // this report has just called fine. Which pieces count as a rug is `forgivesOverhang`,
   // one predicate for this rule and for that allowance.
   //
   // The cost's own dead band was the other half of that report and is fixed in
