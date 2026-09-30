@@ -100,6 +100,11 @@ type StudioState = {
    *  lists, and only one of them could drag a piece onto the floor. Not persisted:
    *  an open panel is a thing you are doing, not a preference. */
   catalogOpen: boolean;
+  /** The piece whose "Change the model" picker is open, or null. Here rather than in
+   *  the Inspector for the same reason as `catalogOpen`: two triggers (the Inspector's
+   *  button and the right-click menu) open one dialog, and the Inspector is not
+   *  mounted in every shell. Not persisted. */
+  swapPartId: string | null;
 
   setSelected: (id: string | null) => void;
   /** set the whole selection at once (group click). primary becomes selectedPartId. */
@@ -157,6 +162,7 @@ type StudioState = {
   setTransformMode: (m: 'translate' | 'rotate' | 'scale') => void;
   setSnapMode: (m: 'off' | 'fine' | 'coarse') => void;
   setCatalogOpen: (open: boolean) => void;
+  setSwapPartId: (id: string | null) => void;
   toggleGrid: () => void;
   toggleRail: (side: 'left' | 'right') => void;
   /** Commit a dragged rail width. `null` restores the token default. */
@@ -227,6 +233,7 @@ export const useStudio = create<StudioState>()(
   quality: 'high',
   dressed: true,
   catalogOpen: false,
+  swapPartId: null,
   frameSelectedToken: 0,
   pinned: {},
   hidden: {},
@@ -281,6 +288,7 @@ export const useStudio = create<StudioState>()(
   setParentIds: (parentIds) => set({ parentIds }),
   setTransformMode: (m) => set({ transformMode: m }),
   setCatalogOpen: (open) => set({ catalogOpen: open }),
+  setSwapPartId: (id) => set({ swapPartId: id }),
   setSnapMode: (m) => set({ snapMode: m }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   // Opens and closes. It does NOT touch the width, and that is a decision rather

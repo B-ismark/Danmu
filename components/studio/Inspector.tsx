@@ -12,12 +12,11 @@ import { ColorPicker } from '@/components/ui/ColorPicker';
 import { Select } from '@/components/ui/Select';
 import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
-import { SwapModelModal } from './RegenerateModal';
 import { RailSection } from './RailSection';
 import { EmptyInspector } from './EmptyInspector';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
-import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { anchorFor, findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
+import { supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
+import { anchorFor, MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
 import { useRoomReport } from './RoomTools';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
@@ -41,15 +40,10 @@ export function Inspector() {
   const selectedWall = useStudio((s) => s.selectedWall);
   const part = useRoomPart(id);
   const baseDim = useScene((s) => s.parts.find((p) => p.id === id)?.dimMM);
-  // The rotation a swap will LAND on: swapModel calls resetTransforms, so the
-  // effective (overridden) rot is about to be discarded and must not be the one
-  // the new model's footprint is measured with.
-  const baseRot = useScene((s) => s.parts.find((p) => p.id === id)?.rot) ?? 0;
   const hasOverrides = useHasOverrides(id);
   const setDim = useStudio((s) => s.setDim);
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
-  const setParent = useStudio((s) => s.setParent);
   const clearParent = useStudio((s) => s.clearParent);
   const resetTransforms = useStudio((s) => s.resetTransforms);
   const updatePart = useScene((s) => s.updatePart);
@@ -62,7 +56,7 @@ export function Inspector() {
   // derivation further down rather than here.
   const { report } = useRoomReport();
 
-  const [swapOpen, setSwapOpen] = useState(false);
+  const setSwapPartId = useStudio((s) => s.setSwapPartId);
 
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
 
@@ -106,58 +100,8 @@ export function Inspector() {
     clearParent(id!);
   }
 
-  // Hybrid swap — replace this part's model with a library one, keeping its
-  // position + colour. Re-grounds Y for the new dims / mount type and clears
-  // stale transform overrides (old scale would distort the new base dims).
-  // `dimOverride` carries sizes the user named in the picker's search box —
-  // `sizeFromQuery` has already clamped them, and the item handed over carries the
-  // result, so the argument and `item.dimMM` are the same number by the time they
-  // arrive. It stays a separate parameter because re-grounding must be the only
-  // place that decides Y, and a caller with a size in hand should be able to say so
-  // rather than mutate the item on the way in.
-  function swapModel(item: LibraryItem, dimOverride?: [number, number, number]) {
-    const dimMM = dimOverride ?? ([...item.dimMM] as [number, number, number]);
-    const [x, y, z] = currentXYZ();
-    const wallMounted = isWallMountedPart(item.category, item.shape);
-    let ny = y;
-    let support: { id: string; y: number } | null = null;
-    if (wallMounted) {
-      // `heightForNewCeiling` with the ceiling held still, NOT a hand-written
-      // clamp. This was a fifth copy of the one in `physics.ts` — character for
-      // character its return expression — while the constant's own docblock named
-      // four and listed the other one in this file. It also broke the exemption
-      // stated three lines below that count: a door is `wall-floor`, so
-      // `isWallMountedPart` is true and it came through here, `groundY` returned
-      // its canonical h/2, and the pad then stood it 20 mm off its own threshold —
-      // with `apertures.ts` cutting the hole from the same raised centre, which is
-      // the doorway-with-a-step the anchor exists to prevent. The shared function
-      // returns `y` untouched for `floor` and `wall-floor` and clamps everything
-      // else, so routing through it fixes the door and makes the count true.
-      ny = heightForNewCeiling(
-        item.category,
-        item.shape,
-        dimMM,
-        groundY(item.category, item.shape, dimMM, room.height),
-        room.height,
-        room.height,
-      );
-    } else {
-      // The NEW kind is the one asking: the snapshot still holds the old one under
-      // this id, and a swap to a chair must not stand it on the table it tucks under.
-      support = findSupportDetailed(partSnapshot(), { id: id!, category: item.category, shape: item.shape }, x, z, dimMM, baseRot);
-      ny = support !== null && support.y > 0.3 ? support.y : 0;
-    }
-    resetTransforms(id!); // drop stale rotate/scale overrides (and any rigid-parenting link)
-    // Update the name too — leaving it stale is how a swapped-in door kept its
-    // old "tall mirror" identity, so hover/tree showed a wrong, conflicting label.
-    updatePart(id!, { name: item.label, category: item.category, shape: item.shape, dimMM, wallMounted });
-    setPosition(id!, [x, ny, z]);
-    // Re-establish what `resetTransforms` just cleared — the swap moved the
-    // part, but didn't stop it resting on whatever it landed on.
-    if (!wallMounted && support && support.y > 0.3) setParent(id!, support.id);
-    else clearParent(id!);
-    setSwapOpen(false);
-  }
+  // The model swap is `lib/swap-model.ts` now, and its dialog is `SwapModelHost`:
+  // the right-click menu offers the same verb, so neither can live in this panel.
 
   function snapToNearestWall() {
     const [x, y, z] = currentXYZ();
@@ -493,7 +437,7 @@ export function Inspector() {
           detections) read poorly, so for those the same button leads with why. */}
       <div className="section section--flush" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button
-          onClick={() => setSwapOpen(true)}
+          onClick={() => setSwapPartId(id)}
           className={isGeneric ? 'ds-btn' : 'ds-btn ds-btn--primary'}
           title="Pick a different model from the Library"
           style={{
@@ -526,10 +470,6 @@ export function Inspector() {
           stays on screen either way, because that clamp is the app's promise that
           nothing can end up a fantasy size. */}
       <DimensionEditor partId={id} category={part.category} shape={part.shape} value={currentDim} defaultDim={defaultDim} onChange={(d) => setDim(id, d)} />
-
-      {swapOpen && (
-        <SwapModelModal part={part} onClose={() => setSwapOpen(false)} onSwap={swapModel} />
-      )}
     </div>
   );
 }

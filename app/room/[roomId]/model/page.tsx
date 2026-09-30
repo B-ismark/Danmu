@@ -6,6 +6,7 @@ import { useStudio } from '@/lib/store';
 import { CatalogPanel, CatalogToggle, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { usePhoneStudio } from '@/components/studio/NarrowViewportBanner';
 import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
+import { SwapModelHost } from '@/components/studio/RegenerateModal';
 import { HoverCard } from '@/components/studio/HoverCard';
 import { TransformToolbar } from '@/components/studio/TransformToolbar';
 import { StudioShell } from '@/components/studio/StudioShell';
@@ -71,6 +72,7 @@ export default function ModelPage() {
 
       {/* Positions itself against this element's box. */}
       <SceneContextMenu />
+      <SwapModelHost />
     </main>
   );
 
