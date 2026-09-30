@@ -3704,6 +3704,27 @@ tables, which is the defect § H.6.3 fixed, so it needs measuring before it is w
 `tests/seat-support.test.ts` uses a 350 mm nesting ottoman under its 420 mm table so that
 no fixture certifies the interpenetration, and asserts only the reading of the 250 mm one.
 
+*Measured first: does a piece's height mean what it says?* A fit test compares two heights,
+so both have to be the heights the pieces are drawn at. `tests/drawn-height.test.tsx` walks
+the renderer of every floor-standing shape (35 of them) at the bottom, catalogue and top of
+its height range. **The ottoman did not reach its own**: the welt stopped at 0.9 h, so a tray
+set on a 420 mm ottoman stood 42 mm above the cushion, and a fit test would have measured a
+seat 10% taller than anyone sees. It is drawn to h now. Eight shapes still miss by more than
+1 mm, and the test holds them as a literal list, so a new miss fails and so does a fixed one
+left on it:
+
+| Shape | Drawn top against h | Why |
+|---|---|---|
+| rug, plane | fixed thickness | a flat piece, whatever the height field says |
+| bed-single, bed-double | 1.4 h | the headboard, on purpose: h is the mattress top |
+| monitor | 0.96 h + 10 mm, −14 mm at 600 | the screen stops short of the box |
+| laptop | 20 mm + 0.94 h, +13 mm at 150 | h is the lid's length, tilted back from the hinge |
+| air-purifier | h + 14 mm | a control disc sits on the top |
+| water-dispenser | 1.02 h, +24 mm at 1200 | the bottle |
+
+None is a seat or a surface a seat tucks under, so none touches this section. The one that
+could matter elsewhere is the purifier: something set on it lands at h, 14 mm inside the disc.
+
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
 Their words, kept because the scope is theirs: *"Do a detailed search to the fundamental
