@@ -68,7 +68,6 @@ import {
   refusalCause,
   type Resolved,
 } from '@/lib/drag-resolve';
-import { wouldCreateCycle } from '@/lib/rigid-parent';
 import { convoyRestore, gestureFor, leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
@@ -168,8 +167,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const setRotation = useStudio((s) => s.setRotation);
   const setTransformsFor = useStudio((s) => s.setTransformsFor);
   const setDim = useStudio((s) => s.setDim);
-  const setParent = useStudio((s) => s.setParent);
-  const clearParent = useStudio((s) => s.clearParent);
+  const landOn = useStudio((s) => s.landOn);
   const setDragging = useStudio((s) => s.setDragging);
   const setLive = useDragLive((s) => s.setLive);
   /** Is THIS piece one of the ones the current gesture cannot place?
@@ -281,10 +279,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // Everything this gesture carries: whatever is (physically, live) resting on
   // this part, the rest of the multi-selection, and any merged group either of
   // those belongs to. Computed once per gesture from the same frozen snapshot as
-  // `effParts()` — the relation cannot change mid-gesture (`setParent`/
-  // `clearParent` are only ever called from `commit()`, after which both caches
-  // are cleared, and a drag writes no authored part), so there's no staleness
-  // risk in caching this either.
+  // `effParts()`, and that is a decision rather than a safe assumption: this drag
+  // writes the relation only in `commit()`, after which both caches are cleared, but
+  // a copy or a panel button can write it too, and a link written while the pointer
+  // is down waits for the next gesture — the same reason the world is a snapshot
+  // (`PlanView`'s `dragRef.world` says why a live one shifts the company twice).
   const convoyCache = useRef<Convoy | null>(null);
   function convoy(): Convoy {
     if (!convoyCache.current) {
@@ -610,12 +609,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // dropping onto the floor (or a refused cycle) breaks it. Established/
     // broken before the cascade below, using `parentIds` as it stood at
     // drag-start (this part's own link can't affect who its own descendants
-    // are, so the ordering here doesn't matter to the convoy).
-    if (resolved.supportId && !wouldCreateCycle(partId, resolved.supportId, useStudio.getState().parentIds)) {
-      setParent(partId, resolved.supportId);
-    } else {
-      clearParent(partId);
-    }
+    // are, so the ordering here doesn't matter to the convoy). The plan tab's
+    // drop writes it through the same `landOn`.
+    landOn(partId, resolved.supportId);
 
     // Everything the gesture carried, landed in one store update: this part's
     // rigid children about its resolved pivot, the rest of the multi-selection and

@@ -291,6 +291,31 @@ export function ridingParents(parts: ScenePart[]): Record<string, string> {
   return out;
 }
 
+/** `parentIds` once `childId` has been set down on `supportId` — or on nothing.
+ *
+ *  A drop is where the relation is written, in both tabs: landing ON something links
+ *  the piece to it, landing on the floor (or on a support that would close a loop)
+ *  unlinks it. The plan tab never wrote it at all, so a lamp moved there onto the other
+ *  nightstand kept the first one's link and was left behind when the second one moved
+ *  (`docs/what-is-still-open.md` § H.6.7). One function so the two tabs cannot write it
+ *  differently.
+ *
+ *  Returns the SAME object when nothing changes, so a caller can hand every landing to
+ *  it without an update for each one that landed where the last did. */
+export function landedLinks(
+  parentIds: Record<string, string>,
+  childId: string,
+  supportId: string | undefined,
+): Record<string, string> {
+  if (supportId && !wouldCreateCycle(childId, supportId, parentIds)) {
+    return parentIds[childId] === supportId ? parentIds : { ...parentIds, [childId]: supportId };
+  }
+  if (!(childId in parentIds)) return parentIds;
+  const next = { ...parentIds };
+  delete next[childId];
+  return next;
+}
+
 /** Would linking `childId` under `candidateParentId` create a cycle? Checked
  *  both when a live drag auto-establishes a relationship and when a scene
  *  file imports one (a hand-edited file can encode a loop directly). */

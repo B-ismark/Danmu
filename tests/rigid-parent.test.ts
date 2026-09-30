@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { snapshotDescendants, cascadeTransform, livingParents, wouldCreateCycle } from '@/lib/rigid-parent';
+import { snapshotDescendants, cascadeTransform, landedLinks, livingParents, wouldCreateCycle } from '@/lib/rigid-parent';
 import type { ScenePart } from '@/lib/scene-spec';
 
 function part(overrides: Partial<ScenePart> & Pick<ScenePart, 'id' | 'pos' | 'dimMM'>): ScenePart {
@@ -250,5 +250,27 @@ describe('snapshotDescendants — a piece on the floor rides nothing (§ H.6.7)'
     expect(snapshotDescendants('mat', [mat, chair], { chair: 'mat' }).map((d) => d.id)).toEqual(['chair']);
     const floored = { ...chair, pos: [0, 0, 0] as [number, number, number] };
     expect(snapshotDescendants('mat', [mat, floored], { chair: 'mat' })).toEqual([]);
+  });
+});
+
+describe('landedLinks — what a drop writes', () => {
+  it('links a piece to what it landed on, and moves the link when it lands elsewhere', () => {
+    expect(landedLinks({}, 'lamp', 'n1')).toEqual({ lamp: 'n1' });
+    expect(landedLinks({ lamp: 'n1', mug: 'desk' }, 'lamp', 'n2')).toEqual({ lamp: 'n2', mug: 'desk' });
+  });
+
+  it('unlinks a piece that landed on nothing', () => {
+    expect(landedLinks({ lamp: 'n1', mug: 'desk' }, 'lamp', undefined)).toEqual({ mug: 'desk' });
+  });
+
+  it('refuses a link that would close a loop, and unlinks instead', () => {
+    // The tray rides the ottoman; the ottoman cannot then ride the tray.
+    expect(landedLinks({ tray: 'o', o: 'rug' }, 'o', 'tray')).toEqual({ tray: 'o' });
+  });
+
+  it('hands back the same map when nothing changes, so a landing costs no update', () => {
+    const links = { lamp: 'n1' };
+    expect(landedLinks(links, 'lamp', 'n1')).toBe(links);
+    expect(landedLinks(links, 'mug', undefined)).toBe(links);
   });
 });
