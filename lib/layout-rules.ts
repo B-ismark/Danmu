@@ -803,7 +803,11 @@ function surfaceKneeMM(shape: Shape, role: Role, h: number): number {
   }
 }
 
-const isSeatRole = (role: Role): boolean => FLOOR_SHARERS.some(([seat]) => seat === role);
+/** Is this a SEAT in `FLOOR_SHARERS` — the half that goes under, never the surface it
+ *  goes under. Seats and surfaces are disjoint there, so this also says which is which. */
+export function isSeatRole(role: Role): boolean {
+  return FLOOR_SHARERS.some(([seat]) => seat === role);
+}
 
 /** Does one of these go under the other? `sharesFloor` for the roles, and the seat's
  *  tuck clearing the surface's knee. Symmetric, like `sharesFloor`; seats and surfaces

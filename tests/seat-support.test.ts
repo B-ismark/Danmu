@@ -7,7 +7,7 @@ import { ridingParents } from '@/lib/rigid-parent';
 import { placeNewPart, selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import { footArea, footFromPart, footIntersectionArea, type Poly } from '@/lib/geometry';
 import { isObstacle, roleOf, tucksUnder, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
-import { floorBlockers } from '@/lib/clearance';
+import { analyzeRoom, floorBlockers } from '@/lib/clearance';
 import { clampDims } from '@/lib/dimension-ranges';
 
 // § H.6.3 — a seat never stands on the surface it tucks under.
@@ -532,8 +532,28 @@ describe('every caller that moves a piece to what it finds', () => {
     // an ottoman is one of those — so a detected ottoman under a table was put ON it.
     expect(settleHeights([TABLE, ottoman(0, 0)], H)).toEqual([]);
     expect(settleHeights([TABLE, lamp(0, 0)], H)).toEqual([{ id: 'lamp', y: TOP }]);
-    // One it does not fit under is an ordinary support (§ H.6.4).
-    expect(settleHeights([COFFEE, ottoman(0, 0)], H)).toEqual([{ id: 'ottoman', y: 0.42 }]);
+    // One it does not fit under is not lifted onto it either. Adding one there puts it
+    // on top (the adding test above), because the user put it there; this pass is the
+    // scan's, where a seat was read as standing on the floor, and it stood a scanned
+    // ottoman on its coffee table where no report saw it. On the floor, Room check
+    // names the clash.
+    expect(settleHeights([COFFEE, ottoman(0, 0)], H)).toEqual([]);
+    expect(analyzeRoom([COFFEE, ottoman(0, 0)], { footprint: ROOM, height: H }).issues.filter((i) => i.rule === 'clash')).toHaveLength(1);
+    expect(settleHeights([COFFEE, lamp(0, 0)], H)).toEqual([{ id: 'lamp', y: 0.42 }]);
+    // Not lifted is not knocked down: one already on the top stays there.
+    expect(settleHeights([COFFEE, ottoman(0, 0, 0.42)], H)).toEqual([]);
+    // A seat, not an ottoman: a row the detector files under `other` with a chair shape
+    // is tabletop-prone by its category (`sceneShapeFor` keeps the shape it picked), and
+    // is a dining chair by its shape. A coffee table is no partner of a dining chair, so
+    // nothing else keeps it off that top.
+    const filed = part({ id: 'filed', category: 'other', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, 0] });
+    expect(roleOf(filed)).toBe('dining-chair');
+    expect(settleHeights([COFFEE, filed], H)).toEqual([]);
+    // A SEAT, not anything that shares floor. A storage box the size of a coffee table
+    // reads as one (`roleOf`), and a box on a dining table is still put on it.
+    const chest = part({ id: 'chest', category: 'other', shape: 'box', dimMM: [800, 450, 320], pos: [0, 0, 0] });
+    expect(roleOf(chest)).toBe('coffee-table');
+    expect(settleHeights([TABLE, chest], H)).toEqual([{ id: 'chest', y: TOP }]);
   });
 
   it('settling: a tray on an ottoman stays on it', () => {

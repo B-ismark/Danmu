@@ -61,7 +61,7 @@ import {
   type Foot,
   type Poly,
 } from './geometry';
-import { isObstacle, profilesTuck, tuckProfile, WALL_GAP, type TuckProfile } from './layout-rules';
+import { isObstacle, isSeatRole, profilesTuck, roleOf, tuckProfile, WALL_GAP, type TuckProfile } from './layout-rules';
 import { findSupportDetailed, isFloorStanding, isTabletopProne, MOUNT_PAD, ridesWall, SUPPORT_Y_EPS, verticalExtent } from './physics';
 import type { ScenePart, Shape } from './scene-spec';
 
@@ -388,7 +388,15 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
         ? findSupportDetailed(under, p, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
         : null;
       const y = support !== null && support.y > 0.3 ? support.y : null;
-      if (isTabletopProne(p.category) && floor && y !== null) {
+      // A seat is not lifted. An ottoman is tabletop-prone, and the add path wants that:
+      // dropped over a coffee table it does not fit under, it goes on top, where the
+      // user put it and can see it (§ H.6.4). Here nobody put it anywhere. A scan reads
+      // every floor piece as standing on the floor, which for a seat is the right
+      // reading — what a scan gets wrong is WHERE on the floor. A scanned ottoman the
+      // tidy-up could not push clear of its coffee table was stood on the top at 0.42 m,
+      // where no report saw it; on the floor it is a clash `lib/clearance.ts` names.
+      // A seat that arrives already in the air still comes to rest in the branch below.
+      if (isTabletopProne(p.category) && floor && y !== null && !isSeatRole(roleOf(p))) {
         p.pos[1] = y;
       } else if (floor && p.pos[1] > 0.05) {
         // Nothing under it any more: the floor. This is the nightstand.

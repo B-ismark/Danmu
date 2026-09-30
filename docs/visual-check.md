@@ -622,7 +622,7 @@ read 1613 after you let go. Wrong: it reads 1610, or 3D refuses the drag while t
 drag goes through in the plan. `Draggable` hands the lead's size to `leadInherited` from
 `currentDim()`, which is the held size since #188, and nothing mounts it in a test.
 
-### A seat goes under a surface only where it fits — § H.6.4, branch `claude/amazing-davinci-m8zqys`, needs eyes in both tabs
+### A seat goes under a surface only where it fits — `1be34c0` on `main` (PR #193, § H.6.4), needs eyes in both tabs
 
 The seat rule asked only which kind of seat goes under which kind of surface. So the
 Library's ottoman "tucked" into the coffee table, straight through its lower shelf, and a
@@ -2026,6 +2026,26 @@ the typical width error 19% → 10%; with the room skipped, short 10 → 6 and o
 real phone, with a real scan, is the unlooked-at half.
 
 ---
+### A scanned seat stays on the floor, and nothing climbs the tray on it — this branch (§ H.6.4 follow-ups), NOT PROBED
+
+Two things the scan's tidy-up used to do to a seat, both only in a scanned room. A tray
+resting on an ottoman lifted the ottoman onto the tray, and the tray onto that, both in the
+air. And an ottoman photographed so close to a coffee table that the room had no space to
+push them apart was stood on the tabletop, where Room check could not see it. Tests hold both;
+nobody has looked at a scanned room with either.
+
+**Where to click.** Scan a small room with an ottoman beside a coffee table, and one with a
+tray on an ottoman. Open the result in 3D and open Room check.
+
+**What right looks like.**
+- The ottoman stands on the floor. The tray, if it came through, sits on the ottoman.
+- An ottoman left overlapping the coffee table is reported by Room check as two pieces in
+  the same place.
+
+**What wrong looks like.**
+- An ottoman floating half a metre up, or on the coffee table's top.
+- An ottoman overlapping the coffee table with Room check saying nothing.
+
 ## Look and light
 
 ### The day track as a slider over the canvas, a frosted base under the selection, no streaks while carrying — merged to `main` in `b955aac` (PR #178), SEEN HEADLESS ONLY

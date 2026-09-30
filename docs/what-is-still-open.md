@@ -3788,11 +3788,17 @@ clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/
 - **A dining table under 800 mm wide is outside the dining/desk table's range.** The panel
   says so and **Put it there** widens it to 800. Whether a `table` category's range should
   start lower is a separate decision.
-- **A scanned ottoman the tidy-up cannot push clear of a coffee table is lifted onto it.**
-  Measured: in a 1.3 × 1.0 m room the push has nowhere to go, the ottoman is left half over
-  the top, and `settleHeights` stands it there at 0.42 m, where no report sees it. On `main`
-  it stayed on the floor inside the table, which no report saw either. It belongs with the
-  other ottoman-on-a-top fix in `settleHeights`, not here.
+- **A scanned ottoman the tidy-up cannot push clear of a coffee table was lifted onto it —
+  fixed after this, in `settleHeights`.** Measured: in a 1.3 × 1.0 m room the push has
+  nowhere to go, the ottoman is left half over the top, and the settle pass stood it there at
+  0.42 m, where no report saw it (before this fix it stayed on the floor inside the table,
+  which no report saw either). That pass no longer lifts a SEAT (`isSeatRole`): a scan reads
+  every floor piece as standing on the floor, which for a seat is the right reading, so the
+  ottoman stays down and Room check reports the clash — measured in the same room, and at
+  1.3 × 0.8 and 1.2 × 0.7. Adding one there still puts it on top, because the user put it
+  there. A seat and not everything that shares floor: a storage box the size of a coffee
+  table reads as one and is still put on a dining table, and a row filed under `other` with a
+  chair's shape is a seat. Four mutants of the gate, each caught by `tests/seat-support.test.ts`.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
