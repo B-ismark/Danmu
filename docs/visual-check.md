@@ -130,32 +130,13 @@ in this repo renders geometry.
 *Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone,
 and so are the four that came after them: Move / Scale / Rotate, a TV changing walls, the
 wall pushing what it meets, and a short piece climbing a tall one. The user looked at each
-of those on 2026-09-30, and ruled that a nightstand may climb a wardrobe. What is left is
+of those on 2026-09-30, and ruled that a nightstand may climb a wardrobe — and, the same
+day, a wall stopping at the rug it carries and its knob standing clear of the furniture. What is left is
 here for a specific reason each. The rotate ring, because drei's `TransformControls` is a
 three.js object with **no DOM**, so nothing in Playwright can aim a press at its ring —
 the 2D half of that defect **is** browser-checked and is not in this list. The refusal
 sentence, because the question it raises is a judgement about what the app should do, not
 a fact a test can settle.*
-
-### A rug the wall carries stops it, and the wall's knob stands clear of the furniture
-
-**Where to click.** An **L-Shape** room, 3D. Select the TV wall and drag it in toward the
-rug in front of it, then keep going. Then do the same with the plan's arrow keys on that
-wall. Then, in any room, select a wall that has a wardrobe or a bookcase against it.
-
-**What changed.** A rug close to a wall is CARRIED by it rather than pushed, and a carried
-piece that ran out of room was simply left behind — so the wall walked on through the rug
-while a pushed sofa stopped it. Now the rug rides the wall until it meets the far side, waits
-there, and the wall stops when it reaches it, with *"That wall stops here: the Area rug has
-no more room to move."* Separately, the 3D knob sat halfway up the wall face, inside
-anything tall standing against it; it now sits on the wall's top edge.
-
-**What "wrong" looks like.** The wall passing over the rug. The rug jumping back to where it
-began when you draw the wall out again in the same drag. A carried sofa or lamp stopping the
-wall while there is still clear floor between them. The knob hidden, clipped by the ceiling,
-or no longer grabbable from the dollhouse view.
-
-**Where it rides.** Branch `claude/affectionate-ritchie-ilawx1`.
 
 ### A refusal that names the wall instead of an obstruction that is not there
 
