@@ -50,6 +50,7 @@ import {
   belongTogether,
   containedBySearch,
   doorPath,
+  forgivesOverhang,
   formsRoute,
   isMountedObstruction,
   isSoftFurnishing,
@@ -823,7 +824,11 @@ export function analyzeRoom(
   // a surface, that term is identically zero however far out it is — so no amount of
   // searching can improve it, and the honest row has no button. A rug was on that
   // list until the term learned to see it; a rug standing off the plan is fixable
-  // now, and its overhang, which this rule forgives, is priced by the search anyway.
+  // now. Its overhang, which this rule forgives, the search forgives too up to where
+  // the user had it (`LayoutModel.overhang`) and charges past that — so an idea
+  // cannot push a rug through the plaster, and **Fix all** does not move one this
+  // report has just called fine. Which pieces count as a rug is `forgivesOverhang`,
+  // one predicate for this rule and for that allowance.
   //
   // The cost's own dead band was the other half of that report and is fixed in
   // `layout-score.ts`: `outsideShare` samples a grid whose outermost points sit a
@@ -833,7 +838,7 @@ export function analyzeRoom(
   // is reported. Without that, `movable: true` here would have been a second lie.
   for (const p of parts) {
     const c = roomContainment(p.pos, p.rot, p.dimMM, poly, p.circle);
-    const out = p.category === 'rug' ? !c.centre : !(c.box && c.centre);
+    const out = forgivesOverhang(p) ? !c.centre : !(c.box && c.centre);
     if (!out) continue;
     // WHERE it is — the title and the remedy sentence.
     const standing = !c.centre;

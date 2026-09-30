@@ -840,8 +840,17 @@ is the gate working rather than an obstacle to it.
 **The one place the two disagree on purpose is a rug's overhang**, and the same file
 holds it as a decision rather than letting it read as a gap: the report forgives a rug
 everything but its centre, because a rug somebody put under a sofa or up to the skirting
-is doing its job; the search charges for the overhang, because an idea is a place nobody
-chose (§ H.6.1). The set the search keeps inside the walls is `containedBySearch`
+is doing its job; the search charges for overhang PAST what the rug was left with
+(`LayoutModel.overhang`), because an idea is a place nobody chose (§ H.6.1). So the two
+agree about every rug the user placed — Fix all leaves a forgiven rug where it is, and a
+pinned rug hanging over the skirting does not stop Ideas — and differ only about where
+the search may take one. A rug whose centre is off the plan is forgiven nothing, which
+is what gives **Try a fix** the whole measure to work with. Because the one spot that
+costs a rug nothing is where it stands, and an anneal ends near that spot rather than on
+it, the solver sends a rug home when its answer would hang it further through
+(`hangsFurtherThanLeft`) — without that, a rug laid wall to wall turned every Ideas press
+into a refusal. Which rugs are forgiven is one predicate, `forgivesOverhang`, read by
+the report and the search alike. The set the search keeps inside the walls is `containedBySearch`
 (`lib/layout-rules.ts`) — every obstacle and a floor rug — and it is also the set whose
 containment finding gets **Try a fix**, so a finding is fixable exactly when the cost
 term can see the piece. It was `isObstacle` on both sides until then, which is why a rug

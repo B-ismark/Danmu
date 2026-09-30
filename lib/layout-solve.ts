@@ -47,6 +47,7 @@ import {
   angleDelta,
   bandCost,
   costBreakdown,
+  hangsFurtherThanLeft,
   navigabilityCost,
   NAV_CELL,
   prepare,
@@ -717,10 +718,12 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
  *  hard-term gate at all, so a large fault trips "never worse than what we were
  *  given" and discards the whole solve while a small one is simply applied.
  *
- *  So the carry is gated on `obstacle` — the SEARCH'S OWN array, not a fourth
- *  constant on the same axis. A piece the search was scoring as a floor obstacle is
+ *  So the carry is gated on `contained` — the SEARCH'S OWN array, not a fourth
+ *  constant on the same axis. A piece the search was holding inside the walls is
  *  left exactly where the search put it, because the search is the thing that
- *  priced it. `ridingParents` is unchanged and still answers the geometric question
+ *  priced it. It was `obstacle` until a rug joined that set (`containedBySearch`):
+ *  a rug at 0 < y < 0.05 is a rider AND priced, and an `obstacle` gate would have
+ *  carried it after the term had scored it — the same hole, one piece over. `ridingParents` is unchanged and still answers the geometric question
  *  honestly; what belongs to the solver is the policy about what to do with the
  *  answer.
  *
@@ -740,7 +743,7 @@ function carryRiders(
   origin: Placement[],
   winner: Placement[],
   locked: boolean[],
-  obstacle: boolean[],
+  contained: boolean[],
   edges: Record<string, string>,
 ): Set<number> {
   // The filter drops a support that is itself riding something, so a chain is
@@ -808,11 +811,12 @@ function carryRiders(
       // the riders too. Here there is only one `locked` array and it deliberately
       // reads as the user's answer.
       if (locked[i]) continue;
-      // …and a rider the search was scoring as a floor obstacle stays where the
-      // search left it. See the docblock: the two bars overlap on (0, 0.05), and
-      // moving a scored obstacle after the last repair pass is how a chair ends up
-      // through a wall.
-      if (obstacle[i]) continue;
+      // …and a rider the search was holding inside the walls stays where the search
+      // left it. See the docblock: the two bars overlap on (0, 0.05), and moving a
+      // piece the containment term priced, after the last repair pass, is how a chair
+      // ends up through a wall — or a rug, which that term scores and `isObstacle`
+      // does not.
+      if (contained[i]) continue;
       winner[i] = { x: mv.pos[0], z: mv.pos[2], yaw: mv.rot ?? winner[i].yaw };
       carried.add(i);
     }
@@ -1260,6 +1264,28 @@ export function solveLayout(
   // by construction. A piece the prune restored is the user's again.
   winner = snapYaws(model, winner, weights, true, origin);
 
+  // ── A rug that would hang further over the skirting goes back where it was ──
+  //
+  // After every pass that can move a piece and before anything reads the answer, in
+  // every mode. A rug the user left hanging over the walls — or laid wall to wall —
+  // has one place guaranteed to cost it nothing, the place it is standing, and
+  // almost nowhere else: every other spot hangs it further through. The anneal ends
+  // a centimetre or so from there, not ON it, and that residue is the whole defect.
+  // Shuffle skips `pruneMoves`, the pass that would offer it its place back; and
+  // even the prune cannot see a drift inside `MOVE_EPSILON`, because it only
+  // offers pieces that count as displaced. So the answer carried a rug a few
+  // millimetres past its allowance, `outside` rose off zero, the impossibility veto
+  // below reverted the whole arrangement, and a 6.5 × 4.5 m rug in a 6 × 4 room
+  // turned every Ideas press into "couldn't find another arrangement" — 4 ideas on
+  // the commit before the search held rugs, NULL at every attempt after.
+  //
+  // Putting it back is always legal (`hangsFurtherThanLeft`: where it stands prices
+  // to exactly zero), and it is the rule the allowance already states — an idea may
+  // not push a rug further through a wall than the user left it — applied to the
+  // answer instead of left to the search to find by chance. Before the riders,
+  // because a rug can carry them and they must follow it home.
+  winner = winner.map((p, i) => (hangsFurtherThanLeft(model, i, p) ? { ...origin[i] } : p));
+
   // Riders come along BEFORE the answer is measured — see `carryRiders`. It has to
   // sit after the last pass that can move a support (`snapYaws` above) and before
   // `breakdownAfter`, or the number handed back describes an arrangement with the
@@ -1269,7 +1295,7 @@ export function solveLayout(
   // for the `moves` filter below — on the same unchanged `parts`, which is two call
   // sites that have to agree and a seam for them to drift at, for no gain.
   const riders = ridingParents(parts);
-  const carried = carryRiders(parts, origin, winner, locked, model.obstacle, riders);
+  const carried = carryRiders(parts, origin, winner, locked, model.contained, riders);
 
   let breakdownAfter = costBreakdown(model, winner, weights, NAV_CELL);
   // …and never hand back something worse than what we were given. The prune spends a

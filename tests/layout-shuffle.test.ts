@@ -79,7 +79,8 @@ const room = (id: LayoutId, w: number, d: number) => {
 
 /** Every preset in `ALL` pressed three times, computed once and shared.
  *
- *  Two tests read the same twelve presses — "never offers a room Room check would
+ *  Two tests read the same fifteen presses (five presets × three) — "never offers a
+ *  room Room check would
  *  report" and "never offers a rug through the plaster" — and each press is a full
  *  search, seconds apiece on `t`. The sweep is deterministic per (room, attempt), so
  *  sharing it changes nothing but the wall clock. */
@@ -573,9 +574,64 @@ describe('shuffleRoom — the offer, not the search', () => {
     }
     expect(through).toEqual([]);
     // Exact, not a floor: the presets that carry a rug are rect, l, open and t, and
-    // this is how many ideas those twelve presses offered when it was written.
+    // this is how many ideas their twelve presses offered when it was written.
     expect(rugIdeas).toBe(RUG_IDEAS_CHECKED);
   });
+
+  it('still offers ideas around a pinned rug that hangs over the skirting', () => {
+    // The limit of the test above. Room check forgives a rug its overhang, so a user
+    // can pin one 300 mm through the east wall and see no finding at all. When the
+    // search charged that overhang, `isCleanShuffle` (which asks for `outside` at an
+    // absolute zero) refused every candidate, and with no finding to name
+    // `shuffleRefusal` could only say something was in the way: 3 of 3 presses came
+    // back null. The rug is forgiven the overhang it already had.
+    const { parts: base, room: rm } = room('rect', 6, 4);
+    const ri = base.findIndex((p) => roleOf(p) === 'rug');
+    expect(ri, 'the seeded 6 x 4 has a rug').toBeGreaterThanOrEqual(0);
+    expect(base[ri].rot, 'square to the walls, so its half-width is dimMM[0] / 2').toBe(0);
+    const parts = base.map((p, i) =>
+      i === ri ? { ...p, pos: [3.3 - p.dimMM[0] / 2000, p.pos[1], p.pos[2]] as [number, number, number] } : p,
+    );
+    const rug = parts[ri];
+    expect(roomContainment(rug.pos, rug.rot, rug.dimMM, rm.footprint).box, 'the fixture is through the wall').toBe(false);
+    const locked = lockedForSolve(parts, { [rug.id]: true }, null);
+    for (const attempt of [1, 2, 3]) {
+      const outcome = shuffleRoom(parts, rm, locked, { attempt });
+      expect(outcome, `press ${attempt}`).not.toBeNull();
+      expect(outcome!.ideas.length, `press ${attempt}`).toBeGreaterThan(0);
+    }
+  }, 60_000);
+
+  it('still offers ideas when the rug is bigger than the room', () => {
+    // The largest rug the catalogue allows (5 x 4 m, `dimension-ranges.ts`) in a
+    // 4.8 x 3.8 room: 100 mm over every wall, centred, NOT pinned — carpet nobody
+    // trimmed to the plan, and a room and rug the Inspector can both reach. Every spot
+    // but the one it is on hangs it further through a wall, and the anneal ends near
+    // that spot rather than on it. Shuffle has no prune to hand it back, so that
+    // residue tripped the impossibility veto, every candidate was reverted to the room
+    // as it stood, and 3 of 3 presses came back null. (Before the search held rugs
+    // they offered 4 ideas each, and all twelve had moved the rug through the walls.)
+    // The rug goes home (`hangsFurtherThanLeft`); the rest of the room is rearranged.
+    const { parts: base, room: rm } = room('rect', 4.8, 3.8);
+    const ri = base.findIndex((p) => roleOf(p) === 'rug');
+    expect(ri, 'the seeded 4.8 x 3.8 has a rug').toBeGreaterThanOrEqual(0);
+    const parts = base.map((p, i) =>
+      i === ri
+        ? { ...p, dimMM: [5000, 4000, p.dimMM[2]] as [number, number, number], pos: [0, p.pos[1], 0] as [number, number, number], rot: 0 }
+        : p,
+    );
+    const locked = lockedForSolve(parts, {}, null);
+    expect(locked[ri], 'the rug is free to move — nothing pins it').toBe(false);
+    for (const attempt of [1, 2, 3]) {
+      const outcome = shuffleRoom(parts, rm, locked, { attempt });
+      expect(outcome, `press ${attempt}`).not.toBeNull();
+      expect(outcome!.ideas.length, `press ${attempt}`).toBeGreaterThan(0);
+      for (const idea of outcome!.ideas) {
+        expect(idea.moved, `press ${attempt}: the rug stays where it was left`).not.toContain(ri);
+        expect(idea.moved.length, `press ${attempt}: …and something else moves`).toBeGreaterThan(0);
+      }
+    }
+  }, 60_000);
 
   it('returns null rather than offering a faulted room when nothing can move', () => {
     const { parts, room: rm } = room('rect', 6, 4);

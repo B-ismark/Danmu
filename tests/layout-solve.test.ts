@@ -652,7 +652,7 @@ describe('the solver and the room report agree', () => {
     // under the seating whether or not `outside` can see it, and that fixture passed
     // with the containment term switched off for rugs — a fix that works for the
     // wrong reason certifies nothing about the reason.
-    const door = part({ category: 'door', shape: 'door', dimMM: [900, 50, 2100], pos: [-2, 0, -1.975], wallMounted: true });
+    const door = doorPart(-2);
     const rug = part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [3.6, 0, 0] });
     const parts = [door, rug];
     const [finding] = analyzeRoom(parts, RECT_ROOM).issues.filter((i) => i.partIds.includes(rug.id));
@@ -663,8 +663,34 @@ describe('the solver and the room report agree', () => {
     const back = r.placements[1];
     expect(r.moved, 'the fix moved the rug and only the rug').toEqual([1]);
     expect(roomContainment([back.x, 0, back.z], back.yaw, rug.dimMM, RECT).box, 'every edge back inside').toBe(true);
-    const after = parts.map((p, i) => ({ ...p, pos: [r.placements[i].x, 0, r.placements[i].z] as [number, number, number], rot: r.placements[i].yaw }));
+    const after = parts.map((p, i) => ({ ...p, pos: [r.placements[i].x, p.pos[1], r.placements[i].z] as [number, number, number], rot: r.placements[i].yaw }));
     expect(analyzeRoom(after, RECT_ROOM).issues.filter((i) => i.partIds.includes(rug.id))).toEqual([]);
+  });
+
+  it('Fix all leaves a rug the report forgives where the user put it', () => {
+    // The other side of the rug's containment. The report forgives overhang on a rug
+    // whose centre is on the floor, so a user can drag one 300 mm over the skirting
+    // and Room check says nothing. When the search charged that overhang in every
+    // mode, the next **Fix all** — `refit`, the rug in `placed` because a hand put it
+    // there — pulled it 320 mm off the wall on every seed and the toast called it
+    // "brought furniture back inside the room", overriding a placement the report had
+    // just called fine. `outside` read 208.01 before the press. The search forgives a
+    // rug the overhang it already had (`LayoutModel.overhang`), and charges past it.
+    const base = defaultScene('rect', 6, 4);
+    const ri = base.findIndex((p) => p.category === 'rug');
+    expect(ri, 'the seeded 6 x 4 has a rug').toBeGreaterThanOrEqual(0);
+    expect(base[ri].rot, 'square to the walls, so its half-width is dimMM[0] / 2').toBe(0);
+    const parts = base.map((p, i) =>
+      i === ri ? { ...p, pos: [3.3 - p.dimMM[0] / 2000, p.pos[1], p.pos[2]] as [number, number, number] } : p,
+    );
+    const rug = parts[ri];
+    expect(roomContainment(rug.pos, rug.rot, rug.dimMM, RECT).box, 'the fixture really is through the wall').toBe(false);
+    expect(analyzeRoom(parts, RECT_ROOM).issues.filter((i) => i.partIds.includes(rug.id)), 'and forgiven').toEqual([]);
+    for (const seed of [1, 2, 3]) {
+      const r = solveLayout(parts, RECT, lockedForSolve(parts, {}, null), { seed, mode: 'refit', placed: new Set([rug.id]) });
+      expect(r.moved, `seed ${seed}: the rug stays`).not.toContain(ri);
+      expect(r.breakdownBefore.outside, `seed ${seed}: nothing to fix`).toBe(0);
+    }
   });
 });
 

@@ -40,6 +40,7 @@ import { analyzeRoom } from '@/lib/clearance';
 import {
   costBreakdown,
   DEFAULT_WEIGHTS,
+  hangsFurtherThanLeft,
   NAV_CELL,
   prepare,
   RULE_HANDLING,
@@ -680,6 +681,13 @@ describe('layout-rules · the report and the solver meet cleanly at TUCKED_CLASH
 // a place nobody chose (`containedBySearch`). The harness's "charges nothing on that
 // term for the layout it is happy with" is not violated: that asks about each case's
 // `good` placement, and a rug through the plaster is nobody's good placement.
+//
+// The disagreement is bounded, and the bound is the second half of this block: the
+// search forgives a rug the overhang it ALREADY HAD (`LayoutModel.overhang`). Charging
+// that too made **Fix all** pull a forgiven rug off its wall, and made a pinned rug
+// over the skirting refuse every Ideas press — `layout-solve` and `layout-shuffle`
+// hold those two. `costAt` prepares from each part's own `pos`, so a part's `pos` is
+// where the user left it and the placement is where the search is trying it.
 
 describe('layout-rules · a rug is forgiven by the report and held to the plaster by the search', () => {
   const rug = () => part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [0, 0, 0] });
@@ -700,5 +708,85 @@ describe('layout-rules · a rug is forgiven by the report and held to the plaste
 
   it('and charges nothing for the same rug 5 mm clear of the wall', () => {
     expect(costAt([rug()], clear).outside).toBe(0);
+  });
+
+  const leftAt = (x: number) =>
+    part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [x, 0, 0] });
+
+  it('forgives a rug the overhang the user left it with', () => {
+    expect(issuesAt([leftAt(2.3)], through).filter(containment), 'the report is quiet about it').toEqual([]);
+    expect(costAt([leftAt(2.3)], through).outside).toBe(0);
+  });
+
+  it('and charges anything past it', () => {
+    expect(costAt([leftAt(2.3)], [{ x: 2.5, z: 0, yaw: 0 }]).outside).toBeGreaterThan(0);
+  });
+
+  it('forgives nothing once the centre is off the plan — that is the report’s own finding', () => {
+    const off: Placement[] = [{ x: 3.6, z: 0, yaw: 0 }];
+    expect(issuesAt([leftAt(2.3)], off).some(containment)).toBe(true);
+    expect(costAt([leftAt(2.3)], off).outside, 'the whole measure, as for a rug that started inside').toBe(
+      costAt([rug()], off).outside,
+    );
+  });
+
+  it('and a rug the user left off the plan has no allowance to spend', () => {
+    // Left at 3.6, its centre 600 mm past the wall. Were its overhang there an
+    // allowance, **Try a fix** could stop the moment the centre crossed back — at
+    // 2.9 the report is quiet and the rug is still 900 mm through the plaster.
+    const back: Placement[] = [{ x: 2.9, z: 0, yaw: 0 }];
+    expect(issuesAt([leftAt(3.6)], back).filter(containment)).toEqual([]);
+    expect(costAt([leftAt(3.6)], back).outside).toBeGreaterThan(0);
+  });
+
+  // The solver's "put it back" (`lib/layout-solve.ts`), asked directly. Shuffle has
+  // no prune, and a rug laid wall to wall has one place that costs it nothing — so
+  // the answer must be able to hand that place back, and must never hand back a
+  // place that is itself the report's finding.
+  describe('hangsFurtherThanLeft', () => {
+    const asks = (p: ScenePart, at: Placement) =>
+      hangsFurtherThanLeft(prepare({ parts: [p], movable: [true], footprint: RECT }), 0, at);
+
+    it('is false where the user left it, so putting it back is always a cure', () => {
+      expect(asks(leftAt(2.3), { x: 2.3, z: 0, yaw: 0 })).toBe(false);
+    });
+
+    it('is true 5 mm further through, and false for moving it back in', () => {
+      expect(asks(leftAt(2.3), { x: 2.305, z: 0, yaw: 0 })).toBe(true);
+      expect(asks(leftAt(2.3), { x: 2.0, z: 0, yaw: 0 })).toBe(false);
+    });
+
+    it('holds a rug laid wall to wall to the one place it fits', () => {
+      const wall = part({ category: 'rug', shape: 'rug', dimMM: [6000, 4000, 5], pos: [0, 0, 0] });
+      expect(asks(wall, { x: 0, z: 0, yaw: 0 })).toBe(false);
+      expect(asks(wall, { x: 0.01, z: 0, yaw: 0 }), '10 mm of drift is 10 mm through a wall').toBe(true);
+    });
+
+    it('never sends a rug back to a centre the user left off the plan', () => {
+      // Left at 3.6 there is no legal place to go back to: a **Try a fix** that
+      // brought it to 3.0 — centre on the floor, still 1 m through — would otherwise
+      // be undone, and one taken further out would be answered with the finding.
+      expect(asks(leftAt(3.6), { x: 3.0, z: 0, yaw: 0 })).toBe(false);
+      expect(asks(leftAt(3.6), { x: 3.8, z: 0, yaw: 0 })).toBe(false);
+    });
+
+    it('is a question about the rugs the search holds, and nothing else', () => {
+      // Flush to the east wall where it stands, 500 mm through it at 2.5. A sofa that
+      // far through is the veto's to refuse, not something to quietly put back.
+      const flush = part({ category: 'sofa', shape: 'sofa', dimMM: [2000, 950, 880], pos: [2.0, 0, 0] });
+      expect(asks(flush, { x: 2.5, z: 0, yaw: 0 })).toBe(false);
+      // A rug off the floor is not held inside the walls at all (`containedBySearch`),
+      // so there is no charge for it to be sent home to avoid.
+      const runner = part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [2.3, 0.75, 0] });
+      expect(asks(runner, { x: 2.5, z: 0, yaw: 0 })).toBe(false);
+    });
+  });
+
+  it('the report and the search pick a rug the same way', () => {
+    // `forgivesOverhang`: by role, so a rug-shaped piece filed under another category
+    // is centre-only in the report AND allowed its overhang by the search.
+    const odd = part({ category: 'other', shape: 'rug', dimMM: [2000, 1400, 10], pos: [2.3, 0, 0] });
+    expect(issuesAt([odd], through).filter(containment)).toEqual([]);
+    expect(costAt([odd], through).outside).toBe(0);
   });
 });

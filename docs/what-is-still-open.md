@@ -3127,6 +3127,77 @@ one suggestion — "a picker chooses a candidate, not an outcome" (`SolveOptions
 measured rather than new. Seed 1 gives four finalists and four suggestions; making the
 solver ignore `pick` still turns the test red.
 
+**Review round 1 found the design too wide, and it was: a rug is held only PAST the
+overhang it was left with.** As first committed, `containedBySearch` charged a rug's whole
+overhang in every mode, while the report goes on forgiving everything but its centre — so
+the same rug was "fine" in Room check and a fault to the search. Two regressions came out
+of that seam, both reproduced on the commit and its parent. **Fix all** on a rect 6 × 4
+with the rug dragged 300 mm through the east wall (centre on the floor, report quiet) pulled
+the rug from x = 2.100 to 1.778 against an `outside` of 208.013 and toasted it as "brought
+furniture back inside the room" — a fix for a finding nobody was shown; the parent left it
+alone. And the same rug **pinned** made `shuffleRoom` return null on 3 of 3 presses, with no
+finding for `shuffleRefusal` to name. The repair is the one the review proposed:
+`LayoutModel.overhang` records each rug's own `outsideMeasure` where the user left it, and
+the containment pass charges only what exceeds it, while the centre is on the plan. A rug
+left with its centre OFF the plan is the report's finding and is forgiven nothing, so
+**Try a fix** keeps the whole measure to work with — and a rug left off the plan has no
+allowance at all, or a fix could stop the moment its centre crossed back with 900 mm still
+through the plaster. After it: the Fix all rug stays where the user put it at seeds 1–3,
+on a room whose `outside` is 0 as handed over; the pinned rug's presses are 3 of 3 non-null again.
+
+**Then a third regression, found while measuring the second one's limit:** a rug bigger
+than the room. The largest rug the catalogue allows, 5 × 4 m, in a 4.8 × 3.8 rectangle —
+100 mm over every wall, centred, unpinned, carpet nobody trimmed to the plan — returned null
+on 3 of 3 presses; so did the same rug wall to wall in a 5 × 4 and in a 4.5 × 3.5. Not the
+allowance: every hard term read 0 on the answer that came back, because that answer was the
+room as it stood. The anneal ends the rug near the one spot that costs it nothing rather
+than on it — 8–61 mm off across the finalists of six solves on a 6 × 4 probe; shuffle skips
+`pruneMoves`, the pass that would offer it its place back, and even the prune only offers
+pieces past `MOVE_EPSILON` (20 mm); so `outside` rose off zero by that residue, the
+impossibility veto reverted every candidate, and `isCleanShuffle` refused a result that
+moved nothing. `lib/layout-solve.ts` now sends a rug home after the last pass that can move
+it — `hangsFurtherThanLeft` (`lib/layout-score.ts`, sharing `outsidePast` with the
+containment pass so the cure and the charge cannot come apart) — which is always legal,
+because where the rug stands prices to exactly zero by construction. After it, all three
+rooms give **4, 4, 4 ideas and the rug moves in none of them**. The parent also gave 4, 4,
+4, and **every one of its twelve ideas per room had moved the rug** — through the walls, in
+a room the rug fills. A 6 × 4 probe over sizes the Inspector cannot reach (up to
+6500 × 4500) reads the same: 4, 4, 4 for all five sizes with the homing, null wherever the
+rug fills the room without it.
+
+One behaviour change rides it on purpose: a `refit` solve (Fix all's mode, seeds 1–2)
+moved that rug 0.74–1.11 m on the parent in the 5 × 4 and the 4.8 × 3.8 — it could not see
+a rug, so nothing stopped it going further through every wall — and leaves it put now. A
+rug with room to slide still slides: 6500 × 3000 in a 6 × 4 has 1 m north–south, and refit
+moves it square to z = −0.48, 20 mm inside the south wall, where the parent turned it 16°
+through the walls.
+
+Three smaller findings, each fixed. The report picked a rug by `category` and the search by
+`roleOf`, two copies of one rule: both read `forgivesOverhang` now, so a rug-shaped piece
+filed under another category is judged the same way by both. `containedBySearch` repeated
+`isObstacle`'s floor bar: both read one `onFloor`. And `carryRiders` held back only
+obstacles while the containment term scores `contained`, which differ for a rug riding a
+low plinth — between 0 and 0.05 m a rug is both a rider and scored, so the carry could move
+a rug after the last pass had checked it against the walls. The gate is `contained`;
+`tests/layout-riders.test.ts` builds that rug and pins its precondition.
+
+**The arrange measurement above covered the case that could not show the change.** Every
+rug in "0 of 14 → 0 of 15" was seeded, and the seeder places rugs with `footInsidePoly`, so
+all of them started with no overhang to forgive. The user-placed case is held by fixtures,
+not by a sweep: `tests/layout-solve.test.ts` "Fix all leaves a rug the report forgives
+where the user put it" (seeds 1–3), `tests/layout-shuffle.test.ts` "still offers ideas
+around a pinned rug that hangs over the skirting" and "…when the rug is bigger than the
+room", and a `hangsFurtherThanLeft` describe in `tests/layout-conformance.test.ts`.
+
+Mutated, every kill named: allowance zeroed — four red; the prepare-side centre check
+dropped — the conformance "no allowance to spend" case and the solve Try-a-fix test; the
+evaluation-side centre check dropped — "forgives nothing once the centre is off the plan";
+the report back to `category` — "the report and the search pick a rug the same way"; the
+carry gate back to `obstacle` — the riders test; the homing line removed — the bigger-than-
+the-room test; its centre gate dropped — "never sends a rug back to a centre the user left
+off the plan"; `> 0` as `>= 0` — three red; its rug gate and its containment gate dropped —
+one red each.
+
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
 Their words, kept because the scope is theirs: *"Do a detailed search to the fundamental

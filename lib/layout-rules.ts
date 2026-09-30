@@ -1256,16 +1256,33 @@ export function isMountedObstruction(part: {
   );
 }
 
+/** Standing on the floor, as the search counts it: not riding a wall, and within
+ *  50 mm of the slab. One bar for `isObstacle` and `containedBySearch` both, so a
+ *  sofa and a rug cannot come to disagree about what "on the floor" means — and the
+ *  bar `carryRiders` in `layout-solve.ts` overlaps on (0, 0.05) moves for both at
+ *  once if it ever moves. */
+function onFloor(part: ScenePart): boolean {
+  return !part.wallMounted && part.pos[1] < 0.05;
+}
+
 /** The pieces that get in a walker's way — floor-standing, solid, tall enough to
  *  stop someone. The same set `lib/clearance.ts` reports on, as a predicate so the
  *  solver can build the mask once per solve. */
 export function isObstacle(part: ScenePart): boolean {
-  return (
-    !part.wallMounted &&
-    roleOf(part) !== 'rug' &&
-    part.pos[1] < 0.05 &&
-    part.dimMM[2] / 1000 > OBSTACLE_HEIGHT
-  );
+  return onFloor(part) && roleOf(part) !== 'rug' && part.dimMM[2] / 1000 > OBSTACLE_HEIGHT;
+}
+
+/** A piece whose overhang the room forgives: a rug, which is FOR lying under the
+ *  furniture, up to the skirting and across an L's missing corner.
+ *
+ *  Two readers that must pick a rug the same way. The room report (`clearance.ts`
+ *  § 7b) calls such a piece outside only when its centre is; the search
+ *  (`layout-score`'s containment pass) lets it keep, and no more than, the overhang
+ *  it already had. The report used to ask `category === 'rug'` while the search asked
+ *  `roleOf`, which is two copies of one rule — the shape rule 3 of `CLAUDE.md` says
+ *  never to grow in a consumer. */
+export function forgivesOverhang(part: { category: Category; shape: Shape; dimMM: [number, number, number] }): boolean {
+  return roleOf(part) === 'rug';
 }
 
 /** The pieces the search keeps inside the walls: every obstacle, and a rug.
@@ -1279,13 +1296,17 @@ export function isObstacle(part: ScenePart): boolean {
  *  The room report forgives exactly that overhang (`clearance.ts` § 7b calls a rug
  *  outside only when its CENTRE is), and the two are not in conflict: the report is
  *  judging a rug somebody PUT there, and the search is choosing a place nobody chose.
- *  An answer the search hands back is its own work, so it is held to the plaster.
+ *  So a rug is held to the plaster only PAST the overhang it already had
+ *  (`forgivesOverhang`, and `LayoutModel.overhang` in `layout-score`): an idea may not
+ *  push it further through a wall than the user left it, and **Fix all** may not move
+ *  a rug the report has just called fine. A rug standing off the plan is the report's
+ *  own finding and is forgiven nothing.
  *
  *  `lib/clearance.ts` asks this same predicate whether a containment finding is
  *  fixable, and `layout-score`'s `outside` term is gated on it — one set, so the
  *  **Try a fix** button appears exactly where the cost can see the piece. */
 export function containedBySearch(part: ScenePart): boolean {
-  return isObstacle(part) || (!part.wallMounted && roleOf(part) === 'rug' && part.pos[1] < 0.05);
+  return isObstacle(part) || (onFloor(part) && forgivesOverhang(part));
 }
 
 /** A part's footprint at a given placement — the one-liner every consumer of this

@@ -6,7 +6,7 @@ import { applyPlacements } from '@/lib/layout-shuffle';
 import { ridingParents } from '@/lib/rigid-parent';
 import { footArea, footFromPart, footIntersectionArea, localToWorld } from '@/lib/geometry';
 import { MIN_SUPPORT_SHARE, verticalExtent } from '@/lib/physics';
-import { isObstacle } from '@/lib/layout-rules';
+import { containedBySearch, isObstacle } from '@/lib/layout-rules';
 import { costBreakdown, DEFAULT_WEIGHTS, NAV_CELL, prepare, type LayoutContext } from '@/lib/layout-score';
 
 // A piece standing ON another piece is not a place the search gets to choose.
@@ -514,6 +514,44 @@ describe('a rider the search is pricing as an obstacle is left to the search', (
       expect(result.moves.map((m) => m.index), `seed ${seed}`).toContain(1);
     }
     expect(seen, 'the chair must actually be getting moved on some seed').toBeGreaterThan(2);
+  }, 60000);
+});
+
+// The same gate one piece over. A rug is not an obstacle, but the containment term
+// scores it (`containedBySearch`), so a rug on a 40 mm platform is a rider AND priced
+// — and a carry gated on `obstacle` would have moved it after the term had scored it,
+// the hole the chair above fell through. The gate is `contained` now; with it back on
+// `obstacle` this goes red.
+describe('a rider the search is holding inside the walls is left to the search', () => {
+  const mat = part({ id: 'mat', name: 'Platform', category: 'other', shape: 'box', dimMM: [2400, 2400, 40] });
+  const rug = part({
+    id: 'rug', name: 'Rug', category: 'rug', shape: 'rug', dimMM: [1200, 800, 10], pos: [0.4, 0.04, 0.4],
+  });
+  const wardrobe = part({
+    id: 'ward', name: 'Wardrobe', category: 'wardrobe', shape: 'wardrobe', dimMM: [1200, 600, 2100],
+    pos: [-2.0, 0, -1.5],
+  });
+  const parts = [mat, rug, wardrobe];
+  const room = footprintForLayout('rect', 6, 4);
+
+  it('the fixture really is in the band where the two bars disagree', () => {
+    expect(ridingParents(parts), 'geometrically it IS riding the platform').toEqual({ rug: 'mat' });
+    expect(isObstacle(rug), 'no obstacle').toBe(false);
+    expect(containedBySearch(rug), 'but the search IS holding it inside the walls').toBe(true);
+  });
+
+  it('does not carry it, and does not strike it out of the reasons either', () => {
+    const locked = lockedForSolve(parts, {}, null);
+    const movable = movableFor(parts, locked);
+    let seen = 0;
+    for (let seed = 0; seed < 6; seed++) {
+      const start = randomizeStart(parts, room, movable, makeRng(seed));
+      const result = solveLayout(parts, room, locked, { seed, mode: 'shuffle', start });
+      if (!result.moved.includes(1)) continue;
+      seen++;
+      expect(result.moves.map((m) => m.index), `seed ${seed}`).toContain(1);
+    }
+    expect(seen, 'the rug must actually be getting moved on some seed').toBeGreaterThan(2);
   }, 60000);
 });
 
