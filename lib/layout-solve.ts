@@ -994,8 +994,33 @@ export function solveLayout(
   const touchedPrev: Placement[] = new Array(parts.length);
 
   let best = current.map((p) => ({ ...p }));
-  let bestCost = before;
-  let cost = before;
+  // ── `cost` must be the price of `current`, and `bestCost` of `best` ───────────
+  //
+  // True in `shuffle`; not yet in `arrange` or `refit` (last paragraph). Both start at
+  // the price of the layout the search STARTS from, taken the way every trial below
+  // is. In `shuffle` that is the scatter, and seeding these two from `before` — the
+  // room we were GIVEN — turned the search off: a scatter prices at 25–5,300 against a
+  // tidy room's ~2, so every step read as hundreds uphill and `exp(-Δ / temp)` at a
+  // temperature of 8 or less refused it. Five presets, seeds 1000–1011 (the first
+  // press's): **no step accepted in 59 of 60 solves** (60 of 60 at seeds 1–12), and a
+  // pool of one finalist, the scatter, labelled with the tidy room's price (2.44
+  // against a real 2,161 on `rect` 6 × 4 seed 1). Every idea the gallery showed was a
+  // scatter tidied by the passes after the pick, and nothing failed, because a legal
+  // scatter still passed every gate. These two lines were written when `before` WAS
+  // the start's price and did not move with it to `origin` (the block above).
+  //
+  // Priced as the scatter, a solve accepts 540–1,060 steps, three presses fill every
+  // slot on every preset, and ideas with a floor piece through a wall fall from 24 to
+  // 9. `tests/layout-shuffle.test.ts` holds the invariant.
+  //
+  // `arrange` and `refit` still read `before`, which carries navigation while no trial
+  // does, so a first proposal cheaper than the origin-plus-navigation is taken as
+  // downhill. Pricing them the same way moves two fixtures, so it is a measured change
+  // of its own — § H.6.0 in `docs/what-is-still-open.md`, "Filed, not fixed". A caller
+  // that hands `arrange` or `refit` a `start` is priced from it too: in any mode, a
+  // search that begins somewhere other than `origin` must be priced where it begins.
+  let bestCost = shuffle || opts.start !== undefined ? scoreLayout(model, current, weights) : before;
+  let cost = bestCost;
   // The finalists that get the expensive navigability pass. Kept as we go rather
   // than re-running the search: the annealer visits plenty of good, genuinely
   // different arrangements on its way down and throwing them away means paying to
@@ -1032,6 +1057,16 @@ export function solveLayout(
   // resize. Hopping between basins is the definition of reinventing the arrangement, so
   // the pass would be spending three hundred evaluations proposing the one thing this
   // mode exists to refuse.
+  // …and in `shuffle` it is not doing the job this block describes. The groups come
+  // from `origin`, the room we were given, while the pass moves the scatter, whose
+  // members are nowhere near each other: a multi-piece move, not a group one. It went
+  // live when the search started accepting steps (the block above), not by design.
+  // Six presets, twenty single solves and six presses each, groups from `origin` /
+  // from the scatter / pass skipped: clean solves 86 / 83 / 90 of 120, ideas 140 / 140
+  // / 135, mean idea cost 16.7 / 16.6 / 16.7 — the annealer's own noise, with skipping
+  // no worse and `GROUP_STEPS` evaluations cheaper. It stays on here only because
+  // switching it off is a second change to the search, and this one is about the
+  // search's starting price.
   if (groups.length > 0 && !refit) {
     for (let step = 0; step < GROUP_STEPS; step++) {
       const t = step / GROUP_STEPS;

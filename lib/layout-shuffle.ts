@@ -13,40 +13,47 @@
  * ── Why this is a pipeline and not one solve ──────────────────────────────────
  *
  * A single shuffle solve is NOT reliably a room you would want to be shown, and that
- * is measured rather than assumed. Twenty seeds per preset, counting solves that end
- * with every one of `HARD_TERMS` at zero:
+ * is measured rather than assumed. Seeds 1000–1019 per preset, counting solves that
+ * end with every one of `HARD_TERMS` at zero:
  *
- *   rect 6x4  20/20 · rect 7.5x5.6  20/20 · l 6x5  13/20 · t 6x5  6/20
- *   u 6x5  16/20 · open 6x4  12/20
+ *   rect 6x4  20/20 · rect 7.5x5.6  19/20 · l 6x5  18/20 · t 6x5  5/20
+ *   u 6x5  14/20 · open 6x4  10/20
  *
  * The failures are mostly `navigation` — a piece parked so that part of the floor has
- * no route from the door — and on the L they reach 481.8. The rectangles are perfect
- * and every non-rectangular preset is not, which is the tell: a scatter start has to
- * rebuild a whole room inside a step budget (`DEFAULT_STEPS`) that was measured for a
- * search starting from a room that was already nearly right.
+ * no route from the door, in 13 of the T's 15 and 5 of the U's 6 — with `access`
+ * beside it on the open plan, and on the U they reach 1,057. The rectangles are
+ * all but perfect and every non-rectangular preset is not, which is the tell: a
+ * scatter start has to rebuild a whole room inside a step budget (`DEFAULT_STEPS`)
+ * that was measured for a search starting from a room that was already nearly right.
  *
  * **More steps is not the fix, and that is the useful half of the measurement.**
  * Clean seeds against budget, same twenty seeds:
  *
  *   steps      1600    4000    8000   16000
  *   rect      20/20   19/20   20/20   20/20
- *   l         13/20   16/20   17/20   18/20
- *   t          6/20    6/20    8/20    5/20
- *   u         16/20   19/20   17/20   18/20
- *   open      12/20   13/20   13/20   14/20
+ *   l         18/20   16/20   16/20   18/20
+ *   t          5/20    8/20    4/20    7/20
+ *   u         14/20   16/20   18/20   14/20
+ *   open      10/20   13/20   12/20   10/20
  *
- * Ten times the budget buys the L five seeds and the T nothing — it goes DOWN, which
- * is the annealer being chaotic under any change rather than a regression. Paying ten
- * times over for that would be the wrong trade even if the user had not asked for
- * this to stay quick enough to press repeatedly.
+ * Ten times the budget buys the T two seeds and every other preset nothing, and the
+ * budgets between move both ways — the annealer being chaotic under any change rather
+ * than a regression. Paying ten times over for that would be the wrong trade even if
+ * the user had not asked for this to stay quick enough to press repeatedly.
  *
  * What does work is asking more than once and **throwing the faulty answers away**.
- * Attempts yielding at least one candidate the SOLVER calls clean, 25 per preset:
+ * Attempts 1–25 yielding at least one candidate the SOLVER calls clean:
  *
  *   candidates   n=4     n=6     n=8    n=12
- *   t 6x5      21/25   24/25   24/25   25/25
- *   open 6x4   24/25   24/25   24/25   25/25
+ *   t 6x5      21/25   23/25   24/25   25/25
+ *   l 6x5      24/25   25/25   25/25   25/25
  *   others     25/25   25/25   25/25   25/25
+ *
+ * All three tables were re-measured on 2026-09-30, once the search was found to have
+ * been accepting no steps (the offers row below). The tables they replace (`l` 13/20,
+ * `t` 6/20, `open` 12/20 as single solves) reproduce on neither search, so they were
+ * not taken on the broken one: run on it, the single solves read `rect` 6x4 7/20 and
+ * `t` 3/20, most of them declined unmoved. They are older than both.
  *
  * Hence `MAX_CANDIDATES`. The solves are independent, so this is the same search run
  * from more places rather than a longer one — which is exactly what a chaotic
@@ -64,16 +71,30 @@
  * at `MAX_CANDIDATES = 12`, measured on `main` after the threshold fix below:
  * rect 6×4 12/12, l 12/12, u 12/12, open 10/12, rect 7.5×5.6 9/12, **t 8/12**.
  *
- * Raising the cap buys the rest at a price not worth paying — the whole search is
- * synchronous on the main thread. Measured BEFORE the threshold fix, when refusals
- * were commoner, so read it for the shape of the trade rather than for its rows:
+ * **That row is a search that accepted no steps.** `solveLayout` started a shuffle's
+ * `cost` at the tidy room's price rather than the scatter's, so it refused every
+ * proposal and handed back the scatter, tidied only by the passes after the pick (its
+ * own comment at `bestCost` has the measurement). Re-run on the code just before that
+ * was fixed, the row reads the same on five of six presets (rect 6×4 10/12). With the
+ * search running, the same twelve presses offer **12/12 on all six** (l, u and t at
+ * 6×5, open at 6×4) and hold more ideas between them: 48 / 48 / 48 / 47 / 48 / 38
+ * against 28 / 40 / 47 / 20 / 25 / 12, in the order above (four is a full press). The
+ * worst press on `t` 6×5 took 4.2 s against 4.5 s (one run each). At a cap of 12 the
+ * search now offers on every press of every preset, so the trade below does not arise
+ * on these rooms; the table is kept for its shape, and nothing here has re-measured it.
+ *
+ * Raising the cap buys the rest at a price not worth paying — a longer wait for the
+ * answer. The search has run off the main thread since `layout-offload.ts`, so the
+ * page stays live; the ideas still arrive no sooner. Measured BEFORE the threshold
+ * fix, when refusals were commoner, so read it for the shape of the trade rather
+ * than for its rows:
  *
  *   cap        t 6x5 offers / worst ms     open 6x4 offers / worst ms
  *   12              5/12  ·  2.9 s               8/12  ·  2.1 s
  *   20              7/12  ·  4.7 s              10/12  ·  3.1 s
  *   30             10/12  ·  6.6 s              12/12  ·  5.2 s
  *
- * So 12 stays: a refusal is honest and survivable, a six-second freeze is not.
+ * So 12 stays: a refusal is honest and survivable, a six-second wait is not.
  *
  * **The upstream repair LANDED, and it is why those first numbers moved** (#68, on
  * `main`). `lib/layout-score.ts` no longer exempts a `sharesFloor` pair from
@@ -92,13 +113,23 @@
  * `TUCKED_CLASH_SHARE` now, and `isCleanShuffle` demands `overlap === 0` exactly, so
  * nothing reaching this gate can hold a pair past that bar.
  *
+ * **And it has work.** With the search running, over the six presets above x seeds
+ * 1000–1019, it refuses **10 of the 86** candidates that pass `isCleanShuffle`, every
+ * one a `clash-mounted` finding — a plant, a lamp, a shelf or a wardrobe standing in
+ * front of a mounted TV or painting, which the solver cannot see at all
+ * (`RULE_HANDLING['clash-mounted']`, § 17). That rule is newer than the "rejected
+ * none" above, as `tests/shuffle-gate.test.ts` already says. The search that accepted
+ * no steps sent the gate 34 candidates on the same sweep and it refused 2, the same
+ * kind: a busier search, not a new failure.
+ *
  * The gate STAYS, and for the honest reason rather than the flattering one: these
  * two modules have already drifted apart once, and it costs two `analyzeRoom` calls
  * on candidates that have passed the cheap filter — a small price for the one
  * failure it exists to catch. What it is not is *covered*, and
  * `tests/shuffle-gate.test.ts` now pins the agreement it depends on instead: that
- * file goes red the moment either threshold moves, which is the moment this gate
- * starts having work to do again.
+ * file goes red the moment either threshold moves, which is the moment the job this
+ * gate was written for comes back. The `clash-mounted` work above is a different job,
+ * and it has that one now.
  */
 import {
   HARD_TERMS,
@@ -137,32 +168,30 @@ export const MIN_CLEAN = 4;
  *  range is 2–8. Below 0.25 the term never fires at all; above ~8 cost stops
  *  mattering.
  *
- *  **Measured 2026-09-06: on this app's data this term cannot change an outcome, and
- *  that is recorded here rather than acted on.**
+ *  **What it does, measured 2026-09-30: it reorders, rarely, and never more.**
+ *  `orderOffers` scores `cost + DIVERSITY_PENALTY x (closest already picked)`. The first
+ *  pick has `picked = []`, so nothing can move `ranked[0]` — and `ranked[0]` is what a
+ *  caller with no history is handed. After it, the candidates are mostly unlike each
+ *  other already: reconstructed as this loop builds them over six presets x presses
+ *  1–5, **177 pairs, 162 at similarity exactly 0**, the other fifteen 0.100–0.400, and
+ *  **none near `REPEAT_SIMILARITY`**. So the term adds at most 1.6 cost units, against
+ *  idea costs of 2.4–84. End to end, `shuffleRoom` at `diversityPenalty: 0` and at 4,
+ *  each press with the previous press's first idea as history, **differs on 1 of 24
+ *  presses** (`rect` 7.5 x 5.6, press 4): the same four ideas and the same first one,
+ *  with the 8.6 — the one most like what was already picked — moved behind a 9.9
+ *  and a 10.1.
  *
- *  `orderOffers` scores `cost + DIVERSITY_PENALTY x (closest already picked)`. Two
- *  facts make the second half zero almost always. The first pick has `picked = []`,
- *  so nothing can move `ranked[0]` — and `ranked[0]` is what a caller with no history
- *  is handed. And the candidates that reach the ranking are already unlike each other:
- *  instrumented inside this very loop, **40 shuffle calls produced 66 candidate pairs,
- *  of which 61 scored similarity exactly 0**; the five non-zero ones were 0.111, 0.125,
- *  0.200 and 0.400, and **none reached `REPEAT_SIMILARITY`**. So the penalty multiplies
- *  zero in 92% of pairs and contributes at most 1.6 cost units in the rest, against
- *  candidate costs measured between 10 and 75.
+ *  **The figures this replaced said it could not change an outcome at all** (66 pairs,
+ *  61 at zero; 26 of 26 end-to-end pairs byte-identical; costs 10–75). They were
+ *  measured on 2026-09-06 against a search that, it turned out, accepted no steps
+ *  (§ H.6.0), so every candidate was a lightly tidied scatter. They are kept here so
+ *  the next reader knows why § A.2 once said its test could not be written.
  *
- *  End to end: `shuffleRoom` run twice on the same attempt with the previous offer as
- *  history, once at `diversityPenalty: 0` and once at 4, returned **byte-identical
- *  placements in all 26 pairs** over four presets and two sizes.
- *
- *  **So the honest gate is on the AGREEMENT, not on the term** — the same shape as the
- *  note above about `newRoomFindings` rejecting none of 816 candidates.
- *  `tests/layout-shuffle.test.ts` asserts that the clean set stays mutually dissimilar,
- *  which is what makes this inert; the day the search starts producing near-duplicates
- *  that test goes red and this term has work to do. Writing a test that fails at
- *  `diversityPenalty: 0` was the outstanding ask (§ A.2). It cannot be written at this
- *  level against real rooms, and the reason is the measurement above rather than an
- *  absence of effort. The unit behaviour IS pinned, in `tests/layout-offer.test.ts`,
- *  where the fixture supplies the similar candidates this search does not.
+ *  `tests/layout-shuffle.test.ts` now holds both halves: the press the term reorders,
+ *  which fails at `diversityPenalty: 0` (§ A.2's ask), and the bound that the clean set
+ *  stays far from `REPEAT_SIMILARITY`, which goes red the day the search starts
+ *  producing near-duplicates and this term has real work. The unit behaviour is pinned
+ *  in `tests/layout-offer.test.ts`, where the fixture supplies similar candidates.
  */
 export const DIVERSITY_PENALTY = 4;
 /** Above this, two arrangements are the same idea shown twice.
@@ -352,11 +381,12 @@ export function newRoomFindings(
  * arrangement because the user pressed a button would be the app knowingly handing
  * them a room with a piece blocking the door.
  *
- * **It is not rare on a complex footprint** — 4 of 12 attempts on the `t` preset, 2
- * of 12 on `open`, none at all on `rect`, `l` or `u`. The header has the table and
- * the reason. So the caller's message for `null` is a real piece of UI rather than
- * an edge case, and it must not read as an error: nothing went wrong, the search
- * looked and did not find one it was willing to show.
+ * **It no longer happens on the presets the header measures** — attempts 1–12 return
+ * `null` 0 times on each of the six, against 4 of 12 on `t` and 2 of 12 on `open`
+ * while the search accepted no steps (the header has both). It is still what every
+ * room gets whose candidates all fault, so the caller's message for `null` is a real
+ * piece of UI rather than an edge case, and it must not read as an error: nothing
+ * went wrong, the search looked and did not find one it was willing to show.
  *
  * Deterministic per `(room, attempt)`, like everything else in the solver — a
  * suggestion that differs between two runs of the same room is a slot machine.
@@ -431,9 +461,9 @@ export function shuffleRoom(
  *  what has been shown already AND against the ideas kept before it.
  *
  *  **It has no work to do on today's rooms, and that is measured, not hoped.** The
- *  clean pool is already mutually unlike (see `DIVERSITY_PENALTY`: none of 66 pairs
- *  reached `REPEAT_SIMILARITY`), so deleting the check leaves every real-room test
- *  green. It is pure and exported so `tests/layout-ideas.test.ts` can hand it the
+ *  clean pool is already mutually unlike (see `DIVERSITY_PENALTY`: none of 177 pairs
+ *  came near `REPEAT_SIMILARITY`, the closest 0.400), so deleting the check leaves
+ *  every real-room test green. It is pure and exported so `tests/layout-ideas.test.ts` can hand it the
  *  near-twins the search does not produce, which is the only way to pin it. */
 export function showableIdeas<T extends { placements: Placement[] }>(
   ranked: readonly T[],

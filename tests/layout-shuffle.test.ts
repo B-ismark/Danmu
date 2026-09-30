@@ -8,6 +8,8 @@ import {
   NEGLIGIBLE_COST,
   LAYOUT_SIMILAR_M,
   TURN_EPSILON,
+  bestCandidate,
+  type Candidate,
   type SolveResult,
 } from '@/lib/layout-solve';
 import { DEFAULT_WEIGHTS } from '@/lib/layout-score';
@@ -157,21 +159,20 @@ describe("solveLayout mode: 'shuffle'", () => {
 
       // Over a sweep of scatters rather than one, because since § 31 a shuffle solve
       // DECLINES rather than hand back an arrangement more impossible than the room
-      // it was given, and roughly half of them would be.
+      // it was given, and a scatter the search cannot rescue would be.
       //
-      // That is not a loss, and the numbers are why. On `rect` 6 x 4, ten seeds,
-      // before the veto: **moved 10, clean 4**. The six that moved and were not clean
-      // carried 520 to 1390 weighted units of `overlap + outside` — furniture well
-      // inside the walls — and `isCleanShuffle` discarded every one. After the veto:
-      // **moved 4, clean 4**, the same four. The search stopped producing answers
-      // that were only ever going to be thrown away, and the button is unchanged:
-      // over five presets x eight presses, `shuffleRoom` offers on 25 of 40 either
-      // way.
+      // **The numbers this comment carried no longer reproduce**: "moved 4, clean 4"
+      // on `rect` 6 x 4 over ten seeds, and 25 of 40 presses offering over five
+      // presets x eight presses. On the code just before the search was fixed (see
+      // "prices every finalist as its own placements" below) the same sweep, seeds 42–51,
+      // read moved 1, clean 0 and 38 of 40, because that search accepted no steps.
+      // Once it ran: **moved 10, clean 9**, and **40 of 40** presses offer. Seed 42 on
+      // `rect`, the decliner this sweep was written for, now moves.
       //
-      // So the honest form of the property is the pipeline's own — twelve tries, as
-      // `MAX_CANDIDATES` allows — rather than a single seed that must not be
-      // unlucky. Seed 42 on `rect` is one of the decliners, which is how this was
-      // found.
+      // So the honest form of the property is still the pipeline's own — twelve tries,
+      // as `MAX_CANDIDATES` allows — rather than a single seed that must not be
+      // unlucky, because declining is still what a solve should do when it cannot
+      // rescue its scatter.
       // Stops at the first mover rather than scoring all twelve. One solve is seconds
       // and four presets x twelve was over this test's own budget under a full-suite
       // run — which is the honest reason, not a flake.
@@ -210,6 +211,93 @@ describe("solveLayout mode: 'shuffle'", () => {
     // than the room it was given, so an individual seed legitimately moves nothing.
     // Without this line every assertion above passes vacuously on five empty lists.
     expect(everMoved, 'no seed moved anything — the assertions above proved nothing').toBeGreaterThan(0);
+  });
+
+  // The search ran for weeks without accepting a step. `cost` started at `before`, the
+  // price of the tidy room, while `current` was the scatter, so every proposal looked
+  // hundreds of units uphill and was refused; the pool kept one finalist, the scatter,
+  // under the tidy room's price. Nothing here could see it — a legal scatter still
+  // passed every gate — so the two tests below assert what the bug broke rather than
+  // what it produced. Both read one sweep of forty solves, taken once.
+  let sweep: Array<{ id: LayoutId; seed: number; rated: readonly Candidate[] }> | undefined;
+  const shuffleSweep = () =>
+    (sweep ??= ALL.flatMap(([id, w, d]) => {
+      const { parts, footprint, locked, movable } = room(id, w, d);
+      return [1, 2, 3, 4, 5, 6, 7, 8].map((seed) => {
+        const start = randomizeStart(parts, footprint, movable, makeRng(seed));
+        let rated: readonly Candidate[] = [];
+        // `pick` is only a window onto the finalists: it answers what the default
+        // picker would, so the solve is the one the Ideas panel runs.
+        solveLayout(parts, footprint, locked, {
+          seed,
+          mode: 'shuffle',
+          start,
+          pick: (r) => {
+            rated = r;
+            return bestCandidate(r);
+          },
+        });
+        return { id, seed, rated };
+      });
+    }));
+
+  it('prices every finalist as its own placements', { timeout: 120_000 }, () => {
+    // `breakdown` is the solver's own full pricing of the finalist — its model, its
+    // weights — so this compares the solver with itself rather than with a copy of its
+    // weight table. `cost` leaves navigation out; the rest of the sum must agree. False
+    // on 40 of 40 before the fix: 2.44 against a real 2,161 on `rect` seed 1.
+    let checked = 0;
+    for (const { id, seed, rated } of shuffleSweep()) {
+      for (const c of rated) {
+        checked++;
+        expect(c.cost, `${id} seed ${seed}: a finalist carries another layout's price`).toBeCloseTo(
+          c.breakdown.total - c.breakdown.navigation,
+          6,
+        );
+      }
+    }
+    // A loop over whatever `pick` saw passes over an empty list, so the count is the
+    // assertion's own floor: forty solves, one of which (`t` seed 4) keeps three.
+    expect(checked, 'the finalists this sweep compared').toBe(159);
+  });
+
+  it('keeps a pool of finalists, because the search moves', { timeout: 120_000 }, () => {
+    // A search that accepts no step finds no new best, so its pool is the scatter
+    // alone: `11111111` on every preset before the fix. Four is `FINALISTS`, the most a
+    // pool keeps; `t` seed 4 fills three, so a full pool is not a property to lean on.
+    const pools = ALL.map(([id]) => [
+      id,
+      shuffleSweep()
+        .filter((r) => r.id === id)
+        .map((r) => r.rated.length)
+        .join(''),
+    ]);
+    expect(pools).toEqual([
+      ['rect', '44444444'],
+      ['l', '44444444'],
+      ['u', '44444444'],
+      ['open', '44444444'],
+      ['t', '44434444'],
+    ]);
+  });
+
+  it('an `arrange` handed a start is priced from that start too', () => {
+    // No caller does this today — only `shuffle` passes `start` — and that is why it is
+    // pinned: the day one does, a guard keyed on the MODE would hand it the origin's
+    // price and a search that accepts nothing, the defect above in another mode.
+    const { parts, footprint, locked, movable } = room('rect', 6, 4);
+    const start = randomizeStart(parts, footprint, movable, makeRng(1));
+    let rated: readonly Candidate[] = [];
+    solveLayout(parts, footprint, locked, {
+      seed: 1,
+      mode: 'arrange',
+      start,
+      pick: (r) => {
+        rated = r;
+        return bestCandidate(r);
+      },
+    });
+    expect(rated.length, 'one finalist is the start alone: nothing was accepted').toBe(4);
   });
 
   it('is deterministic: same room, same seed, same suggestion', () => {
@@ -262,14 +350,13 @@ describe('shuffleRoom — the offer, not the search', () => {
     );
     expect(NEGLIGIBLE_COST, 'must stay far below the smallest real signal measured').toBeLessThan(0.0113);
   });
-  it('the candidates a shuffle ranks are already unlike each other — which is what makes the diversity term inert', { timeout: 300_000 }, () => {
-    // **§ A.2 asked for a test that fails at `diversityPenalty: 0`. This is the reason
-    // there cannot be one at this level, asserted rather than argued.**
-    //
-    // `orderOffers` scores `cost + penalty x (closest already picked)`. Measured end to
-    // end, `shuffleRoom` at penalty 0 and at 4 returned byte-identical placements in all
-    // 26 attempt-pairs over four presets and two sizes. The cause is here: the clean set
-    // is mutually dissimilar, so the penalty multiplies zero.
+  it('the candidates a shuffle ranks are already unlike each other — which is what keeps the diversity term small', { timeout: 300_000 }, () => {
+    // `orderOffers` scores `cost + penalty x (closest already picked)`, and the clean set
+    // is mostly mutually dissimilar, so the penalty mostly multiplies zero. On the search
+    // that accepted no steps it multiplied zero everywhere that mattered — 26 of 26
+    // end-to-end pairs byte-identical, which is why § A.2's test once could not be
+    // written. On the one that runs it reorders one press in 24 (the test above), and
+    // this is the bound on how far it can reach.
     //
     // The clean set is rebuilt the way `shuffleRoom` builds it — same seed derivation,
     // same two gates, both exported — because `clean` is a local. The reconstruction is
@@ -304,9 +391,10 @@ describe('shuffleRoom — the offer, not the search', () => {
     const worst = Math.max(...sims);
     console.log(`  clean candidates=${candidates} pairs=${sims.length} zero=${sims.filter((v) => v === 0).length} worst=${worst.toFixed(3)}`);
 
-    // The agreement itself. Not `worst === 0` — five of 66 measured pairs were non-zero
-    // — but that no pair comes near the bar at which a repeat would be skipped, and that
-    // what the penalty can add stays small against the cost it is added to.
+    // The agreement itself. Not `worst === 0` — 15 of 177 pairs were non-zero over six
+    // presets x five presses, 0.100 to 0.400 — but that no pair comes near the bar at
+    // which a repeat would be skipped, and that what the penalty can add stays small
+    // against the cost it is added to.
     expect(
       worst,
       'a candidate pair reached REPEAT_SIMILARITY: the search is producing near-duplicates and the diversity term now has work to do — see DIVERSITY_PENALTY',
@@ -315,6 +403,35 @@ describe('shuffleRoom — the offer, not the search', () => {
       DIVERSITY_PENALTY * worst,
       'the diversity term can now outweigh a real cost difference between candidates',
     ).toBeLessThan(2);
+  });
+  it('the diversity term reorders a press — the test § A.2 asked for', { timeout: 120_000 }, () => {
+    // Fails at `diversityPenalty: 0`, which is the whole ask. It could not be written
+    // while the search accepted no steps (every pair came back byte-identical); on the
+    // search that runs, one press of 24 swept (six presets x attempts 2–5, each with
+    // the previous press's first idea as history) comes back in a different order.
+    // Same four ideas, same first one — `picked = []` cannot move `ranked[0]` — and
+    // the term trades the second for a less similar dearer one. The history is built
+    // the way the gallery builds it, press after press, so the fixture is one real
+    // sequence rather than a history chosen to provoke it.
+    const { parts, room: r, locked } = room('rect', 7.5, 5.6);
+    const ids = parts.map((p) => p.id);
+    let prev = shuffleRoom(parts, r, locked, { attempt: 1 });
+    for (let attempt = 2; attempt <= 3; attempt++)
+      prev = shuffleRoom(parts, r, locked, { attempt, history: [{ ids, placements: prev!.ideas[0].placements }] });
+    const history = [{ ids, placements: prev!.ideas[0].placements }];
+    const order = (penalty?: number) =>
+      shuffleRoom(parts, r, locked, { attempt: 4, history, diversityPenalty: penalty })!.ideas.map((i) =>
+        i.after.toFixed(1),
+      );
+    const withTerm = order();
+    const without = order(0);
+    console.log(`  rect 7.5x5.6 attempt 4: penalty ${DIVERSITY_PENALTY} [${withTerm}] · penalty 0 [${without}]`);
+    expect(without, 'the premise: without the term the press ranks on cost alone').toEqual(
+      [...without].sort((a, b) => Number(a) - Number(b)),
+    );
+    expect(withTerm, 'the term changed nothing here: see DIVERSITY_PENALTY').not.toEqual(without);
+    expect([...withTerm].sort(), 'it reorders; it never adds or drops an idea').toEqual([...without].sort());
+    expect(withTerm[0], 'and it cannot move the first pick').toBe(without[0]);
   });
   it('the refusal counts the findings it does not name, rather than naming them all', () => {
     // The wire test (`tests/shuffle-refusal-wired.test.tsx`) drives both branches
@@ -339,9 +456,10 @@ describe('shuffleRoom — the offer, not the search', () => {
   it('a single solve is NOT reliably clean, which is why the pipeline exists', { timeout: 60_000 }, () => {
     // The negative control for the test below, and the finding the filter answers.
     // Without it, "shuffleRoom returns a clean room" reads as a property of
-    // `solveLayout` that the filter is not needed for. Measured at 6/20 on this
-    // preset; asserted loosely because the exact count moves with any re-price of
-    // the cost function, while the fact that raw solves fault does not.
+    // `solveLayout` that the filter is not needed for. Measured at 4/20 clean on this
+    // preset and these seeds (1/20 before the search accepted any steps); asserted
+    // loosely because the exact count moves with any re-price of the cost function,
+    // while the fact that raw solves fault does not.
     const { parts, footprint, locked, movable } = room('t', 6, 5);
     let faulted = 0;
     for (let seed = 1; seed <= 20; seed++) {

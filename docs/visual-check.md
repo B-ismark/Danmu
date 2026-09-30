@@ -566,6 +566,32 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
+### Every idea is now an arranged room, not a tidied scatter — PR #184 (§ H.6.0), needs eyes on every preset
+
+Until this change the search behind **Ideas** accepted no steps: each card was a random
+scatter that the passes after the search had squared up and nudged. Now each one is annealed
+from its scatter, so on the fixture sweep the mean idea cost fell 35.6 → 6.1 on the plain
+rectangle and 76.6 → 36.3 on the T, and three presses fill every slot on every preset. None
+of that is a look.
+
+**Where to click.** Start one room from each layout card — Rectangle, L-Shape, T-Shape,
+U-Shape, Open Plan — with its starter furniture (the app's sizes, not the sweep's). In each: left rail (the Room sheet on a phone) → **Ideas**, then **More
+ideas** twice.
+
+**What right looks like.** Each card is a room someone might choose: a bed with its head on a
+wall and a nightstand beside it, a sofa facing the TV, chairs at the dining table, desk
+against a wall. Cards differ from each other in where the big pieces went, not only in which
+way a chair points.
+
+**What wrong looks like.**
+- A card that reads as a scatter: big pieces in the middle of the floor, beds or sofas at a
+  random angle, a dining chair nowhere near the table.
+- A piece standing through a wall or inside another piece, **other than the rug** — the rug
+  through a wall is known (9 of the sweep's 60 ideas) and is the next fix, so a rug is not a
+  finding here.
+- Four cards on one press that look like the same room.
+- Any preset's gallery coming back with *No ideas this time* on the first press.
+
 ### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 
 **Ideas** sits where Shuffle did, beside **Fix**. It opens a card of arrangements: four
