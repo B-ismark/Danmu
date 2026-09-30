@@ -25,7 +25,7 @@ import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { riderRelation } from '@/lib/rider-height';
-import { turnInPlace, refusalCause } from '@/lib/drag-resolve';
+import { turnInPlace, turnSwingsInto, refusalCause } from '@/lib/drag-resolve';
 import { planConvoy, travellingWorld } from '@/lib/drag-convoy';
 import { cascadeTransform } from '@/lib/rigid-parent';
 import { turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
@@ -380,11 +380,14 @@ function paintRefusal(ids: string[]) {
 
 /** A quarter turn on every selected piece, about its own centre.
  *
- *  **The angle is always taken; that is what "keep and report" means here** (§ B.14,
+ *  **The angle is taken; that is what "keep and report" means here** (§ B.14,
  *  decided 2026-09-03). Refusing a turn would make a piece in a tight corner
- *  unturnable, which no report has ever asked for. What the turn does NOT do is
- *  succeed in silence: the resolve says whether the piece still fits at the new
- *  angle, and this says so out loud.
+ *  unturnable. What the turn does NOT do is succeed in silence: the resolve says
+ *  whether the piece still fits at the new angle, and this says so out loud.
+ *  **One exception, 2026-09-30:** a turn that swings a piece into trouble it was
+ *  clear of is held (`turnSwingsInto`) — a chair tucked under a desk and turned
+ *  sideways put its back through the top. A piece already refused where it stands
+ *  still turns, which keeps the corner case above turnable.
  *
  *  It used to do neither. `spinSelection` wrote `setRotation` raw — the fourth turn
  *  gesture in the app and the only one that ran through no pipeline at all, so it
@@ -478,7 +481,7 @@ export function spinSelection(quarterTurns = 1) {
     // back are different numbers for every wall rider, and only one of them is in
     // `turned`.
     const wanted = part.rot + (quarterTurns * Math.PI) / 2;
-    const turned = turnInPlace({
+    const ask = {
       part,
       at: part.pos,
       rot: wanted,
@@ -489,7 +492,15 @@ export function spinSelection(quarterTurns = 1) {
       parts: convoy.travelling.size > 1 ? travellingWorld(convoy, scene, 0, 0, convoy.own) : scene,
       footprint: room.footprint,
       roomHeight: room.height,
-    });
+    };
+    const turned = turnInPlace(ask);
+    // Clear where it stands and not at the new angle: held, written nowhere, and
+    // named as refused — a chair turned under its desk would otherwise put its back
+    // through the top (`turnSwingsInto`).
+    if (turnSwingsInto(ask, turned, part.rot)) {
+      refused.push({ id, name: part.name, why: refusalCause(turned) });
+      continue;
+    }
 
     const pos = turned.pos;
     if (pos[0] !== part.pos[0] || pos[1] !== part.pos[1] || pos[2] !== part.pos[2]) setPosition(id, pos);

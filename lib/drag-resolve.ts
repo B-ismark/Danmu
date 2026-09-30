@@ -381,8 +381,9 @@ export function resolvePlacement(input: ResolveInput): Resolved {
  * · `wallEdge: null`. A wall rider is re-aimed by the wall it lands on, in both
  *   tabs or in neither.
  * · The caller takes the CLAMP and not the legality. Refusing an invalid frame
- *   would make a piece in a tight spot unturnable, which no report has asked for;
- *   `valid` comes back so the caller can say so out loud instead.
+ *   would make a piece in a tight spot unturnable; `valid` comes back so the caller
+ *   can say so out loud instead. The one exception is a turn that swings a piece
+ *   into trouble it was clear of — see `turnSwingsInto`, which every caller asks.
  *
  * That last one is why this returns a whole `Resolved` and not a position. The
  * clamped position is produced whether or not the frame is legal, and the one
@@ -392,7 +393,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
  * merged set into its own siblings made the resolve invalid, so that was the path
  * every such turn took, and the bed was committed with its corner through the wall.
  */
-export function turnInPlace(input: {
+export type TurnInput = {
   part: ScenePart;
   /** Where it stands now. Its `y` is the mount height to preserve. */
   at: [number, number, number];
@@ -402,7 +403,9 @@ export function turnInPlace(input: {
   parts: ScenePart[];
   footprint: Poly;
   roomHeight: number;
-}): Resolved {
+};
+
+export function turnInPlace(input: TurnInput): Resolved {
   return resolvePlacement({
     part: input.part,
     rawX: input.at[0],
@@ -416,4 +419,24 @@ export function turnInPlace(input: {
     currentY: input.at[1],
     wallEdge: null,
   });
+}
+
+/**
+ * Does this turn swing the piece INTO trouble it is clear of where it stands? Then
+ * the turn is HELD — the piece keeps the angle it has — rather than taken.
+ *
+ * The rule above ("the caller takes the clamp and not the legality") was written for
+ * a piece in a tight spot, which refusing would make unturnable, and that reason
+ * still holds: a piece that is already refused at its own angle is answered `false`
+ * here, so it turns as before and is reported. What it never covered is the other
+ * case, and the user found it on 2026-09-30: a chair tucked under a desk front first,
+ * turned on the ring, swung its back up through the desktop and stayed there, red.
+ * A drag has always stopped at the last spot that fitted; a turn now stops at the
+ * last angle that fitted, for the same reason.
+ *
+ * `fromRot` is the angle it faces NOW — the effective one, not the authored `rot`.
+ */
+export function turnSwingsInto(input: TurnInput, turned: Resolved, fromRot: number): boolean {
+  if (turned.valid) return false;
+  return turnInPlace({ ...input, rot: fromRot }).valid;
 }

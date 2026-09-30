@@ -567,13 +567,23 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
   office chair at its Library size does the same under a 750 mm table. *Wrong* looks
   like: the chair jumping onto the tabletop, a *blocked* tag while it is only part way
   in, or it disappearing wholly inside the table.
-  **Front first only — this branch, NOT LOOKED AT.** Looked at 2026-09-30 with the chair
-  turned round: it slid in back first and its back went up through the desktop. The
-  rule now reads which way the seat faces, so back first or side on is *blocked* at the
-  table's edge, and Room check, Suggest and the settle all agree. Turn the chair to face
-  the table and it slides in as above. A chair low enough to clear the underside back
-  and all is not stopped either way. *Wrong* looks like: a chair's back through the top
-  from any side, or a chair facing its table that is refused at the edge.
+  **Front first only — LOOKED AT 2026-09-30.** It had slid in back first with its back
+  up through the desktop; the rule now reads which way the seat faces. The user: *"Front
+  first slides under, sideways is blocked now."*
+  **Turning it once it is under — this branch, NOT LOOKED AT.** The same look found the
+  way round it: slide the chair in front first, then turn it, and its back swung up
+  through the desk and stayed there, because a turn always took its angle (§ B.14). A
+  turn that swings a piece into trouble it was clear of is now held. In 3D, tuck the
+  chair, pick **Rotate** and drag the ring a quarter round: while you drag it may go red,
+  and on release it goes back to the last angle it fitted at. In the plan, focus the
+  tucked chair and press an arrow to turn it; right-click → *Turn a quarter* too. Both
+  should say *"Chair stays at 180 degrees. It does not fit at that angle: something is
+  in the way"* (the context menu: *"Nothing turned."*) and leave it facing the table.
+  Pull it out and every turn works again. And a chair that is ALREADY stuck — back
+  first through the top, from an old room — must still turn, so it can be turned out.
+  *Wrong* looks like: a chair left sideways with its back in the desk, a turn that does
+  nothing and says nothing, or a stuck chair that will not turn at all. The 3D ring is
+  the half no test reaches (`TransformControls` has no DOM).
 - **The ottoman bullet below was looked at on 2026-09-30 and is right:** it stands on the
   coffee table's top.
 - Under the 650 mm desk the office chair's arms would hit the top, so it no longer goes

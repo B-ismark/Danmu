@@ -3,8 +3,11 @@
 // § B.14: a turn that puts a corner through the wall — keep it and report it.
 //
 // Decided 2026-09-03, and the decision is narrower than the question sounded. The
-// ANGLE is always taken; refusing it would make a piece in a tight corner unturnable.
-// What may not happen is a turn succeeding in silence.
+// ANGLE is taken; refusing it would make a piece in a tight corner unturnable. What
+// may not happen is a turn succeeding in silence. Narrowed 2026-09-30 by one case:
+// a turn that swings a piece INTO trouble it was clear of is held (`turnSwingsInto`),
+// because a tucked chair turned sideways put its back through the desk. A piece
+// already refused where it stands still turns, so the corner case stays turnable.
 //
 // `spinSelection` — the context menu's *Turn a quarter* — was the fourth way to turn a
 // piece in this app and the only one that ran through no pipeline at all. It wrote
@@ -20,6 +23,8 @@
 // piece is a `[role]`-less module function, so no component is mounted.
 
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { useScene } from '@/lib/scene-store';
 import { useStudio, useSettings } from '@/lib/store';
 import { footprintForLayout } from '@/lib/footprint';
@@ -98,6 +103,57 @@ describe('spinSelection takes the angle', () => {
   });
 });
 
+describe('spinSelection holds a turn that would swing into something', () => {
+  // § B.14's reason for always taking the angle was the piece in a tight spot. The
+  // user found the other case on 2026-09-30: a chair tucked under a desk, turned, put
+  // its back through the top and stayed there.
+  const table = () =>
+    part({ id: 'table-1', name: 'Table', category: 'table', shape: 'desk-standard', dimMM: [1600, 900, 750], pos: [0, 0, 0] });
+  const chair = (rot: number) =>
+    part({ id: 'chair-1', name: 'Chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, 0.4], rot });
+
+  it('keeps a tucked chair facing its table, writes nothing, and says why', () => {
+    room([table(), chair(Math.PI)]);
+    select('chair-1');
+    spinSelection(1);
+    expect(at('chair-1').rot).toBeCloseTo(Math.PI, 10);
+    expect(useStudio.getState().rotations['chair-1']).toBeUndefined();
+    expect(spoken[0]).toBe('Nothing turned. Chair does not fit at that angle: something is in the way.');
+  });
+
+  it('still turns a piece that was already refused where it stood', () => {
+    // Back first, it is refused at its own angle. Held there, it could never be
+    // turned round to face the table, which is the only way out — so a quarter turn
+    // is taken even though side on is refused too, and reported as it always was.
+    room([table(), chair(0)]);
+    select('chair-1');
+    spinSelection(1);
+    expect(at('chair-1').rot).toBeCloseTo(QUARTER, 10);
+    expect(spoken[0]).toBe('Turned a quarter turn. Chair does not fit at that angle: something is in the way.');
+    spinSelection(1);
+    expect(at('chair-1').rot).toBeCloseTo(Math.PI, 10);
+  });
+});
+
+describe('every turn asks whether it swings into something', () => {
+  // The plan's handle and its two key paths turn through `turnTo`, which cannot be
+  // reached without mounting the plan; the rule is `turnSwingsInto` and is tested
+  // above. What this holds is that no turn path resolves a turn without asking it —
+  // four turn paths drifting apart is how § B.14 began. The 3D ring does not call
+  // `turnInPlace` at all (it resolves a live gesture), so it is on the visual check.
+  it('is asked everywhere `turnInPlace` is', () => {
+    const dir = join(process.cwd(), 'components/studio');
+    const callers = readdirSync(dir)
+      .filter((f) => f.endsWith('.tsx'))
+      .map((f) => ({ f, src: readFileSync(join(dir, f), 'utf8') }))
+      .filter(({ src }) => /\bturnInPlace\(/.test(src));
+    expect(callers.map((c) => c.f).sort()).toEqual(['KeyboardShortcuts.tsx', 'PlanView.tsx']);
+    for (const { f, src } of callers) {
+      expect([f, (src.match(/\bturnSwingsInto\(/g) ?? []).length]).toEqual([f, (src.match(/\bturnInPlace\(/g) ?? []).length]);
+    }
+  });
+});
+
 describe('spinSelection says when the piece no longer fits', () => {
   it('names the piece and the reason', () => {
     // Blocked rather than out of the room: `valid` is computed on the position the
@@ -128,7 +184,9 @@ describe('spinSelection says when the piece no longer fits', () => {
     ]);
     select('wardrobe-1', 'wardrobe-2');
     spinSelection(1);
-    expect(spoken[0]).toContain('2 pieces turned a quarter turn.');
+    // Both were clear where they stood, so both are HELD (`turnSwingsInto`) and
+    // neither turned — which the sentence must not claim otherwise.
+    expect(spoken[0]).toContain('Nothing turned.');
     expect(spoken[0]).toContain('Wardrobe 1 does not fit at that angle');
     // SINGULAR. An unconditional plural verb reads "1 more do not fit either" for a set
     // of exactly two, which is the commonest multi-select there is — and the first

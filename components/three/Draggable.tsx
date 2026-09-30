@@ -200,6 +200,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // Last collision-free spot DURING the current drag — an invalid drop falls
   // back here (slide up to the obstacle) instead of reverting the whole drag.
   const lastFreePos = useRef<[number, number, number] | null>(null);
+  /** The angle it had at `lastFreePos`, written with it and read only beside it. A
+   *  turn never moves the piece, so a spot without its angle is not a pose it fitted
+   *  in: the ring swung a tucked chair's back up through its desk and the drop kept
+   *  that angle at the one spot it had fitted (see `turnSwingsInto`). */
+  const lastFreeRot = useRef<number | null>(null);
   // Position captured at drag start — used to move merged-group siblings by the
   // same delta when the dragged part belongs to a group.
   const dragStartPos = useRef<[number, number, number] | null>(null);
@@ -482,6 +487,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // pointer, so recording that spot made the fallback commit the lead a whole
       // slide ahead of its members, silently and with `valid` saying true.
       lastFreePos.current = [lead.pos[0], lead.pos[1], lead.pos[2]];
+      lastFreeRot.current = lead.rot;
       if (stretch.current) stretch.current.lastFreeDim = dim;
       // Only on a legal step. On an illegal one the set holds at the last legal
       // delta while the piece under the hand goes red and keeps following the
@@ -560,6 +566,19 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           const [sx, sy, sz] = groupScaleForDim(st.base, dim);
           ref.current.scale.set(sx, sy, sz);
         }
+        // …and the ANGLE it had there, which is the whole fallback for a turn: `back`
+        // is where it is standing, so resting there at the refused angle is taking
+        // the turn. With a free frame, the angle of that frame. With none, the angle
+        // the gesture began at — but only if the piece fitted there; one that was
+        // already refused where it stood keeps the new angle, as `turnSwingsInto`
+        // says, or a piece in a tight spot could never be turned out of it.
+        const startRot = dragStartRot.current;
+        const restRot = lastFreePos.current
+          ? (lastFreeRot.current ?? ref.current.rotation.y)
+          : startRot !== null && settleAt(startRot)(back[0], back[2]).valid
+            ? startRot
+            : ref.current.rotation.y;
+        ref.current.rotation.y = restRot;
         // Rebuilt at `back`, not reused from the drop point: the world the convoy
         // occupies is a function of the delta, so a world built for a spot the
         // gesture is no longer resting at puts the company in the wrong place.
