@@ -1061,21 +1061,15 @@ halves.*
 
 ### View behind a gear, collapsed rails as icon strips — merged to `main` in `5114b5f` (PR #179)
 
-**Looked at: the gear and the shut rails.** In the walkthrough the gear menu (toggles,
-outside press, Escape, Help and View closing each other) and the collapsed strips
-(tooltips, Style opening Style) both passed on a real mouse. What is left needs a keyboard,
-a real finger and a real screen reader.
+**Looked at: everything but the screen reader.** In the walkthrough the gear menu, the
+collapsed strips, Tab → Enter on a strip icon, and on a phone the View sheet (now as tall
+as its controls, #187) all passed. The screen-reader stop was skipped for now, not passed.
 
-**Where to click.**
-- **Laptop, right rail shut, a piece selected.** Press the piece's icon on the strip with the
-  keyboard (Tab to it, Enter). The rail opens and the next Tab moves on inside it.
-- **Phone.** Press the toolbar's **View**. Then, with the sheet up, tap a piece in the room:
-  the sheet should become that piece's Details.
+**Where to click.** With VoiceOver or NVDA on, shut the right rail and move through its
+strip icons.
 
 **What wrong looks like.**
-- The rail opening with focus lost to the page.
-- The phone's View sheet taller than its controls with a scrollbar anyway.
-- A screen reader announcing a strip icon as "button" with no name.
+- A strip icon announced as "button" with no name.
 
 **Settled without eyes.** Each strip icon asks for its section and opens the rail. The tree
 takes that request once and focuses the section. Side tooltips are placed beside their

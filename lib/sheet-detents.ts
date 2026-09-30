@@ -31,7 +31,10 @@ export function settleSheet(heightPx: number, velocityPxPerMs: number, heights: 
   return order[nearest];
 }
 
-/** A tap on the grabber cycles the two open detents (HIG § Sheets). */
-export function cycleSheet(snap: SheetSnap): SheetSnap {
+/** A tap on the grabber cycles the two open detents (HIG § Sheets). A sheet sized
+ *  to its content (`fit`) has one open height, so there is nothing to cycle to and
+ *  the tap lowers it. */
+export function cycleSheet(snap: SheetSnap, fit = false): SheetSnap {
+  if (fit) return 'closed';
   return snap === 'full' ? 'half' : 'full';
 }
