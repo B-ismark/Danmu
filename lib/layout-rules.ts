@@ -1411,7 +1411,8 @@ export function isSoftFurnishing(part: { category: Category; shape: Shape }): bo
  *  Three readers, which is why it is here and not written out at any of them: the room
  *  report's `clash-mounted` rule, the drag's own refusal (via `collidesAt`, which asks
  *  the softness question directly because it collides with everything else too), and
- *  "Will it fit?"'s placement search. The third is the one that proves the point —
+ *  the placement search of the Library's own-size fit check. The third is the one that
+ *  proves the point —
  *  `overlapsSomething` skipped every `wallMounted` piece while `explain` reported the
  *  clash the search had just walked into, so a bookshelf that fits was answered
  *  **No room for it**. A verdict must not grow a term its own search cannot see.

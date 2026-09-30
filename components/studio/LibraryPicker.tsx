@@ -43,7 +43,11 @@ export function LibraryPicker({
   autoFocus = true,
   initialQuery = '',
 }: {
-  onPick: (item: LibraryItem) => void;
+  /** `ownSize` is set when the search words named the size — "sofa 228x95x83cm" —
+   *  so the host can treat it as the user's own measurement rather than a preset's
+   *  (the catalog panel seats it where it really fits, or says why it cannot). The
+   *  size itself is already on `item.dimMM`; this is only whose size it is. */
+  onPick: (item: LibraryItem, how?: { ownSize: boolean }) => void;
   /** Add several at once. Passing it turns on Shift-click range marking — the
    *  swap flow leaves it out, because swapping one piece for a SET is not a
    *  thing, and a list that could mark rows there would offer a gesture with
@@ -141,7 +145,7 @@ export function LibraryPicker({
     }
     anchorRef.current = item.label;
     setMarked([]);
-    onPick(item);
+    onPick(item, { ownSize: sized });
   }
 
   return (
@@ -156,6 +160,23 @@ export function LibraryPicker({
         autoFocus={autoFocus}
         style={{ marginBottom: 10, flexShrink: 0 }}
       />
+      {/* "Use my own size", which is what the Room panel's retired "Will it fit" tab
+          was: type the three numbers off a product page and the piece is seated where
+          it really fits in this room, or refused with the reason. Said here because a
+          size the search understands and nobody knows to type is a feature that does
+          not exist — which is how this one went unnoticed beside a tab that did the
+          same job. Hidden once a size is typed: the badge on each row says it then. */}
+      {canMark && (
+        <div className="t-micro" style={{ marginTop: -4, marginBottom: 10, flexShrink: 0, lineHeight: 1.4 }}>
+          {sized ? (
+            <>Your size. It goes where it fits, or Danmu says why it can’t.</>
+          ) : (
+            <>
+              Add your own size, like <span className="mono">sofa 228x95x83cm</span>
+            </>
+          )}
+        </div>
+      )}
       <div role="status" aria-live="polite" className="sr-only">
         {query ? `${items.length} match${items.length === 1 ? '' : 'es'}` : ''}
       </div>

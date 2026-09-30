@@ -50,7 +50,7 @@ function drawnTopMM(shape: Shape, category: Category, dimMM: [number, number, nu
 /** Pairs drawn a second way that the Library's own category never reaches. The one
  *  there is: `PartGeometry` draws a `desk-standard` as a dining table, apron and all,
  *  when `roleOf` reads it as one, which the Library's desk-category entry never is and
- *  a room's `table` — the starter rooms', a scan's, the Will it fit panel's — is. */
+ *  a room's `table` — the starter rooms', a scan's, the Library's own-size add — is. */
 const ALSO: Array<[Shape, Category]> = [['desk-standard', 'table']];
 
 const rows = [

@@ -24,8 +24,9 @@
 import { useEffect } from 'react';
 import { useStudio } from '@/lib/store';
 
-import { type LibraryItem, type ScenePart } from '@/lib/scene-spec';
+import { type LibraryItem } from '@/lib/scene-spec';
 import { addPieceToRoom } from '@/lib/add-piece';
+import { sayAdded } from './say-added';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { LibraryPicker } from './LibraryPicker';
@@ -138,15 +139,13 @@ export function CatalogToggle() {
  *  `silent` is for the MANY case only. One press that adds seven pieces should say
  *  "7 pieces added.", not name seven of them in a row; one press that adds one
  *  should name it, which is what the 2D drop has always done and what neither this
- *  path nor the 3D drop did. Three ways to add a piece and one of them spoke. */
-function spawn(
-  category: ScenePart['category'],
-  shape: ScenePart['shape'],
-  dimMM: [number, number, number],
-  name: string,
-  opts?: { silent?: boolean },
-) {
-  return addPieceToRoom({ label: name, category, shape, dimMM }, undefined, opts);
+ *  path nor the 3D drop did. Three ways to add a piece and one of them spoke.
+ *
+ *  `ownSize` is the Library row pressed with a size typed into the search — the retired
+ *  Will it fit tab's question. Returns the new id, or null when the piece was refused
+ *  (`sayAdded` has already said why). */
+function spawn(item: LibraryItem, opts?: { silent?: boolean; ownSize?: boolean }): string | null {
+  return sayAdded(addPieceToRoom({ label: item.label, category: item.category, shape: item.shape, dimMM: [...item.dimMM] }, undefined, opts), item.label);
 }
 
 /** Several at once, from a marked set.
@@ -164,7 +163,12 @@ function spawn(
  *  placed, the loop really does step around what it has already put down. */
 function spawnMany(items: LibraryItem[]) {
   const ids: string[] = [];
-  for (const item of items) ids.push(spawn(item.category, item.shape, [...item.dimMM], item.label, { silent: true }));
+  // A refused piece is said on its own (`sayAdded`) and simply not counted: three
+  // marked, one wider than every wall, is "2 pieces added." and one card naming it.
+  for (const item of items) {
+    const id = spawn(item, { silent: true });
+    if (id) ids.push(id);
+  }
   if (ids.length === 0) return;
   useStudio.getState().setSelection(ids, ids[ids.length - 1]);
   announce(`${ids.length} ${ids.length === 1 ? 'piece' : 'pieces'} added.`);
@@ -291,8 +295,8 @@ export function LibraryBody({ canDrag = false, touch = false }: { canDrag?: bool
   // `item.dimMM` is already the size the search words asked for, clamped per
   // piece — `LibraryPicker` resolves it before handing the item over, so this path
   // and the drag path cannot disagree about what a query meant.
-  function addItem(item: LibraryItem) {
-    spawn(item.category, item.shape, [...item.dimMM], item.label);
+  function addItem(item: LibraryItem, how?: { ownSize?: boolean }) {
+    spawn(item, { ownSize: how?.ownSize });
   }
   return (
     <div

@@ -27,9 +27,13 @@
 
 import { v4 as uuid } from 'uuid';
 import { announce } from './announce';
+import { checkFit } from './fit-check';
+import { groundY, isFloorStanding, isTabletopProne, ridesWall } from './physics';
 import { currentRoomScene } from './room-scene';
 import { useScene } from './scene-store';
-import { useStudio } from './store';
+import { useSettings, useStudio } from './store';
+import { describeSpaceRefusal, refuseNewForSpace } from './space-bound';
+import { formatDim } from './units';
 import { openSpotForNewPart, placeNewPart, type Category, type Shape } from './scene-spec';
 
 /** What every trigger has: what the piece is, and what to call it. The Library's own
@@ -46,9 +50,26 @@ export type AddPieceOptions = {
    *  says "3 pieces added." itself — seven separate announcements for one gesture is
    *  worse than none, and it is the only reason this option exists. */
   silent?: boolean;
+  /** The size is the user's OWN — typed into the Library ("sofa 228x95x83cm") rather
+   *  than a preset's. What used to be the Room panel's "Will it fit" tab, folded into
+   *  the one place pieces are added (the user's call, 2026-09-30: the tab read as a
+   *  gimmick beside a Library that already understood a size).
+   *
+   *  For a piece that stands on the floor it changes WHERE the piece goes: `checkFit`
+   *  seats it with everything already in the room held still, so it lands where it
+   *  really fits, and a size with nowhere to go is refused with the reason rather than
+   *  dropped on top of the sofa. Wall, ceiling and tabletop pieces are placed the
+   *  ordinary way — `checkFit` is a floor question — and still meet the space bound. */
+  ownSize?: boolean;
 };
 
-/** Place `item` and put it in the room. Returns the new part's id.
+/** What happened. A refusal is a sentence for a person, already in their unit: the
+ *  caller shows it, because a refusal nobody sees is the silent kind rule 2 forbids.
+ *  `note` is set when the piece went in but something about the spot is worth saying
+ *  (an own-size piece that only just fits). */
+export type AddOutcome = { id: string; note?: string } | { refused: string };
+
+/** Place `item` and put it in the room.
  *
  *  `aim` is a world x/z. Omit it for a Library click, where there is no aimed point
  *  and `openSpotForNewPart` looks for a clear one; pass the drop point for either
@@ -58,14 +79,75 @@ export type AddPieceOptions = {
  *
  *  **Parts come from `currentRoomScene()` and are not a parameter.** A caller cannot
  *  hand this the authored array by mistake, which is the entire point of the
- *  extraction — see the header. */
-export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: AddPieceOptions): string {
+ *  extraction — see the header.
+ *
+ *  **Refused when it is wider than the space it would have** (`lib/space-bound.ts`):
+ *  a curtain longer than every wall, a sofa wider than the room. The user's ruling —
+ *  "don't allow if it's wider than the available space" — and it is the same bound
+ *  the Inspector's size fields hold, so a piece cannot be added at a size those fields
+ *  would refuse. A wall piece with no aim that does not fit the wall it was given is
+ *  offered the room's LONGEST wall before it is refused, because the unaimed spot is
+ *  the app's choice and a curtain turned away from a 2 m wall while a 5 m wall stood
+ *  empty would be the app refusing its own mistake. An aimed one is not moved: being
+ *  placed where you aimed is a promise, and a drop somewhere else is not that drop. */
+export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: AddPieceOptions): AddOutcome {
   const { room, addPart } = useScene.getState();
   const parts = currentRoomScene();
+  const unit = useSettings.getState().dimUnit;
+  const len = (mm: number) => `${formatDim(mm, unit)} ${unit}`;
 
-  const spot = aim ?? openSpotForNewPart(item.category, item.shape, item.dimMM, room, parts);
-  const { pos, rot, wallMounted, supportId } = placeNewPart(item.category, item.shape, item.dimMM, room, parts, spot);
+  let pose: { pos: [number, number, number]; rot: number; wallMounted: boolean; supportId: string | null };
+  let note: string | undefined;
 
+  const fitsTheFloorQuestion =
+    opts?.ownSize && !aim && isFloorStanding(item.category, item.shape) && item.category !== 'rug' && !isTabletopProne(item.category);
+  if (fitsTheFloorQuestion) {
+    const fit = checkFit({ category: item.category, shape: item.shape, dimMM: item.dimMM, name: item.label }, parts, room);
+    if (fit.status === 'too-tall') {
+      return {
+        refused: `${item.label} is ${len(item.dimMM[2])} tall, and the ceiling here is ${len(room.height * 1000)}. It would not stand up in this room.`,
+      };
+    }
+    if (fit.status === 'no-room' || !fit.placement) {
+      // `largestBay` is the ROOM's biggest rectangle of floor, with nothing in it — not
+      // the clear floor left between the furniture. The retired panel called it "clear",
+      // which read as "there is 3 × 3 m free" beside a bed filling the room. So it is
+      // used for the one thing it can honestly say: whether this piece would go in the
+      // room empty, which is what tells "move things" apart from "a smaller piece".
+      const bay = fit.largestBay;
+      const [w, d] = [item.dimMM[0] / 1000, item.dimMM[1] / 1000];
+      const inEmptyRoom = bay !== null && ((w <= bay.width && d <= bay.depth) || (w <= bay.depth && d <= bay.width));
+      return {
+        refused:
+          `There is nowhere clear for a ${formatDim(item.dimMM[0], unit)} × ${len(item.dimMM[1])} ${item.label.toLowerCase()} with what is already here.` +
+          (inEmptyRoom
+            ? ' It would fit this room empty, so it is the other pieces in the way. Fix or Ideas may make room by moving them.'
+            : bay
+              ? ` The largest rectangle of floor this room has is ${formatDim(bay.width * 1000, unit)} × ${len(bay.depth * 1000)}.`
+              : ''),
+      };
+    }
+    if (fit.status === 'tight' && fit.issues[0]) note = `It goes in, but it is tight: ${fit.issues[0].title}`;
+    const { x, z, yaw } = fit.placement;
+    pose = { pos: [x, groundY(item.category, item.shape, item.dimMM, room.height), z], rot: yaw, wallMounted: false, supportId: null };
+  } else {
+    const spot = aim ?? openSpotForNewPart(item.category, item.shape, item.dimMM, room, parts);
+    pose = placeNewPart(item.category, item.shape, item.dimMM, room, parts, spot);
+    let refused = refuseNewForSpace({ ...item, pos: pose.pos, rot: pose.rot }, room.footprint);
+    if (refused && !aim && ridesWall(item.category, item.shape)) {
+      const longest = longestWallAim(room.footprint);
+      if (longest) {
+        const again = placeNewPart(item.category, item.shape, item.dimMM, room, parts, longest);
+        const still = refuseNewForSpace({ ...item, pos: again.pos, rot: again.rot }, room.footprint);
+        if (!still) {
+          pose = again;
+          refused = null;
+        } else refused = still;
+      }
+    }
+    if (refused) return { refused: describeSpaceRefusal(item.label, refused, unit) };
+  }
+  const { pos, rot, wallMounted, supportId } = pose;
   const id = `${item.category}-${uuid().slice(0, 6)}`;
   addPart({
     id,
@@ -95,6 +177,19 @@ export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: Ad
   // travelled with it: two ways to put a lamp on a desk, two behaviours.
   if (supportId) useStudio.getState().setParent(id, supportId);
   useStudio.getState().setSelected(id);
-  if (!opts?.silent) announce(`${item.label} added.`);
-  return id;
+  if (!opts?.silent) announce(note ? `${item.label} added. ${note}` : `${item.label} added.`);
+  return note ? { id, note } : { id };
+}
+
+/** The midpoint of the room's longest wall, as an aim — the one spot a wall piece
+ *  with no aim is offered after the one it was given turns out too short. */
+function longestWallAim(footprint: ReadonlyArray<readonly [number, number]>): [number, number] | null {
+  let best: { len: number; at: [number, number] } | null = null;
+  for (let i = 0; i < footprint.length; i++) {
+    const a = footprint[i];
+    const b = footprint[(i + 1) % footprint.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (!best || len > best.len) best = { len, at: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
+  }
+  return best?.at ?? null;
 }

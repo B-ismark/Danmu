@@ -22,7 +22,8 @@ import { groundY, verticalExtent } from '@/lib/physics';
 import { riderYs } from '@/lib/rider-height';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
-import { addPieceToRoom, type NewPiece } from '@/lib/add-piece';
+import { addPieceToRoom as addOutcome, type NewPiece } from '@/lib/add-piece';
+import { PART_LIBRARY } from '@/lib/scene-spec';
 import * as announceModule from '@/lib/announce';
 
 const DESK_DIM: [number, number, number] = [1400, 700, 750];
@@ -51,6 +52,15 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+/** The id of a piece that WAS added. Every fixture below fits its room, so a refusal
+ *  here is a failure of the fixture, said as one rather than as `undefined` somewhere
+ *  further down. */
+function addPieceToRoom(...args: Parameters<typeof addOutcome>): string {
+  const out = addOutcome(...args);
+  if ('refused' in out) throw new Error(`refused: ${out.refused}`);
+  return out.id;
+}
 
 /** Seed one desk, authored at the origin. */
 function seedDesk() {
@@ -250,5 +260,129 @@ describe('a piece dropped onto something RIDES it, and the edge is recorded', ()
       [0, 0],
     );
     expect(useStudio.getState().parentIds[onCeiling], 'a ceiling piece rides no furniture').toBeUndefined();
+  });
+});
+
+describe('a piece wider than the space it would have is refused, not resized', () => {
+  // The user's ruling (2026-09-30): "Don't allow if it's wider than the available
+  // space." These read the OUTCOME, not the pose, because a refusal adds nothing.
+  const CURTAIN = (w: number): NewPiece => ({ label: 'Curtain', category: 'curtain', shape: 'curtain', dimMM: [w, 80, 2200] });
+
+  function room(w: number, d: number) {
+    useScene.setState({
+      parts: [],
+      room: { ...useScene.getState().room, width: w, depth: d, height: 2.5, footprint: footprintForLayout('rect', w, d), layoutId: 'rect' },
+    });
+  }
+
+  it('an unaimed curtain too long for the wall it was given goes to the longest wall', () => {
+    // A U, because in a rectangle the unaimed spot is ALREADY a long wall and the retry
+    // is never reached — the first fixture here was a 4.5 × 3 rectangle and survived the
+    // retry being deleted. Probed rather than reasoned: in the U-Shape preset (6 × 5) an
+    // unaimed wall piece is offered the notch's inner wall first, which is shorter than
+    // 4 m, and the 6 m south wall (z = +2.5) is the longest.
+    useScene.setState({
+      parts: [],
+      room: { ...useScene.getState().room, width: 6, depth: 5, height: 2.5, footprint: footprintForLayout('u', 6, 5), layoutId: 'u' },
+    });
+    const out = addOutcome(CURTAIN(4000));
+    expect('id' in out, JSON.stringify(out)).toBe(true);
+    const c = useScene.getState().parts[0];
+    expect(c.pos[2], `curtain at ${c.pos}`).toBeGreaterThan(2.3);
+    expect(Math.abs(c.pos[0])).toBeLessThan(1e-6);
+  });
+
+  it('longer than every wall: refused, with the sentence, and nothing added', () => {
+    room(4.5, 3);
+    const out = addOutcome(CURTAIN(4800));
+    expect(out).toEqual({ refused: expect.stringMatching(/^Curtain can be at most 4\.50 m wide here\. That is the whole length of the wall it hangs on\.$/) });
+    expect(useScene.getState().parts).toHaveLength(0);
+    expect(said, 'a refusal is not announced as an add').toEqual([]);
+  });
+
+  it('an AIMED one is not moved to a wall it was not aimed at', () => {
+    room(4.5, 3);
+    // Aimed at the east wall, which is 3 m. 4 m fits the room's long walls and not this.
+    const out = addOutcome(CURTAIN(4000), [2.2, 0]);
+    expect(out).toEqual({ refused: expect.stringContaining('at most 3.00 m wide') });
+    expect(useScene.getState().parts).toHaveLength(0);
+  });
+
+  it('a floor piece wider than the room is refused against the room', () => {
+    room(3, 3);
+    const out = addOutcome({ label: 'Sofa', category: 'sofa', shape: 'sofa', dimMM: [3400, 950, 880] });
+    expect(out).toEqual({ refused: expect.stringContaining('as far as the room reaches') });
+  });
+
+  it('and NOTHING in the Library at its own size is refused in any preset room', () => {
+    // The control. A bound that refused ordinary pieces would pass every test above.
+    // The rooms and sizes are the layout picker's own (app/onboarding/layout-pick).
+    const PRESETS = [
+      ['rect', 6, 4], ['l', 6, 4.7], ['t', 5.5, 4.7], ['u', 6, 5], ['open', 7.5, 5.6],
+    ] as const;
+    let tried = 0;
+    for (const [id, w, d] of PRESETS) {
+      for (const item of PART_LIBRARY) {
+        useScene.setState({
+          parts: [],
+          room: { ...useScene.getState().room, width: w, depth: d, height: 2.7, footprint: footprintForLayout(id, w, d), layoutId: id },
+        });
+        const out = addOutcome({ label: item.label, category: item.category, shape: item.shape, dimMM: [...item.dimMM] });
+        expect('refused' in out ? out.refused : null, `${item.label} in ${id}`).toBeNull();
+        tried++;
+      }
+    }
+    expect(tried).toBe(PRESETS.length * PART_LIBRARY.length);
+  });
+});
+
+describe('"Use my own size" — the old Will it fit, asked from the Library', () => {
+  const SOFA = (w: number, d = 950, h = 880): NewPiece => ({ label: 'Sofa', category: 'sofa', shape: 'sofa', dimMM: [w, d, h] });
+
+  it('a size that fits lands where the fit check put it, inside the room', () => {
+    const id = addPieceToRoom(SOFA(2400), undefined, { ownSize: true });
+    const s = useScene.getState().parts.find((p) => p.id === id)!;
+    expect(s.dimMM, 'the size typed is the size kept').toEqual([2400, 950, 880]);
+    expect(Math.abs(s.pos[0])).toBeLessThan(3);
+    expect(Math.abs(s.pos[2])).toBeLessThan(2.5);
+    expect(s.pos[1]).toBeCloseTo(groundY('sofa', 'sofa', [2400, 950, 880], 2.5), 6);
+  });
+
+  it('taller than the ceiling: refused, naming both heights', () => {
+    const out = addOutcome({ label: 'Wardrobe', category: 'wardrobe', shape: 'wardrobe', dimMM: [1200, 600, 2900] }, undefined, { ownSize: true });
+    expect(out).toEqual({ refused: expect.stringMatching(/2\.90 m tall, and the ceiling here is 2\.50 m/) });
+    expect(useScene.getState().parts).toHaveLength(0);
+  });
+
+  it('nowhere clear with what is already here: refused, with the biggest stretch', () => {
+    // A 3 × 3 room with a bed filling most of it; a second big piece has nowhere to go.
+    useScene.setState({
+      room: { ...useScene.getState().room, width: 3, depth: 3, height: 2.5, footprint: footprintForLayout('rect', 3, 3), layoutId: 'rect' },
+      parts: [{ id: 'bed-1', name: 'Bed', category: 'bed', shape: 'bed-double', dimMM: [2000, 2200, 500], pos: [0, 0, 0], rot: 0, locked: false }],
+    });
+    const out = addOutcome(SOFA(2600), undefined, { ownSize: true });
+    expect(out).toEqual({
+      refused:
+        'There is nowhere clear for a 2.60 × 0.95 m sofa with what is already here. It would fit this room empty, so it is the other pieces in the way. Fix or Ideas may make room by moving them.',
+    });
+    expect(useScene.getState().parts).toHaveLength(1);
+  });
+
+  it('and does not tell someone to move things when the room itself is the limit', () => {
+    // An L's biggest rectangle is smaller than its bounding box: a piece the space bound
+    // lets through (it reaches) can still have no rectangle to stand in, empty room or not.
+    const L = footprintForLayout('l', 6, 4.7);
+    useScene.setState({ parts: [], room: { ...useScene.getState().room, width: 6, depth: 4.7, height: 2.5, footprint: L, layoutId: 'l' } });
+    const out = addOutcome({ label: 'Table', category: 'desk', shape: 'desk-standard', dimMM: [4000, 4000, 750] }, undefined, { ownSize: true });
+    expect('refused' in out ? out.refused : '', JSON.stringify(out)).toMatch(/The largest rectangle of floor this room has is/);
+    expect('refused' in out ? out.refused : '').not.toMatch(/moving/);
+  });
+
+  it('without the flag, the same press is an ordinary add — no fit check, no refusal for crowding', () => {
+    useScene.setState({
+      room: { ...useScene.getState().room, width: 3, depth: 3, height: 2.5, footprint: footprintForLayout('rect', 3, 3), layoutId: 'rect' },
+      parts: [{ id: 'bed-1', name: 'Bed', category: 'bed', shape: 'bed-double', dimMM: [2000, 2200, 500], pos: [0, 0, 0], rot: 0, locked: false }],
+    });
+    expect('id' in addOutcome(SOFA(2600))).toBe(true);
   });
 });

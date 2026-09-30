@@ -79,11 +79,13 @@ without any key: pick a footprint and start decorating.
 - **BYO key, no backend.** Browser → provider directly (optional Gemini
   detection). Scope the key with an HTTP-referrer + API restriction. AI is
   detection-only, never a dependency.
-- **"Will it fit?"** Type a real product's W × D × H and Danmu answers whether it goes
-  in *this* room, with what is already in it — by locking every existing piece and
-  asking the solver to find the new one a home
-  ([`lib/fit-check.ts`](lib/fit-check.ts)). Nothing is clamped on the way in: the
-  answer is about the size you entered.
+- **"Use my own size."** Type a real product and its size into the Library search
+  ("sofa 228x95x83cm") and Danmu adds it where it fits in *this* room, with what is
+  already in it — by locking every existing piece and asking the solver to find the
+  new one a home ([`lib/fit-check.ts`](lib/fit-check.ts)). If it cannot stand up or has
+  nowhere clear to go, it is not added, and you are told why. Nothing is ever made
+  wider than its wall or the room: that is refused and said, never resized
+  ([`lib/space-bound.ts`](lib/space-bound.ts)).
 - **Rooms travel as files, not through a server.** `Save file` in the studio writes
   a readable `.danmu.json` ([`lib/scene-file.ts`](lib/scene-file.ts)); `Open a file`
   on `/workspace` lands one as a new room. It carries the room and its furniture and
