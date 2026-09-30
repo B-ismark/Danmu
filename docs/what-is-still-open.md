@@ -159,7 +159,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 8 | ~~**§ H.3** every Library click drops its piece at the room centre, facing the same way~~ **ANSWERED AND BUILT** — fan out from the drop point with a legality gate (`openSpotForNewPart`, 2026-09-03), and **residue 1 answered and built 2026-09-04**: an explicit aim overrides `ceilingSpot`'s midpoint default, so the ceiling family fans out too and a dragged fan lands where it was dropped | **One residue left**, named in § H.3's section below: an unaimed click may still rest one tabletop-prone piece on another, and whether it should is a product question rather than a defect | — | **done, with one filed residue** |
 | 9 | ~~**§ H.8** two reports that need a real repro~~ — **BOTH HALVES BUILT; this row is CLOSED 2026-09-05** | The group drag was measured and pinned in `lib/` (`tests/drag-convoy.test.ts`) — the set refused 450 mm before the dragged bed ran out, because a nightstand the containment clamp corrects fails the rigidity test and vetoes the gesture. **It needed no browser**: it was filed as DOM-only and is arithmetic. The user then chose **slide to the limit**, and it is built — `ConvoyResult.leadPos`, both call sites, 11/14 mutations. **The drill-in half was ALREADY BUILT when this row still said it was untouched**, and the contradiction sat 1,500 lines below it in this file's own § H.8 section: `lib/press-selection.ts` records the press in the CAPTURE phase, so the drill-in survives the gizmo swallowing the press, and it was verified in a browser on a production build. `lib/drag-click.ts` is the second half — a click collapses the selection only on a release that never moved. Both are on `main` with tests, and `Pickable.tsx` calls the first. Re-derived 2026-09-05 by checking for the modules rather than by reading this row | done | nothing |
 | 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report | S once decided | done |
-| 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
+| 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly — relation groups through `proposeGroup`, and merged sets since § H.6.5 | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | **4a is MEASURED (2026-09-05) and the recommendation is to retire it — see § 4.6 of the research doc.** Swapping the box for the drawn geometry changes 0.11% of drag positions (189 of 172,032 once the instrument's own 299 are subtracted, 42 shapes, every shape a row) and **3.3% of sampled picking points** (5521 of 166,664 — the larger outcome by an order of magnitude, and not a collision question); every position in the *other* direction traces to a renderer drawing outside its own `dimMM`, which is literals in the wrong place rather than a case for compound footprints. **"Fix the six renderers" is not that work**: the 1120 geometry-only positions come from 20 shapes, the never-read-`dimMM` list is 6 renderers, and the two sets overlap in exactly two — two of the six are in the OPPOSITE column and two differ at no position at all. **~~`desk-l` draws 2.86 m where every consumer reads 1.60 m~~ **FIXED 2026-09-06****, and 32 of 46 shapes escape their box at all. What this row still holds, unmeasured, is `analyzeRoom`'s clearance findings and the solver's cost. Previously: every piece is one box or one ellipse, so a table's legs and a plant's canopy are the same rectangle — and "a sofa's L" was in that sentence for months describing a shape this codebase does not have. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). The duplication this row used to carry — *"six hand-written copies of the vertical-extent rule in five files"* — is **RETIRED (2026-09-04)**: all six call `verticalExtent`, plus a **seventh** the original list never named (`layout-settle.ts:380`), and `layout-score.ts:487` records it in the code. The only raw `pos[1] +` left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset, never an instance of the rule. **This row is smaller than it was**, and the seventh copy is why a grep for the old wording could not have closed it | XL | independent of row 11, but they meet |
 | 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
 | 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade. *(G.3 was a third item carried in this row's header rather than in a row of its own, which is how a done thing hides inside an open one — it shipped in #106 and is recorded in § G.3.)* | Real, but none is a defect a user has reported. **A.2's owed test EXISTS as of 2026-09-30** (§ H.6.0's PR): `tests/layout-shuffle.test.ts` "the diversity term reorders a press" fails at `diversityPenalty: 0`. `shuffleRoom` run twice per press with the previous press's first idea as history, at penalty 0 and at 4, differs on **2 of 66** presses over six presets × presses 2–12 (`rect` 6 × 4 press 7 and `rect` 7.5 × 5.6 press 6: same four ideas, same first, one reordered). It was 1 of 24 over presses 2–5 (`rect` 7.5 × 5.6 press 4) until the search priced a rug (§ H.6.1) and 0 of those 24 after, so the test now names press 6 and says in its comment that the press is the search's trajectory rather than a property of the term. The pool it ranks is still mostly unlike itself — **177 pairs, 162 at similarity 0**, the rest 0.100–0.400, none near `REPEAT_SIMILARITY` — so the term adds at most 1.6 against idea costs of 2.4–84, and `ranked[0]` cannot move at all because the first pick has `picked = []`. **The answer this replaced** — "cannot be written at this level", from 26 of 26 end-to-end pairs byte-identical and 61 of 66 pool pairs at zero — was measured on 2026-09-06 against a search that accepted no steps (§ H.6.0), so it described tidied scatters rather than arrangements. The agreement bound stays too: the same file asserts the clean set stays mutually dissimilar, vacuity guard first, and goes red the day the search produces near-duplicates. The UNIT behaviour was already pinned in `tests/layout-offer.test.ts`, where the fixture supplies the similar candidates the search does not. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
@@ -2988,7 +2988,7 @@ modes", since the vagueness is what let the wrong version stand beside it.
 Four observations, all the user's, all landing in the same place:
 
 - a merged dining set solved with **one chair hanging in the air**, no floor under it; *(the
-  lift FIXED 2026-09-30, § H.6.3. The solver breaking the set apart is P1, still open.)*
+  lift FIXED 2026-09-30, § H.6.3. The solver breaking the set apart FIXED 2026-09-30, § H.6.5.)*
 - a chair put on a couch, then Suggest, ends **through a wall**; *(FIXED 2026-09-30, § H.6.2.)*
 - a couch a few degrees off square is turned to face **away from the TV** it should face;
 - and generally, *"suggest doesn't really seem to know what to do with groups and their
@@ -3021,6 +3021,7 @@ above:
 3. **A group is not a unit** — *half* true. `proposeGroup` already slides, quarter-turns
    and swaps groups **rigidly**, and one pass moves only groups; the gap is *which* groups
    are seeded as one, and that a group turn pivots on the centroid rather than the anchor.
+   *(A merged set is one body since § H.6.5: every pass moves it through its lead, whole.)*
 
 **And the design for all of this already exists:**
 [`docs/research/suggest-and-collision.md`](research/suggest-and-collision.md) — three layers
@@ -3875,6 +3876,115 @@ clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/
   is the one a person sees happen. Whether a DRAG should also keep a seat down — the ottoman
   staying on the floor, clashing, until it is dragged clear — changes § H.6.4, so it is not
   decided here.
+
+**§ H.6.5 · FIXED 2026-09-30: a merged set is one body to the solver.** The second half of
+the first observation above. Merging says *these belong together as they stand*: a click
+selects the set whole, a drag carries it, a wall move brings it along. The solver was the
+one mover that did not know. Every member was an ordinary piece to the annealer, so Suggest
+and Ideas handed a merged dining set back with its chairs scattered.
+
+*Measured on `d90e61a`* (twelve seeds; `open` 6 × 4, `l` and `t` 6 × 5). The dining set is the
+preset's table and four chairs, merged; the living set is the sofa, its coffee table and its
+rug, moved 0.35 m off the wall and turned as one. **Broken** means some member's offset in
+another member's frame changed by more than 1 mm, or its turn relative to it changed. Ideas
+is three presses; Suggest is `arrange` with the set as the pieces placed, as `useSuggest`
+calls it.
+
+| Case | Before: broken of moved | After |
+|---|---|---|
+| Ideas, `open`, as authored / chairs pulled 0.35 m / turned 8° | 12 of 12, each | 0 of 12 / 0 of 8 / 0 of 12 |
+| Ideas, `t`, as authored / chairs pulled 0.35 m / turned 8° | 9 of 9, each | 0 of 11 / 0 of 1 / 0 of 11 |
+| Suggest, dining set turned 30°, `open` / `t` | 11 of 11 / 11 of 12 | 0 of 12 / 0 of 11 (5 and 9 turned back as one) |
+| Suggest, dining set slid 0.6 m, `t` | 8 of 8 | 0 of 1 (the other ten moved something else) |
+| Suggest, living set, `l`, turned −6° / 12° | 10 of 10 / 12 of 12 | 0 of 10 / 0 of 12, every one squared back as one |
+| Suggest, living set, `l`, turned 0° / 6° | 11 of 11, each | nothing moved |
+| Suggest, living set, `open`, turned −20° | 7 of 8 | 0 of 7 (6 squared back as one) |
+
+*What changed* (`lib/layout-solve.ts`). A set moves whole or not at all: one member locked
+or on a wall holds the rest (`movableFor`). Each set has a LEAD, its largest obstacle, so a
+rug in the set never leads (`rigidSets`); the search proposes moves for the lead only, and
+the rest keep their offset and turn from it (`carryUnit`). Every pass that moves a piece
+does it that way: the scatter Ideas starts from, the anneal and its undo, the route repair,
+the squaring pass and its nudges, the prune, a rug sent home, and the explanation's revert.
+A set never swaps places with a piece, and the group pass counts a set as one group
+whatever its relations say. Fix's confine names the whole set when it names a member
+(`withCompany`, read by `RoomTools`), since a confine naming one chair would otherwise hold
+it by the table it is merged with. And Room check offers **Try a fix** only on a row whose
+pieces the press may move (`confineCanMove`, asked by every row in `RoomTools`): a sofa merged
+with the TV on the wall is held by its set, and so is one merged with a chair you kept in
+place, so neither gets the button on any finding that names it. Review round 1 put that
+answer in `lib/clearance.ts`, on the `outside` row alone; round 2 moved it to the row,
+because the report cannot see a pin and the other rules that offer the button had the same
+dead press. The report's own sentences no longer name the button, since the row may not
+show it.
+
+*Found by its own tests, and the probe could not see it.* `moved`, the list the answer is
+written from, asked each piece whether it had moved past `MOVE_EPSILON`. A set turned 1°
+about a point near its table moves the table 20 mm and two chairs 10 mm, so only the other
+two chairs were written: the set arrived bent by 34 mm (Suggest, set turned 30°, seed 2).
+`moved` asks the whole set now (`unitDisplaced`), and so does the rider pass's reset of a
+support that barely moved. The probe reported that solve as rigid, because it measured the
+distance between each pair of members, and a chair swung round the table keeps its
+distance. It measures offsets in a member's own frame now, and every figure above is from
+that version. **A pairwise distance cannot see a rotation**: a rigidity check has to
+measure in a frame.
+
+*Kept, as trades.*
+- **Fewer ideas where the set is large for the room.** On `t` 6 × 5 with the chairs pulled
+  out, one idea in three presses (was nine, every one broken); on `open`, eight (was twelve).
+  On `t` 6 × 4 with a table lamp on the merged table, **none in three presses** (was 2, 1, 1,
+  every one broken): of 36 candidates, 23 fail on access and navigation together and 13 on
+  navigation alone. The set is a 2.3 × 1.6 m block, and the T has few places to put it
+  and still leave a way through. That is the honest answer to a merge. *Open, the user's
+  call:* whether an empty Ideas panel in a room with a merged set should say that the set
+  moves as one.
+- **A merged member standing on a piece outside its set follows that piece**, and so leaves
+  the set's shape (`carryRiders` runs after every pass). What stands on something goes
+  where it goes.
+- **A lock on one member is a lock on the set**, and so is one member on a wall.
+
+*Tests.* `tests/layout-rigid-sets.test.ts`, 26 tests. Every solve test first shows its fixture can break
+the set: the same room unmerged must come back broken. Mutated, 29 mutants, **26 caught by
+that file alone**. The first pass left 11 alive. Direct tests of the two tidy passes
+(`snapYaws`, `openRoutes`) closed three. Five more were caught only by a scratch sweep over
+the presets (both solve modes, six seeds, three Ideas presses), which does not ship, so
+each got the cheapest press in that sweep that showed it: a rug that has to go home
+(`rug-home-one`), a set meeting a relation group (`groups-no-union`), a floor lamp in a set
+(`swap-member`, `swap-into-member`), and a lamp on a turned set at seed 2
+(`carry-root-single`). The three still alive change nothing a user can see:
+- `pool-all-steer` (every member in the search pools, not only the lead) and `anchor-raw`
+  (the anchor pool holding the anchor rather than its set's lead). `carryUnit` is rigid
+  about whichever member it is handed, so the set still arrives whole; only the member
+  that proposes changes. Leads only is a budget choice: a five-piece set would otherwise
+  draw five proposals to a piece's one.
+- `snap-untouched-one` (the last snap asking the lead alone whether the solve touched it).
+  Every pass before it moves a set through `carryUnit` or puts the whole set back, so the
+  lead is untouched exactly when the set is.
+
+*Filed, not fixed.* **A lead's proposals can aim at its own set.** `propose`'s neighbour,
+partner and focal targets can pick a member of the lead's own set, and that member moves
+with the lead, so the step is spent going nowhere: a dining table's nearest neighbour is
+nearly always one of its chairs. A leak in the move budget rather than a wrong answer — the
+set still arrives whole. Leaving set members out of those picks changes which moves are
+drawn, so it is a measured change to the search, not a tidy-up, and wants the § H.6.5 table
+run again before and after.
+
+*Filed from review round 2, read from the code and not reproduced.* Each is a place where a
+set being one body meets another rule. The first bends a set by one member; the other two
+cost an arrangement, or a squaring, and leave the set whole.
+- **A member standing on a piece outside its set follows the piece, not the set.** A lamp
+  grouped with a bed but standing on a nightstand that is not in the group: the rider pass
+  (`carryRiders`) puts it on the nightstand wherever the nightstand went, so the set comes
+  back bent by one member. A drag answers the other way and carries it with its group
+  (`lib/drag-convoy.ts`). Which should win is the user's call; either beats a lamp in the air.
+- **A rug going home can take its set into a piece that moved.** A rug grouped with its
+  coffee table and left through a wall sends the whole set back, and if another piece has
+  moved into the table's old spot the answer now holds a clash. The impossibility veto
+  catches it and hands back the room as it was, so nothing illegal reaches the screen: an
+  arrangement is lost. Before, the rug went home alone and broke the set.
+- **The snap squares a set to the wall nearest its lead.** A member nearer another wall is
+  not asked, so a set that would square against that wall can be turned to the lead's,
+  swing the member through the plaster, and be put back unsquared.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

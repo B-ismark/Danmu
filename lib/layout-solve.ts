@@ -61,7 +61,7 @@ import {
   type Placement,
   type ScoreWeights,
 } from './layout-score';
-import { relationFor, roleOf } from './layout-rules';
+import { isObstacle, relationFor, roleOf } from './layout-rules';
 
 export type SolveOptions = {
   /** Same seed, same suggestion. */
@@ -646,9 +646,47 @@ export function withRiders(ids: Set<string>, parts: ScenePart[]): Set<string> {
   return out;
 }
 
+/** `withRiders`, plus the rest of any merged set a confined piece is in — and the
+ *  riders of those, and their sets, to a fixed point.
+ *
+ *  A merged set moves whole or not at all (`movableFor`), so a confine naming one
+ *  chair of a merged dining set and locking the table would hold all five where they
+ *  stand: the fix could never move the chair it was pressed for. Naming a member is
+ *  naming the set, the same reading a click on it from outside gives. A rider joins a
+ *  set's walk because its support moving is the set moving, and a rider in a set of
+ *  its own brings that set, which is why the two widenings are one loop.
+ *
+ *  Not `lib/wall-move.ts`'s private function of the same name, and deliberately not
+ *  merged with it: a wall move walks the STORED rigid-parent links
+ *  (`snapshotDescendants` over `parentIds`, behind an `admit` filter), while a solve
+ *  walks what stands on a piece as the room reads now (`ridingParents`, which
+ *  `carryRiders` reads too). One walk for both would change which pieces one of them
+ *  moves.
+ *
+ *  Terminates for `withRiders`' reason: `out` only grows, over a finite room. */
+export function withCompany(ids: Set<string>, parts: ScenePart[]): Set<string> {
+  const byGroup = new Map<string, string[]>();
+  for (const p of parts) {
+    if (!p.groupId) continue;
+    const g = byGroup.get(p.groupId);
+    if (g) g.push(p.id);
+    else byGroup.set(p.groupId, [p.id]);
+  }
+  let out = new Set(ids);
+  for (;;) {
+    const next = withRiders(out, parts);
+    for (const p of parts) {
+      if (p.groupId && next.has(p.id)) for (const id of byGroup.get(p.groupId)!) next.add(id);
+    }
+    if (next.size === out.size) return out;
+    out = next;
+  }
+}
+
 /** Which pieces a solve may actually move: not locked, and not wall-mounted — a
  *  door, window, or ceiling fixture rides the wall or ceiling it was placed on,
- *  and sliding one along it is not a layout decision. `solveLayout` derives this
+ *  and sliding one along it is not a layout decision — and not merged with a piece
+ *  that is either, since a merged set moves whole or not at all. `solveLayout` derives this
  *  internally; exported so a caller that needs the same answer BEFORE calling it
  *  — building a `shuffle` `start`, or scoring `layoutSimilarity` — computes it
  *  once, here, rather than re-deriving `!p.wallMounted` a second place. (That
@@ -659,7 +697,149 @@ export function withRiders(ids: Set<string>, parts: ScenePart[]): Set<string> {
  *  That version was built and measured before this sentence was written; the rule,
  *  and the numbers that decided against it, live in `carryRiders`. */
 export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
-  return parts.map((p, i) => !locked[i] && !p.wallMounted);
+  const own = parts.map((p, i) => !locked[i] && !p.wallMounted);
+  // A merged set moves whole or not at all (`rigidSets`), so one member the solve may
+  // not move holds the rest where they are. A lock on a chair of a merged dining set
+  // is a lock on the set: moving the other four without it is the set taken apart.
+  const held = new Set<string>();
+  parts.forEach((p, i) => {
+    if (p.groupId && !own[i]) held.add(p.groupId);
+  });
+  return parts.map((p, i) => own[i] && !(p.groupId && held.has(p.groupId)));
+}
+
+/** Whether a **Try a fix** pressed for `ids` could move any of them: the locks the
+ *  press composes (`lockedForSolve`) and the solver's own answer over them
+ *  (`movableFor`). Empty `ids` is a whole-room fix, which can act if anything in the
+ *  room may move.
+ *
+ *  A Room check row asks this before it shows the button, beside the rule's
+ *  `RULE_HANDLING.movable`, because the two are different questions. The rule says
+ *  whether rearranging could clear a finding of that kind; this says whether THESE
+ *  pieces may be rearranged — not kept in place by the user, not from the photo,
+ *  not on a wall, and not merged with a piece that is any of those. The report
+ *  cannot answer it: the user's pins live in the studio store, and a finding about a
+ *  sofa merged with the TV on the wall was offered a button on every rule that
+ *  names a piece, each of which spun and said it found nothing.
+ *
+ *  A NAMED piece has to be free, not merely something the press takes along: a lamp
+ *  riding a held sofa is free to move and moving it clears nothing about the sofa.
+ *
+ *  The press also confines its solve to `withCompany(ids)`, locking the rest of the
+ *  room, and that is left out here because it cannot change the answer: a named
+ *  piece's freedom reads only the locks on its own merged set, and the confine always
+ *  contains the whole set. Passing it was a mutant nothing could kill. */
+export function confineCanMove(
+  ids: readonly string[],
+  parts: ScenePart[],
+  pinned: Record<string, boolean>,
+): boolean {
+  const named = ids.length > 0 ? new Set(ids) : null;
+  const free = movableFor(parts, lockedForSolve(parts, pinned, null));
+  return parts.some((p, i) => free[i] && (!named || named.has(p.id)));
+}
+
+/** The merged sets a solve moves, each as ONE rigid body.
+ *
+ *  Merging is the user saying *these belong together as they stand*: a click selects
+ *  the set whole, a drag carries it, a wall move brings it along. The solver was the
+ *  one mover that did not know — every member was an ordinary piece to the annealer,
+ *  so Suggest and Ideas handed a merged dining set back with its chairs scattered or
+ *  its table stood on by them. Measured on the `open` and `t` presets with the table
+ *  and its four chairs merged: every Ideas press broke the set (12 of 12 and 9 of 9
+ *  ideas per press row), and so did a Fix of the set turned 30° (11 of 11 and 11 of 12
+ *  applied). § H.6.5 of `docs/what-is-still-open.md` has the full table.
+ *
+ *  Each set lists its LEAD first: the member every proposal is made for, and the
+ *  pivot the set turns about. The largest footprint that is an obstacle, so a rug in
+ *  the set never leads — `propose` would push the rug to a wall and drag the sofa
+ *  standing on it through that wall. Ties go to the lower index, so the answer does
+ *  not depend on anything but the room.
+ *
+ *  Movable members only, and `movableFor` makes that all or none. A set of one is a
+ *  piece, and left out. */
+export type RigidSets = {
+  sets: number[][];
+  /** Which of `sets` each piece is in, or −1. */
+  setOf: Int32Array;
+};
+
+export function rigidSets(parts: ScenePart[], movable: boolean[]): RigidSets {
+  const byGroup = new Map<string, number[]>();
+  parts.forEach((p, i) => {
+    if (!p.groupId || !movable[i]) return;
+    const g = byGroup.get(p.groupId);
+    if (g) g.push(i);
+    else byGroup.set(p.groupId, [i]);
+  });
+  const rank = (i: number) => (isObstacle(parts[i]) ? 1e9 : 0) + parts[i].dimMM[0] * parts[i].dimMM[1];
+  const sets: number[][] = [];
+  const setOf = new Int32Array(parts.length).fill(-1);
+  for (const members of byGroup.values()) {
+    if (members.length < 2) continue;
+    const lead = members.reduce((a, b) => (rank(b) > rank(a) ? b : a));
+    const set = [lead, ...members.filter((k) => k !== lead)];
+    for (const k of set) setOf[k] = sets.length;
+    sets.push(set);
+  }
+  return { sets, setOf };
+}
+
+/** `rigidSets` for a model, derived once. The passes that take a model as their only
+ *  view of the room (`snapYaws`, `openRoutes`, `pruneMoves`, `explain`) read it here,
+ *  from the same `ctx.movable` the search was given. */
+const SETS = new WeakMap<LayoutModel, RigidSets>();
+function setsOf(m: LayoutModel): RigidSets {
+  let r = SETS.get(m);
+  if (!r) {
+    r = rigidSets(m.ctx.parts, m.ctx.movable);
+    SETS.set(m, r);
+  }
+  return r;
+}
+
+/** Everything that moves with `i`: its merged set, lead first, or `i` alone. */
+function unitOf(r: RigidSets, i: number): readonly number[] {
+  const s = r.setOf[i];
+  return s < 0 ? [i] : r.sets[s];
+}
+
+/** Does the search propose moves for `i`? Every piece but a set member other than
+ *  its lead — the lead moves for the set. */
+function steers(r: RigidSets, i: number): boolean {
+  const s = r.setOf[i];
+  return s < 0 || r.sets[s][0] === i;
+}
+
+/** Put `i` at `to` and bring its merged set with it: each member keeps its offset and
+ *  heading relative to `i`, so the set turns about `i` and arrives as it left. For a
+ *  piece in no set this is `current[i] = to`, exactly. `touch` sees every index
+ *  before it is written, for an undo. */
+function carryUnit(
+  r: RigidSets,
+  current: Placement[],
+  i: number,
+  to: Placement,
+  touch?: (k: number) => void,
+): void {
+  const s = r.setOf[i];
+  if (s < 0) {
+    touch?.(i);
+    current[i] = to;
+    return;
+  }
+  const from = current[i];
+  const turn = angleDelta(to.yaw, from.yaw);
+  for (const k of r.sets[s]) {
+    touch?.(k);
+    if (k === i) {
+      current[k] = to;
+      continue;
+    }
+    const p = current[k];
+    const [ox, oz] = localToWorld(turn, p.x - from.x, p.z - from.z);
+    current[k] = { x: to.x + ox, z: to.z + oz, yaw: normaliseYaw(p.yaw + turn) };
+  }
 }
 
 /** Put every rider back on the piece it was standing on, once the search has
@@ -761,6 +941,7 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
  *  support's top does not change and the rider's own height is already right. */
 function carryRiders(model: LayoutModel, origin: Placement[], winner: Placement[]): Set<number> {
   const parts = model.ctx.parts;
+  const rigid = setsOf(model);
   const carried = new Set<number>();
   for (const { root, snapshot, links } of model.carry) {
     // Cascade from the transform the caller will actually APPLY. `applyPlacements`
@@ -788,7 +969,9 @@ function carryRiders(model: LayoutModel, origin: Placement[], winner: Placement[
     // rule (`LayoutModel.carry`).
     const to = new Map<string, { pos: [number, number, number]; rot?: number }>();
     const cascadeFrom = (i: number) => {
-      if (!displaced(origin[i], winner[i])) winner[i] = { ...origin[i] };
+      // …asked of the support's merged set, since that is what `moved` writes: a
+      // member left a hair off by a set that did move is written where it is.
+      if (!unitDisplaced(rigid, origin, winner, i)) for (const k of unitOf(rigid, i)) winner[k] = { ...origin[k] };
       const from = winner[i];
       const moves = cascadeTransform(
         parts[i].id,
@@ -870,9 +1053,17 @@ function carryRiders(model: LayoutModel, origin: Placement[], winner: Placement[
  * L/T/U shaped room does not spend its whole budget climbing out of the notch the
  * bounding box adds; see rule 3 of `CLAUDE.md` on why a box is not a floor.
  *
+ * A merged set (`rigidSets`) is scattered as ONE body: its lead draws a point and a
+ * heading like any piece, and the rest of the set arrives around it exactly as it
+ * stands in the room, so the annealer starts from the set whole and every move after
+ * keeps it that way. Each member still takes its own draws, discarded, so merging
+ * pieces does not change what any other piece draws.
+ *
  * `locked`/`movable` is `parts`-index-aligned, the same array `solveLayout` itself
  * derives from `locked` and `wallMounted` — passed in rather than recomputed so the
- * two never compute it two different ways.
+ * two never compute it two different ways. It is `movableFor`'s answer, which makes a
+ * set movable all or none; an array built any other way that moves half a set
+ * scatters that half as a smaller set, and holds the rest where it stands.
  */
 export function randomizeStart(
   parts: ScenePart[],
@@ -881,7 +1072,7 @@ export function randomizeStart(
   rng: () => number,
 ): Placement[] {
   const b = footprintBounds(footprint);
-  return parts.map((p, i) => {
+  const out = parts.map((p, i) => {
     if (!movable[i]) return { x: p.pos[0], z: p.pos[2], yaw: p.rot };
     let x = p.pos[0];
     let z = p.pos[2];
@@ -900,6 +1091,18 @@ export function randomizeStart(
     }
     return { x, z, yaw: rng() * Math.PI * 2 };
   });
+  // A merged set is scattered as one body: the lead where it landed, the rest where
+  // they stand relative to it in the room as given — the set put back as it stands,
+  // then carried to the lead's draw by the same `carryUnit` every later pass uses. The
+  // members' own draws are still taken above and thrown away, so a set does not
+  // reseed the pieces after it.
+  const r = rigidSets(parts, movable);
+  for (const set of r.sets) {
+    const to = out[set[0]];
+    for (const k of set) out[k] = { x: parts[k].pos[0], z: parts[k].pos[2], yaw: parts[k].rot };
+    carryUnit(r, out, set[0], to);
+  }
+  return out;
 }
 
 /**
@@ -942,6 +1145,9 @@ export function solveLayout(
     placed: opts.placed ? parts.map((p) => opts.placed!.has(p.id)) : undefined,
   };
   const model = prepare(ctx);
+  // A merged set is one body to every pass below — see `rigidSets`. Empty in a room
+  // with nothing merged, and then every pass is exactly what it was.
+  const rigid = setsOf(model);
 
   const current: Placement[] = (opts.start ?? origin).map((p) => ({ ...p }));
   // Navigation is priced in from the very first number, so `before` and `after` are
@@ -984,7 +1190,7 @@ export function solveLayout(
   const bigIdx: number[] = [];
   const allIdx: number[] = [];
   for (let i = 0; i < parts.length; i++) {
-    if (!movable[i]) continue;
+    if (!movable[i] || !steers(rigid, i)) continue;
     allIdx.push(i);
     if ((parts[i].dimMM[0] / 1000) * (parts[i].dimMM[1] / 1000) >= LARGE_AREA) bigIdx.push(i);
   }
@@ -1020,7 +1226,8 @@ export function solveLayout(
   //
   // Built from the arrangement the user HAS rather than from the relation table, and
   // only from edges that are currently satisfied — see `intactGroups`. A group is a
-  // thing this room already contains, not a thing it ought to.
+  // thing this room already contains, not a thing it ought to. A merged set is always
+  // one, satisfied or not: the user said it belongs together.
   const groups = intactGroups(model, origin, movable);
   // Scratch for undoing a rejected multi-piece proposal. Preallocated: the loop below
   // runs sixteen thousand times and a pair of arrays per step is a pair of arrays per
@@ -1166,8 +1373,9 @@ export function solveLayout(
   // app is for, not an optimisation.
   //
   // Costs one pool of one, and `passSteps` is pro rata, so it is the 120-step floor.
+  // An anchor in a merged set is moved by its set's lead, like every member.
   const anchorIdx =
-    model.profile.anchor !== null && movable[model.profile.anchor] ? [model.profile.anchor] : [];
+    model.profile.anchor !== null && movable[model.profile.anchor] ? [unitOf(rigid, model.profile.anchor)[0]] : [];
 
   for (const pool_ of [anchorIdx, bigIdx.length >= 2 ? bigIdx : [], allIdx]) {
     if (pool_.length === 0) continue;
@@ -1189,14 +1397,15 @@ export function solveLayout(
       const prev = current[i];
       // A swap moves two pieces at once, so it has to be undone as two.
       const swapWith = rng() < 0.06 ? pickSwap(model, pool_, i, rng) : -1;
-      stash(i);
       if (swapWith >= 0) {
+        stash(i);
         const other = current[swapWith];
         stash(swapWith);
         current[i] = { ...other, yaw: normaliseYaw(other.yaw) };
         current[swapWith] = { ...prev, yaw: normaliseYaw(prev.yaw) };
       } else {
-        current[i] = propose(model, current, i, reach, rng, b);
+        // A lead brings its merged set, and the undo puts back every member.
+        carryUnit(rigid, current, i, propose(model, current, i, reach, rng, b), stash);
       }
       const trial = scoreLayout(model, current, weights);
       const delta = trial - cost;
@@ -1311,12 +1520,22 @@ export function solveLayout(
   // turned every Ideas press into "couldn't find another arrangement" — 4 ideas on
   // the commit before the search held rugs, NULL at every attempt after.
   //
-  // Putting it back is always legal (`overhangsOffItsSpot`: where it stands prices
+  // Putting a rug back is always legal (`overhangsOffItsSpot`: where it stands prices
   // to exactly zero), and it is the rule the containment pass already states — an
   // idea either leaves a rug where the user left it or lays it inside the walls —
   // applied to the answer instead of left to the search to find by chance. Before the
   // riders, because a rug can carry them and they must follow it home.
-  winner = winner.map((p, i) => (overhangsOffItsSpot(model, i, p) ? { ...origin[i] } : p));
+  //
+  // A rug in a merged set takes the set home with it, or the set arrives in two places
+  // — and that is NOT always legal: the coffee table merged with it goes back to a
+  // spot another piece may have moved into. The veto below sees the clash and hands
+  // back the room as it was, so an arrangement is lost rather than a set broken.
+  // Filed in § H.6.5, not reproduced.
+  const home = new Set<number>();
+  winner.forEach((p, i) => {
+    if (overhangsOffItsSpot(model, i, p)) for (const k of unitOf(rigid, i)) home.add(k);
+  });
+  winner = winner.map((p, i) => (home.has(i) ? { ...origin[i] } : p));
 
   // Riders come along BEFORE the answer is measured — see `carryRiders`. It has to
   // sit after the last pass that can move a support (`snapYaws` above) and before
@@ -1414,9 +1633,13 @@ export function solveLayout(
     winner = origin.map((p) => ({ ...p }));
     breakdownAfter = breakdownBefore;
   }
+  // A set member is written when its SET moved, not when it did: a set turned 1°
+  // about its table moves the table 20 mm and a chair beside the pivot 10, and writing
+  // only the members past `MOVE_EPSILON` put two of five chairs somewhere the other
+  // three were not — the set handed back bent by 34 mm, measured.
   const moved: number[] = [];
   for (let i = 0; i < winner.length; i++) {
-    if (displaced(origin[i], winner[i])) moved.push(i);
+    if (unitDisplaced(rigid, origin, winner, i)) moved.push(i);
   }
   // A rider IS in `moved` — the caller has to write its new position, and
   // `applyPlacements` reads exactly this list to decide what to apply — and it is
@@ -1469,6 +1692,11 @@ function displaced(from: Placement, to: Placement): boolean {
   );
 }
 
+/** `displaced`, asked of `i`'s whole merged set: one member moving is the set moving. */
+function unitDisplaced(r: RigidSets, origin: Placement[], to: Placement[], i: number): boolean {
+  return unitOf(r, i).some((k) => displaced(origin[k], to[k]));
+}
+
 /** Open a route to any part of the room that has been sealed off.
  *
  *  A short second anneal whose objective INCLUDES navigation, run only when the room
@@ -1505,9 +1733,13 @@ export function openRoutes(
 
   // Everything movable that could plausibly be in the way. The obstacle test is what
   // keeps a rug or a wall-mounted piece out of it; `movable` keeps the user's locks.
+  //
+  // A merged set is proposed for by its lead, which is an obstacle whenever any member
+  // is (`rigidSets`), and moves whole.
+  const rigid = setsOf(m);
   const pool: number[] = [];
   for (let i = 0; i < placements.length; i++) {
-    if (m.ctx.movable[i] && m.obstacle[i]) pool.push(i);
+    if (m.ctx.movable[i] && m.obstacle[i] && steers(rigid, i)) pool.push(i);
   }
   if (pool.length === 0) return placements;
 
@@ -1532,8 +1764,9 @@ export function openRoutes(
     const temp = Math.max(1e-4, 20 * Math.pow(0.02, t));
     const reach = span * 0.4 * (1 - t) + 0.05;
     const i = pool[Math.floor(rng() * pool.length) % pool.length];
-    const prev = current[i];
-    current[i] = propose(m, current, i, reach, rng, b);
+    const unit = unitOf(rigid, i);
+    const prev = unit.map((k) => current[k]);
+    carryUnit(rigid, current, i, propose(m, current, i, reach, rng, b));
     const priced = cost(current);
     const trial = priced.total;
     // Acceptance is on the total and nothing else — a cliff here would give the
@@ -1547,7 +1780,9 @@ export function openRoutes(
         best = current.map((p) => ({ ...p }));
       }
     } else {
-      current[i] = prev;
+      unit.forEach((k, t) => {
+        current[k] = prev[t];
+      });
     }
   }
   for (const p of best) p.yaw = normaliseYaw(p.yaw);
@@ -1747,10 +1982,18 @@ export function snapYaws(
   const out = placements.map((p) => ({ ...p }));
   let hard = hardCosts(m, out, weights, navCell);
   const q = Math.PI / 2;
+  // A merged set is squared as one body, about its lead: the lead is snapped to its
+  // wall, the members turn with it, and the veto is on the whole set.
+  const rigid = setsOf(m);
+  const restore = (unit: readonly number[], keep: Placement[]) =>
+    unit.forEach((k, t) => {
+      out[k] = keep[t];
+    });
   for (let i = 0; i < out.length; i++) {
-    if (!m.ctx.movable[i]) continue;
+    if (!m.ctx.movable[i] || !steers(rigid, i)) continue;
+    const unit = unitOf(rigid, i);
     // …and only pieces this solve has actually touched. See `untouched`.
-    if (onlyMovedFrom && untouched(onlyMovedFrom[i], out[i])) continue;
+    if (onlyMovedFrom && unit.every((k) => untouched(onlyMovedFrom[k], out[k]))) continue;
     // The polygon's winding, cached — see the same call in `layout-score`.
     const edge = nearestEdge(m.poly, out[i].x, out[i].z, m.winding);
     if (!edge) continue;
@@ -1758,8 +2001,9 @@ export function snapYaws(
     const snapped = normaliseYaw(base + Math.round(angleDelta(out[i].yaw, base) / q) * q);
     const off = Math.abs(angleDelta(snapped, out[i].yaw));
     if (off < 1e-4 || off > SNAP_TOL) continue;
+    const keepUnit = unit.map((k) => out[k]);
     const keep = out[i];
-    out[i] = { ...keep, yaw: snapped };
+    carryUnit(rigid, out, i, { ...keep, yaw: snapped });
     const trial = hardCosts(m, out, weights, navCell);
     if (!anyWorse(hard, trial)) {
       hard = trial;
@@ -1797,18 +2041,22 @@ export function snapYaws(
     // from, so the revert is refused for `overlap` in its turn. It cleared neither of
     // the two cases it was written for, so there is no fallback layer here — an
     // untested branch that never fires would be worse than the crooked sofa.
-    out[i] = keep;
+    restore(unit, keepUnit);
 
     // How far it may be shoved: the distance squaring it would move its own furthest
     // corner, `off × radius`. Derived rather than chosen, and self-limiting in the
     // direction that matters — a barely-crooked piece earns a barely-nudge, and the
     // shift is never more visible than the tilt it buys out. For the 2.2 m sofa at
-    // 2.69° that is 56 mm, against the 103 mm the tilt itself moves its corner.
-    const reach = off * m.radius[i];
+    // 2.69° that is 56 mm, against the 103 mm the tilt itself moves its corner. A set's
+    // furthest corner is the furthest of any member's, about the lead it turns on.
+    let radius = 0;
+    for (const k of unit) radius = Math.max(radius, Math.hypot(out[k].x - keep.x, out[k].z - keep.z) + m.radius[k]);
+    const reach = off * radius;
     let fixed = false;
     for (const scale of [1 / 3, 2 / 3, 1]) {
       for (const [ux, uz] of NUDGE_DIRS) {
-        out[i] = { ...keep, yaw: snapped, x: keep.x + ux * reach * scale, z: keep.z + uz * reach * scale };
+        restore(unit, keepUnit);
+        carryUnit(rigid, out, i, { ...keep, yaw: snapped, x: keep.x + ux * reach * scale, z: keep.z + uz * reach * scale });
         const shoved = hardCosts(m, out, weights, navCell);
         if (!anyWorse(hard, shoved)) {
           hard = shoved;
@@ -1820,7 +2068,7 @@ export function snapYaws(
     }
     // Nothing legal within its own reach. Better crooked than through a wall: every
     // candidate here was refused by the same hard veto the plain snap was.
-    if (!fixed) out[i] = keep;
+    if (!fixed) restore(unit, keepUnit);
   }
   return out;
 }
@@ -1860,16 +2108,24 @@ function pruneMoves(
   // what the search found, one invisible step at a time — which is the same failure
   // this pass exists to undo, wearing the other hat.
   let slack = KEEP_EPS;
+  // A merged set is offered back whole, or the prune takes apart what the search kept
+  // together: a chair put back where it was, beside a table that moved.
+  const rigid = setsOf(m);
   for (let pass = 0; pass < 3; pass++) {
+    // Filtered before a unit is measured, so a locked piece or a member the lead speaks
+    // for costs nothing here.
     const candidates = out
-      .map((p, i) => ({ i, d: Math.hypot(p.x - origin[i].x, p.z - origin[i].z) }))
-      .filter((c) => m.ctx.movable[c.i] && displaced(origin[c.i], out[c.i]))
+      .flatMap((_, i) => {
+        if (!m.ctx.movable[i] || !steers(rigid, i) || !unitDisplaced(rigid, origin, out, i)) return [];
+        return [{ i, d: Math.max(...unitOf(rigid, i).map((k) => Math.hypot(out[k].x - origin[k].x, out[k].z - origin[k].z))) }];
+      })
       .sort((a, b) => a.d - b.d);
     if (candidates.length === 0) break;
     let reverted = false;
     for (const { i } of candidates) {
-      const keep = out[i];
-      out[i] = { ...origin[i] };
+      const unit = unitOf(rigid, i);
+      const keep = unit.map((k) => out[k]);
+      for (const k of unit) out[k] = { ...origin[k] };
       const trial = scoreLayout(m, out, weights);
       const spend = Math.max(0, trial - cost);
       if (spend <= slack) {
@@ -1877,7 +2133,9 @@ function pruneMoves(
         cost = trial;
         reverted = true;
       } else {
-        out[i] = keep;
+        unit.forEach((k, t) => {
+          out[k] = keep[t];
+        });
       }
     }
     if (!reverted) break;
@@ -1911,11 +2169,25 @@ function explain(
   const scratch = placements.map((p) => ({ ...p }));
   const here = costBreakdown(m, scratch, weights, navCell);
   const out: MoveReason[] = [];
+  // A member of a merged set moved because its set did, so it is credited with what
+  // putting the whole set back would cost — the one move the search made. That
+  // reading is the same for every member, so it is taken once per set: with a route
+  // to open it runs the navigation grid, and a dining set is five of them.
+  const rigid = setsOf(m);
+  const backOfSet = new Map<number, CostBreakdown>();
   for (const i of moved) {
-    const keep = scratch[i];
-    scratch[i] = { ...origin[i] };
-    const back = costBreakdown(m, scratch, weights, navCell);
-    scratch[i] = keep;
+    const set = rigid.setOf[i];
+    let back = set < 0 ? undefined : backOfSet.get(set);
+    if (!back) {
+      const unit = unitOf(rigid, i);
+      const keep = unit.map((k) => scratch[k]);
+      for (const k of unit) scratch[k] = { ...origin[k] };
+      back = costBreakdown(m, scratch, weights, navCell);
+      unit.forEach((k, t) => {
+        scratch[k] = keep[t];
+      });
+      if (set >= 0) backOfSet.set(set, back);
+    }
     let term: keyof ScoreWeights = 'inertia';
     let best = -Infinity;
     for (const k of TERMS) {
@@ -2087,7 +2359,10 @@ const GROUP_INTACT_M = 0.5;
 const GROUP_INTACT = bandCost(GROUP_INTACT_M, 0, 0);
 
 /** The groups this room actually contains: connected components of the satisfied
- *  relation edges, movable members only.
+ *  relation edges and of the merged sets, movable members only. A merged set is a
+ *  group however its relations stand, so a room with one always has a group and the
+ *  group pass runs there even when nothing else in it is arranged — the one group a
+ *  scrambled room can still contain, because the user made it.
  *
  *  Movable-only matters and is not a technicality. A sofa `faces` its wall-mounted
  *  screen, so the screen would otherwise join the living group — and then a group move
@@ -2116,6 +2391,15 @@ function intactGroups(m: LayoutModel, placements: Placement[], movable: boolean[
     const a = find(e.child);
     const bRoot = find(e.parent);
     if (a !== bRoot) parent[a] = bRoot;
+  }
+  // A merged set is a group however its relations stand: the user said so. It is
+  // also what keeps a group move from carrying half a set (`rigidSets`).
+  for (const set of setsOf(m).sets) {
+    for (const k of set) {
+      const a = find(k);
+      const bRoot = find(set[0]);
+      if (a !== bRoot) parent[a] = bRoot;
+    }
   }
 
   const byRoot = new Map<number, number[]>();
@@ -2435,10 +2719,14 @@ function pickNeighbour(m: LayoutModel, current: Placement[], i: number, rng: () 
  *  1000. */
 function pickSwap(m: LayoutModel, pool: number[], i: number, rng: () => number): number {
   const parts = m.ctx.parts;
+  // A merged set never swaps: trading places with one piece would carry the lead
+  // alone. It moves by its lead's own proposals instead.
+  const rigid = setsOf(m);
+  if (rigid.setOf[i] >= 0) return -1;
   const area = (k: number) => (parts[k].dimMM[0] / 1000) * (parts[k].dimMM[1] / 1000);
   const mine = area(i);
   const options = pool.filter((j) => {
-    if (j === i) return false;
+    if (j === i || rigid.setOf[j] >= 0) return false;
     const a = area(j);
     return a > mine * 0.4 && a < mine * 2.5 && roleOf(parts[j]) !== roleOf(parts[i]);
   });

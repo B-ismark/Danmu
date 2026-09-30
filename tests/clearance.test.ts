@@ -599,6 +599,26 @@ describe('a piece that is not in the room', () => {
     expect(outside([sofa(2.5299, 0, Math.PI / 2)]), '4.9 mm out is within the slack').toEqual([]);
     expect(outside([sofa(2.5301, 0, Math.PI / 2)]).length, '5.1 mm out is not').toBe(1);
   });
+
+  it('never names the button in its own words, since the row decides whether to show it', () => {
+    // Whether Try a fix can act depends on things this report cannot see — the
+    // user's pins above all — so the row asks (`confineCanMove`) and no sentence here
+    // may promise it. The KIND stays the rule's: a held sofa is still a sofa the cost
+    // prices, and a floor piece is never told to slide along its wall.
+    const tv = () =>
+      part({ category: 'tv', shape: 'tv', dimMM: [1200, 60, 700], pos: [0, 1.2, -1.95], wallMounted: true });
+    const rooms: [string, ScenePart[]][] = [
+      ['on its own', [sofa(2.6)]],
+      ['merged with the TV', [{ ...sofa(2.6), groupId: 'g' }, { ...tv(), groupId: 'g' }]],
+      ['from the photo', [{ ...sofa(2.6), locked: true }]],
+    ];
+    for (const [why, parts] of rooms) {
+      const [issue] = outside(parts);
+      expect(issue.rule, why).toBe('outside');
+      expect(issue.detail, why).toMatch(/ Drag it back inside\.$/);
+      expect(issue.detail, why).not.toMatch(/Try a fix|along the wall/);
+    }
+  });
 });
 
 describe('analyzeRoom · crowding names the line it fires on', () => {

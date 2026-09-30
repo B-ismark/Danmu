@@ -68,7 +68,7 @@ The design has three layers, and they are independently shippable in the order g
 
 | layer | what changes | symptom it kills |
 |---|---|---|
-| **1 · Representation** | supported pieces are sampled over their support, not the room; a merged set is one rigid body | chair in the air; chair through a wall; groups and their rotations |
+| **1 · Representation** | supported pieces are sampled over their support, not the room; a merged set is one rigid body *(shipped 2026-09-30, `what-is-still-open.md` § H.6.5)* | chair in the air; chair through a wall; groups and their rotations |
 | **2 · Feasibility ≠ preference** | hard terms become constraints, not summands | the couch facing away; `bandCost` unfixable; § C's four disasters |
 | **3 · Selection** | variety and the offer floor move to the suggestion stage | Shuffle converging; the fix priced as noise |
 

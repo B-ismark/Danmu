@@ -517,7 +517,9 @@ export function IdeasPanel({
       ) : base && !anyMovable ? (
         <div className="ideas-panel__note">
           <div className="t-small" style={{ fontWeight: 700 }}>Nothing here can move</div>
-          <div className="t-hint">Every piece is kept in place or fixed to a wall.</div>
+          {/* A group moves whole or not at all (`movableFor`), so a chair grouped with
+              the TV on the wall is held by it — the third way a piece stays put. */}
+          <div className="t-hint">Every piece is kept in place, fixed to a wall, or grouped with one that is.</div>
         </div>
       ) : failed && found === 0 ? (
         <div className="ideas-panel__note">

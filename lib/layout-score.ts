@@ -213,9 +213,9 @@ export const RULE_HANDLING: Record<
   zone: { costTerm: 'access', movable: true },
   window: { costTerm: 'window', movable: true },
   tv: { costTerm: 'relation', movable: true },
-  // Only ever emitted for a piece the solver can BOTH move and price, which is
+  // Only ever emitted for a KIND of piece the solver can both move and price, which is
   // `containedBySearch` — and that predicate is doing two jobs here, both of them
-  // real. `movableFor` is `!locked && !p.wallMounted`, so a wall rider is excluded
+  // real. `movableFor` refuses a wall-mounted piece, so a wall rider is excluded
   // from every solve this app runs; and `c.outside` accumulates inside
   // `if (!m.contained[i]) continue`, so a piece under `OBSTACLE_HEIGHT` and anything
   // standing on a surface are invisible to the term whatever the report says. Both
@@ -224,6 +224,10 @@ export const RULE_HANDLING: Record<
   // found nothing. That is what this table exists to prevent — see `reach` below,
   // which was the last row to claim a capability it did not have. A rug was the
   // third exclusion until the term learned to see one (`containedBySearch`).
+  // Whether THIS sofa may move — kept in place, from the photo, merged with a piece
+  // on a wall — is a question about the pieces rather than the kind, asked per row
+  // for every rule in this table (`confineCanMove`), because the user's pins are not
+  // anything a finding can see.
   // Containment. The two rows are the same fault seen from opposite sides of one
   // question — can the solver do anything — and `clearance.ts` decides which by
   // asking `containedBySearch`, the SAME predicate the `outside` term's containment

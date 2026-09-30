@@ -810,9 +810,10 @@ export function analyzeRoom(
   // `RULE_HANDLING.movable` answers "could rearranging clear it", and the honest
   // answer here depends on the PIECE, not on where it happens to be standing. The
   // first version said `movable: true` for everything, which put a **Try a fix**
-  // button on a wall-mounted TV that `movableFor` (`!locked && !p.wallMounted`) can
-  // never move. A button that spins and then reports it found nothing is the exact
-  // anti-pattern this table exists to prevent.
+  // button on a wall-mounted TV that `movableFor` (not locked, not wall-mounted, and
+  // not merged with a piece that is either) can never move. A button that spins and
+  // then reports it found nothing is the exact anti-pattern this table exists to
+  // prevent.
   //
   // The SECOND version split on geometry — centre off the plan is fixable, merely
   // crossing a wall is not — and a user found it in one screenshot within a day: a
@@ -844,6 +845,14 @@ export function analyzeRoom(
   // of overhang on a sofa. `outsideDeficit` is corner-exact and non-zero as soon as
   // any corner is out, so `outside` is now priced across the whole range in which it
   // is reported. Without that, `movable: true` here would have been a second lie.
+  //
+  // The cost term seeing a piece is half of "could rearranging clear it"; the other
+  // half is whether the solve may move THIS piece — not kept in place, not from the
+  // photo, not merged with a piece on a wall — and that is a question about the
+  // pieces rather than the rule, which this report cannot answer: the user's pins
+  // live in the studio store. Room check asks it per row (`confineCanMove`), for
+  // every rule at once. Which is why no sentence here names the button: the row may
+  // not show it.
   for (const p of parts) {
     const c = roomContainment(p.pos, p.rot, p.dimMM, poly, p.circle, p.shape);
     const out = forgivesOverhang(p) ? !c.centre : !(c.box && c.centre);
@@ -864,11 +873,9 @@ export function analyzeRoom(
         (standing
           ? `“${p.name}” is standing off the floor plan, with no floor under it.`
           : `“${p.name}” crosses a wall: part of it is outside the room.`) +
-        (fixable
-          ? ' Drag it back inside, or use Try a fix.'
-          : standing
-            ? ' Drag it back inside.'
-            : ' Turn it, move it along the wall, or give it a wall it fits on.'),
+        (fixable || standing
+          ? ' Drag it back inside.'
+          : ' Turn it, move it along the wall, or give it a wall it fits on.'),
       partIds: [p.id],
     });
   }
