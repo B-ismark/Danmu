@@ -637,14 +637,14 @@ sofa turned straight. Tests hold the angles; nobody has looked at a room with it
 in 15° steps, which is too far for this. T-Shape with starter furniture, at the size it
 opens at. In the 2D Plan, turn the sofa about 10° with its rotate handle, press **Fix**,
 and look in 3D.
-Undo, turn it about 10° the other way, and press **Fix** again. Do the same on the L-Shape
-at about 6° each way, and once on the Rectangle at about 10°.
+Undo, turn it about 10° the other way, and press **Fix** again. Then the L-Shape: turn its
+sofa about 6° the way that pushes its back into the wall, and press **Fix**.
 
 **What right looks like.**
 - The sofa stays where you left it and turns square, facing the TV.
-- On the Rectangle the same. Before this change Fix moved the sofa somewhere else there,
-  still facing the TV; now it stays put. That is a change in a room that was not broken,
-  and whether it reads as better is part of the look.
+- Turned the other way in the L, the sofa is clear of the wall and Fix leaves it be, as
+  before. On the Rectangle the turn itself eases the sofa off the wall, so there is nothing
+  for Fix to square; that is unchanged too.
 - Usually nothing else moves. In the T, now and then the walkway repair also moves a few
   pieces to open a path; that is its own pass, and it did the same before.
 

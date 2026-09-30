@@ -3999,8 +3999,9 @@ cost an arrangement, or a squaring, and leave the set whole.
 observation above: a couch a few degrees off square, then Fix, and it comes back facing away
 from the TV it should face.
 
-*Measured on `a548f48` and on this change*, twelve seeds. The sofa is turned by hand, so it
-is `placed`, as `useSuggest` calls it. **Not facing** is more than 30° off its television
+*Measured on `0f76fa4` and on this change*, twelve seeds. The sofa is turned the way the
+rotate handle and the arrow keys turn it (`turnInPlace`), and is `placed`, as `useSuggest`
+calls it. **Not facing** is more than 30° off its television
 (`FACING_HALF_ANGLE`); **away** is more than 90°; **in place** is where it stood, turned
 square. Each preset at its own size:
 
@@ -4010,16 +4011,19 @@ square. Each preset at its own size:
 | `t` 5.5 × 4.7, +10° | 4 / 1 / 0 | 0 / 0 / 12 |
 | `l` 6 × 4.7, −10° | 2 / 0 / 0 (Fix acted on 11) | 0 / 0 / 12 |
 | `l` 6 × 4.7, −6° | 1 / 1 / 0 (acted on 11, left 3 crooked) | 0 / 0 / 12 |
-| `rect` 6 × 4 at ±6° and ±10°, `t` at ±6° | 0 / 0 / 0 | 0 / 0 / 12 |
+| `t` 5.5 × 4.7 at ±6° | 0 / 0 / 0 | 0 / 0 / 12 |
 
-Unchanged: `l` +10° (in place on 11), `open` 7.5 × 5.6 at −10° (10 of the 11 it acts on) and
-+10° (12), and the rows where Fix did nothing (`l` +6°, `open` ±6°). At 6 × 5, where
-`tests/suggest-square-in-place.test.ts` pins it, the T with its sofa at −10° went from 5 not
-facing and 3 away to none, and at +10° from 4 to none.
+At 6 × 5, where `tests/suggest-square-in-place.test.ts` pins it, the T with its sofa at −10°
+went from 5 not facing and 3 away to none, and at +10° from 4 to none.
 
-It changes Fix in every preset, not only the T: in `rect` the sofa used to go somewhere else
-on every seed, still facing the TV. Now it stays and is turned straight, which is the answer
-a person would give and also a change in a room that was not broken.
+Only the T and the L change, and only where the sofa is through a wall. The turn clamps a
+piece into the room's bounding box and keeps the clamp even when the result is illegal, and
+the T's stem wall and the wall the L's sofa backs onto are not edges of that box, so the
+sofa is left through the plaster. In `rect` and `open` at 6 × 4 every wall is an edge of the
+box, so the turn pulls the sofa 92 mm in at ±6° and 164 mm at ±10°, nothing is at fault,
+and Fix says there is nothing to do, before and after; a test pins that. Also unchanged,
+with nothing at fault: `l` +6° (Fix does nothing) and +10° (in place on 11), `open` 7.5 ×
+5.6 at ±6° (nothing), −10° (10 of the 11 it acts on) and +10° (12).
 
 *Why the search missed it.* The sofa pokes through its wall, so Fix has to act, and the
 search's answers all put it somewhere else. The tidy after the pick squares only what the
@@ -4035,20 +4039,24 @@ because in the T at 5.5 × 4.7 the sofa can only be squared once the crooked din
 is. Each rule has a row in the test file on a room where it changes the answer, and each
 was checked by breaking it.
 
-*Fix only.* A refit already squares a turned sofa where it stands and keeps it facing, on
-every row measured; given this too, only how many other pieces a whole-room Re-fit moves
-changes (12 → 14 on one row, 15 → 12 on another). A shuffle is asked for a different room,
-and given this the T with its sofa at −10° got 1 idea in three searches where it had 9.
+*Arrange solves only.* That is Fix, and fit-check's probe, where it is inert: the probe
+starts at 0° and everything else is locked. A refit already squares a turned sofa where it
+stands and keeps it facing, on every row measured; given this too, only how many other
+pieces a whole-room Re-fit moves changes (12 → 14 on one row, 15 → 12 on another). A shuffle
+is asked for a different room, and given this the T with its sofa at −10° got 1 idea in
+three searches where it had 9. Both exclusions have a test.
 
 *Who can reach it.* The default snap turns in 15° steps, past `SNAP_TOL`'s 12°, so a hand
-turn lands in reach only with **Snap when dragging → Free**, or from a scan or a preset angle.
+turn lands in reach only with **Snap when dragging → Free**, or from a scan or a preset
+angle. And only in a room with a wall its bounding box does not have, as above.
 
 *Still open.*
 - **A sofa 2.5° through its wall.** A turn that small is inside `TURN_EPSILON`, so `moved`
   would not count it and the candidate does not try it. The search's own answers hit the
-  same wall: in `rect` 6 × 4 at −2.5°, two seeds in three square it by less than `moved`
-  counts, so Fix says there is nothing to do and the sofa stays through the wall. On the
-  commit before as well.
+  same wall: in `rect` 6 × 4 with the sofa set at −2.5° (by a scan or a file; a hand turn
+  there is clamped back in), two seeds in three square it by less than `moved` counts, so
+  Fix says there is nothing to do and the sofa stays through the wall. On the commit before
+  as well.
 - **Two crooked pieces where squaring one hurts the other.** The T at 6 × 5 with the sofa at
   −10° and the dining table at −8°: squaring the sofa raises the table's `access`, squaring
   the table buys too little, so the search answers as it did.
@@ -4066,9 +4074,10 @@ turn lands in reach only with **Snap when dragging → Free**, or from a scan or
   question.
 
 *The plan's P2, covered by § H.6.5 and not built.* P2 was "a group squares about its anchor,
-not its centroid". A merged set's lead is its largest obstacle, which is its anchor; the
-squaring pass turns the set about it, and the lead's own quarter-turn proposals square the
-set as a whole. § H.6.5's table shows it: `l` turned −6° and 12°, every one squared back as
+not its centroid". A merged set's lead is its largest obstacle (`rigidSets`), which in every
+set measured is its anchor; the squaring pass turns the set about it, and the lead's own
+quarter-turn proposals square the set as a whole. A bed merged with a wardrobe wider than it
+would be squared about the wardrobe; not measured. § H.6.5's table shows it: `l` turned −6° and 12°, every one squared back as
 one; `open` −20°, 6 of 7. What is left is `proposeGroup`'s turn of a group made by its
 relations rather than merged, which pivots on the centroid. It is rigid either way, so the
 group keeps its shape; only where it lands differs. Not measured further.

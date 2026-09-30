@@ -126,8 +126,11 @@ export type SolveOptions = {
   pick?: (candidates: readonly Candidate[]) => number;
 };
 
-/** A finalist, priced the way the winner is chosen — the annealer's own `cost` plus
- *  the navigability term that only the finalists are expensive enough to earn. A
+/** One arrangement the pick chooses among, priced the way the winner is chosen — the
+ *  annealer's own `cost` plus the navigability term that only these are expensive enough
+ *  to earn. They are the search's finalists and, in an arrange solve whose room has a
+ *  fault a square turn clears, one more after them: the room as it stands with those
+ *  pieces squared (`squareFaults`), which is never among `finalists`. A
  *  ranker wanting "how good is this arrangement" wants `total`; `cost` alone is the
  *  number the pool was sorted by and is not what the default picker compares. */
 export type Candidate = {
@@ -1451,7 +1454,7 @@ export function solveLayout(
   });
   // ── …and the one arrangement the search cannot reach: the room, its faults squared out ──
   //
-  // A sofa turned 10° in the T pokes through its wall, so Fix has to act, and every
+  // A sofa turned 10° in the T at 6 × 5 pokes through its wall, so Fix has to act, and every
   // answer the search finds moves it: the tidy after the pick squares only what the
   // search moved, so the room as it stands with the sofa turned straight is never one
   // of them. The sofa went across the room on nearly every seed and faced away from the
@@ -1459,14 +1462,16 @@ export function solveLayout(
   // finalists, priced the same way.
   //
   // Beside the pool, not in it. Put through `remember` it evicted a finalist the pick
-  // preferred once navigation was priced (the T, sofa +6°, seed 3: 14.81 before, 22.26
+  // preferred once navigation was priced (the T at 6 × 5, sofa +6°, seed 3: 14.81 before, 22.26
   // with it), so `finalists` stays what the search kept.
   //
-  // Fix only. A shuffle is asked for a different room, and handed this one the T with
-  // its sofa at −10° got 1 idea in three searches where it had 9. A refit already squares
-  // a turned sofa where it stands and keeps it facing, on every row measured; handed this
-  // too, it changes only how many other pieces a whole-room Re-fit moves (12 → 14 on one
-  // row, 15 → 12 on another), so it is left as it was.
+  // Arrange solves only: Fix, and fit-check's probe, where it is inert because the probe
+  // starts at 0° and everything else is locked. A shuffle is asked for a different room,
+  // and handed this one the T with its sofa at −10° got 1 idea in three searches where it
+  // had 9. A refit already squares a turned sofa where it stands and keeps it facing, on
+  // every row measured; handed this too, it changes only how many other pieces a
+  // whole-room Re-fit moves (12 → 14 on one row, 15 → 12 on another), so it is left as it
+  // was.
   const squared = shuffle || refit ? null : squareFaults(model, origin, weights, breakdownBefore);
   if (squared) {
     const breakdown = costBreakdown(model, squared.placements, weights, NAV_CELL);

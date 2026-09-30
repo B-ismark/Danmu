@@ -18,6 +18,7 @@ import { bestCandidate, isWorthOffering, lockedForSolve, solveLayout, type Candi
 import { applyPlacements, lockedForShuffle, shuffleRoom } from '@/lib/layout-shuffle';
 import { FACING_HALF_ANGLE } from '@/lib/layout-ideas';
 import { frontVector, localToWorld } from '@/lib/geometry';
+import { turnInPlace } from '@/lib/drag-resolve';
 import type { LayoutId } from '@/lib/storage';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -32,10 +33,22 @@ function room(id: LayoutId, w: number, d: number) {
   return { parts: defaultScene(id, w, d), footprint: footprintForLayout(id, w, d) as Footprint };
 }
 
-/** One piece turned by `deg`, as a hand rotation leaves it: an override, so `placed`. */
-function turned(parts: ScenePart[], pick: (p: ScenePart) => boolean, deg: number) {
+/** One piece turned by `deg` the way the rotate handle and the arrow keys turn it
+ *  (`turnInPlace`), so `placed`. That turn clamps the piece into the room's bounding box
+ *  and keeps the clamp even when the frame is illegal, so a sofa backing onto a wall the
+ *  box does not have, as in the T and the L, is left through the plaster. */
+function turned(parts: ScenePart[], pick: (p: ScenePart) => boolean, deg: number, footprint: Footprint) {
   const target = parts.find(pick)!;
-  return { parts: parts.map((p) => (p.id === target.id ? { ...p, rot: wrap(p.rot + deg * DEG) } : p)), id: target.id };
+  const r = turnInPlace({
+    part: target,
+    at: target.pos,
+    rot: wrap(target.rot + deg * DEG),
+    dim: target.dimMM,
+    parts,
+    footprint,
+    roomHeight: 2.4,
+  });
+  return { parts: parts.map((p) => (p.id === target.id ? { ...p, pos: r.pos, rot: r.rot } : p)), id: target.id };
 }
 
 /** What `useSuggest` in `RoomTools` does with a Fix press: solve, offer only a real gain,
@@ -47,11 +60,11 @@ function fix(parts: ScenePart[], footprint: Footprint, seed: number, placed: Set
 }
 
 /** A Fix solve with the ranking watched: what it was handed, and what the search kept. */
-function watched(parts: ScenePart[], footprint: Footprint, seed: number, placed: Set<string>) {
+function watched(parts: ScenePart[], footprint: Footprint, seed: number, placed: Set<string>, mode: 'arrange' | 'refit' = 'arrange') {
   let rated: readonly Candidate[] = [];
   const result = solveLayout(parts, footprint, lockedForSolve(parts, {}, null), {
     seed,
-    mode: 'arrange',
+    mode,
     placed,
     pick: (c) => ((rated = c), bestCandidate(c)),
   });
@@ -98,7 +111,7 @@ describe('Fix on a sofa a few degrees off square', () => {
   for (const [layout, w, d, deg] of cases) {
     it(`${layout} ${w} × ${d}, sofa turned ${deg}°: every seed faces the television`, () => {
       const { parts: base, footprint } = room(layout, w, d);
-      const { parts, id } = turned(base, isSofa, deg);
+      const { parts, id } = turned(base, isSofa, deg, footprint);
       const tv = parts.find(isTv)!;
       const start = parts.find((p) => p.id === id)!;
       let applied = 0;
@@ -124,8 +137,8 @@ describe('Fix on a sofa a few degrees off square', () => {
     // placed, so squaring it costs almost nothing and tidies the room: the one chair the
     // candidate would take if a turn did not have to clear a fault.
     const { parts: base, footprint } = room('t', 6, 5);
-    const sofa = turned(base, isSofa, -10);
-    const { parts, id: chairId } = turned(sofa.parts, (p) => p.id === 'chair-3', 8);
+    const sofa = turned(base, isSofa, -10, footprint);
+    const { parts, id: chairId } = turned(sofa.parts, (p) => p.id === 'chair-3', 8, footprint);
     const { result, rated } = watched(parts, footprint, 1, new Set([sofa.id]));
     // One candidate beside the search's own finalists, not among them: `finalists` is still
     // exactly what the search kept. Put through the pool, it evicted a better finalist.
@@ -138,13 +151,17 @@ describe('Fix on a sofa a few degrees off square', () => {
     const s = parts[i(sofa.id)];
     expect(Math.hypot(cand[i(sofa.id)].x - s.pos[0], cand[i(sofa.id)].z - s.pos[2])).toBeLessThan(1e-9);
     expect(offSquare(cand[i(sofa.id)].yaw)).toBeLessThan(1e-6);
+    // Priced the way a finalist is: its stranded floor counted into the total it is ranked by.
+    const { navCost, cost, total } = rated[rated.length - 1];
+    expect(navCost).toBeGreaterThan(0);
+    expect(total).toBeCloseTo(cost + navCost, 9);
   });
 
   // Each row turns pieces of a preset by hand (so they are `placed`) and names what the
   // candidate squares. Every row is one where its rule changes that answer.
   const rules: [string, LayoutId, number, number, [string, number][], string[] | null][] = [
-    // Squaring the dining table clears its `access`, and buys less than `pruneMoves` would
-    // put back. Offered anyway, it could only crowd out a finalist.
+    // Squaring the dining table clears its `access` and buys less than `KEEP_EPS`, the slack
+    // `pruneMoves` spends putting moves back, so picked, it would be turned crooked again.
     ['a turn that buys less than the tidy keeps is not offered', 't', 6, 5, [['table-2', -8]], null],
     // Squaring the sofa clears the wall and raises the crooked table's `access`: a swap,
     // which is the search's to price. Squaring the table alone buys too little.
@@ -156,23 +173,55 @@ describe('Fix on a sofa a few degrees off square', () => {
     // candidate does not ask; the cell is priced when it is rated, as every answer's is.
     ['navigation is not asked', 't', 6, 5, [['sofa-1', 5]], ['sofa-1']],
     // 2.5° is inside `TURN_EPSILON`, so `moved` would not count the turn.
-    ['a turn too small to count as a move is not tried', 'rect', 6, 4, [['sofa-1', -2.5]], null],
+    ['a turn too small to count as a move is not tried', 't', 6, 5, [['sofa-1', -2.5]], null],
   ];
   for (const [name, layout, w, d, turns, expected] of rules) {
     it(`${name} (${layout} ${w} × ${d}, ${turns.map(([id, deg]) => `${id} ${deg}°`).join(', ')})`, () => {
       const { parts: base, footprint } = room(layout, w, d);
-      const parts = turns.reduce((acc, [id, deg]) => turned(acc, (p) => p.id === id, deg).parts, base);
+      const parts = turns.reduce((acc, [id, deg]) => turned(acc, (p) => p.id === id, deg, footprint).parts, base);
       expect(squaredIn(parts, footprint, new Set(turns.map(([id]) => id)))).toEqual(expected);
     });
   }
 
-  it('a merged set is squared as one, about its lead', () => {
-    // The sofa and coffee table merged, and the pair turned 10° about the sofa, as a rotate
-    // drag of a merged set leaves it. Squared back, both are where they were authored.
+  it('a locked piece is not turned, however crooked', () => {
     const { parts: base, footprint } = room('t', 6, 5);
-    const lead = base.find(isSofa)!;
-    const table = base.find((p) => p.shape === 'coffee-table')!;
-    const turn = -10 * DEG;
+    const { parts, id } = turned(base, isSofa, -10, footprint);
+    const locked = parts.map((p) => (p.id === id ? { ...p, locked: true } : p));
+    expect(squaredIn(locked, footprint, new Set([id]))).toBeNull();
+  });
+
+  it('in the Rectangle the turn itself pushes the sofa back inside, so nothing is squared', () => {
+    // Every wall of a rectangle is an edge of its bounding box, so the clamp in the turn
+    // brings the sofa off the wall and the room has no fault for the candidate to clear.
+    const { parts: base, footprint } = room('rect', 6, 4);
+    const start = base.find(isSofa)!;
+    const { parts, id } = turned(base, isSofa, -10, footprint);
+    const sofa = parts.find((p) => p.id === id)!;
+    expect(Math.hypot(sofa.pos[0] - start.pos[0], sofa.pos[2] - start.pos[2])).toBeGreaterThan(0.1);
+    expect(squaredIn(parts, footprint, new Set([id]))).toBeNull();
+  });
+
+  it('a refit is never offered the candidate', () => {
+    // A refit answers a room that changed under the furniture: the smallest change back to
+    // a legal room, weighed by how far things move. Same room, same turn, no candidate.
+    const { parts: base, footprint } = room('t', 6, 5);
+    const { parts, id } = turned(base, isSofa, -10, footprint);
+    const { result, rated } = watched(parts, footprint, 1, new Set([id]), 'refit');
+    expect(result.breakdownBefore.outside).toBeGreaterThan(1);
+    expect(rated.length).toBe(result.finalists.length);
+  });
+
+  it('a merged set is squared as one, about its lead', () => {
+    // The sofa and coffee table merged, and the pair turned 10° about the sofa. Squared
+    // back, both are where they were authored. The table comes first in the list, so the
+    // set is turned about its lead and not about whichever member the loop meets first:
+    // turned about the table, both land 209 mm off. At −10° the turn about the table is
+    // refused anyway, so that angle cannot tell the two apart.
+    const { parts: authored, footprint } = room('t', 6, 5);
+    const lead = authored.find(isSofa)!;
+    const table = authored.find((p) => p.shape === 'coffee-table')!;
+    const base = [table, ...authored.filter((p) => p.id !== table.id)];
+    const turn = 10 * DEG;
     const parts = base.map((p): ScenePart => {
       if (p.id !== lead.id && p.id !== table.id) return p;
       const [ox, oz] = localToWorld(turn, p.pos[0] - lead.pos[0], p.pos[2] - lead.pos[2]);
@@ -193,7 +242,7 @@ describe('Fix on a sofa a few degrees off square', () => {
     // Beyond `SNAP_TOL` an angle is a choice. In the T the 20° sofa pokes through its wall
     // as the 10° one does, so a wider window would square it here; this pins the window.
     const { parts: base, footprint } = room('t', 6, 5);
-    const { parts, id } = turned(base, isSofa, -20);
+    const { parts, id } = turned(base, isSofa, -20, footprint);
     const { result, rated } = watched(parts, footprint, 1, new Set([id]));
     expect(result.breakdownBefore.outside).toBeGreaterThan(1);
     expect(rated.length).toBe(result.finalists.length);
@@ -205,8 +254,8 @@ describe('Fix on a sofa a few degrees off square', () => {
       let none = 0;
       let candidates = 0;
       for (const seed of SEEDS) {
-        if (!fix(parts, footprint, seed, new Set())) none++;
         const { result, rated } = watched(parts, footprint, seed, new Set());
+        if (result.moved.length === 0 || !isWorthOffering(result.before, result.after)) none++;
         candidates += rated.length - result.finalists.length;
       }
       // Nothing in either room is at fault, so nothing is turned, the L's armchair included:
@@ -218,7 +267,7 @@ describe('Fix on a sofa a few degrees off square', () => {
 
   it('Ideas never hands back the room it was given with the sofa squared in place', () => {
     const { parts: base, footprint } = room('t', 6, 5);
-    const { parts, id } = turned(base, isSofa, -10);
+    const { parts, id } = turned(base, isSofa, -10, footprint);
     const start = parts.find((p) => p.id === id)!;
     let n = 0;
     let inPlace = 0;
