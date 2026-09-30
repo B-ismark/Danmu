@@ -11,6 +11,7 @@ import {
 } from '@/lib/scene-spec';
 import { ridesWall } from '@/lib/physics';
 import { dimRangeFor } from '@/lib/dimension-ranges';
+import { ELL_ARM_DEPTH, ELL_RETURN_WIDTH } from '@/lib/foot-cells';
 
 // § H.16 — "models are still going through walls in 2d plan mode".
 //
@@ -107,24 +108,44 @@ function cornersOf(
   pos: [number, number, number],
   rot: number,
   dimMM: [number, number, number],
+  rect?: { x0: number; x1: number; z0: number; z1: number },
 ): Array<[number, number]> {
   const hw = (dimMM[0] - SLACK_MM) / 2000;
   const hd = (dimMM[1] - SLACK_MM) / 2000;
+  const { x0, x1, z0, z1 } = rect ?? { x0: -hw, x1: hw, z0: -hd, z1: hd };
   const rightX = Math.cos(rot);
   const rightZ = -Math.sin(rot);
   const frontX = Math.sin(rot);
   const frontZ = Math.cos(rot);
   return (
     [
-      [-hw, -hd],
-      [hw, -hd],
-      [hw, hd],
-      [-hw, hd],
+      [x0, z0],
+      [x1, z0],
+      [x1, z1],
+      [x0, z1],
     ] as Array<[number, number]>
   ).map(([lx, lz]): [number, number] => [
     pos[0] + lx * rightX + lz * frontX,
     pos[2] + lx * rightZ + lz * frontZ,
   ]);
+}
+
+/** The rectangles a piece stands on, in its own frame. One — its box — for everything
+ *  but the L-shaped desk, which is a full-width top along its back and a return down
+ *  its right side, leaving the front-left corner open. That sentence is the second
+ *  thing this file takes on trust; the two proportions are imported because they ARE
+ *  the design (`lib/foot-cells.ts`), and the rectangles are built from the sentence,
+ *  not from `footCellsLocal`. Inset by the same `SLACK_MM` the pipeline applies, which
+ *  it does by shrinking the dimensions the cells are proportions of. */
+function standsOn(shape: Shape, dimMM: [number, number, number]) {
+  const hw = (dimMM[0] - SLACK_MM) / 2000;
+  const hd = (dimMM[1] - SLACK_MM) / 2000;
+  if (shape !== 'desk-l') return [{ x0: -hw, x1: hw, z0: -hd, z1: hd }];
+  const armBack = -hd + 2 * hd * ELL_ARM_DEPTH;
+  return [
+    { x0: -hw, x1: hw, z0: -hd, z1: armBack },
+    { x0: hw - 2 * hw * ELL_RETURN_WIDTH, x1: hw, z0: armBack, z1: hd },
+  ];
 }
 
 /** Crossing-number point-in-polygon, written out here rather than imported. */
@@ -229,8 +250,9 @@ function sweep() {
               const ok =
                 c === 'rug'
                   ? isInside(r.pos[0], r.pos[2], poly)
-                  : cornersOf(r.pos, r.rot, dim).every(([cx, cz]) => isInside(cx, cz, poly)) &&
-                    isInside(r.pos[0], r.pos[2], poly);
+                  : standsOn(s, dim).every((rect) =>
+                      cornersOf(r.pos, r.rot, dim, rect).every(([cx, cz]) => isInside(cx, cz, poly)),
+                    ) && isInside(r.pos[0], r.pos[2], poly);
               if (!ok) {
                 escapes.push(
                   `${layout} ${key} ${label} rot=${rot.toFixed(2)} to=(${x},${z}) -> (${r.pos[0].toFixed(3)},${r.pos[2].toFixed(3)}) rides=${rides}`,
@@ -417,8 +439,14 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // Not hypothetical: breaking the rug exemption — which touches no wall rider at
     // all — leaves the escape sweep and every per-rider pin green, and is caught by
     // these two alone.
-    expect(acceptedBefore, 'the pre-fix column moved').toBe(55528);
-    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(54958);
+    // Nine more than when these were first pinned (55528 / 54958), and all nine are
+    // the L-shaped desk: it is held to the two rectangles it stands on now rather than
+    // its box, so a desk wrapped round a room's inside corner is a legal drop
+    // (`tests/foot-cells.test.ts`). 1101 → 1110 was measured by dropping the shape
+    // from `resolvePlacement`'s containment call and re-running.
+    expect(accepts.get('desk/desk-l'), 'the L-shaped desk moved').toBe(1110);
+    expect(acceptedBefore, 'the pre-fix column moved').toBe(55537);
+    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(54967);
 
     // Arithmetic over the pins above, and deliberately not more than that: no source
     // mutation can reach it, because a wrong `KEPT` fails its own loop first. What

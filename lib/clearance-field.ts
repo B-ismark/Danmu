@@ -30,7 +30,7 @@
 // rule, which is the same "no false warnings" bar the rest of the room report is
 // held to.
 
-import { obbExtentAlong, pointInPoly, type Foot, type Poly } from './geometry';
+import { footCells, obbExtentAlong, pointInPoly, type Foot, type Poly } from './geometry';
 
 /** Raster resolution, metres. 5 cm gives ±25 mm on every reading, which is finer
  *  than any of the rules this feeds and cheap enough to run on every edit. */
@@ -139,42 +139,44 @@ export function rasterizeCoverage(parts: Foot[], poly: Poly, cell = FIELD_CELL):
 
   let covered = 0;
   for (let p = 0; p < parts.length; p++) {
-    const b = parts[p];
-    // `worldToLocal` (lib/geometry) inlined with the trig hoisted — this is the
-    // per-cell loop, so the helper's array return would allocate per cell.
-    const cs = Math.cos(b.rot);
-    const sn = Math.sin(b.rot);
-    // A round footprint is the inscribed ellipse, tested in closed form below —
-    // the bound is still the bounding box, which is a superset, so it only costs
-    // a few extra cells at the corners.
-    const round = b.circle === true;
-    const ihw = 1 / b.hw;
-    const ihd = 1 / b.hd;
-    const ex = obbExtentAlong(b, 1, 0);
-    const ez = obbExtentAlong(b, 0, 1);
-    const i0 = Math.max(0, Math.floor((b.cx - ex - ox) / c - 0.5));
-    const i1 = Math.min(nx - 1, Math.ceil((b.cx + ex - ox) / c - 0.5));
-    const j0 = Math.max(0, Math.floor((b.cz - ez - oz) / c - 0.5));
-    const j1 = Math.min(nz - 1, Math.ceil((b.cz + ez - oz) / c - 0.5));
-    for (let j = j0; j <= j1; j++) {
-      const dz = oz + (j + 0.5) * c - b.cz;
-      const row = j * nx;
-      for (let i = i0; i <= i1; i++) {
-        const at = row + i;
-        // Only claim floor the room actually has, and only claim it once — the
-        // first part to reach a cell owns it, so overlapping pieces (a chair
-        // under a desk) are counted a single time.
-        if (cover[at] !== FREE_CELL) continue;
-        const dx = ox + (i + 0.5) * c - b.cx;
-        const lx = dx * cs - dz * sn;
-        const lz = dx * sn + dz * cs;
-        if (round) {
-          if (lx * lx * ihw * ihw + lz * lz * ihd * ihd > 1) continue;
-        } else {
-          if (Math.abs(lx) > b.hw || Math.abs(lz) > b.hd) continue;
+    // Per cell, all owned by piece `p`: an L-shaped desk's open corner is floor.
+    for (const b of footCells(parts[p])) {
+      // `worldToLocal` (lib/geometry) inlined with the trig hoisted — this is the
+      // per-cell loop, so the helper's array return would allocate per cell.
+      const cs = Math.cos(b.rot);
+      const sn = Math.sin(b.rot);
+      // A round footprint is the inscribed ellipse, tested in closed form below —
+      // the bound is still the bounding box, which is a superset, so it only costs
+      // a few extra cells at the corners.
+      const round = b.circle === true;
+      const ihw = 1 / b.hw;
+      const ihd = 1 / b.hd;
+      const ex = obbExtentAlong(b, 1, 0);
+      const ez = obbExtentAlong(b, 0, 1);
+      const i0 = Math.max(0, Math.floor((b.cx - ex - ox) / c - 0.5));
+      const i1 = Math.min(nx - 1, Math.ceil((b.cx + ex - ox) / c - 0.5));
+      const j0 = Math.max(0, Math.floor((b.cz - ez - oz) / c - 0.5));
+      const j1 = Math.min(nz - 1, Math.ceil((b.cz + ez - oz) / c - 0.5));
+      for (let j = j0; j <= j1; j++) {
+        const dz = oz + (j + 0.5) * c - b.cz;
+        const row = j * nx;
+        for (let i = i0; i <= i1; i++) {
+          const at = row + i;
+          // Only claim floor the room actually has, and only claim it once — the
+          // first part to reach a cell owns it, so overlapping pieces (a chair
+          // under a desk) are counted a single time.
+          if (cover[at] !== FREE_CELL) continue;
+          const dx = ox + (i + 0.5) * c - b.cx;
+          const lx = dx * cs - dz * sn;
+          const lz = dx * sn + dz * cs;
+          if (round) {
+            if (lx * lx * ihw * ihw + lz * lz * ihd * ihd > 1) continue;
+          } else {
+            if (Math.abs(lx) > b.hw || Math.abs(lz) > b.hd) continue;
+          }
+          cover[at] = p;
+          covered++;
         }
-        cover[at] = p;
-        covered++;
       }
     }
   }

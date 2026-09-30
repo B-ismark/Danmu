@@ -31,6 +31,7 @@ import { useStudio } from '@/lib/store';
 import { roleOf } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
+import { ELL_ARM_DEPTH, ELL_RETURN_WIDTH } from '@/lib/foot-cells';
 
 /** The module ranges the TILING parametric shapes are divided by, resolved once at module
  *  scope so a renderer reads a value rather than doing a table lookup per frame.
@@ -844,9 +845,13 @@ function DeskGeo({ part, locked, lShape }: { part: ScenePart; locked: boolean; l
   // So the long arm now takes `armD` of the depth and the return takes the rest, both
   // within `w x d`. `desk-standard` is untouched by construction: at `lShape === false`
   // `armD === d` and `armZ === 0`, which is the tabletop this function always drew.
-  const armD = lShape ? d * 0.52 : d;
+  //
+  // The proportions live in `lib/foot-cells.ts` now, where the plan's outline and every
+  // containment and collision test read them too — so the notch the room lets a wall
+  // corner into is the notch this draws.
+  const armD = lShape ? d * ELL_ARM_DEPTH : d;
   const armZ = -d / 2 + armD / 2;
-  const armW = w * 0.42;
+  const armW = w * ELL_RETURN_WIDTH;
 
   return (
     <>

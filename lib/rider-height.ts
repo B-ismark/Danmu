@@ -114,7 +114,7 @@ export function riderRelation(
  *  against the LIVE footprints of both, so a rider dragged off its support (or a
  *  support shrunk out from under one) stops following it. */
 function stillOver(rider: ScenePart, support: ScenePart): boolean {
-  const foot = footFromPart(rider.pos, rider.rot, rider.dimMM, rider.circle);
+  const foot = footFromPart(rider.pos, rider.rot, rider.dimMM, rider.circle, rider.shape);
   return coversEnoughToSupport(foot, footArea(foot), support);
 }
 

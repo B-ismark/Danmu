@@ -76,7 +76,7 @@ export function furnitureFloor(parts: readonly ScenePart[], axis: FloorAxis): Fl
   const dz = axis === 'width' ? 0 : 1;
   let best: FloorStop | null = null;
   for (const p of parts) {
-    const metres = 2 * footExtentAlong(footFromPart(p.pos, p.rot, p.dimMM, p.circle), dx, dz);
+    const metres = 2 * footExtentAlong(footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape), dx, dz);
     if (!Number.isFinite(metres)) continue;
     if (best === null || metres > best.metres) best = { metres, id: p.id, name: p.name };
   }

@@ -47,6 +47,7 @@ import { interiorPoint, polygonCentroid } from './footprint';
 import {
   footArea,
   footFromPart,
+  footCells,
   footInsidePoly,
   footIntersectionArea,
   footOverlap,
@@ -62,7 +63,7 @@ import {
 } from './geometry';
 import { isObstacle, roleOf, sharesFloor, WALL_GAP } from './layout-rules';
 import { findSupportDetailed, isFloorStanding, isTabletopProne, MOUNT_PAD, ridesWall, verticalExtent } from './physics';
-import type { ScenePart } from './scene-spec';
+import type { ScenePart, Shape } from './scene-spec';
 
 // Breathing room kept off a wall comes from `layout-rules` (imported above) rather
 // than being spelled out again here: a piece this pushes off a wall and a piece the
@@ -224,11 +225,11 @@ function shares(fa: Foot, fb: Foot, smaller: number): boolean {
 }
 
 function footOf(p: ScenePart): Foot {
-  return footFromPart(p.pos, p.rot, p.dimMM, p.circle);
+  return footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape);
 }
 
 function footAtXZ(p: ScenePart, x: number, z: number): Foot {
-  return footFromPart([x, p.pos[1], z], p.rot, p.dimMM, p.circle);
+  return footFromPart([x, p.pos[1], z], p.rot, p.dimMM, p.circle, p.shape);
 }
 
 /** One piece's height, and what it is standing on, after everything has moved.
@@ -420,6 +421,8 @@ export type ContainSubject = {
   rot: number;
   dimMM: [number, number, number];
   circle?: boolean;
+  /** For the L-shaped desk, whose open corner may wrap a wall's corner. */
+  shape?: Shape;
 };
 
 /** How badly one candidate position fails to seat the piece. Two numbers, because
@@ -515,33 +518,50 @@ function wallDeficits(
   // anyway is what moved a fan into the other arm of an L.
   if (!pointInPoly(x, z, poly)) return null;
   const f = subjectFootAt(piece, x, z);
+  // Per CELL, for the L-shaped desk: its box reaches past a wall whose corner sits in
+  // its open notch, and reading the box would shove a desk that wraps that corner off
+  // it. Each cell is measured as its own piece — its own centre projected onto the
+  // wall, so a cell beyond a wall's end skips that wall exactly as a box beyond it
+  // does — and a wall takes the worst cell's shortfall. A plain piece is one cell at
+  // `(x, z)`, which is the arithmetic this always did.
+  const cells = footCells(f);
   let dx = 0;
   let dz = 0;
   let total = 0;
   let any = false;
   for (let i = 0; i < poly.length; i++) {
-    const e = edgeProjection(poly, i, x, z, winding);
-    if (!e) continue;
-    // Past the end of this wall: `(px, pz)` is a corner, so the dot product below
-    // would not be this wall's clearance. See the docblock's L-room measurement.
-    if (e.t <= 1e-9 || e.t >= 1 - 1e-9) continue;
-    any = true;
-    const d = (x - e.px) * e.nx + (z - e.pz) * e.nz;
-    // `footExtentAlong`, not `obbExtentAlong`: a round piece's reach towards a wall
-    // is its ELLIPSE's, and the box overstates it by up to (root2 - 1) * r, which is
-    // 249 mm on a 1200 mm piece at 45 degrees. `escape` above already honours `circle`
-    // through `footCorners`, so measuring the shortfall off the box made `Seat.out` and
-    // `Seat.short` describe two different pieces and then ranked them as one. Measured:
-    // such a piece, already 20 mm clear of a wall, was pushed 249 mm further in and
-    // re-pushed on every settle.
-    const short = footExtentAlong(f, e.nx, e.nz) + WALL_GAP - d;
+    let short = -Infinity;
+    let nx = 0;
+    let nz = 0;
+    for (const cell of cells) {
+      const e = edgeProjection(poly, i, cell.cx, cell.cz, winding);
+      if (!e) continue;
+      // Past the end of this wall: `(px, pz)` is a corner, so the dot product below
+      // would not be this wall's clearance. See the docblock's L-room measurement.
+      if (e.t <= 1e-9 || e.t >= 1 - 1e-9) continue;
+      any = true;
+      const d = (cell.cx - e.px) * e.nx + (cell.cz - e.pz) * e.nz;
+      // `footExtentAlong`, not `obbExtentAlong`: a round piece's reach towards a wall
+      // is its ELLIPSE's, and the box overstates it by up to (root2 - 1) * r, which is
+      // 249 mm on a 1200 mm piece at 45 degrees. `escape` above already honours `circle`
+      // through `footCorners`, so measuring the shortfall off the box made `Seat.out` and
+      // `Seat.short` describe two different pieces and then ranked them as one. Measured:
+      // such a piece, already 20 mm clear of a wall, was pushed 249 mm further in and
+      // re-pushed on every settle.
+      const s = footExtentAlong(cell, e.nx, e.nz) + WALL_GAP - d;
+      if (s > short) {
+        short = s;
+        nx = e.nx;
+        nz = e.nz;
+      }
+    }
     // Only walls that WANT clearance contribute, to the push and to the total alike.
     // A wall with room to spare pushing back would be a spring, not a containment,
     // and would pull every piece to the middle of the floor.
     if (short > 0) {
       total += short;
-      dx += e.nx * short;
-      dz += e.nz * short;
+      dx += nx * short;
+      dz += nz * short;
     }
   }
   return any ? { dx, dz, total } : null;
@@ -700,7 +720,7 @@ function contain(p: ScenePart, poly: Poly, centre: readonly [number, number], wi
  *  discarded — a `Foot` is `{cx, cz, hw, hd, rot}` — so there is nothing to supply,
  *  which is exactly why `containedXZ` can answer without one. */
 function subjectFootAt(piece: ContainSubject, x: number, z: number): Foot {
-  return footFromPart([x, 0, z], piece.rot, piece.dimMM, piece.circle);
+  return footFromPart([x, 0, z], piece.rot, piece.dimMM, piece.circle, piece.shape);
 }
 
 /** How badly a part placed here escapes the room: 0 only when the whole footprint
