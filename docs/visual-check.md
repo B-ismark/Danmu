@@ -1037,25 +1037,15 @@ halves.*
 
 ### View behind a gear, collapsed rails as icon strips — merged to `main` in `5114b5f` (PR #179)
 
-**Looked at: the gear, the shut rails and the laptop keyboard route.** In the walkthrough
-the gear menu, the collapsed strips and Tab → Enter on a strip icon all passed. On a phone
-the View sheet was too tall: a 55% detent over four switches left ~66px of blank paper,
-plus a second home-bar inset inside the sheet on top of the toolbar's. **Fixed, not yet
-re-looked at:** the View sheet is as tall as its controls now (326px against 368 in
-headless Chromium at 390×844, 24px under Quality, which is the sheet's own padding), its
-grabber closes it, and no sheet pads for the home bar any more.
+**Looked at: everything but the screen reader.** In the walkthrough the gear menu, the
+collapsed strips, Tab → Enter on a strip icon, and on a phone the View sheet (now as tall
+as its controls, #187) all passed. The screen-reader stop was skipped for now, not passed.
 
-**Where to click.**
-- **Phone.** Press the toolbar's **View**. The sheet should end just under Quality. Tap its
-  grabber: it closes. Open it again, and with the sheet up, tap a piece in the room: the
-  sheet should become that piece's Details.
-- **Phone, Room or Add sheet.** Its bottom edge sits on the toolbar with no blank band.
+**Where to click.** With VoiceOver or NVDA on, shut the right rail and move through its
+strip icons.
 
 **What wrong looks like.**
-- A band of empty paper under View's last control, or the room hidden behind it.
-- Details squashed to View's short height, cutting off its controls.
-- On an iPhone, a sheet's last row tucked behind the home bar.
-- A screen reader announcing a strip icon as "button" with no name.
+- A strip icon announced as "button" with no name.
 
 **Settled without eyes.** Each strip icon asks for its section and opens the rail. The tree
 takes that request once and focuses the section. Side tooltips are placed beside their
