@@ -126,4 +126,37 @@ describe('the plan tab records a landing (§ H.6.7)', () => {
     expect(useStudio.getState().parentIds).toEqual({ lamp: 'n2' });
     expect(carriedBy('n2')).toEqual(['lamp']);
   });
+
+  it('records nothing for a click, however much the pointer jittered', () => {
+    // The room's own lamp, never linked. A press and release a couple of pixels apart
+    // still moves it a little with snap off, but it is a click, not a drop, and a
+    // recorded link is honoured where an inferred one is only a guess.
+    room({});
+    stubCanvas();
+    const { container } = render(<PlanView />);
+    const svg = container.querySelector('svg')!;
+    const key = screen.getAllByRole('button').find((b) => b.getAttribute('aria-label')?.startsWith('Lamp.'))!;
+    fireEvent.pointerDown(key, { button: 0, clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(svg, { clientX: 502, clientY: 500, pointerId: 1 });
+    expect(currentRoomScene().find((p) => p.id === 'lamp')!.pos[0]).not.toBe(0.1);
+    fireEvent.pointerUp(svg, { clientX: 502, clientY: 500, pointerId: 1 });
+    expect(useStudio.getState().parentIds).toEqual({});
+  });
+
+  it('keeps a drag’s landing its own when an arrow key moves another piece mid-drag', () => {
+    // The right nightstand is nudged off along the floor while the lamp is being
+    // dragged. Its landing — on the floor — is its own; handed to the lamp, the release
+    // unlinked a lamp still standing on the left nightstand.
+    room({ lamp: 'n1' });
+    stubCanvas();
+    const { container } = render(<PlanView />);
+    const svg = container.querySelector('svg')!;
+    const button = (name: string) => screen.getAllByRole('button').find((b) => b.getAttribute('aria-label')?.startsWith(`${name}.`))!;
+    fireEvent.pointerDown(button('Lamp'), { button: 0, clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(svg, { clientX: 490, clientY: 500, pointerId: 1 });
+    fireEvent.keyDown(button('Right'), { key: 'ArrowRight' });
+    expect(currentRoomScene().find((p) => p.id === 'n2')!.pos[0]).toBeGreaterThan(0.45);
+    fireEvent.pointerUp(svg, { clientX: 490, clientY: 500, pointerId: 1 });
+    expect(useStudio.getState().parentIds).toEqual({ lamp: 'n1' });
+  });
 });

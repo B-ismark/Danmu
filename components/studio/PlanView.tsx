@@ -722,13 +722,15 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // Empty when nothing snapped, which is the common case and draws nothing.
       if (drag) drag.snapLines = r.snapLines ?? [];
       const moved = r.pos[0] !== part.pos[0] || r.pos[1] !== part.pos[1] || r.pos[2] !== part.pos[2];
-      if (moved) setPosition(part.id, r.pos);
-      // What it now stands on, the way the 3D tab's drop records it. This tab never
-      // did, so a lamp moved here onto the other nightstand kept the first one's
-      // link and stayed behind when the second one moved (§ H.6.7). A nudge has no
-      // drop to wait for; a drag records it on release.
       if (moved) {
-        if (drag) drag.landed = { on: r.supportId };
+        setPosition(part.id, r.pos);
+        // What it now stands on, the way the 3D tab's drop records it. This tab never
+        // did, so a lamp moved here onto the other nightstand kept the first one's
+        // link and stayed behind when the second one moved (§ H.6.7). A nudge has no
+        // drop to wait for; a drag records it on release. Asked of THIS piece: an arrow
+        // key can move another one while a drag is under way, and its landing is its
+        // own, not the dragged piece's.
+        if (drag?.id === part.id) drag.landed = { on: r.supportId };
         else landOn(part.id, r.supportId);
       }
       // A wall-mounted piece is turned by the wall it lands on, not by the drag.
@@ -1228,7 +1230,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
         const dropped = parts.find((p) => p.id === dragRef.current?.id);
         playSound(blockedRef.current ? 'blocked' : 'drop', { size: sizeOf(dropped?.dimMM) });
       }
-      if (dragRef.current.landed) landOn(dragRef.current.id, dragRef.current.landed.on);
+      // A drop, not a click: a press that never left its slop records nothing, or a
+      // few pixels of jitter would turn a lamp's inferred link into a recorded one.
+      if (dragRef.current.moved && dragRef.current.landed) landOn(dragRef.current.id, dragRef.current.landed.on);
       // The per-gesture convoy snapshot dies with it — see the comment on the ref.
       dragRef.current = null;
       setDragging(null);
