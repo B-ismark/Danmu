@@ -4,21 +4,27 @@ import { footprintForLayout } from '@/lib/footprint';
 import { lockedForSolve, makeRng, movableFor, randomizeStart, solveLayout, withRiders } from '@/lib/layout-solve';
 import { applyPlacements } from '@/lib/layout-shuffle';
 import { ridingParents } from '@/lib/rigid-parent';
-import { footArea, footFromPart, footIntersectionArea, localToWorld } from '@/lib/geometry';
+import { footArea, footFromPart, footInsidePoly, footIntersectionArea, localToWorld } from '@/lib/geometry';
 import { MIN_SUPPORT_SHARE, verticalExtent } from '@/lib/physics';
 import { containedBySearch, isObstacle } from '@/lib/layout-rules';
-import { costBreakdown, DEFAULT_WEIGHTS, NAV_CELL, prepare, type LayoutContext } from '@/lib/layout-score';
+import { costBreakdown, DEFAULT_WEIGHTS, NAV_CELL, prepare, type LayoutContext, type Placement } from '@/lib/layout-score';
 
 // A piece standing ON another piece is not a place the search gets to choose.
 //
 // ── What this file is guarding, and why nothing else could ──────────────────
 //
-// Every hard term in `costBreakdown` accumulates inside `if (!obstacle[i]) continue`
+// `overlap`, `door` and `navigation` accumulate inside `if (!obstacle[i]) continue`,
 // and `isObstacle` requires `pos[1] < 0.05`, so a piece resting on furniture is
-// invisible to `overlap`, `outside`, `door`, `access` and `navigation` — all five of
-// `HARD_TERMS`, which is the entire list `isCleanShuffle` reads. `lib/clearance.ts`
-// is silent for the same reason. And the 2D plan draws a lamp ON a nightstand and a
-// lamp INSIDE a bed as the same rectangle, because it is looking down.
+// invisible to three of the five `HARD_TERMS` `isCleanShuffle` reads. `access` gates
+// only the pieces standing IN a zone that way, and prices a rider's own zones at the
+// search's guess for it — where its own support stands in them, a leak filed open in
+// `docs/what-is-still-open.md` § H.6.2 and not guarded here. `outside` sees a rider
+// only at the pose the carry will give it (`LayoutModel.carry`, the last describe
+// below), and only since a chair on a sofa's backrest was carried through the plaster
+// on every seed that moved the sofa. `lib/clearance.ts` is silent about a lamp inside a bed
+// for the same reason (a rider through a WALL it does report, but only once the
+// solve has handed the room over). And the 2D plan draws a lamp ON a nightstand and
+// a lamp INSIDE a bed as the same rectangle, because it is looking down.
 //
 // So the defect this file exists for had no gate anywhere in the app, and the
 // measurement below is the only thing that can go red. Read the assertions in that
@@ -624,5 +630,303 @@ describe('the reported cost describes the returned placements', () => {
       if (r.moved.some((i) => parts[i].id in rides)) riderMoved++;
     }
     expect(riderMoved, 'a rider must actually be moving on most seeds').toBeGreaterThan(4);
+  }, 60000);
+});
+
+// A chair stood on a sofa's backrest. The search slid the sofa flush to the north
+// wall — a good move for the sofa — and the carry then swung the chair 44–73 mm
+// through the plaster on every one of these six seeds, 65–90 mm on the presets.
+// Nothing in the search priced it — the chair is off the floor, so no hard term saw
+// it — and Room check could only report it afterwards, with no **Try a fix**. The
+// search prices a carried rider now, at the pose `carryRiders` will give it, so it
+// stops the sofa short instead.
+describe('a rider is held inside the walls where the carry will put it', () => {
+  const room = footprintForLayout('rect', 6, 4);
+  /** The sofa's back is 475 mm behind its centre and the chair's 550 mm, so a sofa
+   *  at `z` puts the chair's back 75 mm further north than its own. */
+  const build = (sofaZ: number, pinned: Record<string, boolean> = {}) => {
+    const sofa = part({
+      id: 'sofa', name: 'Sofa', category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [0, 0, sofaZ],
+    });
+    const chair = part({
+      id: 'chair', name: 'Dining chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850],
+      pos: [0, 0.88, sofaZ - 0.3],
+    });
+    const parts = [sofa, chair];
+    const locked = lockedForSolve(parts, pinned, null);
+    const model = prepare({ parts, movable: movableFor(parts, locked), footprint: room } as LayoutContext);
+    const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    const outside = (sofaAt: Placement, chairAt: Placement = origin[1]) =>
+      costBreakdown(model, [sofaAt, chairAt], DEFAULT_WEIGHTS, NAV_CELL).outside;
+    return { parts, locked, model, origin, outside };
+  };
+  /** The sofa's back on the north wall: the chair's back is 75 mm through it. */
+  const FLUSH: Placement = { x: 0, z: -1.525, yaw: 0 };
+  /** What 75 mm through a wall costs a 500 × 500 chair, measured. Same number in
+   *  every case below that charges it, which is the point: the chair pays for
+   *  where its SUPPORT puts it, never for its own placement. */
+  const THROUGH_75MM = 212.132034356;
+  const ELSEWHERE: Placement = { x: 2.9, z: 1.9, yaw: 1 };
+
+  it('the fixture is a chair riding a sofa, both inside the walls', () => {
+    const { parts, model, outside, origin } = build(-1.025);
+    expect(ridingParents(parts)).toEqual({ chair: 'sofa' });
+    expect(model.carry.map((c) => c.links.map((l) => [l.i, l.on, l.carried])), 'one chain, rooted at the sofa')
+      .toEqual([[[1, -1, true]]]);
+    expect(outside(origin[0])).toBe(0);
+  });
+
+  it('charges the chair when the sofa goes flush to the wall, wherever the chair itself was placed', () => {
+    const { outside } = build(-1.025);
+    expect(outside(FLUSH)).toBeCloseTo(THROUGH_75MM, 6);
+    // The chair's own placement is not what is priced — it is overwritten by the
+    // carry, so pricing it would price a place the chair never goes.
+    expect(outside(FLUSH, ELSEWHERE)).toBeCloseTo(THROUGH_75MM, 6);
+    // A sofa turned on its own spot swings the chair to its front: in the room.
+    expect(outside({ x: 0, z: -1.025, yaw: Math.PI })).toBe(0);
+  });
+
+  it('with the sofa at home, prices the chair at its own spot, not at its placement', () => {
+    const { outside, origin } = build(-1.025);
+    // ELSEWHERE stands the chair 100 mm from the south-east corner at a 57° turn,
+    // well through both walls.
+    expect(outside(origin[0], ELSEWHERE)).toBe(0);
+  });
+
+  it('does not price a chair the user locked — the carry leaves it, so there is nothing to price', () => {
+    const { model, outside, locked } = build(-1.025, { chair: true });
+    expect(locked).toEqual([false, true]);
+    expect(model.carry[0].links[0].carried).toBe(false);
+    expect(outside(FLUSH)).toBe(0);
+  });
+
+  it('forgives a chair left over the skirting on its own spot, and nowhere else', () => {
+    // The user stood it there: the sofa flush, the chair 75 mm through. That is
+    // theirs, exactly as a rug's overhang is (`outsidePast`) — and like a rug's, the
+    // allowance belongs to that spot, not to the chair.
+    const { model, outside, origin } = build(-1.525);
+    expect(model.overhang[1], 'the fixture really does start through the wall').toBeGreaterThan(0);
+    expect(outside(origin[0])).toBe(0);
+    expect(outside({ x: 0.5, z: -1.525, yaw: 0 }), 'slid along the same wall: the full measure').toBeCloseTo(THROUGH_75MM, 6);
+    expect(outside({ x: 1e-9, z: -1.525, yaw: 0 }), 'a hair off counts as off').toBeCloseTo(THROUGH_75MM, 6);
+    // Turned on the spot is off the spot too. The sofa's own corners go through the
+    // wall at this angle as well, so the chair's share is what is left once a model
+    // with the chair locked (and so not carried, and so not priced) has paid the
+    // sofa's.
+    const turned: Placement = { x: 0, z: -1.525, yaw: 0.1 };
+    const sofaAlone = build(-1.525, { chair: true }).outside(turned);
+    expect(sofaAlone, 'the sofa pays for its own corners').toBeCloseTo(89.672772633, 6);
+    expect(outside(turned) - sofaAlone, 'and the chair pays for its own').toBeCloseTo(274.953225315, 6);
+  });
+
+  // At home the pass reads the rider's own pose rather than recomputing it through
+  // the carry. The two agree on paper and not in floating point: on a sofa turned
+  // 0.02 rad the carry lands this chair a few ULPs off its own spot — 150 of 400
+  // turned stacks swept did — and a hair off is off (above), so the chair the user
+  // left over the skirting would be charged its whole overhang for standing still.
+  it('prices a rider at home at its own pose exactly, on a turned support too', () => {
+    const ROT = 0.02;
+    const sofa = part({
+      id: 'sofa', category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [0.2, 0, -1.48], rot: ROT,
+    });
+    const [ox, oz] = localToWorld(ROT, -0.3, -0.3);
+    const chair = part({
+      id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850],
+      pos: [0.2 + ox, 0.88, -1.48 + oz], rot: ROT,
+    });
+    const parts = [sofa, chair];
+    expect(ridingParents(parts)).toEqual({ chair: 'sofa' });
+    const model = prepare({ parts, movable: movableFor(parts, lockedForSolve(parts, {}, null)), footprint: room } as LayoutContext);
+    expect(model.overhang[1], 'the chair starts through the wall').toBeCloseTo(0.081713459, 8);
+    const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    expect(costBreakdown(model, origin, DEFAULT_WEIGHTS, NAV_CELL).outside).toBe(0);
+  });
+
+  // A lamp on a tray on a desk: the lamp is priced from where the TRAY will be, and
+  // the tray from where the desk will be. Priced straight off the desk the lamp would
+  // stand 150 mm further in, inside the room, and cost nothing.
+  it('follows a chain: each rider is priced from the piece under it', () => {
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750] });
+    const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [400, 400, 60], pos: [0, 0.75, -0.15] });
+    const lamp = part({
+      id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.81, -0.25],
+    });
+    const parts = [desk, tray, lamp];
+    expect(ridingParents(parts), 'the fixture must BE a chain').toEqual({ tray: 'desk', lamp: 'tray' });
+    const model = prepare({ parts, movable: movableFor(parts, lockedForSolve(parts, {}, null)), footprint: room } as LayoutContext);
+    // ONE chain, rooted at the desk. The tray is a support but not a root: a chain
+    // of its own would price the lamp a second time, from wherever the search left
+    // the tray — which is nowhere the carry puts it.
+    expect(model.carry.map((c) => c.links.map((l) => [l.i, l.on, l.carried]))).toEqual([[[1, -1, true], [2, 0, true]]]);
+    const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    // The desk's back on the north wall: the tray's back is flush with it, the lamp's
+    // 25 mm through.
+    const flush = costBreakdown(model, [{ x: 0, z: -1.65, yaw: 0 }, origin[1], origin[2]], DEFAULT_WEIGHTS, NAV_CELL);
+    expect(flush.outside).toBeCloseTo(141.421356237, 6);
+  });
+
+  // The same stack with the tray locked. The carry leaves the tray, so the lamp on it
+  // stays too: its support is the tray, not the desk. Cascaded off the desk's stack
+  // and then skipped, the tray used to be the one link that stayed — the lamp went
+  // with the desk and stood on nothing, a tray's height above the desk's new spot,
+  // on 6 of 6 shuffled seeds (and on the parent commit's carry too).
+  it('leaves a lamp on a locked tray on the tray when the desk under it goes', () => {
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750] });
+    const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [400, 400, 60], pos: [0, 0.75, -0.15] });
+    const lamp = part({
+      id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.81, -0.25],
+    });
+    const parts = [desk, tray, lamp];
+    const locked = lockedForSolve(parts, { tray: true }, null);
+    const model = prepare({ parts, movable: movableFor(parts, locked), footprint: room } as LayoutContext);
+    expect(model.carry.map((c) => c.links.map((l) => [l.i, l.on, l.carried]))).toEqual([[[1, -1, false], [2, 0, true]]]);
+    const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    // Where the desk flush to the north wall took the lamp 25 mm through, above: here
+    // it does not take the lamp anywhere.
+    const flush = costBreakdown(model, [{ x: 0, z: -1.65, yaw: 0 }, origin[1], origin[2]], DEFAULT_WEIGHTS, NAV_CELL);
+    expect(flush.outside).toBe(0);
+    for (let seed = 1; seed <= 3; seed++) {
+      const r = solveLayout(parts, room, locked, { seed, mode: 'shuffle' });
+      const [d, t, l] = applyPlacements(parts, r);
+      // THE CONTROL: a shuffle that left the desk alone passes the rest for free.
+      expect(Math.hypot(d.pos[0], d.pos[2]), `seed ${seed}: the desk did go`).toBeGreaterThan(1);
+      expect(t.pos, `seed ${seed}: the tray is locked`).toEqual(tray.pos);
+      expect(l.pos, `seed ${seed}: so the lamp stays where it stood`).toEqual(lamp.pos);
+      expect(restsOn(l, t), `seed ${seed}: on the tray`).toBe(true);
+    }
+  }, 60000);
+
+  // …and a lamp the user left over the skirting on that tray keeps its allowance
+  // there: the tray is where the user left it, so the lamp is home whatever the desk
+  // does. Priced through the tray's frame instead, on this turned tray it lands
+  // 7e-18 m off its own spot, and a hair off is off.
+  it('keeps the allowance of a lamp over the skirting on a locked tray the desk leaves', () => {
+    const ROT = 0.03;
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750], pos: [0, 0, -1.5], rot: ROT });
+    const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [400, 400, 60], pos: [0, 0.75, -1.79], rot: ROT });
+    const [ox, oz] = localToWorld(ROT, 0.05, -0.11);
+    const lamp = part({
+      id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [ox, 0.81, -1.79 + oz], rot: ROT,
+    });
+    const parts = [desk, tray, lamp];
+    expect(ridingParents(parts), 'the fixture must BE a chain').toEqual({ tray: 'desk', lamp: 'tray' });
+    const model = prepare({ parts, movable: movableFor(parts, lockedForSolve(parts, { tray: true }, null)), footprint: room } as LayoutContext);
+    expect(model.overhang[2], 'the lamp starts through the wall').toBeGreaterThan(0);
+    const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    expect(costBreakdown(model, [{ x: 0, z: 0, yaw: 0 }, origin[1], origin[2]], DEFAULT_WEIGHTS, NAV_CELL).outside).toBe(0);
+  });
+
+  // The same rule for a link the SEARCH holds rather than the user. A crate standing on
+  // a 40 mm platform is in the band where `ridingParents` and `isObstacle` overlap, so
+  // the search prices it where it put it and the carry leaves it there — and what stands
+  // on it goes from THERE, in both readers. Rare by construction: a contained middle
+  // link needs a support that is not a rug and is under 50 mm tall, and a rug is never
+  // handed out as a support, so this fixture is the only way either branch is reached.
+  it('prices and carries a lamp on a crate the search is holding, from the crate', () => {
+    const mat = part({ id: 'mat', name: 'Platform', category: 'other', shape: 'box', dimMM: [1000, 1000, 40] });
+    const crate = part({
+      id: 'crate', name: 'Crate', category: 'other', shape: 'box', dimMM: [500, 500, 400], pos: [0, 0.04, 0],
+    });
+    const lamp = part({
+      id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.44, -0.1],
+    });
+    const parts = [mat, crate, lamp];
+    expect(ridingParents(parts), 'the fixture must BE a chain').toEqual({ crate: 'mat', lamp: 'crate' });
+    expect(containedBySearch(crate), 'with its middle link held by the search').toBe(true);
+    const locked = lockedForSolve(parts, {}, null);
+    const movable = movableFor(parts, locked);
+    const model = prepare({ parts, movable, footprint: room } as LayoutContext);
+    expect(model.carry.map((c) => c.links.map((l) => [l.i, l.on, l.carried]))).toEqual([[[1, -1, false], [2, 0, true]]]);
+
+    // The platform at home and the crate 50 mm through the north wall, so the lamp on
+    // it is 25 mm through — the desk's lamp's 141.421 above. The control is the same
+    // placements with the lamp locked, which the carry does not price at all, so the
+    // difference is the lamp's own share. Priced from the platform instead of the
+    // crate, the lamp is at home and that share is zero.
+    const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    const at: Placement[] = [origin[0], { x: 0, z: -1.8, yaw: 0 }, origin[2]];
+    const lampLocked = prepare({
+      parts, movable: movableFor(parts, lockedForSolve(parts, { lamp: true }, null)), footprint: room,
+    } as LayoutContext);
+    const share =
+      costBreakdown(model, at, DEFAULT_WEIGHTS, NAV_CELL).outside -
+      costBreakdown(lampLocked, at, DEFAULT_WEIGHTS, NAV_CELL).outside;
+    expect(share).toBeCloseTo(141.421356237, 6);
+
+    // …and the carry agrees: wherever the search leaves the crate, the lamp is on it.
+    let apart = 0;
+    for (let seed = 0; seed < 6; seed++) {
+      const start = randomizeStart(parts, room, movable, makeRng(seed));
+      const r = solveLayout(parts, room, locked, { seed, mode: 'shuffle', start });
+      const [m, c, l] = applyPlacements(parts, r);
+      // THE CONTROL: a crate still at the platform's centre is where the platform's
+      // own cascade would have put it, and passes the assertion below for free.
+      if (Math.hypot(c.pos[0] - m.pos[0], c.pos[2] - m.pos[2]) > 0.05) apart++;
+      expect(restsOn(l, c), `seed ${seed}: the lamp stands on the crate`).toBe(true);
+    }
+    expect(apart, 'the search must actually part the crate from the platform').toBeGreaterThan(1);
+  }, 60000);
+
+  // A rider turned on its support is carried turned: its angle is the support's plus
+  // its own `relRot`, and so is the footprint priced. Every other fixture in this
+  // describe stands its rider square, where dropping `relRot` changes nothing.
+  it('prices a rider turned on its support at the turn the carry gives it', () => {
+    const TURN = 0.5;
+    const sofa = part({
+      id: 'sofa', category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [0, 0, -1.025],
+    });
+    const chair = part({
+      id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0.88, -1.225], rot: TURN,
+    });
+    const parts = [sofa, chair];
+    expect(ridingParents(parts), 'the fixture must ride').toEqual({ chair: 'sofa' });
+    const model = prepare({ parts, movable: movableFor(parts, lockedForSolve(parts, {}, null)), footprint: room } as LayoutContext);
+    const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    const priced = costBreakdown(model, [FLUSH, origin[1]], DEFAULT_WEIGHTS, NAV_CELL).outside;
+    // The oracle is the same chair standing on the floor where the carry puts it —
+    // 500 mm north, still turned — priced as the obstacle it would be there.
+    const alone = part({ id: 'alone', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850] });
+    const floor = prepare({ parts: [alone], movable: [true], footprint: room } as LayoutContext);
+    const there = costBreakdown(floor, [{ x: 0, z: -1.725, yaw: TURN }], DEFAULT_WEIGHTS, NAV_CELL).outside;
+    expect(there, 'the turned chair does go through').toBeGreaterThan(0);
+    expect(priced).toBeCloseTo(there, 9);
+    const square = costBreakdown(floor, [{ x: 0, z: -1.725, yaw: 0 }], DEFAULT_WEIGHTS, NAV_CELL).outside;
+    expect(Math.abs(there - square), 'and the turn is what decides how far').toBeGreaterThan(1);
+  });
+
+  // The solver folds every answer's yaws into (−π, π] (`normaliseYaw`); a piece keeps
+  // whatever turn the user gave it. A sofa turned to 2π comes back at 0 having not
+  // moved, and its chair — left over the skirting — is still on its own spot.
+  it('reads a support turned a whole turn as home', () => {
+    const TAU = 2 * Math.PI;
+    const sofa = part({
+      id: 'sofa', category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [0, 0, -1.525], rot: TAU,
+    });
+    const chair = part({
+      id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0.88, -1.825], rot: TAU,
+    });
+    const parts = [sofa, chair];
+    expect(ridingParents(parts)).toEqual({ chair: 'sofa' });
+    const model = prepare({ parts, movable: movableFor(parts, lockedForSolve(parts, {}, null)), footprint: room } as LayoutContext);
+    expect(model.overhang[1], 'the chair starts through the wall').toBeGreaterThan(0);
+    const at = (yaw: number) =>
+      costBreakdown(model, [{ x: 0, z: -1.525, yaw }, { x: 0, z: -1.825, yaw }], DEFAULT_WEIGHTS, NAV_CELL).outside;
+    expect(at(TAU)).toBe(0);
+    expect(at(0), 'the fold the solver applies').toBe(0);
+    expect(at(1e-9), 'a hair of turn is off').toBeCloseTo(THROUGH_75MM, 3);
+  });
+
+  it('a solve that moves the sofa toward the wall keeps the chair inside it, over six seeds', () => {
+    const { parts, locked } = build(-1.025);
+    for (let seed = 1; seed <= 6; seed++) {
+      const r = solveLayout(parts, room, locked, { seed });
+      const after = applyPlacements(parts, r);
+      const [sofa, chair] = after;
+      expect(footInsidePoly(foot(chair), room), `seed ${seed}: chair inside the walls`).toBe(true);
+      // THE CONTROLS. A solve that left the sofa where it was passes the line above
+      // for free, and so does one that left the chair behind on the floor.
+      expect(sofa.pos[2], `seed ${seed}: the sofa did go toward the wall`).toBeLessThan(-1.3);
+      expect(restsOn(chair, sofa), `seed ${seed}: the chair is still on the sofa`).toBe(true);
+    }
   }, 60000);
 });

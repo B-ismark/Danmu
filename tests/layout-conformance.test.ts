@@ -38,6 +38,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { analyzeRoom } from '@/lib/clearance';
 import {
+  angleDelta,
   costBreakdown,
   DEFAULT_WEIGHTS,
   overhangsOffItsSpot,
@@ -774,6 +775,24 @@ describe('layout-rules · a rug is forgiven by the report and held to the plaste
       expect(asks(leftAt(2.3), { x: 2.1, z: 0, yaw: 0 }), '100 mm through is still through').toBe(true);
       expect(asks(leftAt(2.3), { x: 0, z: 1.6, yaw: 0 }), 'and so is another wall').toBe(true);
       expect(asks(leftAt(2.3), { x: 1.99, z: 0, yaw: 0 })).toBe(false);
+    });
+
+    // The solver hands every answer's yaws back folded into (−π, π] (`normaliseYaw`),
+    // while a rug keeps whatever turn the user gave it: one turned to 2π comes back at
+    // 0 without having moved. That is two things to get right, and the second fixture
+    // is for the second: recognising the spot, and then pricing it as the rug STANDS
+    // (`ownSpotCharge`) rather than from the folded angle, whose sine and cosine are a
+    // few ULPs off the raw one's. Priced from the folded angle, 218 of 748 turned rugs
+    // over the skirting swept came back a hair past their own allowance, and `> 0` is
+    // exactly where a hair lands — which is why this asks the predicate, not a cost.
+    it('reads a whole turn as the same spot, and a hair of turn as off it', () => {
+      const turned = { ...leftAt(2.3), rot: 2 * Math.PI };
+      expect(asks(turned, { x: 2.3, z: 0, yaw: 0 }), 'the fold the solver applies').toBe(false);
+      expect(asks(turned, { x: 2.3, z: 0, yaw: 2 * Math.PI })).toBe(false);
+      expect(asks(turned, { x: 2.3, z: 0, yaw: 1e-9 })).toBe(true);
+      const corner = { ...leftAt(2.3), pos: [2.3, 0, 1.5] as [number, number, number], rot: -2.73 + 2 * Math.PI };
+      expect(asks(corner, { x: 2.3, z: 1.5, yaw: -2.73 + 2 * Math.PI })).toBe(false);
+      expect(asks(corner, { x: 2.3, z: 1.5, yaw: angleDelta(corner.rot, 0) }), 'priced as it stands').toBe(false);
     });
 
     it('holds a rug laid wall to wall to the one place it fits', () => {
