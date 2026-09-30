@@ -68,7 +68,8 @@ section is yours to fix if you are the one reading it.
 
 ## Sizes and fit
 
-*Owner: `sizes`. Every item previously listed here was looked at and is gone.*
+*Owner: `sizes`. Every item previously listed here was looked at and is gone — the last,
+a wall stopping 60 cm short of another wall, on 2026-09-30.*
 
 *Two standing caveats for everything in this section. **No test in this repo renders
 geometry** — a control mutation (`FanGeo` passing a literal `200` instead of
@@ -77,7 +78,7 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### The Will it fit chips are the kind's own sizes — this branch, NOT LOOKED AT
+### The Will it fit chips are the kind's own sizes — merged in #195 (`0aa19b2`), NOT LOOKED AT
 
 In the Room panel's **Will it fit** tab, step through all ten kinds and read the chip
 row under the size fields. Each kind should offer only pieces of its own kind: Bed gets
@@ -86,24 +87,6 @@ both get *Dining / desk table*; every other kind gets one chip. Press a chip, th
 **Check the room**: "wrong" is any chip that fills in a size the panel then calls out of
 range, or a chip row that wraps badly now that most kinds have one chip where they had
 up to four.
-
-### A wall stops before it runs into another wall — merged in #191 (`4572419`)
-
-**Where to click.** A **T-Shape** room, 3D and then 2D Plan. Drag the wall under one arm of
-the bar north, toward the north wall, as far as it will go. Then drag a side wall of the stem
-out past the end of the bar. Then open the room from the screenshot that found this (the one
-whose wing lies across the bedroom) and drag the crossing wall back.
-
-**What changed.** A wall drag only checked the room's overall width and depth, so a wall could
-pass straight through another and fold the floor over itself. It now stops 60 cm short of any
-wall it does not share a corner with, and before the wall beside it gets shorter than 60 cm,
-and says which (`wallTravel`, `lib/footprint.ts`). A room that is already folded is left free
-until it is unfolded, so it can be mended.
-
-**What "wrong" looks like.** A wall stopping well short of 60 cm from the next, or stopping
-with no sentence. A fast flick at the plan's lowest zoom getting through where a slow drag
-did not. The folded room refusing to come back. Furniture on the moved wall not following it
-to where it stopped.
 
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
@@ -153,6 +136,26 @@ three.js object with **no DOM**, so nothing in Playwright can aim a press at its
 the 2D half of that defect **is** browser-checked and is not in this list. The refusal
 sentence, because the question it raises is a judgement about what the app should do, not
 a fact a test can settle.*
+
+### A rug the wall carries stops it, and the wall's knob stands clear of the furniture
+
+**Where to click.** An **L-Shape** room, 3D. Select the TV wall and drag it in toward the
+rug in front of it, then keep going. Then do the same with the plan's arrow keys on that
+wall. Then, in any room, select a wall that has a wardrobe or a bookcase against it.
+
+**What changed.** A rug close to a wall is CARRIED by it rather than pushed, and a carried
+piece that ran out of room was simply left behind — so the wall walked on through the rug
+while a pushed sofa stopped it. Now the rug rides the wall until it meets the far side, waits
+there, and the wall stops when it reaches it, with *"That wall stops here: the Area rug has
+no more room to move."* Separately, the 3D knob sat halfway up the wall face, inside
+anything tall standing against it; it now sits on the wall's top edge.
+
+**What "wrong" looks like.** The wall passing over the rug. The rug jumping back to where it
+began when you draw the wall out again in the same drag. A carried sofa or lamp stopping the
+wall while there is still clear floor between them. The knob hidden, clipped by the ceiling,
+or no longer grabbable from the dollhouse view.
+
+**Where it rides.** Branch `claude/affectionate-ritchie-ilawx1`.
 
 ### A refusal that names the wall instead of an obstruction that is not there
 

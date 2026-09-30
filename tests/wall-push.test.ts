@@ -153,6 +153,42 @@ describe('the wall stops where the stack runs out of room, and names what stoppe
     expect(z(r.moves, 'table')).toBeCloseTo(0.3, 9);
   });
 
+  it('at a piece it carries, too, when that one runs out of room', () => {
+    // A rug 200 mm off the wall, within the carry's reach, so it goes WITH the wall
+    // rather than being pushed. Its far edge meets the South wall after 4.4 m; it
+    // waits there, and the wall stops when it reaches it — 200 mm on, leaving a room
+    // exactly as deep as the rug. It used to be left where it stood and the wall
+    // walked on through it.
+    const rug = part({ id: 'rug', name: 'Rug', category: 'rug', shape: 'rug', pos: [0, 0, -2.1], dimMM: [2000, 1400, 10] });
+    const r = pushedByWall([rug], ROOM, NORTH, 5, ['rug'], {});
+    expect(r.stoppedBy).toEqual({ id: 'rug', name: 'Rug', reason: 'room' });
+    // Inside the containment test's 2 mm of plaster tolerance, like every stop here.
+    expect(r.inward).toBeGreaterThanOrEqual(4.6 - 1e-6);
+    expect(r.inward).toBeLessThanOrEqual(4.6 + 0.002 + 1e-6);
+    // Between the two it is parked on the far wall, and nothing stops.
+    const between = pushedByWall([rug], ROOM, NORTH, 4.5, ['rug'], {});
+    expect(between.stoppedBy).toBeNull();
+    expect(z(between.moves, 'rug')).toBeCloseTo(3 - 0.7 + 0.002, 6);
+    // Before it gets there the carry has it and the push says nothing.
+    expect(pushedByWall([rug], ROOM, NORTH, 4, ['rug'], {}).moves).toEqual([]);
+    // A piece hung on the wall goes wherever the wall goes, and stops nothing —
+    // flush on the plaster, or 10 mm through it as a detection can land.
+    for (const z of [-2.97, -2.98]) {
+      const tv = part({ id: 'tv', category: 'tv', shape: 'tv', wallMounted: true, pos: [0, 1.4, z], dimMM: [1400, 60, 800] });
+      expect(pushedByWall([tv], ROOM, NORTH, 5, ['tv'], {}).stoppedBy).toBeNull();
+    }
+  });
+
+  it('leaves what it carries to the carry, however close and whatever is in front', () => {
+    // A sofa 50 mm off the wall and a sideboard just ahead of it, both carried: the
+    // wall meets the sofa and the sofa meets the sideboard, and neither is PUSHED —
+    // a push answer here would override the carry and leave them lagging the wall.
+    const sofa = part({ id: 'sofa', pos: [0, 0, -3 + 0.05 + 0.45], dimMM: [2000, 900, 800] });
+    const board = part({ id: 'board', category: 'table', shape: 'coffee-table', pos: [0, 0, -3 + 0.05 + 0.9 + 0.01 + 0.225], dimMM: [1600, 450, 800] });
+    const r = pushedByWall([sofa, board], ROOM, NORTH, 1, ['sofa', 'board'], {});
+    expect(r).toEqual({ inward: 1, moves: [], stoppedBy: null });
+  });
+
   it('at a piece hung on the far wall, which it cannot slide', () => {
     const tv = part({ id: 'tv', name: 'TV', category: 'tv', shape: 'tv', wallMounted: true, rot: Math.PI, pos: [0, 1.4, 3 - 0.03], dimMM: [1400, 60, 800] });
     const r = pushedByWall([tv], ROOM, NORTH, 5.99, [], {});
