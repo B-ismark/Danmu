@@ -1014,9 +1014,17 @@ function carryRiders(model: LayoutModel, origin: Placement[], winner: Placement[
  * L/T/U shaped room does not spend its whole budget climbing out of the notch the
  * bounding box adds; see rule 3 of `CLAUDE.md` on why a box is not a floor.
  *
+ * A merged set (`rigidSets`) is scattered as ONE body: its lead draws a point and a
+ * heading like any piece, and the rest of the set arrives around it exactly as it
+ * stands in the room, so the annealer starts from the set whole and every move after
+ * keeps it that way. Each member still takes its own draws, discarded, so merging
+ * pieces does not change what any other piece draws.
+ *
  * `locked`/`movable` is `parts`-index-aligned, the same array `solveLayout` itself
  * derives from `locked` and `wallMounted` — passed in rather than recomputed so the
- * two never compute it two different ways.
+ * two never compute it two different ways. It is `movableFor`'s answer, which makes a
+ * set movable all or none; an array built any other way that moves half a set
+ * scatters that half as a smaller set, and holds the rest where it stands.
  */
 export function randomizeStart(
   parts: ScenePart[],
@@ -1045,15 +1053,15 @@ export function randomizeStart(
     return { x, z, yaw: rng() * Math.PI * 2 };
   });
   // A merged set is scattered as one body: the lead where it landed, the rest where
-  // they stand relative to it in the room as given. The members' own draws are still
-  // taken above and thrown away, so a set does not reseed the pieces after it.
-  for (const set of rigidSets(parts, movable).sets) {
-    const lead = parts[set[0]];
-    const turn = angleDelta(out[set[0]].yaw, lead.rot);
-    for (const k of set.slice(1)) {
-      const [ox, oz] = localToWorld(turn, parts[k].pos[0] - lead.pos[0], parts[k].pos[2] - lead.pos[2]);
-      out[k] = { x: out[set[0]].x + ox, z: out[set[0]].z + oz, yaw: normaliseYaw(parts[k].rot + turn) };
-    }
+  // they stand relative to it in the room as given — the set put back as it stands,
+  // then carried to the lead's draw by the same `carryUnit` every later pass uses. The
+  // members' own draws are still taken above and thrown away, so a set does not
+  // reseed the pieces after it.
+  const r = rigidSets(parts, movable);
+  for (const set of r.sets) {
+    const to = out[set[0]];
+    for (const k of set) out[k] = { x: parts[k].pos[0], z: parts[k].pos[2], yaw: parts[k].rot };
+    carryUnit(r, out, set[0], to);
   }
   return out;
 }
