@@ -37,6 +37,7 @@ import {
   footArea,
   footIntersectionArea,
   frontVector,
+  localToWorld,
   nearestEdge,
   obbGap,
   outsideDeficit,
@@ -75,6 +76,7 @@ import {
   type RoomProfile,
   type RuleKind,
 } from './layout-rules';
+import { ridingParents, snapshotDescendants, type DescendantOffset } from './rigid-parent';
 
 /** A part reduced to what the solver moves. Deliberately not a `ScenePart`: the
  *  dimensions are inputs, and a type that cannot express changing them is worth
@@ -304,6 +306,28 @@ export type LayoutContext = {
 type LocalZone = { lx: number; lz: number; hw: number; hd: number; r: number; area: number };
 type ZoneGroup = { rule: AccessRule; boxes: LocalZone[] };
 
+/** One piece standing on another, in a stack the solve carries — see
+ *  `LayoutModel.carry`. Index-aligned with its chain's `snapshot`. */
+type CarryLink = {
+  /** The rider. */
+  i: number;
+  /** The slot in the same chain of the piece it stands on, or `-1` for the root. */
+  on: number;
+  /** Moved with its support, and priced where it goes: `ctx.movable` (so not
+   *  locked) and not `contained` — a piece the search already holds inside the walls
+   *  is left where the search put it, and priced there. */
+  carried: boolean;
+  /** Scratch: its footprint for the placements being scored. */
+  foot: Foot;
+};
+export type CarryChain = {
+  /** The support at the bottom of the stack. */
+  root: number;
+  /** `snapshotDescendants` for it, taken from `ctx.parts` — what the carry replays. */
+  snapshot: DescendantOffset[];
+  links: CarryLink[];
+};
+
 /** Everything about the room that does not change while the solver runs. Built
  *  once by `prepare`, then handed to every `scoreLayout` call.
  *
@@ -326,9 +350,29 @@ export type LayoutModel = {
   /** How far through the walls each piece is FORGIVEN for being where it stands, on
    *  the same 0..1 scale the containment pass charges (`outsideMeasure`). Zero for
    *  everything but a rug (`forgivesOverhang`) whose centre is on the plan where the
-   *  user has it — and for that rug, the overhang it has there. Forgiven THERE and
-   *  nowhere else (`outsidePast`); see the containment pass. */
+   *  user has it — and for that rug, the overhang it has there — and for a rider the
+   *  solve carries (`carry`), the overhang it has where it stands. Forgiven THERE
+   *  and nowhere else (`outsidePast`); see the containment pass. */
   overhang: number[];
+  /** The pieces standing on other pieces, grouped under the support at the bottom
+   *  of each stack, and where each one goes when that support moves.
+   *
+   *  A rider is carried AFTER the search (`carryRiders`, `lib/layout-solve.ts`), so
+   *  where the search put it is not where it ends up — and, standing off the floor,
+   *  it was never `contained`, so nothing priced where it did end up. The search
+   *  pushed a sofa back to the wall with a dining chair left on its backrest, and
+   *  the carry took the chair 80–90 mm through the plaster on every seed that moved
+   *  the sofa — and Room check cannot say so, because it skips anything above the
+   *  floor. Priced where the carry will put it, the chair is what stops the sofa.
+   *
+   *  One plan for both readers: `carryRiders` replays `snapshot` through
+   *  `cascadeTransform` and writes only the links marked `carried`, and the
+   *  containment pass charges exactly those links, from the same offsets through the
+   *  same arithmetic. So the chair the search priced and the chair the user is shown
+   *  cannot come apart. A rider is forgiven what it already hung past the walls where
+   *  the user left it (`overhang`), exactly as a rug is, so a room that already had
+   *  one is not a room every idea is refused for. */
+  carry: CarryChain[];
   /** Top of each piece, world Y — a window sightline needs to know. */
   top: number[];
   /** Bounding-circle radius of each footprint, and its area. Both are properties of
@@ -493,6 +537,51 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     }
   }
 
+  const contained = parts.map(containedBySearch);
+  const poly = ctx.footprint as Poly;
+  // Where a piece stands in `ctx.parts`, built exactly as the scratch feet are filled
+  // for a placement — so a piece left where it stood prices to exactly its own
+  // allowance: the same inputs through the same function, a difference of 0, not 1e-17.
+  const ownFoot = (p: ScenePart): Foot => ({
+    cx: p.pos[0],
+    cz: p.pos[2],
+    hw: p.dimMM[0] / 2000,
+    hd: p.dimMM[1] / 2000,
+    rot: p.rot,
+    circle: p.circle,
+  });
+  const radiusOf = (p: ScenePart): number => Math.hypot(p.dimMM[0], p.dimMM[1]) / 2000;
+  const overhang = parts.map((p, i) => {
+    if (!contained[i] || !forgivesOverhang(p)) return 0;
+    if (!pointInPoly(p.pos[0], p.pos[2], poly)) return 0;
+    return outsideMeasure(ownFoot(p), poly, radiusOf(p));
+  });
+
+  // Chained from the bottom of each stack only. **Load-bearing, not an
+  // optimisation:** the containment pass prices a chain from its ROOT's placement,
+  // and during the search a middle support's own placement is not where it will
+  // end up — so a chain rooted at a book on a desk would price the lamp on the book
+  // at a spot the carry never uses, and price it twice. (In `carryRiders` alone the
+  // filter WAS only an optimisation: a root's cascade rewrites its whole subtree, so
+  // the order the levels ran in converged on one answer.)
+  const riders = ridingParents(parts);
+  const indexOf = new Map(parts.map((p, i) => [p.id, i]));
+  const carry: CarryChain[] = [];
+  for (const rootId of new Set(Object.values(riders).filter((id) => !(id in riders)))) {
+    const root = indexOf.get(rootId);
+    if (root === undefined) continue;
+    const snapshot = snapshotDescendants(rootId, parts, riders);
+    const slot = new Map(snapshot.map((d, k) => [d.id, k]));
+    const links = snapshot.map((d): CarryLink => {
+      const i = indexOf.get(d.id)!;
+      const p = parts[i];
+      const carried = ctx.movable[i] && !contained[i];
+      if (carried) overhang[i] = outsideMeasure(ownFoot(p), poly, radiusOf(p));
+      return { i, on: slot.get(d.parentId) ?? -1, carried, foot: { ...ownFoot(p), cx: 0, cz: 0, rot: 0 } };
+    });
+    carry.push({ root, snapshot, links });
+  }
+
   const rugs: number[] = [];
   const rugClear: LayoutModel['rugClear'] = [];
   for (let i = 0; i < parts.length; i++) {
@@ -509,24 +598,9 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     profile,
     roles,
     obstacle: parts.map(isObstacle),
-    contained: parts.map(containedBySearch),
-    overhang: parts.map((p) => {
-      if (!containedBySearch(p) || !forgivesOverhang(p)) return 0;
-      const poly = ctx.footprint as Poly;
-      if (!pointInPoly(p.pos[0], p.pos[2], poly)) return 0;
-      // Built exactly as the scratch `feet` below are filled for a placement, so a
-      // rug the search leaves where it stood prices to exactly its own allowance —
-      // the same inputs through the same function, so the difference is 0, not 1e-17.
-      const foot: Foot = {
-        cx: p.pos[0],
-        cz: p.pos[2],
-        hw: p.dimMM[0] / 2000,
-        hd: p.dimMM[1] / 2000,
-        rot: p.rot,
-        circle: p.circle,
-      };
-      return outsideMeasure(foot, poly, Math.hypot(p.dimMM[0], p.dimMM[1]) / 2000);
-    }),
+    contained,
+    overhang,
+    carry,
     // `verticalExtent`, not `pos[1] + h`. `pos[1]` is a bottom for a floor anchor and the
     // mesh CENTRE for every other one, so the raw sum is wrong by half a height for a
     // television and for the whole ceiling family. `top[i]` is read by the window rule
@@ -824,6 +898,39 @@ export function costBreakdown(
     // off the plan is the report's finding, so there the rug is forgiven nothing and
     // **Try a fix** has the whole measure to work with.
     c.outside += outsidePast(m, i, feet[i]);
+  }
+  // …and a rider where the carry will put it (`m.carry`), not where the search left
+  // it: `cascadeTransform`'s arithmetic from the root's placement, link by link, so a
+  // lamp on a book on a desk follows the desk. A root standing exactly where the user
+  // left it puts its whole stack back exactly where it stood — not a round trip
+  // through the support's frame, which lands a float off and would cost a rider the
+  // allowance it has only there.
+  for (const chain of m.carry) {
+    const r = placements[chain.root];
+    const own = parts[chain.root];
+    const home = r.x === own.pos[0] && r.z === own.pos[2] && r.yaw === own.rot;
+    const { links, snapshot } = chain;
+    for (let k = 0; k < links.length; k++) {
+      const link = links[k];
+      const f = link.foot;
+      if (home) {
+        const p = parts[link.i];
+        f.cx = p.pos[0];
+        f.cz = p.pos[2];
+        f.rot = p.rot;
+      } else {
+        const base = link.on < 0 ? null : links[link.on].foot;
+        const bx = base ? base.cx : r.x;
+        const bz = base ? base.cz : r.z;
+        const brot = base ? base.rot : r.yaw;
+        const d = snapshot[k];
+        const [wx, wz] = localToWorld(brot, d.localOffset[0], d.localOffset[1]);
+        f.cx = bx + wx;
+        f.cz = bz + wz;
+        f.rot = brot + d.relRot;
+      }
+      if (link.carried) c.outside += outsidePast(m, link.i, f);
+    }
   }
 
   // ── Openings: the room's own structure, which nothing may stand in ────────

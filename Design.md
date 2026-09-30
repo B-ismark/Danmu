@@ -860,7 +860,15 @@ the report and the search alike. The set the search keeps inside the walls is `c
 containment finding gets **Try a fix**, so a finding is fixable exactly when the cost
 term can see the piece. It was `isObstacle` on both sides until then, which is why a rug
 off the plan was filed `outside-immovable` with no button, and why Ideas could leave one
-788 mm through a wall.
+788 mm through a wall. A piece standing ON another — a chair on a sofa's backrest, a lamp
+on a tray on a desk — is held too, and priced where the carry will put it rather than at
+its own placement: `LayoutModel.carry` is one plan, read by the containment pass and by
+`carryRiders`, walked from the bottom support of each stack. At the support's own spot
+a rider is priced at its own pose exactly, so a chair the user left over the skirting is
+forgiven there the way a rug is, and nowhere else. Before it, a sofa slid flush to a wall
+swung its backrest chair 65–90 mm through the plaster on every Fix all that moved it,
+and Room check could only report it afterwards, as *Outside the room* with no **Try a
+fix** (§ H.6.2).
 
 One note for anyone extending it: the table is the *only* place a rule's cost term is
 named. An earlier draft let each fixture carry its own copy too, and pointing the door

@@ -38,7 +38,13 @@ const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 // presets at their offered sizes, counting every outcome including 'nothing moved'. Not
 // done, and it is the measurement anyone should ask for before treating either number as
 // better or worse rather than merely different.
-const SEEDS_WITH_DANGER = 3;
+//
+// Was 3, and is 1 since 2026-09-30 (§ H.6.2, a lamp riding a nightstand priced by `outside`
+// where the carry will put it). Seeds 1 and 7 stopped stranding floor; seed 10 still does,
+// 54.00, unchanged. The caution above applies in full: no lamp was through a wall at the end
+// of any seed before the change (0 of 24, measured), so this is the search walking a
+// different path on eight of twelve seeds, not a fault found in this room.
+const SEEDS_WITH_DANGER = 1;
 
 /** Scramble exactly as `layout-solve`'s bedroom test does, so the two are
  *  measuring the same room and a number can be carried between them. */
@@ -104,7 +110,8 @@ const solveAll = (
  *  Not "or parks itself across the door" — for the rung this app SHIPS, which is the
  *  single, and whose door cost is 0.00. The Double is a different sentence since § 31
  *  was decided: it now blocks the door deliberately rather than stand in a wall, and
- *  scores 181.78. The reason that phrase is worth correcting rather than deleting is
+ *  scores 181.78 (0 since 2026-09-30 — one seed took a different path; see the door
+ *  test). The reason that phrase is worth correcting rather than deleting is
  *  below, in the door test.
  *
  *  It prints the table on every green run (the `detect-pipeline` precedent), because
@@ -293,7 +300,12 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // it says. Recorded rather than absorbed: ~3.4 m² stranded on one seed in twelve is
     // a real cost of that trade and somebody should decide whether the weights are
     // right — see docs/what-is-still-open.md § 31.
-    expect(single.danger, 'sum of danger over 12 seeds').toBeCloseTo(593.3999999999985, 6);
+    //
+    // 593.3999999999985 → 54.00000000000004 on 2026-09-30, with § H.6.2. Every unit of the
+    // old figure was `navigation` on three seeds (1: 408, 7: 131.40, 10: 54.00); the first two
+    // now end clean and seed 10 is untouched. The caution on `SEEDS_WITH_DANGER` says why
+    // this is a moved baseline and not a claim that the solver got safer in general.
+    expect(single.danger, 'sum of danger over 12 seeds').toBeCloseTo(54.00000000000004, 6);
     // Coincides with `layout-solve.test.ts`'s worst-total figure to fifteen digits, and
     // THE COINCIDENCE IS NOT LOAD-BEARING. Both run the same solver over the same seeds
     // on the same scrambled U, so the agreement says the pipeline is deterministic and
@@ -308,7 +320,14 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // nightstands are now carried to wherever the nightstands went, so a soft term
     // reads a marginally tidier room; riders are invisible to every hard term, so
     // nothing about safety could have moved and nothing did.
-    expect(single.worst, 'worst total of the 12').toBeCloseTo(412.6663679837667, 6);
+    //
+    // 412.6663679837667 → 116.35761287695875 on 2026-09-30, and the last sentence above
+    // stopped being true that day: § H.6.2 prices a carried lamp by `outside` where the
+    // carry will put it, so a rider is no longer invisible to every hard term. The search
+    // now steers off any step that would swing a lamp over the skirting, took a different
+    // path on eight of twelve seeds for it, and seed 1's 408 of stranded floor went with
+    // the path it no longer takes. The worst is seed 10.
+    expect(single.worst, 'worst total of the 12').toBeCloseTo(116.35761287695875, 6);
   }, 180_000);
 
   // The assertion is not "the wider bed scores worse" but "the wider bed produces the
@@ -351,7 +370,7 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
   // in the room it ships in — so this is a parked regression, not a corrected assertion.
   // `it.fails` masks any OTHER failure in the same body, which is why the body is one
   // assertion and the `rows.length` guard stayed with the half above.
-  it.fails('the shipped rung is clean — PARKED at 118.06, see the baseline above', () => {
+  it.fails('the shipped rung is clean — PARKED at 54.00, see the baseline above', () => {
     const rows = sweep();
     expect(rows[rows.length - 1].danger, 'the shipped rung is the clean one').toBe(0);
   }, 180_000);
@@ -386,6 +405,9 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
   // — the deleting round had no way to tell a fabricated number from a number measured
   // four commits ago, and neither reading was available to it. Every figure in this
   // file now names the tree it was taken on.
+  //
+  // (2026-09-30, § H.6.2: door cost is 0.00 on all three rungs now, and `navigation` reads
+  // 422.10 / 297.34 / 54.00. The paragraph below is the reading before that.)
   //
   // As of this commit door cost is 0.00 on the Queen and the Single and 181.78 on the
   // Double — see the note on that row below — and what separates the three is
@@ -451,7 +473,16 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     expect(shippedRung.width, 'the shipped rung is the narrowest').toBe(900);
     expect(shippedRung.door, 'THE SHIPPED RUNG MUST NOT BLOCK THE DOOR').toBe(0);
     expect(rows[0].door, 'Queen at U 6x5').toBe(0);
-    expect(rows[1].door, 'Double at U 6x5 — see § 31, now decided').toBeCloseTo(181.7821863200519, 6);
+    //
+    // 181.7821863200519 → 0 on 2026-09-30, and found the way the note above asks: it was
+    // ONE seed, 6, and one term. With a carried lamp priced by `outside` (§ H.6.2) the
+    // search took a different path on that seed, and the Double now ends inside the walls,
+    // clear of the door, stranding 254.40 of floor instead. Seed 5 went the other way
+    // (623.10 of stranded floor → clean), and 1 and 12 picked up 32.10 and 7.20. The ruling
+    // is not what moved — nothing here chose a wall over a door — so the witness is gone
+    // rather than contradicted, and the negative control below is what still proves the
+    // term is wired.
+    expect(rows[1].door, 'Double at U 6x5 — see § 31, now decided').toBe(0);
     const poly = footprintForLayout('u', 6, 5);
     const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
     const door = base.findIndex((q) => q.category === 'door');
@@ -541,10 +572,11 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
   // what guards safety here is the per-seed danger test below, which has all the slack
   // in the world. Read a failure of this line as "the tail got untidier", and go to the
   // next test to find out whether it also got unsafe.
-  // PARKED. 92.10 against a bar of 40. The bar is not wrong and must not be widened:
+  // PARKED. 116.36 against a bar of 40 (92.10 when this was written, 412.67 between; seed 10
+  // is the worst now). The bar is not wrong and must not be widened:
   // it was measured on a solver aimed at wall normals that were backwards on 5 of the
   // 30 preset walls, so raising it to 100 would record the defect as the requirement.
-  it.fails('still keeps the worst case bounded once the ladder has chosen — PARKED at 92.10 vs 40', () => {
+  it.fails('still keeps the worst case bounded once the ladder has chosen — PARKED at 116.36 vs 40', () => {
     const { runs } = shipped();
     expect(SEEDS.length).toBe(12);
     expect(runs.length).toBe(12);
@@ -556,10 +588,11 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
   // bound above until the split into one fact per test: `seed 5 must strand nothing:
   // expected 80.70 to be less than 5`. FOUR assertions in this file were red rather
   // than two, and that only became visible once each got its own `it`.
-  // PARKED. Fails on seed 1 at 36.00 against a bar of 5. `it.fails` stops at the first
-  // failing assertion, so every seed after 1 is unobserved from here — which is exactly
-  // what the baseline below exists to make visible.
-  it.fails('and no seed produces a finding at all — PARKED, seed 1 at 36.00', () => {
+  // PARKED. Fails on seed 10 at 54.00 against a bar of 5 (it was seed 1, at 36.00 and then
+  // 408, until § H.6.2). `it.fails` stops at the first failing assertion, so every seed
+  // after the first red one is unobserved from here — which is exactly what the baseline
+  // below exists to make visible.
+  it.fails('and no seed produces a finding at all — PARKED, seed 10 at 54.00', () => {
     const { runs } = shipped();
     expect(runs.length).toBe(12);
     for (const [i, r] of runs.entries()) {
@@ -583,11 +616,15 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
         `  ${String(SEEDS[i]).padStart(4)} ${danger[i].toFixed(2).padStart(9)} ${r.total.toFixed(2).padStart(10)}`,
       );
     }
-    expect(danger[0], 'seed 1').toBeCloseTo(407.99999999999926, 6);
+    // Seed 1 read 407.99999999999926 until 2026-09-30 and is clean now (§ H.6.2); the
+    // pin moved to the one seed that still strands floor, and seed 1 is kept at zero so
+    // the move is visible from here.
+    expect(danger[0], 'seed 1').toBeCloseTo(0, 6);
+    expect(danger[9], 'seed 10').toBeCloseTo(54.00000000000004, 6);
     expect(danger.filter((d) => d > 0.005).length, 'seeds carrying any danger').toBe(SEEDS_WITH_DANGER);
     expect(
       danger.reduce((a, d) => a + d, 0),
       'and they sum to the figure the sweep prints',
-    ).toBeCloseTo(593.3999999999985, 6);
+    ).toBeCloseTo(54.00000000000004, 6);
   }, 180_000);
 });

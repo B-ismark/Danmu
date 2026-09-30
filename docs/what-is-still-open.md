@@ -2968,7 +2968,7 @@ modes", since the vagueness is what let the wrong version stand beside it.
 Four observations, all the user's, all landing in the same place:
 
 - a merged dining set solved with **one chair hanging in the air**, no floor under it;
-- a chair put on a couch, then Suggest, ends **through a wall**;
+- a chair put on a couch, then Suggest, ends **through a wall**; *(FIXED 2026-09-30, § H.6.2.)*
 - a couch a few degrees off square is turned to face **away from the TV** it should face;
 - and generally, *"suggest doesn't really seem to know what to do with groups and their
   rotations."*
@@ -3280,6 +3280,108 @@ containment as gated on `obstacle`, and the § above's "south" for z = −0.48, 
   the report's behaviour rather than the search's; the gravity sites
   (`lib/drag-resolve.ts`'s support test, `lib/layout-settle.ts`'s drop) stay category-based
   on purpose — a rug lies on the floor because of what it is, not because of how it scores.
+
+**§ H.6.2 · FIXED 2026-09-30: a chair carried on a sofa is held inside the walls.** The
+user's second observation above. `carryRiders` puts every rider back on its support once
+the search has decided where the support goes, and nothing before it priced a rider: a
+chair on a sofa's backrest is off the floor, so it is not an obstacle, so no hard term
+saw it. So the search slid the
+sofa flush to the wall — a good move for the sofa — and the carry then swung the chair
+through the plaster behind it. Measured with the chair dropped on the backrest of each
+preset's sofa, twelve Fix all presses per room: **12 of 12 through the wall on `rect`
+(65–80 mm), 11 of 11 on `open` (up to 84), 12 of 12 on `t` (up to 90)**; the `l`'s sofa
+never reached a wall behind it. Room check did see it, as `outside-immovable` — *Outside
+the room* with no **Try a fix**, since the search could not hold a rider — but only in a
+room Fix all had already applied.
+
+The search now prices each carried rider at the pose the carry will give it.
+`LayoutModel.carry` (`lib/layout-score.ts`) is built once in `prepare`: one chain per
+stack, rooted at the bottom support, each link index-aligned with `snapshotDescendants`
+and naming the link it stands on. The containment pass walks each chain from the root's
+placement with `cascadeTransform`'s arithmetic, and `carryRiders` reads the same chains —
+one plan, two readers, so the chair the search priced is the chair the carry moves. Three
+details are load-bearing, and each was mutated:
+· **Only the bottom of a stack is a root.** In the old `carryRiders` the filter was an
+  optimisation, since a root's cascade rewrites its whole subtree; in the cost it is not,
+  because a middle support's own placement is not where it will end up, and a chain
+  rooted at the tray on a desk would price the lamp on it twice, once from a spot the
+  carry never uses.
+· **At the support's own spot, a rider is priced at its own pose exactly**, rather than
+  recomputed through the carry. The two agree on paper and not in floating point: on 150
+  of 400 turned stacks swept, the recomputation lands a few ULPs away, and a rider left
+  over the skirting is forgiven only on its own spot (`outsidePast`, the rug's rule), so
+  it would have been charged its whole overhang for standing still.
+· **A locked rider is not priced**, because the carry does not move it (LOCK IS A LOCK,
+  `carryRiders`). The flag is `ctx.movable`, decided once, and both readers read it.
+`carryRiders` also puts a root the caller will not move back on its exact origin, so the
+cost `breakdownAfter` reports is priced from the pose that will be applied. That line is
+the one mutant no test kills: eighty instrumented solves found no such root off its
+origin by even 1e-12, so it is written as one line of agreement-by-construction and is
+labelled here as unkilled rather than tested by a fixture built to reach it.
+
+After it, on the same presses: **0 of 12, 0 of 11 and 0 of 11 through the wall**. One
+`t` press of twelve now declines with nothing-moved: the only gains it found needed the
+chair through the plaster. Ideas were never offering the chair through a wall, and not
+because the search saw it: Room check's gate (`newRoomFindings`) refused those candidates
+after the search had spent a solve on each — on `rect`, 10 of press 1's 12, every one
+`outside-immovable` for the chair and most also `clash-mounted` against the painting it
+was pushed into. That is where the fix shows up as more ideas rather than fewer faults: over eight
+presses at each of four chair spots on four presets, **375 ideas → 413**, and on the
+backrest row `rect` 15 → 32, `l` 27 → 32, `open` 10 → 24, `t` 2 → 12. The other rows moved
+by 0–3 either way, the search's own seed noise; no press refused on `outside`.
+
+`overlap`, `door`, `access` and `navigation` still do not see a rider, on purpose: a
+chair on a sofa does not block a door, and pricing it there would be a second body for
+one piece of floor.
+
+Tests: `tests/layout-riders.test.ts` "a rider is held inside the walls where the carry
+will put it" — the cost of 75 mm through the wall pinned as a literal (212.132), paid for
+where the SUPPORT puts the chair and never for the chair's own placement; zero at home
+whatever the chair's placement; zero for a locked chair; a chair left over the skirting
+forgiven on its spot and charged the full measure slid along the wall, a nanometre off,
+or turned 0.1 rad on the spot (the chair's share, 274.953, separated from the sofa's own
+corners by a locked-chair control); the turned-sofa home case; a lamp on a tray on a desk
+priced from the tray (141.421, one chain `[[1, −1], [2, 0]]`); and six arrange seeds of a
+sofa and its backrest chair in a 6 × 4, the chair inside the walls on every one, with
+controls that the sofa did go toward the wall and the chair is still on it.
+
+Mutated, every kill named: the home branch dropped — the turned-sofa home case; the lock
+gate dropped from the cost — the locked-chair and forgiven cases; every link priced from
+the root — the chain case; the chain-root filter dropped — the chain case; the rider's
+own-spot overhang zeroed — the forgiven case; the home test without its turn — the
+turned-on-the-spot case; the lock read from `contained` alone — the lock cases here and in
+"carryRiders is not a second authority"; the carry's own lock gate dropped — the same
+three; the rider pass removed from the cost — four red, the six-seed solve among them.
+The root snap in `carryRiders` survives, as above.
+
+**Baselines it moved, on a room it was not aimed at.** The scrambled U 6 × 5 bedroom that
+`tests/layout-solve.test.ts` and `tests/bed-rung-safety.test.ts` both pin seeds two lamps on
+nightstands. None of its twenty-four lamps ended through a wall before this change (measured on
+the parent tree), so nothing was hidden there; the search's cost differs only where a carried
+lamp would cross the plaster, so eight of twelve seeds met such a step mid-search and walked a
+different path from there, and seeds 2, 4, 8 and 10 came back identical. On the shipped Single:
+clean seeds **9 → 11**, Σdanger **593.40 → 54.00** (seeds 1 and 7 stopped stranding floor;
+seed 10's 54.00 is untouched), worst total **412.67 → 116.36**. The Queen and Double sums fell
+too (962.10 → 422.10, 808.52 → 297.34), and the Double's one door block (seed 6, `door`
+181.78, § 31's witness) is gone: that seed now ends inside the walls and clear of the door,
+stranding 254.40 of floor instead. Every figure is one room's twelve seeds, so this is a moved
+baseline, not evidence that the solver is safer in general. The parked "stops a scrambled
+bedroom from ending in the occasional disaster" (bar 11 of 12) went red as `it.fails` is
+built to, and is live again at exactly the bar. Mutated as a live guard: `anchorIdx = []`
+→ 8, `outside` weight 0 → 9, `steps = 1` → 10 (it survived at 12 while parked), all caught;
+`HARD_TERMS = []` survives there by construction, since `cleanSeeds` reads that list, and dies
+in `tests/impossible-veto.test.ts`, which pins it as a literal. Removing this change also
+turns it red (9).
+
+**Filed, not fixed — a claim this measurement disproved.** `withRiders`' docblock
+(`lib/layout-solve.ts`) and the confine test in `tests/layout-riders.test.ts` both say
+`lib/clearance.ts` skips anything above the floor, so a rider can never appear in a
+finding. The backrest chair did, in two: `outside-immovable` and `clash-mounted`, each
+naming it in `partIds`. The conclusion drawn from the claim still holds — both rules are
+`movable: false`, so neither has a **Try a fix** and neither can confine a solve — but
+the premise is wrong and should be restated as "no finding a fix can act on names a
+rider", with a sweep over `RULE_HANDLING`'s movable rows behind it. Not widened into this
+change because it corrects a comment about the report, not the search.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
@@ -5900,6 +6002,16 @@ the wall, which prices at roughly 175. It picked the door by about ten units out
 > below was built. It is now `door` **181.78** with `outside` **0** — the same choice, but arrived
 > at categorically rather than by ten units, and the bed is no longer *also* 8.5 units inside the
 > wall while it blocks the door. See the BUILT section above.
+>
+> **And 0 since 2026-09-30.** § H.6.2 moved the search's path on that one seed (6): the Double
+> now ends inside the walls *and* clear of the door, stranding 254.40 of floor instead. Nothing
+> chose a wall over a door, so the ruling stands; it has simply lost its witness on this room.
+> It also shows the next paragraph's first sentence is too strong as written: on the same
+> twelve seeds the Double ended inside the walls with the door clear on eleven before this
+> change and on all twelve after it, and with nothing at all on the five terms
+> `tests/bed-rung-safety.test.ts` calls danger on eight before and seven after. What this room
+> cannot give the Double on every seed is "inside, door clear *and* every floor reachable".
+> Not re-argued here; the question below does not depend on it.
 
 **Neither answer is good, and that is the point.** The room genuinely has no arrangement that is
 both fully inside and clear of the door at that bed width, which is exactly what the bed ladder

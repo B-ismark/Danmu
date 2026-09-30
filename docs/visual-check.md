@@ -634,6 +634,30 @@ starter furniture:
   each press shows ideas, the rug never moves, the rest of the room does. Wrong is any
   press saying *No ideas this time*, or a card where the rug has shifted or turned.
 
+### A chair left on the sofa stays inside the walls — § H.6.2, needs eyes in 3D
+
+When a solve moves a sofa, anything standing on it rides along. The search could not see
+the rider, so it slid the sofa flush to the wall and the chair on its backrest went 65–90 mm
+through the plaster, on every Fix all that moved the sofa, on Rectangle, Open Plan and
+T-Shape. Room check did list the chair as *Outside the room*, with no **Try a fix**, but only
+after Fix all had put it there. None of it is a look yet.
+
+**Where to click.** Rectangle with starter furniture, 3D tab. Drag a dining chair onto the
+sofa and let go over the back half of the seat, so it sits up on the sofa near the backrest.
+Push the coffee table into the doorway so there is something to fix, then press **Fix all**.
+Then **Ideas**, and **More ideas** twice. Repeat on T-Shape.
+
+**What right looks like.** The chair is still on the sofa wherever the sofa went, and its
+back legs are inside the room. The sofa may stop a hand's width short of the wall to make
+that true. Room check has no *Outside the room* line for the chair. Ideas show a full page
+on each press.
+
+**What wrong looks like.**
+- The chair's back poking through the wall behind the sofa, seen from the side in 3D, or
+  its outline past the wall line in the plan.
+- The chair left behind in mid-air where the sofa used to be.
+- *No ideas this time* on a press that offered ideas before you put the chair on.
+
 ### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 
 **Ideas** sits where Shuffle did, beside **Fix**. It opens a card of arrangements: four

@@ -1131,18 +1131,31 @@ describe('the room’s anchor is settled first', () => {
   const cleanSeeds = (rows: ReturnType<typeof scrambledU>['rows']) =>
     rows.filter((r) => HARD_TERMS.every((k) => Math.abs(r[k]) < NEGLIGIBLE_COST)).length;
 
-  it.fails('stops a scrambled bedroom from ending in the occasional disaster — PARKED at 7 of 12', () => {
+  it('stops a scrambled bedroom from ending in the occasional disaster', () => {
     const { rows } = scrambledU();
+    // UN-PARKED 2026-09-30, at 11 of 12 — exactly the bar. This was `it.fails`, parked at 7
+    // and later 9, and `it.fails` retires itself by design: it went red the moment this came
+    // true, which is the mark doing its job rather than a test to re-mark.
+    //
+    // What moved it is § H.6.2 — a lamp riding a nightstand is now priced by `outside`
+    // where the carry will put it — and it was NOT aimed at this room. The solves it replaced
+    // ended with no lamp through a wall on any seed (0 of 24 lamps, measured on the parent
+    // tree), so no hidden fault was fixed here. The search's cost differs from before only
+    // where a carried lamp would cross the plaster, so each seed that changed met such a
+    // proposal mid-search and walked a different path from there; seeds 2, 4, 8 and 10 came
+    // back identical. Twelve seeds of one room: this room now ends safe more often, which
+    // says nothing about direction in general (the caution on `SEEDS_WITH_DANGER` in
+    // `tests/bed-rung-safety.test.ts` is the same one).
+    //
+    // No slack is left, and that is stated rather than hidden: a solver change that costs this
+    // room one unsafe seed turns this red. Re-park it then, with the new count in the title and
+    // the baseline below re-recorded. Do not lower the bar.
+    //
     // Reads `cleanSeeds` rather than carrying its own `=== 0`. Both counts in this file run
     // over the SAME cached `rows`, so the tolerance moves this one too: 8 under `=== 0`,
     // 9 under `NEGLIGIBLE_COST`, because seed 3's only non-zero hard term is `outside` 2.025e-13 —
     // which is below 1e-10 and below 1e-9 alike, so taking the shipped constant does not move it.
-    // The bar is 11 and this stays `it.fails` either way — the change is to what the number
-    // MEANS, not to whether this line is red.
-    //
-    // Two figures below this were measured before that and are NOT re-derived here: the
-    // "12 of 12 measured" and the `steps = 1` survival both predate the tolerance and
-    // predate `outsideDeficit`. Re-run them before quoting either.
+    // (Measured while this was parked; the fixture has moved since, the tolerance has not.)
     const clean = cleanSeeds(rows);
 
     // A COUNT of seeds that end with nothing on any hard term, never a sum.
@@ -1151,43 +1164,33 @@ describe('the room’s anchor is settled first', () => {
     // buys any other: reclaiming 0.05 m² of stranded floor is worth 6 units, which
     // would pay for 60 cm² of overlap.
     //
-    // 12 of 12 measured. The bar is 11 — one seed of slack, deliberately, because a
-    // seeded solver fixture is a canary for chaos rather than a ratchet, and pinning
-    // one to its exact current value is how `main` stayed red across nine merges.
+    // The bar is 11 — one seed of slack below 12, deliberately, because a seeded solver
+    // fixture is a canary for chaos rather than a ratchet, and pinning one to its exact
+    // current value is how `main` stayed red across nine merges.
     //
-    // Two mutations were watched failing it, which is the whole reason the number
-    // moved from the 7 it used to be:
+    // Re-measured on the tree that un-parked it, because a guard that goes live has to be
+    // shown it can fail. Three mutations are caught; the figures they had while this was
+    // parked are kept beside them, since every one moved:
     //
-    //  · `anchorIdx = []` → 9 of 12. That is the pass this describe block is named
-    //    for, and nothing else in the file notices its absence: the total-cost bar in
-    //    the next test comes back 36.24, comfortably inside its own 60.
-    //  · `DEFAULT_WEIGHTS.outside = 0` → 8 of 12. This mutation SURVIVED at a bar of
-    //    7, and the note recording that drew the wrong conclusion from it — that the
-    //    predicate is blind to the term it is named for. It is blind to it: a weight
-    //    of zero zeroes the READING as well as the solver's incentive, so `r.outside`
-    //    is 0 with a piece through the plaster. What catches the mutation is that a
-    //    solver no longer paying for walls wrecks three other terms as well.
+    //  · `anchorIdx = []` → 8 of 12 (was 9). That is the pass this describe block is named
+    //    for.
+    //  · `DEFAULT_WEIGHTS.outside = 0` → 9 of 12 (was 8). A weight of zero zeroes the
+    //    READING as well as the solver's incentive, so `r.outside` is 0 with a piece through
+    //    the plaster; what catches the mutation is that a solver no longer paying for walls
+    //    wrecks the other hard terms as well.
+    //  · `steps = 1` → 10 of 12. It SURVIVED at 12 of 12 when this was last live, because
+    //    `passSteps` has a floor of 120 per pool, so `steps = 1` still spends 360 proposals —
+    //    15% of the ~2400 a default solve does. Caught now by one seed, which is a thin kill
+    //    and is written down as one.
     //
-    // And one that survives, which is the smaller claim this line can honestly make:
-    // `steps = 1` still ends 12 of 12. Not because containment is free, but because
-    // `passSteps` has a floor of 120 per pool — `steps = 1` still spends 360
-    // proposals, 15% of the ~2400 a default solve does, and containment is the
-    // cheapest thing the anneal buys. This note used to explain that survival with
-    // "`clampIntoFootprint` runs regardless of step count", which is no longer true of
-    // anything: `c9fe1a4` took that call out of the solver.
-    //
-    // PARKED at 7 of 12. Correcting every inward wall normal to the polygon's winding
-    // fixed 5 of the 30 preset walls — three of them this very U's notch — and the
-    // annealer's weights were tuned against the wrong ones, so the SOLVER's answer
-    // moved and the scorer's did not. **Do not lower this bar back to 7.** It is 11
-    // precisely because two mutations survived at 7, and both of those survivals are
-    // written out above; a bar of 7 would make this line green and powerless at the
-    // same time, which is worse than a red. The baseline test below records the 7 so
-    // the number is measured rather than merely tolerated.
+    // And one that survives here and cannot be killed here: `HARD_TERMS = []` → 12 of 12.
+    // `cleanSeeds` reads the solver's own list, so emptying it empties the definition of
+    // "clean" and every seed passes vacuously. The list is pinned as a literal in
+    // `tests/impossible-veto.test.ts`, which is where that mutant dies.
     expect(clean).toBeGreaterThanOrEqual(11);
   }, 120_000);
 
-  it.fails('keeps the untidiest seed bounded, which is a different claim from safe — PARKED at 92.10 vs 60', () => {
+  it.fails('keeps the untidiest seed bounded, which is a different claim from safe — PARKED at 116.36 vs 60', () => {
     const { rows } = scrambledU();
     const costs = rows.map((r) => r.total);
 
@@ -1206,6 +1209,10 @@ describe('the room’s anchor is settled first', () => {
     // `navigation`, floor a person cannot walk to — so the largest total in the set is
     // now mostly a safety figure rather than a tidiness one. That is the opposite of what
     // the sentence above promised a reader, which is why it could not simply be dropped.
+    //
+    // And on 2026-09-30 (§ H.6.2, a carried lamp priced by `outside`): **11 of 12 clean**,
+    // the worst 116.36 on seed 10, of which 54.00 is `navigation`. About half safety and
+    // half tidiness, so the bar can still fail on danger, on one seed now rather than five.
     //
     // Still true and worth keeping: the earlier version of this comment read
     // `sorted(costs)[6] < 10` and called that the safety check, which it was not; and it
@@ -1228,20 +1235,22 @@ describe('the room’s anchor is settled first', () => {
     // decoration in exactly that way. What actually watches the median is the table in
     // this describe block's comment, re-derived when the fixture moves.
     //
-    // PARKED at 92.10 against 60. **Do not widen it.** 60 was itself a widening of 40,
+    // PARKED at 116.36 against 60 (it read 92.10 when this was written, and 412.67 between).
+    // **Do not widen it.** 60 was itself a widening of 40,
     // taken because 40 passed by only 3.7% on a chaotic solver; raising it again to clear
-    // 92.10 would record the regression as the requirement, and the two mutations named
+    // 116.36 would record the regression as the requirement, and the two mutations named
     // above are only caught because the bar is where the tuned solver put it.
     expect(Math.max(...costs)).toBeLessThan(60);
   }, 120_000);
 
-  // REGRESSION BASELINE, NOT A SPECIFICATION. The two tests above are parked with
-  // `it.fails`, which is self-retiring — they go red the moment the solver improves — but
-  // a mark only says "we know". This says WHAT we know, and it is pinned EXACTLY so an
+  // REGRESSION BASELINE, NOT A SPECIFICATION. The two tests above were parked with
+  // `it.fails`, which is self-retiring — the first went red the moment the solver improved
+  // and is live again; the second is still parked — but a mark only says "we know". This says WHAT we know, and it is pinned EXACTLY so an
   // improvement goes red too: a `<=` bar here would sit green while the numbers drifted
   // in the good direction and nobody would re-derive.
   //
-  // 92.1018827121954 also appears in `tests/bed-rung-safety.test.ts`, and THE
+  // The worst total (116.35761287695875, and 92.1018827121954 when this was written) also
+  // appears in `tests/bed-rung-safety.test.ts`, and THE
   // COINCIDENCE IS NOT LOAD-BEARING. Both files run the same solver over the same seeds
   // on the same scrambled U, so agreeing to fifteen digits says the pipeline is
   // deterministic and says nothing about whether the figure is right. They are different
@@ -1274,7 +1283,13 @@ describe('the room’s anchor is settled first', () => {
     // metre. That is deliberately NOT changed here — it moves what Shuffle accepts, and
     // the rate at which it bites is unmeasured. Filed as § 4b in
     // `docs/what-is-still-open.md`; do not "tidy" it into this commit.
-    expect(clean, 'seeds ending with nothing on any hard term').toBe(9);
+    // 9 → 11 on 2026-09-30 (§ H.6.2). A lamp riding a nightstand is now priced by
+    // `outside` where the carry will put it, and the search took a different path on
+    // eight seeds for it: seeds 1 and 7, which stranded 408 and 131.40 of floor, now end
+    // clean, and seed 10 (`navigation` 54.00) is the one unsafe seed left. No lamp was
+    // through a wall at the end of any seed before the change, so this is the search
+    // walking elsewhere, not a hidden fault found — see the note on the un-parked test.
+    expect(clean, 'seeds ending with nothing on any hard term').toBe(11);
     // Was 7 clean / 92.1018827121954 worst. Both moved when `c.outside` learned to see
     // an overhang (`outsideDeficit`), and the direction of each is the point:
     //
@@ -1298,7 +1313,10 @@ describe('the room’s anchor is settled first', () => {
     // be carried after the search rather than inside it. (`clean` is 9 and did not move.
     // A sentence here once said it had gone to 8; that was the noise reading, and the
     // note on the assertion above says how it happened.)
-    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(412.6663679837667, 6);
+    //
+    // 412.6663679837667 → 116.35761287695875 on 2026-09-30, for the same reason as the
+    // count above: seed 1's 408 of stranded floor is gone, and the worst is now seed 10.
+    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(116.35761287695875, 6);
     // A TOLERANCE, and it is a physical one rather than a number chosen to pass. This
     // read `toEqual(rows.map(() => 0))`, which was available only while every footprint in
     // the fixture was an axis-aligned box. Once the `u` layout's bedside lamp became round
