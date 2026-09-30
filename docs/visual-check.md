@@ -85,67 +85,34 @@ out past the end of the bar. Then open the room from the screenshot that found t
 whose wing lies across the bedroom) and drag the crossing wall back.
 
 **What changed.** A wall drag only checked the room's overall width and depth, so a wall could
-pass straight through another and fold the floor over itself. It now stops 30 cm short of any
-wall it does not share a corner with, and before the wall beside it gets shorter than 30 cm,
+pass straight through another and fold the floor over itself. It now stops 60 cm short of any
+wall it does not share a corner with, and before the wall beside it gets shorter than 60 cm,
 and says which (`wallTravel`, `lib/footprint.ts`). A room that is already folded is left free
 until it is unfolded, so it can be mended.
 
-**What "wrong" looks like.** A wall stopping well short of 30 cm from the next, or stopping
+**What "wrong" looks like.** A wall stopping well short of 60 cm from the next, or stopping
 with no sentence. A fast flick at the plan's lowest zoom getting through where a slow drag
 did not. The folded room refusing to come back. Furniture on the moved wall not following it
 to where it stopped.
 
-### Props step aside, say when there is no room, and the tabletop plant is a plant — branch `claude/affectionate-ritchie-ilawx1`
+### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
-**Where to click.** A bedroom starter, 3D. Look at a nightstand with its lamp. Then select
-a **coffee table**, open **On the surface**, and press **+ Plant**, **+ Vase**, **+ Books**
-and **+ Candle** in turn; then one of each again.
+**What is already settled.** A newly added fan hangs flush: looked at on the preview and fine.
+What nobody has seen is a room saved BEFORE § 35, because the user checking it had none.
 
-**What changed.** A prop had no size anywhere but its renderer, so nothing could keep it
-clear: a lamp stood through the plant beside it. Sizes and spots are `lib/decor.ts` now,
-and each prop keeps clear of the ones before it and of anything standing on the surface.
-A prop with nowhere left to go is **not drawn**, and its row says **No room**. Pieces do
-not stand on props, books included (`docs/what-is-still-open.md`). The tabletop plant is
-the same leafy plant as the floor-standing one, at tabletop size.
+**Where to click.** A room that was already in this browser before `1d16087` (PR #88) and holds
+a fan or pendant. A fresh room is a different program and cannot show this.
 
-**What "wrong" looks like.** Any prop through another, through the lamp, or over a
-table's edge. A prop that jumps somewhere far off when a closer spot was free. A row
-saying **No room** while its prop is visibly on the table, or a prop missing with no
-label. Props moving about when you drag something that is not over the table. The
-plant reading as a green ball.
-
-**Probed in SwiftShader:** four props handed the same spot on a coffee table stood side
-by side; a nightstand with its lamp in the middle showed both its props as **No room**.
-
-### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
-
-**Where to click.** Any room, **3D Model** tab, Library → Appliances → **Ceiling fan**,
-which ships at 200 mm. Look up. Then open a room that was already in this browser before
-today and look at a fan or pendant in that one.
-
-**What changed.** § 35 removed the flat 150 mm drop from `groundY`'s ceiling arm, so a hung
-fixture's top now lands at `roomHeight - MOUNT_PAD` at every size instead of only above
-260 mm. A newly added fan moves up 30 mm and its downrod meets the ceiling.
-
-**What wrong looks like, in a NEW room.** Any daylight between the top of the downrod and
-the slab, or a rod that visibly penetrates it. Neither should be there: the top is 20 mm
-below the ceiling by design, which is the same pad every other clamp uses and is meant to
-read as flush rather than as a gap.
-
-**What is EXPECTED to look wrong, in an old one.** A room already saved keeps its fixture
-where it was, because `pos` is stored and nothing re-places on load — `settleHeights`' cap
-is a maximum and a fixture under it is left alone. So an old fan still hangs 30–55 mm short,
-and a room where someone adds a second fan today shows **one flush and one short, side by
-side**. That is the thing to judge: whether the difference reads as a bug to a user, which
-is not a question the arithmetic can answer. Changing the ceiling height by 1 cm and back
-re-runs `heightForNewCeiling` over the whole room and lifts them all, which is the cheapest
-way to see both states.
-
-**Where it rides.** Merged to `main` in `1d16087` (PR #88).
+**What is EXPECTED to look wrong.** A room already saved keeps its fixture where it was,
+because `pos` is stored and nothing re-places on load — `settleHeights`' cap is a maximum and
+a fixture under it is left alone. So an old fan still hangs 30–55 mm short, and adding a second
+fan today shows **one flush and one short, side by side**. The thing to judge is whether that
+difference reads as a bug to a user. Changing the ceiling height by 1 cm and back re-runs
+`heightForNewCeiling` over the whole room and lifts them all.
 
 **Gates.** `tests/ceiling-fixtures.test.ts` compares each fixture's top to the ROOM across
-both bands and seven ceiling heights — the comparison nothing in this repo made before. It
-cannot see the old-room case, because no test loads a room saved by an older build.
+both bands and seven ceiling heights. It cannot see the old-room case, because no test loads
+a room saved by an older build.
 
 ### A room saved BEFORE § 34 draws its pendant half the size
 

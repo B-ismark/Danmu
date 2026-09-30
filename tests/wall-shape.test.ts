@@ -110,7 +110,7 @@ describe('a dragged wall keeps the room a room', () => {
     // Literals, not floors: 4 + 6 + 8 + 8 walls × 6 deltas, and how many of them
     // the rule stops. A change that stops more, or fewer, is a decision to look at.
     expect(cases).toBe(156);
-    expect(stopped).toBe(62);
+    expect(stopped).toBe(64);
   });
 
   it("stops a T's bar wall pushed up through the north wall, with the bar's end wall at the minimum", () => {

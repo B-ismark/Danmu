@@ -189,14 +189,16 @@ export const ROOM_SIDE_EPS = 1e-6;
  *  over itself: push a T's side wall across its own stem and both sides stay in
  *  range while the floor crosses its own walls. One number serves both halves of
  *  that failure because they are one failure — a neighbour wall shrinking through
- *  zero IS the moved wall passing its own corner — and it is small on purpose: a
- *  chimney breast or a shallow alcove is a real room, and this is here to stop a
- *  room turning inside out, not to have taste about corridors.
+ *  zero IS the moved wall passing its own corner. 0.6 m is a walkable passage —
+ *  the narrowest a leg of a room can be and still be somewhere a person goes — and
+ *  it was chosen by the user over a first 0.3 m, which let a drag leave a wing too
+ *  narrow to stand in. The cost is that a drag cannot make a step shallower than
+ *  that either; a room saved or opened with one keeps it.
  *
  *  Read by `wallTravel` (`lib/footprint.ts`), which both `moveWallCarrying` and the
  *  store's `moveWall` ask, so the wall that stops and the sentence that says why
  *  read one number. */
-export const WALL_MIN_M = 0.3;
+export const WALL_MIN_M = 0.6;
 
 /** How tall a ceiling may be, in metres.
  *

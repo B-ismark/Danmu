@@ -395,9 +395,9 @@ describe('a wall will not fold the room over itself', () => {
     // Wall 2 is under the bar's east half; pushed north it would run up through
     // the north wall. Both sides of the bounding box stay in range the whole way.
     const applied = moveWallCarrying(2, -5);
-    expect(applied).toBeCloseTo(-(2.25 - 0.3), 6);
+    expect(applied).toBeCloseTo(-(2.25 - 0.6), 6);
     expect(heard).toHaveLength(1);
-    expect(heard[0]).toBe('That wall stops here: the wall beside it cannot get shorter than 30.0 cm.');
+    expect(heard[0]).toBe('That wall stops here: the wall beside it cannot get shorter than 60.0 cm.');
     expect(moveWallCarrying(2, -0.05)).toBe(0);
   });
 
@@ -407,7 +407,7 @@ describe('a wall will not fold the room over itself', () => {
     wallAttachments(2);
     useSettings.setState({ dimUnit: 'm' });
     moveWallCarrying(2, -4);
-    expect(heard.at(-1)).toBe('That wall stops 0.30 m short of another wall.');
+    expect(heard.at(-1)).toBe('That wall stops 0.60 m short of another wall.');
   });
 
   it('the store refuses a folding step on its own, for any caller that skips the action', () => {
