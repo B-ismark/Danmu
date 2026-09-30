@@ -27,7 +27,7 @@
 //     `ridingParents(AUTHORED parts)`, which covers a seeded rider that has never
 //     been touched and whose authored Y is therefore still true.
 //   · **A rider lands on its NAMED support, not on whatever is highest.**
-//     `findSupportDetailed` maximises `top` and has no below-test, so asking it
+//     `highestSurfaceUnder` maximises `top` and has no below-test, so asking it
 //     "what is under this lamp" once a wardrobe overlaps the desk lifts the lamp
 //     from 0.75 m to 1.8 m onto a piece it was never on. Nothing here calls it: the
 //     named support's own top is the answer, and the only question asked of geometry
@@ -174,7 +174,7 @@ function stillOver(rider: ScenePart, support: ScenePart): boolean {
  *
  * The first wording of that said *"this function finds nothing"*, and **half of it
  * does**: `parentIds` is a record, but `ridingParents` is a search, with a
- * `findSupportDetailed` and a `pos[1] > 0` bar of its own. The honest reason is
+ * `highestSurfaceUnder` and a `pos[1] > 0` bar of its own. The honest reason is
  * narrower and survives that correction — the search has ALREADY happened by the time
  * this function runs, against the authored scene, and re-filtering its answer by
  * height would drop a rider this pass is not entitled to re-seat. It is
@@ -251,8 +251,8 @@ export function deriveRiderYs(
     // imported file is the one door that can name one — `lib/scene-file.ts` checks it
     // for cycles and id-remapping, not for whether the piece can hold anything up.
     // Measured through that door: a rug thickened from 20 mm to 60 mm lifted its rider.
-    // These are `findSupportDetailed`'s own two skips, so the answer to "may this hold
-    // something up" is the same wherever it is asked.
+    // These are the two skips both support probes in `lib/physics.ts` share, so the
+    // answer to "may this hold something up" is the same wherever it is asked.
     if (
       authoredSupport && liveSupport
       && isFloorStanding(liveSupport.category, liveSupport.shape)

@@ -26,7 +26,7 @@
 // Deliberately pure — no store, no camera, no tab. It takes a snapshot of the
 // world and returns transforms.
 
-import type { ScenePart } from './scene-spec';
+import { collidesAt, type ScenePart } from './scene-spec';
 import { ridesWall } from './physics';
 import { resolvePlacement } from './drag-resolve';
 import { cascadeTransform, snapshotDescendants, type DescendantOffset } from './rigid-parent';
@@ -99,8 +99,39 @@ export type ConvoyMember = {
    * than sliding, which is correct and is pinned.
    * Nothing in the app is known to place a piece there — the containment clamp is
    * in every write path — so it is recorded rather than coded around.
+   *
+   * Asked with `inherited` forgiven, and that is what gives a tucked chair its vote
+   * back — see there.
    */
   startValid: boolean;
+  /**
+   * The travelling company this member already overlapped at pointer-down, which
+   * none of its resolves counts as an obstacle.
+   *
+   * A chair tucked under its table overlaps it: that is what tucked means, and the
+   * room report allows it (`sharesFloor`, `TUCKED_CLASH_SHARE`) while `collidesAt`
+   * does not (§ 17). Selected together the pair refused every drag, from either end —
+   * grab the table and it collided with its own chairs where they were about to be;
+   * grab a chair and it collided with the table. And each chair was `startValid:
+   * false`, so it had no vote on where the set went: a table grabbed by a piece that
+   * overlapped nothing towed its tucked chairs straight into a bookcase, valid and
+   * silent. The overlap came with the set, and it is the same principle as
+   * `startValid` one level finer — the gesture is answerable for what it breaks, not
+   * for what it inherits — applied to a PAIR rather than a whole piece, so the chair
+   * is still judged against everything else.
+   *
+   * Sound because the company TRANSLATES BY ONE DELTA: the rigidity veto refuses any
+   * member that does not arrive exactly where it was sent, so a pair overlapping at
+   * the start overlaps by exactly as much at the end. Two things break that and are
+   * left out. A wall rider on either side, whose wall discards the wall-normal part of
+   * the delta. And the LEAD, once the gesture has turned or resized it — see
+   * `leadInherited`; a member still forgives the lead, and it is the lead's own
+   * unforgiving check that keeps that pair honest. Heights are gravity's and are not
+   * held, which is why this is a set of ids and not a licence for a volume.
+   *
+   * A chair on its own is untouched: nothing travels with it, so this is empty.
+   */
+  inherited: ReadonlySet<string>;
 };
 
 export type Convoy = {
@@ -127,6 +158,10 @@ export type Convoy = {
    * on its own is untouched.
    */
   leadEdge: number | null;
+  /** The dragged piece's own `ConvoyMember.inherited`, with the rotation and size it
+   *  was measured at. Read it through `leadInherited`, never directly: those are the
+   *  two things a gesture can change about the lead and about nobody else. */
+  leadStart: { inherited: ReadonlySet<string>; rot: number; dim: [number, number, number] };
   /** Every id this gesture moves, the dragged piece included.
    *
    *  The set every resolve in the gesture must subtract from the world: a piece
@@ -313,7 +348,13 @@ export function planConvoy(input: {
   const { draggedId, parts, selection, parentIds, footprint, roomHeight } = input;
   const byId = new Map(parts.map((p) => [p.id, p]));
   if (!byId.has(draggedId)) {
-    return { own: [], members: [], travelling: new Set([draggedId]), leadEdge: null };
+    return {
+      own: [],
+      members: [],
+      travelling: new Set([draggedId]),
+      leadEdge: null,
+      leadStart: { inherited: new Set(), rot: 0, dim: [0, 0, 0] },
+    };
   }
 
   const own = snapshotDescendants(draggedId, parts, parentIds);
@@ -446,6 +487,7 @@ export function planConvoy(input: {
         // member's own children are what has to come out of the world it is
         // judged against, and that set is not known until the closure converges.
         startValid: true,
+        inherited: new Set(),
       });
     }
 
@@ -484,6 +526,22 @@ export function planConvoy(input: {
     if (!closeGroupsOver(carried)) break;
   }
 
+  // What each resolved piece already overlapped — see `ConvoyMember.inherited`.
+  // Pairwise, at pointer-down, over the whole travelling company: a member's world
+  // holds every travelling piece, carried ones included, so any of them can be what
+  // it was already standing in. `collidesAt` on the pair alone, so the answer is
+  // exactly the question a resolve will ask and nothing else in the room can leak in.
+  const company = parts.filter((p) => travelling.has(p.id) && !ridesWall(p.category, p.shape));
+  const overlapsAtStart = (x: ScenePart): ReadonlySet<string> => {
+    const out = new Set<string>();
+    if (ridesWall(x.category, x.shape)) return out;
+    for (const y of company) {
+      if (y.id !== x.id && collidesAt([x, y], x.id, x.pos, x.rot, x.dimMM)) out.add(y.id);
+    }
+    return out;
+  };
+  for (const m of members) m.inherited = overlapsAtStart(m.part);
+
   // Was each member legal before anyone touched anything? See
   // `ConvoyMember.startValid` for what rides on the answer.
   //
@@ -508,6 +566,7 @@ export function planConvoy(input: {
       snapMode: 'off',
       currentY: m.startPos[1],
       wallEdge: m.edge,
+      inherited: m.inherited,
     }).valid;
   }
 
@@ -515,8 +574,50 @@ export function planConvoy(input: {
   // should still be able to move a picture from one wall to another.
   const lead = byId.get(draggedId)!;
   const leadEdge = members.length > 0 ? wallEdgeOf(lead) : null;
+  // The answer may name the lead's own rigid children as well as members. That
+  // forgives nothing: its world never holds them (`travellingWorld`'s fifth
+  // argument), so a lone lead carrying a lamp asks the same question as before.
+  const leadStart = {
+    inherited: overlapsAtStart(lead),
+    rot: lead.rot,
+    dim: [lead.dimMM[0], lead.dimMM[1], lead.dimMM[2]] as [number, number, number],
+  };
 
-  return { own, members, travelling, leadEdge };
+  return { own, members, travelling, leadEdge, leadStart };
+}
+
+/**
+ * The overlaps the dragged piece may carry through a resolve at `rot` and `dim` —
+ * `ConvoyMember.inherited` for the lead — or none, once either differs from where
+ * the gesture began.
+ *
+ * A member only ever translates by the set's delta. The lead is the one piece a
+ * gesture can also TURN (the wheel, a two-finger twist, the gizmo) or RESIZE partway
+ * through, and a turned table's corners are not where its tucked chairs were
+ * forgiven for being. So the answer is dropped rather than recomputed: the lead then
+ * judges every overlap afresh, which refuses a set whose turn drove a corner into a
+ * chair and is also what keeps a member's forgiveness of the lead honest, since that
+ * member cannot see the turn. A table turned a full half-circle is refused with its
+ * chairs too, which is conservative and not wrong. A FULL turn is not a turn: the
+ * angle is compared round the circle, because nothing here keeps `rot` inside one
+ * revolution and the wheel can carry it past 2π with the footprint back where it was.
+ *
+ * Both surfaces call this where they resolve the lead — PlanView's `resolveAt` and
+ * Draggable's `resolvePlacement` wrapper — and pass the transform they are resolving
+ * at, not the one they started with.
+ */
+export function leadInherited(
+  convoy: Convoy,
+  rot: number,
+  dim: readonly [number, number, number],
+): ReadonlySet<string> | undefined {
+  const s = convoy.leadStart;
+  if (s.inherited.size === 0) return undefined;
+  const turned = rot - s.rot;
+  const unchanged =
+    Math.abs(Math.atan2(Math.sin(turned), Math.cos(turned))) < RIGID_EPS &&
+    dim.every((v, i) => Math.abs(v - s.dim[i]) < RIGID_EPS);
+  return unchanged ? s.inherited : undefined;
 }
 
 /**
@@ -716,6 +817,7 @@ export function resolveConvoy(input: {
         currentY: m.startPos[1],
         // Its own wall, held for the length of the gesture — see `ConvoyMember.edge`.
         wallEdge: m.edge,
+        inherited: m.inherited,
       });
       // Vertically the member is NOT carried — the resolve's gravity answer wins, so
       // a piece translated off the table it stood on lands on the floor instead of

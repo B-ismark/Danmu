@@ -693,6 +693,40 @@ full page on each press.
 - The chair left behind in mid-air where the sofa used to be.
 - *No ideas this time* on a press that offered ideas before you put the chair on.
 
+### A chair tucked under its table stays on the floor — § H.6.3, needs eyes in both tabs
+
+Fix all could leave a dining chair more than half under its table, and the next touch
+stood it on the tabletop: dragging the set, nudging the chair, or changing a lamp on the
+table into a chair. From most angles that is a chair hanging in the air. Tests cover the
+drag, the add, the settle and the model swap on the plan page. None of it is a look yet,
+and the 3D tab's swap is not in any test.
+
+**Where to click.** T-Shape with starter furniture. Select the dining set (click the
+table, then shift-click each chair, or merge them first), drag it a hand's width, and let
+go. Then push one chair well in under the table in the plan and nudge it with an arrow
+key. Then put a table lamp near the table's edge, select it, **Change the model**, and
+pick **Dining chair**. Do each once in the 3D tab too.
+
+**What right looks like.** The set moves, dragged by the table and dragged by a chair,
+and every chair stays on the floor through it. Drag the set into a bookcase and it stops
+there, with the chair that hit it outlined and named. The nudged chair does not move,
+which is what a chair tucked a little way in has always done. The swapped lamp becomes a chair standing on the floor where the lamp was, tucked
+under the table's edge rather than on top of it.
+
+**What wrong looks like.**
+- A chair seat level with the tabletop, or a chair's legs standing on the table.
+- The set refusing to move at all, or moving with a chair left behind.
+- The placement banner saying *Floating* about a chair that is on something.
+- A lamp or laptop dropped on the table falling to the floor. That is the other half of
+  the rule and it must not have moved.
+
+**And one in the 3D tab only.** Give the table an odd size in the Inspector (1613 mm
+wide, say), select it and a tucked chair, and drag the table by its body with each tool
+in turn: Move, Turn and Scale. The set must move every time, and the Inspector must still
+read 1613 after you let go. Wrong: it reads 1610, or 3D refuses the drag while the same
+drag goes through in the plan. `Draggable` hands the lead's size to `leadInherited` from
+`currentDim()`, which is the held size since #188, and nothing mounts it in a test.
+
 ### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 
 **Ideas** sits where Shuffle did, beside **Fix**. It opens a card of arrangements: four

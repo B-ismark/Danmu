@@ -75,6 +75,7 @@ import type { Category, Shape, ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { WALK_RADIUS } from './clearance-field';
 import { footFromPart, localToWorld, polygonArea, type Foot } from './geometry';
+import { dimRangeFor } from './dimension-ranges';
 
 // ─── Roles ──────────────────────────────────────────────────────────────────
 //
@@ -154,7 +155,9 @@ const ROLE_BY_SHAPE: Partial<Record<Shape, Role>> = {
   // A pedestal fan is an obstacle standing in the room, so it gets a real role: 'other'
   // means no access zone and nothing it belongs beside, which for a floor-standing
   // piece is not a description, it is a gap. `tests/shape-contract.test.ts` refuses
-  // 'other' for anything `isObstacle` accepts.
+  // 'other' for any catalogue piece `isObstacle` accepts, at its default size; the
+  // boxes `roleOf` reads by size are swept for the same in `tests/seat-support.test.ts`,
+  // up to the plan of the largest table — past that, 'other' is the answer.
   //
   // `chest-freezer` and `tv-console` are deliberately absent: their categories
   // (`fridge`, `shelf`) already answer, and a row here that merely restates the
@@ -197,6 +200,37 @@ const SIT_AT_HEIGHT = 0.6;
 /** …and under this in both plan directions it is a side table whatever its height:
  *  nothing you can seat two people at is 700 mm square. */
 const SIDE_TABLE_SPAN = 0.7;
+/** Every size the catalogue will give a table or a desk drawn in a table-ish shape —
+ *  the ranges `clampDims` holds those pieces to. The bounds below are read off these
+ *  rather than restated, which is what makes them unreachable for a `table` or a
+ *  `desk` by construction: each of those pieces was clamped into one of them. The
+ *  reason they exist is `other/box`, which `AMBIGUOUS_TABLE` admits and whose range
+ *  runs from 50 mm to 4 m on every axis. */
+const TABLE_RANGES = [...AMBIGUOUS_TABLE].flatMap((s) => (['table', 'desk'] as const).map((c) => dimRangeFor(c, s)));
+/** …and below this it is not a table at all: the lowest table the catalogue will
+ *  size. Without it a 50 mm floor deck and a 60 mm tray were both read as COFFEE
+ *  TABLES, and since § H.6.3 that is not just a label: an ottoman shares a coffee
+ *  table's floor, so the support probe would not let it stand on the deck — it sank
+ *  into it — and would not let the tray rest on an ottoman, so `settleHeights`
+ *  dropped the tray through the ottoman to the floor.
+ *
+ *  It is the same number as `OBSTACLE_HEIGHT` and `floorBlockers`' 250 mm, and that
+ *  is pinned rather than trusted (`tests/seat-support.test.ts`): a box taller than
+ *  those and lower than this would stand in the room with no role to make room for
+ *  it. */
+const LOWEST_TABLE_M = Math.min(...TABLE_RANGES.map((r) => r.min[2])) / 1000;
+/** …and a box bigger in plan than any table the catalogue will size is not one
+ *  either — the other end of the same question. A 3 m platform was a COFFEE TABLE
+ *  at 300 mm and a DINING TABLE at 700, so an ottoman or a chair standing on it was
+ *  refused its footing by the seat rule and `settleHeights` dropped it inside the box.
+ *  Longer side against the longest, shorter against the widest, so the answer does not
+ *  depend on which way round the box was drawn.
+ *
+ *  This is the one obstacle left 'other' on purpose. A coffee table's clearance and
+ *  the sofa it belongs beside describe nothing about a platform, and no role here
+ *  does, which is what 'other' says. */
+const LONGEST_TABLE_M = Math.max(...TABLE_RANGES.map((r) => Math.max(r.max[0], r.max[1]))) / 1000;
+const WIDEST_TABLE_M = Math.max(...TABLE_RANGES.map((r) => Math.min(r.max[0], r.max[1]))) / 1000;
 
 /** What this piece is FOR.
  *
@@ -214,6 +248,7 @@ export function roleOf(part: { category: Category; shape: Shape; dimMM: [number,
     const d = part.dimMM[1] / 1000;
     const h = part.dimMM[2] / 1000;
     if (w < SIDE_TABLE_SPAN && d < SIDE_TABLE_SPAN) return 'side-table';
+    if (h < LOWEST_TABLE_M || Math.max(w, d) > LONGEST_TABLE_M || Math.min(w, d) > WIDEST_TABLE_M) return 'other';
     if (h < SIT_AT_HEIGHT) return 'coffee-table';
     // Tall enough to sit at. Which of the two it is, is a question about the room
     // rather than the object, and `wallAffinity` already answers it by category:
@@ -684,19 +719,26 @@ export function sharesFloor(a: Role, b: Role): boolean {
   return false;
 }
 
+/** Is there any role `sharesFloor` pairs this one with? The cheap question a caller
+ *  asks per frame before paying for the pairwise one — `findSupportDetailed` asks it
+ *  of every dragged piece, and a lamp or a bed has no partner to look for. */
+export function hasFloorSharers(role: Role): boolean {
+  return FLOOR_SHARERS.some(([seat, surfaces]) => seat === role || surfaces.includes(role));
+}
+
 /**
  * How far a `sharesFloor` pair may be inside one another before it stops being a
  * chair tucked under a table and becomes a chair standing where the table is.
  *
  * **It lives here, with the predicate, because it is the second half of the same
  * rule and the report and the solver must not answer it separately.** They did.
- * (A third reader of `sharesFloor`, `lib/layout-settle.ts`, deliberately does not
- * consult this at all — see the note at the end.) It was a
- * `TUCKED_CLASH_SHARE` private to `lib/clearance.ts`, and `lib/layout-score.ts`'s
- * overlap term had no threshold at all — a blanket `continue` that exempted the
- * pair however deep it was. So the solver paid *nothing* for burying a dining
- * chair completely inside the dining table, and the room report called the result
- * a clash. The file that owned the number said in a comment that the two "cannot
+ * (Some readers of `sharesFloor` deliberately do not consult this at all, among
+ * them `lib/layout-settle.ts` — see the note at the end — and the support probe,
+ * below.) It was a `TUCKED_CLASH_SHARE` private to `lib/clearance.ts`, and
+ * `lib/layout-score.ts`'s overlap term had no threshold at all — a blanket
+ * `continue` that exempted the pair however deep it was. So the solver paid
+ * *nothing* for burying a dining chair completely inside the dining table, and the
+ * room report called the result a clash. The file that owned the number said in a comment that the two "cannot
  * disagree about whether a tucked-in chair is a collision"; they shared the
  * predicate and not the bar, which is a different thing and reads identical.
  *
@@ -715,6 +757,14 @@ export function sharesFloor(a: Role, b: Role): boolean {
  * reaches all of it, and that is still worth saying.
  *
  * `tests/layout-conformance.test.ts` holds the two consumers to it.
+ *
+ * **And it is not the only bar a tucked chair meets.** `MIN_SUPPORT_SHARE` (0.5) in
+ * `lib/physics.ts` is how much of a piece another must cover to hold it up, so a chair
+ * tucked between the two bars was a fine arrangement to both consumers of this one and
+ * stood on the tabletop by the next drag. `findSupportDetailed` therefore reads
+ * `sharesFloor` too: a seat never LANDS on the surface it tucks under (§ H.6.3). It
+ * reads the predicate and not this number — the rule there has no depth at all,
+ * because a chair is never meant to stand on its table however far in it is.
  *
  * ── There is a THIRD consumer, and it deliberately does not read this ─────────
  *

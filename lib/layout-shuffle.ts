@@ -323,35 +323,32 @@ export function applyPlacements(parts: ScenePart[], result: SolveResult): SceneP
  *
  * ── Why the solver's own verdict is not enough ────────────────────────────────
  *
- * `isCleanShuffle` asks the cost function; this asks `analyzeRoom`, and the two ask
- * different questions about a chair pushed under a table. They share the predicate
- * — `sharesFloor` — and they do not share the bar. `lib/layout-score.ts` charges a
- * tucked pair for the share of the overlap **above** `TUCKED_CLASH_SHARE` (0.85),
- * normalised onto the same 0…1 scale as any other overlap; `lib/clearance.ts` draws
- * its own line at `CLASH_SHARE` (0.5) and reports anything past it. So a chair
- * buried 0.6 of the way into its table is silent to the solver and a clash in the
- * report, and the two only coincide at the extremes.
+ * `isCleanShuffle` asks the cost function; this asks `analyzeRoom`, and the two used
+ * to ask different questions about a chair pushed under a table. They shared the
+ * predicate — `sharesFloor` — and not the bar: `lib/layout-score.ts` charged a tucked
+ * pair only past `TUCKED_CLASH_SHARE` (0.85) while `lib/clearance.ts` drew its line at
+ * `CLASH_SHARE` (0.5), so a chair 0.6 of the way into its table was silent to the
+ * solver and a clash in the report.
  *
- * **This paragraph used to say something stronger and it is no longer true.** Before
- * #68 landed, `layout-score.ts` exempted a `sharesFloor` pair from `overlap`
- * entirely — a blanket `continue` — so the solver paid *nothing* for burying a
- * dining chair completely inside a dining table, and this file said so. #68 replaced
- * the exemption with the tolerance above, and `clearance.ts` has since retired the
- * "cannot disagree" sentence quoted here. Both halves of the old wording are gone;
- * what survives is a narrower and still-real gap between 0.5 and 0.85, which is what
- * this gate is scoped to.
+ * **That gap is closed, and this paragraph described it for longer than it existed.**
+ * The report reads the same `TUCKED_CLASH_SHARE` for a `sharesFloor` pair now
+ * (`clashShare` in `lib/clearance.ts`), so the solver and Room check agree about a
+ * tucked chair at every depth. The disagreement that survived was one layer over —
+ * between the tuck bar and the SUPPORT bar, `MIN_SUPPORT_SHARE` (0.5): a chair tucked
+ * 60% under was fine to both, and the next drag stood it on the tabletop. § H.6.3
+ * closed that in `findSupportDetailed`, where a seat never lands on the surface it
+ * tucks under. (Earlier still, before #68, `layout-score.ts` exempted the pair
+ * entirely with a blanket `continue`.)
  *
  * Measured before this gate existed: **8 of 40 offers** (five presets × eight
  * attempts) introduced a clash the room report flags and the solver could not see —
  * all of them on `t` and `open`. Anchored modes mostly hide it because inertia keeps
  * the room roughly where it was; shuffle removes the anchor, so it surfaces.
  *
- * Aligning the two thresholds is the real repair and it is deliberately NOT done
- * here: `overlap` is priced into every solve this app runs, the repo's own notes
- * record that any re-price reshuffles which seeds end badly, and it would change
- * `Fix` — behaviour nobody asked to change — on the way past. So this gate is scoped
- * to the new feature: a shuffle may not INTRODUCE a finding, while a finding the
- * room already had is not this button's to answer for.
+ * That number is history now rather than a live gap, and the gate stays for what it
+ * was always for: a shuffle may not INTRODUCE a finding, while a finding the room
+ * already had is not this button's to answer for. It is also the backstop for the next
+ * rule the two sides come to answer differently.
  *
  * Compared by rule and by the pieces named, not by count: a room that swaps one
  * clash for a different one has not stayed still.

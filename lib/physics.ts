@@ -5,8 +5,8 @@
 
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
-import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea, obbExtentAlong, type Foot } from './geometry';
-import { WALL_GAP } from './layout-rules';
+import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea, footOverlap, obbExtentAlong, type Foot } from './geometry';
+import { hasFloorSharers, roleOf, sharesFloor, WALL_GAP } from './layout-rules';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low' | 'wall-floor';
 
@@ -469,9 +469,10 @@ export const SUPPORT_Y_EPS = 0.05;
 
 /** What a support probe needs to know about a candidate.
  *
- *  Named, because `findSupportUnder` and `findSupportDetailed` had the same shape
- *  written out inline twice and this change had to widen both — which is the drift
- *  this repo keeps finding, one edit before it happens.
+ *  Named, because two support probes had the same shape written out inline twice and
+ *  one change had to widen both — which is the drift this repo keeps finding, one
+ *  edit before it happens. (The second, `findSupportUnder`, was `findSupportDetailed`
+ *  without the id, had no caller outside the tests, and is gone.)
  *
  *  **`shape` is required and `wallMounted` is absent.** `anchorFor` is keyed by SHAPE
  *  first — `fan`, `lamp-pendant`, `door`, `curtain`, `tv`, `mirror`, `painting`,
@@ -490,11 +491,46 @@ export type SupportCandidate = {
   circle?: boolean;
 };
 
+/** Who is ASKING a support probe: the mover's id and what kind of piece it is.
+ *
+ *  **Why the kind, and not just the id.** A dining chair tucked under a table, or an
+ *  ottoman pushed under a coffee table, shares that surface's floor on purpose
+ *  (`sharesFloor`, `lib/layout-rules.ts`) — and the tuck the solver and the report
+ *  both allow (`TUCKED_CLASH_SHARE`, 0.85) runs deeper than the share at which a
+ *  surface starts holding a piece up (`MIN_SUPPORT_SHARE`, 0.5). So a chair tucked
+ *  60% under the table was a fine arrangement to Suggest and to Room check, and the
+ *  very next drag stood it ON the tabletop: measured over the `t` and `open` dining
+ *  sets, 14 of 14 chairs tucked past half were lifted by a 10 mm nudge, and 14 were
+ *  lifted by dragging the set 50 mm. Excluding the partner in `findSupportDetailed`
+ *  closes that for every caller that MOVES a piece to what it finds — drag gravity,
+ *  a piece being added, the model swap and `settleHeights` — because that is the
+ *  one function they all ask.
+ *
+ *  Excluding the partner alone was not enough, and the first version stopped there:
+ *  the probe then looked PAST the table to whatever else was over the chair, and a
+ *  tray on the tabletop is exactly that. So a tucked seat may also not land on
+ *  anything as high as the partner it is tucked under — see `findSupportDetailed`.
+ *
+ *  An id alone could not carry it. Two callers ask on behalf of a piece that is NOT
+ *  in `parts` in the shape they mean: a piece being added has no entry at all
+ *  (`'__new__'`), and the Inspector's model swap asks for the NEW kind while the list
+ *  still holds the old one. Looking the kind up by id would silently skip the rule
+ *  for the first and apply the wrong kind's for the second, so the kind is a
+ *  required argument — a caller that has not thought about it does not compile.
+ *
+ *  **The rule is about where a piece LANDS, not about where one already is.** A chair
+ *  that an earlier version of the app stood on its table is physically on the table,
+ *  and `restingOn` saying "Floating — nothing is holding it up" about it would be the
+ *  § 37 banner lie in the other direction. So the two questions are two functions:
+ *  `findSupportDetailed` (this rule) for a drop, `highestSurfaceUnder` (no rule) for
+ *  what a piece is over as it stands. */
+export type SupportSelf = Pick<SupportCandidate, 'id' | 'category' | 'shape'>;
+
 /** Does enough of `moverFoot` sit over `surface`'s footprint for the surface to hold
  *  it up?
  *
  *  **The bar itself is `MIN_SUPPORT_SHARE` and the arithmetic around it was written
- *  out three times** — here, in `findSupportDetailed` below, and in
+ *  out three times** — here, in the support loop below, and in
  *  `lib/rigid-parent.ts`'s `isPhysicallySupported` — with a fourth about to be added
  *  by `lib/rider-height.ts`. Three spellings of one rule is the shape CLAUDE.md names:
  *  the constant was shared and the *comparison* was not, so a reader checking one of
@@ -503,7 +539,7 @@ export type SupportCandidate = {
  *  original is written as an early `continue` on `<`.
  *
  *  Takes a prebuilt foot and its area rather than the mover part, because
- *  `findSupportDetailed` builds both once and asks this per candidate. */
+ *  the support loop builds both once and asks this per candidate. */
 export function coversEnoughToSupport(
   moverFoot: Foot,
   moverArea: number,
@@ -514,30 +550,6 @@ export function coversEnoughToSupport(
   return shared / moverArea >= MIN_SUPPORT_SHARE;
 }
 
-/** Highest world-Y where a part at (x,z) with given XZ footprint would land on
- *  another part's top surface. Wall-mounted + rugs are ignored as supports.
- *  Returns null if nothing holds it up.
- *
- *  Tests how much of the mover ACTUALLY sits on the surface, not just where its
- *  centre point is. The centre test (plus a 5 cm margin) called a laptop 90%
- *  overhanging a desk "on the desk", and a part perched on the very lip of a
- *  nightstand floated at the nightstand's height with nothing under it.
- *
- *  `rot` on either side is optional and defaults to 0 — at 0/90° the rotated
- *  rectangle and its bounding box are the same, which is the overwhelmingly
- *  common case, so callers that have not got a rotation to hand lose nothing. */
-export function findSupportUnder(
-  parts: SupportCandidate[],
-  selfId: string,
-  x: number,
-  z: number,
-  selfDim: [number, number, number],
-  selfRot = 0,
-  selfCircle?: boolean,
-): number | null {
-  return findSupportDetailed(parts, selfId, x, z, selfDim, selfRot, selfCircle)?.y ?? null;
-}
-
 /** Is this piece actually resting on something, and on what?
  *
  *  ── Why this is not `findSupportDetailed` ────────────────────────────────────
@@ -545,7 +557,8 @@ export function findSupportUnder(
  *  That function takes **x and z only**. It answers *"what is under here"* — the
  *  question a DROP asks, where the mover is about to be moved to whatever it finds —
  *  and it never compares the mover's own `y` to the top it returns, which is correct
- *  for its callers and wrong for this one.
+ *  for its callers and wrong for this one. (This asks `highestSurfaceUnder`, the same
+ *  loop without the drop question's seat rule — see `SupportSelf` for why.)
  *
  *  Read as "is this resting", it says yes to a lamp hovering a metre above a desk, and
  *  then NAMES the desk. That is not a near-miss: it is confidently wrong in the one
@@ -554,7 +567,7 @@ export function findSupportUnder(
  *
  *  So this asks both halves — something under the footprint, AND the piece's own
  *  underside within `SUPPORT_Y_EPS` of that something's top. The probe is given a
- *  CEILING for the same reason: `findSupportDetailed` maximises `top`, so without one
+ *  CEILING for the same reason: `highestSurfaceUnder` maximises `top`, so without one
  *  a taller overlapping piece hides the surface the piece is genuinely on and the
  *  answer flips to "floating" without the piece moving.
  *
@@ -592,9 +605,7 @@ export function restingOn(
   const bottom = verticalExtent(category, shape, dim, pos[1])[0];
   // The highest thing under the footprint whose top the piece could actually be
   // sitting on — anything higher is something it is INSIDE, not something it rests on.
-  const under = findSupportDetailed(
-    parts, selfId, pos[0], pos[2], dim, rot, circle, bottom + SUPPORT_Y_EPS,
-  );
+  const under = highestSurfaceUnder(parts, selfId, pos[0], pos[2], dim, rot, circle, bottom + SUPPORT_Y_EPS);
   if (under && Math.abs(bottom - under.y) <= SUPPORT_Y_EPS) {
     return { on: 'part', id: under.id, gap: bottom - under.y };
   }
@@ -602,9 +613,81 @@ export function restingOn(
   return null;
 }
 
-/** Same test as `findSupportUnder`, but also names which part won — the signal
- *  a rigid-parenting relationship is established from (see `lib/rigid-parent.ts`). */
+/** Highest world-Y where a part at (x,z) with given XZ footprint would land on
+ *  another part's top surface, and which part that is — the signal a
+ *  rigid-parenting relationship is established from (see `lib/rigid-parent.ts`).
+ *  Wall-mounted + rugs are ignored as supports. Returns null if nothing holds it up.
+ *
+ *  Tests how much of the mover ACTUALLY sits on the surface, not just where its
+ *  centre point is. The centre test (plus a 5 cm margin) called a laptop 90%
+ *  overhanging a desk "on the desk", and a part perched on the very lip of a
+ *  nightstand floated at the nightstand's height with nothing under it.
+ *
+ *  `rot` on either side is optional and defaults to 0 — at 0/90° the rotated
+ *  rectangle and its bounding box are the same, which is the overwhelmingly
+ *  common case, so callers that have not got a rotation to hand lose nothing.
+ *
+ *  **This is the DROP question** — what would this piece land on here — and it
+ *  carries the one rule that belongs to landing: a seat is never stood on the
+ *  surface it tucks under (`SupportSelf`), nor on anything standing as high as that
+ *  surface. Every caller that moves a piece to what it finds asks this: drag gravity,
+ *  a piece being added, the Inspector's model swap, and `settleHeights`. */
 export function findSupportDetailed(
+  parts: SupportCandidate[],
+  self: SupportSelf,
+  x: number,
+  z: number,
+  selfDim: [number, number, number],
+  selfRot = 0,
+  selfCircle?: boolean,
+): { id: string; y: number } | null {
+  // What the mover IS, read at the size it is being asked at — `roleOf` tells a
+  // coffee table from a dining table by its dimensions.
+  const selfRole = roleOf({ category: self.category, shape: self.shape, dimMM: selfDim });
+  // Nearly every piece in a room tucks under nothing and has nothing tucked under it,
+  // and a drag asks this per frame — so the rule costs those pieces nothing.
+  if (!hasFloorSharers(selfRole)) {
+    return topSurface(parts, (o) => o.id === self.id, x, z, selfDim, selfRot, selfCircle, Infinity);
+  }
+  // A seat never stands on the surface it tucks under. The partner is not a support,
+  // so the probe looks past it — and what it may find there is capped by it: nothing
+  // whose top is as high as the top of a partner the piece is tucked under. Looking
+  // past the table without the cap found the TRAY on it, and a chair whose footprint
+  // the tray covered by half stood on the tray instead. "Tucked under" is the same
+  // question `collidesAt` asks of the pair on the plan, footprint over footprint with
+  // its flush-touch pad, so a chair merely standing beside its table is not capped.
+  // Symmetric, like `sharesFloor`: a table dropped over a tucked chair does not come
+  // to rest on what stands on top of the chair. "Top" is the partner's bounding top —
+  // a chair's backrest, since nothing here knows a seat height — so something on the
+  // SEAT is below the cap, and only support share keeps a cushion there from holding
+  // the table. Both footprints carry their shape, as in `collidesAt`: a chair standing
+  // in an L-desk's open corner is inside the desk's box and under none of the desk.
+  const me = footFromPart([x, 0, z], selfRot, selfDim, selfCircle, self.shape);
+  const partners = new Set<string>();
+  let under = Infinity;
+  for (const o of parts) {
+    if (o.id === self.id || !sharesFloor(selfRole, roleOf(o))) continue;
+    partners.add(o.id);
+    if (footOverlap(me, footFromPart(o.pos, o.rot ?? 0, o.dimMM, o.circle, o.shape), -0.01)) {
+      under = Math.min(under, verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1]);
+    }
+  }
+  return topSurface(
+    parts,
+    (o) =>
+      o.id === self.id ||
+      partners.has(o.id) ||
+      verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1] >= under,
+    x, z, selfDim, selfRot, selfCircle, Infinity,
+  );
+}
+
+/** What this footprint is over AS IT STANDS — the STATE question, with no rule
+ *  about which pairings are allowed. `restingOn` and `ridingParents` ask it: a piece
+ *  that is on a surface is on it, however it got there, and the relation and the
+ *  banner must say so. Never ask it where a piece will land — that is
+ *  `findSupportDetailed`, and the difference is the seat rule. */
+export function highestSurfaceUnder(
   parts: SupportCandidate[],
   selfId: string,
   x: number,
@@ -612,8 +695,7 @@ export function findSupportDetailed(
   selfDim: [number, number, number],
   selfRot = 0,
   selfCircle?: boolean,
-  /** Ignore anything whose top is above this. Absent means "no ceiling", which is
-   *  the drop question and every existing caller's.
+  /** Ignore anything whose top is above this. Absent means "no ceiling".
    *
    *  `restingOn` is the caller that needs it, and the reason is that this function
    *  maximises `top`: a lamp sitting on a desk while a taller piece overlaps its
@@ -621,6 +703,21 @@ export function findSupportDetailed(
    *  underside against that answer concludes the lamp is floating. Drag a monitor
    *  over a desk lamp and the lamp is suddenly reported airborne without moving. */
   maxTop = Infinity,
+): { id: string; y: number } | null {
+  return topSurface(parts, (o) => o.id === selfId, x, z, selfDim, selfRot, selfCircle, maxTop);
+}
+
+/** The one loop both questions share: the highest floor-standing, non-rug top that
+ *  covers enough of the footprint, skipping whatever `skip` names. */
+function topSurface(
+  parts: SupportCandidate[],
+  skip: (o: SupportCandidate) => boolean,
+  x: number,
+  z: number,
+  selfDim: [number, number, number],
+  selfRot: number,
+  selfCircle: boolean | undefined,
+  maxTop: number,
 ): { id: string; y: number } | null {
   const mover = footFromPart([x, 0, z], selfRot, selfDim, selfCircle);
   const moverArea = footArea(mover);
@@ -630,7 +727,7 @@ export function findSupportDetailed(
 
   let best: { id: string; y: number } | null = null;
   for (const o of parts) {
-    if (o.id === selfId) continue;
+    if (skip(o)) continue;
     // **The ANCHOR, not the `wallMounted` flag.** Nothing rests on a television, a
     // curtain or a ceiling fan, and the question "is this piece's geometry centred on
     // its origin" has exactly one right answer for a given category and shape —

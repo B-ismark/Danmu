@@ -2826,9 +2826,10 @@ The second half is a doc that is simply false. `spawnMany`'s comment says:
 > in the room, so each piece avoids the one before it and four chairs land as four chairs
 > instead of one chair four times.
 
-`placeNewPart` reads `existing` in exactly one place — `findSupportUnder`, and only when
-`isTabletopProne(cat)`. A chair is not tabletop-prone. **Four chairs land as one chair four
-times**, and the comment beside the loop said the opposite. Two sources of truth, and the
+`placeNewPart` reads `existing` in exactly one place — `findSupportUnder` (since § H.6.3,
+`findSupportDetailed`), and only when `isTabletopProne(cat)`. A chair is not
+tabletop-prone. **Four chairs land as one chair four times**, and the comment beside the
+loop said the opposite. Two sources of truth, and the
 prose is the one the next reader believes.
 
 **The comment is fixed** — it now states what the code does and points here. The
@@ -2986,7 +2987,8 @@ modes", since the vagueness is what let the wrong version stand beside it.
 
 Four observations, all the user's, all landing in the same place:
 
-- a merged dining set solved with **one chair hanging in the air**, no floor under it;
+- a merged dining set solved with **one chair hanging in the air**, no floor under it; *(the
+  lift FIXED 2026-09-30, § H.6.3. The solver breaking the set apart is P1, still open.)*
 - a chair put on a couch, then Suggest, ends **through a wall**; *(FIXED 2026-09-30, § H.6.2.)*
 - a couch a few degrees off square is turned to face **away from the TV** it should face;
 - and generally, *"suggest doesn't really seem to know what to do with groups and their
@@ -3498,6 +3500,209 @@ change because it corrects a comment about the report, not the search.
   round 1 it does not: a link at its own spot returns `ownSpotCharge[i]`, a number read out
   of an array, and never reaches `outsideMeasure`. What is left is one pose comparison per
   link, and a second copy of the home rule to skip it would be a place for the two to drift.
+
+**§ H.6.3 · FIXED 2026-09-30: a seat never stands on the surface it tucks under.** The
+user's first observation above — *a merged dining set solved with one chair hanging in the
+air* — reproduced in two steps, and the research (§ H.6's P3) found both. Directly after
+Fix, nothing is airborne; a chair is left on the floor **50–80% under the table**. Then the
+next touch lifts it onto the tabletop, which from most angles is a chair hanging in the air.
+
+**Two bars disagreed.** A chair may be tucked up to `TUCKED_CLASH_SHARE` (0.85) of its own
+footprint under a table and still be a fine arrangement to the solver and to Room check,
+which read that one number since #68. But anything covering `MIN_SUPPORT_SHARE` (0.5) of a
+piece holds it up (`lib/physics.ts`), and `drag-resolve` applies that bar on every frame.
+So between 0.5 and 0.85 a chair was fine to both and stood on the table by the next drag.
+Measured on the `t` dining set turned 0°, 8° and 30° and the `open` one turned 0° and
+30°, twelve Fix presses each, 27 of the 60 applying a solve: **11 left a chair past half
+under the table, 14 chairs in all. Nudging each of those 14 alone 10 mm lifted 14 of 14,
+and the lift made each move valid. Dragging the set 50 mm by one of those chairs lifted 20
+chairs onto the table; dragging it by the table was refused, 11 of 11.** A merged set
+drags the way a selection does, because a click on it selects all of it
+(`selectionForPick`), and the tests drag both.
+
+*Corrected.* This paragraph first said the set drag lifted 14 chairs. That came from a
+probe that resolved the dragged piece against the room as it stood, where both tabs
+resolve it against `travellingWorld` and then `settleLead`. On the real path the set
+dragged by its table never moved at all, and the lifts belonged to the drag by a chair.
+Every number in this section is now from the app's own path.
+
+**Two fixes were built and measured.**
+- *A — lower the tuck bar below the support bar* (0.85 → 0.45). No lifts, and no chair
+  past half. But 3 of the 27 solves were lost, exactly the three that tucked deepest, and
+  9 tests went red in 5 files (the conformance ramp, two shuffle tests, *does not fine a
+  chair for being tucked under a table*, the placement banner, two tidiness seeds). It
+  re-prices `overlap` in every solve the app runs.
+- *B — a seat never LANDS on the surface it tucks under.* Chosen by the user. The solver
+  is untouched; the support probe learns the one rule that belongs to landing.
+
+**B splits one question into two, and the split is the design.** `findSupportDetailed`
+is the DROP question — what would this piece land on here — and it now looks past a
+`sharesFloor` partner (a dining or office chair and a dining table or desk; an ottoman and
+a coffee table, dining table or desk), to the floor or to anything else genuinely under the piece.
+Every caller that MOVES a piece to its answer asks it: drag gravity, a piece being added
+(`placeNewPart`), the Inspector's **Change the model**, and `settleHeights`.
+`highestSurfaceUnder` is the STATE question — what is this footprint over as it stands —
+with no seat rule, and `restingOn` (the placement banner) and `ridingParents` (the rider
+relation) ask it. Putting the rule in the one shared function was the first draft, and it
+was wrong twice over: a chair an older version had already stood on its table would read
+*Floating*, and would be left in mid-air when the table moved. Both callers share one
+loop (`topSurface`), so the two questions cannot drift on anything but the rule.
+
+The mover's kind is a REQUIRED argument (`SupportSelf`), not looked up by id, because two
+callers ask about a piece the list does not hold: a new piece (`'__new__'`), and the model
+swap, whose list still holds the OLD kind under the same id. Asked with the old kind, a
+lamp on a dining table swapped for a dining chair stayed on the tabletop. The rule is
+symmetric, as `sharesFloor` is: a small dining table dropped over a chair does not stand
+on its seat. Its role is read from its own size, because `roleOf` tells a dining table
+from a side table by its dimensions.
+
+**After, on the same 60 presses:** the same 27 solves. The set dragged by its table is
+valid 11 of 11, and by a deep chair 14 of 14, with 0 chairs lifted either way. The solo
+nudge lifts 0 of 14, and is refused (§ 17, below). No baseline moved.
+
+*The first commit of this fix refused every one of those set drags*, by the table and by a
+chair alike, 25 of 25, and reported it as "0 chairs lifted". Both halves were true. A
+chair tucked under its table overlaps it, and `collidesAt` has no `sharesFloor` exemption,
+so each piece of the set blocked the other. Before the fix, the chair's lift onto the
+tabletop was what cleared that overlap. Take the lift away and the set cannot move.
+
+**A set drags as one: the overlaps it starts with travel with it.** A convoy member does
+not count as an obstacle the travelling pieces it already overlapped at pointer-down
+(`ConvoyMember.inherited`, `lib/drag-convoy.ts`), and neither does the lead
+(`leadInherited`). That is sound because the rigidity veto holds every member to exactly
+the lead's delta: two pieces that overlapped by some amount still overlap by that same
+amount, so nothing new has been let through. Three limits keep it that narrow.
+- *Wall riders are left out on both sides.* A wall piece throws away the wall-normal part
+  of the delta, so it does not travel rigidly with the rest, and the argument fails. A
+  bookcase stood over a painting is refused with it selected, by either piece, exactly as
+  before. Grabbed by the painting, forgiving would in fact be sound, since the bookcase
+  follows the painting's own accepted move; it is not done, so the rule stays one sentence
+  and this change stays a change to floor pieces.
+- *The lead forgives only while its turn and size are unchanged.* A wheel turn or a
+  resize mid-drag changes the overlap, so the lead answers for its chairs again. A full
+  turn is unchanged: the angle is compared round the circle (review round 2).
+- *Anything outside the set still counts.* A bookcase in a chair's path stops the whole
+  set and names the chair (`blockedBy`). A chair alone has nothing to inherit, so the solo
+  nudge is still refused.
+
+**Two holes in the seat rule, closed in the same round.**
+- *A tray on the table lifted the chair anyway.* Looking past the table alone still let
+  the chair stand on anything resting on the tabletop. So a seat now also skips any
+  candidate standing as high as the partner it is under: a 900 × 600 tray on the table
+  holds the chair nowhere, while a lamp still lands on that tray. "As high as" has no
+  allowance, so a 5 mm placemat is skipped too. Only a partner the chair is actually under
+  caps anything: beside the table, a shoe rack taller than the tabletop still holds a
+  chair that is over it. Under two partners, the lower one is the cap, so a chair tucked
+  under a 650 mm desk with its back under a dining table's edge does not stand on the tray
+  on the desk. The rule is symmetric, like `sharesFloor`: a table dropped over a tucked
+  chair does not land on what stands on top of it. "Top" is the chair's bounding top, its
+  backrest, because nothing here knows a seat height. A cushion on the SEAT is below the
+  cap, and only support share keeps it from holding the table (a 450 mm cushion is 14% of
+  a 1600 × 900 top). *Corrected in review round 2: this said the cap covered a cushion on
+  the seat. Its test had put the cushion on the backrest, the one height the cap covers.*
+- *A floor deck and a tray were coffee tables.* `roleOf` reads a table-ish piece by its
+  size, and an `other/box` goes down to 50 mm. So a 50 mm floor deck, the thinnest box
+  `clampDims` allows, read as a coffee table, and an ottoman could not stand on it; it sank into the deck. A 750 × 450 tray
+  read as one too, and `settleHeights` dropped it through the ottoman under it. Anything
+  lower than the catalogue's lowest table (250 mm, read from `lib/dimension-ranges.ts`)
+  is now `other`. *Corrected: the first version of this fix and its tests used a 40 mm
+  deck, a size the app cannot make.*
+- *…and so was a platform* (review round 2). A 3 m platform read as a coffee table at
+  300 mm and a dining table at 700, so an ottoman or a chair standing on it was refused
+  its footing, and `settleHeights` dropped the chair inside the box. A box bigger in plan
+  than the largest table the catalogue sizes (2600 × 1500, drawn either way round) is
+  `other` now too. It is the one floor obstacle left `other` on purpose: a coffee table's
+  clearance, and the sofa it belongs beside, describe nothing about a platform.
+  Both bounds are read off the ranges `clampDims` holds tables and desks to, so neither
+  can reach one; a test sweeps every one of those ranges at both ends. The height floor
+  and the 250 mm obstacle height (`isObstacle`, `floorBlockers`) are one boundary written
+  in two places, so a second test sweeps box heights: a box that blocks the floor always
+  has a role that makes room for it.
+
+Pieces with no floor sharers (a lamp, a plant, a monitor) skip all of this; the probe
+asks `hasFloorSharers` first.
+
+**What it deliberately did not do.**
+- *The chairs are still tucked deep.* 11 of 27 solves still leave a chair past half under
+  its table. The plan's acceptance asked for that to be 0 as well, and it was written for
+  fix A. Under B a deep tuck is an arrangement rather than a defect, because nothing lifts
+  it any more. The seeded tucks (0.231) do not move, and neither do the 8/40 and 4/120 at
+  the overlap term, since the solver is unchanged.
+- *A tucked chair nudged alone is refused now, at any depth.* Past half it used to be
+  lifted, and the lift made the move valid. `collidesAt` has no `sharesFloor` exemption, so
+  it is refused like a chair tucked a quarter in always was. That is § 17's open decision,
+  unchanged. `tests/seat-support.test.ts` pins it and says which line to change if § 17
+  is ever decided the other way.
+- *A room saved with a chair already on its table keeps it there.* The banner still says
+  *On Table*, and it rides the table. `settleHeights` would bring it down, but only on the
+  detection path (`buildSceneFromRoom`), not on every room open. The first drag of that
+  chair applies the rule: it is refused while it is over the table, and lands on the floor
+  once it is clear (measured: refused while the chair overlaps the table at all, valid on
+  the floor from the first position clear of it). **Floor** in the placement row brings it
+  down in place.
+- *The 3D tab is not covered by a test.* `tests/seat-swap.test.tsx` mounts the real plan
+  page and presses **Change the model**; the model page cannot be mounted here (R3F). The
+  drag half is `lib/drag-resolve.ts` and `lib/drag-convoy.ts`, which both tabs call.
+  What both tabs call is not all of it, and review round 2 found the gap: `Draggable`
+  hands the lead's size in from `currentDim()`, which snapped and clamped it whenever the
+  Scale TOOL was selected, handles held or not. A body drag of a 1613 mm table asked for
+  its chairs' forgiveness at 1610, did not get it, and was refused in 3D while the plan
+  moved it; on any piece sized off the grid, the same drag quietly resized it on release.
+  The fix was a check on the held scale handles; #188 then removed the scale read
+  outright (`currentDim()` returns the held size, or the stretch in flight), which
+  covers the same drag with nothing left to check, so the check went in the merge.
+  `docs/visual-check.md` names the look.
+- *A new piece is asked about without its turn.* `placeNewPart` passes the probe no `rot`
+  and no `circle`, so a round lamp added at an angle is measured as an unturned square.
+  That is older than this fix and not its mechanism; the fix is one line.
+- *A small low box is still a side table.* `roleOf` asks "under 700 mm both ways" before it
+  asks the new height floor, so a 400 × 300 tray reads as a side table. A side table has no
+  floor sharers, so nothing here depends on it, and it is older than this fix.
+- **Found while testing, not fixed: an ottoman climbs onto the tray standing on it.**
+  `settleHeights` resolves lowest first and its probe has no below-test, so a
+  tabletop-prone piece can take the piece resting on it as its support. A 750 × 450 tray
+  on a 550 × 400 × 420 ottoman: the ottoman goes to 0.48 m, then the tray to 0.90 m, both in the
+  air. Measured the same before this fix (for every tray size tried), after its first
+  commit (for trays too small to read as a coffee table) and now. A large ottoman the tray
+  covers less than half of is unaffected, which is what the tray test uses.
+
+Tests: `tests/seat-support.test.ts` (32) and `tests/seat-swap.test.tsx` (3). Every clause is
+a pair, with a table lamp at the same spot that must still land, because a probe that
+refused everything would pass every "stays on the floor" assertion. 8 of 8 sabotages
+caught: the seat rule deleted; the swap asking with the old kind; `restingOn` or
+`ridingParents` given the drop question; a new piece, a settled piece or a dragged piece
+asked as a generic box; the mover's role read at zero size. The last one survived the
+first pass, and it is what the symmetric test was written for. Review round 1 added 14
+more on the code it added, all caught: the inherited set ignored, withheld from members
+or from the lead, or kept through a turn; wall riders let in on either side; the tray cap
+removed, applied to a partner the chair is not under, given an allowance, or read at the
+higher of two partners; floor sharers limited to seats; the table height floor removed;
+the early-out taken for everything. Five survived the first pass (both rider halves and
+the last three cap variants), and the painting, placemat, shoe-rack and two-surfaces
+clauses are what they were written for. The bookcase-and-painting clause was checked
+both ways: with riders let in, the bookcase goes 9 mm deeper into the painting and the
+drag is valid. A sixth survivor was a check that could change nothing (the lead asked
+for its overlaps only when it had members; without them its world holds none of the
+pieces it could name), and it is deleted rather than tested. Review round 2 added 13
+on the two new bounds and the sweep, all caught: either plan bound removed, read along one
+axis, made inclusive, or read off the wrong end of the ranges; the height floor removed,
+raised, or read off the highest range; the obstacle height or `floorBlockers`' bar
+lowered; the tray cap removed. One was caught by the wrong test the first time: with the
+height floor removed, the deck clause still passed, because a 3 m deck was already `other`
+by the new plan bound. The deck is 2400 × 1500 now, inside a table's plan, so the height is
+what answers.
+
+**§ H.6.4 · OPEN: the seat rule has no fit test.** Found in § H.6.3's second review. A
+seat looks past its partner at any height, so an ottoman exactly as tall as its coffee
+table "tucks" into it (a 420 mm ottoman added over a 420 mm table lands at y = 0), and a
+420 mm ottoman over a 250 mm table ends up inside it, where every drag of it is refused as
+blocked. The rule was written about seats that go under a top, and nothing asks whether
+this one does. The pair `sharesFloor` names needs a height condition: the seat's top below
+the partner's underside, or, lacking an underside, below its top by some allowance. Neither
+number exists in the catalogue yet, and a wrong allowance would lift chairs back onto
+tables, which is the defect § H.6.3 fixed, so it needs measuring before it is written.
+`tests/seat-support.test.ts` uses a 350 mm nesting ottoman under its 420 mm table so that
+no fixture certifies the interpenetration, and asserts only the reading of the 250 mm one.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
@@ -4516,6 +4721,8 @@ places, and both are the app's own presets.** It is narrowed where it is asserte
 - **A tucked pair.** `collidesAt` has no `sharesFloor` exemption while rule 2 and the
   seeder's `seats()` both do, so a dining chair under its table is refused by the drag
   and silent in the report **by design** — 20 seeded pairs across `open` and `t`.
+  *(Since § H.6.3 that holds at every depth. A chair tucked past half used to be lifted
+  onto the table instead, and the lift made the drag valid.)*
 
 Both want the same decision — does `collidesAt` grow the report's exemptions, or does the
 report grow the drag's strictness — and it is the same shape as § 31: a question about
@@ -6920,8 +7127,9 @@ are here rather than in a commit message because each needs a decision:
    **FIXED 2026-09-04, and it was WIDER than filed.** The note blamed one function and
    named an off-centre ring as the symptom. Tracing the callers rather than trusting it:
    **all three** placement paths passed `useScene.getState().parts`, and `placeNewPart`
-   reads that array too — for `findSupportUnder`, not only `openSpotForNewPart` for
-   `collidesAt`. So the visible failure was never a slightly-off ring. Measured in both
+   reads that array too — for `findSupportUnder` (`findSupportDetailed` since § H.6.3),
+   not only `openSpotForNewPart` for `collidesAt`. So the visible failure was never a
+   slightly-off ring. Measured in both
    directions: a lamp dropped where a desk **used to be** rests at **0.75 m over empty
    floor**, and one dropped on the desk that is **really there** falls through it.
    `PlanView` had already imported `currentRoomScene` and was using it **ninety lines

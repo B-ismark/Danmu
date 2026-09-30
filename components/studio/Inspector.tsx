@@ -142,7 +142,9 @@ export function Inspector() {
         room.height,
       );
     } else {
-      support = findSupportDetailed(partSnapshot(), id!, x, z, dimMM, baseRot);
+      // The NEW kind is the one asking: the snapshot still holds the old one under
+      // this id, and a swap to a chair must not stand it on the table it tucks under.
+      support = findSupportDetailed(partSnapshot(), { id: id!, category: item.category, shape: item.shape }, x, z, dimMM, baseRot);
       ny = support !== null && support.y > 0.3 ? support.y : 0;
     }
     resetTransforms(id!); // drop stale rotate/scale overrides (and any rigid-parenting link)

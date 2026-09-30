@@ -76,11 +76,11 @@ describe('ridingParents — who is standing on what', () => {
   // parent's top with a 50 mm tolerance, and a rug's top is 5 mm — so a bare
   // adjacency test makes every sofa in the app a rider of the rug it stands on, and
   // `movableFor` would then refuse to move the sofa at all. The only thing that
-  // stops it is `findSupportDetailed` refusing to hand a rug out as a support.
+  // stops it is `highestSurfaceUnder` refusing to hand a rug out as a support.
   it('does not make a sofa the rider of the rug it stands on', () => {
     const rug = part({ id: 'rug', category: 'rug', shape: 'rug', dimMM: [2000, 3000, 5] });
     // ON the rug, not beside it: at `pos[1] = 0` the floor clause one line earlier
-    // refuses the sofa and `findSupportDetailed` is never called, so the rug refusal
+    // refuses the sofa and `highestSurfaceUnder` is never called, so the rug refusal
     // this test is named for is not reached and deleting it stays green. Measured.
     const sofa = part({
       id: 'sofa', category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 880], pos: [0, 0.005, 0],
@@ -92,7 +92,7 @@ describe('ridingParents — who is standing on what', () => {
     expect(ridingParents([rug, sofa])).toEqual({});
   });
 
-  // THE BELOW-TEST. `findSupportDetailed` returns the highest top whose footprint
+  // THE BELOW-TEST. `highestSurfaceUnder` returns the highest top whose footprint
   // covers the mover, above or below — so asked about a nightstand parked in front
   // of a wardrobe it answers "the wardrobe", and without the adjacency test the
   // nightstand becomes a rider that no solve may move.
@@ -195,7 +195,7 @@ describe('ridingParents — who is standing on what', () => {
   // that took a second pass. The two tests above are refused by the below-test long
   // before this clause is asked, so deleting it survived them both. The case it
   // guards needs a support SHORT enough that a piece standing on the FLOOR is inside
-  // the 50 mm adjacency band of its top, and not a rug (which `findSupportDetailed`
+  // the 50 mm adjacency band of its top, and not a rug (which `highestSurfaceUnder`
   // refuses for its own reasons). A 40 mm mat is that case.
   //
   // The pair is the point. A chair whose bottom is at 0 is standing on the floor,

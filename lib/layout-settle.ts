@@ -275,10 +275,12 @@ export type HeightFix = {
  *
  *  **Do not wire it into Suggest without reading the bar below.** `support.y > 0.3`
  *  here and `p.pos[1] > 0` in `ridingParents` are two thresholds on one axis over one
- *  `findSupportDetailed`, and they disagree on a named pair: a table lamp at y = 0.30
- *  on a 300 mm ottoman — the catalogue's minimum — is a rider that `carryRiders`
- *  carries and a piece this pass drops to the floor. Wiring the two together as they
- *  stand makes the lamp travel with the ottoman and then fall through it.
+ *  search — `findSupportDetailed` here, `highestSurfaceUnder` there, which differ only
+ *  by the seat rule (§ H.6.3) and not at all for a lamp — and they disagree on a named
+ *  pair: a table lamp at y = 0.30 on a 300 mm ottoman — the catalogue's minimum — is a
+ *  rider that `carryRiders` carries and a piece this pass drops to the floor. Wiring
+ *  the two together as they stand makes the lamp travel with the ottoman and then fall
+ *  through it.
  *
  *  The fix is not a vertical axis in the annealer. The solver's job is where things
  *  stand in plan; a rider's height is a CONSEQUENCE of that, so it is answered
@@ -363,7 +365,7 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
 
     if (p.category !== 'rug') {
       const support = floor
-        ? findSupportDetailed(work, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
+        ? findSupportDetailed(work, p, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
         : null;
       const y = support !== null && support.y > 0.3 ? support.y : null;
       if (isTabletopProne(p.category) && floor && y !== null) {
