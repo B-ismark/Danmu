@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { attachedToWall, carryAttached } from '../lib/wall-move';
 import { footprintForLayout, offsetWall, wallOutwardNormal } from '../lib/footprint';
 import type { ScenePart } from '../lib/scene-spec';
-import { WALL_GAP } from '../lib/layout-rules';
+import { WALK_MIN, WALL_CARRY_REACH, WALL_GAP } from '../lib/layout-rules';
 
 // A 4 x 4 rectangle. footprintForLayout('rect') winds [-hw,-hd] → [hw,-hd] →
 // [hw,hd] → [-hw,hd], so edge 0 is the North wall (z = -2) and edge 1 the East
@@ -35,37 +35,41 @@ const shelf = part({ id: 'shelf', category: 'shelf', shape: 'bookshelf', rot: -M
 
 describe('attachedToWall', () => {
   it('takes what is against the wall and what is mounted in it', () => {
-    const ids = attachedToWall([sofa, table, window0, shelf], ROOM, NORTH);
+    const ids = attachedToWall([sofa, table, window0, shelf], ROOM, NORTH, {});
     expect(ids).toEqual(['sofa', 'window']);
   });
 
   it('leaves furniture on a neighbouring wall alone — that wall stretches, it does not travel', () => {
-    expect(attachedToWall([sofa, shelf], ROOM, EAST)).toEqual(['shelf']);
+    expect(attachedToWall([sofa, shelf], ROOM, EAST, {})).toEqual(['shelf']);
   });
 
-  it('ignores a piece further off the wall than the tolerance', () => {
-    const adrift = part({ id: 'adrift', pos: [0, 0, -2 + 0.4 + 0.3], dimMM: [1000, 600, 800] });
-    expect(attachedToWall([adrift], ROOM, NORTH)).toEqual([]);
+  it('takes a piece standing short of a walkway off the wall, and leaves one a person can walk behind', () => {
+    // Near face `gap` off the North wall's plaster; the piece is 600 mm deep.
+    const at = (gap: number) => part({ id: 'p', pos: [0, 0, -2 + gap + 0.3], dimMM: [1000, 600, 800] });
+    expect(attachedToWall([at(WALL_CARRY_REACH - 0.005)], ROOM, NORTH, {})).toEqual(['p']);
+    expect(attachedToWall([at(WALL_CARRY_REACH + 0.005)], ROOM, NORTH, {})).toEqual([]);
+    // The reach IS a walkway, not a number of its own.
+    expect(WALL_CARRY_REACH).toBe(WALK_MIN);
   });
 
   it('counts a piece already overlapping the wall', () => {
     const through = part({ id: 'through', pos: [0, 0, -2 + 0.2], dimMM: [1000, 600, 800] });
-    expect(attachedToWall([through], ROOM, NORTH)).toEqual(['through']);
+    expect(attachedToWall([through], ROOM, NORTH, {})).toEqual(['through']);
   });
 
   it('does not claim a piece that is close to the wall\'s LINE but past its end', () => {
     // Wall 0 spans x ∈ [-2, 2]. This sits at x = 6, z = -2: zero distance from the
     // infinite line the wall lies on, nowhere near the wall.
     const far = part({ id: 'far', pos: [6, 0, -2 + WALL_GAP + 0.4], dimMM: [1000, 600, 800] });
-    expect(attachedToWall([far], ROOM, NORTH)).toEqual([]);
+    expect(attachedToWall([far], ROOM, NORTH, {})).toEqual([]);
   });
 
   it('assigns a wall-mounted piece to one wall only — the one apertures.ts would cut', () => {
     // A window near the NE corner belongs to whichever edge is nearest, and to
     // exactly one, or its hole and its glass would end up on different walls.
     const corner = part({ id: 'corner', shape: 'window', wallMounted: true, pos: [1.9, 1.2, -2], dimMM: [900, 100, 1200] });
-    const north = attachedToWall([corner], ROOM, NORTH);
-    const east = attachedToWall([corner], ROOM, EAST);
+    const north = attachedToWall([corner], ROOM, NORTH, {});
+    const east = attachedToWall([corner], ROOM, EAST, {});
     expect(north.length + east.length).toBe(1);
   });
 });
@@ -76,7 +80,7 @@ describe('carryAttached', () => {
 
   it('moves carried pieces by the wall delta along the wall normal, and nothing else', () => {
     const after = offsetWall(ROOM, NORTH, 0.5); // push North out 500 mm
-    const moves = carryAttached(ids, parts, ROOM, after, wallOutwardNormal(ROOM, NORTH), 0.5);
+    const moves = carryAttached(ids, parts, ROOM, after, wallOutwardNormal(ROOM, NORTH), 0.5, {});
     expect(moves.map((m) => m.id).sort()).toEqual(['sofa', 'window']);
     const bySofa = moves.find((m) => m.id === 'sofa')!;
     // North's outward normal is -Z, so pushing it out moves the sofa to lower z.
@@ -91,11 +95,11 @@ describe('carryAttached', () => {
 
   it('carries them inward too, keeping the gap to the wall', () => {
     const after = offsetWall(ROOM, NORTH, -0.5);
-    const moves = carryAttached(ids, parts, ROOM, after, wallOutwardNormal(ROOM, NORTH), -0.5);
+    const moves = carryAttached(ids, parts, ROOM, after, wallOutwardNormal(ROOM, NORTH), -0.5, {});
     const bySofa = moves.find((m) => m.id === 'sofa')!;
     expect(bySofa.pos[2]).toBeCloseTo(sofa.pos[2] + 0.5, 10);
     // Still against its wall after the move — the gap is what makes it "attached".
-    expect(attachedToWall([{ ...sofa, pos: bySofa.pos }], after, NORTH)).toEqual(['sofa']);
+    expect(attachedToWall([{ ...sofa, pos: bySofa.pos }], after, NORTH, {})).toEqual(['sofa']);
   });
 
   it('refuses to carry a floor piece out of the room, but never blocks a wall-mounted one', () => {
@@ -114,13 +118,14 @@ describe('carryAttached', () => {
       after,
       wallOutwardNormal(L, 0),
       -20, // pull the wall 20 m in: no floor piece can follow that and stay inside
+      {},
     );
     expect(carried.map((m) => m.id)).toEqual(['glass']);
   });
 
   it('is a no-op for an empty selection or a zero step', () => {
-    expect(carryAttached([], parts, ROOM, ROOM, [0, -1], 0.5)).toEqual([]);
-    expect(carryAttached(ids, parts, ROOM, ROOM, [0, -1], 0)).toEqual([]);
+    expect(carryAttached([], parts, ROOM, ROOM, [0, -1], 0.5, {})).toEqual([]);
+    expect(carryAttached(ids, parts, ROOM, ROOM, [0, -1], 0, {})).toEqual([]);
   });
 });
 
@@ -193,11 +198,11 @@ describe('the ceiling family belongs to the room, not to an edge of it', () => {
     // always names SOME wall — so the flag made every ceiling piece attached to
     // whichever edge happened to be nearest, and a wall drag carried it sideways off
     // whatever it hangs over. The geometric branch answers 1.325 m and declines.
-    expect(attachedToWall([pendant, table], ROOM, NORTH)).toEqual([]);
+    expect(attachedToWall([pendant, table], ROOM, NORTH, {})).toEqual([]);
 
     // The control: a piece genuinely IN that wall is still claimed, so this is not
     // "the branch stopped working".
-    expect(attachedToWall([pendant, window0], ROOM, NORTH)).toEqual(['window']);
+    expect(attachedToWall([pendant, window0], ROOM, NORTH, {})).toEqual(['window']);
   });
 
   it('will not carry a pendant out of the room it hangs in', () => {
@@ -209,12 +214,12 @@ describe('the ceiling family belongs to the room, not to an edge of it', () => {
     // room that now ends at z = +2.
     const outward = wallOutwardNormal(ROOM, NORTH);
     const after = offsetWall(ROOM, NORTH, -3.5);
-    const carried = carryAttached(['pendant'], [pendant], ROOM, after, outward, -3.5);
+    const carried = carryAttached(['pendant'], [pendant], ROOM, after, outward, -3.5, {});
     expect(carried).toEqual([]);
 
     // …and the exemption still holds for something that really does ride the wall,
     // which is what stops this being a fix that just turns the branch off.
-    const kept = carryAttached(['window'], [window0], ROOM, after, outward, -3.5);
+    const kept = carryAttached(['window'], [window0], ROOM, after, outward, -3.5, {});
     expect(kept.map((c) => c.id)).toEqual(['window']);
   });
 });

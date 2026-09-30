@@ -1376,8 +1376,17 @@ pair and they are **one row**, and the measured one survives in either photo ord
   from its bounds. Custom footprints persist on `RoomData.footprint`.
 - **What the wall carries**: anything mounted **in** it (window, door, TV, mirror)
   or standing **against** it travels with it, by the same delta along the same
-  normal. `lib/wall-move.ts` decides who is attached (`WALL_ATTACH_TOL` in
-  `layout-rules.ts`) and where they land; `lib/wall-actions.ts` is the **only**
+  normal. "Against" means nearer the plaster than a walkway (`WALL_CARRY_REACH`
+  = `WALK_MIN` in `layout-rules.ts`): a gap nobody can walk through is the
+  piece's breathing room, not floor. It was 120 mm, and the starter rooms stand a
+  plant, a floor lamp, an armchair and a sofa 200–345 mm off their walls, so a
+  fresh room's wall left them behind. **A claimed piece brings its company** —
+  the rest of its group (`groupId`) and whatever rests on it (`parentIds`), the
+  same two relations a drag carries — closed to a fixed point; a resting piece is
+  never claimed on its own, and a group member riding a PARALLEL wall stays on
+  it. Containment is judged per set: one member that cannot follow keeps the whole
+  set where it is. `lib/wall-move.ts` decides who is attached and where they
+  land; `lib/wall-actions.ts` is the **only**
   entry point — all four movers (3D handle, plan handle, plan arrow keys,
   Inspector nudge) go through `moveWallCarrying`, and the positions it writes are
   `useStudio` overrides, because those are the layer that wins. Attachment is
