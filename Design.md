@@ -2277,7 +2277,9 @@ asks about width.
   switching Room ↔ Add ↔ View never means closing first. **One sheet at a time**:
   panels replace each other and never stack (NN/g, HIG). Where a released drag
   settles is `lib/sheet-detents.ts`, which reads the same two tokens the stylesheet
-  draws.
+  draws. **View is the exception:** four switches and a picker, so its sheet is as tall
+  as they are (`.sheet[data-fit]`) with one open height, and its grabber closes it. At
+  55% it was a band of empty paper over the room.
 - **Targets.** Toolbar items are 56px tall, past Apple's 44pt and Material's 48dp,
   because the bottom edge is where Hoober measured touches landing least accurately.
   They stop at 128px wide, so three items never become three slabs.
@@ -2288,7 +2290,8 @@ asks about width.
 **The web half of it**, where the platform guidance stops:
 
 - `viewport-fit=cover` plus `env(safe-area-inset-*)` on `body` and on the toolbar's
-  bottom padding (WebKit, *Designing websites for iPhone X*).
+  bottom padding (WebKit, *Designing websites for iPhone X*). **Only there:** the sheet
+  rests on the toolbar, so an inset inside the sheet too was ~34px of blank paper.
 - `100dvh` for the studio's height (web.dev, *viewport units*), minus the top inset.
 - **Bars in flow, never `position: fixed`.** The toolbar is a grid row. Fixed bottom
   bars are what iOS Safari's collapsing toolbar is reported to misplace (iOS 26).

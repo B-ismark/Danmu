@@ -222,6 +222,16 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
     return sheetHeights(stage.clientHeight, half, gap);
   };
 
+  // View is four switches and a picker: the sheet is as tall as they are (`data-fit`
+  // in globals.css), with one open height. Its drag can only lower it.
+  const fit = panel === 'view';
+  const dragHeights = (d: { h: number }): [number, number, number] => (fit ? [0, d.h, d.h] : restingHeights());
+  const cycle = () => {
+    const next = cycleSheet(snap, fit);
+    if (next === 'closed') close();
+    else setSnap(next);
+  };
+
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     // The close button is a press, never a drag.
     if ((e.target as HTMLElement).closest('.sheet__close')) return;
@@ -238,7 +248,7 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
     const dy = e.clientY - d.y;
     if (!d.moved && Math.abs(dy) < TAP_PX) return;
     d.moved = true;
-    const [, , full] = restingHeights();
+    const [, , full] = dragHeights(d);
     el.dataset.dragging = '1';
     el.style.height = `${Math.min(full, Math.max(0, d.h - dy))}px`;
     d.lastY = e.clientY;
@@ -253,11 +263,11 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
     if (!d.moved) {
       // A tap on the grabber cycles the detents (HIG); a tap elsewhere on the
       // header is nothing.
-      if ((e.target as HTMLElement).closest('.sheet__handle')) setSnap(cycleSheet(snap));
+      if ((e.target as HTMLElement).closest('.sheet__handle')) cycle();
       return;
     }
     const velocity = -(e.clientY - d.lastY) / Math.max(1, performance.now() - d.lastT);
-    const next = settleSheet(el.getBoundingClientRect().height, velocity, restingHeights());
+    const next = settleSheet(el.getBoundingClientRect().height, velocity, dragHeights(d));
     delete el.dataset.dragging;
     el.style.height = '';
     if (next === 'closed') close();
@@ -287,6 +297,7 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
         id={SHEET_ID}
         className="sheet"
         data-snap={snap}
+        data-fit={fit || undefined}
         aria-label={title}
         // Hidden from everyone at rest — it is off-screen, and a keyboard must not
         // tab into a panel nobody can see.
@@ -302,11 +313,11 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
           <button
             type="button"
             className="sheet__handle"
-            aria-label={snap === 'full' ? 'Shrink the panel' : 'Expand the panel'}
+            aria-label={fit ? `Close ${title}` : snap === 'full' ? 'Shrink the panel' : 'Expand the panel'}
             // The head's pointer handlers turn a tap into a cycle; a click here is
             // the keyboard's Enter / Space, which has no pointer.
             onClick={(e) => {
-              if (e.detail === 0) setSnap(cycleSheet(snap));
+              if (e.detail === 0) cycle();
             }}
           >
             <span aria-hidden="true" />

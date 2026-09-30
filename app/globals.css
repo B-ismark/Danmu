@@ -1631,6 +1631,10 @@ textarea.field { border-radius: var(--r-2); }
   transition: height var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out), visibility var(--dur-slow) step-start;
 }
 .sheet[data-snap="full"] { height: calc(100% - var(--sheet-top-gap)); }
+/* A sheet that holds a few fixed controls (View) is as tall as they are, never a
+   detent's worth of empty paper over the room: at 55% it left ~66px blank under
+   Quality, more with a home indicator. One open height, so no `full` either. */
+.sheet[data-fit] { height: auto; max-height: calc(100% - var(--sheet-top-gap)); }
 /* Closed is off the bottom edge and out of the accessibility tree; `visibility`
    waits for the slide to finish before it hides anything. */
 .sheet[data-snap="closed"] {
@@ -1755,7 +1759,8 @@ textarea.field { border-radius: var(--r-2); }
 .sheet__close { width: 44px; height: 44px; flex-shrink: 0; color: var(--ink-2); }
 .sheet__body {
   flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
-  padding-bottom: env(safe-area-inset-bottom);
+  /* No safe-area padding here: the sheet rests on the toolbar, and the toolbar
+     already clears the home indicator. A second inset was dead paper. */
   /* A scroll that reaches the end of a panel stops there, rather than dragging the
      page (or pulling to refresh) behind it. */
   overscroll-behavior: contain;
