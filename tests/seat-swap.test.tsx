@@ -16,6 +16,9 @@
 // kind's turn but not its OUTLINE, so a swap to a round piece was asked as the square
 // around it. The last block below holds that half.
 //
+// And a third: the snapshot holds what stands ON the piece being swapped, one top up
+// over its own footprint. The block after that holds it.
+//
 // What it does NOT prove: nothing about the 3D tab, whose Inspector is the same
 // component but whose page cannot be mounted here (R3F).
 import 'fake-indexeddb/auto';
@@ -84,7 +87,8 @@ beforeEach(() => {
  *  only lamps are on offer and the row being looked for is not there to press. */
 function swapTo(label: string) {
   render(<PlanPage />);
-  fireEvent.click(screen.getByText('Change the model'));
+  // A generic piece — a scanned box — offers the same swap under another name.
+  fireEvent.click(screen.getByText(/^(Change the model|Generic shape · Pick a model)$/));
   fireEvent.change(screen.getByLabelText('Search the Library'), { target: { value: label } });
   const row = screen.getAllByRole('button').find((b) => b.textContent?.trim() === label);
   expect(row, `no Library row named ${label}`).toBeTruthy();
@@ -169,4 +173,31 @@ describe('…and asks with the OUTLINE of the kind it is changing to', () => {
     // The plant's round outline does not come along: a laptop is a square.
     expect(laptop.circle).toBeUndefined();
   });
+});
+
+describe('…and nothing standing on the piece holds it up', () => {
+  // A scanned box with a tray on it, picked a model for. The tray covers the whole box
+  // one top up, so asked with it in the world the new ottoman went UP onto its own tray,
+  // at 0.48 — and with the tray linked to the box, the record gained the other half of
+  // a loop: `{ tray: 'box', box: 'tray' }`.
+  const BOX: ScenePart = { id: 'box', name: 'Box', category: 'other', shape: 'box', dimMM: [550, 400, 420], pos: [0, 0, 0], rot: 0 } as ScenePart;
+  const TRAY: ScenePart = { id: 'tray', name: 'Tray', category: 'other', shape: 'box', dimMM: [750, 450, 60], pos: [0, 0.42, 0], rot: 0 } as ScenePart;
+
+  for (const linked of [true, false]) {
+    it(linked ? 'a tray a drag put there' : 'a tray the scan put there, which nothing linked', () => {
+      // The premise: the probe does hand the tray back, and the ottoman is the kind asked.
+      const self = { id: 'box', category: 'ottoman', shape: 'ottoman' } as const;
+      expect(findSupportDetailed([BOX, TRAY], self, 0, 0, [550, 400, 420], 0, undefined)?.id).toBe('tray');
+
+      useScene.setState({ parts: [BOX, TRAY] });
+      useStudio.setState({ parentIds: linked ? { tray: 'box' } : {}, selection: ['box'], selectedPartId: 'box' });
+      swapTo('Ottoman');
+      const s = useStudio.getState();
+      expect(useScene.getState().parts.find((p) => p.id === 'box')?.shape).toBe('ottoman');
+      expect(s.positions.box?.[1]).toBe(0);
+      expect(s.parentIds.box).toBeUndefined();
+      // The tray is left riding it, as it was.
+      expect(s.parentIds.tray).toBe(linked ? 'box' : undefined);
+    });
+  }
 });

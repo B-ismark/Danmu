@@ -22,6 +22,7 @@ import { useRoomReport } from './RoomTools';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
 import { onPageLeave } from '@/lib/page-leave';
+import { ridersOf } from '@/lib/rider-height';
 
 // The right rail is a DECORATING panel, not a properties palette — and it now
 // practises the disclosure the left rail has always had. Every decorating
@@ -144,7 +145,11 @@ export function Inspector() {
     } else {
       // The NEW kind is the one asking: the snapshot still holds the old one under
       // this id, and a swap to a chair must not stand it on the table it tucks under.
-      support = findSupportDetailed(partSnapshot(), { id: id!, category: item.category, shape: item.shape }, x, z, dimMM, baseRot, isRoundPart(item.shape));
+      // Nor on what is standing on it (`ridersOf`): a box with a tray on it, swapped
+      // for an ottoman, went up onto its own tray.
+      const riders = ridersOf(id!, effParts, useScene.getState().parts, useStudio.getState().parentIds);
+      const world = partSnapshot().filter((p) => !riders.has(p.id));
+      support = findSupportDetailed(world, { id: id!, category: item.category, shape: item.shape }, x, z, dimMM, baseRot, isRoundPart(item.shape));
       ny = support !== null && support.y > 0.3 ? support.y : 0;
     }
     resetTransforms(id!); // drop stale rotate/scale overrides (and any rigid-parenting link)
