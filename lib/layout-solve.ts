@@ -2108,9 +2108,13 @@ function pruneMoves(
   // together: a chair put back where it was, beside a table that moved.
   const rigid = setsOf(m);
   for (let pass = 0; pass < 3; pass++) {
+    // Filtered before a unit is measured, so a locked piece or a member the lead speaks
+    // for costs nothing here.
     const candidates = out
-      .map((_, i) => ({ i, d: Math.max(...unitOf(rigid, i).map((k) => Math.hypot(out[k].x - origin[k].x, out[k].z - origin[k].z))) }))
-      .filter((c) => m.ctx.movable[c.i] && steers(rigid, c.i) && unitOf(rigid, c.i).some((k) => displaced(origin[k], out[k])))
+      .flatMap((_, i) => {
+        if (!m.ctx.movable[i] || !steers(rigid, i) || !unitDisplaced(rigid, origin, out, i)) return [];
+        return [{ i, d: Math.max(...unitOf(rigid, i).map((k) => Math.hypot(out[k].x - origin[k].x, out[k].z - origin[k].z))) }];
+      })
       .sort((a, b) => a.d - b.d);
     if (candidates.length === 0) break;
     let reverted = false;
