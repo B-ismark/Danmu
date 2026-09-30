@@ -90,6 +90,20 @@ export function resolveScene(
   return resolved;
 }
 
+declare const riderRelationBrand: unique symbol;
+
+/** `riderRelation`'s answer, and the only map a gesture's company is read from.
+ *
+ *  A brand, so the raw `parentIds` does not type-check where this is asked for. That
+ *  map holds only the links a drag recorded, so it is EMPTY for a lamp the room came
+ *  with — and a nightstand dragged with it left its own lamp behind, hanging in the air
+ *  at nightstand height, in both tabs (`docs/what-is-still-open.md` § H.6.7). Every drag
+ *  path handed `planConvoy` the raw map while the scene's own height read already used
+ *  this one: one relation for "what does this lamp stand on", another for "does it
+ *  come along". Narrowing the parameter is what makes the second one unpassable
+ *  rather than merely unread, which is § 44's rule. */
+export type RiderRelation = Readonly<Record<string, string>> & { readonly [riderRelationBrand]: true };
+
 /** Which piece each rider was put on — child id -> support id.
  *
  *  Two sources, and the union is the point rather than a hedge. `parentIds` is what
@@ -103,8 +117,8 @@ export function resolveScene(
 export function riderRelation(
   authored: ScenePart[],
   parentIds: Record<string, string>,
-): Record<string, string> {
-  return { ...ridingParents(authored), ...parentIds };
+): RiderRelation {
+  return { ...ridingParents(authored), ...parentIds } as RiderRelation;
 }
 
 /** Every piece riding `rootId`, however many levels up — the tray on it and the cup on

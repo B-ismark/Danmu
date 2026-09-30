@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { planConvoy, resolveConvoy, convoyRestore, gestureFor, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { resolvePlacement } from '@/lib/drag-resolve';
+import { riderRelation } from '@/lib/rider-height';
 import { selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import type { Poly } from '@/lib/geometry';
 
@@ -98,7 +99,7 @@ function dragged(
     draggedId,
     parts: world,
     selection,
-    parentIds: opts.parentIds ?? {},
+    restsOn: riderRelation(world, opts.parentIds ?? {}),
     footprint: ROOM,
     roomHeight: H,
   });
@@ -148,7 +149,7 @@ function dragged(
 }
 
 function plan(draggedId: string, world: ScenePart[], selection: string[] = [], parentIds: Record<string, string> = {}) {
-  return planConvoy({ draggedId, parts: world, selection, parentIds, footprint: ROOM, roomHeight: H });
+  return planConvoy({ draggedId, parts: world, selection, restsOn: riderRelation(world, parentIds), footprint: ROOM, roomHeight: H });
 }
 
 const posOf = (moves: Array<{ id: string; pos: [number, number, number] }>, id: string) =>
@@ -185,6 +186,49 @@ describe('planConvoy — who travels', () => {
     expect(plan('a', world, ['b']).members).toEqual([]);
     // …and the empty selection is the same case, not a special one.
     expect(plan('a', world, []).members).toEqual([]);
+  });
+
+  it('carries a rider the room came with, which no drag ever linked (§ H.6.7)', () => {
+    // A lamp `defaultScene` stood on a nightstand has no `parentIds` entry — nothing
+    // records a link until someone drags the LAMP — so a convoy planned off the raw
+    // map left it behind, standing on air at nightstand height while the nightstand
+    // went on without it. The relation also reads the authored parts, which is where
+    // that link lives.
+    const ns = part({ id: 'ns', category: 'nightstand', shape: 'nightstand', pos: [2, 0, 2], dimMM: [450, 400, 550] });
+    const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', pos: [2, 0.55, 2.1], dimMM: [250, 250, 500] });
+    const world = [ns, lamp];
+    expect(plan('ns', world, ['ns']).own.map((d) => d.id)).toEqual(['lamp']);
+    // What the raw map amounted to: the same relation with no authored parts to read.
+    const bare = planConvoy({ draggedId: 'ns', parts: world, selection: ['ns'], restsOn: riderRelation([], {}), footprint: ROOM, roomHeight: H });
+    expect(bare.own).toEqual([]);
+
+    const r = dragged(world, 'ns', ['ns'], [3, 2.5]);
+    expect(r.valid).toBe(true);
+    const l = r.moves.find((m) => m.id === 'lamp')!;
+    expect(l.pos[0]).toBeCloseTo(3, 9);
+    expect(l.pos[2]).toBeCloseTo(2.6, 9);
+    // Still on the nightstand's top, rather than at it.
+    expect(l.pos[1]).toBeCloseTo(0.55, 9);
+  });
+
+  it('does not climb onto a rider nobody linked, which it is carrying (§ H.6.7)', () => {
+    // The same missing link, the other way up. A tray is wider than the ottoman under
+    // it, so while the tray stayed in the ottoman's world the support probe — which
+    // takes the highest top over the footprint and has no below-test — stood the
+    // ottoman on its own tray, 0.48 m up, and called the nudge valid. A scanned room
+    // has no links at all, so this was the first nudge of any scanned stack.
+    const ottoman = part({ id: 'o', category: 'ottoman', shape: 'ottoman', pos: [2, 0, 2], dimMM: [550, 400, 420] });
+    const tray = part({ id: 'tray', category: 'other', shape: 'box', pos: [2, 0.42, 2], dimMM: [750, 450, 60] });
+    const world = [ottoman, tray];
+    const stayed = resolvePlacement({
+      part: ottoman, rawX: 2.01, rawZ: 2, rot: 0, dim: ottoman.dimMM, parts: world,
+      footprint: ROOM, roomHeight: H, snapMode: 'off', currentY: 0, wallEdge: null,
+    });
+    expect(stayed.pos[1], 'the premise: with the tray left in its world, it climbs').toBeCloseTo(0.48, 9);
+
+    const r = dragged(world, 'o', ['o'], [2.01, 2]);
+    expect(r.lead.pos[1]).toBeCloseTo(0, 9);
+    expect(r.moves.find((m) => m.id === 'tray')!.pos[1]).toBeCloseTo(0.42, 9);
   });
 
   // ─── `groupId` is not a travel rule ────────────────────────────────────
@@ -1363,7 +1407,7 @@ describe("a member's veto is for what this gesture broke", () => {
     part({ id, category: 'table', shape: 'dining-table', dimMM: [1600, 900, 750], pos: [x, 0, z], groupId: gid } as never);
 
   function tee(draggedId: string, world: ScenePart[], selection: string[]) {
-    return planConvoy({ draggedId, parts: world, selection, parentIds: {}, footprint: TEE, roomHeight: H });
+    return planConvoy({ draggedId, parts: world, selection, restsOn: riderRelation(world, {}), footprint: TEE, roomHeight: H });
   }
   function shove(convoy: Convoy, world: ScenePart[], from: [number, number, number], dx: number, dz: number) {
     return resolveConvoy({
@@ -1423,7 +1467,7 @@ describe("a member's veto is for what this gesture broke", () => {
     // vote, and the table is simply not in its way — `tests/seat-support.test.ts`
     // holds the vote half, with a bookcase.
     const world = [diner('t', 3, 2, 'g2'), chair('c', 3, 1.45, 'g2')];
-    const convoy = planConvoy({ draggedId: 't', parts: world, selection: ['t', 'c'], parentIds: {}, footprint: ROOM, roomHeight: H });
+    const convoy = planConvoy({ draggedId: 't', parts: world, selection: ['t', 'c'], restsOn: riderRelation(world, {}), footprint: ROOM, roomHeight: H });
     expect(convoy.members.map((m) => [...m.inherited])).toEqual([['t']]);
     expect(convoy.members.map((m) => m.startValid)).toEqual([true]);
     const r = resolveConvoy({
@@ -1490,7 +1534,7 @@ describe('a set is bounded by its members, not by the piece under the hand (§ H
   function dragEastBy(dx: number) {
     const parts = world();
     const convoy = planConvoy({
-      draggedId: 'bed', parts, selection: ['bed', 'ns-l', 'ns-r'], parentIds: {}, footprint: ROOM, roomHeight: H,
+      draggedId: 'bed', parts, selection: ['bed', 'ns-l', 'ns-r'], restsOn: riderRelation(parts, {}), footprint: ROOM, roomHeight: H,
     });
     const lead = resolvePlacement({
       part: parts[0], rawX: BED_X + dx, rawZ: BED_DIM[1] / 2000, rot: 0, dim: BED_DIM,
@@ -1564,7 +1608,7 @@ describe('a set is bounded by its members, not by the piece under the hand (§ H
     // difference here can only be the company.
     const parts = world();
     const convoy = planConvoy({
-      draggedId: 'bed', parts, selection: ['bed'], parentIds: {}, footprint: ROOM, roomHeight: H,
+      draggedId: 'bed', parts, selection: ['bed'], restsOn: riderRelation(parts, {}), footprint: ROOM, roomHeight: H,
     });
     expect(convoy.members).toEqual([]);
     const lead = resolvePlacement({

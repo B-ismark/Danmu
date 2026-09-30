@@ -30,6 +30,7 @@ import { collidesAt, type ScenePart } from './scene-spec';
 import { ridesWall } from './physics';
 import { resolvePlacement } from './drag-resolve';
 import { cascadeTransform, snapshotDescendants, type DescendantOffset } from './rigid-parent';
+import type { RiderRelation } from './rider-height';
 import { nearestEdge, type Poly } from './geometry';
 
 /** How far a convoy member may be corrected sideways by its own resolve and still
@@ -336,7 +337,10 @@ export function planConvoy(input: {
   /** The world at its EFFECTIVE transforms (see lib/transforms.ts). */
   parts: ScenePart[];
   selection: readonly string[];
-  parentIds: Record<string, string>;
+  /** Who stands on what — `riderRelation`, never the raw `parentIds` (see
+   *  `RiderRelation`, which is branded so the raw map will not type-check here).
+   *  Every edge is still re-checked against `parts` before anything is carried. */
+  restsOn: RiderRelation;
   /** Needed only to name the wall each wall-riding piece starts on — see
    *  `Convoy.leadEdge`. Resolved here, at pointer-down, because a wall read per
    *  frame is a wall that can change mid-gesture, which is the thing being fixed. */
@@ -345,7 +349,7 @@ export function planConvoy(input: {
    *  judge a piece without knowing what it has to fit under. */
   roomHeight: number;
 }): Convoy {
-  const { draggedId, parts, selection, parentIds, footprint, roomHeight } = input;
+  const { draggedId, parts, selection, restsOn, footprint, roomHeight } = input;
   const byId = new Map(parts.map((p) => [p.id, p]));
   if (!byId.has(draggedId)) {
     return {
@@ -357,7 +361,7 @@ export function planConvoy(input: {
     };
   }
 
-  const own = snapshotDescendants(draggedId, parts, parentIds);
+  const own = snapshotDescendants(draggedId, parts, restsOn);
 
   // The selection travels only when the piece under the pointer is IN it. Dragging
   // something outside the selection is not a request to move the selection, and
@@ -512,7 +516,7 @@ export function planConvoy(input: {
     for (const m of members) {
       const kept = new Set<string>([m.part.id]);
       const desc: DescendantOffset[] = [];
-      for (const d of snapshotDescendants(m.part.id, parts, parentIds)) {
+      for (const d of snapshotDescendants(m.part.id, parts, restsOn)) {
         if (travelling.has(d.id) || !kept.has(d.parentId)) continue;
         kept.add(d.id);
         desc.push(d);

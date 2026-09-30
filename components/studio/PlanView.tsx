@@ -17,7 +17,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useStudio, useSettings, WALL_DRAG_ID } from '@/lib/store';
-import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
+import { currentRiderRelation, currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { DND_MIME, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
@@ -629,7 +629,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
         draggedId: part.id,
         parts,
         selection: useStudio.getState().selection,
-        parentIds: useStudio.getState().parentIds,
+        restsOn: currentRiderRelation(),
         footprint: ROOM_DYN.footprint,
         roomHeight: ROOM_DYN.height,
       });
@@ -775,7 +775,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
         draggedId: part.id,
         parts,
         selection: useStudio.getState().selection,
-        parentIds: useStudio.getState().parentIds,
+        restsOn: currentRiderRelation(),
         footprint: ROOM_DYN.footprint,
         roomHeight: ROOM_DYN.height,
       });
@@ -994,7 +994,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       draggedId: id,
       parts,
       selection: useStudio.getState().selection,
-      parentIds: useStudio.getState().parentIds,
+      restsOn: currentRiderRelation(),
       footprint: ROOM_DYN.footprint,
       roomHeight: ROOM_DYN.height,
     });

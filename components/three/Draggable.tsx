@@ -44,7 +44,7 @@ import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
 import { claimPressForGizmo, clearGizmoClick, holdPress, releasePress } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
-import { currentRoomScene, useSettledY } from '@/lib/room-scene';
+import { currentRiderRelation, currentRoomScene, useSettledY } from '@/lib/room-scene';
 import { renderBaseDim, resolvePart } from '@/lib/transforms';
 import { useDragLive } from '@/lib/drag-live';
 import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
@@ -281,9 +281,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // Everything this gesture carries: whatever is (physically, live) resting on
   // this part, the rest of the multi-selection, and any merged group either of
   // those belongs to. Computed once per gesture from the same frozen snapshot as
-  // `effParts()` — `parentIds` cannot change mid-gesture (`setParent`/
+  // `effParts()` — the relation cannot change mid-gesture (`setParent`/
   // `clearParent` are only ever called from `commit()`, after which both caches
-  // are cleared), so there's no staleness risk in caching this either.
+  // are cleared, and a drag writes no authored part), so there's no staleness
+  // risk in caching this either.
   const convoyCache = useRef<Convoy | null>(null);
   function convoy(): Convoy {
     if (!convoyCache.current) {
@@ -291,7 +292,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         draggedId: partId,
         parts: effParts(),
         selection: useStudio.getState().selection,
-        parentIds: useStudio.getState().parentIds,
+        restsOn: currentRiderRelation(),
         footprint,
         roomHeight,
       });

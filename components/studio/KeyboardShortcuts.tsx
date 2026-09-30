@@ -23,11 +23,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import { v4 as uuid } from 'uuid';
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
-import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
+import { currentRiderRelation, currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { riderRelation } from '@/lib/rider-height';
 import { turnInPlace, refusalCause } from '@/lib/drag-resolve';
 import { planConvoy, travellingWorld } from '@/lib/drag-convoy';
-import { cascadeTransform } from '@/lib/rigid-parent';
+import { cascadeTransform, snapshotDescendants } from '@/lib/rigid-parent';
 import { turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { playSound } from '@/lib/sound';
 import { useDragLive } from '@/lib/drag-live';
@@ -444,23 +444,24 @@ export function spinSelection(quarterTurns = 1) {
   // travelling.has(p.id)) continue`) and a turn is the same rule for the same reason.
   // Filtered UP FRONT rather than as the loop goes, so the answer does not depend on
   // whether the rider or its support came first in the selection.
-  const startParents = useStudio.getState().parentIds;
-  const chosen = new Set(ids);
-  const carriedByAnother = (id: string): boolean => {
-    const seen = new Set<string>([id]);
-    for (let p = startParents[id]; p && !seen.has(p); p = startParents[p]) {
-      if (chosen.has(p)) return true;
-      seen.add(p);
-    }
-    return false;
-  };
-  const turning = ids.filter((id) => !carriedByAnother(id));
+  //
+  // And asked of the relation the convoy below carries by, re-checked against the
+  // scene the same way, because either half alone turns a lamp wrong. A chain over
+  // the raw `parentIds` sees no link under a lamp the room came with, so the cascade
+  // would turn it and then it would be turned again on its own account; the union
+  // unchecked still names the nightstand for a seeded lamp since set down on the
+  // floor, so it would be skipped here while the cascade, which does check, leaves
+  // it behind — turned by nobody.
+  const restsOn = currentRiderRelation();
+  const startScene = currentRoomScene();
+  const carried = new Set<string>();
+  for (const id of ids) for (const d of snapshotDescendants(id, startScene, restsOn)) carried.add(d.id);
+  const turning = ids.filter((id) => !carried.has(id));
 
   for (const id of turning) {
     const scene = currentRoomScene();
     const part = scene.find((p) => p.id === id);
     if (!part) continue;
-    const parentIds = useStudio.getState().parentIds;
     const convoy = planConvoy({
       draggedId: id,
       parts: scene,
@@ -468,7 +469,7 @@ export function spinSelection(quarterTurns = 1) {
       // so none of the others is company — they stay in the world as obstacles,
       // which is exactly what they are.
       selection: [id],
-      parentIds,
+      restsOn,
       footprint: room.footprint,
       roomHeight: room.height,
     });
