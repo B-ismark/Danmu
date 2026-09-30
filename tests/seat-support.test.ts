@@ -462,6 +462,36 @@ describe('every caller that moves a piece to what it finds', () => {
     expect(findSupportDetailed([c, cushion], TABLE, 0, 0, TABLE.dimMM)).toBeNull();
   });
 
+  it("drag: an L-desk caps a chair only where the desk is, not where its box is", () => {
+    // `collidesAt` reads an L-desk's two arms since #190, and the seat rule's "under"
+    // is the same question. Read off the box, a chair in the open corner was under the
+    // desk: a shoe rack there, taller than the desktop, was capped away and the chair
+    // dropped through it to the floor.
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-l', dimMM: [1600, 1400, 750], pos: [0, 0, 0] });
+    const rack = part({ id: 'rack', category: 'shelf', shape: 'shoe-rack', dimMM: [700, 300, 900], pos: [-0.35, 0, 0.5] });
+    const corner = chair('c', -0.35, 0.5);
+    const box = footFromPart(desk.pos, 0, desk.dimMM);
+    const arms = footFromPart(desk.pos, 0, desk.dimMM, false, 'desk-l');
+    const seat = footFromPart(corner.pos, 0, corner.dimMM);
+    expect(footIntersectionArea(seat, box)).toBeGreaterThan(0);
+    expect(footIntersectionArea(seat, arms)).toBe(0);
+    expect(share(corner, rack)).toBeGreaterThanOrEqual(MIN_SUPPORT_SHARE);
+    expect(findSupportDetailed([desk, rack], corner, -0.35, 0.5, corner.dimMM)).toEqual({ id: 'rack', y: 0.9 });
+    // The pair: under an arm, the cap still holds. A tray on the arm does not lift the
+    // chair tucked beneath it, and a lamp there stands on the tray.
+    const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [600, 500, 60], pos: [-0.4, TOP, -0.2] });
+    const under = chair('c', -0.4, -0.2);
+    expect(footIntersectionArea(footFromPart(under.pos, 0, under.dimMM), arms)).toBeGreaterThan(0);
+    expect(findSupportDetailed([desk, tray], under, -0.4, -0.2, under.dimMM)).toBeNull();
+    expect(findSupportDetailed([desk, tray], lamp(-0.4, -0.2), -0.4, -0.2, [250, 250, 500])).toEqual({ id: 'tray', y: TOP + 0.06 });
+    // Both ways round: the desk dropped over the chair in its corner is not capped by
+    // it, so it stands on the board resting on the chair's back; over a chair under an
+    // arm, it is.
+    const board = part({ id: 'board', category: 'other', shape: 'box', dimMM: [1600, 1400, 20], pos: [0, 0.85, 0] });
+    expect(findSupportDetailed([corner, board], desk, 0, 0, desk.dimMM)).toEqual({ id: 'board', y: 0.87 });
+    expect(findSupportDetailed([under, board], desk, 0, 0, desk.dimMM)).toBeNull();
+  });
+
   it('adding: an ottoman dropped over a coffee table goes on the floor; a lamp goes on the table', () => {
     const room = { width: 6, depth: 4, height: H, footprint: ROOM };
     const o = placeNewPart('ottoman', 'ottoman', [550, 400, 350], room, [COFFEE], [0, 0]);

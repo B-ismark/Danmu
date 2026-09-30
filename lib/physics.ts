@@ -660,14 +660,15 @@ export function findSupportDetailed(
   // to rest on what stands on top of the chair. "Top" is the partner's bounding top —
   // a chair's backrest, since nothing here knows a seat height — so something on the
   // SEAT is below the cap, and only support share keeps a cushion there from holding
-  // the table.
-  const me = footFromPart([x, 0, z], selfRot, selfDim, selfCircle);
+  // the table. Both footprints carry their shape, as in `collidesAt`: a chair standing
+  // in an L-desk's open corner is inside the desk's box and under none of the desk.
+  const me = footFromPart([x, 0, z], selfRot, selfDim, selfCircle, self.shape);
   const partners = new Set<string>();
   let under = Infinity;
   for (const o of parts) {
     if (o.id === self.id || !sharesFloor(selfRole, roleOf(o))) continue;
     partners.add(o.id);
-    if (footOverlap(me, footFromPart(o.pos, o.rot ?? 0, o.dimMM, o.circle), -0.01)) {
+    if (footOverlap(me, footFromPart(o.pos, o.rot ?? 0, o.dimMM, o.circle, o.shape), -0.01)) {
       under = Math.min(under, verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1]);
     }
   }
