@@ -98,20 +98,31 @@ export function Inspector() {
     }));
   }
 
-  /** What stands on this piece goes where it goes. The Wall button is a move like any
+  /** What stands on this piece goes where it goes. Both buttons are moves like any
    *  other and used to move the piece alone, leaving a lamp in the air over the spot
    *  its nightstand had left (§ H.6.7). Asked of the relation a drag plans its company
-   *  from, about the spot the piece actually lands on. Floor does not call it: it moves
-   *  a piece only upright, the height pass already brings its riders down, and a write
-   *  that restates that answer is an override for nothing. */
-  function carryRiders(to: [number, number, number], rot: number) {
+   *  from, about the spot the piece actually lands on.
+   *
+   *  `'pinned'` writes only the riders that already have a stored position. Floor moves
+   *  a piece only upright, and the height pass brings down a rider with no position of
+   *  its own; writing that one too would restate the height pass as an override a
+   *  re-scan will not move. A rider WITH a stored position is the one it can miss: it
+   *  follows an inferred link only while the support's top differs from its authored
+   *  top, so a nightstand floored back to where the room put it left a lamp carried up
+   *  with it standing at desk height. */
+  function carryRiders(to: [number, number, number], rot: number, which: 'all' | 'pinned') {
     const riders = snapshotDescendants(id!, effParts, currentRiderRelation());
-    if (riders.length > 0) setTransformsFor(cascadeTransform(id!, to, rot, riders));
+    if (riders.length === 0) return;
+    const moves = cascadeTransform(id!, to, rot, riders);
+    const stored = useStudio.getState().positions;
+    const write = which === 'all' ? moves : moves.filter((m) => stored[m.id] !== undefined);
+    if (write.length > 0) setTransformsFor(write);
   }
 
   function groundToFloor() {
     const [x, , z] = currentXYZ();
     setPosition(id!, [x, 0, z]);
+    carryRiders([x, 0, z], part!.rot, 'pinned');
     clearParent(id!);
   }
 
@@ -123,7 +134,7 @@ export function Inspector() {
     const snapped = snapToWallPhys([x, y, z], part!.dimMM, room.footprint, wallStandoff(part!.shape));
     setPosition(id!, [snapped.x, y, snapped.z]);
     if (snapped.rot !== undefined) setRotation(id!, snapped.rot);
-    carryRiders([snapped.x, y, snapped.z], snapped.rot ?? part!.rot);
+    carryRiders([snapped.x, y, snapped.z], snapped.rot ?? part!.rot, 'all');
     clearParent(id!);
   }
 

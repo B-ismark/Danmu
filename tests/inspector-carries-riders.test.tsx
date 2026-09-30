@@ -6,11 +6,13 @@
 // nightstand had been, standing on air. It is asked of the same relation a drag plans its
 // company from, so a lamp the room came with — which no drag ever linked — goes too.
 //
-// Floor never had the defect, and the test for it pins why: it moves a piece only
-// upright, and the height pass already brings down whatever stands on it. So Floor writes
-// nothing for the lamp. A transform write is never free — it becomes an override a
-// re-scan will not move — and one that only restates the height pass's answer is that
-// cost for nothing.
+// Floor moves a piece only upright, and the height pass brings down most of what stands
+// on it, so Floor writes only the riders the height pass cannot. A transform write is
+// never free — it becomes an override a re-scan will not move — and one that only
+// restates the height pass's answer is that cost for nothing. The rider the height pass
+// cannot bring down is one with a stored position whose link was only inferred: it
+// follows such a link only while the support's top differs from its AUTHORED top, so a
+// nightstand floored back to where the room put it left the lamp at desk height.
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -104,5 +106,28 @@ describe('the Floor and Wall buttons carry what stands on the piece (§ H.6.7)',
     expect(l.pos[2]).toBeCloseTo(0, 6);
     // …by the height pass, not by a write of its own.
     expect(useStudio.getState().positions.lamp).toBeUndefined();
+  });
+
+  it('Floor brings down a lamp that was carried up onto a desk with its nightstand', () => {
+    // The room put the nightstand on the floor and the lamp on it; a drag then took the
+    // pair up onto the desk. Only the nightstand's landing is recorded — the lamp came
+    // along and was written at desk height. Floor takes the nightstand back to its
+    // authored height, where the inferred link no longer lifts anything.
+    room([
+      part({ id: 'desk', name: 'Desk', category: 'desk', shape: 'desk-standard', dimMM: [1200, 600, 750], pos: [1, 0, 0] }),
+      part({ id: 'ns', name: 'Nightstand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [-1, 0, 0] }),
+      lamp([-1, 0.55, 0]),
+    ], 'ns');
+    useStudio.setState({
+      positions: { ns: [1, 0.75, 0], lamp: [1, 1.3, 0] },
+      parentIds: { ns: 'desk' },
+    });
+    expect(at('lamp').pos[1]).toBeCloseTo(1.3, 6);
+    render(<Inspector />);
+    fireEvent.click(screen.getByTitle('Put this piece on the floor, without moving it sideways'));
+
+    expect(at('ns').pos[1]).toBe(0);
+    expect(at('lamp').pos[1]).toBeCloseTo(0.55, 6);
+    expect(at('lamp').pos[0]).toBeCloseTo(1, 6);
   });
 });
