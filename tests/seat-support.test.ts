@@ -355,6 +355,13 @@ describe('every caller that moves a piece to what it finds', () => {
     const convoy = planConvoy({ draggedId: 'table', parts: world, selection: ['table', 'c1'], parentIds: {}, footprint: ROOM, roomHeight: H });
     expect(leadInherited(convoy, 0, TABLE.dimMM)).toEqual(new Set(['c1']));
     expect(leadInherited(convoy, Math.PI / 12, TABLE.dimMM)).toBeUndefined();
+    // A full turn either way is the table where it started, so its chairs stay forgiven.
+    expect(leadInherited(convoy, 2 * Math.PI, TABLE.dimMM)).toEqual(new Set(['c1']));
+    expect(leadInherited(convoy, -2 * Math.PI, TABLE.dimMM)).toEqual(new Set(['c1']));
+    expect(leadInherited(convoy, 2 * Math.PI + Math.PI / 12, TABLE.dimMM)).toBeUndefined();
+    // A half turn is still a turn. For a box it lands on the same footprint, so this is
+    // the conservative answer `leadInherited`'s docblock owns up to, not a correct one.
+    expect(leadInherited(convoy, Math.PI, TABLE.dimMM)).toBeUndefined();
     expect(leadInherited(convoy, 0, [1700, 900, 750])).toBeUndefined();
     expect(dragSet(world, 'table', ['table', 'c1'], 0.05, 0, { rot: Math.PI / 12 }).valid).toBe(false);
   });

@@ -3560,7 +3560,8 @@ amount, so nothing new has been let through. Three limits keep it that narrow.
   follows the painting's own accepted move; it is not done, so the rule stays one sentence
   and this change stays a change to floor pieces.
 - *The lead forgives only while its turn and size are unchanged.* A wheel turn or a
-  resize mid-drag changes the overlap, so the lead answers for its chairs again.
+  resize mid-drag changes the overlap, so the lead answers for its chairs again. A full
+  turn is unchanged: the angle is compared round the circle (review round 2).
 - *Anything outside the set still counts.* A bookcase in a chair's path stops the whole
   set and names the chair (`blockedBy`). A chair alone has nothing to inherit, so the solo
   nudge is still refused.

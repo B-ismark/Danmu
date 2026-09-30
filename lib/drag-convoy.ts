@@ -613,7 +613,9 @@ export function planConvoy(input: {
  * judges every overlap afresh, which refuses a set whose turn drove a corner into a
  * chair and is also what keeps a member's forgiveness of the lead honest, since that
  * member cannot see the turn. A table turned a full half-circle is refused with its
- * chairs too, which is conservative and not wrong.
+ * chairs too, which is conservative and not wrong. A FULL turn is not a turn: the
+ * angle is compared round the circle, because nothing here keeps `rot` inside one
+ * revolution and the wheel can carry it past 2π with the footprint back where it was.
  *
  * Both surfaces call this where they resolve the lead — PlanView's `resolveAt` and
  * Draggable's `resolvePlacement` wrapper — and pass the transform they are resolving
@@ -626,8 +628,10 @@ export function leadInherited(
 ): ReadonlySet<string> | undefined {
   const s = convoy.leadStart;
   if (s.inherited.size === 0) return undefined;
+  const turned = rot - s.rot;
   const unchanged =
-    Math.abs(rot - s.rot) < RIGID_EPS && dim.every((v, i) => Math.abs(v - s.dim[i]) < RIGID_EPS);
+    Math.abs(Math.atan2(Math.sin(turned), Math.cos(turned))) < RIGID_EPS &&
+    dim.every((v, i) => Math.abs(v - s.dim[i]) < RIGID_EPS);
   return unchanged ? s.inherited : undefined;
 }
 
