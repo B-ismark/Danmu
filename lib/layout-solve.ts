@@ -2122,16 +2122,24 @@ function explain(
   const here = costBreakdown(m, scratch, weights, navCell);
   const out: MoveReason[] = [];
   // A member of a merged set moved because its set did, so it is credited with what
-  // putting the whole set back would cost — the one move the search made.
+  // putting the whole set back would cost — the one move the search made. That
+  // reading is the same for every member, so it is taken once per set: with a route
+  // to open it runs the navigation grid, and a dining set is five of them.
   const rigid = setsOf(m);
+  const backOfSet = new Map<number, CostBreakdown>();
   for (const i of moved) {
-    const unit = unitOf(rigid, i);
-    const keep = unit.map((k) => scratch[k]);
-    for (const k of unit) scratch[k] = { ...origin[k] };
-    const back = costBreakdown(m, scratch, weights, navCell);
-    unit.forEach((k, t) => {
-      scratch[k] = keep[t];
-    });
+    const set = rigid.setOf[i];
+    let back = set < 0 ? undefined : backOfSet.get(set);
+    if (!back) {
+      const unit = unitOf(rigid, i);
+      const keep = unit.map((k) => scratch[k]);
+      for (const k of unit) scratch[k] = { ...origin[k] };
+      back = costBreakdown(m, scratch, weights, navCell);
+      unit.forEach((k, t) => {
+        scratch[k] = keep[t];
+      });
+      if (set >= 0) backOfSet.set(set, back);
+    }
     let term: keyof ScoreWeights = 'inertia';
     let best = -Infinity;
     for (const k of TERMS) {
