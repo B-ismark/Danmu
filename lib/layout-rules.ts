@@ -119,6 +119,11 @@ const ROLE_BY_SHAPE: Partial<Record<Shape, Role>> = {
   'chair-dining': 'dining-chair',
   'chair-office': 'office-chair',
   ottoman: 'ottoman',
+  // A stool is a stool whatever category the detector filed it under. Its catalogue
+  // category (`chair`) already answers `dining-chair`; this row is for the cloud row
+  // that calls one `other`, which read as `other` — no seat, no room to pull it out,
+  // and stood on the coffee table beside it by `settleHeights`.
+  stool: 'dining-chair',
   'bed-single': 'bed',
   'bed-double': 'bed',
   'side-table': 'side-table',
@@ -807,6 +812,17 @@ function surfaceKneeMM(shape: Shape, role: Role, h: number): number {
  *  goes under. Seats and surfaces are disjoint there, so this also says which is which. */
 export function isSeatRole(role: Role): boolean {
   return FLOOR_SHARERS.some(([seat]) => seat === role);
+}
+
+/** Every role people sit on — the seats that go under a surface (`isSeatRole`) and the
+ *  ones that do not. `settleHeights` asks it: a scan never stands a seat on a top. It
+ *  asked `isSeatRole` first, so an armchair, a sofa or a stool the detector filed as
+ *  `other` still went up onto the coffee table beside it. `tests/seat-support.test.ts`
+ *  holds this set to the Library's Seating group in both directions. */
+const SEATING: ReadonlySet<Role> = new Set<Role>(['sofa', 'armchair', 'dining-chair', 'office-chair', 'ottoman']);
+
+export function isSeating(role: Role): boolean {
+  return SEATING.has(role);
 }
 
 /** Does one of these go under the other? `sharesFloor` for the roles, and the seat's

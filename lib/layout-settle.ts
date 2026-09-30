@@ -61,8 +61,8 @@ import {
   type Foot,
   type Poly,
 } from './geometry';
-import { isObstacle, isSeatRole, profilesTuck, roleOf, tuckProfile, WALL_GAP, type TuckProfile } from './layout-rules';
-import { findSupportDetailed, isFloorStanding, isTabletopProne, MOUNT_PAD, ridesWall, SUPPORT_Y_EPS, verticalExtent } from './physics';
+import { isObstacle, isSeating, profilesTuck, roleOf, tuckProfile, WALL_GAP, type TuckProfile } from './layout-rules';
+import { findSupportDetailed, highestSurfaceUnder, isFloorStanding, isTabletopProne, MOUNT_PAD, ridesWall, SUPPORT_Y_EPS, verticalExtent } from './physics';
 import type { ScenePart, Shape } from './scene-spec';
 
 // Breathing room kept off a wall comes from `layout-rules` (imported above) rather
@@ -287,8 +287,10 @@ export type HeightFix = {
  *  stand in plan; a rider's height is a CONSEQUENCE of that, so it is answered
  *  afterwards, once. Three things it does, in the order they have to happen:
  *
- *    1. a tabletop-prone piece (monitor, lamp, plant, ottoman) snaps onto the highest
- *       real surface under its footprint — taller than 0.3 m, so a rug is not a table
+ *    1. a tabletop-prone piece (monitor, lamp, plant, a box) snaps onto the highest
+ *       real surface under its footprint — taller than 0.3 m, so a rug is not a table.
+ *       Never a seat, the ottoman included: a seat stays at its own level (the loop says
+ *       why)
  *    2. any other floor-standing piece left above the floor with nothing under it
  *       DROPS. This is the half that fixes the nightstand.
  *    3. the ceiling clamp, so no piece's top pokes through the slab
@@ -416,11 +418,13 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
       // onto it, both in the air. Reached from a scan, where every piece enters at
       // y = 0 and the order is the detector's: the tray first takes the ottoman's top,
       // then the ottoman takes the tray's.
-      const support = floor
-        ? findSupportDetailed(work.filter((q) => !standsOn(q, p)), p, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
-        : null;
+      const world = floor ? work.filter((q) => !standsOn(q, p)) : [];
+      const support = floor ? findSupportDetailed(world, p, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle) : null;
       const found = support !== null && support.y > 0.3 ? support : null;
-      // A seat is not lifted. An ottoman is tabletop-prone, and the add path wants that:
+      // A seat is not lifted — any seat (`isSeating`), not only the ones that tuck under
+      // a surface: an armchair, a sofa or a stool the detector filed as `other` is
+      // tabletop-prone by that category, and went up onto the coffee table beside it.
+      // An ottoman is tabletop-prone, and the add path wants that:
       // dropped over a coffee table it does not fit under, it goes on top, where the
       // user put it and can see it (§ H.6.4). Here nobody put it anywhere. A scan reads
       // every floor piece as standing on the floor — what it gets wrong is WHERE on the
@@ -437,8 +441,13 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
       //
       // "Lifted" is UP from where it is, so it holds in the branch for pieces left in the
       // air as well: one hanging 60 mm over a coffee table went up onto it there, and one
-      // 40 mm up stayed down. A seat already on a top, or above one, still comes to rest on it.
-      const rest = found !== null && isSeatRole(roleOf(p)) && found.y > p.pos[1] + SUPPORT_Y_EPS ? null : found;
+      // 40 mm up stayed down. A seat already on a top, or above one, still comes to rest on
+      // it — asked at its own level, not dropped. The first version threw the refused
+      // answer away whole, so an ottoman on a platform, beside a coffee table standing on
+      // that platform, went through the platform to the floor.
+      const lifted = found !== null && isSeating(roleOf(p)) && found.y > p.pos[1] + SUPPORT_Y_EPS;
+      const level = lifted ? highestSurfaceUnder(world, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle, p.pos[1] + SUPPORT_Y_EPS) : null;
+      const rest = lifted ? (level !== null && level.y > 0.3 ? level : null) : found;
       if (isTabletopProne(p.category) && floor && rest !== null) {
         p.pos[1] = rest.y;
         stoodOn.set(p.id, rest.id);

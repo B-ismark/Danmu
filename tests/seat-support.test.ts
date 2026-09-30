@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { findSupportDetailed, highestSurfaceUnder, MIN_SUPPORT_SHARE, restingOn } from '@/lib/physics';
+import { findSupportDetailed, highestSurfaceUnder, isTabletopProne, MIN_SUPPORT_SHARE, restingOn } from '@/lib/physics';
 import { resolvePlacement } from '@/lib/drag-resolve';
 import { leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld } from '@/lib/drag-convoy';
 import { settleHeights } from '@/lib/layout-settle';
 import { ridingParents } from '@/lib/rigid-parent';
-import { placeNewPart, selectionForPick, type ScenePart } from '@/lib/scene-spec';
+import { CATEGORIES, PART_LIBRARY, placeNewPart, selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import { footArea, footFromPart, footIntersectionArea, type Poly } from '@/lib/geometry';
-import { isObstacle, roleOf, tucksUnder, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
+import { isObstacle, isSeating, isSeatRole, roleOf, tucksUnder, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
 import { analyzeRoom, floorBlockers } from '@/lib/clearance';
 import { clampDims } from '@/lib/dimension-ranges';
 
@@ -576,6 +576,59 @@ describe('every caller that moves a piece to what it finds', () => {
     const chest = part({ id: 'chest', category: 'other', shape: 'box', dimMM: [800, 450, 320], pos: [0, 0, 0] });
     expect(roleOf(chest)).toBe('coffee-table');
     expect(settleHeights([TABLE, chest], H)).toEqual([{ id: 'chest', y: TOP }]);
+  });
+
+  it('settling: no seat goes up onto a top — not only the ones that tuck under one', () => {
+    // The gate asked `isSeatRole`, which names the seats that go UNDER a surface. The
+    // others were lifted: a stool, an armchair or a sofa the detector filed as `other`
+    // (or a stool as `plant`) is tabletop-prone by that category, and 100 mm off a
+    // coffee table's centre each one went up onto it — `[{ y: 0.42 }]`, every one.
+    const filed = [
+      part({ id: 'stool', category: 'other', shape: 'stool', dimMM: [350, 350, 450], pos: [0.1, 0, 0] }),
+      part({ id: 'plant-stool', category: 'plant', shape: 'stool', dimMM: [350, 350, 450], pos: [0.1, 0, 0] }),
+      part({ id: 'armchair', category: 'other', shape: 'chair-armchair', dimMM: [700, 700, 900], pos: [0.1, 0, 0] }),
+      part({ id: 'sofa', category: 'other', shape: 'sofa', dimMM: [1000, 600, 800], pos: [0.1, 0, 0] }),
+    ];
+    for (const s of filed) {
+      // In the band: tabletop-prone, and the drop question does stand it on the top.
+      expect(isTabletopProne(s.category), s.id).toBe(true);
+      expect(findSupportDetailed([COFFEE], s, s.pos[0], s.pos[2], s.dimMM, s.rot, s.circle)?.id, s.id).toBe('coffee');
+      expect(settleHeights([COFFEE, s], H), s.id).toEqual([]);
+    }
+    // The pair: a box of the stool's size at the same spot still goes up.
+    const box = part({ id: 'box', category: 'other', shape: 'box', dimMM: [350, 350, 450], pos: [0.1, 0, 0] });
+    expect(settleHeights([COFFEE, box], H)).toEqual([{ id: 'box', y: 0.42 }]);
+  });
+
+  it('settling: a seat on a platform is refused the table beside it, not the platform', () => {
+    // Refusing the lift threw the probe's answer away whole, so an ottoman on a 350 mm
+    // platform, over a coffee table standing on the same platform, fell THROUGH it to
+    // the floor: `[{ id: 'ottoman', y: 0 }]`. It is asked again at its own level.
+    const plat = part({ id: 'plat', category: 'other', shape: 'box', dimMM: [3000, 2000, 350], pos: [0, 0, 0] });
+    const ct = { ...COFFEE, pos: [0, 0.35, 0] as [number, number, number] };
+    const on = ottoman(0.1, 0, 0.35);
+    // In the band: the drop question answers the table, 0.42 above the platform.
+    expect(findSupportDetailed([plat, ct], on, 0.1, 0, on.dimMM, 0, undefined)?.id).toBe('coffee');
+    expect(settleHeights([plat, ct, on], H)).toEqual([]);
+    // "At its level" is read with the resting tolerance: 20 mm into the platform is on it.
+    expect(settleHeights([plat, ct, ottoman(0.1, 0, 0.33)], H)).toEqual([{ id: 'ottoman', y: 0.35 }]);
+    // The pair: a lamp there still goes up onto the table.
+    expect(settleHeights([plat, ct, lamp(0.1, 0, 0.35)], H)).toEqual([{ id: 'lamp', y: 0.77 }]);
+  });
+
+  it('a seat is what the Library files under Seating, whatever the detector calls it', () => {
+    // `isSeating` is a hand-kept role set, so it is held to the catalogue: every Seating
+    // item is one, nothing else in the Library is, and a seat's shape stays a seat under
+    // any category — a cloud row names its category separately, and `sceneShapeFor`
+    // keeps the shape it picked. Every seat that tucks is a seat too.
+    for (const item of PART_LIBRARY) {
+      expect(isSeating(roleOf(item)), item.label).toBe(item.group === 'Seating');
+      if (isSeatRole(roleOf(item))) expect(isSeating(roleOf(item)), item.label).toBe(true);
+      if (item.group !== 'Seating') continue;
+      for (const category of CATEGORIES) {
+        expect(isSeating(roleOf({ ...item, category })), `${item.label} as ${category}`).toBe(true);
+      }
+    }
   });
 
   it('settling: a tray on an ottoman stays on it', () => {
