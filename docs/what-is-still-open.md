@@ -3969,6 +3969,23 @@ set still arrives whole. Leaving set members out of those picks changes which mo
 drawn, so it is a measured change to the search, not a tidy-up, and wants the § H.6.5 table
 run again before and after.
 
+*Filed from review round 2, read from the code and not reproduced.* Each is a place where a
+set being one body meets another rule. The first bends a set by one member; the other two
+cost an arrangement, or a squaring, and leave the set whole.
+- **A member standing on a piece outside its set follows the piece, not the set.** A lamp
+  grouped with a bed but standing on a nightstand that is not in the group: the rider pass
+  (`carryRiders`) puts it on the nightstand wherever the nightstand went, so the set comes
+  back bent by one member. A drag answers the other way and carries it with its group
+  (`lib/drag-convoy.ts`). Which should win is the user's call; either beats a lamp in the air.
+- **A rug going home can take its set into a piece that moved.** A rug grouped with its
+  coffee table and left through a wall sends the whole set back, and if another piece has
+  moved into the table's old spot the answer now holds a clash. The impossibility veto
+  catches it and hands back the room as it was, so nothing illegal reaches the screen: an
+  arrangement is lost. Before, the rug went home alone and broke the set.
+- **The snap squares a set to the wall nearest its lead.** A member nearer another wall is
+  not asked, so a set that would square against that wall can be turned to the lead's,
+  swing the member through the plaster, and be put back unsquared.
+
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
 Their words, kept because the scope is theirs: *"Do a detailed search to the fundamental

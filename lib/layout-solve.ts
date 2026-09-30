@@ -1520,13 +1520,17 @@ export function solveLayout(
   // turned every Ideas press into "couldn't find another arrangement" — 4 ideas on
   // the commit before the search held rugs, NULL at every attempt after.
   //
-  // Putting it back is always legal (`overhangsOffItsSpot`: where it stands prices
+  // Putting a rug back is always legal (`overhangsOffItsSpot`: where it stands prices
   // to exactly zero), and it is the rule the containment pass already states — an
   // idea either leaves a rug where the user left it or lays it inside the walls —
   // applied to the answer instead of left to the search to find by chance. Before the
   // riders, because a rug can carry them and they must follow it home.
   //
-  // A rug in a merged set takes the set home with it, or the set arrives in two places.
+  // A rug in a merged set takes the set home with it, or the set arrives in two places
+  // — and that is NOT always legal: the coffee table merged with it goes back to a
+  // spot another piece may have moved into. The veto below sees the clash and hands
+  // back the room as it was, so an arrangement is lost rather than a set broken.
+  // Filed in § H.6.5, not reproduced.
   const home = new Set<number>();
   winner.forEach((p, i) => {
     if (overhangsOffItsSpot(model, i, p)) for (const k of unitOf(rigid, i)) home.add(k);
