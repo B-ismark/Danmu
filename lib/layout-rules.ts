@@ -885,8 +885,9 @@ export function tucksUnder(a: RoleInput, b: RoleInput): boolean {
 export function seatBackFoot(seat: Foot, backShare: number): Foot | null {
   if (backShare <= 0) return null;
   const hd = seat.hd * backShare;
-  const off = seat.hd - hd;
-  return { cx: seat.cx - off * Math.sin(seat.rot), cz: seat.cz - off * Math.cos(seat.rot), hw: seat.hw, hd, rot: seat.rot };
+  // The back strip's centre, `seat.hd - hd` behind the seat's centre in its own frame.
+  const [dx, dz] = localToWorld(seat.rot, 0, -(seat.hd - hd));
+  return { cx: seat.cx + dx, cz: seat.cz + dz, hw: seat.hw, hd, rot: seat.rot };
 }
 
 /**

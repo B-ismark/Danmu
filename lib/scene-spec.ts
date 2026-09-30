@@ -3320,6 +3320,7 @@ export function collidesAt(
   // fan was never skipped and was mis-measured the same way.
   const [myBottom, myTop] = verticalExtent(mover.category, mover.shape, dimMM, pos[1]);
   const me = footFromPart(pos, rot, dimMM, mover.circle, mover.shape);
+  const myTuck = tuckProfile({ ...mover, dimMM });
   for (const o of parts) {
     if (o.id === movingId) continue;
     if (isSoftFurnishing(o)) continue;
@@ -3341,7 +3342,7 @@ export function collidesAt(
     // pair Room check calls fine — and `tuckedAt`, so a chair pushed in back-first is
     // not a tuck. The mover's height is the CANDIDATE size, so a chair stretched taller
     // mid-drag is asked about the chair it is becoming.
-    if (tuckedAt(tuckProfile({ ...mover, dimMM }), me, tuckProfile(o), theirs)) {
+    if (tuckedAt(myTuck, me, tuckProfile(o), theirs)) {
       const smaller = Math.min(footArea(me), footArea(theirs));
       if (smaller > 0 && footIntersectionArea(me, theirs) / smaller < TUCKED_CLASH_SHARE) continue;
     }

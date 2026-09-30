@@ -378,9 +378,10 @@ gate itself was per-row, so an empty table passed every assertion in it.
 **Where to click.** Select any piece. The banner sits above the decorating controls,
 between the name and the Colour row.
 
-**The last row is the whole point.** `collidesAt` calls a tucked chair a collision and
-the room report does not, deliberately — twenty seeded pairs behind that. The banner
-sides with the report, so a seeded dining set must not light up red.
+**The last row is the whole point.** The banner reads the room report rather than
+asking `collidesAt` itself, so a seeded dining set must not light up red. (The two
+used to disagree about a tucked chair; since § 17 the drag asks the report's own
+`tuckedAt`, so a red here would now be a disagreement neither side should have.)
 
 **What wrong looks like.**
 

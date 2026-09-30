@@ -357,6 +357,11 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
   // drag would rebuild a cube target per pointer move. Half-hour steps are finer
   // than anyone can tell apart on a reflection and cost at most 48 bakes a day.
   const envStep = lighting === 'overcast' ? 'o' : String(Math.round(hour * 2));
+  // …and the panels are lit at that STEP's hour, not the live one. Their colours are
+  // what `Environment` re-bakes on, so panels coloured off the live hour re-baked on
+  // every tick of a sun scrub and the step above decided nothing (found in review).
+  const envHour = lighting === 'overcast' ? hour : Math.round(hour * 2) / 2;
+  const envL = useMemo(() => lightingAt(lighting, envHour, bearingDeg), [lighting, envHour, bearingDeg]);
   // The light the room throws back, on the quality where the shell is closed —
   // see lib/bounce.ts. Resolved parts, so a window stretched in the Inspector is
   // measured at the size it is drawn.
@@ -373,12 +378,12 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
   const panels = useMemo(
     () => (
       <>
-        <Lightformer intensity={0.7 * L.envMul} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={L.env[0]} />
-        <Lightformer intensity={0.35 * L.envMul} position={[5, 2, 3]} scale={[4, 6, 1]} color={L.env[1]} />
-        <Lightformer intensity={0.3 * L.envMul} position={[-5, 2, -3]} scale={[4, 6, 1]} color={L.env[2]} />
+        <Lightformer intensity={0.7 * envL.envMul} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={envL.env[0]} />
+        <Lightformer intensity={0.35 * envL.envMul} position={[5, 2, 3]} scale={[4, 6, 1]} color={envL.env[1]} />
+        <Lightformer intensity={0.3 * envL.envMul} position={[-5, 2, -3]} scale={[4, 6, 1]} color={envL.env[2]} />
       </>
     ),
-    [L.envMul, L.env],
+    [envL],
   );
   const glazing = useMemo(() => glazingArea(resolved), [resolved]);
   const bounce = hi && key ? bounceIntensity(key.intensity, glazing, footprint) : 0;
