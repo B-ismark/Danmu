@@ -63,7 +63,9 @@ furniture in real-time 3D; parametric furniture shapes plus decor; a 2D
 top-down floor plan; one-tap restyle palettes; optional photo capture and
 furniture detection; saving a room to a file and opening one back — which is how a
 room is shared, backed up, and moved between devices without a server; and checking
-whether a real product's dimensions fit *this* room before buying it.
+whether a real product's dimensions fit *this* room before buying it — typed into
+the Library as the piece's own size, which places it where it fits or says why it
+cannot.
 
 **Constraints (durable):**
 

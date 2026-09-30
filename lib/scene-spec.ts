@@ -3160,7 +3160,9 @@ const SPAWN_RINGS = 6;
  * placed exactly as before. Also `undefined` when nothing in range works, because a
  * piece that will not fit is added anyway at its real size and `lib/clearance.ts`
  * reports it — silently refusing to add what the user asked for is the same rule as
- * silently resizing it.
+ * silently resizing it. (The one refusal on the add path, a piece WIDER than the
+ * space it would have, is `addPieceToRoom`'s and is said out loud, which is the
+ * difference: see `lib/space-bound.ts`. Crowding is still never a refusal there.)
  *
  * **Gated with `footInsidePoly`, not `outsideShare`.** The latter samples, and its
  * samples sit 10% in from the edges, so it forgives a piece 20 mm through the plaster.

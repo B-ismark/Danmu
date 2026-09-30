@@ -8,9 +8,9 @@
 // clamped on the way in.
 
 import { describe, expect, it } from 'vitest';
-import { checkFit, FIT_KINDS, fitPresets, PROBE_ID, type FitCandidate } from '@/lib/fit-check';
-import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
-import { roleOf, tucksUnder, type Role } from '@/lib/layout-rules';
+import { checkFit, PROBE_ID, type FitCandidate } from '@/lib/fit-check';
+import { dimRangeFor } from '@/lib/dimension-ranges';
+import { tucksUnder } from '@/lib/layout-rules';
 import type { Footprint } from '@/lib/footprint';
 import type { ScenePart } from '@/lib/scene-spec';
 
@@ -205,85 +205,6 @@ describe('checkFit · where the only place is under something', () => {
     const ottoman: FitCandidate = { category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420] };
     expect(tucksUnder(ottoman, table)).toBe(false);
     expect(checkFit(ottoman, [table], room(1.3, 1.0)).status).toBe('no-room');
-  });
-});
-
-describe('the Fit panel’s kinds are the pieces they are called', () => {
-  const kind = (id: string) => {
-    const k = FIT_KINDS.find((f) => f.id === id);
-    if (!k) throw new Error(`no Fit kind ${id}`);
-    return k;
-  };
-
-  it('a dining table is one a dining chair goes under, at a dining table’s height', () => {
-    // It was a `coffee-table`: a shelf under the top, so no chair fitted under a
-    // six-seater the panel had just been told about, and a range that stops at 600 mm,
-    // so pressing Place stood a 750 mm table in the room at 600.
-    const dining = kind('dining');
-    const size: [number, number, number] = [1800, 900, 750];
-    expect(roleOf({ ...dining, dimMM: size })).toBe('dining-table');
-    expect(clampDims(dining.category, dining.shape, size)).toEqual(size);
-    const chair = kind('chair');
-    expect(tucksUnder({ ...chair, dimMM: [500, 500, 850] }, { ...dining, dimMM: size })).toBe(true);
-  });
-
-  it('a coffee table is still a coffee table', () => {
-    expect(roleOf({ ...kind('coffee'), dimMM: [1100, 600, 420] })).toBe('coffee-table');
-  });
-});
-
-describe('the Fit panel’s sizes are the kind’s own', () => {
-  // A chip fills in three numbers and nothing else; the kind decides what they are the
-  // size of. So each list is pinned in full — every kind, not a sample, because the
-  // lists are data and a new Library row changes them without touching this module —
-  // and the two sweeps below say why each chip on it is allowed to be there.
-  const OFFERED: Record<string, string[]> = {
-    sofa: ['Sofa'],
-    armchair: ['Armchair'],
-    bed: ['Double bed', 'Queen bed', 'King bed'],
-    wardrobe: ['Wardrobe'],
-    shelf: ['Bookshelf'],
-    desk: ['Dining / desk table'],
-    dining: ['Dining / desk table'],
-    coffee: ['Coffee table'],
-    chair: ['Dining chair'],
-    fridge: ['Fridge', 'French door fridge'],
-  };
-  /** What each kind is, written out here rather than read off `roleOf` at some size of
-   *  our choosing — the second sweep would otherwise be asking a chip to agree with
-   *  itself. */
-  const ROLE: Record<string, Role> = {
-    sofa: 'sofa',
-    armchair: 'armchair',
-    bed: 'bed',
-    wardrobe: 'wardrobe',
-    shelf: 'bookshelf',
-    desk: 'desk',
-    dining: 'dining-table',
-    coffee: 'coffee-table',
-    chair: 'dining-chair',
-    fridge: 'fridge',
-  };
-
-  it('offers each kind exactly these, and every kind something', () => {
-    expect(Object.keys(OFFERED).sort()).toEqual(FIT_KINDS.map((k) => k.id).sort());
-    for (const k of FIT_KINDS) expect(fitPresets(k).map((p) => p.label), k.id).toEqual(OFFERED[k.id]);
-  });
-
-  it('every size offered is one the kind takes as it is', () => {
-    // Pressing a chip and then **Put it there** places `clampDims` of what it filled
-    // in. A chip that does not round-trip is a size the panel checks and then changes.
-    for (const k of FIT_KINDS) {
-      for (const p of fitPresets(k)) expect(clampDims(k.category, k.shape, p.dimMM), `${k.id} · ${p.label}`).toEqual(p.dimMM);
-    }
-  });
-
-  it('every size offered is checked as the piece the kind names', () => {
-    // The Dining table and the Desk share a shape and a chip; the category is what
-    // makes one a surface a chair goes under at a dining table’s height.
-    for (const k of FIT_KINDS) {
-      for (const p of fitPresets(k)) expect(roleOf({ category: k.category, shape: k.shape, dimMM: p.dimMM }), `${k.id} · ${p.label}`).toBe(ROLE[k.id]);
-    }
   });
 });
 

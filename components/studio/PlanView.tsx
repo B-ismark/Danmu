@@ -45,6 +45,7 @@ import { cascadeTransform } from '@/lib/rigid-parent';
 import { formatDim, formatLength } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
 import { addPieceToRoom } from '@/lib/add-piece';
+import { sayAdded } from '@/components/studio/say-added';
 import { removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
 import { announce } from '@/lib/announce';
 import { openPickMenu, openSceneMenu } from './SceneContextMenu';
@@ -529,7 +530,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // and the second copy was missing the last of those. Keeping the drop inside the
     // room is `placeNewPart`'s job — see there.
     const w = svgToWorldAt(e.clientX, e.clientY);
-    addPieceToRoom(item, [w.x, w.z]);
+    sayAdded(addPieceToRoom(item, [w.x, w.z]), item.label);
   }
 
   function onWheel(e: React.WheelEvent) {

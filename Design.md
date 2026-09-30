@@ -2456,11 +2456,23 @@ outlined box around outlined buttons, which put two boundaries on every control.
   tablet or phone they are solid paper.
 
 ### Other studio tools
-- **"Will it fit?"** (`lib/fit-check.ts`, the `Will it fit` tab in `RoomTools.tsx`).
-  The gap between "I like this layout" and `PRODUCT.md`'s *confidence to commit* is one
-  question: does the sofa on the shop page go in THIS room, with what is already in it?
-  Type its W × D × H, say what kind of thing it is, and the geometry engine answers —
-  no backend, no scraping, no model.
+- **"Use my own size"** — the fit check, asked from the Library (`lib/fit-check.ts`,
+  reached through `addPieceToRoom`'s `ownSize`). The gap between "I like this layout"
+  and `PRODUCT.md`'s *confidence to commit* is one question: does the sofa on the shop
+  page go in THIS room, with what is already in it? Type the piece and its size into
+  the Library search ("sofa 228x95x83cm"), press it, and the geometry engine answers by
+  adding it — at the spot where it fits, or not at all with the reason — no backend,
+  no scraping, no model.
+  **It used to be its own tab, "Will it fit", in the Room panel, and it was retired on
+  2026-09-30 by the user's call** that a separate form for it felt like a gimmick. The
+  form asked for a kind and three numbers the Library search already reads, then
+  answered in words and offered **Put it there** — which is simply adding the piece.
+  So the question moved to the one place a piece is added, and the answer became the
+  add itself: a piece that fits lands where the check put it (with a toast if it is
+  tight), one taller than the ceiling or with nowhere clear to stand is refused with
+  the sentence the tab would have said. Floor pieces only; a wall or ceiling piece at
+  its own size is placed the ordinary way and meets the space bound below, because
+  this is a floor question. The engine itself was kept unchanged.
   It computes almost nothing itself: it asks `solveLayout` to seat the piece with every
   existing piece **locked**, ends on `layout-settle` the way both scene paths do, then
   asks `analyzeRoom` what it thinks and keeps the findings naming the candidate. Two
@@ -2485,17 +2497,24 @@ outlined box around outlined buttons, which put two boundaries on every control.
   "a bit tight". The overlap gate defers to `tucksUnder`, whose polarity reads
   backwards at a glance: TRUE means the pair MAY share the square metre (a chair tucked
   under its table), so those are the ones to skip.
-  **Nothing is clamped on the way in.** `clampDims` gates sizes the app STORES, and it
-  belongs on **Put it there** — the path that adds the piece — not on the path answering
-  a question about a real product. A user who types the 2700 mm wardrobe off a spec
-  sheet and is told about a 2600 mm one has been lied to. The check reports
-  `outOfRange` instead, and placing says the size was brought into range.
-  The size chips under the fields are the same rule from the other side: `fitPresets`
-  offers the Library rows of the kind's own **shape**, so every chip is a size the kind
-  takes unchanged and is checked as the piece the kind names. They used to be the rows
-  of its *category*, and 15 of the 27 were some other piece (a stool as an armchair, a
-  microwave as a fridge); 11 of those were outside the kind's range, so a chip filled in
-  a size the panel then called out of range. `tests/fit-check.test.ts` pins every list.
+  **`checkFit` clamps nothing on the way in**, so a size outside the kind's range is
+  answered as typed. On the Library path the search row has already brought the size
+  into range (`resolveQuerySize`) and SAYS which axes it overruled, beside the number —
+  so what is checked is what would be stored, and the user was told first.
+  **A curtain is not bounded by the room but by its wall** (`lib/space-bound.ts`), and
+  that is a second rule the same day produced: the user's ruling was *"don't allow if
+  it's wider than the available space."* A wall piece may be no wider than the wall it
+  hangs on; anything else no wider than the room reaches at its angle — the drag's own
+  `roomIsWideEnough`, solved for one side, so the size fields and the drag cannot give
+  two answers. It REFUSES and says why ("Curtain can be at most 2.95 m wide here. That
+  is the whole length of the wall it hangs on."), rounded down so the quoted number is
+  itself allowed; it never resizes. Three callers: the Inspector's size fields (the
+  arrows stop at the limit, a typed size past it is not written, the sentence sits
+  under the fields), and every add — an unaimed wall piece too long for the wall it was
+  offered is tried once on the room's longest wall first, an aimed drop is never moved.
+  Only a GROWING axis is refused, so a piece already over its space (a file from
+  elsewhere, a wall dragged in under it) can still be shrunk and edited. Height is not
+  bounded here — `clearance.ts` reports a tall piece, per rule 2.
   Two things worth knowing about the search. The starting POINT matters more than the
   RNG seed, because the inertia term charges for movement so every run from one origin
   explores the same neighbourhood. Starts are spread over `room-bays`' rectangles of
@@ -3082,7 +3101,8 @@ undo — see `lib/storage.ts`).
 | `lib/scene-store.ts` | Scene parts CRUD + grouping. |
 | `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`, `version`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. `reslotCaptures` moves the whole set of wall photos in one operation, for three reasons that each cost something: the WHOLE record travels (the pairwise swap it replaces re-wrote `{ slot, blob, takenAt }` and silently dropped `pose`, so reordering photos threw away the focal length, the tilt and the bearing — `pose` being optional is what let it typecheck); writes precede deletes (a vacated key that outlives its write is a duplicate the user can delete, a deleted key whose write never landed is a photograph that is gone); and a mapping that would land two photos on one wall is refused rather than absorbed. |
 | `lib/scene-palette.ts` | Scene-side semantic colours — the one home for values the 3D layer, the canvas exports and the panels that edit them must agree on, since neither Three.js materials nor a 2D canvas can read a CSS custom property. Exports `SCENE` (selection / hover / locked / shell), `PLAN` (the floor-plan PNG's palette) and `defaultBodyColor(category, shape)`. Kept in sync with `globals.css` by hand, guarded by a test. **`defaultBodyColor` takes BOTH arguments**: within one category the shapes do not match (a dining chair is walnut, an office chair charcoal), and the renderer and the Inspector's "Default for this piece" swatch must return the same value. The predecessor took a single loosely-typed `category` and was keyed on material-group names, so 18 of 22 categories fell through to one tan default. It also carries **`DETAIL`** (the outline every `Box` draws, dark walnut legs, near-black hardware) and **`DECOR`** (the book / pot / vase / pillow sets `Dressing` scatters) — not recolourable, so deliberately out of `defaultBodyColor`, but each was a literal repeated across renderers, which is several values pretending to be one. There were literally two book palettes, six spines in `Dressing` and eight in `BookshelfGeo`, so the books on a shelf did not match the books beside it. A test now scans `components/three/*.tsx` and fails on any hex this module owns, shorthand included. |
-| `lib/fit-check.ts` | **Will this actually fit?** `checkFit` seats one candidate with everything else locked and reports one of four answers with the room report's own reasons. Pure; see §5. |
+| `lib/fit-check.ts` | **Will this actually fit?** `checkFit` seats one candidate with everything else locked and reports one of four answers with the room report's own reasons. Pure; asked from the Library's "Use my own size" through `addPieceToRoom`. See §5. |
+| `lib/space-bound.ts` | **How wide a piece may be made here.** A wall piece's limit is its own wall (found by heading, not nearest point); anything else's is the room's reach at its angle, the drag's `roomIsWideEnough` solved for one side. Measures only; the Inspector's size fields and `addPieceToRoom` refuse and say `describeSpaceRefusal`'s sentence. Only a growing axis is refused; height never. |
 | `lib/transforms.ts` | **Which of the two transform layers wins.** `resolvePart` / `resolveParts` merge the authored transform on `ScenePart` with the user's `useStudio` override, and this is the ONLY place that fallback is written — see below. Pure, no React, so the scene file and the wall mover resolve exactly the way the renderer does. It is no longer the whole answer to *where a piece actually is*: see `lib/rider-height.ts`. |
 | `lib/rider-height.ts` | **Where a piece actually is**, which is the merge above plus one thing neither layer holds. A piece standing on a piece the user RESIZED has a stale Y in both — `setDim` settles nothing — so it is derived at read time and never written back (§ 12; a derived Y written into the override map becomes the rider's stored position, and the next read compares it against the AUTHORED support top and concludes the piece rides nothing). `resolveScene` is what any consumer rendering or exporting the room calls, and `tests/room-scene.test.ts` pins the three files still allowed to call the plain merge. The relation is REMEMBERED, not re-derived: `parentIds` unioned with `ridingParents` over the AUTHORED parts, honoured unconditionally when a drag recorded it and gated on the support's top having moved when it is merely inferred — plus `pos[1] <= 0` meaning *on the floor, riding nothing*, which is what makes the Inspector's **Floor** button stick. `riderYs` caches on reference identity because `Room.tsx` mounts a `Draggable` and a `Dressing` per part and both read it: uncached that was `2N + 8` whole-room derivations per store write, 14.3 ms per drag frame at 60 parts. Built and reverted twice before this; `docs/what-is-still-open.md` § 12 carries both defect tables. `ridersOf` walks the same relation the other way — everything standing on a piece, at any depth — for the model swap (`lib/swap-model.ts`, reached from the Inspector and the right-click menu), which must not ask what the new kind stands on with its own riders in the world: a box with a tray on it, swapped for an ottoman, went up onto the tray and wrote the loop *tray on box, box on tray*. |
 | `lib/room-scene.ts` | The React half of the above: `useRoomScene` (whole scene, memoised), `useRoomPart`, `usePartTransform` (one part, narrow subscription, for `Draggable` and `Dressing`), `useHasOverrides`, and `currentRoomScene()` for pointer handlers. The row here used to say "build a scene from a room / detections", which is `scene-spec`'s job, not this module's. |

@@ -21,6 +21,7 @@ import { bounceIntensity, glazingArea } from '@/lib/bounce';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { snapshotFileName } from '@/lib/exports';
 import { addPieceToRoom } from '@/lib/add-piece';
+import { sayAdded } from '@/components/studio/say-added';
 import { toast } from '@/components/ui/StorageToast';
 import { pickIdsFrom } from '@/lib/pick-through';
 import { openSceneMenu } from '@/components/studio/SceneContextMenu';
@@ -191,7 +192,7 @@ export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
     // it at +0.25. That is the argument for the extraction as much as for the clamp:
     // this handler was ALSO the copy with no `announce`, so a screen-reader user could
     // not tell a successful 3D drop from the silent `intersectPlane` early return.
-    addPieceToRoom(item, [_hit.x, _hit.z]);
+    sayAdded(addPieceToRoom(item, [_hit.x, _hit.z]), item.label);
   }
 
   return (
