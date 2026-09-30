@@ -2769,7 +2769,7 @@ rather than a property of curtains — and not one placement besides. (Figures a
 deletion. A rider now chooses its wall from the pointer rather than from the room clamp
 taken at its OLD angle, which had held a 5 m curtain to the middle metre of a 6 m wall
 and, past the room's middle, handed it to the cut-away near wall where it vanished —
-2026-09-30. That moved the pins by curtain +44, window +22, painting −3, TV −9, every
+2026-09-30. That moved the pins by curtain +40, window +19, painting −3, TV −4, every
 lost placement a piece wider than the wall the hand is at; the test carries both.) Five of the nine
 riders in the catalogue (`door`, `ac/ac-unit`, both mirrors, `tv/soundbar`), the ones
 that sit in or on the plaster and are the reason such an exemption gets written, pass

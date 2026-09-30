@@ -574,11 +574,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         // the turn. With a free frame, the angle of that frame. With none, the angle
         // the gesture began at — but only if the piece fitted there; one that was
         // already refused where it stood keeps the new angle, as `turnSwingsInto`
-        // says, or a piece in a tight spot could never be turned out of it.
+        // says, or a piece in a tight spot could never be turned out of it. "Fitted
+        // there" means without being MOVED, as there: the resolve clamps into the
+        // room first, so a piece poking through a wall comes back valid somewhere
+        // else, and it is that piece that most needs to turn.
         const startRot = dragStartRot.current;
+        const atStart = startRot === null ? null : settleAt(startRot)(back[0], back[2]);
+        const fittedAtStart =
+          atStart !== null && atStart.valid && Math.hypot(atStart.pos[0] - back[0], atStart.pos[2] - back[2]) <= 0.001;
         const restRot = lastFreePos.current
           ? (lastFreeRot.current ?? ref.current.rotation.y)
-          : startRot !== null && settleAt(startRot)(back[0], back[2]).valid
+          : fittedAtStart && startRot !== null
             ? startRot
             : ref.current.rotation.y;
         ref.current.rotation.y = restRot;

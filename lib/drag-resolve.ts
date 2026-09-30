@@ -21,7 +21,7 @@
 
 import { collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
-import { aabbExtents, type Poly } from './geometry';
+import { aabbExtents, edgeProjection, nearestEdge, type Poly } from './geometry';
 import { snapToNeighbors, type SnapLine } from './item-snap';
 import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
@@ -36,6 +36,12 @@ export function snapSteps(mode: SnapMode): { translate: number | null; rotate: n
   if (mode === 'fine') return { translate: 0.01, rotate: Math.PI / 12 };
   return { translate: 0.05, rotate: Math.PI / 4 };
 }
+
+/** How much nearer the pointer must be to another wall before a wall piece leaves
+ *  the one it is on — see the rider branch of `resolvePlacement`. About a hand's
+ *  width: enough that pushing a piece past the end of its wall rests it in the
+ *  corner, small enough that a pointer moved down the side wall takes it there. */
+export const WALL_SWITCH_M = 0.3;
 
 export type ResolveInput = {
   /** The piece being moved, at its authored identity — category, shape, circle. */
@@ -212,17 +218,32 @@ export function resolvePlacement(input: ResolveInput): Resolved {
     // Held to the room's BOX, not the box inset by the piece, so a pointer off the
     // edge of the room still asks from the room's edge. Measured over the
     // containment sweep (`tests/wall-rider-containment.test.ts`) against the old
-    // clamp, it accepts 141 placements that were refused and refuses 87 that were
-    // accepted, net curtain +44, window +22, painting −3, TV −9. Every one of the
-    // 87 is a piece wider than the wall now chosen: 82 with the pointer OUTSIDE an
-    // L, T or U, where the wall nearest the hand is a stub, and five with it
-    // inside and level with, or nearer to, a wall shorter than the curtain. They are
-    // refused as "wider than that wall", which is true of the wall the hand is at;
-    // the old clamp dragged the pointer back until a longer wall happened to be
-    // nearer. The raw point with no box at all nets painting −9 and TV −12 instead.
+    // clamp, with the switching margin below, it accepts 96 placements that were
+    // refused and refuses 44 that were accepted: net curtain +40, window +19,
+    // painting −3, TV −4. Every one of the 44 is a piece wider than the wall now
+    // chosen — 42 with the pointer OUTSIDE an L, T or U, where the wall nearest the
+    // hand is a stub, and two with it inside and nearer a wall shorter than the
+    // curtain. They are refused as "wider than that wall", which is true of the wall
+    // the hand is at; the old clamp dragged the pointer back until a longer wall
+    // happened to be nearer.
+    //
+    // **…but only once the hand is CLEARLY at the other wall** (`WALL_SWITCH_M`).
+    // Nearest-wall-wins from the pointer alone flips a piece round the corner the
+    // moment it is pushed past the end of its own wall: a 1.2 m TV at the north
+    // wall's west end, pushed on, has its pointer 0.05 m from the north wall and
+    // 0 m from the west one, and turned the corner where the old clamp had it rest
+    // in the corner (found in review, 2026-09-30). So the old answer stands unless
+    // the pointer is nearer another wall by a margin; the curtain's case — the
+    // pointer well down the side wall — clears it by metres.
     const ax = Math.max(bnd.minX, Math.min(bnd.maxX, gx));
     const az = Math.max(bnd.minZ, Math.min(bnd.maxZ, gz));
-    const snapped = snapToWall([ax, 0, az], dim, footprint, wallStandoff(part.shape), input.wallEdge);
+    const stay = nearestEdge(footprint, x, z);
+    const follow = nearestEdge(footprint, ax, az);
+    const stayDist = stay ? edgeProjection(footprint, stay.index, ax, az)?.dist : undefined;
+    const switches =
+      !stay || !follow || stayDist === undefined || follow.index === stay.index || follow.dist + WALL_SWITCH_M < stayDist;
+    const [sx, sz] = switches ? [ax, az] : [x, z];
+    const snapped = snapToWall([sx, 0, sz], dim, footprint, wallStandoff(part.shape), input.wallEdge);
     x = snapped.x;
     z = snapped.z;
     if (snapped.rot !== undefined) outRot = snapped.rot;
@@ -461,8 +482,21 @@ export function turnInPlace(input: TurnInput): Resolved {
  * last angle that fitted, for the same reason.
  *
  * `fromRot` is the angle it faces NOW — the effective one, not the authored `rot`.
+ *
+ * "Clear where it stands" means clear WITHOUT being moved. The resolve clamps into
+ * the room first, so a piece poking through a wall — a wall dragged in on it, a
+ * detected room — comes back `valid` at a spot it is not at, and the first version
+ * held its turn on that answer: the one piece this rule promises can still turn was
+ * the one it could not (found in review). So a resolve that moved the piece more than
+ * `STANDS_TOL_M` along the floor counts as not clear, and the turn is taken.
  */
 export function turnSwingsInto(input: TurnInput, turned: Resolved, fromRot: number): boolean {
   if (turned.valid) return false;
-  return turnInPlace({ ...input, rot: fromRot }).valid;
+  const here = turnInPlace({ ...input, rot: fromRot });
+  if (!here.valid) return false;
+  return Math.hypot(here.pos[0] - input.at[0], here.pos[2] - input.at[2]) <= STANDS_TOL_M;
 }
+
+/** How far the resolve may move a piece and still call it where it stands: a
+ *  millimetre, for the float round trip through the clamp and the wall snap. */
+const STANDS_TOL_M = 0.001;

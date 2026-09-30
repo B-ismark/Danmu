@@ -31,6 +31,7 @@ import { footprintForLayout } from '@/lib/footprint';
 import { currentRoomScene } from '@/lib/room-scene';
 import { ANNOUNCE_EVENT } from '@/lib/announce';
 import { spinSelection } from '@/components/studio/KeyboardShortcuts';
+import { turnInPlace, turnSwingsInto } from '@/lib/drag-resolve';
 import type { ScenePart } from '@/lib/scene-spec';
 
 const QUARTER = Math.PI / 2;
@@ -118,7 +119,24 @@ describe('spinSelection holds a turn that would swing into something', () => {
     spinSelection(1);
     expect(at('chair-1').rot).toBeCloseTo(Math.PI, 10);
     expect(useStudio.getState().rotations['chair-1']).toBeUndefined();
-    expect(spoken[0]).toBe('Nothing turned. Chair does not fit at that angle: something is in the way.');
+    expect(spoken[0]).toBe('Nothing turned. Chair stays at 180 degrees. It does not fit at that angle: something is in the way.');
+  });
+
+  it('names the first piece it held and counts the rest, as the plan words it', () => {
+    // Clear where they stand, so both turns are HELD. Said as the plan's `turnByKey`
+    // says it — "stays at N degrees" — because "does not fit at that angle" alone
+    // reads as though the piece turned and is now stuck (found in review).
+    room([
+      { ...wardrobe([-1.5, 0, 1.0]), id: 'wardrobe-1', name: 'Wardrobe 1' },
+      { ...wardrobe([1.5, 0, 1.0]), id: 'wardrobe-2', name: 'Wardrobe 2' },
+      { ...nightstand([-1.5, 0, 0]), id: 'nightstand-1' },
+      { ...nightstand([1.5, 0, 0]), id: 'nightstand-2' },
+    ]);
+    select('wardrobe-1', 'wardrobe-2');
+    spinSelection(1);
+    expect(spoken[0]).toBe(
+      'Nothing turned. Wardrobe 1 stays at 0 degrees. It does not fit at that angle: something is in the way. 1 more stays as it was.',
+    );
   });
 
   it('still turns a piece that was already refused where it stood', () => {
@@ -132,6 +150,39 @@ describe('spinSelection holds a turn that would swing into something', () => {
     expect(spoken[0]).toBe('Turned a quarter turn. Chair does not fit at that angle: something is in the way.');
     spinSelection(1);
     expect(at('chair-1').rot).toBeCloseTo(Math.PI, 10);
+  });
+});
+
+describe('turnSwingsInto', () => {
+  // "Clear where it stands" is asked WITHOUT moving the piece. Found in review: the
+  // resolve clamps into the room first, so a wardrobe poking through the east wall
+  // came back valid at a spot it is not at, and its turn was held — the one piece
+  // the rule promises can still turn out of trouble.
+  const poly = footprintForLayout('rect', 6, 4) as Array<[number, number]>;
+  const robe = part({ id: 'robe', name: 'Wardrobe', category: 'wardrobe', shape: 'wardrobe', dimMM: [1200, 600, 2000], pos: [0, 0, 0] });
+  const post = part({ id: 'post', name: 'Plant', category: 'plant', shape: 'plant', dimMM: [300, 300, 900], pos: [2.7, 0, 0.7] });
+  const ask = (x: number) => ({
+    part: robe,
+    at: [x, 0, 0] as [number, number, number],
+    rot: QUARTER,
+    dim: robe.dimMM,
+    parts: [robe, post],
+    footprint: poly,
+    roomHeight: 2.5,
+  });
+
+  it('takes the turn of a piece that is only clear once the clamp has moved it', () => {
+    const through = ask(2.7); // reaches x = 3.3, past the 3 m wall
+    const turned = turnInPlace(through);
+    expect(turned.valid, 'control: side on it meets the plant').toBe(false);
+    expect(turnSwingsInto(through, turned, 0)).toBe(false);
+  });
+
+  it('holds the same turn for a piece that really is clear where it stands', () => {
+    const inside = ask(2.4);
+    const turned = turnInPlace(inside);
+    expect(turned.valid, 'control').toBe(false);
+    expect(turnSwingsInto(inside, turned, 0)).toBe(true);
   });
 });
 
@@ -159,7 +210,10 @@ describe('spinSelection says when the piece no longer fits', () => {
     // Blocked rather than out of the room: `valid` is computed on the position the
     // clamp has ALREADY produced, so a wall alone cannot make it false — that is the
     // whole finding behind `turnNudge` below, and this case must not depend on it.
-    room([nightstand([0, 0, 0]), { ...wardrobe([0, 0, 1.0]), id: 'wardrobe-1' }]);
+    // ALREADY overlapping the nightstand where it stands, so the turn is taken and
+    // reported: a piece clear where it stands has its turn HELD instead, and says so
+    // differently (`spinSelection holds a turn…`, above).
+    room([nightstand([0, 0, 0.9]), { ...wardrobe([0, 0, 1.0]), id: 'wardrobe-1' }]);
     select('wardrobe-1');
     spinSelection(1);
     expect(spoken).toHaveLength(1);
@@ -179,14 +233,13 @@ describe('spinSelection says when the piece no longer fits', () => {
     room([
       { ...wardrobe([-1.5, 0, 1.0]), id: 'wardrobe-1', name: 'Wardrobe 1' },
       { ...wardrobe([1.5, 0, 1.0]), id: 'wardrobe-2', name: 'Wardrobe 2' },
-      { ...nightstand([-1.5, 0, 0]), id: 'nightstand-1' },
-      { ...nightstand([1.5, 0, 0]), id: 'nightstand-2' },
+      { ...nightstand([-1.5, 0, 0.9]), id: 'nightstand-1' },
+      { ...nightstand([1.5, 0, 0.9]), id: 'nightstand-2' },
     ]);
     select('wardrobe-1', 'wardrobe-2');
     spinSelection(1);
-    // Both were clear where they stood, so both are HELD (`turnSwingsInto`) and
-    // neither turned — which the sentence must not claim otherwise.
-    expect(spoken[0]).toContain('Nothing turned.');
+    // Each already overlaps its nightstand, so both turns are taken and refused.
+    expect(spoken[0]).toContain('2 pieces turned a quarter turn.');
     expect(spoken[0]).toContain('Wardrobe 1 does not fit at that angle');
     // SINGULAR. An unconditional plural verb reads "1 more do not fit either" for a set
     // of exactly two, which is the commonest multi-select there is — and the first
@@ -202,9 +255,9 @@ describe('spinSelection says when the piece no longer fits', () => {
       { ...wardrobe([-1.5, 0, 1.0]), id: 'wardrobe-1', name: 'Wardrobe 1' },
       { ...wardrobe([0, 0, 1.0]), id: 'wardrobe-2', name: 'Wardrobe 2' },
       { ...wardrobe([1.5, 0, 1.0]), id: 'wardrobe-3', name: 'Wardrobe 3' },
-      { ...nightstand([-1.5, 0, 0]), id: 'nightstand-1' },
-      { ...nightstand([0, 0, 0]), id: 'nightstand-2' },
-      { ...nightstand([1.5, 0, 0]), id: 'nightstand-3' },
+      { ...nightstand([-1.5, 0, 0.9]), id: 'nightstand-1' },
+      { ...nightstand([0, 0, 0.9]), id: 'nightstand-2' },
+      { ...nightstand([1.5, 0, 0.9]), id: 'nightstand-3' },
     ]);
     select('wardrobe-1', 'wardrobe-2', 'wardrobe-3');
     spinSelection(1);

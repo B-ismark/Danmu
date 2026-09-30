@@ -424,7 +424,7 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // kept when the exemption went; `WALL_FROM_POINTER` is what choosing a rider's
     // wall from the pointer, rather than from a clamp taken at its old angle, moved
     // them by since (2026-09-30, the curtain that jumped onto the cut-away near
-    // wall). That change accepts 141 placements and refuses 87, every one of the 87
+    // wall). That change accepts 96 placements and refuses 44, every one of the 44
     // a piece wider than the wall the hand is now nearest — see the rider branch of
     // `resolvePlacement`. Kept apart so the 570 quoted in three documents stays a
     // measurement of the thing it describes.
@@ -435,10 +435,10 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
       'tv/tv': 1557,
     } as const;
     const WALL_FROM_POINTER = {
-      'curtain/curtain': 44,
-      'other/window': 22,
+      'curtain/curtain': 40,
+      'other/window': 19,
       'painting/painting': -3,
-      'tv/tv': -9,
+      'tv/tv': -4,
     } as const;
     for (const [pair, n] of Object.entries(AT_DELETION)) {
       const shift = WALL_FROM_POINTER[pair as keyof typeof WALL_FROM_POINTER];
@@ -462,8 +462,8 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // from `resolvePlacement`'s containment call and re-running.
     expect(accepts.get('desk/desk-l'), 'the L-shaped desk moved').toBe(1110);
     expect(acceptedBefore, 'the pre-fix column moved').toBe(55537);
-    // 54967 at the deletion, + 54 since from `WALL_FROM_POINTER`.
-    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(55021);
+    // 54967 at the deletion, + 52 since from `WALL_FROM_POINTER`.
+    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(55019);
 
     // Arithmetic over the pins above, and deliberately not more than that: no source
     // mutation can reach it, because a wrong `AT_DELETION` fails its own loop first. What
@@ -472,7 +472,7 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // is the line that goes red when someone re-measures the pins and leaves those
     // three saying the old number.
     const shifted = Object.values(WALL_FROM_POINTER).reduce((a, b) => a + b, 0);
-    expect(shifted).toBe(54);
+    expect(shifted).toBe(52);
     expect(acceptedBefore - acceptedNow).toBe(570 - shifted);
     expect(
       every * 4 -
@@ -633,6 +633,35 @@ describe('a wall piece follows the pointer to the wall it is at', () => {
       expect(r.refusal, `z=${z}`).toBe('wall');
       expect(refusalCause(r)).toBe('it is wider than that wall.');
     }
+  });
+
+  it('rests in the corner when pushed past the end of its own wall', () => {
+    // Found in review: from the pointer alone, a TV pushed on past the north wall's
+    // west end is 0.05 m from the north wall and 0 m from the west one, and it
+    // turned the corner. It stays until the hand is clearly at the other wall.
+    const tv: ScenePart = { ...mk('tv', 'tv', [1200, 60, 700]), pos: [0, 1.2, -1.95] };
+    const push = (x: number, z: number) =>
+      resolvePlacement({
+        part: tv,
+        rawX: x,
+        rawZ: z,
+        rot: 0,
+        dim: tv.dimMM,
+        parts: [tv],
+        footprint: room,
+        roomHeight: H,
+        snapMode: 'off',
+      });
+    for (const x of [-2.6, -3, -3.4]) {
+      const r = push(x, -1.95);
+      expect(r.rot, `x=${x}: turned the corner`).toBeCloseTo(0, 6);
+      expect(r.pos[0], `x=${x}`).toBeCloseTo(-2.4, 2);
+      expect(r.valid).toBe(true);
+    }
+    // …and does go round once the pointer is well down the west wall.
+    const round = push(-2.95, -1.2);
+    expect(round.pos[0]).toBeLessThan(-2.9);
+    expect(round.valid).toBe(true);
   });
 
   it('still slides along its own wall, and reaches the near wall only from beside it', () => {
