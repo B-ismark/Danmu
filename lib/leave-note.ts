@@ -28,7 +28,8 @@
 // It is transient: written only on the way out, cleared as soon as the save it stands in
 // for lands on a page that is still alive, and cleared by the replay, which is given one
 // try — a change the user has now seen missing, and gone on working past, is not one to
-// spring on them at a later open. A CLOSED tab is the one way out that clears neither — its
+// spring on them at a later open. A try the user saw no room for (the read failed too) is
+// not spent. A CLOSED tab is the one way out that clears neither — its
 // save lands, but the page that would have cleared the note is gone, and nothing reopens the
 // room — so the room list also clears every note that is no longer owed, or whose room no
 // longer exists (`roomStore.settleLeaveNotes`). It holds the room's shape and furniture,

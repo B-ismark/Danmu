@@ -7834,7 +7834,10 @@ differ by part.
 
 The replay gets **one try**: if it fails, the room opens as stored and the note goes,
 because a change the user has seen missing and worked past is not one to spring on them at a
-later open. It is cleared when its save lands on a page that is still alive, and by the
+later open. It goes only once that room is on screen: the second review found the first
+version clearing it before the read, so storage that refused both the replay and the read
+showed "This room could not be opened" and had already deleted the one copy of the change.
+It is cleared when its save lands on a page that is still alive, and by the
 replay. A closed tab clears neither, since its save lands after the page has gone and nothing
 reopens the room, so the room list also clears every note with nothing left owed, or whose
 room no longer exists (`roomStore.settleLeaveNotes`, beside the trash purge). Deleting a room drops its note,

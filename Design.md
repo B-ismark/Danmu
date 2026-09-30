@@ -3121,7 +3121,7 @@ is synchronous (`lib/leave-note.ts`). The next open replays it through the same 
 each part — shell, positions, scene — only if nothing has written that part since, so the note
 never overwrites a newer save and a rename or a photo in between does not cancel it. Every
 writer of those three parts stamps them with the time its data was taken
-(`room:{id}:wrote:{part}`). The replay gets one try. The note is cleared when its save lands,
+(`room:{id}:wrote:{part}`). The replay gets one try, spent only once the room it failed on is on screen. The note is cleared when its save lands,
 by the replay, and by the room list for a closed tab's (`roomStore.settleLeaveNotes`). A blind put of the room from memory would have been simpler,
 and would put back a rename made in another tab (`docs/what-is-still-open.md` § 47).
 

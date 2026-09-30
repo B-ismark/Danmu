@@ -216,14 +216,18 @@ export function RoomSync() {
       // written only if nothing has written it since. One try: if it fails, the room opens as
       // stored and the note goes, because a change seen missing here and worked past is not
       // one to put back at some later open. `savePending` has said so if the storage is full.
+      // It goes only once that room is on screen, though: when the read below fails too, the
+      // user has seen no room at all, and the note is the one copy of their change.
       const note = readLeaveNote(roomId);
+      let unfinished: number | undefined;
       if (note) {
         try {
           await roomStore.savePending(roomId, pendingOf(note, (stored, shell) => withShell(stored, shell as SceneRoom)));
+          clearLeaveNote(roomId, note.at);
         } catch (err) {
           console.error('[room] could not finish the last change before the reload', err);
+          unfinished = note.at;
         }
-        clearLeaveNote(roomId, note.at);
       }
       let loaded: [Awaited<ReturnType<typeof roomStore.loadRoom>>, ScenePart[] | undefined, Awaited<ReturnType<typeof roomStore.loadTransforms>>];
       try {
@@ -250,6 +254,7 @@ export function RoomSync() {
         return;
       }
       if (!live) return;
+      if (unfinished !== undefined) clearLeaveNote(roomId, unfinished);
       const [room, savedScene, t] = loaded;
       loadFromRoom(room);
       // If user previously edited / deleted parts, prefer that snapshot over rebuild from detections.

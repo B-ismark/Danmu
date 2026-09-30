@@ -356,6 +356,23 @@ describe('RoomSync, when a reload ends the save it started', () => {
     // must not change it behind them.
     expect(note()).toBeNull();
   });
+
+  it('keeps the note when the room cannot be read either, since no room was seen', async () => {
+    await roomStore.destroyRoom(ROOM_ID);
+    await roomStore.saveRoom(room());
+    writeLeaveNote(ROOM_ID, { at: Date.now() + 60_000, shell: { ...room(), width: 5.5 } });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(roomStore, 'savePending').mockRejectedValueOnce(new Error('blocked'));
+    vi.spyOn(roomStore, 'loadRoom').mockRejectedValueOnce(new Error('blocked'));
+    await reopen();
+    expect(note()).not.toBeNull();
+    // The next open that can read the room finishes it.
+    cleanup();
+    await reopen();
+    expect((await roomStore.loadRoom(ROOM_ID))!.width).toBeCloseTo(5.5, 5);
+    expect(useScene.getState().room.width).toBeCloseTo(5.5, 5);
+    expect(note()).toBeNull();
+  });
 });
 
 describe('RoomSync, when nothing leaves', () => {
