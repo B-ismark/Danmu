@@ -690,13 +690,13 @@ export function sharesFloor(a: Role, b: Role): boolean {
  *
  * **It lives here, with the predicate, because it is the second half of the same
  * rule and the report and the solver must not answer it separately.** They did.
- * (A third reader of `sharesFloor`, `lib/layout-settle.ts`, deliberately does not
- * consult this at all — see the note at the end.) It was a
- * `TUCKED_CLASH_SHARE` private to `lib/clearance.ts`, and `lib/layout-score.ts`'s
- * overlap term had no threshold at all — a blanket `continue` that exempted the
- * pair however deep it was. So the solver paid *nothing* for burying a dining
- * chair completely inside the dining table, and the room report called the result
- * a clash. The file that owned the number said in a comment that the two "cannot
+ * (Some readers of `sharesFloor` deliberately do not consult this at all, among
+ * them `lib/layout-settle.ts` — see the note at the end — and the support probe,
+ * below.) It was a `TUCKED_CLASH_SHARE` private to `lib/clearance.ts`, and
+ * `lib/layout-score.ts`'s overlap term had no threshold at all — a blanket
+ * `continue` that exempted the pair however deep it was. So the solver paid
+ * *nothing* for burying a dining chair completely inside the dining table, and the
+ * room report called the result a clash. The file that owned the number said in a comment that the two "cannot
  * disagree about whether a tucked-in chair is a collision"; they shared the
  * predicate and not the bar, which is a different thing and reads identical.
  *
@@ -715,6 +715,14 @@ export function sharesFloor(a: Role, b: Role): boolean {
  * reaches all of it, and that is still worth saying.
  *
  * `tests/layout-conformance.test.ts` holds the two consumers to it.
+ *
+ * **And it is not the only bar a tucked chair meets.** `MIN_SUPPORT_SHARE` (0.5) in
+ * `lib/physics.ts` is how much of a piece another must cover to hold it up, so a chair
+ * tucked between the two bars was a fine arrangement to both consumers of this one and
+ * stood on the tabletop by the next drag. `findSupportDetailed` therefore reads
+ * `sharesFloor` too: a seat never LANDS on the surface it tucks under (§ H.6.3). It
+ * reads the predicate and not this number — the rule there has no depth at all,
+ * because a chair is never meant to stand on its table however far in it is.
  *
  * ── There is a THIRD consumer, and it deliberately does not read this ─────────
  *

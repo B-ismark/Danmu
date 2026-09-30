@@ -2967,7 +2967,8 @@ modes", since the vagueness is what let the wrong version stand beside it.
 
 Four observations, all the user's, all landing in the same place:
 
-- a merged dining set solved with **one chair hanging in the air**, no floor under it;
+- a merged dining set solved with **one chair hanging in the air**, no floor under it; *(the
+  lift FIXED 2026-09-30, § H.6.3. The solver breaking the set apart is P1, still open.)*
 - a chair put on a couch, then Suggest, ends **through a wall**; *(FIXED 2026-09-30, § H.6.2.)*
 - a couch a few degrees off square is turned to face **away from the TV** it should face;
 - and generally, *"suggest doesn't really seem to know what to do with groups and their
@@ -3479,6 +3480,87 @@ change because it corrects a comment about the report, not the search.
   round 1 it does not: a link at its own spot returns `ownSpotCharge[i]`, a number read out
   of an array, and never reaches `outsideMeasure`. What is left is one pose comparison per
   link, and a second copy of the home rule to skip it would be a place for the two to drift.
+
+**§ H.6.3 · FIXED 2026-09-30: a seat never stands on the surface it tucks under.** The
+user's first observation above — *a merged dining set solved with one chair hanging in the
+air* — reproduced in two steps, and the research (§ H.6's P3) found both. Directly after
+Fix, nothing is airborne; a chair is left on the floor **50–80% under the table**. Then the
+next touch lifts it onto the tabletop, which from most angles is a chair hanging in the air.
+
+**Two bars disagreed.** A chair may be tucked up to `TUCKED_CLASH_SHARE` (0.85) of its own
+footprint under a table and still be a fine arrangement to the solver and to Room check,
+which read that one number since #68. But anything covering `MIN_SUPPORT_SHARE` (0.5) of a
+piece holds it up (`lib/physics.ts`), and `drag-resolve` applies that bar on every frame.
+So between 0.5 and 0.85 a chair was fine to both and stood on the table by the next drag.
+Measured on the `t` dining set turned 0°, 8° and 30° and the `open` one turned 0° and
+30°, twelve Fix presses each, 27 of the 60 applying a solve: **11 left a chair past half under the table; dragging the set 50 mm lifted
+14 chairs onto it; nudging each of those 14 chairs alone 10 mm lifted 14 of 14, and the
+lift made each of those moves valid.** The probe dragged the set as a selection; a merged
+set drags the same way, because a click on it selects all of it (`selectionForPick`), and
+the new tests drag both.
+
+**Two fixes were built and measured.**
+- *A — lower the tuck bar below the support bar* (0.85 → 0.45). No lifts, and no chair
+  past half. But 3 of the 27 solves were lost, exactly the three that tucked deepest, and
+  9 tests went red in 5 files (the conformance ramp, two shuffle tests, *does not fine a
+  chair for being tucked under a table*, the placement banner, two tidiness seeds). It
+  re-prices `overlap` in every solve the app runs.
+- *B — a seat never LANDS on the surface it tucks under.* Chosen by the user. The solver
+  is untouched; the support probe learns the one rule that belongs to landing.
+
+**B splits one question into two, and the split is the design.** `findSupportDetailed`
+is the DROP question — what would this piece land on here — and it now looks past a
+`sharesFloor` partner (a dining or office chair and a dining table or desk; an ottoman and
+a coffee table, dining table or desk), to the floor or to anything else genuinely under the piece.
+Every caller that MOVES a piece to its answer asks it: drag gravity, a piece being added
+(`placeNewPart`), the Inspector's **Change the model**, and `settleHeights`.
+`highestSurfaceUnder` is the STATE question — what is this footprint over as it stands —
+with no seat rule, and `restingOn` (the placement banner) and `ridingParents` (the rider
+relation) ask it. Putting the rule in the one shared function was the first draft, and it
+was wrong twice over: a chair an older version had already stood on its table would read
+*Floating*, and would be left in mid-air when the table moved. Both callers share one
+loop (`topSurface`), so the two questions cannot drift on anything but the rule.
+
+The mover's kind is a REQUIRED argument (`SupportSelf`), not looked up by id, because two
+callers ask about a piece the list does not hold: a new piece (`'__new__'`), and the model
+swap, whose list still holds the OLD kind under the same id. Asked with the old kind, a
+lamp on a dining table swapped for a dining chair stayed on the tabletop. The rule is
+symmetric, as `sharesFloor` is: a small dining table dropped over a chair does not stand
+on its seat. Its role is read from its own size, because `roleOf` tells a dining table
+from a side table by its dimensions.
+
+**After, on the same 60 presses:** the same 27 solves, 0 chairs lifted by the set drag,
+0 of 14 by the solo nudge. The full suite is unchanged: no test moved, no baseline moved.
+
+**What it deliberately did not do.**
+- *The chairs are still tucked deep.* 11 of 27 solves still leave a chair past half under
+  its table. The plan's acceptance asked for that to be 0 as well, and it was written for
+  fix A. Under B a deep tuck is an arrangement rather than a defect, because nothing lifts
+  it any more. The seeded tucks (0.231) do not move, and neither do the 8/40 and 4/120 at
+  the overlap term, since the solver is unchanged.
+- *A tucked chair nudged alone is refused now, at any depth.* Past half it used to be
+  lifted, and the lift made the move valid. `collidesAt` has no `sharesFloor` exemption, so
+  it is refused like a chair tucked a quarter in always was. That is § 17's open decision,
+  unchanged. `tests/seat-support.test.ts` pins it and says which line to change if § 17
+  is ever decided the other way.
+- *A room saved with a chair already on its table keeps it there.* The banner still says
+  *On Table*, and it rides the table. `settleHeights` would bring it down, but only on the
+  detection path (`buildSceneFromRoom`), not on every room open. The first drag of that
+  chair applies the rule: it is refused while it is over the table, and lands on the floor
+  once it is clear (measured: refused while the chair overlaps the table at all, valid on
+  the floor from the first position clear of it). **Floor** in the placement row brings it
+  down in place.
+- *The 3D tab is not covered by a test.* `tests/seat-swap.test.tsx` mounts the real plan
+  page and presses **Change the model**; the model page cannot be mounted here (R3F). The
+  drag half is `lib/drag-resolve.ts`, which both tabs call.
+
+Tests: `tests/seat-support.test.ts` (17) and `tests/seat-swap.test.tsx` (3). Every clause is
+a pair, with a table lamp at the same spot that must still land, because a probe that
+refused everything would pass every "stays on the floor" assertion. 8 of 8 sabotages
+caught: the seat rule deleted; the swap asking with the old kind; `restingOn` or
+`ridingParents` given the drop question; a new piece, a settled piece or a dragged piece
+asked as a generic box; the mover's role read at zero size. The last one survived the
+first pass, and it is what the symmetric test was written for.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
@@ -4497,6 +4579,8 @@ places, and both are the app's own presets.** It is narrowed where it is asserte
 - **A tucked pair.** `collidesAt` has no `sharesFloor` exemption while rule 2 and the
   seeder's `seats()` both do, so a dining chair under its table is refused by the drag
   and silent in the report **by design** — 20 seeded pairs across `open` and `t`.
+  *(Since § H.6.3 that holds at every depth. A chair tucked past half used to be lifted
+  onto the table instead, and the lift made the drag valid.)*
 
 Both want the same decision — does `collidesAt` grow the report's exemptions, or does the
 report grow the drag's strictness — and it is the same shape as § 31: a question about

@@ -362,7 +362,7 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
 
     if (p.category !== 'rug') {
       const support = floor
-        ? findSupportDetailed(work, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
+        ? findSupportDetailed(work, p, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
         : null;
       const y = support !== null && support.y > 0.3 ? support.y : null;
       if (isTabletopProne(p.category) && floor && y !== null) {

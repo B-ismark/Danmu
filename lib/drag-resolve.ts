@@ -208,7 +208,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   if (part.category === 'rug') {
     y = 0;
   } else if (!centered) {
-    const support = findSupportDetailed(parts, part.id, x, z, dim, outRot, part.circle);
+    const support = findSupportDetailed(parts, part, x, z, dim, outRot, part.circle);
     y = support?.y ?? 0;
     supportId = support?.id;
   } else {

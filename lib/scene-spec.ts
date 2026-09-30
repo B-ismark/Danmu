@@ -3115,7 +3115,7 @@ export function placeNewPart(
   // support probe reads the FINAL point, not the rotation-blind one above: a piece
   // asks what it can stand on where it is going to be standing.
   const [fx, fz] = intoRoom(ax, az, rot);
-  const support = isTabletopProne(cat) ? findSupportDetailed(existing, '__new__', fx, fz, dimMM) : null;
+  const support = isTabletopProne(cat) ? findSupportDetailed(existing, { id: '__new__', category: cat, shape }, fx, fz, dimMM) : null;
   // The id and the height are gated on ONE condition on purpose. A piece whose
   // support fails the 0.3 m bar floors, and recording an edge to something it is not
   // standing on would be worse than recording none: `deriveRiderYs` rule 2 honours a

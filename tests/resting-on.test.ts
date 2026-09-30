@@ -24,6 +24,9 @@ const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM:
 /** …whose top is therefore at 0.75. */
 const DESK_TOP = 0.75;
 
+/** Who asks — the probe needs the mover's kind as well as its id (`SupportSelf`). */
+const LAMP_SELF = { id: 'lamp', category: 'lamp', shape: 'lamp-table' } as const;
+
 const lampAt = (y: number) =>
   part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, y, 0] });
 
@@ -39,12 +42,12 @@ describe('restingOn — the question findSupportDetailed does not answer', () =>
     //
     // Written the honest way, that absence IS the finding: one call, no `y` anywhere in
     // it, and the answer is the desk regardless of where the lamp is.
-    const under = findSupportDetailed([desk], 'lamp', 0, 0, [250, 250, 500], 0, undefined);
+    const under = findSupportDetailed([desk], LAMP_SELF, 0, 0, [250, 250, 500], 0, undefined);
     expect(under?.id).toBe('desk');
     expect(under?.y).toBeCloseTo(DESK_TOP, 9);
     // …so if the footprints ever stopped overlapping, every "floating" clause below
     // would pass for the wrong reason. This is what stops that.
-    expect(findSupportDetailed([], 'lamp', 0, 0, [250, 250, 500], 0, undefined)).toBeNull();
+    expect(findSupportDetailed([], LAMP_SELF, 0, 0, [250, 250, 500], 0, undefined)).toBeNull();
   });
 
   it('says a lamp ON the desk is on the desk', () => {
@@ -61,7 +64,7 @@ describe('restingOn — the question findSupportDetailed does not answer', () =>
     // user has since resized. The old banner named the desk here.
     const lamp = lampAt(DESK_TOP + 0.35);
     expect(
-      findSupportDetailed([desk], 'lamp', 0, 0, lamp.dimMM, 0, undefined)?.id,
+      findSupportDetailed([desk], LAMP_SELF, 0, 0, lamp.dimMM, 0, undefined)?.id,
       'the old question still says "desk", which is why this test is a pair',
     ).toBe('desk');
     expect(ask(lamp, [desk]), 'and the new one says nothing holds it up').toBeNull();
@@ -161,7 +164,7 @@ describe('restingOn — the question findSupportDetailed does not answer', () =>
     });
     const lamp = lampAt(DESK_TOP);
     // The old question, and it is the wrong answer for this purpose:
-    const naive = findSupportDetailed([desk, monitor], 'lamp', 0, 0, lamp.dimMM, 0, undefined);
+    const naive = findSupportDetailed([desk, monitor], LAMP_SELF, 0, 0, lamp.dimMM, 0, undefined);
     expect(naive?.id, 'the highest top wins, which is the monitor').toBe('monitor');
     // …and the new one, which asks for a support the piece could be resting ON.
     const r = ask(lamp, [desk, monitor]);
@@ -174,7 +177,7 @@ describe('restingOn — the question findSupportDetailed does not answer', () =>
     // that a future `restingOn` written without it goes red: a lamp perched on the very
     // lip of a desk is not on the desk, and at the desk's own height it is in mid-air.
     const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0.78, DESK_TOP, 0] });
-    expect(findSupportDetailed([desk], 'lamp', 0.78, 0, lamp.dimMM, 0, undefined)).toBeNull();
+    expect(findSupportDetailed([desk], LAMP_SELF, 0.78, 0, lamp.dimMM, 0, undefined)).toBeNull();
     expect(ask(lamp, [desk])).toBeNull();
   });
 });
