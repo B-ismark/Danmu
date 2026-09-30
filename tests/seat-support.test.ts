@@ -540,8 +540,30 @@ describe('every caller that moves a piece to what it finds', () => {
     expect(settleHeights([COFFEE, ottoman(0, 0)], H)).toEqual([]);
     expect(analyzeRoom([COFFEE, ottoman(0, 0)], { footprint: ROOM, height: H }).issues.filter((i) => i.rule === 'clash')).toHaveLength(1);
     expect(settleHeights([COFFEE, lamp(0, 0)], H)).toEqual([{ id: 'lamp', y: 0.42 }]);
-    // Not lifted is not knocked down: one already on the top stays there.
+    // Not lifted is not knocked down: one already on the top stays there, and one
+    // hanging above it comes down onto it.
     expect(settleHeights([COFFEE, ottoman(0, 0, 0.42)], H)).toEqual([]);
+    expect(settleHeights([COFFEE, ottoman(0, 0, 0.6)], H)).toEqual([{ id: 'ottoman', y: 0.42 }]);
+    // "On" is read with the resting tolerance: 20 mm into the top is on it, not under it.
+    expect(settleHeights([COFFEE, ottoman(0, 0, 0.4)], H)).toEqual([{ id: 'ottoman', y: 0.42 }]);
+    // Not lifted from anywhere below the top, either. A seat left in the air goes to the
+    // branch for those, which stood it on whatever was under it — so 60 mm up it went
+    // onto the table and 40 mm up it stayed down. A chair too, which is not
+    // tabletop-prone and reaches only that branch.
+    expect(settleHeights([COFFEE, ottoman(0, 0, 0.06)], H)).toEqual([{ id: 'ottoman', y: 0 }]);
+    expect(settleHeights([COFFEE, ottoman(0, 0, 0.2)], H)).toEqual([{ id: 'ottoman', y: 0 }]);
+    expect(settleHeights([COFFEE, chair('c', 0, 0, 0.2)], H)).toEqual([{ id: 'c', y: 0 }]);
+    // Onto anything: a platform too big to be a table, and a bed. What a scan put on the
+    // floor over one of those stays there, and Room check says so.
+    const platform = part({ id: 'plat', category: 'other', shape: 'box', dimMM: [3000, 2000, 400], pos: [0, 0, 0] });
+    const bed = part({ id: 'bed', category: 'bed', shape: 'bed-double', dimMM: [1600, 2100, 550], pos: [0, 0, 0] });
+    expect(roleOf(platform)).toBe('other');
+    for (const under of [platform, bed]) {
+      expect(findSupportDetailed([under], ottoman(0, 0), 0, 0, ottoman(0, 0).dimMM, 0, undefined)?.id, under.id).toBe(under.id);
+      expect(settleHeights([under, ottoman(0, 0)], H), under.id).toEqual([]);
+      const clashes = analyzeRoom([under, ottoman(0, 0)], { footprint: ROOM, height: H }).issues.filter((i) => i.rule === 'clash');
+      expect(clashes, under.id).toHaveLength(1);
+    }
     // A seat, not an ottoman: a row the detector files under `other` with a chair shape
     // is tabletop-prone by its category (`sceneShapeFor` keeps the shape it picked), and
     // is a dining chair by its shape. A coffee table is no partner of a dining chair, so

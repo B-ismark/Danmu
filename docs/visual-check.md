@@ -2056,6 +2056,11 @@ tray on an ottoman. Open the result in 3D and open Room check.
 - An ottoman floating half a metre up, or on the coffee table's top.
 - An ottoman overlapping the coffee table with Room check saying nothing.
 
+**Expected, not wrong.** Nudging that ottoman by hand stands it on the coffee table, as
+dragging any ottoman over one does. Whether a drag should keep it down is an open decision
+in `docs/what-is-still-open.md`. A desk with a riser and a monitor scanned together may put
+the riser on top of the monitor when the monitor was listed first — filed there too.
+
 ### A lamp dropped on a table's corner stands on it — this branch (§ H.6.4 follow-ups), NOT LOOKED AT
 
 Adding a piece, and swapping one in the Inspector, used to ask what it stands on as if it

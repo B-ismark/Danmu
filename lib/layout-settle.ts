@@ -419,16 +419,27 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
       const support = floor
         ? findSupportDetailed(work.filter((q) => !standsOn(q, p)), p, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
         : null;
-      const rest = support !== null && support.y > 0.3 ? support : null;
+      const found = support !== null && support.y > 0.3 ? support : null;
       // A seat is not lifted. An ottoman is tabletop-prone, and the add path wants that:
       // dropped over a coffee table it does not fit under, it goes on top, where the
       // user put it and can see it (§ H.6.4). Here nobody put it anywhere. A scan reads
-      // every floor piece as standing on the floor, which for a seat is the right
-      // reading — what a scan gets wrong is WHERE on the floor. A scanned ottoman the
-      // tidy-up could not push clear of its coffee table was stood on the top at 0.42 m,
-      // where no report saw it; on the floor it is a clash `lib/clearance.ts` names.
-      // A seat that arrives already in the air still comes to rest in the branch below.
-      if (isTabletopProne(p.category) && floor && rest !== null && !isSeatRole(roleOf(p))) {
+      // every floor piece as standing on the floor — what it gets wrong is WHERE on the
+      // floor. A scanned ottoman the tidy-up could not push clear of its coffee table was
+      // stood on the top at 0.42 m, where no report saw it; on the floor it is a clash
+      // `lib/clearance.ts` names.
+      //
+      // Onto ANYTHING, a platform or a bed as much as a table, and that is a trade rather
+      // than an oversight. A seat that really stands on a platform the scan put on the
+      // floor stays inside it — and Room check names that as a clash too (measured on a
+      // 3 × 2 m platform and a double bed). Lifting it instead would put the commoner
+      // overlap, a seat left half over something the tidy-up could not push it clear of,
+      // up on a top where nothing reports it. Wrong and said beats wrong and silent.
+      //
+      // "Lifted" is UP from where it is, so it holds in the branch for pieces left in the
+      // air as well: one hanging 60 mm over a coffee table went up onto it there, and one
+      // 40 mm up stayed down. A seat already on a top, or above one, still comes to rest on it.
+      const rest = found !== null && isSeatRole(roleOf(p)) && found.y > p.pos[1] + SUPPORT_Y_EPS ? null : found;
+      if (isTabletopProne(p.category) && floor && rest !== null) {
         p.pos[1] = rest.y;
         stoodOn.set(p.id, rest.id);
       } else if (floor && p.pos[1] > 0.05) {

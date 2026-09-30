@@ -3828,6 +3828,23 @@ clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/
   there. A seat and not everything that shares floor: a storage box the size of a coffee
   table reads as one and is still put on a dining table, and a row filed under `other` with a
   chair's shape is a seat. Four mutants of the gate, each caught by `tests/seat-support.test.ts`.
+  **Review found two edges, and one is fixed.** The gate held only in the branch for pieces
+  standing on the floor, so a seat left hanging 60 mm over the coffee table went UP onto it in
+  the branch for pieces in the air, and one 40 mm up stayed down; "not lifted" is read against
+  where the seat is now, in both branches (five mutants caught). The other is a trade, kept:
+  the gate refuses every lift, a platform or a bed as well as a table, so a seat that really
+  stands on a platform the scan put on the floor stays inside it. Room check names that as a
+  clash (measured on a 3 × 2 m platform and a double bed), where lifting would hide the far
+  commoner overlap on a top.
+- **Open, and it is the user's call: the first nudge of that scanned ottoman stands it on the
+  coffee table.** Drag gravity asks the drop question, which keeps § H.6.4's answer: a seat
+  dragged over a coffee table it does not fit under goes on top, where the user can see it.
+  So the scanned ottoman Room check reports, nudged 10 mm to deal with it, goes to 0.42 m on
+  the top and the move is valid — measured, the same at 200 mm. A scan and a drag now give
+  two answers for one pair, deliberately (nobody put the scanned one anywhere), and the drag's
+  is the one a person sees happen. Whether a DRAG should also keep a seat down — the ottoman
+  staying on the floor, clashing, until it is dragged clear — changes § H.6.4, so it is not
+  decided here.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
