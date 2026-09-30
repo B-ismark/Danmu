@@ -68,6 +68,7 @@ import { analyzeRoom, floorClearPct, type ClearanceIssue, type ClearanceSeverity
 import {
   impossibleClause,
   isWorthOffering,
+  confineCanMove,
   lockedForSolve,
   type MoveReason,
   type SolveResult,
@@ -378,6 +379,7 @@ export function RoomTools() {
           {tab === 'check' && (
             <CheckPanel
               issues={report.issues}
+              effParts={effParts}
               freeShare={report.freeFloorShare}
               stepFree={stepFree}
               onStepFree={setStepFree}
@@ -832,7 +834,8 @@ function FixAllButton({ appPlaced }: { appPlaced: AppPlacedRef }) {
 // What never moves: kept pieces, locked ones, wall-mounted fixtures (doors,
 // windows, the ceiling light, the fan), and anything merged with one of those,
 // since a merged set moves whole or not at all. `movableFor` is the one answer to
-// that question and both buttons read it, and so does Room check's Try a fix.
+// that question and both buttons read it, and Room check asks it of each row's own
+// pieces before it offers Try a fix (`confineCanMove`).
 
 /** Opens the gallery. A toggle rather than an action, so it carries no busy state:
  *  the search runs inside the panel, which says so. Same row contract as Fix. */
@@ -1191,18 +1194,17 @@ function CheckSummary({
  *  is discovered by hovering. */
 function IssueRow({
   issue,
+  canFix,
   appPlaced,
   onShow,
 }: {
   issue: ClearanceIssue;
+  canFix: boolean;
   appPlaced: AppPlacedRef;
   onShow: (issue: ClearanceIssue) => void;
 }) {
   const sev = SEVERITY[issue.severity];
   const canSelect = issue.partIds.length > 0;
-  // Whether the solver could plausibly clear this by rearranging. Read from the one
-  // table that knows, rather than re-deciding it here.
-  const canFix = RULE_HANDLING[issue.rule].movable;
   return (
     <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--hairline)' }}>
       {/* Pill and title are a flex row, not a pill inlined into the title's text flow.
@@ -1268,12 +1270,14 @@ function IssueRow({
 
 function CheckPanel({
   issues,
+  effParts,
   freeShare,
   stepFree,
   onStepFree,
   appPlaced,
 }: {
   issues: ClearanceIssue[];
+  effParts: ScenePart[];
   freeShare: number;
   stepFree: boolean;
   onStepFree: (on: boolean) => void;
@@ -1281,6 +1285,22 @@ function CheckPanel({
 }) {
   const setSelection = useStudio((s) => s.setSelection);
   const frameSelected = useStudio((s) => s.frameSelected);
+  const pinned = useStudio((s) => s.pinned);
+  // Which rows get **Try a fix**: a kind of finding rearranging could clear
+  // (`RULE_HANDLING`, the one table that knows), about pieces this press may move
+  // (`confineCanMove`, over the same locks the press itself composes). The
+  // second half is what the report cannot see — the user's pins, and a merged set
+  // held by a piece from the photo or on a wall — and without it the button spun on
+  // those rows and said it found nothing.
+  const fixable = useMemo(
+    () =>
+      new Set(
+        issues
+          .filter((i) => RULE_HANDLING[i.rule].movable && confineCanMove(i.partIds, effParts, pinned))
+          .map((i) => i.id),
+      ),
+    [issues, effParts, pinned],
+  );
   const show = useCallback(
     (issue: ClearanceIssue) => {
       setSelection(issue.partIds, issue.partIds[0]);
@@ -1301,6 +1321,7 @@ function CheckPanel({
           <IssueRow
             key={issue.id}
             issue={issue}
+            canFix={fixable.has(issue.id)}
             appPlaced={appPlaced}
             onShow={show}
           />

@@ -3909,9 +3909,14 @@ the squaring pass and its nudges, the prune, a rug sent home, and the explanatio
 A set never swaps places with a piece, and the group pass counts a set as one group
 whatever its relations say. Fix's confine names the whole set when it names a member
 (`withCompany`, read by `RoomTools`), since a confine naming one chair would otherwise hold
-it by the table it is merged with. And Room check offers **Try a fix** on a piece outside
-the room only where `movableFor` lets the solve move it (`lib/clearance.ts`): a sofa merged
-with the TV on the wall is held by its set, so it gets the floor remedy and no button.
+it by the table it is merged with. And Room check offers **Try a fix** only on a row whose
+pieces the press may move (`confineCanMove`, asked by every row in `RoomTools`): a sofa merged
+with the TV on the wall is held by its set, and so is one merged with a chair you kept in
+place, so neither gets the button on any finding that names it. Review round 1 put that
+answer in `lib/clearance.ts`, on the `outside` row alone; round 2 moved it to the row,
+because the report cannot see a pin and the other rules that offer the button had the same
+dead press. The report's own sentences no longer name the button, since the row may not
+show it.
 
 *Found by its own tests, and the probe could not see it.* `moved`, the list the answer is
 written from, asked each piece whether it had moved past `MOVE_EPSILON`. A set turned 1°
@@ -3938,7 +3943,7 @@ measure in a frame.
   where it goes.
 - **A lock on one member is a lock on the set**, and so is one member on a wall.
 
-*Tests.* `tests/layout-rigid-sets.test.ts`, 22 tests. Every solve test first shows its fixture can break
+*Tests.* `tests/layout-rigid-sets.test.ts`, 26 tests. Every solve test first shows its fixture can break
 the set: the same room unmerged must come back broken. Mutated, 29 mutants, **26 caught by
 that file alone**. The first pass left 11 alive. Direct tests of the two tidy passes
 (`snapYaws`, `openRoutes`) closed three. Five more were caught only by a scratch sweep over

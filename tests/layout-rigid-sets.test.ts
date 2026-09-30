@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultScene, type ScenePart } from '@/lib/scene-spec';
 import { footprintBounds, footprintForLayout, type Footprint } from '@/lib/footprint';
 import {
+  confineCanMove,
   lockedForSolve,
   makeRng,
   movableFor,
@@ -18,6 +19,7 @@ import {
 import { applyPlacements, lockedForShuffle, shuffleRoom } from '@/lib/layout-shuffle';
 import { localToWorld, worldToLocal } from '@/lib/geometry';
 import { DEFAULT_WEIGHTS, angleDelta, navigabilityCost, prepare, type Placement } from '@/lib/layout-score';
+import { analyzeRoom } from '@/lib/clearance';
 
 // A merged set is one rigid body to the solver, as it already was to a click, a drag
 // and a wall move. Before this, Suggest and Ideas moved each member as a piece of its
@@ -175,6 +177,61 @@ describe('withCompany widens a confine to the whole merged set', () => {
     expect([...confined].sort()).toEqual([...ids].sort());
     const movable = movableFor(parts, lockedForSolve(parts, {}, confined));
     expect(parts.filter((_, i) => movable[i]).map((p) => p.id).sort()).toEqual([...ids].sort());
+  });
+});
+
+describe('Room check offers Try a fix only where the press may move a piece it names', () => {
+  // A sofa 600 mm through the east wall, which Room check reports as `outside`. Each
+  // row differs from the plain room by the one thing that holds the sofa, or frees it.
+  const sofa = part({ id: 'sofa', category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 880], pos: [2.6, 0, 0] });
+  const tv = part({ id: 'tv', category: 'tv', shape: 'tv', dimMM: [1200, 60, 700], pos: [0, 1.2, -1.95], wallMounted: true });
+  const plant = part({ id: 'plant', category: 'plant', shape: 'plant', dimMM: [400, 400, 900], pos: [-2, 0, 1] });
+  const g = (p: ScenePart): ScenePart => ({ ...p, groupId: 'g' });
+  const rows: { why: string; parts: ScenePart[]; pinned: Record<string, boolean>; can: boolean }[] = [
+    { why: 'on its own', parts: [sofa, tv, plant], pinned: {}, can: true },
+    { why: 'merged with a plant', parts: [g(sofa), tv, g(plant)], pinned: {}, can: true },
+    { why: 'merged with the TV on the wall', parts: [g(sofa), g(tv), plant], pinned: {}, can: false },
+    { why: 'merged with a plant the user kept', parts: [g(sofa), tv, g(plant)], pinned: { plant: true }, can: false },
+    { why: 'kept in place itself', parts: [sofa, tv, plant], pinned: { sofa: true }, can: false },
+    { why: 'from the photo', parts: [{ ...sofa, locked: true }, tv, plant], pinned: {}, can: false },
+  ];
+  const ROOM = { footprint: FOOTPRINT, height: 2.4 };
+  const finding = (ps: ScenePart[]) => analyzeRoom(ps, ROOM).issues.find((i) => i.rule === 'outside')!;
+
+  it('reads the user\'s pins, the photo, a wall and a merged set, on the finding Room check makes', () => {
+    for (const r of rows) {
+      const issue = finding(r.parts);
+      expect(issue.partIds, r.why).toEqual(['sofa']);
+      expect(confineCanMove(issue.partIds, r.parts, r.pinned), r.why).toBe(r.can);
+    }
+  });
+
+  it('agrees with the press: where it says no, the fix moves nothing, and where it says yes it moves the sofa', { timeout: 120_000 }, () => {
+    for (const r of rows) {
+      const issue = finding(r.parts);
+      const locked = lockedForSolve(r.parts, r.pinned, withCompany(new Set(issue.partIds), r.parts));
+      const res = solveLayout(r.parts, FOOTPRINT, locked, { seed: 1, mode: 'refit', placed: new Set() });
+      if (r.can) expect(res.moved, r.why).toContain(0);
+      else expect(res.moved, r.why).toEqual([]);
+    }
+  });
+
+  it('one free piece among those named is enough, and a whole-room fix needs anything free', () => {
+    const photo = { ...sofa, locked: true };
+    expect(confineCanMove(['sofa', 'plant'], [photo, tv, plant], {}), 'a clash between the photo sofa and a plant').toBe(true);
+    expect(confineCanMove([], [photo, tv, plant], {}), 'a whole-room fix with the plant free').toBe(true);
+    expect(confineCanMove([], [photo, tv, plant], { plant: true }), 'a whole-room fix with nothing free').toBe(false);
+  });
+
+  it('a free lamp riding a held piece does not make that piece\'s row fixable', () => {
+    const stand = g(part({ id: 'stand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [1, 0, 0] }));
+    const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [1, 0.55, 0] });
+    const ps = [stand, g(tv), lamp];
+    // The premise: the press takes the lamp along, and would be free to move it.
+    const confined = withCompany(new Set(['stand']), ps);
+    expect([...confined].sort()).toEqual(['lamp', 'stand', 'tv']);
+    expect(movableFor(ps, lockedForSolve(ps, {}, confined))).toEqual([false, false, true]);
+    expect(confineCanMove(['stand'], ps, {})).toBe(false);
   });
 });
 

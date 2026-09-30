@@ -708,6 +708,37 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
   return parts.map((p, i) => own[i] && !(p.groupId && held.has(p.groupId)));
 }
 
+/** Whether a **Try a fix** pressed for `ids` could move any of them: the locks the
+ *  press composes (`lockedForSolve`) and the solver's own answer over them
+ *  (`movableFor`). Empty `ids` is a whole-room fix, which can act if anything in the
+ *  room may move.
+ *
+ *  A Room check row asks this before it shows the button, beside the rule's
+ *  `RULE_HANDLING.movable`, because the two are different questions. The rule says
+ *  whether rearranging could clear a finding of that kind; this says whether THESE
+ *  pieces may be rearranged — not kept in place by the user, not from the photo,
+ *  not on a wall, and not merged with a piece that is any of those. The report
+ *  cannot answer it: the user's pins live in the studio store, and a finding about a
+ *  sofa merged with the TV on the wall was offered a button on every rule that
+ *  names a piece, each of which spun and said it found nothing.
+ *
+ *  A NAMED piece has to be free, not merely something the press takes along: a lamp
+ *  riding a held sofa is free to move and moving it clears nothing about the sofa.
+ *
+ *  The press also confines its solve to `withCompany(ids)`, locking the rest of the
+ *  room, and that is left out here because it cannot change the answer: a named
+ *  piece's freedom reads only the locks on its own merged set, and the confine always
+ *  contains the whole set. Passing it was a mutant nothing could kill. */
+export function confineCanMove(
+  ids: readonly string[],
+  parts: ScenePart[],
+  pinned: Record<string, boolean>,
+): boolean {
+  const named = ids.length > 0 ? new Set(ids) : null;
+  const free = movableFor(parts, lockedForSolve(parts, pinned, null));
+  return parts.some((p, i) => free[i] && (!named || named.has(p.id)));
+}
+
 /** The merged sets a solve moves, each as ONE rigid body.
  *
  *  Merging is the user saying *these belong together as they stand*: a click selects

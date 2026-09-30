@@ -615,7 +615,8 @@ turn the group about 30° in the plan, press **Fix**, and look in 3D. Last, in t
 Catalog press **Keep where it is** on one chair of the group, and press **Fix** and
 **Ideas** again. Do the same once on T-Shape, with a table lamp put on the dining table
 first. Then group the sofa with the TV on the wall, drag the sofa partly through a wall,
-and open **Room check**.
+and open **Room check**. Then ungroup it, group the sofa with an armchair instead, press
+**Keep where it is** on the armchair, and look at Room check again.
 
 **What right looks like.**
 - In every idea the table and its chairs sit exactly as you grouped them, wherever the
@@ -626,7 +627,8 @@ and open **Room check**.
   moves around it.
 - The lamp stays on the table.
 - Room check says the sofa sticks out and to drag it back inside, with no **Try a fix**
-  on that row: the group holds it, because the TV never moves.
+  on that row: the group holds it, because the TV never moves. The same with the kept
+  armchair, and on any other row naming the sofa, such as a blocked door or walkway.
 
 **What wrong looks like.**
 - A chair left behind, pushed out, or turned on its own inside a thumbnail or in 3D.

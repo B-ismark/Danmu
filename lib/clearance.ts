@@ -65,7 +65,6 @@ import {
   type RuleKind,
 } from './layout-rules';
 import { dimRangeFor } from './dimension-ranges';
-import { movableFor } from './layout-solve';
 
 export type ClearanceSeverity = 'error' | 'warn' | 'info';
 
@@ -848,26 +847,20 @@ export function analyzeRoom(
   // is reported. Without that, `movable: true` here would have been a second lie.
   //
   // The cost term seeing a piece is half of "could rearranging clear it"; the other
-  // half is whether the solve may move it at all, and that is `movableFor`, the
-  // solver's own answer rather than a copy of it. A sofa merged with a wall-mounted
-  // TV is an obstacle the term prices, and it is held by its set — the solver moves
-  // a set whole or not at all, and never moves the TV — so a button on it would spin
-  // and report nothing. `ScenePart.locked` (from the photo) is read because the
-  // solve reads it too (`lockedForSolve`); the user's own pins live in the studio
-  // store, which this pure report cannot see.
-  const free = movableFor(
-    parts,
-    parts.map((p) => p.locked),
-  );
-  for (const [i, p] of parts.entries()) {
+  // half is whether the solve may move THIS piece — not kept in place, not from the
+  // photo, not merged with a piece on a wall — and that is a question about the
+  // pieces rather than the rule, which this report cannot answer: the user's pins
+  // live in the studio store. Room check asks it per row (`confineCanMove`), for
+  // every rule at once. Which is why no sentence here names the button: the row may
+  // not show it.
+  for (const p of parts) {
     const c = roomContainment(p.pos, p.rot, p.dimMM, poly, p.circle, p.shape);
     const out = forgivesOverhang(p) ? !c.centre : !(c.box && c.centre);
     if (!out) continue;
     // WHERE it is — the title and the remedy sentence.
     const standing = !c.centre;
     // WHETHER anything can be done — the rule, and so the button.
-    const searchable = containedBySearch(p);
-    const fixable = searchable && free[i];
+    const fixable = containedBySearch(p);
     issues.push({
       id: `${fixable ? 'outside' : 'outside-immovable'}-${p.id}`,
       rule: fixable ? 'outside' : 'outside-immovable',
@@ -880,13 +873,9 @@ export function analyzeRoom(
         (standing
           ? `“${p.name}” is standing off the floor plan, with no floor under it.`
           : `“${p.name}” crosses a wall: part of it is outside the room.`) +
-        (fixable
-          ? ' Drag it back inside, or use Try a fix.'
-          : // A floor piece the solve may not move is still a floor piece: the wall
-            // rider's sentence would tell someone to slide a sofa along its wall.
-            standing || searchable
-            ? ' Drag it back inside.'
-            : ' Turn it, move it along the wall, or give it a wall it fits on.'),
+        (fixable || standing
+          ? ' Drag it back inside.'
+          : ' Turn it, move it along the wall, or give it a wall it fits on.'),
       partIds: [p.id],
     });
   }
