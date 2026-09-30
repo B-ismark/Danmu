@@ -128,6 +128,32 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
+### A table carrying a lamp drags as smoothly as a bare one — this branch, NOT LOOKED AT
+
+Reported 2026-09-30: dragging a table with a lamp on it felt slow, and the wobble on both
+looked like the reason. It was not. Every frame of a drag that carries company, three
+things in the room rebuilt themselves for no reason: the reflection lighting re-baked, the
+soft floor shadow rebuilt (and leaked) its textures, and every wall re-cut its window
+holes. Counted over the same 20-move drag with `scripts/drag-churn-probe.mjs`: 38 textures
+and 372 buffers before, 0 and 8 after, which is exactly what the drag makes with the lamp
+on the floor. The wobble and the lamp's light cost nothing measurable. A software
+renderer can count calls but cannot say how it feels on a real screen.
+
+**Where to click.** Rectangle with starter furniture, 3D tab, High quality. Drop a table
+lamp on the coffee table, then drag the table around in circles for a few seconds. Then
+drag a window along its wall.
+
+**What right looks like.**
+- The table and lamp move together as smoothly as the table does with the lamp taken off.
+- The lamp still wobbles when the table stops, and still lands on the table.
+- Once you let go, the window's hole in the wall is where the window is, and the room's
+  reflections and floor shadow look the same as before.
+
+**What wrong looks like.**
+- A stutter with the lamp on that goes away with the lamp off.
+- A window whose hole stays behind where it used to be.
+- The floor shadow going blank or blotchy during the drag.
+
 ### A refusal that names the wall instead of an obstruction that is not there
 
 **The judgement this item used to carry is answered.** The user, 2026-09-30: *"Don't
@@ -551,8 +577,16 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
 
 **What right looks like.**
 - The ottoman ends up standing on the coffee table's top, like any piece dropped there.
-- The dining chair and the office chair at their Library sizes slide under as before and
-  stay on the floor.
+- ~~The dining chair and the office chair at their Library sizes slide under as before and
+  stay on the floor.~~ **Wrong, and struck rather than deleted.** Looked at 2026-09-30:
+  both chairs read *blocked* and will not slide under — which is what the code does and
+  has done since § H.6.3, because the drag's collision test (`collidesAt`) has no tuck
+  exemption. A tucked chair travels only as part of a set. This bullet was written from
+  the room report's rule, not from a drag, and "as before" described nothing that had
+  ever happened. Whether a drag should tuck a chair alone is `docs/what-is-still-open.md`
+  § 17's open decision, now with the user.
+- **The ottoman bullet below was looked at on 2026-09-30 and is right:** it stands on the
+  coffee table's top.
 - Under the 650 mm desk the office chair's arms would hit the top, so it no longer goes
   under: dragged over the desk it lands on the desktop. A desk from about 690 mm up takes
   it again.
