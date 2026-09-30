@@ -641,14 +641,15 @@ nightstand and its lamp together and **Turn a quarter** once.
 
 Then three more, in the same room. In the 2D Plan, drag one lamp across onto the other
 nightstand and let go, then drag that nightstand away. Select a nightstand standing out in
-the room and press **Wall** in the Inspector. And drag a nightstand a little way and back
-to where it started, before a re-scan would care.
+the room and press **Wall** in the Inspector. And drag a nightstand with its lamp up onto a
+desk, then press **Floor**.
 
 **What right looks like.**
 - The lamp stays on the nightstand's top through every move and turn, in both tabs.
 - With both selected, the lamp turns once, with the nightstand, not a quarter further.
 - A lamp moved onto the other nightstand goes with that one from then on.
 - After **Wall**, the lamp is still on top, still facing the way the nightstand faces.
+- After **Floor**, the lamp comes down with the nightstand.
 
 **What wrong looks like.**
 - A lamp left behind in the air, or one that ends on the floor.

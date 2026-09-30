@@ -112,7 +112,8 @@ export function resolveScene(
  *  rather than merely unread, which is § 44's rule.
  *
  *  "Every hand gesture" is a drag, a nudge, a spin and the Inspector's Floor / Wall
- *  buttons — not every mover. A wall drag (`lib/wall-move.ts`) still reads the raw map,
+ *  buttons (Floor writing only the riders the height pass cannot bring down) — not
+ *  every mover. A wall drag (`lib/wall-move.ts`) still reads the raw map,
  *  and carries a seeded rider by where it stands rather than by what it stands on, so
  *  a lamp on a nightstand against that wall comes along because it is within a walkway
  *  of the wall too (`WALL_CARRY_REACH`). A different rule reaching the same answer for
@@ -200,8 +201,8 @@ function stillOver(rider: ScenePart, support: ScenePart): boolean {
  *      piece) stick, because both write a Y of exactly 0.
  *   2. A relation `parentIds` RECORDED is honoured unconditionally; one merely
  *      INFERRED from authored geometry is gated on the support's top having moved.
- *      A recorded edge is a decision — a drag landed the piece there and
- *      `Draggable.commit` wrote it down — so the rider belongs on that support's top,
+ *      A recorded edge is a decision — a drop or a nudge landed the piece there and
+ *      `landOn` wrote it down, in either tab — so the rider belongs on that support's top,
  *      full stop. An inferred one is a guess about a room nobody has touched, and the
  *      gate is what stops the guess overruling a placement.
  *
@@ -209,8 +210,9 @@ function stillOver(rider: ScenePart, support: ScenePart): boolean {
  * behaviour `tests/placement-banner.test.tsx` pins and which the first attempt broke.
  * It is safe under rule 2 because those pieces have no relation at all: an inferred
  * edge needs the rider within `SUPPORT_Y_EPS` of the top, and nothing in the app can
- * record an edge for a piece that is not resting — `Draggable.commit` only calls
- * `setParent` from a support the drop actually found.
+ * record an edge for a piece that is not resting — `landOn` is handed only a support
+ * the drop or the nudge actually found; a copy takes its original's support, and a new
+ * piece or a swap one found beneath it.
  *
  * ── What is deliberately NOT here ─────────────────────────────────────────────
  *
