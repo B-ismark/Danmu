@@ -1381,7 +1381,10 @@ pair and they are **one row**, and the measured one survives in either photo ord
   selection (`useStudio.selectedWall`). Shows a Wall panel in the Inspector.
 - **Paint**: per-wall swatch / hex, or **Apply to all walls**. Stored per
   footprint-edge index in `room.wallColors`.
-- **Move / resize**: drag the selected wall's handle (3D) or edge (plan). Only
+- **Move / resize**: drag the selected wall's handle (3D) or edge (plan). The 3D
+  handle is a knob sitting on the wall's TOP edge, at its middle: halfway up the
+  face it stood inside any wardrobe or bookcase against that wall, and a knob you
+  cannot see is a wall you cannot move. Only
   the selected wall moves — its edge translates along its outward normal
   (`footprint.offsetWall`), adjacent walls stretch, opposite wall stays. The
   footprint polygon becomes the source of truth; `width`/`depth` are re-derived
@@ -1405,7 +1408,11 @@ pair and they are **one row**, and the measured one survives in either photo ord
   resolved **once per gesture**, never per frame. Pieces on the *adjacent* walls
   do not move: those edges stretch, they do not travel. A carried piece that
   would end up outside the room is left where it is and reported by
-  `clearance.ts` — never resized, never shoved.
+  `clearance.ts` — never resized, never shoved. Left where it last FITTED, that is,
+  and from there it is in the wall's way like anything else: the push treats it as
+  parked and the wall stops when it reaches it. It used to be left behind silently
+  while the wall walked on through it — a rug 200 mm off the TV wall of an L, which
+  pushed furniture stopped and a carried rug did not.
 - **What a wall coming in meets, it pushes** (`pushedByWall`, `lib/wall-move.ts`):
   a piece the wall or a carried piece reaches, sharing its height and its stretch of
   wall, is pushed ahead of it, and so is whatever that piece meets — a set whole, with

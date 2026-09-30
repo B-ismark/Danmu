@@ -548,7 +548,9 @@ export function pushedByWall(
   const fixed = new Set(carried);
   const bands = parts.map(band);
   const loose = new Set(parts.filter((p) => !fixed.has(p.id)).map((p) => p.id));
-  const unitOf = setsOf(loose, parts, parentIds);
+  // Carried and loose pieces are grouped apart — a set is carried whole or not at
+  // all — so their roots never collide and one map serves both.
+  const unitOf = new Map([...setsOf(loose, parts, parentIds), ...setsOf(fixed, parts, parentIds)]);
 
   // A piece hung on a wall slides along it when this wall meets it end-on, and
   // cannot be pushed at all off a wall parallel to this one.
@@ -569,8 +571,11 @@ export function pushedByWall(
   for (const A of bands) {
     if (A.p.category === 'rug') continue;
     for (const B of bands) {
-      if (A === B || !loose.has(B.p.id) || B.p.category === 'rug') continue;
-      if (loose.has(A.p.id) && unitOf.get(A.p.id) === unitOf.get(B.p.id)) continue;
+      // B may be carried: a carried set that runs out of room is pushed from where
+      // it parked (`solve`). A push found for one still riding the wall is never
+      // read — only a loose or parked piece gets an answer from the push.
+      if (A === B || B.p.category === 'rug') continue;
+      if (unitOf.get(A.p.id) === unitOf.get(B.p.id)) continue;
       if (B.hi - A.lo <= TOUCH || A.hi - B.lo <= TOUCH) continue;
       if (B.top - A.bottom <= TOUCH || A.top - B.bottom <= TOUCH) continue;
       if (B.near < A.near - TOUCH || (B.near <= A.near + TOUCH && B.p.id <= A.p.id)) continue;
@@ -578,7 +583,7 @@ export function pushedByWall(
     }
   }
   // What the wall itself meets: inside the plane, across its span.
-  const facing = bands.filter((B) => loose.has(B.p.id) && B.far > TOUCH && B.hi > -len / 2 + TOUCH && B.lo < len / 2 - TOUCH);
+  const facing = bands.filter((B) => B.far > TOUCH && B.hi > -len / 2 + TOUCH && B.lo < len / 2 - TOUCH);
 
   // A piece hung on a side wall has its depth straddling the plaster, where
   // containment is a coin flip — so it usually lands on the overhang rule below,
@@ -591,20 +596,54 @@ export function pushedByWall(
   for (const [id, u] of unitOf) members.set(u, [...(members.get(u) ?? []), byId.get(id)!]);
   const at = (p: ScenePart, s: number): [number, number, number] => [p.pos[0] - ox * s, p.pos[1], p.pos[2] - oz * s];
   /** Why piece `p` cannot go `s` along the push, in a room whose wall is at `after`. */
-  const refuses = (p: ScenePart, s: number, after: Footprint): PushStop['reason'] | null => {
-    const why = pinned(p);
-    if (why) return why;
+  const refuses = (p: ScenePart, s: number, after: Footprint): PushStop['reason'] | null =>
+    pinned(p) ?? (containment(p, s, after) ? 'room' : null);
+  /** Whether `p` gone `s` along the push leaves a room whose wall is at `after`. */
+  function containment(p: ScenePart, s: number, after: Footprint): boolean {
     const from = footAt(p, p.pos);
     const to = footAt(p, at(p, s));
     // Contained before: must stay contained. Through a wall already: may keep what
     // it overhangs, and may not add to it — or a piece straddling a side wall would
     // be pushed clean out through the far one.
-    if (contained(from, poly)) return contained(to, after) ? null : 'room';
-    return overhang(to, after) > overhang(from, poly) + 1e-6 ? 'room' : null;
+    if (contained(from, poly)) return !contained(to, after);
+    return overhang(to, after) > overhang(from, poly) + 1e-6;
+  }
+
+  // How far a carried set can ride the wall before it runs out of room: the largest
+  // travel, up to the whole of it, at which every member still fits the room the
+  // wall leaves. A piece hung on the moving wall fits wherever the wall goes.
+  const rides = new Map<string, number>();
+  const ride = (u: string) => {
+    const known = rides.get(u);
+    if (known !== undefined) return known;
+    const fits = (x: number) => members.get(u)!.every((p) => !containment(p, x, offsetWall(poly, index, -x)));
+    let lo = 0;
+    let hi = inward;
+    if (fits(inward)) lo = inward;
+    else if (!fits(0)) hi = 0;
+    for (let i = 0; i < 40 && hi - lo > 1e-9; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) lo = mid;
+      else hi = mid;
+    }
+    rides.set(u, lo);
+    return lo;
   };
 
   const solve = (d: number) => {
     const after = offsetWall(poly, index, -d);
+    // A carried set that runs out of room stays where it last fitted — a rug carried
+    // into the far wall — and from there it is in the wall's way like anything else:
+    // the wall pushes it, and stops when it cannot go. It was left behind silently
+    // instead (`carryAttached` holds it), and the wall walked on through it.
+    const parked = new Map<string, number>();
+    for (const p of parts) {
+      const u = unitOf.get(p.id)!;
+      if (!fixed.has(p.id) || parked.has(u)) continue;
+      const c = ride(u);
+      if (c < d) parked.set(u, c);
+    }
+    const free = (id: string) => loose.has(id) || parked.has(unitOf.get(id)!);
     // `partial`: how far each set can go, found once per set and capped there. A
     // set's constraints grow with its own shift, so the room it has is an interval.
     // Judged against the room as it stood: what limits a pushed set is the far side,
@@ -629,7 +668,7 @@ export function pushedByWall(
       caps.set(u, lo);
       return lo;
     };
-    const shift = new Map<string, number>();
+    const shift = new Map<string, number>(parked);
     const need = (B: Band, want: number) => {
       const u = unitOf.get(B.p.id)!;
       const s = cap(u, want);
@@ -640,7 +679,7 @@ export function pushedByWall(
       return false;
     };
     for (const B of facing) need(B, d - Math.max(B.near, 0));
-    const of = (A: Band) => (fixed.has(A.p.id) ? d : (shift.get(unitOf.get(A.p.id)!) ?? 0));
+    const of = (A: Band) => (free(A.p.id) ? (shift.get(unitOf.get(A.p.id)!) ?? 0) : d);
     // Relaxed to a fixed point. Every push goes the same way and only forward, so
     // this terminates; the cap is for a float that refuses to settle.
     for (let round = 0, changed = true; changed && round <= bands.length + 1; round++) {
@@ -653,7 +692,7 @@ export function pushedByWall(
     let stop: PushStop | null = null;
     const moves: CarriedPos[] = [];
     for (const B of bands) {
-      const s = loose.has(B.p.id) ? (shift.get(unitOf.get(B.p.id)!) ?? 0) : 0;
+      const s = free(B.p.id) ? (shift.get(unitOf.get(B.p.id)!) ?? 0) : 0;
       if (s <= 1e-9) continue;
       const p = B.p;
       if (!stop && !opts.partial) {
