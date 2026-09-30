@@ -1,7 +1,7 @@
 'use client';
 
 // Drag handle for moving the selected wall. Renders a grabbable knob on the
-// inside face of the selected wall; dragging it along the wall's normal pushes
+// top edge of the selected wall; dragging it along the wall's normal pushes
 // the wall out (bigger room) or in (smaller).
 //
 // **This used to claim the move "resolves to a width/depth change about the room
@@ -45,6 +45,9 @@ import { useStudio, WALL_DRAG_ID } from '@/lib/store';
 import { SCENE } from '@/lib/scene-palette';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
+
+/** The knob's radius, in metres. */
+const KNOB_R = 0.11;
 
 const _ray = new Raycaster();
 const _ndc = new Vector2();
@@ -135,15 +138,18 @@ export function WallHandles() {
 
   if (selectedWall === null || !seg) return null;
 
-  const handleY = roomHeight * 0.5;
+  // On the wall's TOP edge, not halfway up its face. Halfway up, 18 cm into the
+  // room, was inside any wardrobe or bookcase standing against the wall: the knob
+  // was drawn in the cabinet and the cabinet took the press. Nothing in the room
+  // stands above the wall, and the camera looks down on it from above.
+  const handleY = roomHeight + KNOB_R + 0.05;
   // Inward normal (toward centroid) — wallSegments encodes it as yaw = atan2(nx,nz).
   const inX = Math.sin(seg.yaw);
   const inZ = Math.cos(seg.yaw);
   const outX = -inX;
   const outZ = -inZ;
-  // Sit the knob just inside the wall face so it's easy to grab.
-  const hx = seg.x + inX * 0.18;
-  const hz = seg.z + inZ * 0.18;
+  const hx = seg.x;
+  const hz = seg.z;
 
   function onDown(e: ThreeEvent<PointerEvent>) {
     e.stopPropagation();
@@ -174,7 +180,7 @@ export function WallHandles() {
           if (!drag.current) document.body.style.cursor = '';
         }}
       >
-        <sphereGeometry args={[0.11, 24, 24]} />
+        <sphereGeometry args={[KNOB_R, 24, 24]} />
         <meshStandardMaterial
           color={SCENE.accent}
           roughness={0.4}

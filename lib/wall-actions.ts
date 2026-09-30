@@ -340,7 +340,10 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
     g.total += applied;
     // A piece pushed on an earlier frame that this travel no longer reaches goes
     // back to where it stood when the drag began.
-    const now = new Set(pushes.map((m) => m.id));
+    // Not a carried piece the push parked against the far wall: the carry has it,
+    // and returning it to where the drag began would drop it a wall's travel away
+    // from the wall it is riding again.
+    const now = new Set(pushes.filter((m) => !g.ids.includes(m.id)).map((m) => m.id));
     const cleared: string[] = [];
     for (const id of g.pushed) {
       if (now.has(id)) continue;
