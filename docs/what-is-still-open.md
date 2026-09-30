@@ -4172,6 +4172,24 @@ the raw map (above). Twenty-one more mutants, twenty-one killed.
 - **A drag out and back pins its riders.** Undoing that means deleting the overrides the
   gesture itself created, which neither tab can do today.
 
+**§ H.6.8 · FIXED 2026-09-30: an arrow key in the plan moves a piece off the line it is
+lined up on.** Found while fixing § H.6.7. With the snap on, a key press ran through the
+item magnet like a drag, and both steps are shorter than its reach: 10 mm (fine) and
+50 mm (coarse) against 100. So a piece flush with a neighbour, or centred on one, was
+pulled back onto that line on every press, and in either mode it could not be moved off
+it from the keyboard. Coming the other way, the press that took the gap under 100 mm
+jumped the rest of it. A key press now resolves with the snap off, the way a turn already
+did (`turnInPlace`): no grid, no magnet. The step's size still follows the setting, and a
+drag still snaps. The re-resolve at a shorter step, when the rest of a selection runs out
+of room, takes the same exact step. Snapped, 5 mm off a flush line put the piece back on
+it, and the set was refused. `tests/plan-nudge-exact.test.tsx`; five mutants, five killed.
+
+Two consequences, both deliberate. A piece nudged from off the grid stays off it, which is
+what arrow keys do in drawing tools: a step, not a snap. And a press into a neighbour can
+now go 10 mm into it before the next one is refused: that is `collidesAt`'s touching
+allowance, which a free drag always had. The magnet used to hide it from the keyboard by
+pulling the piece back flush.
+
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
 Their words, kept because the scope is theirs: *"Do a detailed search to the fundamental

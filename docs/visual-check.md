@@ -147,6 +147,27 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
+### Arrow keys move a piece off the line it is lined up on — this branch (§ H.6.8), NOT LOOKED AT
+
+With the snap on, a piece standing flush with another could not be moved away from it with
+the arrow keys: each press was pulled straight back. Tests hold the steps; nobody has
+pressed the keys in a browser.
+
+**Where to click.** Any room with starter furniture, snap left at its default. In the 2D
+Plan, drag a chair beside a cabinet or wardrobe until it snaps flush against its side, and
+let go. Press the arrow key that moves it away, a few times, then the one that brings it
+back. Set **More → Snap when dragging → Coarse** and do the same.
+
+**What right looks like.**
+- Every press moves the chair one step: 1 cm, or 5 cm on **Coarse**.
+- On the way back it stops against the cabinet, or goes about 1 cm in and then the next
+  press is refused with a sentence.
+- A mouse drag still pulls the chair flush when you let go close to the cabinet.
+
+**What wrong looks like.**
+- A press that does nothing, or one that jumps several centimetres.
+- The chair ending well inside the cabinet.
+
 ### A refusal that names the wall instead of an obstruction that is not there
 
 **The judgement this item used to carry is answered.** The user, 2026-09-30: *"Don't

@@ -2735,6 +2735,11 @@ snap working in one tab only. It is quantised before the clamp on purpose: round
 a clamped edge afterwards would push the piece back through the wall the clamp had
 just pulled it out of.
 
+**An arrow key takes the step and not the snap.** It resolves with `snapMode: 'off'`,
+as a turn does (`turnInPlace`): both steps are shorter than the item magnet's 100 mm
+reach, so a key press run through it was pulled back onto whatever line the piece
+stood on, and a piece flush with a neighbour could not be arrowed off it (§ H.6.8).
+
 **The legality test has no exemption for wall-mounted pieces any more, and that was
 § H.16.** It used to open `ridesAWall ||`, on the stated grounds that `snapToWall`
 had "just placed it exactly on an edge, so the exemption is EARNED by that snap".

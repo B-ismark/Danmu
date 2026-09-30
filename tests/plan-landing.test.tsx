@@ -10,9 +10,9 @@
 // second nightstand would carry. A pointer drag is driven too, because it records at a
 // different moment: on the release, once, rather than on every frame.
 //
-// Snap is OFF here on purpose. With it on, the item magnet pulls every 10 mm nudge back
-// onto the lamp's alignment with its nightstand and the key does nothing — a separate
-// defect, filed, and not the one this file is about.
+// Snap is OFF here so the pointer drag goes where it is steered: with it on, the item
+// magnet pulls the lamp onto its lines with both nightstands. The arrow keys no longer
+// snap either way (§ H.6.8, `tests/plan-nudge-exact.test.tsx`).
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
