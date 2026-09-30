@@ -296,6 +296,35 @@ describe('spinSelection carries what is standing on the piece', () => {
     // …and it turned with it rather than merely being carried.
     expect(l.rot - w.rot).toBeCloseTo(0, 6);
   });
+
+  it('turns a lamp the room came with, which no drag ever linked (§ H.6.7)', () => {
+    // No `parentIds` at all, which is a room exactly as `defaultScene` hands it over.
+    // The cascade was planned off the raw map, so a quarter turn swung the nightstand
+    // out from under its own lamp and left the lamp standing on air.
+    room([nightstand([0, 0, 0]), lamp([0, 0.55, 0.15])]);
+    select('nightstand-1');
+    spinSelection(1);
+
+    const l = at('lamp-1');
+    expect(l.pos[0]).toBeCloseTo(0.15, 6);
+    expect(l.pos[2]).toBeCloseTo(0, 6);
+    expect(l.rot).toBeCloseTo(QUARTER, 6);
+  });
+
+  it('turns a lamp a drag set down there, which the room could not have inferred', () => {
+    // The other half of the relation. The authored lamp stands on the floor across the
+    // room, so the parts alone name no support; only the recorded link does. A
+    // relation read off the authored parts without `parentIds` left it behind.
+    room([nightstand([0, 0, 0]), lamp([2, 0, 2])]);
+    useStudio.setState({ positions: { 'lamp-1': [0, 0.55, 0.15] }, parentIds: { 'lamp-1': 'nightstand-1' } });
+    select('nightstand-1');
+    spinSelection(1);
+
+    const l = at('lamp-1');
+    expect(l.pos[0]).toBeCloseTo(0.15, 6);
+    expect(l.pos[2]).toBeCloseTo(0, 6);
+    expect(l.rot).toBeCloseTo(QUARTER, 6);
+  });
 });
 
 describe('a rider that is ALSO selected is turned once, not twice', () => {
@@ -341,6 +370,34 @@ describe('a rider that is ALSO selected is turned once, not twice', () => {
     spinSelection(1);
     expect(at('lamp-1').rot).toBeCloseTo(QUARTER, 6);
     expect(at('nightstand-1').rot).toBeCloseTo(0, 6);
+  });
+
+  it('turns a selected lamp nobody linked once, as well (§ H.6.7)', () => {
+    // The skip has to read the relation the cascade carries by. Read off the raw map
+    // it sees no link here, while the cascade — reading the relation — carries the
+    // lamp round: two turns again, by a second route.
+    room([nightstand([0, 0, 0]), lamp([0, 0.55, 0.15])]);
+    select('nightstand-1', 'lamp-1');
+    spinSelection(1);
+    const n = at('nightstand-1');
+    const l = at('lamp-1');
+    expect(l.rot).toBeCloseTo(QUARTER, 6);
+    expect(Math.hypot(l.pos[0] - n.pos[0], l.pos[2] - n.pos[2])).toBeCloseTo(0.15, 6);
+  });
+
+  it('still turns a lamp since set down on the floor, whatever the room first stood it on', () => {
+    // The other half. The authored parts still say the lamp stands on the nightstand
+    // — nothing rewrites them — so a skip that trusted that link unchecked would
+    // leave this lamp out, while the cascade, which re-checks every link against the
+    // room as it stands, does not carry it either. Turned by nobody.
+    room([nightstand([0, 0, 0]), lamp([0, 0.55, 0.15])]);
+    useStudio.setState({ positions: { 'lamp-1': [1, 0, 1] } });
+    select('nightstand-1', 'lamp-1');
+    spinSelection(1);
+    const l = at('lamp-1');
+    expect(l.rot).toBeCloseTo(QUARTER, 6);
+    expect(l.pos[0]).toBeCloseTo(1, 6);
+    expect(l.pos[2]).toBeCloseTo(1, 6);
   });
 });
 

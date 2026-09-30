@@ -3706,7 +3706,8 @@ asks `hasFloorSharers` first.
   a regression of the filter. Nothing here can tell a riser from a second monitor by
   position alone; a fix needs a rule about which pieces go under which, which is the
   `lib/layout-rules.ts` question the parked case above already asks for.
-- **Found while fixing that, not fixed: a drag climbs onto an unlinked rider the same way.**
+- **Found while fixing that, FIXED 2026-09-30 in § H.6.7: a drag climbs onto an unlinked
+  rider the same way.** Fixed by the relation, not by the filter proposed below.
   A drag leaves a piece's carried children out of its world only when they are *linked*
   (`parentIds`, via `snapshotDescendants`), and the support probe asks the same highest-top
   question with no below-test. A scanned room has no links — the settle pass above writes
@@ -3948,6 +3949,9 @@ measure in a frame.
 - **A merged member standing on a piece outside its set follows that piece**, and so leaves
   the set's shape (`carryRiders` runs after every pass). What stands on something goes
   where it goes.
+  *Answered, the user's call 2026-09-30: kept.* They added that outside Suggest a lamp
+  does NOT go where its nightstand goes: move the nightstand and the lamp stays behind in
+  the air. FIXED, § H.6.7.
 - **A lock on one member is a lock on the set**, and so is one member on a wall.
 
 *Tests.* `tests/layout-rigid-sets.test.ts`, 26 tests. Every solve test first shows its fixture can break
@@ -4081,6 +4085,92 @@ would be squared about the wardrobe; not measured. § H.6.5's table shows it: `l
 one; `open` −20°, 6 of 7. What is left is `proposeGroup`'s turn of a group made by its
 relations rather than merged, which pivots on the centroid. It is rigid either way, so the
 group keeps its shape; only where it lands differs. Not measured further.
+
+**§ H.6.7 · FIXED 2026-09-30: a lamp the room came with goes where its nightstand goes.**
+Reported by the user: move the nightstand and the lamp stays where it was, floating at
+nightstand height. Every way of moving a piece by hand plans its company once, at the
+press (`planConvoy`), and all five of them — the 3D drag, the plan's drag, its arrow-key
+nudge and turn key, and the context menu's *Turn a quarter* — handed it the raw `parentIds`.
+That map holds only the links a drag recorded, so it is empty for a lamp nobody has
+dragged, which is every lamp a preset or a scan put down. The scene's height read already
+used the other map, `riderRelation`, which also reads the authored parts: one relation for
+what a lamp stands on and another for whether it comes along. In the `u` preset both
+nightstand lamps stayed behind on a drag; with the relation both travel. A wall move and a
+room resize carried them already, the lamp being inside the wall's reach. Those two still
+read the raw map, and a rider on the far side of a deep piece against the wall is not
+measured.
+
+The fix narrows the parameter rather than changing a call. `planConvoy` takes
+`restsOn: RiderRelation`, a type only `riderRelation` returns, so the raw map no longer
+type-checks there (§ 44's rule: a wrong argument unpassable, not merely unread). The app's
+callers read `currentRiderRelation()` (`lib/room-scene.ts`). *Turn a quarter*'s check for
+"this piece rides another in the selection, so its support's turn carries it" reads the
+same relation, re-checked against the room the way the convoy checks it. Either half alone
+turns a lamp wrong: over the raw map it sees no link, so a selected lamp is turned twice;
+over the relation unchecked it still sees a link to a lamp since set down on the floor,
+so that lamp is turned by nobody. Eight mutants, eight killed, two of them by the compiler.
+
+*Also fixed, and not by the fix that was proposed for it:* the drag that climbs onto an
+unlinked rider (§ H.6.3, "Found while fixing that"). A piece's carried children are left
+out of its own world, so once the relation names the tray, the ottoman under it no longer
+finds it as a support. Nudged 10 mm, a scanned ottoman under a tray stays at 0 m (was
+0.48 m), and a 300 mm box under a 500 mm one of the same footprint stays at 0 m (was
+0.80 m). The filter proposed there, in the support probe's caller, was not needed.
+
+**Review round 1 found four more ways to leave the lamp behind; round 2 found a fifth, and
+what round 1 had overclaimed.**
+
+- **The plan tab never recorded a landing.** Only the 3D drop wrote `parentIds`, so a lamp
+  moved in the plan onto the other nightstand kept the first one's link, and a recorded
+  link wins: drag the second nightstand and the lamp stayed. Both tabs now write through
+  `landOn` (`landedLinks`, `lib/rigid-parent.ts`). The plan's arrow key writes at once;
+  its drag writes once, on the release — `Esc` puts back positions only, and history
+  snapshots at the drag's end, so a per-frame write would outlive a cancelled drag. A
+  click writes nothing (a few pixels of jitter would turn an inferred link into a
+  recorded one), and an arrow key pressed mid-drag records the landing of the piece it
+  moved, not of the one being dragged. **Only the piece under the hand**: see "Still
+  open" below.
+- **The Inspector's Wall button moved the piece alone.** It carries its riders now, turned
+  with the piece when the wall turns it. **Floor had the defect in one case, and round 1
+  concluded it had none.** The carry added there survived its break-test, so it was
+  removed as a write that only restated the height pass — but the fixture was a box
+  authored in the air, and the height pass follows an inferred link only while the
+  support's top differs from its AUTHORED top. Drag a nightstand and its lamp up onto a
+  desk and press Floor: the nightstand goes back to where the room put it, and the lamp,
+  carried up and stored at 1.30 m, stays there. Floor now writes only the riders that
+  already have a stored position — the ones the height pass cannot bring down — and
+  leaves the rest to it. A surviving mutant says the fixture could not tell, not that
+  the code is dead.
+- **A piece on the floor rides nothing.** A chair on a 40 mm mat, sent to the Floor, was
+  still within `SUPPORT_Y_EPS` of the mat's top, so the next drag of the mat took the chair
+  along. `isPhysicallySupported` refuses a rider at y ≤ 0, the rule the height pass
+  already states.
+- **A press that went nowhere pinned its riders.** The zero-delta restore wrote an
+  override for every rider, so a click on a nightstand — its jitter snapped back to where
+  it began — made its seeded lamp one a re-scan could not move. It restores only riders
+  that already had an override, and a whole turn counts as where it began. A drag out
+  and back is NOT covered: its first frame writes the lamp, so coming home puts it back
+  with that override. See "Still open".
+- **The height pass takes `RecordedLinks`.** It honours a recorded link unconditionally,
+  so handing it the relation would make every inferred link unconditional too. The brand
+  makes that a type error, the mirror image of `RiderRelation`.
+
+Kept as is: `wouldCreateCycle` reads the raw map, and a loop through an inferred link
+cannot hang, both walkers keeping a visited set. A wall drag and a room resize still read
+the raw map (above). Twenty-one more mutants, twenty-one killed.
+
+*Still open, each older than this fix and none of them the reported bug:*
+- **A multi-selection records a landing for the piece under the hand only.** The rest of
+  the set travels by the delta and keeps its old recorded link, so a lamp carried that way
+  onto another nightstand still follows the first. `resolveConvoy` resolves each member,
+  so the support is known; it is not handed back.
+- **Wall moves the piece and its riders, and nothing else, unchecked.** Merged-set siblings
+  stay behind, as they always did, and the riders are written without the containment and
+  collision checks a drag's company gets — a lamp overhanging the back of its nightstand
+  goes into the plaster. Routing Wall through `planConvoy` + `resolveConvoy` is the fix
+  for both, and it has to decide what Wall says when a member cannot follow.
+- **A drag out and back pins its riders.** Undoing that means deleting the overrides the
+  gesture itself created, which neither tab can do today.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

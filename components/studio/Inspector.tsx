@@ -2,7 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
-import { useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
+import { currentRiderRelation, useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
+import { cascadeTransform, snapshotDescendants } from '@/lib/rigid-parent';
 import { arrangeDecor } from '@/lib/decor';
 import { useScene } from '@/lib/scene-store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, resyncDraft, tidyDraft, UNIT_OPTIONS } from '@/lib/units';
@@ -47,6 +48,7 @@ export function Inspector() {
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
   const clearParent = useStudio((s) => s.clearParent);
+  const setTransformsFor = useStudio((s) => s.setTransformsFor);
   const resetTransforms = useStudio((s) => s.resetTransforms);
   const updatePart = useScene((s) => s.updatePart);
   // Resolved once for the whole panel: surface snapping and the dimension fields
@@ -96,9 +98,31 @@ export function Inspector() {
     }));
   }
 
+  /** What stands on this piece goes where it goes. Both buttons are moves like any
+   *  other and used to move the piece alone, leaving a lamp in the air over the spot
+   *  its nightstand had left (§ H.6.7). Asked of the relation a drag plans its company
+   *  from, about the spot the piece actually lands on.
+   *
+   *  `'pinned'` writes only the riders that already have a stored position. Floor moves
+   *  a piece only upright, and the height pass brings down a rider with no position of
+   *  its own; writing that one too would restate the height pass as an override a
+   *  re-scan will not move. A rider WITH a stored position is the one it can miss: it
+   *  follows an inferred link only while the support's top differs from its authored
+   *  top, so a nightstand floored back to where the room put it left a lamp carried up
+   *  with it standing at desk height. */
+  function carryRiders(to: [number, number, number], rot: number, which: 'all' | 'pinned') {
+    const riders = snapshotDescendants(id!, effParts, currentRiderRelation());
+    if (riders.length === 0) return;
+    const moves = cascadeTransform(id!, to, rot, riders);
+    const stored = useStudio.getState().positions;
+    const write = which === 'all' ? moves : moves.filter((m) => stored[m.id] !== undefined);
+    if (write.length > 0) setTransformsFor(write);
+  }
+
   function groundToFloor() {
     const [x, , z] = currentXYZ();
     setPosition(id!, [x, 0, z]);
+    carryRiders([x, 0, z], part!.rot, 'pinned');
     clearParent(id!);
   }
 
@@ -110,6 +134,7 @@ export function Inspector() {
     const snapped = snapToWallPhys([x, y, z], part!.dimMM, room.footprint, wallStandoff(part!.shape));
     setPosition(id!, [snapped.x, y, snapped.z]);
     if (snapped.rot !== undefined) setRotation(id!, snapped.rot);
+    carryRiders([snapped.x, y, snapped.z], snapped.rot ?? part!.rot, 'all');
     clearParent(id!);
   }
 

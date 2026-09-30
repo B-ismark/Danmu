@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { DEFAULT_HOUR, legacyLighting, wrapHour } from './lighting-moods';
+import { landedLinks } from './rigid-parent';
 
 // Studio view + interaction state. Mostly session-scoped: only the handful of
 // fields in STUDIO_PREFS below survive a reload (see the persist config at the
@@ -157,6 +158,9 @@ type StudioState = {
   /** Establish (or overwrite) a rigid-parenting relationship. */
   setParent: (childId: string, parentId: string) => void;
   clearParent: (childId: string) => void;
+  /** A drop: link the piece to what it landed on, or unlink it when it landed on
+   *  nothing. See `landedLinks`. */
+  landOn: (childId: string, supportId: string | undefined) => void;
   /** restore the whole parentIds map from persistence (per-room, via RoomSync) */
   setParentIds: (map: Record<string, string>) => void;
   setTransformMode: (m: 'translate' | 'rotate' | 'scale') => void;
@@ -284,6 +288,11 @@ export const useStudio = create<StudioState>()(
       const p = { ...s.parentIds };
       delete p[childId];
       return { parentIds: p };
+    }),
+  landOn: (childId, supportId) =>
+    set((s) => {
+      const parentIds = landedLinks(s.parentIds, childId, supportId);
+      return parentIds === s.parentIds ? s : { parentIds };
     }),
   setParentIds: (parentIds) => set({ parentIds }),
   setTransformMode: (m) => set({ transformMode: m }),

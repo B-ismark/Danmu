@@ -627,6 +627,35 @@ and open **Room check**. Then ungroup it, group the sofa with an armchair instea
   look. The other part is whether an empty gallery reads as broken. The user chose that
   it says the group moves as one; that sentence is not built yet.
 
+### A lamp goes where its nightstand goes — this branch (§ H.6.7), NOT LOOKED AT
+
+Move a nightstand and the lamp on it used to stay behind, floating at nightstand height.
+It happened to every lamp the room came with, because nothing had linked it yet. Tests
+hold where the lamp lands; nobody has watched it travel.
+
+**Where to click.** U-Shape with starter furniture, a fresh room. Leave the lamps alone:
+touching one first links it and hides the bug. In the 3D Model, drag a nightstand a short
+way along the floor. Then in the 2D Plan, move the other one with the arrow keys, turn it
+with its rotate handle, and right-click it and choose **Turn a quarter**. Last, select a
+nightstand and its lamp together and **Turn a quarter** once.
+
+Then three more, in the same room. In the 2D Plan, drag one lamp across onto the other
+nightstand and let go, then drag that nightstand away. Select a nightstand standing out in
+the room and press **Wall** in the Inspector. And drag a nightstand with its lamp up onto a
+desk, then press **Floor**.
+
+**What right looks like.**
+- The lamp stays on the nightstand's top through every move and turn, in both tabs.
+- With both selected, the lamp turns once, with the nightstand, not a quarter further.
+- A lamp moved onto the other nightstand goes with that one from then on.
+- After **Wall**, the lamp is still on top, still facing the way the nightstand faces.
+- After **Floor**, the lamp comes down with the nightstand.
+
+**What wrong looks like.**
+- A lamp left behind in the air, or one that ends on the floor.
+- A lamp that jumps to the nightstand only after you let go.
+- A lamp that follows the nightstand it was moved off, and not the one it is on.
+
 ### Fix squares a slightly turned sofa where it stands — this branch (§ H.6.6), NOT LOOKED AT
 
 Turn the sofa a few degrees and press **Fix**, and it could come back somewhere else in the

@@ -14,7 +14,7 @@ import { useMemo } from 'react';
 import { useScene } from './scene-store';
 import { useStudio } from './store';
 import { hasOverride, type TransformOverrides } from './transforms';
-import { riderYs, resolveScene, type SceneContext } from './rider-height';
+import { riderRelation, riderYs, resolveScene, type RiderRelation, type SceneContext } from './rider-height';
 import type { ScenePart } from './scene-spec';
 import { decorBlockersBySurface, type DecorBlocker } from './decor';
 
@@ -128,6 +128,13 @@ export function currentOverrides(): TransformOverrides {
  *  non-hook twin of the two extra subscriptions `useRoomScene` takes. */
 export function currentSceneContext(): SceneContext {
   return { parentIds: useStudio.getState().parentIds, roomHeight: useScene.getState().room.height };
+}
+
+/** Who stands on what, read at call time — the map a drag's company is planned
+ *  from (`planConvoy`'s `restsOn`). Over the AUTHORED parts, which is where a seeded
+ *  rider's link lives, and never the raw `parentIds`: see `RiderRelation`. */
+export function currentRiderRelation(): RiderRelation {
+  return riderRelation(useScene.getState().parts, useStudio.getState().parentIds);
 }
 
 /** Parts at their effective transforms, read at call time. The non-hook twin of

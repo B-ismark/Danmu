@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { findSupportDetailed, highestSurfaceUnder, isTabletopProne, MIN_SUPPORT_SHARE, restingOn } from '@/lib/physics';
 import { resolvePlacement } from '@/lib/drag-resolve';
+import { riderRelation } from '@/lib/rider-height';
 import { leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld } from '@/lib/drag-convoy';
 import { settleHeights } from '@/lib/layout-settle';
 import { ridingParents } from '@/lib/rigid-parent';
@@ -80,7 +81,7 @@ function dragSet(
   opts: { rot?: number; inherit?: boolean } = {},
 ) {
   const lead = world.find((p) => p.id === grab)!;
-  const convoy = planConvoy({ draggedId: grab, parts: world, selection, parentIds: {}, footprint: ROOM, roomHeight: H });
+  const convoy = planConvoy({ draggedId: grab, parts: world, selection, restsOn: riderRelation(world, {}), footprint: ROOM, roomHeight: H });
   const rot = opts.rot ?? lead.rot;
   const resolveAt = (x: number, z: number) =>
     resolvePlacement({
@@ -373,7 +374,7 @@ describe('every caller that moves a piece to what it finds', () => {
     // turn partway through a drag moves its corners, so the forgiveness goes and the
     // chairs are obstacles once more — refused rather than ploughed through.
     const world = [TABLE, chair('c1', -0.4, TUCKED_Z)];
-    const convoy = planConvoy({ draggedId: 'table', parts: world, selection: ['table', 'c1'], parentIds: {}, footprint: ROOM, roomHeight: H });
+    const convoy = planConvoy({ draggedId: 'table', parts: world, selection: ['table', 'c1'], restsOn: riderRelation(world, {}), footprint: ROOM, roomHeight: H });
     expect(leadInherited(convoy, 0, TABLE.dimMM)).toEqual(new Set(['c1']));
     expect(leadInherited(convoy, Math.PI / 12, TABLE.dimMM)).toBeUndefined();
     // A full turn either way is the table where it started, so its chairs stay forgiven.
