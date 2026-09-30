@@ -2141,6 +2141,10 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   taking clicks. It deliberately does **not** set `visible = false` or move it to a
   layer: both drop it from the shadow pass too (r184 tests layers against the main
   camera there), and the curtains on a cut-away wall still shade the room.
+  **Except a held piece** (`cutAwayHides`): one that is selected or being dragged
+  stays in view and takes clicks, so a curtain dragged onto the near wall does not
+  vanish under the hand. An unselected one stays gone and unpickable, so nothing is
+  selected from behind the wall that hides it (the user's rule, 2026-09-30).
 - **Quality** High / Fast — gates procedural normal/roughness maps
   (`lib/textures.ts`, zero assets) + soft cast shadows + ambient occlusion
   (N8AO/SMAA mount on `high` only). There is no floor reflection.

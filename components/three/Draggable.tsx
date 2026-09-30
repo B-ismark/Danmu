@@ -156,6 +156,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const isSelected = useStudio((s) => s.selectedPartId === partId);
   const inSelection = useStudio((s) => s.selection.includes(partId));
   const isHovered = useStudio((s) => s.hoveredPartId === partId);
+  /** Being carried right now — a wall piece on the camera's side of the room is
+   *  kept in view while it is (`CutAway`'s `held`). */
+  const isDraggingThis = useStudio((s) => s.draggingId === partId);
   const mode = useStudio((s) => s.transformMode);
   const snapMode = useStudio((s) => s.snapMode);
   // Snap increments, from the same module that applies them during a resolve, so
@@ -1449,11 +1452,16 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         >
           <Pickable partId={partId}>{children}</Pickable>
         </Wobble>
-        {/* Wall pieces leave with their wall in the dollhouse cut-away. The depth is
-            the authored one for a group-scaled piece (the scale carries the rest)
-            and the effective one for a parametric piece, which is rebuilt at it. */}
+        {/* Wall pieces leave with their wall in the dollhouse cut-away — unless held:
+            a selected or dragged piece stays in view. The depth is the authored one
+            for a group-scaled piece (the scale carries the rest) and the effective
+            one for a parametric piece, which is rebuilt at it. */}
         {anchorFor(part.category, part.shape).startsWith('wall') && (
-          <CutAway groupRef={ref} depthMM={(isParametric(part.shape) ? (storedDim ?? part.dimMM) : part.dimMM)[1]} />
+          <CutAway
+            groupRef={ref}
+            depthMM={(isParametric(part.shape) ? (storedDim ?? part.dimMM) : part.dimMM)[1]}
+            held={inSelection || isDraggingThis}
+          />
         )}
         {(inSelection || isHovered || refused) && (
           <Highlight

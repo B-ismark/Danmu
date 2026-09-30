@@ -156,13 +156,34 @@ past the room's middle the nearest was the near wall, which the see-through view
 away along with the curtain. A wall piece now takes the wall the pointer is at. Do the
 drag above again, and keep going down the side wall toward the camera: the curtain goes
 onto the side wall, red, with the sentence above, and stays on screen the whole way. It
-reaches the near wall only when the pointer is at the near wall — and there it hides with
-the wall, as every window and print does. *Wrong* looks like: the curtain stuck in the
+reaches the near wall only when the pointer is at the near wall — and there it stays in
+view while it is selected (see the next item). *Wrong* looks like: the curtain stuck in the
 middle of its wall while the pointer is at a corner, or gone with the pointer nowhere
 near the near wall.
 
 **Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half and the
 wall-from-the-pointer fix on this branch.
+
+### A selected piece stays in view on the cut-away wall — this branch, NOT LOOKED AT
+
+The user, 2026-09-30: keep a selected piece visible on the wall the camera looks through,
+*"but obviously, you shouldn't be able to select it if you hadn't selected it and now it's
+not visible."* So it is kept while it is **selected or being dragged**, and only then.
+
+**Where to click.** Rectangle, default 3D view, which looks through the south wall. Drag a
+**painting** from the far wall toward the camera until it lands on the near wall. Then click
+the floor, then orbit round so the camera is behind a wall with a window on it.
+
+**What right looks like.** The painting stays in view the whole drag and after you let go,
+outline and all, and you can drag it again from there. Click the floor and it goes with its
+wall. From behind the window's wall the window is gone, and pressing where it was selects
+whatever is behind it, never the window. Pick the window from the rail's **Catalog** and it
+comes back into view while it is selected. *Wrong* looks like: a selected piece vanishing
+with its wall, an unselected one staying, or a hidden one selectable by clicking where it
+hangs. The shadows must not change as it appears and goes.
+
+**Where it rides.** `lib/near-wall.ts` `cutAwayHides`, `components/three/CutAway.tsx`,
+`components/three/Draggable.tsx`.
 
 ### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye
 
@@ -280,35 +301,12 @@ re-seeded room** and reports it as what the user got back.
    because a wall handle takes focus cleanly. A pointer drag runs a different code path into
    the same store action and nobody has watched the snapshot land after one.
 
-### The rotate ring no longer drags the piece behind it — 3D only
+### The rotate ring no longer drags the piece behind it — only the TOUCH half is left
 
-**Where to click.** 3D tab. Put a nightstand hard against the head of a bed, select the
-**bed**, press **R** for rotate. The ring is drawn around the bed and sweeps over the
-nightstand. Press **on the ring, at a point where it crosses the nightstand**, and drag to
-turn the bed. (Move mode used to have arrows and flat squares reaching over the same
-neighbour; it has no handles now, so only the ring is left to check.)
+**The mouse half was LOOKED AT 2026-09-30 and is right** — the bed turns on its ring over
+the nightstand and the nightstand stays put — so the three mouse checks are deleted.
 
-**What wrong looks like.** Three separate things, and only the first is the reported one:
-
-1. **The nightstand slides.** That was the bug: R3F cannot see the gizmo, so it handed the
-   same press to the furniture behind the ring and that piece started a drag of its own.
-2. **The selection jumps to the nightstand when you let go.** A gizmo gesture ends in a DOM
-   click like any drag, and by then nothing is guarding it. Watch the Inspector's title
-   after the drag, not during.
-3. **You end up holding one drawer unit instead of the bed.** Merge a bed and two
-   nightstands into a group first, then rotate it. A plain click is *drill into the group*,
-   so the click ending the gesture used to select one member. The rail's Catalog is where
-   this shows: after the rotate the header must still name the whole group.
-
-Also worth a second: rotating a piece with **nothing behind the ring** must be exactly as it
-was, and a plain click on a neighbour immediately after a rotate must select that neighbour
-— the gate is armed per gesture and dropped by the next press, so a click that goes missing
-means it is being armed and never consumed. Two more the review added, both about a gesture
-finishing somewhere other than on furniture: a rotate released over a **wall** must not
-select that wall, and one released over bare **floor** must not clear the selection.
-
-**And the one that needs two hands, which is why it is the last line of this item.** On a
-touch device: press a drawer unit, hold past a second so it picks up, start sliding it, and
+**The one that needs two hands.** On a touch device: press a drawer unit, hold past a second so it picks up, start sliding it, and
 while it is still moving put a **second finger on the ring** of whatever is selected. The
 drawer must keep following finger one. If it stops dead — and worse, if it is back where it
 started after a reload while 3D showed it moved — the hold is outliving its press again.
@@ -585,20 +583,9 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
   **Front first only — LOOKED AT 2026-09-30.** It had slid in back first with its back
   up through the desktop; the rule now reads which way the seat faces. The user: *"Front
   first slides under, sideways is blocked now."*
-  **Turning it once it is under — this branch, NOT LOOKED AT.** The same look found the
-  way round it: slide the chair in front first, then turn it, and its back swung up
-  through the desk and stayed there, because a turn always took its angle (§ B.14). A
-  turn that swings a piece into trouble it was clear of is now held. In 3D, tuck the
-  chair, pick **Rotate** and drag the ring a quarter round: while you drag it may go red,
-  and on release it goes back to the last angle it fitted at. In the plan, focus the
-  tucked chair and press an arrow to turn it; right-click → *Turn a quarter* too. Both
-  should say *"Chair stays at 180 degrees. It does not fit at that angle: something is
-  in the way"* (the context menu: *"Nothing turned."*) and leave it facing the table.
-  Pull it out and every turn works again. And a chair that is ALREADY stuck — back
-  first through the top, from an old room — must still turn, so it can be turned out.
-  *Wrong* looks like: a chair left sideways with its back in the desk, a turn that does
-  nothing and says nothing, or a stuck chair that will not turn at all. The 3D ring is
-  the half no test reaches (`TransformControls` has no DOM).
+  **Turning it once it is under — LOOKED AT 2026-09-30.** Slide it in front first and
+  turn it: the turn is held and said, on the 3D ring, the plan's keys and the context
+  menu. The user: *"everything looks good."*
 - **The ottoman bullet below was looked at on 2026-09-30 and is right:** it stands on the
   coffee table's top.
 - Under the 650 mm desk the office chair's arms would hit the top, so it no longer goes
