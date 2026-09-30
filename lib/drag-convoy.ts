@@ -666,8 +666,9 @@ export function resolveConvoy(input: {
   /**
    * Does this id already carry a position override in `useStudio.positions`?
    *
-   * Read only on the zero-delta path, where the answer decides between "put the
-   * company back" and "write nothing" — see there. No default: both surfaces write
+   * Read only where the answer decides between "put the company back" and "write
+   * nothing": the zero-delta path, and the lead's own riders while the lead stands
+   * where it began (`ownAt`). No default: both surfaces write
    * their members LIVE, frame by frame, so both have to answer, and a caller that
    * has not thought about it should be told by the compiler rather than by a room
    * full of pinned furniture.
@@ -682,8 +683,18 @@ export function resolveConvoy(input: {
    *  is not final until the slide limit below has been taken: cascading once at the
    *  top and limiting afterwards left a lamp riding the desk's UNLIMITED position
    *  while the desk stopped short. */
-  const ownAt = (at: [number, number, number]): ConvoyMove[] =>
-    convoy.own.length > 0 ? cascadeTransform(draggedId, at, rot, convoy.own) : [];
+  const ownAt = (at: [number, number, number]): ConvoyMove[] => {
+    if (convoy.own.length === 0) return [];
+    const carried = cascadeTransform(draggedId, at, rot, convoy.own);
+    // A lead standing exactly where it began carries nobody anywhere, so a child
+    // with no override of its own is left unwritten — the zero-delta rule below,
+    // one layer down, and for the same reason: a write creates a pin. It matters
+    // now that a rider the room came with is company at all (§ H.6.7): a stretch
+    // or a press that never travelled stamped every such lamp. A child that DOES
+    // carry one is put back, because an out-and-back drag already wrote it.
+    const home = at[0] === startPos[0] && at[1] === startPos[1] && at[2] === startPos[2] && rot === convoy.leadStart.rot;
+    return home ? carried.filter((m) => memberHasPosOverride(m.id)) : carried;
+  };
 
   const moves: ConvoyMove[] = ownAt(pos);
 

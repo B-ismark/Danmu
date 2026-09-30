@@ -1355,6 +1355,29 @@ describe('the zero-delta restore does not pin what it did not move', () => {
     expect(out.moves.some((m) => m.id === 'D')).toBe(true);
     expect(out.moves.some((m) => m.id === 'L')).toBe(false);
   });
+
+  it('leaves the lead\'s own rider alone while the lead stands where it began (§ H.6.7)', () => {
+    // A lamp the room came with is company now, and it has no override. A stretch, or
+    // a press that never travelled, resolves the lead where it started — and every
+    // such lamp was written back where it already stood: a pin, persisted, for
+    // standing on something that was touched.
+    const ns = part({ id: 'ns', category: 'nightstand', shape: 'nightstand', pos: [2, 0, 2], dimMM: [450, 400, 550] });
+    const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', pos: [2, 0.55, 2.1], dimMM: [250, 250, 500] });
+    const w = [ns, lamp];
+    const c = plan('ns', w, ['ns']);
+    expect(c.own.map((d) => d.id)).toEqual(['lamp']);
+    for (const gesture of ['turn', 'move'] as const) {
+      expect(carry(c, 'ns', w, [2, 0, 2], [2, 0, 2], 0, () => false, gesture).moves).toEqual([]);
+      // …but an out-and-back drag HAS written the lamp, so coming home puts it back.
+      const back = carry(c, 'ns', w, [2, 0, 2], [2, 0, 2], 0, (id) => id === 'lamp', gesture).moves;
+      expect(back.map((m) => m.id)).toEqual(['lamp']);
+      expect(back[0].pos[2]).toBeCloseTo(2.1, 9);
+    }
+    // Anywhere else it is a carry like any other, override or none.
+    expect(carry(c, 'ns', w, [2, 0, 2], [2.5, 0, 2], 0, () => false).moves.map((m) => m.id)).toEqual(['lamp']);
+    // And a turn in place is not "home": the lamp swings round with it.
+    expect(carry(c, 'ns', w, [2, 0, 2], [2, 0, 2], Math.PI / 2, () => false, 'turn').moves.map((m) => m.id)).toEqual(['lamp']);
+  });
 });
 
 describe('gestureFor: while the gizmo is active it owns the whole answer', () => {
