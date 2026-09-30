@@ -43,6 +43,16 @@ import { ridingParents, snapshotDescendants } from './rigid-parent';
 import { resolvePart, resolveParts, type TransformOverrides } from './transforms';
 import type { ScenePart } from './scene-spec';
 
+declare const riderRelationBrand: unique symbol;
+
+/** The links a drop wrote down — `useStudio.parentIds` — and nothing inferred.
+ *
+ *  `RiderRelation`'s brand, the other way round. The height pass honours a RECORDED
+ *  link unconditionally (rule 2 on `deriveRiderYs`), so handed the union it would
+ *  promote every inferred edge to a decision and re-seat a lamp nobody put there. A
+ *  plain record passes; a `RiderRelation` does not. */
+export type RecordedLinks = Readonly<Record<string, string>> & { readonly [riderRelationBrand]?: never };
+
 /** What a rider's height needs that the two transform layers cannot supply on their
  *  own: the record of what was put on what, and the ceiling to clamp against.
  *
@@ -52,7 +62,7 @@ import type { ScenePart } from './scene-spec';
  *  incomplete override object, and `TransformOverrides` is destructured out of the
  *  store by name in several places. */
 export type SceneContext = {
-  parentIds: Record<string, string>;
+  parentIds: RecordedLinks;
   /** Metres. */
   roomHeight: number;
 };
@@ -90,9 +100,7 @@ export function resolveScene(
   return resolved;
 }
 
-declare const riderRelationBrand: unique symbol;
-
-/** `riderRelation`'s answer, and the only map a gesture's company is read from.
+/** `riderRelation`'s answer: the map every hand gesture plans its company from.
  *
  *  A brand, so the raw `parentIds` does not type-check where this is asked for. That
  *  map holds only the links a drag recorded, so it is EMPTY for a lamp the room came
@@ -101,7 +109,14 @@ declare const riderRelationBrand: unique symbol;
  *  path handed `planConvoy` the raw map while the scene's own height read already used
  *  this one: one relation for "what does this lamp stand on", another for "does it
  *  come along". Narrowing the parameter is what makes the second one unpassable
- *  rather than merely unread, which is § 44's rule. */
+ *  rather than merely unread, which is § 44's rule.
+ *
+ *  "Every hand gesture" is a drag, a nudge, a spin and the Inspector's Floor / Wall
+ *  buttons — not every mover. A wall drag (`lib/wall-move.ts`) still reads the raw map,
+ *  and carries a seeded rider by where it stands rather than by what it stands on, so
+ *  a lamp on a nightstand against that wall comes along because it is within a walkway
+ *  of the wall too (`WALL_CARRY_REACH`). A different rule reaching the same answer for
+ *  the ordinary case, not this one. */
 export type RiderRelation = Readonly<Record<string, string>> & { readonly [riderRelationBrand]: true };
 
 /** Which piece each rider was put on — child id -> support id.
@@ -116,9 +131,9 @@ export type RiderRelation = Readonly<Record<string, string>> & { readonly [rider
  *  an inference from the state before any decision was made. */
 export function riderRelation(
   authored: ScenePart[],
-  parentIds: Record<string, string>,
+  parentIds: RecordedLinks,
 ): RiderRelation {
-  return { ...ridingParents(authored), ...parentIds } as RiderRelation;
+  return { ...ridingParents(authored), ...parentIds } as unknown as RiderRelation;
 }
 
 /** Every piece riding `rootId`, however many levels up — the tray on it and the cup on
@@ -134,7 +149,7 @@ export function ridersOf(
   rootId: string,
   live: ScenePart[],
   authored: ScenePart[],
-  parentIds: Record<string, string>,
+  parentIds: RecordedLinks,
 ): Set<string> {
   return new Set(snapshotDescendants(rootId, live, riderRelation(authored, parentIds)).map((d) => d.id));
 }
@@ -226,7 +241,7 @@ function stillOver(rider: ScenePart, support: ScenePart): boolean {
 export function deriveRiderYs(
   authored: ScenePart[],
   o: Partial<TransformOverrides>,
-  parentIds: Record<string, string>,
+  parentIds: RecordedLinks,
   roomHeight: number,
 ): Record<string, number> {
   const out: Record<string, number> = {};
@@ -384,7 +399,7 @@ export function riderYs(
   positions: TransformOverrides['positions'] | undefined,
   rotations: TransformOverrides['rotations'] | undefined,
   dims: TransformOverrides['dims'] | undefined,
-  parentIds: Record<string, string>,
+  parentIds: RecordedLinks,
   roomHeight: number,
 ): Record<string, number> {
   if (

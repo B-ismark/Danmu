@@ -4117,6 +4117,34 @@ finds it as a support. Nudged 10 mm, a scanned ottoman under a tray stays at 0 m
 0.48 m), and a 300 mm box under a 500 mm one of the same footprint stays at 0 m (was
 0.80 m). The filter proposed there, in the support probe's caller, was not needed.
 
+**Review round 1 found four more ways to leave the lamp behind, and one write too many.**
+
+- **The plan tab never recorded a landing.** Only the 3D drop wrote `parentIds`, so a lamp
+  moved in the plan onto the other nightstand kept the first one's link, and a recorded
+  link wins: drag the second nightstand and the lamp stayed. Both tabs now write through
+  `landOn` (`landedLinks`, `lib/rigid-parent.ts`). The plan's arrow key writes at once;
+  its drag writes once, on the release — `Esc` puts back positions only, and history
+  snapshots at the drag's end, so a per-frame write would outlive a cancelled drag.
+- **The Inspector's Wall button moved the piece alone.** It carries its riders now, turned
+  with the piece when the wall turns it. **Floor never had the defect**: it moves a piece
+  only upright and the height pass already brings its riders down. The carry added there
+  survived its break-test, which is how that showed, so it is gone again — a write that
+  restates the height pass is an override a re-scan will not move, for nothing.
+- **A piece on the floor rides nothing.** A chair on a 40 mm mat, sent to the Floor, was
+  still within `SUPPORT_Y_EPS` of the mat's top, so the next drag of the mat took the chair
+  along. `isPhysicallySupported` refuses a rider at y ≤ 0, the rule the height pass
+  already states.
+- **A lead dragged back to where it began pinned its riders.** The zero-delta restore
+  wrote an override for every rider, so a seeded lamp became one a re-scan could not move.
+  It restores only riders that already had an override.
+- **The height pass takes `RecordedLinks`.** It honours a recorded link unconditionally,
+  so handing it the relation would make every inferred link unconditional too. The brand
+  makes that a type error, the mirror image of `RiderRelation`.
+
+Kept as is: `wouldCreateCycle` reads the raw map, and a loop through an inferred link
+cannot hang, both walkers keeping a visited set. A wall drag and a room resize still read
+the raw map (above). Fifteen more mutants, fifteen killed.
+
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
 Their words, kept because the scope is theirs: *"Do a detailed search to the fundamental

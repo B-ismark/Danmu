@@ -639,13 +639,21 @@ way along the floor. Then in the 2D Plan, move the other one with the arrow keys
 with its rotate handle, and right-click it and choose **Turn a quarter**. Last, select a
 nightstand and its lamp together and **Turn a quarter** once.
 
+Then three more, in the same room. In the 2D Plan, drag one lamp across onto the other
+nightstand and let go, then drag that nightstand away. Select a nightstand standing out in
+the room and press **Wall** in the Inspector. And drag a nightstand a little way and back
+to where it started, before a re-scan would care.
+
 **What right looks like.**
 - The lamp stays on the nightstand's top through every move and turn, in both tabs.
 - With both selected, the lamp turns once, with the nightstand, not a quarter further.
+- A lamp moved onto the other nightstand goes with that one from then on.
+- After **Wall**, the lamp is still on top, still facing the way the nightstand faces.
 
 **What wrong looks like.**
 - A lamp left behind in the air, or one that ends on the floor.
 - A lamp that jumps to the nightstand only after you let go.
+- A lamp that follows the nightstand it was moved off, and not the one it is on.
 
 ### Fix squares a slightly turned sofa where it stands — this branch (§ H.6.6), NOT LOOKED AT
 

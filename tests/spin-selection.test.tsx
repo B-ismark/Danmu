@@ -310,6 +310,21 @@ describe('spinSelection carries what is standing on the piece', () => {
     expect(l.pos[2]).toBeCloseTo(0, 6);
     expect(l.rot).toBeCloseTo(QUARTER, 6);
   });
+
+  it('turns a lamp a drag set down there, which the room could not have inferred', () => {
+    // The other half of the relation. The authored lamp stands on the floor across the
+    // room, so the parts alone name no support; only the recorded link does. A
+    // relation read off the authored parts without `parentIds` left it behind.
+    room([nightstand([0, 0, 0]), lamp([2, 0, 2])]);
+    useStudio.setState({ positions: { 'lamp-1': [0, 0.55, 0.15] }, parentIds: { 'lamp-1': 'nightstand-1' } });
+    select('nightstand-1');
+    spinSelection(1);
+
+    const l = at('lamp-1');
+    expect(l.pos[0]).toBeCloseTo(0.15, 6);
+    expect(l.pos[2]).toBeCloseTo(0, 6);
+    expect(l.rot).toBeCloseTo(QUARTER, 6);
+  });
 });
 
 describe('a rider that is ALSO selected is turned once, not twice', () => {
