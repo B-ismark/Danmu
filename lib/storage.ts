@@ -5,10 +5,13 @@ import {
   del as idbDel,
   get as idbGet,
   keys as idbKeys,
+  promisifyRequest,
   set as idbSet,
+  setMany as idbSetMany,
   update as idbUpdate,
 } from 'idb-keyval';
 import { v4 as uuid } from 'uuid';
+import { clearLeaveNote, dropLeaveNote, leaveNoteRooms, noteOwed, readLeaveNote, stillOwed, type SavePart } from './leave-note';
 
 // Every call in this file goes through ONE connection, the one the room's own load opens.
 // A write on the way out of the page (`lib/page-leave.ts`) has no time to wait for a
@@ -24,6 +27,16 @@ const keys = () => idbKeys(keyval);
 async function set<T>(key: IDBValidKey, value: T): Promise<void> {
   try {
     await idbSet(key, value, keyval);
+  } catch (e) {
+    reportQuota(e);
+    throw e;
+  }
+}
+
+/** Several puts as ONE transaction, reported like `set`. */
+async function setMany(entries: [IDBValidKey, unknown][]): Promise<void> {
+  try {
+    await idbSetMany(entries, keyval);
   } catch (e) {
     reportQuota(e);
     throw e;
@@ -267,6 +280,25 @@ async function touch(roomId: string) {
   await set(k(roomId, 'touched'), Date.now());
 }
 
+/** When one part of the room — its shell, its positions, its scene — was last written, as
+ *  the moment the written data was taken. `touched` cannot answer that: every writer shares
+ *  it, a rename and a photo included, and it records when a write committed, so an older
+ *  save committing late looks newer than a change made after it. A replayed leave note asks
+ *  this instead (`lib/leave-note.ts`). Every writer of an existing room's three parts stamps
+ *  what it wrote in the same transaction as the write: `savePending`, `saveSceneParts`,
+ *  `saveTransforms`, `forgetArrangement`. `saveRoom` and `importScene` write a room no note
+ *  can be owed for, one under an id nothing has used. */
+const wrote = (roomId: string, part: SavePart) => k(roomId, `wrote:${part}`);
+
+let lastSave = 0;
+/** A save's time: `Date.now()`, but never the same twice on one page, so two saves the page
+ *  makes can always be told apart by their stamps — a leave note and the save it stands in
+ *  for share theirs, and nothing else does. */
+export function saveTime(): number {
+  lastSave = Math.max(Date.now(), lastSave + 1);
+  return lastSave;
+}
+
 export type Transforms = {
   positions: Record<string, [number, number, number]>;
   rotations: Record<string, number>;
@@ -296,6 +328,16 @@ export type PendingWrite = {
   transforms?: Transforms;
   parts?: unknown;
   room?: { edit: (room: RoomData) => RoomData; pin?: unknown };
+  /** When its data was taken, and what each part it writes is stamped with. `saveTime()`
+   *  when absent. */
+  at?: number;
+  /** Write each part only if nothing has written that part at or after this time. A
+   *  replayed leave note's (`lib/leave-note.ts`): a part written since the page went has
+   *  either had this save land after all or had a newer one, and neither may be written
+   *  over — while a part nothing has written since is still owed, whatever else happened
+   *  to the room. Asked inside the same transaction, so nothing can land between the
+   *  question and the write. */
+  unlessSavedSince?: number;
 };
 
 /** A named furniture-arrangement snapshot ("Layout A / B") — lets the user
@@ -495,14 +537,14 @@ export const roomStore = {
       .sort((a, b) => a.createdAt - b.createdAt);
   },
   async saveTransforms(roomId: string, t: Transforms) {
-    await set(k(roomId, 'transforms'), t);
+    await setMany([[k(roomId, 'transforms'), t], [wrote(roomId, 'transforms'), saveTime()]]);
     await touch(roomId);
   },
   async loadTransforms(roomId: string): Promise<Transforms | undefined> {
     return get<Transforms>(k(roomId, 'transforms'));
   },
   async saveSceneParts(roomId: string, parts: unknown) {
-    await set(k(roomId, 'scene'), parts);
+    await setMany([[k(roomId, 'scene'), parts], [wrote(roomId, 'scene'), saveTime()]]);
     await touch(roomId);
   },
   async loadSceneParts<T>(roomId: string): Promise<T | undefined> {
@@ -524,7 +566,10 @@ export const roomStore = {
    *  reloaded straight away was kept 0 of 5 times, and 5 of 5 with the commit asked for.
    *  With a room edit in it, that commit waits for the room to be read, and a reload
    *  does not wait for that either (`docs/what-is-still-open.md` § 47): the whole save
-   *  is lost rather than half of it.
+   *  is lost rather than half of it. So a page going away with a room edit waiting
+   *  also writes the save down where it can finish writing, and the next open replays
+   *  it here with `unlessSavedSince` (`lib/leave-note.ts`). Each part it writes is
+   *  stamped, in the same transaction, with the moment its data was taken (`wrote`).
    *
    *  `room.edit` must be synchronous, as `editRoom`'s is; with no stored room it writes
    *  no room, and the rest is written as the separate saves would have written it. The
@@ -561,27 +606,57 @@ export const roomStore = {
             fail(e);
           }
         };
-        const rest = (scene: unknown) => {
-          if (w.transforms) store.put(w.transforms, k(roomId, 'transforms'));
-          if (scene !== undefined) store.put(scene, k(roomId, 'scene'));
+        const at = w.at ?? saveTime();
+        const rest = (v: PendingWrite, scene: unknown) => {
+          if (v.transforms) {
+            store.put(v.transforms, k(roomId, 'transforms'));
+            store.put(at, wrote(roomId, 'transforms'));
+          }
+          if (scene !== undefined) {
+            store.put(scene, k(roomId, 'scene'));
+            store.put(at, wrote(roomId, 'scene'));
+          }
           store.put(Date.now(), k(roomId, 'touched'));
           tx.commit?.();
         };
-        const room = w.room;
-        if (!room) return step(() => rest(w.parts))();
-        const read = store.get(k(roomId, 'meta'));
-        read.onsuccess = step(() => {
-          const old = read.result as RoomData | undefined;
-          if (!old) return rest(w.parts);
-          const written = rewritten(old, room.edit);
-          store.put(written, k(roomId, 'meta'));
-          // A newer part list than the pin is already on its way, and a detected room is
-          // never pinned; only then is it worth asking whether a photo is.
-          if (room.pin === undefined || w.parts !== undefined || written.detectedObjects?.length) {
-            return rest(w.parts);
-          }
-          const photos = store.count(IDBKeyRange.bound(k(roomId, 'cap:'), k(roomId, 'cap:\uffff')));
-          photos.onsuccess = step(() => rest(photos.result > 0 ? undefined : room.pin));
+        const write = (v: PendingWrite) => {
+          const room = v.room;
+          if (!room) return rest(v, v.parts);
+          const read = store.get(k(roomId, 'meta'));
+          read.onsuccess = step(() => {
+            const old = read.result as RoomData | undefined;
+            if (!old) return rest(v, v.parts);
+            const written = rewritten(old, room.edit);
+            store.put(written, k(roomId, 'meta'));
+            store.put(at, wrote(roomId, 'room'));
+            // A newer part list than the pin is already on its way, and a detected room is
+            // never pinned; only then is it worth asking whether a photo is.
+            if (room.pin === undefined || v.parts !== undefined || written.detectedObjects?.length) {
+              return rest(v, v.parts);
+            }
+            const photos = store.count(IDBKeyRange.bound(k(roomId, 'cap:'), k(roomId, 'cap:\uffff')));
+            photos.onsuccess = step(() => rest(v, photos.result > 0 ? undefined : room.pin));
+          });
+        };
+        const since = w.unlessSavedSince;
+        if (since === undefined) return step(() => write(w))();
+        // Requests on one transaction complete in the order they were made, so the last
+        // one's success is all three's.
+        const [room, transforms, scene] = (['room', 'transforms', 'scene'] as const).map((part) =>
+          store.get(wrote(roomId, part)),
+        );
+        scene.onsuccess = step(() => {
+          const owed = stillOwed(
+            since,
+            { room: !!w.room, transforms: !!w.transforms, parts: w.parts !== undefined, pin: w.room?.pin !== undefined },
+            { room: room.result, transforms: transforms.result, scene: scene.result },
+          );
+          if (!owed.room && !owed.transforms && !owed.parts) return tx.commit?.();
+          write({
+            transforms: owed.transforms ? w.transforms : undefined,
+            parts: owed.parts ? w.parts : undefined,
+            room: owed.room && w.room ? { edit: w.room.edit, pin: owed.pin ? w.room.pin : undefined } : undefined,
+          });
         });
       }));
     } catch (e) {
@@ -594,8 +669,16 @@ export const roomStore = {
    *  after it has saved what it drops as a layout: see there for why a fresh scan
    *  has to do this at all. */
   async forgetArrangement(roomId: string) {
-    await del(k(roomId, 'scene'));
-    await del(k(roomId, 'transforms'));
+    // Dropped and stamped together: a leave note older than the scan must not put the old
+    // arrangement back over it (`wrote`).
+    const t = saveTime();
+    await keyval('readwrite', (store) => {
+      store.delete(k(roomId, 'scene'));
+      store.delete(k(roomId, 'transforms'));
+      store.put(t, wrote(roomId, 'scene'));
+      store.put(t, wrote(roomId, 'transforms'));
+      return promisifyRequest(store.transaction);
+    });
     await touch(roomId);
   },
   async listRooms(): Promise<RoomSummary[]> {
@@ -646,8 +729,10 @@ export const roomStore = {
     );
 
     // Expiring old trash here keeps deletion recoverable without needing a
-    // background job in a product that has no server.
+    // background job in a product that has no server. Settling the leave notes is the
+    // same housekeeping, for the same reason.
     void roomStore.purgeTrash();
+    roomStore.settleLeaveNotes(ids).catch((e) => console.error('[room] could not settle the leave notes', e));
 
     return rows.filter((r): r is RoomSummary => r !== null).sort((a, b) => b.updatedAt - a.updatedAt);
   },
@@ -680,6 +765,9 @@ export const roomStore = {
       (key): key is string => typeof key === 'string' && key.startsWith(prefix) && key !== metaKey,
     );
     await Promise.all(rest.map(move));
+    // A deleted room keeps nothing in the other storage either. Undoing the delete brings
+    // back the room as it was stored, without a change a reload had stranded in the note.
+    dropLeaveNote(roomId);
     return { roomId, deletedAt };
   },
 
@@ -706,6 +794,24 @@ export const roomStore = {
     await Promise.all(matching.filter((key) => key !== trashedMeta).map(restore));
     if (matching.includes(trashedMeta)) await restore(trashedMeta);
     return matching.length > 0;
+  },
+
+  /** Clear each leave note that is no longer owed — every part of its save written since
+   *  (`lib/leave-note.ts`) — or whose room is not among `rooms`, the ids that exist. A
+   *  closed tab leaves one behind after its save has landed, since the page that would have
+   *  cleared it is gone. A note with a part still owed is left for the room's next open. */
+  async settleLeaveNotes(rooms: ReadonlySet<string>) {
+    await Promise.all(
+      leaveNoteRooms().map(async (roomId) => {
+        const note = readLeaveNote(roomId);
+        if (!note) return;
+        if (!rooms.has(roomId)) return clearLeaveNote(roomId, note.at);
+        const [room, transforms, scene] = await Promise.all(
+          (['room', 'transforms', 'scene'] as const).map((part) => get(wrote(roomId, part))),
+        );
+        if (!noteOwed(note, { room, transforms, scene })) clearLeaveNote(roomId, note.at);
+      }),
+    );
   },
 
   /** Drop trashed keys older than TRASH_TTL. Cheap: one key scan, no reads. */
@@ -741,6 +847,9 @@ export const roomStore = {
       (key): key is string => typeof key === 'string' && key.startsWith(prefix) && key !== metaKey,
     );
     await Promise.all(rest.map((key) => del(key)));
+    // And the note a reload may have left for it: the room's shape and furniture, in the
+    // other storage, which would otherwise outlive the room it describes.
+    dropLeaveNote(roomId);
   },
 };
 

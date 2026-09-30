@@ -26,9 +26,10 @@
 // all. Measured in Chromium, a change made and left at once, five of each: a duplicated
 // piece kept on a reload 5 of 5 and a typed width on a closed tab 5 of 5, with no room
 // ever half-saved — where three separate saves had stored the width without its outline
-// on 4 of 5 closed tabs. A typed width on a RELOAD is still lost, 0 of 5, whole: that save
-// reads the room before it can write it, and the old document is gone first
-// (`docs/what-is-still-open.md` § 47).
+// on 4 of 5 closed tabs. A typed width on a RELOAD was still lost, 0 of 5, whole: that save
+// reads the room before it can write it, and the old document is gone first. So that save
+// is also written down synchronously on the way out and finished on the next open
+// (`lib/leave-note.ts`), which kept it 5 of 5 (`docs/what-is-still-open.md` § 47).
 
 const PHASES = ['commit', 'persist'] as const;
 export type LeavePhase = (typeof PHASES)[number];

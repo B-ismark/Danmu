@@ -91,8 +91,9 @@ export function RoomDimsEditor() {
 
   // A closed tab inside the 200 ms lost what was typed: nothing unmounts, so nothing
   // commits. It commits in the page-leave's FIRST phase, because this commit is what
-  // hands `RoomSync` the new size — and the furniture it carries — to save. A reload can
-  // still lose it; `lib/page-leave.ts` says why.
+  // hands `RoomSync` the new size — and the furniture it carries — to save. A reload ends
+  // that save before it can write, and the note it leaves finishes it on the next open
+  // (`lib/leave-note.ts`).
   //
   // The saving is `RoomSync`'s alone, on the way out and every other time. This commit
   // used to save the three numbers itself as well, and that save, landing without

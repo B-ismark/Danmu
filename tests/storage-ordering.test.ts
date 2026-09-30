@@ -30,6 +30,15 @@ vi.mock('idb-keyval', () => ({
     store.set(key, value);
     return Promise.resolve();
   },
+  // One transaction in the real store; logged as its puts, in order, which is all an
+  // ordering assertion here can see of it.
+  setMany: (entries: [string, unknown][]) => {
+    for (const [key, value] of entries) {
+      log.push(`set ${key}`);
+      store.set(key, value);
+    }
+    return Promise.resolve();
+  },
   get: (key: string) => {
     log.push(`get ${key}`);
     return Promise.resolve(store.get(key));

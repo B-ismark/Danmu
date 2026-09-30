@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { markRoughSize, roomStore, type PendingWrite, type RoomData, type Transforms } from '@/lib/storage';
+import { markRoughSize, roomStore, saveTime, type PendingWrite, type RoomData, type Transforms } from '@/lib/storage';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { livingParents } from '@/lib/rigid-parent';
@@ -15,6 +15,7 @@ import type { ScenePart } from '@/lib/scene-spec';
 import { normalizeStoredParts } from '@/lib/scene-spec';
 import { toast } from '@/components/ui/StorageToast';
 import { onPageLeave } from '@/lib/page-leave';
+import { clearLeaveNote, leaveNoteOf, pendingOf, readLeaveNote, writeLeaveNote } from '@/lib/leave-note';
 
 const DEBOUNCE_MS = 300;
 
@@ -85,9 +86,12 @@ export function RoomSync() {
    *  one and not the other. Nothing between them can land now, whichever timer fires.
    *
    *  `roomId` is the caller's, never read off the render, because an effect's cleanup runs
-   *  for the room it was set up for. */
-  const saveWaiting = useCallback((roomId: string) => {
+   *  for the room it was set up for. `leaving` is the page going away, where a save with a
+   *  room edit in it also leaves a note (`lib/leave-note.ts`), because that save has to read
+   *  the room before it can write it and a reload does not wait for the read. */
+  const saveWaiting = useCallback((roomId: string, leaving = false) => {
     const w: PendingWrite = {};
+    let shell: SceneRoom | undefined;
     if (transformTimer.current) {
       clearTimeout(transformTimer.current);
       transformTimer.current = null;
@@ -170,10 +174,24 @@ export function RoomSync() {
       // stored is the room's latest. (This once read the live store after two awaits,
       // and could file the next room's furniture under this one; nothing here awaits
       // now.)
-      if (p) w.room = { edit: (stored) => withShell(stored, p.room), pin: wasReshaped ? p.parts : undefined };
+      if (p) {
+        shell = p.room;
+        w.room = { edit: (stored) => withShell(stored, p.room), pin: wasReshaped ? p.parts : undefined };
+      }
     }
     if (!w.transforms && w.parts === undefined && !w.room) return;
-    roomStore.savePending(roomId, w).catch((e) => {
+    // The whole save, as data, so a reload that ends it before its read comes back can be
+    // finished by the next open. Cleared once it lands on a page still alive to see it. The
+    // save and its note share one time, which is what each part the save writes is stamped
+    // with, and what tells the next open whether it landed (`lib/leave-note.ts`).
+    const at = saveTime();
+    w.at = at;
+    const noted =
+      leaving && shell !== undefined &&
+      writeLeaveNote(roomId, leaveNoteOf(at, shell, { transforms: w.transforms, parts: w.parts, pin: w.room?.pin }));
+    roomStore.savePending(roomId, w).then(() => {
+      if (noted) clearLeaveNote(roomId, at);
+    }).catch((e) => {
       // None of it landed. What is on screen is still whole, and the next save of each
       // kind writes it whole again — the positions, the scene and the shell are each
       // written entire — except the pin, which only the reshape knew to ask for. Asked
@@ -193,6 +211,24 @@ export function RoomSync() {
     useScene.getState().setHydrated(null);
     let live = true;
     (async () => {
+      // The last change made before a reload, if the reload ended its save (`lib/leave-note.ts`):
+      // finished first, so the room read below is the room as it was left. Each part is
+      // written only if nothing has written it since. One try: if it fails, the room opens as
+      // stored and the note goes, because a change seen missing here and worked past is not
+      // one to put back at some later open. `savePending` has said so if the storage is full.
+      // It goes only once that room is on screen, though: when the read below fails too, the
+      // user has seen no room at all, and the note is the one copy of their change.
+      const note = readLeaveNote(roomId);
+      let unfinished: number | undefined;
+      if (note) {
+        try {
+          await roomStore.savePending(roomId, pendingOf(note, (stored, shell) => withShell(stored, shell as SceneRoom)));
+          clearLeaveNote(roomId, note.at);
+        } catch (err) {
+          console.error('[room] could not finish the last change before the reload', err);
+          unfinished = note.at;
+        }
+      }
       let loaded: [Awaited<ReturnType<typeof roomStore.loadRoom>>, ScenePart[] | undefined, Awaited<ReturnType<typeof roomStore.loadTransforms>>];
       try {
         loaded = await Promise.all([
@@ -218,6 +254,7 @@ export function RoomSync() {
         return;
       }
       if (!live) return;
+      if (unfinished !== undefined) clearLeaveNote(roomId, unfinished);
       const [room, savedScene, t] = loaded;
       loadFromRoom(room);
       // If user previously edited / deleted parts, prefer that snapshot over rebuild from detections.
@@ -348,7 +385,7 @@ export function RoomSync() {
   // of `visibilitychange` and `pagehide` finds nothing to write.
   useEffect(() => {
     if (!roomId) return;
-    return onPageLeave('persist', () => saveWaiting(roomId));
+    return onPageLeave('persist', () => saveWaiting(roomId, true));
   }, [roomId, saveWaiting]);
 
   return null;

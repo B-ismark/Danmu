@@ -1675,79 +1675,6 @@ the SwiftShader screenshot times out, so **nobody has seen this**. Still open �
 
 ---
 
-### Ctrl+Z now walks back through the SELECTION too — and only a person can say how that feels
-
-Row 17 / § H.10, built on `feat/selection-in-the-undo-stack`. The user’s ruling was
-Blender’s behaviour — *"in blender, actions and selections are both affectted by undo and
-redoing"* — so selection rides in the main undo entry rather than in a history of its own.
-
-Everything below typechecks, lints, and is covered by 10 tests and 12 killed mutations.
-None of it has been on screen. **The whole point of this item is that the tests can prove
-the stack is right and cannot say whether the behaviour is pleasant**, which is the one
-question the ruling was actually about.
-
-**MEASURED IN A BROWSER 2026-09-06 — steps 1–3 below are answered; do not redo them.**
-Playwright, production build of `4533321`, SwiftShader, six pieces seeded in a rect room.
-The instrument is the Undo button’s own `disabled` state: `UndoRedo` computes
-`canUndo = past.length >= 2`, so pressing Undo until it disables COUNTS undo steps in the
-units a user feels them, with no app instrumentation.
-
-| what was driven | result |
-|---|---|
-| six selection clicks, 420 ms apart | **1** undo step |
-| CONTROL: four arrow-key moves | **5** undo steps (1 for the selecting click + 4 moves) |
-| move made with A selected, then select B, then one Undo | selection returns to **A** |
-
-The control is what makes the 1 mean anything — a counter stuck at 1 reports 1, and this
-one reached 5 on the same page. And the selection reading CHANGED across the Undo press
-(`["Echo shelf"]` → `["Alpha sofa"]`), so "restored" is a value that moved rather than a
-value that never left.
-
-**What is still open is the only part that was ever the real question: does it FEEL
-chatty?** Six clicks costing one press is the mechanical answer; whether stepping back
-through a highlight reads as stepping back through *work* is a judgement, and the 250 ms
-coalescing window is still the debounce every other edit uses rather than a measurement.
-Step 4 (undo across a layout change) was NOT driven — it needs a room-shape switch
-mid-session, which the probe does not do.
-
-**Where to click.** Any room, 3D or 2D.
-
-1. **Move a piece with two selected, then Ctrl+Z.** Shift-click two pieces, drag one, undo.
-   The move should come back undone *with both pieces still highlighted* — that is the new
-   behaviour. If the highlight is gone, the selection is not riding the entry.
-2. **Click around, then press Ctrl+Z once.** Click six different pieces, pausing between
-   each. One press should take you back past the whole run, not six presses. If each click
-   costs its own press, coalescing is not firing — and the real cost of that is not
-   tedium: the stack is a ring of 80, so a long clicking session would push real edits off
-   the end.
-3. **The one that would be worst to get wrong.** Move a piece, then click three others,
-   then Ctrl+Z twice. The first press should restore the selection the move was made with;
-   the second should undo the move itself. If the move is unreachable, a click has
-   overwritten the entry holding it.
-4. **A stale wall index — and this step was looking for the wrong thing.** It used to say
-   "undo across a room-shape change", which cannot produce the state: `applySnapshot`
-   restores the room and the index from the SAME entry, so they always travel together.
-   The reachable version needs no undo at all. Select a wall in a U (click one in the 2D
-   plan), get the footprint to change under it, and look at the right-hand panel: nothing
-   clears `selectedWall` when the room shape changes, so a stale 7 renders a **"Wall 8"
-   panel in a four-walled room** and its paint button writes a colour to a wall that does
-   not exist. It does not throw, which is why nobody has reported it.
-   **Still unproven: which in-studio gesture actually changes the edge count.** A resize
-   does not — `setRoom` rebuilds the polygon at the same `layoutId`. Opening a scene file
-   saved from a differently-shaped room is the candidate and has NOT been driven. Until
-   someone finds the gesture, the consequence is verified by reading and the path is not.
-
-**What "wrong" looks like** is mostly a feeling, and it is the reason this needs eyes:
-undo becoming *chatty*. If pressing Ctrl+Z repeatedly feels like it is stepping through
-highlights rather than through work, the coalescing window is in the wrong place — it is
-currently the same 250 ms debounce every other edit uses, which is a guess and not a
-measurement. Nobody has watched a person use it.
-
-**Not a defect if you see it:** clicking the *same* piece twice records nothing at all,
-deliberately. And a selection restored onto a room that no longer holds those pieces comes
-back partially — the pieces that survive stay selected and the rest are dropped, rather
-than the whole selection clearing.
-
 ### A cleaner cream, a deeper ink, plain copy, and Sun direction behind an info button — `0c3cd64` on `main` (PR #158), SWEPT, needs a real phone and a real screen
 
 The paper family lost about half its yellow and the ink went darker; every contrast
@@ -1857,7 +1784,8 @@ room. Then start **without typing**:
   button landing somewhere other than under the sentence, or smaller than a fingertip on a
   phone.
 - The note back after a reload once cleared, or on a room whose size was typed on the
-  picker. (A reload in the half-second after typing is § 47 in the open list, not this.)
+  picker. Since 2026-09-29 that includes a reload in the half-second after typing, which
+  § 47's leave note now keeps, so the note coming back then is a finding too.
 - A ≈ on a measured room, or missing from a rough room's wall lengths.
 - The preview's dimension labels unreadable on a phone or oversized on a desk.
 - In the studio's glass rail the refused rim is the border alone, since the rail owns the
@@ -1964,7 +1892,14 @@ half-saved (§ 47 in `docs/what-is-still-open.md`). The save runs on `visibility
 event a phone sends when the browser goes to the background, and the unit test covers that
 event — not the phone. Nothing here says how long a phone lets a hidden page run, so whether
 the one transaction gets to commit before the browser is frozen or killed is exactly what is
-not known. A typed room size on a reload is a known loss (§ 47), not a finding.
+not known. **Since 2026-09-29 that matters less for a typed room size:** the page also
+writes that save to localStorage the moment it is hidden, synchronously, and the next open
+finishes it (`lib/leave-note.ts`). So a width typed and the browser killed should come back
+even if the transaction never committed. A duplicated piece has no such note: a save with no
+room edit in it has no read to wait on and asks for its commit at once, which a desktop reload
+lets finish 5 of 5 — but asking is not finishing, so a duplicate missing here is the finding
+that would justify a note for it too (§ 47, "Still open"). Also try **Safari: type a width and reload at
+once**. Desktop Chromium keeps it 5 of 5 now, and WebKit is unmeasured.
 
 ---
 
@@ -1994,7 +1929,8 @@ check could read starts unticked (§ 49 in `docs/what-is-still-open.md`).
 - **Known and not fixed here:** with the room size skipped, a piece can now come back too
   BIG rather than too small, because a skipped room's walls are guessed and the grown size is
   a catalogue typical one (§ 49.3, § 49.4). Whether a real room reads better too big than
-  too small is a person's call.
+  too small is a person's call. Asking for the room size to fix it is not: the user decided
+  2026-09-29 that nothing may depend on people knowing it (D9).
 
 **What was measured, and on what.** SwiftShader, desktop Chromium, one seeded photo with
 seven boxes, no detector: `scripts/cut-note-probe.mjs`, 48 of 48 checks at 360, 390, 768 and
