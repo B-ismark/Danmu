@@ -210,7 +210,11 @@ you held drifting out from under the pointer after the switch. From the dollhous
 near walls hidden), the TV going onto a hidden wall instead of the one you can see. In the
 menu: the picker not opening, or the new model floating or sinking where the old one stood.
 
-**Probed:** not yet.
+**Probed in SwiftShader on `c455bad`:** a fresh 5 × 4 room. The TV was dragged from its
+wall onto the door wall, where it landed flush and facing the room at 1.38 m, and then back
+onto its own wall. Right-clicking the sofa shows **Change the model…**, which opens the picker
+titled with the sofa's name. Not probed: the wall across the room, the L's inside corner, the
+dollhouse view, and a real pointer's feel at a corner.
 
 ### A short piece climbs a tall one, and the plan cannot show it
 
