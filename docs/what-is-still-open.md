@@ -3709,6 +3709,28 @@ asks `hasFloorSharers` first.
   or after a drag has re-parented the tray), the same nudge stays at 0 m. The fix is the
   same filter in `findSupportDetailed`'s caller on the drag path, and it is not this
   commit's mechanism.
+- **Found in review, not fixed: a tray across two tops is recorded on one of them.** A
+  1100 × 600 × 420 coffee table, a 350 × 350 × 420 box beside it at x = 0.825 and a 750 × 450
+  × 60 tray at x = 0.5 across both (57% of the tray over the table, 30% over the box), all at
+  y = 0. Listed tray first, the tray goes to 0.42 m on the table and the box to 0.48 m, up
+  onto the tray resting on it; listed box first, the box stays down and the tray goes to
+  0.42 m. Measured the same on the commit before this work, so not a regression. The record
+  holds one support per piece, the one `findSupportDetailed` answered, and the tray's is the
+  table, so the box's probe keeps it; the height test would have left it out, but it is read
+  only for pieces the pass has not placed. The likely fix is a record of every top a piece
+  comes to rest at, within `SUPPORT_Y_EPS` of its underside, rather than the one the probe
+  returned — proposed, not built or measured.
+- **Found in review, not fixed: a support that goes up after its rider has settled leaves
+  the rider inside it.** A 250 mm table lamp and a 500 × 400 × 300 box at the same spot over
+  a coffee table, all at y = 0. Listed lamp first, the lamp goes to 0.42 m on the table; the
+  box then goes to 0.42 m on the table too (the lamp covers 31% of it, under the support bar,
+  so it is no support for the box), and the lamp is left at 0.42 m inside the box, whose top
+  is at 0.72. Listed box first, the lamp ends on the box at 0.72 m. Measured the same on the
+  commit before this work. Ascending Y cannot order a tie, which is how a scan hands every
+  piece in, so the answer depends on the detector's order. The fix is to re-ask whatever
+  stood on a piece that later moved, down the record — a fixed point, and whether it ends is
+  the first thing to answer, because the case parked in `lib/layout-settle.ts` is exactly a
+  fixed point that can diverge.
 
 Tests: `tests/seat-support.test.ts` (32) and `tests/seat-swap.test.tsx` (3). Every clause is
 a pair, with a table lamp at the same spot that must still land, because a probe that
@@ -3821,8 +3843,9 @@ clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/
   fixed after this, in `settleHeights`.** Measured: in a 1.3 × 1.0 m room the push has
   nowhere to go, the ottoman is left half over the top, and the settle pass stood it there at
   0.42 m, where no report saw it (before this fix it stayed on the floor inside the table,
-  which no report saw either). That pass no longer lifts a SEAT (`isSeatRole`): a scan reads
-  every floor piece as standing on the floor, which for a seat is the right reading, so the
+  which no report saw either). That pass no longer lifts a SEAT (`isSeating`, every role
+  people sit on): a scan reads every floor piece as standing on the floor, which for a seat
+  is the right reading, so the
   ottoman stays down and Room check reports the clash — measured in the same room, and at
   1.3 × 0.8 and 1.2 × 0.7. Adding one there still puts it on top, because the user put it
   there. A seat and not everything that shares floor: a storage box the size of a coffee
@@ -3836,6 +3859,13 @@ clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/
   stands on a platform the scan put on the floor stays inside it. Room check names that as a
   clash (measured on a 3 × 2 m platform and a double bed), where lifting would hide the far
   commoner overlap on a top.
+  **Review round 2 found two more, both fixed.** The gate first asked `isSeatRole`, the seats
+  that tuck under a surface, so a stool, an armchair or a sofa the detector filed as `other`
+  — tabletop-prone by that category — went up onto the coffee table beside it; it asks
+  `isSeating` now, held to the Library's Seating group by a sweep. And a refused lift threw
+  the probe's answer away whole, so an ottoman already on a 3 × 2 m platform, beside a coffee
+  table standing on it, went through the platform to the floor; it is asked again at its own
+  level and stays on the platform (and 20 mm down, at 0.33 m, it comes up onto it).
 - **Open, and it is the user's call: the first nudge of that scanned ottoman stands it on the
   coffee table.** Drag gravity asks the drop question, which keeps § H.6.4's answer: a seat
   dragged over a coffee table it does not fit under goes on top, where the user can see it.

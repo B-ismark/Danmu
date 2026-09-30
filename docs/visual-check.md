@@ -2051,6 +2051,8 @@ tray on an ottoman. Open the result in 3D and open Room check.
 - The ottoman stands on the floor. The tray, if it came through, sits on the ottoman.
 - An ottoman left overlapping the coffee table is reported by Room check as two pieces in
   the same place.
+- The same for any seat, whatever the scan called it: a stool or an armchair listed as
+  *Other* stays on the floor beside a coffee table too.
 
 **What wrong looks like.**
 - An ottoman floating half a metre up, or on the coffee table's top.
@@ -2059,7 +2061,10 @@ tray on an ottoman. Open the result in 3D and open Room check.
 **Expected, not wrong.** Nudging that ottoman by hand stands it on the coffee table, as
 dragging any ottoman over one does. Whether a drag should keep it down is an open decision
 in `docs/what-is-still-open.md`. A desk with a riser and a monitor scanned together may put
-the riser on top of the monitor when the monitor was listed first — filed there too.
+the riser on top of the monitor when the monitor was listed first — filed there too, with
+two more of the same kind that are older than this branch: a tray across a coffee table and
+a box beside it can lift the box onto the tray, and a lamp over a box on a table can end up
+inside the box.
 
 ### A lamp dropped on a table's corner stands on it — this branch (§ H.6.4 follow-ups), NOT LOOKED AT
 
@@ -2070,17 +2075,20 @@ monitor turned to face a side wall was tested across the wrong way.
 **Where to click.** In **2D Plan**, drag a **Table lamp** from the Library so its centre
 is just inside a coffee table's corner, then look in 3D. Separately, put a desk against a
 side wall, and drop a **Monitor** near one end of it. Last, select any small piece near a
-table's corner and **Change the model** to a Table lamp.
+table's corner and **Change the model** to a Table lamp. And put a tray on a plain box,
+select the box and **Pick a model** → Ottoman.
 
 **What right looks like.** A lamp that is mostly over the table stands on the tabletop; one
 mostly over the floor stands on the floor. The monitor turns to face the side wall and stands
 on the desk while most of it is over the desk. The swapped-in lamp is drawn round in 2D Plan,
-its Inspector says it is on the table, and dragging the table carries it along.
+its Inspector says it is on the table, and dragging the table carries it along. The
+ottoman stays on the floor with the tray on it.
 
 **What wrong looks like.** A lamp on the floor with most of its base under the tabletop, or
 a monitor on the floor beside a desk it is mostly over. After the swap: a square lamp in the
 plan, an Inspector saying the lamp is floating, or the table leaving it behind — the store
 kept the old piece's outline until the next reload, and the fix has only a test behind it.
+An ottoman up on its own tray, with the tray still under it.
 
 ## Look and light
 

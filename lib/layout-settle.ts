@@ -349,6 +349,16 @@ export type HeightFix = {
  *  where everything enters at y = 0; reachable the moment Suggest is wired up, which is
  *  why it is written down rather than left to be rediscovered.
  *
+ *  **Three more parts answer only for that caller, and a scan cannot reach them.** The
+ *  branch for a piece left in the air: nothing a scan hands in is. The height half of
+ *  `standsOn`: at y = 0 no floor piece's underside is above another's, and a wall piece
+ *  it may catch is one `topSurface` skips anyway. And the outline the seat's re-ask is
+ *  handed: `p.shape` changes the answer only for an L-desk, which is never a seat. The
+ *  first two have tests that call this function directly with pieces off the floor;
+ *  the third has none, because nothing can reach it, and it is passed so this question
+ *  reads the piece the way every other support question does. None of it is dead
+ *  code, and none of it is covered by a scan's test.
+ *
  *  Pure: `parts` is not touched — the working copy deep-copies each `pos`, and
  *  `tests/layout-settle.test.ts` asserts it, because dropping the `.map` is otherwise a
  *  silent mutant that every other assertion here still passes. Callers apply the fixes,
