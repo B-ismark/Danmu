@@ -182,6 +182,22 @@ export const ROOM_SIDE_M = { min: 1, max: 50 } as const;
  *  further", and the piece in the way goes unmentioned. */
 export const ROOM_SIDE_EPS = 1e-6;
 
+/** The shortest a wall may get, and the least gap between two walls that do not
+ *  share a corner, in metres — whichever side of them the gap is on.
+ *
+ *  `ROOM_SIDE_M` bounds the room's BOUNDING BOX, and a box cannot see a room fold
+ *  over itself: push a T's side wall across its own stem and both sides stay in
+ *  range while the floor crosses its own walls. One number serves both halves of
+ *  that failure because they are one failure — a neighbour wall shrinking through
+ *  zero IS the moved wall passing its own corner — and it is small on purpose: a
+ *  chimney breast or a shallow alcove is a real room, and this is here to stop a
+ *  room turning inside out, not to have taste about corridors.
+ *
+ *  Read by `wallTravel` (`lib/footprint.ts`), which both `moveWallCarrying` and the
+ *  store's `moveWall` ask, so the wall that stops and the sentence that says why
+ *  read one number. */
+export const WALL_MIN_M = 0.3;
+
 /** How tall a ceiling may be, in metres.
  *
  *  Separate from `ROOM_SIDE_M` because a ceiling is not a side, and sharing that

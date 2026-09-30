@@ -7,6 +7,7 @@ import {
   footprintForLayout,
   roomFootprint,
   offsetWall,
+  wallTravel,
   footprintBounds,
   wallSegments,
   type Footprint,
@@ -224,6 +225,10 @@ export const useScene = create<SceneState>((set, get) => ({
       b.depth > ROOM_SIDE_M.max + ROOM_SIDE_EPS
     )
       return 0;
+    // The box cannot see a room fold over itself, so the SHAPE is asked too — the
+    // same `wallTravel` `moveWallCarrying` reads for its sentence, so a wall the
+    // action lets through is never one the store then refuses in silence.
+    if (Math.abs(wallTravel(s.room.footprint, index, delta).travel - delta) > ROOM_SIDE_EPS) return 0;
     set({ room: { ...s.room, footprint: poly, width: b.width, depth: b.depth, layoutId: 'custom' } });
     return delta;
   },

@@ -77,6 +77,24 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
+### A wall stops before it runs into another wall — branch `claude/affectionate-ritchie-ilawx1`
+
+**Where to click.** A **T-Shape** room, 3D and then 2D Plan. Drag the wall under one arm of
+the bar north, toward the north wall, as far as it will go. Then drag a side wall of the stem
+out past the end of the bar. Then open the room from the screenshot that found this (the one
+whose wing lies across the bedroom) and drag the crossing wall back.
+
+**What changed.** A wall drag only checked the room's overall width and depth, so a wall could
+pass straight through another and fold the floor over itself. It now stops 30 cm short of any
+wall it does not share a corner with, and before the wall beside it gets shorter than 30 cm,
+and says which (`wallTravel`, `lib/footprint.ts`). A room that is already folded is left free
+until it is unfolded, so it can be mended.
+
+**What "wrong" looks like.** A wall stopping well short of 30 cm from the next, or stopping
+with no sentence. A fast flick at the plan's lowest zoom getting through where a slow drag
+did not. The folded room refusing to come back. Furniture on the moved wall not following it
+to where it stopped.
+
 ### Props step aside, say when there is no room, and the tabletop plant is a plant — branch `claude/affectionate-ritchie-ilawx1`
 
 **Where to click.** A bedroom starter, 3D. Look at a nightstand with its lamp. Then select

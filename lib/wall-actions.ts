@@ -23,10 +23,10 @@
 import { useSettings, useStudio } from './store';
 import { currentRoomScene } from './room-scene';
 import { attachedToWall, carryAttached } from './wall-move';
-import { footprintBounds, offsetWall, wallOutwardNormal } from './footprint';
+import { footprintBounds, offsetWall, wallOutwardNormal, wallTravel, type WallFault } from './footprint';
 import { useScene } from './scene-store';
 import { announce } from './announce';
-import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
+import { ROOM_SIDE_EPS, ROOM_SIDE_M, WALL_MIN_M } from './dimension-ranges';
 import { floorRefusal, furnitureFloor, namesTheStop, roomFloor, type FloorAxis } from './room-floor';
 import { formatDim } from './units';
 import type { ScenePart } from './scene-spec';
@@ -209,6 +209,16 @@ function wallRefusal(
   return null;
 }
 
+/** The sentence for a wall stopped by the room's shape rather than its size. The
+ *  number is `WALL_MIN_M`, in the user's unit — derived, never typed beside it. */
+function shapeRefusal(fault: WallFault): string {
+  const unit = useSettings.getState().dimUnit;
+  const size = `${formatDim(WALL_MIN_M * 1000, unit)} ${unit}`;
+  return fault === 'close'
+    ? `That wall stops ${size} short of another wall.`
+    : `That wall stops here: the wall beside it cannot get shorter than ${size}.`;
+}
+
 /**
  * Move wall `index` by `delta` metres along its outward normal and carry what is
  * attached to it. Returns the delta actually applied — **0 when it was refused**,
@@ -235,18 +245,28 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
   // read here and by `RoomDimsEditor` and by nothing else.
   const cur = footprintBounds(before);
   const asked = footprintBounds(offsetWall(before, index, delta));
-  const refusal = wallRefusal(asked, cur, resolved);
+  let refusal = wallRefusal(asked, cur, resolved);
   if (refusal !== null) {
-    say(index, cur, refusal);
-    // Say it AND take as much of the step as fits. The two are not alternatives:
-    // the wall stops at the stop, and the sentence explains why it stopped there.
+    // Take as much of the step as fits. Stopping and saying why are not
+    // alternatives: the wall stops at the stop, and the sentence explains it.
     const limits = {
       width: { min: roomFloor(furnitureFloor(resolved, 'width'), cur.width), max: ROOM_SIDE_M.max },
       depth: { min: roomFloor(furnitureFloor(resolved, 'depth'), cur.depth), max: ROOM_SIDE_M.max },
     };
     delta = permittedDelta(delta, cur, asked, limits);
-    if (delta === 0) return 0;
   }
+  // Then the room's SHAPE, on what the box allowed: whichever stop comes first is
+  // the one named, so a wall stopped short of another wall never blames the room's
+  // size, and the reverse.
+  if (delta !== 0) {
+    const shape = wallTravel(before, index, delta);
+    if (shape.fault !== null) {
+      refusal = shapeRefusal(shape.fault);
+      delta = shape.travel;
+    }
+  }
+  if (refusal !== null) say(index, cur, refusal);
+  if (delta === 0) return 0;
   // Read before the move: the moved edge translates along this normal and keeps its
   // direction, so one reading holds for the whole gesture — but the polygon object
   // does not, so take it from `before`.
