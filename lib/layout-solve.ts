@@ -1434,6 +1434,22 @@ export function solveLayout(
   // skipping it changed nothing because the snapshot carries `best`'s own cost and
   // never beats it on a strict `<`.)
   remember(pool, best, bestCost);
+  // ── …and the room as it stands, squared where it stands ─────────────────────
+  //
+  // The one arrangement the search cannot reach by itself: every piece where the user
+  // left it, turned straight. A sofa 10° off square in the T pokes through its wall, so
+  // Fix has to move it, and on 5 seeds in 12 the search's answer left it more than 30°
+  // off its television (3 of them facing away). The tidy after the pick squares only
+  // what the search moved, so an answer that moved the sofa elsewhere is tidied where
+  // it went. Offered here, this is the answer on all twelve. It is the tidy's own pass
+  // with its own veto, so nothing past `SNAP_TOL` is turned: a 45° version squared an
+  // armchair turned 25° by choice (§ H.6.6). Arrange only, and both others measured:
+  // offered to a shuffle it cost the T 8 of its 9 ideas, and a refit already squares
+  // the piece it is asked to fix.
+  if (!shuffle && !refit) {
+    const squared = snapYaws(model, origin, weights, true, null);
+    if (squared.some((p, i) => !untouched(origin[i], p))) remember(pool, squared, scoreLayout(model, squared, weights));
+  }
   const rated: Candidate[] = pool.map((c) => {
     // The expensive term the pool's own sort does not price — a raster and a distance
     // transform each, which is why only the finalists ever get it. Taken off a full

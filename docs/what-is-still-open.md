@@ -2991,6 +2991,7 @@ Four observations, all the user's, all landing in the same place:
   lift FIXED 2026-09-30, § H.6.3. The solver breaking the set apart FIXED 2026-09-30, § H.6.5.)*
 - a chair put on a couch, then Suggest, ends **through a wall**; *(FIXED 2026-09-30, § H.6.2.)*
 - a couch a few degrees off square is turned to face **away from the TV** it should face;
+  *(FIXED 2026-09-30 for Fix, § H.6.6. Ideas is the open half.)*
 - and generally, *"suggest doesn't really seem to know what to do with groups and their
   rotations."*
 
@@ -3021,7 +3022,8 @@ above:
 3. **A group is not a unit** — *half* true. `proposeGroup` already slides, quarter-turns
    and swaps groups **rigidly**, and one pass moves only groups; the gap is *which* groups
    are seeded as one, and that a group turn pivots on the centroid rather than the anchor.
-   *(A merged set is one body since § H.6.5: every pass moves it through its lead, whole.)*
+   *(A merged set is one body since § H.6.5: every pass moves it through its lead, whole,
+   and its lead is its anchor. What is left is a relation group's turn, § H.6.6.)*
 
 **And the design for all of this already exists:**
 [`docs/research/suggest-and-collision.md`](research/suggest-and-collision.md) — three layers
@@ -3985,6 +3987,95 @@ cost an arrangement, or a squaring, and leave the set whole.
 - **The snap squares a set to the wall nearest its lead.** A member nearer another wall is
   not asked, so a set that would square against that wall can be turned to the lead's,
   swing the member through the plaster, and be put back unsquared.
+
+**§ H.6.6 · FIXED 2026-09-30: Fix can square a piece where it stands.** The third
+observation above: a couch a few degrees off square, then Fix, and it comes back facing away
+from the TV it should face.
+
+*Measured on `a548f48`*, twelve seeds. The preset's sofa is turned by hand, so it is
+`placed`, as `useSuggest` calls it. **Not facing** is more than 30° off its television
+(`FACING_HALF_ANGLE`); **away** is more than 90°; **in place** is where it stood, turned
+square. First at each preset's own size, the one a new room opens at:
+
+| Preset, sofa turned | not facing / away / in place, before | after |
+|---|---|---|
+| `t` 5.5 × 4.7, −10° | 3 / 0 / 0 | 0 / 0 / 12 |
+| `t` 5.5 × 4.7, +10° | 4 / 1 / 0 | 0 / 0 / 12 |
+| `l` 6 × 4.7, −10° | 2 / 0 / 0 (Fix acted on 11) | 0 / 0 / 12 |
+| `l` 6 × 4.7, −6° | 1 / 1 / 0 (acted on 11, and left 3 crooked) | 0 / 0 / 12 |
+| `rect` 6 × 4 at ±6° and ±10°, `t` at ±6° | 0 / 0 / 0 | 0 / 0 / 12 |
+| `open` 7.5 × 5.6, −10° | 0 / 0 / 10 (acted on 11) | 0 / 0 / 12 |
+
+`l` at +10° was already in place on 11 and is on 12; `open` at +10° was on 12. Where Fix
+did nothing before (`l` +6°, `open` ±6°) it still does nothing. After, on every seed of
+every row measured for it (`t` ±10°, `l` −10° and −6°, `rect` +10° and −6°, `open` −10°),
+the sofa is the only piece Fix moves. And at 6 × 5, where
+`tests/suggest-square-in-place.test.ts` pins it:
+
+| Sofa turned | `t` not facing / away, before | after |
+|---|---|---|
+| −10° | 5 / 3 (Fix acted on 11) | 0 / 0 (12) |
+| +10° | 4 / 0 | 0 / 0 |
+| −20° | 4 / 0 | 4 / 0 |
+| `open` 6 × 4, −20° | 3 / 1 | 3 / 1 |
+
+**It changes Fix in every preset, not only the T.** Before, Fix answered a slightly turned
+sofa by moving it: in `rect` it went somewhere else on every seed, still facing the TV. Now
+it stays where it stood and is turned straight. That is a smaller answer, and the one a
+person would give; it is also a change someone will see in a room that was not broken.
+
+*Why the search missed it.* The sofa 10° off in the T pokes through its wall, so Fix has to
+move it, and the search's answers all put it somewhere else. The one arrangement it cannot
+reach by itself is the room as it stands with the sofa turned straight: the tidy after the
+pick squares only what the search moved (`onlyMovedFrom`), so an answer that moved the sofa
+is tidied where it went.
+
+*What changed* (`lib/layout-solve.ts`). After the search, the room as it stands, squared by the
+tidy's own pass, joins the finalists and is priced like them. It is the same pass with the
+same veto: nothing past `SNAP_TOL` is turned, and a turn that makes a hard term worse is
+shoved or left.
+
+*Fix only, and why each other mode is left out.*
+- **A refit already gets this right.** Try a fix on the sofa and the whole-room Re-fit, at
+  `t` 6 × 5 and 5.5 × 4.7 and `l` 6 × 4.7 with the sofa turned ±10°, square it and keep it
+  facing on every seed on the commit before. Giving a refit the candidate changes only how
+  many other pieces a whole-room Re-fit moves: 12 → 14 on one row, 15 → 12 on another.
+- **A shuffle is not meant to hand back the room it was given**, and measured it costs the
+  gallery its ideas: with the candidate offered to a shuffle as well, the T with its sofa
+  turned −10° gets **1** idea in three attempts where it got 9, and that one is not the
+  room squared in place either. Why the searches come back empty was not traced. The test
+  pins the 9.
+- Two parts of the block no test can fail, and each says why it is there. `guardRoutes` is
+  `true`, as at the two tidy calls, so the candidate is made under the same veto; `false`
+  changes no answer measured, since the finalists are rated on navigation anyway. And the
+  candidate is skipped when it would be the room unchanged, which saves rating it on every
+  Fix of a room with nothing off square; pricing it changes no answer measured either.
+
+*Declined, measured: a wider angle for the candidate.* Squaring anything up to 45° closes the
+20° rows (`t` 4 → 0, `open` 3 / 1 → 0 / 0), and squares an armchair turned 25° in `l` with
+nothing else wrong in the room on **12 of 12** seeds, where Fix leaves it alone on 9 (the
+other three are the search's own answers, the same before and after). Past `SNAP_TOL` an
+angle is a choice, and that includes a sofa at 20°. `tests/suggest-square-in-place.test.ts`
+pins the armchair row, so a wider angle fails it. At `l`'s own 6 × 4.7 the row is the same
+before and after this change: Fix acts on 5 of 12, squares all 5, 2 of them in place.
+
+*Still open: Ideas.* A shuffle does not get the candidate, so the ideas are as they were.
+The panel keeps searching in the background and stops after three searches in a row find
+nothing new; measured here on `shuffleRoom`'s first three attempts, without the panel's
+history of ideas already shown, at 6 × 4 (`rect`, `open`) and 6 × 5 (`l`, `t`), and with the
+sofa turned 0° or ±6°: `rect` 12 ideas, 3 not facing; `l` 12, 3 (1 away); `open` 12, 5 (2
+away); `t` 9, 5 (1 away). The same at every angle, since a shuffle starts from its own
+scatter. Which way a sofa faces in an idea is a separate question. So is Fix on a sofa past
+`SNAP_TOL`: at −20° in the T it still moves the sofa, and 4 seeds in 12 leave it more than
+30° off its television (the second table above), the same question as the ideas'.
+
+*The plan's P2, covered by § H.6.5 and not built.* P2 was "a group squares about its anchor,
+not its centroid". A merged set's lead is its largest obstacle, which is its anchor; the
+squaring pass turns the set about it, and the lead's own quarter-turn proposals square the
+set as a whole. § H.6.5's table shows it: `l` turned −6° and 12°, every one squared back as
+one; `open` −20°, 6 of 7. What is left is `proposeGroup`'s turn of a group made by its
+relations rather than merged, which pivots on the centroid. It is rigid either way, so the
+group keeps its shape; only where it lands differs. Not measured further.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
