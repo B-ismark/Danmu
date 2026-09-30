@@ -56,7 +56,7 @@ import {
   isSoftFurnishing,
   routeWidth,
   roleOf,
-  sharesFloor,
+  tucksUnder,
   zoneExempt,
   CROWDED_COVER,
   TUCKED_CLASH_SHARE,
@@ -145,7 +145,7 @@ const MIN_WALKWAY = WALK_MIN;
 const SWING_CLASH_SHARE = 0.02;
 
 // ── Same-place rule thresholds ──────────────────────────────────────────────
-// Which pieces genuinely share floor is `sharesFloor` in lib/layout-rules, and so
+// Which pieces genuinely share floor is `tucksUnder` in lib/layout-rules, and so
 // is **how far into each other they may be** — `TUCKED_CLASH_SHARE`, imported
 // above. It used to be a pair of category sets here: seating pushed under a work
 // surface shares that surface's footprint ON PURPOSE, and the chair back rises
@@ -173,7 +173,7 @@ const SWING_CLASH_SHARE = 0.02;
  *  It IS exported, and that is a narrower thing than the paragraph above forbids: a
  *  TEST asserting that a fixture sits above this bar is not a second consumer of the
  *  rule, it is a check that the fixture exercises the rule at all.
- *  `tests/placement-banner.test.tsx` needs a chair the `sharesFloor` exemption
+ *  `tests/placement-banner.test.tsx` needs a chair the `tucksUnder` exemption
  *  genuinely forgives, and its first fixture sat **two ulps below this number** — so
  *  nothing was being forgiven, deleting the exemption left all eight assertions green,
  *  and the file's headline claim was decoration. A test that has to know a bar should
@@ -230,8 +230,12 @@ function zoneDetail(
   return `“${part.name}” needs ${need_} clear on ${need} sides ${rule.reason}. ${clear === 0 ? 'None of them is clear' : `Only ${clear} ${clear === 1 ? 'is' : 'are'} clear`} (${blocked} blocked).`;
 }
 
+/** The tucked bar only for a pair that genuinely goes one under the other: the roles
+ *  AND the seat's own height clearing the surface's knee room (`tucksUnder`). An
+ *  ottoman at a coffee table shares the roles and not the room, so half of it inside
+ *  the table is two pieces in the same place, like any other pair. */
 function clashShare(a: ScenePart, b: ScenePart): number {
-  return sharesFloor(roleOf(a), roleOf(b)) ? TUCKED_CLASH_SHARE : CLASH_SHARE;
+  return tucksUnder(a, b) ? TUCKED_CLASH_SHARE : CLASH_SHARE;
 }
 
 /** The pieces that actually get in a walker's way: floor-standing, solid, and
@@ -492,7 +496,7 @@ export function analyzeRoom(
   //   · MOUNTED ↔ MOUNTED. `floorSolids` requires `!wallMounted`, so neither ordering of
   //     such a pair is reachable here and `floorBlockers` excludes both from rule 2. The
   //     seeder ships seven rooms with a framed print inside a window.
-  //   · A TUCKED pair. `collidesAt` has no `sharesFloor` exemption while rule 2 and the
+  //   · A TUCKED pair. `collidesAt` has no `tucksUnder` exemption while rule 2 and the
   //     seeder's own `seats()` both do, so a dining chair under its table is refused by
   //     the drag and silent in the report BY DESIGN — twenty seeded pairs.
   // Both are recorded in `docs/what-is-still-open.md` § 17. Neither is this rule's job;

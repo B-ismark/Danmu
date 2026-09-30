@@ -183,7 +183,7 @@ export function Inspector() {
   // It ran `collidesAt` and `partInsideRoom` beside the room report, which asks the
   // same two questions with different bars, and it was wrong on both.
   //
-  // `collidesAt` deliberately has no `sharesFloor` exemption while the report's rule 2
+  // `collidesAt` deliberately has no `tucksUnder` exemption while the report's rule 2
   // charges a tucked pair against `TUCKED_CLASH_SHARE` — that divergence is written
   // down in `lib/clearance.ts` in as many words, with twenty seeded pairs behind it.
   // So a dining chair pushed under its table got a red *"Blocked — move it away from

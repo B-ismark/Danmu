@@ -28,7 +28,7 @@ import { dimRangeFor } from './dimension-ranges';
 import { footprintBounds, type Footprint } from './footprint';
 import { footFromPart, footInsidePoly, footIntersectionArea, type Foot } from './geometry';
 import { baySides, roomBays } from './room-bays';
-import { isMountedObstruction, roleOf, sharesFloor } from './layout-rules';
+import { isMountedObstruction, profilesTuck, tuckProfile } from './layout-rules';
 import { verticalExtent } from './physics';
 import { solveLayout } from './layout-solve';
 import { settleParts } from './layout-settle';
@@ -208,7 +208,7 @@ export function checkFit(
       // collision — the right bar for a panel whose job is to avoid crying wolf. This
       // feature has the opposite error budget: a false alarm costs a shrug, a false
       // "yes, it fits" costs someone a sofa. So a piece that shares the floor with the
-      // candidate may not overlap it at all, and `sharesFloor` is the existing rule for
+      // candidate may not overlap it at all, and `tucksUnder` is the existing rule for
       // which pairs those are — the same one `layout-settle` separates by.
       if (overlapsSomething(foot, settledPart, parts)) continue;
 
@@ -233,7 +233,7 @@ export function checkFit(
 
   // Cost sorts the candidates; the ROOM REPORT decides between them. Those are not the
   // same ranking and cannot be swapped, which cost me a regression worth recording: for
-  // a pair `sharesFloor` exempts — a dining chair and its table — the solver's cheapest
+  // a pair `tucksUnder` exempts — a dining chair and its table — the solver's cheapest
   // answer is the chair at the table's dead centre, because the relation distance is
   // zero there and the overlap it exempts costs nothing. The report calls that same
   // placement a clash. Ranking on cost alone therefore answered "no room" for a chair
@@ -284,7 +284,7 @@ const TOUCH_AREA_M2 = 1e-4;
 
 /** Does the seated candidate share floor with, and overlap, anything already there? */
 function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): boolean {
-  const mine = roleOf(seated);
+  const mine = tuckProfile(seated);
   for (const other of parts) {
     // Mounted pieces are NOT skipped — `isMountedObstruction` is the same predicate the
     // room report's `clash-mounted` rule reads, and it has to be, because `explain`
@@ -303,12 +303,12 @@ function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): b
     const [myBottom, myTop] = verticalExtent(seated.category, seated.shape, seated.dimMM, seated.pos[1]);
     const [itsBottom, itsTop] = verticalExtent(other.category, other.shape, other.dimMM, other.pos[1]);
     if (myTop <= itsBottom + 0.005 || itsTop <= myBottom + 0.005) continue;
-    // Note the polarity: `sharesFloor` is TRUE for the pairs that legitimately occupy
-    // the same square metre — a dining chair under its table, an ottoman under a coffee
-    // table. Those are the ones to SKIP. Reading the name as "competes for the floor"
-    // and testing `!sharesFloor` inverts the rule exactly, and quietly: it exempts a
-    // sofa 31% inside a bed while flagging a correctly tucked chair.
-    if (sharesFloor(mine, roleOf(other))) continue;
+    // Note the polarity: `profilesTuck` is TRUE for the pairs that legitimately occupy
+    // the same square metre — a dining chair under its table, an ottoman low enough for
+    // its coffee table. Those are the ones to SKIP. Reading it as "competes for the
+    // floor" and testing `!profilesTuck` inverts the rule exactly, and quietly: it
+    // exempts a sofa 31% inside a bed while flagging a correctly tucked chair.
+    if (profilesTuck(mine, tuckProfile(other))) continue;
     const its = footFromPart(other.pos, other.rot, other.dimMM, other.circle, other.shape);
     if (footIntersectionArea(foot, its) > TOUCH_AREA_M2) return true;
   }

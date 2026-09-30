@@ -64,7 +64,8 @@ import {
   routeWidth,
   rugKeepsOff,
   rugTarget,
-  sharesFloor,
+  profilesTuck,
+  tuckProfile,
   TUCKED_CLASH_SHARE,
   wallDebt,
   WALK_MIN,
@@ -73,6 +74,7 @@ import {
   type PlaceAffinity,
   type Relation,
   type Role,
+  type TuckProfile,
   type RoomProfile,
   type RuleKind,
 } from './layout-rules';
@@ -350,6 +352,10 @@ export type LayoutModel = {
   poly: Poly;
   profile: RoomProfile;
   roles: Role[];
+  /** How high each piece reaches where it tucks, and how much room it leaves under
+   *  it (`tuckProfile`). The search moves pieces and never resizes them, so this is as
+   *  fixed as `roles` is. */
+  tuck: TuckProfile[];
   /** Does this piece get in a walker's way? */
   obstacle: boolean[];
   /** Is this piece held inside the walls? `containedBySearch`: every obstacle, and a
@@ -512,6 +518,7 @@ export function prepare(ctx: LayoutContext): LayoutModel {
   const parts = ctx.parts;
   const profile = ctx.profile ?? roomProfile(parts);
   const roles = parts.map(roleOf);
+  const tuck = parts.map(tuckProfile);
   const doors = profile.apertures.filter((i) => roles[i] === 'door');
   const windows = profile.apertures.filter((i) => roles[i] === 'window');
   const route = routeWidth(ctx.footprint);
@@ -622,6 +629,7 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     poly,
     profile,
     roles,
+    tuck,
     obstacle: parts.map(isObstacle),
     contained,
     overhang,
@@ -835,7 +843,7 @@ export function costBreakdown(
    *  pays for it once. */
   navCell: number | null = null,
 ): CostBreakdown {
-  const { ctx, poly, roles, obstacle, top, radius, area } = m;
+  const { ctx, poly, roles, tuck, obstacle, top, radius, area } = m;
   const parts = ctx.parts;
   const c: CostBreakdown = { ...ZERO };
 
@@ -884,7 +892,7 @@ export function costBreakdown(
       // matter how far inside the table it stood, while `lib/clearance.ts` called
       // the same pair a clash past `TUCKED_CLASH_SHARE`. Same predicate, no shared
       // bar — so the search would happily produce a room the report then flagged.
-      // The number is `layout-rules`' now, next to `sharesFloor` itself.
+      // The number is `layout-rules`' now, next to the fit test (`profilesTuck`) itself.
       //
       // Two measurements of that, and they are different harnesses rather than two
       // readings of one — which is why both are named here instead of one figure
@@ -920,7 +928,7 @@ export function costBreakdown(
       // face: at share 1.0 the two ARE the same arrangement — one piece standing
       // where another is — and the tolerance only ever existed to forgive the part
       // of the overlap that is by design.
-      const tolerance = sharesFloor(roles[i], roles[j]) ? TUCKED_CLASH_SHARE : 0;
+      const tolerance = profilesTuck(tuck[i], tuck[j]) ? TUCKED_CLASH_SHARE : 0;
       if (share > tolerance) c.overlap += (share - tolerance) / (1 - tolerance);
     }
   }

@@ -5,6 +5,7 @@ import { footArea, footFromPart, footInsidePoly, footIntersectionArea, outsideSh
 import type { ScenePart } from '../lib/scene-spec';
 import { MOUNT_PAD, verticalExtent } from '../lib/physics';
 import { resolveParts } from '../lib/transforms';
+import { tucksUnder } from '../lib/layout-rules';
 
 const RECT: Footprint = footprintForLayout('rect', 6, 4);
 
@@ -111,6 +112,20 @@ describe('settleParts · out of each other', () => {
     const chair = part({ category: 'chair', shape: 'chair-dining', dimMM: [480, 520, 850], pos: [0, 0, 0.55], rot: Math.PI });
     const [, settled] = settleParts([table, chair], RECT);
     expect(settled.pos).toEqual(chair.pos);
+  });
+
+  it('pushes a seat out of a surface it does not fit under', () => {
+    // An ottoman belongs under a coffee table by role; this one is taller than the shelf
+    // it would have to clear (§ H.6.4), so 60% of it in the table is two pieces in one
+    // place. Both halves of the pass read that: the pair that is found clashing, and the
+    // spot the ottoman is pushed to, which must not be back inside the table.
+    const table = part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [0, 0, 0] });
+    const ottoman = part({ category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420], pos: [0, 0, 0.26] });
+    expect(tucksUnder(ottoman, table)).toBe(false);
+    expect(shared(table, ottoman)).toBeCloseTo(0.6, 9);
+    const [a, b] = settleParts([table, ottoman], RECT);
+    expect(a.pos).toEqual(table.pos);
+    expect(shared(a, b)).toBeLessThan(0.02);
   });
 
   it('leaves a rug under the furniture it anchors', () => {

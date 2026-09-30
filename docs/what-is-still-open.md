@@ -3692,7 +3692,7 @@ height floor removed, the deck clause still passed, because a 3 m deck was alrea
 by the new plan bound. The deck is 2400 × 1500 now, inside a table's plan, so the height is
 what answers.
 
-**§ H.6.4 · OPEN: the seat rule has no fit test.** Found in § H.6.3's second review. A
+**§ H.6.4 · FIXED 2026-09-30: the seat rule has a fit test.** Found in § H.6.3's second review. A
 seat looks past its partner at any height, so an ottoman exactly as tall as its coffee
 table "tucks" into it (a 420 mm ottoman added over a 420 mm table lands at y = 0), and a
 420 mm ottoman over a 250 mm table ends up inside it, where every drag of it is refused as
@@ -3724,6 +3724,40 @@ left on it:
 
 None is a seat or a surface a seat tucks under, so none touches this section. The one that
 could matter elsewhere is the purifier: something set on it lands at h, 14 mm inside the disc.
+
+*The fit test.* Two numbers per piece, both read off the drawings (`tuckProfile` in
+`lib/layout-rules.ts`). For a seat, how high it reaches in the front 85% of its depth — the
+part that goes under when it is pushed in as far as the tuck bar allows: a dining chair's
+seat, an office chair's armrests, an ottoman's whole top. For a surface, how much clear
+height it leaves under its top, away from its legs: a dining table's apron, a desk's cable
+rail, and a coffee table's **lower shelf, at a quarter of its height**. A seat tucks when the
+first is no higher than the second. A shape with no case is taken as solid — as tall as it
+is, nothing under it — which is the direction that tucks nothing.
+
+`tests/seat-fit.test.tsx` walks every shape and category that can be a seat or a surface
+(245 rows) and holds both numbers to the renderer: never a seat lower, or a surface roomier,
+than it is drawn; the five shapes with a case exactly; and a pinned list of the three that
+are more careful than their drawing (a plane, a TV console's toe-kick, a stool read as a
+table). Every consumer that forgave a tucked pair asks it: Room check, Suggest, the tidy-up
+on open, the starter rooms, the fit check and where a dropped piece lands.
+
+What it changes, over every height each piece can be set to:
+
+| Seat | Under | Pushes in |
+|---|---|---|
+| Dining chair | desk, L-desk | always |
+| Dining chair | dining table | all but 3 of 1116 — the tallest chairs at the lowest table |
+| Office chair | desk, L-desk | from a 690 mm desk for the catalogue's chair (965 of 1581) |
+| Office chair | dining table | 765 of 1581 |
+| Ottoman | desk, L-desk, dining table | nearly always (778–800 of 806) |
+| Ottoman | coffee table | **never** — the shelf is in the way |
+| Stool | desk, L-desk, dining table | mostly (1018–1100 of 1271) |
+
+The ottoman at the coffee table is the one a person will notice. It is an ordinary pair now:
+Room check calls it a clash past half, Suggest pays for any overlap, the tidy-up pushes the
+two apart, and an ottoman dropped over the table stands on it the way a box would, instead of
+on the floor inside the drawing where every later drag was refused. The starter rooms hold
+only dining chairs at dining tables, and all of those fit, so no built-in room moves.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

@@ -6,7 +6,7 @@ import { settleHeights } from '@/lib/layout-settle';
 import { ridingParents } from '@/lib/rigid-parent';
 import { placeNewPart, selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import { footArea, footFromPart, footIntersectionArea, type Poly } from '@/lib/geometry';
-import { isObstacle, roleOf, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
+import { isObstacle, roleOf, tucksUnder, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
 import { floorBlockers } from '@/lib/clearance';
 import { clampDims } from '@/lib/dimension-ranges';
 
@@ -39,9 +39,9 @@ const chair = (id: string, x: number, z: number, y = 0, rot = 0) =>
   part({ id, category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [x, y, z], rot });
 const lamp = (x: number, z: number, y = 0) =>
   part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [x, y, z] });
-/** A nesting ottoman: 350 mm, so it fits under `COFFEE`. The seat rule has no fit
- *  test — it would "tuck" one as tall as the table into it just the same — so a fixture
- *  that did not fit would certify an interpenetration (§ H.6.3, filed). */
+/** A nesting ottoman: 350 mm, so it fits under `TABLE`'s 635 mm of knee room. It does
+ *  NOT fit under `COFFEE`, whose lower shelf is a quarter of the way up — the fit test
+ *  (§ H.6.4) reads what the drawing leaves room for, and that is 105 mm. */
 const ottoman = (x: number, z: number, y = 0) =>
   part({ id: 'ottoman', category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 350], pos: [x, y, z] });
 
@@ -134,11 +134,31 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     expect(findSupportDetailed([TABLE], c, 0, 0, c.dimMM)).toBeNull();
   });
 
-  it('an ottoman lands on the floor under a coffee table, and a lamp lands on it', () => {
+  it('an ottoman lands on the floor under a table, and a lamp lands on it', () => {
     const o = ottoman(0, 0);
     const l = lamp(0, 0);
-    expect(findSupportDetailed([COFFEE], o, 0, 0, o.dimMM)).toBeNull();
-    expect(findSupportDetailed([COFFEE], l, 0, 0, l.dimMM)?.id).toBe('coffee');
+    expect(findSupportDetailed([TABLE], o, 0, 0, o.dimMM)).toBeNull();
+    expect(findSupportDetailed([TABLE], l, 0, 0, l.dimMM)?.id).toBe('table');
+  });
+
+  it('a seat that does not fit under its partner is no partner of it (§ H.6.4)', () => {
+    // The rule was written about seats that go UNDER a top. An ottoman at a coffee
+    // table shares the roles and not the room — the shelf is at 105 mm — so it is an
+    // ordinary pair: dropped over the table, the ottoman stands on it like a box would,
+    // rather than on the floor inside the drawing where every later drag is refused.
+    const o = ottoman(0, 0);
+    expect([tucksUnder(o, TABLE), tucksUnder(o, COFFEE)]).toEqual([true, false]);
+    expect(findSupportDetailed([COFFEE], o, 0, 0, o.dimMM)).toEqual({ id: 'coffee', y: 0.42 });
+    // The same gate on a dining chair, at the one corner of the ranges where it closes:
+    // the lowest table (600 mm, its apron's underside at 485) and the tallest chairs,
+    // whose seat — the part that goes under — is scaled up past it. The chair with it is
+    // the catalogue's, which fits.
+    const low = { ...TABLE, id: 'low', dimMM: [1600, 900, 600] as [number, number, number] };
+    const c = chair('c', 0, 0);
+    expect(tucksUnder(c, low)).toBe(true);
+    const tall = { ...c, dimMM: [500, 500, 1080] as [number, number, number] };
+    expect(tucksUnder(tall, low)).toBe(false);
+    expect(findSupportDetailed([low], tall, 0, 0, tall.dimMM)).toEqual({ id: 'low', y: 0.6 });
   });
 
   it('only the partner is looked past: a chair over a sofa still stands on the sofa', () => {
@@ -170,11 +190,12 @@ describe('findSupportDetailed — where a piece would LAND', () => {
     const o = ottoman(0, 0, 0.05);
     expect(findSupportDetailed([deck], o, 0, 0, o.dimMM)).toEqual({ id: 'deck', y: 0.05 });
     // The pair: the lowest real coffee table the catalogue sizes (250 mm) still is one.
-    // Only the reading is asserted. An ottoman "under" a 250 mm table is inside it, and
-    // the rule has no fit test to say so (§ H.6.3, filed), so asserting where it lands
-    // would certify that.
+    // A box has no shelf and no apron in its drawing, so nothing fits under it, and the
+    // ottoman stands on it too — for the fit test's reason rather than the role's.
     const low = part({ id: 'low', category: 'other', shape: 'box', dimMM: [1100, 600, 250], pos: [0, 0, 0] });
     expect(roleOf(low)).toBe('coffee-table');
+    expect(tucksUnder(o, low)).toBe(false);
+    expect(findSupportDetailed([low], o, 0, 0, o.dimMM)).toEqual({ id: 'low', y: 0.25 });
   });
 
   it('a platform bigger than any table is not one: an ottoman and a chair stand on it', () => {
@@ -492,22 +513,27 @@ describe('every caller that moves a piece to what it finds', () => {
     expect(findSupportDetailed([under, board], desk, 0, 0, desk.dimMM)).toBeNull();
   });
 
-  it('adding: an ottoman dropped over a coffee table goes on the floor; a lamp goes on the table', () => {
+  it('adding: an ottoman dropped over a table goes on the floor; a lamp goes on the table', () => {
     const room = { width: 6, depth: 4, height: H, footprint: ROOM };
-    const o = placeNewPart('ottoman', 'ottoman', [550, 400, 350], room, [COFFEE], [0, 0]);
+    const o = placeNewPart('ottoman', 'ottoman', [550, 400, 350], room, [TABLE], [0, 0]);
     expect(o.pos[1]).toBe(0);
     expect(o.supportId).toBeNull();
-    const l = placeNewPart('lamp', 'lamp-table', [250, 250, 500], room, [COFFEE], [0, 0]);
-    expect(l.pos[1]).toBeCloseTo(0.42, 9);
-    expect(l.supportId).toBe('coffee');
+    const l = placeNewPart('lamp', 'lamp-table', [250, 250, 500], room, [TABLE], [0, 0]);
+    expect(l.pos[1]).toBeCloseTo(TOP, 9);
+    expect(l.supportId).toBe('table');
+    // Over a coffee table it does not fit under, it goes on top like the lamp (§ H.6.4).
+    const on = placeNewPart('ottoman', 'ottoman', [550, 400, 350], room, [COFFEE], [0, 0]);
+    expect(on.pos[1]).toBeCloseTo(0.42, 9);
+    expect(on.supportId).toBe('coffee');
   });
 
-  it('settling: an ottoman under a coffee table is not lifted onto it, and a lamp is', () => {
+  it('settling: an ottoman under a table is not lifted onto it, and a lamp is', () => {
     // `settleHeights` lifts "goes on a table" pieces onto any support over 0.3 m, and
-    // an ottoman is one of those — so a detected ottoman under a coffee table was put
-    // ON the coffee table.
-    expect(settleHeights([COFFEE, ottoman(0, 0)], H)).toEqual([]);
-    expect(settleHeights([COFFEE, lamp(0, 0)], H)).toEqual([{ id: 'lamp', y: 0.42 }]);
+    // an ottoman is one of those — so a detected ottoman under a table was put ON it.
+    expect(settleHeights([TABLE, ottoman(0, 0)], H)).toEqual([]);
+    expect(settleHeights([TABLE, lamp(0, 0)], H)).toEqual([{ id: 'lamp', y: TOP }]);
+    // One it does not fit under is an ordinary support (§ H.6.4).
+    expect(settleHeights([COFFEE, ottoman(0, 0)], H)).toEqual([{ id: 'ottoman', y: 0.42 }]);
   });
 
   it('settling: a tray on an ottoman stays on it', () => {

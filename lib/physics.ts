@@ -6,7 +6,7 @@
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
 import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea, footOverlap, obbExtentAlong, type Foot } from './geometry';
-import { hasFloorSharers, roleOf, sharesFloor, WALL_GAP } from './layout-rules';
+import { hasFloorSharers, profilesTuck, tuckProfile, WALL_GAP } from './layout-rules';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low' | 'wall-floor';
 
@@ -494,8 +494,9 @@ export type SupportCandidate = {
 /** Who is ASKING a support probe: the mover's id and what kind of piece it is.
  *
  *  **Why the kind, and not just the id.** A dining chair tucked under a table, or an
- *  ottoman pushed under a coffee table, shares that surface's floor on purpose
- *  (`sharesFloor`, `lib/layout-rules.ts`) — and the tuck the solver and the report
+ *  ottoman pushed under a desk, shares that surface's floor on purpose (`tucksUnder`,
+ *  `lib/layout-rules.ts`: the roles, and a seat low enough for the room under the top)
+ *  — and the tuck the solver and the report
  *  both allow (`TUCKED_CLASH_SHARE`, 0.85) runs deeper than the share at which a
  *  surface starts holding a piece up (`MIN_SUPPORT_SHARE`, 0.5). So a chair tucked
  *  60% under the table was a fine arrangement to Suggest and to Room check, and the
@@ -642,11 +643,12 @@ export function findSupportDetailed(
   selfCircle?: boolean,
 ): { id: string; y: number } | null {
   // What the mover IS, read at the size it is being asked at — `roleOf` tells a
-  // coffee table from a dining table by its dimensions.
-  const selfRole = roleOf({ category: self.category, shape: self.shape, dimMM: selfDim });
+  // coffee table from a dining table by its dimensions, and the fit test reads the
+  // height (`tuckProfile`).
+  const selfFit = tuckProfile({ category: self.category, shape: self.shape, dimMM: selfDim });
   // Nearly every piece in a room tucks under nothing and has nothing tucked under it,
   // and a drag asks this per frame — so the rule costs those pieces nothing.
-  if (!hasFloorSharers(selfRole)) {
+  if (!hasFloorSharers(selfFit.role)) {
     return topSurface(parts, (o) => o.id === self.id, x, z, selfDim, selfRot, selfCircle, Infinity);
   }
   // A seat never stands on the surface it tucks under. The partner is not a support,
@@ -656,9 +658,9 @@ export function findSupportDetailed(
   // the tray covered by half stood on the tray instead. "Tucked under" is the same
   // question `collidesAt` asks of the pair on the plan, footprint over footprint with
   // its flush-touch pad, so a chair merely standing beside its table is not capped.
-  // Symmetric, like `sharesFloor`: a table dropped over a tucked chair does not come
+  // Symmetric, like `profilesTuck`: a table dropped over a tucked chair does not come
   // to rest on what stands on top of the chair. "Top" is the partner's bounding top —
-  // a chair's backrest, since nothing here knows a seat height — so something on the
+  // a chair's backrest, not the tuck height the fit test reads — so something on the
   // SEAT is below the cap, and only support share keeps a cushion there from holding
   // the table. Both footprints carry their shape, as in `collidesAt`: a chair standing
   // in an L-desk's open corner is inside the desk's box and under none of the desk.
@@ -666,7 +668,7 @@ export function findSupportDetailed(
   const partners = new Set<string>();
   let under = Infinity;
   for (const o of parts) {
-    if (o.id === self.id || !sharesFloor(selfRole, roleOf(o))) continue;
+    if (o.id === self.id || !profilesTuck(selfFit, tuckProfile(o))) continue;
     partners.add(o.id);
     if (footOverlap(me, footFromPart(o.pos, o.rot ?? 0, o.dimMM, o.circle, o.shape), -0.01)) {
       under = Math.min(under, verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1]);
