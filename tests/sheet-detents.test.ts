@@ -77,6 +77,24 @@ describe('cycleSheet', () => {
     expect(cycleSheet('full')).toBe('half');
     expect(cycleSheet('closed')).toBe('full');
   });
+
+  it('lowers a sheet sized to its content, which has no second height to go to', () => {
+    expect(cycleSheet('half', true)).toBe('closed');
+    expect(cycleSheet('full', true)).toBe('closed');
+  });
+});
+
+describe('a sheet sized to its content (View)', () => {
+  // SheetShell hands the drag `[0, h, h]`, h being the sheet's height at the press.
+  const FIT: [number, number, number] = [0, 240, 240];
+
+  it('settles open or closed, never on a second open height', () => {
+    expect(settleSheet(240, FLICK + 1, FIT)).toBe('half');
+    expect(settleSheet(230, FLICK + 1, FIT)).toBe('half');
+    expect(settleSheet(121, 0, FIT)).toBe('half');
+    expect(settleSheet(119, 0, FIT)).toBe('closed');
+    expect(settleSheet(200, -(FLICK + 1), FIT)).toBe('closed');
+  });
 });
 
 describe('the stylesheet draws the heights the drag settles on', () => {
@@ -90,6 +108,21 @@ describe('the stylesheet draws the heights the drag settles on', () => {
   it('uses --sheet-half for the middle detent and --sheet-top-gap for the top one', () => {
     expect(rule('.sheet')).toMatch(/\bheight: var\(--sheet-half\);/);
     expect(rule('.sheet[data-snap="full"]')).toMatch(/height: calc\(100% - var\(--sheet-top-gap\)\)/);
+  });
+
+  it('draws a content-sized sheet at its content, under the same top gap', () => {
+    const r = rule('.sheet[data-fit]');
+    expect(r).toMatch(/height: auto;/);
+    expect(r).toMatch(/max-height: calc\(100% - var\(--sheet-top-gap\)\)/);
+    // After the `full` rule, so a sheet switched to View from a full Room still fits.
+    expect(css.indexOf('\n.sheet[data-fit] {')).toBeGreaterThan(css.indexOf('\n.sheet[data-snap="full"] {'));
+  });
+
+  it('leaves the home indicator to the toolbar, not the sheet resting on it', () => {
+    // The sheet ends at the toolbar's top edge, and the toolbar pads for the inset.
+    // A second inset inside the sheet was ~34px of empty paper on an iPhone.
+    expect(rule('.phone-toolbar')).toMatch(/env\(safe-area-inset-bottom\)/);
+    expect(rule('.sheet__body')).not.toMatch(/env\(safe-area/);
   });
 
   it('declares --sheet-half as a percentage, which is what the drag parses', () => {
