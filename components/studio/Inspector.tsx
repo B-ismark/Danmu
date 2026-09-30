@@ -5,7 +5,7 @@ import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
 import { arrangeDecor } from '@/lib/decor';
 import { useScene } from '@/lib/scene-store';
-import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
+import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, resyncDraft, tidyDraft, UNIT_OPTIONS } from '@/lib/units';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
 import { ColorPicker } from '@/components/ui/ColorPicker';
@@ -18,9 +18,11 @@ import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { anchorFor, MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
 import { useRoomReport } from './RoomTools';
-import { wallSegments } from '@/lib/footprint';
+import { wallSegments, type Footprint } from '@/lib/footprint';
+import { describeSpaceRefusal, refuseForSpace, spaceLimits } from '@/lib/space-bound';
 import { moveWallCarrying } from '@/lib/wall-actions';
 import { onPageLeave } from '@/lib/page-leave';
+import { announce } from '@/lib/announce';
 
 // The right rail is a DECORATING panel, not a properties palette — and it now
 // practises the disclosure the left rail has always had. Every decorating
@@ -469,7 +471,14 @@ export function Inspector() {
       {/* Precise millimetres last, folded away — and the plain-language size tier
           stays on screen either way, because that clamp is the app's promise that
           nothing can end up a fantasy size. */}
-      <DimensionEditor partId={id} category={part.category} shape={part.shape} value={currentDim} defaultDim={defaultDim} onChange={(d) => setDim(id, d)} />
+      <DimensionEditor
+        partId={id}
+        piece={part}
+        footprint={room.footprint}
+        value={currentDim}
+        defaultDim={defaultDim}
+        onChange={(d) => setDim(id, d)}
+      />
     </div>
   );
 }
@@ -725,19 +734,22 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 function DimensionEditor({
   partId,
-  category,
-  shape,
+  piece,
+  footprint,
   value,
   onChange,
   defaultDim,
 }: {
   partId: string;
-  category: ScenePart['category'];
-  shape: ScenePart['shape'];
+  /** The piece as it stands (resolved), which is what the space it has is measured
+   *  from — its wall, or the room at its current angle. */
+  piece: ScenePart;
+  footprint: Footprint;
   value: [number, number, number];
   onChange: (d: [number, number, number]) => void;
   defaultDim: [number, number, number];
 }) {
+  const { category, shape, name } = piece;
   const dimUnit = useSettings((s) => s.dimUnit);
   const setDimUnit = useSettings((s) => s.setDimUnit);
   const prec = precisionFor(dimUnit);
@@ -749,7 +761,21 @@ function DimensionEditor({
    *  a range printed under every piece was reading as a warning nobody had earned.
    *  The sentence it replaced was also the one place the two had disagreed (in feet a
    *  dining chair advertised 1.25-1.97 wide while the arrows stopped at 1.3 and 1.9). */
-  const bound = (i: 0 | 1 | 2) => boundsToUnit(range.min[i], range.max[i], dimUnit);
+  //
+  // Width and depth are bounded by the SPACE too, not only by the shape's range: a
+  // curtain may not be made wider than its wall, nor a sofa wider than the room
+  // (`lib/space-bound.ts`, the user's ruling on the curtain that could be set to 4 m
+  // in a 3 m room). The arrows stop there, and a typed number past it is refused with
+  // `refusal` below rather than clamped — rule 2. Never below the piece's own size, so
+  // a piece that is already over (a file from elsewhere, a wall moved in under it) is
+  // not shrunk by pressing UP, which would be a silent resize of its own.
+  const space = spaceLimits(piece, footprint, value);
+  const bound = (i: 0 | 1 | 2) => {
+    const hi = i === 2 ? range.max[i] : Math.max(range.min[i], Math.min(range.max[i], Math.max(space[i].maxMM, value[i])));
+    return boundsToUnit(range.min[i], hi, dimUnit);
+  };
+  const [refusal, setRefusal] = useState<string | null>(null);
+  useEffect(() => setRefusal(null), [partId]);
   // Open by default. It was collapsed on the reasoning that typing millimetres is
   // the rare path — true of typing, and beside the point for READING: the three
   // numbers are what tells you whether the piece you just dropped is the size you
@@ -774,13 +800,36 @@ function DimensionEditor({
     fromMM(valH, dimUnit).toFixed(prec),
   ]);
 
+  // The field being typed into keeps its draft while the change is its own debounced
+  // commit coming back. Rewriting it there put the caret after digits nobody typed:
+  // "2" · pause · ".7" read 2.007, because the commit's echo turned "2" into "2.00"
+  // (`resyncDraft`), and on the way to "1.5" a sofa's "1" was clamped to its 1.2 m
+  // floor and the box read "1.20" under the cursor. Leaving the field is where the
+  // draft catches up with what the piece became. Another piece is always news.
+  const shownFor = useRef(partId);
+  const typing = useRef<number | null>(null);
   useEffect(() => {
-    setLocal([
-      fromMM(valW, dimUnit).toFixed(prec),
-      fromMM(valD, dimUnit).toFixed(prec),
-      fromMM(valH, dimUnit).toFixed(prec),
-    ]);
+    const samePiece = shownFor.current === partId;
+    shownFor.current = partId;
+    setLocal((was) =>
+      [valW, valD, valH].map((mm, i) =>
+        !samePiece ? fromMM(mm, dimUnit).toFixed(prec) : i === typing.current ? was[i] : resyncDraft(was[i], mm, dimUnit),
+      ) as [string, string, string],
+    );
   }, [partId, valW, valD, valH, dimUnit, prec]);
+
+  function leave(i: number) {
+    typing.current = null;
+    // A commit still on its timer echoes back through the effect above, and a refused
+    // size stays on screen beside the sentence explaining it — either way the draft is
+    // only tidied. Otherwise it is brought to what the piece is: a clamped "1" reads
+    // "1.20" now, once the person has finished with it.
+    const settled = !timer.current && !refusal;
+    const mm = [valW, valD, valH][i];
+    setLocal((was) =>
+      was.map((d, k) => (k !== i ? d : tidyDraft(settled ? resyncDraft(d, mm, dimUnit) : d, dimUnit))) as [string, string, string],
+    );
+  }
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** What the pending commit will do, so that leaving the page can do it now. */
@@ -818,7 +867,18 @@ function DimensionEditor({
       if (mm.some((n) => Number.isNaN(n) || n <= 0)) return;
       // Clamp into the shape's trustable real-world range — same gate the 3D
       // stretch handles and every other size path go through.
-      onChange(clampDims(category, shape, [mm[0], mm[1], mm[2]]));
+      const sized = clampDims(category, shape, [mm[0], mm[1], mm[2]]);
+      // …then refuse, never clamp, a size the room has no space for. The fields keep
+      // what was typed, so the number and the sentence explaining it sit together.
+      const refused = refuseForSpace(piece, sized, footprint);
+      if (refused) {
+        const sentence = describeSpaceRefusal(name, refused, dimUnit);
+        setRefusal(sentence);
+        announce(sentence);
+        return;
+      }
+      setRefusal(null);
+      onChange(sized);
     };
     pendingCommit.current = run;
     timer.current = setTimeout(() => {
@@ -886,11 +946,22 @@ function DimensionEditor({
                   step={step}
                   value={local[i]}
                   onChange={(v) => commitDebounced(i as 0 | 1 | 2, v)}
+                  onFocus={() => {
+                    typing.current = i;
+                  }}
+                  onBlur={() => leave(i)}
                   height={34}
                 />
               </label>
             ))}
           </div>
+
+          {refusal && (
+            <div role="status" style={{ marginTop: 8, fontSize: 'var(--fs-caption)', color: 'var(--warn-text)', lineHeight: 1.4, display: 'flex', gap: 6 }}>
+              <Icon name="info" size={12} />
+              <span style={{ minWidth: 0 }}>{refusal}</span>
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
             {/* One display unit for the whole app — Settings owns it, and this is
@@ -910,7 +981,10 @@ function DimensionEditor({
             </label>
             <div style={{ flex: 1 }} />
             <button
-              onClick={() => onChange(defaultDim)}
+              onClick={() => {
+                setRefusal(null);
+                onChange(defaultDim);
+              }}
               className="ds-btn ds-btn--xs ds-btn--ghost"
               title="Back to the size it came with"
               style={{ padding: '0 8px', fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}

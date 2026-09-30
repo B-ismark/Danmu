@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { boundsToUnit, decimalsOf, fromMM, stepFor, steppedValue, toMM, formatDim, formatDimDown, formatLength, precisionFor } from '@/lib/units';
+import { boundsToUnit, decimalsOf, fromMM, stepFor, steppedValue, toMM, formatDim, formatDimDown, formatLength, precisionFor, resyncDraft, tidyDraft } from '@/lib/units';
 import { dimRangeFor, roomAxisRange, roomAxisWithin, type RoomAxis } from '@/lib/dimension-ranges';
 import { CATEGORIES, SHAPES } from '@/lib/scene-spec';
 
@@ -480,5 +480,33 @@ describe('formatLength', () => {
     // Nearest would collapse them onto the same number, which is the defect.
     expect(formatLength(1056, 'm')).toBe('1.06 m');
     expect(formatLength(1063, 'm')).toBe('1.06 m');
+  });
+});
+
+describe('a size box’s draft, when its own commit echoes back', () => {
+  it('is kept as typed while it already means the new value', () => {
+    // The reported case: "2" committed, and rewriting it "2.00" made ".7" read 2.007.
+    expect(resyncDraft('2', 2000, 'm')).toBe('2');
+    expect(resyncDraft('2.', 2000, 'm')).toBe('2.');
+    // Feet: 2 ft is 609.6 mm, which has no exact float — the tolerance is what holds it.
+    expect(resyncDraft('2', toMM(2, 'ft'), 'ft')).toBe('2');
+    // The room stores metres, so its echo has been through ÷1000 and ×1000: a 201 cm
+    // ceiling comes back as 2009.9999999999998 mm, and exact equality would rewrite
+    // "201" as "201.0" — the reported bug again, one unit over.
+    expect((toMM(201, 'cm') / 1000) * 1000).not.toBe(toMM(201, 'cm'));
+    expect(resyncDraft('201', (toMM(201, 'cm') / 1000) * 1000, 'cm')).toBe('201');
+  });
+
+  it('is replaced when the value is news', () => {
+    expect(resyncDraft('2', 2700, 'm')).toBe('2.70');
+    expect(resyncDraft('', 2000, 'm')).toBe('2.00');
+    // A unit change: the same draft now means a different length.
+    expect(resyncDraft('2.00', 2000, 'cm')).toBe('200.0');
+  });
+
+  it('is tidied into display form on the way out, and left alone if it is not a number', () => {
+    expect(tidyDraft('2.7', 'm')).toBe('2.70');
+    expect(tidyDraft('2', 'mm')).toBe('2');
+    expect(tidyDraft('', 'm')).toBe('');
   });
 });

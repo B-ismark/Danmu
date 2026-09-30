@@ -78,15 +78,24 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### The Will it fit chips are the kind's own sizes — merged in #195 (`0aa19b2`), NOT LOOKED AT
+### A size box keeps what you are typing through a pause — this branch, NOT LOOKED AT
 
-In the Room panel's **Will it fit** tab, step through all ten kinds and read the chip
-row under the size fields. Each kind should offer only pieces of its own kind: Bed gets
-Double, Queen and King; Fridge gets Fridge and French door fridge; Desk and Dining table
-both get *Dining / desk table*; every other kind gets one chip. Press a chip, then
-**Check the room**: "wrong" is any chip that fills in a size the panel then calls out of
-range, or a chip row that wraps badly now that most kinds have one chip where they had
-up to four.
+The "Use my own size" item was looked at on 2026-09-30 and is gone. What the user found
+while looking: type `2`, pause, go on with `.7`, and the box read **2.007** — the pause
+had committed the `2` and the box answered by rewriting itself `2.00` under the caret.
+Both size editors keep the draft as typed now, and tidy it when you leave the box.
+
+**Where to click.** Any room. In the Inspector's **Exact size**, type `2` into Width,
+wait a second, then type `.7`. Do the same in the Room panel's **Height**. Then, on a
+curtain, type `0.1` into Width, wait, and click somewhere else.
+
+**What right looks like.** The piece (and the room) changes to 2 m during the pause and
+to 2.7 m after — while the box shows exactly what you typed, `2` then `2.7`, and becomes
+`2.70` only once you click away. The curtain's `0.1` stays `0.1` while you are in the box
+and reads `0.40` (the smallest a curtain can be) after you leave it.
+
+**What wrong looks like.** Digits appearing that you did not type; a box that still shows
+`2` after you have left it; a box that shows one number while the piece is another size.
 
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
@@ -135,37 +144,28 @@ day, a wall stopping at the rug it carries and its knob standing clear of the fu
 here for a specific reason each. The rotate ring, because drei's `TransformControls` is a
 three.js object with **no DOM**, so nothing in Playwright can aim a press at its ring —
 the 2D half of that defect **is** browser-checked and is not in this list. The refusal
-sentence, because the question it raises is a judgement about what the app should do, not
-a fact a test can settle.*
+sentence, because it is a sentence a person has to read in place — the judgement it once
+raised was answered on 2026-09-30.*
 
 ### A refusal that names the wall instead of an obstruction that is not there
 
-**Where to click.** Any room. Add a **curtain** from the Library, then in the Inspector set
-its width to **4 m** — the range allows 5 m and nothing stops you doing it in a 3 m room.
-Now drag it, on **both** tabs.
+**The judgement this item used to carry is answered.** The user, 2026-09-30: *"Don't
+allow if it's wider than the available space."* So a curtain can no longer be SIZED
+wider than its wall (looked at 2026-09-30), and the un-draggable 4 m
+curtain in a 3 m room cannot be made from the Inspector any more. The drag sentence is
+still worth a look, because a piece CAN still be wider than a wall it is dragged to.
 
-**What should happen.** It refuses everywhere, because every wall is too short: measured,
-**0 of 5,184** swept targets are legal where all 5,184 were before § H.16. The sentence in
-the live region should read *"Curtain will not fit there — **it is wider than that wall**"*.
-Before this branch it read *"— something is in the way"* in an empty room, which sends you
-hunting an obstruction that does not exist. Third place to check: focus the piece in the
-plan and press an arrow to **turn** it — that path says *"It does not fit at that angle — "*
-and reads the same clause.
+**Where to click.** Rectangle (6 × 4). Add a **curtain**, make it **5 m** wide on a 6 m
+wall, then drag it toward a 4 m side wall, on **both** tabs. Then focus it in the plan
+and press an arrow to **turn** it.
 
-**What wrong looks like.** Any of the three still saying "something is in the way" for a
-piece with clear floor all round it. Or the opposite over-reach: a piece refused by a real
-obstruction being told it is wider than its wall. Put a wardrobe where a normal-width
-curtain wants to go — that one should still say "something is in the way".
+**What should happen.** It will not go onto the short wall, and the live region reads
+*"Curtain will not fit there — **it is wider than that wall**"* — not *"something is in
+the way"* when nothing is. The turn reads *"It does not fit at that angle — "* with the
+same clause. Put a wardrobe where a normal-width curtain wants to go: that one should
+still say "something is in the way".
 
-**The judgement, which is why this is here and not merely a test.** The piece is now
-**un-draggable** until you shrink it or grow the room, and nothing on screen says so in as
-many words — the sentence explains the refusal, it does not name the way out. Is a true,
-actionable refusal enough, or does a piece that fits on no wall need to be *allowed* and
-reported instead (the rule-2 shape: it keeps its real size and something else says it does
-not fit)? Nothing reports it today — that is § H.16b — so refusing honestly is the interim,
-not the answer. **This needs a person's opinion, not a test.**
-
-**Where it rides.** Merged to `main` in `20654e5` (PR #74).
+**Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half on this branch.
 
 ### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye
 
@@ -565,8 +565,8 @@ room with it.
 and drag it over the middle of the coffee table in the plan, then look in 3D. Push a
 dining chair under the dining table and add an **Office chair** under the desk. Then
 select the desk, set its height to 650 mm in the Inspector, and push the office chair
-under it again. Last, in the Room panel's **Will it fit** tab choose **Dining table**,
-type 1800 × 900 × 750 mm, press **Check the room**, then **Put it there**.
+under it again. Last, in the Library type `dining table 180x90x75cm` and press the dining table row
+(the Room panel's Will it fit tab that this used to go through was retired).
 
 **What right looks like.**
 - The ottoman ends up standing on the coffee table's top, like any piece dropped there.
@@ -576,13 +576,13 @@ type 1800 × 900 × 750 mm, press **Check the room**, then **Put it there**.
   under: dragged over the desk it lands on the desktop. A desk from about 690 mm up takes
   it again.
 - Suggest and the ideas gallery never park the ottoman inside the coffee table.
-- The Will it fit dining table arrives 750 mm tall, drawn like the starter dining table,
+- The own-size dining table arrives 750 mm tall, drawn like the starter dining table,
   and a dining chair pushed under it tucks.
 
 **What wrong looks like.**
 - An ottoman sunk into a coffee table, with the shelf showing through its cushion.
 - A Library-size dining chair or office chair standing on its table or desk.
-- A Will it fit dining table that arrives 600 mm tall, or with a shelf under its top.
+- An own-size dining table that arrives 600 mm tall, or with a shelf under its top.
 - A starter room that looks different from before. None should: every seat in the starter
   rooms is a dining chair at a dining table, and all of those fit.
 

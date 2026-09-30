@@ -88,9 +88,15 @@ export function NumberField({
   ariaInvalid,
   ariaLabel,
   style,
+  onFocus,
+  onBlur,
 }: {
   value: string;
   onChange: (v: string) => void;
+  /** Entering and leaving the box — a caller holds its draft as typed in between,
+   *  and tidies it into display form on the way out. */
+  onFocus?: () => void;
+  onBlur?: () => void;
   step: number;
   min?: number;
   max?: number;
@@ -185,6 +191,8 @@ export function NumberField({
         aria-invalid={ariaInvalid || undefined}
         aria-label={ariaLabel}
         onChange={(e) => onChange(e.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
         className="field"
         style={{
           fontFamily: 'var(--font-mono)',

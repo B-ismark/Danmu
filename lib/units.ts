@@ -50,6 +50,34 @@ export function precisionFor(unit: DimUnit): number {
   }
 }
 
+/** What a size field should read once the value it edits has changed.
+ *
+ *  The fields commit on a short debounce, so a pause mid-number commits it — and the
+ *  field used to answer that commit by rewriting itself in display form. Type `2`,
+ *  pause, and the box read `2.00` with the caret at the end, so the `.7` you went on to
+ *  type became `2.007`, stored as 2007 mm and shown as `2.01` (the user's report,
+ *  2026-09-30). So a draft that already MEANS the value is left as typed: the change
+ *  is its own commit coming back. Anything else — a clamp, an undo, a wall dragged, a
+ *  unit switched — is news from outside, and the field shows it formatted. (The piece
+ *  editor also holds the box being typed into outright, since a clamp there is news
+ *  for when the person has finished, not mid-number.)
+ *
+ *  "Means" within a micrometre, not exactly: the room stores metres, so its echo has
+ *  been through ÷1000 and ×1000, and 201 cm comes back as 2009.9999999999998 mm. */
+export function resyncDraft(draft: string, valueMM: number, unit: DimUnit): string {
+  const typed = parseFloat(draft);
+  if (Number.isFinite(typed) && Math.abs(toMM(typed, unit) - valueMM) < 1e-6) return draft;
+  return fromMM(valueMM, unit).toFixed(precisionFor(unit));
+}
+
+/** A draft tidied into display form once the person has left the field — `2.7` reads
+ *  `2.70` beside its neighbours. The same number, so nothing is re-committed; a draft
+ *  that is not a number is left for the field's own message to explain. */
+export function tidyDraft(draft: string, unit: DimUnit): string {
+  const typed = parseFloat(draft);
+  return Number.isFinite(typed) ? typed.toFixed(precisionFor(unit)) : draft;
+}
+
 export function formatDim(valueMM: number, unit: DimUnit): string {
   const v = fromMM(valueMM, unit);
   return v.toFixed(precisionFor(unit));

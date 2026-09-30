@@ -7,7 +7,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
-import { boundsToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
+import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, resyncDraft, tidyDraft } from '@/lib/units';
 import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis, type RoomRejection } from '@/lib/dimension-ranges';
 import { floorHint, floorRefusal, namesTheStop, roomFloors, type FloorAxis } from '@/lib/room-floor';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
@@ -65,13 +65,16 @@ export function RoomDimsEditor() {
   const edited = useRef(new Set<RoomAxis>());
 
   useEffect(() => {
-    setLocal([
-      fromMM(room.width * 1000, dimUnit).toFixed(prec),
-      fromMM(room.depth * 1000, dimUnit).toFixed(prec),
-      fromMM(room.height * 1000, dimUnit).toFixed(prec),
-    ]);
-    // This resync has just overwritten whatever the user had typed, so it owns
-    // retiring what that typing left behind. It did not, and the message outlived
+    // A draft that already reads the room's value is left as typed: this effect
+    // also fires on the field's own commit, and rewriting "2" as "2.00" there put
+    // the caret after a dot the user never typed, so "2" · pause · ".7" read 2.007
+    // (`resyncDraft`). Blur is where a draft is tidied into display form.
+    setLocal((was) =>
+      [room.width, room.depth, room.height].map((m, i) => resyncDraft(was[i], m * 1000, dimUnit)) as [string, string, string],
+    );
+    // This resync has just overwritten whatever the user had typed that the room
+    // does not hold — a kept draft IS the room's value — so it owns retiring what
+    // that typing left behind. It did not, and the message outlived
     // its subject: clear the Height box, the batch is refused and `rangeError`
     // says so — then change the unit in Settings (or drag a wall, or undo) and
     // this effect rewrites Height to the room's real value while the sentence
@@ -366,6 +369,7 @@ export function RoomDimsEditor() {
                 step={step}
                 value={local[i]}
                 onChange={(v) => commit(i as 0 | 1 | 2, v)}
+                onBlur={() => setLocal((was) => was.map((d, k) => (k === i ? tidyDraft(d, dimUnit) : d)) as [string, string, string])}
                 ariaInvalid={rangeError === ROOM_AXES[i]}
                 height={32}
               />
