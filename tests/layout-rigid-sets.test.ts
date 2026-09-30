@@ -5,11 +5,13 @@ import {
   lockedForSolve,
   makeRng,
   movableFor,
+  MOVE_EPSILON,
   openRoutes,
   randomizeStart,
   rigidSets,
   snapYaws,
   solveLayout,
+  TURN_EPSILON,
   withCompany,
   type SolveResult,
 } from '@/lib/layout-solve';
@@ -390,7 +392,13 @@ describe('a set stays whole where it meets the rest of the room', () => {
     const before = setPoses(parts, ids);
     const solve = (ps: ScenePart[]) =>
       applyPlacements(ps, solveLayout(ps, FOOTPRINT, lockedForSolve(ps, {}, null), { seed: 2, mode: 'arrange', placed: new Set(ids) }));
-    const n = nonRigidity(before, setPoses(solve(parts), ids));
+    const after = setPoses(solve(parts), ids);
+    // The premise, or this is not the case it names: the set did move, and its lead
+    // by less than the rider pass counts as a move (measured: 14.5 mm and 0.044 rad).
+    expect(moved(before, after), 'the set moved').toBe(true);
+    expect(Math.hypot(after[0].x - before[0].x, after[0].z - before[0].z)).toBeLessThan(MOVE_EPSILON);
+    expect(Math.abs(angleDelta(after[0].yaw, before[0].yaw))).toBeLessThan(TURN_EPSILON);
+    const n = nonRigidity(before, after);
     expect(n.offset).toBeLessThan(1e-6);
     expect(n.turn).toBeLessThan(1e-9);
     expect(nonRigidity(before, setPoses(solve(unmerged(parts)), ids)).offset, 'unmerged, the same solve takes it apart').toBeGreaterThan(0.02);
