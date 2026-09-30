@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { defaultScene, buildSceneFromRoom, isRoundPart, type ScenePart } from './scene-spec';
+import { defaultScene, buildSceneFromRoom, isRoundPart, normalizeStoredParts, type ScenePart } from './scene-spec';
 import { ROOM as ROOM_DEFAULT } from './parts-catalog';
 import {
   footprintForLayout,
@@ -232,17 +232,22 @@ export const useScene = create<SceneState>((set, get) => ({
     set({ room: { ...s.room, footprint: poly, width: b.width, depth: b.depth, layoutId: 'custom' } });
     return delta;
   },
-  // A patch that changes the SHAPE re-derives `circle`, for `addPart`'s reason below: the
-  // Inspector's model swap is such a patch and did not, so a laptop swapped for a table
-  // lamp was stood on a table by a round probe and then stored — drawn, re-checked and
-  // carried — as the laptop's square: the Inspector said it floated and the rigid link
-  // refused it. `normalizeStoredParts` put it right only on the next load.
+  // A patch that changes the piece's KIND — its shape or its category — re-derives what
+  // the kind decides, for `addPart`'s reason below: the Inspector's model swap is such a
+  // patch and did not, so a laptop swapped for a table lamp was stood on a table by a
+  // round probe and then stored — drawn, re-checked and carried — as the laptop's
+  // square: the Inspector said it floated and the rigid link refused it.
+  // `normalizeStoredParts` put it right only on the next load, so it is asked here too,
+  // whole: the first fix re-derived `circle` alone, and a wardrobe changed into a
+  // ceiling fan came out round and not mounted. The swap passes `wallMounted` itself,
+  // so that half guards the next caller rather than a live one — which is the reason
+  // it cannot be a second hand-kept list.
   updatePart: (id, patch) =>
     set((s) => ({
       parts: s.parts.map((p) => {
         if (p.id !== id) return p;
         const next = { ...p, ...patch };
-        return patch.shape === undefined ? next : { ...next, circle: isRoundPart(next.shape) || undefined };
+        return patch.shape === undefined && patch.category === undefined ? next : normalizeStoredParts([next])[0];
       }),
     })),
   deletePart: (id) => set((s) => ({ parts: s.parts.filter((p) => p.id !== id) })),

@@ -174,6 +174,46 @@ describe('§ 32 · the route that was actually broken', () => {
     expect(parts.find((p) => p.id === 'w1')?.circle, 'and an added wardrobe must not be').toBeUndefined();
   });
 
+  it('a change of kind re-derives everything the kind decides, not only the outline', async () => {
+    // `updatePart` re-derived `circle` on a shape patch and nothing else, so a wardrobe
+    // changed into a ceiling fan came out round and NOT mounted — half of what the load
+    // path would say about the same piece. A category alone is a change of kind too: a
+    // box refiled as a painting hangs. Each case first proves the fixture disagrees
+    // with its new kind, or it would pass with the routing gone — and one patch moves
+    // each half alone, since a gate reading either would pass the cases that move both.
+    const { useScene } = await import('@/lib/scene-store');
+    const { isWallMountedPart } = await import('@/lib/scene-spec');
+    const after = (p: ScenePart, patch: Partial<ScenePart>): ScenePart => {
+      useScene.getState().setParts([p]);
+      useScene.getState().updatePart(p.id, patch);
+      return useScene.getState().parts[0];
+    };
+
+    expect(isWallMountedPart('fan', 'fan') && isRoundPart('fan')).toBe(true);
+    const fan = after(stored({ id: 'w', category: 'wardrobe', shape: 'wardrobe' }), { category: 'fan', shape: 'fan' });
+    expect(fan.circle, 'a wardrobe made a fan is round').toBe(true);
+    expect(fan.wallMounted, 'and hangs').toBe(true);
+
+    expect(isWallMountedPart('other', 'box')).toBe(false);
+    expect(isWallMountedPart('painting', 'box')).toBe(true);
+    const art = after(stored({ id: 'b', category: 'other', shape: 'box' }), { category: 'painting' });
+    expect(art.wallMounted, 'a box refiled as a painting hangs').toBe(true);
+
+    // And a shape alone: the Library's generic box turned into a cylinder, still filed
+    // under `other`.
+    expect(isRoundPart('box') || !isRoundPart('cylinder')).toBe(false);
+    const drum = after(stored({ id: 'c', category: 'other', shape: 'box' }), { shape: 'cylinder' });
+    expect(drum.circle, 'a box made a cylinder is round').toBe(true);
+
+    const sofa = after(stored({ id: 't', category: 'tv', shape: 'tv', wallMounted: true }), { category: 'sofa', shape: 'sofa' });
+    expect(sofa.wallMounted, 'and a TV made a sofa stands').toBeUndefined();
+
+    // A patch that leaves the kind alone is written as given — the routing is the kind's,
+    // not every edit's.
+    const named = after(stored({ id: 'n', category: 'other', shape: 'box', wallMounted: true }), { name: 'Shelf' });
+    expect(named.wallMounted, 'a rename re-derives nothing').toBe(true);
+  });
+
   it('derives it for an imported file rather than believing the bytes', async () => {
     // Same trust boundary `clampDims` draws for a size and `isWallMountedPart` for the
     // mount flag: a file has nothing to say about a property of the shape. Both
