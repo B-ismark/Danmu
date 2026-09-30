@@ -219,27 +219,101 @@ describe('settleHeights · a rider whose support has moved', () => {
     expect(by.get(lamp.id)?.y, 'and the lamp onto the desk it now stands on').toBeCloseTo(0.75, 9);
   });
 
-  it('is not held up by what stands on it: a tray on an ottoman, in either order', () => {
+  it('is not held up by what stands on it: a tray on an ottoman, or on a storage cube', () => {
     // The probe takes the highest top over the footprint and never asks which way up
     // the pair is. A 750 × 450 tray covers a 550 × 400 ottoman, so the ottoman took the
     // tray as its support — 0.48, then the tray 0.90 on top of it, both in the air.
+    //
+    // The ottoman is the case a scan reaches, and since a scanned seat is not lifted at
+    // all (below) it is held twice. The cube is the same pair with no seat in it, so the
+    // filter answers for it alone: take the filter out and the ottoman still passes.
     const ottoman = part({ category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420], pos: [0, 0, 0] });
+    const cube = part({ category: 'other', shape: 'box', dimMM: [550, 400, 420], pos: [0, 0, 0] });
     const tray = (y: number) => part({ category: 'other', shape: 'box', dimMM: [750, 450, 60], pos: [0, y, 0] });
-    const on = tray(0.42);
-    expect(settleHeights([ottoman, on], 2.8)).toEqual([]);
-    expect(settleHeights([on, ottoman], 2.8)).toEqual([]);
-    // From a scan both enter at y = 0 in the detector's order, and a tie keeps it: the
-    // tray listed first took the ottoman's top, and then the ottoman took the tray's. The
-    // tray going UP is the pair to every "stays" above — a probe that refused everything
-    // would pass them.
-    const scanned = tray(0);
-    expect(settleHeights([scanned, ottoman], 2.8)).toEqual([{ id: scanned.id, y: 0.42 }]);
-    expect(settleHeights([ottoman, scanned], 2.8)).toEqual([{ id: scanned.id, y: 0.42 }]);
-    // Standing on is the resting question, read with its tolerance: a tray 20 mm into the
-    // cushion — the ottoman made shorter under it — is still on it, and comes back up to
-    // the top rather than lifting the ottoman over itself.
-    const sunk = tray(0.4);
-    expect(settleHeights([ottoman, sunk], 2.8)).toEqual([{ id: sunk.id, y: 0.42 }]);
+    for (const under of [ottoman, cube]) {
+      // Already on it when the pass begins. One order only: the pass sorts by height, so
+      // the other order is the same input.
+      const on = tray(0.42);
+      expect(settleHeights([under, on], 2.8), under.category).toEqual([]);
+      // From a scan both enter at y = 0 in the detector's order, and a tie keeps it: the
+      // tray listed first took the ottoman's top, and then the ottoman took the tray's.
+      // The tray going UP is the pair to every "stays" above — a probe that refused
+      // everything would pass them.
+      const scanned = tray(0);
+      expect(settleHeights([scanned, under], 2.8), under.category).toEqual([{ id: scanned.id, y: 0.42 }]);
+      expect(settleHeights([under, scanned], 2.8), under.category).toEqual([{ id: scanned.id, y: 0.42 }]);
+      // Standing on is the resting question, read with its tolerance: a tray 20 mm into
+      // the cushion — the ottoman made shorter under it — is still on it, and comes back
+      // up to the top rather than lifting the ottoman over itself.
+      const sunk = tray(0.4);
+      expect(settleHeights([under, sunk], 2.8), under.category).toEqual([{ id: sunk.id, y: 0.42 }]);
+    }
+  });
+
+  it('is held up by a support this pass has already lifted: a stack settles from a scan', () => {
+    // The pair to the tray. The first below-test read heights alone, against the
+    // rider's top before it settles — a piece still on the floor in a scan — so a riser
+    // already stood on the desk (underside 0.75) was "above" a 400 mm monitor (top
+    // 0.40) and left out of its probe, and the monitor went onto the desk THROUGH the
+    // riser. What this pass stood where is a record, not a height.
+    const desk = part({ category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750], pos: [0, 0, 0] });
+    const riser = part({ category: 'other', shape: 'box', dimMM: [600, 250, 100], pos: [0, 0, 0] });
+    const monitor = part({ category: 'monitor', shape: 'monitor', dimMM: [600, 200, 400], pos: [0, 0, 0] });
+    expect(settleHeights([desk, riser, monitor], 2.8)).toEqual([
+      { id: riser.id, y: 0.75 },
+      { id: monitor.id, y: 0.85 },
+    ]);
+    const tray = part({ category: 'other', shape: 'box', dimMM: [600, 400, 60], pos: [0, 0, 0] });
+    const plant = part({ category: 'plant', shape: 'plant', dimMM: [300, 300, 600], pos: [0, 0, 0], circle: true });
+    const settled = new Map(settleHeights([desk, tray, plant], 2.8).map((f) => [f.id, f.y]));
+    expect(settled.get(tray.id)).toBeCloseTo(0.75, 9);
+    expect(settled.get(plant.id)).toBeCloseTo(0.81, 9);
+  });
+
+  it('reads the record, not the heights, for a piece it has placed', () => {
+    // Heights can only say a piece is AT another's top, not that it stands there. A
+    // 750 mm plant's top is the desk's, so the riser lifted onto the desk has its
+    // underside exactly at the plant's top — and read by height it was standing on the
+    // plant, left out of the plant's probe, and the plant went onto the desk through it.
+    const desk = part({ category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750], pos: [0, 0, 0] });
+    const riser = part({ category: 'other', shape: 'box', dimMM: [600, 250, 100], pos: [0, 0, 0] });
+    const tall = part({ category: 'plant', shape: 'plant', dimMM: [300, 300, 750], pos: [0, 0, 0], circle: true });
+    const settled = new Map(settleHeights([desk, riser, tall], 2.8).map((f) => [f.id, f.y]));
+    expect(settled.get(riser.id)).toBeCloseTo(0.75, 9);
+    expect(settled.get(tall.id)).toBeCloseTo(0.85, 9);
+    // The same for one that comes DOWN onto a top in the branch for pieces left in the
+    // air: a nightstand hanging over the desk rests on it, at the top of a box hanging
+    // beside it 10 mm lower, and the box then goes onto the nightstand rather than onto
+    // the desk through it.
+    const hung = part({ category: 'nightstand', shape: 'nightstand', dimMM: [600, 400, 100], pos: [0, 0.3, 0] });
+    const box = part({ category: 'other', shape: 'box', dimMM: [500, 300, 440], pos: [0, 0.3, 0] });
+    const down = new Map(settleHeights([desk, hung, box], 2.8).map((f) => [f.id, f.y]));
+    expect(down.get(hung.id)).toBeCloseTo(0.75, 9);
+    expect(down.get(box.id)).toBeCloseTo(0.85, 9);
+  });
+
+  it('a piece no taller than the resting tolerance is still lifted', () => {
+    // The same first version's "or anywhere above" half: a 50 mm box at y = 0 has its
+    // top at the tolerance, so every underside on the floor was "at its top" and every
+    // support was refused it. 50 mm is the clamp floor for an `other` box, so anything
+    // thin the detector reads comes in at exactly that; a 51 mm one was lifted.
+    const coffee = part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [0, 0, 0] });
+    const thin = part({ category: 'other', shape: 'box', dimMM: [300, 200, 50], pos: [0, 0, 0] });
+    expect(settleHeights([coffee, thin], 2.8)).toEqual([{ id: thin.id, y: 0.42 }]);
+  });
+
+  it('is not held up by what stands on it down a stack', () => {
+    // A second tray on the first: its underside is 60 mm over the cube's top, outside the
+    // tolerance, so only the record's chain — second tray on tray on cube — keeps it out
+    // of the cube's probe. It covers the cube by more than half, so without the chain
+    // the cube climbs onto it. A cube and not an ottoman, which is never lifted anyway.
+    const cube = part({ category: 'other', shape: 'box', dimMM: [550, 400, 420], pos: [0, 0, 0] });
+    const tray = part({ category: 'other', shape: 'box', dimMM: [750, 450, 60], pos: [0, 0, 0] });
+    const second = part({ category: 'other', shape: 'box', dimMM: [700, 420, 60], pos: [0, 0, 0] });
+    expect(settleHeights([tray, second, cube], 2.8)).toEqual([
+      { id: tray.id, y: 0.42 },
+      { id: second.id, y: 0.48 },
+    ]);
   });
 
   it('measures a mounted piece by its CENTRE, so the ceiling clamp is not off by h/2', () => {

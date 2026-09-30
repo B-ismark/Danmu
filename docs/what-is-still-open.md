@@ -3676,12 +3676,30 @@ asks `hasFloorSharers` first.
   the air. Reached from a scan, not only from a hand-built fixture: every piece enters at
   y = 0 and a tie keeps the detector's order, so a tray listed before its ottoman first takes
   the ottoman's top and the ottoman then takes the tray's (0.48 m, measured). The pass now
-  leaves out of a piece's probe anything whose underside is within `SUPPORT_Y_EPS` of that
-  piece's top, or above it — "standing on" is the resting question, so it reads the resting
-  tolerance. Five mutants of the filter (no filter, no tolerance, tolerance added the wrong
-  way, the piece's bottom for its top, the other piece's top for its underside) all fail
-  `tests/layout-settle.test.ts`. It is only the resting half of a below-test: a support that
-  starts partway up its rider still counts, which is the case parked in that file.
+  leaves out of a piece's probe whatever it has itself stood on that piece, directly or down
+  a stack, from its own record, and whatever was already resting on the piece's top when it
+  began. It is only the resting half of a below-test: a support that starts partway up its
+  rider still counts, which is the case parked in that file.
+  **The first version read heights alone, and review found it broke stacks.** It left out
+  anything whose underside was within `SUPPORT_Y_EPS` of the piece's top *or above it*,
+  against the top the piece had BEFORE it settled — in a scan, a piece still on the floor.
+  A riser already stood on a desk then had its underside (0.75) above the waiting monitor's
+  top (0.40), so the monitor went onto the desk through the riser, and a plant through the
+  tray under it; and a piece no taller than the tolerance, 50 mm, the clamp floor for an
+  `other` box, had every support refused it. What the pass stood where is a record now,
+  and the height test is kept for pieces it has not placed, reading "at the top and off the
+  piece's own level" — seven of eight mutants fail `tests/layout-settle.test.ts`; the
+  eighth, "at or above" for "at", differs only for a piece already hanging above another,
+  which no scan hands in.
+- **Found while fixing that, not fixed: a rider listed before its support in a scan's tie
+  goes under it.** Desk, riser and monitor all enter at y = 0, and a tie keeps the
+  detector's order. With the riser listed before the monitor the stack comes out right
+  (riser 0.75, monitor 0.85). With the monitor first, it takes the desk at 0.75 and the
+  riser, which the monitor covers by 80%, then goes on top of the monitor at 1.15 m —
+  three of the six orders, measured the same on the commit before this work, so it is not
+  a regression of the filter. Nothing here can tell a riser from a second monitor by
+  position alone; a fix needs a rule about which pieces go under which, which is the
+  `lib/layout-rules.ts` question the parked case above already asks for.
 - **Found while fixing that, not fixed: a drag climbs onto an unlinked rider the same way.**
   A drag leaves a piece's carried children out of its world only when they are *linked*
   (`parentIds`, via `snapshotDescendants`), and the support probe asks the same highest-top
