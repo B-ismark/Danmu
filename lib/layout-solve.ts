@@ -102,10 +102,12 @@ export type SolveOptions = {
    *  app guessed at — see `LayoutContext.placed`. */
   placed?: Set<string>;
   /** Which finalist becomes the suggestion. Returns an index into the candidates it
-   *  is handed; omit it and `bestCandidate` is used — least impossible first, then
-   *  cheapest on `total`. On a pool where no candidate has a piece inside another one
-   *  or through a wall, which is most of them, that is the plain argmin on `total`
-   *  this has always taken.
+   *  is handed: the finalists in order, and in an arrange solve one more after them when
+   *  there is one, the room as it stands with its faults squared out (`squareFaults`).
+   *  Omit it and `bestCandidate` is used — least impossible first, then cheapest on
+   *  `total`. On a pool where no candidate has a piece inside another one or through a
+   *  wall, which is most of them, that is the plain argmin on `total` this has always
+   *  taken.
    *
    *  The seam exists because **variety is a property of the set of suggestions**, and
    *  no single solve can see that set — only the caller knows what it has already
@@ -462,8 +464,10 @@ export type SolveResult = {
    *  **AND THE WINNER NEED NOT APPEAR IN THIS POOL AT ALL.** Four passes run AFTER the
    *  selection — `snapYaws`, `pruneMoves`, `openRoutes` and a second tidy — so
    *  `placements` is a post-processed descendant of a finalist rather than one of them,
-   *  and on a solve that improved nothing it is the ORIGINAL layout instead. These are
-   *  therefore raw annealer output: the best few arrangements the search visited, not
+   *  and on a solve that improved nothing it is the ORIGINAL layout instead. In an
+   *  arrange solve it can also descend from the one candidate rated beside this pool
+   *  rather than in it, the room squared in place (`squareFaults`). These are therefore
+   *  raw annealer output: the best few arrangements the search visited, not
    *  the few things a user would be shown. A ranker over them is ranking candidates,
    *  and whatever it picks still has to go through those four passes to become a
    *  suggestion.
@@ -1434,22 +1438,6 @@ export function solveLayout(
   // skipping it changed nothing because the snapshot carries `best`'s own cost and
   // never beats it on a strict `<`.)
   remember(pool, best, bestCost);
-  // ── …and the room as it stands, squared where it stands ─────────────────────
-  //
-  // The one arrangement the search cannot reach by itself: every piece where the user
-  // left it, turned straight. A sofa 10° off square in the T pokes through its wall, so
-  // Fix has to move it, and on 5 seeds in 12 the search's answer left it more than 30°
-  // off its television (3 of them facing away). The tidy after the pick squares only
-  // what the search moved, so an answer that moved the sofa elsewhere is tidied where
-  // it went. Offered here, this is the answer on all twelve. It is the tidy's own pass
-  // with its own veto, so nothing past `SNAP_TOL` is turned: a 45° version squared an
-  // armchair turned 25° by choice (§ H.6.6). Arrange only, and both others measured:
-  // offered to a shuffle it cost the T 8 of its 9 ideas, and a refit already squares
-  // the piece it is asked to fix.
-  if (!shuffle && !refit) {
-    const squared = snapYaws(model, origin, weights, true, null);
-    if (squared.some((p, i) => !untouched(origin[i], p))) remember(pool, squared, scoreLayout(model, squared, weights));
-  }
   const rated: Candidate[] = pool.map((c) => {
     // The expensive term the pool's own sort does not price — a raster and a distance
     // transform each, which is why only the finalists ever get it. Taken off a full
@@ -1461,6 +1449,30 @@ export function solveLayout(
     const navCost = breakdown.navigation;
     return { placements: c.placements, cost: c.cost, navCost, total: c.cost + navCost, breakdown };
   });
+  // ── …and the one arrangement the search cannot reach: the room, its faults squared out ──
+  //
+  // A sofa turned 10° in the T pokes through its wall, so Fix has to act, and every
+  // answer the search finds moves it: the tidy after the pick squares only what the
+  // search moved, so the room as it stands with the sofa turned straight is never one
+  // of them. The sofa went across the room on nearly every seed and faced away from the
+  // TV on 3 in 12 (§ H.6.6). So that arrangement is built here and rated with the
+  // finalists, priced the same way.
+  //
+  // Beside the pool, not in it. Put through `remember` it evicted a finalist the pick
+  // preferred once navigation was priced (the T, sofa +6°, seed 3: 14.81 before, 22.26
+  // with it), so `finalists` stays what the search kept.
+  //
+  // Fix only. A shuffle is asked for a different room, and handed this one the T with
+  // its sofa at −10° got 1 idea in three searches where it had 9. A refit already squares
+  // a turned sofa where it stands and keeps it facing, on every row measured; handed this
+  // too, it changes only how many other pieces a whole-room Re-fit moves (12 → 14 on one
+  // row, 15 → 12 on another), so it is left as it was.
+  const squared = shuffle || refit ? null : squareFaults(model, origin, weights, breakdownBefore);
+  if (squared) {
+    const breakdown = costBreakdown(model, squared.placements, weights, NAV_CELL);
+    const navCost = breakdown.navigation;
+    rated.push({ placements: squared.placements, cost: squared.cost, navCost, total: squared.cost + navCost, breakdown });
+  }
 
   // Which finalist becomes the suggestion. The default is `bestCandidate`; a caller
   // may substitute its own — see `SolveOptions.pick`. An out-of-range answer falls
@@ -1982,6 +1994,93 @@ function untouched(from: Placement, to: Placement): boolean {
   return Math.hypot(to.x - from.x, to.z - from.z) < 1e-9 && Math.abs(angleDelta(to.yaw, from.yaw)) < 1e-9;
 }
 
+/** The quarter turn of its nearest wall that `p` reads as meant to be at, or null when
+ *  it is square already or turned further than `SNAP_TOL`, which is a choice. */
+function squareYaw(m: LayoutModel, p: Placement): number | null {
+  // The polygon's winding, cached — see the same call in `layout-score`.
+  const edge = nearestEdge(m.poly, p.x, p.z, m.winding);
+  if (!edge) return null;
+  const q = Math.PI / 2;
+  const snapped = normaliseYaw(edge.yaw + Math.round(angleDelta(p.yaw, edge.yaw) / q) * q);
+  const off = Math.abs(angleDelta(snapped, p.yaw));
+  return off < 1e-4 || off > SNAP_TOL ? null : snapped;
+}
+
+/** Did a hard term fall? The same 1e-6 as `anyWorse`, the other way. */
+function clearsFault(before: number[], after: number[]): boolean {
+  return before.some((b, j) => after[j] < b - 1e-6);
+}
+
+/** The room as it stands, with each piece turned square where that clears a fault.
+ *
+ *  Nothing moves. A piece inside `SNAP_TOL` is turned to the quarter turn of its nearest
+ *  wall about its own centre, or a merged set about its lead (`carryUnit`), and the turn
+ *  is kept only when all three hold:
+ *  · a fault falls (`clearsFault`). A piece a few degrees off with nothing wrong is at an
+ *    angle someone chose, and the tidy after the pick leaves it too. Not asked, a dining
+ *    chair the app left 8° off in the T was squared along with the sofa through the wall.
+ *  · no fault rises (`anyWorse`). In the T with the dining table turned 8° as well,
+ *    squaring the sofa clears the wall and raises `access`; a swap is the search's to
+ *    price.
+ *  · the room is cheaper by more than `KEEP_EPS`. `pruneMoves` puts back a turn that buys
+ *    less, so a candidate holding one can only crowd out a finalist. The T's dining
+ *    table turned 8° is that turn: squared, it clears its `access` and buys less.
+ *  Navigation is not asked either way. It is measured on a grid, and in the T a sofa 5°
+ *  off, turned back to the angle the preset gives it, lost one cell and was left through
+ *  its wall. It is priced where it always is, when the candidate is rated, and
+ *  `openRoutes` runs after the pick.
+ *
+ *  Repeated until a pass keeps nothing, because squaring one piece can be what lets
+ *  another be squared: in the T at 5.5 × 4.7 with the sofa and the dining table both
+ *  turned, the sofa is tried first and raises `access` while the table is crooked; once
+ *  the table is square, the sofa's turn is clean. A squared piece is not offered again, so
+ *  every pass that keeps a turn leaves one piece fewer to try.
+ *
+ *  A turn inside `TURN_EPSILON` is not tried, because `moved` would not count it: a sofa
+ *  2.5° through its wall squared that little comes back priced as fixed and written as
+ *  untouched. Null when nothing was turned. */
+function squareFaults(
+  m: LayoutModel,
+  origin: Placement[],
+  weights: ScoreWeights,
+  before: CostBreakdown,
+): { placements: Placement[]; cost: number } | null {
+  // A turn is kept only for clearing a fault, so a room with none has nothing to offer.
+  // The same answer the loop would give: `clearsFault` asks for a fall of more than
+  // 1e-6, and no term at or below `NEGLIGIBLE_COST` has that far to fall.
+  if (HARD_TERMS.every((k) => k === 'navigation' || before[k] <= NEGLIGIBLE_COST)) return null;
+  const rigid = setsOf(m);
+  const out = origin.map((p) => ({ ...p }));
+  // Nav-blind, so `navigation` is zero on both sides of every comparison below.
+  const start = costBreakdown(m, out, weights);
+  let hard = HARD_TERMS.map((k) => start[k]);
+  let cost = start.total;
+  let turned = false;
+  for (let kept = true; kept; ) {
+    kept = false;
+    for (let i = 0; i < out.length; i++) {
+      if (!m.ctx.movable[i] || !steers(rigid, i)) continue;
+      const snapped = squareYaw(m, out[i]);
+      if (snapped === null || Math.abs(angleDelta(snapped, out[i].yaw)) <= TURN_EPSILON) continue;
+      const unit = unitOf(rigid, i);
+      const keep = unit.map((k) => out[k]);
+      carryUnit(rigid, out, i, { ...out[i], yaw: snapped });
+      const b = costBreakdown(m, out, weights);
+      const trial = HARD_TERMS.map((k) => b[k]);
+      if (!anyWorse(hard, trial) && clearsFault(hard, trial) && cost - b.total > KEEP_EPS) {
+        hard = trial;
+        cost = b.total;
+        kept = turned = true;
+        continue;
+      }
+      unit.forEach((k, t) => {
+        out[k] = keep[t];
+      });
+    }
+  }
+  return turned ? { placements: out, cost } : null;
+}
+
 /** Exported for the same reason `openRoutes` is: the contract that matters here —
  *  *no hard term is ever worse coming out than going in* — is invisible from
  *  `solveLayout`, which reports one total for a layout three passes downstream. A
@@ -1997,7 +2096,6 @@ export function snapYaws(
   const navCell = guardRoutes ? NAV_CELL : null;
   const out = placements.map((p) => ({ ...p }));
   let hard = hardCosts(m, out, weights, navCell);
-  const q = Math.PI / 2;
   // A merged set is squared as one body, about its lead: the lead is snapped to its
   // wall, the members turn with it, and the veto is on the whole set.
   const rigid = setsOf(m);
@@ -2010,13 +2108,9 @@ export function snapYaws(
     const unit = unitOf(rigid, i);
     // …and only pieces this solve has actually touched. See `untouched`.
     if (onlyMovedFrom && unit.every((k) => untouched(onlyMovedFrom[k], out[k]))) continue;
-    // The polygon's winding, cached — see the same call in `layout-score`.
-    const edge = nearestEdge(m.poly, out[i].x, out[i].z, m.winding);
-    if (!edge) continue;
-    const base = edge.yaw;
-    const snapped = normaliseYaw(base + Math.round(angleDelta(out[i].yaw, base) / q) * q);
+    const snapped = squareYaw(m, out[i]);
+    if (snapped === null) continue;
     const off = Math.abs(angleDelta(snapped, out[i].yaw));
-    if (off < 1e-4 || off > SNAP_TOL) continue;
     const keepUnit = unit.map((k) => out[k]);
     const keep = out[i];
     carryUnit(rigid, out, i, { ...keep, yaw: snapped });

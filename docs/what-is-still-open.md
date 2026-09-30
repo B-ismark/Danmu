@@ -3999,82 +3999,71 @@ cost an arrangement, or a squaring, and leave the set whole.
 observation above: a couch a few degrees off square, then Fix, and it comes back facing away
 from the TV it should face.
 
-*Measured on `a548f48`*, twelve seeds. The preset's sofa is turned by hand, so it is
-`placed`, as `useSuggest` calls it. **Not facing** is more than 30° off its television
+*Measured on `a548f48` and on this change*, twelve seeds. The sofa is turned by hand, so it
+is `placed`, as `useSuggest` calls it. **Not facing** is more than 30° off its television
 (`FACING_HALF_ANGLE`); **away** is more than 90°; **in place** is where it stood, turned
-square. First at each preset's own size, the one a new room opens at:
+square. Each preset at its own size:
 
 | Preset, sofa turned | not facing / away / in place, before | after |
 |---|---|---|
 | `t` 5.5 × 4.7, −10° | 3 / 0 / 0 | 0 / 0 / 12 |
 | `t` 5.5 × 4.7, +10° | 4 / 1 / 0 | 0 / 0 / 12 |
 | `l` 6 × 4.7, −10° | 2 / 0 / 0 (Fix acted on 11) | 0 / 0 / 12 |
-| `l` 6 × 4.7, −6° | 1 / 1 / 0 (acted on 11, and left 3 crooked) | 0 / 0 / 12 |
+| `l` 6 × 4.7, −6° | 1 / 1 / 0 (acted on 11, left 3 crooked) | 0 / 0 / 12 |
 | `rect` 6 × 4 at ±6° and ±10°, `t` at ±6° | 0 / 0 / 0 | 0 / 0 / 12 |
-| `open` 7.5 × 5.6, −10° | 0 / 0 / 10 (acted on 11) | 0 / 0 / 12 |
 
-`l` at +10° was already in place on 11 and is on 12; `open` at +10° was on 12. Where Fix
-did nothing before (`l` +6°, `open` ±6°) it still does nothing. After, on every seed of
-every row measured for it (`t` ±10°, `l` −10° and −6°, `rect` +10° and −6°, `open` −10°),
-the sofa is the only piece Fix moves. And at 6 × 5, where
-`tests/suggest-square-in-place.test.ts` pins it:
+Unchanged: `l` +10° (in place on 11), `open` 7.5 × 5.6 at −10° (10 of the 11 it acts on) and
++10° (12), and the rows where Fix did nothing (`l` +6°, `open` ±6°). At 6 × 5, where
+`tests/suggest-square-in-place.test.ts` pins it, the T with its sofa at −10° went from 5 not
+facing and 3 away to none, and at +10° from 4 to none.
 
-| Sofa turned | `t` not facing / away, before | after |
-|---|---|---|
-| −10° | 5 / 3 (Fix acted on 11) | 0 / 0 (12) |
-| +10° | 4 / 0 | 0 / 0 |
-| −20° | 4 / 0 | 4 / 0 |
-| `open` 6 × 4, −20° | 3 / 1 | 3 / 1 |
+It changes Fix in every preset, not only the T: in `rect` the sofa used to go somewhere else
+on every seed, still facing the TV. Now it stays and is turned straight, which is the answer
+a person would give and also a change in a room that was not broken.
 
-**It changes Fix in every preset, not only the T.** Before, Fix answered a slightly turned
-sofa by moving it: in `rect` it went somewhere else on every seed, still facing the TV. Now
-it stays where it stood and is turned straight. That is a smaller answer, and the one a
-person would give; it is also a change someone will see in a room that was not broken.
+*Why the search missed it.* The sofa pokes through its wall, so Fix has to act, and the
+search's answers all put it somewhere else. The tidy after the pick squares only what the
+search moved, so the room as it stands with the sofa turned straight is never one of them.
 
-*Why the search missed it.* The sofa 10° off in the T pokes through its wall, so Fix has to
-move it, and the search's answers all put it somewhere else. The one arrangement it cannot
-reach by itself is the room as it stands with the sofa turned straight: the tidy after the
-pick squares only what the search moved (`onlyMovedFrom`), so an answer that moved the sofa
-is tidied where it went.
+*What changed* (`lib/layout-solve.ts`, `squareFaults`). That room is built after the search
+and rated beside the finalists, priced the same way. Nothing moves; a piece inside
+`SNAP_TOL` is turned square about its centre, or a merged set about its lead, and each turn
+is kept only if it clears a fault, raises none, and is worth more than `KEEP_EPS` (the
+prune puts back a turn worth less). Navigation is left to the rating: judged per turn, one
+grid cell kept the T's sofa at +5° through its wall. Repeated until nothing more is kept,
+because in the T at 5.5 × 4.7 the sofa can only be squared once the crooked dining table
+is. Each rule has a row in the test file on a room where it changes the answer, and each
+was checked by breaking it.
 
-*What changed* (`lib/layout-solve.ts`). After the search, the room as it stands, squared by the
-tidy's own pass, joins the finalists and is priced like them. It is the same pass with the
-same veto: nothing past `SNAP_TOL` is turned, and a turn that makes a hard term worse is
-shoved or left.
+*Fix only.* A refit already squares a turned sofa where it stands and keeps it facing, on
+every row measured; given this too, only how many other pieces a whole-room Re-fit moves
+changes (12 → 14 on one row, 15 → 12 on another). A shuffle is asked for a different room,
+and given this the T with its sofa at −10° got 1 idea in three searches where it had 9.
 
-*Fix only, and why each other mode is left out.*
-- **A refit already gets this right.** Try a fix on the sofa and the whole-room Re-fit, at
-  `t` 6 × 5 and 5.5 × 4.7 and `l` 6 × 4.7 with the sofa turned ±10°, square it and keep it
-  facing on every seed on the commit before. Giving a refit the candidate changes only how
-  many other pieces a whole-room Re-fit moves: 12 → 14 on one row, 15 → 12 on another.
-- **A shuffle is not meant to hand back the room it was given**, and measured it costs the
-  gallery its ideas: with the candidate offered to a shuffle as well, the T with its sofa
-  turned −10° gets **1** idea in three attempts where it got 9, and that one is not the
-  room squared in place either. Why the searches come back empty was not traced. The test
-  pins the 9.
-- Two parts of the block no test can fail, and each says why it is there. `guardRoutes` is
-  `true`, as at the two tidy calls, so the candidate is made under the same veto; `false`
-  changes no answer measured, since the finalists are rated on navigation anyway. And the
-  candidate is skipped when it would be the room unchanged, which saves rating it on every
-  Fix of a room with nothing off square; pricing it changes no answer measured either.
+*Who can reach it.* The default snap turns in 15° steps, past `SNAP_TOL`'s 12°, so a hand
+turn lands in reach only with **Snap when dragging → Free**, or from a scan or a preset angle.
 
-*Declined, measured: a wider angle for the candidate.* Squaring anything up to 45° closes the
-20° rows (`t` 4 → 0, `open` 3 / 1 → 0 / 0), and squares an armchair turned 25° in `l` with
-nothing else wrong in the room on **12 of 12** seeds, where Fix leaves it alone on 9 (the
-other three are the search's own answers, the same before and after). Past `SNAP_TOL` an
-angle is a choice, and that includes a sofa at 20°. `tests/suggest-square-in-place.test.ts`
-pins the armchair row, so a wider angle fails it. At `l`'s own 6 × 4.7 the row is the same
-before and after this change: Fix acts on 5 of 12, squares all 5, 2 of them in place.
-
-*Still open: Ideas.* A shuffle does not get the candidate, so the ideas are as they were.
-The panel keeps searching in the background and stops after three searches in a row find
-nothing new; measured here on `shuffleRoom`'s first three attempts, without the panel's
-history of ideas already shown, at 6 × 4 (`rect`, `open`) and 6 × 5 (`l`, `t`), and with the
-sofa turned 0° or ±6°: `rect` 12 ideas, 3 not facing; `l` 12, 3 (1 away); `open` 12, 5 (2
-away); `t` 9, 5 (1 away). The same at every angle, since a shuffle starts from its own
-scatter. Which way a sofa faces in an idea is a separate question. So is Fix on a sofa past
-`SNAP_TOL`: at −20° in the T it still moves the sofa, and 4 seeds in 12 leave it more than
-30° off its television (the second table above), the same question as the ideas'.
+*Still open.*
+- **A sofa 2.5° through its wall.** A turn that small is inside `TURN_EPSILON`, so `moved`
+  would not count it and the candidate does not try it. The search's own answers hit the
+  same wall: in `rect` 6 × 4 at −2.5°, two seeds in three square it by less than `moved`
+  counts, so Fix says there is nothing to do and the sofa stays through the wall. On the
+  commit before as well.
+- **Two crooked pieces where squaring one hurts the other.** The T at 6 × 5 with the sofa at
+  −10° and the dining table at −8°: squaring the sofa raises the table's `access`, squaring
+  the table buys too little, so the search answers as it did.
+- **The walkway repair can still move more.** The T at 6 × 5, sofa +6°: three seeds in six
+  now square the sofa alone where they used to move it. On a fourth the pass that opens
+  walkways, which runs on whatever is picked, also moves six pieces and cuts the stranded
+  floor from 20.1 to 8.7.
+- **Past `SNAP_TOL`.** At −20° in the T, Fix still moves the sofa and 4 seeds in 12 leave it
+  more than 30° off its television. A candidate that squared anything up to 45° closed that
+  and squared an armchair turned 25° in `l`, with nothing else wrong, on 12 of 12 seeds
+  where Fix leaves it alone on 9, so it was declined: past `SNAP_TOL` an angle is a choice.
+- **Ideas.** Measured on `shuffleRoom`'s first three attempts at 6 × 4 (`rect`, `open`) and
+  6 × 5 (`l`, `t`), sofa at 0° or ±6°: `rect` 12 ideas, 3 not facing; `l` 12, 3 (1 away);
+  `open` 12, 5 (2 away); `t` 9, 5 (1 away). Which way a sofa faces in an idea is its own
+  question.
 
 *The plan's P2, covered by § H.6.5 and not built.* P2 was "a group squares about its anchor,
 not its centroid". A merged set's lead is its largest obstacle, which is its anchor; the
