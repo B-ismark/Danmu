@@ -133,7 +133,15 @@ describe('the fit test reads the furniture as it is drawn', () => {
   it('the sweep has a fixed denominator', () => {
     // Every (shape, category, height) that reads as a seat or a surface. A literal, so a
     // shape that stops reaching a role — or starts — is a decision someone sees.
-    expect([rows.length, rows.filter((r) => r.kind === 'seat').length, rows.filter((r) => r.kind === 'surface').length]).toEqual([245, 168, 77]);
+    //
+    // 245 / 168 / 77 until a stool became a seat under every category (`ROLE_BY_SHAPE`),
+    // because the settle pass's seat gate reads the role and a stool filed as `other` went
+    // up onto the coffee table beside it. All 36 new rows and all 4 lost ones are the
+    // stool's — measured, with every other row identical: its 9 rows (3 dining chair, 2
+    // ottoman, 2 dining table, 2 desk) became 45, every one a dining chair.
+    expect([rows.length, rows.filter((r) => r.kind === 'seat').length, rows.filter((r) => r.kind === 'surface').length]).toEqual([281, 208, 73]);
+    expect(rows.filter((r) => r.shape === 'stool').map((r) => r.role).every((r) => r === 'dining-chair')).toBe(true);
+    expect(rows.filter((r) => r.shape === 'stool').length).toBe(45);
   });
 
   // Measured both ways, and the two directions are not the same kind of fact. A profile
@@ -158,13 +166,13 @@ describe('the fit test reads the furniture as it is drawn', () => {
     // drawing leaves a little room. None is worth a case of its own:
     //   plane       a flat 5 mm sheet, whatever it is called.
     //   tv-console  a 42–60 mm toe-kick. No seat goes under that.
-    //   stool       read as a table by its size; its seat sits on legs, and the air
-    //               between them is not knee room anyone is offered.
+    // A stool was the third, read as a table by its size under two categories. It is a
+    // seat under every category now, so it is never asked as a surface.
     // A shape that joins this list has had a drawing change under it, and should be
     // measured and, if it now makes real room, given a case in `tuckProfile`.
     const byShape = (rs: Array<{ shape: Shape }>) => [...new Set(rs.map((r) => r.shape))].sort();
     expect(byShape(seatRows().filter((r) => r.profile > r.drawn + TOLERANCE_MM))).toEqual(['plane']);
-    expect(byShape(surfaceRows().filter((r) => r.profile < r.drawn - TOLERANCE_MM))).toEqual(['plane', 'stool', 'tv-console']);
+    expect(byShape(surfaceRows().filter((r) => r.profile < r.drawn - TOLERANCE_MM))).toEqual(['plane', 'tv-console']);
   });
 
   it('the shapes it names are measured exactly', () => {
