@@ -230,21 +230,26 @@ function unitLeaf(): BufferGeometry {
   return leafGeometry;
 }
 
+const NOPICK = () => {};
+
 /** One draw call for every leaf of a plant: the unit leaf, placed per `plantForm`, each
  *  in the palette tone it names. */
 export function LeafInstances({
   items,
   tones,
   surface,
+  noPick,
 }: {
   items: readonly PlantLeaf[];
   tones: readonly string[];
   surface?: InstancedProps['surface'];
+  /** Out of raycasting — a surface's prop plant, which is not a piece to select. */
+  noPick?: boolean;
 }) {
   const ref = useInstanceTransforms(items, (i) => tones[items[i].tone % tones.length]);
   if (items.length === 0) return null;
   return (
-    <instancedMesh ref={ref} args={[unitLeaf(), undefined, items.length]} castShadow receiveShadow>
+    <instancedMesh ref={ref} args={[unitLeaf(), undefined, items.length]} castShadow receiveShadow {...(noPick ? { raycast: NOPICK } : {})}>
       <InstanceMaterial color="#ffffff" side={DoubleSide} envMapIntensity={0.5} surface={surface} />
     </instancedMesh>
   );
@@ -252,11 +257,11 @@ export function LeafInstances({
 
 /** One draw call for a plant's trunk and stalks: a unit cylinder tapering to
  *  `PLANT_STEM_TAPER` at its top, wood-coloured for the trunk and green for the rest. */
-export function StemInstances({ items, wood, green }: { items: readonly PlantStem[]; wood: string; green: string }) {
+export function StemInstances({ items, wood, green, noPick }: { items: readonly PlantStem[]; wood: string; green: string; noPick?: boolean }) {
   const ref = useInstanceTransforms(items, (i) => (items[i].wood ? wood : green));
   if (items.length === 0) return null;
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
+    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow {...(noPick ? { raycast: NOPICK } : {})}>
       <cylinderGeometry args={[PLANT_STEM_TAPER, 1, 1, 7]} />
       <InstanceMaterial color="#ffffff" roughness={0.8} envMapIntensity={0.5} />
     </instancedMesh>

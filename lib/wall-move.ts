@@ -167,8 +167,8 @@ export function carryAttached(
     // was-inside/now-inside check for the ceiling family too, so a pendant could be
     // carried straight out of the room with nothing testing whether it still fitted.
     if (!ridesWall(p.category, p.shape)) {
-      const wasInside = contained(footFromPart(p.pos, p.rot, p.dimMM, p.circle), before);
-      const nowInside = contained(footFromPart(pos, p.rot, p.dimMM, p.circle), after);
+      const wasInside = contained(footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape), before);
+      const nowInside = contained(footFromPart(pos, p.rot, p.dimMM, p.circle, p.shape), after);
       if (wasInside && !nowInside) continue;
     }
     out.push({ id: p.id, pos });
@@ -286,8 +286,8 @@ export function carryForResize(
     if (s[0] === 0 && s[1] === 0) continue;
     const pos: [number, number, number] = [p.pos[0] + s[0], p.pos[1], p.pos[2] + s[1]];
     if (!ridesWall(p.category, p.shape)) {
-      const wasInside = contained(footFromPart(p.pos, p.rot, p.dimMM, p.circle), before);
-      const nowInside = contained(footFromPart(pos, p.rot, p.dimMM, p.circle), after);
+      const wasInside = contained(footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape), before);
+      const nowInside = contained(footFromPart(pos, p.rot, p.dimMM, p.circle, p.shape), after);
       if (wasInside && !nowInside) continue;
     }
     out.push({ id: p.id, pos });

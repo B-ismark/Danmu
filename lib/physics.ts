@@ -507,10 +507,10 @@ export type SupportCandidate = {
 export function coversEnoughToSupport(
   moverFoot: Foot,
   moverArea: number,
-  surface: { pos: [number, number, number]; rot?: number; dimMM: [number, number, number]; circle?: boolean },
+  surface: { pos: [number, number, number]; rot?: number; dimMM: [number, number, number]; circle?: boolean; shape?: Shape },
 ): boolean {
   if (!(moverArea > 0)) return false;
-  const shared = footIntersectionArea(moverFoot, footFromPart(surface.pos, surface.rot ?? 0, surface.dimMM, surface.circle));
+  const shared = footIntersectionArea(moverFoot, footFromPart(surface.pos, surface.rot ?? 0, surface.dimMM, surface.circle, surface.shape));
   return shared / moverArea >= MIN_SUPPORT_SHARE;
 }
 

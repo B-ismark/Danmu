@@ -77,55 +77,49 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### A bedside lamp draws as a RECTANGLE on a freshly seeded room
+### An L-shaped desk wraps a room's inside corner, and its open corner is floor — branch `claude/affectionate-ritchie-ilawx1`
 
-**Where to click.** Open the plan tab on a fresh `u`-shape starter and look at the
-bedside lamp on each nightstand. It must draw as an **ellipse**, not a rectangle.
+**Where to click.** An **L-shape** room, 2D Plan. Add an **L-shaped desk**, turn it so its
+open corner faces the room's inside corner, and drag it until that corner of wall sits in
+the desk's open corner. Then the same in 3D. Then push an **Office chair** into the open
+corner of a desk standing in the middle of the room.
 
-**What is wrong.** `defaultScene` authors the `circle` flag at four sites and misses a
-fifth: the `u` starter's `lamp-table`. `normalizeStoredParts` re-derives the flag, but
-only on the three paths that load a **persisted** snapshot — the seed path hands
-`defaultScene` straight to `setParts`. **A room saved and reloaded is therefore NOT the
-test**: the load path corrects it, so the defect exists only in a freshly seeded room.
+**What changed.** Every containment and collision test read the desk's BOX, so the open
+corner counted as desk: the wrap was refused as *blocked*, and a chair tucked into the L
+was *in the way*. They read the two rectangles the desk stands on now
+(`lib/foot-cells.ts`), and the plan draws the L rather than a box.
 
-**Seen, and not by me.** The `footprint` lane put it on screen: on `main` `26db2d1` the
-bedside lamp is a `<rect>` and ten pieces draw with zero round; at `546fc4f` it is an
-`<ellipse>`. Filed here at that lane’s request because the fix was on PR #123 and the
-items live on this branch. **The observation is theirs. I have not seen it.**
+**What "wrong" looks like.** The tag saying *blocked* with the wall corner in the open
+corner and 20–30 mm of air on both walls. Nudging it 100 mm further so one arm really
+does cross the wall and it NOT going red. The plan outline and the 3D tabletop
+disagreeing about where the notch is. A click in the open corner selecting the desk. A
+room check calling the tucked chair an overlap.
 
-**#123 LANDED as `82f85c9` (2026-09-06), and this item stays.** It was filed saying
-"delete when #123 lands", which is the rule this file used to keep and explicitly gave up:
-*merging is not looking*. Re-pointed at the merge commit rather than deleted.
+**Measured, not seen:** the wrap, the chair and the click are in
+`tests/foot-cells.test.ts`; the catalogue sweep in `tests/wall-rider-containment.test.ts`
+accepts nine more desk placements and still finds none outside the room.
 
-Two reasons it is still owed a person, and the second is the one that matters. The
-`<rect>` → `<ellipse>` check was read out of the DOM by Playwright — a **machine** reading
-a tag name, which settles that the flag now derives and settles nothing about whether the
-room looks right. And a round footprint changes more than the plan outline: `footFromPart`
-feeds `plan-hit`, so the lamp is now **picked** by the ellipse it draws, and `footOverlap`
-treats it as π/4 of its box. Whether the lamp is still easy to click, and whether it now
-slides under an overhang it used to collide with, are questions no DOM assertion asked.
+### Props step aside, say when there is no room, and the tabletop plant is a plant — branch `claude/affectionate-ritchie-ilawx1`
 
-### The L-shaped desk is a different shape now, and nobody has looked at it
+**Where to click.** A bedroom starter, 3D. Look at a nightstand with its lamp. Then select
+a **coffee table**, open **On the surface**, and press **+ Plant**, **+ Vase**, **+ Books**
+and **+ Candle** in turn; then one of each again.
 
-**Where to click.** 3D Model, add **L-shaped desk** from the Library. Then the same piece
-in **2D Plan**, and drag it against a wall in both tabs.
+**What changed.** A prop had no size anywhere but its renderer, so nothing could keep it
+clear: a lamp stood through the plant beside it. Sizes and spots are `lib/decor.ts` now,
+and each prop keeps clear of the ones before it and of anything standing on the surface.
+A prop with nowhere left to go is **not drawn**, and its row says **No room**. Pieces do
+not stand on props, books included (`docs/what-is-still-open.md`). The tabletop plant is
+the same leafy plant as the floor-standing one, at tabletop size.
 
-**What changed.** Its return arm used to be drawn entirely OUTSIDE the box every other
-consumer reads — 2860 mm of desk against a `dimMM` of 1600 — while the main tabletop
-already filled the whole footprint. The L is now built inside `w × d`: the long arm takes
-52% of the depth against the back edge, and the return fills the rest at the right-hand
-end. `overX` went 1260 mm → 0 at all three sizes.
+**What "wrong" looks like.** Any prop through another, through the lamp, or over a
+table's edge. A prop that jumps somewhere far off when a closer spot was free. A row
+saying **No room** while its prop is visibly on the table, or a prop missing with no
+label. Props moving about when you drag something that is not over the table. The
+plant reading as a green ball.
 
-**What "wrong" looks like.** It should still read as an L-shaped desk — a long working
-surface with a return at one end, not a square table with a notch, and not two thin
-planks. The right front leg now sits under the return rather than under open air; check it
-is not floating. `desk-standard` must be **completely unchanged** — same top, same legs,
-same modesty panel — since the two share `DeskGeo` and only the `lShape` branch moved.
-
-**What is already settled and does not need eyes.** That the geometry is inside its box at
-min, library and max sizes, and that `desk-standard` is behaviourally identical (fill 1.00,
-over 0, all three sizes) — both measured by `tests/footprint-fidelity.test.tsx`. The open
-question is purely whether the new proportions look like furniture. PR #124.
+**Probed in SwiftShader:** four props handed the same spot on a coffee table stood side
+by side; a nightstand with its lamp in the middle showed both its props as **No room**.
 
 ### Six pieces changed size — a plant, three chairs and two lamps
 
@@ -254,7 +248,7 @@ raises is a judgement about what the app should do, not a fact a test can settle
 the handles are drawn in WebGL and only a hand on a real pointer can say whether they
 feel right.*
 
-### Move has no arrows, a TV rides its wall, and Scale is three dots — branch `claude/affectionate-ritchie-ilawx1`
+### Move has no arrows, a TV rides its wall, and Scale is three dots — merged to `main` in `0ef90b6` (PR #188)
 
 **Where to click.** 3D tab, a fresh rectangular room.
 
@@ -288,6 +282,10 @@ wide with its centre moving 85 mm, which is half the growth, so the far arm stoo
 The height pull went 880 → 900 mm, the top of the sofa's range. A TV dragged up and
 left went to 1.82 m with its wall coordinate unchanged. Steps 4 and 6 and the door were
 not probed.
+
+**Seen by the user on a phone:** dragging a piece and the three scale dots (steps 1, 3
+and 6). Still owed a look: the TV and the door on their wall (step 2) and the arm run into
+a wall (step 4).
 
 ### A short piece climbs a tall one, and the plan cannot show it
 

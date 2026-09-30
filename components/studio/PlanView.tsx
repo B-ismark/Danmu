@@ -23,7 +23,8 @@ import { DND_MIME, selectionForPick, type Category, type ScenePart, type Shape }
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
 import { buildClearanceField, fieldRuns, FREE_CELL } from '@/lib/clearance-field';
 import { accessZones } from '@/lib/layout-rules';
-import { footFromPart, obbExtentAlong, obbFromPart, rayToBoundary } from '@/lib/geometry';
+import { footFromPart, obbExtentAlong, rayToBoundary } from '@/lib/geometry';
+import { footOutlineLocal } from '@/lib/foot-cells';
 import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
@@ -153,7 +154,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     if (!showComfort) return [];
     const blockers = floorBlockers(parts);
     const field = buildClearanceField(
-      blockers.map((p) => obbFromPart(p.pos, p.rot, p.dimMM)),
+      blockers.map((p) => footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape)),
       ROOM_DYN.footprint,
     );
     if (!field) return [];
@@ -1406,7 +1407,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     if (!d || d.mode !== 'translate') return null;
     const part = visible.find((p) => p.id === d.id);
     if (!part) return null;
-    const foot = footFromPart(part.pos, part.rot, part.dimMM, part.circle);
+    const foot = footFromPart(part.pos, part.rot, part.dimMM, part.circle, part.shape);
     const [cx, , cz] = part.pos;
     const axes: Array<{ axis: 'x' | 'z'; dirs: Array<[number, number]> }> = [
       { axis: 'x', dirs: [[-1, 0], [1, 0]] },
@@ -1657,6 +1658,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
             const center = toLocal(pos[0], pos[2]);
             const wpx = fpW * SCALE;
             const hpx = fpD * SCALE;
+            const outlinePts = part.circle ? undefined : footOutlineLocal(part.shape, fpW, fpD);
+            const outline = outlinePts && `M ${outlinePts.map(([x, z]) => `${x * SCALE} ${z * SCALE}`).join(' L ')} Z`;
             const blocked = isBlocked(part.id);
             // Stroke tokens are boundaries (≥3:1); the label uses the *-text pair
             // because 9px type has to clear 4.5:1.
@@ -1739,6 +1742,15 @@ export const PlanView = forwardRef<PlanViewHandle, {
                     strokeWidth={strokeW}
                     strokeDasharray={part.locked ? undefined : `${4 * k} ${3 * k}`}
                   />
+                ) : outline ? (
+                  // The L-shaped desk, drawn as the L every containment and collision
+                  // test reads (`lib/foot-cells.ts`) — a box here would say the open
+                  // corner is desk, which is the one thing the room no longer believes.
+                  <>
+                    <path d={outline} fill={fill} stroke={color} strokeWidth={strokeW} strokeDasharray={part.locked ? undefined : `${4 * k} ${3 * k}`} />
+                    {part.locked && <path d={outline} fill="url(#lockHatch)" />}
+                    <line x1={0} y1={-hpx / 2} x2={0} y2={-hpx / 2 - 8 * k} stroke={color} strokeWidth={1.4 * k} />
+                  </>
                 ) : (
                   <>
                     <rect
