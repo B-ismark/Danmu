@@ -603,7 +603,7 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
 - A starter room that looks different from before. None should: every seat in the starter
   rooms is a dining chair at a dining table, and all of those fit.
 
-### Suggest and Ideas keep a group whole — this branch (§ H.6.5), NOT LOOKED AT
+### Suggest and Ideas keep a group whole — `0f76fa4` on `main` (PR #197, § H.6.5), NOT LOOKED AT
 
 A group made with **Group N** stayed together when dragged, but Fix and the ideas gallery
 moved each piece on its own: a dining set came back with a chair across the room, or
@@ -639,9 +639,39 @@ and open **Room check**. Then ungroup it, group the sofa with an armchair instea
   wall.
 - **Fewer ideas on T-Shape with the lamp, maybe none.** That is expected and filed
   (§ H.6.5, "Kept, as trades"): a set that cannot come apart has fewer places to go.
-  It was counted with the room at 6 × 4 m (none in three presses), not at the preset's
-  own 5.5 × 4.7, so how few is part of the look. The other part is whether an empty
-  gallery reads as broken; the sentence it should say is the user's call.
+  It was counted with the room at 6 × 4 m, where the gallery's first three searches find
+  none and it stops there, not at the preset's own 5.5 × 4.7, so how few is part of the
+  look. The other part is whether an empty gallery reads as broken. The user chose that
+  it says the group moves as one; that sentence is not built yet.
+
+### Fix squares a slightly turned sofa where it stands — this branch (§ H.6.6), NOT LOOKED AT
+
+Turn the sofa a few degrees and press **Fix**, and it could come back somewhere else in the
+room, sometimes facing away from the TV. Fix now also tries the room as it stands with the
+sofa turned straight. Tests hold the angles; nobody has looked at a room with it.
+
+**Where to click.** First set **More → Snap when dragging → Free**: the default snap turns
+in 15° steps, which is too far for this. T-Shape with starter furniture, at the size it
+opens at. In the 2D Plan, turn the sofa about 10° with its rotate handle, press **Fix**,
+and look in 3D.
+Undo, turn it about 10° the other way, and press **Fix** again. Then the L-Shape: turn its
+sofa about 6° the way that pushes its back into the wall, and press **Fix**.
+
+**What right looks like.**
+- The sofa stays where you left it and turns square, facing the TV.
+- Turned the other way in the L, the sofa is clear of the wall and Fix leaves it be, as
+  before. On the Rectangle the turn itself eases the sofa off the wall, so there is nothing
+  for Fix to square; that is unchanged too.
+- Usually nothing else moves. In the T, now and then the walkway repair also moves a few
+  pieces to open a path; that is its own pass, and it did the same before.
+
+**What wrong looks like.**
+- After a small turn, the sofa sent across the room, or facing away from the TV.
+- A dining chair or the L-Shape's armchair squared when only the sofa was turned. Their
+  angles are left alone unless squaring them clears a fault.
+
+A sofa turned 20° or more is not part of this: Fix may still move it, and in the T it can
+still end up facing away. That is filed (§ H.6.6, "Still open").
 
 ### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 
