@@ -1902,26 +1902,21 @@ export function isParametric(shape: Shape): boolean {
 }
 
 /**
- * A three.js group scale, read back as millimetres.
+ * The three.js group scale that draws a piece authored at `base` at `dim`.
  *
  * The axis mapping is the whole content and it is not the identity: a `dimMM` is
  * `[width, DEPTH, HEIGHT]` while a three.js scale is `(x, y = up, z)`, so depth and
  * height cross over. Getting it backwards swaps a wardrobe's depth with its height
  * — invisible on anything square, gross on anything that is not.
  *
- * Here rather than in the component that uses it, where it was written out three
- * times, because arithmetic that exists only inside a TSX renderer is arithmetic no
- * test can reach. That is the `fanBlade` scar. `renderBaseDim` in lib/transforms.ts
- * is what decides the `base` these take.
+ * Here rather than in the component that uses it, because arithmetic that exists
+ * only inside a TSX renderer is arithmetic no test can reach. That is the
+ * `fanBlade` scar. `renderBaseDim` in lib/transforms.ts is what decides `base`.
+ *
+ * It had an inverse, `dimFromGroupScale`, while drei's scale gizmo wrote the scale
+ * and `Draggable` had to read a size back off it. The stretch handles carry their
+ * size as a number, so nothing reads a scale back any more and the inverse went.
  */
-export function dimFromGroupScale(
-  base: [number, number, number],
-  scale: { x: number; y: number; z: number },
-): [number, number, number] {
-  return [base[0] * scale.x, base[1] * scale.z, base[2] * scale.y];
-}
-
-/** The inverse of `dimFromGroupScale`, in three.js's own `(x, y, z)` order. */
 export function groupScaleForDim(
   base: [number, number, number],
   dim: [number, number, number],

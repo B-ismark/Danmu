@@ -427,8 +427,8 @@ re-seeded room** and reports it as what the user got back.
 **Where to click.** 3D tab. Put a nightstand hard against the head of a bed, select the
 **bed**, press **R** for rotate. The ring is drawn around the bed and sweeps over the
 nightstand. Press **on the ring, at a point where it crosses the nightstand**, and drag to
-turn the bed. Do it again in **W** (move) mode, where the arrows and the flat translate
-squares reach over the same neighbour.
+turn the bed. (Move mode used to have arrows and flat squares reaching over the same
+neighbour; it has no handles now, so only the ring is left to check.)
 
 **What wrong looks like.** Three separate things, and only the first is the reported one:
 

@@ -278,6 +278,13 @@ export function ridesWall(category: Category, shape: Shape): boolean {
   return anchorFor(category, shape).startsWith('wall-');
 }
 
+/** True when a drag moves the piece UP the wall as well as along it — every wall
+ *  rider except the ones standing on the floor. A door is `wall-floor`: its
+ *  threshold is the floor, so it slides sideways and never lifts. */
+export function followsPointerUp(category: Category, shape: Shape): boolean {
+  return ridesWall(category, shape) && anchorFor(category, shape) !== 'wall-floor';
+}
+
 // ─── Wall affinity ────────────────────────────────────────────────────────
 // Some items only make sense against / near walls (doors, fridge, wardrobe,
 // bookshelf, bed). Others want to be in the middle of the room (rugs, coffee

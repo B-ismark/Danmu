@@ -4,10 +4,15 @@
 //   1. DIRECT DRAG (game-style, the default): press a part and drag it across
 //      the floor — it slides, snaps to walls when wall-mounted, stops against
 //      obstacles, and tints red while the spot is invalid. Scroll rotates it
-//      mid-drag; on touch, a second finger twists it.
-//   2. GIZMO (precision): TransformControls on the selected part, W = move,
-//      R = rotate, S = scale. NOT "W=move E=rotate R=scale", which is what this
-//      line said for a long time and is wrong twice over: the modes are set in
+//      mid-drag; on touch, a second finger twists it. A wall piece is dragged
+//      across its WALL instead (`lib/wall-drag.ts`), so it goes up and down as
+//      well as along. This is the whole of Move mode: the piece is its own handle,
+//      and the translate arrows that used to sit on it are gone.
+//   2. HANDLES (precision), on the selected part: R = rotate is drei's
+//      TransformControls, reduced to its one vertical ring; S = scale is three
+//      stretch handles (`StretchHandles.tsx`), each on the face it moves. W is
+//      Move. NOT "W=move E=rotate R=scale", which is what this line said for a long
+//      time and is wrong twice over: the modes are set in
 //      components/studio/KeyboardShortcuts.tsx, and E is not one of them — Q and E
 //      ORBIT THE CAMERA (components/three/CameraRig.tsx, NAV_KEYS). The cost of that
 //      sentence was a hand-off note telling the user to "press E and turn it", which
@@ -45,13 +50,15 @@ import { useDragLive } from '@/lib/drag-live';
 import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { announce } from '@/lib/announce';
 import {
-  dimFromGroupScale,
   groupScaleForDim,
   isParametric,
   selectionForPick,
   type ScenePart,
 } from '@/lib/scene-spec';
-import { anchorFor, isFloorStanding } from '@/lib/physics';
+import { anchorFor, followsPointerUp, isFloorStanding } from '@/lib/physics';
+import { wallGrip, wallPlaneHit, wallTarget, type WallGrip } from '@/lib/wall-drag';
+import { stretchedDim, stretchedOrigin, type StretchAxis } from '@/lib/stretch';
+import { StretchHandles } from './StretchHandles';
 import { CutAway } from './CutAway';
 import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
@@ -79,7 +86,7 @@ const HOLD_SLOP = 10;
 let _gestureOwner: string | null = null;
 
 /** Coarse-pointer (finger / stylus) detection, resolved once and cached. Drives
- *  the gizmo handle size: drei's default 0.8 is far under a 44px target. */
+ *  the handle sizes: drei's default 0.8 is far under a 44px target. */
 let _coarse: boolean | null = null;
 function coarsePointer(): boolean {
   if (_coarse === null) {
@@ -126,6 +133,9 @@ function ShadowCaster({
 const _plane = new Plane(new Vector3(0, 1, 0), 0);
 const _hit = new Vector3();
 
+type Dim3 = [number, number, number];
+type Vec3 = [number, number, number];
+
 export function Draggable({ partId, children }: { partId: string; children: ReactNode }) {
   const ref = useRef<Group | null>(null);
   const [obj, setObj] = useState<Group | null>(null);
@@ -149,8 +159,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const mode = useStudio((s) => s.transformMode);
   const snapMode = useStudio((s) => s.snapMode);
   // Snap increments, from the same module that applies them during a resolve, so
-  // the gizmo's steps and the drag's magnetism can never drift apart.
+  // the handles' steps and the drag's magnetism can never drift apart.
   const { translate: translationSnap, rotate: rotationSnap } = snapSteps(snapMode);
+  /** The same grid, as the millimetre step a stretch rounds a size to. */
+  const sizeStepMM = translationSnap ? Math.round(translationSnap * 1000) : null;
 
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
@@ -226,9 +238,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     ref.current.rotation.y = storedRot ?? part.rot;
     // Parametric parts — whatever `isParametric` says — rebuild
     // their geometry from the effective dim — the mesh must NOT be group-scaled
-    // or it would stretch on top of the rebuild. The scale-gizmo still scales
-    // live during a drag; commit() converts that to a dim and this effect resets
-    // the scale to 1, leaving the geometry to redraw at the new size.
+    // or it would stretch on top of the rebuild. A stretch handle still scales
+    // the group live during a pull; commit() stores the size and this effect
+    // resets the scale to 1, leaving the geometry to redraw at the new size.
     if (storedDim && !isParametric(part.shape)) {
       const [sx, sy, sz] = groupScaleForDim(part.dimMM, storedDim);
       ref.current.scale.set(sx, sy, sz);
@@ -310,11 +322,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
 
   /** Which gesture is in flight — `lib/drag-convoy.ts` owns the rule, and the
    *  reasoning, because in here it could not be tested. Both refs are read at call
-   *  time rather than remembered at pointer-down: `gizmoActive` is set in the
-   *  gizmo's own `onMouseDown` and cleared after `commit()` in its `onMouseUp`,
-   *  which is exactly the span the answer has to cover. */
+   *  time rather than remembered at pointer-down: `gizmoActive` is set when a
+   *  handle takes the press and cleared after `commit()` on its release, which is
+   *  exactly the span the answer has to cover. */
   function currentGesture(): 'move' | 'turn' {
-    return gestureFor(gizmoActive.current, mode, rotOnly.current);
+    return gestureFor(gizmoActive.current, rotOnly.current);
   }
 
   /** Where the company lands for a given transform of this part. */
@@ -358,53 +370,37 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       parts: effParts,
       footprint,
       roomHeight,
-      snapMode,
+      // A stretch asks to be kept in the room, not re-gridded or re-magnetised
+      // where it stands — the same reason `turnInPlace` resolves a turn with snap
+      // off. On the grid, a 10 mm wider piece moves its centre 5 mm and that 5 mm
+      // rounds, so the side that is supposed to stay still would step.
+      snapMode: stretch.current ? 'off' : snapMode,
       currentY: ref.current?.position.y,
+      // Where the pointer has a wall piece on its wall, when it is dragging one.
+      rawY: wantY.current ?? undefined,
       // Null unless this piece rides a wall and has company: a wall flip mid-drag
       // is a jump the whole set would translate by. See `Convoy.leadEdge`.
       wallEdge: convoy().leadEdge,
     });
   }
 
-  /** Current dims from the group's live scale (the scale gizmo writes scale,
-   *  commit converts to mm), clamped into the shape's real-world range. */
-  function currentDim(): [number, number, number] {
-    if (!ref.current || !part) return part?.dimMM ?? [100, 100, 100];
-    // What this group renders at scale 1 — which is NOT always the authored size.
-    //
-    // A parametric shape — `isParametric` is the list, deliberately not repeated — rebuilds
-    // its geometry from the effective dim, so the effect above deliberately leaves
-    // its group at scale 1 and the mesh carries the resize. Everything else keeps
-    // authored geometry and wears the resize as a group scale. Multiplying the
-    // AUTHORED dim by the live scale is only right for the second kind: for the
-    // first it returns the authored size no matter how the piece was resized, and
-    // `commit()` writes that straight back through `setDim` — so resizing a
-    // wardrobe and then merely MOVING it threw the resize away, in exactly the
-    // shapes `isParametric` names and nowhere else, which is why it reported as
-    // "sometimes".
-    //
-    // Read from the store rather than the subscribed `storedDim`: `commit` runs from
-    // handlers that can outlive the render that captured it.
-    const base = renderBaseDim(part, useStudio.getState());
-    let dim = dimFromGroupScale(base, ref.current.scale);
-    if (mode === 'scale') {
-      // Snap the resulting dims to the increment (TransformControls has no
-      // native scaleSnap)…
-      if (snapMode !== 'off') {
-        const stepMM = snapMode === 'fine' ? 10 : 50;
-        dim = [
-          Math.max(stepMM, Math.round(dim[0] / stepMM) * stepMM),
-          Math.max(stepMM, Math.round(dim[1] / stepMM) * stepMM),
-          Math.max(stepMM, Math.round(dim[2] / stepMM) * stepMM),
-        ];
-      }
-      // …then clamp into the trustable range for this shape (a laptop can't
-      // stretch to a metre; a dining table legitimately can).
-      dim = clampDims(part.category, part.shape, dim);
-      const [sx, sy, sz] = groupScaleForDim(base, dim);
-      ref.current.scale.set(sx, sy, sz);
-    }
-    return dim;
+  /** The size this piece is at right now: the stretch in flight, else the held
+   *  size from the transform layers.
+   *
+   *  It used to be read back off the group's live SCALE, because drei's scale
+   *  gizmo wrote the scale and this turned it into millimetres. Nothing writes the
+   *  scale now except the effect above (from the held size) and the stretch (from
+   *  its own `dim`), so reading the scale back only reintroduced float noise:
+   *  `850 × (1203 / 850)` is not always 1203, and `commit()` writes any difference
+   *  through `setDim`. That read was also where a gizmo-era rule lived — snap every
+   *  axis to the grid in scale mode — which fired on a plain body DRAG in scale mode
+   *  and quietly rounded a detected 853 mm depth to 850.
+   *
+   *  Read from the store rather than the subscribed `storedDim`: `commit` runs from
+   *  handlers that can outlive the render that captured it. */
+  function currentDim(): Dim3 {
+    if (!part) return [100, 100, 100];
+    return stretch.current?.dim ?? resolvePart(part, useStudio.getState()).dimMM;
   }
 
   /** Per-frame feedback shared by both drag paths. Moves the mesh to the
@@ -483,6 +479,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // pointer, so recording that spot made the fallback commit the lead a whole
       // slide ahead of its members, silently and with `valid` saying true.
       lastFreePos.current = [lead.pos[0], lead.pos[1], lead.pos[2]];
+      if (stretch.current) stretch.current.lastFreeDim = dim;
       // Only on a legal step. On an illegal one the set holds at the last legal
       // delta while the piece under the hand goes red and keeps following the
       // pointer — the separation IS the feedback, and the drop reunites them.
@@ -523,7 +520,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
 
   function commit() {
     if (!ref.current || !part) return;
-    const dim = currentDim();
+    let dim = currentDim();
     const p = ref.current.position;
     /** Resolve here, ask the company, and keep going until the lead and its set
      *  agree on one delta — see `settleLead`. Both branches below need it, and the
@@ -544,6 +541,22 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     if (!resolved.valid || !co.valid || !settle.settled) {
       const back = lastFreePos.current ?? lastValidPos.current;
       if (back) {
+        // A wall piece being dragged up its wall takes its height from the pointer,
+        // so the fallback has to hand it the height it had AT `back` — or it would
+        // slide back along the wall and stay at the refused height.
+        if (wantY.current !== null) wantY.current = back[1];
+        // …and a stretch hands back the SIZE it had there. `back` is a spot where
+        // the piece fitted at a smaller size; testing it at the refused size is a
+        // placement nobody saw, and it would come back refused with the far face
+        // moved. With no free frame at all, `back` is the pre-gesture spot and so
+        // is the size. Pull a sofa's side into the wall and it rests touching it.
+        const st = stretch.current;
+        if (st) {
+          dim = lastFreePos.current ? (st.lastFreeDim ?? st.startDim) : st.startDim;
+          st.dim = dim;
+          const [sx, sy, sz] = groupScaleForDim(st.base, dim);
+          ref.current.scale.set(sx, sy, sz);
+        }
         // Rebuilt at `back`, not reused from the drop point: the world the convoy
         // occupies is a function of the delta, so a world built for a spot the
         // gesture is no longer resting at puts the company in the wrong place.
@@ -563,10 +576,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         // position, which was legal for the OLD angle and the OLD size.
         //
         // Harmless for a translate — `back` is a spot this piece already stood in at
-        // this angle and size — and the whole defect for the other two gestures, since
-        // a rotate and a scale never move the piece, so `back` IS where it is standing
-        // and the only thing that changed is the extent being tested against the
-        // walls. Turning the lead of a merged set into its own siblings makes the
+        // this angle and size — and the whole defect for a rotate, which never moves
+        // the piece, so `back` IS where it is standing and the only thing that
+        // changed is the extent being tested against the walls. (A stretch gets
+        // its size back with its spot, just above.) Turning the lead of a merged set into its own siblings makes the
         // resolve invalid by collision, so that was the branch every such turn took:
         // the bed kept the angle, kept the position, and was committed with its corner
         // through the plaster. It also claimed `valid: true` on the way out, which is
@@ -637,12 +650,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // 6 × 3 room resolves to `pos.z = 0.5` spanning `[-1.5, 2.5]` against a room of
     // `[-1.5, 1.5]` — 1.000 m through the south wall, `valid: false`.
     //
-    // A translate cannot get here: its fallback rests at a spot this piece already
-    // occupied at this angle and size. A ROTATE or a SCALE can, and does, because
-    // `back` is where the piece is standing and the only thing that changed is the
-    // extent being tested against the walls — which is also why the fallback's own
-    // comment claiming it "comes back legal by construction" is true for one of the
-    // three gestures.
+    // A translate or a stretch cannot normally get here: its fallback rests at a
+    // spot — and for a stretch a size — this piece already occupied. A ROTATE can,
+    // and does, because `back` is where the piece is standing and the only thing
+    // that changed is the extent being tested against the walls — which is also
+    // why the fallback's own comment claiming it "comes back legal by
+    // construction" is not true of every gesture.
     //
     // Held rather than latched, and on the channel that already draws it: every
     // refused piece reads `blockedIds` through its own per-part selector, so the set
@@ -694,6 +707,29 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const pendingPos = useRef<[number, number] | null>(null);
   const pendingRot = useRef<number | null>(null);
   const raf = useRef(0);
+  /** The height the pointer is asking for, while a wall piece is dragged across
+   *  its wall; null for every other gesture. Read by `resolvePlacement` rather
+   *  than passed through `flushGesture`, so `settleLead`'s re-resolves and the
+   *  drop in `commit()` land at the same height as the frame the user saw. */
+  const wantY = useRef<number | null>(null);
+  /** The pull in flight on a stretch handle. `dim` is the size it has pulled the
+   *  piece to so far; everything else is fixed at the press. */
+  const stretch = useRef<{
+    axis: StretchAxis;
+    side: 1 | -1;
+    /** What the group draws at scale 1 — the base a size becomes a scale against. */
+    base: Dim3;
+    startDim: Dim3;
+    dim: Dim3;
+    startScale: Vector3;
+    /** The last size at which the whole placement fitted — `lastFreePos`'s
+     *  partner, written on the same frames. A pull that ends refused rests at
+     *  this size, the way a drag that ends refused rests at that spot. */
+    lastFreeDim: Dim3 | null;
+    /** False until the pointer has actually pulled; a press and release with no
+     *  travel writes nothing. */
+    pulled: boolean;
+  } | null>(null);
 
   function flushGesture() {
     // Cleared FIRST, before any early return. It sat after the `cancelled` check,
@@ -747,12 +783,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     planeY: number;
     offX: number;
     offZ: number;
+    /** Where on its wall the pointer took hold of a wall piece, when this drag
+     *  moves it across the wall rather than across the floor. Null for a floor
+     *  drag — including a wall piece's, when the press met its wall edge-on or
+     *  when company is following it (see `onPointerMove`). */
+    wall: WallGrip | null;
   } | null>(null);
 
-  // True for the life of a TransformControls (gizmo) grab on this part — set in
-  // its onMouseDown, cleared in its onMouseUp. Guards onPointerDown above
-  // against a second touch point starting a competing direct-drag on the same
-  // mesh while the gizmo is already writing its transform.
+  // True for the life of a handle grab on this part — the rotate ring's
+  // onMouseDown to its onMouseUp, or a stretch handle's press to its release.
+  // Guards onPointerDown above against a second touch point starting a competing
+  // direct-drag on the same mesh while a handle is already writing its transform.
   const gizmoActive = useRef(false);
 
   /** True while the last thing the user did to this piece was TURN it rather than
@@ -898,6 +939,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       pendingRot.current = null;
       g.position.set(start[0], start[1], start[2]);
       g.rotation.y = startRot;
+      // A stretch draws its size as a group scale until it commits; put that back
+      // too, or the piece keeps the cancelled size on screen while the store holds
+      // the old one.
+      if (stretch.current) g.scale.copy(stretch.current.startScale);
+      wantY.current = null;
       setTransformsFor(
         convoyRestore(
           convoy(),
@@ -1036,8 +1082,21 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const planeY = ref.current.position.y;
     _plane.set(_plane.normal.set(0, 1, 0), -planeY);
     if (!e.ray.intersectPlane(_plane, _hit)) return;
+    // A wall piece is gripped on its wall as well, and which of the two planes the
+    // drag follows is settled when it starts. Null when the ray meets the wall
+    // edge-on: a grazing plane turns a pixel of travel into metres along the wall,
+    // so that press drags across the floor as before.
+    let wall: WallGrip | null = null;
+    if (followsPointerUp(part.category, part.shape)) {
+      const at: Vec3 = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
+      const o = e.ray.origin;
+      const dir = e.ray.direction;
+      const hit = wallPlaneHit([o.x, o.y, o.z], [dir.x, dir.y, dir.z], at, ref.current.rotation.y);
+      if (hit) wall = wallGrip(hit, at, ref.current.rotation.y);
+    }
     const isTouch = e.pointerType === 'touch';
     rotOnly.current = false;
+    wantY.current = null;
     drag.current = {
       pointerId: e.pointerId,
       started: false,
@@ -1048,6 +1107,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       planeY,
       offX: _hit.x - ref.current.position.x,
       offZ: _hit.z - ref.current.position.z,
+      wall,
     };
     _gestureOwner = partId;
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -1167,8 +1227,32 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId, sel), partId);
       }
       document.body.style.cursor = 'grabbing';
+      // Up the wall only when nothing is following. A member keeps its own height
+      // (`resolveConvoy` resolves each at its start y), so lifting the lead would
+      // pull a set of prints apart vertically — the "arrives deformed" failure the
+      // convoy exists to prevent. The set slides along the wall together instead.
+      // Asked here, after the selection above, because the press may just have
+      // picked up a whole merged group.
+      if (d.wall && convoy().members.length > 0) d.wall = null;
     }
     e.stopPropagation();
+    if (d.wall) {
+      // The plane is rebuilt from where the piece is NOW, not where it was
+      // pressed: after a corner it is the next wall's, and the grip is re-laid
+      // along that wall. A frame whose ray grazes it is skipped rather than read.
+      const g = ref.current;
+      const o = e.ray.origin;
+      const dir = e.ray.direction;
+      const hit = wallPlaneHit([o.x, o.y, o.z], [dir.x, dir.y, dir.z], [g.position.x, g.position.y, g.position.z], g.rotation.y);
+      if (!hit) return;
+      const t = wallTarget(hit, d.wall, g.rotation.y);
+      // Raw, like the floor drag below: the resolve owns the grid, the wall and
+      // the floor-to-ceiling clamp.
+      wantY.current = t[1];
+      pendingPos.current = [t[0], t[2]];
+      schedule();
+      return;
+    }
     _plane.set(_plane.normal.set(0, 1, 0), -d.planeY);
     if (!e.ray.intersectPlane(_plane, _hit)) return;
     // Raw, deliberately. `resolvePlacement` quantises to the snap grid as its
@@ -1206,6 +1290,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // just restored.
       suppressClickAfterDrag();
     }
+    // After the commit, which reads it: the next gesture on this piece may be a
+    // rotate, and a stale height would lift it.
+    wantY.current = null;
     effCache.current = null;
     convoyCache.current = null;
     if (d.armed) setDragging(null);
@@ -1227,19 +1314,73 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     schedule();
   }
 
-  // ─── Gizmo live feedback ──────────────────────────────────────────────────
-  function onGizmoChange() {
-    if (!ref.current || !part) return;
-    if (mode !== 'translate') return; // rotate/scale resolve on commit
-    const p = ref.current.position;
-    pendingPos.current = [p.x, p.z];
+  // ─── Stretch handles (scale mode) ─────────────────────────────────────────
+  // The dots in `StretchHandles` report a pull in metres; the size, the origin
+  // that keeps the far face still, and the landing are worked out here, through
+  // the same resolve and the same `commit()` as every other gesture.
+  function pressStretch(axis: StretchAxis, side: 1 | -1): boolean {
+    const g = ref.current;
+    if (!part || !g) return false;
+    if (gizmoActive.current || drag.current || gestureOwnedByOther(partId)) return false;
+    // Arms the click gate: the click that ends the pull must not select whatever
+    // is under the pointer by then. Nothing holds this press to hand back — R3F
+    // gave it to the dot, which stopped it there.
+    claimPressForGizmo();
+    gizmoActive.current = true;
+    setDragging(partId);
+    dragStartPos.current = [g.position.x, g.position.y, g.position.z];
+    dragStartRot.current = g.rotation.y;
+    cancelled.current = false;
+    lastFreePos.current = null;
+    wantY.current = null;
+    effCache.current = buildEffSnapshot();
+    convoyCache.current = null;
+    const startDim = currentDim();
+    stretch.current = {
+      axis,
+      side,
+      base: renderBaseDim(part, useStudio.getState()),
+      startDim,
+      dim: startDim,
+      startScale: g.scale.clone(),
+      lastFreeDim: null,
+      pulled: false,
+    };
+    return true;
+  }
+
+  function pullStretch(metres: number) {
+    const st = stretch.current;
+    const g = ref.current;
+    const start = dragStartPos.current;
+    if (!st || !g || !part || !start || cancelled.current) return;
+    if (!st.pulled) playSound('pick');
+    st.pulled = true;
+    st.dim = stretchedDim(st.startDim, st.axis, metres, sizeStepMM, (d) => clampDims(part.category, part.shape, d));
+    const [sx, sy, sz] = groupScaleForDim(st.base, st.dim);
+    g.scale.set(sx, sy, sz);
+    // From the START every frame (`stretchedOrigin` says why), at the angle the
+    // pull began at: a wall piece's resolve may re-aim it, and the far face is
+    // where it was when the pull started.
+    const o = stretchedOrigin(start, dragStartRot.current ?? g.rotation.y, st.axis, st.side, st.startDim, st.dim, isFloorStanding(part.category, part.shape));
+    // Y goes on the object, where the resolve reads a centred piece's height.
+    g.position.set(o[0], o[1], o[2]);
+    pendingPos.current = [o[0], o[2]];
     schedule();
   }
 
-  // Translate / Scale: all 3 axes. Rotate: Y only (around vertical).
-  const showX = mode !== 'rotate';
-  const showY = true;
-  const showZ = mode !== 'rotate';
+  function releaseStretch() {
+    if (stretch.current?.pulled && !cancelled.current) {
+      flushNow();
+      commit();
+    }
+    // After `commit()`, which reads the stretched size through `currentDim()`.
+    stretch.current = null;
+    effCache.current = null;
+    convoyCache.current = null;
+    setDragging(null);
+    gizmoActive.current = false;
+  }
 
   if (!part) return null;
 
@@ -1292,18 +1433,32 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           />
         )}
       </group>
-      {isSelected && obj && (
+      {isSelected && obj && mode === 'scale' && (
+        <StretchHandles
+          targetRef={ref}
+          liveDim={currentDim}
+          floorStanding={isFloorStanding(part.category, part.shape)}
+          heightSide={anchorFor(part.category, part.shape) === 'ceiling' ? -1 : 1}
+          depthSide={anchorFor(part.category, part.shape).startsWith('wall') ? 1 : null}
+          coarse={coarsePointer()}
+          onPress={pressStretch}
+          onPull={pullStretch}
+          onRelease={releaseStretch}
+        />
+      )}
+      {/* Rotate only. Move has no handle — the piece is the handle — and scale has
+          the stretch handles above. One ring, around the vertical: furniture
+          turns on the floor, it does not tip. */}
+      {isSelected && obj && mode === 'rotate' && (
         <TransformControls
           object={obj}
-          mode={mode}
-          showX={showX}
-          showY={showY}
-          showZ={showZ}
+          mode="rotate"
+          showX={false}
+          showY
+          showZ={false}
           // Fingers need a target roughly twice the size a mouse does.
           size={coarsePointer() ? 1.5 : 0.8}
-          translationSnap={mode === 'translate' ? translationSnap : null}
-          rotationSnap={mode === 'rotate' ? rotationSnap : null}
-          onObjectChange={onGizmoChange}
+          rotationSnap={rotationSnap}
           onMouseDown={() => {
             // This fires only when `pointerDown` found an axis — the press really
             // did land on a handle — and three-stdlib re-runs its hover test at the

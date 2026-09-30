@@ -23,7 +23,7 @@ import { collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
 import { aabbExtents, type Poly } from './geometry';
 import { snapToNeighbors, type SnapLine } from './item-snap';
-import { findSupportDetailed, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
+import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
 export type SnapMode = 'off' | 'fine' | 'coarse';
 
@@ -70,6 +70,14 @@ export type ResolveInput = {
    * shape, which is what a freshly added piece wants.
    */
   currentY?: number;
+  /**
+   * Where the pointer is asking a piece that follows it UP the wall to go, in
+   * metres, UNROUNDED — the 3D drag across the wall's own plane (`lib/wall-drag.ts`).
+   * Wins over `currentY` for those pieces and is ignored for every other one, so a
+   * caller cannot lift a sofa or a door by passing it. Snapped here, on the piece's
+   * bottom edge, for the same reason `rawX` is: one grid, one place.
+   */
+  rawY?: number;
   /**
    * The footprint edge a wall-riding piece must KEEP, rather than sliding onto
    * whichever wall is nearest. Set only while company is following it — see
@@ -211,6 +219,12 @@ export function resolvePlacement(input: ResolveInput): Resolved {
     const support = findSupportDetailed(parts, part.id, x, z, dim, outRot, part.circle);
     y = support?.y ?? 0;
     supportId = support?.id;
+  } else if (input.rawY !== undefined && Number.isFinite(input.rawY) && followsPointerUp(part.category, part.shape)) {
+    // The bottom edge goes on the grid, not the centre: "the print hangs 1.20 m
+    // off the floor" is the number the Inspector shows and the one a person
+    // measures, and a centre on the grid puts the edge on it only for even heights.
+    const bottom = input.rawY - partH / 2;
+    y = (grid ? Math.round(bottom / grid) * grid : bottom) + partH / 2;
   } else {
     const curY = input.currentY ?? NaN;
     y = Number.isFinite(curY) && curY > 0.01 ? curY : groundY(part.category, part.shape, dim, roomHeight);

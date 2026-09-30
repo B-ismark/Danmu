@@ -182,6 +182,9 @@ press-plumbing (`lib/gizmo-press.ts`) fixes invisible-plane steals.
   one-time touch-mode card when a touch pointer opens the studio.
 - **M3 — P1: TransformControls handles (`size={0.8}`) are 10–16px on a phone canvas.**
   Scale the gizmo up on coarse pointers or add touch-sized handles.
+  *Addressed for move and scale:* Move has no handles (the piece is dragged), and Scale
+  is three dots at 22 px drawn / 44 px hit on a coarse pointer. The rotate ring is still
+  drei's, at its old size.
 - **M4 — P1: `quality: 'high'` is the default for everyone** (`lib/store.ts:224`) —
   N8AO + SMAA + shadows at DPR 2 is the first-impression jank moment on phone GPUs.
   Default 'low' on coarse pointers / low `deviceMemory`; the toggle already exists.

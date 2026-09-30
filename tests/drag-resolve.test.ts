@@ -583,3 +583,73 @@ describe('turnInPlace — a turn is a placement too', () => {
     expect(r.valid).toBe(false);
   });
 });
+
+describe('rawY: a wall piece dragged up its wall', () => {
+  // The 3D drag moves a wall piece across its wall's own plane, so the pointer asks
+  // for a height as well as a spot. Only pieces that follow the pointer up take it.
+  const tv = () =>
+    part({ id: 'tv', category: 'tv', shape: 'tv', pos: [2, 1.2, 0.03], dimMM: [1200, 60, 700] });
+  const at = (p: ScenePart, rawY: number, snapMode: 'off' | 'fine' | 'coarse' = 'off', currentY = 1.2) =>
+    resolvePlacement({
+      part: p,
+      rawX: 2,
+      rawZ: 0.2,
+      rot: 0,
+      dim: p.dimMM,
+      parts: [p],
+      footprint: ROOM,
+      roomHeight: H,
+      snapMode,
+      currentY,
+      rawY,
+    });
+
+  it('goes where the pointer asks, and keeps its current height without one', () => {
+    expect(at(tv(), 1.6).pos[1]).toBeCloseTo(1.6, 12);
+    const kept = resolvePlacement({
+      part: tv(), rawX: 2, rawZ: 0.2, rot: 0, dim: tv().dimMM, parts: [tv()],
+      footprint: ROOM, roomHeight: H, snapMode: 'off', currentY: 1.2,
+    });
+    expect(kept.pos[1]).toBeCloseTo(1.2, 12);
+  });
+
+  it('snaps its BOTTOM edge to the grid, not its centre', () => {
+    // 700 mm tall, asked for a centre of 1.613: the bottom edge 1.263 rounds to
+    // 1.25 on the coarse grid, so the centre lands at 1.60 — not 1.60 by rounding
+    // the centre, which would put the edge at 1.25 only by luck of an even height.
+    const r = at(tv(), 1.613, 'coarse');
+    expect(r.pos[1] - 0.35).toBeCloseTo(1.25, 9);
+    const odd = part({ id: 'tv', category: 'tv', shape: 'tv', pos: [2, 1.2, 0.03], dimMM: [1200, 60, 730] });
+    const s = at(odd, 1.6, 'coarse');
+    // Bottom 1.235 → 1.25; centre 1.615, which the centre-rounding version would
+    // have put at 1.60 with the edge on 1.235, off the grid.
+    expect(s.pos[1] - 0.365).toBeCloseTo(1.25, 9);
+  });
+
+  it('stays between floor and ceiling', () => {
+    expect(at(tv(), 9).pos[1]).toBeCloseTo(H - 0.35 - 0.02, 9);
+    expect(at(tv(), -3).pos[1]).toBeCloseTo(0.35 + 0.02, 9);
+  });
+
+  it('is ignored by anything that does not follow the pointer up', () => {
+    // A door stands on the floor; a ceiling fan keeps its height; a sofa has gravity.
+    const door = part({ id: 'door', category: 'door', shape: 'door', pos: [2, 1.02, 0.02], dimMM: [900, 40, 2040] });
+    const still = resolvePlacement({
+      part: door, rawX: 2, rawZ: 0.2, rot: 0, dim: door.dimMM, parts: [door],
+      footprint: ROOM, roomHeight: H, snapMode: 'off', currentY: 1.02,
+    });
+    expect(at(door, 2.2, 'off', 1.02).pos[1]).toBe(still.pos[1]);
+    const fan = part({ id: 'fan', category: 'fan', shape: 'fan', pos: [2, 2.3, 1.5], dimMM: [1000, 1000, 300] });
+    const f = resolvePlacement({
+      part: fan, rawX: 2, rawZ: 1.5, rot: 0, dim: fan.dimMM, parts: [fan],
+      footprint: ROOM, roomHeight: H, snapMode: 'off', currentY: 2.3, rawY: 1.0,
+    });
+    expect(f.pos[1]).toBeCloseTo(2.3, 9);
+    const sofa = part({ id: 'sofa', category: 'sofa', shape: 'sofa', pos: [2, 0, 1.5], dimMM: [2000, 900, 850] });
+    const s = resolvePlacement({
+      part: sofa, rawX: 2, rawZ: 1.5, rot: 0, dim: sofa.dimMM, parts: [sofa],
+      footprint: ROOM, roomHeight: H, snapMode: 'off', rawY: 1.5,
+    });
+    expect(s.pos[1]).toBe(0);
+  });
+});
