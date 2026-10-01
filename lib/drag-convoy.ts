@@ -28,7 +28,7 @@
 
 import { collidesAt, type ScenePart } from './scene-spec';
 import { ridesWall } from './physics';
-import { resolvePlacement } from './drag-resolve';
+import { backOf, resolvePlacement } from './drag-resolve';
 import { cascadeTransform, snapshotDescendants, type DescendantOffset } from './rigid-parent';
 import type { RiderRelation } from './rider-height';
 import { nearestEdge, type Poly } from './geometry';
@@ -439,11 +439,17 @@ export function planConvoy(input: {
    *  Gated on the SAME predicate as the wall branch in `resolvePlacement`: a pin
    *  that is absent where the snap is present leaves the flip in place for exactly
    *  the pieces nobody remembered to check, and a pin present where the snap is not
-   *  is a claim about a piece that nothing reads and nobody can trust. */
-  const wallEdgeOf = (p: ScenePart): number | null =>
-    ridesWall(p.category, p.shape)
-      ? (nearestEdge(footprint, p.pos[0], p.pos[2])?.index ?? null)
-      : null;
+   *  is a claim about a piece that nothing reads and nobody can trust.
+   *
+   *  Asked of the piece's BACK, for the reason `backOf` gives: this pin overrides
+   *  the resolve's own "which wall does it stand on", so asking it of the centre
+   *  took a narrow curtain in a corner round onto the return wall the moment it
+   *  had company — the case the resolve had just been fixed for alone. */
+  const wallEdgeOf = (p: ScenePart): number | null => {
+    if (!ridesWall(p.category, p.shape)) return null;
+    const [bx, bz] = backOf(p.pos, p.rot, p.dimMM);
+    return nearestEdge(footprint, bx, bz)?.index ?? null;
+  };
 
   /** Pull the rest of every merged set that `ids` touches into `wanted`. Returns
    *  whether anything was added, which is the loop's termination test.

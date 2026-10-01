@@ -38,8 +38,9 @@ export type SelectionBase = {
 export const BASE_THICKNESS = 0.024;
 /** Off its surface by this much, so the face against it does not flicker against
  *  whatever else lies in that plane. On every plane, not just the floor: a wall
- *  piece's back is ON the plaster, so a base laid on the plaster shared the piece's
- *  back plane exactly. From inside the room that face is turned away and never
+ *  piece's base is laid at the piece's own back face (`-d/2` in its frame — the
+ *  piece itself stands `WALL_GAP` or more off the plaster), so the base's outer face
+ *  shared the piece's back plane exactly. From inside the room that face is turned away and never
  *  drawn, but once a held piece stayed in view through its cut-away wall it was the
  *  face the camera saw, and it striped a selected TV's black back with the base's
  *  frosted white (the user, 2026-09-30). A ceiling light seen from above is the same

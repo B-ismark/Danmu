@@ -156,8 +156,10 @@ export function refusalCause(r: Pick<Resolved, 'refusal'>): string {
 }
 
 /** The middle of a wall rider's back face, on the floor plane: the point that is
- *  against its wall whichever wall that is. */
-function backOf(at: readonly [number, number, number], rot: number, dim: [number, number, number]): [number, number] {
+ *  against its wall whichever wall that is. Its centre is not — a curtain 200 mm
+ *  deep flush in a corner has its centre nearer the return wall than its own, so
+ *  "which wall is this on" asked of the centre names the wrong one. */
+export function backOf(at: readonly [number, number, number], rot: number, dim: [number, number, number]): [number, number] {
   const [fx, fz] = frontVector(rot);
   const half = dim[1] / 2000;
   return [at[0] - fx * half, at[2] - fz * half];

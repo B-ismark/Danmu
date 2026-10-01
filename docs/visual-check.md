@@ -201,14 +201,18 @@ between a corner's two walls on every press, because its centre is nearer the re
 than its own. A turn now asks which wall the piece's BACK is against where it stands, not
 which wall is nearest the spot the corner clamp put it at (`standsAt` in
 `lib/drag-resolve.ts`), and so do the 3D tab's ring, wheel and two-finger twist, which never
-went through the keyboard's turn (found in the second review). Swept in
-`tests/wall-rider-containment.test.ts`: 96 turns, none moves; the 3D half is a source guard,
-since the ring cannot be driven from a test.
+went through the keyboard's turn (found in the second review). The third review found the
+same flip twice more: with company (selected with another piece, or merged with its window,
+the wall pin `wallEdgeOf` in `lib/drag-convoy.ts` read the centre), and on a refused turn's
+slide back. Both read the back now. Swept in `tests/wall-rider-containment.test.ts`: 96
+turns, none moves; the 3D half is a source guard, since the ring cannot be driven from a
+test; the company half is in `tests/drag-convoy.test.ts`.
 
 **Where to click.** Rectangle. Drag a small painting into each corner in turn, select it,
 and turn it every way there is: **R** in the plan, and in 3D the rotate ring, the scroll
 wheel over it, and on a phone a two-finger twist. Then a curtain stretched to its narrowest,
-in a corner. *Right:* it stays on its wall, square to it. *Wrong:* it hops onto the
+in a corner — once alone, once shift-selected with a chair, and once turned into something
+so the turn is refused. *Right:* it stays on its wall, square to it. *Wrong:* it hops onto the
 neighbouring wall, on the press or on letting go of the ring.
 
 ### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye

@@ -547,15 +547,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     /** Resolve here, ask the company, and keep going until the lead and its set
      *  agree on one delta — see `settleLead`. Both branches below need it, and the
      *  fallback branch is the one that used to skip it. */
-    const settleAt = (rot: number) => (x: number, z: number) =>
-      resolvePlacement(x, z, rot, dim, travelWorld(x, z));
+    const settleAt = (rot: number, standsAt?: { at: [number, number, number]; rot: number }) => (x: number, z: number) =>
+      resolvePlacement(x, z, rot, dim, travelWorld(x, z), standsAt);
     // Resolved where it stands, so it is asked which wall it stands on — the ring
     // turns `rotation.y` without a resolve, and this is the first one it gets.
-    const first = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, travelWorld(p.x, p.z), {
-      at: [p.x, p.y, p.z],
-      rot: standRot.current ?? ref.current.rotation.y,
-    });
-    let settle = settleLead<Resolved>(settleAt(first.rot), (l) => carry(l.pos, l.rot), first);
+    const here = { at: [p.x, p.y, p.z] as [number, number, number], rot: standRot.current ?? ref.current.rotation.y };
+    const first = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, travelWorld(p.x, p.z), here);
+    let settle = settleLead<Resolved>(settleAt(first.rot, here), (l) => carry(l.pos, l.rot), first);
     let resolved = settle.lead;
     let co = settle.co;
 
@@ -594,7 +592,15 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         // room first, so a piece poking through a wall comes back valid somewhere
         // else, and it is that piece that most needs to turn.
         const startRot = dragStartRot.current;
-        const atStart = startRot === null ? null : settleAt(startRot)(back[0], back[2]);
+        // The angle it stood at, AT `back` — so every re-resolve below is asked which
+        // wall it stands on there, as `first` was. Without it a refused turn of a
+        // narrow curtain in a corner slid "back" onto the return wall, and read as
+        // moved, so it kept the refused angle too.
+        const standing = {
+          at: back,
+          rot: lastFreePos.current ? (lastFreeRot.current ?? ref.current.rotation.y) : (startRot ?? ref.current.rotation.y),
+        };
+        const atStart = startRot === null ? null : settleAt(startRot, standing)(back[0], back[2]);
         const fittedAtStart =
           atStart !== null && atStart.valid && Math.hypot(atStart.pos[0] - back[0], atStart.pos[2] - back[2]) <= 0.001;
         const restRot = lastFreePos.current
@@ -606,13 +612,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         // Rebuilt at `back`, not reused from the drop point: the world the convoy
         // occupies is a function of the delta, so a world built for a spot the
         // gesture is no longer resting at puts the company in the wrong place.
-        const back0 = settleAt(ref.current.rotation.y)(back[0], back[2]);
+        const back0 = settleAt(ref.current.rotation.y, standing)(back[0], back[2]);
         // Settled here too. `lastFreePos` is a position the whole set could take,
         // so this normally agrees on the first pass — but "normally" is what the
         // first version of this assumed, and a fallback that writes the lead from
         // its own resolve while the members take `co.moves` is precisely the caller
         // `ConvoyResult.leadPos` was added to stop existing.
-        settle = settleLead<Resolved>(settleAt(back0.rot), (l) => carry(l.pos, l.rot), back0);
+        settle = settleLead<Resolved>(settleAt(back0.rot, standing), (l) => carry(l.pos, l.rot), back0);
         const r = settle.lead;
         // `r`, whole — never `back` raw with the live angle written beside it, which
         // is what this did. `resolvePlacement` returns a CONTAINMENT-CLAMPED position

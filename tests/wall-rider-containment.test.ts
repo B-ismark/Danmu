@@ -709,12 +709,20 @@ describe('a wall piece follows the pointer to the wall it is at', () => {
     const src = readFileSync('components/three/Draggable.tsx', 'utf8');
     // The wrapper hands it on…
     expect(src).toMatch(/inherited: leadInherited\(convoy\(\), rot, dim\),\s*standsAt,/);
-    // …the release (where a ring turn is first resolved) passes it…
-    expect(src).toMatch(/const first = resolvePlacement\([^;]*?rot: standRot\.current/);
+    // …the release (where a ring turn is first resolved) passes it, to the settle
+    // after it, and to all three re-resolves of a refused drop's slide back…
+    expect(src).toMatch(/const here = \{ at: \[p\.x, p\.y, p\.z\][^;]*?rot: standRot\.current/);
+    expect(src).toMatch(/const first = resolvePlacement\([^;]*?, here\);/);
+    expect(src).toMatch(/settleAt\(first\.rot, here\)/);
+    expect(src.match(/settleAt\([^()]*, standing\)/g)).toHaveLength(3);
+    // …which is asked at the angle it stood at there, not the refused one…
+    expect(src).toMatch(/const standing = \{\s*at: back,\s*rot: lastFreePos\.current \? \(lastFreeRot\.current/);
     // …a wheel or twist held still passes it…
     expect(src).toMatch(/pp === null \? \{ at: [^;]*?rot: standRot\.current/);
     // …and the angle it stands at is the one each resolve gave it.
     expect(src).toMatch(/ref\.current\.rotation\.y = resolved\.rot;\s*standRot\.current = resolved\.rot;/);
+    // …and every gesture starts from the angle it began at: drag, twist, stretch, ring.
+    expect(src.match(/dragStartRot\.current = [^;]+;\s*standRot\.current = dragStartRot\.current;/g)).toHaveLength(4);
   });
 
   it('still slides along its own wall, and reaches the near wall only from beside it', () => {
