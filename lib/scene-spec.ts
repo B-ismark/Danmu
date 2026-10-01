@@ -35,6 +35,7 @@ import {
   footIntersectionArea,
   footOverlap,
   localToWorld,
+  TOUCH_M,
   nearestEdge,
   obbGap,
   worldToLocal,
@@ -3344,7 +3345,7 @@ export function collidesAt(
     // XZ overlap — exact separating-axis test, over the ROUND footprint where a
     // piece has one. The tiny negative pad lets flush side-by-side placement read
     // as touching, not colliding.
-    if (footOverlap(me, footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape), -0.01)) return true;
+    if (footOverlap(me, footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape), -TOUCH_M)) return true;
   }
   return false;
 }

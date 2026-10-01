@@ -21,7 +21,7 @@
 
 import { canCollideWith, collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
-import { aabbExtents, type Poly } from './geometry';
+import { aabbExtents, footIsBox, type Poly } from './geometry';
 import { snapAhead, snapToNeighbors, type SnapLine } from './item-snap';
 import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
@@ -157,6 +157,25 @@ export function refusalCause(r: Pick<Resolved, 'refusal'>): string {
 }
 
 /**
+ * Which neighbours an arrow key stops at rather than steps into: the ones the collision
+ * test's own pair rule says it could run into, at the height it stands now — and only
+ * where both footprints are their boxes. The lines a press stops on are drawn from the
+ * boxes, so where a box is not the outline they are alignments and not contacts: a
+ * sofa at 45°, a round table and an L-desk reach their box at a corner or not at all,
+ * and stopping there told a crate with clear floor ahead that it could go no further.
+ */
+function pressObstacle(
+  part: ScenePart,
+  rot: number,
+  dim: [number, number, number],
+  y: number,
+): (o: ScenePart) => boolean {
+  if (!footIsBox(rot, dim, part.circle, part.shape)) return () => false;
+  const inTheWay = canCollideWith(part, dim, y);
+  return (o) => footIsBox(o.rot, o.dimMM, o.circle, o.shape) && inTheWay(o);
+}
+
+/**
  * The deterministic placement pipeline. Order matters and each step feeds the
  * next: grid snap → containment → wall snap OR magnetic item snap →
  * gravity/support → vertical clamp → legality.
@@ -230,17 +249,16 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   } else if (snapMode !== 'off') {
     // Magnetic item-to-item snapping — edges flush, centres aligned, against the
     // neighbouring furniture.
-    // A key press stops at a neighbour it would collide with, by the collision test's
-    // own pair rule, at the height it stands now. Its company is not among them, so
-    // neither is anything in `inherited`, which is company too.
-    const y0 = input.currentY ?? part.pos[1];
+    // A key press stops at a neighbour it would collide with — see `pressObstacle`. Its
+    // company is not among them, so neither is anything in `inherited`, which is
+    // company too.
     const company = input.company;
     const snapped = nudgeFrom
       ? snapAhead(
           nudgeFrom, x, z, outRot, dim,
           company ? parts.filter((o) => !company.has(o.id)) : parts,
           part.id,
-          canCollideWith(part, dim, y0),
+          pressObstacle(part, outRot, dim, input.currentY ?? part.pos[1]),
         )
       : snapToNeighbors(x, z, outRot, dim, parts, part.id);
     x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, snapped.x));

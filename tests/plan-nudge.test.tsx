@@ -162,6 +162,90 @@ describe('an arrow key lands on the first line it reaches (plan tab)', () => {
     expect(crate()[0]).toBeCloseTo(FLUSH, 9);
   });
 
+  it('stops at a neighbour only where its box is its outline', () => {
+    // A chest turned 45° and a round table both reach the box their lines are drawn
+    // from only at a corner or not at all. Each crate below stands on one of those
+    // lines with clear floor ahead, and the press used to stop there and say so.
+    const turned = { ...box('chest', 'Chest', 0, 600), dimMM: [600, 600, 700] as [number, number, number], rot: Math.PI / 4 };
+    const fromTurned = Math.SQRT1_2 * 0.6 + 0.2;
+    room(fromTurned, 'fine', 0.5);
+    useScene.setState({ parts: [turned, box('crate', 'Crate', fromTurned, 400, 0.5)] });
+    render(<PlanView />);
+    expect(listening(() => press('ArrowLeft', 1))).toEqual([]);
+    expect(crate()[0]).toBeCloseTo(fromTurned - 0.01, 9);
+    cleanup();
+
+    room(FLUSH, 'fine', 0.35);
+    useScene.setState({ parts: [{ ...box('chest', 'Table', 0, 600), dimMM: [600, 600, 700], circle: true }, box('crate', 'Crate', FLUSH, 400, 0.35)] });
+    render(<PlanView />);
+    expect(listening(() => press('ArrowLeft', 1))).toEqual([]);
+    expect(crate()[0]).toBeCloseTo(FLUSH - 0.01, 9);
+    cleanup();
+
+    // An L-desk's box reaches its left end across the whole depth; its outline does only
+    // along the back, and this crate comes in through the open corner.
+    room(-1, 'fine', 0.35);
+    useScene.setState({
+      parts: [
+        { ...box('chest', 'Desk', 0, 1600), shape: 'desk-l', dimMM: [1600, 1200, 750] },
+        box('crate', 'Crate', -1, 400, 0.35),
+      ],
+    });
+    render(<PlanView />);
+    expect(listening(() => press('ArrowRight', 1))).toEqual([]);
+    expect(crate()[0]).toBeCloseTo(-0.99, 9);
+  });
+
+  it('stops nowhere it would not touch when the moving piece is turned', () => {
+    // The crate at 45°, its box's corner level with the chest's edge and its own
+    // outline 250 mm clear of it there.
+    const half = Math.SQRT1_2 * 0.4;
+    room(0.3 + half, 'fine', 0.45);
+    useScene.setState({ parts: [box('chest', 'Chest', 0, 600), { ...box('crate', 'Crate', 0.3 + half, 400, 0.45), dimMM: [400, 400, 700], rot: Math.PI / 4 }] });
+    render(<PlanView />);
+    expect(listening(() => press('ArrowLeft', 1))).toEqual([]);
+    expect(crate()[0]).toBeCloseTo(0.3 + half - 0.01, 9);
+  });
+
+  it('passes a neighbour it only grazes, and stops at one it overlaps, on either axis', () => {
+    // 5 mm across the line is inside the collision test's 10 mm touching allowance, so
+    // the two never collide and the press goes on; 15 mm is a contact.
+    room(FLUSH, 'fine', 0.4 - 0.005);
+    render(<PlanView />);
+    expect(listening(() => press('ArrowLeft', 1))).toEqual([]);
+    expect(crate()[0]).toBeCloseTo(FLUSH - 0.01, 9);
+    cleanup();
+
+    room(FLUSH, 'fine', 0.4 - 0.015);
+    render(<PlanView />);
+    expect(listening(() => press('ArrowLeft', 1))).toEqual(['Crate cannot go any further that way.']);
+    expect(crate()[0]).toBeCloseTo(FLUSH, 9);
+    cleanup();
+
+    // The same along z: both are 400 deep, so at 0.40 the crate touches the chest's
+    // back, and it is 5 then 15 mm across the chest's side.
+    room(FLUSH - 0.005, 'fine', 0.4);
+    render(<PlanView />);
+    expect(listening(() => press('ArrowUp', 1))).toEqual([]);
+    expect(crate()[2]).toBeCloseTo(0.39, 9);
+    cleanup();
+
+    room(FLUSH - 0.015, 'fine', 0.4);
+    render(<PlanView />);
+    expect(listening(() => press('ArrowUp', 1))).toEqual(['Crate cannot go any further that way.']);
+    expect(crate()[2]).toBeCloseTo(0.4, 9);
+  });
+
+  it('stops flush at a mounted piece it would run into', () => {
+    // A radiator: mounted, and at the crate's height. Mounted pieces gave a press no
+    // line at all, so it went the whole step, 5 mm inside, within the allowance.
+    room(FLUSH + 0.005, 'fine');
+    useScene.setState({ parts: [{ ...box('chest', 'Radiator', 0, 600), wallMounted: true }, box('crate', 'Crate', FLUSH + 0.005, 400)] });
+    render(<PlanView />);
+    press('ArrowLeft', 1);
+    expect(crate()[0]).toBeCloseTo(FLUSH, 9);
+  });
+
   it('takes the exact step with the snap off', () => {
     room(1.505, 'off');
     render(<PlanView />);

@@ -8,7 +8,7 @@
 // rotations (the overwhelmingly common case) snap exactly; odd angles snap via
 // their bounding box, which still reads naturally.
 
-import { aabbExtents } from './geometry';
+import { aabbExtents, TOUCH_M } from './geometry';
 import type { ScenePart } from './scene-spec';
 
 /** How close an edge/centre must be (metres) before it magnetises. */
@@ -69,11 +69,14 @@ function linesNear(
 
   for (const o of parts) {
     if (o.id === movingId) continue;
+    const inWay = obstacle?.(o) ?? false;
     // Skipped as a snap TARGET. The reason used to read "wall snap owns those", which
     // is false for the ceiling family — `drag-resolve.ts` sends only `ridesWall` pieces
     // to `snapToWall`, so nothing owns a pendant. It is skipped because it is overhead:
     // aligning a sofa's edge to a fan 2.4 m above it is not a placement anyone wants.
-    if (o.wallMounted) continue;
+    // Unless a press would run into it: a radiator, or a TV at a wardrobe's height, is
+    // not overhead, and a press toward one went 10 mm inside it with no line to stop on.
+    if (o.wallMounted && !inWay) continue;
     const oe = aabbExtents(o.rot, o.dimMM);
     const ox = o.pos[0];
     const oz = o.pos[2];
@@ -83,10 +86,12 @@ function linesNear(
     const overlapX = Math.abs(x - ox) < ex + oe.ex + CROSS_SLACK;
 
     // Whether the two really face each other across an edge-to-edge line, rather
-    // than passing beside each other inside the slack.
-    const inWay = obstacle?.(o) ?? false;
-    const facesX = inWay && Math.abs(z - oz) < ez + oe.ez - SAME_M;
-    const facesZ = inWay && Math.abs(x - ox) < ex + oe.ex - SAME_M;
+    // than passing beside each other inside the slack: overlapping across it by more
+    // than the collision test's touching allowance, since less than that never
+    // collides, and a neighbour that grazed the path stopped a press the collision
+    // test would have let through.
+    const facesX = inWay && Math.abs(z - oz) < ez + oe.ez - TOUCH_M;
+    const facesZ = inWay && Math.abs(x - ox) < ex + oe.ex - TOUCH_M;
 
     // Span of the guide line along the other axis — covers both parts.
     const spanZ: [number, number] = [Math.min(z - ez, oz - oe.ez), Math.max(z + ez, oz + oe.ez)];

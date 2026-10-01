@@ -787,6 +787,21 @@ export function footFromPart(
   return box;
 }
 
+/** How far two footprints may overlap and still be TOUCHING rather than colliding: the
+ *  pad `collidesAt` hands `footOverlap`, negated, which shrinks each side by half of it.
+ *  Named so the arrow key's barrier stops at the contact the collision test calls one
+ *  (`snapAhead`): an overlap across the line no deeper than this never collides. */
+export const TOUCH_M = 0.01;
+
+/** Whether a piece's footprint is exactly its axis-aligned box: square to the room,
+ *  not round, not an L. Where it is not, a line drawn from the box is an alignment and
+ *  not a contact — a sofa at 45° reaches its box only at its corners. */
+export function footIsBox(rot: number, dimMM: [number, number, number], circle?: boolean, shape?: Shape): boolean {
+  if (circle) return false;
+  if (footCellsLocal(shape, dimMM[0] / 1000, dimMM[1] / 1000)) return false;
+  return Math.abs(Math.sin(2 * rot)) < 1e-9;
+}
+
 /** Exact plan area, m². */
 export function footArea(f: Foot): number {
   if (f.cells) return f.cells.reduce((a, c) => a + 4 * c.hw * c.hd, 0);
