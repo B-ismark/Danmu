@@ -87,6 +87,12 @@ const FLOOR_NORMAL_SCALE = new Vector2(0.25, 0.25);
 /** Skirting height, metres. Shared with the aperture maths, which needs to know
  *  which openings reach down far enough to interrupt it. */
 const SKIRTING_H = 0.1;
+/** How far the skirting stands proud of the plaster, metres. It used to be a plane
+ *  laid ON the wall's own face, and two surfaces in one plane fight over every pixel:
+ *  a sawtooth of wall and board along the foot of every wall, the user's first
+ *  picture on 2026-10-01. A board has a thickness, so it has one now. Under
+ *  `WALL_GAP` (20 mm) on purpose, so a piece snapped flush to a wall still clears it. */
+const SKIRTING_PROUD = 0.012;
 
 export function RoomShell() {
   // Field-level subscriptions, not the whole `room` object: a wall drag replaces
@@ -305,14 +311,20 @@ export function RoomShell() {
           const mid = (a + b) / 2;
           // Runs are off-centre, so each one is offset along the wall's own
           // tangent — (cos yaw, -sin yaw), the same axis the openings are
-          // measured on.
+          // measured on — and half its thickness along the inward normal,
+          // (sin yaw, cos yaw), the side the wall's face looks into.
+          const out = SKIRTING_PROUD / 2;
           return (
             <mesh
               key={`sk-${i}-${k}`}
-              position={[wl.x + mid * Math.cos(wl.yaw), SKIRTING_H / 2, wl.z - mid * Math.sin(wl.yaw)]}
+              position={[
+                wl.x + mid * Math.cos(wl.yaw) + out * Math.sin(wl.yaw),
+                SKIRTING_H / 2,
+                wl.z - mid * Math.sin(wl.yaw) + out * Math.cos(wl.yaw),
+              ]}
               rotation={[0, wl.yaw, 0]}
             >
-              <planeGeometry args={[b - a, SKIRTING_H]} />
+              <boxGeometry args={[b - a, SKIRTING_H, SKIRTING_PROUD]} />
               <meshStandardMaterial color="#D8D3C6" roughness={0.9} side={FrontSide} />
             </mesh>
           );
