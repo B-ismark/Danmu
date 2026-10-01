@@ -184,7 +184,7 @@ the way"* when nothing is. The turn reads *"It does not fit at that angle — "*
 same clause. Put a wardrobe where a normal-width curtain wants to go: that one should
 still say "something is in the way".
 
-**It also used to vanish, and that is fixed on this branch — NOT LOOKED AT.** Looked at
+**It also used to vanish, and that is fixed in `32ccdca` on `main` (PR #200) — NOT LOOKED AT.** Looked at
 2026-09-30: dragged sideways the 5 m curtain *"wasn't moving"*, and pulled toward the
 camera it *"disappeared from my screen"*. Both were one defect. The room clamp was taken
 at the curtain's old angle before its wall was chosen, so it was held to the middle metre
@@ -199,9 +199,9 @@ middle of its wall while the pointer is at a corner, or gone with the pointer no
 near the near wall.
 
 **Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half and the
-wall-from-the-pointer fix on this branch.
+wall-from-the-pointer fix in `32ccdca` (PR #200).
 
-### A selected wall piece seen from behind its wall has a clean back — this branch, NOT LOOKED AT
+### A selected wall piece seen from behind its wall has a clean back — `32ccdca` on `main` (PR #200), NOT LOOKED AT
 
 The user looked at *a selected piece stays in view on the cut-away wall* on 2026-09-30 and
 it was right, except for *"some weird shading issue going on with the tv's back when viewing
@@ -229,7 +229,7 @@ room — a frosted veil over its glass rather than a rim round its edge.
 
 **Where it rides.** `lib/selection-base.ts`, `components/three/Highlight.tsx`.
 
-### A small wall piece turned in a corner stays on its own wall — this branch, NOT LOOKED AT
+### A small wall piece turned in a corner stays on its own wall — `32ccdca` on `main` (PR #200), NOT LOOKED AT
 
 Found in review, 2026-10-01: a 300–500 mm painting pushed flush into a corner and turned
 (**R**, or the plan's turn) went 0.16–0.30 m round onto the next wall, in four of the eight
@@ -640,7 +640,7 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
   exemption. A tucked chair travels only as part of a set. This bullet was written from
   the room report's rule, not from a drag, and "as before" described nothing that had
   ever happened.
-- **Decided since, and this bullet is the one to look at — this branch, NOT LOOKED AT.**
+- **Decided since, and this bullet is the one to look at — `32ccdca` on `main` (PR #200), NOT LOOKED AT.**
   The user chose "make the drag match Room check" (§ 17). Drag the dining chair, alone,
   into its table from the front: it slides in under the top and stays on the floor,
   with no *blocked* tag. Keep pushing and it stops about where 85% of the seat is under
