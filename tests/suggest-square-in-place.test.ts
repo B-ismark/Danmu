@@ -114,7 +114,11 @@ describe('Fix on a sofa a few degrees off square', () => {
   // picked, at 22.42 against the search's best 55.01, and `openRoutes` then clears a route
   // through the dining set and takes the sofa 36 mm with it, square and facing. With the
   // tuck rule's two checks off it is 12 again, so the route repair's draw is what moved.
-  const cases: [LayoutId, number, number, number, number][] = [['t', 6, 5, -10, 11], ['t', 6, 5, 10, 12], ['l', 6, 4.7, -6, 12]];
+  // 10 since a dining set moves as one (§ 52): the search now reaches rooms the in-place
+  // answer's 22.42 cannot match on every seed, and on seeds 4 and 6 the one it picks
+  // (19.94, 11.00) takes the sofa 112 and 126 mm, square and facing; seed 9 stays put.
+  // With the sets off it is 11 again, seed 9 the one that moves.
+  const cases: [LayoutId, number, number, number, number][] = [['t', 6, 5, -10, 10], ['t', 6, 5, 10, 12], ['l', 6, 4.7, -6, 12]];
   for (const [layout, w, d, deg, stays] of cases) {
     it(`${layout} ${w} × ${d}, sofa turned ${deg}°: every seed faces the television`, () => {
       const { parts: base, footprint } = room(layout, w, d);
@@ -291,9 +295,11 @@ describe('Fix on a sofa a few degrees off square', () => {
       // it is authored 8° off square, inside `SNAP_TOL`. Identical on the commit before, both
       // rooms: the T's seeds that act are the search's own. There were two (seeds 2 and 8)
       // until a seat tucked only front first (`tuckedAt`), which changes which seat spots the
-      // search may take, so it walks other paths: four now (2, 3, 5, 6), from the same 22.0
-      // the T starts at, its walkway fault. `candidates` is the rule here, and it is 0 on both.
-      expect({ none, candidates }).toEqual({ none: id === 't' ? 8 : 12, candidates: 0 });
+      // search may take, so it walks other paths: four, from the same 22.0 the T starts at,
+      // its walkway fault. Five since a dining set moves as one (§ 52), seeds 1, 3, 5, 10
+      // and 12; with the sets off it is four again, seeds 2, 6, 8 and 12. `candidates` is
+      // the rule here, and it is 0 on both.
+      expect({ none, candidates }).toEqual({ none: id === 't' ? 7 : 12, candidates: 0 });
     });
   }
 
@@ -311,12 +317,13 @@ describe('Fix on a sofa a few degrees off square', () => {
         if (Math.hypot(sofa.pos[0] - start.pos[0], sofa.pos[2] - start.pos[2]) < 1e-9 && offSquare(sofa.rot) < 1e-6) inPlace++;
       }
     }
-    // A shuffle is not meant to hand back the room it was given. 8 ideas and none of them
-    // this, the same as on the commit before. (9 until a seat tucked only front first,
-    // which moves the search's paths; `inPlace` is the rule, and it is 0 on both.) With the
+    // A shuffle is not meant to hand back the room it was given. 9 ideas and none of them
+    // this. (9 until a seat tucked only front first, 8 after, which moves the search's
+    // paths; 9 again since a dining set moves as one, § 52, presses 1 + 4 + 4 against
+    // 2 + 2 + 4 with the sets off. `inPlace` is the rule, and it is 0 on all of them.) With the
     // candidate offered to a shuffle as well, this room got 1 idea (measured before the
     // front-first rule, not re-measured since), and that is the
     // reason the shuffle is left out.
-    expect({ n, inPlace }).toEqual({ n: 8, inPlace: 0 });
+    expect({ n, inPlace }).toEqual({ n: 9, inPlace: 0 });
   });
 });

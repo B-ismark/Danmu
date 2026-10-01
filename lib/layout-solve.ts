@@ -41,7 +41,7 @@ import type { Footprint } from './footprint';
 import { footprintBounds } from './footprint';
 import { snapToWall } from './physics';
 import { distanceToFootprintEdge, ON_WALL_M, pointInFootprint } from './footprint';
-import { localToWorld, nearestEdge } from './geometry';
+import { localToWorld, nearestEdge, obbGap } from './geometry';
 import { cascadeTransform, ridingParents } from './rigid-parent';
 import {
   angleDelta,
@@ -61,7 +61,7 @@ import {
   type Placement,
   type ScoreWeights,
 } from './layout-score';
-import { isObstacle, relationFor, roleOf } from './layout-rules';
+import { footAt, isObstacle, relationFor, roleOf, standsInSet } from './layout-rules';
 
 export type SolveOptions = {
   /** Same seed, same suggestion. */
@@ -663,6 +663,10 @@ export function withRiders(ids: Set<string>, parts: ScenePart[]): Set<string> {
  *  set's walk because its support moving is the set moving, and a rider in a set of
  *  its own brings that set, which is why the two widenings are one loop.
  *
+ *  A third widening joins the same loop: a set the room STANDS in (`formationSets`,
+ *  § 52) — a table named brings the chairs at it, a bed its nightstands. One way
+ *  only, and the inline comment says why.
+ *
  *  Not `lib/wall-move.ts`'s private function of the same name, and deliberately not
  *  merged with it: a wall move walks the STORED rigid-parent links
  *  (`snapshotDescendants` over `parentIds`, behind an `admit` filter), while a solve
@@ -679,12 +683,20 @@ export function withCompany(ids: Set<string>, parts: ScenePart[]): Set<string> {
     if (g) g.push(p.id);
     else byGroup.set(p.groupId, [p.id]);
   }
+  // The sets the room stands in, as the press will find them: a table named brings
+  // the chairs at it, or the solve would hold them and move the table out from among
+  // them. Only that way round. A chair named for its own fault is the chair's to fix,
+  // and naming it does not free the table, so it moves alone, as it always did.
+  const free = parts.map((p) => !p.locked && !p.wallMounted);
+  const company = new Map<string, string[]>();
+  for (const [a, ...members] of formationSets(parts, free)) company.set(parts[a].id, members.map((k) => parts[k].id));
   let out = new Set(ids);
   for (;;) {
     const next = withRiders(out, parts);
     for (const p of parts) {
       if (p.groupId && next.has(p.id)) for (const id of byGroup.get(p.groupId)!) next.add(id);
     }
+    for (const [anchor, members] of company) if (next.has(anchor)) for (const id of members) next.add(id);
     if (next.size === out.size) return out;
     out = next;
   }
@@ -769,6 +781,9 @@ export type RigidSets = {
   sets: number[][];
   /** Which of `sets` each piece is in, or −1. */
   setOf: Int32Array;
+  /** Per set: whether the room stands in it (`formationSets`) rather than the user
+   *  having merged it. */
+  formation: boolean[];
 };
 
 export function rigidSets(parts: ScenePart[], movable: boolean[]): RigidSets {
@@ -782,14 +797,65 @@ export function rigidSets(parts: ScenePart[], movable: boolean[]): RigidSets {
   const rank = (i: number) => (isObstacle(parts[i]) ? 1e9 : 0) + parts[i].dimMM[0] * parts[i].dimMM[1];
   const sets: number[][] = [];
   const setOf = new Int32Array(parts.length).fill(-1);
+  const formation: boolean[] = [];
   for (const members of byGroup.values()) {
     if (members.length < 2) continue;
     const lead = members.reduce((a, b) => (rank(b) > rank(a) ? b : a));
     const set = [lead, ...members.filter((k) => k !== lead)];
     for (const k of set) setOf[k] = sets.length;
     sets.push(set);
+    formation.push(false);
   }
-  return { sets, setOf };
+  for (const set of formationSets(parts, movable)) {
+    for (const k of set) setOf[k] = sets.length;
+    sets.push(set);
+    formation.push(true);
+  }
+  return { sets, setOf, formation };
+}
+
+/** The sets the room already stands in without anyone merging them: a dining table
+ *  and the chairs at it, a bed and the nightstands at its head (`standsInSet`), each
+ *  with its anchor first, so the table or the bed leads and the set turns about it.
+ *
+ *  Why: on its own a squared table swings an end leg into the chair tucked at its
+ *  end, which the tuck rule rightly calls a clash, so the tidy left the table where
+ *  the search did; and Ideas scattered the chairs and asked the search to bring each
+ *  back. Measured on the five busy rooms × 40 seeds of `tests/suggest-tidiness.test.ts`,
+ *  16–38 solves per room broke a set; with this, none did, and Ideas keeps every chair
+ *  at its table on the seeded T, U and open plan (`docs/what-is-still-open.md` § 52).
+ *
+ *  Movable, unmerged pieces only. A merged piece is already in the set the user made,
+ *  and a set of the user's beside one of the room's would put one piece in two bodies.
+ *  A chair the user pinned is left out rather than holding its table: a pin says where
+ *  that chair stays, not that the table may not move. Each member joins the one anchor
+ *  it is nearest, the lower index on a tie, so a nightstand between twin beds is in one
+ *  set and the answer depends on nothing but the room. */
+export function formationSets(parts: ScenePart[], movable: boolean[]): number[][] {
+  const free = (i: number) => movable[i] && !parts[i].groupId;
+  const byAnchor = new Map<number, number[]>();
+  for (let k = 0; k < parts.length; k++) {
+    if (!free(k)) continue;
+    let best = -1;
+    let bestGap = Infinity;
+    for (let a = 0; a < parts.length; a++) {
+      if (a === k || !free(a) || !standsInSet(parts[k], parts[a])) continue;
+      const p = parts[k];
+      const q = parts[a];
+      const gap = obbGap(footAt(p, p.pos[0], p.pos[2], p.rot), footAt(q, q.pos[0], q.pos[2], q.rot));
+      // A tie by a nanometre is a tie: two beds mirrored about a nightstand measure
+      // their gaps through different arithmetic and differ in the last bit.
+      if (gap < bestGap - 1e-9) {
+        bestGap = gap;
+        best = a;
+      }
+    }
+    if (best < 0) continue;
+    const g = byAnchor.get(best);
+    if (g) g.push(k);
+    else byAnchor.set(best, [k]);
+  }
+  return [...byAnchor.entries()].sort((x, y) => x[0] - y[0]).map(([a, members]) => [a, ...members]);
 }
 
 /** `rigidSets` for a model, derived once. The passes that take a model as their only
@@ -2634,8 +2700,19 @@ function propose(
     if (beside) return beside;
   }
 
+  // A dining set or a bed set turns by quarter turns only. Carried as one body, a set
+  // that takes a free turn has every chair at the table's angle, and squaring it again
+  // afterwards (`snapYaws`) swings the whole set at once, which in a full room raises
+  // a clash somewhere and is vetoed — so the set stayed at whatever angle the search
+  // left. With free turns, 5 busy rooms × 40 seeds of Suggest kept every set whole
+  // and left MORE tables crooked than with no sets at all; quarter turns only, no
+  // table was crooked in any of them (`docs/what-is-still-open.md` § 52). A set the
+  // user merged is theirs and keeps every turn it had.
+  const sets = setsOf(m);
+  const quarterOnly = sets.setOf[i] >= 0 && sets.formation[sets.setOf[i]];
+
   // Turn to face something worth facing.
-  if (roll < 0.3 && m.profile.focals.length > 0) {
+  if (roll < 0.3 && !quarterOnly && m.profile.focals.length > 0) {
     const f = m.profile.focals[Math.floor(rng() * m.profile.focals.length) % m.profile.focals.length];
     if (f !== i) {
       return { ...p, yaw: normaliseYaw(Math.atan2(current[f].x - p.x, current[f].z - p.z)) };
@@ -2650,7 +2727,7 @@ function propose(
     const q = Math.PI / 2;
     return { ...p, yaw: normaliseYaw(Math.round(p.yaw / q) * q + Math.floor(rng() * 4) * q) };
   }
-  if (roll < 0.5) {
+  if (roll < 0.5 && !quarterOnly) {
     // A small free turn, so a chair can end up angled toward a sofa.
     return { ...p, yaw: normaliseYaw(p.yaw + (rng() - 0.5) * 0.6) };
   }

@@ -74,7 +74,7 @@
 import type { Category, Shape, ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { WALK_RADIUS } from './clearance-field';
-import { footFromPart, footOverlap, frontVector, localToWorld, polygonArea, worldToLocal, type Foot, type OBB } from './geometry';
+import { footFromPart, footOverlap, frontVector, localToWorld, obbGap, polygonArea, worldToLocal, type Foot, type OBB } from './geometry';
 import { surfacePostsLocal, type LocalRect } from './foot-cells';
 import { dimRangeFor } from './dimension-ranges';
 
@@ -1454,6 +1454,77 @@ export function belongTogether(a: ScenePart, b: ScenePart): boolean {
 
 function maySnug(rel: Relation | null): boolean {
   return rel !== null && rel.min < WALK_MIN;
+}
+
+// ─── Sets that stand as one ─────────────────────────────────────────────────
+//
+// A dining table and the chairs at it, a bed and the nightstands at its head. The
+// arranger keeps such a set whole (`formationSets` in `lib/layout-solve.ts`): it moves
+// and turns as one body, the way a merged set does, so Suggest and Ideas carry the
+// table with its chairs round it instead of sending five pieces on five errands.
+//
+// Only a set that already STANDS as one is one. A chair across the room from its table
+// is the search's to bring back, piece by piece, as it always was; freezing it where it
+// stands would carry the mistake wherever the table went.
+
+/** Which relation each kind of set is, by the spec that already says how near the
+ *  member belongs: the gap is that spec's band, read through `fixedBand`, so the two
+ *  cannot drift. A desk and its chair are not here: an office chair swivels, so
+ *  there is no one place it stands at a desk to keep. */
+const SETS: ReadonlyArray<{ specId: string; member: Role; anchor: Role }> = [
+  { specId: 'chair-table', member: 'dining-chair', anchor: 'dining-table' },
+  { specId: 'nightstand-bed', member: 'nightstand', anchor: 'bed' },
+];
+
+/** How far off square to its table or bed a piece may stand and still be in a set
+ *  with it: one degree, which is float slack around exact. A set is carried rigidly, so
+ *  whatever angle a member stands at to its lead it keeps wherever the lead goes, and
+ *  squaring the lead turns it that far off the room. A table knocked 8° with its chairs
+ *  left square was a set at the tuck rule's 10°, and squaring it swung all four chairs
+ *  8° crooked and 0.1 m round the table; squared alone, it puts the room back. Exact is
+ *  what the presets, the Library and a turn in 15° steps all produce, so it costs no set
+ *  anyone made on purpose. */
+export const SET_SQUARE_RAD = Math.PI / 180;
+
+/** Does `member` stand in a set with `anchor`, where both stand now?
+ *
+ *  A dining chair: within the chair-table band of the table's edge, squarely in front
+ *  of that edge rather than round its corner, and — if it has a front, which a stool
+ *  does not — facing in (`squareToEdge`, the tuck rule's own test) and square to the
+ *  table to `SET_SQUARE_RAD`.
+ *
+ *  A nightstand: within the nightstand-bed band of the bed, beside it rather than at
+ *  its foot, its back within that same band of the head, and square to the bed to
+ *  `SET_SQUARE_RAD`.
+ *
+ *  Both on the floor: a nightstand standing on something is not at the bed's head. */
+export function standsInSet(member: ScenePart, anchor: ScenePart): boolean {
+  if (!onFloor(member) || !onFloor(anchor)) return false;
+  const mr = roleOf(member);
+  const ar = roleOf(anchor);
+  const kind = SETS.find((s) => s.member === mr && s.anchor === ar);
+  const band = kind && fixedBand(kind.specId);
+  if (!band) return false;
+  const m = footAt(member, member.pos[0], member.pos[2], member.rot);
+  const a = footAt(anchor, anchor.pos[0], anchor.pos[2], anchor.rot);
+  if (obbGap(m, a) > band[1]) return false;
+  const [lx, lz] = worldToLocal(a.rot, m.cx - a.cx, m.cz - a.cz);
+  // `sin 2θ` is zero at every quarter turn and grows as the turn leaves one, so this
+  // is "within `SET_SQUARE_RAD` of square to the anchor" with no wrapping to get wrong.
+  const turn = m.rot - a.rot;
+  const square = Math.abs(Math.sin(2 * turn)) <= Math.sin(2 * SET_SQUARE_RAD);
+  if (ar === 'dining-table') {
+    // Beyond which edge, by the same reading `squareToEdge` makes, and within its run.
+    const alongX = Math.abs(lx) / a.hw < Math.abs(lz) / a.hd;
+    if (alongX ? Math.abs(lx) > a.hw : Math.abs(lz) > a.hd) return false;
+    return member.shape !== 'chair-dining' || (square && squareToEdge(m, a));
+  }
+  // A bed: head at local −Z (its front, +Z, is the foot end — `lib/geometry.ts`).
+  if (!square) return false;
+  if (Math.abs(lx) <= a.hw) return false;
+  // The nightstand's extent along the bed, squared up to it.
+  const along = Math.abs(Math.cos(turn)) * m.hd + Math.abs(Math.sin(turn)) * m.hw;
+  return lz - along <= -a.hd + band[1];
 }
 
 // ─── Reading the room ───────────────────────────────────────────────────────
