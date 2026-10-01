@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuid } from 'uuid';
 import { useDimUnit, useRoom, useSettings, type DimUnit } from '@/lib/store';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { roomStore } from '@/lib/storage';
 import { footprintForLayout, type LayoutId } from '@/lib/footprint';
 import { polygonArea } from '@/lib/geometry';
@@ -111,6 +112,9 @@ type ScreenScale = { unit: number; caption: number };
 
 export default function LayoutPickPage() {
   const router = useRouter();
+  // The double-click shortcut is offered to a mouse or trackpad only: a finger's
+  // double tap is a zoom, or nothing, and the copy follows the pointer.
+  const touch = useMediaQuery('(pointer: coarse)');
   const setRoomId = useRoom((s) => s.setRoomId);
   const dimUnit = useDimUnit();
   const setDimUnit = useSettings((s) => s.setDimUnit);
@@ -153,13 +157,16 @@ export default function LayoutPickPage() {
     setTried(false);
   }
 
-  // One save path for both CTAs — no duplicated persistence logic to drift.
-  async function createRoom(dest: 'model' | 'capture') {
+  // One save path for both CTAs and the double-click — no duplicated persistence
+  // logic to drift. The shape is passed rather than read from `sel`, so a
+  // double-click starts the shape it landed on.
+  async function createRoom(dest: 'model' | 'capture', shapeId: (typeof PRESETS)[number]['id'] = sel) {
     if (saving) return;
+    const shape = PRESETS.find((p) => p.id === shapeId)!;
     // Refused, not repaired: a size outside the room range is named with its range
     // and the room is not made. Saving the two good sides of a half-typed room, or
     // clamping a typed 80 m to 50, would build a room nobody described.
-    const dims = entry ? enteredDims(entry, dimUnit) : typicalOf(preset);
+    const dims = entry ? enteredDims(entry, dimUnit) : typicalOf(shape);
     if (!dims) {
       setTried(true);
       const inputs = sizeRef.current?.querySelectorAll('input');
@@ -174,9 +181,9 @@ export default function LayoutPickPage() {
         id,
         // Named after the preset it started from. Every room used to be called
         // "My Room", which turned the workspace into a grid of identical cards.
-        name: layout.starter,
+        name: shape.starter,
         createdAt: Date.now(),
-        layoutId: sel,
+        layoutId: shapeId,
         width: dims.width,
         depth: dims.depth,
         height: dims.height,
@@ -222,205 +229,189 @@ export default function LayoutPickPage() {
       back={<BackButton onBack={() => router.back()} />}
     >
       {/* No `page-pad` here: DocShell's hero variant already applies it AND
-          already centres its measured column, so a second one made this the one
-          page in the app with 80px/48px of gutter instead of 40/24 — and left the
-          back link, which sits at the column edge, inset from everything it
-          belongs to. */}
-      {/* .auto-grid--wide collapses to one column on a phone; the old
-          minmax(380px, 1fr) forced a track wider than the viewport. */}
-      <div className="auto-grid auto-grid--wide" style={{ width: '100%', gap: 32, alignItems: 'start' }}>
-        {/* INTRO + PICKER */}
-        <div>
-          <StepHeader
-            kicker="Pick a shape"
-            title="Which footprint is closest to your room?"
-          />
-          <div role="radiogroup" aria-label="Room footprint" style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {layouts.map((l, i) => {
-              const active = sel === l.id;
-              return (
-                <button
-                  key={l.id}
-                  ref={(el) => {
-                    optionRefs.current[i] = el;
-                  }}
-                  role="radio"
-                  aria-checked={active}
-                  aria-label={`${l.name}, ${l.areaText} of floor, starts as a ${l.starter.toLowerCase()}`}
-                  // Roving tabindex: one stop for the whole group, arrows move
-                  // within it — the standard radiogroup keyboard contract.
-                  tabIndex={active ? 0 : -1}
-                  onKeyDown={(e) => onOptionKeyDown(e, i)}
-                  onClick={() => setSel(l.id)}
-                  style={{
-                    border: `2px solid ${active ? 'var(--accent)' : 'var(--edge)'}`,
-                    background: active ? 'var(--accent-tint)' : 'var(--paper)',
-                    borderRadius: 'var(--r-3)',
-                    padding: '14px 14px 12px',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    minHeight: 122,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 8,
-                    transition: 'border-color var(--dur-quick) var(--ease-out), background var(--dur-quick) var(--ease-out)',
-                  }}
-                >
-                  <svg viewBox="0 0 240 180" style={{ width: '100%', height: 60 }} aria-hidden="true">
-                    <path
-                      d={l.path}
-                      fill={active ? 'var(--accent)' : 'var(--ink-4)'}
-                      fillOpacity={active ? 0.25 : 0.4}
-                      stroke={active ? 'var(--accent)' : 'var(--ink-2)'}
-                      strokeWidth="2"
-                    />
-                  </svg>
-                  <div className="shape-option__row">
-                    <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: active ? 'var(--accent-text)' : 'var(--ink)' }}>{l.name}</span>
-                    <span className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>{l.areaText}</span>
-                  </div>
-                  <div className="t-small">Starts as a {l.starter.toLowerCase()}</div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* ROOM SIZE — optional, and it says so before anything else. Most people
-              do not know their room's measurements, so the fields arrive filled with
-              the shape's typical size and follow the shape until someone types. */}
-          <section aria-labelledby="room-size-title" className="size-entry">
-            <div className="size-entry__head">
-              <h2 id="room-size-title" className="size-entry__title">
-                Room size <span className="t-hint">· optional</span>
-              </h2>
-              {/* The app's one unit setting, not a local one: the studio opens in
-                  whatever is chosen here, so the numbers on this screen and the
-                  numbers on the next are the same numbers. */}
-              <Select
-                value={dimUnit}
-                onChange={(u) => setDimUnit(u as DimUnit)}
-                options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.label, short: u.id }))}
-                ariaLabel="Units"
-                title="Applies everywhere in Danmu"
-                width={72}
-              />
-            </div>
-            <div ref={sizeRef} className="fields-row" style={{ ['--field-min' as string]: fieldMinWidth(text) }}>
-              {ROOM_AXES.map((axis, i) => {
-                const b = axisBounds(axis, dimUnit);
-                return (
-                  <label
-                    key={axis}
-                    className="size-entry__field"
-                    // Left means focus went out of the FIELD, not out of the input.
-                    // A chevron press used to move focus to the chevron, and counting
-                    // that judged the box live while the person was still working it;
-                    // it leaves focus where it was now (`NumberField`), and the check
-                    // stays on the label so that holds whatever else joins the field.
-                    onBlur={(e) => {
-                      if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-                      setLeft((s) => (s.has(axis) ? s : new Set(s).add(axis)));
-                    }}
-                  >
-                    <span className="t-note">{AXIS_LABEL[axis]}</span>
-                    <NumberField
-                      min={b.min}
-                      max={b.max}
-                      step={stepFor(dimUnit)}
-                      value={text[i]}
-                      onChange={(v) => setEntry(typeInto(entry, typicalOf(preset), dimUnit, i as 0 | 1 | 2, v))}
-                      ariaInvalid={flagged.includes(axis)}
-                      ariaLabel={`${AXIS_LABEL[axis]} in ${dimUnit}`}
-                      height={40}
-                    />
-                  </label>
-                );
-              })}
-            </div>
-            {/* Always mounted, so a sentence arriving in it is announced. */}
-            <div aria-live="polite" className="size-entry__error">
-              {flagged.map((a) => rangeSentence(a, dimUnit)).join(' ')}
-            </div>
-            <div className="size-entry__foot">
-              <p className="t-note">
-                {entry
-                  ? 'Wall to wall, at the widest point.'
-                  : 'Not sure? Leave these as they are. Sizes stay rough until you set your own, and you can change them any time in the studio.'}
-              </p>
-              {entry && (
-                <button type="button" onClick={resetSize} className="ds-btn ds-btn--sm ds-btn--ghost size-entry__reset">
-                  <Icon name="rotate-ccw" size={13} />
-                  Use a typical size
-                </button>
-              )}
-            </div>
-          </section>
-
-          {error && (
-            <p
-              role="status"
-              aria-live="polite"
-              style={{
-                margin: '16px 0 0',
-                padding: '10px 12px',
-                borderRadius: 'var(--r-2)',
-                background: 'var(--danger-tint)',
-                color: 'var(--danger-text)',
-                fontSize: 'var(--fs-small)',
-                lineHeight: 1.45,
-              }}
-            >
-              {error}
-            </p>
-          )}
-
-          <div className="action-row" style={{ marginTop: 24 }}>
-            <button
-              onClick={() => createRoom('model')}
-              disabled={saving !== null}
-              className="ds-btn ds-btn--xl ds-btn--accent ds-btn--block-compact"
-              style={{ fontSize: 'var(--fs-body)' }}
-            >
-              {saving === 'model' ? 'Creating your room…' : (<>Start decorating · {layout.starter.toLowerCase()}<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
-            </button>
-            <button
-              onClick={() => createRoom('capture')}
-              disabled={saving !== null}
-              className="ds-btn ds-btn--lg ds-btn--ghost ds-btn--block-compact"
-              style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}
-            >
-              <Icon name="camera" size={13} />
-              {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first (optional)'}
-            </button>
-          </div>
+          already centres its measured column. */}
+      {/* One screen, no scroll on a laptop: the shapes in a row across the top, then
+          the drawing beside the size and the two ways on. The shapes used to be a
+          two-column stack beside the drawing, which ran the page to ~900px with the
+          buttons under the fold and the drawing's column half empty. */}
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <StepHeader
+          title="Which footprint is closest to your room?"
+          subtitle={touch ? 'Pick one to see it below.' : 'Pick one to see it below, or double-click it to start straight away.'}
+        />
+        <div role="radiogroup" aria-label="Room footprint" className="shape-options">
+          {layouts.map((l, i) => {
+            const active = sel === l.id;
+            return (
+              <button
+                key={l.id}
+                ref={(el) => {
+                  optionRefs.current[i] = el;
+                }}
+                role="radio"
+                aria-checked={active}
+                aria-label={`${l.name}, ${l.areaText} of floor, starts as a ${l.starter.toLowerCase()}`}
+                // Roving tabindex: one stop for the whole group, arrows move
+                // within it — the standard radiogroup keyboard contract.
+                tabIndex={active ? 0 : -1}
+                onKeyDown={(e) => onOptionKeyDown(e, i)}
+                onClick={() => setSel(l.id)}
+                // The first click of the two has already picked it; this opens it.
+                onDoubleClick={() => createRoom('model', l.id)}
+                className="shape-option"
+                data-active={active || undefined}
+              >
+                <svg viewBox="0 0 240 180" style={{ width: '100%', height: 44 }} aria-hidden="true">
+                  <path
+                    d={l.path}
+                    fill={active ? 'var(--accent)' : 'var(--ink-4)'}
+                    fillOpacity={active ? 0.25 : 0.4}
+                    stroke={active ? 'var(--accent)' : 'var(--ink-2)'}
+                    strokeWidth="2"
+                  />
+                </svg>
+                <div className="shape-option__row">
+                  <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: active ? 'var(--accent-text)' : 'var(--ink)' }}>{l.name}</span>
+                  <span className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>{l.areaText}</span>
+                </div>
+                <div className="t-small">{l.starter}</div>
+              </button>
+            );
+          })}
         </div>
 
-        {/* PREVIEW */}
-        <div
-          style={{
-            border: '1px solid var(--hairline)',
-            background: 'var(--paper)',
-            borderRadius: 'var(--r-card)',
-            padding: 24,
-            minHeight: 360,
-            position: 'relative',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          <div className="ds-label" style={{ color: 'var(--ink-2)', marginBottom: 18 }}>
-            Footprint preview · <span className="mono" style={{ color: 'var(--ink)', whiteSpace: 'nowrap' }}>{wText} × {dText}</span> · <span className="mono" style={{ color: 'var(--ink)', whiteSpace: 'nowrap' }}>{layout.areaText}</span> · {layout.starter}
-          </div>
-          <div className="ds-crosshair-bg" style={{ aspectRatio: '4/3', position: 'relative', borderRadius: 'var(--r-2)', overflow: 'hidden' }}>
-            <svg ref={planRef} viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} footprint, ${wText} by ${dText}, ${layout.areaText} of floor`}>
-              <path
-                d={layout.path}
-                fill="var(--accent-tint)"
-                stroke="var(--accent)"
-                strokeWidth="2"
-                vectorEffect="non-scaling-stroke"
-              />
-              {screen && <PlanDimensions box={layout.box} width={wText} depth={dText} screen={screen} />}
-            </svg>
+        {/* .auto-grid--wide collapses to one column on a phone. */}
+        <div className="auto-grid auto-grid--wide" style={{ gap: 28, alignItems: 'start' }}>
+          {/* PREVIEW */}
+          <figure>
+            <div
+              className="ds-crosshair-bg"
+              style={{ aspectRatio: '16/10', position: 'relative', borderRadius: 'var(--r-3)', overflow: 'hidden', border: '1px solid var(--hairline)' }}
+            >
+              <svg ref={planRef} viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} footprint, ${wText} by ${dText}, ${layout.areaText} of floor`}>
+                <path
+                  d={layout.path}
+                  fill="var(--accent-tint)"
+                  stroke="var(--accent)"
+                  strokeWidth="2"
+                  vectorEffect="non-scaling-stroke"
+                />
+                {screen && <PlanDimensions box={layout.box} width={wText} depth={dText} screen={screen} />}
+              </svg>
+            </div>
+            <figcaption className="t-small" style={{ marginTop: 8 }}>
+              {layout.name} · <span className="mono" style={{ whiteSpace: 'nowrap' }}>{wText} × {dText}</span> ·{' '}
+              <span className="mono" style={{ whiteSpace: 'nowrap' }}>{layout.areaText}</span>
+            </figcaption>
+          </figure>
+
+          <div>
+            {/* ROOM SIZE — optional, and it says so before anything else. Most people
+                do not know their room's measurements, so the fields arrive filled with
+                the shape's typical size and follow the shape until someone types. */}
+            <section aria-labelledby="room-size-title">
+              <div className="size-entry__head">
+                <h2 id="room-size-title" className="size-entry__title">
+                  Room size <span className="t-hint">· optional</span>
+                </h2>
+                {/* The app's one unit setting, not a local one: the studio opens in
+                    whatever is chosen here, so the numbers on this screen and the
+                    numbers on the next are the same numbers. */}
+                <Select
+                  value={dimUnit}
+                  onChange={(u) => setDimUnit(u as DimUnit)}
+                  options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.label, short: u.id }))}
+                  ariaLabel="Units"
+                  title="Applies everywhere in Danmu"
+                  width={72}
+                />
+              </div>
+              <div ref={sizeRef} className="fields-row" style={{ ['--field-min' as string]: fieldMinWidth(text) }}>
+                {ROOM_AXES.map((axis, i) => {
+                  const b = axisBounds(axis, dimUnit);
+                  return (
+                    <label
+                      key={axis}
+                      className="size-entry__field"
+                      // Left means focus went out of the FIELD, not out of the input.
+                      // A chevron press used to move focus to the chevron, and counting
+                      // that judged the box live while the person was still working it;
+                      // it leaves focus where it was now (`NumberField`), and the check
+                      // stays on the label so that holds whatever else joins the field.
+                      onBlur={(e) => {
+                        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                        setLeft((s) => (s.has(axis) ? s : new Set(s).add(axis)));
+                      }}
+                    >
+                      <span className="t-note">{AXIS_LABEL[axis]}</span>
+                      <NumberField
+                        min={b.min}
+                        max={b.max}
+                        step={stepFor(dimUnit)}
+                        value={text[i]}
+                        onChange={(v) => setEntry(typeInto(entry, typicalOf(preset), dimUnit, i as 0 | 1 | 2, v))}
+                        ariaInvalid={flagged.includes(axis)}
+                        ariaLabel={`${AXIS_LABEL[axis]} in ${dimUnit}`}
+                        height={40}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+              {/* Always mounted, so a sentence arriving in it is announced. */}
+              <div aria-live="polite" className="size-entry__error">
+                {flagged.map((a) => rangeSentence(a, dimUnit)).join(' ')}
+              </div>
+              <div className="size-entry__foot">
+                <p className="t-note">
+                  {entry
+                    ? 'Wall to wall, at the widest point.'
+                    : 'Not sure? Leave these as they are. Sizes stay rough until you set your own, and you can change them any time in the studio.'}
+                </p>
+                {entry && (
+                  <button type="button" onClick={resetSize} className="ds-btn ds-btn--sm ds-btn--ghost size-entry__reset">
+                    <Icon name="rotate-ccw" size={13} />
+                    Use a typical size
+                  </button>
+                )}
+              </div>
+            </section>
+
+            {error && (
+              <p
+                role="status"
+                aria-live="polite"
+                style={{
+                  margin: '16px 0 0',
+                  padding: '10px 12px',
+                  borderRadius: 'var(--r-2)',
+                  background: 'var(--danger-tint)',
+                  color: 'var(--danger-text)',
+                  fontSize: 'var(--fs-small)',
+                  lineHeight: 1.45,
+                }}
+              >
+                {error}
+              </p>
+            )}
+
+            <div className="action-row" style={{ marginTop: 20 }}>
+              <button
+                onClick={() => createRoom('model')}
+                disabled={saving !== null}
+                className="ds-btn ds-btn--lg ds-btn--accent ds-btn--block-compact"
+              >
+                {saving === 'model' ? 'Creating your room…' : (<>Start decorating<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
+              </button>
+              <button
+                onClick={() => createRoom('capture')}
+                disabled={saving !== null}
+                className="ds-btn ds-btn--lg ds-btn--block-compact"
+              >
+                <Icon name="camera" size={14} />
+                {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

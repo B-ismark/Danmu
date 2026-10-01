@@ -16,13 +16,10 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock(null));
 
 import LayoutPickPage from '@/app/onboarding/layout-pick/page';
+import { quietResizeObserver } from './helpers/mount';
 
 // The preview measures itself; jsdom has no layout to measure, and none is needed here.
-globalThis.ResizeObserver ??= class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-} as unknown as typeof ResizeObserver;
+quietResizeObserver();
 
 afterEach(cleanup);
 

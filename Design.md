@@ -130,8 +130,8 @@ owned by a deterministic geometry engine, not by a model.
    together, so a hint is always a hint: `.t-title`, `.t-body`, `.t-small`,
    `.t-note` (caption, ink-2), `.t-hint` (caption, ink-3), `.t-meta` (small,
    ink-3), `.t-micro`, and `.truncate` for the one flex child that should
-   ellipsise. And **five button sizes** on `.ds-btn` — `--xs` 26 · `--sm` 32 ·
-   default 38 · `--lg` 44 · `--xl` 52 — each carrying its own padding, gap and
+   ellipsise. And **four button sizes** on `.ds-btn` — `--xs` 26 · `--sm` 32 ·
+   default 38 · `--lg` 44 — each carrying its own padding, gap and
    type step, so a button's height is never typed beside its label again. The same
    test fails on a classless element spelling out a named pairing inline, and holds
    a ceiling on inline styles that only goes down.
@@ -139,7 +139,8 @@ owned by a deterministic geometry engine, not by a model.
    label (Material's buttons hug their content; Apple's "span the screen" advice is
    watchOS'), so full width is reserved for a screen's one primary action on a
    phone — `.ds-btn--block-compact`, below 600px, Material's compact class — and an
-   action with its quieter alternative stacks as one block (`.action-row`). A
+   action with its alternative sits beside it, wrapping when the column is narrow
+   and stacking on a phone (`.action-row`). A
    line of running text stops at `70ch` (`p, li { max-inline-size }`; Baymard
    measures 50–75 characters as the readable band, WCAG 1.4.8 caps it at 80). Rows
    that are not buttons — a disclosure header, a rename field — span their panel on
@@ -213,7 +214,8 @@ arrives as `//host`. Settings' key row carries the "Get a free key" link and the
 Two ways in:
 
 1. **Quick start** — pick a footprint, skip capture, land straight in the studio
-   with a contextual starter scene. Zero credentials.
+   with a contextual starter scene. Zero credentials. A double-click on a shape
+   starts that shape; a single click picks it and shows it beside the size fields.
 2. **Capture flow** — footprint → photograph room → detect furniture → studio.
 
 **The size is asked for on the shape picker, and skipping it is allowed** (D7). Three

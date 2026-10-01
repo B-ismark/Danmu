@@ -122,6 +122,17 @@ export function navigationMock(roomId: string | null, opts: Tab | { tab?: Tab; r
   };
 }
 
+/** jsdom has no `ResizeObserver`. For a page that measures itself (the footprint
+ *  page's preview) where the measurement is not what the test is about: it observes
+ *  nothing, so the page keeps its unmeasured state. Leaves a real one alone. */
+export function quietResizeObserver(): void {
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 /** jsdom lays nothing out, so the plan's `<svg>` measures 0 × 0 and every pointer maps
  *  to one point. A 1000 px square is enough for a drag that steers by the piece's own
  *  position, which is how the plan's drag tests are written: the scale the plan fits
