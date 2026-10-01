@@ -78,7 +78,7 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### No more stripes where two parts of a piece meet — this branch, NOT LOOKED AT
+### No more stripes where two parts of a piece meet — merged to `main` in `7de4934` (PR #204), NOT LOOKED AT
 
 The user's report on 2026-10-01: *"the shadow issue is across the platform, the lower part of
 the room, the bed model, the edges of the wardrobe."* **Not shadows** — the key light's shadow
@@ -156,7 +156,7 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
-### A print swapped for curtains hangs flat on the print's wall — this branch, NOT LOOKED AT
+### A print swapped for curtains hangs flat on the print's wall — merged to `main` in `7de4934` (PR #204); the sofa half this branch, NOT LOOKED AT
 
 The user's report on 2026-10-01: *"when you replace a painting with curtain while in 2d plan
 mode, curtains spawns in the wrong degree and ends up going through th wall."* Two halves, and
@@ -176,6 +176,22 @@ Curtain. Repeat once from the 3D tab and once with a door.
 along it, with its back just off the plaster, and in 3D it hangs flat with the folds facing
 into the room. *Wrong* looks like a curtain drawn across the wall in the plan, or poking
 through the wall in 3D.
+
+**And the other way round — this branch.** A print swapped for a **sofa** kept the print's
+centre too, so the 2 m sofa stood 400 mm through the wall. Now a piece that belongs against a
+wall (sofa, bed, wardrobe, desk, shelf, fridge) backs onto the print's wall, facing the room.
+Anything else (a plant, a chair, a lamp) stays where the print was, pulled inside the walls.
+And every floor swap is kept inside the room now, so a big sofa swapped in for a small one
+by a wall no longer pokes through it; a piece that already fits does not move.
+
+**Where to click.** Use the 2D plan. Put a print on a side wall, then **Change the model…** →
+Sofa. Then a second print → Floor plant. Then swap a small sofa standing against a wall for a
+large one.
+
+**What right looks like.** The sofa's back is against the print's wall, with its seat facing
+the room, at the same point along the wall. The plant stands just inside the wall where the
+print hung. The large sofa stays against its wall, inside the room. *Wrong* looks like any
+piece crossing the wall line in the plan, or a sofa with its back to the room.
 
 **Where it rides.** `lib/swap-model.ts`.
 

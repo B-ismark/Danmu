@@ -10,11 +10,12 @@
 import { useStudio } from './store';
 import { useScene } from './scene-store';
 import { currentRoomScene } from './room-scene';
-import { findSupportDetailed, groundY, heightForNewCeiling, ridesWall, snapToWall, wallStandoff } from './physics';
+import { findSupportDetailed, groundY, heightForNewCeiling, ridesWall, snapToWall, wallAffinity, wallStandoff } from './physics';
+import { containedXZ } from './layout-settle';
 import { ridersOf } from './rider-height';
 import { isRoundPart, isWallMountedPart, type LibraryItem, type ScenePart } from './scene-spec';
-import { edgeProjection } from './geometry';
-import type { Footprint } from './footprint';
+import { edgeProjection, polygonWinding } from './geometry';
+import { interiorPoint, polygonCentroid, type Footprint } from './footprint';
 
 /** Signed angle from `b` to `a`, in (−π, π]. */
 const turnBetween = (a: number, b: number) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -89,9 +90,34 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
     // With the new kind's outline too, or a swap to a round piece is asked as the
     // square around it. Nor on what is standing on it (`ridersOf`): a box with a tray
     // on it, swapped for an ottoman, went up onto its own tray.
+    //
+    // And inside the room, at the NEW piece's size. A print swapped for a sofa kept the
+    // print's centre, 35 mm off the plaster, so the sofa stood half its depth through
+    // the wall — the mirror of the curtain above. A piece that belongs against a wall
+    // backs onto the old piece's wall, facing the room, as one added from the Library
+    // turns to; anything else stays where it was, pulled in by the containment the add
+    // path ends on (`containedXZ`). A piece already inside comes back where it was.
+    if (room.footprint) {
+      const fp = room.footprint;
+      const edge = ownWall(fp, part, x, z);
+      if (edge !== null && wallAffinity(item.category, item.shape) === 'prefers-wall') {
+        const snapped = snapToWall([x, 0, z], dimMM, fp, 0, edge);
+        x = snapped.x;
+        z = snapped.z;
+        rot = snapped.rot ?? baseRot;
+      }
+      [x, z] = containedXZ(
+        { rot, dimMM, circle: isRoundPart(item.shape), shape: item.shape },
+        x,
+        z,
+        fp,
+        interiorPoint(fp) ?? polygonCentroid(fp),
+        polygonWinding(fp),
+      );
+    }
     const riders = ridersOf(id, scene, useScene.getState().parts, s.parentIds);
     const world = scene.filter((p) => !riders.has(p.id));
-    support = findSupportDetailed(world, { id, category: item.category, shape: item.shape }, x, z, dimMM, baseRot, isRoundPart(item.shape));
+    support = findSupportDetailed(world, { id, category: item.category, shape: item.shape }, x, z, dimMM, rot, isRoundPart(item.shape));
     ny = support !== null && support.y > 0.3 ? support.y : 0;
   }
   s.resetTransforms(id); // drop stale rotate/scale overrides (and any rigid-parenting link)

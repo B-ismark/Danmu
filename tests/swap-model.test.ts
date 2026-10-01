@@ -160,6 +160,37 @@ describe('changing the model', () => {
     expect(useStudio.getState().rotations.p).toBeUndefined();
   });
 
+  // The mirror of the curtain: a print swapped for a sofa kept the print's centre,
+  // 35 mm off the plaster, and the 2 m sofa stood 400 mm through the wall.
+  it('a wall piece swapped for a sofa backs the sofa onto that wall, facing in', () => {
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.4, 0], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    room6([print]);
+    // On the east wall, turned to face west by a drag (authored 0, override −90°).
+    useStudio.setState({ positions: { p: [3 - 0.035, 1.4, 0.4] }, rotations: { p: -Math.PI / 2 }, dims: {}, parentIds: {} });
+    swapPartModel('p', { label: 'Sofa', group: 'Seating', category: 'sofa', shape: 'sofa', dimMM: [2000, 850, 800] });
+    const s = useStudio.getState();
+    const [x, y, z] = s.positions.p!;
+    expect(Math.sin(s.rotations.p!)).toBeCloseTo(-1, 9);
+    // Back on the plaster, by half its depth and the shared gap.
+    expect(x).toBeCloseTo(3 - 0.425 - 0.02, 9);
+    expect(z).toBeCloseTo(0.4, 9);
+    expect(y).toBe(0);
+    expect(useScene.getState().parts.find((q) => q.id === 'p')!.wallMounted).toBe(false);
+  });
+
+  it('a wall piece swapped for something with no wall of its own is pulled inside the room', () => {
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [1, 1.4, -3 + 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    room6([print]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', { label: 'Floor plant', group: 'Decor', category: 'plant', shape: 'plant', dimMM: [400, 400, 900] });
+    const s = useStudio.getState();
+    const [x, , z] = s.positions.p!;
+    // Its back edge inside the north wall; the turn left alone.
+    expect(z - 0.2).toBeGreaterThanOrEqual(-3);
+    expect(x).toBeCloseTo(1, 6);
+    expect(s.rotations.p).toBeUndefined();
+  });
+
   it('does nothing for a piece that is gone', () => {
     setRoom();
     const before = useScene.getState().parts;
