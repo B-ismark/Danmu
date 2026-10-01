@@ -531,6 +531,22 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
+### Comfort zones in the plan are outlines and halos, not cells and dashed boxes — this branch, LOOKED AT once (Chromium, L room)
+
+The walkable floor is one rounded outline of the same cells Room check measures
+(`lib/field-contour.ts`), each piece's clearance is a halo fading out from the piece, and floor
+cut off from the door is a warm hatch. `--warn-tint`, which the cut-off fill and its legend chip
+had been asking for, **did not exist** — both were drawing with an undefined colour until this.
+
+Looked at once in a headless Chromium on the L preset, with the sofa dragged across the lower
+arm to cut the corner off: the outline is smooth, the hatch reads, the legend chips match.
+**Still wants an eye:** a real GPU and a phone at 2× zoom (does the hatch shimmer when the plan
+is panned?), a T and a U room, and a room with no door (everything walkable, no hatch at all).
+
+**Wrong:** a stair-step edge anywhere on the walkable outline; walkable tint showing **under** a
+piece; a halo drawn on the far side of a piece from the floor it describes (the fade runs
+backwards); the cut-off legend chip showing when no hatch is on the plan.
+
 ### Every idea is now an arranged room, not a tidied scatter — `0edf04e` on `main` (PR #184, § H.6.0), needs eyes on every preset
 
 Until this change the search behind **Ideas** accepted no steps: each card was a random

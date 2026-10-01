@@ -56,6 +56,7 @@
   --danger-text: #A63A20;   /* 5.37:1 on --danger-tint — for text sitting in a danger banner */
   --warn: #9A6233;          /* 4.79:1 on --paper */
   --warn-text: #85511F;     /* 5.73:1 on --paper-2 — for warn text on a tinted chip */
+  --warn-tint: rgba(154, 98, 51, 0.16); /* the plan's cut-off floor wash — a fill, never type */
   --success: #5E8B6E;       /* fills only (3.70:1) */
   --success-text: #46705A;  /* 5.36:1 on --paper */
 
