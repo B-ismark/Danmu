@@ -426,17 +426,15 @@ h1, h2, h3 { text-wrap: balance; }
 @media (max-width: 599px) {
   .ds-btn--block-compact { width: 100%; justify-content: center; }
 }
-/* A row of actions: primary first, wrapping rather than squeezing. On a phone it
-   becomes a stack, each action full width, so the thumb has the whole row. */
-/* A primary action and its quieter alternative, stacked, as wide as the wider of
-   the two: one block with one left edge, rather than a bar and a stray link. On a
-   phone the stack takes the full width, so the thumb has the whole row. */
-.action-row { display: inline-grid; grid-auto-flow: row; gap: 8px; max-inline-size: 100%; }
-.action-row > .ds-btn { justify-content: center; }
+/* A primary action and its alternative, side by side, primary first. Wraps rather
+   than squeezing when the column is too narrow for both; on a phone it is a stack,
+   each full width, so the thumb has the whole row. */
+.action-row { display: flex; flex-wrap: wrap; gap: 8px; max-inline-size: 100%; }
+.action-row > .ds-btn { justify-content: center; max-inline-size: 100%; }
 @media (max-width: 599px) { .action-row { display: grid; } }
 /* Sizes. Buttons came in thirteen heights — 24 through 52, most of them two
    pixels from a neighbour — each typed inline beside a font size that did not
-   always agree with it. Five now, and the label size and padding travel WITH
+   always agree with it. Four now, and the label size and padding travel WITH
    the height, because a 26px button with 16px of side padding and body-size
    type is three decisions that were never made together.
 
@@ -444,13 +442,11 @@ h1, h2, h3 { text-wrap: balance; }
    · --sm  32  panel and rail actions, toolbar buttons
    · (md)  38  the default — dialogs, pages
    · --lg  44  a page's main action, and anything a thumb has to hit
-   · --xl  52  the one front-door call to action
 
    A size is not a variant: `ds-btn--sm ds-btn--primary` is a small primary. */
 .ds-btn--xs { height: 26px; padding: 0 10px; gap: 6px; font-size: var(--fs-caption); border-radius: var(--r-2); }
 .ds-btn--sm { height: 32px; padding: 0 12px; gap: 6px; font-size: var(--fs-small); }
 .ds-btn--lg { height: 44px; padding: 0 20px; }
-.ds-btn--xl { height: 52px; padding: 0 24px; font-size: var(--fs-lead); }
 
 /* ─── Busy ────────────────────────────────────────────────────────────────
    A ring in `currentColor`, so it takes the colour of whatever control it sits
@@ -1761,6 +1757,30 @@ textarea.field { border-radius: var(--r-2); }
   display: grid; gap: 8px;
   grid-template-columns: repeat(auto-fit, minmax(min(var(--field-min, 64px), 100%), 1fr));
 }
+/* The shape picker's options (app/onboarding/layout-pick): five in one row on a
+   laptop, so the page fits a screen; fewer across as the column narrows. `auto-fit`,
+   not `auto-fill`: a fixed five in an 1100px column would otherwise keep an empty
+   sixth track and stop short of the drawing's right edge below. */
+.shape-options {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+}
+.shape-option {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px; text-align: left; cursor: pointer;
+  border: 1px solid var(--edge); border-radius: var(--r-3); background: var(--paper);
+  transition: border-color var(--dur-quick) var(--ease-out), background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
+}
+.shape-option:hover { background: var(--paper-2); }
+/* Its own ring rather than the shared one, which also sets a small radius and would
+   square the tile's corners off while it has focus. */
+.shape-option:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+/* The chosen one reads 2px through an inset ring, so picking does not nudge the
+   tile's contents by the extra pixel of border. */
+.shape-option[data-active] {
+  border-color: var(--accent); background: var(--accent-tint);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 /* A shape option's name and floor area. Wraps rather than squeezing: at a phone's
    two ~150px columns an area in square feet ("241.1 ft²") and "Open Plan" do not
    share a line, and a baseline row that cannot wrap prints one over the other. */
@@ -1769,8 +1789,7 @@ textarea.field { border-radius: var(--r-2); }
   gap: 2px 8px; flex-wrap: wrap;
 }
 /* The shape picker's room size (app/onboarding/layout-pick): optional, so it
-   reads as a quiet form under the shapes rather than a step of its own. */
-.size-entry { margin-top: 24px; }
+   reads as a quiet form beside the drawing rather than a step of its own. */
 .size-entry__head {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap; margin-bottom: 10px;

@@ -1336,4 +1336,19 @@ describe('nothing spreads wide because the window did', () => {
   it('running text stops at its measure', () => {
     expect(CSS).toMatch(/\np, li \{ max-inline-size: 70ch; \}/);
   });
+
+  it('an action and its alternative sit side by side, and stack only on a phone', () => {
+    // The footprint page's two ways on. They were one stacked block at every width,
+    // which spent a second 44px line on a laptop that had room for both.
+    const row = rule('.action-row');
+    expect(row).toMatch(/display: flex;/);
+    expect(row).toMatch(/flex-wrap: wrap;/);
+    expect(CSS).toMatch(/@media \(max-width: 599px\) \{ \.action-row \{ display: grid; \} \}/);
+  });
+
+  it('a fixed set of shapes fills its row rather than leaving an empty track', () => {
+    // `auto-fill` keeps a sixth, empty track in an 1100px column, so five tiles stop
+    // ~185px short of the drawing's right edge below them.
+    expect(rule('.shape-options')).toMatch(/repeat\(auto-fit, /);
+  });
 });

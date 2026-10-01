@@ -46,7 +46,7 @@ function isSettingsPath(pathname: string): boolean {
 const APP_ORIGIN = 'https://app.invalid';
 
 /** The Settings address for a page that sends someone there. The rooms page needs
- *  no `from`: the breadcrumb's "Rooms" already goes there. */
+ *  no `from`: Settings opened without one goes back to the rooms. */
 export function settingsHref(from?: string | null): string {
   const path = safeReturnPath(from);
   return path && path !== '/' ? `/settings?from=${encodeURIComponent(path)}` : '/settings';
@@ -59,6 +59,7 @@ export function returnLabel(path: string, room?: { id: string; name: string } | 
     return room && path.startsWith(`/room/${room.id}/`) ? `Back to “${room.name}”` : 'Back to your room';
   }
   if (path.startsWith('/onboarding/detect')) return 'Back to the scan';
+  if (pathOf(path) === '/') return 'Back to your rooms';
   return 'Back';
 }
 

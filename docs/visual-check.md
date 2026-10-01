@@ -769,7 +769,7 @@ and `tests/library-click-through.test.tsx`. The Catalog tree was looked at on 20
 and is gone. What is left is here because what a test can check about it and what a person
 can see are different halves.*
 
-### The rooms page opens the app, and Settings goes back where it came from — on `claude/amazing-davinci-m8zqys` (PR #211)
+### The rooms page opens the app, and Settings goes back where it came from — merged to `main` in `150e12a` (PR #211); Back moved to the heading's right, and the footprint page tightened, on `claude/amazing-davinci-m8zqys`
 
 **Where to click.**
 - A fresh profile (or cleared site data) on `/`. It should open on the empty rooms page, with **Create your first room**.
@@ -783,9 +783,14 @@ can see are different halves.*
   - from the scan screen's **Set up a key in Settings**.
 - Paste a Settings address that has `?from=` into a new tab, and press Back there.
 - Settings at phone width (375px).
+- Settings opened from the rooms page. Back should sit at the right end of the heading row and read **Back to your rooms**.
+- The footprint page (**New room**) at 1280×800. Double-click a shape that is not the picked one.
+- The same page at 375px.
 
 **What wrong looks like.**
 - A welcome page, or a flash of one, before the rooms.
+- Settings' Back anywhere but beside the heading, or missing when Settings was opened from the rooms page.
+- On the footprint page: a scroll at 1280×800, or the two buttons on separate lines there; a double-click opening the shape picked before it; the picked shape's tile shifting its contents by a pixel; at 375px, the shapes not reflowing to two or three across, or the buttons not stacking full width.
 - Back reading a plain "Back", or going somewhere other than the room or the scan it names. A fresh tab, or a link opened from another site, should push to the path, never leave the app.
 - On a phone, the three cards' rows not stacking, or the key field and its buttons running off the card.
 - The tinted tiles reading as buttons.
@@ -793,6 +798,7 @@ can see are different halves.*
 **Settled without eyes.**
 - Which paths Settings will honour, what Back says, and how it gets there are in `tests/settings-return.test.ts`. So is the sweep holding every way in except the rooms page to carrying its place. Mutants across three rounds were all caught, counted in the PR.
 - The View menu's link carries its room, in `tests/view-menu.test.tsx`.
+- Settings' Back placement and fallback are in `tests/settings-back.test.tsx`; the footprint page's double-click, its touch copy and its button row in `tests/layout-pick-open.test.tsx` and `tests/reflow.test.ts`. Eleven mutants, all caught. Measured in Chromium: the footprint page is one screen at 1280×800 and 1024×768, the five shapes span the drawing's width, and Settings' Back ends on the cards' right edge.
 - The worker's precache and fallback are in `tests/service-worker.test.ts`.
 
 ### View behind a gear, collapsed rails as icon strips — merged to `main` in `5114b5f` (PR #179)

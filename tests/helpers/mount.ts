@@ -101,15 +101,36 @@ export function stackedViewport(): () => void {
  *  is the one thing here worth defending: `usePathname` is the only difference between
  *  the plan page's mock and the model page's, so deriving it would be a second source
  *  of truth for which tab a test is on — silently right for the six files on `/plan`
- *  and silently wrong for the two on `/model`. */
-export function navigationMock(roomId: string | null, tab: 'plan' | 'model' = 'plan') {
+ *  and silently wrong for the two on `/model`.
+ *
+ *  Pass `{ router }` when the test is ABOUT where a press goes: spies made with
+ *  `vi.hoisted`, so they exist by the time the hoisted factory runs. Without it the
+ *  router does nothing, which is the right default for a test about anything else.
+ *  An object rather than a third argument, so a route with no room is not made to
+ *  name a tab it is not on. */
+export type RouterMock = { push: (href: string) => void; replace: (href: string) => void; back: () => void; prefetch: (href: string) => void };
+type Tab = 'plan' | 'model';
+export function navigationMock(roomId: string | null, opts: Tab | { tab?: Tab; router?: RouterMock } = 'plan') {
+  const { tab = 'plan', router } = typeof opts === 'string' ? { tab: opts } : opts;
   const pathname = roomId === null ? '/' : `/room/${roomId}/${tab}`;
+  const quiet: RouterMock = { push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} };
   return {
     useParams: () => (roomId === null ? {} : { roomId }),
     usePathname: () => pathname,
-    useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} }),
+    useRouter: () => router ?? quiet,
     useSearchParams: () => new URLSearchParams(),
   };
+}
+
+/** jsdom has no `ResizeObserver`. For a page that measures itself (the footprint
+ *  page's preview) where the measurement is not what the test is about: it observes
+ *  nothing, so the page keeps its unmeasured state. Leaves a real one alone. */
+export function quietResizeObserver(): void {
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
 }
 
 /** jsdom lays nothing out, so the plan's `<svg>` measures 0 × 0 and every pointer maps
