@@ -1249,6 +1249,31 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
+### A merged set reads as a tree in the Catalog, not as a stack of outlined cards — this branch, NOT LOOKED AT
+
+**Where to click.** Open a furnished room, Shift-click two pieces in the Catalog list, press
+**Group 2** in the bar over the canvas. Then: fold and unfold the group with its chevron; click
+the **Group** row; click one member; fold the group while a member is selected; hide one member
+and keep another where it is; hover a member. Do it once at 1440px and once with the left rail
+at its narrowest (the 1024–1279px step).
+
+**What wrong looks like.**
+- Any row in the list with an outline. Selection is a fill now, strong on the row you picked and
+  paler on the members of a picked group; a ring on every member is the old card stack.
+- A heavy connector. The members should hang off one faint vertical line under the chevron,
+  stopping at the last member.
+- The chevron not turning (it should go from pointing right to pointing down), or turning when
+  you merely select the row. Only the chevron folds; the row selects.
+- Picking a group opens a second line of buttons under every member. Only the header opens its
+  actions; a member opens its own when you pick it by itself.
+- A folded group that holds the selection looking unselected.
+- A hidden member not dim and struck through, or a kept-in-place member that loses its padlock
+  until hovered. The marks must show without a pointer.
+- "Group" or a count wrapping onto a second line, or a member's name losing its ellipsis.
+
+**Rides** this branch; the rules are `.tree-row*` in `app/globals.css` and the rows in
+`components/studio/PartTree.tsx`. Behaviour (selection, fold, ungroup, remove, keys) is untouched.
+
 ### View behind a gear, collapsed rails as icon strips — merged to `main` in `5114b5f` (PR #179)
 
 **Looked at: everything but the screen reader.** In the walkthrough the gear menu, the

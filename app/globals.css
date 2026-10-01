@@ -1187,6 +1187,89 @@ textarea.field { border-radius: var(--r-2); }
 /* A state mark — locked, hidden — after the name: small, quiet, always there. */
 .row-mark { display: inline-flex; flex-shrink: 0; color: var(--ink-3); }
 
+/* ─── The piece list as a tree ─────────────────────────────────────────────
+   `PartTree`'s rows (`.tree-row`, on top of `.list-row`, which the context menu and
+   the export menu share and which stays as it was). A merged set is a header with
+   its members under it, and the way to draw that is the way every file tree does:
+   no box on any row, a soft rounded fill for the two states that need one, the
+   children set in by an indent with one quiet guide line down it.
+
+   It used to be a card per row. `.list-row.is-selected` spends a 1px accent ring on
+   the selection, and picking a group selects every member, so three pieces and a
+   header came up as four outlined buttons with a connector between them — a stack
+   of buttons, not a hierarchy. Selection is a FILL here, in two strengths:
+     · strong  — `.is-selected`: the row you picked. The only one that opens its
+                 actions onto a line of its own.
+     · pale    — `.is-implied`: a member that is selected because its group is.
+                 Still `aria-selected`; it just does not repeat the ring N times.
+   The name turns --accent-text and heavier, so the state does not rest on a tint
+   alone (WCAG 1.4.11 was the reason for the ring, and a 4.9:1 label is the same
+   evidence). Keyboard focus keeps its own outline, from the rule near the top.
+
+   Height is 32px, like the other rail rows; the 24px chevron and the 24px action
+   buttons fit inside it, and each carries its 44px touch pad from `.icon-btn::after`. */
+.list-row.tree-row { padding: 3px 8px; min-height: 32px; gap: 6px; flex-shrink: 0; }
+/* `flex-shrink: 0`, because `min-height: 32px` replaces the flex item's automatic minimum
+   (its content height) and `.list` is a column with a fixed height: without it a selected
+   row, which wraps its actions onto a second line, is squeezed back to 32px and its second
+   line paints over the row beneath. */
+.tree-row .row-name { font-size: var(--fs-small); font-weight: 500; color: var(--ink); }
+.tree-row.is-selected { box-shadow: none; background: var(--accent-tint-strong); }
+.tree-row.is-selected .row-name { color: var(--accent-text); font-weight: 600; }
+/* A hidden piece stays dim and struck through whether or not it is the selected one:
+   the eye-off mark beside it is the second signal, this is the one you read down the list. */
+.tree-row.is-hidden .row-name { color: var(--ink-3); text-decoration: line-through; }
+
+/* The header: chevron, glyph, name, count. Its name is the heavier of the two so the
+   group reads as the parent. */
+.list-row.tree-row--group { padding-left: 4px; } /* `.list-row.tree-row` above is two classes deep; so is this */
+.tree-row--group .row-name { font-weight: 700; }
+.tree-group-icon { display: inline-flex; flex-shrink: 0; color: var(--ink-3); }
+.tree-row--group.is-selected .tree-group-icon,
+.tree-row--group.is-within .tree-group-icon { color: var(--accent-text); }
+/* A count, not a button — a small pill that the name never has to make room for:
+   `flex-shrink: 0` and the name is the only item allowed to ellipsise. */
+.tree-count {
+  flex-shrink: 0; min-width: 18px; padding: 1px 6px; text-align: center;
+  border-radius: var(--r-full); font-size: var(--fs-micro); font-weight: 700; line-height: 1.4;
+  color: var(--ink-2); background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+/* One glyph, turned. `transform` is not in the reduced-motion allow-list above, so
+   with that preference set the fold simply is; the state is still carried by the glyph. */
+.tree-chevron svg { transition: transform var(--dur-base) var(--ease-out); }
+.tree-chevron[aria-expanded="true"] svg { transform: rotate(90deg); }
+
+/* A member: set in under its header, with the guide line on the chevron's axis
+   (4px of padding + half the 24px button, less the 1px border the abs. box is
+   measured inside). It reaches through the list's 2px row gap so it is one line down
+   the set, and a last member's stops at its own bottom edge. --hairline: it divides
+   nothing and nothing presses it. */
+.list-row.tree-row--child { padding-left: 28px; }
+.tree-row--child::before {
+  content: ''; position: absolute; left: 15px; top: -2px; bottom: -2px; width: 1px;
+  background: var(--hairline); pointer-events: none;
+}
+.tree-row--last::before { bottom: 0; }
+
+/* The paler tier. After the hover rule above in source order — equal specificity, so
+   the later one wins — and it sets its own ground so the fade under floating actions
+   is the tint, not a slab of paper. Opaque on purpose: `color-mix` of two opaque
+   colours is opaque, where the --accent-tint token is a translucent wash. */
+.list-row.tree-row.is-implied,
+.list-row.tree-row.is-implied:hover,
+.list-row.tree-row.is-within,
+.list-row.tree-row.is-within:hover {
+  background: var(--accent-tint);
+  --row-ground: color-mix(in srgb, var(--accent) 12%, var(--paper));
+}
+.tree-row.is-within .row-name { color: var(--accent-text); }
+/* A folded group that holds the selection is the only row that can say so. */
+.list-row.tree-row.is-folded,
+.list-row.tree-row.is-folded:hover {
+  background: var(--accent-tint-strong);
+  --row-ground: color-mix(in srgb, var(--accent) 20%, var(--paper));
+}
+
 /* Editable text: a real button that swaps to an input on activate. Replaces
    four separate `<div onClick>` rename affordances. */
 .editable {
