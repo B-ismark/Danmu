@@ -188,6 +188,25 @@ describe('an arrow key lands on the first line it reaches (plan tab)', () => {
     expect(at('tote')[0]).toBeCloseTo(FLUSH + 0.317, 9);
   });
 
+  it('steps from the room as it is when a key is pressed during a drag', () => {
+    // The crate is dragged away from the tote, and the tote is arrowed toward where
+    // the crate stood. Read off the drag's pointer-down world, the tote bumped into the
+    // crate that was no longer there and stopped flush with it at 1.9.
+    room(1.5, 'fine');
+    useScene.setState({ parts: [...useScene.getState().parts, box('tote', 'Tote', 2.0, 400)] });
+    restoreRect = stubPlanCanvas();
+    const { container } = render(<PlanView />);
+    const svg = container.querySelector('svg')!;
+    fireEvent.pointerDown(buttonFor('Crate'), { button: 0, clientX: 500, clientY: 500, pointerId: 1 });
+    for (let dy = 1; dy <= 300 && crate()[2] < 0.7; dy++) {
+      fireEvent.pointerMove(svg, { clientX: 500, clientY: 500 + dy, pointerId: 1 });
+    }
+    expect(crate()[2]).toBeGreaterThanOrEqual(0.7);
+    press('ArrowLeft', 12, 'Tote');
+    fireEvent.pointerUp(svg, { clientX: 500, clientY: 600, pointerId: 1 });
+    expect(at('tote')[0]).toBeCloseTo(1.88, 9);
+  });
+
   it('still snaps a drag flush', () => {
     // The drag half of the same call site: a pointer keeps the drag magnet, so a piece
     // dragged in close is pulled onto its neighbour's edge from 100 mm out.

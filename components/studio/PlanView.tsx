@@ -638,7 +638,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // off, so it asks for the same answer on the spot. Both routes therefore carry
     // the same company, which they did not: the keys moved one piece out of a
     // selection while the mouse moved one piece out of a selection differently.
-    const drag = dragRef.current;
+    //
+    // Only the drag reads `dragRef`. A key can be pressed while a drag is under way,
+    // and it is a step from where its piece stands now: borrowing the drag's convoy,
+    // start and pointer-down world moved it against the room as it was when the drag
+    // began — bumping into where the dragged piece used to be — and wrote its guides
+    // over the drag's.
+    const drag = gesture === 'drag' ? dragRef.current : null;
     const convoy =
       drag?.convoy ??
       planConvoy({
@@ -739,10 +745,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
         // What it now stands on, the way the 3D tab's drop records it. This tab never
         // did, so a lamp moved here onto the other nightstand kept the first one's
         // link and stayed behind when the second one moved (§ H.6.7). A nudge has no
-        // drop to wait for; a drag records it on release. Asked of THIS piece: an arrow
-        // key can move another one while a drag is under way, and its landing is its
-        // own, not the dragged piece's.
-        if (drag?.id === part.id) drag.landed = { on: r.supportId };
+        // drop to wait for; a drag records it on release.
+        if (drag) drag.landed = { on: r.supportId };
         else landOn(part.id, r.supportId);
       }
       // A wall-mounted piece is turned by the wall it lands on, not by the drag.
