@@ -817,8 +817,34 @@ export function containedXZ(
     }
   }
 
+  // Still out: the walk toward the middle can pass a seat without landing on it. A
+  // turned piece in a U's inner corner is pushed off one wall's line onto the next and
+  // back, and the straight line home crosses the notch — found in review, a 2.1 m bed
+  // at 45° left 0.3 m through the plaster with clear floor 200 mm away. So ask the
+  // nearest ring around where it was asked to stand, widening until one has a seat.
+  for (let r = RING_STEP_M; r <= RING_MAX_M + 1e-9 && best.out > 0; r += RING_STEP_M) {
+    for (let k = 0; k < RING_DIRECTIONS; k++) {
+      const a = (2 * Math.PI * k) / RING_DIRECTIONS;
+      const nx = x0 + r * Math.cos(a);
+      const nz = z0 + r * Math.sin(a);
+      const s = seatAt(piece, nx, nz, poly, winding);
+      // A SEAT, or nothing: a piece that fits nowhere keeps the answer above — centred
+      // across a room too narrow for it — rather than one a ring found less far out.
+      if (s.out <= 0 && seatBetter(s, best)) {
+        best = s;
+        bestX = nx;
+        bestZ = nz;
+      }
+    }
+  }
+
   return [bestX, bestZ];
 }
+
+/** The ring search's spacing and reach: 50 mm rings out to a metre, 16 directions. */
+const RING_STEP_M = 0.05;
+const RING_MAX_M = 1.0;
+const RING_DIRECTIONS = 16;
 
 /** Push a part until its whole footprint is inside the room.
  *
