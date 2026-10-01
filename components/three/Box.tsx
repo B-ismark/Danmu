@@ -91,9 +91,7 @@ export function Box({
       <meshStandardMaterial {...matProps} />
     );
   const outline = edgeOpacity > 0 && (
-    <Edges threshold={30} renderOrder={1}>
-      <lineBasicMaterial color={edgeColor} transparent opacity={edgeOpacity} />
-    </Edges>
+    <Edges threshold={30} renderOrder={1} color={edgeColor} transparent opacity={edgeOpacity} />
   );
   return (
     <group position={position} rotation={rotation}>

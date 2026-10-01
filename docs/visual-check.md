@@ -173,6 +173,12 @@ bedroom slowly across the nightstands and back. A dark band crossing the floor u
 bed is this defect back. A missing outline anywhere — the bed's legs, the rim round a
 selected piece, the frame round a selected wall — is the fix gone too far.
 
+**The outlines have their colours back, which is a change you will see.** Every outline
+used to draw opaque white whatever it asked for (the colour sat on a material drei
+ignored). Now a selected piece's rim is terracotta, a hovered one's sage, a refused
+move's red, and a bed's legs carry a soft dark edge rather than a white one. White
+anywhere on those is the old bug back.
+
 **Gates.** `tests/strokes.test.tsx`.
 
 **Where it rides.** `components/three/strokes.tsx` + `components/three/Box.tsx` +

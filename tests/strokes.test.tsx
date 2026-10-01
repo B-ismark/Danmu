@@ -34,7 +34,7 @@ vi.mock('@react-three/fiber', async (orig) => ({
   useThree: (sel: (s: { camera: PerspectiveCamera; invalidate: () => void }) => unknown) => sel({ camera, invalidate }),
 }));
 
-const { Edges, Line, SeeStrokes, STROKE_LAYER } = await import('@/components/three/strokes');
+const { Edges, Line, SeeStrokes, STROKE_LAYER, isStroke } = await import('@/components/three/strokes');
 
 describe('the stroke layer', () => {
   it('is not layer 0, so a camera left at three’s default cannot see it', () => {
@@ -68,6 +68,28 @@ describe('the stroke wrappers', () => {
     const points: [number, number, number][] = [[0, 0, 0], [1, 0, 0]];
     expect(Line({ points }).props.layers).toBe(STROKE_LAYER);
     expect(Line({ points, layers: 0 } as Parameters<typeof Line>[0]).props.layers).toBe(STROKE_LAYER);
+  });
+});
+
+describe('a stroke is told apart from a surface', () => {
+  it('by its layer: a stroke is one, a surface is not, and a mesh on both is still a surface', () => {
+    const stroke = new Object3D();
+    stroke.layers.set(STROKE_LAYER);
+    const both = new Object3D();
+    both.layers.enable(STROKE_LAYER);
+    expect(isStroke(stroke)).toBe(true);
+    expect(isStroke(new Object3D())).toBe(false);
+    expect(isStroke(both)).toBe(false);
+  });
+
+  it('and ShadowCaster asks, so turning on casting for a piece skips its strokes', () => {
+    const src = stripComments(readFileSync(join(__dirname, '..', 'components/three/Draggable.tsx'), 'utf8'));
+    expect(src).toMatch(/isMesh\)?\s*\|\|\s*isStroke\(mesh\)\)\s*return;\s*mesh\.castShadow = true;/);
+  });
+
+  it('refuses a material child at compile time, which drei v10 would attach to nothing', () => {
+    // @ts-expect-error — the colour is a prop; a <lineBasicMaterial> child draws white.
+    expect(Edges({ children: null }).props.layers).toBe(STROKE_LAYER);
   });
 });
 

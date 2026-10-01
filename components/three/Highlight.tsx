@@ -108,9 +108,7 @@ export function Highlight({
         renderOrder={2}
       >
         <meshBasicMaterial transparent opacity={fill} color={fillColor} depthWrite={false} />
-        <Edges threshold={20} raycast={noRaycast}>
-          <lineBasicMaterial color={rimColor} transparent opacity={rim} depthWrite={false} />
-        </Edges>
+        <Edges threshold={20} raycast={noRaycast} color={rimColor} transparent opacity={rim} depthWrite={false} />
       </mesh>
     </group>
   );
