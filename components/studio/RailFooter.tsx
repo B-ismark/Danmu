@@ -1,7 +1,7 @@
 'use client';
 
 // The right rail's pinned action row: finish with whatever is selected — delete
-// the piece, or stop editing the wall — add a piece, put every piece back.
+// the piece, or stop editing the wall — add a piece, start the room over.
 //
 // It was TWO bands, stacked. The Inspector ended with its own `--paper-2` strip
 // holding a full-width "Delete from scene" (and the WALL panel an identical one
@@ -55,14 +55,20 @@
 // which is why this is `RailFooter` and not `RoomActions`. A file named for a set
 // it no longer holds is the scar CLAUDE.md rule 1 describes.
 //
-// `hasAnyOverride` lives here rather than in `PartTree` because this is now its
-// only consumer. It is a raw read of the three override maps with no fallback,
-// which is exactly the case `lib/transforms.ts` allows: the question is "has
-// anything been overridden", not "what is this piece's transform".
+// "Start over" puts the room back the way it first opened — the scan's furniture,
+// or the starter arrangement. It used to be "Put everything back", which did less
+// than it said: it dropped the move / turn / size overrides and left every piece
+// added since, every recolour and every hidden piece where it was. What the start
+// IS lives in `lib/room-start.ts`; this file asks whether there is anything to
+// undo and does the writes. Its read of the override maps has no fallback, which is
+// the case `lib/transforms.ts` allows: "has anything been overridden", not "what
+// is this piece's transform".
 
 import { usePhoneStudio } from './NarrowViewportBanner';
+import { useMemo } from 'react';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
+import { hasEditsSinceStart, startingParts } from '@/lib/room-start';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -78,13 +84,17 @@ export function RailFooter() {
   const selectedId = useStudio((s) => s.selectedPartId);
   const selectedWall = useStudio((s) => s.selectedWall);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
-  const resetTransforms = useStudio((s) => s.resetTransforms);
-  const hasAnyOverride = useStudio(
-    (s) =>
-      Object.keys(s.positions).length > 0 ||
-      Object.keys(s.rotations).length > 0 ||
-      Object.keys(s.dims).length > 0,
-  );
+  const positions = useStudio((s) => s.positions);
+  const rotations = useStudio((s) => s.rotations);
+  const dims = useStudio((s) => s.dims);
+  const hidden = useStudio((s) => s.hidden);
+  const parts = useScene((s) => s.parts);
+  const room = useScene((s) => s.room);
+  const startSource = useScene((s) => s.startSource);
+  // Rebuilt only when the room or what it was opened from changes — a drag writes
+  // `positions`, not either of these — so a drag frame pays only for the compare.
+  const start = useMemo(() => startingParts(startSource, room), [startSource, room]);
+  const canStartOver = hasEditsSinceStart(parts, start, { positions, rotations, dims, hidden });
   // The NAME, not the parts array: subscribing to the list re-runs this on every
   // scene write, and all the footer needs is whether the selected id still names
   // a piece — plus the name itself, because "Delete" alone is a fine visible
@@ -108,7 +118,7 @@ export function RailFooter() {
 
   // With Add moved to the toolbar, a phone's footer can have nothing to hold; an
   // empty tinted strip at the bottom of a sheet reads as a broken bar.
-  if (phone && selectedWall === null && selectedName == null && !hasAnyOverride) return null;
+  if (phone && selectedWall === null && selectedName == null && !canStartOver) return null;
 
   return (
     <div className="rail-footer">
@@ -164,27 +174,70 @@ export function RailFooter() {
           <AddPiecesButton />
         </div>
       )}
-      {hasAnyOverride && (
-        <Tooltip label="Put everything back">
+      {canStartOver && (
+        <Tooltip label="Start over">
           <IconButton
             icon="rotate-ccw"
-            label="Put every piece back where the room started"
+            label="Start over: put the room back the way it first opened"
             variant="outline"
             size={32}
             onClick={async () => {
               const ok = await confirm({
-                title: 'Put every piece back?',
-                body: 'Every move, turn and resize returns to where the room started. Colours, styles and pieces you added stay.',
-                confirmLabel: 'Put them back',
+                title: 'Start over?',
+                body: 'The room goes back to how it first opened: pieces you added are removed, and every move, size and colour is undone. The walls stay.',
+                confirmLabel: 'Start over',
                 danger: true,
               });
-              if (!ok) return;
-              resetTransforms();
-              toast({ title: 'Everything is back where it started', ttl: 4000 });
+              if (ok) startOver(start);
             }}
           />
         </Tooltip>
       )}
     </div>
   );
+}
+
+/** Put the room back to `start`, with an Undo that brings back exactly what was
+ *  there. Pieces, the move / turn / size overrides, what rides on what, what is
+ *  hidden, and the selection — a selected piece the start does not have would leave
+ *  the Inspector open on nothing. Locks stay: a lock is a promise about a piece, not
+ *  an edit to it, and the start's pieces carry the same ids. The walls and their
+ *  paint stay, which the confirm says. */
+function startOver(start: ReturnType<typeof startingParts>) {
+  const scene = useScene.getState();
+  const studio = useStudio.getState();
+  const before = {
+    parts: scene.parts,
+    positions: studio.positions,
+    rotations: studio.rotations,
+    dims: studio.dims,
+    parentIds: studio.parentIds,
+    hidden: studio.hidden,
+    selection: studio.selection,
+    selectedPartId: studio.selectedPartId,
+  };
+  scene.setParts(start);
+  studio.resetTransforms();
+  studio.setHiddenMap({});
+  studio.setSelected(null);
+  toast({
+    title: 'The room is back to how it started',
+    ttl: 6000,
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        useScene.getState().setParts(before.parts);
+        useStudio.setState({
+          positions: before.positions,
+          rotations: before.rotations,
+          dims: before.dims,
+          parentIds: before.parentIds,
+          hidden: before.hidden,
+          selection: before.selection,
+          selectedPartId: before.selectedPartId,
+          selectedWall: null,
+        });
+      },
+    },
+  });
 }

@@ -59,6 +59,12 @@ type SceneState = {
    *  did. Set by `loadFromRoom`, which is the one place the scene changes which
    *  room it is about. */
   loadedRoomId: string | null;
+  /** What the room was opened FROM — its record, whose detections (or, with none,
+   *  its layout) are what `buildSceneFromRoom` furnishes it with — or null for the
+   *  starter room. Kept so "Start over" can rebuild the room as it first arrived,
+   *  which no saved scene can tell it: the saved scene is the room as it is NOW.
+   *  See `lib/room-start.ts`. Set by `loadFromRoom` only. */
+  startSource: RoomData | null;
   /** The room whose WHOLE load has finished: meta, saved scene, transforms, locks
    *  and parents, the three reads `RoomSync` makes. `loadedRoomId` is set by the
    *  first of those, so until this matches the route the studio is still showing a
@@ -120,6 +126,7 @@ export const useScene = create<SceneState>((set, get) => ({
   parts: defaultScene(),
   room: DEFAULT_ROOM,
   loadedRoomId: null,
+  startSource: null,
   hydratedRoomId: null,
   setHydrated: (roomId) => set({ hydratedRoomId: roomId }),
   ready: false,
@@ -150,6 +157,7 @@ export const useScene = create<SceneState>((set, get) => ({
     if (!room)
       return set({
         loadedRoomId: null,
+        startSource: null,
         parts: defaultScene(DEFAULT_ROOM.layoutId, DEFAULT_ROOM.width, DEFAULT_ROOM.depth, {
           footprint: DEFAULT_ROOM.footprint,
           height: DEFAULT_ROOM.height,
@@ -163,6 +171,7 @@ export const useScene = create<SceneState>((set, get) => ({
     const footprint = roomFootprint(room);
     set({
       loadedRoomId: room.id,
+      startSource: room,
       parts: buildSceneFromRoom(room),
       room: {
         width: room.width,
