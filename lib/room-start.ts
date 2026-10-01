@@ -12,10 +12,21 @@
 // time. A snapshot taken at load could not be the start, because what loads is the
 // SAVED scene — the room as it was left, not as it began.
 //
-// Built against the room's CURRENT shell, not the one in the record. The walls are
-// not part of what this undoes (the size boxes and the wall handles have their own
-// way back), and a starter furnished for walls that have since moved puts its pieces
-// through the plaster — the defect `buildSceneFromRoom`'s own comment describes.
+// Built against a SHELL the caller names, and the two callers name different ones.
+// Pressing the button builds for today's walls: the walls are not part of what this
+// undoes (the size boxes and the wall handles have their own way back), and a starter
+// furnished for walls that have since moved puts its pieces through the plaster —
+// the defect `buildSceneFromRoom`'s own comment describes. Deciding whether to SHOW
+// the button builds for the walls the room opened with (`useScene.startRoom`),
+// because the pieces on screen were laid out for those: comparing them against a
+// layout for walls moved since made a wall drag alone light the button, and pressing
+// it then re-laid furniture nobody had touched, with new pieces in it.
+//
+// What that leaves, written down rather than fixed: a starter whose walls were moved
+// and SAVED reopens with its pieces laid out for the old walls and a start built for
+// the new ones, so the button is offered on a room whose furniture nobody touched —
+// and pressing it fits the starter to the walls as they are, which is what the
+// dialog says it does. The walls it was first furnished for are not kept anywhere.
 //
 // Pure, so it can be tested without the stores; the store writes are the caller's.
 
@@ -23,7 +34,7 @@ import { buildSceneFromRoom, defaultScene, normalizeStoredParts, type ScenePart 
 import type { RoomShape } from './scene-store';
 import type { RoomData } from './storage';
 
-/** The pieces the room started with, laid out in today's walls. */
+/** The pieces the room started with, laid out in the walls of `room`. */
 export function startingParts(source: RoomData | null, room: RoomShape): ScenePart[] {
   const built = source
     ? buildSceneFromRoom({
@@ -35,8 +46,11 @@ export function startingParts(source: RoomData | null, room: RoomShape): ScenePa
         footprint: room.footprint,
       })
     : defaultScene(room.layoutId, room.width, room.depth, { footprint: room.footprint, height: room.height });
-  // Through the same re-derivation a saved scene gets on the way in, so an untouched
-  // room compares equal to its own start rather than differing by a derived flag.
+  // Through the same re-derivation a saved scene gets on the way in (`RoomSync`), so
+  // the two sides of the compare have been through the same steps. It is the identity
+  // on a fresh build today, for every preset — `tests/room-start.test.ts` holds that —
+  // and it is here so a derivation added to it later cannot make every saved room read
+  // as edited.
   return normalizeStoredParts(built);
 }
 
@@ -53,14 +67,23 @@ export type PieceEdits = {
  *  added or deleted, recoloured, restyled or swapped. Compared by CONTENT, because the
  *  saved scene is a fresh array with equal pieces, never the same one. */
 export function hasEditsSinceStart(parts: ScenePart[], start: ScenePart[], edits: PieceEdits): boolean {
-  if (
+  return hasPieceEdits(edits) || !sameParts(parts, start);
+}
+
+/** The cheap half: anything in the override maps. Asked first, so a room that has
+ *  been edited never pays for building its start. */
+export function hasPieceEdits(edits: PieceEdits): boolean {
+  return (
     Object.keys(edits.positions).length > 0 ||
     Object.keys(edits.rotations).length > 0 ||
     Object.keys(edits.dims).length > 0 ||
     Object.values(edits.hidden).some(Boolean)
-  )
-    return true;
-  return !sameValue(parts, start);
+  );
+}
+
+/** The scene is its start, piece for piece. */
+export function sameParts(parts: ScenePart[], start: ScenePart[]): boolean {
+  return sameValue(parts, start);
 }
 
 /** Structural equality over plain data. A key holding `undefined` counts as absent,

@@ -27,7 +27,10 @@ export type Loop = Array<[number, number]>;
 /** How far, in cells, simplification may move a point. A shallow stair is half a
  *  cell either side of its true line, but Douglas–Peucker draws its chords through
  *  stair CORNERS, so the worst point sits a whole cell off a chord: one cell (5 cm)
- *  is what flattens a stair, and walkable floor is never thinner than a dozen. */
+ *  is what flattens a stair. A walkable strip can be as thin as one cell (two
+ *  pieces just over a person-width apart), and there a simplified loop can touch its
+ *  neighbour; this is the drawing only, the field and every number read from it are
+ *  untouched. */
 export const SIMPLIFY_CELLS = 1;
 
 /** Closed loops, in world metres, around every cell `inside` accepts.

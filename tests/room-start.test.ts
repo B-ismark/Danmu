@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { hasEditsSinceStart, startingParts, type PieceEdits } from '../lib/room-start';
 import { roomFootprint } from '../lib/footprint';
-import { buildSceneFromRoom, normalizeStoredParts, type ScenePart } from '../lib/scene-spec';
+import { buildSceneFromRoom, defaultScene, normalizeStoredParts, type ScenePart } from '../lib/scene-spec';
 import type { RoomShape } from '../lib/scene-store';
-import type { RoomData } from '../lib/storage';
+import { LAYOUT_IDS, type RoomData } from '../lib/storage';
 
 const shape = (width = 4.6, depth = 3.8): RoomShape => ({
   width,
@@ -52,6 +52,24 @@ describe('startingParts', () => {
       expect(Math.abs(p.pos[0])).toBeLessThan(small.width / 2 + 1e-6);
       expect(Math.abs(p.pos[2])).toBeLessThan(small.depth / 2 + 1e-6);
     }
+  });
+});
+
+describe('the re-derivation the start goes through', () => {
+  // `startingParts` runs its build through `normalizeStoredParts` because the saved
+  // side of the compare goes through it on load. That is only harmless if it is the
+  // identity on a fresh build — otherwise every untouched room would read as edited —
+  // and `lib/room-start.ts` says it is, for every preset. This is where that is held.
+  it('changes nothing on a fresh build of any preset, at any of four sizes', () => {
+    const changed: string[] = [];
+    for (const layoutId of LAYOUT_IDS) {
+      for (const [w, d] of [[3, 3], [4.6, 3.8], [6, 4.5], [8, 7]] as const) {
+        const footprint = roomFootprint({ width: w, depth: d, layoutId, footprint: undefined });
+        const built = defaultScene(layoutId, w, d, { footprint, height: 2.6 });
+        if (JSON.stringify(normalizeStoredParts(built)) !== JSON.stringify(built)) changed.push(`${layoutId} ${w}x${d}`);
+      }
+    }
+    expect(changed).toEqual([]);
   });
 });
 

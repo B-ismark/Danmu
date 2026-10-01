@@ -36,8 +36,11 @@ describe('fieldContours', () => {
   });
 
   it('keeps two cells that touch only at a corner apart, and a region on the grid edge closed', () => {
-    const { g, inside } = fromRows(['#.', '.#']);
-    expect(fieldContours(g, inside)).toHaveLength(2);
+    // Both diagonals: they are the two saddle cases, and each has its own branch.
+    for (const rows of [['#.', '.#'], ['.#', '#.']]) {
+      const { g, inside } = fromRows(rows);
+      expect(fieldContours(g, inside), rows.join('/')).toHaveLength(2);
+    }
     const all = fromRows(['##', '##']);
     expect(fieldContours(all.g, all.inside)).toHaveLength(1);
   });

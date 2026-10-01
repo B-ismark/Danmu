@@ -47,8 +47,10 @@ describe('every Tooltip call site', () => {
   const sites = files.flatMap((file) => {
     const text = readFileSync(file, 'utf8');
     const found: Array<{ file: string; child: string }> = [];
-    // Everything between the tags: an opening tag cannot be cut at its first `>`,
-    // because an `onClick={() => …}` has one.
+    // Everything between the tags, and the opening tag's own attributes ride in the
+    // capture when one holds a `>` (an `onClick={() => …}`): `[^>]*>` stops at the
+    // first one, so the rest of the tag is swept with the child — which errs toward
+    // finding a `title=`, never toward missing one.
     for (const m of text.matchAll(/<Tooltip\b[^>]*>([\s\S]*?)<\/Tooltip>/g)) found.push({ file, child: m[1] });
     return found;
   });

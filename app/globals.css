@@ -1202,8 +1202,8 @@ textarea.field { border-radius: var(--r-2); }
                  actions onto a line of its own.
      · pale    — `.is-implied`: a member that is selected because its group is.
                  Still `aria-selected`; it just does not repeat the ring N times.
-   The name turns --accent-text and heavier, so the state does not rest on a tint
-   alone (WCAG 1.4.11 was the reason for the ring, and a 4.9:1 label is the same
+   The name turns --accent-text and heavier in BOTH tiers, so the state does not rest
+   on a tint alone (WCAG 1.4.11 was the reason for the ring, and a 4.9:1 label is the same
    evidence). Keyboard focus keeps its own outline, from the rule near the top.
 
    Height is 32px, like the other rail rows; the 24px chevron and the 24px action
@@ -1215,7 +1215,8 @@ textarea.field { border-radius: var(--r-2); }
    line paints over the row beneath. */
 .tree-row .row-name { font-size: var(--fs-small); font-weight: 500; color: var(--ink); }
 .tree-row.is-selected { box-shadow: none; background: var(--accent-tint-strong); }
-.tree-row.is-selected .row-name { color: var(--accent-text); font-weight: 600; }
+.tree-row.is-selected .row-name,
+.tree-row.is-implied .row-name { color: var(--accent-text); font-weight: 600; }
 /* A hidden piece stays dim and struck through whether or not it is the selected one:
    the eye-off mark beside it is the second signal, this is the one you read down the list. */
 .tree-row.is-hidden .row-name { color: var(--ink-3); text-decoration: line-through; }

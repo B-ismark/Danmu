@@ -35,7 +35,7 @@ import { Icon } from './Icon';
  *  different font and often in different words ("Put everything back" over "Put
  *  every piece back where the room started"). `IconButton` copies its `label` into
  *  `title` by default, so wrapping one in a `Tooltip` was enough to get both.
- *  `tests/tooltip-single.test.ts` holds the call sites to the same rule. */
+ *  `tests/tooltip-single.test.tsx` holds the call sites to the same rule. */
 export const InsideTooltip = createContext(false);
 
 /** Gap between the trigger and the bubble. */

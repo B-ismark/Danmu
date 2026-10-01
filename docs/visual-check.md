@@ -179,14 +179,16 @@ back (be deleted)"*. It was "Put everything back" and it only undid moves, turns
 **Where to click.** Any starter room, either tab. Hover the right rail before changing anything:
 there is no square. Add a piece from the Library, recolour another, move a third, hide a fourth.
 Hover the square that appears, then press it and confirm. Then press **Undo** on the toast. Do the
-same once in a room made from photos.
+same once in a room made from photos. Last, in a fresh starter room, drag one wall and change the
+ceiling height without touching any furniture: still no square.
 
 **What right looks like.** One bubble on hover, reading "Start over", and nothing appearing under it
 a second later. After confirming, the added piece is gone, the recoloured one has its colour back,
 the moved one is where it started, the hidden one is showing, and the square disappears. The walls
 and their paint do not change. Undo brings back all four edits at once. In the photo room the pieces
 come back as the scan placed them, not as the starter. *Wrong* looks like a second, plainer label
-under the bubble, an added piece still there, or a square that stays after a fresh room opens.
+under the bubble, an added piece still there, a square that stays after a fresh room opens, or one
+that appears for a wall drag alone.
 
 **Where it rides.** `lib/room-start.ts`, `components/studio/RailFooter.tsx`, `components/ui/Tooltip.tsx`.
 
