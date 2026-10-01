@@ -19,10 +19,10 @@
 // the object3D it is animating and the plan knows it off the stored transform, so
 // that one value is passed in rather than reached for.
 
-import { collidesAt, type ScenePart } from './scene-spec';
+import { canCollide, collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
 import { aabbExtents, type Poly } from './geometry';
-import { snapToNeighbors, type SnapLine } from './item-snap';
+import { snapAhead, snapToNeighbors, type SnapLine } from './item-snap';
 import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
 export type SnapMode = 'off' | 'fine' | 'coarse';
@@ -92,6 +92,24 @@ export type ResolveInput = {
    * nowhere else; see `ConvoyMember.inherited` for when it may be trusted.
    */
   inherited?: ReadonlySet<string>;
+  /**
+   * Set for an arrow key: where the piece stands, (x, z), before the press. The press
+   * is one step from here to (`rawX`, `rawZ`), so the target is not put on the grid;
+   * with the snap on, it stops on the first neighbour edge or centre it reaches
+   * instead, never on one behind it, and does not move at all into a neighbour it
+   * already touches and would collide with. See `snapAhead`, where the reasons are
+   * written down. With the snap off it is exactly the step.
+   */
+  nudgeFrom?: readonly [number, number];
+  /**
+   * The pieces travelling with this one (`Convoy.travelling`). `parts` holds them
+   * where they are going, so they keep their place relative to this piece and none
+   * of their lines is one it can reach. Only an arrow key reads it: a press stopped
+   * on one, and since the set moves together the next press stopped the same
+   * distance short of it again — every press of a set whose pieces were a few
+   * millimetres off lining up came up short.
+   */
+  company?: ReadonlySet<string>;
 };
 
 export type Resolved = {
@@ -160,9 +178,15 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   //
   // The magnetic item snap below may pull a piece straight back off the grid, and
   // should: flush against a real neighbour beats aligned to an arbitrary lattice.
+  //
+  // A key press is not rounded here. It is a step from where the piece stands, so an
+  // off-grid piece keeps its offset (`snapAhead` says why), and the shorter step a
+  // selection settles on when a member runs out of room (`settleLead`) is not a whole
+  // step: rounded, it put the piece straight back where it started.
   const grid = snapSteps(snapMode).translate;
-  const gx = grid ? Math.round(rawX / grid) * grid : rawX;
-  const gz = grid ? Math.round(rawZ / grid) * grid : rawZ;
+  const nudgeFrom = input.nudgeFrom;
+  const gx = grid && !nudgeFrom ? Math.round(rawX / grid) * grid : rawX;
+  const gz = grid && !nudgeFrom ? Math.round(rawZ / grid) * grid : rawZ;
 
   // Containment clamp — keep the whole rotated footprint inside the room's
   // bounding box. Footprints can be off-centre after independent wall moves, so
@@ -206,7 +230,19 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   } else if (snapMode !== 'off') {
     // Magnetic item-to-item snapping — edges flush, centres aligned, against the
     // neighbouring furniture.
-    const snapped = snapToNeighbors(x, z, outRot, dim, parts, part.id);
+    // A key press stops at a neighbour it would collide with, by the collision test's
+    // own pair rule, at the height it stands now. Its company is not among them, so
+    // neither is anything in `inherited`, which is company too.
+    const y0 = input.currentY ?? part.pos[1];
+    const company = input.company;
+    const snapped = nudgeFrom
+      ? snapAhead(
+          nudgeFrom, x, z, outRot, dim,
+          company ? parts.filter((o) => !company.has(o.id)) : parts,
+          part.id,
+          (o) => canCollide(part, dim, y0, o),
+        )
+      : snapToNeighbors(x, z, outRot, dim, parts, part.id);
     x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, snapped.x));
     z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, snapped.z));
     if (snapped.lines.length > 0) snapLines = snapped.lines;

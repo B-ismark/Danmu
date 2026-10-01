@@ -34,7 +34,6 @@ import {
   turnInPlace,
   refusalCause,
   type Refusal,
-  type SnapMode,
 } from '@/lib/drag-resolve';
 import { refusalAfterGesture, turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { useDragLive } from '@/lib/drag-live';
@@ -585,8 +584,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
     world: ScenePart[],
     /** Where the dragged piece began, so the company can be shifted by the delta. */
     startPos: [number, number, number],
-    /** The setting for a drag, `'off'` for a key press — see `moveTo`'s `snap`. */
-    snap: SnapMode,
+    /** Where the piece stood before an arrow key, undefined for a drag — see
+     *  `moveTo`'s `gesture`. */
+    nudgeFrom: readonly [number, number] | undefined,
   ) {
     return resolvePlacement({
       part,
@@ -600,7 +600,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
           : world,
       footprint: ROOM_DYN.footprint,
       roomHeight: ROOM_DYN.height,
-      snapMode: snap,
+      snapMode,
+      nudgeFrom,
+      company: convoy.travelling,
       // The plan has no live object to read a mount height off, so the stored one
       // is the answer — which is also what keeps a picture at picture height when
       // it is slid along a wall from up here.
@@ -626,13 +628,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
    *  hit rather than freezing. Returns false if nothing was possible — and says
    *  so, out loud and in colour, instead of returning silently.
    *
-   *  `snap` is the setting for a drag and `'off'` for an arrow key. A key press asks
-   *  for exactly one step, the way a turn asks to stay where it stands
-   *  (`turnInPlace`), and both steps are shorter than the item magnet's reach — 10
-   *  and 50 mm against 100 — so with the snap on, a piece lined up with a neighbour
-   *  was pulled back onto that line on every press and could not be moved off it
-   *  from the keyboard at all. The step's SIZE still follows the setting. */
-  function moveTo(part: ScenePart, rawX: number, rawZ: number, snap: SnapMode): boolean {
+   *  An arrow key is one step from where the piece stands, and with the snap on it
+   *  stops on the first line it reaches (`nudgeFrom`, `snapAhead`). It used to run
+   *  through the drag's magnet, whose 100 mm reach is longer than either step — 10
+   *  and 50 mm — so a piece lined up with a neighbour was pulled back onto that line
+   *  on every press and could not be arrowed off it at all. */
+  function moveTo(part: ScenePart, rawX: number, rawZ: number, gesture: 'drag' | 'key'): boolean {
     // A drag has its convoy already; an arrow-key nudge has no gesture to hang one
     // off, so it asks for the same answer on the spot. Both routes therefore carry
     // the same company, which they did not: the keys moved one piece out of a
@@ -652,6 +653,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // A nudge has no gesture, so the live scene IS its pointer-down state and the
     // delta is measured from where the piece is standing now.
     const world = drag?.world ?? parts;
+    const nudgeFrom = gesture === 'key' ? ([part.pos[0], part.pos[2]] as const) : undefined;
     const candidates: Array<[number, number]> = [
       [rawX, rawZ],
       [rawX, part.pos[2]],
@@ -693,7 +695,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       });
 
     for (const [tx, tz] of candidates) {
-      const asked = resolveAt(part, tx, tz, convoy, world, startPos, snap);
+      const asked = resolveAt(part, tx, tz, convoy, world, startPos, nudgeFrom);
       if (!asked.valid) {
         refusedAs ??= asked.refusal;
         continue;
@@ -711,7 +713,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // The plan already tries axis-slide CANDIDATES; this is the continuous version
       // of the same idea and wins over the candidate's own answer.
       const settle = settleLead(
-        (x, z) => resolveAt(part, x, z, convoy, world, startPos, snap),
+        (x, z) => resolveAt(part, x, z, convoy, world, startPos, nudgeFrom),
         askConvoy,
         asked,
       );
@@ -1142,7 +1144,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // Minus the grab offset — see `grab` on the ref. Handed to `moveTo`
       // UNROUNDED: `resolvePlacement` quantises to the snap grid as its first step,
       // and rounding here as well is how two surfaces drift over where the grid is.
-      moveTo(part, w.x - dragRef.current.grab.x, w.z - dragRef.current.grab.z, snapMode);
+      moveTo(part, w.x - dragRef.current.grab.x, w.z - dragRef.current.grab.z, 'drag');
     } else {
       const a = Math.atan2(w.z - part.pos[2], w.x - part.pos[0]);
       const delta = -(a - dragRef.current.startAngle);
@@ -1313,7 +1315,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     }
     const dx = e.key === 'ArrowLeft' ? -nudge : e.key === 'ArrowRight' ? nudge : 0;
     const dz = e.key === 'ArrowUp' ? -nudge : e.key === 'ArrowDown' ? nudge : 0;
-    moveTo(part, part.pos[0] + dx, part.pos[2] + dz, 'off');
+    moveTo(part, part.pos[0] + dx, part.pos[2] + dz, 'key');
     force((v) => v + 1);
   }
 

@@ -2735,10 +2735,22 @@ snap working in one tab only. It is quantised before the clamp on purpose: round
 a clamped edge afterwards would push the piece back through the wall the clamp had
 just pulled it out of.
 
-**An arrow key takes the step and not the snap.** It resolves with `snapMode: 'off'`,
-as a turn does (`turnInPlace`): both steps are shorter than the item magnet's 100 mm
-reach, so a key press run through it was pulled back onto whatever line the piece
-stood on, and a piece flush with a neighbour could not be arrowed off it (§ H.6.8).
+**An arrow key is a step that stops on the first line it reaches.** `nudgeFrom` tells
+the resolve where the piece stood, and with the snap on `snapAhead` lands it on the
+first neighbour edge or centre strictly ahead of it within the step, and never on one
+behind it. The drag magnet cannot do this: its 100 mm reach is longer than either step
+and has no direction, so a press was pulled back onto whatever line the piece stood on
+and could not leave it. Turning the snap off for a press was tried first, and lost the
+landing: a Coarse step could not close a 30 mm gap, and a Fine one went 5 mm into a
+neighbour (§ H.6.8). Three rules ride with it, each measured. A press into a
+neighbour the piece already touches does not move (`canCollide`, the collision test's
+own pair rule, says which neighbours are in the way): a Fine step is exactly the
+collision test's 10 mm touching allowance, so whether it was kept 10 mm inside was
+float noise. Grid marks are not stopping points, so a piece off the grid stays off it
+and every press is a whole step or a landing: a piece flush with a neighbour is almost
+never on a mark, and over 2,000 random layouts about half the presses that stopped on
+one moved under 5 mm. And the pieces travelling with it are not lines it can reach (`company`), since
+they move by the same step — a set 3 mm off lining up came up 3 mm short on every press.
 
 **The legality test has no exemption for wall-mounted pieces any more, and that was
 § H.16.** It used to open `ridesAWall ||`, on the stated grounds that `snapToWall`

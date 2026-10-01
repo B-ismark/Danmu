@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { snapToNeighbors, snapGuideEnds, GUIDE_OVERHANG_M } from '@/lib/item-snap';
+import { snapAhead, snapToNeighbors, snapGuideEnds, GUIDE_OVERHANG_M } from '@/lib/item-snap';
 import { aabbExtents } from '@/lib/geometry';
 import type { ScenePart } from '@/lib/scene-spec';
 
@@ -121,5 +121,84 @@ describe('snapGuideEnds', () => {
     // taste and stays out of the suite; that it is not nothing is the behaviour.
     expect(to[0] - from[0]).toBeGreaterThan(0.05);
     expect(to[0] - from[0]).toBeCloseTo(2 * GUIDE_OVERHANG_M);
+  });
+});
+
+describe('snapAhead — the arrow key\'s magnet', () => {
+  // Same neighbour as above: a mover of the same size is flush with it at x = 1.0.
+  const neighbor = part({ id: 'n1', dimMM: DIM, pos: [0, 0, 0] });
+  const inTheWay = () => true;
+
+  it('stops on the FIRST line inside the step, not the one nearest its end', () => {
+    // A second piece whose centre line is at x = 1.02. A coarse step left from 1.04 to
+    // 0.99 passes it before it reaches the flush line at 1.0, the line nearest the end
+    // of the step.
+    const other = part({ id: 'n2', dimMM: DIM, pos: [1.02, 0, 1.1] });
+    const r = snapAhead([1.04, 0], 0.99, 0, 0, DIM, [neighbor, other], 'mover', inTheWay);
+    expect(r.x).toBeCloseTo(1.02, 9);
+    expect(r.lines).toEqual([expect.objectContaining({ axis: 'x', kind: 'center', at: 1.02 })]);
+  });
+
+  it('does not count the line it is standing on as ahead of it', () => {
+    const r = snapAhead([1.0, 0], 1.01, 0, 0, DIM, [neighbor], 'mover', inTheWay);
+    expect(r.x).toBeCloseTo(1.01, 9);
+    expect(r.lines).toEqual([]);
+  });
+
+  it('lands flush on a neighbour\'s edge inside the step, and draws its guide', () => {
+    const r = snapAhead([1.03, 0], 0.98, 0, 0, DIM, [neighbor], 'mover', inTheWay);
+    expect(r.x).toBeCloseTo(1.0, 9);
+    expect(r.lines).toEqual([expect.objectContaining({ axis: 'x', kind: 'edge', at: 0.5 })]);
+  });
+
+  it('leaves an axis the step does not move along alone', () => {
+    // 50 mm off the neighbour's centre line along z — inside the drag magnet's reach.
+    const r = snapAhead([1.3, 0.05], 1.31, 0.05, 0, DIM, [neighbor], 'mover', inTheWay);
+    expect(r.z).toBe(0.05);
+    expect(r.lines.some((l) => l.axis === 'z')).toBe(false);
+  });
+
+  it('ends at the step when it reaches no line, off the grid or not', () => {
+    const r = snapAhead([2.005, 0], 2.015, 0, 0, DIM, [neighbor], 'mover', inTheWay);
+    expect(r.x).toBe(2.015);
+    expect(r.lines).toEqual([]);
+  });
+
+  it('does not move toward a neighbour it is touching and would collide with', () => {
+    // Flush at x = 1.0 and pressed left, into it. A Fine step lands 10 mm inside it,
+    // which is exactly the collision test's touching allowance, so whether the step was
+    // kept came down to float noise.
+    const r = snapAhead([1.0, 0], 0.99, 0, 0, DIM, [neighbor], 'mover', inTheWay);
+    expect(r.x).toBeCloseTo(1.0, 9);
+  });
+
+  it('steps into a neighbour that is not in its way', () => {
+    // A rug, say: `canCollide` says no, so the collision test is the judge, as for a drag.
+    const r = snapAhead([1.0, 0], 0.99, 0, 0, DIM, [neighbor], 'mover', () => false);
+    expect(r.x).toBeCloseTo(0.99, 9);
+  });
+
+  it('steps past a neighbour it only passes beside', () => {
+    // 650 mm off it along z, with 600 mm of half-depths between them: inside the guide's
+    // slack, but they do not face each other across the line.
+    const r = snapAhead([1.0, 0.65], 0.99, 0.65, 0, DIM, [neighbor], 'mover', inTheWay);
+    expect(r.x).toBeCloseTo(0.99, 9);
+  });
+
+  it('stops a press into a neighbour along z the same way', () => {
+    // Flush with its 600 mm depth at z = 0.6, pressed back toward it.
+    const r = snapAhead([0, 0.6], 0, 0.59, 0, DIM, [neighbor], 'mover', inTheWay);
+    expect(r.z).toBeCloseTo(0.6, 9);
+  });
+
+  it('steps past a neighbour along z that it only passes beside', () => {
+    // 1.05 m off it along x, with 1.0 m of half-widths between them.
+    const r = snapAhead([1.05, 0.6], 1.05, 0.59, 0, DIM, [neighbor], 'mover', inTheWay);
+    expect(r.z).toBeCloseTo(0.59, 9);
+  });
+
+  it('stops only the way that goes into the neighbour', () => {
+    const r = snapAhead([1.0, 0], 1.01, 0, 0, DIM, [neighbor], 'mover', inTheWay);
+    expect(r.x).toBeCloseTo(1.01, 9);
   });
 });

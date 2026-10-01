@@ -4178,17 +4178,54 @@ item magnet like a drag, and both steps are shorter than its reach: 10 mm (fine)
 50 mm (coarse) against 100. So a piece flush with a neighbour, or centred on one, was
 pulled back onto that line on every press, and in either mode it could not be moved off
 it from the keyboard. Coming the other way, the press that took the gap under 100 mm
-jumped the rest of it. A key press now resolves with the snap off, the way a turn already
-did (`turnInPlace`): no grid, no magnet. The step's size still follows the setting, and a
-drag still snaps. The re-resolve at a shorter step, when the rest of a selection runs out
-of room, takes the same exact step. Snapped, 5 mm off a flush line put the piece back on
-it, and the set was refused. `tests/plan-nudge-exact.test.tsx`; five mutants, five killed.
+jumped the rest of it.
 
-Two consequences, both deliberate. A piece nudged from off the grid stays off it, which is
-what arrow keys do in drawing tools: a step, not a snap. And a press into a neighbour can
-now go 10 mm into it before the next one is refused: that is `collidesAt`'s touching
-allowance, which a free drag always had. The magnet used to hide it from the keyboard by
-pulling the piece back flush.
+A press is now one step that stops on the first line it reaches (`snapAhead`, via
+`nudgeFrom`): a neighbour's edge or centre, strictly ahead of the piece and no further
+than the step. A line behind it, or under it, is not ahead, so a press can always leave
+one; a line inside the step is met rather than stepped over, so a press can always land
+flush. An axis the press does not move along is left alone, and a drag keeps the drag
+magnet.
+
+**The first fix was the snap off for a press, and review found what it lost.** On Coarse
+a 30 mm gap could not be closed at all: the 50 mm step overlaps 20 mm and is refused. On
+Fine a piece 5 mm off its neighbour went 5 mm into it, inside `collidesAt`'s touching
+allowance, and stayed there. The magnet had been doing the landing, and a step with no
+lines in it cannot land. The shorter step a selection settles on when a member runs out of
+room is not rounded to the grid either: rounded, 5 mm is a whole step or none.
+
+**Three more rules came out of measuring the second version, none of them predicted.**
+Each is a probe over 2,000 random pairs of pieces, on both steps.
+· *A press into a neighbour it already touches does not move.* From flush, a Fine step
+  lands exactly on `collidesAt`'s 10 mm touching allowance, so whether the press was
+  refused or kept 10 mm inside came down to float noise; with grid marks as stopping
+  points it landed 1–9.9 mm inside in nearly every layout. The edge it stands on now
+  counts as ahead when the press goes into a neighbour that faces it and is in the way —
+  `canCollide`, the collision test's own pair rule, extracted from `collidesAt` so the two
+  cannot disagree about a rug. 2,000 of 2,000 stay flush; away from it, 2,000 of 2,000
+  take the whole step.
+· *Grid marks are not stopping points.* A piece flush with a neighbour is almost never on
+  a mark, so the next one is anywhere from a step to a hair away: about half the presses
+  that stopped on one moved under 5 mm, some 0.1 mm, which reads as a key that did
+  nothing. Off the grid stays off it, as arrow keys do in drawing tools. A random approach
+  gap now gives a whole step or a flush landing and nothing else, 4,000 of 4,000.
+· *The company is not a line.* The rest of a selection is in the resolve's world where it
+  is going, so its lines move with the piece. A set whose pieces were 3 mm off lining up
+  stopped 3 mm short on every press, forever, since the next press found the same 3 mm.
+  `ResolveInput.company` keeps them out of a press's lines; it also made the press's own
+  `inherited` exclusion redundant, since inherited pieces are company.
+
+`tests/plan-nudge.test.tsx`, plus `snapAhead` in `tests/item-snap.test.ts`.
+
+**Still open, and the same rule for a drag.** The drag magnet reads the same shifted world,
+so a piece dragged with company it is nearly lined up with is pulled onto that company's
+line where it is GOING, and the set follows it. Measured in the plan with a companion
+30 mm off lining up, snap Fine: the set ran 106, 182, 334 and 638 mm against the
+pointer's 76, 152, 304 and 608 — a constant 30 mm ahead of the hand for the whole drag,
+and none with the snap off. By reading rather than measurement, its guide is drawn where
+the companion would be without that 30 mm. Not fixed here because it changes how every
+multi-selection drag feels in both tabs, and the arrow-key change did not need it. The
+patch would be `company` read by `snapToNeighbors` too, with `Draggable` passing it.
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 

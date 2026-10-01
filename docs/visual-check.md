@@ -147,26 +147,35 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
-### Arrow keys move a piece off the line it is lined up on — this branch (§ H.6.8), NOT LOOKED AT
+### Arrow keys move a piece off the line it is lined up on, and land it flush — this branch (§ H.6.8), NOT LOOKED AT
 
 With the snap on, a piece standing flush with another could not be moved away from it with
-the arrow keys: each press was pulled straight back. Tests hold the steps; nobody has
+the arrow keys: each press was pulled straight back. A press now goes one step and stops on
+the first line it meets, a neighbour's edge or centre. Tests hold the steps; nobody has
 pressed the keys in a browser.
 
-**Where to click.** Any room with starter furniture, snap left at its default. In the 2D
-Plan, drag a chair beside a cabinet or wardrobe until it snaps flush against its side, and
-let go. Press the arrow key that moves it away, a few times, then the one that brings it
-back. Set **More → Snap when dragging → Coarse** and do the same.
+**Where to click.** Any room with starter furniture, snap left at its default (**Fine**). In
+the 2D Plan, drag a chair beside a cabinet or wardrobe until it snaps flush against its side,
+and let go. Press the arrow key that moves it away, a few times, then the one that brings it
+back, and keep pressing once it is back. Then do the same on **Coarse**. On a laptop, the snap
+setting is the **Snap · Fine** button in the 3D Model tab's toolbar, which steps to Coarse
+when you click it; the 2D Plan has no control of its own for it. On a phone it is **More (⋯)
+→ Snap when dragging**.
 
 **What right looks like.**
-- Every press moves the chair one step: 1 cm, or 5 cm on **Coarse**.
-- On the way back it stops against the cabinet, or goes about 1 cm in and then the next
-  press is refused with a sentence.
+- Every press away moves the chair one step: 1 cm, or 5 cm on **Coarse**.
+- On the way back it stops exactly against the cabinet, even when the last gap is shorter
+  than a step.
+- Once it is touching, a press toward the cabinet does not move it.
 - A mouse drag still pulls the chair flush when you let go close to the cabinet.
+- Select two chairs that are nearly, not quite, lined up (shift-click) and arrow them
+  together: every press moves both a whole step.
 
 **What wrong looks like.**
-- A press that does nothing, or one that jumps several centimetres.
-- The chair ending well inside the cabinet.
+- A press away that does nothing, or one that jumps several centimetres, or one that
+  moves a hair — a millimetre or less.
+- On Coarse, the chair stopping a few centimetres short of the cabinet and staying there.
+- The chair ending even slightly inside the cabinet.
 
 ### A refusal that names the wall instead of an obstruction that is not there
 
