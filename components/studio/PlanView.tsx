@@ -17,7 +17,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useStudio, useSettings, WALL_DRAG_ID } from '@/lib/store';
-import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
+import { currentRiderRelation, currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { DND_MIME, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
@@ -126,6 +126,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
   const setTransformsFor = useStudio((s) => s.setTransformsFor);
+  const landOn = useStudio((s) => s.landOn);
   const setDragging = useStudio((s) => s.setDragging);
   const panKey = useStudio((s) => s.panKeyHeld);
   const selectedWall = useStudio((s) => s.selectedWall);
@@ -275,6 +276,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
      * against a position the piece may not have taken.
      */
     snapLines: SnapLine[];
+    /** What the last accepted frame set the piece down on (`on` undefined: the
+     *  floor), written into the relation on the drop — not per frame, so Escape has
+     *  no link to put back. Absent until a frame is accepted. */
+    landed?: { on: string | undefined };
   } | null>(null);
   const [, force] = useState(0);
 
@@ -630,7 +635,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
         draggedId: part.id,
         parts,
         selection: useStudio.getState().selection,
-        parentIds: useStudio.getState().parentIds,
+        restsOn: currentRiderRelation(),
         footprint: ROOM_DYN.footprint,
         roomHeight: ROOM_DYN.height,
       });
@@ -718,7 +723,17 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // Empty when nothing snapped, which is the common case and draws nothing.
       if (drag) drag.snapLines = r.snapLines ?? [];
       const moved = r.pos[0] !== part.pos[0] || r.pos[1] !== part.pos[1] || r.pos[2] !== part.pos[2];
-      if (moved) setPosition(part.id, r.pos);
+      if (moved) {
+        setPosition(part.id, r.pos);
+        // What it now stands on, the way the 3D tab's drop records it. This tab never
+        // did, so a lamp moved here onto the other nightstand kept the first one's
+        // link and stayed behind when the second one moved (§ H.6.7). A nudge has no
+        // drop to wait for; a drag records it on release. Asked of THIS piece: an arrow
+        // key can move another one while a drag is under way, and its landing is its
+        // own, not the dragged piece's.
+        if (drag?.id === part.id) drag.landed = { on: r.supportId };
+        else landOn(part.id, r.supportId);
+      }
       // A wall-mounted piece is turned by the wall it lands on, not by the drag.
       if (r.rot !== part.rot) setRotation(part.id, r.rot);
       // Everything travelling, in ONE store update: what is resting on this piece
@@ -776,7 +791,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
         draggedId: part.id,
         parts,
         selection: useStudio.getState().selection,
-        parentIds: useStudio.getState().parentIds,
+        restsOn: currentRiderRelation(),
         footprint: ROOM_DYN.footprint,
         roomHeight: ROOM_DYN.height,
       });
@@ -1008,7 +1023,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       draggedId: id,
       parts,
       selection: useStudio.getState().selection,
-      parentIds: useStudio.getState().parentIds,
+      restsOn: currentRiderRelation(),
       footprint: ROOM_DYN.footprint,
       roomHeight: ROOM_DYN.height,
     });
@@ -1229,6 +1244,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
         const dropped = parts.find((p) => p.id === dragRef.current?.id);
         playSound(blockedRef.current ? 'blocked' : 'drop', { size: sizeOf(dropped?.dimMM) });
       }
+      // A drop, not a click: a press that never left its slop records nothing, or a
+      // few pixels of jitter would turn a lamp's inferred link into a recorded one.
+      if (dragRef.current.moved && dragRef.current.landed) landOn(dragRef.current.id, dragRef.current.landed.on);
       // The per-gesture convoy snapshot dies with it — see the comment on the ref.
       dragRef.current = null;
       setDragging(null);
