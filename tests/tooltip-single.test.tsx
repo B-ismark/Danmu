@@ -56,11 +56,15 @@ describe('every Tooltip call site', () => {
   });
 
   it('is found, so the sweep below is looking at something', () => {
-    // RailFooter, the rail strip, the Catalog's re-scan and the lighting moods: one
-    // written site each. A literal, so a new call site is a decision to update it.
+    // RailFooter's three (Done, Delete, Start over), the rail's Add, the rail strip,
+    // the Catalog's re-scan and the lighting moods. A literal, so a new call site is
+    // a decision to update it.
     expect(sites.map((s) => s.file.split('/').pop()).sort()).toEqual([
+      'CatalogPanel.tsx',
       'LightingPicker.tsx',
       'PartTree.tsx',
+      'RailFooter.tsx',
+      'RailFooter.tsx',
       'RailFooter.tsx',
       'shell-parts.tsx',
     ]);

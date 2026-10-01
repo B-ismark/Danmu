@@ -55,10 +55,11 @@
 // which is why this is `RailFooter` and not `RoomActions`. A file named for a set
 // it no longer holds is the scar CLAUDE.md rule 1 describes.
 //
-// "Start over" puts the room back the way it first opened — the scan's furniture,
-// or the starter arrangement. It used to be "Put everything back", which did less
-// than it said: it dropped the move / turn / size overrides and left every piece
-// added since, every recolour and every hidden piece where it was. What the start
+// "Start over" puts the room back the way it first opened — its walls, and the
+// scan's furniture or the starter arrangement inside them. It used to be "Put
+// everything back", which did less than it said: it dropped the move / turn / size
+// overrides and left every piece added since, every recolour and every hidden piece
+// where it was. What the start
 // IS lives in `lib/room-start.ts`; this file asks whether there is anything to
 // undo and does the writes. Its read of the override maps has no fallback, which is
 // the case `lib/transforms.ts` allows: "has anything been overridden", not "what
@@ -68,7 +69,7 @@ import { usePhoneStudio } from './NarrowViewportBanner';
 import { useMemo } from 'react';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
-import { hasPieceEdits, sameParts, startingParts } from '@/lib/room-start';
+import { hasPieceEdits, sameParts, sameWalls, startingParts } from '@/lib/room-start';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -90,17 +91,19 @@ export function RailFooter() {
   const pieceEdits = useStudio((s) => hasPieceEdits(s));
   const startSource = useScene((s) => s.startSource);
   const startRoom = useScene((s) => s.startRoom);
-  // The start for the walls the room OPENED with, built once per room load (and not
-  // at all while there are override edits) — never per wall-drag frame, which is what
-  // keying it on today's `room` did: 15–50 ms a step in an L, T or U. Pressing the
-  // button builds a fresh one for today's walls; see `lib/room-start.ts` for why the
-  // two differ.
+  // The walls are part of the start: a wall dragged, or the ceiling changed, is
+  // something to start over from — and a wall drag carries the furniture with it, so
+  // it is never only the walls.
+  const wallsMoved = useScene((s) => !sameWalls(s.room, s.startRoom));
+  // The start, built once per room load (and not at all while anything else already
+  // answers the question) — never per wall-drag frame, which is what keying it on
+  // today's `room` did: 15–50 ms a step in an L, T or U.
   const openedStart = useMemo(
-    () => (pieceEdits ? null : startingParts(startSource, startRoom)),
-    [pieceEdits, startSource, startRoom],
+    () => (pieceEdits || wallsMoved ? null : startingParts(startSource, startRoom)),
+    [pieceEdits, wallsMoved, startSource, startRoom],
   );
   const sceneEdited = useScene((s) => openedStart !== null && !sameParts(s.parts, openedStart));
-  const canStartOver = pieceEdits || sceneEdited;
+  const canStartOver = pieceEdits || wallsMoved || sceneEdited;
   // The NAME, not the parts array: subscribing to the list re-renders this on every
   // scene write, and all the footer needs is whether the selected id still names
   // a piece — plus the name itself, because "Delete" alone is a fine visible
@@ -119,6 +122,9 @@ export function RailFooter() {
     selectedCount > 1
       ? `Delete ${selectedCount} selected pieces from the scene`
       : `Delete ${selectedName} from the scene`;
+  // The bubble is the short form of the same name — the house tooltip, not the
+  // browser's own grey `title` box, which looked like it came from another app.
+  const deleteTip = selectedCount > 1 ? `Delete ${selectedCount} pieces` : `Delete ${selectedName}`;
   const confirm = useConfirm();
   const phone = usePhoneStudio();
 
@@ -130,22 +136,21 @@ export function RailFooter() {
     <div className="rail-footer">
       {selectedWall !== null ? (
         <div style={{ minWidth: 0 }}>
-          <button
-            onClick={() => setSelectedWall(null)}
-            className="ds-btn ds-btn--sm"
-            title="Finish with this wall"
-          >
-            <Icon name="x" size={12} />
-            <span style={LABEL}>Done</span>
-          </button>
+          <Tooltip label="Done with this wall">
+            <button
+              onClick={() => setSelectedWall(null)}
+              className="ds-btn ds-btn--sm"
+              aria-label="Done with this wall"
+            >
+              <Icon name="x" size={12} />
+              <span style={LABEL}>Done</span>
+            </button>
+          </Tooltip>
         </div>
       ) : selectedName != null ? (
         <div style={{ minWidth: 0 }}>
-          {/* No confirm — pressing a button labelled Delete is a decision, and the
-              shared path answers with an Undo toast rather than a dialog (see
-              `removeParts`). Backspace is the one delete gesture that asks first,
-              because it is the one that can be a typing reflex; see
-              `deleteSelection`.
+          {/* No confirm — every delete, this button and Backspace alike, answers
+              with an Undo toast rather than a dialog (see `removeParts`).
 
               `selectedIds()`, NOT `[selectedId]`. This button used to delete the
               primary id alone, so deleting a merged bed-and-two-nightstands from
@@ -155,19 +160,20 @@ export function RailFooter() {
               on; the selection is what is selected, and a merged set is selected
               whole (`selectionForPick`). Anything acting on "what is selected"
               wants the latter. */}
-          <button
-            onClick={() => removeParts(selectedIds())}
-            className="ds-btn ds-btn--sm"
-            title={deleteLabel}
-            aria-label={deleteLabel}
-            style={{
-              color: 'var(--danger)',
-              borderColor: 'var(--danger)',
-            }}
-          >
-            <Icon name="trash" size={12} />
-            <span style={LABEL}>Delete</span>
-          </button>
+          <Tooltip label={deleteTip}>
+            <button
+              onClick={() => removeParts(selectedIds())}
+              className="ds-btn ds-btn--sm"
+              aria-label={deleteLabel}
+              style={{
+                color: 'var(--danger)',
+                borderColor: 'var(--danger)',
+              }}
+            >
+              <Icon name="trash" size={12} />
+              <span style={LABEL}>Delete</span>
+            </button>
+          </Tooltip>
         </div>
       ) : null}
       {/* Each button as wide as its label, the way a dialog's actions sit: the
@@ -190,9 +196,11 @@ export function RailFooter() {
             onClick={async () => {
               const ok = await confirm({
                 title: 'Start over?',
-                body: 'The furniture goes back to how the room first opened: pieces you added are removed, and every move, size and colour is undone. The walls stay.',
+                body: 'The room goes back to how it first opened: its walls, and every piece where it started. Pieces you added are removed. Wall colours and lighting stay.',
                 confirmLabel: 'Start over',
                 danger: true,
+                // The bin said "delete"; this puts things back.
+                icon: 'rotate-ccw',
               });
               if (ok) startOver();
             }}
@@ -203,18 +211,22 @@ export function RailFooter() {
   );
 }
 
-/** Put the room back the way it first opened, laid out for the walls as they are
- *  now, with an Undo that brings back exactly what was there. Pieces, the move / turn
- *  / size overrides, what rides on what, what is hidden, the locks and the selection
- *  — a selected piece the start does not have would leave the Inspector open on
- *  nothing. The walls and their paint stay, which the confirm says.
+/** Put the room back the way it first opened — the walls, the ceiling and every
+ *  piece — with an Undo that brings back exactly what was there. Pieces, the move /
+ *  turn / size overrides, what rides on what, what is hidden, the locks and the
+ *  selection — a selected piece the start does not have would leave the Inspector
+ *  open on nothing. The wall paint, the site and the lighting stay, which the
+ *  confirm says.
+ *
+ *  It USED to keep the walls and re-lay the start inside today's, which read fine on
+ *  paper and wrong on the first press: drag a wall, the drag carries the furniture,
+ *  the button lights, and pressing it handed back a different ARRANGEMENT — a
+ *  starter laid out for walls the room never opened with. Nobody asked for a new
+ *  layout; they asked for the room back.
  *
  *  Locks stay on the pieces the start still has and go with the ones it does not
- *  (Ctrl+Z brings them back with the pieces; locks are in history, `lib/history.ts`).
- *  Ids are `${category}-${counter}`, and a start built for walls that have moved can
- *  be a different arrangement — so an id can come back naming a different piece, and
- *  a kept lock would land on it. The ones on a piece that exists in both stay, which
- *  is the ordinary case: a lock is a promise about a piece, not an edit to it.
+ *  (Ctrl+Z brings them back with the pieces; locks are in history, `lib/history.ts`):
+ *  a lock is a promise about a piece, not an edit to it.
  *
  *  Undo writes only into the room it came from. The toast outlives the room — it is
  *  mounted at the app root — so pressing it after opening another room wrote this
@@ -222,7 +234,7 @@ export function RailFooter() {
 export function startOver() {
   const scene = useScene.getState();
   const studio = useStudio.getState();
-  const start = startingParts(scene.startSource, scene.room);
+  const start = startingParts(scene.startSource, scene.startRoom);
   const roomId = scene.loadedRoomId;
   const before = {
     parts: scene.parts,
@@ -234,14 +246,18 @@ export function startOver() {
     pinned: studio.pinned,
     selection: studio.selection,
     selectedPartId: studio.selectedPartId,
-    startRoom: scene.startRoom,
+    room: scene.room,
   };
   const kept = new Set(start.map((p) => p.id));
-  // The start is laid out for today's walls now, so it is what "anything to start
-  // over?" is asked against from here on. Leaving `startRoom` at the walls the room
-  // opened with kept the square lit after pressing it in any room whose walls had
-  // moved, because the pieces it had just put back were laid out for different walls.
-  useScene.setState({ parts: start, startRoom: scene.room, ready: true });
+  // The shape comes back; the paint and the site are today's. The typical-size mark
+  // travels WITH the shape: walls going back to a typical size are typical again,
+  // while a room whose walls never moved keeps today's answer — "these sizes are
+  // right" said over the very walls being kept is still true.
+  const { width, depth, height, layoutId, footprint } = scene.startRoom;
+  const { roughSize: _today, ...rest } = scene.room;
+  const typical = sameWalls(scene.room, scene.startRoom) ? scene.room.roughSize : scene.startRoom.roughSize;
+  const room = { ...rest, width, depth, height, layoutId, footprint, ...(typical ? { roughSize: true as const } : {}) };
+  useScene.setState({ parts: start, room, ready: true });
   studio.resetTransforms();
   studio.setHiddenMap({});
   studio.setPinnedMap(Object.fromEntries(Object.entries(studio.pinned).filter(([id]) => kept.has(id))));
@@ -253,7 +269,7 @@ export function startOver() {
       label: 'Undo',
       onClick: () => {
         if (useScene.getState().loadedRoomId !== roomId) return;
-        useScene.setState({ parts: before.parts, startRoom: before.startRoom });
+        useScene.setState({ parts: before.parts, room: before.room });
         useStudio.setState({
           positions: before.positions,
           rotations: before.rotations,

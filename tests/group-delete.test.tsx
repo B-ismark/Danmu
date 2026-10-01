@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Deleting a merged set, and the one delete gesture that asks first.
+// Deleting a merged set, from the button and from the key.
 //
 // The user merged a bed with two nightstands, pressed the right rail's Delete, and
 // got the bed removed and both nightstands left standing. The button named one
@@ -28,7 +28,7 @@
 // this one is to press the actual button.
 //
 // What this does NOT cover: the keydown binding itself. `deleteSelection` is
-// tested directly here; that Delete and Backspace reach it is one `void` call in
+// tested directly here; that Delete and Backspace reach it is one call in
 // the key switch, and mounting the whole studio to press a key would be a much
 // larger test for a much smaller claim.
 import 'fake-indexeddb/auto';
@@ -38,16 +38,13 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { selectionForPick, type ScenePart } from '@/lib/scene-spec';
 
-// The dialog is the thing under test in half these cases, so it is controlled
-// rather than rendered. `answer` is what the user presses.
-let answer = true;
+// No delete asks first any more, so any dialog raised here is the regression.
 const confirmCalls: Array<{ title: string }> = [];
 vi.mock('@/components/ui/Confirm', () => ({
-  confirmDialog: (req: { title: string }) => {
+  useConfirm: () => (req: { title: string }) => {
     confirmCalls.push({ title: req.title });
-    return Promise.resolve(answer);
+    return Promise.resolve(true);
   },
-  useConfirm: () => () => Promise.resolve(true),
   useConfirmDeleteRooms: () => () => Promise.resolve(true),
   ConfirmHost: () => null,
 }));
@@ -111,7 +108,6 @@ function idsLeft(): string[] {
 
 beforeEach(() => {
   cleanup();
-  answer = true;
   confirmCalls.length = 0;
   useScene.setState({ parts: world() });
   useStudio.getState().setSelection([], null);
@@ -188,65 +184,26 @@ describe('a merged set is selected whole, so it must delete whole', () => {
   });
 });
 
-describe('Backspace asks first; the buttons do not', () => {
-  it('deletes nothing until the dialog is answered yes', async () => {
+describe('Backspace deletes straight away, like the button', () => {
+  // It used to ask first. The user asked for the dialog to go: every delete answers
+  // with the same Undo toast, and a reflex in a text field is kept out by
+  // `studioSurfaceFocused`, not by a dialog.
+  it('deletes the whole set without a dialog', () => {
     clickTheMergedBed();
-    answer = false;
-    await deleteSelection();
-    expect(confirmCalls).toHaveLength(1);
-    expect(idsLeft()).toEqual([BED, CHAIR, NS_L, NS_R].sort());
-  });
-
-  it('deletes the whole set once confirmed', async () => {
-    clickTheMergedBed();
-    answer = true;
-    await deleteSelection();
-    expect(idsLeft()).toEqual([CHAIR]);
-  });
-
-  it('names the count in the title for a set and the piece for a single', async () => {
-    clickTheMergedBed();
-    await deleteSelection();
-    expect(confirmCalls[0].title).toBe('Delete 3 pieces?');
-
-    useScene.setState({ parts: world() });
-    useStudio.getState().setSelection([CHAIR], CHAIR);
-    await deleteSelection();
-    expect(confirmCalls[1].title).toBe('Delete “Chair”?');
-  });
-
-  it('asks even for a single piece — the gesture is the axis, not the count', async () => {
-    useStudio.getState().setSelection([CHAIR], CHAIR);
-    answer = false;
-    await deleteSelection();
-    expect(confirmCalls).toHaveLength(1);
-    expect(idsLeft()).toContain(CHAIR);
-  });
-
-  it('does not raise a dialog when nothing is selected', async () => {
-    await deleteSelection();
+    deleteSelection();
     expect(confirmCalls).toHaveLength(0);
-    expect(idsLeft()).toEqual([BED, CHAIR, NS_L, NS_R].sort());
-  });
-
-  it('deletes what was selected when the key was pressed, not what is selected when the dialog resolves', async () => {
-    clickTheMergedBed();
-    const pending = deleteSelection();
-    // The selection moves while the dialog is open — a click behind a modal, or
-    // any store write. The captured ids must win, or Delete removes something the
-    // user never had selected. Same class as a convoy resolving against a fresh
-    // world instead of the snapshot it started from.
-    useStudio.getState().setSelection([CHAIR], CHAIR);
-    await pending;
     expect(idsLeft()).toEqual([CHAIR]);
   });
 
-  it('leaves the piece alone when the dialog is declined and the selection has moved on', async () => {
-    clickTheMergedBed();
-    answer = false;
-    const pending = deleteSelection();
+  it('deletes a single piece the same way', () => {
     useStudio.getState().setSelection([CHAIR], CHAIR);
-    await pending;
+    deleteSelection();
+    expect(confirmCalls).toHaveLength(0);
+    expect(idsLeft()).not.toContain(CHAIR);
+  });
+
+  it('does nothing when nothing is selected', () => {
+    deleteSelection();
     expect(idsLeft()).toEqual([BED, CHAIR, NS_L, NS_R].sort());
   });
 });

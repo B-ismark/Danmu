@@ -65,14 +65,11 @@ type SceneState = {
    *  which no saved scene can tell it: the saved scene is the room as it is NOW.
    *  See `lib/room-start.ts`. Set by `loadFromRoom` only. */
   startSource: RoomData | null;
-  /** The walls the room's start is laid out for: the ones it OPENED with, set beside
-   *  `startSource` — and re-set by Start over, which lays the start out for the walls
-   *  as they are then (`startOver` in `RailFooter`). "Is there
-   *  anything to start over" is asked against the start laid out for these, not for
-   *  today's walls: a starter's pieces were laid out for the walls they were built in,
-   *  so building the comparison for walls moved since made a wall drag alone light the
-   *  button, and pressing it re-laid furniture nobody had touched. Pressing builds for
-   *  today's walls (`lib/room-start.ts`). */
+  /** The walls the room OPENED with, set beside `startSource` by `loadFromRoom`
+   *  only. They are half of the start: Start over puts these walls back along with
+   *  the pieces laid out inside them (`startOver` in `RailFooter`), and a room whose
+   *  walls differ from them has something to start over (`sameWalls`,
+   *  `lib/room-start.ts`). Paint, site and lighting are not part of it. */
   startRoom: RoomShape;
   /** The room whose WHOLE load has finished: meta, saved scene, transforms, locks
    *  and parents, the three reads `RoomSync` makes. `loadedRoomId` is set by the
