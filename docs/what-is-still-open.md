@@ -7701,7 +7701,8 @@ still hangs in the middle of the ceiling, because a Library click carries no aim
 fan is still contained by the FOOTPRINT rather than by the bounding box, so honouring an aim
 is not licence to hang a fan in an L's notch. What did move beyond the click is the **drag** —
 a fan dropped on the canvas now lands where it was dropped. That half is a look rather than a
-measurement and it is in [`visual-check.md`](visual-check.md).
+measurement, and the user looked at it on 2026-10-01 and reported one thing, the overlap
+in item 1 below.
 
 **Residue 2 — a click can still stack one piece on another.** `placeNewPart` rests a
 tabletop-prone piece on whatever is under the aim, which is right for a lamp and a desk and
@@ -7710,17 +7711,21 @@ may be based where its top passes the ceiling). Whether an UNAIMED click should 
 is the open half — gating it entirely would put a table lamp on the floor beside the desk it
 belongs on, so it is not obviously an improvement.
 
-**Six things the 2026-09-04 review found. FOUR are still open; 5 and 6 were fixed the
-same day** — see the two struck rows below and § H.3's own entry in the queue. All are
-reachable, none a regression from that change except where marked. The four that remain
-are here rather than in a commit message because each needs a decision:
+**Six things the 2026-09-04 review found. THREE are still open; 5 and 6 were fixed the
+same day and 1 on 2026-10-01** — see the struck rows below and § H.3's own entry in the
+queue. All are reachable, none a regression from that change except where marked. The three
+that remain are here rather than in a commit message because each needs a decision:
 
-1. **The drop path has no collision gate; the click path does.** A fan dropped onto a
-   2.4 m bookshelf is accepted at `(1.50, 2.33, 1.00)` — inside it — and then one
-   arrow-key nudge is refused by `drag-resolve`'s `collidesAt`. **The app creates by drop
-   a state it will not let you leave.** Newly reachable, because the aim is honoured now.
-   Two surfaces, two answers, and rule 2 says the answer is to report rather than refuse —
-   but the two paths must first agree on which they are doing.
+1. ~~**The drop path has no collision gate; the click path does.**~~ **FIXED 2026-10-01,
+   after the user hit it:** a ceiling fan dropped on 2D Plan and a second dropped on 3D
+   Model at the same point shared one hub. The two paths now agree, and on the answer
+   Duplicate and "Change the model" already gave an arrival: `addPieceToRoom` keeps an
+   aimed drop where it was aimed when that is clear and otherwise hands it to
+   `placeArrival` (`lib/duplicate-place.ts`) for the nearest clear spot, saying so in the
+   outcome's `note`. When nothing near is clear it keeps the aim and the note says it is
+   touching what is there: reported, not refused, as rule 2 asks. Not for a piece that came
+   to rest ON a support (a lamp dropped on a desk is meant to be on it) nor a wall rider,
+   which its wall snap has placed already.
 2. **`clash-mounted` prescribes an impossible action for this family.** Verbatim: *"A
    piece is inside something on the wall … **Slide one of them along its wall.**"* A
    ceiling fan has `ridesWall === false` and a free-standing bookshelf has no wall either.

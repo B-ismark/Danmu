@@ -263,6 +263,42 @@ describe('a piece dropped onto something RIDES it, and the edge is recorded', ()
   });
 });
 
+describe('a drop does not make an overlap no drag would allow', () => {
+  // The user's report: two ceiling fans, one dropped in the plan and one in the 3D
+  // tab at the same point, shared one hub. Both drops reach `addPieceToRoom`, and
+  // an aimed drop used to skip every collision question.
+  const FAN: NewPiece = { label: 'Ceiling fan', category: 'fan', shape: 'fan', dimMM: [1000, 1000, 200] }; // annotated, not `as const` (see BED above)
+  const fanAt = (id: string) => useScene.getState().parts.find((p) => p.id === id)!;
+
+  it('a second fan dropped on the first goes beside it, still on the ceiling, and says so', () => {
+    const a = addPieceToRoom(FAN, [0, 0]);
+    const out = addOutcome(FAN, [0, 0]);
+    if ('refused' in out) throw new Error(out.refused);
+    const [p, q] = [fanAt(a), fanAt(out.id)];
+    const gap = Math.hypot(p.pos[0] - q.pos[0], p.pos[2] - q.pos[2]);
+    expect(gap, 'two 1 m fans need their centres a metre apart').toBeGreaterThanOrEqual(1 - 1e-6);
+    expect(q.pos[1], 'and the second still hangs from the ceiling').toBeCloseTo(p.pos[1], 6);
+    expect(out.note, 'moved from where the hand let go, so it says so').toMatch(/taken/);
+  });
+
+  it('a drop on clear floor is kept exactly, and says nothing extra', () => {
+    addPieceToRoom(FAN, [-2, -1.5]);
+    const out = addOutcome(FAN, [1.5, 1]);
+    if ('refused' in out) throw new Error(out.refused);
+    expect(fanAt(out.id).pos[0]).toBeCloseTo(1.5, 6);
+    expect(fanAt(out.id).pos[2]).toBeCloseTo(1, 6);
+    expect(out.note).toBeUndefined();
+  });
+
+  it('a lamp dropped onto a desk still rides the desk — landing ON a piece is the point', () => {
+    seedDesk();
+    const id = addPieceToRoom(LAMP, [0, 0]);
+    const lamp = useScene.getState().parts.find((p) => p.id === id)!;
+    expect(lamp.pos[0]).toBeCloseTo(0, 6);
+    expect(useStudio.getState().parentIds[id]).toBe('desk-1');
+  });
+});
+
 describe('a piece wider than the space it would have is refused, not resized', () => {
   // The user's ruling (2026-09-30): "Don't allow if it's wider than the available
   // space." These read the OUTCOME, not the pose, because a refusal adds nothing.
@@ -384,5 +420,40 @@ describe('"Use my own size" — the old Will it fit, asked from the Library', ()
       parts: [{ id: 'bed-1', name: 'Bed', category: 'bed', shape: 'bed-double', dimMM: [2000, 2200, 500], pos: [0, 0, 0], rot: 0, locked: false }],
     });
     expect('id' in addOutcome(SOFA(2600))).toBe(true);
+  });
+});
+
+describe('a chair dropped square under a table stays tucked', () => {
+  // Found in review: the drop's "is it clear" question asked whether the chair touched
+  // anything, which a tucked chair always does, so a chair let go of square under a
+  // table was carried out to "the nearest clear spot" — the one place a drag would have
+  // let it stay. An arrival is now asked what a drag is asked (`tuckedAt`).
+  //
+  // A drop arrives facing +z (`placeNewPart` gives a chair yaw 0), so the chair that
+  // can tuck is the one on the table's −z side, facing it; on the +z side the same
+  // drop has its back to the table.
+  const TABLE_DIM: [number, number, number] = [1500, 850, 750];
+  const CHAIR: NewPiece = { label: 'Dining chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850] };
+  const seedTable = () =>
+    useScene.setState({
+      parts: [{ id: 'table-1', name: 'Dining table', category: 'table', shape: 'desk-standard', dimMM: TABLE_DIM, pos: [0, 0, 0], rot: 0, locked: false }],
+    });
+  const chairAt = (id: string) => useScene.getState().parts.find((p) => p.id === id)!;
+
+  it('facing the table: kept where it was let go, and nothing said about a taken spot', () => {
+    seedTable();
+    const out = addOutcome(CHAIR, [0, -0.275]);
+    if ('refused' in out) throw new Error(out.refused);
+    expect(chairAt(out.id).rot).toBeCloseTo(0, 9);
+    expect(chairAt(out.id).pos[2]).toBeCloseTo(-0.275, 6);
+    expect(out.note).toBeUndefined();
+  });
+
+  it('with its back to the table: moved out, and said — a backwards chair is not tucked', () => {
+    seedTable();
+    const out = addOutcome(CHAIR, [0, 0.275]);
+    if ('refused' in out) throw new Error(out.refused);
+    expect(Math.abs(chairAt(out.id).pos[2] - 0.275)).toBeGreaterThan(0.1);
+    expect(out.note).toMatch(/taken/);
   });
 });

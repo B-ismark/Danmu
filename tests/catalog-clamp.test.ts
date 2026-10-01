@@ -125,7 +125,9 @@ describe('every shipped preset survives its own clamp', () => {
    *  table. */
   it('ships no bed wider than it is long — the axis the renderer actually uses', () => {
     const beds = PART_LIBRARY.filter((i) => i.category === 'bed');
-    expect(beds.length).toBeGreaterThan(3);
+    // One row since the Library merged its four sizes (the Inspector resizes); the
+    // check is the same one, and a row added back must pass it too.
+    expect(beds.length).toBeGreaterThanOrEqual(1);
     for (const b of beds) {
       expect(
         b.dimMM[1],

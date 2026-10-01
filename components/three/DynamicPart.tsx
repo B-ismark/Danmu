@@ -13,13 +13,17 @@ import {
   consoleSlabs,
   doorHandleY,
   drawerSlide,
+  clothesRail,
   fanBlade,
   fanColumn,
+  fridgeDoors,
   pendantDrop,
   plantForm,
   isParametric,
   lightFor,
   radiatorFins,
+  shoeRow,
+  SHOE_TIER_TILT,
   stoolSeat,
   windowPanes,
   moduleCount,
@@ -28,10 +32,10 @@ import {
   type ScenePart,
 } from '@/lib/scene-spec';
 import { useStudio } from '@/lib/store';
-import { roleOf } from '@/lib/layout-rules';
+import { roleOf, bedPillows } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
-import { ELL_ARM_DEPTH, ELL_RETURN_WIDTH } from '@/lib/foot-cells';
+import { DINING_LEG, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from '@/lib/foot-cells';
 
 /** The module ranges the TILING parametric shapes are divided by, resolved once at module
  *  scope so a renderer reads a value rather than doing a table lookup per frame.
@@ -169,6 +173,8 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
       return <BookshelfGeo part={part} locked={locked} />;
     case 'shoe-rack':
       return <ShoeRackGeo part={part} locked={locked} />;
+    case 'clothes-rack':
+      return <ClothesRackGeo part={part} locked={locked} />;
     case 'chair-dining':
       return <DiningChairGeo part={part} locked={locked} />;
     case 'chair-office':
@@ -186,9 +192,10 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
     case 'lamp-pendant':
       return <PendantLampGeo part={part} />;
     case 'bed-single':
-      return <BedGeo part={part} locked={locked} double={false} />;
     case 'bed-double':
-      return <BedGeo part={part} locked={locked} double={true} />;
+      // Pillows by width, not by shape: one Library bed is resized from a single to a
+      // king, and a 900-wide `bed-double` is a single bed.
+      return <BedGeo part={part} locked={locked} />;
     case 'desk-standard':
       // One shape, two pieces of furniture: the catalogue and the seeder both use
       // `desk-standard` for a dining table, and a detected "table" lands on it too.
@@ -785,7 +792,8 @@ function BookshelfGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 }
 
 // Parametric: open shoe rack. Tier count derives from height; each tier is a
-// width-filling slatted shelf tilted back so shoes lean. Widening adds slats.
+// width-filling slatted shelf tilted back so shoes lean. Widening adds slats — and
+// pairs of shoes, which `shoeRow` seeds per rack so the rack is never shown empty.
 function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
@@ -794,6 +802,10 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const tiers = moduleCount(h, TIER);
   const gap = h / tiers;
   const posts = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * (w / 2 - 0.02), sz * (d / 2 - 0.02)] as [number, number]));
+  const shoes = shoeRow(part).map((b) => ({
+    ...b,
+    color: locked ? shade(SCENE.lockedTint, 10) : (b.sole ? DECOR.sole : DECOR.shoe)[b.tone % DECOR.shoe.length],
+  }));
   return (
     <>
       {posts.map(([x, z], i) => (
@@ -808,8 +820,9 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
           pos: [0, 0, -d / 2 + (j + 0.5) * (d / slatCount)] as [number, number, number],
           size: [w - 0.06, 0.012, 0.018] as [number, number, number],
         }));
+        const pairs: InstanceItem[] = shoes.filter((b) => b.tier === i).map((b) => ({ pos: b.pos, size: b.size, color: b.color }));
         return (
-          <group key={i} position={[0, (i + 0.5) * gap, 0]} rotation={[-0.12, 0, 0]}>
+          <group key={i} position={[0, (i + 0.5) * gap, 0]} rotation={[-SHOE_TIER_TILT, 0, 0]}>
             <BoxInstances items={slats} color={wood} surface={{ roughness: 0.7 }} />
             {/* side rails the slats rest on, running front post to back post. Without
                 them every slat was a board floating 40 mm from the next, held by
@@ -817,6 +830,7 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
             {[-1, 1].map((sx) => (
               <Box key={sx} surface="wood" size={[0.02, 0.025, d - 0.02]} position={[sx * (w / 2 - 0.03), -0.01, 0]} color={wood} roughness={0.7} />
             ))}
+            {pairs.length > 0 && <BoxInstances items={pairs} color="#ffffff" surface={{ roughness: 0.75 }} />}
           </group>
         );
       })}
@@ -824,8 +838,82 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   );
 }
 
+// Parametric: an open pipe clothes rail — two uprights on flanged T-feet, a top bar the
+// hangers ride and a lower bar, all from `clothesRail`, with the clothes on it seeded per
+// rail. The pipe is the recolourable body; the clothes keep their own colours, as the
+// books on a shelf do.
+function ClothesRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const d = part.dimMM[1] / 1000;
+  const h = part.dimMM[2] / 1000;
+  const rail = clothesRail(part);
+  const { pipe, flange, postX, footY, topY, lowY } = rail;
+  const iron = body(part, locked);
+  const joint = shade(iron, 12);
+  const span = 2 * postX;
+  const footLen = d - 2 * flange;
+  const hangerWood = locked ? shade(SCENE.lockedTint, 20) : DETAIL.lightWood;
+  const clothes: InstanceItem[] = [];
+  const hangers: InstanceItem[] = [];
+  for (const g of rail.garments) {
+    const color = locked ? shade(SCENE.lockedTint, 10) : DECOR.garment[g.tone % DECOR.garment.length];
+    // the hook, from the bar's underside down to the hanger
+    hangers.push({ pos: [g.x, topY - pipe - 0.03, 0], size: [0.004, 0.06, 0.004] });
+    hangers.push({ pos: [g.x, g.top + 0.006, 0], size: [0.008, 0.012, g.width] });
+    // shoulders, then the body a touch narrower — a flat box reads as a board
+    const shoulder = Math.min(0.12, g.length * 0.2);
+    clothes.push({ pos: [g.x, g.top - shoulder / 2, 0], size: [g.thick, shoulder, g.width], color });
+    clothes.push({ pos: [g.x, g.top - shoulder - (g.length - shoulder) / 2, 0], size: [g.thick * 0.9, g.length - shoulder, g.width * 0.86], color });
+  }
+  return (
+    <>
+      {[-1, 1].map((sx) => (
+        <group key={sx} position={[sx * postX, 0, 0]}>
+          {/* floor flanges, a short stub up from each, and the foot pipe between them */}
+          {[-1, 1].map((sz) => (
+            <group key={sz} position={[0, 0, sz * (d / 2 - flange)]}>
+              <mesh position={[0, 0.004, 0]}>
+                <cylinderGeometry args={[flange, flange, 0.008, 20]} />
+                <meshStandardMaterial color={iron} {...SURFACE.metal} />
+              </mesh>
+              <mesh position={[0, (footY + 0.008) / 2, 0]}>
+                <cylinderGeometry args={[pipe, pipe, footY - 0.008, 12]} />
+                <meshStandardMaterial color={iron} {...SURFACE.metal} />
+              </mesh>
+            </group>
+          ))}
+          <mesh position={[0, footY, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[pipe, pipe, footLen, 12]} />
+            <meshStandardMaterial color={iron} {...SURFACE.metal} />
+          </mesh>
+          {/* the upright, from the foot's tee to the elbow under the top bar */}
+          <mesh position={[0, (footY + topY) / 2, 0]}>
+            <cylinderGeometry args={[pipe, pipe, topY - footY, 12]} />
+            <meshStandardMaterial color={iron} {...SURFACE.metal} />
+          </mesh>
+          {/* tee, lower-bar tee and elbow: fittings a little fatter than the pipe. The
+              elbow sits down by its own extra girth so its crown is the rail's height. */}
+          {[footY, lowY, Math.min(topY, h - pipe * 1.45)].map((y) => (
+            <mesh key={y} position={[0, y, 0]}>
+              <sphereGeometry args={[pipe * 1.45, 12, 10]} />
+              <meshStandardMaterial color={joint} {...SURFACE.metal} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      {[topY, lowY].map((y) => (
+        <mesh key={y} position={[0, y, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[pipe, pipe, span, 12]} />
+          <meshStandardMaterial color={iron} {...SURFACE.metal} />
+        </mesh>
+      ))}
+      {hangers.length > 0 && <BoxInstances items={hangers} color={hangerWood} surface={{ roughness: 0.6 }} />}
+      {clothes.length > 0 && <BoxInstances items={clothes} color="#ffffff" surface={SURFACE.fabric} />}
+    </>
+  );
+}
+
 // ─── Beds ───────────────────────────────────────────────────────────────
-function BedGeo({ part, locked, double }: { part: ScenePart; locked: boolean; double: boolean }) {
+function BedGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
@@ -833,6 +921,7 @@ function BedGeo({ part, locked, double }: { part: ScenePart; locked: boolean; do
   const mattress = body(part, locked, '#E8D5B0');
   // Pillows always neutral — real beds have white/cream pillows regardless of frame color.
   const pillow = locked ? shade(SCENE.lockedTint, 20) : '#F0ECE3';
+  const pillows = bedPillows(part.dimMM[0]);
   return (
     <>
       {/* The headboard is the bed's full width, so the frame stands `SEAM` inside it —
@@ -847,14 +936,9 @@ function BedGeo({ part, locked, double }: { part: ScenePart; locked: boolean; do
           falls 10 mm past it now, and stops short of the pillows. */}
       <Box surface="fabric" size={[w * 0.99, h * 0.2, d * 0.62]} position={[0, h * 0.62, d / 2 - 0.03 - d * 0.31]} color={shade(mattress, -8)} roughness={0.97} />
       <Box surface="wood" size={[w, h * 1.4, 0.05]} position={[0, h * 0.7, -d / 2]} color={frame} roughness={0.7} />
-      {double ? (
-        <>
-          <Box surface="fabric" size={[w * 0.42, h * 0.15, d * 0.25]} position={[-w * 0.22, h * 0.75, -d * 0.3]} color={pillow} roughness={0.93} />
-          <Box surface="fabric" size={[w * 0.42, h * 0.15, d * 0.25]} position={[w * 0.22, h * 0.75, -d * 0.3]} color={pillow} roughness={0.93} />
-        </>
-      ) : (
-        <Box surface="fabric" size={[w * 0.5, h * 0.15, d * 0.25]} position={[0, h * 0.75, -d * 0.3]} color={pillow} roughness={0.93} />
-      )}
+      {pillows.xs.map((x) => (
+        <Box key={x} surface="fabric" size={[pillows.w, h * 0.15, d * 0.25]} position={[x, h * 0.75, -d * 0.3]} color={pillow} roughness={0.93} />
+      ))}
       {[
         [-w / 2 + 0.04, -d / 2 + 0.04],
         [w / 2 - 0.04, -d / 2 + 0.04],
@@ -917,14 +1001,17 @@ function DeskGeo({ part, locked, lShape }: { part: ScenePart; locked: boolean; l
           roughness={0.65}
         />
       )}
-      {/* side panel on left — encloses the leg space, within the long arm. It carries
-          that end of the top, so it runs floor to underside: at 0.82h it stopped 90 mm
-          short and the desktop's left end sat on air. */}
-      <Box surface="wood" size={[0.018, h - 0.045, armD * 0.88]} position={[-w / 2 + 0.009, (h - 0.045) / 2, armZ]} color={leg} roughness={0.68} />
-      {/* right rear leg */}
-      <Box surface="wood" size={[0.05, h - 0.04, 0.05]} position={[w / 2 - 0.04, (h - 0.04) / 2, -d / 2 + 0.04]} color={leg} roughness={0.7} />
-      {/* right front leg — under the return in L form, under the top otherwise */}
-      <Box surface="wood" size={[0.05, h - 0.04, 0.05]} position={[w / 2 - 0.04, (h - 0.04) / 2, d / 2 - 0.04]} color={leg} roughness={0.7} />
+      {/* The side panel on the left, then the right rear and right front legs (the
+          front one under the return in L form) — `surfacePostsLocal`'s rectangles, the
+          ones a tucked chair is kept out of. The panel carries that end of the top, so
+          it runs floor to underside: at 0.82h it stopped 90 mm short and the desktop's
+          left end sat on air; the legs stop 5 mm higher, under the top's lip. */}
+      {surfacePostsLocal(lShape ? 'desk-l' : 'desk-standard', false, w, d).map((r, i) => {
+        const tall = i === 0 ? h - 0.045 : h - 0.04;
+        return (
+          <Box key={i} surface="wood" size={[r.x1 - r.x0, tall, r.z1 - r.z0]} position={[(r.x0 + r.x1) / 2, tall / 2, (r.z0 + r.z1) / 2]} color={leg} roughness={i === 0 ? 0.68 : 0.7} />
+        );
+      })}
       {/* cable management rail under back edge */}
       <Box surface="wood" size={[w * 0.75, 0.03, 0.04]} position={[0, h - 0.06, -d / 2 + 0.05]} color={shade(leg, 8)} roughness={0.6} />
     </>
@@ -1020,6 +1107,8 @@ function FridgeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
   const shell = body(part, locked);
+  const french = fridgeDoors(part.dimMM[0]) === 2;
+  const steel = DETAIL.steel;
   return (
     <>
       <Box size={[w, h, d]} position={[0, h / 2, 0]} color={shell} roughness={0.5} metalness={0.08} />
@@ -1027,8 +1116,24 @@ function FridgeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       <Box size={[w - 2 * SEAM, 0.01, 0.006]} position={[0, h * 0.36, d / 2 + 0.002]} color={shade(shell, -30)} />
       {/* brushed-steel handles */}
       {/* handles against the doors — both stood 8 mm off them on nothing */}
-      <Box size={[0.025, h * 0.34, 0.04]} position={[w / 2 - 0.07, h * 0.72, d / 2 + 0.02]} color="#b9bcc0" roughness={0.35} metalness={0.6} />
-      <Box size={[0.025, h * 0.18, 0.04]} position={[w / 2 - 0.07, h * 0.2, d / 2 + 0.02]} color="#b9bcc0" roughness={0.35} metalness={0.6} />
+      {french ? (
+        <>
+          {/* French door: two doors meeting in the middle over a pull-out freezer
+              drawer, handles either side of the meeting line and one across the drawer */}
+          {/* 5 mm, not the split line's 6: the two meet, and one front face shared
+              between them flickers where they do (coplanar-faces) */}
+          <Box size={[0.008, h * 0.64 - SEAM, 0.005]} position={[0, h * 0.68, d / 2 + 0.0015]} color={shade(shell, -30)} />
+          {[-1, 1].map((s) => (
+            <Box key={s} size={[0.025, h * 0.34, 0.04]} position={[s * 0.05, h * 0.72, d / 2 + 0.02]} color={steel} roughness={0.35} metalness={0.6} />
+          ))}
+          <Box size={[w * 0.5, 0.025, 0.04]} position={[0, h * 0.32, d / 2 + 0.02]} color={steel} roughness={0.35} metalness={0.6} />
+        </>
+      ) : (
+        <>
+          <Box size={[0.025, h * 0.34, 0.04]} position={[w / 2 - 0.07, h * 0.72, d / 2 + 0.02]} color={steel} roughness={0.35} metalness={0.6} />
+          <Box size={[0.025, h * 0.18, 0.04]} position={[w / 2 - 0.07, h * 0.2, d / 2 + 0.02]} color={steel} roughness={0.35} metalness={0.6} />
+        </>
+      )}
       {/* feet */}
       {[-1, 1].map((s) => (
         <Box key={s} size={[0.05, 0.04, 0.05]} position={[s * (w / 2 - 0.06), 0.02, d / 2 - 0.06]} color="#2b2b2e" />
@@ -1081,11 +1186,11 @@ function DiningTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
   const top = body(part, locked);
   const frame = shade(top, -20);
   const topT = 0.035;
-  const leg = 0.055;
   const apron = 0.08;
-  // Leg centres, inset so a leg's outer faces sit 40 mm inside the top's edge.
-  const lx = w / 2 - 0.04 - leg / 2;
-  const lz = d / 2 - 0.04 - leg / 2;
+  // Leg centres, inset so a leg's outer faces sit 40 mm inside the top's edge. The legs
+  // themselves are `surfacePostsLocal`'s, the rectangles a tucked chair is kept out of.
+  const lx = w / 2 - DINING_LEG.inset - DINING_LEG.size / 2;
+  const lz = d / 2 - DINING_LEG.inset - DINING_LEG.size / 2;
   return (
     <>
       <Box surface="wood" size={[w, topT, d]} position={[0, h - topT / 2, 0]} color={top} roughness={0.65} />
@@ -1096,13 +1201,8 @@ function DiningTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
       {[-1, 1].map((s) => (
         <Box key={`az${s}`} surface="wood" size={[0.022, apron, 2 * lz]} position={[s * lx, h - topT - apron / 2, 0]} color={frame} roughness={0.7} />
       ))}
-      {[
-        [-lx, -lz],
-        [lx, -lz],
-        [-lx, lz],
-        [lx, lz],
-      ].map(([x, z], i) => (
-        <Box key={i} surface="wood" size={[leg, h - topT, leg]} position={[x, (h - topT) / 2, z]} color={frame} roughness={0.7} />
+      {surfacePostsLocal('desk-standard', true, w, d).map((r, i) => (
+        <Box key={i} surface="wood" size={[r.x1 - r.x0, h - topT, r.z1 - r.z0]} position={[(r.x0 + r.x1) / 2, (h - topT) / 2, (r.z0 + r.z1) / 2]} color={frame} roughness={0.7} />
       ))}
     </>
   );

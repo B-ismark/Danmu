@@ -107,8 +107,15 @@ const isTv = (p: ScenePart) => p.shape === 'tv';
 describe('Fix on a sofa a few degrees off square', () => {
   // The T at 6 × 5 is the room the observation was measured in; the L at its own preset
   // size is the row where the sofa came back facing away at only 6°.
-  const cases: [LayoutId, number, number, number][] = [['t', 6, 5, -10], ['t', 6, 5, 10], ['l', 6, 4.7, -6]];
-  for (const [layout, w, d, deg] of cases) {
+  //
+  // The last number is how many of the twelve answers leave the sofa exactly where it
+  // stood. In the T at −10° it is 11 since the 2026-10-01 tuck rule (a chair tucks only
+  // square and between the table's legs): on seed 9 the in-place answer is still the one
+  // picked, at 22.42 against the search's best 55.01, and `openRoutes` then clears a route
+  // through the dining set and takes the sofa 36 mm with it, square and facing. With the
+  // tuck rule's two checks off it is 12 again, so the route repair's draw is what moved.
+  const cases: [LayoutId, number, number, number, number][] = [['t', 6, 5, -10, 11], ['t', 6, 5, 10, 12], ['l', 6, 4.7, -6, 12]];
+  for (const [layout, w, d, deg, stays] of cases) {
     it(`${layout} ${w} × ${d}, sofa turned ${deg}°: every seed faces the television`, () => {
       const { parts: base, footprint } = room(layout, w, d);
       const { parts, id } = turned(base, isSofa, deg, footprint);
@@ -117,18 +124,21 @@ describe('Fix on a sofa a few degrees off square', () => {
       let applied = 0;
       let notFacing = 0;
       let inPlace = 0;
+      let crooked = 0;
       for (const seed of SEEDS) {
         const out = fix(parts, footprint, seed, new Set([id]));
         if (!out) continue;
         applied++;
         const sofa = out.find((p) => p.id === id)!;
         if (facing(sofa, tv) > FACING_HALF_ANGLE) notFacing++;
+        if (offSquare(sofa.rot) > 1e-6) crooked++;
         if (Math.hypot(sofa.pos[0] - start.pos[0], sofa.pos[2] - start.pos[2]) < 1e-9 && offSquare(sofa.rot) < 1e-6) inPlace++;
       }
-      // Fix acts on every seed, and on every seed the answer is the sofa squared where it
-      // stood. Before, in the T: 11 / 12 acted at −10°, and 0 and 1 of them squared it in
-      // place. In the L: 11 acted, none in place, 3 left crooked and 1 facing away.
-      expect({ applied, notFacing, inPlace }).toEqual({ applied: 12, notFacing: 0, inPlace: 12 });
+      // Fix acts on every seed, and on every seed the sofa comes back square and facing,
+      // nearly always where it stood. Before the candidate, in the T: 11 / 12 acted at
+      // −10°, and 0 and 1 of them squared it in place. In the L: 11 acted, none in place,
+      // 3 left crooked and 1 facing away.
+      expect({ applied, notFacing, crooked, inPlace }).toEqual({ applied: 12, notFacing: 0, crooked: 0, inPlace: stays });
     });
   }
 
@@ -160,14 +170,16 @@ describe('Fix on a sofa a few degrees off square', () => {
   // Each row turns pieces of a preset by hand (so they are `placed`) and names what the
   // candidate squares. Every row is one where its rule changes that answer.
   const rules: [string, LayoutId, number, number, [string, number][], string[] | null][] = [
-    // Squaring the dining table clears its `access` and buys less than `KEEP_EPS`, the slack
-    // `pruneMoves` spends putting moves back, so picked, it would be turned crooked again.
-    ['a turn that buys less than the tidy keeps is not offered', 't', 6, 5, [['table-2', -8]], null],
-    // Squaring the sofa clears the wall and raises the crooked table's `access`: a swap,
-    // which is the search's to price. Squaring the table alone buys too little.
-    ['a turn that raises another fault is not offered', 't', 6, 5, [['sofa-1', -10], ['table-2', -8]], null],
-    // The same two turns at 5.5 × 4.7: the sofa first raises the table's `access`, the
-    // table squared clears it, and on the second pass the sofa's turn is clean.
+    // Squaring the nightstand clears its 0.64 of `overlap`, and turning back a piece the user
+    // placed costs 0.34 of `inertia`: the room is 0.43 cheaper, less than `KEEP_EPS`, the
+    // slack `pruneMoves` spends putting moves back, so picked, it would be turned crooked
+    // again. Until 2026-10-01 this row was the T's dining table at −8°; since the tuck rule
+    // its end leg swings into the end chair at that angle, so squaring it buys enough.
+    ['a turn that buys less than the tidy keeps is not offered', 'u', 5, 4.5, [['nightstand-1', -8]], null],
+    // The sofa and the dining table turned at 5.5 × 4.7: the sofa first raises the table's
+    // `access` (3.4 → 4.7), the table squared clears it (and, since the 2026-10-01 tuck
+    // rule, its end leg out of the end chair), and on the second pass the sofa's turn is
+    // clean.
     ['squaring one piece can let another be squared', 't', 5.5, 4.7, [['sofa-1', -10], ['table-2', -8]], ['sofa-1', 'table-2']],
     // The sofa back at the angle the preset gives it strands one more cell of floor. The
     // candidate does not ask; the cell is priced when it is rated, as every answer's is.
@@ -182,6 +194,23 @@ describe('Fix on a sofa a few degrees off square', () => {
       expect(squaredIn(parts, footprint, new Set(turns.map(([id]) => id)))).toEqual(expected);
     });
   }
+
+  it('a turn that raises another fault is not offered (t 6 × 5, sofa-1 −10°, a plant by its corner)', () => {
+    // The plant stood clear of the turned sofa, 600 mm toward the room and 800 mm along its
+    // back. Squared, the sofa comes out of its wall (`outside` 122 → 0) and drives that
+    // corner into the plant (`overlap` 0 → 35): a swap, which is the search's to price.
+    // Until 2026-10-01 this row was the sofa with the dining table turned −8°, whose
+    // `access` the sofa raised; since the tuck rule no two turns of the T, the U or the
+    // open plan raise a fault the sofa's turn clears (420 pairs, the same answer with the
+    // rule on or off), so the plant is put where the corner swings.
+    const { parts: base, footprint } = room('t', 6, 5);
+    const { parts: sofaTurned, id } = turned(base, isSofa, -10, footprint);
+    const sofa = sofaTurned.find((p) => p.id === id)!;
+    const parts = sofaTurned.map((p): ScenePart => (p.id === 'plant-1' ? { ...p, pos: [sofa.pos[0] - 0.6, p.pos[1], sofa.pos[2] - 0.8] } : p));
+    expect(squaredIn(parts, footprint, new Set([id, 'plant-1']))).toBeNull();
+    // Without the plant there, the same sofa is squared.
+    expect(squaredIn(sofaTurned, footprint, new Set([id]))).toEqual([id]);
+  });
 
   it('a locked piece is not turned, however crooked', () => {
     const { parts: base, footprint } = room('t', 6, 5);

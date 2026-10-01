@@ -180,11 +180,23 @@ describe('a suggestion never hands back a piece a few degrees off square', () =>
   // alone and 29 with the diagonals; the difference is thirteen coordinates. None of the
   // old four survived as a witness: `l` seed 1 and `u` seed 8 stopped being crooked
   // without the diagonals, and `rect` seed 5 and `t` seed 1 came back crooked with them.
+  //
+  // **And again for the tuck rule** (2026-10-01: a dining chair is tucked only square to
+  // the edge and clear of the table's legs), the same five rooms × 40 seeds. 51 crooked on
+  // the axes alone and 47 with the diagonals, against 43 and 36 on the old rule over the
+  // same sweep. The rise is mostly dining tables, 14 → 23: squared alone, a table swings
+  // a leg into the chair tucked at its end, so the tidy leaves it where the search did.
+  // Squaring the table with its chairs as one set is the fix, and it is not this one.
+  // The difference is six coordinates: `rect` seeds 5, 14, 25, `t` 19, `u` 21, `open`
+  // 25. None in the `l` in forty seeds, so `open` stands in for it. Of the old four, `t`
+  // 5 is clean on the axes alone now, `l` 3 and `u` 3 are crooked even with the
+  // diagonals (a dining table, and the single bed with the table and a chair), and
+  // `rect` 3 had already stopped witnessing: clean on the axes alone on the old rule too.
   const DIAGONAL_ONLY: Array<[LayoutId, number, number, number]> = [
-    ['rect', 5, 4, 3],
-    ['l', 6, 5, 3],
-    ['t', 6, 5, 5],
-    ['u', 5, 4.5, 3],
+    ['rect', 5, 4, 5],
+    ['t', 6, 5, 19],
+    ['u', 5, 4.5, 21],
+    ['open', 7.5, 5.6, 25],
   ];
 
   it.each(DIAGONAL_ONLY)('squares a piece only a diagonal shove can reach: %s %sx%s seed %i', (id, w, d, seed) => {

@@ -581,6 +581,24 @@ describe('resolveConvoy — where the company lands', () => {
     // rides up onto a table it is pulled over. A set behaving like its own members
     // is the consistent answer — vertical rigidity is not a promise this makes, and
     // `resolveConvoy`'s gravity is what keeps the piece off thin air either way.
+    //
+    // A STEP UP, lower than the member itself: what a member may not do is climb
+    // something taller than it is — the next test.
+    const world = [
+      part({ id: 'a', pos: [1, 0, 1], dimMM: [800, 800, 400] }),
+      part({ id: 'b', pos: [2, 0, 1], dimMM: [800, 800, 400] }),
+      part({ id: 'wide', pos: [3.6, 0, 1], dimMM: [1400, 1400, 300] }),
+    ];
+    const c = plan('a', world, ['a', 'b']);
+    const r = carry(c, 'a', world, [1, 0, 1], [2.6, 0, 1]);
+    expect(r.valid).toBe(true);
+    expect(posOf(r.moves, 'b')).toEqual([3.6, 0.3, 1]);
+  });
+
+  it('but never climbs something taller than itself — and names itself for it', () => {
+    // The user's report: a merged bed dragged toward a wardrobe, and the nightstand
+    // riding along stood on TOP of the 2.2 m wardrobe, its lamp pressed into it by the
+    // ceiling cap. Same fixture as above with the obstacle taller than the member.
     const world = [
       part({ id: 'a', pos: [1, 0, 1], dimMM: [800, 800, 400] }),
       part({ id: 'b', pos: [2, 0, 1], dimMM: [800, 800, 400] }),
@@ -588,8 +606,9 @@ describe('resolveConvoy — where the company lands', () => {
     ];
     const c = plan('a', world, ['a', 'b']);
     const r = carry(c, 'a', world, [1, 0, 1], [2.6, 0, 1]);
-    expect(r.valid).toBe(true);
-    expect(posOf(r.moves, 'b')).toEqual([3.6, 0.5, 1]);
+    expect(r.valid).toBe(false);
+    expect(r.blocked?.id).toBe('b');
+    expect(r.blockedIds).toEqual(['b']);
   });
 
   it('re-gravitates a member instead of carrying its height', () => {

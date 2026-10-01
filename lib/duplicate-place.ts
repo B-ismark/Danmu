@@ -76,7 +76,7 @@ import {
   TOUCH_M,
 } from './geometry';
 import { footprintBounds, type Footprint } from './footprint';
-import { isSoftFurnishing } from './layout-rules';
+import { isSoftFurnishing, tuckedAt, tuckProfile } from './layout-rules';
 import { isFloorStanding, restingOn } from './physics';
 import { canCollideWith, type ScenePart } from './scene-spec';
 
@@ -333,8 +333,16 @@ function place(
           const ix = Math.min(r.pos[0] + mx.ex, o.pos[0] + ox.ex) - Math.max(r.pos[0] - mx.ex, o.pos[0] - ox.ex);
           const iz = Math.min(r.pos[2] + mx.ez, o.pos[2] + ox.ez) - Math.max(r.pos[2] - mx.ez, o.pos[2] - ox.ez);
           if (ix > 0 && iz > 0) overlap += ix * iz;
-          if (snug && inTheWay(o) && footOverlap(me, footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape), -TOUCH_M))
-            snug = false;
+          if (!snug || !inTheWay(o)) continue;
+          const theirs = footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape);
+          if (!footOverlap(me, theirs, -TOUCH_M)) continue;
+          // An ARRIVAL may be tucked, and only an arrival: a chair dropped square
+          // under a table was aimed there, and moving it out to "the nearest clear
+          // spot" undid the one thing the drop said. A copy is never made tucked —
+          // nothing asked for its spot, and a copy tucked under the table beside its
+          // original is two chairs where one was.
+          if (arriving && tuckedAt(tuckProfile(src), me, tuckProfile(o), theirs)) continue;
+          snug = false;
         }
       }
       // Did it land where it was asked, rather than where a clamp or a wall's end

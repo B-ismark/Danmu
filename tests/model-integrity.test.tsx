@@ -114,14 +114,24 @@ for (const shape of SHAPES) {
   for (const [s, d] of sizes) findings.push(...inspect(shape, s, d));
 }
 // The one shape drawn two ways: `desk-standard` with category `table` is a dining
-// table (`roleOf`), and the library entry is the desk. Walked at the desk range's
-// sizes that still read as a dining table — the min is too small to sit at.
+// table (`roleOf`), with `desk` a desk — and the Library offers both, Dining table
+// first, so the sweep above (which takes the FIRST row's category) walks only the
+// table. Each is walked here in its own category: the dining table at the sizes that
+// still read as one (the band's min is too small to sit at), the desk at its own
+// Library row and both band ends.
 const DINING: Array<[string, [number, number, number]]> = [
   ['seed', [1500, 850, 750]],
   ['min', [900, 700, 700]],
   ['max', [...dimRangeFor('desk', 'desk-standard').max] as [number, number, number]],
 ];
 for (const [s, d] of DINING) findings.push(...inspect('desk-standard', `dining ${s}`, d, 'table'));
+const deskRow = PART_LIBRARY.find((l) => l.shape === 'desk-standard' && l.category === 'desk');
+const DESK: Array<[string, [number, number, number]]> = [
+  ['lib', deskRow!.dimMM as [number, number, number]],
+  ['min', [...dimRangeFor('desk', 'desk-standard').min] as [number, number, number]],
+  ['max', [...dimRangeFor('desk', 'desk-standard').max] as [number, number, number]],
+];
+for (const [s, d] of DESK) findings.push(...inspect('desk-standard', `desk ${s}`, d, 'desk'));
 
 describe('every model is one grounded object', () => {
   it('draws a dining table as a table and a desk as a desk', () => {
@@ -133,6 +143,16 @@ describe('every model is one grounded object', () => {
       ).length;
     expect(onFloor('table')).toBe(4);
     expect(onFloor('desk')).toBe(3);
+    // And the Library's own two rows land on those two drawings. "Dining table" used
+    // to be the desk row under another name, so the far side of a table dropped from
+    // the Library showed the desk's side panel where two legs should be.
+    const row = (label: string) => PART_LIBRARY.find((l) => l.label === label)!;
+    const legs = (label: string) =>
+      walk(PartGeometry({ part: partAt('desk-standard', row(label).dimMM as [number, number, number], row(label).category), locked: false })).prims.filter(
+        (p) => Math.abs(p.y[0]) < TOUCH,
+      ).length;
+    expect(legs('Dining table')).toBe(4);
+    expect(legs('Desk')).toBe(3);
   });
 
   it('walks every library shape completely', () => {

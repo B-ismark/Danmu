@@ -285,6 +285,49 @@ function cases(): Case[] {
     });
   }
 
+  // ── A dining chair tucked at an angle, and one slid into the table's leg ──
+  // Both were "tucked" until 2026-10-01 and drew through the table: turned 30°, the
+  // chair's legs and back swing across the apron; slid along the edge, its seat stands
+  // where the corner leg is. Each `good` is the same chair pushed in square, between
+  // the legs, at the depth the buried-chair case above calls fine — so the pair pins
+  // that the new conditions did not make the ordinary tuck a clash.
+  {
+    const t = diningTable();
+    const c = part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 480, 900], pos: [0, 0, 0] });
+    // 0.6 of the chair's depth under the top: past `CLASH_SHARE`, so an untucked pair is
+    // a finding, and short of the back's 1 − 55/420, so the tucked one is not.
+    const z = t.dimMM[1] / 2000 + 0.24 - 0.48 * 0.6;
+    out.push({
+      family: 'clash',
+      what: 'a dining chair pushed under the table at an angle',
+      parts: [t, c],
+      bad: [
+        { x: 0, z: 0, yaw: 0 },
+        { x: 0, z, yaw: Math.PI + Math.PI / 6 },
+      ],
+      good: [
+        { x: 0, z: 0, yaw: 0 },
+        { x: 0, z, yaw: Math.PI },
+      ],
+    });
+    // The leg's inner face is `DINING_LEG.inset + size` in from the end; the chair's
+    // side 100 mm past it is through the leg, 100 mm short of it is clear.
+    const legInner = t.dimMM[0] / 2000 - 0.095;
+    out.push({
+      family: 'clash',
+      what: 'a dining chair slid along the edge into the table’s corner leg',
+      parts: [t, c],
+      bad: [
+        { x: 0, z: 0, yaw: 0 },
+        { x: legInner - 0.225 + 0.1, z, yaw: Math.PI },
+      ],
+      good: [
+        { x: 0, z: 0, yaw: 0 },
+        { x: legInner - 0.225 - 0.1, z, yaw: Math.PI },
+      ],
+    });
+  }
+
   // ── A walkway too narrow to use ───────────────────────────────────────────
   // Gaps are derived from the rule rather than typed: a bad gap well under WALK_MIN
   // even after the field's quantisation band, a good one past the route width this
