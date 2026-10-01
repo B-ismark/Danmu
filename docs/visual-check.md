@@ -164,26 +164,33 @@ near the near wall.
 **Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half and the
 wall-from-the-pointer fix on this branch.
 
-### A selected piece stays in view on the cut-away wall — this branch, NOT LOOKED AT
+### A selected wall piece seen from behind its wall has a clean back — this branch, NOT LOOKED AT
 
-The user, 2026-09-30: keep a selected piece visible on the wall the camera looks through,
-*"but obviously, you shouldn't be able to select it if you hadn't selected it and now it's
-not visible."* So it is kept while it is **selected or being dragged**, and only then.
+The user looked at *a selected piece stays in view on the cut-away wall* on 2026-09-30 and
+it was right, except for *"some weird shading issue going on with the tv's back when viewing
+from the wall while it's selected"* — diagonal dark stripes across it. **Not a shadow, and
+not ambient occlusion:** a probe that switched the shadow map and then the whole post pass
+off kept the stripes. It was the frosted selection base. A wall piece's base stood ON the
+plaster, and the piece's back is on the plaster too, so the two shared one plane; from inside
+the room that face is turned away and never drawn, and seen through the cut-away wall it was
+the face on screen, the base's white and the TV's black fighting over it pixel by pixel. The
+base now stands `BASE_LIFT` (2 mm) off its wall, as the floor's always did, and the ceiling's
+2 mm under the slab (`lib/selection-base.ts`). And it is never thicker than the piece it is
+behind, which it used to be on anything under 24 mm deep: a 15 mm mirror wore the base's
+frosted face 11 mm in front of its glass. Re-rendered headless with shadows and AO on: the
+TV's back is one solid panel inside its rim. The mirror half is arithmetic only.
 
-**Where to click.** Rectangle, default 3D view, which looks through the south wall. Drag a
-**painting** from the far wall toward the camera until it lands on the near wall. Then click
-the floor, then orbit round so the camera is behind a wall with a window on it.
+**Where to click.** Rectangle, default 3D view. Put a **TV** on the near (cut-away) wall and
+select it from the rail's **Catalog**, then orbit a little either way. Then a **ceiling
+light**, selected, from a camera pulled up high.
 
-**What right looks like.** The painting stays in view the whole drag and after you let go,
-outline and all, and you can drag it again from there. Click the floor and it goes with its
-wall. From behind the window's wall the window is gone, and pressing where it was selects
-whatever is behind it, never the window. Pick the window from the rail's **Catalog** and it
-comes back into view while it is selected. *Wrong* looks like: a selected piece vanishing
-with its wall, an unselected one staying, or a hidden one selectable by clicking where it
-hangs. The shadows must not change as it appears and goes.
+**What right looks like.** The TV's back is one even dark panel with the frosted rim round
+it, and stays even as you orbit. From inside the room the TV looks exactly as before: the
+rim round its edge, nothing on its screen. *Wrong* looks like: stripes or a jagged dark
+triangle on the back, a frosted sheet over the back, or — select a **mirror** from inside the
+room — a frosted veil over its glass rather than a rim round its edge.
 
-**Where it rides.** `lib/near-wall.ts` `cutAwayHides`, `components/three/CutAway.tsx`,
-`components/three/Draggable.tsx`.
+**Where it rides.** `lib/selection-base.ts`, `components/three/Highlight.tsx`.
 
 ### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye
 

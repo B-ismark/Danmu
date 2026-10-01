@@ -1358,7 +1358,10 @@ pair and they are **one row**, and the measured one survives in either photo ord
 - **What is drawn while you point** — `Highlight.tsx` renders a translucent
   **base** under the piece (`lib/selection-base.ts`): a rounded slab a margin past
   its footprint on the floor, a plate between it and the plaster for a wall piece,
-  one against the slab for a ceiling piece. Frosted paper with a sage rim on hover
+  one against the slab for a ceiling piece — each `BASE_LIFT` (2 mm) off its surface
+  and, behind a wall or ceiling piece, never thicker than the piece, so no face of
+  it shares a plane with the piece's back or shows through its front (a base ON the
+  plaster striped a selected TV seen through its cut-away wall). Frosted paper with a sage rim on hover
   and a terracotta rim when selected or carried; **light red** (`SCENE.invalid`)
   when the spot it is being carried to will not take it — the one state that tints
   the slab, because `--danger` sits a step from `--accent` and a terracotta slab
