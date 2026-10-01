@@ -10375,3 +10375,29 @@ put where a print hung above the bed stands on the floor. The ottoman was left i
 one put over a top it does not fit under goes on it, § H.6.4's decision, which
 `tests/seat-support.test.ts` holds for a coffee table. A bed is a top by that rule. Whether
 a bed should be a top for anything is the open question, and it is a physics one.
+
+## § 51 · Start over on a room whose walls were moved and saved — WRITTEN DOWN, NOT FIXED
+
+**Exists in:** this branch, `lib/room-start.ts` (the header names it) and
+`tests/start-over.test.tsx`.
+
+Start over decides whether to SHOW against the start laid out for the walls the room opened
+with (`useScene.startRoom`), and builds for today's walls when it is pressed. A wall drag or a
+height change alone no longer lights it; before, it did, and pressing it re-laid furniture
+nobody had touched.
+
+**What is left.** A starter whose walls were moved and then saved reopens with its pieces laid out
+for the OLD walls, and the start is built for the walls it opened with, which are now the new
+ones. So the button is offered on a room whose furniture nobody touched. Pressing it fits the
+starter to the walls as they are, which is what the dialog says ("The furniture goes back to
+how the room first opened… The walls stay"). After that one press the two agree and the
+button goes.
+
+**Why it is not fixed.** The walls a starter was first furnished for are not stored anywhere.
+`withShell` saves the new shell over the old one, so nothing on reload can tell "furnished for
+these walls" from "furnished for walls since moved". The fix is a stored marker: either the
+start's shell, or a flag that the furniture has been edited. Both are a new persisted field for
+one button's visibility. Related, and older than Start over: after `moveWall` the store's
+`layoutId` is `'custom'`, but the record keeps its preset. So a T or U starter re-furnished
+before a reload and after one can differ (10 against 8 pieces for a T, 9 against 8 for a U),
+measured by the 2026-10-01 follow-up review.

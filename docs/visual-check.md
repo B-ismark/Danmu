@@ -169,6 +169,52 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
+### Start over puts the room back the way it first opened — this branch, NOT LOOKED AT
+
+The user's report on 2026-10-01: the revert square at the end of the right rail showed two
+tooltips, and pressing it should put the room back to how it loaded — *"added models should go
+back (be deleted)"*. It was "Put everything back" and it only undid moves, turns and sizes. It is
+**Start over** now (`lib/room-start.ts`, `components/studio/RailFooter.tsx`).
+
+**Where to click.** Any starter room, either tab. Hover the right rail before changing anything:
+there is no square. Add a piece from the Library, recolour another, move a third, hide a fourth.
+Hover the square that appears, then press it and confirm. Then press **Undo** on the toast. Do the
+same once in a room made from photos. Last, in a fresh starter room, drag one wall and change the
+ceiling height without touching any furniture: still no square. Lock a piece you added, press Start
+over, then Ctrl+Z: the piece comes back locked.
+
+**What right looks like.** One bubble on hover, reading "Start over", and nothing appearing under it
+a second later. After confirming, the added piece is gone, the recoloured one has its colour back,
+the moved one is where it started, the hidden one is showing, and the square disappears. The walls
+and their paint do not change. Undo brings back all four edits at once. In the photo room the pieces
+come back as the scan placed them, not as the starter. *Wrong* looks like a second, plainer label
+under the bubble, an added piece still there, a square that stays after a fresh room opens, or one
+that appears for a wall drag alone.
+
+**Where it rides.** `lib/room-start.ts`, `components/studio/RailFooter.tsx`, `components/ui/Tooltip.tsx`.
+
+### Deleting a piece brings down what stood on it — this branch, NOT LOOKED AT
+
+The user's report on 2026-10-01: *"an item on top of another remains floating even after
+deleting the item it was initially on."* `removeParts` took the desk out and left the lamp at
+desk height; the Inspector's "Floating" banner noticed, and nothing acted on it. Every delete
+now drops each piece that was RESTING on a deleted one (`lib/orphan-drop.ts`, the banner's own
+`restingOn` question) onto the highest top left under it, or the floor.
+
+**Where to click.** The default bedroom, 3D: select the desk, press Delete (or the trash on its
+row) and confirm. Then, in the 2D tab, do the same to a nightstand with a lamp on it, and once
+with BOTH the desk and the lamp selected. Last, stack any small piece from the Library on the lamp first and delete the
+desk.
+
+**What right looks like.** The lamp comes down to the floor (or onto a coffee table it was over)
+in the same frame the desk disappears, and the Inspector shows no "Floating" for it. The small piece
+stays on the lamp and comes down with it. Deleting desk and lamp together moves only what stood on the lamp.
+**Undo** on the toast puts the desk back AND the lamp back on top of it — dragging the desk
+afterwards carries the lamp. Press Ctrl+Z instead and it is one step, not two. *Wrong* looks
+like: a lamp left hanging, a lamp on the floor after Undo, or a piece beside the desk that moved.
+
+**Where it rides.** `lib/orphan-drop.ts`, `components/studio/KeyboardShortcuts.tsx` (`removeParts`).
+
 ### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205), NOT LOOKED AT; the floor lamp and tall plant this branch
 
 The curtain half (a print swapped for curtains hangs flat on the print's wall) was looked at
@@ -530,6 +576,22 @@ solver produces no floor collisions at all; what goes through the bed is the LAM
 the nightstand, carried nowhere while the nightstand moved. That fix does want eyes, and it
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
+
+### Comfort zones in the plan are outlines and halos, not cells and dashed boxes — this branch, LOOKED AT once (Chromium, L room)
+
+The walkable floor is one rounded outline of the same cells Room check measures
+(`lib/field-contour.ts`), each piece's clearance is a halo fading out from the piece, and floor
+cut off from the door is a warm hatch. `--warn-tint`, which the cut-off fill and its legend chip
+had been asking for, **did not exist** — both were drawing with an undefined colour until this.
+
+Looked at once in a headless Chromium on the L preset, with the sofa dragged across the lower
+arm to cut the corner off: the outline is smooth, the hatch reads, the legend chips match.
+**Still wants an eye:** a real GPU and a phone at 2× zoom (does the hatch shimmer when the plan
+is panned?), a T and a U room, and a room with no door (everything walkable, no hatch at all).
+
+**Wrong:** a stair-step edge anywhere on the walkable outline; walkable tint showing **under** a
+piece; a halo drawn on the far side of a piece from the floor it describes (the fade runs
+backwards); the cut-off legend chip showing when no hatch is on the plan.
 
 ### Every idea is now an arranged room, not a tidied scatter — `0edf04e` on `main` (PR #184, § H.6.0), needs eyes on every preset
 
@@ -1210,6 +1272,31 @@ person. The three signposts and the click-through are gated by `tests/studio-cop
 and `tests/library-click-through.test.tsx`. The two items below are new, and each
 is here because what a test can check about it and what a person can see are different
 halves.*
+
+### A merged set reads as a tree in the Catalog, not as a stack of outlined cards — this branch, NOT LOOKED AT
+
+**Where to click.** Open a furnished room, Shift-click two pieces in the Catalog list, press
+**Group 2** in the bar over the canvas. Then: fold and unfold the group with its chevron; click
+the **Group** row; click one member; fold the group while a member is selected; hide one member
+and keep another where it is; hover a member. Do it once at 1440px and once with the left rail
+at its narrowest (the 1024–1279px step).
+
+**What wrong looks like.**
+- Any row in the list with an outline. Selection is a fill now, strong on the row you picked and
+  paler on the members of a picked group; a ring on every member is the old card stack.
+- A heavy connector. The members should hang off one faint vertical line under the chevron,
+  stopping at the last member.
+- The chevron not turning (it should go from pointing right to pointing down), or turning when
+  you merely select the row. Only the chevron folds; the row selects.
+- Picking a group opens a second line of buttons under every member. Only the header opens its
+  actions; a member opens its own when you pick it by itself.
+- A folded group that holds the selection looking unselected.
+- A hidden member not dim and struck through, or a kept-in-place member that loses its padlock
+  until hovered. The marks must show without a pointer.
+- "Group" or a count wrapping onto a second line, or a member's name losing its ellipsis.
+
+**Rides** this branch; the rules are `.tree-row*` in `app/globals.css` and the rows in
+`components/studio/PartTree.tsx`. Behaviour (selection, fold, ungroup, remove, keys) is untouched.
 
 ### View behind a gear, collapsed rails as icon strips — merged to `main` in `5114b5f` (PR #179)
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   MARK_FILL_OPACITY,
@@ -11,6 +11,7 @@ import {
   MARK_VIEWBOX,
 } from '@/lib/brand-mark';
 import { Icon, type IconName } from './Icon';
+import { InsideTooltip } from './Tooltip';
 
 // The mark is the room the studio builds: a soft dollhouse volume with one piece
 // of furniture in it. It replaced a hard-cornered square with tracked monospace
@@ -353,6 +354,8 @@ export function IconButton({
   /** extra class(es) merged onto .icon-btn */
   className?: string;
 }) {
+  // Under a `Tooltip` the bubble is the visible name; a `title` as well is a second.
+  const tipped = useContext(InsideTooltip);
   return (
     <button
       type="button"
@@ -361,7 +364,7 @@ export function IconButton({
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}
       aria-expanded={expanded === undefined ? undefined : expanded}
-      title={title ?? label}
+      title={tipped ? undefined : (title ?? label)}
       className={`icon-btn${variant === 'outline' ? ' icon-btn--outline' : ''}${tone === 'danger' ? ' icon-btn--danger' : ''}${active ? ' is-active' : ''}${className ? ` ${className}` : ''}`}
       style={{ width: Math.max(size, 24), height: Math.max(size, 24), ...style }}
     >

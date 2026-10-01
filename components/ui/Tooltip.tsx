@@ -25,9 +25,18 @@
 // name twice, and `aria-describedby` would make it a description, which it is not
 // — it IS the name.
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createContext, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
+
+/** True under a `Tooltip`. A control that would otherwise print its name in a
+ *  native `title` reads this and leaves it off, because the two together are two
+ *  labels on one button: ours at once, the OS's a second later underneath it, in a
+ *  different font and often in different words ("Put everything back" over "Put
+ *  every piece back where the room started"). `IconButton` copies its `label` into
+ *  `title` by default, so wrapping one in a `Tooltip` was enough to get both.
+ *  `tests/tooltip-single.test.tsx` holds the call sites to the same rule. */
+export const InsideTooltip = createContext(false);
 
 /** Gap between the trigger and the bubble. */
 const OFFSET = 8;
@@ -202,7 +211,7 @@ export function Tooltip({
         }
       }}
     >
-      {children}
+      <InsideTooltip.Provider value={true}>{children}</InsideTooltip.Provider>
       {/* Portalled to `document.body` rather than rendered here, and that is not
           cosmetic. `.rail` carries `container-type: inline-size`, which applies
           layout containment — and a layout-contained element acts as the containing

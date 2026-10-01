@@ -38,6 +38,13 @@ export type Snapshot = {
    *  hide, and walking back past a hide left the part hidden in a state the stack
    *  did not describe. The help card advertises Ctrl+Z two lines under H. */
   hidden: Record<string, boolean>;
+  /** Which parts are locked, for the reason `hidden` is here: it is saved per room
+   *  beside the transforms, so it is part of the design being edited, and a lock is
+   *  undoable in every design tool this platform is measured against (Blender and
+   *  Figma both). It was outside the stack until Start over began clearing the locks
+   *  on pieces it removes — and then Ctrl+Z brought the pieces back unlocked, while
+   *  the toast's Undo brought them back locked: one gesture, two answers. */
+  pinned: Record<string, boolean>;
   /** The selection, all three fields of it, because the user’s ruling is that this
    *  platform behaves like Blender: *"in blender, actions and selections are both
    *  affectted by undo and redoing so wouldn’t it be best to do the same for this
@@ -146,6 +153,7 @@ function takeSnapshot(): Snapshot {
     lighting: t.lighting,
     hour: t.hour,
     hidden: t.hidden,
+    pinned: t.pinned,
     selectedPartId: t.selectedPartId,
     selection: t.selection,
     selectedWall: t.selectedWall,
@@ -233,6 +241,7 @@ export function startHistoryRecording() {
       state.lighting === prev.lighting &&
       state.hour === prev.hour &&
       state.hidden === prev.hidden &&
+      state.pinned === prev.pinned &&
       state.selectedPartId === prev.selectedPartId &&
       state.selection === prev.selection &&
       state.selectedWall === prev.selectedWall
@@ -263,7 +272,8 @@ function sameEdit(a: Snapshot, b: Snapshot): boolean {
     a.room === b.room &&
     a.lighting === b.lighting &&
     a.hour === b.hour &&
-    a.hidden === b.hidden
+    a.hidden === b.hidden &&
+    a.pinned === b.pinned
   );
 }
 
@@ -300,6 +310,7 @@ export function applySnapshot(snap: Snapshot) {
   // rather than write `undefined` into a number.
   if (typeof snap.hour === 'number') useStudio.getState().setHour(snap.hour);
   useStudio.getState().setHiddenMap(snap.hidden);
+  useStudio.getState().setPinnedMap(snap.pinned);
   useStudio.getState().setParentIds(snap.parentIds);
   useScene.setState({ parts: snap.parts, room: snap.room });
   // A stored selection names things that may not be there any more, on TWO axes, and

@@ -65,9 +65,9 @@ export type TreeRow<T extends Groupable> =
        *  selection never have to ask which kind of row they are holding */
       ids: string[];
       part: T;
-      /** set when this row sits inside a group — drives the indent and the spine */
+      /** set when this row sits inside a group — drives the indent and the guide line */
       gid?: string;
-      /** last visible member of its group, so the spine can stop */
+      /** last visible member of its group, so the guide line can stop */
       lastOfGroup?: boolean;
     };
 

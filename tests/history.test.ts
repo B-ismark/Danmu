@@ -32,6 +32,7 @@ function snapshot(over: Partial<Snapshot> = {}): Snapshot {
     lighting: t.lighting,
     hour: t.hour,
     hidden: t.hidden,
+    pinned: t.pinned,
     selectedPartId: t.selectedPartId,
     selection: t.selection,
     selectedWall: t.selectedWall,
@@ -46,6 +47,7 @@ beforeEach(() => {
   // them the same way.
   useStudio.getState().loadTransforms({ positions: {}, rotations: {}, dims: {} });
   useStudio.getState().setHiddenMap({});
+  useStudio.getState().setPinnedMap({});
   useStudio.getState().setParentIds({});
   // The selection is part of a snapshot now, so a test that leaves one behind changes
   // what the NEXT test’s baseline contains. `setSelectedWall(null)` second because it
@@ -141,6 +143,17 @@ describe('what a snapshot covers', () => {
     expect(restored?.hidden).toEqual({});
     applySnapshot(restored!);
     expect(useStudio.getState().hidden).toEqual({});
+  });
+
+  it('carries locks, so undoing a lock unlocks and undoing past an unlock locks again', () => {
+    seedHistory();
+    expect(useHistory.getState().past[0].pinned).toEqual({});
+    useStudio.getState().togglePinned('sofa-1');
+    useHistory.getState().push(snapshot());
+    const restored = useHistory.getState().undo();
+    expect(restored?.pinned).toEqual({});
+    applySnapshot(restored!);
+    expect(useStudio.getState().pinned).toEqual({});
   });
 
   it('carries rigid-parenting relationships, so undoing a desk-move-with-cascade also undoes the relationship', () => {
@@ -274,6 +287,21 @@ describe('startHistoryRecording', () => {
       await vi.advanceTimersByTimeAsync(300);
       expect(useHistory.getState().past).toHaveLength(2);
       expect(useHistory.getState().past[1].hidden).toEqual({ 'sofa-1': true });
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it('records a lock, because locking a part is an edit', async () => {
+    vi.useFakeTimers();
+    const stop = startHistoryRecording();
+    try {
+      seedHistory();
+      useStudio.getState().togglePinned('sofa-1');
+      await vi.advanceTimersByTimeAsync(300);
+      expect(useHistory.getState().past).toHaveLength(2);
+      expect(useHistory.getState().past[1].pinned).toEqual({ 'sofa-1': true });
     } finally {
       stop();
       vi.useRealTimers();
