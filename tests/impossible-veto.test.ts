@@ -239,9 +239,11 @@ describe('solveLayout never hands back a room more impossible than the one it wa
     // The revert path, on a seed that actually takes it FOR THIS REASON. It used to
     // read `l` seed 7, which declines for `no-gain` — and on that arm every assertion
     // below is true by definition, so the test survived deleting the revert itself.
-    // The seeded U at 6 x 4 declines `impossible` at seeds 1, 2, 5 and 7.
+    // The seeded U at 6 x 4 declines `impossible` at seeds 2, 3 and 7. (It was 1, 2, 5
+    // and 7 until containment stopped pushing a piece in one of the U's arms through
+    // the notch into the other — the search's proposals changed with it.)
     const parts = defaultScene('u', 6, 4);
-    const r = solveLayout(parts, footprintForLayout('u', 6, 4), lockedForSolve(parts, {}, null), { seed: 1 });
+    const r = solveLayout(parts, footprintForLayout('u', 6, 4), lockedForSolve(parts, {}, null), { seed: 2 });
     expect(r.declined, 'the fixture must still take the impossibility arm').toBe('impossible');
     expect(r.moved, 'a declined solve moves nothing').toEqual([]);
     // The room the caller is handed back is the legal one it came in with, NOT the

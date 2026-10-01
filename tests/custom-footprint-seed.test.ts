@@ -357,10 +357,13 @@ describe('§ G.1 · what the seeder does with a wall-moved footprint', () => {
     // Both ends. A floor alone survives a change that makes EVERY invisible cell report
     // something — which is not a fix, it is the measurement losing its meaning — and the
     // negative controls below are `rect` and `open`, which have no invisible cells at
-    // all and so bound nothing here. 44 of 100 today.
+    // all and so bound nothing here. 33 of 100 today. It was 43 until containment
+    // stopped pushing a piece in one of the U's arms through the notch into the other:
+    // ten U cells (edges 1 and 3, every delta) lost a `door` finding — a piece the seed
+    // had thrown across into the far arm's doorway — and no other kind moved.
     const hidden = all.filter((c) => c.invisible && c.findings.length > 0);
-    expect(hidden.length).toBeGreaterThanOrEqual(40);
-    expect(hidden.length).toBeLessThanOrEqual(60);
+    expect(hidden.length).toBeGreaterThanOrEqual(28);
+    expect(hidden.length).toBeLessThanOrEqual(45);
 
     // ONE arrow press. The T's own offered size, its second wall, 50 mm — the room is
     // 5.50 x 4.70 before and after, and Room check has something to say afterwards.

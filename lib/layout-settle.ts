@@ -58,6 +58,7 @@ import {
   obbExtentAlong,
   outsideShare,
   pointInPoly,
+  segmentsCross,
   type Foot,
   type Poly,
 } from './geometry';
@@ -600,7 +601,19 @@ const SEAT_TOL = 1e-4;
  *  shoved `need + 1` m along -z out of its own arm. `t` strictly inside `(0, 1)` is
  *  the guard, and when no wall qualifies this returns null and `containedXZ` falls
  *  back to `nearestEdge` — which is the right answer there, because "past every
- *  wall's end" means a corner, and a corner is what the lerp exists for. */
+ *  wall's end" means a corner, and a corner is what the lerp exists for.
+ *
+ *  **And only walls the piece can SEE.** Being level with a wall is not standing in
+ *  front of it. A U's two arms each end on an inner wall that faces the other arm's
+ *  way, across the notch: a 600 mm box at `(−2, −1)` in the west arm of a 6 × 6 U is
+ *  level with the EAST arm's inner wall at `x = 1.32`, 3.3 m behind it, so that wall
+ *  reported a 3.64 m shortfall and the box was pushed through the notch into the other
+ *  arm — every Library drop aimed at either arm, every settle of a piece standing in
+ *  one, mirrored. The room's symmetry is why it went unseen: the piece always landed
+ *  somewhere that looked like a place a piece could be. A wall counts when the line
+ *  from the piece's centre — in the room, checked first — to the cell's foot on it
+ *  crosses no other wall. The centre rather than the cell's own, because a cell's
+ *  centre can be through the plaster (an L-desk poking out) and the piece's cannot. */
 function wallDeficits(
   piece: ContainSubject,
   x: number,
@@ -633,6 +646,9 @@ function wallDeficits(
       // Past the end of this wall: `(px, pz)` is a corner, so the dot product below
       // would not be this wall's clearance. See the docblock's L-room measurement.
       if (e.t <= 1e-9 || e.t >= 1 - 1e-9) continue;
+      // Across the room's own cut-out: a wall this piece cannot see is not one it is
+      // standing at. See the docblock's U-room measurement.
+      if (!seesWall(poly, i, [x, z], [e.px, e.pz])) continue;
       any = true;
       const d = (cell.cx - e.px) * e.nx + (cell.cz - e.pz) * e.nz;
       // `footExtentAlong`, not `obbExtentAlong`: a round piece's reach towards a wall
@@ -659,6 +675,20 @@ function wallDeficits(
     }
   }
   return any ? { dx, dz, total } : null;
+}
+
+/** Whether the straight line from `eye` to `foot` — a point on wall `index` — stays
+ *  in the room: it crosses no OTHER wall. Strict, so grazing a corner on the way is
+ *  not a crossing; the walls next to `index` share only its endpoints, and `foot` is
+ *  strictly inside it. `index` itself is skipped for rounding, not geometry: `foot` is
+ *  a projection, so on a wall at an angle it can land a hair past the line and read as
+ *  crossing the very wall it is on. */
+function seesWall(poly: Poly, index: number, eye: [number, number], foot: [number, number]): boolean {
+  for (let j = 0; j < poly.length; j++) {
+    if (j === index) continue;
+    if (segmentsCross(eye, foot, poly[j], poly[(j + 1) % poly.length])) return false;
+  }
+  return true;
 }
 
 /** Both halves of the seat measure at one position.
