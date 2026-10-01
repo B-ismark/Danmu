@@ -20,11 +20,11 @@
 // would stand on a slab twice as thick.
 
 import { useEffect, useMemo } from 'react';
-import { Edges } from '@react-three/drei';
 import { ExtrudeGeometry, Shape } from 'three';
 import { SCENE } from '@/lib/scene-palette';
 import { selectionBase } from '@/lib/selection-base';
 import type { Anchor } from '@/lib/physics';
+import { Edges } from './strokes';
 
 function roundedRect(w: number, l: number, r: number): Shape {
   const s = new Shape();

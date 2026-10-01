@@ -69,7 +69,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { DoubleSide, FrontSide, Path, Shape, Vector2, type Group } from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
-import { Line } from '@react-three/drei';
+import { Line } from './strokes';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';

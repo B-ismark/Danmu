@@ -2202,6 +2202,14 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   first frame after the re-render, which is not reliably the frame where the
   edit is on screen, and a deleted piece kept its shadow on an empty floor until
   some unrelated re-render happened to reopen the pass.
+  **No stroke is in that bake.** drei's `<Edges>` and `<Line>` are a template quad
+  that only their own material turns into a line, and the bake swaps every
+  material — so each stroke drew as a 2 × 3 m sheet, invisible edge-on at rest and
+  a dark streak through the floor once a carried piece leaned (a bed's edged legs
+  were the visible case). Every stroke comes from `components/three/strokes.tsx`,
+  which puts it on `STROKE_LAYER`: the main camera sees that layer, the bake's
+  camera does not. `tests/strokes.test.tsx` fails on a drei stroke imported
+  anywhere else.
 - **Idle micro-motion** (`Motion.tsx`): fan spins, plant sways, pendant swings.
 
 ### Studio chrome — where a control lives
