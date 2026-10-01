@@ -639,9 +639,10 @@ in the T at 5.5 × 4.7: turned 10° and left on its wall, the sofa squares where
 6 seeds in 6. Pulled 30 cm forward first, nothing in the room is wrong (no clash, nothing
 through a wall), but three guidelines count against it: off its wall, away from its TV and
 coffee table, and not square. Together they outweigh the extra cost of moving a piece you
-placed by hand, so Fix puts it back on its wall facing the TV on 6 seeds in 6. **Whether Fix
-should leave a sofa you pulled off the wall alone is a decision for the user**, filed in
-`docs/what-is-still-open.md` § H.6.6. The turn-only check below is still unlooked-at.
+placed by hand, so Fix puts it back on its wall facing the TV on 6 seeds in 6. **The user
+decided (2026-10-01) that this stays:** Fix tidies to the guidelines, and Undo or Lock keeps a
+sofa you floated (`docs/what-is-still-open.md` § H.6.6 and § C). The turn-only check below is
+still unlooked-at.
 
 Turn the sofa a few degrees and press **Fix**, and it could come back somewhere else in the
 room, sometimes facing away from the TV. Fix now also tries the room as it stands with the
