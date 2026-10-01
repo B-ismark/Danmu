@@ -18,6 +18,8 @@ describe('safeReturnPath', () => {
     // `/<tab>/host` and `/<newline>/host` are the spellings a character test misses:
     // URL parsing deletes tabs and newlines, so they arrive as `//host`.
     const sneaky = ['/\t/evil.example', '/\n/evil.example', '/\r\n/evil.example', '/\t\\evil.example'];
+    // …and the ones normalising makes: dot segments collapse to a `//host` pathname.
+    sneaky.push('/.//evil.example', '/..//evil.example', '/%2e//evil.example', '/a/..//evil.example');
     for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', 'evil', '', null, undefined, ...sneaky]) {
       expect(safeReturnPath(bad), String(bad)).toBeNull();
     }
@@ -28,6 +30,16 @@ describe('safeReturnPath', () => {
       expect(safeReturnPath(self), self).toBeNull();
     }
     expect(safeReturnPath('/settingsish')).toBe('/settingsish');
+  });
+
+  it('never hands back a path the router would read as another site', () => {
+    // The property, not a list: whatever is accepted resolves to this app.
+    const base = 'https://danmu.test';
+    const inputs = ['/', '/room/a/model', '/./x', '/../x', '/a/../b', '/%2e%2e/x', '/x?y=//z', '/x#//z', '/.//evil.example'];
+    for (const inp of inputs) {
+      const out = safeReturnPath(inp);
+      if (out !== null) expect(new URL(out, base).origin, inp).toBe(base);
+    }
   });
 
   it('returns the path it checked, query and all', () => {
@@ -75,19 +87,28 @@ describe('returnLabel', () => {
 });
 
 describe('wayBack', () => {
-  it('goes back through history when the app routed here', () => {
-    expect(wayBack('/room/abc/model')).toBe('history');
-    expect(wayBack('/')).toBe('history');
-    expect(wayBack('/onboarding/detect')).toBe('history');
+  const room = '/room/abc/model';
+
+  it('goes back through history when the entry behind is the page it names', () => {
+    expect(wayBack(room, { previous: room })).toBe('history');
+    expect(wayBack('/onboarding/detect', { previous: '/onboarding/detect' })).toBe('history');
   });
 
-  it('goes by address when this tab was opened on Settings', () => {
-    // A fresh tab, a bookmark, or a link from another site: the entry behind it is
-    // not this app, so history would leave it.
-    expect(wayBack('/settings')).toBe('address');
-    expect(wayBack('/settings/')).toBe('address');
-    expect(wayBack(null)).toBe('address');
-    expect(wayBack(undefined)).toBe('address');
+  it('goes by address when the entry behind is anything else', () => {
+    // A tab that arrived on Settings and wandered: the room is not what is behind.
+    expect(wayBack(room, { previous: '/' })).toBe('address');
+    // Nothing behind, or another site's page (not in this app's entries).
+    expect(wayBack(room, { previous: null, documentPath: room })).toBe('address');
+  });
+
+  it('without the Navigation API, asks where the document began', () => {
+    expect(wayBack(room, { documentPath: room })).toBe('history');
+    expect(wayBack(room, { documentPath: '/' })).toBe('history');
+    // A fresh tab, a bookmark, or a link from another site.
+    expect(wayBack(room, { documentPath: '/settings' })).toBe('address');
+    expect(wayBack(room, { documentPath: '/settings/' })).toBe('address');
+    expect(wayBack(room, { documentPath: null })).toBe('address');
+    expect(wayBack(room, {})).toBe('address');
   });
 });
 
@@ -102,21 +123,26 @@ describe('every way into Settings', () => {
     readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((e) =>
       e.isDirectory() ? files(join(dir, e.name)) : /\.tsx?$/.test(e.name) ? [join(dir, e.name)] : [],
     );
-  const sources = [...files('app'), ...files('components')].map((f) => ({
+  const sources = [...files('app'), ...files('components'), ...files('lib')].map((f) => ({
     f,
     src: stripComments(readFileSync(join(ROOT, f), 'utf8')),
   }));
 
   it('carries its own page, except the rooms page', () => {
     const bare = sources
-      .filter(({ f }) => f !== join('app', 'page.tsx'))
-      .filter(({ src }) => /['"`]\/settings['"`?]/.test(src))
+      .filter(({ f }) => f !== join('app', 'page.tsx') && f !== join('lib', 'settings-return.ts'))
+      // A quote, `?`, `#`, `/` or a template hole after it: every way to spell a
+      // bare way in, not just the one written today.
+      .filter(({ src }) => /['"`]\/settings(?:['"`?#/]|\$\{)/.test(src))
       .map(({ f }) => f);
     expect(bare).toEqual([]);
   });
 
   it('reaches the three entry points it names', () => {
-    const callers = sources.filter(({ src }) => /settingsHref\(/.test(src)).map(({ f }) => f).sort();
+    const callers = sources
+      .filter(({ f, src }) => f !== join('lib', 'settings-return.ts') && /settingsHref\(/.test(src))
+      .map(({ f }) => f)
+      .sort();
     expect(callers).toEqual(
       [
         join('app', 'onboarding', 'detect', 'page.tsx'),

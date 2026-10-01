@@ -125,11 +125,11 @@ export default function SettingsPage() {
   }, []);
 
   // History, so the room or the scan comes back as it was left — but only when
-  // the app routed here (`wayBack`). A tab opened on Settings has someone else's
-  // page behind it, or none, so it goes to the address the label names.
+  // the entry behind is the place the label names (`wayBack`). Otherwise the
+  // address: behind a tab opened on Settings is someone else's page, or none.
   function goBack() {
     if (!returnTo) return;
-    if (wayBack(documentPath()) === 'history') router.back();
+    if (wayBack(returnTo, { previous: previousPath(), documentPath: documentPath() }) === 'history') router.back();
     else router.push(returnTo);
   }
 
@@ -311,14 +311,14 @@ export default function SettingsPage() {
                 which left "Set up a key in Settings" pointing at an empty field
                 with nothing to say what goes in it. */}
             <div className="t-hint" style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 4 }}>
-              <span>A Gemini key. They start with “AIza”.</span>
+              <span>A Google AI Studio key. They start with “AIza”.</span>
               <a
                 href="https://aistudio.google.com/app/apikey"
                 target="_blank"
                 rel="noreferrer"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--accent-text)', fontWeight: 600 }}
               >
-                Get a free key
+                Get a key
                 {/* target=_blank has to be visible, not a surprise. */}
                 <Icon name="external" size={11} />
                 <span className="sr-only">(opens in a new tab)</span>
@@ -458,6 +458,23 @@ export default function SettingsPage() {
       </div>
     </DocShell>
   );
+}
+
+/** The path of the history entry behind this one, where the Navigation API can
+ *  say: null when there is none in this app, `undefined` when the API is absent. */
+function previousPath(): string | null | undefined {
+  const nav = (window as unknown as {
+    navigation?: { currentEntry?: { index: number } | null; entries?: () => { url: string | null }[] };
+  }).navigation;
+  if (!nav?.currentEntry || typeof nav.entries !== 'function') return undefined;
+  const prev = nav.entries()[nav.currentEntry.index - 1];
+  if (!prev?.url) return null;
+  try {
+    const url = new URL(prev.url);
+    return url.origin === window.location.origin ? url.pathname : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The path this document was first loaded at, or null when the browser cannot

@@ -29,9 +29,17 @@ export function safeReturnPath(from: string | null | undefined): string | null {
     return null;
   }
   if (url.origin !== APP_ORIGIN) return null;
-  if (url.pathname === '/settings' || url.pathname.startsWith('/settings/')) return null;
-  // The parsed form, not the input: it is what the check above approved.
-  return url.pathname + url.search + url.hash;
+  if (isSettingsPath(url.pathname)) return null;
+  // The parsed form, not the input: it is what the check above approved. Checked
+  // AGAIN as the router will read it, because normalising can make a path out of
+  // another site: `/.//host` resolves to the pathname `//host`, which is
+  // same-origin as a pathname and another site as an address.
+  const out = url.pathname + url.search + url.hash;
+  return new URL(out, APP_ORIGIN).origin === APP_ORIGIN ? out : null;
+}
+
+function isSettingsPath(pathname: string): boolean {
+  return pathname === '/settings' || pathname.startsWith('/settings/');
 }
 
 /** Any origin a path cannot name. Only the comparison matters, not the host. */
@@ -54,16 +62,28 @@ export function returnLabel(path: string, room?: { id: string; name: string } | 
   return 'Back';
 }
 
-/** How Back gets there. History, when this document was opened somewhere else in
- *  the app and routed here — the entry behind Settings is then the page that sent
- *  someone, and going back to it brings it back as it was left. The address, when
- *  this document was opened ON Settings — a fresh tab, a bookmark, a link from
- *  another site — because the entry behind it is then not this app at all, and
- *  `history.length` cannot tell those apart: it counts the whole tab.
+/** How Back gets there. History, when the entry behind Settings is the page the
+ *  label names — going back brings it back as it was left. The address otherwise:
+ *  a fresh tab, a bookmark, a link from another site, or a tab that arrived on
+ *  Settings and has since wandered. `history.length` cannot tell those apart,
+ *  because it counts the whole tab.
  *
- *  `documentPath` is the path the document was first loaded at (the navigation
- *  timing entry's URL), or null when the browser cannot say. */
-export function wayBack(documentPath: string | null | undefined): 'history' | 'address' {
-  if (!documentPath) return 'address';
-  return documentPath === '/settings' || documentPath.startsWith('/settings/') ? 'address' : 'history';
+ *  `previous` is the path of the entry behind this one, where the browser can say
+ *  (the Navigation API): null for none, or none in this app. `undefined` means it
+ *  cannot say, and then the fallback is the path this DOCUMENT was first loaded at
+ *  — a soft navigation keeps the document, so a document that began anywhere but
+ *  Settings was routed here by the app. */
+export function wayBack(
+  returnTo: string,
+  at: { previous?: string | null; documentPath?: string | null },
+): 'history' | 'address' {
+  if (at.previous !== undefined) {
+    return at.previous !== null && at.previous === pathOf(returnTo) ? 'history' : 'address';
+  }
+  if (!at.documentPath) return 'address';
+  return isSettingsPath(at.documentPath) ? 'address' : 'history';
+}
+
+function pathOf(path: string): string {
+  return new URL(path, APP_ORIGIN).pathname;
 }
