@@ -154,12 +154,12 @@ export function Inspector() {
   // It ran `collidesAt` and `partInsideRoom` beside the room report, which asks the
   // same two questions with different bars, and it was wrong on both.
   //
-  // `collidesAt` deliberately has no `tucksUnder` exemption while the report's rule 2
-  // charges a tucked pair against `TUCKED_CLASH_SHARE` — that divergence is written
-  // down in `lib/clearance.ts` in as many words, with twenty seeded pairs behind it.
-  // So a dining chair pushed under its table got a red *"Blocked — move it away from
-  // the overlapping piece"* while Room check said the room was fine. The advice was to
-  // break the app's own seeded arrangement.
+  // `collidesAt` had no `tucksUnder` exemption then, while the report's rule 2 charged
+  // a tucked pair against `TUCKED_CLASH_SHARE`. So a dining chair pushed under its
+  // table got a red *"Blocked — move it away from the overlapping piece"* while Room
+  // check said the room was fine: the advice was to break the app's own seeded
+  // arrangement. (The drag asks the report's own rule now — § 17, `tuckedAt` — so the
+  // two agree; reading the report is still the right design, for the reason below.)
   //
   // So it reads the report instead. Not "computes the same thing carefully": READS it,
   // via the same memoised `useRoomReport` the health chip uses. The banner agrees with

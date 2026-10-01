@@ -791,3 +791,27 @@ degenerate, because that composition puts two of the three vanishing points at i
 box room was a picture of the right kind of thing in the wrong composition, which is a harder
 mismatch to notice than a wrong kind of thing.
 
+
+## A drag gets slow only when something travels with it
+
+**Symptom.** Dragging a piece alone is smooth; the same drag with a lamp riding it, a merged
+set, or a multi-selection stutters. The obvious suspects — the wobble, the carried piece's own
+light — are cheap and turning them off changes nothing.
+
+**What it is.** Company moves through the store (`setTransformsFor`) every legal frame, so
+everything reading the resolved scene re-renders once a frame. That is fine. What is not fine
+is a drei component downstream that keys expensive work on a prop's **identity**: a re-render
+with an inline array or inline JSX children is, to drei, new input. It rebuilds silently, and
+nothing but the frame rate says so.
+
+**Twice.** `<Line points>` rebuilt its geometry on every wall-drag tick until the frame loops
+were memoised (the note in `components/three/RoomShell.tsx`). Then, carrying a lamp:
+`<Environment>` re-baked its cube on inline `<Lightformer>` children, `<ContactShadows>` rebuilt
+— and leaked — two render targets on an inline `scale={[x, z]}`, and the walls re-cut their
+holes on a fresh `wallApertures` Map. 38 textures and 372 buffers over a 20-move drag against
+0 and 8. `tests/render-churn.test.ts` holds those three sites; it cannot see a fourth.
+
+**What to do.** Count, do not guess: `scripts/drag-churn-probe.mjs` wraps the WebGL calls and
+runs the drag with and without company. Any count that differs between the two runs is a
+re-render being taken for new input. Then read the drei source for that component's `useMemo`
+/ `useLayoutEffect` deps, not its docs.

@@ -34,7 +34,7 @@ import { dimRangeFor } from './dimension-ranges';
 import { footprintBounds, type Footprint } from './footprint';
 import { footFromPart, footInsidePoly, footIntersectionArea, type Foot } from './geometry';
 import { baySides, roomBays } from './room-bays';
-import { isMountedObstruction, profilesTuck, tuckProfile } from './layout-rules';
+import { isMountedObstruction, tuckedAt, tuckProfile } from './layout-rules';
 import { verticalExtent } from './physics';
 import { solveLayout } from './layout-solve';
 import { settleParts } from './layout-settle';
@@ -288,8 +288,11 @@ function explain(
  *  magnitude above this. */
 const TOUCH_AREA_M2 = 1e-4;
 
-/** Does the seated candidate share floor with, and overlap, anything already there? */
-function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): boolean {
+/** Does the seated candidate share floor with, and overlap, anything already there?
+ *  Exported for tests: the solver fines a chair pushed in back-first and the settle
+ *  pushes one out, so no search reaches this gate with one — which is exactly why it
+ *  cannot be tested through `checkFit`, and why it must still say no on its own. */
+export function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): boolean {
   const mine = tuckProfile(seated);
   for (const other of parts) {
     // Mounted pieces are NOT skipped — `isMountedObstruction` is the same predicate the
@@ -309,13 +312,13 @@ function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): b
     const [myBottom, myTop] = verticalExtent(seated.category, seated.shape, seated.dimMM, seated.pos[1]);
     const [itsBottom, itsTop] = verticalExtent(other.category, other.shape, other.dimMM, other.pos[1]);
     if (myTop <= itsBottom + 0.005 || itsTop <= myBottom + 0.005) continue;
-    // Note the polarity: `profilesTuck` is TRUE for the pairs that legitimately occupy
+    // Note the polarity: `tuckedAt` is TRUE for the pairs that legitimately occupy
     // the same square metre — a dining chair under its table, an ottoman low enough for
     // the desk it is pushed under. Those are the ones to SKIP. Reading it as "competes for the
-    // floor" and testing `!profilesTuck` inverts the rule exactly, and quietly: it
+    // floor" and testing `!tuckedAt` inverts the rule exactly, and quietly: it
     // exempts a sofa 31% inside a bed while flagging a correctly tucked chair.
-    if (profilesTuck(mine, tuckProfile(other))) continue;
     const its = footFromPart(other.pos, other.rot, other.dimMM, other.circle, other.shape);
+    if (tuckedAt(mine, foot, tuckProfile(other), its)) continue;
     if (footIntersectionArea(foot, its) > TOUCH_AREA_M2) return true;
   }
   return false;

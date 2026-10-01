@@ -25,7 +25,7 @@ import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRiderRelation, currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { riderRelation } from '@/lib/rider-height';
-import { turnInPlace, refusalCause } from '@/lib/drag-resolve';
+import { turnInPlace, turnSwingsInto, refusalCause } from '@/lib/drag-resolve';
 import { planConvoy, travellingWorld } from '@/lib/drag-convoy';
 import { cascadeTransform, snapshotDescendants } from '@/lib/rigid-parent';
 import { turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
@@ -380,11 +380,14 @@ function paintRefusal(ids: string[]) {
 
 /** A quarter turn on every selected piece, about its own centre.
  *
- *  **The angle is always taken; that is what "keep and report" means here** (§ B.14,
+ *  **The angle is taken; that is what "keep and report" means here** (§ B.14,
  *  decided 2026-09-03). Refusing a turn would make a piece in a tight corner
- *  unturnable, which no report has ever asked for. What the turn does NOT do is
- *  succeed in silence: the resolve says whether the piece still fits at the new
- *  angle, and this says so out loud.
+ *  unturnable. What the turn does NOT do is succeed in silence: the resolve says
+ *  whether the piece still fits at the new angle, and this says so out loud.
+ *  **One exception, 2026-09-30:** a turn that swings a piece into trouble it was
+ *  clear of is held (`turnSwingsInto`) — a chair tucked under a desk and turned
+ *  sideways put its back through the top. A piece already refused where it stands
+ *  still turns, which keeps the corner case above turnable.
  *
  *  It used to do neither. `spinSelection` wrote `setRotation` raw — the fourth turn
  *  gesture in the app and the only one that ran through no pipeline at all, so it
@@ -426,6 +429,10 @@ export function spinSelection(quarterTurns = 1) {
   const nudged: Array<{ name: string; by: number }> = [];
   /** Pieces whose final angle was decided by their WALL rather than by the request. */
   const held: string[] = [];
+  /** Turns HELD because they would swing into something (`turnSwingsInto`) — said
+   *  as the plan says them, "stays at N degrees", because "does not fit at that
+   *  angle" alone reads as though it turned and is now stuck. */
+  const stayed: Array<{ id: string; name: string; deg: number; why: string }> = [];
   /** Pieces the turn moved vertically, positive down. A piece that turned off the
    *  table it was standing on falls, and nothing else in the sentence can say so. */
   const dropped: Array<{ name: string; by: number }> = [];
@@ -479,7 +486,7 @@ export function spinSelection(quarterTurns = 1) {
     // back are different numbers for every wall rider, and only one of them is in
     // `turned`.
     const wanted = part.rot + (quarterTurns * Math.PI) / 2;
-    const turned = turnInPlace({
+    const ask = {
       part,
       at: part.pos,
       rot: wanted,
@@ -490,7 +497,15 @@ export function spinSelection(quarterTurns = 1) {
       parts: convoy.travelling.size > 1 ? travellingWorld(convoy, scene, 0, 0, convoy.own) : scene,
       footprint: room.footprint,
       roomHeight: room.height,
-    });
+    };
+    const turned = turnInPlace(ask);
+    // Clear where it stands and not at the new angle: held, written nowhere, and
+    // named as refused — a chair turned under its desk would otherwise put its back
+    // through the top (`turnSwingsInto`).
+    if (turnSwingsInto(ask, turned, part.rot)) {
+      stayed.push({ id, name: part.name, deg: Math.round((part.rot * 180) / Math.PI), why: refusalCause(turned) });
+      continue;
+    }
 
     const pos = turned.pos;
     if (pos[0] !== part.pos[0] || pos[1] !== part.pos[1] || pos[2] !== part.pos[2]) setPosition(id, pos);
@@ -544,6 +559,13 @@ export function spinSelection(quarterTurns = 1) {
         : `${held.length} pieces are held square to their walls.`,
     );
   }
+  if (stayed.length > 0) {
+    // The same sentence as `PlanView`'s `turnByKey` for the same outcome.
+    const st = stayed[0];
+    parts.push(`${st.name} stays at ${st.deg} degrees. It does not fit at that angle: ${st.why}`);
+    const rest = stayed.length - 1;
+    if (rest > 0) parts.push(`${rest} more ${rest === 1 ? 'stays' : 'stay'} as ${rest === 1 ? 'it was' : 'they were'}.`);
+  }
   if (refused.length > 0) {
     parts.push(`${refused[0].name} does not fit at that angle: ${refused[0].why}`);
     // "1 more do not fit" is what an unconditional plural verb reads like for a set
@@ -559,7 +581,7 @@ export function spinSelection(quarterTurns = 1) {
   // this cannot drift from the two drag paths that already paint; the ids ride the one
   // channel both tabs read. Cleared on a timer rather than on the next gesture, because
   // "the next gesture" may never come and a permanently red piece stops meaning refused.
-  paintRefusal(refused.map((r) => r.id));
+  paintRefusal([...stayed, ...refused].map((r) => r.id));
   if (dropped.length > 0) {
     const d = dropped[0];
     parts.push(

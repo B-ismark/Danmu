@@ -7,7 +7,7 @@ import { settleHeights } from '@/lib/layout-settle';
 import { ridingParents } from '@/lib/rigid-parent';
 import { CATEGORIES, PART_LIBRARY, placeNewPart, selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import { footArea, footFromPart, footIntersectionArea, type Poly } from '@/lib/geometry';
-import { isObstacle, isSeating, isSeatRole, roleOf, tucksUnder, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
+import { isObstacle, isSeating, isSeatRole, roleOf, tuckProfile, tucksUnder, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
 import { analyzeRoom, floorBlockers } from '@/lib/clearance';
 import { clampDims } from '@/lib/dimension-ranges';
 
@@ -36,7 +36,10 @@ const TOP = 0.75;
 /** A 1100 × 600 coffee table. Top at 0.42, above `settleHeights`' 0.3 bar. */
 const COFFEE = part({ id: 'coffee', category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [0, 0, 0] });
 
-const chair = (id: string, x: number, z: number, y = 0, rot = 0) =>
+/** A dining chair FACING the table at the origin — its front, local +Z, towards it —
+ *  unless told otherwise. Back-first, its back is through the top, which is not a tuck
+ *  (`tuckedAt`); these fixtures used to face away and nothing could tell. */
+const chair = (id: string, x: number, z: number, y = 0, rot = z > 0 ? Math.PI : 0) =>
   part({ id, category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [x, y, z], rot });
 const lamp = (x: number, z: number, y = 0) =>
   part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [x, y, z] });
@@ -54,6 +57,10 @@ function share(p: ScenePart, under: ScenePart): number {
 
 /** A chair whose front edge is 300 mm under the table's +z side: 60% of it is under. */
 const TUCKED_Z = 0.45 + 0.25 - 0.3;
+/** 450 mm under: 90%, past `TUCKED_CLASH_SHARE`. A pair the room report calls a clash,
+ *  so the drag refuses it too — and, for the set tests, the overlap a travelling set
+ *  has to INHERIT, because the tuck rule no longer forgives it on its own. */
+const DEEP_Z = 0.45 + 0.25 - 0.45;
 
 /** 6 × 4 m, centred on the origin. */
 const ROOM: Poly = [
@@ -309,16 +316,24 @@ describe('every caller that moves a piece to what it finds', () => {
     const c = chair('c', 0, TUCKED_Z);
     const world = [TABLE, c];
     const r = resolvePlacement({
-      part: c, rawX: 0.01, rawZ: TUCKED_Z, rot: 0, dim: c.dimMM, parts: world, footprint: ROOM, roomHeight: H, snapMode: 'off',
+      part: c, rawX: 0.01, rawZ: TUCKED_Z, rot: c.rot, dim: c.dimMM, parts: world, footprint: ROOM, roomHeight: H, snapMode: 'off',
     });
     expect(r.pos[1]).toBe(0);
     expect(r.supportId).toBeUndefined();
-    // Refused rather than lifted. `collidesAt` has no `sharesFloor` exemption, so a
-    // chair tucked under its table is refused at ANY depth — § 17's open decision, and
-    // already true of the seeded 23% tucks. Before this change a chair past half was
-    // lifted instead, and the lift is what made the move valid. If § 17 is ever decided
-    // the other way, this is the line that changes.
-    expect(r.valid).toBe(false);
+    // Moved, on the floor. § 17 decided (2026-09-30): a seat less than
+    // `TUCKED_CLASH_SHARE` under the surface it tucks under is composition, as the
+    // room report has always said, so the drag lets it go. Before, it was refused at
+    // any depth; before THAT, a chair past half was lifted onto the tabletop, and the
+    // lift is what made the move valid. Neither is the answer now.
+    expect(share(c, TABLE)).toBeCloseTo(0.6, 9);
+    expect(r.valid).toBe(true);
+    // The bar is the report's, and past it the drag refuses — still on the floor.
+    const deep = resolvePlacement({
+      part: c, rawX: 0, rawZ: DEEP_Z, rot: c.rot, dim: c.dimMM, parts: world, footprint: ROOM, roomHeight: H, snapMode: 'off',
+    });
+    expect(deep.valid).toBe(false);
+    expect(deep.refusal).toBe('blocked');
+    expect(deep.pos[1]).toBe(0);
     // The pair: a lamp nudged at the same spot lands on the table.
     const l = lamp(0, TUCKED_Z, TOP);
     const lr = resolvePlacement({
@@ -342,7 +357,7 @@ describe('every caller that moves a piece to what it finds', () => {
     ['merged', 'table'],
     ['merged', 'c1'],
   ] as const)('drag: moving the whole set (%s, grabbed by %s) leaves every chair on the floor', (how, grab) => {
-    const chairs = [chair('c1', -0.4, TUCKED_Z), chair('c2', 0.4, TUCKED_Z), chair('c3', 0, -TUCKED_Z, 0, Math.PI)];
+    const chairs = [chair('c1', -0.4, TUCKED_Z), chair('c2', 0.4, TUCKED_Z), chair('c3', 0, -TUCKED_Z)];
     const plain = [TABLE, ...chairs];
     const world = how === 'merged' ? plain.map((p) => ({ ...p, groupId: 'set' })) : plain;
     const selection = how === 'merged' ? selectionForPick(world, grab, []) : world.map((p) => p.id);
@@ -364,7 +379,8 @@ describe('every caller that moves a piece to what it finds', () => {
     // tabs resolve it, the table collided with its own chairs where they were about to
     // be, and was refused from the first millimetre. Withholding the inherited set is
     // that world again, and this is the line that proves the fixture can see it.
-    const world = [TABLE, chair('c1', -0.4, TUCKED_Z)];
+    // A chair past the tuck bar, since one inside it is no longer an overlap at all.
+    const world = [TABLE, chair('c1', -0.4, DEEP_Z)];
     expect(dragSet(world, 'table', ['table', 'c1'], 0.05, 0).valid).toBe(true);
     expect(dragSet(world, 'table', ['table', 'c1'], 0.05, 0, { inherit: false }).valid).toBe(false);
   });
@@ -373,7 +389,7 @@ describe('every caller that moves a piece to what it finds', () => {
     // `leadInherited` holds only while the lead is exactly as it was picked up. A wheel
     // turn partway through a drag moves its corners, so the forgiveness goes and the
     // chairs are obstacles once more — refused rather than ploughed through.
-    const world = [TABLE, chair('c1', -0.4, TUCKED_Z)];
+    const world = [TABLE, chair('c1', -0.4, DEEP_Z)];
     const convoy = planConvoy({ draggedId: 'table', parts: world, selection: ['table', 'c1'], restsOn: riderRelation(world, {}), footprint: ROOM, roomHeight: H });
     expect(leadInherited(convoy, 0, TABLE.dimMM)).toEqual(new Set(['c1']));
     expect(leadInherited(convoy, Math.PI / 12, TABLE.dimMM)).toBeUndefined();
@@ -425,12 +441,69 @@ describe('every caller that moves a piece to what it finds', () => {
     expect(byArt.valid).toBe(false);
   });
 
-  it('drag: a chair on its own is still refused — § 17 is not decided here', () => {
-    // The inherited set is empty when nothing travels with the chair, so the solo nudge
-    // is exactly the "drag: nudging a tucked chair" answer above, reached the app's way.
-    const r = dragSet([TABLE, chair('c1', -0.4, TUCKED_Z)], 'c1', ['c1'], 0.01, 0);
-    expect(r.convoy.leadStart.inherited.size).toBe(0);
-    expect(r.valid).toBe(false);
+  it('drag: a chair on its own slides under its table up to the bar, and stops there', () => {
+    // § 17, decided. The inherited set is empty when nothing travels with the chair, so
+    // this is the tuck rule alone, reached the app's way: from clear of the table, in.
+    const out = chair('c1', -0.4, 0.45 + 0.25 + 0.05);
+    expect(share(out, TABLE)).toBe(0);
+    const inside = dragSet([TABLE, out], 'c1', ['c1'], 0, TUCKED_Z - out.pos[2]);
+    expect(inside.convoy.leadStart.inherited.size).toBe(0);
+    expect(inside.valid).toBe(true);
+    expect(inside.lead.pos[1]).toBe(0);
+    expect(inside.lead.pos[2]).toBeCloseTo(TUCKED_Z, 9);
+    // 90% is the report's clash, and the drag says so — the table is what refuses it.
+    const past = dragSet([TABLE, out], 'c1', ['c1'], 0, DEEP_Z - out.pos[2]);
+    expect(past.valid).toBe(false);
+    expect(past.lead.refusal).toBe('blocked');
+  });
+
+  it('drag: …front first. Back-first or side-on, its back would be through the top', () => {
+    // Looked at on 2026-09-30, the day the drag learnt to tuck: a chair pushed in
+    // back-first slid under, and its top rail stood on the desktop. The roles and the
+    // seat height tuck whichever way it faces; its 850 mm back under a 750 mm top does
+    // not, so the pair is two pieces in one place and the drag refuses it.
+    const at = (rot: number) =>
+      dragSet([TABLE, chair('c', -0.4, 0.45 + 0.25 + 0.05, 0, rot)], 'c', ['c'], 0, TUCKED_Z - (0.45 + 0.25 + 0.05));
+    expect(at(Math.PI)).toMatchObject({ valid: true, lead: { pos: [-0.4, 0, expect.closeTo(TUCKED_Z, 6)] } });
+    expect(at(0)).toMatchObject({ valid: false, lead: { refusal: 'blocked' } });
+    expect(at(Math.PI / 2)).toMatchObject({ valid: false, lead: { refusal: 'blocked' } });
+    // A back that clears the knee room is no back at all: a 750 mm chair, back-first,
+    // under a 900 mm desk with 825 mm under its cable rail.
+    const tall = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1600, 900, 900], pos: [0, 0, 0] });
+    const low = part({ id: 'low', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 750], pos: [-0.4, 0, 0.8], rot: 0 });
+    expect(tuckProfile(low).heightMM).toBeLessThanOrEqual(tuckProfile(tall).kneeMM);
+    expect(dragSet([tall, low], 'low', ['low'], 0, TUCKED_Z - 0.8)).toMatchObject({ valid: true, lead: { pos: [-0.4, 0, expect.closeTo(TUCKED_Z, 6)] } });
+  });
+
+  it('drag: …only a seat that fits under that surface', () => {
+    // The rule is `tucksUnder`, the report's, not the roles alone: a seat that tucks
+    // under a dining table is two pieces in one place when it is pushed into a coffee
+    // table instead. (No dining chair is the counter-example: its seat is at most
+    // 1100 × 490 / 1090 = 494 mm within `clampDims`, under this table's 635 of knee room.)
+    const o = ottoman(0, 0.3 + 0.2 - 0.12);
+    expect(tucksUnder(o, COFFEE)).toBe(false);
+    expect(tucksUnder(o, TABLE)).toBe(true);
+    const r = resolvePlacement({
+      part: o, rawX: 0.01, rawZ: o.pos[2], rot: 0, dim: o.dimMM, parts: [COFFEE, o], footprint: ROOM, roomHeight: H, snapMode: 'off',
+    });
+    // Not tucked, so it is not let through at floor level: it stands on the coffee
+    // table's top, as § H.6.4 has it — or is refused. Either way it is not IN the table.
+    expect(r.pos[1] === 0 && r.valid).toBe(false);
+  });
+
+  it('drag: a seat stretched mid-gesture is asked about the size it is becoming', () => {
+    // An office chair's armrests are its tuck height (640 / 1150 of it). At 1000 mm they
+    // clear a 750 desk's 675 of knee room; stretched to 1300 they do not. Below the
+    // support share, so gravity leaves it on the floor and the collision is the answer.
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1200, 600, 750], pos: [0, 0, 0] });
+    const c = part({ id: 'c', category: 'chair', shape: 'chair-office', dimMM: [600, 600, 1000], pos: [0, 0, 0.36], rot: Math.PI });
+    expect(share(c, desk)).toBeLessThan(MIN_SUPPORT_SHARE);
+    const at = (h: number) =>
+      resolvePlacement({ part: c, rawX: 0.01, rawZ: 0.36, rot: c.rot, dim: [600, 600, h], parts: [desk, c], footprint: ROOM, roomHeight: H, snapMode: 'off' });
+    expect(tucksUnder(c, desk)).toBe(true);
+    expect(at(1000)).toMatchObject({ valid: true, pos: [0.01, 0, 0.36] });
+    expect(tucksUnder({ ...c, dimMM: [600, 600, 1300] }, desk)).toBe(false);
+    expect(at(1300)).toMatchObject({ valid: false, refusal: 'blocked' });
   });
 
   it('drag: a tray on the tabletop does not lift the chair tucked under it', () => {

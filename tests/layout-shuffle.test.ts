@@ -97,8 +97,10 @@ function runSweep() {
 }
 const presetSweep = () => (sweepCache ??= runSweep());
 
-/** How many ideas `presetSweep` offers in the presets that carry a rug. */
-const RUG_IDEAS_CHECKED = 45;
+/** How many ideas `presetSweep` offers in the presets that carry a rug. 45 until the
+ *  search priced a chair pushed under its table back-first (`tuckedAt`), which moves
+ *  any trajectory that passed through one. */
+const RUG_IDEAS_CHECKED = 44;
 
 // ── Three tests below USED to carry an explicit 30 s timeout ────────────
 //
@@ -281,17 +283,22 @@ describe("solveLayout mode: 'shuffle'", () => {
       }
     }
     // A loop over whatever `pick` saw passes over an empty list, so the count is the
-    // assertion's own floor: forty solves, two of which (`l` seed 7, `open` seed 8)
-    // keep three. It was 159 — `t` seed 4 the one short — until the search priced a
-    // rug through the plaster, which moves any trajectory whose scatter put one there.
-    expect(checked, 'the finalists this sweep compared').toBe(158);
+    // assertion's own floor: forty solves, one of which (`l` seed 7) keeps three. It
+    // was 159 — `t` seed 4 the one short — until the search priced a rug through the
+    // plaster, which moves any trajectory whose scatter put one there; then 158, with
+    // `open` seed 8 short too, until the search priced a chair pushed under its table
+    // back-first (`tuckedAt`). That seed's finalists had four chair backs through the
+    // table between them, and 11 of the sweep's 158 had one — measured by re-running
+    // the sweep on both rules with the back strip computed by hand.
+    expect(checked, 'the finalists this sweep compared').toBe(159);
   });
 
   it('keeps a pool of finalists, because the search moves', { timeout: 120_000 }, () => {
     // A search that accepts no step finds no new best, so its pool is the scatter
     // alone: `11111111` on every preset before the fix. Four is `FINALISTS`, the most a
-    // pool keeps; `l` seed 7 and `open` seed 8 fill three (`t` seed 4 did, before the
-    // search priced a rug), so a full pool is not a property to lean on.
+    // pool keeps; `l` seed 7 fills three (`t` seed 4 did, before the search priced a
+    // rug, and `open` seed 8 before it priced a chair's back), so a full pool is not a
+    // property to lean on.
     const pools = ALL.map(([id]) => [
       id,
       shuffleSweep()
@@ -303,7 +310,7 @@ describe("solveLayout mode: 'shuffle'", () => {
       ['rect', '44444444'],
       ['l', '44444434'],
       ['u', '44444444'],
-      ['open', '44444443'],
+      ['open', '44444444'],
       ['t', '44444444'],
     ]);
   });

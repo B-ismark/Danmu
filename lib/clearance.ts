@@ -56,7 +56,8 @@ import {
   isSoftFurnishing,
   routeWidth,
   roleOf,
-  tucksUnder,
+  tuckedAt,
+  tuckProfile,
   zoneExempt,
   CROWDED_COVER,
   TUCKED_CLASH_SHARE,
@@ -230,12 +231,13 @@ function zoneDetail(
   return `“${part.name}” needs ${need_} clear on ${need} sides ${rule.reason}. ${clear === 0 ? 'None of them is clear' : `Only ${clear} ${clear === 1 ? 'is' : 'are'} clear`} (${blocked} blocked).`;
 }
 
-/** The tucked bar only for a pair that genuinely goes one under the other: the roles
- *  AND the seat's own height clearing the surface's knee room (`tucksUnder`). An
- *  ottoman at a coffee table shares the roles and not the room, so half of it inside
- *  the table is two pieces in the same place, like any other pair. */
-function clashShare(a: ScenePart, b: ScenePart): number {
-  return tucksUnder(a, b) ? TUCKED_CLASH_SHARE : CLASH_SHARE;
+/** The tucked bar only for a pair that genuinely goes one under the other, standing
+ *  where it stands: the roles, the seat's own height clearing the surface's knee room,
+ *  and its back out from under the top (`tuckedAt`). An ottoman at a coffee table
+ *  shares the roles and not the room, and a chair pushed in back-first has its back
+ *  through the tabletop, so either is two pieces in the same place like any other pair. */
+function clashShare(a: ScenePart, b: ScenePart, fa: Foot, fb: Foot): number {
+  return tuckedAt(tuckProfile(a), fa, tuckProfile(b), fb) ? TUCKED_CLASH_SHARE : CLASH_SHARE;
 }
 
 /** The pieces that actually get in a walker's way: floor-standing, solid, and
@@ -456,7 +458,7 @@ export function analyzeRoom(
       // pointing the more dangerous way. `layout-conformance`'s property is
       // one-directional (flagged ⇒ costlier), so silence was invisible to it — the
       // exact-half case is pinned in `tests/clearance.test.ts` instead.
-      if (smaller <= 0 || shared / smaller < clashShare(a, b)) continue;
+      if (smaller <= 0 || shared / smaller < clashShare(a, b, oa, ob)) continue;
       issues.push({
         id: `clash-${a.id}-${b.id}`,
         rule: 'clash',
@@ -496,10 +498,11 @@ export function analyzeRoom(
   //   · MOUNTED ↔ MOUNTED. `floorSolids` requires `!wallMounted`, so neither ordering of
   //     such a pair is reachable here and `floorBlockers` excludes both from rule 2. The
   //     seeder ships seven rooms with a framed print inside a window.
-  //   · A TUCKED pair. `collidesAt` has no `tucksUnder` exemption while rule 2 and the
-  //     seeder's own `seats()` both do, so a dining chair under its table is refused by
-  //     the drag and silent in the report BY DESIGN — twenty seeded pairs.
-  // Both are recorded in `docs/what-is-still-open.md` § 17. Neither is this rule's job;
+  //   · (A TUCKED pair was the second, and is not any more: `collidesAt` forgives a
+  //     `tucksUnder` pair below `TUCKED_CLASH_SHARE`, rule 2's own bar, since the user
+  //     decided § 17 that way on 2026-09-30. A chair the drag slides under its table is
+  //     one this report calls fine, and one pushed past the bar is refused and named.)
+  // It is recorded in `docs/what-is-still-open.md` § 17. It is not this rule's job;
   // saying so here is, because the next reader will otherwise read the sentence above
   // as a general guarantee and build on it.
   //

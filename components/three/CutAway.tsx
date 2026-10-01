@@ -18,6 +18,10 @@
 // It also stops the piece taking clicks while it is gone, so a press on the sofa
 // behind an invisible window selects the sofa.
 //
+// A HELD piece — selected, or being dragged — is not hidden (`cutAwayHides`): the
+// one you are working on stays in view, and takes clicks, on the wall the camera
+// looks through. Let go of the selection and it goes with its wall again.
+//
 // Re-applied every frame while cut away, not just on the transition: a recolour
 // or a model change remounts the piece's inline materials fresh, and those would
 // otherwise draw until the camera next crossed the wall. The work is a traverse
@@ -26,7 +30,7 @@
 import { useFrame } from '@react-three/fiber';
 import { useRef, type RefObject } from 'react';
 import type { Group, Material, Mesh, Raycaster, Intersection } from 'three';
-import { cutAwayWithWall } from '@/lib/near-wall';
+import { cutAwayHides } from '@/lib/near-wall';
 
 type Saved = { __cutDepthWrite?: boolean };
 const NO_PICK = (_r: Raycaster, _i: Intersection[]) => {};
@@ -61,17 +65,26 @@ function apply(g: Group, cut: boolean) {
   });
 }
 
-export function CutAway({ groupRef, depthMM }: { groupRef: RefObject<Group | null>; depthMM: number }) {
+export function CutAway({
+  groupRef,
+  depthMM,
+  held,
+}: {
+  groupRef: RefObject<Group | null>;
+  depthMM: number;
+  held: boolean;
+}) {
   const was = useRef(false);
   useFrame(({ camera }) => {
     const g = groupRef.current;
     if (!g) return;
     const p = g.position;
-    const cut = cutAwayWithWall(
+    const cut = cutAwayHides(
       [camera.position.x, camera.position.y, camera.position.z],
       [p.x, p.y, p.z],
       g.rotation.y,
       (depthMM / 1000) * g.scale.z,
+      held,
     );
     if (cut || was.current) apply(g, cut);
     was.current = cut;

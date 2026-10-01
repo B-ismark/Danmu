@@ -30,3 +30,21 @@ export function cutAwayWithWall(
   const backZ = pos[2] - fz * (depthM / 2);
   return (cam[0] - backX) * fx + (cam[2] - backZ) * fz < 0;
 }
+
+/** Whether the cut-away actually HIDES the piece: it goes with its wall unless it is
+ *  held — selected, or being dragged. The user's rule, 2026-09-30: a piece you are
+ *  working on stays in view on the wall the camera looks through, and one you are
+ *  not stays gone and takes no clicks, so it cannot be selected from behind the wall
+ *  it is hidden by. It came out of a curtain dragged onto the near wall, which
+ *  vanished mid-drag with its red "does not fit" still owed to the person dragging
+ *  it. Held is asked by the caller because selection lives in the store; the wall
+ *  question stays `cutAwayWithWall`'s alone. */
+export function cutAwayHides(
+  cam: readonly [number, number, number],
+  pos: readonly [number, number, number],
+  rot: number,
+  depthM: number,
+  held: boolean,
+): boolean {
+  return !held && cutAwayWithWall(cam, pos, rot, depthM);
+}

@@ -114,6 +114,19 @@ describe('settleParts · out of each other', () => {
     expect(settled.pos).toEqual(chair.pos);
   });
 
+  it('pushes a chair out that went under its table back first', () => {
+    // Its seat would clear the apron; its back, standing 850 mm tall, is through the top.
+    // Both halves of the pass read the facing: the pair is found clashing, and the spot
+    // it is pushed to may not be one where the back is still under the top. Pushed in
+    // this deep, clear is 285 mm out — six 50 mm steps — so a search that took the first
+    // step as free would still be under the top when its three passes ran out.
+    const table = part({ category: 'table', shape: 'desk-standard', dimMM: [1500, 850, 750], pos: [0, 0, 0] });
+    const chair = part({ category: 'chair', shape: 'chair-dining', dimMM: [480, 520, 850], pos: [0, 0, 0.4], rot: 0 });
+    const [a, b] = settleParts([table, chair], RECT);
+    expect(a.pos).toEqual(table.pos);
+    expect(shared(a, b)).toBeLessThan(0.02);
+  });
+
   it('pushes a seat out of a surface it does not fit under', () => {
     // An ottoman belongs under a coffee table by role; this one is taller than the shelf
     // it would have to clear (§ H.6.4), so 60% of it in the table is two pieces in one
