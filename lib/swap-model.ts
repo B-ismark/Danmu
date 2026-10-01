@@ -10,7 +10,7 @@
 import { useStudio } from './store';
 import { useScene } from './scene-store';
 import { currentRoomScene } from './room-scene';
-import { findSupportDetailed, groundY, heightForNewCeiling, ridesWall, snapToWall, wallAffinity, wallStandoff } from './physics';
+import { findSupportDetailed, groundY, heightForNewCeiling, isTabletopProne, ridesWall, snapToWall, wallAffinity, wallStandoff } from './physics';
 import { containedXZ } from './layout-settle';
 import { ridersOf } from './rider-height';
 import { isRoundPart, isWallMountedPart, type LibraryItem, type ScenePart } from './scene-spec';
@@ -117,7 +117,13 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
     }
     const riders = ridersOf(id, scene, useScene.getState().parts, s.parentIds);
     const world = scene.filter((p) => !riders.has(p.id));
-    support = findSupportDetailed(world, { id, category: item.category, shape: item.shape }, x, z, dimMM, rot, isRoundPart(item.shape));
+    // Only a small "goes on a table" piece looks for a surface — the add path's own
+    // rule (`placeNewPart`). Asking for every kind stood a nightstand, a bookshelf or a
+    // second sofa on top of the bed a print had hung above: the print's spot is over
+    // the bed, the bed is under it, and nothing said a nightstand does not go there.
+    support = isTabletopProne(item.category)
+      ? findSupportDetailed(world, { id, category: item.category, shape: item.shape }, x, z, dimMM, rot, isRoundPart(item.shape))
+      : null;
     ny = support !== null && support.y > 0.3 ? support.y : 0;
   }
   s.resetTransforms(id); // drop stale rotate/scale overrides (and any rigid-parenting link)
