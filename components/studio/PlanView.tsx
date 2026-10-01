@@ -796,10 +796,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
    * drag had, surviving in the path nobody clicks; three call sites is exactly how
    * it survived.
    */
-  function turnTo(part: ScenePart, next: number) {
+  function turnTo(part: ScenePart, next: number, gesture: 'drag' | 'key') {
     // Same rule as `moveTo`: a drag has its convoy already, a key press has no
-    // gesture to hang one off and asks for the same answer on the spot.
-    const drag = dragRef.current;
+    // gesture to hang one off and asks for the same answer on the spot — and only
+    // the drag reads `dragRef`, for the reason given there.
+    const drag = gesture === 'drag' ? dragRef.current : null;
     const convoy =
       drag?.convoy ??
       planConvoy({
@@ -1161,7 +1162,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // Containment and the cascade both live in `turnTo` — this gesture had
       // neither until recently, and the two keyboard turns still had neither after
       // that, which is what one more copy of this block would have preserved.
-      turnTo(part, next);
+      turnTo(part, next, 'drag');
     }
     force((v) => v + 1);
   }
@@ -1338,7 +1339,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   function turnByKey(e: React.KeyboardEvent, part: ScenePart) {
     const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
     const wanted = part.rot + dir * spin;
-    const turned = turnTo(part, wanted);
+    const turned = turnTo(part, wanted, 'key');
     // A turn can move the piece DOWN as well as sideways, and neither the refusal nor
     // the nudge below can say so: a piece standing on a table that no longer covers
     // enough of it after the turn is written to the floor by the gravity branch of the

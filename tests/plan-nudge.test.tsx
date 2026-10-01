@@ -22,6 +22,7 @@ import { footprintForLayout } from '@/lib/footprint';
 import { currentRoomScene } from '@/lib/room-scene';
 import type { SnapMode } from '@/lib/drag-resolve';
 import type { ScenePart } from '@/lib/scene-spec';
+import { ANNOUNCE_EVENT } from '@/lib/announce';
 import { stubPlanCanvas } from './helpers/mount';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('plan-nudge', 'plan'));
@@ -205,6 +206,34 @@ describe('an arrow key lands on the first line it reaches (plan tab)', () => {
     press('ArrowLeft', 12, 'Tote');
     fireEvent.pointerUp(svg, { clientX: 500, clientY: 600, pointerId: 1 });
     expect(at('tote')[0]).toBeCloseTo(1.88, 9);
+  });
+
+  it('turns from the room as it is when a key is pressed during a drag', () => {
+    // Shift+arrow is the same gesture as an arrow, and read the same drag state. A turn
+    // takes the angle either way and only SAYS whether it fits, so the sentence is the
+    // thing to read: against the crate where it stood when the drag began, 10 mm away,
+    // the tote's corner swung into it and was told it does not fit.
+    room(1.5, 'fine');
+    useScene.setState({ parts: [...useScene.getState().parts, box('tote', 'Tote', 2.11, 800)] });
+    restoreRect = stubPlanCanvas();
+    const spoken: string[] = [];
+    const listen = (e: Event) => spoken.push((e as CustomEvent<string>).detail);
+    window.addEventListener(ANNOUNCE_EVENT, listen);
+    try {
+      const { container } = render(<PlanView />);
+      const svg = container.querySelector('svg')!;
+      fireEvent.pointerDown(buttonFor('Crate'), { button: 0, clientX: 500, clientY: 500, pointerId: 1 });
+      for (let dy = 1; dy <= 300 && crate()[2] < 0.7; dy++) {
+        fireEvent.pointerMove(svg, { clientX: 500, clientY: 500 + dy, pointerId: 1 });
+      }
+      expect(crate()[2]).toBeGreaterThanOrEqual(0.7);
+      fireEvent.keyDown(buttonFor('Tote'), { key: 'ArrowRight', shiftKey: true });
+      fireEvent.pointerUp(svg, { clientX: 500, clientY: 600, pointerId: 1 });
+    } finally {
+      window.removeEventListener(ANNOUNCE_EVENT, listen);
+    }
+    expect(spoken.filter((s) => s.startsWith('Tote'))).toEqual(['Tote turned to 15 degrees.']);
+    expect(currentRoomScene().find((p) => p.id === 'tote')!.rot).toBeCloseTo(Math.PI / 12, 9);
   });
 
   it('still snaps a drag flush', () => {
