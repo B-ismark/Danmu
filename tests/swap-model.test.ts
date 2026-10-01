@@ -206,6 +206,22 @@ describe('changing the model', () => {
     expect(s.parentIds.p).toBeUndefined();
   });
 
+  // Review of this branch: the gate was the CATEGORY, so a floor lamp — a `lamp` — and
+  // a 1.6 m floor plant each stood on the bed a print hung above.
+  it.each([
+    { label: 'Floor lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-floor', dimMM: [300, 300, 1700] },
+    { label: 'Plant', group: 'Decor', category: 'plant', shape: 'plant', dimMM: [400, 400, 1600] },
+  ] as LibraryItem[])('a print over a bed swapped for a $label stands it on the floor', (item) => {
+    const bed = part({ id: 'bed', category: 'bed', shape: 'bed-double', pos: [0, 0, -2], dimMM: [1600, 2000, 500] });
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.4, -3 + 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    room6([bed, print]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', item);
+    const s = useStudio.getState();
+    expect(s.positions.p![1]).toBe(0);
+    expect(s.parentIds.p).toBeUndefined();
+  });
+
   it('…while a lamp swapped in over a table still stands on the table', () => {
     // The gate is the add path's, not "never stack": the first case in this file is the
     // other half, and this one is it at a wall piece's spot.

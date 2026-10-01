@@ -64,3 +64,19 @@ describe('placeNewPart asks with the new piece’s own outline and turn', () => 
     expect(r.supportId).toBe('desk');
   });
 });
+
+// The add path's half of the swap fix: a floor lamp or a floor plant dropped over a bed
+// is a floor piece standing beside it, not a lamp on the duvet. A table lamp still
+// goes on top of a table — the cases above — because `seeksSurface` is narrower than
+// the category, not "never stack".
+describe('placeNewPart: only a tabletop-sized piece stands on what is under it', () => {
+  const bed: ScenePart = { id: 'bed', name: 'bed', category: 'bed', shape: 'bed-double', pos: [0, 0, 0], rot: 0, dimMM: [1600, 2000, 500], locked: false };
+  it.each([
+    ['lamp', 'lamp-floor', [300, 300, 1700]],
+    ['plant', 'plant', [400, 400, 1600]],
+  ] as const)('a %s (%s) over a bed stands on the floor', (cat, shape, dim) => {
+    const r = placeNewPart(cat, shape, [...dim], ROOM, [bed], [0, 0]);
+    expect(r.pos[1]).toBe(0);
+    expect(r.supportId).toBeNull();
+  });
+});

@@ -777,6 +777,24 @@ export function isTabletopProne(category: Category): boolean {
   return TABLETOP_PRONE_CATEGORIES.has(category);
 }
 
+/** Tallest piece a placement will stand on top of something. A metre is past every
+ *  tabletop thing in the Library (a table lamp is 500 mm) and short of a floor plant. */
+export const SURFACE_PIECE_MAX_MM = 1000;
+
+/** True if a piece being PLACED — added from the Library, or swapped in for another —
+ *  goes on whatever top is under it rather than on the floor beside it.
+ *
+ *  Narrower than `isTabletopProne`, which is a CATEGORY and so says "a lamp" for a
+ *  1.7 m floor lamp and "a plant" for a 1.6 m floor plant. Asked by category, a print
+ *  above the bed swapped for a floor lamp stood the lamp on the duvet — found in
+ *  review. This reads the shape and the size as well. The ottoman stays in: one put
+ *  over a top it does not fit under goes on it, which is § H.6.4's decision and
+ *  `tests/seat-support.test.ts` holds it. */
+export function seeksSurface(category: Category, shape: Shape, dimMM: readonly [number, number, number]): boolean {
+  if (!isTabletopProne(category) || shape === 'lamp-floor') return false;
+  return dimMM[2] <= SURFACE_PIECE_MAX_MM;
+}
+
 /** Centroid pull — for prefers-middle items push slightly toward room center. */
 export function pullToward(
   pos: [number, number, number],
