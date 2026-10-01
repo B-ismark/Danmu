@@ -370,15 +370,15 @@ describe('an arrow key that goes nowhere says so (plan tab)', () => {
   it('says so at a neighbour it is touching, and draws nothing in red', () => {
     room(FLUSH, 'fine');
     const { container } = render(<PlanView />);
-    expect(listening(() => press('ArrowLeft', 2))).toEqual([
-      'Crate cannot go any further that way.',
-      'Crate cannot go any further that way.',
-    ]);
+    // Once: a held key repeats some thirty times a second.
+    expect(listening(() => press('ArrowLeft', 2))).toEqual(['Crate cannot go any further that way.']);
     expect(crate()[0]).toBeCloseTo(FLUSH, 9);
     expect(drawnRefused(container)).toBe(false);
-    // …and a press that does move says nothing.
+    // …a press that does move says nothing…
     expect(listening(() => press('ArrowRight', 1))).toEqual([]);
     expect(crate()[0]).toBeCloseTo(FLUSH + 0.01, 9);
+    // …and back against it, it is said again: once each time it arrives.
+    expect(listening(() => press('ArrowLeft', 2))).toEqual(['Crate cannot go any further that way.']);
   });
 
   it('says so where the flush stop is a rounding error away, and stores nothing', () => {
@@ -390,11 +390,15 @@ describe('an arrow key that goes nowhere says so (plan tab)', () => {
     expect(useStudio.getState().positions.crate).toBeUndefined();
   });
 
-  it("says so at the room's edge", () => {
-    room(2.8, 'fine');
+  it("says so at the room's edge, once for each way it cannot go", () => {
+    // In the south-east corner: east and south are both the room's edge.
+    room(2.8, 'fine', 2.3);
     render(<PlanView />);
     expect(listening(() => press('ArrowRight', 1))).toEqual(['Crate cannot go any further that way.']);
+    expect(listening(() => press('ArrowDown', 1))).toEqual(['Crate cannot go any further that way.']);
+    expect(listening(() => press('ArrowRight', 1))).toEqual(['Crate cannot go any further that way.']);
     expect(crate()[0]).toBeCloseTo(2.8, 9);
+    expect(crate()[2]).toBeCloseTo(2.3, 9);
   });
 
   it('says why when the step itself was refused, in red', () => {
@@ -423,6 +427,28 @@ describe('an arrow key that goes nowhere says so (plan tab)', () => {
     expect(spoken).toEqual([]);
   });
 
+  it('leaves a refused drag its own refusal when a key beside it goes nowhere', () => {
+    // The crate is dragged further into the chest it is already 15 mm inside, so every
+    // frame is refused; the tote, at the east wall, is pressed into it. Clearing the drag's
+    // refusal for the tote's press said the crate's refusal a second time.
+    room(FLUSH - 0.015, 'off');
+    useScene.setState({ parts: [...useScene.getState().parts, box('tote', 'Tote', 2.8, 400)] });
+    restoreRect = stubPlanCanvas();
+    const spoken = listening(() => {
+      const { container } = render(<PlanView />);
+      const svg = container.querySelector('svg')!;
+      fireEvent.pointerDown(buttonFor('Crate'), { button: 0, clientX: 500, clientY: 500, pointerId: 1 });
+      for (let dx = 1; dx <= 5; dx++) fireEvent.pointerMove(svg, { clientX: 500 - dx, clientY: 500, pointerId: 1 });
+      press('ArrowRight', 1, 'Tote');
+      for (let dx = 6; dx <= 10; dx++) fireEvent.pointerMove(svg, { clientX: 500 - dx, clientY: 500, pointerId: 1 });
+      fireEvent.pointerUp(svg, { clientX: 490, clientY: 500, pointerId: 1 });
+    });
+    expect(spoken).toEqual([
+      'Crate will not fit there: something is in the way.',
+      'Tote cannot go any further that way.',
+    ]);
+  });
+
   it('names the piece in the set that cannot follow, in red', () => {
     // The tote is selected with the crate and already stands against the east wall.
     room(FLUSH, 'fine');
@@ -434,5 +460,24 @@ describe('an arrow key that goes nowhere says so (plan tab)', () => {
     ]);
     expect(crate()[0]).toBeCloseTo(FLUSH, 9);
     expect(drawnRefused(container)).toBe(true);
+  });
+
+  it('answers each press when refusals and dead ends take turns', () => {
+    // Right is refused by the tote at the wall, left goes nowhere into the chest. Each
+    // answer is news after the other, so neither is held back as a repeat.
+    room(FLUSH, 'fine');
+    useScene.setState({ parts: [...useScene.getState().parts, box('tote', 'Tote', 2.8, 400)] });
+    useStudio.setState({ selection: ['crate', 'tote'], selectedPartId: 'crate' });
+    render(<PlanView />);
+    const refused = 'Tote will not fit there, so the rest of the selection cannot follow.';
+    const nowhere = 'Crate cannot go any further that way.';
+    expect(
+      listening(() => {
+        press('ArrowRight', 1);
+        press('ArrowLeft', 1);
+        press('ArrowRight', 1);
+        press('ArrowLeft', 1);
+      }),
+    ).toEqual([refused, nowhere, refused, nowhere]);
   });
 });

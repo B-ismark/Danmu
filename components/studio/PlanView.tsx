@@ -313,6 +313,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
    *  answer. Keyed on the blocker rather than incremented, so holding against one
    *  obstacle still says it once. */
   const announcedRef = useRef<string | null>(null);
+  /** Which piece was last told it could go no further, and which way. Its own ref, not
+   *  `announcedRef`: that one belongs to the refusal and is cleared with it, and a key
+   *  pressed during a drag that cleared it wiped the drag's refusal, so the release
+   *  played a drop and the next refused frame said the same refusal again. Keyed on the
+   *  direction so a held key says it once and a press the other way is still answered. */
+  const nowhereRef = useRef<string | null>(null);
   const blockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
 
@@ -642,8 +648,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
   /** Try the full move, then each axis alone, so a piece slides along whatever it
    *  hit rather than freezing. Returns false if nothing was possible — and says
    *  so, out loud and in colour, instead of returning silently. A key press that
-   *  went nowhere without anything refusing it is said too, and not drawn: a
-   *  barrier or the room's edge is not a piece that does not fit.
+   *  went nowhere without anything refusing it is said too — once for each way it
+   *  cannot go, not on every repeat of a held key — and not drawn: a barrier or the
+   *  room's edge is not a piece that does not fit.
    *
    *  An arrow key is one step from where the piece stands, and with the snap on it
    *  stops on the first line it reaches (`nudgeFrom`, `snapAhead`). It used to run
@@ -794,6 +801,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // the selection, and any merged group. See lib/drag-convoy.ts.
       if (moved && co.moves.length > 0) setTransformsFor(co.moves);
       if (blockedRef.current) clearBlocked();
+      nowhereRef.current = null;
       return true;
     }
     // Nothing was possible, so no alignment holds either — a guide left over from
@@ -801,10 +809,16 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // piece sits refusing to go there.
     if (drag) drag.snapLines = [];
     if (wentNowhere && !refused) {
-      if (blockedRef.current) clearBlocked();
-      announce(`${part.name} cannot go any further that way.`);
+      // A drag under way owns the refusal state; a key beside it only adds a sentence.
+      if (blockedRef.current && !dragRef.current) clearBlocked();
+      const saying = `${part.id}:${Math.sign(rawX - part.pos[0])},${Math.sign(rawZ - part.pos[2])}`;
+      if (nowhereRef.current !== saying) {
+        nowhereRef.current = saying;
+        announce(`${part.name} cannot go any further that way.`);
+      }
       return false;
     }
+    nowhereRef.current = null;
     // Cancel any pending fade — a second refusal must not be wiped by the
     // timer the first one left behind.
     if (blockTimer.current) clearTimeout(blockTimer.current);
