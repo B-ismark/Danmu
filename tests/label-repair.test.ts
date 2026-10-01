@@ -734,7 +734,12 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     // shelf, and the wardrobe moves up into the second chip. Read as a shelf, it is
     // 1464. That pick is filed with § 49.5's. Boxed as the photo draws them (§ 49.20),
     // 539, 48 and 172, because a width read short takes the right word off the chips; with
-    // a foot-cut box's side read where the frame crosses it, 556, 64 and 217.
+    // a foot-cut box's side read where the frame crosses it, 556, 64 and 217. Then 63 and
+    // 211, every one of the moves a desk: the Library's four beds became one `bed-double`
+    // that resizes down to a single, so that band starts at 800 rather than 1350, and a
+    // 1.4 m desk now sits well inside it — "Bed" outranks "Table" on those rows. That is
+    // the one-bed merge's price, paid on purpose: narrowing the band back would leave the
+    // Inspector unable to make a single out of the only bed there is.
     let caught = 0, first = 0, shown = 0;
     for (const { d, cal } of ROWS) {
       for (const category of CATEGORIES) {
@@ -747,7 +752,7 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
         if (i === 0 || i === 1) shown++;
       }
     }
-    expect([caught, first, shown]).toEqual([556, 64, 217]);
+    expect([caught, first, shown]).toEqual([556, 63, 211]);
   });
 
   it("keeps the right word when only the wrong word's anchor read it too big (§ 49.5)", () => {
@@ -1242,7 +1247,10 @@ describe('a repair is built as the shape it was measured as', () => {
     const [bed] = candidatesFor(sofa, ['bed'], CALS, ROOM);
     expect(bed).toBeDefined();
     expect(bed.detection.shape).toBe('bed-double');
-    expect(bed.name).toBe('Double bed');
+    // The Library's name for it — one "Bed" since its four sizes merged. Before the
+    // kinds were asked with the row's own shape carried, that row read as building a
+    // single and was left out, and this row was offered no bed at all.
+    expect(bed.name).toBe('Bed');
     const w = bed.detection.dimMM![0];
     expect(sizeFitsLabel('bed', 'bed-single', w, bed.detection.dimMM![2])).toBe(false); // premise
     expect(sizeFitsLabel('bed', 'bed-double', w, bed.detection.dimMM![2])).toBe(true);
@@ -1253,6 +1261,16 @@ describe('a repair is built as the shape it was measured as', () => {
     expect(part.dimMM[0]).toBe(w);
     // A typed word is answered the same way: the kind that fits, over the plain one that does not.
     expect(candidatesFor(sofa, ['bed'], CALS, ROOM, { requireFit: false })[0].detection.shape).toBe('bed-double');
+  });
+
+  it('takes a size word at its word, now that no Library row is named for it', () => {
+    // "single bed" was a Library row's name, which is how it counted as naming a kind;
+    // the rows merged and it is a size class now (`classSize`). Words that name a kind
+    // are not second-guessed, so the same 1.56 m row CALLED a single bed is measured as
+    // one, which it is too wide to be — and is not quietly re-offered as the double.
+    const single = { ...sofa, label: 'single bed' };
+    expect(candidatesFor(single, ['bed'], CALS, ROOM)).toEqual([]);
+    expect(candidatesFor(single, ['bed'], CALS, ROOM, { requireFit: false })[0].detection.shape).toBe('bed-single');
   });
 
   it('keeps the plain kind when it fits, even where another kind fits too', () => {

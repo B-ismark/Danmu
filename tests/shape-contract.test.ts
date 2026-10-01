@@ -242,7 +242,9 @@ describe('a shape lands somewhere the room can hold it', () => {
     }
     // The one filtered loop here that had no count, which is exactly how a narrowed
     // `isObstacle` could make it iterate zero times and stay green.
-    expect(obstacles, 'the catalogue is mostly floor-standing furniture').toBe(32);
+    // 32 → 30: four beds became one and two fridges one (−4), the dining / desk table
+    // split into two rows and the clothes rail joined (+2).
+    expect(obstacles, 'the catalogue is mostly floor-standing furniture').toBe(30);
   });
 });
 

@@ -138,7 +138,7 @@ export function CatalogToggle() {
  *  `undefined` for the first piece into an empty room, which is `placeNewPart`'s own
  *  no-aim behaviour unchanged; the drag-and-drop paths in `PlanView` and `Room` do not
  *  call it at all, because there the user aimed and being placed where you aimed is a
- *  promise.
+ *  promise — kept unless another piece is already standing there (see `addPieceToRoom`).
  *
  *  The placing itself is `addPieceToRoom` (`lib/add-piece.ts`), shared with both
  *  tabs' drop handlers — see there for why it reads the parts itself rather than

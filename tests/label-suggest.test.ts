@@ -107,16 +107,19 @@ describe('suggestFromLabel', () => {
     // its old word, and the kind of bed a candidate is measured as is read from the
     // words — so measuring under "sofa" found no kind named and offered the plain
     // single bed, at a margin that called it a fit, to someone who had just typed
-    // double. The typed words name the double, and the double is what is offered,
-    // caveated: 1080 is narrower than any double bed.
+    // double. The typed words name the double, and the double is what is offered.
     const sofa = det({ category: 'sofa', slot: 'n', label: 'sofa', box: [0.275, 0.75, 0.45, 0.1] });
     const [bed, ...rest] = suggestFromLabel(sofa, 'double bed', CALS, ROOM);
     expect(rest).toEqual([]);
     expect(bed.category).toBe('bed');
     expect(bed.detection.shape).toBe('bed-double');
-    expect(bed.name).toBe('Double bed');
+    expect(bed.name).toBe('Bed'); // the Library's one bed, which is a `bed-double`
     expect(bed.detection.dimMM?.[0]).toBe(1080);
-    expect(bed.margin).toBeLessThan(0);
+    // It used to be caveated here, 1080 being narrower than the old double's 1350
+    // floor. The Library's one bed is a `bed-double` that resizes down to a single, so
+    // its band starts at 800 and a 1080 bed is a bed — drawn with one pillow, because
+    // pillows follow the width (`sleepsTwo`), not the shape.
+    expect(bed.margin).toBeGreaterThan(0);
   });
 
   it('offers nothing when the words only reach the category it already is', () => {

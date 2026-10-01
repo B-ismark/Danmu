@@ -42,8 +42,8 @@ beforeEach(() => {
 /** Click the Library row with exactly this name, `n` times.
  *
  *  An EXACT string, not a regex, and not `[0]` of a loose match. Once a piece is in
- *  the room the plan canvas renders it with `aria-label="Double bed. Arrow keys move
- *  it, hold Shift to turn" ` — which also matches /^Double bed/i and comes FIRST in
+ *  the room the plan canvas renders it with `aria-label="Bed. Arrow keys move
+ *  it, hold Shift to turn" ` — which also matches /^Bed/i and comes FIRST in
  *  DOM order, so the second and third clicks landed on the piece instead of the list
  *  and added nothing. The test read that as the wiring being broken. */
 function addFromLibrary(label: string, n: number) {
@@ -57,7 +57,7 @@ function addFromLibrary(label: string, n: number) {
 describe('the Library gives each click its own spot', () => {
   it('three clicks are three pieces in three places, facing more than one way', () => {
     render(<PlanPage />);
-    addFromLibrary('Double bed', 3);
+    addFromLibrary('Bed', 3);
 
     const beds = useScene.getState().parts.filter((p) => p.category === 'bed');
     // Named count, not `.length > 0`: a loop over "whatever it found" passes over an
@@ -116,7 +116,7 @@ describe('the Library gives each click its own spot', () => {
     // The wiring must not move the ordinary single-add case. `[0, ?, 0]` is what an
     // unaimed `placeNewPart` produces in a rectangle, and a bed is floor-anchored.
     render(<PlanPage />);
-    addFromLibrary('Double bed', 1);
+    addFromLibrary('Bed', 1);
     const bed = useScene.getState().parts.find((p) => p.category === 'bed')!;
     expect([bed.pos[0], bed.pos[2]]).toEqual([0, 0]);
   });

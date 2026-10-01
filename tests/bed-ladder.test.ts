@@ -14,11 +14,13 @@
 // and a table printed to nobody is not a measurement.
 import { describe, it, expect } from 'vitest';
 import { defaultScene, PART_LIBRARY } from '../lib/scene-spec';
+import { classSize } from '../lib/shape-search';
+import { clampDims } from '../lib/dimension-ranges';
 
-/** Every bed size the Library ships, as `w×l` keys. */
-const CATALOG_BEDS = new Set(
-  PART_LIBRARY.filter((i) => i.category === 'bed').map((i) => `${i.dimMM[0]}x${i.dimMM[1]}`),
-);
+/** The Library's one bed. It used to sell four, one per size, and the ladder's rungs
+ *  were checked against those rows; the rows are one now (the Inspector resizes), so
+ *  a rung is checked against what that row becomes when its class word is typed. */
+const LIBRARY_BEDS = PART_LIBRARY.filter((i) => i.category === 'bed');
 
 type Row = { w: number; d: number; label: string; key: string | null };
 
@@ -58,12 +60,21 @@ describe('the bed a starter bedroom gets', () => {
   it('never seeds a bed the Library does not sell', () => {
     // The real invariant, and the reason the ladder is a table rather than three
     // literals in `bedroom()`: a seeded room and the Library must agree about what a
-    // Queen is. A rung edited in one place and not the other shows up here.
-    expect(CATALOG_BEDS.size).toBeGreaterThanOrEqual(3);
+    // Queen is. With one Library bed that agreement is the CLASS WORD: "queen bed"
+    // typed into the search arrives at `classSize`'s width, so a seeded Queen must be
+    // that width, the one bed's length and height, and a size its own band keeps.
+    // A rung edited in one place and not the other shows up here.
+    expect(LIBRARY_BEDS).toHaveLength(1);
+    const [bed] = LIBRARY_BEDS;
     for (const r of rows) {
       if (!r.key) continue;
-      expect(CATALOG_BEDS, `${r.w}x${r.d} seeded ${r.label} at ${r.key}, which no Library bed matches`)
-        .toContain(r.key);
+      const word = classSize('bed', r.label).w;
+      expect(word, `${r.label} names no bed size the search knows`).toBeDefined();
+      const want = `${word}x${bed.dimMM[1]}`;
+      expect(r.key, `${r.w}x${r.d} seeded ${r.label} at ${r.key}; the Library's "${r.label.toLowerCase()}" is ${want}`)
+        .toBe(want);
+      const asked: [number, number, number] = [word!, bed.dimMM[1], bed.dimMM[2]];
+      expect(clampDims('bed', bed.shape, asked), `${r.label} is outside the Library bed's own band`).toEqual(asked);
     }
   });
 

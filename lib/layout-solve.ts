@@ -2024,12 +2024,12 @@ function clearsFault(before: number[], after: number[]): boolean {
  *  · a fault falls (`clearsFault`). A piece a few degrees off with nothing wrong is at an
  *    angle someone chose, and the tidy after the pick leaves it too. Not asked, a dining
  *    chair the app left 8° off in the T was squared along with the sofa through the wall.
- *  · no fault rises (`anyWorse`). In the T with the dining table turned 8° as well,
- *    squaring the sofa clears the wall and raises `access`; a swap is the search's to
- *    price.
+ *  · no fault rises (`anyWorse`). In the T with a plant standing by the turned sofa's
+ *    corner, squaring the sofa takes it out of its wall and drives that corner into the
+ *    plant; a swap is the search's to price.
  *  · the room is cheaper by more than `KEEP_EPS`. `pruneMoves` puts back a turn that buys
- *    less, so a candidate holding one can only crowd out a finalist. The T's dining
- *    table turned 8° is that turn: squared, it clears its `access` and buys less.
+ *    less, so a candidate holding one can only crowd out a finalist. A nightstand in the U
+ *    turned 8° is that turn: squared, it clears its overlap and buys 0.43.
  *  Navigation is not asked either way. It is measured on a grid, and in the T a sofa 5°
  *  off, turned back to the angle the preset gives it, lost one cell and was left through
  *  its wall. It is priced where it always is, when the candidate is rated, and

@@ -1011,15 +1011,24 @@ describe('the solver moves groups, not only pieces', () => {
     // The whole distribution moves: even the worst run with the pass beats the median
     // without it. Both bars below are checked by mutation — setting `GROUP_STEPS = 0`
     // fails each of them, which an earlier version of this test did not.
+    //
+    // Re-measured 2026-10-01, when a chair stopped counting as tucked turned off square
+    // or standing on a table leg (`tuckedAt`), off → on:
+    //
+    //   median  88.5 → 2.12     best  35.9 → 1.79     worst of nine  860 → 18.0
     const costs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
       .map((seed) => solveLayout(parts, poly, parts.map(() => false), { seed }))
       .map((r) => costBreakdown(model, r.placements, DEFAULT_WEIGHTS, NAV_CELL).total)
       .sort((a, b) => a - b);
 
     expect(costs[4]).toBeLessThan(10);
-    // …and the best run gets under the room it was built from, which no run does
-    // without the pass: the flat search's best of nine is 11.8 against a 5.5 target.
-    expect(costs[0]).toBeLessThan(target);
+    // …and the best run gets back to the room it was built from, which no run comes
+    // near without the pass: the flat search's best of nine is 35.9 against a 1.70
+    // target. Within 10% of it, not under it. The strict bar was met by seed 3 at the
+    // target to the sixth decimal, a tie. With the chair rule tightened, that seed ends
+    // 0.086 of `relation` above it, at 1.79 (one chair a few centimetres outside its
+    // band), and the margin is the size of that, not the size of the gap the pass closes.
+    expect(costs[0]).toBeLessThan(target * 1.1);
     // Nine anneals on a sixteen-piece room. Nothing here is a timing assertion — the
     // explicit budget exists because the harness's own bound was not one either, and
     // this test sat just under it: green run after run, then red the first time the

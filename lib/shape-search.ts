@@ -28,6 +28,15 @@ const SYNONYM: Record<string, string> = {
   armoire: 'wardrobe',
   dresser: 'wardrobe',
   drawers: 'wardrobe',
+  // A rail is a `clothes-rack`: without these "garment rack" scored the Shoe rack on
+  // `rack` and the rail on `rack` alone, a tie the Library's order broke the wrong way.
+  garment: 'clothes',
+  clothing: 'clothes',
+  // Size classes that were Library rows until the beds merged. Only the two that name
+  // nothing but a bed: "double" and "single" describe wardrobes and chairs too, and are
+  // read as sizes by `classSize` once the bed is found by its own word.
+  king: 'bed',
+  queen: 'bed',
   bookcase: 'bookshelf',
   shelving: 'bookshelf',
   shelves: 'bookshelf',
@@ -90,8 +99,8 @@ export function hayTokens(item: LibraryItem): string[] {
  *  Without it a query that IS a catalogue name ties with every item merely holding
  *  that word as a token, and the tie is then broken by however `PART_LIBRARY` happens
  *  to be ordered: typing `Door` — the exact, complete name of a shipped item —
- *  returned **French door fridge**, because `door` scores 3 against both and the
- *  fridge is listed first. A ranking decided by array order is not a ranking.
+ *  returned **French door fridge** (a row since merged into Fridge), because `door`
+ *  scores 3 against both and the fridge was listed first. A ranking decided by array order is not a ranking.
  *
  *  It cannot widen a result set, which is what keeps the measured query-space
  *  ceilings in `tests/shape-search.test.ts` honest: an exact label match means every
@@ -167,6 +176,39 @@ export function parseDims(text: string): { w?: number; d?: number; h?: number } 
   return {};
 }
 
+/** The size CLASS a word names, for the catalogue rows that a class used to be.
+ *
+ *  The Library had four beds and two fridges that differed only in size, and they
+ *  were merged into one row each because the Inspector already resizes and the rows
+ *  looked alike. What the merge must not lose is the words: `king bed` arrived 1800
+ *  wide because it found the King row, and with no King row it would arrive at the
+ *  one bed's 1400 with nothing said. So the class words are sizes now, read before
+ *  the numbers — `queen bed 150cm` is 1500 wide, because a number the user typed is
+ *  more specific than a word they typed. Widths are the EU mattress sizes the old
+ *  rows carried, the fridge is the old French-door row. */
+const CLASS_SIZES: ReadonlyArray<{ category: Category; word: RegExp; size: { w?: number; d?: number; h?: number } }> = [
+  { category: 'bed', word: /\b(?:super\s*king|king)\b/, size: { w: 1800 } },
+  { category: 'bed', word: /\bqueen\b/, size: { w: 1600 } },
+  { category: 'bed', word: /\bdouble\b/, size: { w: 1400 } },
+  { category: 'bed', word: /\b(?:single|twin)\b/, size: { w: 900 } },
+  { category: 'fridge', word: /\b(?:french|american|side[\s-]*by[\s-]*side)\b/, size: { w: 910, d: 720, h: 1780 } },
+];
+
+/** The size a class word in `text` names for a `category` — `{}` when it names none.
+ *  Exported because the seeded bedroom's ladder has to mean the same Queen the search
+ *  does (`tests/bed-ladder.test.ts`). */
+export function classSize(category: Category, text: string): { w?: number; d?: number; h?: number } {
+  const t = text.toLowerCase();
+  return CLASS_SIZES.find((c) => c.category === category && c.word.test(t))?.size ?? {};
+}
+
+/** The sizes `query` names for `item`: its class words, then its numbers on top. */
+function askedSize(item: LibraryItem, query: string): { w?: number; d?: number; h?: number } {
+  const cls = classSize(item.category, query);
+  const o = parseDims(query);
+  return { w: o.w ?? cls.w, d: o.d ?? cls.d, h: o.h ?? cls.h };
+}
+
 export type LocalMatch = {
   label: string;
   category: Category;
@@ -179,7 +221,7 @@ export type LocalMatch = {
 export function bestMatch(query: string): LocalMatch | null {
   const [item] = searchLibrary(query, 1);
   if (!item) return null;
-  const o = parseDims(query);
+  const o = askedSize(item, query);
   const dim: Dim3 = clampDims(item.category, item.shape, [
     o.w ?? item.dimMM[0],
     o.d ?? item.dimMM[1],
@@ -304,7 +346,7 @@ export function resolveQuerySize(
   item: LibraryItem,
   query: string,
 ): { dim: Dim3; overruled: { w?: AxisRequest; d?: AxisRequest; h?: AxisRequest } } {
-  const o = parseDims(query);
+  const o = askedSize(item, query);
   const asked: Dim3 = [o.w ?? item.dimMM[0], o.d ?? item.dimMM[1], o.h ?? item.dimMM[2]];
   const dim = clampDims(item.category, item.shape, asked);
   const overruled: { w?: AxisRequest; d?: AxisRequest; h?: AxisRequest } = {};

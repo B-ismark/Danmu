@@ -74,7 +74,8 @@
 import type { Category, Shape, ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { WALK_RADIUS } from './clearance-field';
-import { footFromPart, footOverlap, localToWorld, polygonArea, type Foot } from './geometry';
+import { footFromPart, footOverlap, frontVector, localToWorld, polygonArea, worldToLocal, type Foot, type OBB } from './geometry';
+import { surfacePostsLocal, type LocalRect } from './foot-cells';
 import { dimRangeFor } from './dimension-ranges';
 
 // ─── Roles ──────────────────────────────────────────────────────────────────
@@ -100,6 +101,7 @@ export type Role =
   | 'wardrobe'
   | 'bookshelf'
   | 'shoe-rack'
+  | 'clothes-rack'
   | 'fridge'
   | 'appliance'
   | 'tv'
@@ -133,6 +135,7 @@ const ROLE_BY_SHAPE: Partial<Record<Shape, Role>> = {
   closet: 'wardrobe',
   bookshelf: 'bookshelf',
   'shoe-rack': 'shoe-rack',
+  'clothes-rack': 'clothes-rack',
   fridge: 'fridge',
   'washing-machine': 'appliance',
   microwave: 'appliance',
@@ -451,6 +454,7 @@ const AFFINITY_BY_ROLE: Partial<Record<Role, PlaceAffinity>> = {
   wardrobe: 'prefers-wall',
   bookshelf: 'prefers-wall',
   'shoe-rack': 'prefers-wall',
+  'clothes-rack': 'prefers-wall',
   fridge: 'prefers-wall',
   appliance: 'prefers-wall',
   desk: 'prefers-wall',
@@ -589,6 +593,34 @@ const zone = (
   reason,
 });
 
+/** A bed that sleeps two: from 1.3 m wide, whatever its shape says.
+ *
+ *  Width, not `bed-double`, because the Library has one bed now and it is resized
+ *  from a single to a king — a `bed-double` 900 wide is a single and must be drawn
+ *  and judged as one. 1.3 m sits between the two shapes' bands (a `bed-single` stops
+ *  at 1200, a `bed-double` used to start at 1350), so no bed that existed before the
+ *  merge changes its answer. Read by the drawing (pillows) and by the bedside rule
+ *  below (one side to get out of, or two), which used to ask the shape each. */
+export const SLEEPS_TWO_MM = 1300;
+export function sleepsTwo(part: { dimMM: readonly number[] }): boolean {
+  return part.dimMM[0] >= SLEEPS_TWO_MM;
+}
+
+/** A bed's pillows at a width: their own width and where each sits across the bed,
+ *  metres. Two side by side once it sleeps two, one centred below that.
+ *
+ *  A COUNT chosen off an absolute, which is § 36's module form — so `bed-double` is in
+ *  `PARAMETRIC_SHAPES`, and this is here rather than in `BedGeo` so the caps table
+ *  can reach it. Drawn at the authored size and group-scaled, a Library bed (1400,
+ *  two pillows) narrowed to 900 kept two pillows while the bedside rule beside this
+ *  one was already judging it a single. */
+export function bedPillows(widthMM: number): { w: number; xs: number[] } {
+  const w = widthMM / 1000;
+  return sleepsTwo({ dimMM: [widthMM] })
+    ? { w: w * 0.42, xs: [-w * 0.22, w * 0.22] }
+    : { w: w * 0.5, xs: [0] };
+}
+
 const ACCESS_BY_ROLE: Partial<Record<Role, RuleSpec>> = {
   // Hinged doors and deep drawers: 600 mm is the figure that lets the door past
   // you and your arm past the door.
@@ -596,13 +628,16 @@ const ACCESS_BY_ROLE: Partial<Record<Role, RuleSpec>> = {
   fridge: () => [zone('front', 'Fridge door can’t open', ['front'], 0.6, 'to open the door and reach inside', { span: 1 })],
   bookshelf: () => [zone('front', 'Can’t stand at the shelves', ['front'], 0.6, 'to stand and read the spines', { span: 1 })],
   'shoe-rack': () => [zone('front', 'No room at the shoe rack', ['front'], 0.45, 'to stand there and put shoes on')],
+  // Open, so no door to swing — but a hanger comes off the rail toward you, and you
+  // stand back to see what is on it: the wardrobe's 600 mm without the door's reason.
+  'clothes-rack': () => [zone('front', 'No room at the clothes rail', ['front'], 0.6, 'to take a hanger off and look along the rail', { span: 1 })],
   appliance: () => [zone('front', 'Can’t reach the front of it', ['front'], 0.5, 'to reach the front of it')],
 
   // A bed needs a strip you can walk down and make it from. Both sides for a
   // double, because two people get out of it in two directions.
   bed: (p) => [
     zone('bedside', 'Bed hard to get into', ['left', 'right'], 0.5, 'to get in and make the bed', {
-      atLeast: p.shape === 'bed-double' ? 2 : 1,
+      atLeast: sleepsTwo(p) ? 2 : 1,
       span: 0.8,
     }),
   ],
@@ -786,6 +821,13 @@ export interface TuckProfile {
    *  `tuckMM` — a dining chair's back, an office chair's backrest. 0 for a seat with
    *  nothing taller than its tuck, and for every surface. `tuckedAt` reads it. */
   backShare: number;
+  /** For a surface: what it stands on (`surfacePostsLocal`), in its own frame, metres —
+   *  the legs and panels a seat tucked under it may not pass through. `[]` for a seat. */
+  posts: LocalRect[];
+  /** For a seat: whether it only tucks pushed in square to the edge and facing in.
+   *  A dining chair, whose back and legs are square to its seat; not an office chair,
+   *  which swivels, nor a seat with no back. `tuckedAt` reads it. */
+  square: boolean;
 }
 
 type RoleInput = Parameters<typeof roleOf>[0];
@@ -799,7 +841,47 @@ export function tuckProfile(part: RoleInput): TuckProfile {
     kneeMM: surfaceKneeMM(part.shape, role, h),
     heightMM: h,
     backShare: isSeatRole(role) ? seatBackShare(part.shape) : 0,
+    posts: isSeatRole(role) ? [] : surfacePostsLocal(part.shape, role === 'dining-table', part.dimMM[0] / 1000, part.dimMM[1] / 1000),
+    // By SHAPE, not role: a stool's role is `dining-chair` too, and it has no front.
+    square: part.shape === 'chair-dining',
   };
+}
+
+/** How far off square a dining chair may stand and still be tucked in, radians. Under
+ *  one 15° turn step on purpose: a snapped turn away from square is a chair standing
+ *  at the table, not one pushed under it. */
+export const TUCK_SQUARE_RAD = (10 * Math.PI) / 180;
+
+/** Is the seat pushed in square to the edge of the surface it is nearest, and facing
+ *  it? The edge is the one the seat's centre lies beyond, measured against the
+ *  surface's half-extents.
+ *
+ *  Against the nearest of the surface's CELLS when it has them. Measured against the
+ *  box, an L-desk's inside corner is the box's middle, so a chair pushed square into
+ *  the long arm from the notch read as standing beyond the return's end and facing
+ *  the wrong edge — refused, in the one place an L-desk's chair goes. */
+function squareToEdge(seat: Foot, whole: Foot): boolean {
+  const surface = whole.cells?.length ? nearestCell(seat, whole.cells) : whole;
+  const [lx, lz] = worldToLocal(surface.rot, seat.cx - surface.cx, seat.cz - surface.cz);
+  const [fx, fz] = frontVector(seat.rot);
+  const [ux, uz] = worldToLocal(surface.rot, fx, fz);
+  // No surface a seat tucks under is round (`ROUND_SHAPES` has none of them), so the
+  // edge is always one of the box's four.
+  const [nx, nz] = Math.abs(lx) / surface.hw >= Math.abs(lz) / surface.hd ? [Math.sign(lx) || 1, 0] : [0, Math.sign(lz) || 1];
+  // Facing in: the seat's front points along the edge's INWARD normal.
+  return -(ux * nx + uz * nz) >= Math.cos(TUCK_SQUARE_RAD);
+}
+
+/** The cell whose box the seat's centre is nearest — inside one is distance 0. */
+function nearestCell(seat: Foot, cells: readonly OBB[]): OBB {
+  let best = cells[0];
+  let bestD = Infinity;
+  for (const c of cells) {
+    const [lx, lz] = worldToLocal(c.rot, seat.cx - c.cx, seat.cz - c.cz);
+    const d = Math.hypot(Math.max(0, Math.abs(lx) - c.hw), Math.max(0, Math.abs(lz) - c.hd));
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return best;
 }
 
 function seatBackShare(shape: Shape): number {
@@ -908,11 +990,31 @@ export function seatBackFoot(seat: Foot, backShare: number): Foot | null {
  * would call a clash. A seat whose whole height clears the knee has no back to worry
  * about, and neither does a stool. The strip is taken from `tuckMM`, not from the knee:
  * everything taller than the tuck, which covers everything taller than the knee.
+ *
+ * Two more things the pair must satisfy, both looked at on 2026-10-01 with a dining
+ * chair turned 30° and slid under the Library's table. **A seat never stands where the
+ * surface's legs are** (`posts`, from `surfacePostsLocal` — the same rectangles the
+ * renderer builds the legs from): the knee room is between the legs, and a chair slid
+ * along the edge into the corner went through one. And **a dining chair tucks only
+ * square to the edge and facing in** (`square`, within `TUCK_SQUARE_RAD`): turned, its
+ * back and its legs swing across the apron and the next leg, and a chair at an angle
+ * at a table is one standing beside it, not one pushed in. An office chair swivels, so
+ * it is held to its back and the legs and not to its angle.
  */
 export function tuckedAt(a: TuckProfile, footA: Foot, b: TuckProfile, footB: Foot): boolean {
   if (!profilesTuck(a, b)) return false;
   const [seat, seatFoot, surface, surfaceFoot] = isSeatRole(a.role) ? [a, footA, b, footB] : [b, footB, a, footA];
+  // Asked before the height test: a stool low enough to go wholly under a top still
+  // cannot stand where its leg is.
+  for (const r of surface.posts) {
+    const [dx, dz] = localToWorld(surfaceFoot.rot, (r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2);
+    const post: Foot = { cx: surfaceFoot.cx + dx, cz: surfaceFoot.cz + dz, hw: (r.x1 - r.x0) / 2, hd: (r.z1 - r.z0) / 2, rot: surfaceFoot.rot };
+    if (footOverlap(seatFoot, post, -0.01)) return false;
+  }
+  // After it: a seat wholly under the knee room has nothing to swing across the apron,
+  // whichever way it faces — only the legs, above.
   if (seat.heightMM <= surface.kneeMM) return true;
+  if (seat.square && !squareToEdge(seatFoot, surfaceFoot)) return false;
   const back = seatBackFoot(seatFoot, seat.backShare);
   // The pad `collidesAt` passes, so a back flush with the table's edge is touching.
   return !back || !footOverlap(back, surfaceFoot, -0.01);

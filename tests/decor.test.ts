@@ -300,4 +300,5 @@ describe('every surface in the Library', () => {
   });
 });
 
-const SURFACE_COUNT = 9;
+// 10 since "Dining / desk table" became a Dining table and a Desk — two rows, one shape.
+const SURFACE_COUNT = 10;

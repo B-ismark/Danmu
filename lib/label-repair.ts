@@ -27,6 +27,7 @@ import { cutAxes, type ReadBounds } from './photo-geometry';
 import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
 import { formatDim, formatDimDown } from './units';
+import { classSize } from './shape-search';
 import type { DimUnit } from './store';
 
 /** The axis names this module reasons about. Never depth — see `sizeFitsLabel`. */
@@ -261,7 +262,14 @@ const KINDS = new Map<Category, Kinds>();
 
 /** The kinds a category's pieces come in: a bed is a single or a double bed, a lamp
  *  a floor, table or pendant lamp. Read off the Library, leaving out `box` and any
- *  row whose name would build something other than its own shape. */
+ *  row whose name would build something other than its own shape.
+ *
+ *  "Would build" is asked WITH the row's shape carried, because a candidate carries it
+ *  (`LabelCandidate.detection.shape`) and a name that names no kind defers to a carried
+ *  shape (`sceneShapeFor`). Asked without it, the Library's one "Bed" — a `bed-double`
+ *  the Inspector resizes from a single to a king, since the four size rows merged —
+ *  read as building the plain single, so it was left out and the bed kinds shrank to
+ *  the single alone: a 1.56 m bed the photo called a sofa was never offered as a bed. */
 function kindsOf(c: Category): Kinds {
   const known = KINDS.get(c);
   if (known) return known;
@@ -269,7 +277,7 @@ function kindsOf(c: Category): Kinds {
   const k: Kinds = { plain, plainNames: [], variants: [] };
   const seen = new Set<Shape>([plain, 'box']);
   for (const p of PART_LIBRARY) {
-    if (p.category !== c || sceneShapeFor(c, p.label, undefined) !== p.shape) continue;
+    if (p.category !== c || sceneShapeFor(c, p.label, p.shape) !== p.shape) continue;
     if (p.shape === plain) k.plainNames.push(p.label.toLowerCase());
     else if (!seen.has(p.shape)) {
       seen.add(p.shape);
@@ -280,13 +288,19 @@ function kindsOf(c: Category): Kinds {
   return k;
 }
 
-/** Whether `label` names a kind of `c` — one of its keywords, or the plain kind by
- *  its Library name. The plain kind has no keyword, being what no keyword builds, so
- *  without the second half "single bed" read as a bed of no particular size. */
+/** Whether `label` names a kind of `c` — one of its keywords, the plain kind by its
+ *  Library name, or a size class ("single", "queen"). The plain kind has no keyword,
+ *  being what no keyword builds, so without the last two "single bed" read as a bed of
+ *  no particular size. The size words are the half that outlived the Library's rows:
+ *  "single bed" was a row's name until the beds merged, and is a class word now. */
 function namesAKind(c: Category, label: string): boolean {
   const k = kindsOf(c);
   const l = label.toLowerCase();
-  return sceneShapeFor(c, label, undefined) !== k.plain || k.plainNames.some((n) => l.includes(n));
+  return (
+    sceneShapeFor(c, label, undefined) !== k.plain ||
+    k.plainNames.some((n) => l.includes(n)) ||
+    Object.keys(classSize(c, label)).length > 0
+  );
 }
 
 /** A candidate's place in the list: the more comfortable fit first.

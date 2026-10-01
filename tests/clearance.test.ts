@@ -432,7 +432,7 @@ describe('analyzeRoom · a piece that cannot be made to fit at all', () => {
     // the loop walks cannot fail when the list is gutted. Both sides must be
     // non-zero or one of the two branches is going untested.
     expect(stuck).toBe(1);
-    expect(shrinkable).toBe(12);
+    expect(shrinkable).toBe(13); // 13 with the clothes rail, whose 900 mm floor clears 1.8 m
   });
 });
 
