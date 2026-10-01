@@ -101,6 +101,33 @@ describe('the room is closed to the sun', () => {
   });
 });
 
+// The skirting was a flat sheet laid ON the wall's face — two surfaces on one plane,
+// facing the same way, which the depth buffer cannot order: the sawtooth at the base of
+// every wall in the user's 2026-10-01 report. `tests/coplanar-faces.test.tsx` walks
+// `PartGeometry`, not this file, so the guard for the room's own half lives here.
+describe('the skirting stands proud of the wall it runs along', () => {
+  const skirting = meshBlock('key={`sk-');
+  const proud = /const SKIRTING_PROUD = ([\d.]+);/.exec(SHELL);
+
+  it('is a board, not a sheet on the plaster', () => {
+    expect(skirting).not.toBeNull();
+    expect(skirting).toContain('<boxGeometry args={[b - a, SKIRTING_H, SKIRTING_PROUD]} />');
+    expect(skirting).not.toContain('planeGeometry');
+  });
+
+  it('sits wholly on the room side: its back face on the plaster, not through it', () => {
+    // Centred half its thickness along the inward normal, so its back face IS the
+    // wall's face — which is a pair facing opposite ways, and nothing fights.
+    expect(SHELL).toContain('const out = SKIRTING_PROUD / 2;');
+    // With the sign: `- out` builds the same board 12 mm INSIDE the plaster.
+    expect(skirting).toContain('+ out * Math.sin(wl.yaw)');
+    expect(skirting).toContain('+ out * Math.cos(wl.yaw)');
+    // Thick enough to be a face of its own, and under `WALL_GAP` (20 mm), so a piece
+    // snapped flush to a wall still clears it.
+    expect(Number(proud?.[1])).toBe(0.012);
+  });
+});
+
 describe('the per-piece shadow gate is gone, not merely unused', () => {
   // The removed-vocabulary check, kept as a gate rather than run once by hand.
   // `lib/sun-shadow.ts` was a workaround for a room with no ceiling: it asked, per

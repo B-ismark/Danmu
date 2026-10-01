@@ -78,6 +78,33 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
+### No more stripes where two parts of a piece meet — this branch, NOT LOOKED AT
+
+The user's report on 2026-10-01: *"the shadow issue is across the platform, the lower part of
+the room, the bed model, the edges of the wardrobe."* **Not shadows** — the key light's shadow
+off, a 4k shadow map and three times the bias all left every stripe where it was. Each was two
+surfaces drawn on one plane, facing the same way, which the depth buffer cannot order: the
+skirting was a flat sheet laid on the wall's own face (now a board 12 mm proud,
+`components/three/RoomShell.tsx`); the bed's duvet ended exactly on the mattress's front face,
+and its frame shared the headboard's side faces; the wardrobe was five full-size slabs sharing
+every outer face, its doors in the plane of its sides' front edges. A sweep of the whole
+catalogue at three sizes (`tests/coplanar-faces.test.tsx`) found the same thing in **fifteen**
+shapes — also the sofa, closet, bookshelf, TV console, both chairs, armchair, window, laptop and
+fridge — and every one is set back by `SEAM` (2 mm) now or built the way the real joinery is
+(a carcass's top BETWEEN its sides). Re-rendered headless with shadows and AO on: the bed's foot
+and the wardrobe's edges are clean.
+
+**Where to click.** The default bedroom, 3D. Look at the foot of the bed from the side, the
+wardrobe's corners and door edges, and where every wall meets the floor; then add a sofa, a
+bookshelf, a TV console and a window and orbit each slowly at arm's length.
+
+**What right looks like.** Edges are straight lines that hold still as you orbit. *Wrong* looks
+like: a sawtooth, a dashed seam, or a stripe that crawls when the camera moves. One known
+non-defect: from across the room the skirting's 12 mm top can read as a broken highlight,
+because it is thinner than a pixel there; up close it is one line.
+
+**Where it rides.** `components/three/DynamicPart.tsx`, `components/three/RoomShell.tsx`.
+
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
 **What is already settled.** A newly added fan hangs flush: looked at on the preview and fine.
@@ -128,6 +155,29 @@ three.js object with **no DOM**, so nothing in Playwright can aim a press at its
 the 2D half of that defect **is** browser-checked and is not in this list. The refusal
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
+
+### A print swapped for curtains hangs flat on the print's wall — this branch, NOT LOOKED AT
+
+The user's report on 2026-10-01: *"when you replace a painting with curtain while in 2d plan
+mode, curtains spawns in the wrong degree and ends up going through th wall."* Two halves, and
+both came from **Change the model** keeping the old piece's spot as-is. It kept the print's
+centre, 35 mm off the plaster, and the curtain needs 150 mm. And it threw away the turn that
+faced the print into the room, so on any wall where the drag had done the turning, the curtain
+came back at the room's original angle, crossways. The swap now hangs every wall piece the way
+adding one does (`snapToWall`, using the new piece's own depth and standoff), on the wall the
+old one was on. `tests/swap-model.test.ts` holds both halves, and checks that a print already
+square to its wall gets no new turn written.
+
+**Where to click.** Use the 2D plan. Drag a print onto a side wall (east or west, because the
+north wall hides the turn half). Right-click it, choose **Change the model…**, then pick
+Curtain. Repeat once from the 3D tab and once with a door.
+
+**What right looks like.** The curtain lies along the wall the print was on, at the same point
+along it, with its back just off the plaster, and in 3D it hangs flat with the folds facing
+into the room. *Wrong* looks like a curtain drawn across the wall in the plan, or poking
+through the wall in 3D.
+
+**Where it rides.** `lib/swap-model.ts`.
 
 ### Arrow keys move a piece off the line it is lined up on, and land it flush — this branch (§ H.6.8), NOT LOOKED AT
 
@@ -201,35 +251,7 @@ near the near wall.
 **Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half and the
 wall-from-the-pointer fix in `32ccdca` (PR #200).
 
-### A selected wall piece seen from behind its wall has a clean back — `32ccdca` on `main` (PR #200), NOT LOOKED AT
-
-The user looked at *a selected piece stays in view on the cut-away wall* on 2026-09-30 and
-it was right, except for *"some weird shading issue going on with the tv's back when viewing
-from the wall while it's selected"* — diagonal dark stripes across it. **Not a shadow, and
-not ambient occlusion:** a probe that switched the shadow map and then the whole post pass
-off kept the stripes. It was the frosted selection base. A wall piece's base stood ON the
-plaster, and the piece's back is on the plaster too, so the two shared one plane; from inside
-the room that face is turned away and never drawn, and seen through the cut-away wall it was
-the face on screen, the base's white and the TV's black fighting over it pixel by pixel. The
-base now stands `BASE_LIFT` (2 mm) off its wall, as the floor's always did, and the ceiling's
-2 mm under the slab (`lib/selection-base.ts`). And it is never thicker than the piece it is
-behind, which it used to be on anything under 24 mm deep: a 15 mm mirror wore the base's
-frosted face 11 mm in front of its glass. Re-rendered headless with shadows and AO on: the
-TV's back is one solid panel inside its rim. The mirror half is arithmetic only.
-
-**Where to click.** Rectangle, default 3D view. Put a **TV** on the near (cut-away) wall and
-select it from the rail's **Catalog**, then orbit a little either way. Then a **ceiling
-light**, selected, from a camera pulled up high.
-
-**What right looks like.** The TV's back is one even dark panel with the frosted rim round
-it, and stays even as you orbit. From inside the room the TV looks exactly as before: the
-rim round its edge, nothing on its screen. *Wrong* looks like: stripes or a jagged dark
-triangle on the back, a frosted sheet over the back, or — select a **mirror** from inside the
-room — a frosted veil over its glass rather than a rim round its edge.
-
-**Where it rides.** `lib/selection-base.ts`, `components/three/Highlight.tsx`.
-
-### A small wall piece turned in a corner stays on its own wall — `32ccdca` on `main` (PR #200), NOT LOOKED AT
+### A small wall piece turned in a corner stays on its own wall — merged to `main` in `32ccdca` (PR #200), NOT LOOKED AT
 
 Found in review, 2026-10-01: a 300–500 mm painting pushed flush into a corner and turned
 (**R**, or the plan's turn) went 0.16–0.30 m round onto the next wall, in four of the eight
