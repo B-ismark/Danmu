@@ -223,8 +223,9 @@ along the piece's own width, with a 5 cm gap, and is dropped the way a drag drop
 they don't consider whether they're clipping with an object."* A copy was checked the way a
 drag is, and a drag forgives two things on purpose: a chair pushed in under a table, and a short
 piece stepping up onto a tall one. So a chair's copy could land half under the table and a
-nightstand's copy on the bed. Now a copy has to touch nothing, and stand on what the original
-stands on. When nothing beside it is clear, the rest of the room is searched, nearest spot
+nightstand's copy on the bed. Now a copy has to touch nothing it could bump into (a rug or a
+curtain bumps into nothing, so a rug's copy may still lie over another rug), and stand on what
+the original stands on. When nothing beside it is clear, the rest of the room is searched, nearest spot
 first. A lamp copied off a full nightstand goes on the other nightstand, or on the floor beside
 it, never on the bed. Every piece of every starter room is copied in the test, and none touches
 anything.
@@ -243,10 +244,15 @@ bed and nightstands arrive as a set, in the same formation. The chair's copy sta
 table, not under it. The T's sofa copy goes to the nearest open floor, even if that is a little
 way off. The U's lamp copy stands on the floor beside the nightstand, which has room for one
 lamp. Only when nothing in the whole room is clear does the copy overlap something, and then it
-is outlined red and the message reads *"No clear space beside it, so the copy overlaps
-something."* *Wrong* looks like a copy you cannot see because it is inside the original, a copy
-overlapping another piece while there is open floor, a lamp's copy in mid-air or on the bed, or
-a set scattered across the room.
+is outlined red and the message reads *"No clear space left in the room, so the copy overlaps
+something."* Even then it stays on the floor, never on top of the piece in its way, and pressing
+Duplicate again and again spreads the copies into whatever gaps are left rather than piling them
+in one spot. *Wrong* looks like a copy you cannot see because it is inside the original, a copy
+overlapping another piece while there is open floor, a lamp's copy in mid-air or on the bed, a
+bed's copy standing on another bed, copies piled into one spot, or a set scattered across the
+room. Also try a lamp you moved off its nightstand onto the floor: its copy goes beside it on
+the floor, not back onto the nightstand. And select every piece in the room and duplicate: it
+should answer at once, not freeze.
 
 **Where it rides.** `lib/duplicate-place.ts`, `components/studio/KeyboardShortcuts.tsx`.
 

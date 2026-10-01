@@ -10334,8 +10334,8 @@ printed.
 
 ## § 50 · Four limits the swap and duplicate follow-up left in place — MEASURED 2026-10-01, NOT FIXED
 
-All three are in the commit that fixed the U-arm containment (`wallDeficits` counting only
-walls the piece can see, `lib/layout-settle.ts`). Each is written down so it does not get
+The first three are in the commit that fixed the U-arm containment (`wallDeficits` counting only
+walls the piece can see, `lib/layout-settle.ts`); the fourth is the swap's. Each is written down so it does not get
 re-found as a regression. **This paragraph first said "none is a regression", and review
 disproved it:** counting only the walls a piece can see let a TURNED piece in a U's inner
 corner bounce between that corner's two walls, and the walk toward the middle crossed the

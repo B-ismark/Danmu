@@ -24,7 +24,6 @@ import { v4 as uuid } from 'uuid';
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRiderRelation, currentRoomScene, useRoomScene } from '@/lib/room-scene';
-import { riderRelation } from '@/lib/rider-height';
 import { turnInPlace, turnSwingsInto, refusalCause } from '@/lib/drag-resolve';
 import { planConvoy, travellingWorld } from '@/lib/drag-convoy';
 import { cascadeTransform, snapshotDescendants } from '@/lib/rigid-parent';
@@ -301,14 +300,7 @@ export function duplicateSelection(explicit?: string[]) {
     .map((id) => ({ base: sc.parts.find((p) => p.id === id), eff: live.find((p) => p.id === id) }))
     .filter((x): x is { base: ScenePart; eff: ScenePart } => !!x.base && !!x.eff);
   if (pairs.length === 0) return;
-  const links = riderRelation(sc.parts, useStudio.getState().parentIds);
-  const { spots, clear } = placeCopies(
-    pairs.map((x) => x.eff),
-    live,
-    sc.room.footprint,
-    sc.room.height,
-    links,
-  );
+  const { spots, clear, beside } = placeCopies(pairs.map((x) => x.eff), live, sc.room.footprint, sc.room.height);
 
   const created: string[] = [];
   const copyOf = new Map<string, string>();
@@ -327,28 +319,33 @@ export function duplicateSelection(explicit?: string[]) {
     copyOf.set(base.id, copy.id);
     created.push(copy.id);
   });
-  // A copy of a rider is a rider — of the COPY of its support when that was copied
-  // too, else of the same support. `pos` above came from `currentRoomScene()` and the
-  // drop, so it carries the height the support is at; without the relation the copy
-  // is severed from the piece it stands on: shrink the desk back and the original
-  // returns while the copy stays where it was. If the copy landed clear of the
-  // support `stillOver` drops the edge on the next read.
-  for (const { base } of pairs) {
-    const on = links[base.id];
-    if (on) useStudio.getState().setParent(copyOf.get(base.id)!, copyOf.get(on) ?? on);
-  }
+  // A copy of a rider is a rider — of whatever the COPY landed on, which is not always
+  // what its original rides: a lamp off a full nightstand goes onto the other one, and
+  // one copied with its desk onto the desk's copy. Linking it to the original's support
+  // instead wrote an edge that overrode the right one, so dragging the nightstand it
+  // actually stood on left it in the air. Without the relation at all the copy is
+  // severed from its support: shrink the desk back and the original returns while the
+  // copy stays where it was.
+  pairs.forEach(({ base }, i) => {
+    const on = spots[i].support;
+    if (!on) return;
+    const target = on.copy ? copyOf.get(on.id) : on.id;
+    if (target) useStudio.getState().setParent(copyOf.get(base.id)!, target);
+  });
 
   useStudio.getState().setSelection(created, created[created.length - 1]);
   if (clear) {
-    announce(created.length === 1 ? 'Copy added beside it and selected.' : `${created.length} copies added beside them and selected.`);
+    // "Beside" only when it is: the room search can put a copy metres away.
+    const where = beside ? (created.length === 1 ? ' beside it' : ' beside them') : '';
+    announce(created.length === 1 ? `Copy added${where} and selected.` : `${created.length} copies added${where} and selected.`);
   } else {
     // Rule 2: when it does not fit, say so. The copy is made — a Duplicate that does
     // nothing reads as broken — and outlined red where it stands.
     paintRefusal(created);
     announce(
       created.length === 1
-        ? 'No clear space beside it, so the copy overlaps something. Move it somewhere clear.'
-        : 'No clear space beside them, so the copies overlap something. Move them somewhere clear.',
+        ? 'No clear space left in the room, so the copy overlaps something. Move it somewhere clear.'
+        : 'No clear space left in the room, so the copies overlap something. Move them somewhere clear.',
     );
   }
 }

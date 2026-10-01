@@ -13,7 +13,7 @@
 // own test — `tests/seat-swap.test.tsx`, for the outline and the turn both.
 
 import { describe, expect, it } from 'vitest';
-import { findSupportDetailed } from '@/lib/physics';
+import { findSupportDetailed, seeksSurface, SURFACE_PIECE_MAX_MM } from '@/lib/physics';
 import { placeNewPart, type ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
 
@@ -78,5 +78,19 @@ describe('placeNewPart: only a tabletop-sized piece stands on what is under it',
     const r = placeNewPart(cat, shape, [...dim], ROOM, [bed], [0, 0]);
     expect(r.pos[1]).toBe(0);
     expect(r.supportId).toBeNull();
+  });
+});
+
+// The two halves of `seeksSurface`, each held on its own. The size alone already turns
+// away every floor lamp in the Library, so the shape clause is only ever reached by
+// one the user has SHRUNK: an 800 mm floor lamp is still a floor lamp.
+describe('seeksSurface: the shape and the size each decide', () => {
+  it('a floor lamp shrunk under a metre still stands on the floor', () => {
+    expect(seeksSurface('lamp', 'lamp-floor', [300, 300, 800])).toBe(false);
+  });
+  it('a metre is the line, both sides of it', () => {
+    expect(SURFACE_PIECE_MAX_MM).toBe(1000);
+    expect(seeksSurface('plant', 'plant', [300, 300, SURFACE_PIECE_MAX_MM])).toBe(true);
+    expect(seeksSurface('plant', 'plant', [300, 300, SURFACE_PIECE_MAX_MM + 1])).toBe(false);
   });
 });
