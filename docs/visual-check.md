@@ -129,6 +129,43 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
+### Arrow keys move a piece off the line it is lined up on, and land it flush — this branch (§ H.6.8), NOT LOOKED AT
+
+With the snap on, a piece standing flush with another could not be moved away from it with
+the arrow keys: each press was pulled straight back. A press now goes one step and stops on
+the first line it meets, a neighbour's edge or centre. Tests hold the steps; nobody has
+pressed the keys in a browser.
+
+**Where to click.** Any room with starter furniture, snap left at its default (**Fine**). In
+the 2D Plan, drag a chair beside a cabinet or wardrobe until it snaps flush against its side,
+and let go. Press the arrow key that moves it away, a few times, then the one that brings it
+back, and keep pressing once it is back. Then do the same on **Coarse**. On a laptop, the snap
+setting is the **Snap · Fine** button in the 3D Model tab's toolbar, which steps to Coarse
+when you click it; the 2D Plan has no control of its own for it. On a phone it is **More (⋯)
+→ Snap when dragging**.
+
+**What right looks like.**
+- Every press away moves the chair one step: 1 cm, or 5 cm on **Coarse**.
+- On the way back it stops exactly against the cabinet, even when the last gap is shorter
+  than a step.
+- Once it is touching, a press toward the cabinet does not move it, and a screen
+  reader hears "cannot go any further that way" — once, even with the key held down.
+  Nothing turns red.
+- Next to a round table, or a sofa turned to 45°, the chair keeps moving until it
+  really meets the furniture, rather than stopping in the air at the corner of the
+  table's square.
+- A dining chair facing its table goes on under it, a press at a time, as dragging it
+  does. Turned with its back to the table, it stops at the table's edge.
+- A mouse drag still pulls the chair flush when you let go close to the cabinet.
+- Select two chairs that are nearly, not quite, lined up (shift-click) and arrow them
+  together: every press moves both a whole step.
+
+**What wrong looks like.**
+- A press away that does nothing, or one that jumps several centimetres, or one that
+  moves a hair — a millimetre or less.
+- On Coarse, the chair stopping a few centimetres short of the cabinet and staying there.
+- The chair ending even slightly inside the cabinet.
+
 ### A refusal that names the wall instead of an obstruction that is not there
 
 **The judgement this item used to carry is answered.** The user, 2026-09-30: *"Don't
@@ -147,7 +184,7 @@ the way"* when nothing is. The turn reads *"It does not fit at that angle — "*
 same clause. Put a wardrobe where a normal-width curtain wants to go: that one should
 still say "something is in the way".
 
-**It also used to vanish, and that is fixed on this branch — NOT LOOKED AT.** Looked at
+**It also used to vanish, and that is fixed in `32ccdca` on `main` (PR #200) — NOT LOOKED AT.** Looked at
 2026-09-30: dragged sideways the 5 m curtain *"wasn't moving"*, and pulled toward the
 camera it *"disappeared from my screen"*. Both were one defect. The room clamp was taken
 at the curtain's old angle before its wall was chosen, so it was held to the middle metre
@@ -162,9 +199,9 @@ middle of its wall while the pointer is at a corner, or gone with the pointer no
 near the near wall.
 
 **Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half and the
-wall-from-the-pointer fix on this branch.
+wall-from-the-pointer fix in `32ccdca` (PR #200).
 
-### A selected wall piece seen from behind its wall has a clean back — this branch, NOT LOOKED AT
+### A selected wall piece seen from behind its wall has a clean back — `32ccdca` on `main` (PR #200), NOT LOOKED AT
 
 The user looked at *a selected piece stays in view on the cut-away wall* on 2026-09-30 and
 it was right, except for *"some weird shading issue going on with the tv's back when viewing
@@ -192,7 +229,7 @@ room — a frosted veil over its glass rather than a rim round its edge.
 
 **Where it rides.** `lib/selection-base.ts`, `components/three/Highlight.tsx`.
 
-### A small wall piece turned in a corner stays on its own wall — this branch, NOT LOOKED AT
+### A small wall piece turned in a corner stays on its own wall — `32ccdca` on `main` (PR #200), NOT LOOKED AT
 
 Found in review, 2026-10-01: a 300–500 mm painting pushed flush into a corner and turned
 (**R**, or the plan's turn) went 0.16–0.30 m round onto the next wall, in four of the eight
@@ -603,7 +640,7 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
   exemption. A tucked chair travels only as part of a set. This bullet was written from
   the room report's rule, not from a drag, and "as before" described nothing that had
   ever happened.
-- **Decided since, and this bullet is the one to look at — this branch, NOT LOOKED AT.**
+- **Decided since, and this bullet is the one to look at — `32ccdca` on `main` (PR #200), NOT LOOKED AT.**
   The user chose "make the drag match Room check" (§ 17). Drag the dining chair, alone,
   into its table from the front: it slides in under the top and stays on the floor,
   with no *blocked* tag. Keep pushing and it stops about where 85% of the seat is under
@@ -674,7 +711,7 @@ and open **Room check**. Then ungroup it, group the sofa with an armchair instea
   look. The other part is whether an empty gallery reads as broken. The user chose that
   it says the group moves as one; that sentence is not built yet.
 
-### A lamp goes where its nightstand goes — this branch (§ H.6.7), NOT LOOKED AT
+### A lamp goes where its nightstand goes — `1452946` on `main` (PR #202, § H.6.7), NOT LOOKED AT
 
 Move a nightstand and the lamp on it used to stay behind, floating at nightstand height.
 It happened to every lamp the room came with, because nothing had linked it yet. Tests
@@ -703,7 +740,7 @@ desk, then press **Floor**.
 - A lamp that jumps to the nightstand only after you let go.
 - A lamp that follows the nightstand it was moved off, and not the one it is on.
 
-### Fix squares a slightly turned sofa where it stands — this branch (§ H.6.6), NOT LOOKED AT
+### Fix squares a slightly turned sofa where it stands — `76eaee1` on `main` (PR #201, § H.6.6), NOT LOOKED AT
 
 Turn the sofa a few degrees and press **Fix**, and it could come back somewhere else in the
 room, sometimes facing away from the TV. Fix now also tries the room as it stands with the
@@ -2103,7 +2140,7 @@ the typical width error 19% → 10%; with the room skipped, short 10 → 6 and o
 real phone, with a real scan, is the unlooked-at half.
 
 ---
-### A scanned seat stays on the floor, and nothing climbs the tray on it — this branch (§ H.6.4 follow-ups), NOT PROBED
+### A scanned seat stays on the floor, and nothing climbs the tray on it — `0aa19b2` on `main` (PR #195, § H.6.4 follow-ups), NOT PROBED
 
 Two things the scan's tidy-up used to do to a seat, both only in a scanned room. A tray
 resting on an ottoman lifted the ottoman onto the tray, and the tray onto that, both in the
@@ -2129,7 +2166,7 @@ tray on an ottoman. Open the result in 3D and open Room check.
 dragging any ottoman over one does. Whether a drag should keep it down is an open decision
 in `docs/what-is-still-open.md`. A desk with a riser and a monitor scanned together may put
 the riser on top of the monitor when the monitor was listed first — filed there too, with
-two more of the same kind that are older than this branch: a tray across a coffee table and
+two more of the same kind that are older than `0aa19b2`: a tray across a coffee table and
 a box beside it can lift the box onto the tray, and a lamp over a box on a table can end up
 inside the box.
 
@@ -2275,7 +2312,7 @@ cannot answer is a real reply.
   come back.
 - **The part only a real reply answers:** how often a real scan sets pieces aside at all.
 
-### A plant or floor lamp cut by the side of the photo stands where the photo shows it — this branch (§ 49.9), NOT PROBED
+### A plant or floor lamp cut by the side of the photo stands where the photo shows it — `0fb6a27` on `main` (PR #180, § 49.9), NOT PROBED
 
 **Where to click.** *Photograph my real room* → a photo in which a plant, a floor lamp, a
 standing fan or a stool runs off the LEFT or RIGHT side of the frame with its foot still in the
@@ -2289,7 +2326,7 @@ Compare where it stands with the photo: how far out from its wall, and where alo
 - A round piece whose base is ALSO below the photo moving at all. Those stay on the old
   reading on purpose (§ 49.9 in `docs/what-is-still-open.md`).
 - A piece in a corner poking through the side wall, in the plan most plainly. It grows to a
-  typical size toward the cut side and must stop at the wall; the first version of this branch
+  typical size toward the cut side and must stop at the wall; the first version of PR #180
   did not, and a small plant by the wall came out 400 mm wide and 297 mm into the next room.
 - **The part only a real room answers:** a plant much smaller or larger than a typical one, shot
   level, now stands up to a hand's width off along the wall (on the fixture, 49 → 80 mm on
@@ -2302,7 +2339,7 @@ only, in two rooms at three tilts: along the wall 178 → 103 mm on average, exa
 lens and a typical size, none past the side wall, and the 568 rows cut at the foot as well
 unchanged. No browser run, and no test renders the room.
 
-### Chairs across a table both come back, and a repeat starts unticked rather than vanishing — this branch (§ 46.3), NOT PROBED
+### Chairs across a table both come back, and a repeat starts unticked rather than vanishing — `0fb6a27` on `main` (PR #180, § 46.3), NOT PROBED
 
 **Where to click.** *Photograph my real room* → photograph a dining table with chairs on both
 sides of it, from the wall behind one row of chairs and from a side wall, on a phone that writes
@@ -2323,7 +2360,7 @@ five ways: pieces with no row at all fell from 91 to 2, the two being one curtai
 `tests/distance-doubt.test.ts` holds the two chair pairs. No browser run, and no test drives the
 scan screen with a real photo.
 
-### A piece the photo cut off can still be too big for its word, and says "at least" — this branch (§ 49.5), NOT PROBED
+### A piece the photo cut off can still be too big for its word, and says "at least" — `0fb6a27` on `main` (PR #180, § 49.5), NOT PROBED
 
 **Where to click.** *Photograph my real room* → a photo in which a sofa or a bed runs off the
 LEFT or RIGHT side of the frame with its foot in the picture, and one taken with the phone

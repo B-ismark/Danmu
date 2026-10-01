@@ -38,7 +38,7 @@ import {
 } from '@/lib/drag-resolve';
 import { refusalAfterGesture, turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { useDragLive } from '@/lib/drag-live';
-import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
+import { SAME_M, snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { playSound } from '@/lib/sound';
 import { sizeOf } from '@/lib/sound-cues';
 import { convoyRestore, leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
@@ -314,6 +314,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
    *  answer. Keyed on the blocker rather than incremented, so holding against one
    *  obstacle still says it once. */
   const announcedRef = useRef<string | null>(null);
+  /** Which piece was last told it could go no further, and which way. Its own ref, not
+   *  `announcedRef`: that one belongs to the refusal and is cleared with it, and a key
+   *  pressed during a drag that cleared it wiped the drag's refusal, so the release
+   *  played a drop and the next refused frame said the same refusal again. Keyed on the
+   *  direction so a held key says it once and a press the other way is still answered. */
+  const nowhereRef = useRef<string | null>(null);
   const blockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
 
@@ -585,8 +591,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
     world: ScenePart[],
     /** Where the dragged piece began, so the company can be shifted by the delta. */
     startPos: [number, number, number],
+    /** Where the piece stood before an arrow key, undefined for a drag — see
+     *  `moveTo`'s `gesture`. */
+    nudgeFrom: readonly [number, number] | undefined,
   ) {
-    return resolvePlacement({
+    /** The pipeline with the company shifted to where it goes when this piece stands
+     *  at (sx, sz). */
+    const resolveWith = (sx: number, sz: number) => resolvePlacement({
       part,
       rawX,
       rawZ,
@@ -594,11 +605,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
       dim: part.dimMM,
       parts:
         convoy.travelling.size > 1
-          ? travellingWorld(convoy, world, rawX - startPos[0], rawZ - startPos[2], convoy.own)
+          ? travellingWorld(convoy, world, sx - startPos[0], sz - startPos[2], convoy.own)
           : world,
       footprint: ROOM_DYN.footprint,
       roomHeight: ROOM_DYN.height,
       snapMode,
+      nudgeFrom,
+      company: convoy.travelling,
       // The plan has no live object to read a mount height off, so the stored one
       // is the answer — which is also what keeps a picture at picture height when
       // it is slid along a wall from up here.
@@ -609,6 +622,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // The chairs tucked under a table it is dragging with — see `leadInherited`.
       inherited: leadInherited(convoy, part.rot, part.dimMM),
     });
+    const asked = resolveWith(rawX, rawZ);
+    // The company goes where THIS piece goes, and an arrow key often stops it short of
+    // the step it asked for — flush with a neighbour 3 mm away. Shifted by the whole
+    // step, a member standing flush behind it was 47 mm inside it on a Coarse press,
+    // and the set was refused by its own member. So a press asks again with the
+    // company where the piece actually stopped. Once is the answer: the company is
+    // not among the lines a press stops on, so where it stands cannot move the stop.
+    // A drag keeps its one pass. Its magnet does see the company's lines, so a second
+    // pass is a different question there, and the drag's half of this is filed with
+    // the rest of what a drag owes its company (what-is-still-open § H.6.8).
+    if (!nudgeFrom || convoy.travelling.size <= 1) return asked;
+    if (asked.pos[0] === rawX && asked.pos[2] === rawZ) return asked;
+    return resolveWith(asked.pos[0], asked.pos[2]);
   }
 
   function clearBlocked() {
@@ -622,13 +648,28 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
   /** Try the full move, then each axis alone, so a piece slides along whatever it
    *  hit rather than freezing. Returns false if nothing was possible — and says
-   *  so, out loud and in colour, instead of returning silently. */
-  function moveTo(part: ScenePart, rawX: number, rawZ: number): boolean {
+   *  so, out loud and in colour, instead of returning silently. A key press that
+   *  went nowhere without anything refusing it is said too — once for each way it
+   *  cannot go, not on every repeat of a held key — and not drawn: a barrier or the
+   *  room's edge is not a piece that does not fit.
+   *
+   *  An arrow key is one step from where the piece stands, and with the snap on it
+   *  stops on the first line it reaches (`nudgeFrom`, `snapAhead`). It used to run
+   *  through the drag's magnet, whose 100 mm reach is longer than either step — 10
+   *  and 50 mm — so a piece lined up with a neighbour was pulled back onto that line
+   *  on every press and could not be arrowed off it at all. */
+  function moveTo(part: ScenePart, rawX: number, rawZ: number, gesture: 'drag' | 'key'): boolean {
     // A drag has its convoy already; an arrow-key nudge has no gesture to hang one
     // off, so it asks for the same answer on the spot. Both routes therefore carry
     // the same company, which they did not: the keys moved one piece out of a
     // selection while the mouse moved one piece out of a selection differently.
-    const drag = dragRef.current;
+    //
+    // Only the drag reads `dragRef`. A key can be pressed while a drag is under way,
+    // and it is a step from where its piece stands now: borrowing the drag's convoy,
+    // start and pointer-down world moved it against the room as it was when the drag
+    // began — bumping into where the dragged piece used to be — and wrote its guides
+    // over the drag's.
+    const drag = gesture === 'drag' ? dragRef.current : null;
     const convoy =
       drag?.convoy ??
       planConvoy({
@@ -643,6 +684,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // A nudge has no gesture, so the live scene IS its pointer-down state and the
     // delta is measured from where the piece is standing now.
     const world = drag?.world ?? parts;
+    const nudgeFrom = gesture === 'key' ? ([part.pos[0], part.pos[2]] as const) : undefined;
     const candidates: Array<[number, number]> = [
       [rawX, rawZ],
       [rawX, part.pos[2]],
@@ -659,6 +701,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
      *  not the last. The two fallbacks are this function's own idea (keep x, take z),
      *  so the reason one of THEM failed is an answer to a question nobody asked. */
     let refusedAs: Refusal | undefined;
+    /** A key press took a candidate that did not move the piece. On its own that is
+     *  not a refusal — a barrier or the room's edge stopped it, and nothing is drawn
+     *  in red for it — but it is still said. */
+    let wentNowhere = false;
+    /** Any candidate was refused, by this piece or by its company. */
+    let refused = false;
     /** Where the company lands, and its veto, for a lead standing at `lead`.
      *
      *  A candidate this piece could take but its set cannot is not a candidate — but
@@ -684,8 +732,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
       });
 
     for (const [tx, tz] of candidates) {
-      const asked = resolveAt(part, tx, tz, convoy, world, startPos);
+      const asked = resolveAt(part, tx, tz, convoy, world, startPos, nudgeFrom);
       if (!asked.valid) {
+        refused = true;
         refusedAs ??= asked.refusal;
         continue;
       }
@@ -702,7 +751,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // The plan already tries axis-slide CANDIDATES; this is the continuous version
       // of the same idea and wins over the candidate's own answer.
       const settle = settleLead(
-        (x, z) => resolveAt(part, x, z, convoy, world, startPos),
+        (x, z) => resolveAt(part, x, z, convoy, world, startPos, nudgeFrom),
         askConvoy,
         asked,
       );
@@ -712,6 +761,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // could not be brought to one delta, and committing that is the deformed
       // arrival `ConvoyResult.leadPos` exists to prevent.
       if (!co.valid || !settle.settled) {
+        refused = true;
         // Remembered for the message, but the slide candidates are still tried: a
         // set stopped from moving diagonally can usually still go along one axis.
         blocker = blocker ?? co.blocked;
@@ -722,16 +772,27 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // rather than derived in the render, for the reason on `snapLines` above.
       // Empty when nothing snapped, which is the common case and draws nothing.
       if (drag) drag.snapLines = r.snapLines ?? [];
-      const moved = r.pos[0] !== part.pos[0] || r.pos[1] !== part.pos[1] || r.pos[2] !== part.pos[2];
+      // Within float noise of where it stood is where it stood. A flush stop is worked
+      // out from the neighbour's edge, so a piece at 0.6 against one ending at 0.1 + 0.3
+      // comes back at 0.6000000000000001 — and an exact test called that a move, wrote an
+      // override for the rounding error and said nothing.
+      const moved = r.pos.some((v, i) => Math.abs(v - part.pos[i]) > SAME_M);
+      // A press that leaves the piece where it was is not a move, however legal: the
+      // last candidate of every press is the spot the piece is standing on, so a
+      // press into a neighbour or a wall used to be accepted there and said nothing.
+      // A drag holds still under a hand that can see it; a key press has only the
+      // sentence.
+      if (gesture === 'key' && !moved && r.rot === part.rot) {
+        wentNowhere = true;
+        continue;
+      }
       if (moved) {
         setPosition(part.id, r.pos);
         // What it now stands on, the way the 3D tab's drop records it. This tab never
         // did, so a lamp moved here onto the other nightstand kept the first one's
         // link and stayed behind when the second one moved (§ H.6.7). A nudge has no
-        // drop to wait for; a drag records it on release. Asked of THIS piece: an arrow
-        // key can move another one while a drag is under way, and its landing is its
-        // own, not the dragged piece's.
-        if (drag?.id === part.id) drag.landed = { on: r.supportId };
+        // drop to wait for; a drag records it on release.
+        if (drag) drag.landed = { on: r.supportId };
         else landOn(part.id, r.supportId);
       }
       // A wall-mounted piece is turned by the wall it lands on, not by the drag.
@@ -741,12 +802,24 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // the selection, and any merged group. See lib/drag-convoy.ts.
       if (moved && co.moves.length > 0) setTransformsFor(co.moves);
       if (blockedRef.current) clearBlocked();
+      nowhereRef.current = null;
       return true;
     }
     // Nothing was possible, so no alignment holds either — a guide left over from
     // the last frame that DID move would keep claiming an edge is level while the
     // piece sits refusing to go there.
     if (drag) drag.snapLines = [];
+    if (wentNowhere && !refused) {
+      // A drag under way owns the refusal state; a key beside it only adds a sentence.
+      if (blockedRef.current && !dragRef.current) clearBlocked();
+      const saying = `${part.id}:${Math.sign(rawX - part.pos[0])},${Math.sign(rawZ - part.pos[2])}`;
+      if (nowhereRef.current !== saying) {
+        nowhereRef.current = saying;
+        announce(`${part.name} cannot go any further that way.`);
+      }
+      return false;
+    }
+    nowhereRef.current = null;
     // Cancel any pending fade — a second refusal must not be wiped by the
     // timer the first one left behind.
     if (blockTimer.current) clearTimeout(blockTimer.current);
@@ -781,10 +854,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
    * drag had, surviving in the path nobody clicks; three call sites is exactly how
    * it survived.
    */
-  function turnTo(part: ScenePart, next: number) {
+  function turnTo(part: ScenePart, next: number, gesture: 'drag' | 'key') {
     // Same rule as `moveTo`: a drag has its convoy already, a key press has no
-    // gesture to hang one off and asks for the same answer on the spot.
-    const drag = dragRef.current;
+    // gesture to hang one off and asks for the same answer on the spot — and only
+    // the drag reads `dragRef`, for the reason given there.
+    const drag = gesture === 'drag' ? dragRef.current : null;
     const convoy =
       drag?.convoy ??
       planConvoy({
@@ -1146,7 +1220,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // Minus the grab offset — see `grab` on the ref. Handed to `moveTo`
       // UNROUNDED: `resolvePlacement` quantises to the snap grid as its first step,
       // and rounding here as well is how two surfaces drift over where the grid is.
-      moveTo(part, w.x - dragRef.current.grab.x, w.z - dragRef.current.grab.z);
+      moveTo(part, w.x - dragRef.current.grab.x, w.z - dragRef.current.grab.z, 'drag');
     } else {
       const a = Math.atan2(w.z - part.pos[2], w.x - part.pos[0]);
       const delta = -(a - dragRef.current.startAngle);
@@ -1159,7 +1233,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // Containment and the cascade both live in `turnTo` — this gesture had
       // neither until recently, and the two keyboard turns still had neither after
       // that, which is what one more copy of this block would have preserved.
-      turnTo(part, next);
+      turnTo(part, next, 'drag');
     }
     force((v) => v + 1);
   }
@@ -1317,7 +1391,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     }
     const dx = e.key === 'ArrowLeft' ? -nudge : e.key === 'ArrowRight' ? nudge : 0;
     const dz = e.key === 'ArrowUp' ? -nudge : e.key === 'ArrowDown' ? nudge : 0;
-    moveTo(part, part.pos[0] + dx, part.pos[2] + dz);
+    moveTo(part, part.pos[0] + dx, part.pos[2] + dz, 'key');
     force((v) => v + 1);
   }
 
@@ -1336,7 +1410,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   function turnByKey(e: React.KeyboardEvent, part: ScenePart) {
     const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
     const wanted = part.rot + dir * spin;
-    const turned = turnTo(part, wanted);
+    const turned = turnTo(part, wanted, 'key');
     if (turned.held) {
       announce(
         `${part.name} stays at ${Math.round((part.rot * 180) / Math.PI)} degrees. It does not fit at that angle: ${refusalCause(turned)}`,
