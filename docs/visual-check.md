@@ -972,7 +972,8 @@ can see are different halves.*
 
 **Where to click.**
 - A fresh profile (or cleared site data) on `/`. It should open on the empty rooms page, with **Create your first room**.
-- An old `/workspace` bookmark. It should land on the same page.
+- An old `/workspace` or `/onboarding/welcome` bookmark. It should land on the same page.
+- A private window with site data blocked, on `/`. It should say your saved rooms could not be read, and still offer **Create your first room**. Nothing tests this screen's failed read.
 - Delete a room on `/`. The toast should sit below the top bar, not over it.
 - Open Settings three ways, and press its Back each time:
   - from a room's View menu (the gear);
@@ -983,12 +984,12 @@ can see are different halves.*
 
 **What wrong looks like.**
 - A welcome page, or a flash of one, before the rooms.
-- Back reading a plain "Back", or going somewhere other than the room or the scan it names. The fresh tab should push to the path.
+- Back reading a plain "Back", or going somewhere other than the room or the scan it names. A fresh tab, or a link opened from another site, should push to the path, never leave the app.
 - On a phone, the three cards' rows not stacking, or the key field and its buttons running off the card.
 - The tinted tiles reading as buttons.
 
 **Settled without eyes.**
-- Which paths Settings will honour, and what Back says for each, are in `tests/settings-return.test.ts`: 11 mutants, all caught.
+- Which paths Settings will honour, what Back says, and how it gets there are in `tests/settings-return.test.ts`. So is the sweep holding every way in except the rooms page to carrying its place. 18 mutants across two rounds, all caught.
 - The View menu's link carries its room, in `tests/view-menu.test.tsx`.
 - The worker's precache and fallback are in `tests/service-worker.test.ts`.
 

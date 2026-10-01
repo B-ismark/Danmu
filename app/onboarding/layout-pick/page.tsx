@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuid } from 'uuid';
-import { useRoom, useSettings, type DimUnit } from '@/lib/store';
+import { useDimUnit, useRoom, useSettings, type DimUnit } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { footprintForLayout, type LayoutId } from '@/lib/footprint';
 import { polygonArea } from '@/lib/geometry';
@@ -75,19 +75,6 @@ function planFor(layout: LayoutId, w: number, d: number) {
       })
       .join(' ') + ' Z';
   return { path, box, area: polygonArea(poly) };
-}
-
-/** The unit as the server rendered it until this page has hydrated, then the one
- *  the user chose. `useSettings` rehydrates from localStorage synchronously when
- *  the store is created, so a plain selector reads "ft" on the first client render
- *  against the server's "m", and every number on this page is a hydration
- *  mismatch. `getInitialState` is the store's own default, not a second copy of it. */
-function useDimUnit(): DimUnit {
-  return useSyncExternalStore(
-    useSettings.subscribe,
-    () => useSettings.getState().dimUnit,
-    () => useSettings.getInitialState().dimUnit,
-  );
 }
 
 /** The preview at screen scale: how many drawing units one CSS pixel is, and the

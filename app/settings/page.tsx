@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSettings, useRoom } from '@/lib/store';
+import { useDimUnit, useSettings, useRoom } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { validateKey, type KeyFailure, type KeyResult } from '@/lib/validate-key';
 import { UNIT_OPTIONS, formatLength } from '@/lib/units';
-import { returnLabel, safeReturnPath } from '@/lib/settings-return';
+import { returnLabel, safeReturnPath, wayBack } from '@/lib/settings-return';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { Dot, IconButton, Pill, Segmented } from '@/components/ui/primitives';
 import { useConfirm, useConfirmDeleteRooms } from '@/components/ui/Confirm';
@@ -50,6 +50,9 @@ const KEY_INPUT_ID = 'settings-access-key';
 
 export default function SettingsPage() {
   const s = useSettings();
+  // The unit the server printed until hydration, so the example below is not a
+  // hydration mismatch for anyone who chose feet.
+  const dimUnit = useDimUnit();
   const roomId = useRoom((r) => r.roomId);
   const setRoomId = useRoom((r) => r.setRoomId);
   const confirm = useConfirm();
@@ -70,11 +73,13 @@ export default function SettingsPage() {
   const [roomCount, setRoomCount] = useState<number | null | undefined>(undefined);
   // Where Settings was opened from (`lib/settings-return.ts`). Read after mount,
   // not during render: the server has no address bar, and a first paint that
-  // disagreed with the client's would be a hydration mismatch.
+  // disagreed with the client's would be a hydration mismatch. A LAYOUT effect, so
+  // arriving from the studio — a client render, with nothing painted yet — shows
+  // Back on the first frame rather than pushing the cards down a frame later.
   const [returnTo, setReturnTo] = useState<string | null>(null);
   const alive = useRef(true);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setReturnTo(safeReturnPath(new URLSearchParams(window.location.search).get('from')));
   }, []);
 
@@ -106,7 +111,8 @@ export default function SettingsPage() {
     };
   }, [roomId]);
 
-  // Re-counted when the open room changes, which is what a delete here does.
+  // Once: a delete here leaves for the rooms page, so the count never goes stale
+  // while this page is up.
   useEffect(() => {
     let cancelled = false;
     roomStore.listRooms().then(
@@ -116,13 +122,14 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [room]);
+  }, []);
 
-  // History, so the room or the scan comes back as it was left. A Settings tab
-  // opened on its own has no page behind it, so it goes to the path instead.
+  // History, so the room or the scan comes back as it was left — but only when
+  // the app routed here (`wayBack`). A tab opened on Settings has someone else's
+  // page behind it, or none, so it goes to the address the label names.
   function goBack() {
     if (!returnTo) return;
-    if (window.history.length > 1) router.back();
+    if (wayBack(documentPath()) === 'history') router.back();
     else router.push(returnTo);
   }
 
@@ -300,6 +307,23 @@ export default function SettingsPage() {
                 Remove
               </button>
             </div>
+            {/* Where a key comes from. This lived on the welcome page and went with it,
+                which left "Set up a key in Settings" pointing at an empty field
+                with nothing to say what goes in it. */}
+            <div className="t-hint" style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 4 }}>
+              <span>A Gemini key. They start with “AIza”.</span>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--accent-text)', fontWeight: 600 }}
+              >
+                Get a free key
+                {/* target=_blank has to be visible, not a surprise. */}
+                <Icon name="external" size={11} />
+                <span className="sr-only">(opens in a new tab)</span>
+              </a>
+            </div>
 
             {/* Three states, all real: tested-good, tested-bad (with the reason and
                 what to do), and never-tested. */}
@@ -366,13 +390,13 @@ export default function SettingsPage() {
           {/* The hint is the setting's own preview, formatted by the same function
               every size on screen goes through, so it cannot describe a different
               rounding from the one the studio shows. */}
-          <Row label="Dimension units" hint={`Example: ${formatLength(1850, s.dimUnit)}`}>
+          <Row label="Dimension units" hint={`Example: ${formatLength(1850, dimUnit)}`}>
             {/* This replaced a Metric/Imperial switch that was wired to a store
                 field nothing read — a units control that changed nothing, on a
                 product whose promise is that its dimensions are trustworthy. */}
             <Segmented
               ariaLabel="Dimension units"
-              value={s.dimUnit}
+              value={dimUnit}
               onChange={(u) => s.setDimUnit(u)}
               options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.id }))}
             />
@@ -434,6 +458,18 @@ export default function SettingsPage() {
       </div>
     </DocShell>
   );
+}
+
+/** The path this document was first loaded at, or null when the browser cannot
+ *  say. A soft navigation keeps the document, so this is where the tab ARRIVED. */
+function documentPath(): string | null {
+  const nav = performance.getEntriesByType?.('navigation')[0];
+  if (!nav) return null;
+  try {
+    return new URL(nav.name).pathname;
+  } catch {
+    return null;
+  }
 }
 
 /** Keeps a pasted 400-character room name from stretching a button off-screen. */

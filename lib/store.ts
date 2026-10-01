@@ -1,5 +1,6 @@
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { DEFAULT_HOUR, legacyLighting, wrapHour } from './lighting-moods';
@@ -484,6 +485,21 @@ export const useSettings = create<SettingsState>()(
     },
   ),
 );
+
+/** The unit as the server rendered it until the page has hydrated, then the one
+ *  the user chose. `useSettings` rehydrates from localStorage synchronously when
+ *  the store is created, so a plain selector reads "ft" on the first client render
+ *  against the server's "m", and every number on a prerendered page is a hydration
+ *  mismatch. `getInitialState` is the store's own default, not a second copy of it.
+ *  Shared by the shape picker and Settings, the two prerendered pages that print a
+ *  size. */
+export function useDimUnit(): DimUnit {
+  return useSyncExternalStore(
+    useSettings.subscribe,
+    () => useSettings.getState().dimUnit,
+    () => useSettings.getInitialState().dimUnit,
+  );
+}
 
 // Active room id (single-room v0.1).
 type RoomState = { roomId: string | null; setRoomId: (id: string | null) => void };

@@ -187,19 +187,26 @@ owned by a deterministic geometry engine, not by a model.
 
 **The rooms page is the first screen.** There used to be a welcome page at `/` in
 front of it; its one job was a "Start decorating" button, and the rooms page's
-empty state already says that. An old `/workspace` address forwards to `/`
-(`next.config.mjs` `redirects()`), and `/` is a real page rather than a redirect
+empty state already says that. An old `/workspace` or `/onboarding/welcome` address
+forwards to `/` (`next.config.mjs` `redirects()`), the offline worker's cache
+version moved so a v1 shell holding both old pages is dropped, and `/` is a real page rather than a redirect
 because the offline worker serves it as the fallback for every navigation, and a
 cached redirect cannot answer one.
 
 **Settings goes back where it came from.** It is opened from the rooms page, the
 studio's View menu, the studio's Cmd/Ctrl+, and the scan screen's *Set up a key*.
 The last three pass `?from=` (`lib/settings-return.ts`), and Settings names that
-place on its Back control — *Back to "Front room"*, *Back to the scan* — and returns
-there through history, or by address when Settings was opened in a fresh tab. The
+place on its Back control — *Back to "Front room"*, *Back to the scan*. It goes
+back through history when the app routed there, so the room or the scan comes back
+as it was left, and by address when the tab was opened ON Settings (a fresh tab, a
+bookmark, a link from elsewhere), because `history.length` counts the whole tab and
+cannot tell the two apart (`wayBack`, read off the navigation timing entry). The
 breadcrumb's *Rooms* stays, because it is a fixed destination and Back is history.
 `from` is typed into the address bar as easily as clicked, so only a same-app path
-is honoured.
+is honoured, and "same-app" is decided the way the router will decide it: resolved
+as a URL and compared by origin, since `/<tab>/host` passes any character test and
+arrives as `//host`. Settings' key row carries the "Get a free key" link and the
+"AIza" hint the welcome page used to.
 
 Two ways in:
 

@@ -14,13 +14,28 @@
 /** A path Settings may send someone back to, or null.
  *
  *  `from` arrives in the address bar, so anyone can write it: only a same-app path
- *  passes. `//host` and `/\host` are other sites to a browser, and Settings itself
- *  would make Back a button that goes nowhere. */
+ *  passes. The test is the one the router will apply — resolve it as a URL and
+ *  compare origins — rather than a guess at its characters, because a browser
+ *  reads more spellings as another site than a character test lists: `//host`,
+ *  `/\host`, and `/<tab>/host`, since URL parsing deletes tabs and newlines
+ *  anywhere in the input. Settings itself would make Back a button that goes
+ *  nowhere. */
 export function safeReturnPath(from: string | null | undefined): string | null {
-  if (!from || from[0] !== '/' || from[1] === '/' || from.includes('\\')) return null;
-  if (/^\/settings(?:[/?#]|$)/.test(from)) return null;
-  return from;
+  if (!from || from[0] !== '/') return null;
+  let url: URL;
+  try {
+    url = new URL(from, APP_ORIGIN);
+  } catch {
+    return null;
+  }
+  if (url.origin !== APP_ORIGIN) return null;
+  if (url.pathname === '/settings' || url.pathname.startsWith('/settings/')) return null;
+  // The parsed form, not the input: it is what the check above approved.
+  return url.pathname + url.search + url.hash;
 }
+
+/** Any origin a path cannot name. Only the comparison matters, not the host. */
+const APP_ORIGIN = 'https://app.invalid';
 
 /** The Settings address for a page that sends someone there. The rooms page needs
  *  no `from`: the breadcrumb's "Rooms" already goes there. */
@@ -36,7 +51,19 @@ export function returnLabel(path: string, room?: { id: string; name: string } | 
     return room && path.startsWith(`/room/${room.id}/`) ? `Back to “${room.name}”` : 'Back to your room';
   }
   if (path.startsWith('/onboarding/detect')) return 'Back to the scan';
-  if (path.startsWith('/onboarding/capture')) return 'Back to your photos';
-  if (path.startsWith('/onboarding/layout-pick')) return 'Back to the room shape';
   return 'Back';
+}
+
+/** How Back gets there. History, when this document was opened somewhere else in
+ *  the app and routed here — the entry behind Settings is then the page that sent
+ *  someone, and going back to it brings it back as it was left. The address, when
+ *  this document was opened ON Settings — a fresh tab, a bookmark, a link from
+ *  another site — because the entry behind it is then not this app at all, and
+ *  `history.length` cannot tell those apart: it counts the whole tab.
+ *
+ *  `documentPath` is the path the document was first loaded at (the navigation
+ *  timing entry's URL), or null when the browser cannot say. */
+export function wayBack(documentPath: string | null | undefined): 'history' | 'address' {
+  if (!documentPath) return 'address';
+  return documentPath === '/settings' || documentPath.startsWith('/settings/') ? 'address' : 'history';
 }
