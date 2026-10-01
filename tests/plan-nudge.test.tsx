@@ -205,6 +205,20 @@ describe('an arrow key lands on the first line it reaches (plan tab)', () => {
     expect(at('tote')[0]).toBeCloseTo(FLUSH + 0.317, 9);
   });
 
+  it('stops the rest of the selection where the piece stops', () => {
+    // The tote is selected with the crate and stands flush behind it, and the crate is
+    // 3 mm off the chest. A Coarse press stops the crate flush after 3 mm, and the tote
+    // was checked where the whole 50 mm step would have put it — 47 mm inside the crate
+    // — so the set was refused by its own member.
+    room(FLUSH + 0.003, 'coarse');
+    useScene.setState({ parts: [...useScene.getState().parts, box('tote', 'Tote', FLUSH + 0.403, 400)] });
+    useStudio.setState({ selection: ['crate', 'tote'], selectedPartId: 'crate' });
+    render(<PlanView />);
+    expect(listening(() => press('ArrowLeft', 1))).toEqual([]);
+    expect(crate()[0]).toBeCloseTo(FLUSH, 9);
+    expect(at('tote')[0]).toBeCloseTo(FLUSH + 0.4, 9);
+  });
+
   it('steps from the room as it is when a key is pressed during a drag', () => {
     // The crate is dragged away from the tote, and the tote is arrowed toward where
     // the crate stood. Read off the drag's pointer-down world, the tote bumped into the

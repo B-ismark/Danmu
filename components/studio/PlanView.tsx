@@ -588,7 +588,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
      *  `moveTo`'s `gesture`. */
     nudgeFrom: readonly [number, number] | undefined,
   ) {
-    return resolvePlacement({
+    /** The pipeline with the company shifted to where it goes when this piece stands
+     *  at (sx, sz). */
+    const resolveWith = (sx: number, sz: number) => resolvePlacement({
       part,
       rawX,
       rawZ,
@@ -596,7 +598,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       dim: part.dimMM,
       parts:
         convoy.travelling.size > 1
-          ? travellingWorld(convoy, world, rawX - startPos[0], rawZ - startPos[2], convoy.own)
+          ? travellingWorld(convoy, world, sx - startPos[0], sz - startPos[2], convoy.own)
           : world,
       footprint: ROOM_DYN.footprint,
       roomHeight: ROOM_DYN.height,
@@ -613,6 +615,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // The chairs tucked under a table it is dragging with — see `leadInherited`.
       inherited: leadInherited(convoy, part.rot, part.dimMM),
     });
+    const asked = resolveWith(rawX, rawZ);
+    // The company goes where THIS piece goes, and an arrow key often stops it short of
+    // the step it asked for — flush with a neighbour 3 mm away. Shifted by the whole
+    // step, a member standing flush behind it was 47 mm inside it on a Coarse press,
+    // and the set was refused by its own member. So a press asks again with the
+    // company where the piece actually stopped. Once is the answer: the company is
+    // not among the lines a press stops on, so where it stands cannot move the stop.
+    // A drag keeps its one pass. Its magnet does see the company's lines, so a second
+    // pass is a different question there, and the drag's half of this is filed with
+    // the rest of what a drag owes its company (what-is-still-open § H.6.8).
+    if (!nudgeFrom || convoy.travelling.size <= 1) return asked;
+    if (asked.pos[0] === rawX && asked.pos[2] === rawZ) return asked;
+    return resolveWith(asked.pos[0], asked.pos[2]);
   }
 
   function clearBlocked() {
