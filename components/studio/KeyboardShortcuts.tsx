@@ -36,6 +36,7 @@ import { type ScenePart } from '@/lib/scene-spec';
 import { placeCopies } from '@/lib/duplicate-place';
 import { formatDim, formatLength } from '@/lib/units';
 import { ANNOUNCE_EVENT, announce } from '@/lib/announce';
+import { settingsHref } from '@/lib/settings-return';
 import { toast } from '@/components/ui/StorageToast';
 
 export const STUDIO_SURFACE_ID = 'danmu-studio-surface';
@@ -584,6 +585,8 @@ export function KeyboardShortcuts() {
   const pathname = usePathname();
   const onPlanTab = useRef(false);
   onPlanTab.current = !!pathname?.endsWith('/plan');
+  const pathRef = useRef(pathname);
+  pathRef.current = pathname;
 
   useEffect(() => {
     const unsubHistory = startHistoryRecording();
@@ -619,7 +622,7 @@ export function KeyboardShortcuts() {
         }
         if (e.key === ',') {
           e.preventDefault();
-          routerRef.current.push('/settings');
+          routerRef.current.push(settingsHref(pathRef.current));
           return;
         }
         if (key === 'd') {

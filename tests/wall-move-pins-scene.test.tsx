@@ -161,7 +161,7 @@ describe('§ G.1 · a wall move and the scene snapshot', () => {
     // about to be; a room with photographs and no detections is exactly the room a
     // first scan is coming to. `RoomSync`'s load prefers a saved scene over
     // `buildSceneFromRoom` forever and only `destroyRoom` clears the key, so pinning
-    // here would make *Detect furniture* — a shipped button on `/workspace` — silently
+    // here would make *Detect furniture* — a shipped button on the rooms page — silently
     // do nothing, permanently.
     await roomStore.saveCapture(ROOM_ID, {
       slot: 'n',

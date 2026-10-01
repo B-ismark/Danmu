@@ -20,7 +20,6 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { IconButton, Spinner } from './primitives';
 
 export type ToastTone = 'neutral' | 'danger' | 'success';
@@ -112,9 +111,10 @@ export function StorageToast() {
   // card that takes pointer events, swallowed their clicks. The top strip holds
   // one left-aligned toolbar and nothing else.
   //
-  // 68 clears the 56px chrome bar on every route; 16 is the plain page inset.
-  const pathname = usePathname();
-  const top = pathname === '/' ? 16 : 68;
+  // 68 clears the 56px chrome bar, which every route with a toast now has. The
+  // old exception — 16 on `/` — was for a bar-less redirect page there; `/` is
+  // the rooms page now, and 16 would sit the card on its Settings button.
+  const top = 68;
 
   useEffect(() => {
     function onFull(e: Event) {
@@ -124,7 +124,7 @@ export function StorageToast() {
         title: 'Storage full',
         message: 'Your browser ran out of room, so the last change was not saved. Delete a room you no longer need, then try again.',
         detail: ce.detail ?? '',
-        link: { label: 'Manage rooms', href: '/workspace' },
+        link: { label: 'Manage rooms', href: '/' },
       });
     }
     window.addEventListener('danmu:storage-full', onFull);

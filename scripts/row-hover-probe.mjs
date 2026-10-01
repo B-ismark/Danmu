@@ -97,7 +97,7 @@ for (const [w, h, railLeftW] of VIEWPORTS) {
   console.log(`${w}x${h}${railLeftW ? `, list dragged to ${railLeftW}px` : ''}`);
   const ctx = await browser.newContext({ viewport: { width: w, height: h } });
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/workspace`);
+  await page.goto(`${BASE}/`);
   await page.evaluate(async ([r, railLeftW]) => {
     if (railLeftW) localStorage.setItem('danmu-studio-prefs', JSON.stringify({ state: { railLeftW }, version: 0 }));
     const db = await new Promise((res, rej) => { const q = indexedDB.open('keyval-store'); q.onupgradeneeded = () => q.result.createObjectStore('keyval'); q.onsuccess = () => res(q.result); q.onerror = rej; });

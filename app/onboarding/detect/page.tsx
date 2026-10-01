@@ -47,6 +47,7 @@ import { toast } from '@/components/ui/StorageToast';
 import { formatDim } from '@/lib/units';
 import type { DimUnit } from '@/lib/store';
 import { roomFootprint } from '@/lib/footprint';
+import { settingsHref } from '@/lib/settings-return';
 
 type SlotEntry = { slot: CaptureSlot; url: string; cap: Capture };
 type Box = [number, number, number, number];
@@ -1026,7 +1027,7 @@ export default function DetectPage() {
             </button>
           )}
           {notice.settings && (
-            <Link href="/settings" className="ds-btn ds-btn--sm">
+            <Link href={settingsHref('/onboarding/detect')} className="ds-btn ds-btn--sm">
               <Icon name="key" size={12} />
               Set up a key in Settings
             </Link>

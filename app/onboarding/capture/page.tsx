@@ -611,7 +611,7 @@ export default function CapturePage() {
       <div className="chrome-bar">
         {/* The mark links here: `persistPhoto` writes every shot to IndexedDB as
             it is taken, so leaving this screen costs nothing. */}
-        <FlowBarLead onBack={() => router.back()} markHref="/workspace">
+        <FlowBarLead onBack={() => router.back()} markHref="/">
           <span style={{ fontSize: 'var(--fs-body)', color: 'var(--ink)', fontWeight: 700 }}>Photograph your room</span>
         </FlowBarLead>
         <span role="status" aria-live="polite" className="t-meta">

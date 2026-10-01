@@ -830,15 +830,16 @@ the boundary honest in both directions: a module only tests import does not belo
 
 ## Layout
 
-- `app/` — Next App Router. Routes: `/`, `/onboarding/{welcome,layout-pick,capture,detect}`,
-  `/workspace`, `/room/[roomId]/{model,plan}`, `/settings`. Only two studio tabs
+- `app/` — Next App Router. Routes: `/` (the rooms list — the first screen; `/workspace`
+  and `/onboarding/welcome` redirect there), `/onboarding/{layout-pick,capture,detect}`,
+  `/room/[roomId]/{model,plan}`, `/settings`. Only two studio tabs
   (`3D Model`, `2D Plan`).
 - `components/three/` — R3F scene (`Room`, `DynamicPart`, `Draggable`, `Pickable`,
   `RoomShell`, `WallHandles`, `Dressing`, `Motion`).
 - `components/studio/` — 2D UI (`Inspector`, `PartTree`, `CatalogPanel`,
   `ViewOptions`, `PlanView`, `SelectionHeader`, `LibraryPicker`, `TopBar`, …).
   Layout lives in three shells — `StudioShell` (both room tabs),
-  `ui/DocShell` (workspace / settings / layout-pick) and `CanvasChrome`
+  `ui/DocShell` (rooms / settings / layout-pick) and `CanvasChrome`
   (the studio's three canvas slots). A new control joins an existing slot or
   a rail section; it does not start a fourth canvas corner.
 - `components/ui/` — primitives + `Icon` (lucide wrapper).

@@ -91,7 +91,7 @@ export function TopBar({
   if (phone) {
     return (
       <header className="app-bar">
-        <Link href="/workspace" className="icon-btn app-bar__btn" aria-label="Back to your rooms" title="Your rooms">
+        <Link href="/" className="icon-btn app-bar__btn" aria-label="Back to your rooms" title="Your rooms">
           <Icon name="chevron-left" size={22} />
         </Link>
         {nameField({ fontSize: 'var(--fs-body)', fontWeight: 700, minWidth: 0, flex: '1 1 auto' })}
@@ -111,7 +111,7 @@ export function TopBar({
     // in it could shrink either: flex items default to `min-width: auto`, so the
     // `flex: 1` spacer collapsed to nothing and then the row spilled.
     <div className="chrome-bar chrome-bar--tight">
-      <Link href="/workspace" aria-label="Danmu: back to your rooms" style={{ display: 'flex' }}>
+      <Link href="/" aria-label="Danmu: back to your rooms" style={{ display: 'flex' }}>
         <DanmuMark size={12} />
       </Link>
       <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)', flexShrink: 0 }} />
@@ -125,7 +125,7 @@ export function TopBar({
         style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 0 }}
       >
         <Link
-          href="/workspace"
+          href="/"
           style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink-3)', textDecoration: 'none', whiteSpace: 'nowrap' }}
         >
           Rooms

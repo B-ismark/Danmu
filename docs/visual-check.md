@@ -295,7 +295,7 @@ pieces the eye tracks against a flat ceiling rather than against furniture.
 makes the green worth anything. `danmu-probe/wall-pin.mjs`, production build, headless
 Chromium: seed a T from the picker (meta only — no scene key, which is the state a fresh
 room is in), open `/room/<id>/plan`, focus one wall handle, two ArrowRights (`WALL_STEP`
-0.05 m, so +10 cm), go to `/workspace`, come back, read `RoomTools`' own verdict.
+0.05 m, so +10 cm), go to the rooms page (`/`), come back, read `RoomTools`' own verdict.
 
 | | before the fix | after |
 |---|---|---|
@@ -968,6 +968,32 @@ and `tests/library-click-through.test.tsx`. The Catalog tree was looked at on 20
 and is gone. What is left is here because what a test can check about it and what a person
 can see are different halves.*
 
+### The rooms page opens the app, and Settings goes back where it came from — on `claude/amazing-davinci-m8zqys` (PR #211)
+
+**Where to click.**
+- A fresh profile (or cleared site data) on `/`. It should open on the empty rooms page, with **Create your first room**.
+- An old `/workspace` or `/onboarding/welcome` bookmark. It should land on the same page.
+- A private window with site data blocked, on `/`. It should say your rooms can't be opened here, why, and offer **Try again**. It should not offer a **Create** that would fail to save. Nothing tests this screen's failed read.
+- Settings opened offline from a room. It should open Settings, not the rooms page.
+- Delete a room on `/`. The toast should sit below the top bar, not over it.
+- Open Settings three ways, and press its Back each time:
+  - from a room's View menu (the gear);
+  - with Cmd/Ctrl+, in the studio;
+  - from the scan screen's **Set up a key in Settings**.
+- Paste a Settings address that has `?from=` into a new tab, and press Back there.
+- Settings at phone width (375px).
+
+**What wrong looks like.**
+- A welcome page, or a flash of one, before the rooms.
+- Back reading a plain "Back", or going somewhere other than the room or the scan it names. A fresh tab, or a link opened from another site, should push to the path, never leave the app.
+- On a phone, the three cards' rows not stacking, or the key field and its buttons running off the card.
+- The tinted tiles reading as buttons.
+
+**Settled without eyes.**
+- Which paths Settings will honour, what Back says, and how it gets there are in `tests/settings-return.test.ts`. So is the sweep holding every way in except the rooms page to carrying its place. Mutants across three rounds were all caught, counted in the PR.
+- The View menu's link carries its room, in `tests/view-menu.test.tsx`.
+- The worker's precache and fallback are in `tests/service-worker.test.ts`.
+
 ### View behind a gear, collapsed rails as icon strips — merged to `main` in `5114b5f` (PR #179)
 
 **Looked at: everything but the screen reader.** In the walkthrough the gear menu, the
@@ -1403,7 +1429,7 @@ survives the re-point.)*
 
 ### A U-Shape's first wall shows no length, and it looks exactly like a missing number
 
-**Where to click.** `/onboarding/welcome` → **Start decorating** → choose **U-Shape** →
+**Where to click.** `/` → **Create your first room** (or **New Room**) → choose **U-Shape** →
 *"Photograph my real room first (optional)"* → add four photos. Look at the four cards'
 wall-length labels.
 
