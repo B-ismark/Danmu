@@ -81,6 +81,12 @@ describe('returnLabel', () => {
     expect(returnLabel('/onboarding/detect', room)).toBe('Back to the scan');
   });
 
+  it('names the rooms, which is where a Settings opened without a `from` goes', () => {
+    // One label for one destination: `?from=%2F` and no `from` at all both go home.
+    expect(returnLabel('/', room)).toBe('Back to your rooms');
+    expect(returnLabel('/?sort=name', room)).toBe('Back to your rooms');
+  });
+
   it('falls back to a plain Back', () => {
     expect(returnLabel('/somewhere', room)).toBe('Back');
   });

@@ -196,7 +196,9 @@ cached redirect cannot answer one.
 **Settings goes back where it came from.** It is opened from the rooms page, the
 studio's View menu, the studio's Cmd/Ctrl+, and the scan screen's *Set up a key*.
 The last three pass `?from=` (`lib/settings-return.ts`), and Settings names that
-place on its Back control — *Back to "Front room"*, *Back to the scan*. It goes
+place on its Back control — *Back to "Front room"*, *Back to the scan*. Back sits at
+the right end of the heading row, beside the content rather than across the screen
+in the bar, and is always there: without a `from` it reads *Back to your rooms*. It goes
 back through history when the app routed there, so the room or the scan comes back
 as it was left, and by address when the tab was opened ON Settings (a fresh tab, a
 bookmark, a link from elsewhere), because `history.length` counts the whole tab and

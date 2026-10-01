@@ -76,7 +76,8 @@ export default function SettingsPage() {
   // disagreed with the client's would be a hydration mismatch. A LAYOUT effect, so
   // arriving from the studio — a client render, with nothing painted yet — shows
   // Back on the first frame rather than pushing the cards down a frame later.
-  const [returnTo, setReturnTo] = useState<string | null>(null);
+  // `undefined` until read, so Back never shows one destination and then another.
+  const [returnTo, setReturnTo] = useState<string | null | undefined>(undefined);
   const alive = useRef(true);
 
   useLayoutEffect(() => {
@@ -127,10 +128,11 @@ export default function SettingsPage() {
   // History, so the room or the scan comes back as it was left — but only when
   // the entry behind is the place the label names (`wayBack`). Otherwise the
   // address: behind a tab opened on Settings is someone else's page, or none.
+  // Opened without a `from` — the rooms page's own link — the way back is the rooms.
+  const target = returnTo ?? '/';
   function goBack() {
-    if (!returnTo) return;
-    if (wayBack(returnTo, { previous: previousPath(), documentPath: documentPath() }) === 'history') router.back();
-    else router.push(returnTo);
+    if (wayBack(target, { previous: previousPath(), documentPath: documentPath() }) === 'history') router.back();
+    else router.push(target);
   }
 
   async function test() {
@@ -206,29 +208,45 @@ export default function SettingsPage() {
   }
 
   const failure = KEY_FAILURE[(s.keyValidReason ?? 'unknown') as KeyFailure] ?? KEY_FAILURE.unknown;
-  const back = returnTo
-    ? returnLabel(returnTo, room ? { id: room.id, name: truncate(room.name, 28) } : null)
-    : null;
+  const back = returnLabel(target, room ? { id: room.id, name: truncate(room.name, 28) } : null);
 
   return (
-    // "Close" is gone: the breadcrumb's "Rooms" is the fixed way out, and Back —
-    // shown only when Settings knows where it was opened from — is the way to
-    // carry on where you were. Without it, adding a key mid-scan or switching
-    // units mid-arrangement dropped you on the room list.
-    <DocShell
-      trail={[{ label: 'Rooms', href: '/' }, { label: 'Settings' }]}
-      measure="prose"
-      back={back ? <BackButton onBack={goBack} label={back} /> : undefined}
-    >
+    // "Close" is gone: the breadcrumb's "Rooms" is the fixed way out, and Back is
+    // the way to carry on where you were. Without it, adding a key mid-scan or
+    // switching units mid-arrangement dropped you on the room list.
+    <DocShell trail={[{ label: 'Rooms', href: '/' }, { label: 'Settings' }]} measure="prose">
       {/* Three cards in the same dress as the room cards, each with its own tile —
           the page used to be three loose headings over hairline rows, which read
           as a form left unstyled beside every other screen's cards. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ marginBottom: 6 }}>
-          {/* The route had no heading element at all — no document outline, and the
-              display serif (which globals.css hangs off h1/h2/h3) never rendered. */}
-          <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginBottom: 4 }}>Settings</h1>
-          <div className="t-small">Kept in this browser, like your rooms.</div>
+        <div
+          style={{
+            marginBottom: 6,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            {/* The route had no heading element at all — no document outline, and the
+                display serif (which globals.css hangs off h1/h2/h3) never rendered. */}
+            <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginBottom: 4 }}>Settings</h1>
+            <div className="t-small">Kept in this browser, like your rooms.</div>
+          </div>
+          {/* Back sits at the head of the cards, on the right, and is always there:
+              above the heading on the left it was only shown with a `from`, so a
+              Settings opened from the rooms page had its one way out in the bar's
+              far corner. It wraps under the heading, still on the right, when a long
+              room name meets a phone. Held invisible rather than left out until
+              `from` is read, so a phone's cards do not jump down when it arrives. */}
+          <BackButton
+            onBack={goBack}
+            label={back}
+            edge="end"
+            style={{ marginTop: 6, marginInlineStart: 'auto', visibility: returnTo === undefined ? 'hidden' : undefined }}
+          />
         </div>
 
         <Section

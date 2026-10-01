@@ -23,7 +23,7 @@
 // rooms page is the first screen, and its empty state is the first-run one.)
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Icon } from './Icon';
 import { DanmuMark } from './primitives';
 
@@ -189,27 +189,50 @@ function Breadcrumb({ trail }: { trail: Crumb[] }) {
   );
 }
 
-// The control that goes in the `back` slot. Where it sits is the slot's — the top
-// of the content column, not the chrome bar (see the `back` prop's note above).
+// The one Back control on a document page. In the `back` slot it sits at the top
+// of the content column, not the chrome bar (see the `back` prop's note above);
+// Settings puts the same control at the right end of its heading row instead.
 // `label` names the destination when the route knows it (Settings: "Back to the
-// scan"); a bare "Back" is for a step whose way in is not one place.
+// scan"); a bare "Back" is for a step whose way in is not one place. A long label
+// ellipsises rather than pushing the button past its column.
 //
-// `marginLeft: -10` cancels the ghost button's own horizontal padding so the
-// word "Back" starts on the same vertical as the kicker and the heading below
-// it. The offset lives on the button rather than on the slot because the number IS
-// this button's padding, and a shell that guessed at its slot's inner padding would
-// be wrong for the next control put in it. A back link that sits 10px right of
-// everything it belongs to reads as a stray, which is half of why the old
-// placement failed.
-export function BackButton({ onBack, label = 'Back' }: { onBack: () => void; label?: string }) {
+// The -10 margin on the `edge` it sits against cancels the ghost button's own
+// horizontal padding, so the word lines up with the heading's edge rather than
+// sitting 10px in from everything it belongs to — which reads as a stray, and was
+// half of why the old placement failed. The offset lives on the button rather than
+// on the slot because the number IS this button's padding. At the `end` it only
+// moves the button when the button is itself the item its row aligns — inside a
+// wrapper, a negative right margin does not shrink the wrapper and the word stayed
+// 11px in from the cards (measured) — so a caller that needs more than placement
+// passes `style` rather than wrapping it.
+export function BackButton({
+  onBack,
+  label = 'Back',
+  edge = 'start',
+  style,
+}: {
+  onBack: () => void;
+  label?: string;
+  /** Which side of its column it lines up with. */
+  edge?: 'start' | 'end';
+  style?: CSSProperties;
+}) {
   return (
     <button
+      type="button"
       onClick={onBack}
       className="ds-btn ds-btn--sm ds-btn--ghost"
-      style={{ padding: '0 10px', marginLeft: -10, fontSize: 'var(--fs-body)' }}
+      style={{
+        padding: '0 10px',
+        [edge === 'start' ? 'marginInlineStart' : 'marginInlineEnd']: -10,
+        fontSize: 'var(--fs-body)',
+        maxWidth: '100%',
+        minWidth: 0,
+        ...style,
+      }}
     >
       <Icon name="chevron-left" size={14} />
-      <span className="t-small">{label}</span>
+      <span className="t-small truncate">{label}</span>
     </button>
   );
 }
