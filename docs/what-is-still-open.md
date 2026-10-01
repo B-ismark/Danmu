@@ -10331,3 +10331,31 @@ typical height exactly (nightstand, bookshelf, desk), so on those a typical size
 It wants pieces off typical in both directions, and a look at what it does to a correct row the
 user already sees as *up to about N wide*, since the number built would no longer be the number
 printed.
+
+## § 50 · Three limits the swap and duplicate follow-up left in place — MEASURED 2026-10-01, NOT FIXED
+
+All three are in the commit that fixed the U-arm containment (`wallDeficits` counting only
+walls the piece can see, `lib/layout-settle.ts`). None is a regression; each is written down
+so it does not get re-found as one.
+
+**1. In a U, a piece too wide for its arm ends ~27 mm through the plaster.** A 2000 × 900 table
+swapped in for a print on an arm's end wall, turned to run across the arm: no spot in the
+1.68 m arm holds it, so `containedXZ` walks it toward `interiorPoint` and it ends with
+`outsideDeficit` 0.027. With `polygonCentroid` as the walk's target (which lands in the
+notch) it stayed in the arm 340 mm through the wall, so the target is pinned in
+`tests/swap-model.test.ts`. The honest fix is refusal or a turn, not a better clamp — rule 2's
+"say so, never silently resize": the swap could turn the piece to fit the arm, or keep it and
+report it the way a refused drag does. A decision, because the swap currently never refuses.
+
+**2. A U resized to 6 × 4 seats the bedside pieces in a pocket the bed seals off.** Before the
+fix, containment flung the nightstand and lamp 3.5 m into the other arm; now they stand beside
+the bed, where they belong, and Room check reports `reach` ("You can't walk to everything").
+`tests/impossible-clause-wired.test.tsx` counts three fixable findings for that reason. The
+offered U (6 × 5, `app/onboarding/layout-pick/page.tsx`) is identical before and after, with no
+findings. This is a seeder question, not a containment one: at 6 × 4 the starter's bed is the
+wrong size or the wrong wall for that arm.
+
+**3. Change the model does no collision avoidance.** A nightstand swapped in for a print over a
+bed stands on the floor inside the bed's footprint (it no longer stands on the bed — that half
+is fixed). The add path behaves the same, so the swap matches it; the fix is one for both, and
+`lib/duplicate-place.ts`'s candidate search is the shape it would take.
