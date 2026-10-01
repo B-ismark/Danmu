@@ -4,6 +4,7 @@ import {
   makeRng,
   movableFor,
   randomizeStart,
+  rigidSets,
   solveLayout,
   NEGLIGIBLE_COST,
   LAYOUT_SIMILAR_M,
@@ -99,8 +100,10 @@ const presetSweep = () => (sweepCache ??= runSweep());
 
 /** How many ideas `presetSweep` offers in the presets that carry a rug. 45 until the
  *  search priced a chair pushed under its table back-first (`tuckedAt`), which moves
- *  any trajectory that passed through one. */
-const RUG_IDEAS_CHECKED = 44;
+ *  any trajectory that passed through one; 44 after, and 45 again since a dining set
+ *  moves as one (§ 52): the T's three presses offer 1 + 4 + 4, against 2 + 2 + 4 with
+ *  the sets off. */
+const RUG_IDEAS_CHECKED = 45;
 
 // ── Three tests below USED to carry an explicit 30 s timeout ────────────
 //
@@ -143,14 +146,22 @@ describe('randomizeStart', () => {
     // On an L, T or U the bounding box includes floor the room does not have, which
     // is the failure this samples for — a generator using `±width/2` puts pieces in
     // the notch and every one of them reads as inside the box.
+    //
+    // Every piece that DRAWS its spot. A set's members do not: they ride their lead to
+    // wherever it was drawn (`carryUnit`), so a nightstand of a bed drawn near the U's
+    // notch can start beyond it, and the search prices that like any other start. That
+    // has been true of a merged set since § H.6.5; the presets have none, so it first
+    // showed here when a bed and its nightstands became a set as they stand (§ 52).
     for (const [id, w, d] of ALL) {
       const { parts, footprint, movable } = room(id, w, d);
+      const { sets } = rigidSets(parts, movable);
+      const riders = new Set(sets.flatMap((set) => set.slice(1)));
       const rng = makeRng(3);
       let checked = 0;
       for (let trial = 0; trial < 20; trial++) {
         const start = randomizeStart(parts, footprint, movable, rng);
         for (let i = 0; i < parts.length; i++) {
-          if (!movable[i]) continue;
+          if (!movable[i] || riders.has(i)) continue;
           checked++;
           expect(pointInFootprint(start[i].x, start[i].z, footprint), `${id}: ${parts[i].id}`).toBe(true);
         }
@@ -293,17 +304,18 @@ describe("solveLayout mode: 'shuffle'", () => {
     // `t` seed 1 short, when a dining chair stopped counting as tucked turned off square
     // or standing where the table has a leg (2026-10-01). Attributed by switching the
     // two checks off: with both off it is 159, and with either one alone on it is 159
-    // too, so it is the pair that moves this trajectory.
-    expect(checked, 'the finalists this sweep compared').toBe(158);
+    // too, so it is the pair that moves this trajectory. 159 again since a dining set
+    // moves as one (§ 52): `t` seed 1 fills its pool, and with the sets off it is 158.
+    expect(checked, 'the finalists this sweep compared').toBe(159);
   });
 
   it('keeps a pool of finalists, because the search moves', { timeout: 120_000 }, () => {
     // A search that accepts no step finds no new best, so its pool is the scatter
     // alone: `11111111` on every preset before the fix. Four is `FINALISTS`, the most a
     // pool keeps; `l` seed 7 fills three (`t` seed 4 did, before the search priced a
-    // rug, and `open` seed 8 before it priced a chair's back; `t` seed 1 has since the
-    // chair had to stand square and clear of the legs), so a full pool is not a
-    // property to lean on.
+    // rug, and `open` seed 8 before it priced a chair's back; `t` seed 1 did while the
+    // chair had to stand square and clear of the legs, until a dining set moved as one),
+    // so a full pool is not a property to lean on.
     const pools = ALL.map(([id]) => [
       id,
       shuffleSweep()
@@ -316,7 +328,7 @@ describe("solveLayout mode: 'shuffle'", () => {
       ['l', '44444434'],
       ['u', '44444444'],
       ['open', '44444444'],
-      ['t', '34444444'],
+      ['t', '44444444'],
     ]);
   });
 
