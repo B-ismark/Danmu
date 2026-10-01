@@ -169,6 +169,27 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
+### Start over puts the room back the way it first opened — this branch, NOT LOOKED AT
+
+The user's report on 2026-10-01: the revert square at the end of the right rail showed two
+tooltips, and pressing it should put the room back to how it loaded — *"added models should go
+back (be deleted)"*. It was "Put everything back" and it only undid moves, turns and sizes. It is
+**Start over** now (`lib/room-start.ts`, `components/studio/RailFooter.tsx`).
+
+**Where to click.** Any starter room, either tab. Hover the right rail before changing anything:
+there is no square. Add a piece from the Library, recolour another, move a third, hide a fourth.
+Hover the square that appears, then press it and confirm. Then press **Undo** on the toast. Do the
+same once in a room made from photos.
+
+**What right looks like.** One bubble on hover, reading "Start over", and nothing appearing under it
+a second later. After confirming, the added piece is gone, the recoloured one has its colour back,
+the moved one is where it started, the hidden one is showing, and the square disappears. The walls
+and their paint do not change. Undo brings back all four edits at once. In the photo room the pieces
+come back as the scan placed them, not as the starter. *Wrong* looks like a second, plainer label
+under the bubble, an added piece still there, or a square that stays after a fresh room opens.
+
+**Where it rides.** `lib/room-start.ts`, `components/studio/RailFooter.tsx`, `components/ui/Tooltip.tsx`.
+
 ### Deleting a piece brings down what stood on it — this branch, NOT LOOKED AT
 
 The user's report on 2026-10-01: *"an item on top of another remains floating even after
