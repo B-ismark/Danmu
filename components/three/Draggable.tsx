@@ -206,6 +206,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
    *  in: the ring swung a tucked chair's back up through its desk and the drop kept
    *  that angle at the one spot it had fitted (see `turnSwingsInto`). */
   const lastFreeRot = useRef<number | null>(null);
+  /** The angle it STANDS at — the last one a resolve gave it, or the one it began the
+   *  gesture at — as opposed to `rotation.y`, which the ring turns live and a wheel or
+   *  twist is about to. A turn asks which wall its back is against at THIS angle
+   *  (`standsAt` in `lib/drag-resolve.ts`), or a small piece in a corner turned onto
+   *  the next wall. */
+  const standRot = useRef<number | null>(null);
   // Position captured at drag start — used to move merged-group siblings by the
   // same delta when the dragged part belongs to a group.
   const dragStartPos = useRef<[number, number, number] | null>(null);
@@ -367,6 +373,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     rot: number,
     dim: [number, number, number],
     effParts: ScenePart[],
+    /** Set by a resolve that TURNS the piece where it stands — see `standRot`. */
+    standsAt?: { at: [number, number, number]; rot: number },
   ): { pos: [number, number, number]; rot: number; valid: boolean; snapLines?: SnapLine[]; supportId?: string } {
     if (!part) return { pos: [rawX, 0, rawZ], rot, valid: false };
     return resolveDrag({
@@ -392,6 +400,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // At the rot and dim being resolved, which a wheel, the turn ring or a
       // stretch can have changed since pointer-down — see `leadInherited`.
       inherited: leadInherited(convoy(), rot, dim),
+      standsAt,
     });
   }
 
@@ -430,6 +439,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   function liveUpdate(resolved: Resolved, dim: [number, number, number]) {
     if (!ref.current || !part) return;
     ref.current.rotation.y = resolved.rot;
+    standRot.current = resolved.rot;
     // The convoy has a veto: a spot this piece could take but its company cannot
     // is not a spot the gesture may rest at, so it must not be remembered as the
     // fallback `commit()` slides back to either.
@@ -539,7 +549,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
      *  fallback branch is the one that used to skip it. */
     const settleAt = (rot: number) => (x: number, z: number) =>
       resolvePlacement(x, z, rot, dim, travelWorld(x, z));
-    const first = settleAt(ref.current.rotation.y)(p.x, p.z);
+    // Resolved where it stands, so it is asked which wall it stands on — the ring
+    // turns `rotation.y` without a resolve, and this is the first one it gets.
+    const first = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, travelWorld(p.x, p.z), {
+      at: [p.x, p.y, p.z],
+      rot: standRot.current ?? ref.current.rotation.y,
+    });
     let settle = settleLead<Resolved>(settleAt(first.rot), (l) => carry(l.pos, l.rot), first);
     let resolved = settle.lead;
     let co = settle.co;
@@ -779,7 +794,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const z = pp ? pp[1] : ref.current.position.z;
     const rot = pr ?? ref.current.rotation.y;
     const dim = currentDim();
-    liveUpdate(resolvePlacement(x, z, rot, dim, travelWorld(x, z)), dim);
+    // A wheel or a twist with the piece held still is a turn where it stands.
+    const turning =
+      pp === null ? { at: [x, ref.current.position.y, z] as [number, number, number], rot: standRot.current ?? ref.current.rotation.y } : undefined;
+    liveUpdate(resolvePlacement(x, z, rot, dim, travelWorld(x, z), turning), dim);
   }
 
   function schedule() {
@@ -864,6 +882,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       releasePress(partId);
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       dragStartRot.current = ref.current.rotation.y;
+      standRot.current = dragStartRot.current;
       cancelled.current = false;
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot();
@@ -1244,6 +1263,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       releasePress(partId);
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       dragStartRot.current = ref.current.rotation.y;
+      standRot.current = dragStartRot.current;
       cancelled.current = false;
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot(); // one world snapshot for the gesture
@@ -1367,6 +1387,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     setDragging(partId);
     dragStartPos.current = [g.position.x, g.position.y, g.position.z];
     dragStartRot.current = g.rotation.y;
+    standRot.current = dragStartRot.current;
     cancelled.current = false;
     lastFreePos.current = null;
     wantY.current = null;
@@ -1520,6 +1541,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             const pp = ref.current?.position;
             dragStartPos.current = pp ? [pp.x, pp.y, pp.z] : null;
             dragStartRot.current = ref.current?.rotation.y ?? null;
+            standRot.current = dragStartRot.current;
             cancelled.current = false;
             lastFreePos.current = null;
             effCache.current = buildEffSnapshot();

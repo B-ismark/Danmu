@@ -669,27 +669,52 @@ describe('a wall piece follows the pointer to the wall it is at', () => {
     // a narrow piece flush in a corner on the corner's diagonal — as near one wall as
     // the other — and the wall it kept was whichever won that tie. Four of the eight
     // corner-and-wall spots sent a 500 mm painting 0.30 m round onto the next wall.
-    // Swept, every corner from both of its walls, both directions, three widths.
+    // Swept, every corner from both of its walls, both directions, three widths — and
+    // the narrowest, deepest curtain, whose CENTRE is nearer the return wall (0.20 m)
+    // than its own (0.21 m), so the wall it is on has to be read off its back. That one
+    // flipped on every press, even a turn to the angle it already had.
     const spots: Array<[number, number, number]> = [
       [-3.5, -1.95, 0], [3.5, -1.95, 0], [-3.5, 1.95, Math.PI], [3.5, 1.95, Math.PI],
       [-2.95, -2.5, Math.PI / 2], [2.95, -2.5, -Math.PI / 2], [-2.95, 2.5, Math.PI / 2], [2.95, 2.5, -Math.PI / 2],
     ];
     let turns = 0;
-    for (const [shape, dim] of [['painting', [300, 30, 300]], ['painting', [500, 30, 400]], ['tv', [1200, 60, 700]]] as const) {
-      const p: ScenePart = { ...mk(shape, shape, [...dim]), pos: [0, 1.2, -1.9] };
+    const kinds = [
+      ['painting', 'painting', [300, 30, 300]],
+      ['painting', 'painting', [500, 30, 400]],
+      ['tv', 'tv', [1200, 60, 700]],
+      ['curtain', 'curtain', [400, 200, 800]],
+    ] as const;
+    for (const [cat, shape, dim] of kinds) {
+      const p: ScenePart = { ...mk(cat, shape, [...dim]), pos: [0, 1.2, -1.9] };
       for (const [x, z, rot] of spots) {
         const flush = resolvePlacement({ part: p, rawX: x, rawZ: z, rot, dim: p.dimMM, parts: [p], footprint: room, roomHeight: H, snapMode: 'off' });
         const here = { ...p, pos: flush.pos, rot: flush.rot };
-        for (const k of [1, -1]) {
+        for (const k of [1, -1, 0]) {
           const t = turnInPlace({ part: here, at: flush.pos, rot: flush.rot + (k * Math.PI) / 2, dim: p.dimMM, parts: [here], footprint: room, roomHeight: H });
-          const what = `${dim[0]} mm at (${x}, ${z}) turned ${k > 0 ? 'left' : 'right'}`;
+          const what = `${shape} ${dim[0]} mm at (${x}, ${z}) turned ${k}`;
           expect(Math.hypot(t.pos[0] - flush.pos[0], t.pos[2] - flush.pos[2]), what).toBeLessThan(1e-9);
           expect(t.rot, what).toBeCloseTo(flush.rot, 9);
           turns++;
         }
       }
     }
-    expect(turns).toBe(48);
+    expect(turns).toBe(96);
+  });
+
+  // The 3D tab's ring, wheel and twist turn the piece without `turnInPlace` — the
+  // ring through \`TransformControls\`, which has no DOM for a test to drive — so the
+  // rule is held at the source: each of those resolves says where the piece stands.
+  it('is asked by the 3D tab\'s own turns, which never reach turnInPlace', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('components/three/Draggable.tsx', 'utf8');
+    // The wrapper hands it on…
+    expect(src).toMatch(/inherited: leadInherited\(convoy\(\), rot, dim\),\s*standsAt,/);
+    // …the release (where a ring turn is first resolved) passes it…
+    expect(src).toMatch(/const first = resolvePlacement\([^;]*?rot: standRot\.current/);
+    // …a wheel or twist held still passes it…
+    expect(src).toMatch(/pp === null \? \{ at: [^;]*?rot: standRot\.current/);
+    // …and the angle it stands at is the one each resolve gave it.
+    expect(src).toMatch(/ref\.current\.rotation\.y = resolved\.rot;\s*standRot\.current = resolved\.rot;/);
   });
 
   it('still slides along its own wall, and reaches the near wall only from beside it', () => {

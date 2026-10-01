@@ -21,7 +21,7 @@
 
 import { collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
-import { aabbExtents, edgeProjection, nearestEdge, type Poly } from './geometry';
+import { aabbExtents, edgeProjection, frontVector, nearestEdge, type Poly } from './geometry';
 import { snapToNeighbors, type SnapLine } from './item-snap';
 import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
@@ -92,14 +92,16 @@ export type ResolveInput = {
    */
   wallEdge?: number | null;
   /**
-   * Where a wall rider stands NOW, when the caller knows and the angle being
-   * resolved is not the one it stands at — a turn. Its wall is then the one nearest
-   * this point, rather than the one nearest the clamp taken at the new angle, which
-   * in a corner lies on the diagonal (see the rider branch). A drag leaves it unset:
-   * there the angle is the piece's live one, and `part.pos` is no help, being the
-   * AUTHORED position in the 3D tab rather than where the piece has been moved to.
+   * Where a wall rider stands NOW and the angle it stands at, when the caller knows
+   * and is resolving it at ANOTHER angle — a turn, from any surface. Its wall is
+   * then the one its BACK is against, rather than the one nearest the clamp taken at
+   * the new angle, which in a corner lies on the diagonal (see the rider branch).
+   * The back and not the centre: a 400 × 200 mm curtain's centre is 0.20 m from the
+   * return wall and 0.21 m from its own. A drag leaves it unset — there the angle is
+   * the piece's live one — and so must not read `part.pos` instead, which in the 3D
+   * tab is the AUTHORED position, not where the piece has been moved to.
    */
-  standsAt?: readonly [number, number, number];
+  standsAt?: { at: readonly [number, number, number]; rot: number };
   /**
    * Company this piece already overlapped when the gesture began, and whose overlap
    * the gesture therefore did not cause — a chair tucked under the table it is
@@ -151,6 +153,14 @@ export function refusalCause(r: Pick<Resolved, 'refusal'>): string {
   if (r.refusal === 'wall') return 'it is wider than that wall.';
   if (r.refusal === 'room') return 'it would stick out of the room.';
   return 'something is in the way.';
+}
+
+/** The middle of a wall rider's back face, on the floor plane: the point that is
+ *  against its wall whichever wall that is. */
+function backOf(at: readonly [number, number, number], rot: number, dim: [number, number, number]): [number, number] {
+  const [fx, fz] = frontVector(rot);
+  const half = dim[1] / 2000;
+  return [at[0] - fx * half, at[2] - fz * half];
 }
 
 /**
@@ -254,13 +264,18 @@ export function resolvePlacement(input: ResolveInput): Resolved {
     const ax = Math.max(bnd.minX, Math.min(bnd.maxX, gx));
     const az = Math.max(bnd.minZ, Math.min(bnd.maxZ, gz));
     const from = input.standsAt;
-    const stay = from ? nearestEdge(footprint, from[0], from[2]) : nearestEdge(footprint, x, z);
+    const back = from ? backOf(from.at, from.rot, dim) : null;
+    const stay = back ? nearestEdge(footprint, back[0], back[1]) : nearestEdge(footprint, x, z);
     const follow = nearestEdge(footprint, ax, az);
     const stayDist = stay ? edgeProjection(footprint, stay.index, ax, az)?.dist : undefined;
     const switches =
       !stay || !follow || stayDist === undefined || follow.index === stay.index || follow.dist + WALL_SWITCH_M < stayDist;
     const [sx, sz] = switches ? [ax, az] : [x, z];
-    const snapped = snapToWall([sx, 0, sz], dim, footprint, wallStandoff(part.shape), input.wallEdge);
+    // Staying means staying on THAT wall, so a turn names it: from the clamped point,
+    // `snapToWall`'s own nearest-wall choice can be the same tie again. A drag keeps
+    // letting the snap choose, which is the answer `stay` was derived from anyway.
+    const edge = input.wallEdge ?? (back && !switches ? stay!.index : input.wallEdge);
+    const snapped = snapToWall([sx, 0, sz], dim, footprint, wallStandoff(part.shape), edge);
     x = snapped.x;
     z = snapped.z;
     if (snapped.rot !== undefined) outRot = snapped.rot;
@@ -482,7 +497,9 @@ export function turnInPlace(input: TurnInput): Resolved {
     snapMode: 'off',
     currentY: input.at[1],
     wallEdge: null,
-    standsAt: input.at,
+    // `part.rot` is the angle it faces now — the contract `turnSwingsInto`'s
+    // `fromRot` already leans on at every caller.
+    standsAt: { at: input.at, rot: input.part.rot },
   });
 }
 

@@ -196,13 +196,20 @@ room — a frosted veil over its glass rather than a rim round its edge.
 
 Found in review, 2026-10-01: a 300–500 mm painting pushed flush into a corner and turned
 (**R**, or the plan's turn) went 0.16–0.30 m round onto the next wall, in four of the eight
-corner-and-wall spots. A 1.2 m TV never did. The turn now asks which wall the piece stands
-on, not which wall is nearest the spot the corner clamp put it at (`standsAt` in
-`lib/drag-resolve.ts`). Swept in `tests/wall-rider-containment.test.ts`: 48 turns, none moves.
+corner-and-wall spots. A 1.2 m TV never did. And a 400 mm curtain at its deepest flipped
+between a corner's two walls on every press, because its centre is nearer the return wall
+than its own. A turn now asks which wall the piece's BACK is against where it stands, not
+which wall is nearest the spot the corner clamp put it at (`standsAt` in
+`lib/drag-resolve.ts`), and so do the 3D tab's ring, wheel and two-finger twist, which never
+went through the keyboard's turn (found in the second review). Swept in
+`tests/wall-rider-containment.test.ts`: 96 turns, none moves; the 3D half is a source guard,
+since the ring cannot be driven from a test.
 
 **Where to click.** Rectangle. Drag a small painting into each corner in turn, select it,
-press **R** a few times, in both tabs. *Right:* it stays on its wall, square to it, and the
-turn report says it is held square. *Wrong:* it hops onto the neighbouring wall.
+and turn it every way there is: **R** in the plan, and in 3D the rotate ring, the scroll
+wheel over it, and on a phone a two-finger twist. Then a curtain stretched to its narrowest,
+in a corner. *Right:* it stays on its wall, square to it. *Wrong:* it hops onto the
+neighbouring wall, on the press or on letting go of the ring.
 
 ### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye
 
