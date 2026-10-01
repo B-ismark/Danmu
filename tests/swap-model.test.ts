@@ -61,6 +61,52 @@ describe('changing the model', () => {
     expect(s.positions.vase?.[1]).toBeGreaterThan(0.75);
   });
 
+  // Reported 2026-10-01: a print on a wall, swapped for curtains from the plan tab,
+  // came back turned across the wall and half through it. The swap kept the print's
+  // centre — 15 mm off the plaster, where a curtain's centre wants 145 — and dropped
+  // the turn that faced the print into the room.
+  it('a wall piece swapped for another hangs flat on the same wall, facing in', () => {
+    const W = 6;
+    // On the EAST wall (x = +3), faced into the room by a drag: authored rot 0, override
+    // −90°, so the drop of the override is the half of the defect a north wall hides.
+    const print = part({ id: 'print', category: 'painting', shape: 'painting', pos: [0, 1.4, 0], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    useScene.setState({
+      room: { width: W, depth: W, height: 2.5, layoutId: 'rect', footprint: footprintForLayout('rect', W, W), wallColors: {} },
+      parts: [print],
+      ready: true,
+    });
+    useStudio.setState({ positions: { print: [W / 2 - 0.015 - 0.005, 1.4, 0.4] }, rotations: { print: -Math.PI / 2 }, dims: {}, parentIds: {} });
+    swapPartModel('print', { label: 'Curtain', group: 'Decor', category: 'curtain', shape: 'curtain', dimMM: [1600, 80, 2200] });
+    const s = useStudio.getState();
+    const [x, , z] = s.positions.print!;
+    // Turned to face west, into the room — the print's own turn, not the authored 0.
+    expect(Math.sin(s.rotations.print!)).toBeCloseTo(-1, 9);
+    expect(Math.cos(s.rotations.print!)).toBeCloseTo(0, 9);
+    // Its back clear of the plaster, by the curtain's own standoff.
+    const back = x + 0.08 / 2;
+    expect(back).toBeLessThan(W / 2);
+    expect(W / 2 - back).toBeGreaterThan(0.08);
+    // Still where along the wall the print was.
+    expect(z).toBeCloseTo(0.4, 9);
+  });
+
+  it('a wall piece already square to its wall writes no turn of its own', () => {
+    // A transform write is never free: re-writing the authored turn still creates an
+    // override a re-detect cannot touch.
+    const W = 6;
+    const print = part({ id: 'print', category: 'painting', shape: 'painting', pos: [0, 1.4, -W / 2 + 0.02], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    useScene.setState({
+      room: { width: W, depth: W, height: 2.5, layoutId: 'rect', footprint: footprintForLayout('rect', W, W), wallColors: {} },
+      parts: [print],
+      ready: true,
+    });
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('print', { label: 'Curtain', group: 'Decor', category: 'curtain', shape: 'curtain', dimMM: [1600, 80, 2200] });
+    const s = useStudio.getState();
+    expect(s.rotations.print).toBeUndefined();
+    expect(s.positions.print![2]).toBeGreaterThan(-W / 2 + 0.08 / 2 + 0.08);
+  });
+
   it('does nothing for a piece that is gone', () => {
     setRoom();
     const before = useScene.getState().parts;

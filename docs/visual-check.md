@@ -156,6 +156,29 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
+### A print swapped for curtains hangs flat on the print's wall — this branch, NOT LOOKED AT
+
+The user's report on 2026-10-01: *"when you replace a painting with curtain while in 2d plan
+mode, curtains spawns in the wrong degree and ends up going through th wall."* Two halves, and
+both came from **Change the model** keeping the old piece's spot as-is. It kept the print's
+centre, 15 mm off the plaster, and the curtain needs 145 mm. And it threw away the turn that
+faced the print into the room, so on any wall where the drag had done the turning, the curtain
+came back at the room's original angle, crossways. The swap now hangs every wall piece the way
+adding one does (`snapToWall`, using the new piece's own depth and standoff), on the wall the
+old one was on. `tests/swap-model.test.ts` holds both halves, and checks that a print already
+square to its wall gets no new turn written.
+
+**Where to click.** Use the 2D plan. Drag a print onto a side wall (east or west, because the
+north wall hides the turn half). Right-click it, choose **Change the model…**, then pick
+Curtain. Repeat once from the 3D tab and once with a door.
+
+**What right looks like.** The curtain lies along the wall the print was on, at the same point
+along it, with its back just off the plaster, and in 3D it hangs flat with the folds facing
+into the room. *Wrong* looks like a curtain drawn across the wall in the plan, or poking
+through the wall in 3D.
+
+**Where it rides.** `lib/swap-model.ts`.
+
 ### A refusal that names the wall instead of an obstruction that is not there
 
 **The judgement this item used to carry is answered.** The user, 2026-09-30: *"Don't
