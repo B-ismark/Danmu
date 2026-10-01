@@ -173,7 +173,7 @@ describe('snapAhead — the arrow key\'s magnet', () => {
   });
 
   it('steps into a neighbour that is not in its way', () => {
-    // A rug, say: `canCollide` says no, so the collision test is the judge, as for a drag.
+    // A rug, say: `canCollideWith` says no, so the collision test is the judge, as for a drag.
     const r = snapAhead([1.0, 0], 0.99, 0, 0, DIM, [neighbor], 'mover', () => false);
     expect(r.x).toBeCloseTo(0.99, 9);
   });

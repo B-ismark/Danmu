@@ -3276,19 +3276,22 @@ export function openSpotForNewPart(
   return undefined;
 }
 
-/** Whether `o` is in the way of `mover` standing at height `y` at all — the pair rule
+/** Which pieces are in the way of `mover` standing at height `y` at all — the pair rule
  *  `collidesAt` applies before it compares footprints. A soft furnishing is in nobody's
  *  way and has nothing in its way, and two pieces at different heights stack rather
  *  than collide. Exported for the arrow key's magnet (`snapAhead`), which stops a press
  *  at a neighbour's edge only when the two could collide: a rug slides under a sofa and
- *  a lamp on a table passes over a stool, from the keyboard as with the mouse. */
-export function canCollide(
+ *  a lamp on a table passes over a stool, from the keyboard as with the mouse.
+ *
+ *  A predicate rather than a pair test because the mover's half is the same for every
+ *  neighbour, and `collidesAt` asks it of every piece in the room, up to three times a
+ *  frame during a drag. */
+export function canCollideWith(
   mover: Pick<ScenePart, 'category' | 'shape'>,
   dimMM: [number, number, number],
   y: number,
-  o: ScenePart,
-): boolean {
-  if (isSoftFurnishing(mover) || isSoftFurnishing(o)) return false;
+): (o: ScenePart) => boolean {
+  if (isSoftFurnishing(mover)) return () => false;
   // `pos[1]` is a BOTTOM for a floor-anchored part and a mesh CENTRE for every
   // other anchor, so the extent is `verticalExtent`'s answer and not `[y, y + h]`.
   // This function spelled the floor version out for both sides, which put a
@@ -3297,9 +3300,12 @@ export function canCollide(
   // the room could collide with a mounted TV or a floating shelf at all. A ceiling
   // fan was never skipped and was mis-measured the same way.
   const [myBottom, myTop] = verticalExtent(mover.category, mover.shape, dimMM, y);
-  const [oyBottom, oyTop] = verticalExtent(o.category, o.shape, o.dimMM, o.pos[1]);
-  // Vertical separation → no collision (stacking allowed).
-  return !(myTop <= oyBottom + 0.005 || myBottom >= oyTop - 0.005);
+  return (o) => {
+    if (isSoftFurnishing(o)) return false;
+    const [oyBottom, oyTop] = verticalExtent(o.category, o.shape, o.dimMM, o.pos[1]);
+    // Vertical separation → no collision (stacking allowed).
+    return !(myTop <= oyBottom + 0.005 || myBottom >= oyTop - 0.005);
+  };
 }
 
 /** Y-aware collision. Used for placement clamping. Soft furnishings exempt.
@@ -3329,10 +3335,11 @@ export function collidesAt(
   if (!mover) return false;
   if (isSoftFurnishing(mover)) return false;
   const me = footFromPart(pos, rot, dimMM, mover.circle, mover.shape);
+  const inTheWay = canCollideWith(mover, dimMM, pos[1]);
   for (const o of parts) {
     if (o.id === movingId) continue;
     if (ignore?.has(o.id)) continue;
-    if (!canCollide(mover, dimMM, pos[1], o)) continue;
+    if (!inTheWay(o)) continue;
 
     // XZ overlap — exact separating-axis test, over the ROUND footprint where a
     // piece has one. The tiny negative pad lets flush side-by-side placement read

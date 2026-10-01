@@ -40,6 +40,9 @@ export type SnapResult = { x: number; z: number; lines: SnapLine[] };
  *  the way of the moving piece, and is the direction that crosses into it. */
 type Line = { target: number; line: SnapLine; into?: 1 | -1 };
 
+/** One line a neighbour offers, before it is put on an axis. */
+type Cand = { target: number; at: number; kind: SnapLine['kind']; into?: 1 | -1 };
+
 /** Below this, two positions are the same place: float noise, not a step. */
 const SAME_M = 1e-9;
 
@@ -81,8 +84,9 @@ function linesNear(
 
     // Whether the two really face each other across an edge-to-edge line, rather
     // than passing beside each other inside the slack.
-    const facesX = obstacle !== undefined && Math.abs(z - oz) < ez + oe.ez - SAME_M && obstacle(o);
-    const facesZ = obstacle !== undefined && Math.abs(x - ox) < ex + oe.ex - SAME_M && obstacle(o);
+    const inWay = obstacle?.(o) ?? false;
+    const facesX = inWay && Math.abs(z - oz) < ez + oe.ez - SAME_M;
+    const facesZ = inWay && Math.abs(x - ox) < ex + oe.ex - SAME_M;
 
     // Span of the guide line along the other axis — covers both parts.
     const spanZ: [number, number] = [Math.min(z - ez, oz - oe.ez), Math.max(z + ez, oz + oe.ez)];
@@ -91,37 +95,35 @@ function linesNear(
     if (overlapZ) {
       // X axis: centre alignment first (wins ties against coincident edge
       // candidates on equal-size parts), then edge-to-edge (flush).
-      const xCands: Array<{ target: number; at: number; kind: SnapLine['kind'] }> = [
+      // `into` is the direction that crosses from that line into the neighbour: only the
+      // two edge-to-edge pairings have one. Standing with my left edge on their right,
+      // moving left goes into them.
+      const xCands: Cand[] = [
         { target: ox, at: ox, kind: 'center' },
-        { target: ox + oe.ex + ex, at: ox + oe.ex, kind: 'edge' }, // my left edge on their right
-        { target: ox - oe.ex - ex, at: ox - oe.ex, kind: 'edge' }, // my right edge on their left
+        { target: ox + oe.ex + ex, at: ox + oe.ex, kind: 'edge', into: -1 }, // my left edge on their right
+        { target: ox - oe.ex - ex, at: ox - oe.ex, kind: 'edge', into: 1 }, // my right edge on their left
         { target: ox + oe.ex - ex, at: ox + oe.ex, kind: 'edge' }, // right edges flush
         { target: ox - oe.ex + ex, at: ox - oe.ex, kind: 'edge' }, // left edges flush
       ];
-      xCands.forEach((c, i) =>
-        xs.push({ target: c.target, line: { axis: 'x', at: c.at, span: spanZ, kind: c.kind }, into: facesX ? INTO[i] : undefined }),
-      );
+      for (const c of xCands) {
+        xs.push({ target: c.target, line: { axis: 'x', at: c.at, span: spanZ, kind: c.kind }, into: facesX ? c.into : undefined });
+      }
     }
     if (overlapX) {
-      const zCands: Array<{ target: number; at: number; kind: SnapLine['kind'] }> = [
+      const zCands: Cand[] = [
         { target: oz, at: oz, kind: 'center' },
-        { target: oz + oe.ez + ez, at: oz + oe.ez, kind: 'edge' },
-        { target: oz - oe.ez - ez, at: oz - oe.ez, kind: 'edge' },
+        { target: oz + oe.ez + ez, at: oz + oe.ez, kind: 'edge', into: -1 },
+        { target: oz - oe.ez - ez, at: oz - oe.ez, kind: 'edge', into: 1 },
         { target: oz + oe.ez - ez, at: oz + oe.ez, kind: 'edge' },
         { target: oz - oe.ez + ez, at: oz - oe.ez, kind: 'edge' },
       ];
-      zCands.forEach((c, i) =>
-        zs.push({ target: c.target, line: { axis: 'z', at: c.at, span: spanX, kind: c.kind }, into: facesZ ? INTO[i] : undefined }),
-      );
+      for (const c of zCands) {
+        zs.push({ target: c.target, line: { axis: 'z', at: c.at, span: spanX, kind: c.kind }, into: facesZ ? c.into : undefined });
+      }
     }
   }
   return { xs, zs };
 }
-
-/** For each candidate in `linesNear`'s order, the direction that crosses from that line
- *  into the neighbour: only the two edge-to-edge pairings have one. Standing with my
- *  left edge on their right, moving left goes into them. */
-const INTO: ReadonlyArray<1 | -1 | undefined> = [undefined, -1, 1, undefined, undefined];
 
 /** The line nearest `v`, inside `reach` of it. Strict, and the first of equals wins. */
 function nearest(lines: Line[], v: number, reach: number): Line | null {

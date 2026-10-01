@@ -19,7 +19,7 @@
 // the object3D it is animating and the plan knows it off the stored transform, so
 // that one value is passed in rather than reached for.
 
-import { canCollide, collidesAt, type ScenePart } from './scene-spec';
+import { canCollideWith, collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
 import { aabbExtents, type Poly } from './geometry';
 import { snapAhead, snapToNeighbors, type SnapLine } from './item-snap';
@@ -240,7 +240,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
           nudgeFrom, x, z, outRot, dim,
           company ? parts.filter((o) => !company.has(o.id)) : parts,
           part.id,
-          (o) => canCollide(part, dim, y0, o),
+          canCollideWith(part, dim, y0),
         )
       : snapToNeighbors(x, z, outRot, dim, parts, part.id);
     x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, snapped.x));
