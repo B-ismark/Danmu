@@ -48,6 +48,7 @@ export default function RoomsPage() {
   // The list could not be read at all — a private window, blocked site data. This
   // is the first screen, so a read that throws must still leave a way to start.
   const [unreadable, setUnreadable] = useState(false);
+  const roomsShown = useRef(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -59,9 +60,19 @@ export default function RoomsPage() {
     } catch {
       setUnreadable(true);
       setBooted(true);
+      // A re-read after a delete or an undo: the cards on screen are now the
+      // list as it was, so say so rather than leave them looking current.
+      if (roomsShown.current) {
+        toast({
+          tone: 'danger',
+          title: 'Your rooms could not be re-read',
+          message: 'Reload the page to see the current list.',
+        });
+      }
       return;
     }
     setUnreadable(false);
+    roomsShown.current = rs.length > 0;
     setRooms(rs);
     setBooted(true);
     // Drop selections for rooms that no longer exist.
@@ -558,12 +569,37 @@ function RoomCard({
 }
 
 function EmptyState({ unreadable }: { unreadable: boolean }) {
+  // A list that could not be read is not an empty one. "No rooms yet" over it
+  // would be a false empty state, and "Create your first room" a dead end: a
+  // browser that will not open its storage will not save a new room either.
+  if (unreadable) {
+    return (
+      <div style={{ textAlign: 'center', padding: '80px 8px', maxWidth: 'var(--measure-text)', marginInline: 'auto' }}>
+        <div className="ds-kicker" style={{ marginBottom: 12 }}>
+          Storage unavailable
+        </div>
+        <h1 style={{ fontSize: 'var(--fs-hero)', letterSpacing: '-0.02em', marginBottom: 10 }}>
+          Your rooms can&apos;t be opened here.
+        </h1>
+        <p className="t-body" style={{ lineHeight: 1.55, marginBottom: 28 }}>
+          This browser isn&apos;t letting Danmu use its storage, which is where your rooms are kept. A private
+          window or blocked site data can do this. Rooms can&apos;t be saved until it is allowed.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="ds-btn ds-btn--lg ds-btn--primary"
+          style={{ padding: '0 20px' }}
+        >
+          <Icon name="refresh" size={13} />
+          Try again
+        </button>
+      </div>
+    );
+  }
   return (
     <div style={{ textAlign: 'center', padding: '80px 8px', maxWidth: 'var(--measure-text)', marginInline: 'auto' }}>
-      {/* "No rooms yet" about a list that could not be read would be a false empty
-          state, so the kicker says which it is. */}
       <div className="ds-kicker" style={{ marginBottom: 12 }}>
-        {unreadable ? 'Your saved rooms could not be read here' : 'No rooms yet'}
+        No rooms yet
       </div>
       <h1 style={{ fontSize: 'var(--fs-hero)', letterSpacing: '-0.02em', marginBottom: 10 }}>Decorate your first room.</h1>
       <p className="t-body" style={{ lineHeight: 1.55, marginBottom: 28 }}>
