@@ -10,9 +10,9 @@
 // second nightstand would carry. A pointer drag is driven too, because it records at a
 // different moment: on the release, once, rather than on every frame.
 //
-// Snap is OFF here on purpose. With it on, the item magnet pulls every 10 mm nudge back
-// onto the lamp's alignment with its nightstand and the key does nothing — a separate
-// defect, filed, and not the one this file is about.
+// Snap is OFF here so the pointer drag goes where it is steered: with it on, the item
+// magnet pulls the lamp onto its lines with both nightstands. The arrow keys never use
+// the drag magnet (§ H.6.8, `tests/plan-nudge.test.tsx`).
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -22,6 +22,7 @@ import { footprintForLayout } from '@/lib/footprint';
 import { currentRiderRelation, currentRoomScene } from '@/lib/room-scene';
 import { planConvoy } from '@/lib/drag-convoy';
 import type { ScenePart } from '@/lib/scene-spec';
+import { stubPlanCanvas } from './helpers/mount';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('plan-landing', 'plan'));
 const { PlanView } = await import('@/components/studio/PlanView');
@@ -43,18 +44,8 @@ afterEach(() => {
   restoreRect = null;
 });
 
-/** jsdom lays nothing out, so the plan's `<svg>` measures 0 × 0 and every pointer maps
- *  to one point. A square canvas is enough: the drag below steers by the lamp's own
- *  position, so the scale the plan fits the room at does not have to be known here. */
 function stubCanvas() {
-  const real = Element.prototype.getBoundingClientRect;
-  Element.prototype.getBoundingClientRect = function rect(this: Element) {
-    if (this.tagName.toLowerCase() !== 'svg') return real.call(this);
-    return { x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 1000, width: 1000, height: 1000, toJSON: () => ({}) } as DOMRect;
-  };
-  restoreRect = () => {
-    Element.prototype.getBoundingClientRect = real;
-  };
+  restoreRect = stubPlanCanvas();
 }
 
 function room(parentIds: Record<string, string>) {

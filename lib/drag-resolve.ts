@@ -19,10 +19,11 @@
 // the object3D it is animating and the plan knows it off the stored transform, so
 // that one value is passed in rather than reached for.
 
-import { collidesAt, type ScenePart } from './scene-spec';
+import { canCollideWith, collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
-import { aabbExtents, edgeProjection, frontVector, nearestEdge, type Poly } from './geometry';
-import { snapToNeighbors, type SnapLine } from './item-snap';
+import { aabbExtents, edgeProjection, footFromPart, footIsBox, frontVector, nearestEdge, TOUCH_M, type Poly } from './geometry';
+import { tuckedAt, tuckProfile } from './layout-rules';
+import { snapAhead, snapToNeighbors, type SnapLine } from './item-snap';
 import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
 export type SnapMode = 'off' | 'fine' | 'coarse';
@@ -109,6 +110,24 @@ export type ResolveInput = {
    * nowhere else; see `ConvoyMember.inherited` for when it may be trusted.
    */
   inherited?: ReadonlySet<string>;
+  /**
+   * Set for an arrow key: where the piece stands, (x, z), before the press. The press
+   * is one step from here to (`rawX`, `rawZ`), so the target is not put on the grid;
+   * with the snap on, it stops on the first neighbour edge or centre it reaches
+   * instead, never on one behind it, and does not move at all into a neighbour it
+   * already touches and would collide with. See `snapAhead`, where the reasons are
+   * written down. With the snap off it is exactly the step.
+   */
+  nudgeFrom?: readonly [number, number];
+  /**
+   * The pieces travelling with this one (`Convoy.travelling`). `parts` holds them
+   * where they are going, so they keep their place relative to this piece and none
+   * of their lines is one it can reach. Only an arrow key reads it: a press stopped
+   * on one, and since the set moves together the next press stopped the same
+   * distance short of it again — every press of a set whose pieces were a few
+   * millimetres off lining up came up short.
+   */
+  company?: ReadonlySet<string>;
 };
 
 export type Resolved = {
@@ -166,6 +185,39 @@ export function backOf(at: readonly [number, number, number], rot: number, dim: 
 }
 
 /**
+ * Which neighbours an arrow key stops at rather than steps into: the ones the collision
+ * test's own pair rule says it could run into, at the height it stands now — and only
+ * where both footprints are their boxes. The lines a press stops on are drawn from the
+ * boxes, so where a box is not the outline they are alignments and not contacts: a
+ * sofa at 45°, a round table and an L-desk reach their box at a corner or not at all,
+ * and stopping there told a crate with clear floor ahead that it could go no further.
+ *
+ * Nor is a seat going under the surface it tucks under, front first: the collision test
+ * forgives that pair (§ 17), so a drag slides the chair in and a press stopped it at the
+ * table's edge. Asked as `collidesAt` asks it, `tuckedAt`, with the piece a touching
+ * allowance past the step — `from` to `to` — where a back that leads has gone in.
+ */
+function pressObstacle(
+  part: ScenePart,
+  rot: number,
+  dim: [number, number, number],
+  y: number,
+  from: readonly [number, number],
+  to: readonly [number, number],
+): (o: ScenePart) => boolean {
+  if (!footIsBox(rot, dim, part.circle, part.shape)) return () => false;
+  const inTheWay = canCollideWith(part, dim, y);
+  const len = Math.hypot(to[0] - from[0], to[1] - from[1]);
+  const k = len > 0 ? (len + TOUCH_M) / len : 0;
+  const past = footFromPart([from[0] + (to[0] - from[0]) * k, y, from[1] + (to[1] - from[1]) * k], rot, dim, part.circle, part.shape);
+  const mine = tuckProfile({ ...part, dimMM: dim });
+  return (o) =>
+    footIsBox(o.rot, o.dimMM, o.circle, o.shape) &&
+    inTheWay(o) &&
+    !tuckedAt(mine, past, tuckProfile(o), footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape));
+}
+
+/**
  * The deterministic placement pipeline. Order matters and each step feeds the
  * next: grid snap → containment → wall snap OR magnetic item snap →
  * gravity/support → vertical clamp → legality.
@@ -187,9 +239,15 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   //
   // The magnetic item snap below may pull a piece straight back off the grid, and
   // should: flush against a real neighbour beats aligned to an arbitrary lattice.
+  //
+  // A key press is not rounded here. It is a step from where the piece stands, so an
+  // off-grid piece keeps its offset (`snapAhead` says why), and the shorter step a
+  // selection settles on when a member runs out of room (`settleLead`) is not a whole
+  // step: rounded, it put the piece straight back where it started.
   const grid = snapSteps(snapMode).translate;
-  const gx = grid ? Math.round(rawX / grid) * grid : rawX;
-  const gz = grid ? Math.round(rawZ / grid) * grid : rawZ;
+  const nudgeFrom = input.nudgeFrom;
+  const gx = grid && !nudgeFrom ? Math.round(rawX / grid) * grid : rawX;
+  const gz = grid && !nudgeFrom ? Math.round(rawZ / grid) * grid : rawZ;
 
   // Containment clamp — keep the whole rotated footprint inside the room's
   // bounding box. Footprints can be off-centre after independent wall moves, so
@@ -284,7 +342,18 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   } else if (snapMode !== 'off') {
     // Magnetic item-to-item snapping — edges flush, centres aligned, against the
     // neighbouring furniture.
-    const snapped = snapToNeighbors(x, z, outRot, dim, parts, part.id);
+    // A key press stops at a neighbour it would collide with — see `pressObstacle`. Its
+    // company is not among them, so neither is anything in `inherited`, which is
+    // company too.
+    const company = input.company;
+    const snapped = nudgeFrom
+      ? snapAhead(
+          nudgeFrom, x, z, outRot, dim,
+          company ? parts.filter((o) => !company.has(o.id)) : parts,
+          part.id,
+          pressObstacle(part, outRot, dim, input.currentY ?? part.pos[1], nudgeFrom, [x, z]),
+        )
+      : snapToNeighbors(x, z, outRot, dim, parts, part.id);
     x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, snapped.x));
     z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, snapped.z));
     if (snapped.lines.length > 0) snapLines = snapped.lines;

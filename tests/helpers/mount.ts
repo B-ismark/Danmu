@@ -111,3 +111,18 @@ export function navigationMock(roomId: string | null, tab: 'plan' | 'model' = 'p
     useSearchParams: () => new URLSearchParams(),
   };
 }
+
+/** jsdom lays nothing out, so the plan's `<svg>` measures 0 × 0 and every pointer maps
+ *  to one point. A 1000 px square is enough for a drag that steers by the piece's own
+ *  position, which is how the plan's drag tests are written: the scale the plan fits
+ *  the room at then does not have to be known. Returns the undo. */
+export function stubPlanCanvas(): () => void {
+  const real = Element.prototype.getBoundingClientRect;
+  Element.prototype.getBoundingClientRect = function rect(this: Element) {
+    if (this.tagName.toLowerCase() !== 'svg') return real.call(this);
+    return { x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 1000, width: 1000, height: 1000, toJSON: () => ({}) } as DOMRect;
+  };
+  return () => {
+    Element.prototype.getBoundingClientRect = real;
+  };
+}
