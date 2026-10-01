@@ -21,7 +21,8 @@
 
 import { canCollideWith, collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
-import { aabbExtents, edgeProjection, footIsBox, frontVector, nearestEdge, type Poly } from './geometry';
+import { aabbExtents, edgeProjection, footFromPart, footIsBox, frontVector, nearestEdge, TOUCH_M, type Poly } from './geometry';
+import { tuckedAt, tuckProfile } from './layout-rules';
 import { snapAhead, snapToNeighbors, type SnapLine } from './item-snap';
 import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
@@ -190,16 +191,30 @@ export function backOf(at: readonly [number, number, number], rot: number, dim: 
  * boxes, so where a box is not the outline they are alignments and not contacts: a
  * sofa at 45°, a round table and an L-desk reach their box at a corner or not at all,
  * and stopping there told a crate with clear floor ahead that it could go no further.
+ *
+ * Nor is a seat going under the surface it tucks under, front first: the collision test
+ * forgives that pair (§ 17), so a drag slides the chair in and a press stopped it at the
+ * table's edge. Asked as `collidesAt` asks it, `tuckedAt`, with the piece a touching
+ * allowance past the step — `from` to `to` — where a back that leads has gone in.
  */
 function pressObstacle(
   part: ScenePart,
   rot: number,
   dim: [number, number, number],
   y: number,
+  from: readonly [number, number],
+  to: readonly [number, number],
 ): (o: ScenePart) => boolean {
   if (!footIsBox(rot, dim, part.circle, part.shape)) return () => false;
   const inTheWay = canCollideWith(part, dim, y);
-  return (o) => footIsBox(o.rot, o.dimMM, o.circle, o.shape) && inTheWay(o);
+  const len = Math.hypot(to[0] - from[0], to[1] - from[1]);
+  const k = len > 0 ? (len + TOUCH_M) / len : 0;
+  const past = footFromPart([from[0] + (to[0] - from[0]) * k, y, from[1] + (to[1] - from[1]) * k], rot, dim, part.circle, part.shape);
+  const mine = tuckProfile({ ...part, dimMM: dim });
+  return (o) =>
+    footIsBox(o.rot, o.dimMM, o.circle, o.shape) &&
+    inTheWay(o) &&
+    !tuckedAt(mine, past, tuckProfile(o), footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape));
 }
 
 /**
@@ -336,7 +351,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
           nudgeFrom, x, z, outRot, dim,
           company ? parts.filter((o) => !company.has(o.id)) : parts,
           part.id,
-          pressObstacle(part, outRot, dim, input.currentY ?? part.pos[1]),
+          pressObstacle(part, outRot, dim, input.currentY ?? part.pos[1], nudgeFrom, [x, z]),
         )
       : snapToNeighbors(x, z, outRot, dim, parts, part.id);
     x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, snapped.x));

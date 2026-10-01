@@ -154,6 +154,8 @@ when you click it; the 2D Plan has no control of its own for it. On a phone it i
 - Next to a round table, or a sofa turned to 45°, the chair keeps moving until it
   really meets the furniture, rather than stopping in the air at the corner of the
   table's square.
+- A dining chair facing its table goes on under it, a press at a time, as dragging it
+  does. Turned with its back to the table, it stops at the table's edge.
 - A mouse drag still pulls the chair flush when you let go close to the cabinet.
 - Select two chairs that are nearly, not quite, lined up (shift-click) and arrow them
   together: every press moves both a whole step.

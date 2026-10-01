@@ -246,6 +246,31 @@ describe('an arrow key lands on the first line it reaches (plan tab)', () => {
     expect(crate()[0]).toBeCloseTo(FLUSH, 9);
   });
 
+  it('goes on under the table a chair tucks under, front first, as a drag does', () => {
+    // A 1600 × 900 dining table and a dining chair flush with its south side, as both
+    // `tests/seat-support.test.ts` fixtures are. A drag lets the chair slide under
+    // (§ 17), so a press may not stop at the edge the collision test forgives.
+    const seat = (rot: number, z = 0): ScenePart[] => [
+      { id: 'table', name: 'Table', category: 'table', shape: 'desk-standard', dimMM: [1600, 900, 750], pos: [0, 0, z], rot: 0, locked: false } as ScenePart,
+      { id: 'chair', name: 'Chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, z + 0.7], rot, locked: false } as ScenePart,
+    ];
+    room(FLUSH, 'fine');
+    useScene.setState({ parts: seat(Math.PI) });
+    render(<PlanView />);
+    expect(listening(() => press('ArrowUp', 3, 'Chair'))).toEqual([]);
+    expect(at('chair')[2]).toBeCloseTo(0.67, 9);
+    cleanup();
+
+    // Back first, its back would go through the top: not a tuck, so it stays flush. With
+    // the table at 0.4 a back exactly one Fine step in reads as clear, by float noise on
+    // the touching allowance; the press asks a touching allowance past the step.
+    room(FLUSH, 'fine');
+    useScene.setState({ parts: seat(0, 0.4) });
+    render(<PlanView />);
+    expect(listening(() => press('ArrowUp', 1, 'Chair'))).toEqual(['Chair cannot go any further that way.']);
+    expect(at('chair')[2]).toBeCloseTo(1.1, 9);
+  });
+
   it('takes the exact step with the snap off', () => {
     room(1.505, 'off');
     render(<PlanView />);

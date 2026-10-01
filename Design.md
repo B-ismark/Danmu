@@ -2756,6 +2756,8 @@ Which neighbours count is the collision test's own answer — `canCollideWith`, 
 rule, overlapping across the line by more than `TOUCH_M` — and only where both
 footprints are their boxes (`footIsBox`), since the lines are drawn from the boxes and
 a sofa at 45°, a round table or an L-desk reaches its box at a corner or not at all.
+A chair going front first under the table it tucks under is not a stop either: the
+collision test forgives that pair (`tuckedAt`), so the press slides it in as a drag does.
 Grid marks are not stopping points, so a piece off the grid stays off it: a piece flush
 with a neighbour is almost never on a mark, and the next one is as likely to be a hair
 ahead as a whole step. And the pieces travelling with it are not lines it can reach

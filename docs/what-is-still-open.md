@@ -4234,6 +4234,11 @@ so their counts are not quoted here; the tests named below hold each rule.
   a held key, and it cleared the refusal state a running drag owns. It is said once each
   way, and a key leaves a drag's refusal alone.
 
+**And one from the merge with § 17.** A drag now slides a chair under the table it
+tucks under, and the barrier stopped a press at that table's edge, because the pair rule
+says the two can collide. The barrier now asks the collision test's tuck question too
+(`tuckedAt`), a touching allowance past the step: front first goes in, back first stays.
+
 `tests/plan-nudge.test.tsx`, plus `snapAhead` in `tests/item-snap.test.ts`.
 
 **Still open, three of them found by that review and none of them new with it.**
