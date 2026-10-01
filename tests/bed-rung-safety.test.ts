@@ -482,7 +482,17 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // is not what moved — nothing here chose a wall over a door — so the witness is gone
     // rather than contradicted, and the negative control below is what still proves the
     // term is wired.
-    expect(rows[1].door, 'Double at U 6x5 — see § 31, now decided').toBe(0);
+    //
+    // 0 → 205.06 on 2026-10-01, ONE seed again, 5, and found the same way. The Library
+    // has one bed now, so whether a bed sleeps two is its WIDTH (`sleepsTwo`) and not its
+    // shape — and this sweep only ever overwrote the seeded single's `dimMM`, so every
+    // wide rung here had been a 1400 or 1600 mm `bed-single` asking for one clear side.
+    // The app's own Queen and Double are `bed-double` and always asked for two. So the
+    // sweep measures the rungs the app ships at last, and they cost more: `access` 20–80
+    // on most seeds (U 6x5 cannot give a wide bed two clear sides), and on seed 5 the
+    // Double gives up the door — door 205.1, access 80, overlap and outside 0. That is
+    // § 31's ruling holding, not breaking: nothing went through a wall to spare it.
+    expect(rows[1].door, 'Double at U 6x5 — see § 31, now decided').toBeCloseTo(205.06, 1);
     const poly = footprintForLayout('u', 6, 5);
     const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
     const door = base.findIndex((q) => q.category === 'door');
@@ -551,10 +561,16 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // bound wide enough to be a fact rather than a preference — the rungs are within a
     // quarter of each other, in either direction, which a genuine tidiness collapse
     // (the tidy passes not running on one rung) would blow straight through.
-    expect(
-      Math.abs(narrowest.median - rows[0].median) / rows[0].median,
-      'the rungs are not in different tidiness leagues',
-    ).toBeLessThan(0.25);
+    //
+    // AND IT REVERSED BACK on 2026-10-01, which is why the bound above is the ordering
+    // again: medians 54.04 / 50.78 / 17.77. Same cause as the door witness above — the
+    // wide rungs had been measured as one-sided `bed-single`s and are now measured as
+    // the two-sided beds the app ships, which U 6x5 cannot give two clear sides (`access`
+    // 20–80 on most seeds). The single loses nothing, being under `SLEEPS_TWO_MM`. So
+    // coming down the ladder is tidier as well as safer, by a factor of three, and that
+    // is a property worth pinning rather than a band: if the narrowest rung ever costs
+    // more than the widest, the ladder's choice has become a trade.
+    expect(narrowest.median, 'coming down the ladder costs no tidiness').toBeLessThanOrEqual(rows[0].median);
   }, 180_000);
 
   it('the room as it ships comes down to the narrowest rung', () => {

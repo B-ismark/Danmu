@@ -263,6 +263,42 @@ describe('a piece dropped onto something RIDES it, and the edge is recorded', ()
   });
 });
 
+describe('a drop does not make an overlap no drag would allow', () => {
+  // The user's report: two ceiling fans, one dropped in the plan and one in the 3D
+  // tab at the same point, shared one hub. Both drops reach `addPieceToRoom`, and
+  // an aimed drop used to skip every collision question.
+  const FAN: NewPiece = { label: 'Ceiling fan', category: 'fan', shape: 'fan', dimMM: [1000, 1000, 200] }; // annotated, not `as const` (see BED above)
+  const fanAt = (id: string) => useScene.getState().parts.find((p) => p.id === id)!;
+
+  it('a second fan dropped on the first goes beside it, still on the ceiling, and says so', () => {
+    const a = addPieceToRoom(FAN, [0, 0]);
+    const out = addOutcome(FAN, [0, 0]);
+    if ('refused' in out) throw new Error(out.refused);
+    const [p, q] = [fanAt(a), fanAt(out.id)];
+    const gap = Math.hypot(p.pos[0] - q.pos[0], p.pos[2] - q.pos[2]);
+    expect(gap, 'two 1 m fans need their centres a metre apart').toBeGreaterThanOrEqual(1 - 1e-6);
+    expect(q.pos[1], 'and the second still hangs from the ceiling').toBeCloseTo(p.pos[1], 6);
+    expect(out.note, 'moved from where the hand let go, so it says so').toMatch(/taken/);
+  });
+
+  it('a drop on clear floor is kept exactly, and says nothing extra', () => {
+    addPieceToRoom(FAN, [-2, -1.5]);
+    const out = addOutcome(FAN, [1.5, 1]);
+    if ('refused' in out) throw new Error(out.refused);
+    expect(fanAt(out.id).pos[0]).toBeCloseTo(1.5, 6);
+    expect(fanAt(out.id).pos[2]).toBeCloseTo(1, 6);
+    expect(out.note).toBeUndefined();
+  });
+
+  it('a lamp dropped onto a desk still rides the desk — landing ON a piece is the point', () => {
+    seedDesk();
+    const id = addPieceToRoom(LAMP, [0, 0]);
+    const lamp = useScene.getState().parts.find((p) => p.id === id)!;
+    expect(lamp.pos[0]).toBeCloseTo(0, 6);
+    expect(useStudio.getState().parentIds[id]).toBe('desk-1');
+  });
+});
+
 describe('a piece wider than the space it would have is refused, not resized', () => {
   // The user's ruling (2026-09-30): "Don't allow if it's wider than the available
   // space." These read the OUTCOME, not the pose, because a refusal adds nothing.

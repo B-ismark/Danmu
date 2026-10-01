@@ -97,10 +97,10 @@ const PIECES: Piece[] = [
   { label: 'mini fridge', category: 'fridge', shape: 'fridge', slot: 'n', lateral: 0.35, gap: 0.05, w: 500, h: 850 },
   { label: 'cube wardrobe', category: 'wardrobe', shape: 'wardrobe', slot: 'n', lateral: -2.0, gap: 0, w: 1000, h: 1800 },
   { label: 'palm print', category: 'painting', shape: 'painting', slot: 'n', lateral: -0.05, y: 1.55, w: 500, h: 400 },
-  { label: 'garment rack', category: 'wardrobe', shape: 'wardrobe', slot: 'n', lateral: 1.55, gap: 0, w: 900, h: 1600 },
+  { label: 'garment rack', category: 'wardrobe', shape: 'clothes-rack', slot: 'n', lateral: 1.55, gap: 0, w: 900, h: 1600 },
   // Photo 2: the window wall, mostly ceiling, no floor in shot.
   { label: 'curtain', category: 'curtain', shape: 'curtain', slot: 'e', lateral: -0.4, y: 1.25, w: 1400, h: 2300 },
-  { label: 'clothes rack', category: 'shelf', shape: 'bookshelf', slot: 'e', lateral: -1.6, gap: 0.02, w: 800, h: 1500 },
+  { label: 'clothes rack', category: 'shelf', shape: 'clothes-rack', slot: 'e', lateral: -1.6, gap: 0.02, w: 800, h: 1500 },
   // Photo 3: the bed wall.
   { label: 'bed', category: 'bed', shape: 'bed-double', slot: 's', lateral: -0.4, gap: 0, w: 1500, h: 1000 },
   { label: 'barred window', category: 'other', shape: 'window', slot: 's', lateral: 0.1, y: 1.55, w: 1000, h: 1000 },
@@ -410,8 +410,10 @@ describe('a scan tilted up, cut at the edges, with the size skipped', () => {
     // Before that, 7 of these 14 came back more than 10% short on this run alone.
     expect(tooSmall(ALL_BUT_CUTS)).toBe(0);
     // The price is the catalogue's idea of typical, and it is paid by the pieces that
-    // are not: a 900 mm garment rack read as a wardrobe grows toward a 2 m one, until
-    // the end of the wall stops it. Four of fourteen are more than 10% over, which is
+    // are not: an 800 or 900 mm clothes rail grows toward the Library's 1200 mm one.
+    // (Before the rail was a shape it was read as a wardrobe, and grew toward a 2 m one
+    // until the end of the wall stopped it — 56% over where it is 33% now; the two
+    // rails are `clothes-rack` in the fixture because that is what is in the photo.) Four of fourteen are more than 10% over, which is
     // why the scan screen says so on every row it grew.
     expect(summarise(ALL_BUT_CUTS).tooBig).toBe(4);
     // The wall's end is what makes the corner piece exact. The cube wardrobe runs off

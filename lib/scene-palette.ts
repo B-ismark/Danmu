@@ -73,6 +73,12 @@ export const DECOR = {
   pot: ['#B5774D', '#C9B79C', '#3E5A52', '#8A8A86'],
   vase: ['#D9CFC0', '#6E8C84', '#B5734D', '#2E2A26'],
   pillow: ['#C9A98E', '#8FA98C', '#C57B53', '#3F5670', '#D6C7AE'],
+  /** Shoes on a shoe rack — leather, canvas, a white trainer. */
+  shoe: ['#2E2A26', '#6B4A32', '#F2EFE8', '#3F5670', '#8A6A4A', '#B5734D'],
+  /** A shoe's sole, one per shoe tone above, so a white trainer gets a gum sole. */
+  sole: ['#1E1B18', '#2E2A26', '#D9CFC0', '#E8E4DC', '#4A3B2E', '#3A3530'],
+  /** Clothes on a rail — the palette's own warm neutrals with a couple of accents. */
+  garment: ['#E8E0CB', '#3F5670', '#C57B53', '#8FA98C', '#2E2A26', '#D6C7AE', '#A88A6E', '#6E8C84'],
 } as const;
 
 // ─── Exported-artifact palette ──────────────────────────────────────────────
@@ -133,6 +139,8 @@ const BY_SHAPE: Record<Shape, string> = {
   closet: '#E8B833',
   bookshelf: '#9A7848',
   'shoe-rack': '#8A6A45',
+  // black-iron pipe, the one in the reference photo
+  'clothes-rack': '#2B2B2E',
   // lighting
   'lamp-floor': '#E8E0CB',
   'lamp-table': '#E8E0CB',

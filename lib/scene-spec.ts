@@ -101,7 +101,7 @@ export const SHAPES = [
   'mirror', 'mirror-oval', 'painting', 'ac-unit', 'window',
   // others
   'monitor', 'laptop', 'fan', 'fridge', 'wardrobe', 'curtain',
-  'bookshelf', 'shoe-rack', 'door',
+  'bookshelf', 'shoe-rack', 'clothes-rack', 'door',
   // appliances
   'soundbar', 'radiator', 'air-purifier', 'washing-machine', 'microwave', 'water-dispenser',
   'fan-standing', 'chest-freezer', 'tv-console', 'stool',
@@ -1882,6 +1882,8 @@ export const DND_MIME = 'application/x-danmu-item';
 const PARAMETRIC_SHAPES = new Set<Shape>([
   'sofa', 'curtain', 'wardrobe', 'closet', 'bookshelf', 'shoe-rack',
   'fan', 'lamp-pendant',
+  // `railPipe`: a pipe is plumbing, and a wider rail is not thicker plumbing.
+  'clothes-rack',
   // …and the rest of § 36's class: `consoleSlabs`, `stoolSeat`, `drawerSlide` and
   // `doorHandleY` are all `min(absolute, proportion)`, which is the shape a group
   // scale destroys. Smaller violations than the two above — 1.5x to 1.6x, and
@@ -2015,6 +2017,7 @@ export function moduleRangeFor(shape: Shape): ModuleRange | null {
 const DECOR_CATEGORIES = new Set<Category>(['table', 'desk', 'nightstand', 'shelf', 'wardrobe', 'ottoman']);
 export function supportsDecor(category: Category, shape: Shape): boolean {
   if (shape === 'shoe-rack') return false; // angled tiers, no flat top
+  if (shape === 'clothes-rack') return false; // a pipe, no top at all
   return DECOR_CATEGORIES.has(category);
 }
 
@@ -2032,6 +2035,144 @@ function seededRand(s: string): () => number {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/** One box of a drawn prop, in the frame its renderer places it in, metres. `tone` is
+ *  an index into the prop's own `DECOR` list, so the palette stays in
+ *  `scene-palette.ts` and the arithmetic stays here, where a test can reach it. */
+export type PropBox = { pos: [number, number, number]; size: [number, number, number]; tone: number };
+
+/** How far a shoe rack's tiers lean back, radians. Shared with `ShoeRackGeo`, which
+ *  tilts each tier group by it, so the shoes and the slats lean together. */
+export const SHOE_TIER_TILT = 0.12;
+
+/** The shoes standing on a shoe rack — which tiers, which slots, which shoes.
+ *
+ *  Seeded by the part's id, like the books and the decor, so a rack keeps its shoes
+ *  across a reload and two racks do not carry the same pairs. Some slots are left
+ *  empty on purpose: a rack filled shoe-to-shoe reads as a shop display.
+ *
+ *  Each box is in its TIER's frame — the tilted group `ShoeRackGeo` draws the slats
+ *  in, origin at the slats' centre line — and `tier` says which. Everything is sized
+ *  against the rack it stands on rather than at a fixed shoe size: a shoe is as long
+ *  as the tier is deep (to 280 mm), as tall as the tier above leaves room for, and the
+ *  top tier is bounded by the rack's own height, so a shoe never stands proud of the
+ *  `dimMM` the plan draws. A boot's shaft is cut to the headroom its tier has. */
+export function shoeRow(part: { id: string; dimMM: readonly number[] }): Array<PropBox & { tier: number; sole: boolean }> {
+  const w = part.dimMM[0] / 1000;
+  const d = part.dimMM[1] / 1000;
+  const h = part.dimMM[2] / 1000;
+  const range = MODULE_RANGE['shoe-rack'];
+  if (!range) return [];
+  const tiers = moduleCount(h, range);
+  const gap = h / tiers;
+  const rise = Math.sin(SHOE_TIER_TILT) * (d / 2);
+  // Between the side rails (which stand 30 mm in, 20 mm thick) with a finger's clearance.
+  const inner = w - 0.1;
+  const len = Math.min(0.28, d - 0.04);
+  if (len < 0.12 || inner < 0.2) return [];
+  const shoeW = len * 0.34;
+  const pairW = shoeW * 2 + 0.012;
+  const pitch = pairW + 0.035;
+  const slots = Math.max(1, Math.floor(inner / pitch));
+  const used = slots * pitch - 0.035;
+  const rand = seededRand(`${part.id}:shoes`);
+  const slatTop = 0.006;
+  const out: Array<PropBox & { tier: number; sole: boolean }> = [];
+  for (let t = 0; t < tiers; t++) {
+    // Room above this tier's slats: to the underside of the next tier's, or to the
+    // top of the posts for the last one — measured where it is tightest, at the front.
+    const room = t < tiers - 1 ? gap * Math.cos(SHOE_TIER_TILT) - 0.03 : gap / 2 - rise - slatTop - 0.005;
+    if (room < 0.04) continue;
+    for (let i = 0; i < slots; i++) {
+      if (rand() < 0.22) continue;
+      const kind = rand();
+      const tone = Math.floor(rand() * 64);
+      // boot ≥ 0.82, sneaker ≥ 0.4, flat otherwise
+      const want = kind >= 0.82 ? 0.24 : kind >= 0.4 ? 0.1 : 0.06;
+      const sh = Math.min(want, room);
+      const cx = -used / 2 + i * pitch + pairW / 2;
+      for (const side of [-1, 1]) {
+        const x = cx + side * (shoeW / 2 + 0.006);
+        const soleH = Math.min(0.018, sh * 0.3);
+        out.push({ tier: t, sole: true, tone, pos: [x, slatTop + soleH / 2, 0], size: [shoeW, soleH, len] });
+        // The upper: the heel end carries the height (a boot's shaft, a trainer's
+        // collar), the toe end is lower — two boxes rather than one, which is what
+        // makes it read as a shoe rather than a brick.
+        const upH = sh - soleH;
+        const heelL = len * 0.5;
+        out.push({ tier: t, sole: false, tone, pos: [x, slatTop + soleH + upH / 2, -len / 2 + heelL / 2], size: [shoeW * 0.94, upH, heelL] });
+        const toeH = Math.min(upH, 0.05) * 0.75;
+        out.push({ tier: t, sole: false, tone, pos: [x, slatTop + soleH + toeH / 2, len / 2 - (len - heelL) / 2], size: [shoeW * 0.9, toeH, len - heelL] });
+      }
+    }
+  }
+  return out;
+}
+
+/** How many doors a fridge's upper compartment has. One Library fridge is resized from
+ *  a 600 mm under-counter to a 910 mm French door, so the doors follow the width rather
+ *  than the shape: from 800 mm a single door would swing most of a metre into the
+ *  kitchen, which is why nobody builds one. */
+export const FRENCH_DOOR_MM = 800;
+export function fridgeDoors(widthMM: number): 1 | 2 {
+  return widthMM >= FRENCH_DOOR_MM ? 2 : 1;
+}
+
+/** A clothes rail's pipe radius, metres. 13.5 mm is a 27 mm black-iron pipe — the
+ *  rail is plumbing, and plumbing does not get thicker because the rail got wider —
+ *  and the proportion catches a narrow rail, which would otherwise be all pipe. */
+export function railPipe(widthMM: number): number {
+  return Math.min(0.0135, (widthMM / 1000) * 0.018);
+}
+
+/** What a clothes rail is built from — pipe frame, flanged feet, and the clothes on it.
+ *
+ *  Pure, like `fanBlade`, so the geometry that decides whether anything hangs past the
+ *  rail's own `dimMM` lives where a test can reach it. Every number is measured from
+ *  the rail: the feet run the full depth and their flanges finish at its faces, the
+ *  uprights stand a flange in from the ends so the flange finishes at the width, and
+ *  the top bar's crown is the height. Garments are seeded per part id (as the shoes
+ *  are) and hang from the top bar to above the lower bar, never into it; a rail
+ *  widened gains garments rather than wider ones. */
+export function clothesRail(part: { id: string; dimMM: readonly number[] }): {
+  pipe: number;
+  flange: number;
+  postX: number;
+  footY: number;
+  topY: number;
+  lowY: number;
+  garments: Array<{ x: number; thick: number; width: number; top: number; length: number; tone: number }>;
+} {
+  const w = part.dimMM[0] / 1000;
+  const d = part.dimMM[1] / 1000;
+  const h = part.dimMM[2] / 1000;
+  const pipe = railPipe(part.dimMM[0]);
+  const flange = Math.min(0.045, d * 0.12, w * 0.06);
+  const postX = w / 2 - flange;
+  const footY = flange + pipe;
+  const topY = h - pipe;
+  const lowY = Math.min(0.28, h * 0.16);
+  const rand = seededRand(`${part.id}:rail`);
+  const width = Math.min(0.44, d - 0.04);
+  // A hanger's hook drops 60 mm below the bar; the garment hangs from its shoulders.
+  const top = topY - pipe - 0.06;
+  const floor = lowY + pipe + 0.04;
+  const garments: Array<{ x: number; thick: number; width: number; top: number; length: number; tone: number }> = [];
+  const lo = -postX + pipe + 0.06;
+  const hi = postX - pipe - 0.06;
+  let x = lo;
+  while (true) {
+    const thick = 0.025 + rand() * 0.035;
+    if (x + thick > hi) break;
+    const long = rand() < 0.3;
+    const length = Math.min(long ? 1.0 + rand() * 0.15 : 0.62 + rand() * 0.16, top - floor);
+    const tone = Math.floor(rand() * 64);
+    if (length > 0.15 && width > 0.1) garments.push({ x: x + thick / 2, thick, width, top, length, tone });
+    // Mostly hung close, now and then a gap where something was taken off the rail.
+    x += thick + (rand() < 0.15 ? 0.09 : 0.012 + rand() * 0.02);
+  }
+  return { pipe, flange, postX, footY, topY, lowY, garments };
 }
 
 /** Seeded suggested decor arrangement for a decor-capable part. */
@@ -2064,39 +2205,28 @@ export const PART_LIBRARY: LibraryItem[] = [
   // Tables
   { label: 'Coffee table', group: 'Tables', category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420] },
   { label: 'Side table', group: 'Tables', category: 'table', shape: 'side-table', dimMM: [450, 450, 550] },
-  { label: 'Dining / desk table', group: 'Tables', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750] },
+  // Two rows for one shape, and that is the point of the split. `desk-standard` draws
+  // as a dining table or as a desk by `roleOf`, which reads the CATEGORY, so the one
+  // row this used to be ("Dining / desk table", category `desk`) could only ever be a
+  // desk: a side panel down one end and a cable rail, wherever it was put. The
+  // dining table arrives at the starter room's own size.
+  { label: 'Dining table', group: 'Tables', category: 'table', shape: 'desk-standard', dimMM: [1500, 850, 750] },
+  { label: 'Desk', group: 'Tables', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750] },
   { label: 'L-shaped desk', group: 'Tables', category: 'desk', shape: 'desk-l', dimMM: [1600, 1400, 750] },
   { label: 'Nightstand', group: 'Tables', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] },
   // Storage
   { label: 'Wardrobe', group: 'Storage', category: 'wardrobe', shape: 'wardrobe', dimMM: [2400, 600, 2200] },
   { label: 'Bookshelf', group: 'Storage', category: 'shelf', shape: 'bookshelf', dimMM: [900, 350, 1800] },
   { label: 'Shoe rack', group: 'Storage', category: 'shelf', shape: 'shoe-rack', dimMM: [800, 300, 900] },
-  // Bedroom. Beds are the one place where size classes are real products rather
-  // than variants of each other — a king will not fit where a single does — so
-  // the ladder is a deliberate three, authored INSIDE clampDims' bed bands (the
-  // old preset sheet's dims sat outside them and were silently clamped on add).
-  // Everything between the rungs is reachable by resizing.
-  // Mattress sizes are EU standards and every one of them is 2000 long; what
-  // separates the rungs is WIDTH. dimMM is [W, L, H] here as everywhere -- see the
-  // note above the ladder for why that had to be said twice.
-  { label: 'Single bed', group: 'Bedroom', category: 'bed', shape: 'bed-single', dimMM: [900, 2000, 600] },
-  { label: 'Double bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [1400, 2000, 600] },
-  { label: 'Queen bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600] },
-  // 600 mm, the same as the others: `BedGeo` scales the frame, mattress, duvet,
-  // pillows AND a `h * 1.4` headboard off dimMM[2], so a taller number here does
-  // not make a king-size bed — it makes a 67%-larger bed with a 1.4 m headboard.
-  // A king is WIDER than a double, and width is dimMM[0].
-  //
-  // That last sentence used to end "which is dimMM[1]'s job", and it is the whole
-  // reason this ladder was transposed for as long as it was: the belief was
-  // written down beside the numbers it produced, so every reader who checked the
-  // numbers against the comment found them consistent. `BedGeo` disagrees and
-  // always did — its headboard spans dimMM[0] and a double's two pillows sit side
-  // by side across it — as do `Inspector`'s ['Width','Depth','Height'] labels, the
-  // seed's `vBed`, and this file's own `[W, D, H]` header. Five readers against one
-  // comment. A 2000-wide, 1600-long "double" renders as a plausible but oversized
-  // bed rather than a broken one, which is why it survived being looked at.
-  { label: 'King bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [1800, 2000, 600] },
+  { label: 'Clothes rail', group: 'Storage', category: 'wardrobe', shape: 'clothes-rack', dimMM: [1200, 450, 1600] },
+  // Bedroom. ONE bed, resized from a single to a king, and it draws the size it is:
+  // `sleepsTwo` puts a second pillow on it from 1.3 m wide, and every reader that asks
+  // whether a bed is a double asks that rather than the shape. The four rows this used
+  // to be (single, double, queen, king) differed only in width, which the Inspector
+  // already sets, and looked alike in the list. The class words still work in the
+  // search box — `king bed` arrives 1800 wide (`CLASS_SIZES` in `lib/shape-search.ts`).
+  // dimMM is [W, L, H] here as everywhere: width is the axis a mattress size names.
+  { label: 'Bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [1400, 2000, 600] },
   // Lighting
   { label: 'Floor lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-floor', dimMM: [300, 300, 1700] },
   { label: 'Table lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500] },
@@ -2117,10 +2247,10 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Monitor', group: 'Tech', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 400] },
   { label: 'Laptop', group: 'Tech', category: 'monitor', shape: 'laptop', dimMM: [340, 240, 220] },
   // Appliances
-  // Fridges are the other real-class item: the 60 cm freestanding box and the
-  // French door are footprints a kitchen actually chooses between, not variants.
+  // One fridge, for the same reason as the bed: the French-door model was this row
+  // 310 mm wider, and `FridgeGeo` draws a fridge that wide with two doors. `french
+  // door fridge` in the search box still arrives at that size.
   { label: 'Fridge', group: 'Appliances', category: 'fridge', shape: 'fridge', dimMM: [600, 650, 1700] },
-  { label: 'French door fridge', group: 'Appliances', category: 'fridge', shape: 'fridge', dimMM: [910, 720, 1780] },
   { label: 'Washing machine', group: 'Appliances', category: 'fridge', shape: 'washing-machine', dimMM: [600, 600, 850] },
   { label: 'Microwave', group: 'Appliances', category: 'fridge', shape: 'microwave', dimMM: [500, 380, 300] },
   { label: 'Water dispenser', group: 'Appliances', category: 'fridge', shape: 'water-dispenser', dimMM: [330, 330, 1000] },
@@ -2197,8 +2327,9 @@ const CATEGORY_DEFAULTS: Record<Category, { shape: Shape; dim: [number, number, 
  *  `CATEGORY_DEFAULTS` stays unexported on purpose — handing out the whole table
  *  invites a caller to read `.dim` and skip `clampDims` altogether. */
 export function defaultAxisFor(category: Category, shape: Shape, axis: 0 | 1 | 2): number {
-  const typical = (CATEGORY_DEFAULTS[category] ?? CATEGORY_DEFAULTS.other).dim[axis];
   const r = dimRangeFor(category, shape);
+  // A band's own typical before the category's: a double bed's is not a single's.
+  const typical = r.typical?.[axis] ?? (CATEGORY_DEFAULTS[category] ?? CATEGORY_DEFAULTS.other).dim[axis];
   return Math.min(Math.max(typical, r.min[axis]), r.max[axis]);
 }
 
@@ -2239,12 +2370,17 @@ export const CATALOG_SHAPES_ORDERED: readonly Shape[] = [
   'lamp-floor', 'lamp-table', 'lamp-pendant',
   'mirror', 'mirror-oval', 'painting', 'ac-unit', 'window',
   'monitor', 'laptop', 'fan', 'fridge', 'curtain',
-  'bookshelf', 'shoe-rack', 'door',
+  'bookshelf', 'shoe-rack', 'clothes-rack', 'door',
   'soundbar', 'radiator', 'air-purifier', 'washing-machine', 'microwave', 'water-dispenser',
   'fan-standing', 'chest-freezer', 'tv-console', 'stool',
 ] as const;
 
 const CATALOG_SHAPES = new Set<Shape>(CATALOG_SHAPES_ORDERED);
+
+/** The words for an open clothes rail, read under both categories a detector might file
+ *  one under. `rack` and `rail` only with a clothes word in front, because a bare "rack"
+ *  is as likely to be the shoe rack or a towel rail. */
+const CLOTHES_RAIL = /(cloth(es|ing)?|garment|coat|closet|hanging|dress) ?(rack|rail|stand)|clothes ?horse/;
 
 /** Refine the default shape based on label keywords — turns a generic chair into
  *  an office chair if the AI detected it as such.
@@ -2283,6 +2419,9 @@ export function refineShape(category: Category, label: string): Shape {
       if (/table|desk|bedside|nightstand/.test(l)) return 'lamp-table';
       return 'lamp-floor';
     case 'shelf':
+      // Before the wardrobe test: a "closet rack" is a rail, and a shelf a detector
+      // calls a clothes rack is the open rail, not a cabinet.
+      if (CLOTHES_RAIL.test(l)) return 'clothes-rack';
       if (/wardrobe|closet|cupboard/.test(l)) return 'wardrobe';
       if (/shoe|footwear/.test(l)) return 'shoe-rack';
       if (/tv (console|stand|unit|bench|cabinet)|media (console|unit)|entertainment/.test(l)) return 'tv-console';
@@ -2312,6 +2451,10 @@ export function refineShape(category: Category, label: string): Shape {
       if (/purifier|air cleaner/.test(l)) return 'air-purifier';
       if (/radiator|heater/.test(l)) return 'radiator';
       return 'fridge';
+    // A wardrobe category's bare label keeps its default; only a rail word makes it open.
+    case 'wardrobe':
+      if (CLOTHES_RAIL.test(l)) return 'clothes-rack';
+      return CATEGORY_DEFAULTS.wardrobe.shape;
     case 'monitor':
       if (/laptop|notebook|macbook|ultrabook|chromebook/.test(l)) return 'laptop';
       return 'monitor';

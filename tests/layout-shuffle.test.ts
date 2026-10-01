@@ -289,15 +289,20 @@ describe("solveLayout mode: 'shuffle'", () => {
     // `open` seed 8 short too, until the search priced a chair pushed under its table
     // back-first (`tuckedAt`). That seed's finalists had four chair backs through the
     // table between them, and 11 of the sweep's 158 had one — measured by re-running
-    // the sweep on both rules with the back strip computed by hand.
-    expect(checked, 'the finalists this sweep compared').toBe(159);
+    // the sweep on both rules with the back strip computed by hand. Then 158 again,
+    // `t` seed 1 short, when a dining chair stopped counting as tucked turned off square
+    // or standing where the table has a leg (2026-10-01). Attributed by switching the
+    // two checks off: with both off it is 159, and with either one alone on it is 159
+    // too, so it is the pair that moves this trajectory.
+    expect(checked, 'the finalists this sweep compared').toBe(158);
   });
 
   it('keeps a pool of finalists, because the search moves', { timeout: 120_000 }, () => {
     // A search that accepts no step finds no new best, so its pool is the scatter
     // alone: `11111111` on every preset before the fix. Four is `FINALISTS`, the most a
     // pool keeps; `l` seed 7 fills three (`t` seed 4 did, before the search priced a
-    // rug, and `open` seed 8 before it priced a chair's back), so a full pool is not a
+    // rug, and `open` seed 8 before it priced a chair's back; `t` seed 1 has since the
+    // chair had to stand square and clear of the legs), so a full pool is not a
     // property to lean on.
     const pools = ALL.map(([id]) => [
       id,
@@ -311,7 +316,7 @@ describe("solveLayout mode: 'shuffle'", () => {
       ['l', '44444434'],
       ['u', '44444444'],
       ['open', '44444444'],
-      ['t', '44444444'],
+      ['t', '34444444'],
     ]);
   });
 

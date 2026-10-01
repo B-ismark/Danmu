@@ -23,9 +23,35 @@ describe('searchLibrary', () => {
     expect(top.category).toBe('wardrobe');
   });
 
-  it('surfaces a specific model by name', () => {
-    const r = searchLibrary('french door');
-    expect(r.some((i) => i.label.toLowerCase().includes('french door'))).toBe(true);
+  it('reaches a model that used to be its own row, at that row\'s size', () => {
+    // "French door fridge" was a Library row until the fridges merged; the words are a
+    // size class now (`classSize`), so the one Fridge arrives at the French door's size.
+    const [top] = searchLibrary('french door fridge');
+    expect(top.label).toBe('Fridge');
+    expect(sizeFromQuery(top, 'french door fridge')).toEqual([910, 720, 1780]);
+    // And "french door" alone is a door, which is also what a French door is.
+    expect(searchLibrary('french door')[0].label).toBe('Door');
+  });
+
+  it('finds the bed by a size class alone, and arrives at that size', () => {
+    for (const [q, w] of [['king', 1800], ['queen size', 1600], ['super king bed', 1800], ['twin bed', 900]] as const) {
+      const [top] = searchLibrary(q);
+      expect(top?.label, q).toBe('Bed');
+      expect(sizeFromQuery(top, q)[0], q).toBe(w);
+    }
+    // A plain "bed" is the Library's own, and a typed number beats a class word.
+    const bed = PART_LIBRARY.find((i) => i.label === 'Bed')!;
+    expect(sizeFromQuery(bed, 'bed')).toEqual(bed.dimMM);
+    expect(sizeFromQuery(bed, 'queen bed 150cm')[0]).toBe(1500);
+    // A class word for one category does not size another: a "double wardrobe".
+    const wardrobe = PART_LIBRARY.find((i) => i.label === 'Wardrobe')!;
+    expect(sizeFromQuery(wardrobe, 'double wardrobe')).toEqual(wardrobe.dimMM);
+  });
+
+  it('finds the clothes rail by what people call it', () => {
+    for (const q of ['clothes rail', 'garment rack', 'clothing rail', 'clothes rack']) {
+      expect(searchLibrary(q)[0]?.label, q).toBe('Clothes rail');
+    }
   });
 
   it('returns empty for gibberish', () => {
@@ -202,8 +228,9 @@ describe('sizeFromQuery', () => {
     // `dimension-ranges.ts`'s own '[W, D, H]' header. The catalog and the range table
     // were the two that disagreed, and the 1800 was a correct 1600 width being clamped
     // up by a transposed floor. Both tables are un-transposed now.
-    const q = PART_LIBRARY.find((i) => i.label === 'Queen bed')!;
-    expect(q.dimMM).toEqual([1600, 2000, 600]);
+    // One Library bed since the four sizes merged; "queen" is a size class on it.
+    const q = PART_LIBRARY.find((i) => i.label === 'Bed')!;
+    expect(sizeFromQuery(q, 'queen bed')).toEqual([1600, 2000, 600]);
     expect(sizeFromQuery(q, 'queen bed 160x200cm')).toEqual([1600, 2000, 600]);
   });
 
@@ -214,11 +241,12 @@ describe('sizeFromQuery', () => {
     // is 2000 wide and 900 long, which is not a bed at any glance. Same rule as
     // 'verify in the asymmetric case': pick the fixture where the two readings differ
     // by more than plausibility.
-    const single = PART_LIBRARY.find((i) => i.label === 'Single bed')!;
-    expect(single.dimMM).toEqual([900, 2000, 600]);
-    expect(sizeFromQuery(single, 'single bed 90x200cm')).toEqual([900, 2000, 600]);
+    const bed = PART_LIBRARY.find((i) => i.label === 'Bed')!;
+    const single = sizeFromQuery(bed, 'single bed 90x200cm');
+    expect(single).toEqual([900, 2000, 600]);
+    expect(sizeFromQuery(bed, 'single bed')).toEqual([900, 2000, 600]);
     // …and the width is the SHORT side, which is the whole claim in one assertion.
-    expect(single.dimMM[0]).toBeLessThan(single.dimMM[1]);
+    expect(single[0]).toBeLessThan(single[1]);
   });
   it('keeps the preset on every axis the words did not name', () => {
     // A sofa, whose one legal 1600 is inside its range, so the assertion is about
@@ -296,7 +324,7 @@ describe('the tail of a compound word', () => {
     // contains it at 1. Both appear; the prefix is first.
     const labels = searchLibrary('stand', PART_LIBRARY.length).map((i) => i.label);
     expect(labels.length).toBeGreaterThanOrEqual(2);
-    expect(labels[0]).toBe('Dining / desk table');
+    expect(labels[0]).toBe('Dining table'); // the first `desk-standard` row, before Desk
     expect(labels.indexOf('Nightstand')).toBeGreaterThan(0);
   });
 
@@ -338,10 +366,12 @@ describe('the tail of a compound word', () => {
     // (containment, 1) = 4, which puts it ahead of Bookshelf and Shoe rack on 3.
     // Under `=` the containment hit OVERWRITES the group hit, Wardrobe scores 1, and
     // the query that names it most precisely ranks it third. A multi-word box is
-    // what `rankLibrary` is fed, so this is the ordinary case and not a corner.
+    // what `rankLibrary` is fed, so this is the ordinary case and not a corner. The
+    // Clothes rail scores 4 the same way (its category is `wardrobe`) and ties, the
+    // Wardrobe being first by the Library's order; under `=` both fall behind the 3s.
     const labels = searchLibrary('storage robe', PART_LIBRARY.length).map((i) => i.label);
     expect(labels[0]).toBe('Wardrobe');
-    expect(labels.slice(1, 3)).toEqual(['Bookshelf', 'Shoe rack']);
+    expect(labels.slice(1, 4)).toEqual(['Clothes rail', 'Bookshelf', 'Shoe rack']);
   });
 
   it('reaches Wardrobe for "robe" and Microwave for "wave"', () => {
@@ -358,7 +388,10 @@ describe('the tail of a compound word', () => {
     // is the assertion that fails if CONTAINS_MIN drops.
     expect(searchLibrary('ing', PART_LIBRARY.length)).toEqual([]);
     const wouldMatch = PART_LIBRARY.filter((i) => hayTokens(i).some((h) => h.includes('ing')));
-    expect(wouldMatch.length).toBe(16);
+    // 14 — the number in this test's name, and its count when the name was written. It
+    // was 16 for a while with a King bed and a Single bed in the Library, both of which
+    // carry the tail; they merged into one Bed.
+    expect(wouldMatch.length).toBe(14);
   });
 
   it('and no query in the catalog\'s own substring space becomes a catch-all', () => {

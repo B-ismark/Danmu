@@ -23,7 +23,9 @@
 // The only thing that genuinely differs between the three is whether the user AIMED.
 // A drop has a point and being placed where you aimed is a promise; a click has none,
 // so `openSpotForNewPart` finds one. That is the whole of the branch below, and it is
-// why `aim` is the parameter rather than three separate entry points.
+// why `aim` is the parameter rather than three separate entry points. The promise has
+// one exception, and it is the one a drag already enforces: the aim is not kept when
+// something is standing there, and the piece takes the nearest clear spot instead.
 
 import { v4 as uuid } from 'uuid';
 import { announce } from './announce';
@@ -34,7 +36,8 @@ import { useScene } from './scene-store';
 import { useSettings, useStudio } from './store';
 import { describeSpaceRefusal, refuseNewForSpace } from './space-bound';
 import { formatDim } from './units';
-import { openSpotForNewPart, placeNewPart, type Category, type Shape } from './scene-spec';
+import { placeArrival } from './duplicate-place';
+import { isRoundPart, openSpotForNewPart, placeNewPart, type Category, type ScenePart, type Shape } from './scene-spec';
 
 /** What every trigger has: what the piece is, and what to call it. The Library's own
  *  row shape, minus the grouping the picker uses to lay itself out. */
@@ -89,7 +92,12 @@ export type AddOutcome = { id: string; note?: string } | { refused: string };
  *  offered the room's LONGEST wall before it is refused, because the unaimed spot is
  *  the app's choice and a curtain turned away from a 2 m wall while a 5 m wall stood
  *  empty would be the app refusing its own mistake. An aimed one is not moved: being
- *  placed where you aimed is a promise, and a drop somewhere else is not that drop. */
+ *  placed where you aimed is a promise, and a drop somewhere else is not that drop.
+ *
+ *  **…except off another piece.** An aimed floor or ceiling piece whose spot is taken
+ *  goes to the nearest clear one (`placeArrival`), because a drop must not make an
+ *  overlap that no drag would allow. When nothing near is clear it keeps the aim and
+ *  `note` says so. */
 export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: AddPieceOptions): AddOutcome {
   const { room, addPart } = useScene.getState();
   const parts = currentRoomScene();
@@ -146,6 +154,35 @@ export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: Ad
       }
     }
     if (refused) return { refused: describeSpaceRefusal(item.label, refused, unit) };
+    // An aimed drop goes where it was aimed — unless something is already standing
+    // there. Two ceiling fans, one dropped in each tab at the same point, used to share
+    // one hub, a state no drag would let you leave (`collidesAt` refuses it) and so one
+    // the drop should not be able to make. The aim is asked the question Duplicate and
+    // "Change the model" ask of an arrival: kept when it is clear, otherwise the nearest
+    // clear spot — beside it along its own width first. Not for a piece that came to
+    // rest ON something (a lamp dropped on a desk is meant to be on the desk) nor a
+    // wall piece, which its wall snap has already placed.
+    if (aim && !pose.supportId && !ridesWall(item.category, item.shape)) {
+      const arriving: ScenePart = {
+        id: '__drop__',
+        name: item.label,
+        category: item.category,
+        shape: item.shape,
+        dimMM: item.dimMM,
+        pos: pose.pos,
+        rot: pose.rot,
+        locked: false,
+        circle: isRoundPart(item.shape),
+        wallMounted: pose.wallMounted,
+      };
+      const arrival = placeArrival(arriving, parts, room.footprint, room.height);
+      if (!arrival.clear) note = 'Nothing near where it was dropped is clear, so it is touching what is there.';
+      else if (!arrival.here) {
+        pose = { ...pose, pos: [arrival.spot.pos[0], pose.pos[1], arrival.spot.pos[2]], rot: arrival.spot.rot };
+        // Said, not silent: the piece is not where the hand let go of it.
+        note = 'That spot was taken, so it went to the nearest clear one.';
+      }
+    }
   }
   const { pos, rot, wallMounted, supportId } = pose;
   const id = `${item.category}-${uuid().slice(0, 6)}`;

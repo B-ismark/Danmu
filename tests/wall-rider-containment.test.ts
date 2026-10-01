@@ -344,10 +344,12 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // reach a single one of the placements this test exists for, all of which are
     // in an L, a T or a U.
     //
-    // 42 catalogue pairs × 3 sizes × 3 angles × 7 x-targets × 5 z-targets ×
-    // 5 layout ids.
-    expect(PAIRS.length).toBe(42);
-    expect(considered).toBe(66150);
+    // 43 catalogue pairs × 3 sizes × 3 angles × 7 x-targets × 5 z-targets ×
+    // 5 layout ids. 43 since the Library's beds became one and its "Dining / desk
+    // table" a Desk and a Dining table, and the clothes rail joined: `bed/bed-single`
+    // out, `table/desk-standard` and `wardrobe/clothes-rack` in.
+    expect(PAIRS.length).toBe(43);
+    expect(considered).toBe(67725);
 
     // …and the coverage that matters is named rather than counted, because the
     // number above is satisfiable by any five layout ids — five copies of the
@@ -461,9 +463,13 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // (`tests/foot-cells.test.ts`). 1101 → 1110 was measured by dropping the shape
     // from `resolvePlacement`'s containment call and re-running.
     expect(accepts.get('desk/desk-l'), 'the L-shaped desk moved').toBe(1110);
-    expect(acceptedBefore, 'the pre-fix column moved').toBe(55537);
-    // 54967 at the deletion, + 52 since from `WALL_FROM_POINTER`.
-    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(55019);
+    // + 1303 in both columns from the Library's pairs (above), none of it a rider:
+    // + 1189 `table/desk-standard`, + 1263 `wardrobe/clothes-rack`, − 1163 for the
+    // retired `bed/bed-single`, + 14 `bed/bed-double`, whose band now starts at a
+    // single's 800 (1092 → 1106). Both columns moving by the same number is the claim.
+    expect(acceptedBefore, 'the pre-fix column moved').toBe(56840);
+    // 54967 at the deletion, + 52 since from `WALL_FROM_POINTER`, + 1303 as above.
+    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(56322);
 
     // Arithmetic over the pins above, and deliberately not more than that: no source
     // mutation can reach it, because a wrong `AT_DELETION` fails its own loop first. What

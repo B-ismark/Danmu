@@ -58,3 +58,47 @@ export function footOutlineLocal(shape: Shape | undefined, w: number, d: number)
     [-w / 2, -d / 2 + armD],
   ];
 }
+
+/** What a dining table's legs are: 55 mm square, their outer faces 40 mm inside the
+ *  top's edge. */
+export const DINING_LEG = { size: 0.055, inset: 0.04 } as const;
+/** A desk's floor-standing members: the left side panel's thickness and the share of
+ *  the long arm's depth it covers, and the two right-hand legs' size and inset. */
+export const DESK_POSTS = { panel: 0.018, panelDepth: 0.88, leg: 0.05, legInset: 0.04 } as const;
+
+/**
+ * What a surface stands on, as rectangles in its own frame (metres, +Z its front) —
+ * the legs and panels a seat tucked under it must not pass through.
+ *
+ * Authored here for the reason the outline above is: two readers must agree on it.
+ * `DiningTableGeo` and `DeskGeo` build their legs from these rectangles, and
+ * `tuckedAt` (`lib/layout-rules.ts`) refuses a tuck whose seat footprint reaches one —
+ * so the leg the chair is stopped by is the leg on screen, not a second copy of its
+ * position that drifts. `[]` for a surface with nothing to pass through, or none the
+ * tuck rule has to know about.
+ */
+export function surfacePostsLocal(shape: Shape | undefined, dining: boolean, w: number, d: number): LocalRect[] {
+  const box = (cx: number, cz: number, sx: number, sz: number): LocalRect => ({ x0: cx - sx / 2, x1: cx + sx / 2, z0: cz - sz / 2, z1: cz + sz / 2 });
+  if (shape === 'desk-standard' && dining) {
+    const { size, inset } = DINING_LEG;
+    const lx = w / 2 - inset - size / 2;
+    const lz = d / 2 - inset - size / 2;
+    return [
+      box(-lx, -lz, size, size),
+      box(lx, -lz, size, size),
+      box(-lx, lz, size, size),
+      box(lx, lz, size, size),
+    ];
+  }
+  if (shape === 'desk-standard' || shape === 'desk-l') {
+    const { panel, panelDepth, leg, legInset } = DESK_POSTS;
+    const armD = shape === 'desk-l' ? d * ELL_ARM_DEPTH : d;
+    const armZ = -d / 2 + armD / 2;
+    return [
+      box(-w / 2 + panel / 2, armZ, panel, armD * panelDepth),
+      box(w / 2 - legInset, -d / 2 + legInset, leg, leg),
+      box(w / 2 - legInset, d / 2 - legInset, leg, leg),
+    ];
+  }
+  return [];
+}

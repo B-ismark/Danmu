@@ -19,9 +19,13 @@ import type { Category, Shape } from './scene-spec';
 // to tell which table answered a lookup.
 export type DimFlex = 'fixed' | 'standard' | 'flexible';
 export type Dim3 = [number, number, number];
-export type DimRange = { flex: DimFlex; min: Dim3; max: Dim3 };
+/** `typical` is where in the band an ordinary one sits, for a shape whose category's
+ *  typical (`CATEGORY_DEFAULTS`) is a different kind of that category — read by
+ *  `defaultAxisFor`, for the axes a photo could not see. Absent, the category's stands. */
+export type DimRange = { flex: DimFlex; min: Dim3; max: Dim3; typical?: Dim3 };
 
-const R = (flex: DimFlex, min: Dim3, max: Dim3): DimRange => ({ flex, min, max });
+const R = (flex: DimFlex, min: Dim3, max: Dim3, typical?: Dim3): DimRange =>
+  typical ? { flex, min, max, typical } : { flex, min, max };
 
 const BY_SHAPE: Partial<Record<Shape, DimRange>> = {
   // ── fixed — real products, tight bands ──────────────────────────────────
@@ -56,7 +60,14 @@ const BY_SHAPE: Partial<Record<Shape, DimRange>> = {
   ottoman: R('standard', [350, 350, 300], [1200, 1200, 550]),
   nightstand: R('standard', [300, 280, 350], [700, 600, 800]),
   'bed-single': R('standard', [800, 1700, 300], [1200, 2100, 1300]),
-  'bed-double': R('standard', [1350, 1800, 300], [2000, 2300, 1400]),
+  // From a single's width up. The Library has ONE bed (`bed-double`), resized from a
+  // single to a king, so its band has to reach the narrow end: at 1350 the Inspector
+  // could not make a single out of it. The same band as the `bed` category's.
+  // `typical` is the job the old 1350 floor did without being asked: a bed's typical is
+  // a single's 900, and a double bed the photo's edge cut was grown to it clamped up to
+  // 1350. With the floor at 800 it was grown to a single — a 1.5 m bed read 40% short
+  // (`tests/scan-tilted-room.test.ts`). 1400 is the Library's one bed.
+  'bed-double': R('standard', [800, 1700, 300], [2000, 2300, 1400], [1400, 2000, 600]),
   'lamp-floor': R('standard', [200, 200, 1200], [600, 600, 2000]),
   'lamp-table': R('standard', [120, 120, 250], [450, 450, 800]),
   'lamp-pendant': R('standard', [150, 150, 150], [800, 800, 900]),
@@ -90,6 +101,11 @@ const BY_SHAPE: Partial<Record<Shape, DimRange>> = {
   closet: R('flexible', [600, 400, 1600], [4000, 800, 2600]),
   bookshelf: R('flexible', [400, 200, 600], [2400, 600, 2600]),
   'shoe-rack': R('flexible', [400, 200, 300], [1500, 500, 1800]),
+  // A pipe rail: a 600 mm hall rail to a 2 m boutique one, deep enough for a hanger
+  // (300 mm) to a double-depth stand, and tall enough for shirts to a full-length coat.
+  // `typical` because its category's is a 2 m wardrobe, and a rail the frame cut grew
+  // toward one; 1200 × 450 × 1600 is the Library's rail.
+  'clothes-rack': R('standard', [600, 300, 900], [2000, 700, 2000], [1200, 450, 1600]),
   rug: R('flexible', [600, 400, 3], [5000, 4000, 40]),
   curtain: R('flexible', [400, 40, 800], [5000, 200, 3200]),
   plant: R('flexible', [100, 100, 150], [1200, 1200, 2600]),

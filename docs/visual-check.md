@@ -79,6 +79,25 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
+### One bed and one fridge in the Library, and a scanned double comes back double — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+The Library's four bed rows and two fridge rows were one piece each in different sizes, and
+the size is a field you can type. There is one **Bed** (1400 wide) and one **Fridge** now.
+Whether a bed takes two nightstands is read from its width, so a bed you narrow to 900 is
+a single for the arranger, and one you widen is a double. A fridge 800 mm or wider is drawn
+with French doors; below that, one door.
+
+**Where to click.** Library, search `bed`, then `fridge`. Add the bed, select it, type its
+width down to 900 in the Inspector, press Suggest; then up to 1800 and Suggest again. Add the
+fridge and type its width 790, then 800.
+
+**What right looks like.** One row each. The 900 bed gets one nightstand and the 1800 bed
+two. The fridge gains a second door exactly at 800. A photo scan that finds a double bed cut
+off by the photo's edge comes back about 1.4 m wide, not a single's 0.9 m.
+
+**What wrong looks like.** A bed you cannot type down to 800, a single carrying two
+nightstands, or a fridge with doors that do not meet in the middle.
+
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
 **What is already settled.** A newly added fan hangs flush: looked at on the preview and fine.
@@ -132,6 +151,26 @@ three.js object with **no DOM**, so nothing in Playwright can aim a press at its
 the 2D half of that defect **is** browser-checked and is not in this list. The refusal
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
+
+### A fan dropped onto a fan moves aside, and a bed set stops at the wardrobe — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+Two reports from the 2026-10-01 batch. A ceiling fan dropped on 2D Plan and another dropped
+on 3D Model at the same spot shared one hub, which no drag would allow. A drop now keeps
+your aim when the spot is clear, and otherwise takes the nearest clear spot and says so.
+Separately, a merged bed with its nightstands, dragged into a wardrobe, let a nightstand
+climb the wardrobe and its lamp sink into it. A member can no longer be pushed up onto
+something taller than itself, so the set stops at the wardrobe and names the nightstand.
+
+**Where to click.** Drop a ceiling fan on 2D Plan, switch to 3D Model, and drop a second fan
+on the first. Then merge a bed with a nightstand (and lamp) each side, and drag the set with
+the mouse into a wardrobe.
+
+**What right looks like.** The second fan hangs beside the first, flush to the ceiling, with
+a note that the spot was taken. The bed set stops when the nightstand meets the wardrobe,
+and the size tag says which piece stopped it. The lamp stays on its nightstand.
+
+**What wrong looks like.** Two fans in one place, or the second jumping somewhere far away.
+A nightstand on top of the wardrobe, or a lamp half inside its nightstand.
 
 ### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205); the sofa LOOKED AT 2026-10-01; a floor piece over the bed on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
 
@@ -210,7 +249,7 @@ still say "something is in the way".
 **Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half and the
 wall-from-the-pointer fix in `32ccdca` (PR #200).
 
-### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye
+### The turn report — PROBED, and three of eleven still want an eye (the fan-out ring LOOKED AT 2026-10-01)
 
 **Where it rides.** `fix/turn-report-and-spawn-spread` (PR #102). Probed headlessly at
 `99a66c7` against a production build; the script is
@@ -226,7 +265,7 @@ wall-from-the-pointer fix in `32ccdca` (PR #200).
 | a free-standing chair, same room, same gesture | *"Turned a quarter turn."* — the internal control |
 | a sofa refused at 90° | spoken *and* outlined red *and* the outline clears again |
 
-**What a probe cannot answer here, and what to look at.** All four are about how it *reads*,
+**What a probe cannot answer here, and what to look at.** All three are about how it *reads*,
 not whether it fires:
 
 1. **The sentence is a paragraph now.** The painting's full announcement is *"Painting
@@ -239,92 +278,6 @@ not whether it fires:
    especially away from the piece they were looking at — is not something frames can settle.
 3. **"Nothing turned."** is what a wall rider gets. It is accurate and it may read as a
    fault. The alternative wording would be about the wall, not about the turn.
-4. **The fan-out ring is hexagonal and starts at the piece's own diagonal.** Four chairs
-   look deliberate; whether twelve look like a spiral rather than a scatter has not been
-   looked at.
-
-### A ceiling fan now lands where you drop it — and the middle stopped being a promise
-
-**Where it rides.** `feat/ceiling-aim`.
-
-**What changed and why it is here.** § H.3's residue 1, answered by the user on 2026-09-04:
-an explicit aim overrides `ceilingSpot`'s midpoint default. Before it, a fan or a pendant
-dragged out of the Library hung in the middle of the room wherever the pointer was released,
-and a second one was placed exactly inside the first.
-
-**A review then found the reversal had switched on a defect that had been dead code.** The
-3D drop resolved every pointer ray against the **floor** plane, which was harmless only for
-as long as a ceiling piece discarded its aim. The error at the point the camera looks at is
-`|camera x,z| × planeY / (camY − planeY)` — **8.3 m for a fan at 2.38 m under the default
-camera, in a room 6 m across** — and it grows toward the corners and diverges as the camera
-orbits down. Fixed, and gated by `tests/drop-aim.test.ts`, which asserts a round trip rather
-than a coordinate. The 2D plan never had it: `svgToWorldAt` maps screen to world directly.
-
-**Where to click.** `/room/<id>/model`, Library open.
-
-1. **Drag** a ceiling fan onto the canvas near a corner, then again over the middle of the
-   ceiling — above the wall tops, not over the floor. It should hang under the pointer both
-   times. *Wrong looks like:* it jumps to the centre (the reversal did not reach the drag
-   path); it hangs past the wall (containment lost); or — the case the tests were blind to
-   and the one to look hardest for — **it lands somewhere legal and plausible that is not
-   where you dropped it.** That third one has no tell at all, so drop it deliberately onto a
-   piece of furniture and see whether it lands on that piece.
-2. **The cross-tab reading, which is the sharpest check here.** Drop a fan at the same place
-   in the room on `/plan` and on `/model`. They must land in the same place. The two tabs
-   are two code paths for one gesture, and an expected coordinate typed into a test is also
-   satisfied by an error that is merely consistent — this comparison is not.
-3. **Orbit down to eye level and drop one there.** The error the fix removes diverges as the
-   camera approaches the plane, so a low camera is where a residual would be visible. Also
-   check that a drop aimed at the upper half of the frame lands at all: an upward ray meets
-   no horizontal plane and the handler returns in silence.
-4. **Click** the fan row four times without dragging. Four fans, spread on one hexagonal
-   ring, all flush to the slab. *Wrong looks like:* a heap at one point (the old behaviour),
-   or fans at different heights — a tower is invisible from directly overhead in the 2D
-   plan, so **look from eye level**.
-5. **The judgement call, and the reason this item exists.** With one fan in the room, is the
-   middle still where it should go? That is the half of the old rule the user kept, and the
-   only evidence for it is somebody looking at a room with one fan in it.
-
-**What a probe cannot answer.** Whether a hexagonal ring of ceiling fixtures reads as
-deliberate or as a mess — the same open question item 4 above raises for chairs, now with
-pieces the eye tracks against a flat ceiling rather than against furniture.
-
-### A wall drag and a revisit — PROBED on all eight T edges, and two things still want an eye
-
-**The wiring is measured and the probe goes red without the fix**, which is the part that
-makes the green worth anything. `danmu-probe/wall-pin.mjs`, production build, headless
-Chromium: seed a T from the picker (meta only — no scene key, which is the state a fresh
-room is in), open `/room/<id>/plan`, focus one wall handle, two ArrowRights (`WALL_STEP`
-0.05 m, so +10 cm), go to `/workspace`, come back, read `RoomTools`' own verdict.
-
-| | before the fix | after |
-|---|---|---|
-| edges writing `room:<id>:scene` | **0 of 8** | **8 of 8** |
-| edges disagreeing with the room on screen before leaving | 3 | **0** |
-| edges handing back a different set of pieces | 8 | **0** |
-| worst single edge | Wall 4: **1 issue → 6 issues** | Wall 4: 1 issue → 1 issue |
-
-Three edges legitimately keep a finding across the revisit (Walls 4, 5, 6 → *1 issue*).
-That is the fix working, not failing: a wall move may leave a real finding, and the claim
-is only that leaving the room does not change the answer.
-
-**Two probe traps worth keeping, because the first run produced a confident wrong FAIL on
-three edges.** `RoomTools`' health control carries an `aria-label` only on its COLLAPSED
-trigger; at 1440px the rail is open and the verdict is a bare `<span>`, so the probe waited
-fifteen seconds for a selector that only exists on a narrow window. And `RoomSync`'s load is
-one async effect with three painting writes in order — re-seed, then `setParts(savedScene)`,
-then `loadTransforms` — so reading as soon as a verdict appears catches the **intermediate
-re-seeded room** and reports it as what the user got back.
-
-**What still wants a person:**
-
-1. **Does the room LOOK like the one you left?** The probe compares the app's verdict and
-   the set of piece names. It does not compare positions, and it cannot: two rooms with the
-   same twelve names can be arranged completely differently. Drag a wall on a room you have
-   arranged by hand, leave, come back, and see whether anything moved.
-2. **A wall dragged with the MOUSE, not the arrow keys.** The probe nudges by keyboard
-   because a wall handle takes focus cleanly. A pointer drag runs a different code path into
-   the same store action and nobody has watched the snapshot land after one.
 
 ### The rotate ring no longer drags the piece behind it — only the TOUCH half is left
 
@@ -340,63 +293,6 @@ This is the only defect in the whole item that a mouse cannot produce.
 **Where it rides.** `lib/gizmo-press.ts` + `components/three/Draggable.tsx` +
 `components/three/Pickable.tsx` + `components/three/RoomShell.tsx` +
 `components/three/Room.tsx`. Merged to `main` in **`d2ef257`** (PR #73).
-
-### Eight shapes stopped stretching their details — merged to `main` in `6912849` (PR #90)
-
-**Where to click.** Add each piece below from the **Library**, select it, press `S` for
-Scale, and pull it to the end of its band. Then compare against the same piece at its
-catalogue size. Every one of these now REBUILDS instead of stretching, so the detail
-named should stay the size it is while the piece around it grows.
-
-| add this | drag this axis to | watch |
-|---|---|---|
-| Ceiling fan | 450 mm tall | the motor housing stays ~80 mm; only the downrod lengthens |
-| Pendant lamp | 150 mm wide × 900 mm long | the shade stays a shade; only the cord lengthens |
-| TV console | 800 mm tall | the top slab stays ~30 mm and the plinth ~60 mm |
-| Stool | 700 mm tall | the seat pad stays ~50 mm; only the legs lengthen |
-| Nightstand | 600 mm deep, then double-click to open the drawers | the drawers slide ~180 mm, not 270 |
-| Door | 2400 mm tall | the handle stays at ~1 m from the FLOOR, not 1.08 m |
-| Door | 35 mm deep (the band's floor) | the panel gets THINNER; it used to freeze at 40 mm, thicker than the door |
-| Window | 3200 mm wide | five panes and four mullions, not two panes stretched to 1.6 m each |
-| Radiator | 2000 mm wide | 33 fins, not 13 fat ones |
-| Fan or Stool | width and depth to DIFFERENT values | it must read as an oval from above, matching the 2D plan — these three round shapes drew a circle over an elliptical footprint |
-
-**What wrong looks like, and it is the reason this cannot be left to the tests.**
-
-- **A piece that changes size when merely dragged.** This is the scar
-  `tests/part-scale.test.ts` was written for and the failure mode this whole set has:
-  `renderBaseDim` returns the RESOLVED dim for a parametric shape, so if a piece is
-  drawn at its authored size while the store holds a resize, `commit()` writes the
-  authored size straight back through `setDim` and the resize is silently thrown away.
-  Resize one of the six, then MOVE it, and check the Inspector's dimensions did not
-  jump back.
-- **A detail that has stopped scaling when it should.** The opposite error. A fan's
-  BLADES are a proportion (`fanBlade`) and must still grow with the fan; only the motor
-  is capped. Same for a console's carcass against its top slab, and a stool's legs
-  against its seat. If the whole piece looks rigid, the effective dim is not reaching
-  the renderer.
-- **A pendant that looks wrong at the bottom of its band.** The cap runs the other way
-  too: at 150 mm wide the shade is capped by WIDTH, and at a short drop by height. Try
-  800 × 150 as well as 150 × 900.
-- **A door handle on the wrong side of its own panel.** `doorHandleY` is measured from
-  the panel's bottom edge (`-h / 2 + doorHandleY(...)`), so a mistake here puts it in
-  the floor or above the frame. Doors are the one member of this set the user does not
-  usually resize, which is exactly why nobody would notice.
-
-**What does not need re-deriving.** The class table runs on every green suite and names
-each shape, its authored and stored size, what was drawn, and its own cap — nine rows
-across eight shapes, `authored` read from `PART_LIBRARY` rather than typed. The extent
-(`top - bottom` = the stored height) is swept over the fan's and the pendant's whole
-bands; it is NOT checked for the other six, and the first version of this paragraph
-claimed it for "every shape" off a single assertion at a single size.
-
-**What was found by REVIEW rather than by these tests, so treat the green with
-proportion.** Three things this file's gate could not see, all now fixed: the pendant's
-light was left at the authored anchor while its mesh moved (§ 34's defect re-entered,
-and `ceiling-fixtures.test.ts` asserts that property and stayed green because it hands
-one dim to both functions); three round shapes drew a circle where the plan draws an
-ellipse; and `window` and `radiator` were members of the class nobody had listed. The
-gate itself was per-row, so an empty table passed every assertion in it.
 
 ### The Inspector's placement banner, with a screen reader — merged to `main` in `e0c484a` (PR #91), the rest LOOKED AT 2026-10-01
 
@@ -428,31 +324,27 @@ constitutionally unable to show.*
 *The comfort zones in the plan (outline, halos, warm hatch) were looked at by the user on
 2026-10-01 and that item is gone.*
 
-### Every idea is now an arranged room, not a tidied scatter — `0edf04e` on `main` (PR #184, § H.6.0), needs eyes on every preset
+### A chair tucks only square to the table and between its legs — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
 
-Until this change the search behind **Ideas** accepted no steps: each card was a random
-scatter that the passes after the search had squared up and nudged. Now each one is annealed
-from its scatter, so on the fixture sweep the mean idea cost fell 35.6 → 6.1 on the plain
-rectangle and 76.6 → 36.3 on the T, and three presses fill every slot on every preset. None
-of that is a look.
+A dining chair turned 30° under the table, or slid along its edge into a corner leg, was
+counted as tucked, so drags allowed it, Room check passed it and Ideas handed it back with
+the chair through the wood. A dining chair now counts as tucked only within 10° of square to
+the edge it goes under, and never where the table or desk has a leg or side panel. Office
+chairs swivel and stools have no back, so both stay free to turn. Ideas still does not treat
+a dining table and its chairs as one set; that is the next change.
 
-**Where to click.** Start one room from each layout card — Rectangle, L-Shape, T-Shape,
-U-Shape, Open Plan — with its starter furniture (the app's sizes, not the sweep's). In each: left rail (the Room sheet on a phone) → **Ideas**, then **More
-ideas** twice.
+**Where to click.** Rectangle, 3D Model. Turn a dining chair under the table 30° and push it
+in; then slide one along the long edge into a corner leg. Open Ideas and page through. Push
+an office chair under the desk against its side panel.
 
-**What right looks like.** Each card is a room someone might choose: a bed with its head on a
-wall and a nightstand beside it, a sofa facing the TV, chairs at the dining table, desk
-against a wall. Cards differ from each other in where the big pieces went, not only in which
-way a chair points.
+**What right looks like.** The turned chair is refused under the top, and so is the one
+pushed into the leg. In Ideas, every chair is square to the table and none stands in a leg.
+The office chair turns freely under the desk but stops at its panel.
 
-**What wrong looks like.**
-- A card that reads as a scatter: big pieces in the middle of the floor, beds or sofas at a
-  random angle, a dining chair nowhere near the table.
-- A piece standing through a wall or inside another piece — **the rug included** now. It was
-  exempt here while it was a known defect (9 of the sweep's 72 ideas); § H.6.1 holds it to
-  the walls, and the item below says what to look for.
-- Four cards on one press that look like the same room.
-- Any preset's gallery coming back with *No ideas this time* on the first press.
+**What wrong looks like.** A chair through a leg, or a square chair that will no longer go
+under at all. Also watch for this: a dining table left a few degrees off square after
+Suggest happens more often now (23 in 200 test solves, up from 14), because the table cannot
+be squared on its own without swinging a leg into a chair.
 
 ### An idea keeps the rug inside the walls — § H.6.1, needs eyes on Open Plan and the L
 
@@ -495,30 +387,6 @@ starter furniture:
   middle of the room, so it runs 10 cm up every wall, then press **Ideas** three times:
   each press shows ideas, the rug never moves, the rest of the room does. Wrong is any
   press saying *No ideas this time*, or a card where the rug has shifted or turned.
-
-### A chair left on the sofa stays inside the walls — § H.6.2, needs eyes in 3D
-
-When a solve moves a sofa, anything standing on it rides along. The search could not see
-the rider, so it slid the sofa flush to the wall and the chair on its backrest went 65–90 mm
-through the plaster, on every Fix all that moved the sofa, on Rectangle, Open Plan and
-T-Shape. Room check did list the chair as *Sticks out of the room*, with no **Try a
-fix**, but only after Fix all had put it there. None of it is a look yet.
-
-**Where to click.** Rectangle with starter furniture, 3D tab. Drag a dining chair onto the
-sofa and let go over the back half of the seat, so it sits up on the sofa near the backrest.
-Push the coffee table into the doorway so there is something to fix, then press **Fix all**.
-Then **Ideas**, and **More ideas** twice. Repeat on T-Shape.
-
-**What right looks like.** The chair is still on the sofa wherever the sofa went, and its
-back legs are inside the room. The sofa may stop a hand's width short of the wall to make
-that true. Room check has no *Sticks out of the room* line for the chair. Ideas show a
-full page on each press.
-
-**What wrong looks like.**
-- The chair's back poking through the wall behind the sofa, seen from the side in 3D, or
-  its outline past the wall line in the plan.
-- The chair left behind in mid-air where the sofa used to be.
-- *No ideas this time* on a press that offered ideas before you put the chair on.
 
 ### A chair tucked under its table stays on the floor — § H.6.3, needs eyes in both tabs
 
@@ -566,8 +434,7 @@ room with it.
 and drag it over the middle of the coffee table in the plan, then look in 3D. Push a
 dining chair under the dining table and add an **Office chair** under the desk. Then
 select the desk, set its height to 650 mm in the Inspector, and push the office chair
-under it again. Last, in the Library type `dining table 180x90x75cm` and press the dining table row
-(the Room panel's Will it fit tab that this used to go through was retired).
+under it again.
 
 **What right looks like.**
 - The ottoman ends up standing on the coffee table's top, like any piece dropped there.
@@ -579,97 +446,12 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
   under: dragged over the desk it lands on the desktop. A desk from about 690 mm up takes
   it again.
 - Suggest and the ideas gallery never park the ottoman inside the coffee table.
-- The own-size dining table arrives 750 mm tall, drawn like the starter dining table,
-  and a dining chair pushed under it tucks.
 
 **What wrong looks like.**
 - An ottoman sunk into a coffee table, with the shelf showing through its cushion.
 - A Library-size dining chair or office chair standing on its table or desk.
-- An own-size dining table that arrives 600 mm tall, or with a shelf under its top.
 - A starter room that looks different from before. None should: every seat in the starter
   rooms is a dining chair at a dining table, and all of those fit.
-
-### Suggest and Ideas keep a group whole — `0f76fa4` on `main` (PR #197, § H.6.5), NOT LOOKED AT
-
-A group made with **Group N** stayed together when dragged, but Fix and the ideas gallery
-moved each piece on its own: a dining set came back with a chair across the room, or
-turned while the table stayed square. The solver now moves a group as one body. Tests hold
-the shape to a millimetre; nobody has looked at a room with it.
-
-**Where to click.** Open Plan with starter furniture. Click the dining table, shift-click
-each of its chairs, press **Group**. Press **Ideas** and page through every card. Then
-turn the group about 30° in the plan, press **Fix**, and look in 3D. Last, in the
-Catalog press **Keep where it is** on one chair of the group, and press **Fix** and
-**Ideas** again. Do the same once on T-Shape, with a table lamp put on the dining table
-first. Then group the sofa with the TV on the wall, drag the sofa partly through a wall,
-and open **Room check**. Then ungroup it, group the sofa with an armchair instead, press
-**Keep where it is** on the armchair, and look at Room check again.
-
-**What right looks like.**
-- In every idea the table and its chairs sit exactly as you grouped them, wherever the
-  set ends up and whichever way it faces.
-- Fix brings the turned set back square, or leaves it turned, but as one piece: no chair
-  squared on its own.
-- With one chair kept in place, the whole set stays put, and the rest of the room still
-  moves around it.
-- The lamp stays on the table.
-- Room check says the sofa sticks out and to drag it back inside, with no **Try a fix**
-  on that row: the group holds it, because the TV never moves. The same with the kept
-  armchair, and on any other row naming the sofa, such as a blocked door or walkway.
-
-**What wrong looks like.**
-- A chair left behind, pushed out, or turned on its own inside a thumbnail or in 3D.
-- A kept chair staying put while the table and the other chairs move away from it.
-- A card whose "N pieces move" counts the set's chairs as not moving when the set did.
-- A **Try a fix** on the grouped sofa, or a sentence telling you to slide it along its
-  wall.
-- **Fewer ideas on T-Shape with the lamp, maybe none.** That is expected and filed
-  (§ H.6.5, "Kept, as trades"): a set that cannot come apart has fewer places to go.
-  It was counted with the room at 6 × 4 m, where the gallery's first three searches find
-  none and it stops there, not at the preset's own 5.5 × 4.7, so how few is part of the
-  look. The other part is whether an empty gallery reads as broken. The user chose that
-  it says the group moves as one; that sentence is not built yet.
-
-### Fix squares a slightly turned sofa where it stands — `76eaee1` on `main` (PR #201, § H.6.6), NOT LOOKED AT
-
-**Looked at 2026-10-01, with the sofa also MOVED:** *"If moved forward a bit and turned, it
-moves back to it's previous position and turn to face the tv."* That is a different case from
-the one below, and Fix is doing what its guidelines say there rather than misfiring. Measured
-in the T at 5.5 × 4.7: turned 10° and left on its wall, the sofa squares where it stands on
-6 seeds in 6. Pulled 30 cm forward first, nothing in the room is wrong (no clash, nothing
-through a wall), but three guidelines count against it: off its wall, away from its TV and
-coffee table, and not square. Together they outweigh the extra cost of moving a piece you
-placed by hand, so Fix puts it back on its wall facing the TV on 6 seeds in 6. **The user
-decided (2026-10-01) that this stays:** Fix tidies to the guidelines, and Undo or Lock keeps a
-sofa you floated (`docs/what-is-still-open.md` § H.6.6 and § C). The turn-only check below is
-still unlooked-at.
-
-Turn the sofa a few degrees and press **Fix**, and it could come back somewhere else in the
-room, sometimes facing away from the TV. Fix now also tries the room as it stands with the
-sofa turned straight. Tests hold the angles; nobody has looked at a room with it.
-
-**Where to click.** First set **More → Snap when dragging → Free**: the default snap turns
-in 15° steps, which is too far for this. T-Shape with starter furniture, at the size it
-opens at. In the 2D Plan, turn the sofa about 10° with its rotate handle, press **Fix**,
-and look in 3D.
-Undo, turn it about 10° the other way, and press **Fix** again. Then the L-Shape: turn its
-sofa about 6° the way that pushes its back into the wall, and press **Fix**.
-
-**What right looks like.**
-- The sofa stays where you left it and turns square, facing the TV.
-- Turned the other way in the L, the sofa is clear of the wall and Fix leaves it be, as
-  before. On the Rectangle the turn itself eases the sofa off the wall, so there is nothing
-  for Fix to square; that is unchanged too.
-- Usually nothing else moves. In the T, now and then the walkway repair also moves a few
-  pieces to open a path; that is its own pass, and it did the same before.
-
-**What wrong looks like.**
-- After a small turn, the sofa sent across the room, or facing away from the TV.
-- A dining chair or the L-Shape's armchair squared when only the sofa was turned. Their
-  angles are left alone unless squaring them clears a fault.
-
-A sofa turned 20° or more is not part of this: Fix may still move it, and in the T it can
-still end up facing away. That is filed (§ H.6.6, "Still open").
 
 ### The ideas gallery replaces Shuffle — `6ff707f` on `main` (PR #159), needs a real phone and a real GPU
 
@@ -1465,88 +1247,6 @@ writing about your own. Which the item then proved twice over: it also asserted 
 capture screen's wall-length label "now states the wall's real length", read out of the
 source, and a browser found it still saying 4.70 m about a 2.58 m wall.)*
 
-### A dragged SET slides to its binding member — and only a pointer can show it
-
-*Filed by `drag` (§ H.8, built 2026-09-05, PR #113). It is here rather than in a probe
-for a reason worth keeping: a probe was built and run against both builds, it reproduced
-the old behaviour in a browser — a two-piece selection stopping **3.55 m short** of where
-the dragged piece reaches alone — and it still could **not tell the two builds apart**.
-An arrow nudge is a fixed step, and in every fixture reachable from the keyboard the
-binding member's clamp lands exactly on the lattice, where "refuse" and "slide to the
-limit" stop in the same place to six decimals. **A sub-step delta needs a pointer drag**,
-which is the one gesture that probe never made. Five versions failed five different ways
-and all five are written into `scripts/slide-probe.mjs`.*
-
-**Where to click.** Merge a bed with a nightstand on each side, or shift-click any
-multi-selection, and drag it **with the pointer** toward the wall the members are nearest.
-
-**Right.** The set slides until the nearest member is flush against the wall and stops
-there, still following the hand. Nothing goes red; nothing is announced.
-
-**Wrong.** The piece under the hand runs ahead of its company. Or the size tag and the
-wall-gap labels sit somewhere the piece is not — 3D drew the mesh at the limited position
-while publishing the live channel from the pointer's, so `MeasureGuides` (now `DragTag`) built the OBB at
-a place the piece was not; that is fixed, and this is where it would show.
-
-**Unverified and named as such:** four mutants survive in that change — both `Draggable`
-call sites and the two `settled` gates — because no test in this repo reaches an R3F
-component and the probe cannot make a sub-step drag. This row is the only check they have.
-
-### A lamp on a nightstand you have resized — the CORE case is MEASURED, the rest still wants a person
-
-**Where it rides.** `main`, `04ce6e0` (PR #100). The two earlier attempts were reverted;
-this is the third.
-
-**What no test in this repo can see, and why.** `Draggable` writes a part's transform
-straight to its `Object3D`, and there is no R3F under jsdom, so
-`tests/rider-settle-hooks.test.tsx` proves only that the **store** hands out a corrected
-Y. The headless probe closes that gap and is worth keeping:
-`…/danmu-probe/rider-height.mjs`, route recorded below.
-
-**MEASURED, 2026-09-03, headless Chromium against a production build of `04ce6e0`.**
-U-Shape preset (the only one `enumeratePlans` gives a bed rung, so the only one that
-seeds nightstands and bedside lamps). Select a nightstand, type its height `0.55 → 0.75`:
-
-| part | before y | after y | delta |
-|---|---|---|---|
-| `lamp-1` (on the resized nightstand) | 0.55 | **0.75** | **+0.200** |
-| `lamp-2` (on the other nightstand) | 0.55 | 0.55 | 0.000 |
-| every other part in the room | — | — | 0.000 |
-
-Typing `0.75 → 0.55` puts `lamp-1` back at 0.55. So the 3D scene **paints** the corrected
-height, in-session, with no reload — which is the half that was in doubt.
-
-**And the probe was watched failing.** The identical run against a production build of
-`2f3d0dd` — `main` immediately before this landed — grows the nightstand to 0.75 and
-leaves `lamp-1` at **0.55**, 200 mm inside it. A browser probe that has only ever been
-green is the same decoration as an assertion never seen fail.
-
-**What that run does NOT settle, and it is most of the list.** A number is not a picture:
-the SwiftShader screenshot times out, so **nobody has seen this**. Still open —
-
-· **The picture, from eye level.** From directly overhead a floating lamp is
-  indistinguishable from a seated one, which is why the 2D plan cannot check this at all.
-· **After dragging the lamp once** (a *recorded* edge, not the seeded one the probe used).
-  A consumer writing the derived Y back is what killed the first derivation permanently.
-· **Press Floor on the lamp after resizing the nightstand.** It must stay on the floor.
-  Before this branch's second round it dropped and popped straight back — two clicks, and
-  no review lens found it.
-· **Resize the nightstand, press Suggest, then type the height back to exactly what it
-  was.** The lamp must come back down. Every writer that moves a piece in x/z copies
-  `pos[1]` out of the resolved scene, so this is where a baked Y gets stranded — measured
-  at 450 mm in the air, persisted.
-· **A lamp on a 300 mm support** — an ottoman, a low chest — must not fall through it.
-  That is the `> 0.3` bar in `lib/layout-settle.ts:275-280`.
-· **It must never climb** onto something above it.
-· **Drag a piece with something on it, in a busy room**, and watch for dropped frames.
-  Uncached the derivation cost 14.3 ms of a 16.7 ms budget per frame at 60 parts;
-  `riderYs` collapses that to one call, and only a real GPU can say whether it is enough.
-· **Drag a piece into mid-air over a table** — the Inspector must still say **Floating**.
-  Three assertions in `tests/placement-banner.test.tsx` broke when the first version
-  seated a piece that was never resting on anything.
-
----
-
 ### A cleaner cream, a deeper ink, plain copy, and Sun direction behind an info button — `0c3cd64` on `main` (PR #158), SWEPT, needs a real phone and a real screen
 
 The paper family lost about half its yellow and the ink went darker; every contrast
@@ -1847,6 +1547,25 @@ inside the box.
 
 ## Look and light
 
+### Shoes on the rack, a pipe clothes rail, and a dining table on four legs — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+From the 2026-10-01 batch. The shoe rack carries a random mix of shoes, trainers and the odd
+boot on its tilted tiers. A new **Clothes rail** follows the reference photo: black pipe with
+flanged feet, a top bar of clothes on hangers and a lower bar. The dining table's far side
+was drawn as a slab (the desk's side panel); it now stands on four legs, and the desk keeps
+its panel and two legs. The legs drawn are the legs the chair rule above checks against.
+
+**Where to click.** Library: add a shoe rack, a clothes rail and a dining table, and orbit
+round each at eye level. Stretch the rack and the rail wider in the Inspector.
+
+**What right looks like.** Shoes sitting on their tiers, none through the shelf above or
+past the ends, and different each time you add one. Garments on hangers between the posts,
+above the lower bar, and more of them on a wider rail. Four legs at the table's corners from
+every side.
+
+**What wrong looks like.** A shoe through the shelf above, a garment through the lower bar or
+a post, or a dining table with a slab on one end.
+
 ### The day track as a slider over the canvas, a frosted base under the selection, no streaks while carrying — merged to `main` in `b955aac` (PR #178), SEEN HEADLESS ONLY
 
 **Where to click.** Open any room in **3D Model** on a wide window, then on a phone. Under the
@@ -2098,22 +1817,6 @@ both. The closed shell (`RoomShell`) is doing its job — the key light casts on
 ceiling stops it — so the interior is lit by the hemisphere and environment alone. That is
 the lighting pass's to answer (warm interior light sources), not a grading defect.
 
-### Windows, curtains, art and doors go with the cut-away wall — `c2137c4` on `main` (PR #157)
-
-**Where to click.** Any room with a window or a painting on each wall, **3D Model** tab,
-default dollhouse view. Orbit slowly all the way round, on **High** and on **Fast**.
-
-**What wrong looks like.** A wall piece still hanging where its wall has gone; a piece
-vanishing while its wall is still drawn (a sign error in `lib/near-wall.ts` shows only on
-the side walls); the room's **shadows moving** as the camera crosses a wall — the piece is
-meant to stop drawing but keep casting (`components/three/CutAway.tsx`); or a press where
-an invisible window was selecting the window instead of what is behind it.
-
-**What was measured, and on what.** SwiftShader, 1280 × 800, the starter living room:
-both near walls' windows and curtains gone in the default view, back after a ~180° orbit,
-and a click through the vanished window selected the sofa. Shadow stability while orbiting
-was not measured — it is the half that wants eyes.
-
 ### High has a bounce light now, and the furniture has real surfaces — `c2137c4` on `main` (PR #157)
 
 **Where to click.** The starter living room on **High**, every mood; then a bedroom and a
@@ -2134,26 +1837,6 @@ a real GPU is entirely unlooked-at.
 
 **Noticed, not fixed.** The sofa's fabric weave aliases into a moiré at room distance on
 both builds — the normal map wants mipmapping or a distance fade.
-
-### Every model is one object now — `c2137c4` on `main` (PR #157)
-
-**Where to click.** Library → coffee table, dining chair, armchair, office chair, desk, shoe
-rack, floor lamp, air purifier, both mirrors, monitor, fridge. Orbit close to each.
-
-**What wrong looks like.** A part that stops short of what it should meet: a table top above
-its legs, a chair back with nothing under it, a shelf between legs that does not reach them,
-a handle standing off a door, purifier rings through the floor (they were vertical hoops;
-now `rotation={[π/2,0,0]}` — this closes the old "intake slats stand up" item, seen as bands
-on SwiftShader). Also look at legs: the white outline strokes are gone from them.
-
-**What was measured, and on what.** `tests/model-integrity.test.tsx` walks every shape at
-min / library / max and found 181 detached or ungrounded parts across 19 shapes; it finds
-none now. It proves each model is connected, not that every visible joint is closed — the
-coffee table's legs cut back to 0.82h still pass, because the new aprons carry them. Seen on
-SwiftShader in a seeded showroom, the oval mirror included (seeded on three walls: it shows on
-the two the camera faces and leaves with the cut-away third, as it should). The purifier's
-rings follow its taper now — sized to the top radius, the lowest stood ~4 mm off the body,
-which an axis-aligned box test cannot see because the ring's box contains the body.
 
 ### A rug sits where a designer would put it — `c2137c4` on `main` (PR #157)
 

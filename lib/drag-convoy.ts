@@ -898,11 +898,20 @@ export function resolveConvoy(input: {
         if (Math.abs(cx) > Math.abs(overX)) overX = cx;
         if (Math.abs(cz) > Math.abs(overZ)) overZ = cz;
       }
+      // …but only onto something LOWER than itself. A step up is the chair onto the
+      // table it is pulled across; a climb is a nightstand riding a merged bed's drag up
+      // the side of the 2.2 m wardrobe in its path and standing on top of it, its lamp
+      // then pressed into it by the ceiling cap — the user's report, and nothing
+      // refused it, because the wardrobe top is a legal support and `collidesAt` only
+      // asks about the floor it would have stood on. A piece does not get onto
+      // something taller than itself by being pushed sideways into it, so that is a
+      // refusal and names the member, like any other: the set stops at the wardrobe.
+      const climbed = !wallRider && r.pos[1] - m.startPos[1] > m.part.dimMM[2] / 1000;
       // Only a member this gesture BROKE may veto it. One that could not stand where
       // it started refuses every delta forever and takes the whole set with it — see
       // `ConvoyMember.startValid`, which is also where the rigidity half is explained
       // for not being gated the same way.
-      if ((!r.valid && m.startValid) || !rigid) {
+      if ((!r.valid && m.startValid) || !rigid || climbed) {
         ok = false;
         if (!first) first = m.part;
         ids.push(m.part.id);

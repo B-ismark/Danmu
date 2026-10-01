@@ -38,7 +38,7 @@ import { convexHull, occupiedPts, pointInHull, walk } from './helpers/geometry-w
 const TOLERANCE_MM = 1;
 /** Rows whose shape `tuckProfile` has a case for — pinned so the exactness test cannot
  *  pass by measuring nothing. */
-const NAMED_ROWS = 153;
+const NAMED_ROWS = 154; // 154 with the Library's Desk row (see the denominator above)
 /** Anything whose bottom is this close to the floor stands on it — a leg, a panel. */
 const ON_FLOOR_MM = 2;
 
@@ -138,8 +138,11 @@ describe('the fit test reads the furniture as it is drawn', () => {
     // because the settle pass's seat gate reads the role and a stool filed as `other` went
     // up onto the coffee table beside it. All 36 new rows and all 4 lost ones are the
     // stool's — measured, with every other row identical: its 9 rows (3 dining chair, 2
-    // ottoman, 2 dining table, 2 desk) became 45, every one a dining chair.
-    expect([rows.length, rows.filter((r) => r.kind === 'seat').length, rows.filter((r) => r.kind === 'surface').length]).toEqual([281, 208, 73]);
+    // ottoman, 2 dining table, 2 desk) became 45, every one a dining chair. 282 / 74 when
+    // the Library's "Dining / desk table" (a `desk` row) became a Desk and a Dining table:
+    // the Dining table is a `desk-standard` row under `table`, a Library size the sweep
+    // had not reached under that category before.
+    expect([rows.length, rows.filter((r) => r.kind === 'seat').length, rows.filter((r) => r.kind === 'surface').length]).toEqual([282, 208, 74]);
     expect(rows.filter((r) => r.shape === 'stool').map((r) => r.role).every((r) => r === 'dining-chair')).toBe(true);
     expect(rows.filter((r) => r.shape === 'stool').length).toBe(45);
   });
@@ -224,20 +227,21 @@ describe('the back a tuck keeps out from under the top', () => {
 });
 
 describe('the catalogue pairings that leave room', () => {
-  // What a person meets: the Library's seats against its surfaces, plus a dining table,
-  // which the Library only reaches as a desk-category piece and a room reaches as the
-  // `table` category — the same shape drawn with an apron rather than a cable rail.
+  // What a person meets: the Library's seats against its surfaces. The Library used to
+  // reach a dining table only as a desk-category "Desk", so a synthetic
+  // one stood in here for the `table` category a room reaches it as; it sells a Dining
+  // table and a Desk now — one shape, drawn with an apron or with a cable rail.
   type Item = { label: string; category: Category; shape: Shape; dimMM: Dim };
-  const DINING_TABLE: Item = { label: 'Dining table', category: 'table', shape: 'desk-standard', dimMM: [1200, 600, 750] };
-  const items: Item[] = [...PART_LIBRARY, DINING_TABLE];
+  const items: Item[] = [...PART_LIBRARY];
   const seats = items.filter((l) => SEATS.includes(tuckProfile(l).role));
   const surfaces = items.filter((l) => SURFACES.includes(tuckProfile(l).role));
   const pairs = seats.flatMap((a) => surfaces.filter((b) => sharesFloor(tuckProfile(a).role, tuckProfile(b).role)).map((b) => [a, b] as const));
 
   it('reads the pieces it means to', () => {
-    expect(tuckProfile(DINING_TABLE).role).toBe('dining-table');
+    expect(tuckProfile(items.find((l) => l.label === 'Dining table')!).role).toBe('dining-table');
+    expect(tuckProfile(items.find((l) => l.label === 'Desk')!).role).toBe('desk');
     expect(seats.map((l) => l.label)).toEqual(['Dining chair', 'Office chair', 'Ottoman', 'Stool']);
-    expect(surfaces.map((l) => l.label)).toEqual(['Coffee table', 'Dining / desk table', 'L-shaped desk', 'Dining table']);
+    expect(surfaces.map((l) => l.label)).toEqual(['Coffee table', 'Dining table', 'Desk', 'L-shaped desk']);
   });
 
   it('at the sizes they are added at', () => {
@@ -245,26 +249,26 @@ describe('the catalogue pairings that leave room', () => {
     // a quarter of the way up, so there is no room under it for anything, and an ottoman
     // beside one is an ordinary piece beside it.
     expect(pairs.map(([a, b]) => `${a.label} → ${b.label}: ${tucksUnder(a, b) ? 'tucks' : 'no'}`)).toEqual([
-      'Dining chair → Dining / desk table: tucks',
-      'Dining chair → L-shaped desk: tucks',
       'Dining chair → Dining table: tucks',
-      'Office chair → Dining / desk table: tucks',
-      'Office chair → L-shaped desk: tucks',
+      'Dining chair → Desk: tucks',
+      'Dining chair → L-shaped desk: tucks',
       'Office chair → Dining table: tucks',
+      'Office chair → Desk: tucks',
+      'Office chair → L-shaped desk: tucks',
       'Ottoman → Coffee table: no',
-      'Ottoman → Dining / desk table: tucks',
-      'Ottoman → L-shaped desk: tucks',
       'Ottoman → Dining table: tucks',
-      'Stool → Dining / desk table: tucks',
-      'Stool → L-shaped desk: tucks',
+      'Ottoman → Desk: tucks',
+      'Ottoman → L-shaped desk: tucks',
       'Stool → Dining table: tucks',
+      'Stool → Desk: tucks',
+      'Stool → L-shaped desk: tucks',
     ]);
   });
 
   it('a seat that meets the underside exactly goes under it', () => {
     // Touching is clearing: a seat whose top meets the underside has not gone into it.
     // The sweep below never lands on this, because every knee it reaches ends in a 5.
-    const desk = items.find((l) => l.label === 'Dining / desk table')!;
+    const desk = items.find((l) => l.label === 'Desk')!;
     const stool = items.find((l) => l.label === 'Stool')!;
     const at = (h: number): Item => ({ ...stool, dimMM: [stool.dimMM[0], stool.dimMM[1], h] });
     expect(tuckProfile(at(675)).tuckMM).toBe(tuckProfile(desk).kneeMM);
@@ -296,19 +300,19 @@ describe('the catalogue pairings that leave room', () => {
     // 690 mm or more; an ottoman goes under everything but a coffee table and the
     // lowest tops with the tallest ottomans.
     expect(counts).toEqual([
-      'Dining chair → Dining / desk table: 1116/1116',
-      'Dining chair → L-shaped desk: 1116/1116',
       'Dining chair → Dining table: 1113/1116',
-      'Office chair → Dining / desk table: 965/1581',
-      'Office chair → L-shaped desk: 965/1581',
+      'Dining chair → Desk: 1116/1116',
+      'Dining chair → L-shaped desk: 1116/1116',
       'Office chair → Dining table: 765/1581',
+      'Office chair → Desk: 965/1581',
+      'Office chair → L-shaped desk: 965/1581',
       'Ottoman → Coffee table: 0/936',
-      'Ottoman → Dining / desk table: 800/806',
-      'Ottoman → L-shaped desk: 800/806',
       'Ottoman → Dining table: 778/806',
-      'Stool → Dining / desk table: 1100/1271',
-      'Stool → L-shaped desk: 1100/1271',
+      'Ottoman → Desk: 800/806',
+      'Ottoman → L-shaped desk: 800/806',
       'Stool → Dining table: 1018/1271',
+      'Stool → Desk: 1100/1271',
+      'Stool → L-shaped desk: 1100/1271',
     ]);
   });
 });
