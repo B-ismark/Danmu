@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { COPY_GAP_M, placeCopies, roomSearch } from '@/lib/duplicate-place';
 import { footprintForLayout } from '@/lib/footprint';
-import { footFromPart, footOverlap, obbFromPart, obbOverlap, TOUCH_M } from '@/lib/geometry';
+import { footFromPart, footInsidePoly, footOverlap, obbFromPart, obbOverlap, TOUCH_M } from '@/lib/geometry';
 import { isSoftFurnishing } from '@/lib/layout-rules';
 import { riderRelation } from '@/lib/rider-height';
 import { canCollideWith, defaultScene, PART_LIBRARY, placeNewPart, type ScenePart } from '@/lib/scene-spec';
@@ -294,6 +294,10 @@ describe('every starter piece copies clear of everything', () => {
         touching: touching(src, spots[0], parts),
         moved: Math.abs(spots[0].pos[1] - src.pos[1]) > 1e-6 && !src.wallMounted,
         floored: supportOf[src.id] !== undefined && spots[0].pos[1] === 0,
+        // Shrunk a millimetre a side: a piece flush on the plaster is in the room.
+        outside:
+          !src.wallMounted &&
+          !footInsidePoly(footFromPart(spots[0].pos, spots[0].rot, [src.dimMM[0] - 2, src.dimMM[1] - 2, src.dimMM[2]], src.circle, src.shape), rfp),
       };
     });
   });
@@ -304,6 +308,9 @@ describe('every starter piece copies clear of everything', () => {
   });
   it('all are clear', () => {
     expect(rows.filter((r) => !r.clear).map((r) => r.at)).toEqual([]);
+  });
+  it('every floor piece is wholly inside the room — a rug included, which collides with nothing', () => {
+    expect(rows.filter((r) => r.outside).map((r) => r.at)).toEqual([]);
   });
   it('none touches anything', () => {
     expect(rows.filter((r) => r.touching.length > 0).map((r) => `${r.at} → ${r.touching}`)).toEqual([]);
@@ -472,6 +479,17 @@ describe('what a copy stands on, and where it goes when nothing is clear', () =>
     const { spots, clear } = placeCopies([chair], [chair, block], fp, H);
     expect(clear).toBe(true);
     expect(spots[0].pos[2]).toBeCloseTo(-3 + 0.25, 3);
+  });
+
+  it('…and along the far wall too, where a flush outline reads as outside the polygon', () => {
+    // Ray casting puts a corner exactly ON the +x or +z wall outside and one on the −x
+    // or −z wall inside, so the in-room test shrinks the outline a millimetre a side.
+    // Without that, the same strip mirrored south was "no clear space".
+    const block = part({ id: 'block', pos: [0, 0, -0.275], dimMM: [6000, 5450, 900] });
+    const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', pos: [0, 0, -2.7], dimMM: [450, 500, 850] });
+    const { spots, clear } = placeCopies([chair], [chair, block], fp, H);
+    expect(clear).toBe(true);
+    expect(spots[0].pos[2]).toBeCloseTo(3 - 0.25, 3);
   });
 
   it('piece by piece, one copy with nowhere clear makes the whole duplicate not clear', () => {

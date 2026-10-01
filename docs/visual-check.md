@@ -234,7 +234,8 @@ anything.
 **Ctrl/⌘ D** (or right-click → Duplicate). Then the bed, a print on the wall, a lamp on the
 desk or nightstand, and a piece standing against a side wall. Then shift-select the bed and
 both nightstands and duplicate the three together. Then a dining chair at its table, the sofa in
-the T-Shape (every spot beside it is taken), and a bedside lamp in the U-Shape. Last, fill a
+the T-Shape (every spot beside it is taken), a bedside lamp in the U-Shape, and the rug in the
+L-Shape. Last, fill a
 small room so nothing fits anywhere and duplicate a piece there.
 
 **What right looks like.** The copy sits right beside the original with a small gap, turned the
@@ -243,7 +244,8 @@ same desk when there is room on it. A piece against a wall puts its copy on the 
 bed and nightstands arrive as a set, in the same formation. The chair's copy stands clear of the
 table, not under it. The T's sofa copy goes to the nearest open floor, even if that is a little
 way off. The U's lamp copy stands on the floor beside the nightstand, which has room for one
-lamp. Only when nothing in the whole room is clear does the copy overlap something, and then it
+lamp. The L's rug copy lies wholly on the floor, none of it in the corner the L cuts away.
+Only when nothing in the whole room is clear does the copy overlap something, and then it
 is outlined red and the message reads *"No clear space left in the room, so the copy overlaps
 something."* Even then it stays on the floor, never on top of the piece in its way, and pressing
 Duplicate again and again spreads the copies into whatever gaps are left rather than piling them

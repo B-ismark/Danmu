@@ -67,6 +67,7 @@ import { resolvePlacement } from './drag-resolve';
 import {
   aabbExtents,
   footFromPart,
+  footInsidePoly,
   footOverlap,
   localToWorld,
   obbFromPart,
@@ -262,6 +263,17 @@ function place(
       // so no spot off the original is ever refused for width. Kept because 'wall' is a
       // refusal and calling it "in the room" would be a lie the day that changes.
       if (r.refusal === 'room' || r.refusal === 'wall') inRoom = false;
+      // …and asked of the whole outline, not the resolve's verdict: the containment it
+      // runs forgives a rug, so a rug's copy beside its original in an L stood 0.7 m
+      // into the corner the L cuts away, reported clear. `footInsidePoly`, not the
+      // sampled `outsideShare`, which forgives 20 mm through the plaster. Shrunk a
+      // millimetre a side, because ray casting reads a corner exactly on the +x or +z
+      // wall as outside: a piece flush there is in the room. Wall pieces too — every
+      // one rides its wall from the room side, back on the plaster.
+      if (
+        !footInsidePoly(footFromPart(r.pos, r.rot, [src.dimMM[0] - 2, src.dimMM[1] - 2, src.dimMM[2]], src.circle, src.shape), footprint)
+      )
+        inRoom = false;
       // The containment clamp can carry a step at the room's edge straight back onto
       // the piece it started beside, so "off the original" is asked, not assumed — and
       // asked of the footprints, not of `collidesAt`, which never reports a rug or a
@@ -314,7 +326,7 @@ function place(
     return { spots, grounded, valid, inRoom, offOriginal, footing, footingKind, floored, snug, overlap, formed, asked };
   };
 
-  const clean = (t: Try) => t.valid && t.offOriginal && t.snug && t.formed;
+  const clean = (t: Try) => t.valid && t.inRoom && t.offOriginal && t.snug && t.formed;
   // Nearest first within each tier, and the tiers in the order a person would rank
   // them: exactly beside it; beside it but shifted by the room's edge; then the rest
   // of the room, nearest first — on the same footing, then, for a rider whose
