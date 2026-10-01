@@ -295,7 +295,7 @@ pieces the eye tracks against a flat ceiling rather than against furniture.
 makes the green worth anything. `danmu-probe/wall-pin.mjs`, production build, headless
 Chromium: seed a T from the picker (meta only — no scene key, which is the state a fresh
 room is in), open `/room/<id>/plan`, focus one wall handle, two ArrowRights (`WALL_STEP`
-0.05 m, so +10 cm), go to `/workspace`, come back, read `RoomTools`' own verdict.
+0.05 m, so +10 cm), go to the rooms page (`/`), come back, read `RoomTools`' own verdict.
 
 | | before the fix | after |
 |---|---|---|
@@ -1403,7 +1403,7 @@ survives the re-point.)*
 
 ### A U-Shape's first wall shows no length, and it looks exactly like a missing number
 
-**Where to click.** `/onboarding/welcome` → **Start decorating** → choose **U-Shape** →
+**Where to click.** `/` → **Create your first room** (or **New Room**) → choose **U-Shape** →
 *"Photograph my real room first (optional)"* → add four photos. Look at the four cards'
 wall-length labels.
 

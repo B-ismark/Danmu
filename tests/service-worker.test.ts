@@ -69,7 +69,7 @@ describe('install', () => {
     const sw = loadServiceWorker();
     await sw.install();
     const shell = await sw.cacheStorage.open('danmu-shell-v1');
-    expect(shell.urls()).toEqual([`${ORIGIN}/`, `${ORIGIN}/onboarding/welcome`, `${ORIGIN}/settings`, `${ORIGIN}/workspace`]);
+    expect(shell.urls()).toEqual([`${ORIGIN}/`, `${ORIGIN}/settings`]);
     // `cache: 'reload'` — an install must not adopt a stale HTTP-cached copy.
     expect(sw.calls.every((c) => c.cacheMode === 'reload')).toBe(true);
   });
@@ -197,7 +197,7 @@ describe('navigation', () => {
   it('prefers the network while it is there', async () => {
     const sw = await installed();
     sw.setNetwork(async () => new Response('fresh page', { status: 200 }));
-    const res = await sw.fetch(navigation('/workspace'));
+    const res = await sw.fetch(navigation('/settings'));
     expect(await res!.text()).toBe('fresh page');
     expect(sw.calls).toHaveLength(1);
   });
@@ -215,13 +215,13 @@ describe('navigation', () => {
     expect(await res!.text()).toBe('the studio');
   });
 
-  it('offline on a page never visited, falls back to the landing page', async () => {
+  it('offline on a page never visited, falls back to the rooms page', async () => {
     const sw = await installed();
     sw.goOffline();
     const res = await sw.fetch(navigation('/room/never-opened/plan'));
     expect(res!.ok).toBe(true);
-    // Precached '/' — the app loads and can read its own IndexedDB, which is
-    // where the rooms are. Better than the browser's dinosaur.
+    // Precached '/' — the rooms page, which loads and reads its own IndexedDB,
+    // which is where the rooms are. Better than the browser's dinosaur.
     expect(await res!.text()).toBe('ok');
   });
 

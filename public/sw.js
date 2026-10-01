@@ -36,7 +36,10 @@ const KEEP = [SHELL, ASSETS];
 
 // The routes that exist at fixed URLs, so they can be had up front. The studio
 // lives under /room/<uuid>/, which is per-room and cached when visited.
-const PRECACHE = ['/', '/workspace', '/onboarding/welcome', '/settings'];
+// `/` is the rooms page itself — the first screen — so it is also the offline
+// fallback below. (`/workspace`, its old address, is a server redirect now: a
+// redirect is not a page, and a precached one cannot be served to a navigation.)
+const PRECACHE = ['/', '/settings'];
 
 // Content-hashed and immutable — a URL match here is always the right bytes.
 // Compared against the *pathname*: `url.includes()` would also match a query
@@ -134,7 +137,7 @@ self.addEventListener('fetch', (event) => {
       // `fresh` has already tried this exact URL in the cache — that is what makes
       // a reload of /room/<id>/model come back as that room rather than the home
       // page. So by the time this catch runs, the page genuinely was never
-      // visited, and the precached landing page is the only thing left. (An
+      // visited, and the precached rooms page is the only thing left. (An
       // earlier version re-tried `cache.match(request)` here, which read as if
       // this were where per-URL fallback happened; it was dead code, and a
       // mutation test proved it by deleting it with nothing going red.)

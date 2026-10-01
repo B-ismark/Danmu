@@ -2311,14 +2311,14 @@ the break are more useful than the conclusion was:
   no detections and no saved scene, and `moveWallCarrying` (`lib/wall-actions.ts`)
   **never calls `setParts`**, so a wall move writes no scene snapshot. `RoomSync`
   persists width/depth/footprint and **not `layoutId`**. So: pick T-Shape, nudge a wall
-  +10 cm, go to `/workspace` and come back — the room is re-seeded, Room check reports a
+  +10 cm, go to the rooms page and come back — the room is re-seeded, Room check reports a
   finding, and the user has moved no furniture at all.
 
 ##### Watched happening, in a real browser, 2026-09-03 — and it is worse than the claim
 
 Production build, headless Chromium, driven through the actual picker: **T-Shape → Start
 decorating → 2D Plan → focus one wall edge → two ArrowRights (`WALL_STEP` is 0.05 m, so
-+10 cm) → `/workspace` → back into the room.** Repeated for each of the T's eight edges,
++10 cm) → the rooms page → back into the room.** Repeated for each of the T's eight edges,
 each nudge undone before the next, reading `RoomTools`' own health control rather than
 pixels. The fresh room reads **"Room checks out"** first, which is the positive control
 that makes every absence below mean something.

@@ -113,7 +113,6 @@ async function seed(page, rooms) {
 
 /** Screens and states. `go` returns once the state is on screen. */
 const SCREENS = [
-  { key: 'welcome', go: (p) => p.goto(`${BASE}/onboarding/welcome`) },
   { key: 'layout-pick', go: (p) => p.goto(`${BASE}/onboarding/layout-pick`) },
   // The size fields TYPED: a small room, so every outline redraws at a size no preset
   // offers and the reset appears beside the note. Per unit, because a legal 3.2 m is
@@ -147,7 +146,7 @@ const SCREENS = [
   // named that state `capture` the sweep never saw the screen itself: the drop zone
   // and the instruction line stretched edge to edge at 1920 with every width `ok`.
   { key: 'capture-no-room', go: (p) => p.goto(`${BASE}/onboarding/capture`) },
-  { key: 'workspace', go: (p) => p.goto(`${BASE}/workspace`) },
+  { key: 'workspace', go: (p) => p.goto(`${BASE}/`) },
   { key: 'settings', go: (p) => p.goto(`${BASE}/settings`) },
   { key: 'studio-plan', studio: true, go: (p, id) => p.goto(`${BASE}/room/${id}/plan`) },
   {

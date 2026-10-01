@@ -54,12 +54,10 @@ without any key: pick a footprint and start decorating.
 
 | Path | Purpose |
 |---|---|
-| `/` | Entry router (rooms? → workspace, else onboarding) |
-| `/onboarding/welcome` | Intro + "Start decorating"; optional BYO key |
+| `/` | Rooms list, the first screen — create / resume / delete / **open a saved room file** |
 | `/onboarding/layout-pick` | Pick footprint preset (sets dims + starter scene) |
 | `/onboarding/capture` | 4-wall guided capture (`getUserMedia`) |
 | `/onboarding/detect` | Furniture detection (local ONNX → Gemini → manual) |
-| `/workspace` | Rooms list — create / resume / delete / **open a saved room file** |
 | `/room/[id]/model` | **3D decoration studio (default)** |
 | `/room/[id]/plan` | 2D floor plan |
 | `/settings` | Key, display unit, danger zone |
@@ -88,7 +86,7 @@ without any key: pick a footprint and start decorating.
   ([`lib/space-bound.ts`](lib/space-bound.ts)).
 - **Rooms travel as files, not through a server.** `Save file` in the studio writes
   a readable `.danmu.json` ([`lib/scene-file.ts`](lib/scene-file.ts)); `Open a file`
-  on `/workspace` lands one as a new room. It carries the room and its furniture and
+  on the rooms page lands one as a new room. It carries the room and its furniture and
   deliberately **no photographs**.
 
 See [Design.md](Design.md) for the full feature list, data flow, and roadmap.

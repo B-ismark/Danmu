@@ -356,15 +356,6 @@ describe('the canvas tool cluster reflows instead of mangling', () => {
     expect(rule('.ds-chip')).toMatch(/white-space:\s*nowrap/);
   });
 
-  it('lets a button whose label is a sentence opt out of that nowrap', () => {
-    // The pair is the signal, and `height: auto` alone is NOT enough — the class
-    // still wins and clips. This button lost its trailing chevron on a phone until
-    // it said both.
-    const src = readFileSync(root('app', 'onboarding', 'welcome', 'page.tsx'), 'utf8');
-    const sentence = /height: 'auto'[^}]*/.exec(src)?.[0] ?? '';
-    expect(sentence, 'the sentence button must say `whiteSpace: normal` too').toMatch(/whiteSpace: 'normal'/);
-  });
-
   it('keeps the centred tool cluster out from under the right-hand one', () => {
     // Both clusters sit at the same `top` and nothing made them aware of each
     // other, so the 3D tab printed undo/redo over "Snap · Fine" and the 2D tab
@@ -1333,9 +1324,9 @@ describe('nothing spreads wide because the window did', () => {
     const before = CSS.slice(0, at);
     const media = before.lastIndexOf('@media');
     expect(before.slice(media), 'the full-width rule must live inside the compact query').toMatch(/^@media \(max-width: 599px\) \{\s*$/);
-    // Filled buttons only: the welcome card's "Add an AI key" is a disclosure ROW in
-    // ghost dress, and a row spanning its card is the pattern, not the defect.
-    for (const page of ['welcome', 'layout-pick', 'capture']) {
+    // Filled buttons only: a disclosure ROW in ghost dress spanning its card is the
+    // pattern, not the defect.
+    for (const page of ['layout-pick', 'capture']) {
       const src = codeOnly(readFileSync(root('app', 'onboarding', page, 'page.tsx'), 'utf8'));
       expect(src, `${page}: a CTA stretched at every width`).not.toMatch(/className="ds-btn[^"]*--(?:accent|primary)[^"]*"\s+style=\{\{[^}]*width: '100%'/);
       expect(src).toContain('ds-btn--block-compact');

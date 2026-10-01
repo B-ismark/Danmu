@@ -1,7 +1,7 @@
 'use client';
 
 // The shell for every page that is READ and NAVIGATED, as opposed to operated:
-// the workspace, settings, and the layout picker. It owns the top bar, the two
+// the rooms page, settings, and the layout picker. It owns the top bar, the two
 // ways back, and how wide the content is allowed to get.
 //
 // The two ways back are deliberately different and deliberately not adjacent:
@@ -16,12 +16,11 @@
 // `ds-label` beside content that already said it; and each route picked its own
 // content width. All three are decided here now.
 //
-// TWO routes deliberately do NOT use this:
-//   · /onboarding/welcome — a hero. A breadcrumb on the first screen would be a
-//     path from nowhere, and the page has no chrome bar to unify.
-//   · /onboarding/{capture,detect} — a viewfinder and a review queue. A document
-//     shell has nothing to offer a live camera feed.
-// Forcing either into this would be the same mistake as leaving three bars.
+// ONE pair of routes deliberately does NOT use this: /onboarding/{capture,detect}
+// — a viewfinder and a review queue. A document shell has nothing to offer a live
+// camera feed, and forcing them into it would be the same mistake as leaving
+// three bars. (A welcome page at / used to be the other opt-out. It is gone: the
+// rooms page is the first screen, and its empty state is the first-run one.)
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -96,7 +95,7 @@ export function DocShell({
         {/* Always a link, always to the same place. This was the inconsistency:
             the workspace rendered a bare <DanmuMark/>, so the one affordance
             every other page trained you to click did nothing there. */}
-        <Link href="/workspace" aria-label="Danmu: back to your rooms" style={{ display: 'flex' }}>
+        <Link href="/" aria-label="Danmu: back to your rooms" style={{ display: 'flex' }}>
           <DanmuMark size={12} />
         </Link>
         <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)' }} />

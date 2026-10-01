@@ -225,11 +225,11 @@ export default function LayoutPickPage() {
   return (
     <DocShell
       variant="hero"
-      trail={[{ label: 'Rooms', href: '/workspace' }, { label: 'New room' }]}
-      // Kept as history, not folded into the breadcrumb: arriving here from
-      // Welcome and arriving from the workspace are different journeys, and Back
-      // is the only control that honours both. The breadcrumb offers the fixed
-      // destination alongside it.
+      trail={[{ label: 'Rooms', href: '/' }, { label: 'New room' }]}
+      // Kept as history, not folded into the breadcrumb: arriving here from the
+      // rooms page and arriving from the capture screen's "pick a shape first"
+      // card are different journeys, and Back is the only control that honours
+      // both. The breadcrumb offers the fixed destination alongside it.
       back={<BackButton onBack={() => router.back()} />}
     >
       {/* No `page-pad` here: DocShell's hero variant already applies it AND

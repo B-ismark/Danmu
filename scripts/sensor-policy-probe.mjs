@@ -76,7 +76,7 @@ await page.waitForLoadState('networkidle');
 check('home, typed address', await read(page), !SPLIT);
 
 // The way people arrive: a page the app routes FROM, then its own router.
-for (const from of ['/workspace', '/onboarding/layout-pick']) {
+for (const from of ['/', '/onboarding/layout-pick']) {
   await page.goto(`${BASE}${from}`);
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => { window.__sameDoc = true; });
