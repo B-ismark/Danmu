@@ -2103,7 +2103,7 @@ tray on an ottoman. Open the result in 3D and open Room check.
 dragging any ottoman over one does. Whether a drag should keep it down is an open decision
 in `docs/what-is-still-open.md`. A desk with a riser and a monitor scanned together may put
 the riser on top of the monitor when the monitor was listed first — filed there too, with
-two more of the same kind that are older than this branch: a tray across a coffee table and
+two more of the same kind that are older than `0aa19b2`: a tray across a coffee table and
 a box beside it can lift the box onto the tray, and a lamp over a box on a table can end up
 inside the box.
 
@@ -2287,7 +2287,7 @@ Compare where it stands with the photo: how far out from its wall, and where alo
 - A round piece whose base is ALSO below the photo moving at all. Those stay on the old
   reading on purpose (§ 49.9 in `docs/what-is-still-open.md`).
 - A piece in a corner poking through the side wall, in the plan most plainly. It grows to a
-  typical size toward the cut side and must stop at the wall; the first version of this branch
+  typical size toward the cut side and must stop at the wall; the first version of PR #180
   did not, and a small plant by the wall came out 400 mm wide and 297 mm into the next room.
 - **The part only a real room answers:** a plant much smaller or larger than a typical one, shot
   level, now stands up to a hand's width off along the wall (on the fixture, 49 → 80 mm on
