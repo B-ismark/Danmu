@@ -74,7 +74,7 @@
 import type { Category, Shape, ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { WALK_RADIUS } from './clearance-field';
-import { footFromPart, footOverlap, frontVector, localToWorld, polygonArea, worldToLocal, type Foot } from './geometry';
+import { footFromPart, footOverlap, frontVector, localToWorld, polygonArea, worldToLocal, type Foot, type OBB } from './geometry';
 import { surfacePostsLocal, type LocalRect } from './foot-cells';
 import { dimRangeFor } from './dimension-ranges';
 
@@ -606,6 +606,21 @@ export function sleepsTwo(part: { dimMM: readonly number[] }): boolean {
   return part.dimMM[0] >= SLEEPS_TWO_MM;
 }
 
+/** A bed's pillows at a width: their own width and where each sits across the bed,
+ *  metres. Two side by side once it sleeps two, one centred below that.
+ *
+ *  A COUNT chosen off an absolute, which is § 36's module form — so `bed-double` is in
+ *  `PARAMETRIC_SHAPES`, and this is here rather than in `BedGeo` so the caps table
+ *  can reach it. Drawn at the authored size and group-scaled, a Library bed (1400,
+ *  two pillows) narrowed to 900 kept two pillows while the bedside rule beside this
+ *  one was already judging it a single. */
+export function bedPillows(widthMM: number): { w: number; xs: number[] } {
+  const w = widthMM / 1000;
+  return sleepsTwo({ dimMM: [widthMM] })
+    ? { w: w * 0.42, xs: [-w * 0.22, w * 0.22] }
+    : { w: w * 0.5, xs: [0] };
+}
+
 const ACCESS_BY_ROLE: Partial<Record<Role, RuleSpec>> = {
   // Hinged doors and deep drawers: 600 mm is the figure that lets the door past
   // you and your arm past the door.
@@ -839,8 +854,14 @@ export const TUCK_SQUARE_RAD = (10 * Math.PI) / 180;
 
 /** Is the seat pushed in square to the edge of the surface it is nearest, and facing
  *  it? The edge is the one the seat's centre lies beyond, measured against the
- *  surface's half-extents. */
-function squareToEdge(seat: Foot, surface: Foot): boolean {
+ *  surface's half-extents.
+ *
+ *  Against the nearest of the surface's CELLS when it has them. Measured against the
+ *  box, an L-desk's inside corner is the box's middle, so a chair pushed square into
+ *  the long arm from the notch read as standing beyond the return's end and facing
+ *  the wrong edge — refused, in the one place an L-desk's chair goes. */
+function squareToEdge(seat: Foot, whole: Foot): boolean {
+  const surface = whole.cells?.length ? nearestCell(seat, whole.cells) : whole;
   const [lx, lz] = worldToLocal(surface.rot, seat.cx - surface.cx, seat.cz - surface.cz);
   const [fx, fz] = frontVector(seat.rot);
   const [ux, uz] = worldToLocal(surface.rot, fx, fz);
@@ -849,6 +870,18 @@ function squareToEdge(seat: Foot, surface: Foot): boolean {
   const [nx, nz] = Math.abs(lx) / surface.hw >= Math.abs(lz) / surface.hd ? [Math.sign(lx) || 1, 0] : [0, Math.sign(lz) || 1];
   // Facing in: the seat's front points along the edge's INWARD normal.
   return -(ux * nx + uz * nz) >= Math.cos(TUCK_SQUARE_RAD);
+}
+
+/** The cell whose box the seat's centre is nearest — inside one is distance 0. */
+function nearestCell(seat: Foot, cells: readonly OBB[]): OBB {
+  let best = cells[0];
+  let bestD = Infinity;
+  for (const c of cells) {
+    const [lx, lz] = worldToLocal(c.rot, seat.cx - c.cx, seat.cz - c.cz);
+    const d = Math.hypot(Math.max(0, Math.abs(lx) - c.hw), Math.max(0, Math.abs(lz) - c.hd));
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return best;
 }
 
 function seatBackShare(shape: Shape): number {

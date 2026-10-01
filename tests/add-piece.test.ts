@@ -422,3 +422,38 @@ describe('"Use my own size" — the old Will it fit, asked from the Library', ()
     expect('id' in addOutcome(SOFA(2600))).toBe(true);
   });
 });
+
+describe('a chair dropped square under a table stays tucked', () => {
+  // Found in review: the drop's "is it clear" question asked whether the chair touched
+  // anything, which a tucked chair always does, so a chair let go of square under a
+  // table was carried out to "the nearest clear spot" — the one place a drag would have
+  // let it stay. An arrival is now asked what a drag is asked (`tuckedAt`).
+  //
+  // A drop arrives facing +z (`placeNewPart` gives a chair yaw 0), so the chair that
+  // can tuck is the one on the table's −z side, facing it; on the +z side the same
+  // drop has its back to the table.
+  const TABLE_DIM: [number, number, number] = [1500, 850, 750];
+  const CHAIR: NewPiece = { label: 'Dining chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850] };
+  const seedTable = () =>
+    useScene.setState({
+      parts: [{ id: 'table-1', name: 'Dining table', category: 'table', shape: 'desk-standard', dimMM: TABLE_DIM, pos: [0, 0, 0], rot: 0, locked: false }],
+    });
+  const chairAt = (id: string) => useScene.getState().parts.find((p) => p.id === id)!;
+
+  it('facing the table: kept where it was let go, and nothing said about a taken spot', () => {
+    seedTable();
+    const out = addOutcome(CHAIR, [0, -0.275]);
+    if ('refused' in out) throw new Error(out.refused);
+    expect(chairAt(out.id).rot).toBeCloseTo(0, 9);
+    expect(chairAt(out.id).pos[2]).toBeCloseTo(-0.275, 6);
+    expect(out.note).toBeUndefined();
+  });
+
+  it('with its back to the table: moved out, and said — a backwards chair is not tucked', () => {
+    seedTable();
+    const out = addOutcome(CHAIR, [0, 0.275]);
+    if ('refused' in out) throw new Error(out.refused);
+    expect(Math.abs(chairAt(out.id).pos[2] - 0.275)).toBeGreaterThan(0.1);
+    expect(out.note).toMatch(/taken/);
+  });
+});

@@ -73,6 +73,26 @@ describe('a dining chair tucks only square to the edge and facing in', () => {
   });
 });
 
+describe('an L-desk is square to the edge of the arm the chair is at, not of its box', () => {
+  // 1600 × 1400: the long arm runs along the back to z 0.028, the return fills
+  // x 0.128…0.8 in front of it, and the notch the chair stands in is what is left.
+  // Measured against the BOX, the notch is the box's middle: a chair pushed square
+  // into the arm read as beyond the return's end, facing the wrong edge.
+  const ELL: P = { category: 'desk', shape: 'desk-l', dimMM: [1600, 1400, 750] };
+  const armZ = 0.028 + 0.25 - 0.5 / 3;
+  const returnX = 0.128 - 0.25 + 0.5 / 3;
+
+  it('tucks a chair pushed square into the long arm from the notch', () => {
+    expect(tucked(CHAIR, -0.4, armZ, Math.PI, ELL)).toBe(true);
+    expect(tucked(CHAIR, -0.4, armZ, Math.PI / 2, ELL)).toBe(false);
+  });
+
+  it('and one pushed square into the return’s inside face', () => {
+    expect(tucked(CHAIR, returnX, 0.4, Math.PI / 2, ELL)).toBe(true);
+    expect(tucked(CHAIR, returnX, 0.4, Math.PI, ELL)).toBe(false);
+  });
+});
+
 describe('a seat never stands where the surface’s legs are', () => {
   const legInner = TABLE.dimMM[0] / 2000 - DINING_LEG.inset - DINING_LEG.size;
 

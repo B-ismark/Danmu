@@ -20,6 +20,9 @@ import {
   type Shape,
 } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
+import { fridgeDoors } from '@/lib/scene-spec';
+import { surfacePostsLocal } from '@/lib/foot-cells';
+import { bedPillows } from '@/lib/layout-rules';
 
 // § 36 — an absolute inside a non-parametric renderer cannot survive a group scale.
 //
@@ -103,6 +106,22 @@ const CAPS: CapRow[] = [
     shape: 'plant', axis: 2,
     read: (mm) => plantForm([authoredDim('plant')[0], authoredDim('plant')[1], mm]).pot.h,
     what: 'the pot',
+  },
+  // A count off an absolute, like the window's panes: two pillows from 1.3 m, two
+  // doors from 800 mm. Each was one Library tile per count until the beds and the
+  // fridges were each merged into one resizable row, which is what put the switch
+  // INSIDE a single shape's band.
+  { shape: 'bed-double', axis: 0, read: (mm) => bedPillows(mm).w, what: 'a pillow' },
+  { shape: 'fridge', axis: 0, read: (mm) => mm / 1000 / fridgeDoors(mm), what: 'a door' },
+  {
+    // A real 55 mm leg, which the tuck rule reads as a post — so a stretched one is
+    // a leg the drawing and the rule disagree about, not just a fat leg.
+    shape: 'desk-standard', axis: 0,
+    read: (mm) => {
+      const [leg] = surfacePostsLocal('desk-standard', true, mm / 1000, authoredDim('desk-standard')[1] / 1000);
+      return leg.x1 - leg.x0;
+    },
+    what: 'a dining leg',
   },
 ];
 

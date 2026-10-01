@@ -100,15 +100,15 @@ describe('shoeRow — the shoes stay on the rack', () => {
       expect(n).toBeGreaterThan(0);
       expect(Number.isInteger(n)).toBe(true);
     }
-    // Not every rack is wall to wall: across six ids at least one has a gap.
-    const slotsPerRack = (() => {
-      const [w, , h] = dim.map((v) => v / 1000);
-      const len = Math.min(0.28, dim[1] / 1000 - 0.04);
-      const pitch = len * 0.34 * 2 + 0.012 + 0.035;
-      return Math.floor((w - 0.1) / pitch) * moduleCount(h, MODULE_RANGE['shoe-rack']!);
-    })();
-    expect(Math.min(...counts)).toBeLessThan(slotsPerRack);
-    expect(full).toBeLessThanOrEqual(slotsPerRack);
+    // Not every rack is wall to wall: some rack has a gap where another has a pair.
+    // The slots are read off the racks themselves — the union of where any of forty
+    // ids put a shoe — rather than recomputed from `shoeRow`'s own pitch, which only
+    // ever agreed with itself.
+    const at = (id: string) => new Set(shoeRow({ id, dimMM: dim }).map((b) => `${b.tier}:${b.pos[0].toFixed(4)}`));
+    const many = Array.from({ length: 40 }, (_, i) => `rack-${i}`);
+    const slots = new Set(many.flatMap((id) => [...at(id)])).size / 2;
+    expect(Math.min(...many.map((id) => at(id).size / 2))).toBeLessThan(slots);
+    expect(full).toBeLessThanOrEqual(slots);
   });
 
   it('draws boots on a tall rack, cut to the headroom each tier has', () => {

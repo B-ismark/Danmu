@@ -1901,6 +1901,15 @@ const PARAMETRIC_SHAPES = new Set<Shape>([
   // per axis came out as squashed leaves in a tube of a pot. `plantForm` redraws it at
   // its size instead, choosing a fig or a bush from its proportions, and caps the pot.
   'plant',
+  // …and three that are module counts again, all three from the one-Library-row
+  // merge: a bed's pillows (`bedPillows`), a fridge's doors (`fridgeDoors`) and a
+  // dining table's legs (`DINING_LEG`, a real 55 mm square that `surfacePostsLocal`
+  // also hands the tuck rule). Drawn at the catalogue size and stretched, the Library
+  // bed narrowed to a single kept two pillows, the fridge widened to French-door width
+  // kept one door 900 mm wide, and a table resized drew legs the tuck rule disagreed
+  // with. `bed-single` stays out: its band stops at 1200, below `SLEEPS_TWO_MM`, so its
+  // pillow count cannot change and there is nothing for a scale to distort.
+  'bed-double', 'fridge', 'desk-standard',
 ]);
 export function isParametric(shape: Shape): boolean {
   return PARAMETRIC_SHAPES.has(shape);
@@ -2380,7 +2389,9 @@ const CATALOG_SHAPES = new Set<Shape>(CATALOG_SHAPES_ORDERED);
 /** The words for an open clothes rail, read under both categories a detector might file
  *  one under. `rack` and `rail` only with a clothes word in front, because a bare "rack"
  *  is as likely to be the shoe rack or a towel rail. */
-const CLOTHES_RAIL = /(cloth(es|ing)?|garment|coat|closet|hanging|dress) ?(rack|rail|stand)|clothes ?horse/;
+// A word boundary in FRONT, none behind: "coat stands" is still a rack, while
+// "undress rail" or a "wainscoat rail" label off a detector is not a clothes rail.
+const CLOTHES_RAIL = /\b(cloth(es|ing)?|garment|coat|closet|hanging|dress) ?(rack|rail|stand)|\bclothes ?horse/;
 
 /** Refine the default shape based on label keywords — turns a generic chair into
  *  an office chair if the AI detected it as such.

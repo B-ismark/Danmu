@@ -87,16 +87,24 @@ Whether a bed takes two nightstands is read from its width, so a bed you narrow 
 a single for the arranger, and one you widen is a double. A fridge 800 mm or wider is drawn
 with French doors; below that, one door.
 
+Review found the drawing did not follow: the bed and the fridge were drawn at their Library
+size and stretched, so the 900 bed kept two pillows and the 900 fridge kept one door
+stretched across it. Both now redraw at the size you type, and so does the dining table, whose
+legs had stretched with it. Its legs stay 55 mm square at any size.
+
 **Where to click.** Library, search `bed`, then `fridge`. Add the bed, select it, type its
 width down to 900 in the Inspector, press Suggest; then up to 1800 and Suggest again. Add the
-fridge and type its width 790, then 800.
+fridge and type its width 790, then 800. Add a dining table and type its width 2400.
 
-**What right looks like.** One row each. The 900 bed gets one nightstand and the 1800 bed
-two. The fridge gains a second door exactly at 800. A photo scan that finds a double bed cut
-off by the photo's edge comes back about 1.4 m wide, not a single's 0.9 m.
+**What right looks like.** One row each. The 900 bed has one pillow and gets one nightstand;
+the 1800 bed has two pillows and two nightstands. The fridge gains a second door exactly at
+800, with its handles at the meeting line. The 2400 table's legs are as slim as the 1500
+table's. A photo scan that finds a double bed cut off by the photo's edge comes back about
+1.4 m wide, not a single's 0.9 m.
 
-**What wrong looks like.** A bed you cannot type down to 800, a single carrying two
-nightstands, or a fridge with doors that do not meet in the middle.
+**What wrong looks like.** A bed you cannot type down to 800, a single carrying two pillows
+or two nightstands, a fridge with doors that do not meet in the middle, or fat legs on a long
+table.
 
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
@@ -333,13 +341,24 @@ the edge it goes under, and never where the table or desk has a leg or side pane
 chairs swivel and stools have no back, so both stay free to turn. Ideas still does not treat
 a dining table and its chairs as one set; that is the next change.
 
+Two more from review. A chair pushed square into an **L-shaped desk's** inside corner was
+refused, because the desk's edge was worked out from its outer box rather than its two arms.
+And a chair **dropped** from the Library square under a table was moved out to "the nearest
+clear spot"; a drop now gets the same allowance as a drag.
+
 **Where to click.** Rectangle, 3D Model. Turn a dining chair under the table 30° and push it
 in; then slide one along the long edge into a corner leg. Open Ideas and page through. Push
-an office chair under the desk against its side panel.
+an office chair under the desk against its side panel. Add an L-shaped desk and push a dining
+chair square into each arm from the inside corner. Drag a dining chair from the Library and
+drop it just under one long side of the table, then the other. A dropped chair always
+arrives facing the same way, so on one side it faces the table and on the other its back
+does.
 
 **What right looks like.** The turned chair is refused under the top, and so is the one
 pushed into the leg. In Ideas, every chair is square to the table and none stands in a leg.
-The office chair turns freely under the desk but stops at its panel.
+The office chair turns freely under the desk but stops at its panel. The chair goes into
+both arms of the L. On the side it faces, the dropped chair stays where you let go, tucked,
+and nothing says the spot was taken. On the other side it is moved out, and you are told.
 
 **What wrong looks like.** A chair through a leg, or a square chair that will no longer go
 under at all. Also watch for this: a dining table left a few degrees off square after

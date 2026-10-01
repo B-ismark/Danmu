@@ -59,6 +59,10 @@ export const DETAIL = {
   darkWood: '#3A2818',
   /** Near-black hardware — castors, brackets, a monitor's stem. */
   hardware: '#222222',
+  /** Pale beech — a clothes rail's hangers. */
+  lightWood: '#C9B79C',
+  /** Brushed steel — a fridge's handles. */
+  steel: '#B9BCC0',
 } as const;
 
 // ─── Decor accents ──────────────────────────────────────────────────────────

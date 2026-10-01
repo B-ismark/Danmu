@@ -32,7 +32,7 @@ import {
   type ScenePart,
 } from '@/lib/scene-spec';
 import { useStudio } from '@/lib/store';
-import { roleOf, sleepsTwo } from '@/lib/layout-rules';
+import { roleOf, bedPillows } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
 import { DINING_LEG, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from '@/lib/foot-cells';
@@ -195,7 +195,7 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
     case 'bed-double':
       // Pillows by width, not by shape: one Library bed is resized from a single to a
       // king, and a 900-wide `bed-double` is a single bed.
-      return <BedGeo part={part} locked={locked} double={sleepsTwo(part)} />;
+      return <BedGeo part={part} locked={locked} />;
     case 'desk-standard':
       // One shape, two pieces of furniture: the catalogue and the seeder both use
       // `desk-standard` for a dining table, and a detected "table" lands on it too.
@@ -851,7 +851,7 @@ function ClothesRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
   const joint = shade(iron, 12);
   const span = 2 * postX;
   const footLen = d - 2 * flange;
-  const hangerWood = locked ? shade(SCENE.lockedTint, 20) : DECOR.pot[1];
+  const hangerWood = locked ? shade(SCENE.lockedTint, 20) : DETAIL.lightWood;
   const clothes: InstanceItem[] = [];
   const hangers: InstanceItem[] = [];
   for (const g of rail.garments) {
@@ -913,7 +913,7 @@ function ClothesRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
 }
 
 // ─── Beds ───────────────────────────────────────────────────────────────
-function BedGeo({ part, locked, double }: { part: ScenePart; locked: boolean; double: boolean }) {
+function BedGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
@@ -921,6 +921,7 @@ function BedGeo({ part, locked, double }: { part: ScenePart; locked: boolean; do
   const mattress = body(part, locked, '#E8D5B0');
   // Pillows always neutral — real beds have white/cream pillows regardless of frame color.
   const pillow = locked ? shade(SCENE.lockedTint, 20) : '#F0ECE3';
+  const pillows = bedPillows(part.dimMM[0]);
   return (
     <>
       {/* The headboard is the bed's full width, so the frame stands `SEAM` inside it —
@@ -935,14 +936,9 @@ function BedGeo({ part, locked, double }: { part: ScenePart; locked: boolean; do
           falls 10 mm past it now, and stops short of the pillows. */}
       <Box surface="fabric" size={[w * 0.99, h * 0.2, d * 0.62]} position={[0, h * 0.62, d / 2 - 0.03 - d * 0.31]} color={shade(mattress, -8)} roughness={0.97} />
       <Box surface="wood" size={[w, h * 1.4, 0.05]} position={[0, h * 0.7, -d / 2]} color={frame} roughness={0.7} />
-      {double ? (
-        <>
-          <Box surface="fabric" size={[w * 0.42, h * 0.15, d * 0.25]} position={[-w * 0.22, h * 0.75, -d * 0.3]} color={pillow} roughness={0.93} />
-          <Box surface="fabric" size={[w * 0.42, h * 0.15, d * 0.25]} position={[w * 0.22, h * 0.75, -d * 0.3]} color={pillow} roughness={0.93} />
-        </>
-      ) : (
-        <Box surface="fabric" size={[w * 0.5, h * 0.15, d * 0.25]} position={[0, h * 0.75, -d * 0.3]} color={pillow} roughness={0.93} />
-      )}
+      {pillows.xs.map((x) => (
+        <Box key={x} surface="fabric" size={[pillows.w, h * 0.15, d * 0.25]} position={[x, h * 0.75, -d * 0.3]} color={pillow} roughness={0.93} />
+      ))}
       {[
         [-w / 2 + 0.04, -d / 2 + 0.04],
         [w / 2 - 0.04, -d / 2 + 0.04],
@@ -1112,7 +1108,7 @@ function FridgeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const h = part.dimMM[2] / 1000;
   const shell = body(part, locked);
   const french = fridgeDoors(part.dimMM[0]) === 2;
-  const steel = '#b9bcc0';
+  const steel = DETAIL.steel;
   return (
     <>
       <Box size={[w, h, d]} position={[0, h / 2, 0]} color={shell} roughness={0.5} metalness={0.08} />
