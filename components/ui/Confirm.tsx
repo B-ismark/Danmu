@@ -5,10 +5,10 @@
 
 import { create } from 'zustand';
 import type { ReactNode } from 'react';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 import { Modal } from './Modal';
 
-type ConfirmRequest = {
+export type ConfirmRequest = {
   title: string;
   /** ReactNode, not string: a destructive confirm has to be able to *enumerate*
    *  what it destroys, and a single run-on sentence is the reason people click
@@ -18,6 +18,10 @@ type ConfirmRequest = {
   cancelLabel?: string;
   /** danger styling on confirm button */
   danger?: boolean;
+  /** The confirm button's glyph. A danger confirm defaults to the bin, which is
+   *  right for a delete and wrong for anything else destructive: Start over removes
+   *  nothing you would call deleting, and a bin on it read as one. */
+  icon?: IconName;
 };
 
 type ConfirmState = {
@@ -41,21 +45,6 @@ const useConfirmStore = create<ConfirmState>((set, get) => ({
 
 export function useConfirm() {
   return useConfirmStore((s) => s.open);
-}
-
-/** The same dialog, raised from module scope.
- *
- *  `useConfirm` is a hook and a keyboard accelerator is not a component: the
- *  Delete/Backspace handler lives in a `useEffect` that is installed once and
- *  must not be re-bound, so it cannot close over a hook result without either a
- *  ref dance or re-running the effect. The store underneath is already global —
- *  a single host, a single `pending` — so reading it directly is not a second
- *  source of truth, it is the same one without React in the way.
- *
- *  Deliberately NOT the general escape hatch. Anything rendering a component
- *  should keep using `useConfirm`; this exists for the accelerator layer. */
-export function confirmDialog(req: ConfirmRequest): Promise<boolean> {
-  return useConfirmStore.getState().open(req);
 }
 
 // The room-delete confirm lives here, once, because it is raised from two
@@ -130,7 +119,7 @@ export function ConfirmHost() {
           >
             {/* no explicit colour — the glyph inherits the button's own
                 --on-ink / --on-accent foreground */}
-            <Icon name={pending.danger ? 'trash' : 'check'} size={11} />
+            <Icon name={pending.icon ?? (pending.danger ? 'trash' : 'check')} size={11} />
             {pending.confirmLabel ?? 'Confirm'}
           </button>
         </>

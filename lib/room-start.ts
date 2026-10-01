@@ -12,21 +12,21 @@
 // time. A snapshot taken at load could not be the start, because what loads is the
 // SAVED scene — the room as it was left, not as it began.
 //
-// Built against a SHELL the caller names, and the two callers name different ones.
-// Pressing the button builds for today's walls: the walls are not part of what this
-// undoes (the size boxes and the wall handles have their own way back), and a starter
-// furnished for walls that have since moved puts its pieces through the plaster —
-// the defect `buildSceneFromRoom`'s own comment describes. Deciding whether to SHOW
-// the button builds for the walls the room opened with (`useScene.startRoom`),
-// because the pieces on screen were laid out for those: comparing them against a
-// layout for walls moved since made a wall drag alone light the button, and pressing
-// it then re-laid furniture nobody had touched, with new pieces in it.
+// It puts back the WALLS as well, the ones the start is built for. They used to
+// stay where they had been dragged, and a start rebuilt for walls that have moved is a
+// different arrangement: the user dragged one wall of a fresh starter room, pressed
+// Start over and got a room re-laid with pieces nobody had touched. A wall drag also
+// carries what stands against the wall (`lib/wall-actions.ts`), so there was no
+// separating "the walls changed" from "the furniture changed" anyway. So the start is
+// the whole room as it opened — `useScene.startRoom`, its walls and height, and the
+// pieces built for those — and putting it back never re-lays anything. Paint, the site
+// and the lighting are the look, not the room, and stay.
 //
 // What that leaves, written down rather than fixed: a starter whose walls were moved
-// and SAVED reopens with its pieces laid out for the old walls and a start built for
-// the new ones, so the button is offered on a room whose furniture nobody touched —
-// and pressing it fits the starter to the walls as they are, which is what the
-// dialog says it does. The walls it was first furnished for are not kept anywhere.
+// and SAVED reopens with those walls as its start and its pieces laid out for the old
+// ones, so the button is offered on a room nobody has touched since it opened, and
+// pressing it fits the starter to the walls it opened with. The walls it was first
+// furnished for are not kept anywhere.
 //
 // Pure, so it can be tested without the stores; the store writes are the caller's.
 
@@ -63,11 +63,31 @@ export type PieceEdits = {
 };
 
 /** Is there anything for "Start over" to undo? Any edit at all — a piece moved,
- *  turned, resized or hidden, or the scene itself differing from its start: a piece
- *  added or deleted, recoloured, restyled or swapped. Compared by CONTENT, because the
- *  saved scene is a fresh array with equal pieces, never the same one. */
-export function hasEditsSinceStart(parts: ScenePart[], start: ScenePart[], edits: PieceEdits): boolean {
-  return hasPieceEdits(edits) || !sameParts(parts, start);
+ *  turned, resized or hidden, a wall moved or the ceiling changed, or the scene itself
+ *  differing from its start: a piece added or deleted, recoloured, restyled or swapped.
+ *  Compared by CONTENT, because the saved scene is a fresh array with equal pieces,
+ *  never the same one. */
+export function hasEditsSinceStart(
+  parts: ScenePart[],
+  start: ScenePart[],
+  edits: PieceEdits,
+  room: RoomShape,
+  startRoom: RoomShape,
+): boolean {
+  return hasPieceEdits(edits) || !sameWalls(room, startRoom) || !sameParts(parts, start);
+}
+
+/** The room's shell is the one it opened with: the same outline at the same height.
+ *  The paint, the site and the "typical size" mark are not compared, because Start
+ *  over does not put them back. */
+export function sameWalls(a: RoomShape, b: RoomShape): boolean {
+  return (
+    a.layoutId === b.layoutId &&
+    sameValue(a.width, b.width) &&
+    sameValue(a.depth, b.depth) &&
+    sameValue(a.height, b.height) &&
+    sameValue(a.footprint, b.footprint)
+  );
 }
 
 /** The cheap half: anything in the override maps. Asked first, so a room that has

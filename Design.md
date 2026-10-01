@@ -3076,9 +3076,11 @@ and the 2D plan all call it.
   live region, so doing both said the removal twice.
 
 **Confirmation is reserved for what undo cannot reach:** deleting a saved layout
-(stored with the room, outside edit history), the bulk "put every piece back"
-transform reset, and deleting a room (which is itself a soft delete with its own
-undo — see `lib/storage.ts`).
+(stored with the room, outside edit history), **Start over** (the whole room — walls,
+ceiling and every piece — at once; its toast has an Undo, but a press that wipes an
+afternoon is worth one question), and deleting a room (which is itself a soft delete
+with its own undo — see `lib/storage.ts`). Deleting pieces never asks, from any
+surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01).
 
 ---
 

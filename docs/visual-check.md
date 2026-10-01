@@ -162,58 +162,49 @@ and so are the four that came after them: Move / Scale / Rotate, a TV changing w
 wall pushing what it meets, and a short piece climbing a tall one. The user looked at each
 of those on 2026-09-30, and ruled that a nightstand may climb a wardrobe — and, the same
 day, a wall stopping at the rug it carries and its knob standing clear of the furniture — and
-a table carrying a lamp dragging as smoothly as a bare one. What is left is
+a table carrying a lamp dragging as smoothly as a bare one. On 2026-10-01 the user looked at
+Start over, the drop after a delete and Duplicate, and all three are gone. What is left is
 here for a specific reason each. The rotate ring, because drei's `TransformControls` is a
 three.js object with **no DOM**, so nothing in Playwright can aim a press at its ring —
 the 2D half of that defect **is** browser-checked and is not in this list. The refusal
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
-### Start over puts the room back the way it first opened — merged to `main` in `abcb216` (PR #207), NOT LOOKED AT
+### The right rail's footer: tooltips, Start over with the walls, Delete without a dialog — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
 
-The user's report on 2026-10-01: the revert square at the end of the right rail showed two
-tooltips, and pressing it should put the room back to how it loaded — *"added models should go
-back (be deleted)"*. It was "Put everything back" and it only undid moves, turns and sizes. It is
-**Start over** now (`lib/room-start.ts`, `components/studio/RailFooter.tsx`).
+The user's walkthrough of the last round on 2026-10-01 passed Start over, the drop after a
+delete, Duplicate, the Catalog tree and the comfort zones, and turned up five things in the
+footer, each fixed here:
 
-**Where to click.** Any starter room, either tab. Hover the right rail before changing anything:
-there is no square. Add a piece from the Library, recolour another, move a third, hide a fourth.
-Hover the square that appears, then press it and confirm. Then press **Undo** on the toast. Do the
-same once in a room made from photos. Last, in a fresh starter room, drag one wall and change the
-ceiling height without touching any furniture: still no square. Lock a piece you added, press Start
-over, then Ctrl+Z: the piece comes back locked.
+- **The Start over bubble sat over the button beside it.** A bubble near the right edge was
+  kept a full 120 px clear of it, the room its WIDEST label would need, so a short one slid left
+  onto Add. It is kept clear by its own drawn width now (`components/ui/Tooltip.tsx`).
+- **Close showed the browser's grey label, reading "Add a piece to the room".** The Add / Close
+  button, Delete and the wall's Done all use the house bubble now, and the bubble names what a
+  press does: *Add a piece to the room*, then *Close the Library* once it is open.
+- **Start over's confirm wore the bin.** It is the turn-back arrow; the bin stays on real deletes.
+- **A wall drag lit Start over, and pressing it re-arranged the room.** Start over puts the WALLS
+  back now too, with the ceiling, so the room returns to exactly how it opened. Wall paint and
+  lighting stay. Painting a wall alone does not light it.
+- **Backspace asked before deleting.** It doesn't any more; every delete shows the same Undo toast.
 
-**What right looks like.** One bubble on hover, reading "Start over", and nothing appearing under it
-a second later. After confirming, the added piece is gone, the recoloured one has its colour back,
-the moved one is where it started, the hidden one is showing, and the square disappears. The walls
-and their paint do not change. Undo brings back all four edits at once. In the photo room the pieces
-come back as the scan placed them, not as the starter. *Wrong* looks like a second, plainer label
-under the bubble, an added piece still there, a square that stays after a fresh room opens, or one
-that appears for a wall drag alone.
+**Where to click.** A fresh starter room. Hover the footer's square at the right end with a wall
+dragged, and Add / Close in both states. Select a piece and hover Delete; select a wall and hover
+Done. Press Start over: the walls go back to where they started, every piece too, and Undo on the
+toast brings the dragged wall back with the furniture it carried. Select a piece and press
+Backspace. Also try the footer with the right rail at its narrowest (1024–1279px).
 
-**Where it rides.** `lib/room-start.ts`, `components/studio/RailFooter.tsx`, `components/ui/Tooltip.tsx`.
+**What right looks like.** Every bubble is the same dark rounded one, centred over its own
+button, inside the window. The confirm's button shows the turn-back arrow. After Start over the
+outline in the 2D plan matches a freshly opened room and the square disappears. Backspace removes
+the piece at once with *Undo* on the toast. *Wrong* looks like a bubble over a neighbour, a grey
+browser label appearing a second after the bubble, a bin on the Start over confirm, a wall left
+where it was dragged, a different arrangement from the one the room opened with, or a dialog on
+Backspace.
 
-### Deleting a piece brings down what stood on it — merged to `main` in `abcb216` (PR #207), NOT LOOKED AT
-
-The user's report on 2026-10-01: *"an item on top of another remains floating even after
-deleting the item it was initially on."* `removeParts` took the desk out and left the lamp at
-desk height; the Inspector's "Floating" banner noticed, and nothing acted on it. Every delete
-now drops each piece that was RESTING on a deleted one (`lib/orphan-drop.ts`, the banner's own
-`restingOn` question) onto the highest top left under it, or the floor.
-
-**Where to click.** The default bedroom, 3D: select the desk, press Delete (or the trash on its
-row) and confirm. Then, in the 2D tab, do the same to a nightstand with a lamp on it, and once
-with BOTH the desk and the lamp selected. Last, stack any small piece from the Library on the lamp first and delete the
-desk.
-
-**What right looks like.** The lamp comes down to the floor (or onto a coffee table it was over)
-in the same frame the desk disappears, and the Inspector shows no "Floating" for it. The small piece
-stays on the lamp and comes down with it. Deleting desk and lamp together moves only what stood on the lamp.
-**Undo** on the toast puts the desk back AND the lamp back on top of it — dragging the desk
-afterwards carries the lamp. Press Ctrl+Z instead and it is one step, not two. *Wrong* looks
-like: a lamp left hanging, a lamp on the floor after Undo, or a piece beside the desk that moved.
-
-**Where it rides.** `lib/orphan-drop.ts`, `components/studio/KeyboardShortcuts.tsx` (`removeParts`).
+**Where it rides.** `components/studio/RailFooter.tsx`, `components/ui/Tooltip.tsx`,
+`components/ui/Confirm.tsx`, `components/studio/CatalogPanel.tsx`, `lib/room-start.ts`,
+`components/studio/KeyboardShortcuts.tsx`.
 
 ### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205), NOT LOOKED AT; the floor lamp and tall plant merged in `502fb23` (PR #206)
 
@@ -253,56 +244,6 @@ crossing the wall line in the plan, a sofa with its back to the room, or a night
 lamp perched on the bed.
 
 **Where it rides.** `lib/swap-model.ts`, `seeksSurface` in `lib/physics.ts`.
-
-### Duplicate puts the copy beside the piece, not inside it — merged to `main` in `502fb23` (PR #206), NOT LOOKED AT
-
-The user's report on 2026-10-01: *"duplicating an item should spawn the duplicate properly if
-there's space, it should be next to the main instance, it shouldn't spawn inside the main
-instance."* Duplicate tried seven fixed steps sized for a chair, 350–700 mm, and when every one
-hit something it fell back to the original's own spot. A wardrobe, a bed or a sofa is wider
-than 700 mm, so its copy always landed exactly inside it. A copy now goes one piece-width over,
-along the piece's own width, with a 5 cm gap, and is dropped the way a drag drops a piece
-(`lib/duplicate-place.ts`). Every piece in the Library is swept in an empty room in
-`tests/duplicate-place.test.ts`, and every one lands beside itself.
-
-**The user's second look, the same day:** *"Duplicated items are offset nicely but it seems
-they don't consider whether they're clipping with an object."* A copy was checked the way a
-drag is, and a drag forgives two things on purpose: a chair pushed in under a table, and a short
-piece stepping up onto a tall one. So a chair's copy could land half under the table and a
-nightstand's copy on the bed. Now a copy has to touch nothing it could bump into (a rug or a
-curtain bumps into nothing, so a rug's copy may still lie over another rug), and stand on what
-the original stands on. When nothing beside it is clear, the rest of the room is searched, nearest spot
-first. A lamp copied off a full nightstand goes on the other nightstand, or on the floor beside
-it, never on the bed. Every piece of every starter room is copied in the test, and none touches
-anything.
-
-**Where to click.** The default bedroom, either tab. Select the wardrobe and press
-**Ctrl/⌘ D** (or right-click → Duplicate). Then the bed, a print on the wall, a lamp on the
-desk or nightstand, and a piece standing against a side wall. Then shift-select the bed and
-both nightstands and duplicate the three together. Then a dining chair at its table, the sofa in
-the T-Shape (every spot beside it is taken), a bedside lamp in the U-Shape, and the rug in the
-L-Shape. Last, fill a
-small room so nothing fits anywhere and duplicate a piece there.
-
-**What right looks like.** The copy sits right beside the original with a small gap, turned the
-same way. A print's copy hangs on the same wall at the same height. A lamp's copy stands on the
-same desk when there is room on it. A piece against a wall puts its copy on the open side. The
-bed and nightstands arrive as a set, in the same formation. The chair's copy stands clear of the
-table, not under it. The T's sofa copy goes to the nearest open floor, even if that is a little
-way off. The U's lamp copy stands on the floor beside the nightstand, which has room for one
-lamp. The L's rug copy lies wholly on the floor, none of it in the corner the L cuts away.
-Only when nothing in the whole room is clear does the copy overlap something, and then it
-is outlined red and the message reads *"No clear space left in the room, so the copy overlaps
-something."* Even then it stays on the floor, never on top of the piece in its way, and pressing
-Duplicate again and again spreads the copies into whatever gaps are left rather than piling them
-in one spot. *Wrong* looks like a copy you cannot see because it is inside the original, a copy
-overlapping another piece while there is open floor, a lamp's copy in mid-air or on the bed, a
-bed's copy standing on another bed, copies piled into one spot, or a set scattered across the
-room. Also try a lamp you moved off its nightstand onto the floor: its copy goes beside it on
-the floor, not back onto the nightstand. And select every piece in the room and duplicate: it
-should answer at once, not freeze.
-
-**Where it rides.** `lib/duplicate-place.ts`, `components/studio/KeyboardShortcuts.tsx`.
 
 ### A refusal that names the wall instead of an obstruction that is not there
 
@@ -577,21 +518,8 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
-### Comfort zones in the plan are outlines and halos, not cells and dashed boxes — merged to `main` in `abcb216` (PR #207), LOOKED AT once (Chromium, L room)
-
-The walkable floor is one rounded outline of the same cells Room check measures
-(`lib/field-contour.ts`), each piece's clearance is a halo fading out from the piece, and floor
-cut off from the door is a warm hatch. `--warn-tint`, which the cut-off fill and its legend chip
-had been asking for, **did not exist** — both were drawing with an undefined colour until this.
-
-Looked at once in a headless Chromium on the L preset, with the sofa dragged across the lower
-arm to cut the corner off: the outline is smooth, the hatch reads, the legend chips match.
-**Still wants an eye:** a real GPU and a phone at 2× zoom (does the hatch shimmer when the plan
-is panned?), a T and a U room, and a room with no door (everything walkable, no hatch at all).
-
-**Wrong:** a stair-step edge anywhere on the walkable outline; walkable tint showing **under** a
-piece; a halo drawn on the far side of a piece from the floor it describes (the fade runs
-backwards); the cut-off legend chip showing when no hatch is on the plan.
+*The comfort zones in the plan (outline, halos, warm hatch) were looked at by the user on
+2026-10-01 and that item is gone.*
 
 ### Every idea is now an arranged room, not a tidied scatter — `0edf04e` on `main` (PR #184, § H.6.0), needs eyes on every preset
 
@@ -1269,34 +1197,9 @@ proves the page.
 *Owner: `shell`. The Library click-through was looked at on 2026-08-30 — the Add rail is
 present and the panel is visible on both tabs, which is the whole of what was left for a
 person. The three signposts and the click-through are gated by `tests/studio-copy.test.tsx`
-and `tests/library-click-through.test.tsx`. The two items below are new, and each
-is here because what a test can check about it and what a person can see are different
-halves.*
-
-### A merged set reads as a tree in the Catalog, not as a stack of outlined cards — merged to `main` in `abcb216` (PR #207), NOT LOOKED AT
-
-**Where to click.** Open a furnished room, Shift-click two pieces in the Catalog list, press
-**Group 2** in the bar over the canvas. Then: fold and unfold the group with its chevron; click
-the **Group** row; click one member; fold the group while a member is selected; hide one member
-and keep another where it is; hover a member. Do it once at 1440px and once with the left rail
-at its narrowest (the 1024–1279px step).
-
-**What wrong looks like.**
-- Any row in the list with an outline. Selection is a fill now, strong on the row you picked and
-  paler on the members of a picked group; a ring on every member is the old card stack.
-- A heavy connector. The members should hang off one faint vertical line under the chevron,
-  stopping at the last member.
-- The chevron not turning (it should go from pointing right to pointing down), or turning when
-  you merely select the row. Only the chevron folds; the row selects.
-- Picking a group opens a second line of buttons under every member. Only the header opens its
-  actions; a member opens its own when you pick it by itself.
-- A folded group that holds the selection looking unselected.
-- A hidden member not dim and struck through, or a kept-in-place member that loses its padlock
-  until hovered. The marks must show without a pointer.
-- "Group" or a count wrapping onto a second line, or a member's name losing its ellipsis.
-
-**Rides** `abcb216` on `main` (PR #207); the rules are `.tree-row*` in `app/globals.css` and the rows in
-`components/studio/PartTree.tsx`. Behaviour (selection, fold, ungroup, remove, keys) is untouched.
+and `tests/library-click-through.test.tsx`. The Catalog tree was looked at on 2026-10-01
+and is gone. What is left is here because what a test can check about it and what a person
+can see are different halves.*
 
 ### View behind a gear, collapsed rails as icon strips — merged to `main` in `5114b5f` (PR #179)
 

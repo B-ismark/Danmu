@@ -10378,26 +10378,34 @@ a bed should be a top for anything is the open question, and it is a physics one
 
 ## § 51 · Start over on a room whose walls were moved and saved — WRITTEN DOWN, NOT FIXED
 
-**Exists in:** `abcb216` on `main` (PR #207), `lib/room-start.ts` (the header names it) and
+**Exists in:** `abcb216` on `main` (PR #207), changed on `claude/affectionate-ritchie-ilawx1`:
+`lib/room-start.ts` (the header names it), `components/studio/RailFooter.tsx` and
 `tests/start-over.test.tsx`.
 
-Start over decides whether to SHOW against the start laid out for the walls the room opened
-with (`useScene.startRoom`), and builds for today's walls when it is pressed. A wall drag or a
-height change alone no longer lights it; before, it did, and pressing it re-laid furniture
-nobody had touched.
+**What Start over is now.** The room as it OPENED, walls included: the outline, the size, the
+ceiling height and every piece laid out inside them (`useScene.startRoom` beside
+`startSource`). Wall paint, the site and the lighting are not part of it. A wall drag or a
+height change lights the button, and pressing it puts the walls back with the furniture.
 
-**What is left.** A starter whose walls were moved and then saved reopens with its pieces laid out
-for the OLD walls, and the start is built for the walls it opened with, which are now the new
-ones. So the button is offered on a room whose furniture nobody touched. Pressing it fits the
-starter to the walls as they are, which is what the dialog says ("The furniture goes back to
-how the room first opened… The walls stay"). After that one press the two agree and the
-button goes.
+**Why the walls became part of it.** The first version kept today's walls and laid a fresh start
+out inside them. On paper a wall drag alone did not light the button. In the user's first try on
+2026-10-01 it did, because a wall drag carries the furniture with it (`moveWallCarrying` writes
+position overrides), so the drag is never only the walls. Pressing the button then handed back a
+starter re-laid for the new walls: a different arrangement, which nobody had asked for. The user
+chose "walls too" over hiding the button for a carried-only drag.
+
+**What is left.** "Opened" means opened THIS time. A starter whose walls were moved and then saved
+reopens with those walls as its start, and with pieces that were laid out for the OLD walls and
+carried. The start built for the saved walls is a different arrangement, so the button is offered
+on a room nobody has touched since it opened. Pressing it re-lays the furniture for the saved
+walls: the same surprise the user hit, though now only after a reload and with the walls left
+where they are.
 
 **Why it is not fixed.** The walls a starter was first furnished for are not stored anywhere.
 `withShell` saves the new shell over the old one, so nothing on reload can tell "furnished for
 these walls" from "furnished for walls since moved". The fix is a stored marker: either the
-start's shell, or a flag that the furniture has been edited. Both are a new persisted field for
-one button's visibility. Related, and older than Start over: after `moveWall` the store's
-`layoutId` is `'custom'`, but the record keeps its preset. So a T or U starter re-furnished
-before a reload and after one can differ (10 against 8 pieces for a T, 9 against 8 for a U),
-measured by the 2026-10-01 follow-up review.
+start's shell (which would also let Start over put the ORIGINAL walls back), or the saved scene
+itself taken as the start on reopen. Both are a new persisted field. Related, and older than
+Start over: after `moveWall` the store's `layoutId` is `'custom'`, but the record keeps its
+preset. So a T or U starter re-furnished before a reload and after one can differ (10 against 8
+pieces for a T, 9 against 8 for a U), measured by the 2026-10-01 follow-up review.

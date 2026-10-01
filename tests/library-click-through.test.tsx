@@ -45,10 +45,16 @@ beforeEach(() => {
 });
 
 /** The rail's trigger, found by the accessible name a user would look for rather than
- *  by a test id. `AddPiecesButton` labels itself "Add" with `title="Add a piece to the
- *  room"`; `CatalogToggle` on the canvas is the 3D tab's and is not on this page. */
+ *  by a test id. `AddPiecesButton` labels itself "Add", named "Add a piece to the
+ *  room" (and "Close the Library" once open); `CatalogToggle` on the canvas is the 3D tab's and is not on this page. */
 function addButton(): HTMLElement {
-  return screen.getByTitle('Add a piece to the room');
+  // Once open it shares "Close the Library" with the panel's own X — both close it —
+  // so the trigger is the one that reports open/shut.
+  const found = screen
+    .getAllByRole('button', { name: /^(Add a piece to the room|Close the Library)$/ })
+    .filter((b) => b.hasAttribute('aria-expanded'));
+  expect(found).toHaveLength(1);
+  return found[0];
 }
 
 describe('the Library opens when a signpost is pressed', () => {
@@ -80,8 +86,12 @@ describe('the Library opens when a signpost is pressed', () => {
     render(<PlanPage />);
     fireEvent.click(addButton());
     expect(screen.getByText('Library')).toBeTruthy();
+    // Named for what a press does now: its tooltip used to promise "Add a piece to the
+    // room" over a button reading "Close".
+    expect(addButton().getAttribute('aria-label')).toBe('Close the Library');
     fireEvent.click(addButton());
     expect(screen.queryByText('Library')).toBeNull();
+    expect(addButton().getAttribute('aria-label')).toBe('Add a piece to the room');
   });
 
   it('closes on the panel’s own X, which names what it closes', () => {
@@ -89,7 +99,9 @@ describe('the Library opens when a signpost is pressed', () => {
     fireEvent.click(addButton());
     // "Close" alone tells a screen-reader user nothing about what is closing, which is
     // why the panel's own control is named for its subject.
-    fireEvent.click(screen.getByRole('button', { name: 'Close the Library' }));
+    const x = screen.getAllByRole('button', { name: 'Close the Library' }).filter((b) => !b.hasAttribute('aria-expanded'));
+    expect(x).toHaveLength(1);
+    fireEvent.click(x[0]);
     expect(screen.queryByText('Library')).toBeNull();
   });
 

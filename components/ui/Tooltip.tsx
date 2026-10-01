@@ -55,6 +55,8 @@ type BubbleBox = {
   width: number;
   /** The height it was placed for: `ONE_LINE` until the bubble has been measured. */
   height: number;
+  /** The width it was placed for: the cap until the bubble has been measured. */
+  drawn: number;
 };
 
 /** `left` / `right` are for a trigger in a vertical strip — a collapsed rail's
@@ -65,7 +67,7 @@ type Placement = 'top' | 'bottom' | 'left' | 'right';
 /** Where a bubble goes for a trigger at `r`: `position: fixed` coordinates, kept
  *  inside the viewport. Shared by `Tooltip` and `InfoTip` so the two bubbles land
  *  by one rule. */
-function placeBubble(r: DOMRect, placement: Placement, height = ONE_LINE): BubbleBox {
+function placeBubble(r: DOMRect, placement: Placement, height = ONE_LINE, drawn?: number): BubbleBox {
   if (placement === 'left' || placement === 'right') {
     // Beside the trigger, vertically centred on it, and never wider than the room
     // on that side: the bubble is a label, so it wraps rather than runs off-screen.
@@ -77,6 +79,7 @@ function placeBubble(r: DOMRect, placement: Placement, height = ONE_LINE): Bubbl
       place: placement,
       width: Math.max(0, Math.min(CAP, room)),
       height,
+      drawn: drawn ?? Math.max(0, Math.min(CAP, room)),
     };
   }
   // Measured against the viewport because the bubble is `fixed`. Height is not
@@ -92,12 +95,14 @@ function placeBubble(r: DOMRect, placement: Placement, height = ONE_LINE): Bubbl
   // with `nowrap` and `position: fixed` there is no wrap, no ellipsis and no
   // scrollbar to say so, on the one control whose bubble IS its label.
   //
-  // `half` is derived from the same cap the bubble is styled with, so the two
-  // cannot drift; on a viewport narrower than the cap the range collapses and the
-  // bubble centres itself, which is the right answer when it cannot fit beside
-  // its trigger anyway.
+  // `half` is the bubble's DRAWN width once it has been measured, and the cap only
+  // until then. Clamping by the cap kept every bubble 120 px clear of the edge, so
+  // a short one by the right edge — "Start over", on the last square of the right
+  // rail — slid left by the difference and sat over the button beside it. On a
+  // viewport narrower than the cap the range collapses and the bubble centres
+  // itself, which is the right answer when it cannot fit beside its trigger anyway.
   const width = Math.min(CAP, window.innerWidth - 2 * MARGIN);
-  const half = width / 2;
+  const half = Math.min(width, drawn ?? width) / 2;
   const centre = r.left + r.width / 2;
   return {
     left: Math.min(Math.max(MARGIN + half, centre), window.innerWidth - MARGIN - half),
@@ -105,6 +110,7 @@ function placeBubble(r: DOMRect, placement: Placement, height = ONE_LINE): Bubbl
     place,
     width,
     height,
+    drawn: drawn ?? width,
   };
 }
 
@@ -131,6 +137,11 @@ function bubbleStyle(box: BubbleBox): CSSProperties {
     lineHeight: 1.3,
     // Wraps inside the cap rather than running off the edge. `anywhere`
     // because a part name is user-typed and need not contain a space.
+    // `max-content` so its width is the label's own whatever `left` is: a `fixed`
+    // box shrinks to fit the room between `left` and the viewport edge before the
+    // transform moves it, so a bubble placed near the right edge would wrap there,
+    // and measure narrower, and be placed again.
+    width: 'max-content',
     maxWidth: box.width,
     whiteSpace: 'normal',
     overflowWrap: 'anywhere',
@@ -154,6 +165,7 @@ export function Tooltip({
   placement?: Placement;
 }) {
   const wrapRef = useRef<HTMLSpanElement>(null);
+  const bubbleRef = useRef<HTMLSpanElement>(null);
   const [box, setBox] = useState<BubbleBox | null>(null);
 
   // Set on pointer-down and cleared when the pointer leaves or focus goes. Without
@@ -171,6 +183,19 @@ export function Tooltip({
     if (!r) return;
     setBox(placeBubble(r, placement));
   }, [placement]);
+
+  // Placed again at its real size once laid out, before the browser paints it, so
+  // the clamp keeps the bubble's own box on screen rather than the cap's. The loop
+  // ends because the second placement records the size it used.
+  useLayoutEffect(() => {
+    const el = bubbleRef.current;
+    const r = (wrapRef.current?.firstElementChild ?? wrapRef.current)?.getBoundingClientRect();
+    if (!box || !el || !r) return;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    if (!w || (w === box.drawn && h === box.height)) return;
+    setBox(placeBubble(r, placement, h, w));
+  }, [box, placement]);
 
   const close = useCallback(() => setBox(null), []);
   /** A press: dismiss, and stay dismissed until the pointer or focus leaves. */
@@ -225,6 +250,7 @@ export function Tooltip({
           `docs/visual-check.md`. */}
       {box && createPortal(
         <span
+          ref={bubbleRef}
           role="tooltip"
           // Decoration: the trigger's own `aria-label` is the accessible name, so
           // announcing this too would repeat it.
@@ -317,13 +343,18 @@ export function InfoTip({
     };
   }, [shown, placement, close]);
 
-  // Placed again at its real height once painted, before the browser shows it.
-  // The loop ends because the second placement records the height it used.
+  // Placed again at its real size once laid out, before the browser shows it.
+  // The loop ends because the second placement records the size it used.
   useLayoutEffect(() => {
-    const h = bubbleRef.current?.offsetHeight;
+    const el = bubbleRef.current;
     const r = btnRef.current?.getBoundingClientRect();
-    if (!box || !h || !r || h === box.height) return;
-    setBox(placeBubble(r, placement, h));
+    if (!box || !el || !r) return;
+    // A width that reads 0 has not been laid out; keep the one already used, or the
+    // two never agree and this places it again forever.
+    const w = el.offsetWidth || box.drawn;
+    const h = el.offsetHeight;
+    if (!h || (h === box.height && w === box.drawn)) return;
+    setBox(placeBubble(r, placement, h, w));
   }, [box, placement]);
 
   return (

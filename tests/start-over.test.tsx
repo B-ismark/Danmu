@@ -11,7 +11,7 @@
 
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { startingParts } from '@/lib/room-start';
@@ -26,9 +26,12 @@ vi.mock('@/components/ui/StorageToast', () => ({
   },
   StorageToast: () => null,
 }));
+const asked: Array<{ title: string; icon?: string }> = [];
 vi.mock('@/components/ui/Confirm', () => ({
-  confirmDialog: () => Promise.resolve(true),
-  useConfirm: () => () => Promise.resolve(true),
+  useConfirm: () => (req: { title: string; icon?: string }) => {
+    asked.push(req);
+    return Promise.resolve(true);
+  },
   useConfirmDeleteRooms: () => () => Promise.resolve(true),
   ConfirmHost: () => null,
 }));
@@ -48,6 +51,7 @@ const startOverButton = () => screen.queryByRole('button', { name: /^Start over/
 beforeEach(() => {
   cleanup();
   toasts.length = 0;
+  asked.length = 0;
   useScene.getState().loadFromRoom(undefined);
   const st = useStudio.getState();
   st.resetTransforms();
@@ -62,15 +66,14 @@ describe('the footer offers Start over only when something was changed', () => {
     expect(startOverButton()).toBeNull();
   });
 
-  it('not after a wall is moved and nothing else — the walls are not what it undoes', () => {
-    // The start used to be built for TODAY's walls, which a starter's pieces were not
-    // laid out for, so this alone lit the button and pressing it re-laid the room.
+  it('after a wall is moved — the walls are part of the start', () => {
+    // A wall drag carries the furniture with it, so this is never only the walls.
     useScene.getState().moveWall(0, 0.3);
     render(<RailFooter />);
-    expect(startOverButton()).toBeNull();
+    expect(startOverButton()).not.toBeNull();
   });
 
-  it('nor on a saved room opened at its own size, then reshaped', () => {
+  it('not on a saved room opened at its own size, but once it is reshaped', () => {
     // A record, not the starter: the walls it opens with are its own, which is what
     // the start has to be laid out for.
     useScene.getState().loadFromRoom({
@@ -87,12 +90,28 @@ describe('the footer offers Start over only when something was changed', () => {
     unmount();
     useScene.getState().moveWall(1, -0.25);
     render(<RailFooter />);
-    expect(startOverButton()).toBeNull();
+    expect(startOverButton()).not.toBeNull();
   });
 
-  it('nor after the ceiling height alone is changed', () => {
+  it('asks with the put-it-back glyph, not the bin, and then does it', async () => {
+    useScene.getState().moveWall(0, 0.3);
+    render(<RailFooter />);
+    await act(async () => {
+      fireEvent.click(startOverButton()!);
+    });
+    expect(asked.map((r) => r.icon)).toEqual(['rotate-ccw']);
+    expect(useScene.getState().room).toEqual(useScene.getState().startRoom);
+  });
+
+  it('after the ceiling height alone is changed', () => {
     const { width, depth } = useScene.getState().room;
     useScene.getState().setRoom({ width, depth, height: 3.0 });
+    render(<RailFooter />);
+    expect(startOverButton()).not.toBeNull();
+  });
+
+  it('not after a wall is painted — the paint is not part of the start', () => {
+    useScene.getState().setWallColor(0, '#123456');
     render(<RailFooter />);
     expect(startOverButton()).toBeNull();
   });
@@ -133,11 +152,11 @@ describe('startOver', () => {
     return first;
   }
 
-  it('puts back the start for the walls as they are, and clears every per-piece edit', () => {
+  it('puts back the start, and clears every per-piece edit', () => {
     editTheRoom();
     startOver();
-    const { parts, startSource, room } = useScene.getState();
-    expect(parts).toEqual(startingParts(startSource, room));
+    const { parts, startSource, startRoom } = useScene.getState();
+    expect(parts).toEqual(startingParts(startSource, startRoom));
     const st = useStudio.getState();
     expect(st.positions).toEqual({});
     expect(st.hidden).toEqual({});
@@ -150,18 +169,45 @@ describe('startOver', () => {
     expect(useStudio.getState().pinned).toEqual({ [first]: true });
   });
 
-  it('builds for the walls as they are NOW, so a wall moved since is honoured', () => {
+  it('puts the walls and the ceiling back, and keeps the paint', () => {
+    // It used to keep today's walls and lay a fresh start out inside them, so a wall
+    // drag followed by Start over handed back a different arrangement nobody asked for.
+    const opened = useScene.getState().room;
     editTheRoom();
     useScene.getState().moveWall(0, 0.3);
+    useScene.getState().setRoom({ width: useScene.getState().room.width, depth: useScene.getState().room.depth, height: 3.1 });
+    useScene.getState().setWallColor(1, '#123456');
     startOver();
-    const { parts, startSource, room } = useScene.getState();
-    expect(parts).toEqual(startingParts(startSource, room));
+    const { parts, startSource, startRoom, room } = useScene.getState();
+    expect(room.footprint).toEqual(opened.footprint);
+    expect([room.width, room.depth, room.height, room.layoutId]).toEqual([opened.width, opened.depth, opened.height, opened.layoutId]);
+    expect(room.wallColors).toEqual({ 1: '#123456' });
+    expect(parts).toEqual(startingParts(startSource, startRoom));
+  });
+
+  it('brings the typical-size mark back with the typical walls', () => {
+    useScene.getState().loadFromRoom({
+      id: 'typical', createdAt: 0, name: 'Typical', layoutId: 'rect', width: 4, depth: 3.5, height: 2.6, roughSize: true,
+    } as RoomData);
+    // The person typed a size, which is theirs and clears the mark…
+    useScene.getState().setRoom({ width: 4.4, depth: 3.5, height: 2.6 });
+    expect(useScene.getState().room.roughSize).toBeUndefined();
+    startOver();
+    // …and putting the typical size back makes it typical again.
+    expect(useScene.getState().room.roughSize).toBe(true);
+  });
+
+  it('keeps "these sizes are right" when the walls never moved', () => {
+    useScene.getState().loadFromRoom({
+      id: 'typical', createdAt: 0, name: 'Typical', layoutId: 'rect', width: 4, depth: 3.5, height: 2.6, roughSize: true,
+    } as RoomData);
+    useScene.getState().confirmSize();
+    editTheRoom();
+    startOver();
+    expect(useScene.getState().room.roughSize).toBeUndefined();
   });
 
   it('goes dark once pressed, even after the walls moved — and Undo lights it again', () => {
-    // The start it puts back is laid out for TODAY's walls, so that is what the
-    // footer must compare against afterwards; comparing against the walls the room
-    // opened with kept it lit on a room that had just been started over.
     editTheRoom();
     useScene.getState().moveWall(0, 0.5);
     startOver();
@@ -175,14 +221,16 @@ describe('startOver', () => {
 
   it('Undo brings back exactly what was there', () => {
     const first = editTheRoom();
-    const parts = useScene.getState().parts;
-    const startRoom = useScene.getState().startRoom;
     useScene.getState().moveWall(0, 0.5);
+    const parts = useScene.getState().parts;
+    const room = useScene.getState().room;
+    const startRoom = useScene.getState().startRoom;
     startOver();
-    expect(useScene.getState().startRoom).not.toBe(startRoom);
+    expect(useScene.getState().room).not.toBe(room);
     lastUndo()();
     expect(useScene.getState().parts).toBe(parts);
-    // What "is there anything to start over" is asked against goes back too.
+    // The walls come back with the pieces, and the start stays the one it opened with.
+    expect(useScene.getState().room).toBe(room);
     expect(useScene.getState().startRoom).toBe(startRoom);
     const st = useStudio.getState();
     expect(st.positions).toEqual({ [first]: [0.2, 0, 0.2] });
