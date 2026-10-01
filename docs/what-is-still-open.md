@@ -4194,28 +4194,59 @@ allowance, and stayed there. The magnet had been doing the landing, and a step w
 lines in it cannot land. The shorter step a selection settles on when a member runs out of
 room is not rounded to the grid either: rounded, 5 mm is a whole step or none.
 
-**Three more rules came out of measuring the second version, none of them predicted.**
-Each is a probe over 2,000 random pairs of pieces, on both steps.
+**Three more rules came out of probing the second version, none of them predicted.** The
+probes were scratch files over random pairs of axis-aligned boxes and are not committed,
+so their counts are not quoted here; the tests named below hold each rule.
 · *A press into a neighbour it already touches does not move.* From flush, a Fine step
   lands exactly on `collidesAt`'s 10 mm touching allowance, so whether the press was
   refused or kept 10 mm inside came down to float noise; with grid marks as stopping
-  points it landed 1–9.9 mm inside in nearly every layout. The edge it stands on now
-  counts as ahead when the press goes into a neighbour that faces it and is in the way —
-  `canCollide`, the collision test's own pair rule, extracted from `collidesAt` so the two
-  cannot disagree about a rug. 2,000 of 2,000 stay flush; away from it, 2,000 of 2,000
-  take the whole step.
+  points it landed 1–9.9 mm inside in nearly every layout probed. The edge it stands on
+  now counts as ahead when the press goes into a neighbour that faces it and is in the
+  way — `canCollideWith`, the collision test's own pair rule, extracted from `collidesAt`
+  so the two cannot disagree about a rug.
 · *Grid marks are not stopping points.* A piece flush with a neighbour is almost never on
-  a mark, so the next one is anywhere from a step to a hair away: about half the presses
-  that stopped on one moved under 5 mm, some 0.1 mm, which reads as a key that did
-  nothing. Off the grid stays off it, as arrow keys do in drawing tools. A random approach
-  gap now gives a whole step or a flush landing and nothing else, 4,000 of 4,000.
+  a mark, so the next one is as likely to be a hair ahead as a whole step, and half the
+  presses that stopped on one would move less than half a step — a key that seems to do
+  nothing. Off the grid stays off it, as arrow keys do in drawing tools. Against one
+  neighbour a press is now a whole step or a flush landing. Two neighbours whose lines sit
+  a few millimetres apart are still two stops a few millimetres apart; each is an
+  alignment, where a mark was nothing.
 · *The company is not a line.* The rest of a selection is in the resolve's world where it
   is going, so its lines move with the piece. A set whose pieces were 3 mm off lining up
   stopped 3 mm short on every press, forever, since the next press found the same 3 mm.
   `ResolveInput.company` keeps them out of a press's lines; it also made the press's own
   `inherited` exclusion redundant, since inherited pieces are company.
 
+**The second review found four more, all fixed with it.**
+· *A set was refused by its own member.* The company was moved by the whole step while
+  the piece stopped short at a flush line, so a member standing flush behind it was
+  inside it. A press now asks again with the company moved as far as the piece went.
+· *The barrier is the collision test's question, not the box's.* It stopped a press at a
+  sofa at 45°, a round table or an L-desk, whose boxes are not their outlines, and at a
+  neighbour that only grazed the path inside the 10 mm touching allowance (`TOUCH_M`),
+  while a radiator at the piece's own height gave no line at all and a press went 5 mm
+  into it. It now needs both footprints to be their boxes (`footIsBox`), an overlap
+  deeper than `TOUCH_M`, and a mounted piece counts when it is in the way.
+· *A rounding error was a move.* A flush stop worked out as 0.1 + 0.3 + 0.2 came back at
+  0.6000000000000001 for a piece at 0.6, so the press stored an override and said
+  nothing. "Did it move" uses the snap's own same-place tolerance now.
+· *"Cannot go any further" repeated and trampled a drag.* It was said on every repeat of
+  a held key, and it cleared the refusal state a running drag owns. It is said once each
+  way, and a key leaves a drag's refusal alone.
+
 `tests/plan-nudge.test.tsx`, plus `snapAhead` in `tests/item-snap.test.ts`.
+
+**Still open, three of them found by that review and none of them new with it.**
+· *An L, T or U room gives a press no wall to land on.* The room clamp and the stop
+  lines know only the bounding box, so a press toward an inner corner wall oversteps it
+  and is refused in red rather than landing flush, and toward an outer wall it says
+  "cannot go any further" short of the plaster. Pre-existing: the drag has the same clamp.
+· *The barrier asks at the height the piece stands before the press.* A lamp pressed off
+  a desk onto the floor is judged against the desk's layer, so floor pieces it is about
+  to meet give no stop line. Found by reading, not probed.
+· *A drag does not re-ask with its company where the piece went.* The arrow key's second
+  pass is not the drag's: its magnet does see the company's lines (below), so the same
+  pass there is a different question, and it rides with that fix.
 
 **Still open, and the same rule for a drag.** The drag magnet reads the same shifted world,
 so a piece dragged with company it is nearly lined up with is pulled onto that company's

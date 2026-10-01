@@ -2742,15 +2742,19 @@ behind it. The drag magnet cannot do this: its 100 mm reach is longer than eithe
 and has no direction, so a press was pulled back onto whatever line the piece stood on
 and could not leave it. Turning the snap off for a press was tried first, and lost the
 landing: a Coarse step could not close a 30 mm gap, and a Fine one went 5 mm into a
-neighbour (§ H.6.8). Three rules ride with it, each measured. A press into a
-neighbour the piece already touches does not move (`canCollide`, the collision test's
-own pair rule, says which neighbours are in the way): a Fine step is exactly the
-collision test's 10 mm touching allowance, so whether it was kept 10 mm inside was
-float noise. Grid marks are not stopping points, so a piece off the grid stays off it
-and every press is a whole step or a landing: a piece flush with a neighbour is almost
-never on a mark, and over 2,000 random layouts about half the presses that stopped on
-one moved under 5 mm. And the pieces travelling with it are not lines it can reach (`company`), since
-they move by the same step — a set 3 mm off lining up came up 3 mm short on every press.
+neighbour (§ H.6.8). Three rules ride with it. A press into a neighbour the piece
+already touches does not move: a Fine step is exactly the collision test's 10 mm
+touching allowance (`TOUCH_M`), so whether it was kept 10 mm inside was float noise.
+Which neighbours count is the collision test's own answer — `canCollideWith`, its pair
+rule, overlapping across the line by more than `TOUCH_M` — and only where both
+footprints are their boxes (`footIsBox`), since the lines are drawn from the boxes and
+a sofa at 45°, a round table or an L-desk reaches its box at a corner or not at all.
+Grid marks are not stopping points, so a piece off the grid stays off it: a piece flush
+with a neighbour is almost never on a mark, and the next one is as likely to be a hair
+ahead as a whole step. And the pieces travelling with it are not lines it can reach
+(`company`), since they move by the same step — a set 3 mm off lining up came up 3 mm
+short on every press. Where the piece stops short of the step, the plan asks again with
+its company moved by the distance it actually went, or the set refused itself.
 
 **The legality test has no exemption for wall-mounted pieces any more, and that was
 § H.16.** It used to open `ridesAWall ||`, on the stated grounds that `snapToWall`

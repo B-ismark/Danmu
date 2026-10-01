@@ -167,7 +167,11 @@ when you click it; the 2D Plan has no control of its own for it. On a phone it i
 - On the way back it stops exactly against the cabinet, even when the last gap is shorter
   than a step.
 - Once it is touching, a press toward the cabinet does not move it, and a screen
-  reader hears "cannot go any further that way". Nothing turns red.
+  reader hears "cannot go any further that way" — once, even with the key held down.
+  Nothing turns red.
+- Next to a round table, or a sofa turned to 45°, the chair keeps moving until it
+  really meets the furniture, rather than stopping in the air at the corner of the
+  table's square.
 - A mouse drag still pulls the chair flush when you let go close to the cabinet.
 - Select two chairs that are nearly, not quite, lined up (shift-click) and arrow them
   together: every press moves both a whole step.

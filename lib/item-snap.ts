@@ -211,9 +211,11 @@ function firstAhead(lines: Line[], from: number, to: number): { target: number; 
  *
  * The grid is not a line here. A piece is off the grid whenever it stands flush with a
  * neighbour, since nothing puts a neighbour's edge on a mark, and the next mark is then
- * anywhere from a step to a hair away: measured over 2,000 random layouts, about half
- * the presses that stopped on one moved under 5 mm and some 0.1 mm, which reads as a
- * key that did nothing. Off the grid stays off it, as arrow keys do in drawing tools.
+ * as likely to be a hair ahead as a whole step: half the presses that stopped on one
+ * would move less than half a step, and some a fraction of a millimetre, which reads as
+ * a key that did nothing. Off the grid stays off it, as arrow keys do in drawing tools.
+ * Two neighbours' lines a few millimetres apart are still two stops a few millimetres
+ * apart; the difference is that each of them is an alignment, and a mark is nothing.
  *
  * `obstacle` says which neighbours are in the way, and a press toward one it is
  * touching does not move.

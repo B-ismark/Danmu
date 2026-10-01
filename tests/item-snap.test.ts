@@ -145,7 +145,8 @@ describe('snapAhead — the arrow key\'s magnet', () => {
     expect(r.lines).toEqual([]);
   });
 
-  it('lands flush on a neighbour\'s edge inside the step, and draws its guide', () => {
+  it('lands flush on a neighbour\'s edge inside the step, and names that line', () => {
+    // Named, not drawn: the plan draws guides for a drag only, and a press has none.
     const r = snapAhead([1.03, 0], 0.98, 0, 0, DIM, [neighbor], 'mover', inTheWay);
     expect(r.x).toBeCloseTo(1.0, 9);
     expect(r.lines).toEqual([expect.objectContaining({ axis: 'x', kind: 'edge', at: 0.5 })]);
@@ -197,8 +198,12 @@ describe('snapAhead — the arrow key\'s magnet', () => {
     expect(r.z).toBeCloseTo(0.59, 9);
   });
 
-  it('stops only the way that goes into the neighbour', () => {
-    const r = snapAhead([1.0, 0], 1.01, 0, 0, DIM, [neighbor], 'mover', inTheWay);
-    expect(r.x).toBeCloseTo(1.01, 9);
+  it('stops only the way that goes into the neighbour, from either side of it', () => {
+    // Flush on its west side this time, where going in is to the right.
+    expect(snapAhead([-1.0, 0], -0.99, 0, 0, DIM, [neighbor], 'mover', inTheWay).x).toBeCloseTo(-1.0, 9);
+    expect(snapAhead([-1.0, 0], -1.01, 0, 0, DIM, [neighbor], 'mover', inTheWay).x).toBeCloseTo(-1.01, 9);
+    // …and on its north side, where it is down.
+    expect(snapAhead([0, -0.6], 0, -0.59, 0, DIM, [neighbor], 'mover', inTheWay).z).toBeCloseTo(-0.6, 9);
+    expect(snapAhead([0, -0.6], 0, -0.61, 0, DIM, [neighbor], 'mover', inTheWay).z).toBeCloseTo(-0.61, 9);
   });
 });
