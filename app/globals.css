@@ -143,7 +143,6 @@
   --measure-page-prose: 920px;  /* a page that is mostly reading + forms */
   --measure-text: 600px;        /* body copy at 13-15px */
   --measure-text-sm: 560px;     /* fine print at 11.5-12px */
-  --measure-hero: 470px;        /* hero copy set beside a visual */
   --measure-card: 440px;        /* one centred card — errors, empty states, gates */
 
   /* The studio's two rails. Same argument as the measures: both room tabs had
@@ -1925,32 +1924,6 @@ textarea.field { border-radius: var(--r-2); }
   .ds-btn:hover, .ds-btn:active, .ds-card:hover { transform: none !important; }
 }
 
-
-/* ─── Front-door vignette motion ───────────────────────────────────────────
-   The welcome page's isometric room demonstrates the two core verbs — move a
-   piece, re-colour it — so the front door shows a live studio instead of a flat
-   elevation. The keyframes live here, not in the component: styled-jsx hashes
-   keyframe names, so a scoped @keyframes referenced from an inline
-   style={{ animation }} resolves to nothing and fails silently.
-   `color` is animated rather than `fill` so one declaration re-tints every
-   upholstery face through currentColor while each face keeps its own shading
-   opacity. No animation-fill-mode, so the reduced-motion block above (1ms, one
-   iteration) leaves the piece at its own base colour and position. */
-@keyframes danmu-vignette-slide {
-  0%, 26%  { transform: translate(0, 0); }
-  46%, 72% { transform: translate(24px, 12px); }  /* one step along the floor's iso axis */
-  100%     { transform: translate(0, 0); }
-}
-@keyframes danmu-vignette-reupholster {
-  0%, 22%  { color: var(--accent); }
-  42%, 68% { color: var(--accent-2); }
-  100%     { color: var(--accent); }
-}
-.vignette-piece {
-  animation:
-    danmu-vignette-slide 7s ease-in-out infinite,
-    danmu-vignette-reupholster 7s ease-in-out infinite;
-}
 
 /* ── The day over the canvas (components/studio/SunArc.tsx) ──────────────────
    A rainbow of dashes under the tool row with the sun riding it, or on a narrow

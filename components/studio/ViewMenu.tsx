@@ -25,12 +25,15 @@
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
 import { ViewOptions } from './ViewOptions';
 import { usePopoverDismiss } from './usePopoverDismiss';
+import { settingsHref } from '@/lib/settings-return';
 
 export function ViewMenu() {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
   const wrapRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   usePopoverDismiss(open, () => setOpen(false), wrapRef, btnRef);
@@ -64,7 +67,7 @@ export function ViewMenu() {
           {/* Units and the detection key live on the settings page. They are app
               settings rather than view settings, and a second copy of them here
               would be a second place to keep in step. */}
-          <Link href="/settings" className="view-menu__foot" onClick={() => setOpen(false)}>
+          <Link href={settingsHref(pathname)} className="view-menu__foot" onClick={() => setOpen(false)}>
             <span>Units, detection and storage</span>
             <Icon name="arrow-right" size={12} />
           </Link>

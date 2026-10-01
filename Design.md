@@ -92,7 +92,7 @@ owned by a deterministic geometry engine, not by a model.
    every `className` resolves to a hand-written class in `globals.css`.
    **Three families were added late, because they had been escaping the rule.**
    *Content measure* (`--measure-page`, `--measure-page-prose`, `--measure-text`,
-   `--measure-text-sm`, `--measure-hero`, `--measure-card`) replaced ten distinct
+   `--measure-text-sm`, `--measure-card`) replaced ten distinct
    literals retyped across seventeen sites — no two pages agreed on how wide
    content should get, and nothing said what a number was *for*. *Rail width*
    (`--rail-left`, `--rail-right`) replaced the same two numbers inline in both
@@ -174,18 +174,39 @@ owned by a deterministic geometry engine, not by a model.
 ## 2. User journey
 
 ```
-/                         entry router → onboarding (no rooms) or workspace
+/                         rooms list — the first screen; create / resume / delete
 └─ /onboarding
-   ├─ /welcome            intro + "Start decorating"; optional BYO key (collapsed)
    ├─ /layout-pick        pick footprint preset + (optionally) its size → starter scene
    ├─ /capture            add up to 4 wall photos (upload or getUserMedia)
    └─ /detect             furniture detection on captured photos
-/workspace                rooms list — create / resume / delete
 /room/[roomId]
    ├─ /model              ★ 3D decoration studio (default landing)
    └─ /plan               2D top-down floor plan
-/settings                 API key, display unit, danger zone
+/settings                 API key, display unit, your rooms
 ```
+
+**The rooms page is the first screen.** There used to be a welcome page at `/` in
+front of it; its one job was a "Start decorating" button, and the rooms page's
+empty state already says that. An old `/workspace` or `/onboarding/welcome` address
+forwards to `/` (`next.config.mjs` `redirects()`), the offline worker's cache
+version moved so a v1 shell holding both old pages is dropped, and `/` is a real page rather than a redirect
+because the offline worker serves it as the fallback for every navigation, and a
+cached redirect cannot answer one.
+
+**Settings goes back where it came from.** It is opened from the rooms page, the
+studio's View menu, the studio's Cmd/Ctrl+, and the scan screen's *Set up a key*.
+The last three pass `?from=` (`lib/settings-return.ts`), and Settings names that
+place on its Back control — *Back to "Front room"*, *Back to the scan*. It goes
+back through history when the app routed there, so the room or the scan comes back
+as it was left, and by address when the tab was opened ON Settings (a fresh tab, a
+bookmark, a link from elsewhere), because `history.length` counts the whole tab and
+cannot tell the two apart (`wayBack`, read off the navigation timing entry). The
+breadcrumb's *Rooms* stays, because it is a fixed destination and Back is history.
+`from` is typed into the address bar as easily as clicked, so only a same-app path
+is honoured, and "same-app" is decided the way the router will decide it: resolved
+as a URL and compared by origin, since `/<tab>/host` passes any character test and
+arrives as `//host`. Settings' key row carries the "Get a free key" link and the
+"AIza" hint the welcome page used to.
 
 Two ways in:
 
@@ -2694,7 +2715,7 @@ outlined box around outlined buttons, which put two boundaries on every control.
   photoreal render).
 - **The scene file** (`lib/scene-file.ts`, `components/studio/SceneFile.tsx`) —
   `Save file` in the top bar writes the whole room as readable JSON
-  (`front-room.danmu.json`); `Open a file` on `/workspace` lands one as a **new**
+  (`front-room.danmu.json`); `Open a file` on the rooms page lands one as a **new**
   room. See §6a — it is the app's only import path, and therefore its only
   untrusted input.
 - **Undo/redo** (`lib/history.ts`, `UndoRedo.tsx`) — snapshots cover parts, room
@@ -3172,7 +3193,7 @@ precedents to pick from. There are now two shells and two deliberate exceptions.
 | Shell | Owns | Used by |
 |---|---|---|
 | `components/studio/StudioShell.tsx` | Picks the layout for the window: `DockedShell`'s two rails from 1024px, `SheetShell` below (one docked pane on a tablet, toolbar + sheet on a phone), plus the `ready` paint gate | `/room/[id]/model` · `/room/[id]/plan` |
-| `components/ui/DocShell.tsx` | The `.chrome-bar`, the mark (always a link), the breadcrumb, the content measure, and the `hero` wash | `/workspace` · `/settings` · `/onboarding/layout-pick` |
+| `components/ui/DocShell.tsx` | The `.chrome-bar`, the mark (always a link), the breadcrumb, the content measure, and the `hero` wash | `/` (rooms) · `/settings` · `/onboarding/layout-pick` |
 
 **`.chrome-bar` is the app's one bar**, in two sizes — the 56px default and the
 studio top bar's `--tight` 48px. It **wraps at any width, not below a
@@ -3204,11 +3225,12 @@ which is why Settings no longer needs a separate "Close" button. `back` is a slo
 rather than built in, because `router.back()` is history and the breadcrumb is a
 fixed destination; only the route knows which of the two it means.
 
-**Two routes deliberately opt out, and should stay out.** `/onboarding/welcome`
-is a hero — a breadcrumb on the first screen is a path from nowhere.
+**One pair of routes deliberately opts out, and should stay out.**
 `/onboarding/{capture,detect}` are a viewfinder and a review queue; a document
-shell has nothing to offer a live camera feed. Forcing either in would be the
-same mistake as leaving three bars.
+shell has nothing to offer a live camera feed. Forcing them in would be the same
+mistake as leaving three bars. (A welcome page at `/` used to be the other
+opt-out, as a hero with no breadcrumb. It is gone: the rooms page is the first
+screen, and its empty state is the first-run one.)
 
 Those three were then **audited on their own terms**, and the opt-out held: no
 literal colour, no literal `z-index`, no `#fff` in either of the big two;
@@ -3350,7 +3372,7 @@ while the filter is on, because a filtered grid is a set of search results and
 "create" is not one of them.
 
 `Save file` (studio top bar, both tabs) → `front-room.danmu.json`. `Open a file`
-(`/workspace` chrome bar and its empty state) → a **new** room, never a replacement
+(the rooms page's chrome bar and its empty state) → a **new** room, never a replacement
 for the one you have open, because `roomStore.importScene` mints its own id.
 
 ### What travels

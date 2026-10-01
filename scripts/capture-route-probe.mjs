@@ -419,15 +419,16 @@ async function main() {
   {
     const { ctx, page } = await fresh(browser);
     try {
-      // Welcome's onward control is a BUTTON, not a link — the first version of this
-      // scenario asserted a link and failed for that reason alone, which would have read
-      // as the route being broken.
-      await page.goto(`${BASE}/onboarding/welcome`, { waitUntil: 'domcontentloaded' });
-      const start = await one(page, page.getByRole('button', { name: /Start decorating/ }), 'welcome\'s onward button');
+      // The first screen is the rooms page, and a fresh browser has no rooms, so its
+      // empty state's "Create your first room" — a LINK — is the way in. (The welcome
+      // page this used to start on is gone; its onward control was a button, and the
+      // first version of this scenario asserted a link and failed for that reason alone.)
+      await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+      const start = await one(page, page.getByRole('link', { name: /Create your first room/ }), 'the empty rooms page\'s onward link');
       await start.click();
       await page.waitForURL('**/onboarding/layout-pick', { timeout: 20000 });
       await toCapture(page, 'T-Shape');
-      ok('S1', 'welcome → layout-pick → T-Shape → "Photograph my real room first" → capture');
+      ok('S1', 'rooms (empty) → layout-pick → T-Shape → "Photograph my real room first" → capture');
       await shot(page, 'S1-capture-empty');
     } catch (e) {
       no('S1', `the route does not walk: ${e.message}`);

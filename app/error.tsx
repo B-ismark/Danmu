@@ -37,8 +37,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, padding: '14px 24px', background: 'var(--paper-2)', borderTop: '1px solid var(--hairline)' }}>
-          {/* '/' rather than '/workspace': the root router already sends you to
-              your rooms, or to onboarding if you have none. */}
+          {/* '/' is the rooms page — the first screen, with or without rooms. */}
           <button className="ds-btn ds-btn--lg" style={{ flex: 1, justifyContent: 'center' }} onClick={() => (window.location.href = '/')}>
             Back to your rooms
           </button>

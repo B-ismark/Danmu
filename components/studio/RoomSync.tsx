@@ -157,7 +157,7 @@ export function RoomSync() {
       // scan is coming to, and `RoomSync`'s own load prefers a saved scene over
       // `buildSceneFromRoom` forever, with nothing but `destroyRoom` ever clearing
       // the key. Pinning one would have made *Detect furniture* — a shipped button on
-      // `/workspace`, and *Re-scan* inside the studio — silently do nothing, for good.
+      // the rooms page, and *Re-scan* inside the studio — silently do nothing, for good.
       // So captures are asked about too, and the pin is for a picker room: no photos,
       // no detections, the only room `defaultScene` re-seeds from scratch. Those two
       // questions are asked of the STORED room, inside the save's one transaction.

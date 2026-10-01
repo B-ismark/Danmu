@@ -27,8 +27,8 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: 'Danmu',
     description:
       'Arrange, recolour, restyle and relight furniture in a scaled 3D room in your browser. No account. Your rooms stay on your device.',
-    // `/` and not `/workspace`: a fresh install has no rooms, and the landing
-    // page is the only screen that reads correctly with none.
+    // `/` is the rooms page, and its empty state is the first-run screen: a fresh
+    // install has no rooms, and that page says what to do with none.
     start_url: '/',
     scope: '/',
     display: 'standalone',

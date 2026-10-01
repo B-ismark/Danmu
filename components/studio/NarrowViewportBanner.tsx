@@ -120,7 +120,7 @@ export function NarrowViewportBanner() {
           </Link>
           <div style={{ display: 'flex', gap: 8 }}>
             <Link
-              href="/workspace"
+              href="/"
               className="ds-btn"
               style={{ flex: 1, justifyContent: 'center' }}
             >

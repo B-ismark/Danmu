@@ -1,7 +1,7 @@
 'use client';
 
 // Dropdown that lists all saved rooms; lets user jump between them without
-// returning to /workspace. Lives in the studio TopBar.
+// returning to the rooms page. Lives in the studio TopBar.
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -175,7 +175,7 @@ export function RoomSwitcher() {
             <button
               onClick={() => {
                 setOpen(false);
-                router.push('/workspace');
+                router.push('/');
               }}
               className="t-small"
               style={{

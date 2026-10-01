@@ -29,14 +29,24 @@
 // response to an authenticated call is not this worker's business. The origin
 // check is the first thing `fetch` does.
 
-const VERSION = 'v1';
+// v2: the rooms list moved to `/` and the welcome page went. A v1 shell still
+// holds both old pages, and offline they would be served as if they existed —
+// and its `/` is the old redirect page, which offline would bounce to a
+// /workspace nothing serves. Rotating the whole version also drops cached assets
+// and visited rooms, which the next online visit re-caches; deleting two URLs
+// by hand would keep those, and leave that `/` in place.
+const VERSION = 'v2';
 const SHELL = `danmu-shell-${VERSION}`;
 const ASSETS = `danmu-assets-${VERSION}`;
 const KEEP = [SHELL, ASSETS];
 
 // The routes that exist at fixed URLs, so they can be had up front. The studio
 // lives under /room/<uuid>/, which is per-room and cached when visited.
-const PRECACHE = ['/', '/workspace', '/onboarding/welcome', '/settings'];
+// `/` is the rooms page itself — the first screen — so it is also the offline
+// fallback below. (`/workspace` and `/onboarding/welcome`, the old first two
+// screens, are server redirects now: a redirect is not a page, and a precached
+// one cannot be served to a navigation.)
+const PRECACHE = ['/', '/settings'];
 
 // Content-hashed and immutable — a URL match here is always the right bytes.
 // Compared against the *pathname*: `url.includes()` would also match a query
@@ -134,13 +144,20 @@ self.addEventListener('fetch', (event) => {
       // `fresh` has already tried this exact URL in the cache — that is what makes
       // a reload of /room/<id>/model come back as that room rather than the home
       // page. So by the time this catch runs, the page genuinely was never
-      // visited, and the precached landing page is the only thing left. (An
+      // visited, and the precached rooms page is the only thing left. (An
       // earlier version re-tried `cache.match(request)` here, which read as if
       // this were where per-URL fallback happened; it was dead code, and a
       // mutation test proved it by deleting it with nothing going red.)
+      //
+      // One step before that: the same page under a different query. Settings is
+      // opened as /settings?from=…, which no cache entry carries, and it is the
+      // same document whatever `from` says — the query is read in the browser.
+      // Without this, Settings opened offline from a room served the rooms page.
       fresh(event, SHELL).catch(async () => {
         const cache = await caches.open(SHELL);
-        return (await cache.match('/')) ?? Response.error();
+        return (
+          (await cache.match(request, { ignoreSearch: true })) ?? (await cache.match('/')) ?? Response.error()
+        );
       }),
     );
     return;
