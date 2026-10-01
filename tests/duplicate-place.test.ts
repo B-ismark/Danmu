@@ -7,8 +7,10 @@
 import { describe, expect, it } from 'vitest';
 import { COPY_GAP_M, placeCopies } from '@/lib/duplicate-place';
 import { footprintForLayout } from '@/lib/footprint';
-import { obbFromPart, obbOverlap } from '@/lib/geometry';
-import { PART_LIBRARY, placeNewPart, type ScenePart } from '@/lib/scene-spec';
+import { footFromPart, footOverlap, obbFromPart, obbOverlap, TOUCH_M } from '@/lib/geometry';
+import { isSoftFurnishing } from '@/lib/layout-rules';
+import { riderRelation } from '@/lib/rider-height';
+import { canCollideWith, defaultScene, PART_LIBRARY, placeNewPart, type ScenePart } from '@/lib/scene-spec';
 
 const W = 6;
 const H = 2.5;
@@ -123,6 +125,57 @@ describe('a copy goes beside the original', () => {
     expect(spots[0].pos[1]).toBeCloseTo(0.75, 6);
   });
 
+  it('a set with no room to move AS a set copies each piece beside its own original', () => {
+    // Two chairs in opposite corners: any offset that moves one off itself carries the
+    // other through a wall, and the clamp corrects the two differently — which, kept,
+    // bent the set, and the copies stood wherever the clamps left them.
+    const a = part({ id: 'a', category: 'chair', shape: 'chair-dining', pos: [-2.5, 0, -2.5], dimMM: [480, 520, 850] });
+    const b = part({ id: 'b', category: 'chair', shape: 'chair-dining', pos: [2.5, 0, 2.5], dimMM: [480, 520, 850] });
+    const { spots, clear } = placeCopies([a, b], [a, b], fp, H);
+    expect(clear).toBe(true);
+    [a, b].forEach((s, i) => {
+      expect(Math.hypot(spots[i].pos[0] - s.pos[0], spots[i].pos[2] - s.pos[2])).toBeLessThan(0.6);
+      expect(spots[i].pos[1]).toBe(0);
+      expect(touching(s, spots[i], [a, b])).toEqual([]);
+    });
+    expect(overlaps(spots[0], spots[1], a.dimMM, b.dimMM)).toBe(false);
+  });
+
+  it('a set the clamp would bend is not copied bent', () => {
+    // Stepped east by the set's width, the east chair is clamped back 3.8 m short and the
+    // west one is not: both clear, both off their originals, and no longer the pair.
+    // Behind them is the one step that keeps both where asked, and a cabinet fills it,
+    // so the only spots beside the set are bent ones — the second-best tier's to take.
+    const a = part({ id: 'a', category: 'chair', shape: 'chair-dining', pos: [2, 0, 0], dimMM: [480, 520, 850] });
+    const b = part({ id: 'b', category: 'chair', shape: 'chair-dining', pos: [-2, 0, 1.5], dimMM: [480, 520, 850] });
+    const cab = part({ id: 'cab', category: 'other', shape: 'box', pos: [2, 0, -2.2], dimMM: [1000, 600, 800] });
+    const { spots, clear } = placeCopies([a, b], [a, b, cab], fp, H);
+    expect(clear).toBe(true);
+    const dx = spots[0].pos[0] - a.pos[0];
+    const dz = spots[0].pos[2] - a.pos[2];
+    expect(spots[1].pos[0] - b.pos[0]).toBeCloseTo(dx, 6);
+    expect(spots[1].pos[2] - b.pos[2]).toBeCloseTo(dz, 6);
+  });
+
+  it('a step clamped back over the original is not a place, even for a rug', () => {
+    // A 2.4 × 1.6 m rug in a 6 × 3.4 m room: every step either way is clamped back over
+    // the rug itself, and a rug never collides, so only the footprints can say so.
+    const narrow = footprintForLayout('rect', W, 3.4);
+    const rug = part({ id: 'rug', category: 'rug', shape: 'rug', pos: [-0.5, 0, 0], dimMM: [2400, 1600, 5] });
+    const { spots, clear } = placeCopies([rug], [rug], narrow, H);
+    expect(clear).toBe(false);
+    expect(spots[0].pos[0]).toBeCloseTo(rug.pos[0], 6);
+  });
+
+  it('a step the wall shortened loses to a full step the other way', () => {
+    // Right lands at 2.53, 30 mm through the plaster: the clamp pulls it back, still
+    // clear of the original. Left is exactly where it was asked to be.
+    const near = { ...wardrobe, pos: [1.48, 0, 0] as [number, number, number] };
+    const { spots, clear } = placeCopies([near], [near], fp, H);
+    expect(clear).toBe(true);
+    expect(spots[0].pos[0]).toBeCloseTo(1.48 - 1 - COPY_GAP_M, 6);
+  });
+
   it('no clear space: the copy is still made, never inside the original, and says so', () => {
     // A 2.2 × 1.6 m room: the wardrobe against the back wall, a sofa across the front.
     // Either side is clamped back onto the wardrobe, behind is the wall, and in front
@@ -133,6 +186,115 @@ describe('a copy goes beside the original', () => {
     const { spots, clear } = placeCopies([w], [w, sofa], small, H);
     expect(clear).toBe(false);
     expect(overlaps(spots[0], w, w.dimMM)).toBe(false);
+  });
+});
+
+/** What the copy touches, tuck or no tuck: every piece it could collide with whose
+ *  footprint it overlaps. `collidesAt` forgives a chair under its table; this does not. */
+function touching(src: ScenePart, at: At, world: ScenePart[]): string[] {
+  if (isSoftFurnishing(src)) return [];
+  const me = footFromPart(at.pos, at.rot, src.dimMM, src.circle, src.shape);
+  const inTheWay = canCollideWith(src, src.dimMM, at.pos[1]);
+  return world
+    .filter((o) => inTheWay(o) && footOverlap(me, footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape), -TOUCH_M))
+    .map((o) => o.id);
+}
+
+// The user's second look, 2026-10-01: "Duplicated items are offset nicely but it seems
+// they don't consider whether they're clipping with an object or not."
+describe('a copy touches nothing', () => {
+  it("a chair's copy is not tucked under the table beside it", () => {
+    // A chair at the table's end, facing it. Its copy beside it, along its width, is
+    // under the table's corner — which a DRAG allows, as a tuck. A copy must not.
+    const table = part({ id: 'table', category: 'table', shape: 'desk-standard', pos: [0, 0, 0], dimMM: [1600, 900, 750] });
+    const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', pos: [0.4, 0, 0.6], rot: Math.PI, dimMM: [450, 500, 900] });
+    const { spots, clear } = placeCopies([chair], [table, chair], fp, H);
+    expect(clear).toBe(true);
+    expect(touching(chair, spots[0], [table, chair])).toEqual([]);
+  });
+
+  it("a nightstand's copy stays on the floor rather than climbing the bed", () => {
+    // Against the head wall, beside the bed: its side steps are the bed and the wall's
+    // corner, and the resolve's gravity would stand the copy ON the bed.
+    const bed = part({ id: 'bed', category: 'bed', shape: 'bed-double', pos: [0, 0, -2], dimMM: [1600, 2000, 500] });
+    const ns = part({ id: 'ns', category: 'nightstand', shape: 'nightstand', pos: [-1.05, 0, -2.78], dimMM: [450, 400, 550] });
+    const { spots, clear } = placeCopies([ns], [bed, ns], fp, H);
+    expect(clear).toBe(true);
+    expect(spots[0].pos[1]).toBe(0);
+    expect(touching(ns, spots[0], [bed, ns])).toEqual([]);
+  });
+
+  it("a lamp off a full nightstand goes on the other nightstand, not the bed between", () => {
+    const bed = part({ id: 'bed', category: 'bed', shape: 'bed-double', pos: [0, 0, -2], dimMM: [1600, 2000, 500] });
+    const nl = part({ id: 'nl', category: 'nightstand', shape: 'nightstand', pos: [-1.05, 0, -2.78], dimMM: [450, 400, 550] });
+    const nr = part({ id: 'nr', category: 'nightstand', shape: 'nightstand', pos: [1.05, 0, -2.78], dimMM: [450, 400, 550] });
+    const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', pos: [-1.05, 0.55, -2.78], dimMM: [250, 250, 500] });
+    const world = [bed, nl, nr, lamp];
+    const { spots, clear } = placeCopies([lamp], world, fp, H, { lamp: 'nl' });
+    expect(clear).toBe(true);
+    // On the right-hand nightstand's top, wherever on it the search reached first.
+    expect(Math.abs(spots[0].pos[0] - 1.05)).toBeLessThan(0.25);
+    expect(spots[0].pos[1]).toBeCloseTo(0.55, 6);
+  });
+
+  it('…and with both full, on the floor beside it — never on the bed', () => {
+    const bed = part({ id: 'bed', category: 'bed', shape: 'bed-double', pos: [0, 0, -2], dimMM: [1600, 2000, 500] });
+    const nl = part({ id: 'nl', category: 'nightstand', shape: 'nightstand', pos: [-1.05, 0, -2.78], dimMM: [450, 400, 550] });
+    const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', pos: [-1.05, 0.55, -2.78], dimMM: [250, 250, 500] });
+    const world = [bed, nl, lamp];
+    const { spots, clear } = placeCopies([lamp], world, fp, H, { lamp: 'nl' });
+    expect(clear).toBe(true);
+    expect(spots[0].pos[1]).toBe(0);
+    expect(touching(lamp, spots[0], world)).toEqual([]);
+  });
+
+  it('with nothing clear beside it, it goes to the nearest clear spot in the room', () => {
+    // The T's sofa: every spot beside it is a lamp, a table or a chair. The first
+    // version took the least-bad of those and stood the copy in all three.
+    const tfp = footprintForLayout('t', 6, 5);
+    const parts = defaultScene('t', 6, 5, { footprint: tfp, height: H });
+    const sofa = parts.find((p) => p.category === 'sofa')!;
+    const { spots, clear } = placeCopies([sofa], parts, tfp, H);
+    expect(clear).toBe(true);
+    expect(touching(sofa, spots[0], parts)).toEqual([]);
+    expect(overlaps(spots[0], sofa, sofa.dimMM)).toBe(false);
+  });
+});
+
+// Every piece of every starter room, copied where it stands: none touches anything,
+// and every one stands on what its original stands on. Swept rather than sampled,
+// because the three defects above were each found in a room nobody had picked.
+describe('every starter piece copies clear of everything', () => {
+  const rows = (['rect', 'l', 't', 'u', 'open'] as const).flatMap((lid) => {
+    const [w, d] = lid === 'open' ? [8, 6] : [6, 5];
+    const rfp = footprintForLayout(lid, w, d);
+    const parts = defaultScene(lid, w, d, { footprint: rfp, height: H });
+    const supportOf = riderRelation(parts, {});
+    return parts.map((src) => {
+      const { spots, clear } = placeCopies([src], parts, rfp, H, supportOf);
+      return {
+        at: `${lid} ${src.id}`,
+        clear,
+        touching: touching(src, spots[0], parts),
+        moved: Math.abs(spots[0].pos[1] - src.pos[1]) > 1e-6 && !src.wallMounted,
+        floored: supportOf[src.id] !== undefined && spots[0].pos[1] === 0,
+      };
+    });
+  });
+
+  it('sweeps every room', () => {
+    expect(rows.length).toBeGreaterThan(60);
+  });
+  it('all are clear', () => {
+    expect(rows.filter((r) => !r.clear).map((r) => r.at)).toEqual([]);
+  });
+  it('none touches anything', () => {
+    expect(rows.filter((r) => r.touching.length > 0).map((r) => `${r.at} → ${r.touching}`)).toEqual([]);
+  });
+  it('none changes height, but for the riders whose surface is full', () => {
+    expect(rows.filter((r) => r.moved && !r.floored).map((r) => r.at)).toEqual([]);
+    // Named, not counted: the U's bedside lamps, on nightstands with room for one.
+    expect(rows.filter((r) => r.moved).map((r) => r.at)).toEqual(['u lamp-1', 'u lamp-2']);
   });
 });
 
