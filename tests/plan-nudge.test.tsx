@@ -66,6 +66,22 @@ function press(key: string, times: number, name = 'Crate') {
   for (let i = 0; i < times; i++) fireEvent.keyDown(buttonFor(name), { key });
 }
 
+/** Every sentence the studio's live region was handed while `run` ran. */
+function listening(run: () => void): string[] {
+  const spoken: string[] = [];
+  const hear = (e: Event) => spoken.push((e as CustomEvent<string>).detail);
+  window.addEventListener(ANNOUNCE_EVENT, hear);
+  try {
+    run();
+  } finally {
+    window.removeEventListener(ANNOUNCE_EVENT, hear);
+  }
+  return spoken;
+}
+
+/** Whether anything in the plan is drawn as refused. */
+const drawnRefused = (container: HTMLElement) => container.innerHTML.includes('var(--danger)');
+
 describe('an arrow key leaves a line it stands on (plan tab)', () => {
   it('moves a piece off the neighbour it is flush with, snap Fine', () => {
     room(FLUSH, 'fine');
@@ -216,10 +232,7 @@ describe('an arrow key lands on the first line it reaches (plan tab)', () => {
     room(1.5, 'fine');
     useScene.setState({ parts: [...useScene.getState().parts, box('tote', 'Tote', 2.11, 800)] });
     restoreRect = stubPlanCanvas();
-    const spoken: string[] = [];
-    const listen = (e: Event) => spoken.push((e as CustomEvent<string>).detail);
-    window.addEventListener(ANNOUNCE_EVENT, listen);
-    try {
+    const spoken = listening(() => {
       const { container } = render(<PlanView />);
       const svg = container.querySelector('svg')!;
       fireEvent.pointerDown(buttonFor('Crate'), { button: 0, clientX: 500, clientY: 500, pointerId: 1 });
@@ -229,9 +242,7 @@ describe('an arrow key lands on the first line it reaches (plan tab)', () => {
       expect(crate()[2]).toBeGreaterThanOrEqual(0.7);
       fireEvent.keyDown(buttonFor('Tote'), { key: 'ArrowRight', shiftKey: true });
       fireEvent.pointerUp(svg, { clientX: 500, clientY: 600, pointerId: 1 });
-    } finally {
-      window.removeEventListener(ANNOUNCE_EVENT, listen);
-    }
+    });
     expect(spoken.filter((s) => s.startsWith('Tote'))).toEqual(['Tote turned to 15 degrees.']);
     expect(currentRoomScene().find((p) => p.id === 'tote')!.rot).toBeCloseTo(Math.PI / 12, 9);
   });
@@ -251,5 +262,70 @@ describe('an arrow key lands on the first line it reaches (plan tab)', () => {
     }
     fireEvent.pointerUp(svg, { clientX: 400, clientY: 500, pointerId: 1 });
     expect(crate()[0]).toBeCloseTo(FLUSH, 9);
+  });
+});
+
+describe('an arrow key that goes nowhere says so (plan tab)', () => {
+  // The last candidate of every press is the spot the piece stands on, so a press that
+  // could not go anywhere was accepted there and said nothing — at a neighbour, at the
+  // room's edge, and with a set that could not follow alike.
+  it('says so at a neighbour it is touching, and draws nothing in red', () => {
+    room(FLUSH, 'fine');
+    const { container } = render(<PlanView />);
+    expect(listening(() => press('ArrowLeft', 2))).toEqual([
+      'Crate cannot go any further that way.',
+      'Crate cannot go any further that way.',
+    ]);
+    expect(crate()[0]).toBeCloseTo(FLUSH, 9);
+    expect(drawnRefused(container)).toBe(false);
+    // …and a press that does move says nothing.
+    expect(listening(() => press('ArrowRight', 1))).toEqual([]);
+    expect(crate()[0]).toBeCloseTo(FLUSH + 0.01, 9);
+  });
+
+  it("says so at the room's edge", () => {
+    room(2.8, 'fine');
+    render(<PlanView />);
+    expect(listening(() => press('ArrowRight', 1))).toEqual(['Crate cannot go any further that way.']);
+    expect(crate()[0]).toBeCloseTo(2.8, 9);
+  });
+
+  it('says why when the step itself was refused, in red', () => {
+    // Snap off, the crate already 5 mm into the chest — inside the touching allowance —
+    // and the exact step would take it 15 mm in.
+    room(FLUSH - 0.005, 'off');
+    const { container } = render(<PlanView />);
+    expect(listening(() => press('ArrowLeft', 1))).toEqual(['Crate will not fit there: something is in the way.']);
+    expect(crate()[0]).toBeCloseTo(FLUSH - 0.005, 9);
+    expect(drawnRefused(container)).toBe(true);
+  });
+
+  it('leaves a drag held against the wall silent', () => {
+    // A hand holding a piece against the wall can see it is not moving; saying so on
+    // every frame would talk over everything else the live region has to say.
+    room(2.8, 'fine');
+    restoreRect = stubPlanCanvas();
+    const spoken = listening(() => {
+      const { container } = render(<PlanView />);
+      const svg = container.querySelector('svg')!;
+      fireEvent.pointerDown(buttonFor('Crate'), { button: 0, clientX: 500, clientY: 500, pointerId: 1 });
+      for (let dx = 1; dx <= 40; dx++) fireEvent.pointerMove(svg, { clientX: 500 + dx, clientY: 500, pointerId: 1 });
+      fireEvent.pointerUp(svg, { clientX: 540, clientY: 500, pointerId: 1 });
+    });
+    expect(crate()[0]).toBeCloseTo(2.8, 9);
+    expect(spoken).toEqual([]);
+  });
+
+  it('names the piece in the set that cannot follow, in red', () => {
+    // The tote is selected with the crate and already stands against the east wall.
+    room(FLUSH, 'fine');
+    useScene.setState({ parts: [...useScene.getState().parts, box('tote', 'Tote', 2.8, 400)] });
+    useStudio.setState({ selection: ['crate', 'tote'], selectedPartId: 'crate' });
+    const { container } = render(<PlanView />);
+    expect(listening(() => press('ArrowRight', 1))).toEqual([
+      'Tote will not fit there, so the rest of the selection cannot follow.',
+    ]);
+    expect(crate()[0]).toBeCloseTo(FLUSH, 9);
+    expect(drawnRefused(container)).toBe(true);
   });
 });

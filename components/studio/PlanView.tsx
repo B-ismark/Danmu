@@ -626,7 +626,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
   /** Try the full move, then each axis alone, so a piece slides along whatever it
    *  hit rather than freezing. Returns false if nothing was possible — and says
-   *  so, out loud and in colour, instead of returning silently.
+   *  so, out loud and in colour, instead of returning silently. A key press that
+   *  went nowhere without anything refusing it is said too, and not drawn: a
+   *  barrier or the room's edge is not a piece that does not fit.
    *
    *  An arrow key is one step from where the piece stands, and with the snap on it
    *  stops on the first line it reaches (`nudgeFrom`, `snapAhead`). It used to run
@@ -676,6 +678,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
      *  not the last. The two fallbacks are this function's own idea (keep x, take z),
      *  so the reason one of THEM failed is an answer to a question nobody asked. */
     let refusedAs: Refusal | undefined;
+    /** A key press took a candidate that did not move the piece. On its own that is
+     *  not a refusal — a barrier or the room's edge stopped it, and nothing is drawn
+     *  in red for it — but it is still said. */
+    let wentNowhere = false;
+    /** Any candidate was refused, by this piece or by its company. */
+    let refused = false;
     /** Where the company lands, and its veto, for a lead standing at `lead`.
      *
      *  A candidate this piece could take but its set cannot is not a candidate — but
@@ -703,6 +711,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     for (const [tx, tz] of candidates) {
       const asked = resolveAt(part, tx, tz, convoy, world, startPos, nudgeFrom);
       if (!asked.valid) {
+        refused = true;
         refusedAs ??= asked.refusal;
         continue;
       }
@@ -729,6 +738,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // could not be brought to one delta, and committing that is the deformed
       // arrival `ConvoyResult.leadPos` exists to prevent.
       if (!co.valid || !settle.settled) {
+        refused = true;
         // Remembered for the message, but the slide candidates are still tried: a
         // set stopped from moving diagonally can usually still go along one axis.
         blocker = blocker ?? co.blocked;
@@ -740,6 +750,15 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // Empty when nothing snapped, which is the common case and draws nothing.
       if (drag) drag.snapLines = r.snapLines ?? [];
       const moved = r.pos[0] !== part.pos[0] || r.pos[1] !== part.pos[1] || r.pos[2] !== part.pos[2];
+      // A press that leaves the piece where it was is not a move, however legal: the
+      // last candidate of every press is the spot the piece is standing on, so a
+      // press into a neighbour or a wall used to be accepted there and said nothing.
+      // A drag holds still under a hand that can see it; a key press has only the
+      // sentence.
+      if (gesture === 'key' && !moved && r.rot === part.rot) {
+        wentNowhere = true;
+        continue;
+      }
       if (moved) {
         setPosition(part.id, r.pos);
         // What it now stands on, the way the 3D tab's drop records it. This tab never
@@ -762,6 +781,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // the last frame that DID move would keep claiming an edge is level while the
     // piece sits refusing to go there.
     if (drag) drag.snapLines = [];
+    if (wentNowhere && !refused) {
+      if (blockedRef.current) clearBlocked();
+      announce(`${part.name} cannot go any further that way.`);
+      return false;
+    }
     // Cancel any pending fade — a second refusal must not be wiped by the
     // timer the first one left behind.
     if (blockTimer.current) clearTimeout(blockTimer.current);
