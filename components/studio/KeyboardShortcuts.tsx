@@ -24,6 +24,7 @@ import { v4 as uuid } from 'uuid';
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRiderRelation, currentRoomScene, useRoomScene } from '@/lib/room-scene';
+import { dropMoves, orphanDrops, recordDrops, undoDrops, type DropRecord } from '@/lib/orphan-drop';
 import { turnInPlace, turnSwingsInto, refusalCause } from '@/lib/drag-resolve';
 import { planConvoy, travellingWorld } from '@/lib/drag-convoy';
 import { cascadeTransform, snapshotDescendants } from '@/lib/rigid-parent';
@@ -180,7 +181,18 @@ export function removeParts(ids: string[], opts?: { selectAfter?: string | null 
   const doomed = before.filter((p) => ids.includes(p.id));
   if (doomed.length === 0) return;
 
+  // Gravity is part of the room: whatever was standing on what is leaving comes down.
+  // Asked of the scene BEFORE the pieces go, because "resting on" needs the support
+  // there to be found — and of the effective transforms, which is what the Inspector's
+  // banner asks. See `lib/orphan-drop.ts`.
+  const drops = orphanDrops(currentRoomScene(), new Set(doomed.map((p) => p.id)));
+  const landed = recordDrops(drops, useStudio.getState().positions, useStudio.getState().parentIds);
+
   useScene.setState({ parts: before.filter((p) => !ids.includes(p.id)) });
+  for (const d of drops) {
+    if (dropMoves(d)) useStudio.getState().setPosition(d.id, d.to);
+    useStudio.getState().landOn(d.id, d.supportId ?? undefined);
+  }
 
   // Selection survives everything that didn't just leave: deleting one row of a
   // multi-select must not collapse the rest of it. `selectAfter` overrides for
@@ -207,14 +219,19 @@ export function removeParts(ids: string[], opts?: { selectAfter?: string | null 
   const many = doomed.length > 1;
   toast({
     title: many ? `${doomed.length} pieces removed` : `“${doomed[0].name}” removed`,
-    action: { label: 'Undo', onClick: () => restoreParts(doomed, before) },
+    action: { label: 'Undo', onClick: () => restoreParts(doomed, before, landed) },
     ttl: 8000,
   });
 }
 
 /** Put removed parts back where they sat in the list, skipping any that are
- *  already there (a second click, or an undo that beat the toast to it). */
-function restoreParts(doomed: ScenePart[], before: ScenePart[]) {
+ *  already there (a second click, or an undo that beat the toast to it).
+ *
+ *  `landed` is what the delete dropped, and it goes back with the pieces that were
+ *  holding them up — a lamp left on the floor beside its restored desk is half an
+ *  undo. Only when the parts actually came back, so an undo that lost the race to
+ *  history's does not write a second time. */
+function restoreParts(doomed: ScenePart[], before: ScenePart[], landed: DropRecord[] = []) {
   const current = useScene.getState().parts;
   const present = new Set(current.map((p) => p.id));
   const revived = [...current];
@@ -225,6 +242,14 @@ function restoreParts(doomed: ScenePart[], before: ScenePart[]) {
   }
   if (revived.length === current.length) return;
   useScene.setState({ parts: revived });
+  if (landed.length > 0) {
+    const st = useStudio.getState();
+    const undone = undoDrops(landed, st.positions, st.parentIds);
+    if (undone.positions !== st.positions) {
+      st.loadTransforms({ positions: undone.positions, rotations: st.rotations, dims: st.dims });
+    }
+    if (undone.parentIds !== st.parentIds) st.setParentIds(undone.parentIds);
+  }
   const back = doomed.filter((p) => !present.has(p.id));
   if (back.length === 1) useStudio.getState().setSelected(back[0].id);
   announce(back.length === 1 ? `“${back[0].name}” is back.` : `${back.length} pieces are back.`);

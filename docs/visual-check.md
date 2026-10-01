@@ -169,6 +169,28 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
+### Deleting a piece brings down what stood on it — this branch, NOT LOOKED AT
+
+The user's report on 2026-10-01: *"an item on top of another remains floating even after
+deleting the item it was initially on."* `removeParts` took the desk out and left the lamp at
+desk height; the Inspector's "Floating" banner noticed, and nothing acted on it. Every delete
+now drops each piece that was RESTING on a deleted one (`lib/orphan-drop.ts`, the banner's own
+`restingOn` question) onto the highest top left under it, or the floor.
+
+**Where to click.** The default bedroom, 3D: select the desk, press Delete (or the trash on its
+row) and confirm. Then, in the 2D tab, do the same to a nightstand with a lamp on it, and once
+with BOTH the desk and the lamp selected. Last, stack any small piece from the Library on the lamp first and delete the
+desk.
+
+**What right looks like.** The lamp comes down to the floor (or onto a coffee table it was over)
+in the same frame the desk disappears, and the Inspector shows no "Floating" for it. The small piece
+stays on the lamp and comes down with it. Deleting desk and lamp together moves only what stood on the lamp.
+**Undo** on the toast puts the desk back AND the lamp back on top of it — dragging the desk
+afterwards carries the lamp. Press Ctrl+Z instead and it is one step, not two. *Wrong* looks
+like: a lamp left hanging, a lamp on the floor after Undo, or a piece beside the desk that moved.
+
+**Where it rides.** `lib/orphan-drop.ts`, `components/studio/KeyboardShortcuts.tsx` (`removeParts`).
+
 ### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205), NOT LOOKED AT; the floor lamp and tall plant this branch
 
 The curtain half (a print swapped for curtains hangs flat on the print's wall) was looked at
