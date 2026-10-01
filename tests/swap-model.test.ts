@@ -10,8 +10,8 @@ import { swapPartModel } from '@/lib/swap-model';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { footprintForLayout } from '@/lib/footprint';
-import { footFromPart, outsideDeficit } from '@/lib/geometry';
-import type { LibraryItem, ScenePart } from '@/lib/scene-spec';
+import { footFromPart, footOverlap, outsideDeficit } from '@/lib/geometry';
+import { isRoundPart, type LibraryItem, type ScenePart } from '@/lib/scene-spec';
 
 function part(over: Partial<ScenePart> & { id: string }): ScenePart {
   return { category: 'other', name: over.id, shape: 'box', pos: [0, 0, 0], rot: 0, dimMM: [1000, 600, 800], locked: false, ...over };
@@ -204,6 +204,46 @@ describe('changing the model', () => {
     const s = useStudio.getState();
     expect(s.positions.p![1]).toBe(0);
     expect(s.parentIds.p).toBeUndefined();
+  });
+
+  // The user's look at #206, 2026-10-01: on the floor, but at the print's spot — so
+  // through the bed, "and it happens with other pieces too". A floor piece arriving
+  // where something already stands goes to the nearest clear floor.
+  it.each([
+    { label: 'Nightstand', group: 'Bedroom', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] },
+    { label: 'Floor lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-floor', dimMM: [300, 300, 1700] },
+    { label: 'Plant', group: 'Decor', category: 'plant', shape: 'plant', dimMM: [400, 400, 1600] },
+    { label: 'Armchair', group: 'Seating', category: 'chair', shape: 'armchair', dimMM: [800, 800, 850] },
+    { label: 'Sofa', group: 'Seating', category: 'sofa', shape: 'sofa', dimMM: [2000, 850, 800] },
+  ] as LibraryItem[])('a print over a bed swapped for a $label lands beside the bed, not in it', (item) => {
+    const bed = part({ id: 'bed', category: 'bed', shape: 'bed-double', pos: [0, 0, -2], dimMM: [1600, 2000, 500] });
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.4, -3 + 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    room6([bed, print]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', item);
+    const s = useStudio.getState();
+    const [x, y, z] = s.positions.p!;
+    const rot = s.rotations.p ?? 0;
+    expect(y).toBe(0);
+    const me = footFromPart([x, 0, z], rot, item.dimMM, isRoundPart(item.shape), item.shape);
+    expect(footOverlap(me, footFromPart(bed.pos, bed.rot, bed.dimMM, false, bed.shape), 0), item.label).toBe(false);
+    expect(outsideDeficit(me, footprintForLayout('rect', 6, 6)), item.label).toBeLessThan(1e-6);
+    // Beside the bed's head, by the wall the print hung on — not across the room.
+    expect(z - item.dimMM[1] / 2000, item.label).toBeLessThan(-3 + 0.2);
+    expect(Math.abs(x), item.label).toBeLessThan(0.8 + item.dimMM[0] / 1000 + 0.25);
+  });
+
+  it('…and a floor piece whose spot is clear keeps it to the millimetre', () => {
+    // The bed is moved off the print's spot, so nothing is in the way of the nightstand.
+    const bed = part({ id: 'bed', category: 'bed', shape: 'bed-double', pos: [-1.6, 0, -2], dimMM: [1600, 2000, 500] });
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0.4, 1.4, -3 + 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    room6([bed, print]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', { label: 'Floor lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-floor', dimMM: [300, 300, 1700] });
+    const [x, , z] = useStudio.getState().positions.p!;
+    expect(x).toBeCloseTo(0.4, 9);
+    // Pulled in off the plaster by its own radius and the shared gap, as before.
+    expect(z).toBeCloseTo(-3 + 0.15 + 0.02, 6);
   });
 
   // Review of this branch: the gate was the CATEGORY, so a floor lamp — a `lamp` — and

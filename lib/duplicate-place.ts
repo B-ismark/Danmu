@@ -136,7 +136,30 @@ export function placeCopies(
   footprint: Footprint,
   roomHeight: number,
 ): CopyPlacement {
-  return place(sources, world, footprint, roomHeight, new Map());
+  return place(sources, world, footprint, roomHeight, new Map(), false);
+}
+
+/** Where a piece ARRIVING at a spot goes — a model swapped in where another stood.
+ *
+ *  The same search a copy makes, with two differences that are the whole of an
+ *  arrival: the spot it was asked for is tried FIRST, and there is no original to keep
+ *  off, because the piece it replaces has gone. A print hung over a bed, swapped for a
+ *  nightstand, used to stand the nightstand at the print's spot — on the floor, which
+ *  was the previous fix, and inside the bed, which nothing asked. Now the spot is kept
+ *  when it is clear and otherwise the nearest clear one is taken: beside it along its
+ *  own width first, which keeps a piece backed onto a wall on that wall.
+ *
+ *  `world` must not hold the piece being replaced, nor anything riding it: neither is
+ *  in the way of what arrives. `here` is true when the asked spot was the answer, so a
+ *  caller with its own exact arithmetic for that spot can keep it. */
+export function placeArrival(
+  piece: ScenePart,
+  world: ScenePart[],
+  footprint: Footprint,
+  roomHeight: number,
+): { spot: CopyPlacement['spots'][number]; clear: boolean; here: boolean } {
+  const r = place([piece], world, footprint, roomHeight, new Map(), true);
+  return { spot: r.spots[0], clear: r.clear, here: r.here ?? false };
 }
 
 /** @param standsFor world ids that are copies already placed in this same gesture,
@@ -147,7 +170,9 @@ function place(
   footprint: Footprint,
   roomHeight: number,
   standsFor: ReadonlyMap<string, string>,
-): CopyPlacement {
+  /** An arrival (`placeArrival`): the asked spot first, and no original to keep off. */
+  arriving: boolean,
+): CopyPlacement & { here?: boolean } {
   if (sources.length === 0) return { spots: [], clear: true, beside: true };
 
   // One piece is measured in its own frame, so "beside" means along its width
@@ -326,13 +351,17 @@ function place(
     return { spots, grounded, valid, inRoom, offOriginal, footing, footingKind, floored, snug, overlap, formed, asked };
   };
 
-  const clean = (t: Try) => t.valid && t.inRoom && t.offOriginal && t.snug && t.formed;
+  const clean = (t: Try) => t.valid && t.inRoom && (arriving || t.offOriginal) && t.snug && t.formed;
   // Nearest first within each tier, and the tiers in the order a person would rank
   // them: exactly beside it; beside it but shifted by the room's edge; then the rest
   // of the room, nearest first — on the same footing, then, for a rider whose
   // surface is full, on another surface of the same kind, then on the floor.
-  const steps = candidates(w, d).map(([lx, lz]) => localToWorld(frame, lx, lz));
+  const steps = [...(arriving ? [[0, 0] as [number, number]] : []), ...candidates(w, d).map(([lx, lz]) => localToWorld(frame, lx, lz))];
   const tries = steps.map(([dx, dz]) => attempt(dx, dz));
+  // An arrival's own spot wins when it is clear, even where the resolve nudged it: the
+  // caller has already contained it at the new size, and a nudge is not something in
+  // the way.
+  if (arriving && clean(tries[0]) && tries[0].footing) return { spots: tries[0].spots, clear: true, beside: true, here: true };
   const near = tries.find((t) => clean(t) && t.footing && t.asked) ?? tries.find((t) => clean(t) && t.footing);
   if (near) return { spots: near.spots, clear: true, beside: true };
 
@@ -357,7 +386,7 @@ function place(
     let all = true;
     let beside = true;
     for (const i of order) {
-      const one = place([sources[i]], [...world, ...placed], footprint, roomHeight, placedFor);
+      const one = place([sources[i]], [...world, ...placed], footprint, roomHeight, placedFor, false);
       spots[i] = one.spots[0];
       const id = `__copy-placed-${i}__`;
       placed.push({ ...sources[i], id, groupId: undefined, pos: one.spots[0].pos, rot: one.spots[0].rot });
@@ -373,11 +402,11 @@ function place(
   // equals, so repeated copies spread into what gaps are left.
   let best: Try | undefined;
   for (const t of [...tries, ...search.all()]) {
-    if (t.inRoom && t.offOriginal && (!best || t.overlap < best.overlap - 1e-6)) best = t;
+    if (t.inRoom && (arriving || t.offOriginal) && (!best || t.overlap < best.overlap - 1e-6)) best = t;
   }
   // `beside` is only ever read of a clear placement; a copy made overlapping is not
   // announced as beside anything.
-  if (best) return { spots: best.grounded, clear: false, beside: false };
+  if (best) return { spots: best.grounded, clear: false, beside: false, here: arriving && best === tries[0] };
   return {
     spots: sources.map((s) => ({ pos: [...s.pos] as [number, number, number], rot: s.rot, support: null })),
     clear: false,

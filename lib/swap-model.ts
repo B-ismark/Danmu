@@ -12,6 +12,7 @@ import { useScene } from './scene-store';
 import { currentRoomScene } from './room-scene';
 import { findSupportDetailed, groundY, heightForNewCeiling, ridesWall, seeksSurface, snapToWall, wallAffinity, wallStandoff } from './physics';
 import { containedXZ } from './layout-settle';
+import { placeArrival } from './duplicate-place';
 import { ridersOf } from './rider-height';
 import { isRoundPart, isWallMountedPart, type LibraryItem, type ScenePart } from './scene-spec';
 import { edgeProjection, polygonWinding } from './geometry';
@@ -122,10 +123,36 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
     // second sofa on top of the bed a print had hung above: the print's spot is over
     // the bed, the bed is under it, and nothing said a nightstand does not go there.
     // `seeksSurface`, not the category: a floor lamp is a `lamp` too.
-    support = seeksSurface(item.category, item.shape, dimMM)
+    const seeks = seeksSurface(item.category, item.shape, dimMM);
+    support = seeks
       ? findSupportDetailed(world, { id, category: item.category, shape: item.shape }, x, z, dimMM, rot, isRoundPart(item.shape))
       : null;
     ny = support !== null && support.y > 0.3 ? support.y : 0;
+    // A floor piece stands on the floor — and not inside what is already standing there.
+    // A print over a bed swapped for a nightstand, a floor lamp or a chair kept the
+    // print's spot, on the floor and through the bed. So the spot is asked the question
+    // Duplicate asks of a copy, and when something is in the way the piece goes to the
+    // nearest clear floor instead: beside it along its own width first, which keeps a
+    // nightstand on the wall the print hung on, by the bed.
+    if (!seeks && room.footprint) {
+      const arriving: ScenePart = {
+        ...part,
+        name: item.label,
+        category: item.category,
+        shape: item.shape,
+        dimMM,
+        pos: [x, 0, z],
+        rot,
+        circle: isRoundPart(item.shape),
+        wallMounted: false,
+        groupId: undefined,
+      };
+      const arrival = placeArrival(arriving, world.filter((p) => p.id !== id), room.footprint, room.height);
+      if (!arrival.here) {
+        [x, , z] = arrival.spot.pos;
+        rot = arrival.spot.rot;
+      }
+    }
   }
   s.resetTransforms(id); // drop stale rotate/scale overrides (and any rigid-parenting link)
   // The name too — leaving it stale is how a swapped-in door kept its old "tall
