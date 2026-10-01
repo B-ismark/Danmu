@@ -225,6 +225,16 @@ describe('navigation', () => {
     expect(await res!.text()).toBe('ok');
   });
 
+  it('offline, opens Settings under any return address, not the rooms page', async () => {
+    // Every way into Settings but one adds `?from=`, and no cache entry carries
+    // that query. The page is the same document whatever `from` says.
+    const sw = await installed();
+    await (await sw.cacheStorage.open('danmu-shell-v2')).put('/settings', new Response('SETTINGS'));
+    sw.goOffline();
+    const res = await sw.fetch(navigation('/settings?from=%2Froom%2Fabc%2Fmodel'));
+    expect(await res!.text()).toBe('SETTINGS');
+  });
+
   it('offline with nothing cached at all resolves to an error, not a hang', async () => {
     const sw = loadServiceWorker();
     sw.goOffline();

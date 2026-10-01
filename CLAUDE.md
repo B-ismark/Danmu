@@ -831,7 +831,7 @@ the boundary honest in both directions: a module only tests import does not belo
 ## Layout
 
 - `app/` — Next App Router. Routes: `/` (the rooms list — the first screen; `/workspace`
-  redirects there), `/onboarding/{layout-pick,capture,detect}`,
+  and `/onboarding/welcome` redirect there), `/onboarding/{layout-pick,capture,detect}`,
   `/room/[roomId]/{model,plan}`, `/settings`. Only two studio tabs
   (`3D Model`, `2D Plan`).
 - `components/three/` — R3F scene (`Room`, `DynamicPart`, `Draggable`, `Pickable`,

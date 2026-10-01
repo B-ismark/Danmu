@@ -53,8 +53,12 @@ class FakeCache {
     this.store.set(this.key(req), res);
   }
 
-  async match(req: AnyRequest | string): Promise<Response | undefined> {
-    return this.store.get(this.key(req));
+  async match(req: AnyRequest | string, opts?: { ignoreSearch?: boolean }): Promise<Response | undefined> {
+    if (!opts?.ignoreSearch) return this.store.get(this.key(req));
+    const bare = (href: string) => href.split(/[?#]/)[0];
+    const want = bare(this.key(req));
+    for (const [k, v] of this.store) if (bare(k) === want) return v;
+    return undefined;
   }
 
   /** Test-side view: which URLs ended up in here. */
