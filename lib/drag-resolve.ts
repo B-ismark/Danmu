@@ -92,6 +92,15 @@ export type ResolveInput = {
    */
   wallEdge?: number | null;
   /**
+   * Where a wall rider stands NOW, when the caller knows and the angle being
+   * resolved is not the one it stands at — a turn. Its wall is then the one nearest
+   * this point, rather than the one nearest the clamp taken at the new angle, which
+   * in a corner lies on the diagonal (see the rider branch). A drag leaves it unset:
+   * there the angle is the piece's live one, and `part.pos` is no help, being the
+   * AUTHORED position in the 3D tab rather than where the piece has been moved to.
+   */
+  standsAt?: readonly [number, number, number];
+  /**
    * Company this piece already overlapped when the gesture began, and whose overlap
    * the gesture therefore did not cause — a chair tucked under the table it is
    * travelling with. Not an obstacle for this resolve. Built by `planConvoy` and
@@ -235,9 +244,17 @@ export function resolvePlacement(input: ResolveInput): Resolved {
     // in the corner (found in review, 2026-09-30). So the old answer stands unless
     // the pointer is nearer another wall by a margin; the curtain's case — the
     // pointer well down the side wall — clears it by metres.
+    //
+    // On a TURN "the old answer" is the wall the piece stands on (`standsAt`), not the
+    // wall nearest the clamped point. The clamp is taken at the REQUESTED angle, and a
+    // turn requests another wall's angle: a 500 mm painting flush in a corner, turned,
+    // was clamped onto the corner's diagonal, where both walls are equally near, the
+    // tie picked the other wall, and the margin then held it there — a turn that moved
+    // the painting round the corner (found in review, 2026-10-01).
     const ax = Math.max(bnd.minX, Math.min(bnd.maxX, gx));
     const az = Math.max(bnd.minZ, Math.min(bnd.maxZ, gz));
-    const stay = nearestEdge(footprint, x, z);
+    const from = input.standsAt;
+    const stay = from ? nearestEdge(footprint, from[0], from[2]) : nearestEdge(footprint, x, z);
     const follow = nearestEdge(footprint, ax, az);
     const stayDist = stay ? edgeProjection(footprint, stay.index, ax, az)?.dist : undefined;
     const switches =
@@ -465,6 +482,7 @@ export function turnInPlace(input: TurnInput): Resolved {
     snapMode: 'off',
     currentY: input.at[1],
     wallEdge: null,
+    standsAt: input.at,
   });
 }
 

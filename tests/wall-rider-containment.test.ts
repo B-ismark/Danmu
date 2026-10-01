@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolvePlacement, refusalCause } from '@/lib/drag-resolve';
+import { resolvePlacement, refusalCause, turnInPlace } from '@/lib/drag-resolve';
 import { footprintForLayout } from '@/lib/footprint';
 import {
   PART_LIBRARY,
@@ -662,6 +662,34 @@ describe('a wall piece follows the pointer to the wall it is at', () => {
     const round = push(-2.95, -1.2);
     expect(round.pos[0]).toBeLessThan(-2.9);
     expect(round.valid).toBe(true);
+  });
+
+  it('turns in a corner without going round it', () => {
+    // Found in review, 2026-10-01: a turn resolves at the TURNED angle, whose clamp put
+    // a narrow piece flush in a corner on the corner's diagonal — as near one wall as
+    // the other — and the wall it kept was whichever won that tie. Four of the eight
+    // corner-and-wall spots sent a 500 mm painting 0.30 m round onto the next wall.
+    // Swept, every corner from both of its walls, both directions, three widths.
+    const spots: Array<[number, number, number]> = [
+      [-3.5, -1.95, 0], [3.5, -1.95, 0], [-3.5, 1.95, Math.PI], [3.5, 1.95, Math.PI],
+      [-2.95, -2.5, Math.PI / 2], [2.95, -2.5, -Math.PI / 2], [-2.95, 2.5, Math.PI / 2], [2.95, 2.5, -Math.PI / 2],
+    ];
+    let turns = 0;
+    for (const [shape, dim] of [['painting', [300, 30, 300]], ['painting', [500, 30, 400]], ['tv', [1200, 60, 700]]] as const) {
+      const p: ScenePart = { ...mk(shape, shape, [...dim]), pos: [0, 1.2, -1.9] };
+      for (const [x, z, rot] of spots) {
+        const flush = resolvePlacement({ part: p, rawX: x, rawZ: z, rot, dim: p.dimMM, parts: [p], footprint: room, roomHeight: H, snapMode: 'off' });
+        const here = { ...p, pos: flush.pos, rot: flush.rot };
+        for (const k of [1, -1]) {
+          const t = turnInPlace({ part: here, at: flush.pos, rot: flush.rot + (k * Math.PI) / 2, dim: p.dimMM, parts: [here], footprint: room, roomHeight: H });
+          const what = `${dim[0]} mm at (${x}, ${z}) turned ${k > 0 ? 'left' : 'right'}`;
+          expect(Math.hypot(t.pos[0] - flush.pos[0], t.pos[2] - flush.pos[2]), what).toBeLessThan(1e-9);
+          expect(t.rot, what).toBeCloseTo(flush.rot, 9);
+          turns++;
+        }
+      }
+    }
+    expect(turns).toBe(48);
   });
 
   it('still slides along its own wall, and reaches the near wall only from beside it', () => {

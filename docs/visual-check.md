@@ -192,6 +192,18 @@ room — a frosted veil over its glass rather than a rim round its edge.
 
 **Where it rides.** `lib/selection-base.ts`, `components/three/Highlight.tsx`.
 
+### A small wall piece turned in a corner stays on its own wall — this branch, NOT LOOKED AT
+
+Found in review, 2026-10-01: a 300–500 mm painting pushed flush into a corner and turned
+(**R**, or the plan's turn) went 0.16–0.30 m round onto the next wall, in four of the eight
+corner-and-wall spots. A 1.2 m TV never did. The turn now asks which wall the piece stands
+on, not which wall is nearest the spot the corner clamp put it at (`standsAt` in
+`lib/drag-resolve.ts`). Swept in `tests/wall-rider-containment.test.ts`: 48 turns, none moves.
+
+**Where to click.** Rectangle. Drag a small painting into each corner in turn, select it,
+press **R** a few times, in both tabs. *Right:* it stays on its wall, square to it, and the
+turn report says it is held square. *Wrong:* it hops onto the neighbouring wall.
+
 ### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye
 
 **Where it rides.** `fix/turn-report-and-spawn-spread` (PR #102). Probed headlessly at
