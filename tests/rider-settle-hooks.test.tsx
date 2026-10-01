@@ -194,6 +194,21 @@ describe('a copy of a rider is a rider', () => {
   });
 });
 
+describe('a desk copied with its lamp', () => {
+  it("parents the lamp's copy to the desk's COPY, not to the desk it was cloned from", () => {
+    setUp([desk(), lamp(0.75)]);
+    act(() => useStudio.setState({ selection: [DESK, LAMP], selectedPartId: DESK }));
+    act(() => duplicateSelection());
+    const added = useScene.getState().parts.filter((p) => p.id !== DESK && p.id !== LAMP);
+    const deskCopy = added.find((p) => p.category === 'desk')?.id;
+    const lampCopy = added.find((p) => p.category === 'lamp')?.id;
+    expect(deskCopy && lampCopy, 'both copies were made').toBeTruthy();
+    expect(useStudio.getState().parentIds[lampCopy!]).toBe(deskCopy);
+    // …and the original keeps its own link: copying is not moving.
+    expect(useStudio.getState().parentIds[LAMP]).toBeUndefined();
+  });
+});
+
 describe('usePartTransform composes the correction into the position it returns', () => {
   it('reports the settled Y for the rider and the plain one for its support', () => {
     const parts = [desk(), lamp(0.75)];

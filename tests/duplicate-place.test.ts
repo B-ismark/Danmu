@@ -79,6 +79,20 @@ describe('a copy goes beside the original', () => {
     expect(spots[0].rot).toBeCloseTo(0, 9);
   });
 
+  it('a print hung just above a sideboard is on the WALL, not on the sideboard', () => {
+    // Its bottom 0 mm off the sideboard's top: `restingOn` alone calls that resting, and
+    // the copy was grounded on the floor when nothing was clear, and announced as not
+    // beside anything when something was.
+    const z = -W / 2 + 0.015 + 0.02;
+    const print = part({ id: 'print', category: 'painting', shape: 'painting', pos: [0, 1.0, z], dimMM: [600, 30, 400], wallMounted: true });
+    const sideboard = part({ id: 'sb', category: 'shelf', shape: 'tv-console', pos: [0, 0, -W / 2 + 0.225], dimMM: [1600, 450, 800] });
+    const { spots, clear, beside } = placeCopies([print], [print, sideboard], fp, H);
+    expect(clear).toBe(true);
+    expect(beside).toBe(true);
+    expect(spots[0].pos[1]).toBeCloseTo(1.0, 6);
+    expect(spots[0].support).toBeNull();
+  });
+
   it('a lamp copied off a desk stays on the desk', () => {
     const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', pos: [0, 0, 0], dimMM: [1600, 700, 750] });
     const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', pos: [-0.5, 0.75, 0], dimMM: [300, 300, 500] });
@@ -412,6 +426,54 @@ describe('what a copy stands on, and where it goes when nothing is clear', () =>
     expect(spots[1].pos[1]).toBeCloseTo(0.55, 6);
   });
 
+  it('piece by piece for real: the lamp finds the table\'s copy, and a copy sent across the room is not "beside"', () => {
+    // Opposite corners, so no shift keeps the three in the room and off themselves: the
+    // fallback is the only way out. The far chair is boxed in, so its copy comes from the
+    // room search. The table's copy goes first; the lamp fills its table and must SEE
+    // that copy — under the probe's id it was taken for the lamp itself.
+    const table = part({ id: 'table', category: 'table', shape: 'side-table', pos: [-2.6, 0, -2.6], dimMM: [450, 450, 550] });
+    const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', pos: [-2.6, 0.55, -2.6], dimMM: [400, 400, 500] });
+    const far = part({ id: 'far', category: 'chair', shape: 'chair-dining', pos: [2.6, 0, 2.6], dimMM: [450, 500, 850] });
+    const bx1 = part({ id: 'bx1', pos: [1.9, 0, 2.6], dimMM: [600, 600, 600] });
+    const bx2 = part({ id: 'bx2', pos: [2.6, 0, 1.9], dimMM: [600, 600, 600] });
+    const { spots, clear, beside } = placeCopies([table, lamp, far], [table, lamp, far, bx1, bx2], fp, H);
+    expect(clear).toBe(true);
+    expect(beside).toBe(false);
+    // Not one shift for the set.
+    const shift = (i: number, s: ScenePart) => [spots[i].pos[0] - s.pos[0], spots[i].pos[2] - s.pos[2]];
+    expect(Math.hypot(shift(0, table)[0] - shift(2, far)[0], shift(0, table)[1] - shift(2, far)[1])).toBeGreaterThan(0.1);
+    expect(spots[1].support).toEqual({ id: 'table', copy: true });
+    expect(spots[1].pos[1]).toBeCloseTo(0.55, 6);
+    expect(Math.hypot(spots[1].pos[0] - spots[0].pos[0], spots[1].pos[2] - spots[0].pos[2])).toBeLessThan(0.05);
+  });
+
+  it('a rider with nowhere clear is made on the floor, not hanging at its surface\'s height', () => {
+    const tiny = footprintForLayout('rect', 1.2, 1.2);
+    const stand = part({ id: 'stand', category: 'table', shape: 'side-table', pos: [-0.35, 0, -0.35], dimMM: [450, 450, 550] });
+    const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', pos: [-0.35, 0.55, -0.35], dimMM: [400, 400, 500] });
+    const fill = [
+      part({ id: 'f1', pos: [0.3, 0, -0.3], dimMM: [600, 600, 900] }),
+      part({ id: 'f2', pos: [-0.3, 0, 0.3], dimMM: [600, 600, 900] }),
+      part({ id: 'f3', pos: [0.3, 0, 0.3], dimMM: [600, 600, 900] }),
+    ];
+    const { spots, clear } = placeCopies([lamp], [stand, lamp, ...fill], tiny, H);
+    expect(clear).toBe(false);
+    expect(spots[0].pos[1]).toBe(0);
+    expect(spots[0].support).toBeNull();
+  });
+
+  it('a strip along a wall a little deeper than the piece is found, flush with the wall', () => {
+    // The only free floor is 0.55 m along the north wall: less than one search step
+    // deeper than a 500 mm chair, so no grid point puts the chair in it — only the clamp
+    // to the wall does. Dropping out-of-bounds offsets lost it, and the copy was made
+    // overlapping with "No clear space left in the room".
+    const block = part({ id: 'block', pos: [0, 0, 0.275], dimMM: [6000, 5450, 900] });
+    const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', pos: [0, 0, 2.7], dimMM: [450, 500, 850] });
+    const { spots, clear } = placeCopies([chair], [chair, block], fp, H);
+    expect(clear).toBe(true);
+    expect(spots[0].pos[2]).toBeCloseTo(-3 + 0.25, 3);
+  });
+
   it('piece by piece, one copy with nowhere clear makes the whole duplicate not clear', () => {
     const small = footprintForLayout('rect', 3.4, 2.2);
     const bed = (id: string, x: number) =>
@@ -420,13 +482,14 @@ describe('what a copy stands on, and where it goes when nothing is clear', () =>
     expect(placeCopies([world[0], world[2]], world, small, H).clear).toBe(false);
   });
 
-  it('a whole room selected searches nothing as a set: its box fits nowhere else', () => {
+  it('a whole room selected searches a handful of shifts as a set, not the floor', () => {
     // 0.5–1.8 s per Duplicate when every offset was resolved for every member.
     for (const lid of ['rect', 'l', 't', 'u', 'open'] as const) {
       const [w, d] = lid === 'open' ? [8, 6] : [6, 5];
       const rfp = footprintForLayout(lid, w, d);
       const parts = defaultScene(lid, w, d, { footprint: rfp, height: H });
-      expect(roomSearch(parts, rfp, () => 0).offsets, lid).toBe(0);
+      // Every offset clamps to the few shifts that keep the room's box in the room.
+      expect(roomSearch(parts, rfp, () => 0).offsets, lid).toBeLessThanOrEqual(20);
     }
     // …while one piece still searches the whole floor.
     const one = u().find((p) => p.id === 'bed-1')!;

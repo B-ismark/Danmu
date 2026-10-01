@@ -76,7 +76,7 @@ import {
 } from './geometry';
 import { footprintBounds, type Footprint } from './footprint';
 import { isSoftFurnishing } from './layout-rules';
-import { restingOn } from './physics';
+import { isFloorStanding, restingOn } from './physics';
 import { canCollideWith, type ScenePart } from './scene-spec';
 
 /** Air between the original and its copy, metres. Enough to read as two pieces from
@@ -110,10 +110,6 @@ export type CopyPlacement = {
    *  space. The caller says "beside it" only when this is true. */
   beside: boolean;
 };
-
-/** Distance an offset's box may poke past the room's bounds and still be resolved:
- *  a wall piece's centre stands its standoff off the plaster, not on it. */
-const BOUNDS_SLACK_M = 0.01;
 
 /** The offsets to try, nearest first: the four sides, the four corners, then the four
  *  sides again one piece further out. `w`/`d` are the extents in metres of whatever is
@@ -184,8 +180,11 @@ function place(
   const kindOf = (id: string) => kinds.get(id);
   // What each source stands on NOW. A world id that stands for a copy is never what an
   // original stands on: the originals are where they were.
+  // Floor-standing pieces only, as `ridingParents` asks: a print hung 40 mm above a
+  // sideboard is not ON it, and reading it as a rider grounded its copy on the floor.
   const supportOf = new Map(
     sources.map((src) => {
+      if (!isFloorStanding(src.category, src.shape)) return [src.id, undefined] as const;
       const on = restingOn(world, src.id, src.pos, src.rot, src.dimMM, src.category, src.shape, src.circle);
       return [src.id, on?.on === 'part' && on.id ? on.id : undefined] as const;
     }),
@@ -364,11 +363,13 @@ function place(
   for (const t of [...tries, ...search.all()]) {
     if (t.inRoom && t.offOriginal && (!best || t.overlap < best.overlap - 1e-6)) best = t;
   }
-  if (best) return { spots: best.grounded, clear: false, beside: tries.includes(best) };
+  // `beside` is only ever read of a clear placement; a copy made overlapping is not
+  // announced as beside anything.
+  if (best) return { spots: best.grounded, clear: false, beside: false };
   return {
     spots: sources.map((s) => ({ pos: [...s.pos] as [number, number, number], rot: s.rot, support: null })),
     clear: false,
-    beside: true,
+    beside: false,
   };
 }
 
@@ -378,10 +379,14 @@ function place(
  *  lot — once, however many questions are asked of it; `all` is that lot.
  *
  *  An offset that would carry the sources' combined box out of the room's bounds is
- *  never resolved: the clamp would only pull it back to a spot the grid already holds,
- *  and for a SET it is the whole cost. Selecting a room's every piece and duplicating
- *  resolved ~1300 offsets × every member before the fallback — 0.5–1.8 s, measured in
- *  review — for a box the size of the room, which fits at one offset or none. */
+ *  clamped to the nearest one that does not — flush with the wall, which the grid does
+ *  NOT hold: dropping those offsets instead lost every strip along a wall less than a
+ *  grid step deeper than the piece, and a chair with a clear 0.55 m strip left was told
+ *  there was no space. Clamped offsets are deduplicated, which is what makes a SET
+ *  cheap: selecting a room's every piece and duplicating resolved ~1300 offsets × every
+ *  member before the fallback — 0.5–1.8 s, measured in review — for a box the size of
+ *  the room, whose offsets all clamp to a handful of shifts. Where the box is wider
+ *  than the room on an axis, no offset keeps it in, and none is resolved. */
 export function roomSearch<T>(
   sources: ScenePart[],
   footprint: Footprint,
@@ -401,20 +406,21 @@ export function roomSearch<T>(
   }
   const b = footprintBounds(footprint);
   const step = Math.max(SEARCH_STEP_M, Math.sqrt((b.width * b.depth) / SEARCH_MAX_SPOTS));
+  // The shifts that keep the combined box inside the bounds, per axis.
+  const [loX, hiX, loZ, hiZ] = [b.minX - minX, b.maxX - maxX, b.minZ - minZ, b.maxZ - maxZ];
   const offsets: Array<[number, number]> = [];
-  for (let x = b.minX + step / 2; x < b.maxX; x += step) {
-    for (let z = b.minZ + step / 2; z < b.maxZ; z += step) {
-      if (!pointInPoly(x, z, footprint)) continue;
-      const dx = x - cx;
-      const dz = z - cz;
-      if (
-        minX + dx < b.minX - BOUNDS_SLACK_M ||
-        maxX + dx > b.maxX + BOUNDS_SLACK_M ||
-        minZ + dz < b.minZ - BOUNDS_SLACK_M ||
-        maxZ + dz > b.maxZ + BOUNDS_SLACK_M
-      )
-        continue;
-      offsets.push([dx, dz]);
+  const taken = new Set<string>();
+  if (loX <= hiX && loZ <= hiZ) {
+    for (let x = b.minX + step / 2; x < b.maxX; x += step) {
+      for (let z = b.minZ + step / 2; z < b.maxZ; z += step) {
+        if (!pointInPoly(x, z, footprint)) continue;
+        const dx = Math.min(hiX, Math.max(loX, x - cx));
+        const dz = Math.min(hiZ, Math.max(loZ, z - cz));
+        const key = `${Math.round(dx * 1000)},${Math.round(dz * 1000)}`;
+        if (taken.has(key)) continue;
+        taken.add(key);
+        offsets.push([dx, dz]);
+      }
     }
   }
   offsets.sort((p, q) => Math.hypot(p[0], p[1]) - Math.hypot(q[0], q[1]));
