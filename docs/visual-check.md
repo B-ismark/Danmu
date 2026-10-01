@@ -161,7 +161,7 @@ raised was answered on 2026-09-30.*
 The user's report on 2026-10-01: *"when you replace a painting with curtain while in 2d plan
 mode, curtains spawns in the wrong degree and ends up going through th wall."* Two halves, and
 both came from **Change the model** keeping the old piece's spot as-is. It kept the print's
-centre, 15 mm off the plaster, and the curtain needs 145 mm. And it threw away the turn that
+centre, 35 mm off the plaster, and the curtain needs 150 mm. And it threw away the turn that
 faced the print into the room, so on any wall where the drag had done the turning, the curtain
 came back at the room's original angle, crossways. The swap now hangs every wall piece the way
 adding one does (`snapToWall`, using the new piece's own depth and standoff), on the wall the

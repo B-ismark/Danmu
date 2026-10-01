@@ -63,7 +63,7 @@ describe('changing the model', () => {
 
   // Reported 2026-10-01: a print on a wall, swapped for curtains from the plan tab,
   // came back turned across the wall and half through it. The swap kept the print's
-  // centre — 15 mm off the plaster, where a curtain's centre wants 145 — and dropped
+  // centre — 35 mm off the plaster, where a curtain's centre wants 150 — and dropped
   // the turn that faced the print into the room.
   it('a wall piece swapped for another hangs flat on the same wall, facing in', () => {
     const W = 6;
@@ -105,6 +105,37 @@ describe('changing the model', () => {
     const s = useStudio.getState();
     expect(s.rotations.print).toBeUndefined();
     expect(s.positions.print![2]).toBeGreaterThan(-W / 2 + 0.08 / 2 + 0.08);
+  });
+
+  const room6 = (parts: ScenePart[]) =>
+    useScene.setState({
+      room: { width: 6, depth: 6, height: 2.5, layoutId: 'rect', footprint: footprintForLayout('rect', 6, 6), wallColors: {} },
+      parts,
+      ready: true,
+    });
+
+  it('a piece in a corner stays on its own wall, not the nearer return wall', () => {
+    // A 400 mm curtain snapped into the north-east corner: its centre is 210 mm off the
+    // north wall (half its depth, the gap, the standoff) and only 200 mm off the east
+    // one. Nearest-wall alone carried the swap round the corner and turned it −90°.
+    const curtain = part({ id: 'c', category: 'curtain', shape: 'curtain', pos: [2.8, 1.2, -2.79], rot: 0, dimMM: [400, 200, 2200], wallMounted: true });
+    room6([curtain]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('c', { label: 'Framed print', group: 'Decor', category: 'painting', shape: 'painting', dimMM: [600, 30, 400] });
+    const s = useStudio.getState();
+    expect(s.rotations.c).toBeUndefined();
+    const [x, , z] = s.positions.c!;
+    expect(z).toBeCloseTo(-3 + 0.015 + 0.02, 9);
+    expect(x).toBeCloseTo(3 - 0.3, 9);
+  });
+
+  it('a turn equal to the authored one up to a full circle writes nothing', () => {
+    // The south wall answers −π; a piece authored at π already faces that way.
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.4, 2.965], rot: Math.PI, dimMM: [600, 30, 400], wallMounted: true });
+    room6([print]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', { label: 'Curtain', group: 'Decor', category: 'curtain', shape: 'curtain', dimMM: [1600, 80, 2200] });
+    expect(useStudio.getState().rotations.p).toBeUndefined();
   });
 
   it('does nothing for a piece that is gone', () => {

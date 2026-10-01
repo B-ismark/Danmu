@@ -12,7 +12,29 @@ import { useScene } from './scene-store';
 import { currentRoomScene } from './room-scene';
 import { findSupportDetailed, groundY, heightForNewCeiling, ridesWall, snapToWall, wallStandoff } from './physics';
 import { ridersOf } from './rider-height';
-import { isRoundPart, isWallMountedPart, type LibraryItem } from './scene-spec';
+import { isRoundPart, isWallMountedPart, type LibraryItem, type ScenePart } from './scene-spec';
+import { edgeProjection } from './geometry';
+import type { Footprint } from './footprint';
+
+/** Signed angle from `b` to `a`, in (−π, π]. */
+const turnBetween = (a: number, b: number) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+
+/** The wall a wall piece is ON — the one it faces away from — or null for the
+ *  nearest. Nearest alone is wrong near a corner: a piece's centre stands half its
+ *  depth plus `WALL_GAP` plus any standoff off its own plaster, which for a narrow
+ *  curtain in a corner is FURTHER than its centre is from the return wall, so the
+ *  swap moved it round the corner. A piece facing into the room along an edge's
+ *  inward normal, near that edge, is on it. */
+function ownWall(footprint: Footprint, part: ScenePart, x: number, z: number): number | null {
+  if (!ridesWall(part.category, part.shape)) return null;
+  let best: { index: number; dist: number } | null = null;
+  for (let i = 0; i < footprint.length; i++) {
+    const hit = edgeProjection(footprint, i, x, z);
+    if (!hit || Math.abs(turnBetween(hit.yaw, part.rot)) > 0.01) continue;
+    if (!best || hit.dist < best.dist) best = { index: i, dist: hit.dist };
+  }
+  return best?.index ?? null;
+}
 
 /** Replace piece `id`'s model with `item`, re-grounded for the new size and mount.
  *  `dimOverride` carries a size the picker's search words named — already clamped
@@ -50,13 +72,13 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
     );
     // Onto the wall, facing the room, by the NEW piece's own depth — the same call the
     // add path makes. Keeping the old spot is right for a floor piece and wrong for a
-    // wall one: a print's centre sits 15 mm off the plaster, so a 1.6 m curtain swapped
-    // in there hung half through the wall, and `resetTransforms` had already thrown
-    // away the turn that faced the print into the room, so it hung crossways as well.
-    // The nearest wall IS the old piece's wall when it rode one — its centre is half
-    // its own depth off that plaster and half its width off any corner.
+    // wall one: a print's centre sits 35 mm off the plaster and a curtain's wants 150,
+    // so a curtain swapped in there hung half through the wall, and `resetTransforms`
+    // had already thrown away the turn that faced the print into the room, so it hung
+    // crossways as well.
     if (room.footprint && ridesWall(item.category, item.shape)) {
-      const snapped = snapToWall([x, 0, z], dimMM, room.footprint, wallStandoff(item.shape));
+      const edge = ownWall(room.footprint, part, x, z);
+      const snapped = snapToWall([x, 0, z], dimMM, room.footprint, wallStandoff(item.shape), edge);
       x = snapped.x;
       z = snapped.z;
       rot = snapped.rot ?? baseRot;
@@ -79,7 +101,9 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
   s.setPosition(id, [x, ny, z]);
   // Only when the wall asks for a different turn: writing back the authored rotation
   // would still CREATE an override, which a re-detect then cannot touch.
-  if (Math.abs(rot - baseRot) > 1e-9) s.setRotation(id, rot);
+  // Compared WRAPPED: a south wall answers −π, and a piece authored at π is already
+  // facing that way.
+  if (Math.abs(turnBetween(rot, baseRot)) > 1e-9) s.setRotation(id, rot);
   // Re-establish what `resetTransforms` just cleared — the swap moved the part, but
   // did not stop it resting on whatever it landed on.
   if (!wallMounted && support && support.y > 0.3) s.setParent(id, support.id);

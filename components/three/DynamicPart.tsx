@@ -284,7 +284,8 @@ function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       {/* plinth — upholstered, so it takes the cloth surface (weave + sheen).
           The frame keeps its tauter 0.75 roughness against the loose cushions. */}
       {/* The arms are the sofa's outside faces; plinth and backrest stand `SEAM` inside
-          them, and the arms stand `SEAM` off the legs, so no two panels share a face. */}
+          them, and the arms' undersides stand `SEAM` above the plinth's, so no two panels
+          share a face. */}
       <Box size={[w - 2 * SEAM, seatTop - legH, d - 2 * SEAM]} position={[0, (seatTop + legH) / 2, 0]} color={main} surface="fabric" roughness={0.75} />
       {/* backrest */}
       <Box size={[w - 2 * SEAM, h - seatTop, backTh - SEAM]} position={[0, (h + seatTop) / 2, -d / 2 + SEAM + (backTh - SEAM) / 2]} color={main} surface="fabric" roughness={0.75} />

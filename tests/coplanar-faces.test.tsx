@@ -16,14 +16,15 @@
 // components rather than rendering them) and asks the question directly, of every shape at
 // every size the app can draw it.
 //
-// What counts: two axis-aligned boxes (or a box and a flat plane — the skirting was a
-// plane on the wall's face) whose faces on one side lie within `EPS` of each other and
-// overlap in the other two axes by more than `EPS` both ways. FACING THE SAME WAY is the
+// What counts: two axis-aligned boxes (or a box and a flat plane) whose faces on one
+// side lie within `EPS` of each other and overlap in the other two axes by more than
+// `EPS` both ways. FACING THE SAME WAY is the
 // whole of it. Two boxes that ABUT (one's max face on the other's min face) draw faces
 // pointing at each other; each is the other's back, culled or buried, and nothing fights.
 // Boxes the walk cannot express as an axis-aligned box in the part's frame (a tilted
 // slat, a swung door) are skipped and COUNTED, so a shape that escapes the sweep shows up
-// as a number rather than a pass.
+// as a number rather than a pass. The room's own skirting is not a piece and is not
+// walked here; `tests/room-shell.test.ts` holds that half.
 
 import { describe, expect, it, vi } from 'vitest';
 
