@@ -19,6 +19,7 @@ import {
 import { applyPlacements, lockedForShuffle, shuffleRoom } from '@/lib/layout-shuffle';
 import { localToWorld, worldToLocal } from '@/lib/geometry';
 import { DEFAULT_WEIGHTS, angleDelta, navigabilityCost, prepare, type Placement } from '@/lib/layout-score';
+import { TUCK_SQUARE_RAD } from '@/lib/layout-rules';
 import { analyzeRoom } from '@/lib/clearance';
 
 // A merged set is one rigid body to the solver, as it already was to a click, a drag
@@ -63,6 +64,14 @@ function diningRoom(turn = 0): { parts: ScenePart[]; ids: string[] } {
 }
 
 const unmerged = (parts: ScenePart[]) => parts.map(({ groupId: _groupId, ...p }) => p as ScenePart);
+
+/** Unmerged AND out of formation: each dining chair turned twice the tuck rule's
+ *  square in place, so the room does not stand in a set either (`standsInSet`). A
+ *  dining set the user never merged is still one body while it stands as one
+ *  (`formationSets`, § 52), so `unmerged` alone is no longer a set the solve may break,
+ *  and the control that proves a fixture CAN break needs both taken off. */
+const loose = (parts: ScenePart[]) =>
+  unmerged(parts).map((p) => (p.shape === 'chair-dining' ? { ...p, rot: p.rot + 2 * TUCK_SQUARE_RAD } : p));
 
 type Pose = { x: number; z: number; yaw: number };
 const poseOf = (p: ScenePart): Pose => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot });
@@ -238,12 +247,15 @@ describe('Room check offers Try a fix only where the press may move a piece it n
 describe('randomizeStart scatters a merged set as one body', () => {
   it('the lead and every other piece draw exactly as unmerged; the members ride the lead', () => {
     const { parts, ids } = diningRoom();
-    const plain = unmerged(parts);
+    const plain = loose(parts);
+    const formed = unmerged(parts);
     const lockedM = lockedForShuffle(parts, {});
     const lockedP = lockedForShuffle(plain, {});
     for (const seed of [1, 2, 3]) {
       const merged = randomizeStart(parts, FOOTPRINT, movableFor(parts, lockedM), makeRng(seed));
       const free = randomizeStart(plain, FOOTPRINT, movableFor(plain, lockedP), makeRng(seed));
+      // Unmerged but standing as a set, the room holds it as one body: the same draw.
+      expect(randomizeStart(formed, FOOTPRINT, movableFor(formed, lockedForShuffle(formed, {})), makeRng(seed))).toEqual(merged);
       const idx = ids.map((id) => parts.findIndex((p) => p.id === id));
       // Every draw is still taken, so nothing outside the set moves to a new spot.
       parts.forEach((_, i) => {
@@ -254,7 +266,7 @@ describe('randomizeStart scatters a merged set as one body', () => {
       const n = nonRigidity(before, after);
       expect(n.offset).toBeLessThan(1e-9);
       expect(n.turn).toBeLessThan(1e-9);
-      // …and unmerged, the same scatter takes it apart, so the check above can fail.
+      // …and loose, the same scatter takes it apart, so the check above can fail.
       expect(nonRigidity(before, idx.map((i) => free[i])).offset).toBeGreaterThan(0.1);
     }
   });
@@ -276,11 +288,15 @@ describe('the solver hands a merged set back as it took it', () => {
       const n = nonRigidity(before, merged);
       expect(n.offset, `seed ${seed}`).toBeLessThan(1e-6);
       expect(n.turn, `seed ${seed}`).toBeLessThan(1e-9);
-      const free = setPoses(applyPlacements(parts, solve(unmerged(parts))), ids);
+      // Unmerged, standing as a set: the room holds it whole too (§ 52).
+      const formed = nonRigidity(before, setPoses(applyPlacements(parts, solve(unmerged(parts))), ids));
+      expect(formed.offset, `formed, seed ${seed}`).toBeLessThan(1e-6);
+      expect(formed.turn, `formed, seed ${seed}`).toBeLessThan(1e-9);
+      const free = setPoses(applyPlacements(parts, solve(loose(parts))), ids);
       if (nonRigidity(before, free).offset > 0.02) brokeUnmerged++;
     }
     expect(movedMerged, 'the set has to be moved for rigid to mean anything').toBe(3);
-    expect(brokeUnmerged, 'unmerged, the same solves take it apart').toBe(3);
+    expect(brokeUnmerged, 'loose, the same solves take it apart').toBe(3);
   });
 
   it('every idea Ideas offers keeps the set whole', { timeout: 120_000 }, () => {
@@ -296,7 +312,11 @@ describe('the solver hands a merged set back as it took it', () => {
       expect(n.offset).toBeLessThan(1e-6);
       expect(n.turn).toBeLessThan(1e-9);
     }
-    const plain = unmerged(parts);
+    const formed = unmerged(parts);
+    const held = shuffleRoom(formed, room, lockedForShuffle(formed, {}), { attempt: 1 });
+    expect(held?.ideas.length ?? 0).toBeGreaterThan(0);
+    for (const idea of held!.ideas) expect(nonRigidity(before, setPoses(applyPlacements(formed, idea), ids)).offset).toBeLessThan(1e-6);
+    const plain = loose(parts);
     const free = shuffleRoom(plain, room, lockedForShuffle(plain, {}), { attempt: 1 });
     expect(free!.ideas.some((idea) => nonRigidity(before, setPoses(applyPlacements(plain, idea), ids)).offset > 0.02)).toBe(true);
   });
@@ -458,7 +478,7 @@ describe('a set stays whole where it meets the rest of the room', () => {
     const n = nonRigidity(before, after);
     expect(n.offset).toBeLessThan(1e-6);
     expect(n.turn).toBeLessThan(1e-9);
-    expect(nonRigidity(before, setPoses(solve(unmerged(parts)), ids)).offset, 'unmerged, the same solve takes it apart').toBeGreaterThan(0.02);
+    expect(nonRigidity(before, setPoses(solve(loose(parts)), ids)).offset, 'loose, the same solve takes it apart').toBeGreaterThan(0.02);
   });
 });
 

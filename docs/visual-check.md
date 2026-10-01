@@ -79,7 +79,7 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### One bed and one fridge in the Library, and a scanned double comes back double — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### One bed and one fridge in the Library, and a scanned double comes back double — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 
 The Library's four bed rows and two fridge rows were one piece each in different sizes, and
 the size is a field you can type. There is one **Bed** (1400 wide) and one **Fridge** now.
@@ -160,7 +160,7 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
-### A fan dropped onto a fan moves aside, and a bed set stops at the wardrobe — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### A fan dropped onto a fan moves aside, and a bed set stops at the wardrobe — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 
 Two reports from the 2026-10-01 batch. A ceiling fan dropped on 2D Plan and another dropped
 on 3D Model at the same spot shared one hub, which no drag would allow. A drop now keeps
@@ -180,7 +180,7 @@ and the size tag says which piece stopped it. The lamp stays on its nightstand.
 **What wrong looks like.** Two fans in one place, or the second jumping somewhere far away.
 A nightstand on top of the wardrobe, or a lamp half inside its nightstand.
 
-### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205); the sofa LOOKED AT 2026-10-01; a floor piece over the bed on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205); the sofa LOOKED AT 2026-10-01; a floor piece over the bed merged to `main` in `6a7f93f` (PR #210), NOT LOOKED AT
 
 **Looked at 2026-10-01:** *"First one works, but when i change from print to nightstand, it
 falls through the bed clipping through it, it happens with other pieces too."* The sofa is
@@ -332,14 +332,14 @@ constitutionally unable to show.*
 *The comfort zones in the plan (outline, halos, warm hatch) were looked at by the user on
 2026-10-01 and that item is gone.*
 
-### A chair tucks only square to the table and between its legs — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### A chair tucks only square to the table and between its legs — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 
 A dining chair turned 30° under the table, or slid along its edge into a corner leg, was
 counted as tucked, so drags allowed it, Room check passed it and Ideas handed it back with
 the chair through the wood. A dining chair now counts as tucked only within 10° of square to
 the edge it goes under, and never where the table or desk has a leg or side panel. Office
-chairs swivel and stools have no back, so both stay free to turn. Ideas still does not treat
-a dining table and its chairs as one set; that is the next change.
+chairs swivel and stools have no back, so both stay free to turn. Ideas and Suggest now
+move a dining table and its chairs as one set: see the next item.
 
 Two more from review. A chair pushed square into an **L-shaped desk's** inside corner was
 refused, because the desk's edge was worked out from its outer box rather than its two arms.
@@ -361,9 +361,33 @@ both arms of the L. On the side it faces, the dropped chair stays where you let 
 and nothing says the spot was taken. On the other side it is moved out, and you are told.
 
 **What wrong looks like.** A chair through a leg, or a square chair that will no longer go
-under at all. Also watch for this: a dining table left a few degrees off square after
-Suggest happens more often now (23 in 200 test solves, up from 14), because the table cannot
-be squared on its own without swinging a leg into a chair.
+under at all. (The crooked-table cost this item used to warn about, 23 in 200 test solves
+against 14, is gone with the sets in the next item: 0 in 200.)
+
+### A table and its chairs, and a bed and its nightstands, move as one set — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+Suggest and Ideas used to move a dining table and its chairs as separate pieces unless you had
+merged them. So Ideas handed back chairs turned through the table, and Suggest left tables
+crooked rather than swing a leg into a chair. Now a chair standing square at its table's edge
+travels with the table, and so does a nightstand at the head of a bed. Nothing is merged and
+nothing is stored. It is read from where the pieces stand when you press, so a chair you've
+pulled away is free. A set turns only in quarter turns. `docs/what-is-still-open.md` § 52 has the
+numbers.
+
+**Where to click.** Open Plan, 3D Model. Press Ideas and page through every idea. Then
+T-Shape: knock the dining table a few degrees off square with the chairs tucked and press
+Suggest. Then U-Shape: press Suggest and Ideas with the bed and its two nightstands where the
+starter put them. Last, pull one chair a metre away from the table, turn it, and press Ideas
+again.
+
+**What right looks like.** In every idea, each chair is still square at the table, at the same
+side and the same distance, and each nightstand is still at the bed's head. After Suggest, the
+table is square and so are its chairs. The chair you pulled away goes its own way.
+
+**What wrong looks like.** A chair through the table, a set that arrives turned a few degrees,
+a nightstand left behind when the bed moves, or the pulled-away chair dragged back to the
+table. Also watch the U: its arrangements are a little worse on average now (the bed set is a
+large body in a small room), and it may offer one idea fewer in three presses.
 
 ### An idea keeps the rug inside the walls — § H.6.1, needs eyes on Open Plan and the L
 
@@ -493,7 +517,7 @@ only.
 - A heart that is filled for a layout the Layouts tab no longer has.
 - Keeping a piece and the next ideas moving it anyway.
 
-### The standing fan is a real pedestal fan now — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### The standing fan is a real pedestal fan now — merged to `main` in `6a7f93f` (PR #210), NOT LOOKED AT
 
 **Looked at 2026-10-01:** *"Can we make the standing fan a bit more detailed/realistic? Just
 looks like an oval and a stick now."* `StandingFanGeo` (`components/three/DynamicPart.tsx`) is
@@ -1598,7 +1622,7 @@ inside the box.
 
 ## Look and light
 
-### Shoes on the rack, a pipe clothes rail, and a dining table on four legs — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### Shoes on the rack, a pipe clothes rail, and a dining table on four legs — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 
 From the 2026-10-01 batch. The shoe rack carries a random mix of shoes, trainers and the odd
 boot on its tilted tiers. A new **Clothes rail** follows the reference photo: black pipe with

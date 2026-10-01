@@ -164,7 +164,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report. **Narrowed 2026-09-30:** a turn that swings a piece INTO trouble it was clear of is held (`turnSwingsInto`, every turn gesture) — a chair tucked front first and then turned put its back through the desk and stayed there. Already refused where it stands, a piece still turns, so the tight corner stays turnable | S once decided | done |
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly — relation groups through `proposeGroup`, and merged sets since § H.6.5 | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | **4a is MEASURED (2026-09-05) and the recommendation is to retire it — see § 4.6 of the research doc.** Swapping the box for the drawn geometry changes 0.11% of drag positions (189 of 172,032 once the instrument's own 299 are subtracted, 42 shapes, every shape a row) and **3.3% of sampled picking points** (5521 of 166,664 — the larger outcome by an order of magnitude, and not a collision question); every position in the *other* direction traces to a renderer drawing outside its own `dimMM`, which is literals in the wrong place rather than a case for compound footprints. **"Fix the six renderers" is not that work**: the 1120 geometry-only positions come from 20 shapes, the never-read-`dimMM` list is 6 renderers, and the two sets overlap in exactly two — two of the six are in the OPPOSITE column and two differ at no position at all. **~~`desk-l` draws 2.86 m where every consumer reads 1.60 m~~ **FIXED 2026-09-06****, and 32 of 46 shapes escape their box at all. What this row still holds, unmeasured, is `analyzeRoom`'s clearance findings and the solver's cost. Previously: every piece is one box or one ellipse, so a table's legs and a plant's canopy are the same rectangle — and "a sofa's L" was in that sentence for months describing a shape this codebase does not have. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). The duplication this row used to carry — *"six hand-written copies of the vertical-extent rule in five files"* — is **RETIRED (2026-09-04)**: all six call `verticalExtent`, plus a **seventh** the original list never named (`layout-settle.ts:380`), and `layout-score.ts:487` records it in the code. The only raw `pos[1] +` left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset, never an instance of the rule. **This row is smaller than it was**, and the seventh copy is why a grep for the old wording could not have closed it | XL | independent of row 11, but they meet |
-| 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
+| 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do. **§ 52 is that search for two kinds of company:** a table moves with its chairs and a bed with its nightstands, and over 5 busy rooms × 40 seeds the crooked pieces fell 47 → 14 and the crooked tables 23 → 0. The 14 left are pieces in no set | M | **a symptom of row 11 and only closable there** |
 | 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade. *(G.3 was a third item carried in this row's header rather than in a row of its own, which is how a done thing hides inside an open one — it shipped in #106 and is recorded in § G.3.)* | Real, but none is a defect a user has reported. **A.2's owed test EXISTS as of 2026-09-30** (§ H.6.0's PR): `tests/layout-shuffle.test.ts` "the diversity term reorders a press" fails at `diversityPenalty: 0`. `shuffleRoom` run twice per press with the previous press's first idea as history, at penalty 0 and at 4, differs on **2 of 66** presses over six presets × presses 2–12 (`rect` 6 × 4 press 7 and `rect` 7.5 × 5.6 press 6: same four ideas, same first, one reordered). It was 1 of 24 over presses 2–5 (`rect` 7.5 × 5.6 press 4) until the search priced a rug (§ H.6.1) and 0 of those 24 after, so the test now names press 6 and says in its comment that the press is the search's trajectory rather than a property of the term. The pool it ranks is still mostly unlike itself — **177 pairs, 162 at similarity 0**, the rest 0.100–0.400, none near `REPEAT_SIMILARITY` — so the term adds at most 1.6 against idea costs of 2.4–84, and `ranked[0]` cannot move at all because the first pick has `picked = []`. **The answer this replaced** — "cannot be written at this level", from 26 of 26 end-to-end pairs byte-identical and 61 of 66 pool pairs at zero — was measured on 2026-09-06 against a search that accepted no steps (§ H.6.0), so it described tidied scatters rather than arrangements. The agreement bound stays too: the same file asserts the clean set stays mutually dissimilar, vacuity guard first, and goes red the day the search produces near-duplicates. The UNIT behaviour was already pinned in `tests/layout-offer.test.ts`, where the fixture supplies the similar candidates the search does not. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
 | 15 | **E** the jsdom component bucket — **the shim half is DONE 2026-09-03; the coverage half is row 9's** | The count in this row was already stale when it was written: **14 `.test.tsx` files**, not 9, and **ten** hand-rolled the `next/navigation` object rather than five. They had drifted into three formattings of the same object and two different comments explaining it. `vitest.config.ts` now names `setupFiles: ['tests/helpers/setup.ts']` for the two globals — jsdom implements neither, and `lib/use-media-query.ts` calls `window.matchMedia` **unguarded** while every other reader uses `?.`, so `matches: false` changes nothing for the optional readers and unblocks the one that needs it; the `typeof window` guard is what keeps ~115 node-environment files from paying for it. `tests/helpers/mount.ts` owns `navigationMock`, called per file because the room id differs — `vi.mock`'s factory is `async` and `await import()`s it, since vitest hoists the call above every `import` and a static one throws *before initialization*. Both halves gated in `tests/toolchain.test.ts`, because an extraction is undone by one paste | done | **row 9 is what is left of § E** |
 | 16 | **§ A.3** the standalone re-search script — **WRITTEN 2026-09-04** | `scripts/openroutes-sweep.mjs`, plain Node through vite's SSR pipeline, not a Vitest file — a measurement campaign that takes minutes is not a gate. Both reds it was filed to serve had been **green since `4be144c`** and this table's own red list said so while § A.3 still described them reproducing. What the script buys is the part that was never rot: the fixture has been re-hunted by hand FOUR times, each time because a cost-function change moved the space. Run in full: **19 of 54 cut, 532 trials, 1 refusal** — the first two exactly as recorded, the third down from 3, which the test file predicted and refused to quote unmeasured. **The live finding is that one trial**: the fine-grid re-check has a single piece of evidence across the whole grid | done | nothing |
@@ -3976,13 +3976,15 @@ each got the cheapest press in that sweep that showed it: a rug that has to go h
   Every pass before it moves a set through `carryUnit` or puts the whole set back, so the
   lead is untouched exactly when the set is.
 
-*Filed, not fixed.* **A lead's proposals can aim at its own set.** `propose`'s neighbour,
+*Filed, then MEASURED AND DECLINED 2026-10-01 (§ 52).* **A lead's proposals can aim at its own set.** `propose`'s neighbour,
 partner and focal targets can pick a member of the lead's own set, and that member moves
 with the lead, so the step is spent going nowhere: a dining table's nearest neighbour is
 nearly always one of its chairs. A leak in the move budget rather than a wrong answer — the
 set still arrives whole. Leaving set members out of those picks changes which moves are
 drawn, so it is a measured change to the search, not a tidy-up, and wants the § H.6.5 table
-run again before and after.
+run again before and after. It was run: skipping the lead's own set made Suggest worse in 4 of 5
+rooms, and open plan hard faults went 26 → 2910. The neighbours it picks instead are worse ones.
+The step stays (§ 52).
 
 *Filed from review round 2, read from the code and not reproduced.* Each is a place where a
 set being one body meets another rule. The first bends a set by one member; the other two
@@ -10430,3 +10432,75 @@ itself taken as the start on reopen. Both are a new persisted field. Related, an
 Start over: after `moveWall` the store's `layoutId` is `'custom'`, but the record keeps its
 preset. So a T or U starter re-furnished before a reload and after one can differ (10 against 8
 pieces for a T, 9 against 8 for a U), measured by the 2026-10-01 follow-up review.
+
+## § 52 · A table and its chairs, a bed and its nightstands, as one set — FIXED 2026-10-01, three costs written down
+
+**Exists in:** `claude/affectionate-ritchie-ilawx1` (the PR after #212). `lib/layout-rules.ts`
+(`standsInSet`, `SET_SQUARE_RAD`), `lib/layout-solve.ts` (`formationSets`, `rigidSets`'
+`formation` flags, `withCompany`, `propose`'s `quarterOnly`), `tests/layout-formation-sets.test.ts`.
+
+**What it fixes.** Two faults with one cause. In Ideas, dining chairs came back turned through
+their table. And § H.6.5's squaring-alone cost: once a chair could only tuck square (PR #212),
+squaring a crooked table on its own swung an end leg into its end chair, so Suggest left 23
+tables crooked against 14 before. The cause was the same in both. The solver moved a table and its
+chairs as separate pieces unless the user had merged them, and almost nobody does.
+
+**What a set is now.** A set is still something the user merged, or now something the room
+already stands in. A dining chair whose seat reaches a dining table's edge, square to that edge
+and within its run, is part of the table's set. So is a nightstand at the head of a bed, square
+to it and beside it. A stool has no front, so it can be at any turn. The set is read when a
+press starts, from where the pieces are standing. Nothing is stored, so moving a chair away by
+hand takes it out of the set. Pinned pieces, merged pieces and wall pieces are never in one.
+A piece that could belong to two anchors joins the nearer one, and the lower index wins a tie.
+
+**Square means within 1°, not the 10° a tuck allows (`SET_SQUARE_RAD`).** At 10°, a table
+knocked 8° with its chairs still square formed a set. Squaring it then swung the chairs 8°
+crooked and moved them 0.1 m round the table. Squared on its own instead, the table puts the
+room back.
+
+**A set turns only in quarter turns.** Its lead never takes the small free turn or the
+turn-to-face move (`quarterOnly`). Without this, Suggest hands back a table and its chairs
+3.8° crooked (`tests/suggest-tidiness.test.ts`, T 6×5 seed 19). That test is the one that
+kills the mutant.
+
+**Measured.** 5 busy rooms × 40 seeds, sets off → on (the off arm was a temporary env switch,
+deleted before commit):
+
+| Suggest | crooked pieces | crooked tables | mean cost after | hard faults |
+|---|---|---|---|---|
+| `l` 6×5 | 17 → 7 | 8 → 0 | 778 → 716 | 1706 → 1216 |
+| `open` 7.5×5.6 | 1 → 1 | 1 → 0 | 203 → 69 | 58 → 26 |
+| `rect` 5×4 | 4 → 3 | 3 → 0 | 260 → 173 | 893 → 649 |
+| `t` 6×5 | 15 → 0 | 9 → 0 | 494 → 441 | 2787 → 2036 |
+| `u` 5×4.5 | 10 → 3 | 2 → 0 | 725 → **837** | 4958 → 4324 |
+
+Sets came back whole in 100% of solves, against about 70% with sets off.
+
+| Ideas, 3 presses | ideas, sets whole (off) | ideas, sets whole (on) |
+|---|---|---|
+| seeded `open` | 12, 21/48 | 12, 48/48 |
+| seeded `t` | 8, 14/32 | 9, 36/36 |
+| seeded `u` | 10, 3/20 | 9, 18/18 |
+| busy `open` | 4, 14/24 | 11, 66/66 |
+
+No idea showed a crooked set in any room.
+
+**What it cost, honestly.**
+- The U's mean cost after Suggest rises, 725 → 837, though its hard faults fall. A bed set is a
+  large body in a small U and finds fewer places to go.
+- The T and U each lose about one idea in three presses.
+- A piece can no longer swap places with a set member.
+- Desks and office chairs are not sets. An office chair swivels, and a desk's chair is
+  pulled out as often as tucked, so "at the desk" is not a formation the room reliably stands in.
+
+**Measured and declined: a lead's proposals skipping its own set** (§ H.6.5's filed item).
+Leaving set members out of `pickNeighbour` made Suggest worse. Mean cost rose in 4 of 5 rooms,
+and open plan hard faults went 26 → 2910. A table aligning to one of its own chairs is a
+wasted step, but the neighbours it picks instead are worse ones. The step stays.
+
+**What moved in the suite, each A/B'd with sets off:** `RUG_IDEAS_CHECKED` 44 → 45, the
+shuffle finalists 158 → 159 (`t` seed 1 fills its pool), three counts in
+`tests/suggest-square-in-place.test.ts` (T −10° stays 11 → 10, T authored none 8 → 7, Ideas
+n 8 → 9), and the fine-grid refusal fixture, which moved from scramble 35 seed 21 to scramble
+30 seed 7. Still one refusal in 532 (`scripts/openroutes-sweep.mjs`, 126 s, the same 19 of 54
+scrambles cut).

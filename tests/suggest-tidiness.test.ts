@@ -652,6 +652,8 @@ describe('squaring a piece up never cuts the room off', () => {
 // 8.5 × 6.4 × 28 repair seeds, keeping only the scrambles the fine grid says are cut.
 // **19 of the 54 are cut, giving 532 runs, and the re-check refuses the proxy's answer
 // exactly ONCE** — scramble 35, repair seed 21. So the property holds on 531 of the 532.
+// (Since § 52 the one refusal is scramble 30, repair seed 7: same 19 / 54 cut, same 532
+// runs, still one. See the fixture's docblock below.)
 //
 // **That 1 is the whole live evidence for the re-check, and it used to be 3.** Read it
 // honestly rather than as damage: the coarse proxy hands back a worse-on-the-fine-grid
@@ -695,8 +697,8 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
   const bounds = { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ };
   const fine = (p: Placement[]) => costBreakdown(model, p, DEFAULT_WEIGHTS, NAV_CELL).total;
 
-  /** The ONE run in 532 where the coarse proxy and the fine grid disagree: scramble 35
-   *  of the U at 8.5 x 6.4, repair seed 21.
+  /** The ONE run in 532 where the coarse proxy and the fine grid disagree: scramble 30
+   *  of the U at 8.5 x 6.4, repair seed 7.
    *
    *  Both constants are that search's coordinates and neither means anything on its
    *  own. The encoding is the search's own — `i * 2654435761` for the scramble,
@@ -711,6 +713,7 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
    *      scramble 35, 19 / 22 / 26  `propose` retired 8, produced 19 and 22; kept 26
    *      scramble 35, 6 / 12 / 22   the winding fix; chose 22 on continuity
    *      scramble 35, {21}          `outsideDeficit` in the containment term — ONE
+   *      scramble 30, {7}           a bed and its nightstands one body (§ 52) — ONE
    *
    *  **The fourth move is the one worth reading, because there the fixture moved and the
    *  EVIDENCE did not**: same 7.055 cut, same 19 of 54, same 532 trials, still exactly 3
@@ -733,7 +736,15 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
    *  not relax the gate. A fixture that stops being cut is a test that stops meaning
    *  anything, which is how the first two fixtures died.
    *
-   *  **Seed 21 now, and there was no tie-break to apply — it is the only one.** Earlier
+   *  **The sixth move is the fourth's kind again**: the U's bed and nightstands became a
+   *  set as they stand (`formationSets`), which changes what the repair anneal may move,
+   *  and the same grid re-run by `scripts/openroutes-sweep.mjs` (126 s) gave the same 19
+   *  of 54 cut, the same 532 trials and the same ONE refusal, at scramble 30 seed 7. With
+   *  the sets off it is scramble 35 seed 21 again. Scramble 30 is cut by 2.860, below
+   *  the 7.055 above — thinner, and there was nothing to choose: it is the only refusal
+   *  on the grid, so this records the floor fell rather than relaxing anything.
+   *
+   *  **Seed 7 now, and there was no tie-break to apply — it is the only one.** Earlier
    *  rounds chose between refusals on continuity ("26 has refused across two generations
    *  of the proposal generator, and 19 has refused across none"), and that rule survives
    *  for the next time there is a choice. There is none at present: the set is a
@@ -741,18 +752,22 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
    *  not a bar. A `>= 1` here would sit green while the evidence went from one trial to
    *  none.
    *
+   *  (The paragraphs above speak of scramble 35 and seed 21 as they were when written;
+   *  the coordinates are scramble 30 and seed 7 since § 52.)
+   *
    *  None of those three figures can be read off a passing run — they need the re-check
    *  removed — and they were taken by actually removing it: `return best` in place of
    *  the final line of `openRoutes`, which turns this assertion and the one above it
    *  red together. */
-  const LAYOUT_SEED = layoutSeed(35);
+  const LAYOUT_SEED = layoutSeed(30);
   // Re-derived, not chosen. Was `+ 22`. Adding `outsideDeficit` to the containment
   // term changed which repair seeds the fine grid refuses on this scramble — 22 now
   // improves and 21 does not — so the specimen moved with the population, exactly the
   // maintenance the comment on the count below describes. Picking a seed that still
   // refuses is the whole point: on any other seed the two tests beneath it pass
-  // without the re-check existing at all.
-  const REPAIR_SEED = repairSeed(35, 21);
+  // without the re-check existing at all. Scramble 35 seed 21 until § 52 moved the only
+  // refusal on the grid here.
+  const REPAIR_SEED = repairSeed(30, 7);
 
   function scattered(): Placement[] {
     return scatterInto(base, bounds, LAYOUT_SEED);
@@ -772,11 +787,11 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
     // would be a second copy of `openRoutes`' own line and the drift this repo keeps
     // finding, so the exclusion is by CONTRAST instead: on this same model one
     // different repair seed comes back with a different array, and none of the three
-    // early returns can do that for any seed. Measured on scramble 35 by
+    // early returns can do that for any seed. Measured on scramble 30 by
     // `scripts/openroutes-sweep.mjs`: 27 of the 28 repair seeds come back with a
-    // different array, and only seed 21 refuses.
+    // different array, and only seed 7 refuses.
     const at = scattered();
-    expect(openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(repairSeed(35, 1)))).not.toBe(at);
+    expect(openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(repairSeed(30, 1)))).not.toBe(at);
   });
 
   it('and its answer is never worse on the fine grid than what it was given', () => {
@@ -805,7 +820,8 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
   // The wider 54 x 28 figure is re-derived now, and the artifact is named:
   // `scripts/openroutes-sweep.mjs`, run in full on `ec2a7be` in 413.7 s. **19 of 54
   // scrambles cut, 532 trials, ONE refusal** — scramble 35 at repair seed 21, which is
-  // exactly the specimen frozen above. So the previous note's "three in 532" was stale in
+  // exactly the specimen frozen above (since § 52: scramble 30 at seed 7, the same ONE
+  // in the same 532, and that is the specimen frozen now). So the previous note's "three in 532" was stale in
   // the direction it feared; the cut count and the denominator were not, and this file no
   // longer holds a figure it forbids you to quote.
   //
@@ -817,10 +833,10 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
     const at = scattered();
     const refused: number[] = [];
     for (let j = 0; j < 28; j++) {
-      if (openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(repairSeed(35, j))) === at) refused.push(j);
+      if (openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(repairSeed(30, j))) === at) refused.push(j);
     }
-    expect(refused).toEqual([21]);
-    expect(refused).toContain(REPAIR_SEED - repairSeed(35, 0));
+    expect(refused).toEqual([7]);
+    expect(refused).toContain(REPAIR_SEED - repairSeed(30, 0));
   }, 300_000);
 
   it('…on a fixture where the proxy really does hand back something worse', () => {
