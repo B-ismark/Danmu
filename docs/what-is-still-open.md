@@ -10378,7 +10378,7 @@ a bed should be a top for anything is the open question, and it is a physics one
 
 ## § 51 · Start over on a room whose walls were moved and saved — WRITTEN DOWN, NOT FIXED
 
-**Exists in:** this branch, `lib/room-start.ts` (the header names it) and
+**Exists in:** `abcb216` on `main` (PR #207), `lib/room-start.ts` (the header names it) and
 `tests/start-over.test.tsx`.
 
 Start over decides whether to SHOW against the start laid out for the walls the room opened

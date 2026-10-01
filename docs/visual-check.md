@@ -78,7 +78,7 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### No more stripes where two parts of a piece meet — merged to `main` in `7de4934` (PR #204), LOOKED AT 2026-10-01 except the near wall's skirting, this branch
+### No more stripes where two parts of a piece meet — merged to `main` in `7de4934` (PR #204), LOOKED AT 2026-10-01 except the near wall's skirting, merged to `main` in `502fb23` (PR #206)
 
 The user's report on 2026-10-01: *"the shadow issue is across the platform, the lower part of
 the room, the bed model, the edges of the wardrobe."* **Not shadows** — the key light's shadow
@@ -169,7 +169,7 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
-### Start over puts the room back the way it first opened — this branch, NOT LOOKED AT
+### Start over puts the room back the way it first opened — merged to `main` in `abcb216` (PR #207), NOT LOOKED AT
 
 The user's report on 2026-10-01: the revert square at the end of the right rail showed two
 tooltips, and pressing it should put the room back to how it loaded — *"added models should go
@@ -193,7 +193,7 @@ that appears for a wall drag alone.
 
 **Where it rides.** `lib/room-start.ts`, `components/studio/RailFooter.tsx`, `components/ui/Tooltip.tsx`.
 
-### Deleting a piece brings down what stood on it — this branch, NOT LOOKED AT
+### Deleting a piece brings down what stood on it — merged to `main` in `abcb216` (PR #207), NOT LOOKED AT
 
 The user's report on 2026-10-01: *"an item on top of another remains floating even after
 deleting the item it was initially on."* `removeParts` took the desk out and left the lamp at
@@ -215,7 +215,7 @@ like: a lamp left hanging, a lamp on the floor after Undo, or a piece beside the
 
 **Where it rides.** `lib/orphan-drop.ts`, `components/studio/KeyboardShortcuts.tsx` (`removeParts`).
 
-### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205), NOT LOOKED AT; the floor lamp and tall plant this branch
+### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205), NOT LOOKED AT; the floor lamp and tall plant merged in `502fb23` (PR #206)
 
 The curtain half (a print swapped for curtains hangs flat on the print's wall) was looked at
 on 2026-10-01 and is gone. This is the other way round. A print swapped for a **sofa** kept
@@ -230,7 +230,7 @@ to stand on. A print hung above a bed and swapped for a nightstand used to stand
 on the bed. And a lamp swapped in for a print looks for its table where the lamp ends up, not
 where the print hung.
 
-**This branch.** "A lamp" used to mean any lamp, so a print above the bed swapped for a **floor
+**Merged in `502fb23` (PR #206).** "A lamp" used to mean any lamp, so a print above the bed swapped for a **floor
 lamp** stood the floor lamp on the duvet, and a 1.6 m floor plant the same. Now only a piece of
 tabletop size looks for a top, when swapped in and when added from the Library. An ottoman
 still goes on a top it does not fit under, which was decided before (§ 50 point 4).
@@ -254,7 +254,7 @@ lamp perched on the bed.
 
 **Where it rides.** `lib/swap-model.ts`, `seeksSurface` in `lib/physics.ts`.
 
-### Duplicate puts the copy beside the piece, not inside it — this branch, NOT LOOKED AT
+### Duplicate puts the copy beside the piece, not inside it — merged to `main` in `502fb23` (PR #206), NOT LOOKED AT
 
 The user's report on 2026-10-01: *"duplicating an item should spawn the duplicate properly if
 there's space, it should be next to the main instance, it shouldn't spawn inside the main
@@ -577,7 +577,7 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
-### Comfort zones in the plan are outlines and halos, not cells and dashed boxes — this branch, LOOKED AT once (Chromium, L room)
+### Comfort zones in the plan are outlines and halos, not cells and dashed boxes — merged to `main` in `abcb216` (PR #207), LOOKED AT once (Chromium, L room)
 
 The walkable floor is one rounded outline of the same cells Room check measures
 (`lib/field-contour.ts`), each piece's clearance is a halo fading out from the piece, and floor
@@ -1273,7 +1273,7 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
-### A merged set reads as a tree in the Catalog, not as a stack of outlined cards — this branch, NOT LOOKED AT
+### A merged set reads as a tree in the Catalog, not as a stack of outlined cards — merged to `main` in `abcb216` (PR #207), NOT LOOKED AT
 
 **Where to click.** Open a furnished room, Shift-click two pieces in the Catalog list, press
 **Group 2** in the bar over the canvas. Then: fold and unfold the group with its chevron; click
@@ -1295,7 +1295,7 @@ at its narrowest (the 1024–1279px step).
   until hovered. The marks must show without a pointer.
 - "Group" or a count wrapping onto a second line, or a member's name losing its ellipsis.
 
-**Rides** this branch; the rules are `.tree-row*` in `app/globals.css` and the rows in
+**Rides** `abcb216` on `main` (PR #207); the rules are `.tree-row*` in `app/globals.css` and the rows in
 `components/studio/PartTree.tsx`. Behaviour (selection, fold, ungroup, remove, keys) is untouched.
 
 ### View behind a gear, collapsed rails as icon strips — merged to `main` in `5114b5f` (PR #179)
