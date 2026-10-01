@@ -24,7 +24,7 @@ import { v4 as uuid } from 'uuid';
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRiderRelation, currentRoomScene, useRoomScene } from '@/lib/room-scene';
-import { riderRelation } from '@/lib/rider-height';
+import { dropMoves, orphanDrops, recordDrops, undoDrops, type DropRecord } from '@/lib/orphan-drop';
 import { turnInPlace, turnSwingsInto, refusalCause } from '@/lib/drag-resolve';
 import { planConvoy, travellingWorld } from '@/lib/drag-convoy';
 import { cascadeTransform, snapshotDescendants } from '@/lib/rigid-parent';
@@ -32,12 +32,11 @@ import { turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refus
 import { playSound } from '@/lib/sound';
 import { useDragLive } from '@/lib/drag-live';
 import { useHistory, applySnapshot, startHistoryRecording } from '@/lib/history';
-import { collidesAt, type ScenePart } from '@/lib/scene-spec';
-import { clampIntoFootprint } from '@/lib/footprint';
+import { type ScenePart } from '@/lib/scene-spec';
+import { placeCopies } from '@/lib/duplicate-place';
 import { formatDim, formatLength } from '@/lib/units';
 import { ANNOUNCE_EVENT, announce } from '@/lib/announce';
 import { toast } from '@/components/ui/StorageToast';
-import { confirmDialog } from '@/components/ui/Confirm';
 
 export const STUDIO_SURFACE_ID = 'danmu-studio-surface';
 
@@ -147,18 +146,6 @@ export function StudioAnnouncer() {
 
 // ─── Selection-wide actions the accelerators need ───────────────────────────
 
-/** Where to try putting a copy, in order, so it never lands buried in the piece
- *  it was copied from. */
-const COPY_OFFSETS: Array<[number, number]> = [
-  [0.35, 0.35],
-  [-0.35, 0.35],
-  [0.35, -0.35],
-  [-0.35, -0.35],
-  [0.7, 0],
-  [0, 0.7],
-  [0, 0],
-];
-
 export function selectedIds(): string[] {
   const s = useStudio.getState();
   if (s.selection.length > 0) return s.selection;
@@ -176,13 +163,6 @@ export function selectedIds(): string[] {
  *  irreversible ones (deleting a saved layout, resetting every transform)
  *  dangerous. Those keep their confirm; this doesn't.
  *
- *  **One caller does ask first, and the axis is intent, not blast radius.**
- *  `deleteSelection` — Delete/Backspace — puts a dialog in front of this, because
- *  a keypress can be a typing reflex that missed a field while a button labelled
- *  Delete cannot be pressed by accident in the same way. The prompt belongs to
- *  that gesture, so it lives there and not in here, where it would also catch the
- *  row trash, the context menu and the rail button.
- *
  *  Undo here restores through the store rather than through `applySnapshot`:
  *  history snapshots are debounced 250ms, so a fast click on Undo would
  *  otherwise pop the state *before* the delete. Re-inserting the parts is a
@@ -193,7 +173,18 @@ export function removeParts(ids: string[], opts?: { selectAfter?: string | null 
   const doomed = before.filter((p) => ids.includes(p.id));
   if (doomed.length === 0) return;
 
+  // Gravity is part of the room: whatever was standing on what is leaving comes down.
+  // Asked of the scene BEFORE the pieces go, because "resting on" needs the support
+  // there to be found — and of the effective transforms, which is what the Inspector's
+  // banner asks. See `lib/orphan-drop.ts`.
+  const drops = orphanDrops(currentRoomScene(), new Set(doomed.map((p) => p.id)));
+  const landed = recordDrops(drops, useStudio.getState().positions, useStudio.getState().parentIds);
+
   useScene.setState({ parts: before.filter((p) => !ids.includes(p.id)) });
+  for (const d of drops) {
+    if (dropMoves(d)) useStudio.getState().setPosition(d.id, d.to);
+    useStudio.getState().landOn(d.id, d.supportId ?? undefined);
+  }
 
   // Selection survives everything that didn't just leave: deleting one row of a
   // multi-select must not collapse the rest of it. `selectAfter` overrides for
@@ -220,14 +211,19 @@ export function removeParts(ids: string[], opts?: { selectAfter?: string | null 
   const many = doomed.length > 1;
   toast({
     title: many ? `${doomed.length} pieces removed` : `“${doomed[0].name}” removed`,
-    action: { label: 'Undo', onClick: () => restoreParts(doomed, before) },
+    action: { label: 'Undo', onClick: () => restoreParts(doomed, before, landed) },
     ttl: 8000,
   });
 }
 
 /** Put removed parts back where they sat in the list, skipping any that are
- *  already there (a second click, or an undo that beat the toast to it). */
-function restoreParts(doomed: ScenePart[], before: ScenePart[]) {
+ *  already there (a second click, or an undo that beat the toast to it).
+ *
+ *  `landed` is what the delete dropped, and it goes back with the pieces that were
+ *  holding them up — a lamp left on the floor beside its restored desk is half an
+ *  undo. Only when the parts actually came back, so an undo that lost the race to
+ *  history's does not write a second time. */
+function restoreParts(doomed: ScenePart[], before: ScenePart[], landed: DropRecord[] = []) {
   const current = useScene.getState().parts;
   const present = new Set(current.map((p) => p.id));
   const revived = [...current];
@@ -238,63 +234,30 @@ function restoreParts(doomed: ScenePart[], before: ScenePart[]) {
   }
   if (revived.length === current.length) return;
   useScene.setState({ parts: revived });
+  if (landed.length > 0) {
+    const st = useStudio.getState();
+    const undone = undoDrops(landed, st.positions, st.parentIds);
+    if (undone.positions !== st.positions) {
+      st.loadTransforms({ positions: undone.positions, rotations: st.rotations, dims: st.dims });
+    }
+    if (undone.parentIds !== st.parentIds) st.setParentIds(undone.parentIds);
+  }
   const back = doomed.filter((p) => !present.has(p.id));
   if (back.length === 1) useStudio.getState().setSelected(back[0].id);
   announce(back.length === 1 ? `“${back[0].name}” is back.` : `${back.length} pieces are back.`);
 }
 
-/** Delete/Backspace, and the ONE delete gesture that asks first.
+/** Delete/Backspace: the selection leaves the room, with the same Undo toast as
+ *  every other delete.
  *
- *  The rail's Delete button, the tree's row trash and the context menu all go
- *  straight to `removeParts` and answer with an Undo toast — that argument is
- *  unchanged and it is written out above `removeParts`. This one is different for
- *  a reason that has nothing to do with blast radius and everything to do with
- *  INTENT: pressing a button labelled Delete is a decision, and hitting Backspace
- *  is very often a typing reflex that missed a text field. Same outcome, two
- *  completely different levels of "did you mean it", so the dialog goes on the
- *  gesture that can be made by accident rather than on the one that cannot.
- *
- *  The user asked for it whether or not a group is involved, so there is no size
- *  threshold here. A count-based rule ("ask above three pieces") would put the
- *  prompt exactly where it is least needed — the deliberate multi-select — and
- *  omit it from the slip.
- *
- *  `ids` is captured BEFORE the await. The dialog is async and the selection is
- *  live; resolving it afterwards would delete whatever happened to be selected
- *  when the user pressed Delete in the dialog, which is the same class of defect
- *  as a convoy member resolving against a fresh world instead of a snapshot. */
-export async function deleteSelection() {
-  const ids = selectedIds();
-  if (ids.length === 0) return;
-  const sc = useScene.getState().parts;
-  const names = ids
-    .map((id) => sc.find((p) => p.id === id)?.name)
-    .filter((n): n is string => !!n);
-
-  const ok = await confirmDialog({
-    title: names.length === 1 ? `Delete “${names[0]}”?` : `Delete ${ids.length} pieces?`,
-    // Enumerated rather than counted: `body` is a ReactNode precisely so a
-    // destructive dialog can say WHAT it destroys. A merged set is the case that
-    // needs it — "3 pieces" does not tell you the two nightstands are going with
-    // the bed, and that surprise is what this whole item started as.
-    body:
-      names.length === 1 ? (
-        'It leaves the room. You can undo this.'
-      ) : (
-        <>
-          <div style={{ marginBottom: 8 }}>These leave the room together:</div>
-          <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-            {names.map((n, i) => (
-              <li key={`${n}-${i}`}>{n}</li>
-            ))}
-          </ul>
-        </>
-      ),
-    confirmLabel: 'Delete',
-    danger: true,
-  });
-  if (!ok) return;
-  removeParts(ids);
+ *  It used to be the one delete gesture that asked first, on the argument that a
+ *  keypress can be a typing reflex that missed a field. The user asked for the
+ *  dialog to go (2026-10-01), and the reflex is already answered where it starts:
+ *  the key handler only runs while the studio surface has focus
+ *  (`studioSurfaceFocused`), so a Backspace typed into a field never reaches here,
+ *  and what does reach here is one click from coming back. */
+export function deleteSelection() {
+  removeParts(selectedIds());
 }
 
 /** @param explicit which pieces to copy, when the gesture names them rather than
@@ -304,56 +267,63 @@ export function duplicateSelection(explicit?: string[]) {
   const ids = explicit ?? selectedIds();
   if (ids.length === 0) return;
   const sc = useScene.getState();
-  const created: string[] = [];
 
-  // Duplicating copies the piece as it STANDS, not as it was authored.
+  // Duplicating copies the piece as it STANDS, not as it was authored — and puts it
+  // beside the original rather than in it (`lib/duplicate-place.ts`, where the
+  // reasons are written down).
   const live = currentRoomScene();
-  for (const id of ids) {
-    const base = sc.parts.find((p) => p.id === id);
-    const eff = live.find((p) => p.id === id);
-    if (!base || !eff) continue;
-    const { pos, rot, dimMM } = eff;
+  const pairs = ids
+    .map((id) => ({ base: sc.parts.find((p) => p.id === id), eff: live.find((p) => p.id === id) }))
+    .filter((x): x is { base: ScenePart; eff: ScenePart } => !!x.base && !!x.eff);
+  if (pairs.length === 0) return;
+  const { spots, clear, beside } = placeCopies(pairs.map((x) => x.eff), live, sc.room.footprint, sc.room.height);
 
-    // Probe with a stand-in that IS in the parts list, so the original counts as
-    // an obstacle — collidesAt exempts whatever id you name as the mover.
-    const probeId = '__duplicate-probe__';
-    const probeParts = [...useScene.getState().parts, { ...base, id: probeId }];
-    let placed: [number, number, number] = [pos[0], pos[1], pos[2]];
-    for (const [dx, dz] of COPY_OFFSETS) {
-      const [cx, cz] = clampIntoFootprint(pos[0] + dx, pos[2] + dz, sc.room.footprint);
-      if (!collidesAt(probeParts, probeId, [cx, pos[1], cz], rot, dimMM)) {
-        placed = [cx, pos[1], cz];
-        break;
-      }
-    }
-
+  const created: string[] = [];
+  const copyOf = new Map<string, string>();
+  pairs.forEach(({ base, eff }, i) => {
     const copy: ScenePart = {
       ...base,
       id: `${base.category}-${uuid().slice(0, 6)}`,
-      pos: placed,
-      rot,
-      dimMM,
+      pos: spots[i].pos,
+      rot: spots[i].rot,
+      dimMM: eff.dimMM,
       // A copy is its own piece: inheriting the merge group would make it move
       // with a group the user never added it to.
       groupId: undefined,
     };
     useScene.getState().addPart(copy);
-    // A copy of a rider is a rider. `pos` above came from `currentRoomScene()`, so it
-    // carries the height its support was CORRECTED to — an authored Y that
-    // `resetTransforms` cannot reach and `RoomSync` persists. Without the relation the
-    // copy is severed from the piece it was cloned from: shrink the desk back and the
-    // original returns while the copy stays where it was, two identical lamps 450 mm
-    // apart on one desk. `riderRelation` answers for a seeded rider as well as a
-    // dragged one, and if the copy landed clear of the support `stillOver` drops the
-    // edge on the next read.
-    const on = riderRelation(sc.parts, useStudio.getState().parentIds)[id];
-    if (on) useStudio.getState().setParent(copy.id, on);
+    copyOf.set(base.id, copy.id);
     created.push(copy.id);
-  }
+  });
+  // A copy of a rider is a rider — of whatever the COPY landed on, which is not always
+  // what its original rides: a lamp off a full nightstand goes onto the other one, and
+  // one copied with its desk onto the desk's copy. Linking it to the original's support
+  // instead wrote an edge that overrode the right one, so dragging the nightstand it
+  // actually stood on left it in the air. Without the relation at all the copy is
+  // severed from its support: shrink the desk back and the original returns while the
+  // copy stays where it was.
+  pairs.forEach(({ base }, i) => {
+    const on = spots[i].support;
+    if (!on) return;
+    const target = on.copy ? copyOf.get(on.id) : on.id;
+    if (target) useStudio.getState().setParent(copyOf.get(base.id)!, target);
+  });
 
-  if (created.length === 0) return;
   useStudio.getState().setSelection(created, created[created.length - 1]);
-  announce(created.length === 1 ? 'Copy added and selected.' : `${created.length} copies added and selected.`);
+  if (clear) {
+    // "Beside" only when it is: the room search can put a copy metres away.
+    const where = beside ? (created.length === 1 ? ' beside it' : ' beside them') : '';
+    announce(created.length === 1 ? `Copy added${where} and selected.` : `${created.length} copies added${where} and selected.`);
+  } else {
+    // Rule 2: when it does not fit, say so. The copy is made — a Duplicate that does
+    // nothing reads as broken — and outlined red where it stands.
+    paintRefusal(created);
+    announce(
+      created.length === 1
+        ? 'No clear space left in the room, so the copy overlaps something. Move it somewhere clear.'
+        : 'No clear space left in the room, so the copies overlap something. Move them somewhere clear.',
+    );
+  }
 }
 
 /** Live handle for the outline timer, so a second turn replaces the first's countdown
@@ -681,9 +651,7 @@ export function KeyboardShortcuts() {
         case 'Delete':
         case 'Backspace':
           e.preventDefault();
-          // `void`: the dialog is async and nothing here waits on it. The key
-          // handler must stay synchronous so `preventDefault` above still lands.
-          void deleteSelection();
+          deleteSelection();
           return;
       }
       // The gizmo's three modes only exist on the 3D tab. Armed on the plan they

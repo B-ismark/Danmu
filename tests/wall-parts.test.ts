@@ -492,6 +492,21 @@ describe('placeNewPart keeps a drop inside the room', () => {
   });
 });
 
+describe('containedXZ looks around, not only toward the middle', () => {
+  // Found in review: a 2137 × 1558 mm piece at 45° in a 6 × 6 m U, asked at
+  // (−1.41, −0.10). The wall pushes bounce it between the inner corner's two walls and
+  // the walk home crosses the notch, so it came back ~0.3 m through the plaster with a
+  // seat 0.35 m away. The ring around the asked spot finds that seat.
+  const U = footprintForLayout('u', 6, 6);
+  const dim: [number, number, number] = [2137, 1558, 600];
+
+  it('a turned piece in the inner corner ends inside', () => {
+    const [x, z] = seat(dim, Math.PI / 4, -1.41, -0.1, U);
+    expect(footInsidePoly(footFromPart([x, 0, z], Math.PI / 4, dim), U as unknown as Poly)).toBe(true);
+    expect(Math.hypot(x + 1.41, z + 0.1)).toBeLessThan(0.5);
+  });
+});
+
 describe('placeNewPart: the two edges of that clamp', () => {
   const RECT6x4: Footprint = [
     [0, 0],

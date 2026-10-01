@@ -101,6 +101,66 @@ describe('the room is closed to the sun', () => {
   });
 });
 
+// The skirting was a flat sheet laid ON the wall's face — two surfaces on one plane,
+// facing the same way, which the depth buffer cannot order: the sawtooth at the base of
+// every wall in the user's 2026-10-01 report. `tests/coplanar-faces.test.tsx` walks
+// `PartGeometry`, not this file, so the guard for the room's own half lives here.
+describe('the skirting stands proud of the wall it runs along', () => {
+  const skirting = meshBlock('key={`sk-');
+  const proud = /const SKIRTING_PROUD = ([\d.]+);/.exec(SHELL);
+
+  it('is a board, not a sheet on the plaster', () => {
+    expect(skirting).not.toBeNull();
+    expect(skirting).toContain('<boxGeometry args={[b - a, SKIRTING_H, SKIRTING_PROUD]} />');
+    expect(skirting).not.toContain('planeGeometry');
+  });
+
+  it('sits wholly on the room side: its back face on the plaster, not through it', () => {
+    // Centred half its thickness along the inward normal, so its back face IS the
+    // wall's face — which is a pair facing opposite ways, and nothing fights.
+    expect(SHELL).toContain('const out = SKIRTING_PROUD / 2;');
+    // With the sign: `- out` builds the same board 12 mm INSIDE the plaster.
+    expect(skirting).toContain('+ out * Math.sin(wl.yaw)');
+    expect(skirting).toContain('+ out * Math.cos(wl.yaw)');
+    // Thick enough to be a face of its own, and under `WALL_GAP` (20 mm), so a piece
+    // snapped flush to a wall still clears it.
+    expect(Number(proud?.[1])).toBe(0.012);
+  });
+});
+
+// …and a board is a closed box, so it has a BACK: the one face the cut-away cannot
+// cull. From outside the near wall that back faced the camera, and the near wall's
+// skirting hung across the foot of the dollhouse view in front of every piece — the
+// grey strip striped with wardrobe in the user's next picture. It goes with its wall.
+describe('the skirting goes when its wall goes', () => {
+  const fn = SHELL.slice(SHELL.indexOf('function WallSkirting('));
+
+  it('lives inside the component that hides it', () => {
+    expect(SHELL).toContain('function WallSkirting(');
+    expect(fn).toContain('key={`sk-');
+    expect(SHELL).toMatch(/<WallSkirting key=\{`sk-\$\{i\}`\}/);
+  });
+
+  it("asks the wall's own question, through the plane of the plaster", () => {
+    // Depth 0 is the wall's face. The board's centre (`+ out`) would hide it a hair
+    // early, and its front face later than the wall; neither is the plane the GPU culls on.
+    expect(fn).toContain('cutAwayWithWall([camera.position.x, camera.position.y, camera.position.z], [wl.x, 0, wl.z], wl.yaw, 0)');
+    // With the sign: dropping the `!` shows the near wall's skirting and hides the far ones.
+    expect(fn).toContain('g.visible = !cutAwayWithWall(');
+  });
+
+  it('agrees with the wall on which side is outside', async () => {
+    const { cutAwayWithWall } = await import('@/lib/near-wall');
+    // A north wall at z = -3 faces +z into the room (yaw 0): the camera south of it is
+    // inside and sees the board, the camera north of it is outdoors and must not.
+    expect(cutAwayWithWall([0, 2, 4], [0, 0, -3], 0, 0)).toBe(false);
+    expect(cutAwayWithWall([0, 2, -5], [0, 0, -3], 0, 0)).toBe(true);
+    // An east wall at x = 3 faces -x (yaw -π/2).
+    expect(cutAwayWithWall([6, 2, 0], [3, 0, 0], -Math.PI / 2, 0)).toBe(true);
+    expect(cutAwayWithWall([0, 2, 0], [3, 0, 0], -Math.PI / 2, 0)).toBe(false);
+  });
+});
+
 describe('the per-piece shadow gate is gone, not merely unused', () => {
   // The removed-vocabulary check, kept as a gate rather than run once by hand.
   // `lib/sun-shadow.ts` was a workaround for a room with no ceiling: it asked, per

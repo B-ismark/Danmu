@@ -23,7 +23,7 @@
 // bay never overhangs a wall it merely straddles on the grid.
 
 import type { Footprint } from './footprint';
-import { pointInPoly, type Poly } from './geometry';
+import { pointInPoly, segmentsCross, type Poly } from './geometry';
 
 /** An axis-aligned rectangle of real floor. */
 export type Bay = {
@@ -256,24 +256,6 @@ function rectInsidePoly(b: Bay, poly: Poly): boolean {
     }
   }
   return true;
-}
-
-/** Do two segments properly cross? Orientation signs, strict on both — segments
- *  that merely share an endpoint or run along each other do not count, which is
- *  what a rectangle flush against a wall does. */
-function segmentsCross(
-  p1: [number, number],
-  p2: [number, number],
-  p3: [number, number],
-  p4: [number, number],
-): boolean {
-  const d = (a: [number, number], b: [number, number], c: [number, number]) =>
-    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-  const d1 = d(p1, p2, p3);
-  const d2 = d(p1, p2, p4);
-  const d3 = d(p3, p4, p1);
-  const d4 = d(p3, p4, p2);
-  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
 }
 
 /** Does the whole side lie on the polygon's boundary?

@@ -4,7 +4,6 @@ import {
   cellAt,
   cellCentre,
   componentAreas,
-  fieldRuns,
   freeShareOf,
   gapTolerance,
   largestFreeCircle,
@@ -16,6 +15,7 @@ import {
   FIELD_CELL,
 } from '@/lib/clearance-field';
 import { analyzeRoom, freeFloorFraction } from '@/lib/clearance';
+import { fieldContours, loopArea } from '@/lib/field-contour';
 import { obbGap, type OBB, type Poly } from '@/lib/geometry';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
@@ -323,35 +323,28 @@ describe('analyzeRoom circulation rules', () => {
   });
 });
 
-describe('fieldRuns', () => {
-  it('collapses a room into far fewer runs than cells', () => {
+describe('the plan overlay outline', () => {
+  // The plan draws this field as `lib/field-contour.ts` outlines; these pin the
+  // drawing to the cells Room check measures, on a real field rather than a toy grid.
+  it('outlines the walkable floor around a piece as the room with a hole in it', () => {
     const f = buildClearanceField([box(0, 0, 1.4, 0.7)], RECT)!;
-    const runs = fieldRuns(f, (at) => (f.component[at] >= 0 ? 0 : -1));
+    const walk = (at: number) => f.component[at] >= 0;
+    const loops = fieldContours(f, walk);
+    expect(loops).toHaveLength(2);
     const walkableCells = f.component.reduce((n, id) => n + (id >= 0 ? 1 : 0), 0);
     expect(walkableCells).toBeGreaterThan(5000);
-    // One or two runs per row, not one node per cell — this is the whole reason
-    // the overlay can be SVG that reads the design tokens.
-    expect(runs.length).toBeLessThan(f.nz * 3);
-    // …and they cover exactly the classified cells, no more and no less.
-    const covered = runs.reduce((sum, r) => sum + Math.round(r.w / f.cell), 0);
-    expect(covered).toBe(walkableCells);
+    // Outer area minus the hole is the cells' own area, to within a chamfer per
+    // boundary cell — the outline is a drawing of these cells, not of something near them.
+    const [outer, hole] = loops.map((l) => Math.abs(loopArea(l))).sort((x, y) => y - x);
+    const perimeterCells = loops.reduce((n, l) => n + l.length, 0);
+    expect(Math.abs(outer - hole - walkableCells * f.cell ** 2)).toBeLessThan(perimeterCells * f.cell ** 2 * 0.25);
   });
 
-  it('splits a run where the state changes', () => {
+  it('keeps two walkable regions as two outlines', () => {
     const f = buildClearanceField([box(0, 0, 0.5, 4)], RECT)!;
-    // A slab down the middle: every row through it has walkable floor on both
-    // sides and nothing in between.
-    const runs = fieldRuns(f, (at) => (f.component[at] >= 0 ? f.component[at] : -1));
     expect(f.componentCount).toBe(2);
-    const states = new Set(runs.map((r) => r.state));
-    expect(states).toEqual(new Set([0, 1]));
-  });
-
-  it('gives up rather than emitting a node per cell', () => {
-    const f = buildClearanceField([], RECT)!;
-    // Alternating cells make every single cell its own run — the pathological
-    // case the cap exists for.
-    expect(fieldRuns(f, (at) => (at % 2 === 0 ? 0 : -1), 100)).toEqual([]);
+    expect(fieldContours(f, (at) => f.component[at] === 0)).toHaveLength(1);
+    expect(fieldContours(f, (at) => f.component[at] === 1)).toHaveLength(1);
   });
 });
 

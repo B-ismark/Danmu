@@ -470,44 +470,6 @@ export function componentsAround(f: ClearanceField, b: Foot, margin = 0.75): Set
   return out;
 }
 
-export type FieldRun = { x: number; z: number; w: number; h: number; state: number };
-
-/** The field as horizontal runs of like-classified cells, in world metres.
- *
- *  For drawing. A 6 × 4 m room is ~10 000 cells but only a few hundred runs, so a
- *  plan overlay can be plain SVG rects that read `var(--accent-2-tint)` like
- *  everything else on the page — no canvas, and therefore no third copy of the
- *  palette in `scene-palette.ts` for a layer that cannot see the tokens.
- *
- *  `classify` returns a small state number, or anything negative to draw nothing.
- *  Bails to an empty array past `max` runs rather than emitting tens of thousands
- *  of nodes into the document. */
-export function fieldRuns(f: ClearanceField, classify: (at: number) => number, max = 8000): FieldRun[] {
-  const out: FieldRun[] = [];
-  for (let j = 0; j < f.nz; j++) {
-    const row = j * f.nx;
-    let runStart = -1;
-    let runState = -1;
-    for (let i = 0; i <= f.nx; i++) {
-      const state = i < f.nx ? classify(row + i) : -1;
-      if (state === runState) continue;
-      if (runState >= 0 && runStart >= 0) {
-        out.push({
-          x: f.minX + runStart * f.cell,
-          z: f.minZ + j * f.cell,
-          w: (i - runStart) * f.cell,
-          h: f.cell,
-          state: runState,
-        });
-        if (out.length > max) return [];
-      }
-      runState = state;
-      runStart = state >= 0 ? i : -1;
-    }
-  }
-  return out;
-}
-
 /** Floor area of each walkable region, m². Index is the component id. */
 export function componentAreas(f: ClearanceField): number[] {
   const areas = new Array<number>(f.componentCount).fill(0);

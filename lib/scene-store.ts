@@ -59,6 +59,18 @@ type SceneState = {
    *  did. Set by `loadFromRoom`, which is the one place the scene changes which
    *  room it is about. */
   loadedRoomId: string | null;
+  /** What the room was opened FROM — its record, whose detections (or, with none,
+   *  its layout) are what `buildSceneFromRoom` furnishes it with — or null for the
+   *  starter room. Kept so "Start over" can rebuild the room as it first arrived,
+   *  which no saved scene can tell it: the saved scene is the room as it is NOW.
+   *  See `lib/room-start.ts`. Set by `loadFromRoom` only. */
+  startSource: RoomData | null;
+  /** The walls the room OPENED with, set beside `startSource` by `loadFromRoom`
+   *  only. They are half of the start: Start over puts these walls back along with
+   *  the pieces laid out inside them (`startOver` in `RailFooter`), and a room whose
+   *  walls differ from them has something to start over (`sameWalls`,
+   *  `lib/room-start.ts`). Paint, site and lighting are not part of it. */
+  startRoom: RoomShape;
   /** The room whose WHOLE load has finished: meta, saved scene, transforms, locks
    *  and parents, the three reads `RoomSync` makes. `loadedRoomId` is set by the
    *  first of those, so until this matches the route the studio is still showing a
@@ -120,6 +132,8 @@ export const useScene = create<SceneState>((set, get) => ({
   parts: defaultScene(),
   room: DEFAULT_ROOM,
   loadedRoomId: null,
+  startSource: null,
+  startRoom: DEFAULT_ROOM,
   hydratedRoomId: null,
   setHydrated: (roomId) => set({ hydratedRoomId: roomId }),
   ready: false,
@@ -150,6 +164,8 @@ export const useScene = create<SceneState>((set, get) => ({
     if (!room)
       return set({
         loadedRoomId: null,
+        startSource: null,
+        startRoom: DEFAULT_ROOM,
         parts: defaultScene(DEFAULT_ROOM.layoutId, DEFAULT_ROOM.width, DEFAULT_ROOM.depth, {
           footprint: DEFAULT_ROOM.footprint,
           height: DEFAULT_ROOM.height,
@@ -161,19 +177,22 @@ export const useScene = create<SceneState>((set, get) => ({
     // A saved custom footprint (from independent wall moves) is the source of
     // truth; otherwise derive the preset shape from the layout + dims.
     const footprint = roomFootprint(room);
+    const shape: RoomShape = {
+      width: room.width,
+      depth: room.depth,
+      height: room.height,
+      layoutId,
+      footprint,
+      wallColors: room.wallColors ?? {},
+      site: room.site,
+      ...(room.roughSize === true ? { roughSize: true as const } : {}),
+    };
     set({
       loadedRoomId: room.id,
+      startSource: room,
+      startRoom: shape,
       parts: buildSceneFromRoom(room),
-      room: {
-        width: room.width,
-        depth: room.depth,
-        height: room.height,
-        layoutId,
-        footprint,
-        wallColors: room.wallColors ?? {},
-        site: room.site,
-        ...(room.roughSize === true ? { roughSize: true as const } : {}),
-      },
+      room: shape,
       ready: true,
     });
   },

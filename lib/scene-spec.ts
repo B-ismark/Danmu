@@ -22,7 +22,7 @@ import {
   snapToWall,
   pullToward,
   findSupportDetailed,
-  isTabletopProne,
+  seeksSurface,
   verticalExtent,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
@@ -3050,7 +3050,7 @@ export function placeNewPart(
       const snapped = snapToWall([ax, 0, az], dimMM, room.footprint, wallStandoff(shape));
       // `supportId: null` for the whole wall-mounted family, and it is a fact rather
       // than a placeholder: a piece fixed to a wall or hung from the slab does not REST
-      // on furniture, so there is no riding edge to record. `isTabletopProne` is false
+      // on furniture, so there is no riding edge to record. `seeksSurface` is false
       // for every one of them, so the probe below never ran for these branches either.
       return { pos: [snapped.x, y, snapped.z], rot: snapped.rot ?? 0, wallMounted, supportId: null };
     }
@@ -3119,7 +3119,7 @@ export function placeNewPart(
   // from the shape too, so this is the outline the piece is then drawn and dragged
   // with.
   const [fx, fz] = intoRoom(ax, az, rot);
-  const support = isTabletopProne(cat)
+  const support = seeksSurface(cat, shape, dimMM)
     ? findSupportDetailed(existing, { id: '__new__', category: cat, shape }, fx, fz, dimMM, rot, isRoundPart(shape))
     : null;
   // The id and the height are gated on ONE condition on purpose. A piece whose

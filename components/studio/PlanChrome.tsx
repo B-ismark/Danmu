@@ -141,12 +141,12 @@ export function ComfortLegend({ hasCutOff }: { hasCutOff: boolean }) {
       }}
     >
       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Swatch fill="var(--accent-2-tint)" dashed />
+        <Swatch kind="halo" />
         Room each piece needs to be used
       </span>
       {hasCutOff && (
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--warn-text)' }}>
-          <Swatch fill="var(--warn-tint)" />
+          <Swatch kind="cut-off" />
           No route from the door to here
         </span>
       )}
@@ -154,7 +154,9 @@ export function ComfortLegend({ hasCutOff }: { hasCutOff: boolean }) {
   );
 }
 
-function Swatch({ fill, dashed }: { fill: string; dashed?: boolean }) {
+/** A legend chip drawn the way the plan draws the thing it names: the halo as a
+ *  soft sage fade out from the piece, cut-off floor as the warm hatch. */
+function Swatch({ kind }: { kind: 'halo' | 'cut-off' }) {
   return (
     <span
       aria-hidden="true"
@@ -162,9 +164,12 @@ function Swatch({ fill, dashed }: { fill: string; dashed?: boolean }) {
         width: 14,
         height: 10,
         flexShrink: 0,
-        background: fill,
-        border: dashed ? '1px dashed var(--accent-2)' : '1px solid var(--edge)',
-        borderRadius: 2,
+        borderRadius: 3,
+        background:
+          kind === 'halo'
+            ? 'linear-gradient(to right, color-mix(in srgb, var(--accent-2) 32%, transparent), color-mix(in srgb, var(--accent-2) 6%, transparent))'
+            : 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--warn) 40%, transparent) 0 1.5px, var(--warn-tint) 1.5px 5px)',
+        border: kind === 'cut-off' ? '1px solid color-mix(in srgb, var(--warn) 45%, transparent)' : undefined,
       }}
     />
   );

@@ -29,6 +29,7 @@ import { addPieceToRoom } from '@/lib/add-piece';
 import { sayAdded } from './say-added';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { LibraryPicker } from './LibraryPicker';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 import { announce } from '@/lib/announce';
@@ -45,56 +46,63 @@ export const STUDIO_CANVAS_ID = 'studio-canvas';
 export function AddPiecesButton() {
   const open = useStudio((s) => s.catalogOpen);
   const setOpen = useStudio((s) => s.setCatalogOpen);
+  // The house bubble, and it names what pressing does NOW. It was a native `title`
+  // fixed at "Add a piece to the room", so on the open state it sat over a button
+  // reading "Close" promising the opposite, in the browser's grey box rather than
+  // the one every other control here uses.
+  const tip = open ? 'Close the Library' : 'Add a piece to the room';
   return (
-    <button
-      onClick={() => {
-        const next = !open;
-        setOpen(next);
-        if (!next) return;
-        // The CSS reduced-motion block cannot reach a JS-requested smooth scroll.
-        const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-        document
-          .getElementById(STUDIO_CANVAS_ID)
-          ?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
-      }}
-      aria-expanded={open}
-      title="Add a piece to the room"
-      className="ds-btn ds-btn--sm"
-      style={{
-        background: 'var(--accent-tint)',
-        // --accent as type on --accent-tint measures 2.89:1; --accent-text is
-        // the accent-coloured ink that clears 4.5:1 on the same tint.
-        borderColor: 'var(--accent-text)',
-        color: 'var(--accent-text)',
-      }}
-    >
-      {/* The label says the action, not the state: a button that reads "Library is
-          open" is a status line you can press.
-          It says "Add", not "Browse the library", because the user asked for a CTA
-          that names what pressing it achieves. "Library" survives as the name of
-          the collection it opens — the search field inside still searches the
-          library, and `StudioHelp` still teaches Catalog-vs-Library — so rule 4's
-          distinction is intact and the screen gains no second Catalog. The panel
-          this opens is headed "Library"; see the note on that heading for why the
-          button and the heading are named on different principles.
+    <Tooltip label={tip}>
+      <button
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (!next) return;
+          // The CSS reduced-motion block cannot reach a JS-requested smooth scroll.
+          const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+          document
+            .getElementById(STUDIO_CANVAS_ID)
+            ?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+        }}
+        aria-expanded={open}
+        aria-label={tip}
+        className="ds-btn ds-btn--sm"
+        style={{
+          background: 'var(--accent-tint)',
+          // --accent as type on --accent-tint measures 2.89:1; --accent-text is
+          // the accent-coloured ink that clears 4.5:1 on the same tint.
+          borderColor: 'var(--accent-text)',
+          color: 'var(--accent-text)',
+        }}
+      >
+        {/* The label says the action, not the state: a button that reads "Library is
+            open" is a status line you can press.
+            It says "Add", not "Browse the library", because the user asked for a CTA
+            that names what pressing it achieves. "Library" survives as the name of
+            the collection it opens — the search field inside still searches the
+            library, and `StudioHelp` still teaches Catalog-vs-Library — so rule 4's
+            distinction is intact and the screen gains no second Catalog. The panel
+            this opens is headed "Library"; see the note on that heading for why the
+            button and the heading are named on different principles.
 
-          One word rather than "Add a piece", and the reason is the row it sits in
-          rather than brevity for its own sake: `RailFooter` puts it beside a
-          labelled Delete and a 32px square inside a rail that floors at
-          `--rail-right-min`, and the two longer labels together ask for more width
-          than that leaves. The object is not lost — the `title` says "Add a piece
-          to the room", the panel it opens is headed "Library", and the canvas
-          trigger has read a bare "Add" all along, so the two triggers now agree.
+            One word rather than "Add a piece", and the reason is the row it sits in
+            rather than brevity for its own sake: `RailFooter` puts it beside a
+            labelled Delete and a 32px square inside a rail that floors at
+            `--rail-right-min`, and the two longer labels together ask for more width
+            than that leaves. The object is not lost — the tooltip says "Add a piece
+            to the room", the panel it opens is headed "Library", and the canvas
+            trigger has read a bare "Add" all along, so the two triggers now agree.
 
-          The label gets its own element so it can ellipsise: `.ds-btn` is
-          `white-space: nowrap` and a bare text node beside an icon is an anonymous
-          flex item that no per-site rule can reach, which sends the overflow out
-          through the border instead. `globals.css` names this opt-out. */}
-      <Icon name={open ? 'x' : 'plus'} size={12} />
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
-        {open ? 'Close' : 'Add'}
-      </span>
-    </button>
+            The label gets its own element so it can ellipsise: `.ds-btn` is
+            `white-space: nowrap` and a bare text node beside an icon is an anonymous
+            flex item that no per-site rule can reach, which sends the overflow out
+            through the border instead. `globals.css` names this opt-out. */}
+        <Icon name={open ? 'x' : 'plus'} size={12} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+          {open ? 'Close' : 'Add'}
+        </span>
+      </button>
+    </Tooltip>
   );
 }
 

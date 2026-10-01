@@ -1711,6 +1711,10 @@ the user went and looked.
   destructive action behind a glyph.
 - **Wrapping the footer row instead of shortening its labels.** It reaches "stacked" again
   at exactly the width the original report was about.
+- **Fix leaving a hand-placed piece where it stands when nothing is wrong** (§ H.6.6, the
+  user's call 2026-10-01: *"go with (a), leave Fix as is"*). Fix tidies to the guidelines,
+  so a sofa floated off its wall goes back to it; Undo or Lock keeps the float. The rejected
+  version would have changed every hand-placed piece in every room.
 - **A furniture CSV or parts spreadsheet.** `CLAUDE.md` rule 6. Recorded because it has been
   violated twice.
 - **Hiding the repeat note on a ticked row** (review of #160). *Probably the bed from Wall 1
@@ -4055,6 +4059,18 @@ turn lands in reach only with **Snap when dragging → Free**, or from a scan or
 angle. And only in a room with a wall its bounding box does not have, as above.
 
 *Still open.*
+- **A sofa pulled off its wall, then turned — DECIDED 2026-10-01: Fix stays as it is.**
+  The user, 2026-10-01: *"If moved forward a bit and turned, it moves back to it's previous
+  position and turn to face the tv."* Measured in the T at 5.5 × 4.7, the sofa `placed`: moved
+  30 cm along its front and turned ±10°, the room has no fault at all (Room check would say it
+  checks out), and `wall` 2.26, `relation` 2.68 and `alignment` 0.89 price it. Back on its
+  wall, square, those fall to 0.24 / 0 / 0 for 2.22 of `inertia` (four times the app's own
+  pieces', `PLACED_INERTIA`), so every seed puts it back. Only turned, with no move, it squares
+  in place on every seed, as the table above says. So `squareFaults` is not reached and is
+  not meant to be: it fires only on a fault. Put to the user as (a) leave it — Fix tidies to
+  the guidelines, says *“Sofa” moved beside what it belongs with*, and Undo or Lock keeps a
+  floated sofa — or (b) make Fix honour a hand placement when nothing is WRONG. **The user
+  chose (a):** *"go with (a), leave Fix as is"*. (b) is in § C so it is not re-proposed.
 - **A sofa 2.5° through its wall.** A turn that small is inside `TURN_EPSILON`, so `moved`
   would not count it and the candidate does not try it. The search's own answers hit the
   same wall: in `rect` 6 × 4 with the sofa set at −2.5° (by a scan or a file; a hand turn
@@ -10331,3 +10347,81 @@ typical height exactly (nightstand, bookshelf, desk), so on those a typical size
 It wants pieces off typical in both directions, and a look at what it does to a correct row the
 user already sees as *up to about N wide*, since the number built would no longer be the number
 printed.
+
+## § 50 · Four limits the swap and duplicate follow-up left in place — MEASURED 2026-10-01, NOT FIXED
+
+The first three are in the commit that fixed the U-arm containment (`wallDeficits` counting only
+walls the piece can see, `lib/layout-settle.ts`); the fourth is the swap's. Each is written down so it does not get
+re-found as a regression. **This paragraph first said "none is a regression", and review
+disproved it:** counting only the walls a piece can see let a TURNED piece in a U's inner
+corner bounce between that corner's two walls, and the walk toward the middle crossed the
+notch — a 2137 × 1558 mm piece at 45° ended 0.3 m through the plaster with a seat 0.35 m
+away. `containedXZ` now tries rings around the asked spot, out to a metre, before giving up.
+Over 42 432 drops (four sizes, eight turns, every 250 mm of the 6 × 6 L, T and U), pieces left
+outside with a seat within a metre went **467 → 58**; the 1 618 left outside beyond that have
+their nearest seat further than a metre off — the arm is too narrow for them at that turn —
+and carrying a piece across the room to fit is a different place, not a correction. The 410
+drops that start inside and still move are the 20 mm wall gap, identical before and after.
+
+**1. In a U, a piece too wide for its arm ends ~27 mm through the plaster.** A 2000 × 900 table
+swapped in for a print on an arm's end wall, turned to run across the arm: no spot in the
+1.68 m arm holds it, so `containedXZ` walks it toward `interiorPoint` and it ends with
+`outsideDeficit` 0.027. With `polygonCentroid` as the walk's target (which lands in the
+notch) it stayed in the arm 340 mm through the wall, so the target is pinned in
+`tests/swap-model.test.ts`. The honest fix is refusal or a turn, not a better clamp — rule 2's
+"say so, never silently resize": the swap could turn the piece to fit the arm, or keep it and
+report it the way a refused drag does. A decision, because the swap currently never refuses.
+
+**2. A U resized to 6 × 4 seats the bedside pieces in a pocket the bed seals off.** Before the
+fix, containment flung the nightstand and lamp 3.5 m into the other arm; now they stand beside
+the bed, where they belong, and Room check reports `reach` ("You can't walk to everything").
+`tests/impossible-clause-wired.test.tsx` counts three fixable findings for that reason. The
+offered U (6 × 5, `app/onboarding/layout-pick/page.tsx`) is identical before and after, with no
+findings. This is a seeder question, not a containment one: at 6 × 4 the starter's bed is the
+wrong size or the wrong wall for that arm.
+
+**3. Change the model does no collision avoidance.** A nightstand swapped in for a print over a
+bed stands on the floor inside the bed's footprint (it no longer stands on the bed — that half
+is fixed). The add path behaves the same, so the swap matches it; the fix is one for both, and
+`lib/duplicate-place.ts`'s candidate search is the shape it would take.
+
+**4. An ottoman over a bed still goes on the bed.** The swap and the add path now ask
+`seeksSurface` (`lib/physics.ts`) rather than the category, so a floor lamp or a 1.6 m plant
+put where a print hung above the bed stands on the floor. The ottoman was left in on purpose:
+one put over a top it does not fit under goes on it, § H.6.4's decision, which
+`tests/seat-support.test.ts` holds for a coffee table. A bed is a top by that rule. Whether
+a bed should be a top for anything is the open question, and it is a physics one.
+
+## § 51 · Start over on a room whose walls were moved and saved — WRITTEN DOWN, NOT FIXED
+
+**Exists in:** `abcb216` on `main` (PR #207), changed on `claude/affectionate-ritchie-ilawx1`:
+`lib/room-start.ts` (the header names it), `components/studio/RailFooter.tsx` and
+`tests/start-over.test.tsx`.
+
+**What Start over is now.** The room as it OPENED, walls included: the outline, the size, the
+ceiling height and every piece laid out inside them (`useScene.startRoom` beside
+`startSource`). Wall paint, the site and the lighting are not part of it. A wall drag or a
+height change lights the button, and pressing it puts the walls back with the furniture.
+
+**Why the walls became part of it.** The first version kept today's walls and laid a fresh start
+out inside them. On paper a wall drag alone did not light the button. In the user's first try on
+2026-10-01 it did, because a wall drag carries the furniture with it (`moveWallCarrying` writes
+position overrides), so the drag is never only the walls. Pressing the button then handed back a
+starter re-laid for the new walls: a different arrangement, which nobody had asked for. The user
+chose "walls too" over hiding the button for a carried-only drag.
+
+**What is left.** "Opened" means opened THIS time. A starter whose walls were moved and then saved
+reopens with those walls as its start, and with pieces that were laid out for the OLD walls and
+carried. The start built for the saved walls is a different arrangement, so the button is offered
+on a room nobody has touched since it opened. Pressing it re-lays the furniture for the saved
+walls: the same surprise the user hit, though now only after a reload and with the walls left
+where they are.
+
+**Why it is not fixed.** The walls a starter was first furnished for are not stored anywhere.
+`withShell` saves the new shell over the old one, so nothing on reload can tell "furnished for
+these walls" from "furnished for walls since moved". The fix is a stored marker: either the
+start's shell (which would also let Start over put the ORIGINAL walls back), or the saved scene
+itself taken as the start on reopen. Both are a new persisted field. Related, and older than
+Start over: after `moveWall` the store's `layoutId` is `'custom'`, but the record keeps its
+preset. So a T or U starter re-furnished before a reload and after one can differ (10 against 8
+pieces for a T, 9 against 8 for a U), measured by the 2026-10-01 follow-up review.

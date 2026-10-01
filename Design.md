@@ -919,9 +919,13 @@ only route, and that surfaces as reachability instead. And reachability says
 nothing at all when the room has no door, since which side someone arrives from
 is then unknowable.
 
-The 2D plan draws the same raster (`fieldRuns` collapses it to a few hundred
-horizontal runs, so it stays SVG that reads the design tokens rather than a canvas
-needing its own palette). It used to approximate the walkway rule by inflating
+The 2D plan draws the same raster as outlines (`lib/field-contour.ts`: marching
+squares over the cells, simplified, every corner rounded by a fixed radius), so it
+stays SVG that reads the design tokens rather than a canvas needing its own palette,
+and a diagonal edge of floor reads as a line rather than as 5 cm stair-steps. The
+cells are untouched — the outline is a drawing of them, never an input to anything.
+Floor cut off from the door is a warm hatch over `--warn-tint`; each piece's own
+clearance (`accessZones`) is a rounded halo fading out from the piece. It used to approximate the walkway rule by inflating
 each bulky piece by half of 600 mm, with the threshold and category list copied
 out of `clearance.ts` and a comment asking that they be kept in step.
 
@@ -3072,9 +3076,11 @@ and the 2D plan all call it.
   live region, so doing both said the removal twice.
 
 **Confirmation is reserved for what undo cannot reach:** deleting a saved layout
-(stored with the room, outside edit history), the bulk "put every piece back"
-transform reset, and deleting a room (which is itself a soft delete with its own
-undo — see `lib/storage.ts`).
+(stored with the room, outside edit history), **Start over** (the whole room — walls,
+ceiling and every piece — at once; its toast has an Undo, but a press that wipes an
+afternoon is worth one question), and deleting a room (which is itself a soft delete
+with its own undo — see `lib/storage.ts`). Deleting pieces never asks, from any
+surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01).
 
 ---
 

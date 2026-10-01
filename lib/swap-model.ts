@@ -10,9 +10,33 @@
 import { useStudio } from './store';
 import { useScene } from './scene-store';
 import { currentRoomScene } from './room-scene';
-import { findSupportDetailed, groundY, heightForNewCeiling } from './physics';
+import { findSupportDetailed, groundY, heightForNewCeiling, ridesWall, seeksSurface, snapToWall, wallAffinity, wallStandoff } from './physics';
+import { containedXZ } from './layout-settle';
+import { placeArrival } from './duplicate-place';
 import { ridersOf } from './rider-height';
-import { isRoundPart, isWallMountedPart, type LibraryItem } from './scene-spec';
+import { isRoundPart, isWallMountedPart, type LibraryItem, type ScenePart } from './scene-spec';
+import { edgeProjection, polygonWinding } from './geometry';
+import { interiorPoint, polygonCentroid, type Footprint } from './footprint';
+
+/** Signed angle from `b` to `a`, in (−π, π]. */
+const turnBetween = (a: number, b: number) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+
+/** The wall a wall piece is ON — the one it faces away from — or null for the
+ *  nearest. Nearest alone is wrong near a corner: a piece's centre stands half its
+ *  depth plus `WALL_GAP` plus any standoff off its own plaster, which for a narrow
+ *  curtain in a corner is FURTHER than its centre is from the return wall, so the
+ *  swap moved it round the corner. A piece facing into the room along an edge's
+ *  inward normal, near that edge, is on it. */
+function ownWall(footprint: Footprint, part: ScenePart, x: number, z: number): number | null {
+  if (!ridesWall(part.category, part.shape)) return null;
+  let best: { index: number; dist: number } | null = null;
+  for (let i = 0; i < footprint.length; i++) {
+    const hit = edgeProjection(footprint, i, x, z);
+    if (!hit || Math.abs(turnBetween(hit.yaw, part.rot)) > 0.01) continue;
+    if (!best || hit.dist < best.dist) best = { index: i, dist: hit.dist };
+  }
+  return best?.index ?? null;
+}
 
 /** Replace piece `id`'s model with `item`, re-grounded for the new size and mount.
  *  `dimOverride` carries a size the picker's search words named — already clamped
@@ -30,7 +54,9 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
   // rot, so the new model's footprint is measured at the authored one.
   const baseRot = useScene.getState().parts.find((p) => p.id === id)?.rot ?? 0;
   const dimMM = dimOverride ?? ([...item.dimMM] as [number, number, number]);
-  const [x, y, z] = part.pos;
+  const [px, y, pz] = part.pos;
+  let [x, z] = [px, pz];
+  let rot = baseRot;
   const wallMounted = isWallMountedPart(item.category, item.shape);
   let ny = y;
   let support: { id: string; y: number } | null = null;
@@ -46,22 +72,98 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
       room.height,
       room.height,
     );
+    // Onto the wall, facing the room, by the NEW piece's own depth — the same call the
+    // add path makes. Keeping the old spot is right for a floor piece and wrong for a
+    // wall one: a print's centre sits 35 mm off the plaster and a curtain's wants 150,
+    // so a curtain swapped in there hung half through the wall, and `resetTransforms`
+    // had already thrown away the turn that faced the print into the room, so it hung
+    // crossways as well.
+    if (room.footprint && ridesWall(item.category, item.shape)) {
+      const edge = ownWall(room.footprint, part, x, z);
+      const snapped = snapToWall([x, 0, z], dimMM, room.footprint, wallStandoff(item.shape), edge);
+      x = snapped.x;
+      z = snapped.z;
+      rot = snapped.rot ?? baseRot;
+    }
   } else {
     // The NEW kind is the one asking: the snapshot still holds the old one under
     // this id, and a swap to a chair must not stand it on the table it tucks under.
     // With the new kind's outline too, or a swap to a round piece is asked as the
     // square around it. Nor on what is standing on it (`ridersOf`): a box with a tray
     // on it, swapped for an ottoman, went up onto its own tray.
+    //
+    // And inside the room, at the NEW piece's size. A print swapped for a sofa kept the
+    // print's centre, 35 mm off the plaster, so the sofa stood half its depth through
+    // the wall — the mirror of the curtain above. A piece that belongs against a wall
+    // backs onto the old piece's wall, facing the room, as one added from the Library
+    // turns to; anything else stays where it was, pulled in by the containment the add
+    // path ends on (`containedXZ`). A piece already inside comes back where it was.
+    if (room.footprint) {
+      const fp = room.footprint;
+      const edge = ownWall(fp, part, x, z);
+      if (edge !== null && wallAffinity(item.category, item.shape) === 'prefers-wall') {
+        const snapped = snapToWall([x, 0, z], dimMM, fp, 0, edge);
+        x = snapped.x;
+        z = snapped.z;
+        rot = snapped.rot ?? baseRot;
+      }
+      [x, z] = containedXZ(
+        { rot, dimMM, circle: isRoundPart(item.shape), shape: item.shape },
+        x,
+        z,
+        fp,
+        interiorPoint(fp) ?? polygonCentroid(fp),
+        polygonWinding(fp),
+      );
+    }
     const riders = ridersOf(id, scene, useScene.getState().parts, s.parentIds);
     const world = scene.filter((p) => !riders.has(p.id));
-    support = findSupportDetailed(world, { id, category: item.category, shape: item.shape }, x, z, dimMM, baseRot, isRoundPart(item.shape));
+    // Only a small "goes on a table" piece looks for a surface — the add path's own
+    // rule (`placeNewPart`). Asking for every kind stood a nightstand, a bookshelf or a
+    // second sofa on top of the bed a print had hung above: the print's spot is over
+    // the bed, the bed is under it, and nothing said a nightstand does not go there.
+    // `seeksSurface`, not the category: a floor lamp is a `lamp` too.
+    const seeks = seeksSurface(item.category, item.shape, dimMM);
+    support = seeks
+      ? findSupportDetailed(world, { id, category: item.category, shape: item.shape }, x, z, dimMM, rot, isRoundPart(item.shape))
+      : null;
     ny = support !== null && support.y > 0.3 ? support.y : 0;
+    // A floor piece stands on the floor — and not inside what is already standing there.
+    // A print over a bed swapped for a nightstand, a floor lamp or a chair kept the
+    // print's spot, on the floor and through the bed. So the spot is asked the question
+    // Duplicate asks of a copy, and when something is in the way the piece goes to the
+    // nearest clear floor instead: beside it along its own width first, which keeps a
+    // nightstand on the wall the print hung on, by the bed.
+    if (!seeks && room.footprint) {
+      const arriving: ScenePart = {
+        ...part,
+        name: item.label,
+        category: item.category,
+        shape: item.shape,
+        dimMM,
+        pos: [x, 0, z],
+        rot,
+        circle: isRoundPart(item.shape),
+        wallMounted: false,
+        groupId: undefined,
+      };
+      const arrival = placeArrival(arriving, world.filter((p) => p.id !== id), room.footprint, room.height);
+      if (!arrival.here) {
+        [x, , z] = arrival.spot.pos;
+        rot = arrival.spot.rot;
+      }
+    }
   }
   s.resetTransforms(id); // drop stale rotate/scale overrides (and any rigid-parenting link)
   // The name too — leaving it stale is how a swapped-in door kept its old "tall
   // mirror" identity, so hover and the Catalog showed a conflicting label.
   updatePart(id, { name: item.label, category: item.category, shape: item.shape, dimMM, wallMounted });
   s.setPosition(id, [x, ny, z]);
+  // Only when the wall asks for a different turn: writing back the authored rotation
+  // would still CREATE an override, which a re-detect then cannot touch.
+  // Compared WRAPPED: a south wall answers −π, and a piece authored at π is already
+  // facing that way.
+  if (Math.abs(turnBetween(rot, baseRot)) > 1e-9) s.setRotation(id, rot);
   // Re-establish what `resetTransforms` just cleared — the swap moved the part, but
   // did not stop it resting on whatever it landed on.
   if (!wallMounted && support && support.y > 0.3) s.setParent(id, support.id);

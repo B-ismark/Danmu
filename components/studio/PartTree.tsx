@@ -645,6 +645,7 @@ export function PartTree() {
               total={row.total}
               collapsed={collapsed.has(row.gid)}
               selected={groupSelected(row.gid)}
+              within={!groupSelected(row.gid) && parts.some((p) => p.groupId === row.gid && selection.includes(p.id))}
               tabbable={i === tabStop}
               onSelect={(e) => pickRow(e, row)}
               onToggleCollapsed={() => toggleGroup(row.gid)}
@@ -679,6 +680,7 @@ export function PartTree() {
               inGroup={!!row.gid}
               lastOfGroup={!!row.lastOfGroup}
               selected={selection.includes(row.part.id)}
+              implied={!!row.gid && selection.includes(row.part.id) && groupSelected(row.gid)}
               tabbable={i === tabStop}
               onSelect={(e) => pickRow(e, row)}
               onToggleSelect={() => toggleInSelection(row.part.id)}
@@ -707,46 +709,6 @@ export function PartTree() {
   );
 }
 
-/** The ├ / └ before a group member. Two absolutely-positioned rules rather than a
- *  border on the row, because `.list-row.is-selected` already spends the row's
- *  `box-shadow` and its `border` on the selected ring — a third boundary there
- *  would either fight it or disappear under it. `--hairline-strong`, since this
- *  is a decorative connector and not the edge of anything interactive. */
-function Connector({ last }: { last: boolean }) {
-  // Measured from the row, not from this span. The span is a flex item, so it is
-  // only as tall as the row's CONTENT box: a stem drawn inside it stopped at the
-  // row's 9px padding and read as a dotted line — and once the selected row wraps
-  // its actions onto a second line, the span covers only the first. So the stem
-  // is positioned against `.list-row` itself (which is `position: relative`):
-  // `left` is the row's 11px padding plus this span's 4px, and `-3` reaches through
-  // the 1px border across `.list`'s 2px gap so the spine is continuous down the
-  // group. A last member's stem stops at the elbow, which stays in this span on
-  // purpose — centred on the name's line, not on a wrapped row's whole height —
-  // so it reaches up through the 9px padding, 1px border and 2px gap instead.
-  const stem = { position: 'absolute', width: 1, background: 'var(--hairline-strong)' } as const;
-  return (
-    <>
-      {!last && <span aria-hidden="true" style={{ ...stem, left: 15, top: -3, bottom: -3 }} />}
-      <span
-        aria-hidden="true"
-        style={{ position: 'relative', width: 11, alignSelf: 'stretch', flexShrink: 0 }}
-      >
-        {last && <span style={{ ...stem, left: 4, top: -12, bottom: '50%' }} />}
-        <span
-          style={{
-            position: 'absolute',
-            left: 4,
-            top: '50%',
-            width: 6,
-            height: 1,
-            background: 'var(--hairline-strong)',
-          }}
-        />
-      </span>
-    </>
-  );
-}
-
 function PartRow({
   rowKey,
   partId,
@@ -756,6 +718,7 @@ function PartRow({
   inGroup,
   lastOfGroup,
   selected,
+  implied,
   tabbable,
   onSelect,
   onToggleSelect,
@@ -774,6 +737,11 @@ function PartRow({
   inGroup: boolean;
   lastOfGroup: boolean;
   selected: boolean;
+  /** selected only because its whole group is. Still `aria-selected` — the piece
+   *  IS in the selection — but drawn as the paler of the two selected looks and
+   *  without opening its actions, so picking a group paints one strong row (the
+   *  header) and a quiet tint beneath it instead of N identical selected cards. */
+  implied: boolean;
   /** roving tabindex: exactly one row in the list is a tab stop */
   tabbable: boolean;
   onSelect: (e: React.MouseEvent) => void;
@@ -849,17 +817,16 @@ function PartRow({
       // Explicit name: without it the row's name is computed from its contents,
       // which would swallow the nested buttons' labels ("Sofa Hide Remove").
       //
-      // Membership is spoken, not just drawn. The indent and the connector say
+      // Membership is spoken, not just drawn. The indent and the guide line say
       // "grouped" to a sighted user; nothing in a flat listbox says it otherwise,
       // and this is the one fact that changes what dragging the piece will do.
       aria-label={`${name}${inGroup ? ', grouped' : ''}${locked ? ', from your photo' : ''}${isHidden ? ', hidden' : ''}${isPinned ? ', locked in place' : ''}`}
       tabIndex={tabbable ? 0 : -1}
-      className={`list-row${selected ? ' is-selected' : ''}`}
+      className={`list-row tree-row${inGroup ? ' tree-row--child' : ''}${inGroup && lastOfGroup ? ' tree-row--last' : ''}${selected && !implied ? ' is-selected' : ''}${implied ? ' is-implied' : ''}${isHidden ? ' is-hidden' : ''}`}
       title={`${name} · ${category}${inGroup ? ' · grouped' : ''}${isHidden ? ' · hidden' : ''}${isPinned ? ' · locked in place' : ''}${locked ? ' · from your photo' : ''}`}
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
-      {inGroup && <Connector last={lastOfGroup} />}
       {/* Status glyph. Shape, not just hue: a camera reads as "came out of your
           photo" even where the aubergine and the clay look the same. A padlock sat
           here and said the wrong thing — see ScenePart.locked. */}
@@ -867,13 +834,10 @@ function PartRow({
         {locked ? <Icon name="camera" size={11} color="var(--locked)" /> : <Dot size={7} />}
       </span>
       <span
+        // Colour, weight and the hidden strike-through are `.tree-row` rules, not
+        // inline: the selected look has to be able to change the name's colour, and
+        // an inline `color` out-ranks every selector.
         className="row-name truncate sentence-case"
-        style={{
-          fontSize: 'var(--fs-small)',
-          fontWeight: 500,
-          color: isHidden ? 'var(--ink-3)' : 'var(--ink)',
-          textDecoration: isHidden ? 'line-through' : 'none',
-        }}
       >
         {name}
       </span>
@@ -966,6 +930,7 @@ function GroupRow({
   total,
   collapsed,
   selected,
+  within,
   tabbable,
   onSelect,
   onToggleCollapsed,
@@ -981,6 +946,9 @@ function GroupRow({
   total: number;
   collapsed: boolean;
   selected: boolean;
+  /** some but not all of the members are selected — the header is the parent of
+   *  the selection, and when it is folded it is the only row that can say so */
+  within: boolean;
   tabbable: boolean;
   onSelect: (e: React.MouseEvent) => void;
   onToggleCollapsed: () => void;
@@ -1025,7 +993,7 @@ function GroupRow({
       aria-selected={selected}
       aria-label={name}
       tabIndex={tabbable ? 0 : -1}
-      className={`list-row${selected ? ' is-selected' : ''}`}
+      className={`list-row tree-row tree-row--group${selected ? ' is-selected' : ''}${within ? ' is-within' : ''}${within && collapsed ? ' is-folded' : ''}`}
       title={`${name} · Selects the whole set`}
       onClick={onSelect}
       onKeyDown={onKeyDown}
@@ -1034,7 +1002,10 @@ function GroupRow({
           selecting; the keyboard reaches the same thing through Left/Right on
           the row, which is why this one is not a tab stop of its own. */}
       <IconButton
-        icon={collapsed ? 'chevron-right' : 'chevron-down'}
+        // One glyph, turned by CSS (`.tree-chevron`) rather than swapped for a
+        // second one, so the fold animates and reads as the same control.
+        icon="chevron-right"
+        className="tree-chevron"
         label={collapsed ? `Show the ${total} pieces in this group` : 'Fold this group away'}
         // On the chevron and not on the row: ARIA 1.2 dropped `aria-expanded`
         // from `role="option"`, and the button is what performs the disclosure
@@ -1044,17 +1015,17 @@ function GroupRow({
           e.stopPropagation();
           onToggleCollapsed();
         }}
-        size={20}
-        iconSize={12}
+        size={24}
+        iconSize={14}
       />
-      {/* `.ds-label`, not the row's own 12px/500: this is a heading for the rows
-          beneath it and should not read as another piece of furniture. The chevron
-          and the connectors below carry the rest of the identity — a `layers`
-          glyph as well would have cost 20px of a label budget that is only ~46px
-          in the 1024–1279px rail, and pushed the word itself to "Grou…". */}
-      <span className="ds-label row-name truncate">
-        Group · {count}
+      {/* A group is a thing, not a heading over things, so it carries a glyph like
+          every other row does (the leaves have their status dot). The count is a
+          badge so the word stays "Group" and truncates last. */}
+      <span aria-hidden="true" className="tree-group-icon">
+        <Icon name="layers" size={14} />
       </span>
+      <span className="row-name truncate">Group</span>
+      <span className="tree-count" aria-hidden="true">{count}</span>
       <span className="row-actions">
         <IconButton
           icon="swap"

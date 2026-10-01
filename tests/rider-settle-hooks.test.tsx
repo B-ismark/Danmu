@@ -171,10 +171,11 @@ describe('a copy of a rider is a rider', () => {
     //
     // The whole scene is read after each step rather than the map, because the defect
     // is about which LAYER the height came from.
-    // A WIDE desk on purpose: `COPY_OFFSETS` puts the first copy 350 mm away on both
-    // axes, and on the standard 1400 x 700 desk that leaves 49.7% of the lamp over the
-    // edge — just under `MIN_SUPPORT_SHARE`, so `stillOver` correctly declines it and
-    // the copy is not a rider at all. Measured, after this case first failed on it.
+    // A WIDE desk, from when the copy went to a fixed 350 mm diagonal (`COPY_OFFSETS`),
+    // which on the standard 1400 x 700 desk left 49.7% of the lamp over the edge. A copy
+    // now goes beside its original and looks for a spot on the SAME support first
+    // (`lib/duplicate-place.ts`), so the width is no longer what keeps it on the desk;
+    // it is kept so this case still measures the relation and not the placement.
     const wide = { ...desk(), dimMM: [2400, 2000, 750] } as ScenePart;
     setUp([wide, lamp(0.75)]);
     act(() => useStudio.setState({ dims: { [DESK]: [2400, 2000, 900] }, selection: [LAMP], selectedPartId: LAMP }));
@@ -190,6 +191,21 @@ describe('a copy of a rider is a rider', () => {
     const back = currentRoomScene();
     expect(yOf(back, LAMP)).toBe(0.75);
     expect(yOf(back, copyId!)).toBe(0.75);
+  });
+});
+
+describe('a desk copied with its lamp', () => {
+  it("parents the lamp's copy to the desk's COPY, not to the desk it was cloned from", () => {
+    setUp([desk(), lamp(0.75)]);
+    act(() => useStudio.setState({ selection: [DESK, LAMP], selectedPartId: DESK }));
+    act(() => duplicateSelection());
+    const added = useScene.getState().parts.filter((p) => p.id !== DESK && p.id !== LAMP);
+    const deskCopy = added.find((p) => p.category === 'desk')?.id;
+    const lampCopy = added.find((p) => p.category === 'lamp')?.id;
+    expect(deskCopy && lampCopy, 'both copies were made').toBeTruthy();
+    expect(useStudio.getState().parentIds[lampCopy!]).toBe(deskCopy);
+    // …and the original keeps its own link: copying is not moving.
+    expect(useStudio.getState().parentIds[LAMP]).toBeUndefined();
   });
 });
 

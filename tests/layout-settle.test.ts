@@ -61,6 +61,23 @@ describe('settleParts · inside the room', () => {
     expect(outside(settled, poly)).toBe(0);
   });
 
+  it("keeps a piece in a U's arm in THAT arm", () => {
+    // Each arm ends on an inner wall facing the other arm's way, across the notch. A
+    // piece level with the far one read it as 3.6 m short and was pushed through the
+    // notch into the other arm — mirrored, so it always looked like a place a piece could
+    // be. Both arms, and once hanging over its own outer wall, where containment still
+    // has to pull it in, along x only, and no further than that wall asks.
+    const poly = footprintForLayout('u', 6, 6);
+    const box = (x: number) => part({ category: 'other', shape: 'box', dimMM: [600, 600, 750], pos: [x, 0, -1] });
+    for (const x of [-2, 2]) {
+      const [settled] = settleParts([box(x)], poly);
+      expect(settled.pos, `x = ${x}`).toEqual([x, 0, -1]);
+    }
+    const [over] = settleParts([box(-2.9)], poly);
+    expect(over.pos[0]).toBeCloseTo(-3 + 0.3 + 0.02, 9);
+    expect(over.pos[2]).toBeCloseTo(-1, 9);
+  });
+
   it('leaves a piece that is already in alone', () => {
     const s = sofa([0, 0, 1.4], Math.PI);
     const [settled] = settleParts([s], RECT);

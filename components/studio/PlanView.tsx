@@ -21,8 +21,9 @@ import { currentRiderRelation, currentRoomScene, useRoomScene } from '@/lib/room
 import { useScene } from '@/lib/scene-store';
 import { DND_MIME, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
-import { buildClearanceField, fieldRuns, FREE_CELL } from '@/lib/clearance-field';
-import { accessZones } from '@/lib/layout-rules';
+import { buildClearanceField, FREE_CELL } from '@/lib/clearance-field';
+import { fieldContours, roundedPath, simplifyLoop, SIMPLIFY_CELLS } from '@/lib/field-contour';
+import { accessZones, type ZoneSide } from '@/lib/layout-rules';
 import { footFromPart, obbExtentAlong, rayToBoundary } from '@/lib/geometry';
 import { footOutlineLocal } from '@/lib/foot-cells';
 import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
@@ -153,28 +154,43 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
   // Circulation, straight off the same field lib/clearance.ts reports from — and
   // only while the overlay is on, since building it costs a distance transform.
-  const walkRuns = useMemo(() => {
-    if (!showComfort) return [];
+  // Drawn as the field's OUTLINE (`lib/field-contour.ts`), not as one rect per row
+  // of 5 cm cells: the rows read as a staircase on every diagonal, and a person
+  // walking past a chair does not walk in steps. Same cells, same classification —
+  // only the drawing changed — so what is tinted here is still exactly what Room
+  // check measures.
+  const walkPaths = useMemo(() => {
+    const none = { walk: '', cut: '' };
+    if (!showComfort) return none;
     const blockers = floorBlockers(parts);
     const field = buildClearanceField(
       blockers.map((p) => footFromPart(p.pos, p.rot, p.dimMM, p.circle, p.shape)),
       ROOM_DYN.footprint,
     );
-    if (!field) return [];
+    if (!field) return none;
     // No door means no way to know which side anyone comes in from, so every
     // walkable region is drawn as walkable rather than guessed at.
     const entrance = entranceComponents(field, parts);
-    return fieldRuns(field, (at) => {
+    const classify = (at: number) => {
       if (field.cover[at] !== FREE_CELL) return -1;
       const id = field.component[at];
       if (id < 0) return -1; // free floor, but too tight to stand in
       return !entrance || entrance.has(id) ? WALKABLE : CUT_OFF;
-    });
+    };
+    const b = footprintBounds(ROOM_DYN.footprint);
+    const map = (x: number, z: number): [number, number] => [PAD + (x - b.minX) * SCALE, PAD + (z - b.minZ) * SCALE];
+    const outline = (state: number) =>
+      roundedPath(
+        fieldContours(field, (at) => classify(at) === state).map((l) => simplifyLoop(l, SIMPLIFY_CELLS * field.cell)),
+        WALK_CORNER_M,
+        map,
+      );
+    return { walk: outline(WALKABLE), cut: outline(CUT_OFF) };
   }, [showComfort, parts, ROOM_DYN.footprint]);
 
-  // Hoisted to sit with walkRuns rather than with the view controls: the effect
+  // Hoisted to sit with walkPaths rather than with the view controls: the effect
   // that reports it upward runs earlier in the body than `fit` does.
-  const hasCutOff = useMemo(() => walkRuns.some((r) => r.state === CUT_OFF), [walkRuns]);
+  const hasCutOff = walkPaths.cut !== '';
 
   // Keyboard steps track the gizmo's snap setting so the two agree: 10 mm / 15°
   // fine, 50 mm / 45° coarse. "Off" still steps — a key press has to be discrete —
@@ -1610,6 +1626,22 @@ export const PlanView = forwardRef<PlanViewHandle, {
           <pattern id="lockHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <line x1="0" y1="0" x2="0" y2="6" stroke="var(--locked)" strokeWidth="0.4" opacity="0.35" />
           </pattern>
+          {/* Floor nobody can reach from the door: a warm wash with a hatch over it,
+              so it reads as "cut off" in a print-out and to anyone who does not see
+              the tint, rather than as a slightly different shade of the same floor. */}
+          <pattern id="cutOffHatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="9" height="9" fill="var(--warn-tint)" />
+            <line x1="0" y1="0" x2="0" y2="9" stroke="var(--warn)" strokeWidth="1.4" opacity="0.4" />
+          </pattern>
+          {/* A piece's clearance halo, strongest against the piece and fading out
+              into the room — "the floor this needs", not a box drawn around it.
+              One per side, in the piece's own frame (local +y is its front). */}
+          {HALO_SIDES.map(([side, x1, y1, x2, y2]) => (
+            <linearGradient key={side} id={`halo-${side}`} x1={x1} y1={y1} x2={x2} y2={y2}>
+              <stop offset="0" stopColor="var(--accent-2)" stopOpacity="0.30" />
+              <stop offset="1" stopColor="var(--accent-2)" stopOpacity="0.04" />
+            </linearGradient>
+          ))}
         </defs>
 
         <g transform={`rotate(${viewRotDeg} ${baseW / 2} ${baseH / 2}) translate(${offset.x} ${offset.y}) scale(${zoom})`}>
@@ -1627,27 +1659,23 @@ export const PlanView = forwardRef<PlanViewHandle, {
             strokeWidth="3"
           />
 
-          {/* Where a person actually fits, cell by cell. Runs rather than cells:
-              a 6 x 4 m room is ~10 000 cells but only a few hundred horizontal
-              runs, so this stays plain SVG and keeps reading the design tokens
-              instead of needing a canvas and a fourth copy of the palette.
-              A half-cell overlap on each rect closes the hairlines that otherwise
-              show between rows at high zoom. */}
-          {showComfort && walkRuns.length > 0 && (
+          {/* Where a person actually fits, as one soft outline per kind of floor —
+              plain SVG, so it keeps reading the design tokens instead of needing a
+              canvas and a fourth copy of the palette. `evenodd` cuts the furniture
+              out of the walkable floor. */}
+          {showComfort && (walkPaths.walk || walkPaths.cut) && (
             <g style={{ pointerEvents: 'none' }} aria-hidden="true">
-              {walkRuns.map((r, i) => {
-                const a = toLocal(r.x, r.z);
-                return (
-                  <rect
-                    key={`walk-${i}`}
-                    x={a.x}
-                    y={a.y}
-                    width={r.w * SCALE + 0.5}
-                    height={r.h * SCALE + 0.5}
-                    fill={r.state === CUT_OFF ? 'var(--warn-tint)' : 'var(--accent-2-tint)'}
-                  />
-                );
-              })}
+              {walkPaths.walk && <path d={walkPaths.walk} fill="var(--accent-2-tint)" fillRule="evenodd" />}
+              {walkPaths.cut && (
+                <path
+                  d={walkPaths.cut}
+                  fill="url(#cutOffHatch)"
+                  fillRule="evenodd"
+                  stroke="var(--warn)"
+                  strokeOpacity={0.45}
+                  strokeWidth={1}
+                />
+              )}
             </g>
           )}
 
@@ -2142,6 +2170,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
   );
 });
 
+/** Corner radius of the walkable outline, metres. Fixed rather than a share of the
+ *  edge, so a wall's corner and a chair's round the same amount. */
+const WALK_CORNER_M = 0.12;
+/** Corner radius of a clearance halo, metres. */
+const HALO_CORNER_M = 0.08;
+/** Each halo side's gradient, from the piece outwards: [side, x1, y1, x2, y2]. */
+const HALO_SIDES: Array<[ZoneSide, number, number, number, number]> = [
+  ['front', 0, 0, 0, 1],
+  ['back', 0, 1, 0, 0],
+  ['right', 0, 0, 1, 0],
+  ['left', 1, 0, 0, 0],
+];
+
 /** The comfort bands for one piece, drawn in its own local frame — which is
  *  exactly the frame `accessZones` authors them in, so this is a unit conversion
  *  and nothing more. Returns null when the piece has no rule attached to it.
@@ -2152,18 +2193,23 @@ export const PlanView = forwardRef<PlanViewHandle, {
 function comfortBands(part: ScenePart): React.ReactNode[] | null {
   const zones = accessZones(part, 0, 0, 0);
   if (zones.length === 0) return null;
-  const soft = { fill: 'var(--accent-2-tint)', stroke: 'var(--accent-2)', strokeWidth: 0.8, strokeDasharray: '5 4' };
-  return zones.map((zn, i) => (
-    <rect
-      key={`${zn.rule.id}-${zn.side}-${i}`}
-      x={(zn.foot.cx - zn.foot.hw) * SCALE}
-      y={(zn.foot.cz - zn.foot.hd) * SCALE}
-      width={zn.foot.hw * 2 * SCALE}
-      height={zn.foot.hd * 2 * SCALE}
-      {...soft}
-      fillOpacity={0.9}
-    />
-  ));
+  return zones.map((zn, i) => {
+    const w = zn.foot.hw * 2 * SCALE;
+    const h = zn.foot.hd * 2 * SCALE;
+    const r = Math.min(HALO_CORNER_M * SCALE, w / 2, h / 2);
+    return (
+      <rect
+        key={`${zn.rule.id}-${zn.side}-${i}`}
+        x={(zn.foot.cx - zn.foot.hw) * SCALE}
+        y={(zn.foot.cz - zn.foot.hd) * SCALE}
+        width={w}
+        height={h}
+        rx={r}
+        ry={r}
+        fill={`url(#halo-${zn.side})`}
+      />
+    );
+  });
 }
 
 /** As much of a name as a footprint can hold, with an ellipsis when it is cut.
