@@ -37,7 +37,7 @@ import {
 } from '@/lib/drag-resolve';
 import { refusalAfterGesture, turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { useDragLive } from '@/lib/drag-live';
-import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
+import { SAME_M, snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { playSound } from '@/lib/sound';
 import { sizeOf } from '@/lib/sound-cues';
 import { convoyRestore, leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
@@ -764,7 +764,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // rather than derived in the render, for the reason on `snapLines` above.
       // Empty when nothing snapped, which is the common case and draws nothing.
       if (drag) drag.snapLines = r.snapLines ?? [];
-      const moved = r.pos[0] !== part.pos[0] || r.pos[1] !== part.pos[1] || r.pos[2] !== part.pos[2];
+      // Within float noise of where it stood is where it stood. A flush stop is worked
+      // out from the neighbour's edge, so a piece at 0.6 against one ending at 0.1 + 0.3
+      // comes back at 0.6000000000000001 — and an exact test called that a move, wrote an
+      // override for the rounding error and said nothing.
+      const moved = r.pos.some((v, i) => Math.abs(v - part.pos[i]) > SAME_M);
       // A press that leaves the piece where it was is not a move, however legal: the
       // last candidate of every press is the spot the piece is standing on, so a
       // press into a neighbour or a wall used to be accepted there and said nothing.

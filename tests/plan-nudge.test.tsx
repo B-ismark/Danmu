@@ -381,6 +381,15 @@ describe('an arrow key that goes nowhere says so (plan tab)', () => {
     expect(crate()[0]).toBeCloseTo(FLUSH + 0.01, 9);
   });
 
+  it('says so where the flush stop is a rounding error away, and stores nothing', () => {
+    // The chest's right edge is 0.1 + 0.3, and 0.1 + 0.3 + 0.2 is 0.6000000000000001.
+    room(0.6, 'fine');
+    useScene.setState({ parts: [box('chest', 'Chest', 0.1, 600), box('crate', 'Crate', 0.6, 400)] });
+    render(<PlanView />);
+    expect(listening(() => press('ArrowLeft', 1))).toEqual(['Crate cannot go any further that way.']);
+    expect(useStudio.getState().positions.crate).toBeUndefined();
+  });
+
   it("says so at the room's edge", () => {
     room(2.8, 'fine');
     render(<PlanView />);

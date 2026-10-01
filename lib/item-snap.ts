@@ -43,8 +43,9 @@ type Line = { target: number; line: SnapLine; into?: 1 | -1 };
 /** One line a neighbour offers, before it is put on an axis. */
 type Cand = { target: number; at: number; kind: SnapLine['kind']; into?: 1 | -1 };
 
-/** Below this, two positions are the same place: float noise, not a step. */
-const SAME_M = 1e-9;
+/** Below this, two positions are the same place: float noise, not a step. Shared with
+ *  the plan's "did this press move it", which asks the same question of the same lines. */
+export const SAME_M = 1e-9;
 
 /**
  * Every line a piece of this size at (x, z) could be pulled onto, per axis, in a
