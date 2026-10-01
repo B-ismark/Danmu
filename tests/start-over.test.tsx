@@ -158,12 +158,32 @@ describe('startOver', () => {
     expect(parts).toEqual(startingParts(startSource, room));
   });
 
+  it('goes dark once pressed, even after the walls moved — and Undo lights it again', () => {
+    // The start it puts back is laid out for TODAY's walls, so that is what the
+    // footer must compare against afterwards; comparing against the walls the room
+    // opened with kept it lit on a room that had just been started over.
+    editTheRoom();
+    useScene.getState().moveWall(0, 0.5);
+    startOver();
+    const { unmount } = render(<RailFooter />);
+    expect(startOverButton()).toBeNull();
+    unmount();
+    lastUndo()();
+    render(<RailFooter />);
+    expect(startOverButton()).not.toBeNull();
+  });
+
   it('Undo brings back exactly what was there', () => {
     const first = editTheRoom();
     const parts = useScene.getState().parts;
+    const startRoom = useScene.getState().startRoom;
+    useScene.getState().moveWall(0, 0.5);
     startOver();
+    expect(useScene.getState().startRoom).not.toBe(startRoom);
     lastUndo()();
     expect(useScene.getState().parts).toBe(parts);
+    // What "is there anything to start over" is asked against goes back too.
+    expect(useScene.getState().startRoom).toBe(startRoom);
     const st = useStudio.getState();
     expect(st.positions).toEqual({ [first]: [0.2, 0, 0.2] });
     expect(st.hidden).toEqual({ [first]: true });

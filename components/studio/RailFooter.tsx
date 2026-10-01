@@ -209,7 +209,8 @@ export function RailFooter() {
  *  — a selected piece the start does not have would leave the Inspector open on
  *  nothing. The walls and their paint stay, which the confirm says.
  *
- *  Locks stay on the pieces the start still has and go with the ones it does not.
+ *  Locks stay on the pieces the start still has and go with the ones it does not
+ *  (Ctrl+Z brings them back with the pieces; locks are in history, `lib/history.ts`).
  *  Ids are `${category}-${counter}`, and a start built for walls that have moved can
  *  be a different arrangement — so an id can come back naming a different piece, and
  *  a kept lock would land on it. The ones on a piece that exists in both stay, which
@@ -233,9 +234,14 @@ export function startOver() {
     pinned: studio.pinned,
     selection: studio.selection,
     selectedPartId: studio.selectedPartId,
+    startRoom: scene.startRoom,
   };
   const kept = new Set(start.map((p) => p.id));
-  scene.setParts(start);
+  // The start is laid out for today's walls now, so it is what "anything to start
+  // over?" is asked against from here on. Leaving `startRoom` at the walls the room
+  // opened with kept the square lit after pressing it in any room whose walls had
+  // moved, because the pieces it had just put back were laid out for different walls.
+  useScene.setState({ parts: start, startRoom: scene.room, ready: true });
   studio.resetTransforms();
   studio.setHiddenMap({});
   studio.setPinnedMap(Object.fromEntries(Object.entries(studio.pinned).filter(([id]) => kept.has(id))));
@@ -247,7 +253,7 @@ export function startOver() {
       label: 'Undo',
       onClick: () => {
         if (useScene.getState().loadedRoomId !== roomId) return;
-        useScene.getState().setParts(before.parts);
+        useScene.setState({ parts: before.parts, startRoom: before.startRoom });
         useStudio.setState({
           positions: before.positions,
           rotations: before.rotations,

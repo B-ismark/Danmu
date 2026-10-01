@@ -180,7 +180,8 @@ back (be deleted)"*. It was "Put everything back" and it only undid moves, turns
 there is no square. Add a piece from the Library, recolour another, move a third, hide a fourth.
 Hover the square that appears, then press it and confirm. Then press **Undo** on the toast. Do the
 same once in a room made from photos. Last, in a fresh starter room, drag one wall and change the
-ceiling height without touching any furniture: still no square.
+ceiling height without touching any furniture: still no square. Lock a piece you added, press Start
+over, then Ctrl+Z: the piece comes back locked.
 
 **What right looks like.** One bubble on hover, reading "Start over", and nothing appearing under it
 a second later. After confirming, the added piece is gone, the recoloured one has its colour back,
