@@ -204,11 +204,14 @@ const nextConfig = {
     // both ways. If a three-adjacent import starts failing to resolve, this is
     // the first thing to try again — but measure before adding it back.
   },
-  // The rooms list used to live at /workspace, behind a welcome page at /. It is
-  // the first screen now and lives at /, so the old address forwards rather than
+  // The rooms list used to live at /workspace, behind a welcome page. It is the
+  // first screen now and lives at /, so both old addresses forward rather than
   // landing a bookmark on "We can't find that room".
   async redirects() {
-    return [{ source: '/workspace', destination: '/', permanent: true }];
+    return [
+      { source: '/workspace', destination: '/', permanent: true },
+      { source: '/onboarding/welcome', destination: '/', permanent: true },
+    ];
   },
   async headers() {
     return [

@@ -29,7 +29,9 @@
 // response to an authenticated call is not this worker's business. The origin
 // check is the first thing `fetch` does.
 
-const VERSION = 'v1';
+// v2: the rooms list moved to `/` and the welcome page went. A v1 shell still
+// holds both old pages, and offline they would be served as if they existed.
+const VERSION = 'v2';
 const SHELL = `danmu-shell-${VERSION}`;
 const ASSETS = `danmu-assets-${VERSION}`;
 const KEEP = [SHELL, ASSETS];

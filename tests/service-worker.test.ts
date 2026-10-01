@@ -68,7 +68,7 @@ describe('install', () => {
   it('precaches the fixed routes, bypassing the HTTP cache', async () => {
     const sw = loadServiceWorker();
     await sw.install();
-    const shell = await sw.cacheStorage.open('danmu-shell-v1');
+    const shell = await sw.cacheStorage.open('danmu-shell-v2');
     expect(shell.urls()).toEqual([`${ORIGIN}/`, `${ORIGIN}/settings`]);
     // `cache: 'reload'` — an install must not adopt a stale HTTP-cached copy.
     expect(sw.calls.every((c) => c.cacheMode === 'reload')).toBe(true);
@@ -83,7 +83,7 @@ describe('install', () => {
       req.url.endsWith('/settings') ? new Response('nope', { status: 404 }) : new Response('ok', { status: 200 }),
     );
     await sw.install();
-    const shell = await sw.cacheStorage.open('danmu-shell-v1');
+    const shell = await sw.cacheStorage.open('danmu-shell-v2');
     expect(shell.urls()).toContain(`${ORIGIN}/`);
     expect(shell.urls()).not.toContain(`${ORIGIN}/settings`);
   });
@@ -99,14 +99,14 @@ describe('activate', () => {
   it('deletes caches from an older version and keeps both of this one', async () => {
     const sw = loadServiceWorker();
     // A previous deployment's pair, plus something that is not ours at all.
-    await sw.cacheStorage.open('danmu-shell-v0');
-    await sw.cacheStorage.open('danmu-assets-v0');
+    await sw.cacheStorage.open('danmu-shell-v1');
+    await sw.cacheStorage.open('danmu-assets-v1');
     await sw.cacheStorage.open('something-else-entirely');
     // …and the current pair, as a worker that had already served assets would have.
-    await sw.cacheStorage.open('danmu-assets-v1');
+    await sw.cacheStorage.open('danmu-assets-v2');
     await sw.install();
     await sw.activate();
-    expect((await sw.cacheStorage.keys()).sort()).toEqual(['danmu-assets-v1', 'danmu-shell-v1']);
+    expect((await sw.cacheStorage.keys()).sort()).toEqual(['danmu-assets-v2', 'danmu-shell-v2']);
   });
 
   it('leaves the assets cache to be created on first use, not at install', async () => {
@@ -115,11 +115,11 @@ describe('activate', () => {
     const sw = loadServiceWorker();
     await sw.install();
     await sw.activate();
-    expect(await sw.cacheStorage.keys()).toEqual(['danmu-shell-v1']);
+    expect(await sw.cacheStorage.keys()).toEqual(['danmu-shell-v2']);
 
     sw.setNetwork(async () => new Response('chunk', { status: 200 }));
     await sw.fetch(asset(CHUNK));
-    expect((await sw.cacheStorage.keys()).sort()).toEqual(['danmu-assets-v1', 'danmu-shell-v1']);
+    expect((await sw.cacheStorage.keys()).sort()).toEqual(['danmu-assets-v2', 'danmu-shell-v2']);
   });
 
   it('claims open pages so the first load is controlled', async () => {
@@ -175,7 +175,7 @@ describe('hashed assets are cache-first', () => {
     sw.setNetwork(async () => new Response('not really static', { status: 200 }));
     const sneaky = asset('/api-ish?next=/_next/static/chunks/x.js');
     await sw.fetch(sneaky);
-    const assets = await sw.cacheStorage.open('danmu-assets-v1');
+    const assets = await sw.cacheStorage.open('danmu-assets-v2');
     // It is still same-origin, so it is cached — but as mutable, network-first.
     // The proof it took the other branch: a second fetch goes to the network again.
     const before = sw.calls.length;
@@ -188,7 +188,7 @@ describe('hashed assets are cache-first', () => {
     const sw = await installed();
     sw.setNetwork(async () => new Response('boom', { status: 500 }));
     await sw.fetch(asset(CHUNK));
-    const assets = await sw.cacheStorage.open('danmu-assets-v1');
+    const assets = await sw.cacheStorage.open('danmu-assets-v2');
     expect(assets.urls()).toEqual([]);
   });
 });

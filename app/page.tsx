@@ -33,7 +33,7 @@ import { ImportSceneButton } from '@/components/studio/SceneFile';
 // needs `ready`: guessing "no" for one paint costs nothing either way.
 type GroupId = RecencyGroupId;
 
-export default function WorkspacePage() {
+export default function RoomsPage() {
   const router = useRouter();
   const roomId = useRoom((s) => s.roomId);
   const setRoomId = useRoom((s) => s.setRoomId);
@@ -45,12 +45,23 @@ export default function WorkspacePage() {
   // so a cleanup session replaced the whole grid with "Loading rooms…" once per
   // deletion — the list vanished under the user thirty times in a row.
   const [booted, setBooted] = useState(false);
+  // The list could not be read at all — a private window, blocked site data. This
+  // is the first screen, so a read that throws must still leave a way to start.
+  const [unreadable, setUnreadable] = useState(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const filterRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
-    const rs = await roomStore.listRooms();
+    let rs: RoomSummary[];
+    try {
+      rs = await roomStore.listRooms();
+    } catch {
+      setUnreadable(true);
+      setBooted(true);
+      return;
+    }
+    setUnreadable(false);
     setRooms(rs);
     setBooted(true);
     // Drop selections for rooms that no longer exist.
@@ -149,14 +160,14 @@ export default function WorkspacePage() {
             <Icon name="settings" size={12} />
             Settings
           </Link>
-          {/* While the workspace is empty the EmptyState below owns BOTH of these
+          {/* While the list is empty the EmptyState below owns BOTH of these
               calls to action, at 40px in the middle of the page, and the bar carries
               navigation only. Repeating them up here is the one-primary rule's exact
               failure case — two claims to the main action — and the same argument
               applies to Import: offering it twice on one screen is how neither
               placement gets learned.
 
-              Import lives in the workspace rather than in a room because it MAKES a
+              Import lives on the rooms page rather than in a room because it MAKES a
               room, so this is both where it lands and where you see it land. */}
           {rooms.length > 0 && (
             <>
@@ -179,7 +190,7 @@ export default function WorkspacePage() {
               </span>
             </div>
           ) : rooms.length === 0 ? (
-            <EmptyState />
+            <EmptyState unreadable={unreadable} />
           ) : (
             <>
               <div
@@ -546,11 +557,13 @@ function RoomCard({
   );
 }
 
-function EmptyState() {
+function EmptyState({ unreadable }: { unreadable: boolean }) {
   return (
     <div style={{ textAlign: 'center', padding: '80px 8px', maxWidth: 'var(--measure-text)', marginInline: 'auto' }}>
+      {/* "No rooms yet" about a list that could not be read would be a false empty
+          state, so the kicker says which it is. */}
       <div className="ds-kicker" style={{ marginBottom: 12 }}>
-        No rooms yet
+        {unreadable ? 'Your saved rooms could not be read here' : 'No rooms yet'}
       </div>
       <h1 style={{ fontSize: 'var(--fs-hero)', letterSpacing: '-0.02em', marginBottom: 10 }}>Decorate your first room.</h1>
       <p className="t-body" style={{ lineHeight: 1.55, marginBottom: 28 }}>

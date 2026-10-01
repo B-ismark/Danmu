@@ -94,7 +94,7 @@ export function stackedViewport(): () => void {
  *      vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('my-room'));
  *
  *  Pass the room id and which studio tab the page believes it is on; pass `null` for a
- *  route with no `roomId` (the workspace), where `useParams` must answer `{}` rather
+ *  route with no `roomId` (the rooms page), where `useParams` must answer `{}` rather
  *  than a room that does not exist.
  *
  *  The tab is an explicit argument rather than something derived from the id, and that
