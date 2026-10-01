@@ -6,11 +6,12 @@ import { useRouter } from 'next/navigation';
 import { useSettings, useRoom } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { validateKey, type KeyFailure, type KeyResult } from '@/lib/validate-key';
-import { UNIT_OPTIONS } from '@/lib/units';
-import { Icon } from '@/components/ui/Icon';
-import { Dot, IconButton, Segmented } from '@/components/ui/primitives';
+import { UNIT_OPTIONS, formatLength } from '@/lib/units';
+import { returnLabel, safeReturnPath } from '@/lib/settings-return';
+import { Icon, type IconName } from '@/components/ui/Icon';
+import { Dot, IconButton, Pill, Segmented } from '@/components/ui/primitives';
 import { useConfirm, useConfirmDeleteRooms } from '@/components/ui/Confirm';
-import { DocShell } from '@/components/ui/DocShell';
+import { BackButton, DocShell } from '@/components/ui/DocShell';
 import { toast } from '@/components/ui/StorageToast';
 
 // Authored copy per failure code. The old screen printed the raw exception,
@@ -61,10 +62,21 @@ export default function SettingsPage() {
   // persisted id — which may be a room last opened weeks ago. Load it so the
   // button can say what it will delete.
   // `undefined` while it is being read: "No room is open" said during the read was
-  // a false empty state, with a "Go to your rooms" button for a room that WAS open.
+  // a false empty state, about a room that WAS open.
   const [room, setRoom] = useState<{ id: string; name: string } | null | undefined>(undefined);
   const [unreadable, setUnreadable] = useState(false);
+  // How many rooms this browser holds: `undefined` while counting, `null` if the
+  // list could not be read.
+  const [roomCount, setRoomCount] = useState<number | null | undefined>(undefined);
+  // Where Settings was opened from (`lib/settings-return.ts`). Read after mount,
+  // not during render: the server has no address bar, and a first paint that
+  // disagreed with the client's would be a hydration mismatch.
+  const [returnTo, setReturnTo] = useState<string | null>(null);
   const alive = useRef(true);
+
+  useEffect(() => {
+    setReturnTo(safeReturnPath(new URLSearchParams(window.location.search).get('from')));
+  }, []);
 
   useEffect(() => {
     alive.current = true;
@@ -93,6 +105,26 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [roomId]);
+
+  // Re-counted when the open room changes, which is what a delete here does.
+  useEffect(() => {
+    let cancelled = false;
+    roomStore.listRooms().then(
+      (rs) => !cancelled && setRoomCount(rs.length),
+      () => !cancelled && setRoomCount(null),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [room]);
+
+  // History, so the room or the scan comes back as it was left. A Settings tab
+  // opened on its own has no page behind it, so it goes to the path instead.
+  function goBack() {
+    if (!returnTo) return;
+    if (window.history.length > 1) router.back();
+    else router.push(returnTo);
+  }
 
   async function test() {
     if (testing || !s.apiKey) return;
@@ -143,7 +175,7 @@ export default function SettingsPage() {
     if (!room) return;
     const ok = await confirmDelete([room.name]);
     if (!ok) return;
-    // Soft delete, same as the workspace — one path, one recovery story.
+    // Soft delete, same as the rooms page — one path, one recovery story.
     const token = await roomStore.clearRoom(room.id);
     if (roomId === room.id) setRoomId(null);
     setRoom(null);
@@ -163,200 +195,242 @@ export default function SettingsPage() {
     // Was location.reload(), which threw away the toast (and any undo with it)
     // and left the user staring at a Settings page for a room that no longer
     // exists.
-    router.push('/workspace');
+    router.push('/');
   }
 
   const failure = KEY_FAILURE[(s.keyValidReason ?? 'unknown') as KeyFailure] ?? KEY_FAILURE.unknown;
+  const back = returnTo
+    ? returnLabel(returnTo, room ? { id: room.id, name: truncate(room.name, 28) } : null)
+    : null;
 
   return (
-    // "Close" is gone: the breadcrumb's "Rooms" is the way back, and a page that
-    // offers two of them is offering a choice nobody needs to make.
-    <DocShell trail={[{ label: 'Rooms', href: '/workspace' }, { label: 'Settings' }]} measure="prose">
-      <div>
-        {/* The route had no heading element at all — no document outline, and the
-            display serif (which globals.css hangs off h1/h2/h3) never rendered. */}
-        <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', margin: 0 }}>Settings</h1>
+    // "Close" is gone: the breadcrumb's "Rooms" is the fixed way out, and Back —
+    // shown only when Settings knows where it was opened from — is the way to
+    // carry on where you were. Without it, adding a key mid-scan or switching
+    // units mid-arrangement dropped you on the room list.
+    <DocShell
+      trail={[{ label: 'Rooms', href: '/' }, { label: 'Settings' }]}
+      measure="prose"
+      back={back ? <BackButton onBack={goBack} label={back} /> : undefined}
+    >
+      {/* Three cards in the same dress as the room cards, each with its own tile —
+          the page used to be three loose headings over hairline rows, which read
+          as a form left unstyled beside every other screen's cards. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ marginBottom: 6 }}>
+          {/* The route had no heading element at all — no document outline, and the
+              display serif (which globals.css hangs off h1/h2/h3) never rendered. */}
+          <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginBottom: 4 }}>Settings</h1>
+          <div className="t-small">Kept in this browser, like your rooms.</div>
+        </div>
 
-        <SecHeader
-          eyebrow="Detection"
-          title="Connect a detection key (optional)."
-          desc="Recognises furniture in photos of your room."
-        />
+        <Section
+          icon="sparkles"
+          tint="var(--accent-tint)"
+          color="var(--accent)"
+          title="Furniture detection"
+          tag={<Pill>Optional</Pill>}
+          desc="Finds the furniture in photos of your room. Everything else works without it."
+        >
+          <Row label="Access key" controlId={KEY_INPUT_ID}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div
+                // The field is this wrapper, not the input inside it, so this is what
+                // grows to 44px under a finger; the input stretches to fill it.
+                className="key-field"
+                style={{
+                  flex: '1 1 220px',
+                  minWidth: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  // --edge, not a 1.48:1 hairline: this is the boundary of the
+                  // most consequential input on the screen. The focus ring lives
+                  // on this wrapper because the input's own outline is suppressed
+                  // (the ring has to surround the eye button too).
+                  border: `1px solid ${keyFocus ? 'var(--accent-text)' : 'var(--edge)'}`,
+                  boxShadow: keyFocus ? '0 0 0 4px var(--accent-tint)' : 'none',
+                  borderRadius: 'var(--r-2)',
+                  background: 'var(--paper)',
+                  transition: 'border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out)',
+                }}
+              >
+                <input
+                  id={KEY_INPUT_ID}
+                  type={show ? 'text' : 'password'}
+                  value={s.apiKey}
+                  onChange={(e) => s.setApiKey(e.target.value)}
+                  onFocus={() => setKeyFocus(true)}
+                  onBlur={autoValidate}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Paste your key"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    border: 'none',
+                    outline: 'none',
+                    alignSelf: 'stretch',
+                    padding: '0 10px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--fs-small)',
+                    background: 'transparent',
+                    color: 'var(--ink)',
+                  }}
+                />
+                <IconButton
+                  icon={show ? 'eye-off' : 'eye'}
+                  label={show ? 'Hide key' : 'Show key'}
+                  onClick={() => setShow(!show)}
+                  active={show}
+                  size={36}
+                  iconSize={13}
+                />
+              </div>
+              <button onClick={test} disabled={testing || !s.apiKey} className="ds-btn" style={{ fontSize: 'var(--fs-small)' }}>
+                <Icon name={testing ? 'refresh' : 'check'} size={12} />
+                {testing ? 'Testing…' : 'Test'}
+              </button>
+              <button
+                onClick={removeKey}
+                disabled={!s.apiKey || testing}
+                className="ds-btn"
+                style={{ fontSize: 'var(--fs-small)', color: 'var(--danger-text)', borderColor: 'var(--edge)' }}
+              >
+                <Icon name="trash" size={12} />
+                Remove
+              </button>
+            </div>
 
-        <Row label="Access key" controlId={KEY_INPUT_ID}>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {/* Three states, all real: tested-good, tested-bad (with the reason and
+                what to do), and never-tested. */}
+            {testing && (
+              <div style={{ marginTop: 10 }}>
+                <span className="ds-chip" style={{ borderColor: 'var(--edge)', color: 'var(--ink-2)' }}>
+                  <Dot color="var(--ink-3)" size={5} /> Checking with the service…
+                </span>
+              </div>
+            )}
+            {!testing && s.keyValid === true && (
+              <div style={{ marginTop: 10 }}>
+                <span className="ds-chip" style={{ borderColor: 'var(--success)', color: 'var(--success-text)' }}>
+                  <Dot color="var(--success)" size={5} /> Working
+                </span>
+              </div>
+            )}
+            {!testing && s.keyValid === false && (
+              <div style={{ marginTop: 10 }}>
+                <span className="ds-chip" style={{ borderColor: 'var(--danger)', color: 'var(--danger-text)' }}>
+                  <Dot color="var(--danger)" size={5} /> {failure.lead}
+                </span>
+                <p className="t-small" style={{ lineHeight: 1.5, margin: '8px 0 0', maxWidth: 'var(--measure-text-sm)' }}>
+                  {failure.help}
+                </p>
+              </div>
+            )}
+            {!testing && s.keyValid === null && s.apiKey && (
+              <div style={{ marginTop: 10 }}>
+                <span className="ds-chip" style={{ borderColor: 'var(--edge)', color: 'var(--ink-2)' }}>
+                  <Dot color="var(--ink-3)" size={5} /> Not tested yet
+                </span>
+              </div>
+            )}
+
+            {/* The old copy — "stored on this device only, never uploaded" — sat
+                30px from a button that transmits the key. Both facts, plainly. */}
             <div
-              // The field is this wrapper, not the input inside it, so this is what
-              // grows to 44px under a finger; the input stretches to fill it.
-              className="key-field"
               style={{
-                flex: '1 1 220px',
-                minWidth: 0,
-                display: 'flex',
-                alignItems: 'center',
-                // --edge, not a 1.48:1 hairline: this is the boundary of the
-                // most consequential input on the screen. The focus ring lives
-                // on this wrapper because the input's own outline is suppressed
-                // (the ring has to surround the eye button too).
-                border: `1px solid ${keyFocus ? 'var(--accent-text)' : 'var(--edge)'}`,
-                boxShadow: keyFocus ? '0 0 0 4px var(--accent-tint)' : 'none',
+                marginTop: 14,
+                padding: '10px 12px',
+                background: 'var(--paper-2)',
+                border: '1px solid var(--hairline)',
                 borderRadius: 'var(--r-2)',
-                background: 'var(--paper)',
-                transition: 'border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out)',
+                maxWidth: 'var(--measure-text-sm)',
               }}
             >
-              <input
-                id={KEY_INPUT_ID}
-                type={show ? 'text' : 'password'}
-                value={s.apiKey}
-                onChange={(e) => s.setApiKey(e.target.value)}
-                onFocus={() => setKeyFocus(true)}
-                onBlur={autoValidate}
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="Paste your key"
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  border: 'none',
-                  outline: 'none',
-                  alignSelf: 'stretch',
-                  padding: '0 10px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 'var(--fs-small)',
-                  background: 'transparent',
-                  color: 'var(--ink)',
-                }}
-              />
-              <IconButton
-                icon={show ? 'eye-off' : 'eye'}
-                label={show ? 'Hide key' : 'Show key'}
-                onClick={() => setShow(!show)}
-                active={show}
-                size={36}
-                iconSize={13}
-              />
-            </div>
-            <button onClick={test} disabled={testing || !s.apiKey} className="ds-btn" style={{ fontSize: 'var(--fs-small)' }}>
-              <Icon name={testing ? 'refresh' : 'check'} size={12} />
-              {testing ? 'Testing…' : 'Test'}
-            </button>
-            <button
-              onClick={removeKey}
-              disabled={!s.apiKey || testing}
-              className="ds-btn"
-              style={{ fontSize: 'var(--fs-small)', color: 'var(--danger-text)', borderColor: 'var(--edge)' }}
-            >
-              <Icon name="trash" size={12} />
-              Remove
-            </button>
-          </div>
-
-          {/* Three states, all real: tested-good, tested-bad (with the reason and
-              what to do), and never-tested. */}
-          {testing && (
-            <div style={{ marginTop: 10 }}>
-              <span className="ds-chip" style={{ borderColor: 'var(--edge)', color: 'var(--ink-2)' }}>
-                <Dot color="var(--ink-3)" size={5} /> Checking with the service…
-              </span>
-            </div>
-          )}
-          {!testing && s.keyValid === true && (
-            <div style={{ marginTop: 10 }}>
-              <span className="ds-chip" style={{ borderColor: 'var(--success)', color: 'var(--success-text)' }}>
-                <Dot color="var(--success)" size={5} /> Working
-              </span>
-            </div>
-          )}
-          {!testing && s.keyValid === false && (
-            <div style={{ marginTop: 10 }}>
-              <span className="ds-chip" style={{ borderColor: 'var(--danger)', color: 'var(--danger-text)' }}>
-                <Dot color="var(--danger)" size={5} /> {failure.lead}
-              </span>
-              <p className="t-small" style={{ lineHeight: 1.5, margin: '8px 0 0', maxWidth: 'var(--measure-text-sm)' }}>
-                {failure.help}
+              <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, marginBottom: 4 }}>Where your key goes</div>
+              <p className="t-note" style={{ lineHeight: 1.55, margin: 0 }}>
+                Kept in this browser. Sent only to Google: on Test, and with your photos when detection runs.
+                You can restrict the key to this site in Google&apos;s console.
               </p>
             </div>
-          )}
-          {!testing && s.keyValid === null && s.apiKey && (
-            <div style={{ marginTop: 10 }}>
-              <span className="ds-chip" style={{ borderColor: 'var(--edge)', color: 'var(--ink-2)' }}>
-                <Dot color="var(--ink-3)" size={5} /> Not tested yet
-              </span>
-            </div>
-          )}
+          </Row>
+        </Section>
 
-          {/* The old copy — "stored on this device only, never uploaded" — sat
-              30px from a button that transmits the key. Both facts, plainly. */}
-          <div
-            style={{
-              marginTop: 14,
-              padding: '10px 12px',
-              background: 'var(--paper-2)',
-              border: '1px solid var(--hairline)',
-              borderRadius: 'var(--r-2)',
-              maxWidth: 'var(--measure-text-sm)',
-            }}
-          >
-            <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, marginBottom: 4 }}>Where your key goes</div>
-            <p className="t-note" style={{ lineHeight: 1.55, margin: 0 }}>
-              Kept in this browser. Sent only to Google: on Test, and with your photos when detection runs.
-              You can restrict the key to this site in Google&apos;s console.
-            </p>
-          </div>
-
-        </Row>
-
-        <SecHeader eyebrow="Workspace" title="Preferences." desc="" />
-        <Row label="Dimension units">
-          {/* This replaced a Metric/Imperial switch that was wired to a store
-              field nothing read — a units control that changed nothing, on a
-              product whose promise is that its dimensions are trustworthy. */}
-          <Segmented
-            ariaLabel="Dimension units"
-            value={s.dimUnit}
-            onChange={(u) => s.setDimUnit(u)}
-            options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.id }))}
-          />
-        </Row>
-
-        <SecHeader
-          eyebrow="Data"
-          title="Local-first storage."
-          desc="Clearing this site's data in your browser deletes your rooms."
-        />
-        <Row
-          label={room ? 'Delete this room' : 'Delete a room'}
-          hint={
-            room
-              ? 'Recoverable for 30 days.'
-              : room === undefined
-                ? 'Finding the open room…'
-                : unreadable
-                  ? 'The open room could not be read.'
-                  : 'No room is open.'
-          }
+        <Section
+          icon="ruler"
+          tint="var(--accent-2-tint)"
+          color="var(--accent-2)"
+          title="Units"
+          desc="How every size reads, in the studio, on the plan and in a scan."
         >
-          <button
-            onClick={deleteRoomData}
-            disabled={!room}
-            className="ds-btn ds-btn--sm"
-            style={{
-              color: 'var(--danger-text)',
-              borderColor: 'var(--danger)',
-            }}
-          >
-            <Icon name="trash" size={12} />
-            {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
-          </button>
-          {room === null && (
-            <div style={{ marginTop: 8 }}>
-              <Link href="/workspace" className="ds-btn ds-btn--xs">
-                Go to your rooms
+          {/* The hint is the setting's own preview, formatted by the same function
+              every size on screen goes through, so it cannot describe a different
+              rounding from the one the studio shows. */}
+          <Row label="Dimension units" hint={`Example: ${formatLength(1850, s.dimUnit)}`}>
+            {/* This replaced a Metric/Imperial switch that was wired to a store
+                field nothing read — a units control that changed nothing, on a
+                product whose promise is that its dimensions are trustworthy. */}
+            <Segmented
+              ariaLabel="Dimension units"
+              value={s.dimUnit}
+              onChange={(u) => s.setDimUnit(u)}
+              options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.id }))}
+            />
+          </Row>
+        </Section>
+
+        <Section
+          icon="layers"
+          tint="var(--paper-3)"
+          color="var(--ink-2)"
+          title="Your rooms"
+          desc="Saved only in this browser. Clearing this site's data in your browser deletes them."
+        >
+          <Row label="Saved here">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600 }}>
+                {roomCount === undefined ? (
+                  'Counting…'
+                ) : roomCount === null ? (
+                  'Your rooms could not be read.'
+                ) : (
+                  <>
+                    <span className="mono">{roomCount}</span> room{roomCount === 1 ? '' : 's'}
+                  </>
+                )}
+              </span>
+              <Link href="/" className="ds-btn ds-btn--sm">
+                Manage rooms
+                <Icon name="arrow-right" size={12} />
               </Link>
             </div>
-          )}
-        </Row>
+          </Row>
+          <Row
+            label={room ? 'Delete this room' : 'Delete a room'}
+            hint={
+              room
+                ? 'Recoverable for 30 days.'
+                : room === undefined
+                  ? 'Finding the open room…'
+                  : unreadable
+                    ? 'The open room could not be read.'
+                    : 'No room is open.'
+            }
+          >
+            <button
+              onClick={deleteRoomData}
+              disabled={!room}
+              className="ds-btn ds-btn--sm"
+              style={{
+                color: 'var(--danger-text)',
+                borderColor: 'var(--danger)',
+              }}
+            >
+              <Icon name="trash" size={12} />
+              {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
+            </button>
+          </Row>
+        </Section>
       </div>
     </DocShell>
   );
@@ -367,16 +441,57 @@ function truncate(v: string, max: number) {
   return v.length > max ? `${v.slice(0, max - 1)}…` : v;
 }
 
-function SecHeader({ eyebrow, title, desc }: { eyebrow: string; title: string; desc: string }) {
+/** One group of settings, dressed as a card like the room cards. Each has its own
+ *  tinted tile, so the three groups are told apart at a glance rather than by
+ *  reading three headings. */
+function Section({
+  icon,
+  tint,
+  color,
+  title,
+  desc,
+  tag,
+  children,
+}: {
+  icon: IconName;
+  tint: string;
+  color: string;
+  title: string;
+  desc: string;
+  tag?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <div style={{ marginTop: 36, marginBottom: 4 }}>
-      <div className="ds-kicker" style={{ marginBottom: 8 }}>
-        {eyebrow}
+    <section className="ds-card" style={{ padding: '20px 22px 6px' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 6 }}>
+        <span
+          aria-hidden="true"
+          style={{
+            flexShrink: 0,
+            width: 36,
+            height: 36,
+            borderRadius: 'var(--r-2)',
+            background: tint,
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
+          <Icon name={icon} size={17} color={color} />
+        </span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {/* h2, so the cards are a real outline under the page h1. `.sans`, as
+                on the room cards: the display serif is for the page title. */}
+            <h2 className="sans" style={{ fontSize: 'var(--fs-lead)', fontWeight: 700, letterSpacing: 0, lineHeight: 1.3 }}>
+              {title}
+            </h2>
+            {tag}
+          </div>
+          <p className="t-small" style={{ lineHeight: 1.55, margin: '2px 0 0' }}>{desc}</p>
+        </div>
       </div>
-      {/* h2, so the sections are a real outline under the page h1 */}
-      <h2 style={{ fontSize: 'var(--fs-title)', marginBottom: 6 }}>{title}</h2>
-      {desc && <div className="t-small" style={{ lineHeight: 1.55, maxWidth: 'var(--measure-text)' }}>{desc}</div>}
-    </div>
+      {children}
+    </section>
   );
 }
 
@@ -399,14 +514,16 @@ function Row({
   return (
     <div
       // .row-grid collapses this to one column under 720px — the fixed
-      // 220px + 1fr track crushed the control below ~600px.
+      // 200px + 1fr track crushed the control below ~600px.
       className="row-grid"
       style={{
         display: 'grid',
-        gridTemplateColumns: '220px 1fr',
+        gridTemplateColumns: '200px 1fr',
         gap: 30,
-        padding: '18px 0',
-        borderBottom: '1px solid var(--hairline-soft)',
+        padding: '16px 0',
+        // Top, not bottom: inside a card the first rule divides the rows from
+        // the card's heading, and the last row needs no rule under it.
+        borderTop: '1px solid var(--hairline-soft)',
         alignItems: 'flex-start',
       }}
     >

@@ -24,6 +24,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { Icon } from './Icon';
 import { DanmuMark } from './primitives';
 
 /** One hop in the path. No `href` marks the page you are on. */
@@ -185,5 +186,30 @@ function Breadcrumb({ trail }: { trail: Crumb[] }) {
         })}
       </ol>
     </nav>
+  );
+}
+
+// The control that goes in the `back` slot. Where it sits is the slot's — the top
+// of the content column, not the chrome bar (see the `back` prop's note above).
+// `label` names the destination when the route knows it (Settings: "Back to the
+// scan"); a bare "Back" is for a step whose way in is not one place.
+//
+// `marginLeft: -10` cancels the ghost button's own horizontal padding so the
+// word "Back" starts on the same vertical as the kicker and the heading below
+// it. The offset lives on the button rather than on the slot because the number IS
+// this button's padding, and a shell that guessed at its slot's inner padding would
+// be wrong for the next control put in it. A back link that sits 10px right of
+// everything it belongs to reads as a stray, which is half of why the old
+// placement failed.
+export function BackButton({ onBack, label = 'Back' }: { onBack: () => void; label?: string }) {
+  return (
+    <button
+      onClick={onBack}
+      className="ds-btn ds-btn--sm ds-btn--ghost"
+      style={{ padding: '0 10px', marginLeft: -10, fontSize: 'var(--fs-body)' }}
+    >
+      <Icon name="chevron-left" size={14} />
+      <span className="t-small">{label}</span>
+    </button>
   );
 }

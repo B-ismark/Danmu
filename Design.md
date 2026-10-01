@@ -182,7 +182,7 @@ owned by a deterministic geometry engine, not by a model.
 /room/[roomId]
    ├─ /model              ★ 3D decoration studio (default landing)
    └─ /plan               2D top-down floor plan
-/settings                 API key, display unit, danger zone
+/settings                 API key, display unit, your rooms
 ```
 
 **The rooms page is the first screen.** There used to be a welcome page at `/` in
@@ -191,6 +191,15 @@ empty state already says that. An old `/workspace` address forwards to `/`
 (`next.config.mjs` `redirects()`), and `/` is a real page rather than a redirect
 because the offline worker serves it as the fallback for every navigation, and a
 cached redirect cannot answer one.
+
+**Settings goes back where it came from.** It is opened from the rooms page, the
+studio's View menu, the studio's Cmd/Ctrl+, and the scan screen's *Set up a key*.
+The last three pass `?from=` (`lib/settings-return.ts`), and Settings names that
+place on its Back control — *Back to "Front room"*, *Back to the scan* — and returns
+there through history, or by address when Settings was opened in a fresh tab. The
+breadcrumb's *Rooms* stays, because it is a fixed destination and Back is history.
+`from` is typed into the address bar as easily as clicked, so only a same-app path
+is honoured.
 
 Two ways in:
 

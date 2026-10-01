@@ -23,7 +23,7 @@ import { Icon } from '@/components/ui/Icon';
 import { NumberField, fieldMinWidth } from '@/components/ui/NumberField';
 import { Select } from '@/components/ui/Select';
 import { StepHeader } from '@/components/ui/primitives';
-import { DocShell } from '@/components/ui/DocShell';
+import { BackButton, DocShell } from '@/components/ui/DocShell';
 
 const PRESETS = [
   { id: 'rect' as const, name: 'Rectangle', width: 6.0, depth: 4.0, starter: 'Living room' },
@@ -229,7 +229,9 @@ export default function LayoutPickPage() {
       // Kept as history, not folded into the breadcrumb: arriving here from the
       // rooms page and arriving from the capture screen's "pick a shape first"
       // card are different journeys, and Back is the only control that honours
-      // both. The breadcrumb offers the fixed destination alongside it.
+      // both. The breadcrumb offers the fixed destination alongside it. No step
+      // counter beside it: the primary CTA here goes straight to the studio, so
+      // "02 / 04" was promising a sequence most people never walk.
       back={<BackButton onBack={() => router.back()} />}
     >
       {/* No `page-pad` here: DocShell's hero variant already applies it AND
@@ -477,28 +479,3 @@ function PlanDimensions({ box, width, depth, screen }: { box: { x: number; y: nu
   );
 }
 
-// Just the button. Where it sits is DocShell's — the top of the content column,
-// not the chrome bar (see the `back` prop's note there).
-//
-// No step counter: the primary CTA on this screen goes straight to the studio,
-// so "02 / 04" was promising a sequence most people never walk.
-//
-// `marginLeft: -10` cancels the ghost button's own horizontal padding so the
-// word "Back" starts on the same vertical as the kicker and the heading below
-// it. The offset lives here rather than in DocShell because the number IS this
-// button's padding, and a shell that guessed at its slot's inner padding would
-// be wrong for the next control put in it. A back link that sits 10px right of
-// everything it belongs to reads as a stray, which is half of why the old
-// placement failed.
-function BackButton({ onBack }: { onBack: () => void }) {
-  return (
-    <button
-      onClick={onBack}
-      className="ds-btn ds-btn--sm ds-btn--ghost"
-      style={{ padding: '0 10px', marginLeft: -10, fontSize: 'var(--fs-body)' }}
-    >
-      <Icon name="chevron-left" size={14} />
-      <span className="t-small">Back</span>
-    </button>
-  );
-}

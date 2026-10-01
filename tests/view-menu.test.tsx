@@ -41,6 +41,13 @@ describe('the gear', () => {
     expect(document.activeElement).toBe(gear);
   });
 
+  it('sends Settings the room it was opened from, so Settings can go back to it', () => {
+    render(<ViewMenu />);
+    fireEvent.click(screen.getByRole('button', { name: 'View settings' }));
+    const link = screen.getByRole('link', { name: /Units, detection and storage/ });
+    expect(link.getAttribute('href')).toBe('/settings?from=%2Froom%2Fview-room%2Fmodel');
+  });
+
   it('a press outside closes it; a press inside does not', () => {
     render(<ViewMenu />);
     fireEvent.click(screen.getByRole('button', { name: 'View settings' }));
