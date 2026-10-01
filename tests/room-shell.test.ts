@@ -119,8 +119,9 @@ describe('the skirting stands proud of the wall it runs along', () => {
     // Centred half its thickness along the inward normal, so its back face IS the
     // wall's face — which is a pair facing opposite ways, and nothing fights.
     expect(SHELL).toContain('const out = SKIRTING_PROUD / 2;');
-    expect(skirting).toContain('out * Math.sin(wl.yaw)');
-    expect(skirting).toContain('out * Math.cos(wl.yaw)');
+    // With the sign: `- out` builds the same board 12 mm INSIDE the plaster.
+    expect(skirting).toContain('+ out * Math.sin(wl.yaw)');
+    expect(skirting).toContain('+ out * Math.cos(wl.yaw)');
     // Thick enough to be a face of its own, and under `WALL_GAP` (20 mm), so a piece
     // snapped flush to a wall still clears it.
     expect(Number(proud?.[1])).toBe(0.012);

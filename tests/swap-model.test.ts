@@ -129,6 +129,28 @@ describe('changing the model', () => {
     expect(x).toBeCloseTo(3 - 0.3, 9);
   });
 
+  it('in a U, a piece stays on the nearest of the walls facing its way, not a far one', () => {
+    // Three edges of a U face south: both arms' north walls and the notch's floor-side
+    // edge at z = 0. Facing alone cannot tell them apart; distance has to.
+    const W = 6;
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    const print = (id: string, x: number, z: number) =>
+      part({ id, category: 'painting', shape: 'painting', pos: [x, 1.4, z], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    useScene.setState({
+      room: { width: W, depth: W, height: 2.5, layoutId: 'u', footprint: footprintForLayout('u', W, W), wallColors: {} },
+      parts: [print('arm', -2.2, -3 + 0.035), print('notch', 0, 0.035)],
+      ready: true,
+    });
+    const curtain: LibraryItem = { label: 'Curtain', group: 'Decor', category: 'curtain', shape: 'curtain', dimMM: [1200, 80, 2200] };
+    swapPartModel('arm', curtain);
+    swapPartModel('notch', curtain);
+    const s = useStudio.getState();
+    expect(s.positions.arm![0]).toBeCloseTo(-2.2, 9);
+    expect(s.positions.arm![2]).toBeCloseTo(-3 + 0.15, 9);
+    expect(s.positions.notch![0]).toBeCloseTo(0, 9);
+    expect(s.positions.notch![2]).toBeCloseTo(0.15, 9);
+  });
+
   it('a turn equal to the authored one up to a full circle writes nothing', () => {
     // The south wall answers −π; a piece authored at π already faces that way.
     const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.4, 2.965], rot: Math.PI, dimMM: [600, 30, 400], wallMounted: true });
