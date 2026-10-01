@@ -69,7 +69,8 @@ section is yours to fix if you are the one reading it.
 ## Sizes and fit
 
 *Owner: `sizes`. Every item previously listed here was looked at and is gone — the last,
-a wall stopping 60 cm short of another wall, on 2026-09-30.*
+a wall stopping 60 cm short of another wall, on 2026-09-30, and then the stripes where two
+parts of a piece meet, the near wall's skirting included, on 2026-10-01.*
 
 *Two standing caveats for everything in this section. **No test in this repo renders
 geometry** — a control mutation (`FanGeo` passing a literal `200` instead of
@@ -77,46 +78,6 @@ geometry** — a control mutation (`FanGeo` passing a literal `200` instead of
 defect can only ever be settled by looking at it. And **nothing here has been on a real
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
-
-### No more stripes where two parts of a piece meet — merged to `main` in `7de4934` (PR #204), LOOKED AT 2026-10-01 except the near wall's skirting, merged to `main` in `502fb23` (PR #206)
-
-The user's report on 2026-10-01: *"the shadow issue is across the platform, the lower part of
-the room, the bed model, the edges of the wardrobe."* **Not shadows** — the key light's shadow
-off, a 4k shadow map and three times the bias all left every stripe where it was. Each was two
-surfaces drawn on one plane, facing the same way, which the depth buffer cannot order: the
-skirting was a flat sheet laid on the wall's own face (now a board 12 mm proud,
-`components/three/RoomShell.tsx`); the bed's duvet ended exactly on the mattress's front face,
-and its frame shared the headboard's side faces; the wardrobe was five full-size slabs sharing
-every outer face, its doors in the plane of its sides' front edges. A sweep of the whole
-catalogue at three sizes (`tests/coplanar-faces.test.tsx`) found the same thing in **fifteen**
-shapes — also the sofa, closet, bookshelf, TV console, both chairs, armchair, window, laptop and
-fridge — and every one is set back by `SEAM` (2 mm) now or built the way the real joinery is
-(a carcass's top BETWEEN its sides). Re-rendered headless with shadows and AO on: the bed's foot
-and the wardrobe's edges are clean.
-
-**Where to click.** The default bedroom, 3D. Look at the foot of the bed from the side, the
-wardrobe's corners and door edges, and where every wall meets the floor; then add a sofa, a
-bookshelf, a TV console and a window and orbit each slowly at arm's length.
-
-**What right looks like.** Edges are straight lines that hold still as you orbit. *Wrong* looks
-like: a sawtooth, a dashed seam, or a stripe that crawls when the camera moves. One known
-non-defect: from across the room the skirting's 12 mm top can read as a broken highlight,
-because it is thinner than a pixel there; up close it is one line.
-
-**Looked at 2026-10-01:** *"Looks good, but when a wardrobe is viewed from the side facing the
-camera it still shimmers."* The picture showed a grey band with stripes of wardrobe through it
-across the bottom of the view — not a seam in the wardrobe but the **near wall's skirting**.
-The board is a closed box now, so it has a back, and the see-through view hides a wall by
-not drawing the face turned away from the camera: the wall went, its board's back faced the
-camera, and it stayed, floating in front of the furniture. The skirting now hides with its own
-wall (`WallSkirting`, guarded in `tests/room-shell.test.ts`).
-
-**Where to click for that half.** The default bedroom, 3D. Orbit round until you are looking at
-the wardrobe's side through the cut-away wall, low down, so the floor line is in view.
-*Right:* no grey band across the foot of the view; the far walls keep their skirting.
-*Wrong:* a strip of skirting hanging in front of the furniture, or a far wall with none.
-
-**Where it rides.** `components/three/DynamicPart.tsx`, `components/three/RoomShell.tsx`.
 
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
@@ -163,50 +124,33 @@ wall pushing what it meets, and a short piece climbing a tall one. The user look
 of those on 2026-09-30, and ruled that a nightstand may climb a wardrobe — and, the same
 day, a wall stopping at the rug it carries and its knob standing clear of the furniture — and
 a table carrying a lamp dragging as smoothly as a bare one. On 2026-10-01 the user looked at
-Start over, the drop after a delete and Duplicate, and all three are gone. What is left is
+Start over, the drop after a delete and Duplicate, and all three are gone, and then the
+right rail's footer, the Wall · Floor placement row, Room check in feet, a lamp riding its
+nightstand, and the curtain that vanished on a drag. What is left is
 here for a specific reason each. The rotate ring, because drei's `TransformControls` is a
 three.js object with **no DOM**, so nothing in Playwright can aim a press at its ring —
 the 2D half of that defect **is** browser-checked and is not in this list. The refusal
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
-### The right rail's footer: tooltips, Start over with the walls, Delete without a dialog — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205); the sofa LOOKED AT 2026-10-01; a floor piece over the bed on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
 
-The user's walkthrough of the last round on 2026-10-01 passed Start over, the drop after a
-delete, Duplicate, the Catalog tree and the comfort zones, and turned up five things in the
-footer, each fixed here:
+**Looked at 2026-10-01:** *"First one works, but when i change from print to nightstand, it
+falls through the bed clipping through it, it happens with other pieces too."* The sofa is
+right. The nightstand had stopped standing ON the bed (PR #206) and had started standing IN
+it instead: it took the print's spot on the wall above the headboard, which is the middle of
+the bed. A floor piece swapped in now looks for clear floor the way Duplicate does
+(`placeArrival` in `lib/duplicate-place.ts`): the print's spot first, kept to the
+millimetre when it is clear, otherwise the nearest clear spot, which beside a bed is beside
+the bed. A nightstand, floor lamp, plant, armchair and sofa over a bed are each held to
+that in `tests/swap-model.test.ts`.
 
-- **The Start over bubble sat over the button beside it.** A bubble near the right edge was
-  kept a full 120 px clear of it, the room its WIDEST label would need, so a short one slid left
-  onto Add. It is kept clear by its own drawn width now (`components/ui/Tooltip.tsx`).
-- **Close showed the browser's grey label, reading "Add a piece to the room".** The Add / Close
-  button, Delete and the wall's Done all use the house bubble now, and the bubble names what a
-  press does: *Add a piece to the room*, then *Close the Library* once it is open.
-- **Start over's confirm wore the bin.** It is the turn-back arrow; the bin stays on real deletes.
-- **A wall drag lit Start over, and pressing it re-arranged the room.** Start over puts the WALLS
-  back now too, with the ceiling, so the room returns to exactly how it opened. Wall paint and
-  lighting stay. Painting a wall alone does not light it.
-- **Backspace asked before deleting.** It doesn't any more; every delete shows the same Undo toast.
+**Where to click for that half.** The U-Shape (it has the bed). Hang a print on the wall
+above the headboard, then **Change the model…** → Nightstand. Undo, and try Floor lamp,
+Armchair and Floor plant the same way. *Right:* each one stands on the floor beside the bed,
+against that wall, clear of the duvet, in both tabs. *Wrong:* anything inside the bed's
+outline in the plan, or poking out of the duvet in 3D.
 
-**Where to click.** A fresh starter room. Hover the footer's square at the right end with a wall
-dragged, and Add / Close in both states. Select a piece and hover Delete; select a wall and hover
-Done. Press Start over: the walls go back to where they started, every piece too, and Undo on the
-toast brings the dragged wall back with the furniture it carried. Select a piece and press
-Backspace. Also try the footer with the right rail at its narrowest (1024–1279px).
-
-**What right looks like.** Every bubble is the same dark rounded one, centred over its own
-button, inside the window. The confirm's button shows the turn-back arrow. After Start over the
-outline in the 2D plan matches a freshly opened room and the square disappears. Backspace removes
-the piece at once with *Undo* on the toast. *Wrong* looks like a bubble over a neighbour, a grey
-browser label appearing a second after the bubble, a bin on the Start over confirm, a wall left
-where it was dragged, a different arrangement from the one the room opened with, or a dialog on
-Backspace.
-
-**Where it rides.** `components/studio/RailFooter.tsx`, `components/ui/Tooltip.tsx`,
-`components/ui/Confirm.tsx`, `components/studio/CatalogPanel.tsx`, `lib/room-start.ts`,
-`components/studio/KeyboardShortcuts.tsx`.
-
-### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205), NOT LOOKED AT; the floor lamp and tall plant merged in `502fb23` (PR #206)
 
 The curtain half (a print swapped for curtains hangs flat on the print's wall) was looked at
 on 2026-10-01 and is gone. This is the other way round. A print swapped for a **sofa** kept
@@ -262,20 +206,6 @@ and press an arrow to **turn** it.
 the way"* when nothing is. The turn reads *"It does not fit at that angle — "* with the
 same clause. Put a wardrobe where a normal-width curtain wants to go: that one should
 still say "something is in the way".
-
-**It also used to vanish, and that is fixed in `32ccdca` on `main` (PR #200) — NOT LOOKED AT.** Looked at
-2026-09-30: dragged sideways the 5 m curtain *"wasn't moving"*, and pulled toward the
-camera it *"disappeared from my screen"*. Both were one defect. The room clamp was taken
-at the curtain's old angle before its wall was chosen, so it was held to the middle metre
-of its 6 m wall wherever the pointer went — the side wall was never the nearest, and
-past the room's middle the nearest was the near wall, which the see-through view cuts
-away along with the curtain. A wall piece now takes the wall the pointer is at. Do the
-drag above again, and keep going down the side wall toward the camera: the curtain goes
-onto the side wall, red, with the sentence above, and stays on screen the whole way. It
-reaches the near wall only when the pointer is at the near wall — and there it stays in
-view while it is selected (see the next item). *Wrong* looks like: the curtain stuck in the
-middle of its wall while the pointer is at a corner, or gone with the pointer nowhere
-near the near wall.
 
 **Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half and the
 wall-from-the-pointer fix in `32ccdca` (PR #200).
@@ -468,40 +398,17 @@ one dim to both functions); three round shapes drew a circle where the plan draw
 ellipse; and `window` and `radiator` were members of the class nobody had listed. The
 gate itself was per-row, so an empty table passed every assertion in it.
 
-### The Inspector now says where the selected piece stands — merged to `main` in `e0c484a` (PR #91)
+### The Inspector's placement banner, with a screen reader — merged to `main` in `e0c484a` (PR #91), the rest LOOKED AT 2026-10-01
 
-**Where to click.** Select any piece. The banner sits above the decorating controls,
-between the name and the Colour row.
-
-**The last row is the whole point.** The banner reads the room report rather than
-asking `collidesAt` itself, so a seeded dining set must not light up red. (The two
-used to disagree about a tucked chair; since § 17 the drag asks the report's own
-`tuckedAt`, so a red here would now be a disagreement neither side should have.)
-
-**What wrong looks like.**
-
-- **A red banner on the app's own seeded furniture.** Open a fresh room from the layout
-  picker and click each piece in turn. Anything red on an arrangement the app just made
-  is either the defect back or a genuine finding Room check is also making — check the
-  left rail's chip agrees. If the chip says the room is fine and the banner is red, that
-  is exactly § 37.
-- **Contrast.** The success state is `--success-text` on `--paper-0`, and that pair has
-  never been checked by eye or by `tests/color-tokens.test.ts`, which cannot see this
-  element. The danger state is `--danger-text` on `--danger-tint`.
-- **A long finding title spilling the rail.** The banner shows the report's own `title`
-  and `detail`, which are written for a wider panel. `minWidth: 0` and
-  `overflowWrap: anywhere` are on the text, and the rail is `overflow: hidden`, so a
-  spill here would be silent. Drag the right rail to its narrowest with a piece that has
-  a finding selected.
-- **A screen reader narrating a drag.** `role="status"` with no `aria-live` is
-  deliberate; the pair re-announced on every position write. Worth one pass with a
-  reader to confirm selecting a piece announces once and dragging does not chatter.
+The banner itself was looked at on 2026-10-01 — seeded furniture, contrast and a long finding
+at the narrowest rail: *"Looks good."* Screen-reader passes are on hold, so one bullet is
+left. `role="status"` with no `aria-live` is deliberate, because the pair re-announced on
+every position write: with a reader on, selecting a piece should announce once and dragging
+it should not chatter.
 
 **What does not need re-deriving.** The agreement with Room check is gated by
 `tests/placement-banner.test.tsx`, which mounts the real plan page and compares the two
-surfaces — including the tucked-chair case, with the premise asserted. `restingOn` has
-eleven clauses of its own. Reverting the banner to `collidesAt`, collapsing `restingOn`
-into `findSupportDetailed`, and restoring `aria-live` each go red.
+surfaces. Restoring `aria-live` goes red there.
 
 ## Layout and Ideas
 
@@ -664,27 +571,8 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
 
 **What right looks like.**
 - The ottoman ends up standing on the coffee table's top, like any piece dropped there.
-- ~~The dining chair and the office chair at their Library sizes slide under as before and
-  stay on the floor.~~ **Wrong, and struck rather than deleted.** Looked at 2026-09-30:
-  both chairs read *blocked* and will not slide under — which is what the code does and
-  has done since § H.6.3, because the drag's collision test (`collidesAt`) has no tuck
-  exemption. A tucked chair travels only as part of a set. This bullet was written from
-  the room report's rule, not from a drag, and "as before" described nothing that had
-  ever happened.
-- **Decided since, and this bullet is the one to look at — `32ccdca` on `main` (PR #200), NOT LOOKED AT.**
-  The user chose "make the drag match Room check" (§ 17). Drag the dining chair, alone,
-  into its table from the front: it slides in under the top and stays on the floor,
-  with no *blocked* tag. Keep pushing and it stops about where 85% of the seat is under
-  the table — *blocked* there, and Room check would call that same spot a clash. The
-  office chair at its Library size does the same under a 750 mm table. *Wrong* looks
-  like: the chair jumping onto the tabletop, a *blocked* tag while it is only part way
-  in, or it disappearing wholly inside the table.
-  **Front first only — LOOKED AT 2026-09-30.** It had slid in back first with its back
-  up through the desktop; the rule now reads which way the seat faces. The user: *"Front
-  first slides under, sideways is blocked now."*
-  **Turning it once it is under — LOOKED AT 2026-09-30.** Slide it in front first and
-  turn it: the turn is held and said, on the 3D ring, the plan's keys and the context
-  menu. The user: *"everything looks good."*
+- **The dining chair sliding under its table, front first, and turning once it is under —
+  LOOKED AT 2026-10-01.** The user: *"All good."*
 - **The ottoman bullet below was looked at on 2026-09-30 and is right:** it stands on the
   coffee table's top.
 - Under the 650 mm desk the office chair's arms would hit the top, so it no longer goes
@@ -742,36 +630,18 @@ and open **Room check**. Then ungroup it, group the sofa with an armchair instea
   look. The other part is whether an empty gallery reads as broken. The user chose that
   it says the group moves as one; that sentence is not built yet.
 
-### A lamp goes where its nightstand goes — `1452946` on `main` (PR #202, § H.6.7), NOT LOOKED AT
-
-Move a nightstand and the lamp on it used to stay behind, floating at nightstand height.
-It happened to every lamp the room came with, because nothing had linked it yet. Tests
-hold where the lamp lands; nobody has watched it travel.
-
-**Where to click.** U-Shape with starter furniture, a fresh room. Leave the lamps alone:
-touching one first links it and hides the bug. In the 3D Model, drag a nightstand a short
-way along the floor. Then in the 2D Plan, move the other one with the arrow keys, turn it
-with its rotate handle, and right-click it and choose **Turn a quarter**. Last, select a
-nightstand and its lamp together and **Turn a quarter** once.
-
-Then three more, in the same room. In the 2D Plan, drag one lamp across onto the other
-nightstand and let go, then drag that nightstand away. Select a nightstand standing out in
-the room and press **Wall** in the Inspector. And drag a nightstand with its lamp up onto a
-desk, then press **Floor**.
-
-**What right looks like.**
-- The lamp stays on the nightstand's top through every move and turn, in both tabs.
-- With both selected, the lamp turns once, with the nightstand, not a quarter further.
-- A lamp moved onto the other nightstand goes with that one from then on.
-- After **Wall**, the lamp is still on top, still facing the way the nightstand faces.
-- After **Floor**, the lamp comes down with the nightstand.
-
-**What wrong looks like.**
-- A lamp left behind in the air, or one that ends on the floor.
-- A lamp that jumps to the nightstand only after you let go.
-- A lamp that follows the nightstand it was moved off, and not the one it is on.
-
 ### Fix squares a slightly turned sofa where it stands — `76eaee1` on `main` (PR #201, § H.6.6), NOT LOOKED AT
+
+**Looked at 2026-10-01, with the sofa also MOVED:** *"If moved forward a bit and turned, it
+moves back to it's previous position and turn to face the tv."* That is a different case from
+the one below, and Fix is doing what its guidelines say there rather than misfiring. Measured
+in the T at 5.5 × 4.7: turned 10° and left on its wall, the sofa squares where it stands on
+6 seeds in 6. Pulled 30 cm forward first, nothing in the room is wrong (no clash, nothing
+through a wall), but three guidelines count against it: off its wall, away from its TV and
+coffee table, and not square. Together they outweigh the extra cost of moving a piece you
+placed by hand, so Fix puts it back on its wall facing the TV on 6 seeds in 6. **Whether Fix
+should leave a sofa you pulled off the wall alone is a decision for the user**, filed in
+`docs/what-is-still-open.md` § H.6.6. The turn-only check below is still unlooked-at.
 
 Turn the sofa a few degrees and press **Fix**, and it could come back somewhere else in the
 room, sometimes facing away from the TV. Fix now also tries the room as it stands with the
@@ -821,31 +691,35 @@ only.
 - A heart that is filled for a layout the Layouts tab no longer has.
 - Keeping a piece and the next ideas moving it anyway.
 
-### The standing fan is 144 mm shallower than it was, in the plan and in 3D (§ 39)
+### The standing fan is a real pedestal fan now — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
 
-`fan-standing` declared `450 x 450` and drew `450 x 306`. On the user’s ruling it now
-declares **`450 x 310`** — the base, not the cage. Nothing about the 3D geometry moved:
-`StandingFanGeo` never read `dimMM[1]`, so the mesh is the same mesh. **What moved is the
-footprint**, which is what the plan draws and what the solver keeps clear.
+**Looked at 2026-10-01:** *"Can we make the standing fan a bit more detailed/realistic? Just
+looks like an oval and a stick now."* `StandingFanGeo` (`components/three/DynamicPart.tsx`) is
+rebuilt like the real thing. The base is a weighted round plinth with a domed top and three
+switch buttons. The column is two telescoping tubes with a height collar, then a knuckle and
+a tilt arm leaning back to the motor. The head is a motor barrel with a rear dome and an
+oscillation knob. The guard is a wire cage of two shallow cones, front and back, meeting at
+one rim, with rings and spokes and a centre badge, and three translucent pitched blades on a
+hub inside it. It reads the piece's colour, so a recoloured fan recolours body and wire
+together.
 
-**What to look for.** Add a Standing fan from the Library, then the 2D Plan tab. Its
-outline should be a visibly OVAL ellipse — wider than it is deep — where it used to be a
-circle. `Foot.circle` has always meant ellipse (`footCorners` reads `hw` and `hd`
-separately); it drew round only because the two were equal. Wrong would be a circle still,
-or an ellipse whose long axis runs the wrong way.
+**The size did not change, and the cage shape is why.** In the plan the fan is the oval
+450 × 310 (§ 39: the base, not the cage). A flat cage 140 mm deep stuck out of both narrow
+ends of that oval, and a drag past it was refused where the plan showed clear floor
+(`tests/footprint-outcomes.test.tsx` caught it). The rim now stands right over the base, at
+the oval's widest, and the cones and motor taper inside it. Drawn at 449 × 306 × 1300
+against 450 × 310 × 1300 declared, nothing outside the oval at the smallest, catalogue or
+largest size. **The blades do not spin**, on purpose: the app's spin turns about the vertical
+axis, right for a ceiling fan, and it would whirl a pedestal fan's blades like a carousel.
 
-**The half a probe cannot take: whether it reads as a fan.** A pedestal fan seen from
-directly above is mostly cage, and the cage is 450 across in both axes — it is only the
-BASE that is 306. So the honest footprint may well look too narrow to be the thing it
-represents. That is an aesthetic call about what a plan symbol is for, and it is the one
-question the geometry cannot answer.
+**Where to click.** Add a Standing fan from the Library, then orbit it in 3D: from the front,
+from the side, and from behind at eye level. Recolour it. Stretch it to its tallest and
+shortest in the Inspector.
 
-**Also worth a glance while it is on screen:** a fan whose depth was typed by hand now
-draws deeper than it did — 500 mm declared drew 340 and now draws 493. Correct, and
-visible. Reachable only in a room with no saved scene snapshot.
-
-Gates: `pnpm typecheck` 0, `pnpm test` 142 files / 2557 passed / 5 expected-fail, `pnpm
-lint` 0. **None of that is a look.**
+**What right looks like.** It reads as a fan at a glance: a cage you can see the blades
+through, a motor behind it, a pole, a heavy base. *Wrong* looks like the cage's wires
+flickering or crawling as you orbit, the head drifting off its pole when resized, or the base
+sticking out past the oval in the plan.
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 
@@ -1048,90 +922,6 @@ something. 10 of 10 mutants killed on the second battery, 13 of 14 on the first.
 `checkFit` changed 5 of 100 verdicts, every one `no-room` → `tight`. Chained `Fix`
 presses re-introduce findings on the T preset — identical on `main`, so not this branch.
 
-### Fix and Shuffle are two buttons now — merged to `main` in `9ecce9f` (PR #67)
-
-**Where to click.** Left rail, top: the health chip now has **two** buttons under it,
-`Fix` (sparkles) and `Shuffle` (shuffle icon). Open any room. Press `Fix` on a room with
-nothing wrong — it should say *"This is already a good arrangement"*. Then press
-`Shuffle` on the same room: it must actually rearrange it. That difference is the whole
-point of the change, and no test can tell you it reads that way on screen.
-
-**What wrong looks like.**
-
-- **The row fitting.** Two `.ds-btn`s sit in a wrapping `display: flex` row under
-  the health chip, each `flex: 1 0 auto` — they grow to fill a line they fit on and,
-  because they may not shrink, wrap onto two lines rather than cut a word. The rail
-  around the row is `overflow: hidden`, so anything past the edge would be eaten
-  with no scrollbar and no error.
-
-  **Drag the left rail to its narrowest and press Shuffle.** What to watch is the
-  busy label: it becomes `Shuffling…` for the whole 2–3 s freeze, and under
-  `prefers-reduced-motion` the ring does not turn, so that word is the only tell
-  that anything is happening. It must be whole. Whether the row wraps to two lines
-  while it does that is fine and is the intended trade.
-
-  *Do not re-propose a `1fr 1fr` grid here — it was tried and cut the word. A column is
-  85px at `--rail-left-tight` against 50px of `.ds-btn` chrome, leaving ~35px for a word
-  wanting ~41px. And the full label is NOT recoverable on hover: Fix's `title` never
-  contains "Fix", and Shuffle's contains "Fix" and not "Shuffle".*
-  (`tests/reflow.test.ts` now holds both halves: that the row wraps and may not
-  shrink, and the arithmetic saying why.)
-- **The refusal.** On a `t` or `open` footprint roughly a sixth to a third of presses
-  answer *"No new arrangement this time"* and leave the room alone. That is **correct**
-  — it is refusing to show a room with something in the way — but it must not read as a
-  failure, and pressing again must genuinely try something new. Watch whether it feels
-  like a broken button.
-- **A room that got worse.** Shuffle is allowed to cost more than the arrangement you
-  had — that is what "a different arrangement" of an already-optimal room means. What it
-  may **not** do is introduce something Room check reports. After a shuffle, open
-  **Room** → **Check**: any new error or clash is a defect (0 of 72 in measurement, and
-  the gate meant to catch it has since been measured never to fire — see § H.25 — so one
-  on screen is worth reporting loudly).
-
-**The freeze and the repeat-after-a-tab-switch are both gone from this list on purpose.**
-The tab-switch repeat was fixed on this branch — the attempt counter and the offer history
-are module-scope maps keyed by room id now, not per-mount refs. The freeze is the item
-below, which covers all four solve buttons rather than only this one.
-
-### A bedside lamp should ride its nightstand through a Shuffle
-
-**Where to click.** Open the **U** preset room (it seeds a bed, a wardrobe, two nightstands
-and a lamp on each), go to **3D Model**, and press **Shuffle** half a dozen times. After each
-press, find both bedside lamps.
-
-**What wrong looks like.** A lamp standing anywhere except on top of a nightstand — hanging
-in the air at about knee height, sunk into the mattress, or inside the wardrobe. Orbit down
-to eye level rather than looking from above: at 550 mm a floating lamp is the thing this
-whole item is about, and **from directly overhead it is indistinguishable from a lamp sitting
-correctly on its nightstand**, which is why no amount of clicking in the 2D Plan can check
-this. Turn the camera so you are looking along the floor.
-
-**Also worth one press in 2D.** The plan cannot show the fault, but it can show the
-side-effect: after a Shuffle the lamps should sit exactly on their nightstands' outlines and
-turn with them, not trail behind at an angle.
-
-**Where it rides.** Merged to `main` in `73c7048` (PR #86). The gate counts this line
-used to carry are gone with the merge: they measured a branch tip that `main` has since
-moved five PRs past, and quoting them here would be quoting the wrong artifact.
-
-### The solve buttons say they are working — LOOKED AT for three of the four
-
-Suggest, Try a fix and Check the room were seen busy on a production build: the spinner,
-`aria-busy="true"`, the label **Thinking…** and a disabled button across two consecutive
-animation frames — with the synchronous solve blocking for ~2.9 s *after* the busy state
-was already painted, which is what `afterPaint`'s two rAFs are for. All three share
-`useBusyAction`.
-
-*Before re-measuring: three earlier probes each reported "never observed" for a reason of
-their own making — polling slower than the window, matching the wrong label, and a
-MutationObserver that cannot see a state opening and closing inside one microtask.*
-
-**Still unlooked-at, and small.** **Shuffle** was routed through the same hook on PR #67 and
-has the longest solve in the app — one press is up to twelve solves, a median 2.0 s and a
-worst 2.9 s on a T — so it is the one worth pressing, and the only one where a missing ring
-would be unmistakable. And under **prefers-reduced-motion** the ring should sit still while
-the word still changes: the label is the tell that has to survive.
-
 ### A wall that stops has nothing to SAY to someone who can see
 
 **Where.** A room whose widest piece nearly fills it — drop a sofa in and drag the room
@@ -1167,30 +957,6 @@ but it has only been seen at a 1400px viewport with short names. **Rename a piec
 the rail grows a horizontal scrollbar, the wrap is not doing its job.
 
 **Where it rides.** Merged to `main` in `270455f` (PR #72).
-
-### A numbered piece can vanish under the piece drawn after it — the exported floor plan
-
-**The draw-order half is fixed and gated.** `0e60478` on `main` splits `lib/plan-export.ts`
-into two passes, and `tests/plan-export-order.test.ts` asserts every footprint is drawn
-before the first badge. *(An earlier note claimed this existed in no commit on `main`,
-having searched and found nothing. A search that returns nothing is evidence about the
-search, not about the tree.)*
-
-**What is left is the other cause:** a badge placed at a centroid that happens to sit under
-a **neighbour's** badge. The gate's own words are that *"a number can now only be crossed by
-another number"*, and that half has never been looked at. The failure worth naming is
-unchanged — *a legend that references a label the drawing does not carry* is worse than
-omitting both.
-
-**Where to click.** Any room. Add a large piece — a sofa — then add a small one and drag it
-so its footprint sits **inside** the sofa's. Export the floor plan. Both numbers must appear
-on the drawing, or neither piece may be numbered in the legend. **The shot that matters now
-is two badges close enough to touch**, since a number can still be crossed by another number.
-
-**Where it rides.** `0e60478` on `main` — `lib/plan-export.ts`'s two-pass split, gated by
-`tests/plan-export-order.test.ts`. **Merged with nobody having looked at the sheet**, which
-is why it is here rather than deleted: the gate proves the draw order, and only a picture
-proves the page.
 
 ## Shell and flow
 
@@ -1698,42 +1464,6 @@ writing about your own. Which the item then proved twice over: it also asserted 
 capture screen's wall-length label "now states the wall's real length", read out of the
 source, and a browser found it still saying 4.70 m about a 2.58 m wall.)*
 
-### Pressing Shuffle moves the button out from under the pointer
-
-*Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.
-Nothing here fixes it, and it is a look rather than a probe because the question is what a
-person does next, not what a number says.*
-
-Measured on a production build at 1100 × 900, on the plan tab, in the **left** rail's room
-actions row. *(This said "right rail" until a peer checked it: `RoomTools` renders from
-`PartTree.tsx:364`, and `PartTree` is `LeftRailBody`. The table below derives from
-`--rail-left-tight`, nine lines on, which is the tell that was sitting in the same entry.)*
-
-| | idle | pressed |
-|---|---|---|
-| the Shuffle button | 95px wide | **175px** |
-| the row holding it | 30px, one line | **66px, two lines** |
-
-The row is a wrapping flex row — that is the fix from § E, and it is the right one: at
-`--rail-left-tight` there are 85px per column and `.ds-btn` spends 50px of it on chrome,
-so a grid cut the word instead. But `Shuffling…` is ~18px wider than `Shuffle`, and the
-row answers by wrapping, so **Fix takes the whole first line and Shuffle drops to the
-second**. The pointer has not moved and is now over a different control.
-
-**What to look at.** Press Shuffle on the plan tab at a laptop width and do not move the
-mouse. Watch whether the button leaves from under the cursor, and whether the reflow reads
-as the app responding or as the layout breaking. Then press it again without moving —
-whether that second press lands on **Fix** is the thing worth knowing.
-
-**What would fix it, if it needs fixing:** reserve the busy width so the row cannot
-reflow — render the longest label as a hidden sizer inside the button, so its width is the
-maximum of its two states and neither string changes it. That is a change to `RoomTools`
-and it is deliberately not in #115, because the busy window is short and a peer caught it
-**once in four runs**: a fix nobody can watch land is worse than a recorded measurement.
-
-**Unverified either way:** a real font at a real DPI, and touch, where the finger is
-already lifted before the reflow happens and the second-press question does not arise.
-
 ### A dragged SET slides to its binding member — and only a pointer can show it
 
 *Filed by `drag` (§ H.8, built 2026-09-05, PR #113). It is here rather than in a probe
@@ -1760,93 +1490,6 @@ a place the piece was not; that is fixed, and this is where it would show.
 **Unverified and named as such:** four mutants survive in that change — both `Draggable`
 call sites and the two `settled` gates — because no test in this repo reaches an R3F
 component and the probe cannot make a sub-step drag. This row is the only check they have.
-
-### The placement row is two buttons now — does it still read as a row, at every rail width?
-
-**Where to click.** Open any room, select a floor-standing piece, and look at the two
-buttons under the Inspector's colour section: **Wall · Floor**. Try it with something
-under the piece (a lamp on a desk) and with nothing under it — the row must look the same
-both ways now, where it used to grow a third button. Then **drag the right rail's sash as
-far left as it goes**.
-
-**What changed.** § B.17 removed **Surface**, because a drag reproduces it exactly:
-measured against `resolvePlacement`, dragging a lamp clear of a desk lands it at y = 0 and
-dragging it back over lands it on the desk with `supportId` set. Wall and Floor stay
-because a drag reaches neither — the wall snap is gated on `ridesWall` so a lamp is never
-moved to a wall or turned, and Floor drops the piece **in place** where a drag carries it
-sideways.
-
-**What to look for.** Two buttons at 50% each, both words legible, the section's padding
-intact on both sides and nothing touching the window edge. The colour swatches in the same
-rail should be **six across and square**, not eight narrow rectangles. And, since the
-heading above the row went with the third button: whether the row reads as **deliberate**
-rather than as something with a piece missing.
-
-**The WIDTH half is measured and settled — it is the LOOK that is left.** A headless probe
-walked the rail through 420 / 293 / 276 / 248px: two buttons want 234px of the 243px a rail
-dragged to its 276px floor gives them and 206px of 215px at the 248px compact step, with no
-child overflowing and nothing painting past the rail's right edge at any of the four. So
-`.rail-triple`'s container-query fold is deleted (it set `1fr 1fr`, which is what the
-Inspector's inline `repeat(2, 1fr)` already said) and so is the class. `tests/reflow.test.ts`
-asserts both are gone.
-
-**What is still owed a REAL browser, and only this.** Headless Chromium renders **no
-scrollbar at all** here — measured, `offsetWidth - clientWidth` is 0 in four launch
-configurations with the box genuinely scrolling — so every number above is a rail 12–15px
-wider than a Windows machine with classic scrollbars would give it. At a **1280px window**
-the un-dragged right rail is 307.2px. With three buttons the row had about a pixel to spare
-there; with two it has ~120px of slack by the same arithmetic, so this is very likely moot.
-Confirming that is one look: **both buttons on one line, nothing touching the rail's right
-edge.**
-
-**What a test cannot settle.** Nothing in a test can measure a button's min-content, so
-`tests/reflow.test.ts` holds the breakpoints and `tests/where-it-sits.test.tsx` holds which
-buttons exist and that Wall genuinely turns the piece; none of them can see a rendered
-glyph, a clipped word, or a row that looks unfinished.
-
-**Where it rides.** `dcfe1af` (the 268 → 304 fix), `e4a9f25` (the container move and
-304 → 293) and `fix/rider-height-and-report-units` (three buttons → two, then the fold
-deleted). **The first two merged with nobody having looked at either**, which is why this
-item is still here and why its gate counts are gone.
-
-### Room check now speaks the unit you set — read a few findings in feet
-
-**Where to click.** Settings → **Feet (ft)**, then open a room with problems in it and open
-**Room check**. Then switch to **Meters** and read the same findings again without touching
-the room.
-
-**What changed.** § B.12. Every finding used to hard-code centimetres while `dimUnit`
-defaults to metres, so the panel said `190 cm` beside a room field reading `1.9 m`. Every
-length in a finding now renders through `formatLength` in the user's unit.
-
-**The LAYOUT half is measured and clean; what is left is a COPY judgement.** A headless
-probe read a room with seven findings in it at all five units: every finding sentence
-rendered at its full width with no clipping, and the document's own horizontal overflow was
-**0px** in every unit. So this is not a bug hunt. What needs a person is whether the
-sentences still *read* well in a coarse unit — `"needs 0.6 ft of clear floor"` is correct
-and may be worse prose than `"needs 35 cm"`, and `"About 16.1 ft² of floor has no route to
-the door"` is a new sentence nobody has judged.
-
-**Three specific things to check.** A very small gap must never print as zero — the
-formatter grows its decimals rather than saying `0.00 m`, so you should see something like
-`0.004 m`. The mounted-clash sentence must name **two different** heights (`between 1.05 m
-and 1.07 m up`), never the same number twice. And the TV sentence must keep its screen in
-**inches** while both distances convert: on feet it should read *"…is 5.4 ft from the
-65.6″-class screen — comfortable viewing starts around 6.6 ft."* A screen diagonal is the
-product's name worldwide, not a room measurement.
-
-**Already confirmed on screen, so do not re-derive it:** the door swing reads `0.9 m` /
-`90 cm` / `2.95 ft` / `35.4 in` / `900 mm`, the route in reads `60 cm` / `23.6 in`, and the
-**Step-free** control three rows above the findings says `150 cm` / `59.1 in` — it used to
-say `150 cm` whatever the unit, which is the § B.12 defect three rows from where § B.12
-fixed it.
-
-**What a test cannot settle.** Whether the wording is worth reading. The arithmetic is
-gated in `tests/units.test.ts`, the wiring in `tests/room-tools-findings.test.tsx`, the
-band's two-different-numbers property across all five units in `tests/mounted-clash.test.ts`,
-and every finding that states a number in `tests/report-units.test.ts`.
-
-**Where it rides.** `fix/rider-height-and-report-units`.
 
 ### A lamp on a nightstand you have resized — the CORE case is MEASURED, the rest still wants a person
 

@@ -1570,40 +1570,171 @@ function WaterDispenserGeo({ part }: { part: ScenePart }) {
   );
 }
 
-/** Pedestal fan.
+/** Pedestal fan: a weighted base, a telescoping column, a tilt bracket, and a head of
+ *  motor, blades and a domed wire guard.
  *
- *  Authored so the widest thing in it is exactly `dimMM[0]`: the head's guard is the
- *  full width, the base is deliberately narrower, and nothing reaches past the box.
- *  That is the `fanBlade` lesson applied on the way in rather than after a bug — a
- *  renderer whose geometry is wider than the size it declares renders the wrong size
- *  the moment the user resizes it, because `Draggable` scales by `stored / dimMM`. */
+ *  Authored inside the footprint the plan draws, which for this shape is the ELLIPSE
+ *  `dimMM[0]` × `dimMM[1]` (`circle`), not the box around it. So the guard's rim, the
+ *  widest thing in it, stands directly over the base at z = 0, where the ellipse is as
+ *  wide as the piece: a rim pushed forward of that pokes out of the outline at both
+ *  ends, which `tests/footprint-outcomes.test.tsx` measures as positions a drag refuses
+ *  that the plan says are clear. The guard is two shallow cones meeting at that rim, and
+ *  the motor sits behind the back one, every depth a share of `dimMM[1]`: a straight
+ *  line between two points inside an ellipse stays inside it, so straight spokes from
+ *  a centre inside the outline to a rim on it cannot leave it. That is also how a real
+ *  guard is built. Width is `dimMM[0]` exactly, height `dimMM[2]`, and the base sets the
+ *  depth, as § 39 decided. The `fanBlade` lesson, applied on the way in.
+ *
+ *  The blades do not spin: `Spin` turns about the piece's vertical axis, which is the
+ *  ceiling fan's, and a pedestal fan's blades turn about the horizontal one. */
 function StandingFanGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
+  const dd = part.dimMM[1] / 2000;
   const h = part.dimMM[2] / 1000;
   const r = w / 2;
   const bodyC = tint(part);
+  const wire = shade(bodyC, -18);
+  const metal = '#c4c8cc';
   const headY = h - r;
+
+  // The guard: a rim at z = 0, a front cone to `front`, a flatter back cone to `-back`.
+  const tube = r * 0.028;
+  const rimT = tube * 1.2;
+  // The rim's outer edge sits ON the ellipse at its own thickness, not past it.
+  const rim = r * Math.sqrt(1 - (rimT / dd) ** 2) * 0.999 - rimT;
+  const front = Math.min(0.42 * dd, 0.3 * r);
+  const back = front * 0.5;
+  // A point on a cone, `rho` out from the axis.
+  const onFront = (rho: number) => front * (1 - rho / rim);
+  const onBack = (rho: number) => -back * (1 - rho / rim);
+
+  // The motor, behind the back cone's centre: a barrel, then a dome.
+  const motorR = r * 0.3;
+  const motorFace = onBack(motorR);
+  const motorL = Math.min(0.9 * dd + motorFace, 0.45 * r);
+  const barrelL = motorL * 0.6;
+  const barrelZ = motorFace - barrelL / 2;
+  const domeZ = motorFace - barrelL;
+
+  // The base and the column. The base is round and no wider than the depth it declares.
+  const baseR = Math.min(0.7 * r, 0.95 * dd); // its flared foot is 4% wider still
+  const baseH = h * 0.028;
+  // The column stops below the rim and a bracket leans back from it to the motor.
+  const poleTop = headY - r * 1.12;
+  const jointY = baseH + (poleTop - baseH) * 0.55;
+  const mount: [number, number] = [headY - motorR * 0.85, barrelZ];
+  const armL = Math.hypot(mount[0] - poleTop, mount[1]);
+  const armTilt = Math.atan2(-mount[1], mount[0] - poleTop);
+
+  const ring = (radius: number, z: number, t: number, key: string) => (
+    <mesh key={key} position={[0, headY, z]}>
+      <torusGeometry args={[radius, t, 8, 40]} />
+      <meshStandardMaterial color={wire} metalness={0.35} roughness={0.4} />
+    </mesh>
+  );
+  // Straight wires from `from` out to the rim, each lying on its cone.
+  const spokes = (n: number, from: number, cone: (rho: number) => number, keyPrefix: string) => {
+    const z0 = cone(from);
+    const len = Math.hypot(rim - from, z0);
+    const tilt = Math.atan2(z0, rim - from);
+    return Array.from({ length: n }, (_, i) => (
+      <group key={`${keyPrefix}${i}`} position={[0, headY, 0]} rotation={[0, 0, (i / n) * Math.PI * 2]}>
+        <mesh position={[(from + rim) / 2, 0, z0 / 2]} rotation={[0, tilt, -Math.PI / 2]}>
+          <cylinderGeometry args={[tube * 0.35, tube * 0.35, len, 4]} />
+          <meshStandardMaterial color={wire} metalness={0.35} roughness={0.4} />
+        </mesh>
+      </group>
+    ));
+  };
+
   return (
     <>
-      {/* base — narrower than the head on purpose */}
-      <mesh position={[0, 0.02, 0]}>
-        <cylinderGeometry args={[r * 0.62, r * 0.68, 0.04, 24]} />
-        <meshStandardMaterial color={bodyC} roughness={0.6} />
+      {/* weighted base: a low plinth with a dome on it, and the switch row on its front */}
+      <mesh position={[0, baseH / 2, 0]}>
+        <cylinderGeometry args={[baseR, baseR * 1.04, baseH, 32]} />
+        <meshStandardMaterial color={bodyC} roughness={0.55} />
       </mesh>
-      {/* pole */}
-      <mesh position={[0, headY / 2, 0]}>
-        <cylinderGeometry args={[0.017, 0.021, headY, 12]} />
-        <meshStandardMaterial color="#9aa0a6" metalness={0.45} roughness={0.35} />
+      <mesh position={[0, baseH, 0]} scale={[1, 0.22, 1]}>
+        <sphereGeometry args={[baseR * 0.82, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial color={shade(bodyC, 4)} roughness={0.5} />
       </mesh>
-      {/* guard: a flat disc the width of the piece, standing upright */}
-      <mesh position={[0, headY, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[r, r, 0.05, 28]} />
-        <meshStandardMaterial color={bodyC} roughness={0.45} transparent opacity={0.55} />
+      {[-1, 0, 1].map((k) => (
+        <mesh key={k} position={[k * baseR * 0.16, baseH + baseR * 0.06, baseR * 0.62]}>
+          <cylinderGeometry args={[baseR * 0.05, baseR * 0.05, baseR * 0.05, 12]} />
+          <meshStandardMaterial color={shade(bodyC, -30)} roughness={0.4} />
+        </mesh>
+      ))}
+
+      {/* telescoping column: a thicker lower tube, a locking collar, a slimmer upper tube */}
+      <mesh position={[0, (baseH + jointY) / 2, 0]}>
+        <cylinderGeometry args={[0.019, 0.023, jointY - baseH, 14]} />
+        <meshStandardMaterial color={metal} metalness={0.3} roughness={0.35} />
       </mesh>
-      {/* hub */}
-      <mesh position={[0, headY, 0.035]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[r * 0.22, r * 0.22, 0.06, 16]} />
-        <meshStandardMaterial color="#7e8388" metalness={0.4} roughness={0.4} />
+      <mesh position={[0, jointY, 0]}>
+        <cylinderGeometry args={[0.03, 0.03, 0.035, 16]} />
+        <meshStandardMaterial color={bodyC} roughness={0.5} />
+      </mesh>
+      <mesh position={[0.03, jointY, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.009, 0.009, 0.02, 10]} />
+        <meshStandardMaterial color={shade(bodyC, -30)} roughness={0.4} />
+      </mesh>
+      <mesh position={[0, (jointY + poleTop) / 2, 0]}>
+        <cylinderGeometry args={[0.013, 0.013, poleTop - jointY, 12]} />
+        <meshStandardMaterial color={metal} metalness={0.35} roughness={0.3} />
+      </mesh>
+      {/* the tilt bracket: a knuckle on the column, an arm leaning back to the motor */}
+      <mesh position={[0, poleTop, 0]}>
+        <sphereGeometry args={[0.018, 14, 10]} />
+        <meshStandardMaterial color={bodyC} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, (poleTop + mount[0]) / 2, mount[1] / 2]} rotation={[-armTilt, 0, 0]}>
+        <cylinderGeometry args={[0.012, 0.014, armL, 12]} />
+        <meshStandardMaterial color={bodyC} roughness={0.5} />
+      </mesh>
+
+      {/* motor housing behind the guard, rounded at the back, with the oscillation knob on top */}
+      <mesh position={[0, headY, barrelZ]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[motorR, motorR * 0.86, barrelL, 28]} />
+        <meshStandardMaterial color={bodyC} roughness={0.45} />
+      </mesh>
+      <mesh position={[0, headY, domeZ]} rotation={[-Math.PI / 2, 0, 0]} scale={[1, (motorL - barrelL) / (motorR * 0.86), 1]}>
+        <sphereGeometry args={[motorR * 0.86, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial color={bodyC} roughness={0.45} />
+      </mesh>
+      <mesh position={[0, headY + motorR + 0.012, barrelZ]}>
+        <cylinderGeometry args={[0.01, 0.012, 0.024, 12]} />
+        <meshStandardMaterial color={shade(bodyC, -30)} roughness={0.4} />
+      </mesh>
+
+      {/* blades: three broad, pitched, translucent leaves on a hub, between the cones */}
+      {[0, 1, 2].map((i) => {
+        const a = (i / 3) * Math.PI * 2;
+        const len = rim * 0.78;
+        return (
+          <group key={i} position={[0, headY, front * 0.15]} rotation={[0, 0, a]}>
+            <mesh position={[len * 0.55, 0, 0]} rotation={[0.35, 0, 0]} scale={[len / 2, rim * 0.26, 0.004]}>
+              <sphereGeometry args={[1, 20, 10]} />
+              <meshStandardMaterial color={shade(bodyC, -6)} roughness={0.35} transparent opacity={0.72} />
+            </mesh>
+          </group>
+        );
+      })}
+      <mesh position={[0, headY, (front * 0.5 - back * 0.5) / 2]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[r * 0.12, r * 0.12, (front + back) * 0.5, 20]} />
+        <meshStandardMaterial color={shade(bodyC, -10)} roughness={0.4} />
+      </mesh>
+
+      {/* the guard: one rim, a front cone of rings and spokes with a badge at its point,
+          and a back cone of spokes and a ring running into the motor's face */}
+      {ring(rim, 0, rimT, 'rim')}
+      {ring(rim * 0.66, onFront(rim * 0.66), tube * 0.45, 'f66')}
+      {ring(rim * 0.33, onFront(rim * 0.33), tube * 0.45, 'f33')}
+      {ring(rim * 0.55, onBack(rim * 0.55), tube * 0.45, 'b55')}
+      {spokes(12, r * 0.1, onFront, 'fs')}
+      {spokes(8, motorR, onBack, 'bs')}
+      <mesh position={[0, headY, front]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[r * 0.1, r * 0.1, tube * 1.2, 20]} />
+        <meshStandardMaterial color={bodyC} roughness={0.35} metalness={0.15} />
       </mesh>
     </>
   );

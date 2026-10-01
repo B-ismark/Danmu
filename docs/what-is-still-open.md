@@ -4055,6 +4055,21 @@ turn lands in reach only with **Snap when dragging → Free**, or from a scan or
 angle. And only in a room with a wall its bounding box does not have, as above.
 
 *Still open.*
+- **A sofa pulled off its wall, then turned — a decision, not a defect.** The user,
+  2026-10-01: *"If moved forward a bit and turned, it moves back to it's previous position
+  and turn to face the tv."* Measured in the T at 5.5 × 4.7, the sofa `placed`: moved 30 cm
+  along its front and turned ±10°, the room has no fault at all (Room check would say it
+  checks out), and `wall` 2.26, `relation` 2.68 and `alignment` 0.89 price it. Back on its
+  wall, square, those fall to 0.24 / 0 / 0 for 2.22 of `inertia` (four times the app's own
+  pieces', `PLACED_INERTIA`), so every seed puts it back. Only turned, with no move, it squares
+  in place on every seed, as the table above says. So `squareFaults` is not reached and is
+  not meant to be: it fires only on a fault. Two directions, and it is the user's call:
+  (a) leave it. Fix tidies to the guidelines, says *“Sofa” moved beside what it belongs
+  with*, and Undo or Lock keeps a floated sofa; (b) make Fix honour a hand placement when
+  nothing is WRONG, squaring it where it stands at most. That would make Fix mean exactly
+  what its tooltip says (*Clear what’s wrong*) and leave the guidelines to Ideas, but it
+  changes every hand-placed piece in every room, not just this sofa, and needs its own
+  measurement across the presets. Not built.
 - **A sofa 2.5° through its wall.** A turn that small is inside `TURN_EPSILON`, so `moved`
   would not count it and the candidate does not try it. The search's own answers hit the
   same wall: in `rect` 6 × 4 with the sofa set at −2.5° (by a scan or a file; a hand turn
