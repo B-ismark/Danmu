@@ -66,9 +66,9 @@
 // `lib/sun-shadow.ts` described; per-light masking (layers, or two passes) is the
 // real fix and is a change to how the scene is lit.
 
-import { useMemo, useState } from 'react';
-import { DoubleSide, FrontSide, Path, Shape, Vector2 } from 'three';
-import { type ThreeEvent } from '@react-three/fiber';
+import { useMemo, useRef, useState } from 'react';
+import { DoubleSide, FrontSide, Path, Shape, Vector2, type Group } from 'three';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
@@ -77,6 +77,7 @@ import { useRoomScene } from '@/lib/room-scene';
 import { SCENE } from '@/lib/scene-palette';
 import { wallApertures, skirtingRuns, type Aperture } from '@/lib/apertures';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
+import { cutAwayWithWall } from '@/lib/near-wall';
 import { floorNormal, floorRoughness } from '@/lib/textures';
 
 // Floor board tone. Stays local rather than reading SCENE.floor: that value is
@@ -306,30 +307,59 @@ export function RoomShell() {
           Not cut as a hole like the wall above: a door opening spans the whole
           100 mm strip, so the hole would touch the outline top and bottom and
           leave Earcut two degenerate slivers. */}
-      {walls.map((wl, i) =>
-        skirtingRuns(wl.len, apertures.get(i) ?? [], SKIRTING_H).map(([a, b], k) => {
-          const mid = (a + b) / 2;
-          // Runs are off-centre, so each one is offset along the wall's own
-          // tangent — (cos yaw, -sin yaw), the same axis the openings are
-          // measured on — and half its thickness along the inward normal,
-          // (sin yaw, cos yaw), the side the wall's face looks into.
-          const out = SKIRTING_PROUD / 2;
-          return (
-            <mesh
-              key={`sk-${i}-${k}`}
-              position={[
-                wl.x + mid * Math.cos(wl.yaw) + out * Math.sin(wl.yaw),
-                SKIRTING_H / 2,
-                wl.z - mid * Math.sin(wl.yaw) + out * Math.cos(wl.yaw),
-              ]}
-              rotation={[0, wl.yaw, 0]}
-            >
-              <boxGeometry args={[b - a, SKIRTING_H, SKIRTING_PROUD]} />
-              <meshStandardMaterial color="#D8D3C6" roughness={0.9} side={FrontSide} />
-            </mesh>
-          );
-        }),
-      )}
+      {walls.map((wl, i) => (
+        <WallSkirting key={`sk-${i}`} wl={wl} runs={skirtingRuns(wl.len, apertures.get(i) ?? [], SKIRTING_H)} wall={i} />
+      ))}
+    </group>
+  );
+}
+
+type WallSeg = ReturnType<typeof wallSegments>[number];
+
+/** One wall's skirting, which goes when its wall goes.
+ *
+ *  A board with a thickness is a closed box, and a box has a back. The wall above it
+ *  is a single-sided plane that the dollhouse cut-away removes by back-face culling;
+ *  the board's outer face points the other way, so from outside the room it stayed —
+ *  a grey strip floating across the foot of the view in front of everything, with the
+ *  furniture behind it showing through its edge in stripes. The user's picture of a
+ *  wardrobe, 2026-10-01. So the board asks the wall's own question, through the
+ *  plane of the plaster (`cutAwayWithWall` at depth 0), and hides with it.
+ *
+ *  `visible` is the right switch HERE and is the wrong one in `CutAway.tsx`: the
+ *  skirting casts no shadow and takes no clicks, so leaving the shadow pass costs
+ *  nothing it was doing. */
+function WallSkirting({ wl, runs, wall }: { wl: WallSeg; runs: Array<[number, number]>; wall: number }) {
+  const ref = useRef<Group>(null);
+  useFrame(({ camera }) => {
+    const g = ref.current;
+    if (!g) return;
+    g.visible = !cutAwayWithWall([camera.position.x, camera.position.y, camera.position.z], [wl.x, 0, wl.z], wl.yaw, 0);
+  });
+  return (
+    <group ref={ref}>
+      {runs.map(([a, b], k) => {
+        const mid = (a + b) / 2;
+        // Runs are off-centre, so each one is offset along the wall's own
+        // tangent — (cos yaw, -sin yaw), the same axis the openings are
+        // measured on — and half its thickness along the inward normal,
+        // (sin yaw, cos yaw), the side the wall's face looks into.
+        const out = SKIRTING_PROUD / 2;
+        return (
+          <mesh
+            key={`sk-${wall}-${k}`}
+            position={[
+              wl.x + mid * Math.cos(wl.yaw) + out * Math.sin(wl.yaw),
+              SKIRTING_H / 2,
+              wl.z - mid * Math.sin(wl.yaw) + out * Math.cos(wl.yaw),
+            ]}
+            rotation={[0, wl.yaw, 0]}
+          >
+            <boxGeometry args={[b - a, SKIRTING_H, SKIRTING_PROUD]} />
+            <meshStandardMaterial color="#D8D3C6" roughness={0.9} side={FrontSide} />
+          </mesh>
+        );
+      })}
     </group>
   );
 }
