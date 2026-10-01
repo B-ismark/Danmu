@@ -91,8 +91,9 @@ const HEIGHT = 2.5;
  *  the research doc's § H.7, unfixed at the time of writing).
  *
  *  It does not reach this file, and that is measured, not argued: `analyzeRoom` over this
- *  scene reports the same two findings — `zone` "Bed hard to get into" and `cut-off` "Part
- *  of the floor is cut off" — with the flag set and with it absent. Both arms of
+ *  scene reports the same three findings — `zone` "Bed hard to get into", `reach` "You
+ *  can’t walk to everything" and `cut-off` "Part of the floor is cut off" — with the flag
+ *  set and with it absent. Both arms of
  *  `tryFixFor` below therefore exist in both worlds. Worth re-running if that fix lands
  *  and this file goes red for no reason you can see. */
 function seeded(w: number, d: number) {
@@ -149,17 +150,20 @@ function openFindings() {
  *  the report reorders itself. */
 function tryFixFor(title: string): HTMLElement {
   // **The fixture's shape, pinned before the walk rather than inferred from it.** The
-  // whole file rests on this mount producing exactly two fixable findings — `zone`,
-  // which names a piece and so confines the solve, and `cut-off`, which names none and
-  // so does not. If either lost `canFix`, the walk below would run past its own row to
+  // whole file rests on this mount producing `zone`, which names a piece and so confines
+  // the solve, and `cut-off`, which names none and so does not. A third, `reach`, names
+  // the nightstand and is not walked to: it appeared when containment stopped pushing a
+  // piece in one of the U's arms through the notch into the other, which had carried the
+  // nightstand and its lamp 3.5 m from the bed. They now stand where the seeder put
+  // them, in the pocket behind the bed, and the report says so. If either lost `canFix`, the walk below would run past its own row to
   // the list holding both and hand back the OTHER finding's button. The two tests would
   // still fail, because each asserts a branch-discriminating string, but they would fail
   // as a puzzling `toContain` mismatch rather than as "the fixture changed shape". One
   // count says which it is.
   expect(
     screen.queryAllByRole('button', { name: 'Try a fix' }),
-    'this mount is supposed to offer exactly two fixable findings — the confined arm and the unconfined one',
-  ).toHaveLength(2);
+    'this mount is supposed to offer exactly three fixable findings — two confined arms and the unconfined one',
+  ).toHaveLength(3);
   // Walk OUT from the title to the SMALLEST ancestor holding exactly one such button —
   // the finding's own row. Walking in from the buttons instead matched both findings,
   // because every button's ancestry eventually reaches the list that contains every

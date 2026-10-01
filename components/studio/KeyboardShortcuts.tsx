@@ -24,7 +24,6 @@ import { v4 as uuid } from 'uuid';
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRiderRelation, currentRoomScene, useRoomScene } from '@/lib/room-scene';
-import { riderRelation } from '@/lib/rider-height';
 import { turnInPlace, turnSwingsInto, refusalCause } from '@/lib/drag-resolve';
 import { planConvoy, travellingWorld } from '@/lib/drag-convoy';
 import { cascadeTransform, snapshotDescendants } from '@/lib/rigid-parent';
@@ -32,8 +31,8 @@ import { turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refus
 import { playSound } from '@/lib/sound';
 import { useDragLive } from '@/lib/drag-live';
 import { useHistory, applySnapshot, startHistoryRecording } from '@/lib/history';
-import { collidesAt, type ScenePart } from '@/lib/scene-spec';
-import { clampIntoFootprint } from '@/lib/footprint';
+import { type ScenePart } from '@/lib/scene-spec';
+import { placeCopies } from '@/lib/duplicate-place';
 import { formatDim, formatLength } from '@/lib/units';
 import { ANNOUNCE_EVENT, announce } from '@/lib/announce';
 import { toast } from '@/components/ui/StorageToast';
@@ -146,18 +145,6 @@ export function StudioAnnouncer() {
 }
 
 // ─── Selection-wide actions the accelerators need ───────────────────────────
-
-/** Where to try putting a copy, in order, so it never lands buried in the piece
- *  it was copied from. */
-const COPY_OFFSETS: Array<[number, number]> = [
-  [0.35, 0.35],
-  [-0.35, 0.35],
-  [0.35, -0.35],
-  [-0.35, -0.35],
-  [0.7, 0],
-  [0, 0.7],
-  [0, 0],
-];
 
 export function selectedIds(): string[] {
   const s = useStudio.getState();
@@ -304,56 +291,63 @@ export function duplicateSelection(explicit?: string[]) {
   const ids = explicit ?? selectedIds();
   if (ids.length === 0) return;
   const sc = useScene.getState();
-  const created: string[] = [];
 
-  // Duplicating copies the piece as it STANDS, not as it was authored.
+  // Duplicating copies the piece as it STANDS, not as it was authored — and puts it
+  // beside the original rather than in it (`lib/duplicate-place.ts`, where the
+  // reasons are written down).
   const live = currentRoomScene();
-  for (const id of ids) {
-    const base = sc.parts.find((p) => p.id === id);
-    const eff = live.find((p) => p.id === id);
-    if (!base || !eff) continue;
-    const { pos, rot, dimMM } = eff;
+  const pairs = ids
+    .map((id) => ({ base: sc.parts.find((p) => p.id === id), eff: live.find((p) => p.id === id) }))
+    .filter((x): x is { base: ScenePart; eff: ScenePart } => !!x.base && !!x.eff);
+  if (pairs.length === 0) return;
+  const { spots, clear, beside } = placeCopies(pairs.map((x) => x.eff), live, sc.room.footprint, sc.room.height);
 
-    // Probe with a stand-in that IS in the parts list, so the original counts as
-    // an obstacle — collidesAt exempts whatever id you name as the mover.
-    const probeId = '__duplicate-probe__';
-    const probeParts = [...useScene.getState().parts, { ...base, id: probeId }];
-    let placed: [number, number, number] = [pos[0], pos[1], pos[2]];
-    for (const [dx, dz] of COPY_OFFSETS) {
-      const [cx, cz] = clampIntoFootprint(pos[0] + dx, pos[2] + dz, sc.room.footprint);
-      if (!collidesAt(probeParts, probeId, [cx, pos[1], cz], rot, dimMM)) {
-        placed = [cx, pos[1], cz];
-        break;
-      }
-    }
-
+  const created: string[] = [];
+  const copyOf = new Map<string, string>();
+  pairs.forEach(({ base, eff }, i) => {
     const copy: ScenePart = {
       ...base,
       id: `${base.category}-${uuid().slice(0, 6)}`,
-      pos: placed,
-      rot,
-      dimMM,
+      pos: spots[i].pos,
+      rot: spots[i].rot,
+      dimMM: eff.dimMM,
       // A copy is its own piece: inheriting the merge group would make it move
       // with a group the user never added it to.
       groupId: undefined,
     };
     useScene.getState().addPart(copy);
-    // A copy of a rider is a rider. `pos` above came from `currentRoomScene()`, so it
-    // carries the height its support was CORRECTED to — an authored Y that
-    // `resetTransforms` cannot reach and `RoomSync` persists. Without the relation the
-    // copy is severed from the piece it was cloned from: shrink the desk back and the
-    // original returns while the copy stays where it was, two identical lamps 450 mm
-    // apart on one desk. `riderRelation` answers for a seeded rider as well as a
-    // dragged one, and if the copy landed clear of the support `stillOver` drops the
-    // edge on the next read.
-    const on = riderRelation(sc.parts, useStudio.getState().parentIds)[id];
-    if (on) useStudio.getState().setParent(copy.id, on);
+    copyOf.set(base.id, copy.id);
     created.push(copy.id);
-  }
+  });
+  // A copy of a rider is a rider — of whatever the COPY landed on, which is not always
+  // what its original rides: a lamp off a full nightstand goes onto the other one, and
+  // one copied with its desk onto the desk's copy. Linking it to the original's support
+  // instead wrote an edge that overrode the right one, so dragging the nightstand it
+  // actually stood on left it in the air. Without the relation at all the copy is
+  // severed from its support: shrink the desk back and the original returns while the
+  // copy stays where it was.
+  pairs.forEach(({ base }, i) => {
+    const on = spots[i].support;
+    if (!on) return;
+    const target = on.copy ? copyOf.get(on.id) : on.id;
+    if (target) useStudio.getState().setParent(copyOf.get(base.id)!, target);
+  });
 
-  if (created.length === 0) return;
   useStudio.getState().setSelection(created, created[created.length - 1]);
-  announce(created.length === 1 ? 'Copy added and selected.' : `${created.length} copies added and selected.`);
+  if (clear) {
+    // "Beside" only when it is: the room search can put a copy metres away.
+    const where = beside ? (created.length === 1 ? ' beside it' : ' beside them') : '';
+    announce(created.length === 1 ? `Copy added${where} and selected.` : `${created.length} copies added${where} and selected.`);
+  } else {
+    // Rule 2: when it does not fit, say so. The copy is made — a Duplicate that does
+    // nothing reads as broken — and outlined red where it stands.
+    paintRefusal(created);
+    announce(
+      created.length === 1
+        ? 'No clear space left in the room, so the copy overlaps something. Move it somewhere clear.'
+        : 'No clear space left in the room, so the copies overlap something. Move them somewhere clear.',
+    );
+  }
 }
 
 /** Live handle for the outline timer, so a second turn replaces the first's countdown

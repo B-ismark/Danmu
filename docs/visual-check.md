@@ -78,7 +78,7 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### No more stripes where two parts of a piece meet — merged to `main` in `7de4934` (PR #204), NOT LOOKED AT
+### No more stripes where two parts of a piece meet — merged to `main` in `7de4934` (PR #204), LOOKED AT 2026-10-01 except the near wall's skirting, this branch
 
 The user's report on 2026-10-01: *"the shadow issue is across the platform, the lower part of
 the room, the bed model, the edges of the wardrobe."* **Not shadows** — the key light's shadow
@@ -102,6 +102,19 @@ bookshelf, a TV console and a window and orbit each slowly at arm's length.
 like: a sawtooth, a dashed seam, or a stripe that crawls when the camera moves. One known
 non-defect: from across the room the skirting's 12 mm top can read as a broken highlight,
 because it is thinner than a pixel there; up close it is one line.
+
+**Looked at 2026-10-01:** *"Looks good, but when a wardrobe is viewed from the side facing the
+camera it still shimmers."* The picture showed a grey band with stripes of wardrobe through it
+across the bottom of the view — not a seam in the wardrobe but the **near wall's skirting**.
+The board is a closed box now, so it has a back, and the see-through view hides a wall by
+not drawing the face turned away from the camera: the wall went, its board's back faced the
+camera, and it stayed, floating in front of the furniture. The skirting now hides with its own
+wall (`WallSkirting`, guarded in `tests/room-shell.test.ts`).
+
+**Where to click for that half.** The default bedroom, 3D. Orbit round until you are looking at
+the wardrobe's side through the cut-away wall, low down, so the floor line is in view.
+*Right:* no grey band across the foot of the view; the far walls keep their skirting.
+*Wrong:* a strip of skirting hanging in front of the furniture, or a far wall with none.
 
 **Where it rides.** `components/three/DynamicPart.tsx`, `components/three/RoomShell.tsx`.
 
@@ -156,81 +169,94 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
-### A print swapped for curtains hangs flat on the print's wall — merged to `main` in `7de4934` (PR #204); the sofa half this branch, NOT LOOKED AT
+### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205), NOT LOOKED AT; the floor lamp and tall plant this branch
 
-The user's report on 2026-10-01: *"when you replace a painting with curtain while in 2d plan
-mode, curtains spawns in the wrong degree and ends up going through th wall."* Two halves, and
-both came from **Change the model** keeping the old piece's spot as-is. It kept the print's
-centre, 35 mm off the plaster, and the curtain needs 150 mm. And it threw away the turn that
-faced the print into the room, so on any wall where the drag had done the turning, the curtain
-came back at the room's original angle, crossways. The swap now hangs every wall piece the way
-adding one does (`snapToWall`, using the new piece's own depth and standoff), on the wall the
-old one was on. `tests/swap-model.test.ts` holds both halves, and checks that a print already
-square to its wall gets no new turn written.
+The curtain half (a print swapped for curtains hangs flat on the print's wall) was looked at
+on 2026-10-01 and is gone. This is the other way round. A print swapped for a **sofa** kept
+the print's centre, so the 2 m sofa stood 400 mm through the wall. Now a piece that belongs
+against a wall (sofa, bed, wardrobe, desk, shelf, fridge) backs onto the print's wall, facing
+the room. Anything else (a plant, a chair, a lamp) stays where the print was, pulled in off the
+wall. A big sofa swapped in for a small one by a wall stays against that wall, and a piece that
+already fits does not move.
 
-**Where to click.** Use the 2D plan. Drag a print onto a side wall (east or west, because the
-north wall hides the turn half). Right-click it, choose **Change the model…**, then pick
-Curtain. Repeat once from the 3D tab and once with a door.
+**Merged with it.** Only a small tabletop thing (a lamp, a vase, a plant pot) looks for a table
+to stand on. A print hung above a bed and swapped for a nightstand used to stand the nightstand
+on the bed. And a lamp swapped in for a print looks for its table where the lamp ends up, not
+where the print hung.
 
-**What right looks like.** The curtain lies along the wall the print was on, at the same point
-along it, with its back just off the plaster, and in 3D it hangs flat with the folds facing
-into the room. *Wrong* looks like a curtain drawn across the wall in the plan, or poking
-through the wall in 3D.
+**This branch.** "A lamp" used to mean any lamp, so a print above the bed swapped for a **floor
+lamp** stood the floor lamp on the duvet, and a 1.6 m floor plant the same. Now only a piece of
+tabletop size looks for a top, when swapped in and when added from the Library. An ottoman
+still goes on a top it does not fit under, which was decided before (§ 50 point 4).
 
-**And the other way round — this branch.** A print swapped for a **sofa** kept the print's
-centre too, so the 2 m sofa stood 400 mm through the wall. Now a piece that belongs against a
-wall (sofa, bed, wardrobe, desk, shelf, fridge) backs onto the print's wall, facing the room.
-Anything else (a plant, a chair, a lamp) stays where the print was, pulled inside the walls.
-And every floor swap is kept inside the room now, so a big sofa swapped in for a small one
-by a wall no longer pokes through it; a piece that already fits does not move.
+**One known limit, so it does not read as a regression.** In a U-shaped room a piece too wide
+for the arm it lands in — a 2 m table swapped in for a print on an arm's end wall — is carried
+out into the room's middle, but can still end a couple of centimetres through the plaster,
+because there is no spot in an arm that holds it. A piece that fits the arm stays in it.
 
 **Where to click.** Use the 2D plan. Put a print on a side wall, then **Change the model…** →
 Sofa. Then a second print → Floor plant. Then swap a small sofa standing against a wall for a
-large one.
+large one. Then a print hung above a desk → Table lamp, and a print above the bed → Nightstand,
+then another print above the bed → Floor lamp.
 
 **What right looks like.** The sofa's back is against the print's wall, with its seat facing
 the room, at the same point along the wall. The plant stands just inside the wall where the
-print hung. The large sofa stays against its wall, inside the room. *Wrong* looks like any
-piece crossing the wall line in the plan, or a sofa with its back to the room.
+print hung. The large sofa stays against its wall, inside the room. The lamp stands on the
+desk; the nightstand and the floor lamp stand on the floor. *Wrong* looks like any piece
+crossing the wall line in the plan, a sofa with its back to the room, or a nightstand or floor
+lamp perched on the bed.
 
-**Where it rides.** `lib/swap-model.ts`.
+**Where it rides.** `lib/swap-model.ts`, `seeksSurface` in `lib/physics.ts`.
 
-### Arrow keys move a piece off the line it is lined up on, and land it flush — this branch (§ H.6.8), NOT LOOKED AT
+### Duplicate puts the copy beside the piece, not inside it — this branch, NOT LOOKED AT
 
-With the snap on, a piece standing flush with another could not be moved away from it with
-the arrow keys: each press was pulled straight back. A press now goes one step and stops on
-the first line it meets, a neighbour's edge or centre. Tests hold the steps; nobody has
-pressed the keys in a browser.
+The user's report on 2026-10-01: *"duplicating an item should spawn the duplicate properly if
+there's space, it should be next to the main instance, it shouldn't spawn inside the main
+instance."* Duplicate tried seven fixed steps sized for a chair, 350–700 mm, and when every one
+hit something it fell back to the original's own spot. A wardrobe, a bed or a sofa is wider
+than 700 mm, so its copy always landed exactly inside it. A copy now goes one piece-width over,
+along the piece's own width, with a 5 cm gap, and is dropped the way a drag drops a piece
+(`lib/duplicate-place.ts`). Every piece in the Library is swept in an empty room in
+`tests/duplicate-place.test.ts`, and every one lands beside itself.
 
-**Where to click.** Any room with starter furniture, snap left at its default (**Fine**). In
-the 2D Plan, drag a chair beside a cabinet or wardrobe until it snaps flush against its side,
-and let go. Press the arrow key that moves it away, a few times, then the one that brings it
-back, and keep pressing once it is back. Then do the same on **Coarse**. On a laptop, the snap
-setting is the **Snap · Fine** button in the 3D Model tab's toolbar, which steps to Coarse
-when you click it; the 2D Plan has no control of its own for it. On a phone it is **More (⋯)
-→ Snap when dragging**.
+**The user's second look, the same day:** *"Duplicated items are offset nicely but it seems
+they don't consider whether they're clipping with an object."* A copy was checked the way a
+drag is, and a drag forgives two things on purpose: a chair pushed in under a table, and a short
+piece stepping up onto a tall one. So a chair's copy could land half under the table and a
+nightstand's copy on the bed. Now a copy has to touch nothing it could bump into (a rug or a
+curtain bumps into nothing, so a rug's copy may still lie over another rug), and stand on what
+the original stands on. When nothing beside it is clear, the rest of the room is searched, nearest spot
+first. A lamp copied off a full nightstand goes on the other nightstand, or on the floor beside
+it, never on the bed. Every piece of every starter room is copied in the test, and none touches
+anything.
 
-**What right looks like.**
-- Every press away moves the chair one step: 1 cm, or 5 cm on **Coarse**.
-- On the way back it stops exactly against the cabinet, even when the last gap is shorter
-  than a step.
-- Once it is touching, a press toward the cabinet does not move it, and a screen
-  reader hears "cannot go any further that way" — once, even with the key held down.
-  Nothing turns red.
-- Next to a round table, or a sofa turned to 45°, the chair keeps moving until it
-  really meets the furniture, rather than stopping in the air at the corner of the
-  table's square.
-- A dining chair facing its table goes on under it, a press at a time, as dragging it
-  does. Turned with its back to the table, it stops at the table's edge.
-- A mouse drag still pulls the chair flush when you let go close to the cabinet.
-- Select two chairs that are nearly, not quite, lined up (shift-click) and arrow them
-  together: every press moves both a whole step.
+**Where to click.** The default bedroom, either tab. Select the wardrobe and press
+**Ctrl/⌘ D** (or right-click → Duplicate). Then the bed, a print on the wall, a lamp on the
+desk or nightstand, and a piece standing against a side wall. Then shift-select the bed and
+both nightstands and duplicate the three together. Then a dining chair at its table, the sofa in
+the T-Shape (every spot beside it is taken), a bedside lamp in the U-Shape, and the rug in the
+L-Shape. Last, fill a
+small room so nothing fits anywhere and duplicate a piece there.
 
-**What wrong looks like.**
-- A press away that does nothing, or one that jumps several centimetres, or one that
-  moves a hair — a millimetre or less.
-- On Coarse, the chair stopping a few centimetres short of the cabinet and staying there.
-- The chair ending even slightly inside the cabinet.
+**What right looks like.** The copy sits right beside the original with a small gap, turned the
+same way. A print's copy hangs on the same wall at the same height. A lamp's copy stands on the
+same desk when there is room on it. A piece against a wall puts its copy on the open side. The
+bed and nightstands arrive as a set, in the same formation. The chair's copy stands clear of the
+table, not under it. The T's sofa copy goes to the nearest open floor, even if that is a little
+way off. The U's lamp copy stands on the floor beside the nightstand, which has room for one
+lamp. The L's rug copy lies wholly on the floor, none of it in the corner the L cuts away.
+Only when nothing in the whole room is clear does the copy overlap something, and then it
+is outlined red and the message reads *"No clear space left in the room, so the copy overlaps
+something."* Even then it stays on the floor, never on top of the piece in its way, and pressing
+Duplicate again and again spreads the copies into whatever gaps are left rather than piling them
+in one spot. *Wrong* looks like a copy you cannot see because it is inside the original, a copy
+overlapping another piece while there is open floor, a lamp's copy in mid-air or on the bed, a
+bed's copy standing on another bed, copies piled into one spot, or a set scattered across the
+room. Also try a lamp you moved off its nightstand onto the floor: its copy goes beside it on
+the floor, not back onto the nightstand. And select every piece in the room and duplicate: it
+should answer at once, not freeze.
+
+**Where it rides.** `lib/duplicate-place.ts`, `components/studio/KeyboardShortcuts.tsx`.
 
 ### A refusal that names the wall instead of an obstruction that is not there
 
@@ -266,29 +292,6 @@ near the near wall.
 
 **Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half and the
 wall-from-the-pointer fix in `32ccdca` (PR #200).
-
-### A small wall piece turned in a corner stays on its own wall — merged to `main` in `32ccdca` (PR #200), NOT LOOKED AT
-
-Found in review, 2026-10-01: a 300–500 mm painting pushed flush into a corner and turned
-(**R**, or the plan's turn) went 0.16–0.30 m round onto the next wall, in four of the eight
-corner-and-wall spots. A 1.2 m TV never did. And a 400 mm curtain at its deepest flipped
-between a corner's two walls on every press, because its centre is nearer the return wall
-than its own. A turn now asks which wall the piece's BACK is against where it stands, not
-which wall is nearest the spot the corner clamp put it at (`standsAt` in
-`lib/drag-resolve.ts`), and so do the 3D tab's ring, wheel and two-finger twist, which never
-went through the keyboard's turn (found in the second review). The third review found the
-same flip twice more: with company (selected with another piece, or merged with its window,
-the wall pin `wallEdgeOf` in `lib/drag-convoy.ts` read the centre), and on a refused turn's
-slide back. Both read the back now. Swept in `tests/wall-rider-containment.test.ts`: 96
-turns, none moves; the 3D half is a source guard, since the ring cannot be driven from a
-test; the company half is in `tests/drag-convoy.test.ts`.
-
-**Where to click.** Rectangle. Drag a small painting into each corner in turn, select it,
-and turn it every way there is: **R** in the plan, and in 3D the rotate ring, the scroll
-wheel over it, and on a phone a two-finger twist. Then a curtain stretched to its narrowest,
-in a corner — once alone, once shift-selected with a chair, and once turned into something
-so the turn is refused. *Right:* it stays on its wall, square to it. *Wrong:* it hops onto the
-neighbouring wall, on the press or on letting go of the ring.
 
 ### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye
 

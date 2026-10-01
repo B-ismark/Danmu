@@ -58,6 +58,7 @@ import {
   obbExtentAlong,
   outsideShare,
   pointInPoly,
+  segmentsCross,
   type Foot,
   type Poly,
 } from './geometry';
@@ -600,7 +601,19 @@ const SEAT_TOL = 1e-4;
  *  shoved `need + 1` m along -z out of its own arm. `t` strictly inside `(0, 1)` is
  *  the guard, and when no wall qualifies this returns null and `containedXZ` falls
  *  back to `nearestEdge` — which is the right answer there, because "past every
- *  wall's end" means a corner, and a corner is what the lerp exists for. */
+ *  wall's end" means a corner, and a corner is what the lerp exists for.
+ *
+ *  **And only walls the piece can SEE.** Being level with a wall is not standing in
+ *  front of it. A U's two arms each end on an inner wall that faces the other arm's
+ *  way, across the notch: a 600 mm box at `(−2, −1)` in the west arm of a 6 × 6 U is
+ *  level with the EAST arm's inner wall at `x = 1.32`, 3.3 m behind it, so that wall
+ *  reported a 3.64 m shortfall and the box was pushed through the notch into the other
+ *  arm — every Library drop aimed at either arm, every settle of a piece standing in
+ *  one, mirrored. The room's symmetry is why it went unseen: the piece always landed
+ *  somewhere that looked like a place a piece could be. A wall counts when the line
+ *  from the piece's centre — in the room, checked first — to the cell's foot on it
+ *  crosses no other wall. The centre rather than the cell's own, because a cell's
+ *  centre can be through the plaster (an L-desk poking out) and the piece's cannot. */
 function wallDeficits(
   piece: ContainSubject,
   x: number,
@@ -633,6 +646,9 @@ function wallDeficits(
       // Past the end of this wall: `(px, pz)` is a corner, so the dot product below
       // would not be this wall's clearance. See the docblock's L-room measurement.
       if (e.t <= 1e-9 || e.t >= 1 - 1e-9) continue;
+      // Across the room's own cut-out: a wall this piece cannot see is not one it is
+      // standing at. See the docblock's U-room measurement.
+      if (!seesWall(poly, i, [x, z], [e.px, e.pz])) continue;
       any = true;
       const d = (cell.cx - e.px) * e.nx + (cell.cz - e.pz) * e.nz;
       // `footExtentAlong`, not `obbExtentAlong`: a round piece's reach towards a wall
@@ -659,6 +675,20 @@ function wallDeficits(
     }
   }
   return any ? { dx, dz, total } : null;
+}
+
+/** Whether the straight line from `eye` to `foot` — a point on wall `index` — stays
+ *  in the room: it crosses no OTHER wall. Strict, so grazing a corner on the way is
+ *  not a crossing; the walls next to `index` share only its endpoints, and `foot` is
+ *  strictly inside it. `index` itself is skipped for rounding, not geometry: `foot` is
+ *  a projection, so on a wall at an angle it can land a hair past the line and read as
+ *  crossing the very wall it is on. */
+function seesWall(poly: Poly, index: number, eye: [number, number], foot: [number, number]): boolean {
+  for (let j = 0; j < poly.length; j++) {
+    if (j === index) continue;
+    if (segmentsCross(eye, foot, poly[j], poly[(j + 1) % poly.length])) return false;
+  }
+  return true;
 }
 
 /** Both halves of the seat measure at one position.
@@ -787,8 +817,34 @@ export function containedXZ(
     }
   }
 
+  // Still out: the walk toward the middle can pass a seat without landing on it. A
+  // turned piece in a U's inner corner is pushed off one wall's line onto the next and
+  // back, and the straight line home crosses the notch — found in review, a 2.1 m bed
+  // at 45° left 0.3 m through the plaster with clear floor 200 mm away. So ask the
+  // nearest ring around where it was asked to stand, widening until one has a seat.
+  for (let r = RING_STEP_M; r <= RING_MAX_M + 1e-9 && best.out > 0; r += RING_STEP_M) {
+    for (let k = 0; k < RING_DIRECTIONS; k++) {
+      const a = (2 * Math.PI * k) / RING_DIRECTIONS;
+      const nx = x0 + r * Math.cos(a);
+      const nz = z0 + r * Math.sin(a);
+      const s = seatAt(piece, nx, nz, poly, winding);
+      // A SEAT, or nothing: a piece that fits nowhere keeps the answer above — centred
+      // across a room too narrow for it — rather than one a ring found less far out.
+      if (s.out <= 0 && seatBetter(s, best)) {
+        best = s;
+        bestX = nx;
+        bestZ = nz;
+      }
+    }
+  }
+
   return [bestX, bestZ];
 }
+
+/** The ring search's spacing and reach: 50 mm rings out to a metre, 16 directions. */
+const RING_STEP_M = 0.05;
+const RING_MAX_M = 1.0;
+const RING_DIRECTIONS = 16;
 
 /** Push a part until its whole footprint is inside the room.
  *

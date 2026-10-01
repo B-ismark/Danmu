@@ -10,6 +10,7 @@ import { swapPartModel } from '@/lib/swap-model';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { footprintForLayout } from '@/lib/footprint';
+import { footFromPart, outsideDeficit } from '@/lib/geometry';
 import type { LibraryItem, ScenePart } from '@/lib/scene-spec';
 
 function part(over: Partial<ScenePart> & { id: string }): ScenePart {
@@ -189,6 +190,199 @@ describe('changing the model', () => {
     expect(z - 0.2).toBeGreaterThanOrEqual(-3);
     expect(x).toBeCloseTo(1, 6);
     expect(s.rotations.p).toBeUndefined();
+  });
+
+  // Review of #205 (O1): the support probe asked for every kind, so a print hung over
+  // a bed, swapped for a nightstand, stood the nightstand ON the bed. The add path only
+  // lets a small "goes on a table" piece look for a surface; the swap does now too.
+  it('a print over a bed swapped for a nightstand stands it on the floor, not on the bed', () => {
+    const bed = part({ id: 'bed', category: 'bed', shape: 'bed-double', pos: [0, 0, -2], dimMM: [1600, 2000, 500] });
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.4, -3 + 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    room6([bed, print]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', { label: 'Nightstand', group: 'Bedroom', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] });
+    const s = useStudio.getState();
+    expect(s.positions.p![1]).toBe(0);
+    expect(s.parentIds.p).toBeUndefined();
+  });
+
+  // Review of this branch: the gate was the CATEGORY, so a floor lamp — a `lamp` — and
+  // a 1.6 m floor plant each stood on the bed a print hung above.
+  it.each([
+    { label: 'Floor lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-floor', dimMM: [300, 300, 1700] },
+    { label: 'Plant', group: 'Decor', category: 'plant', shape: 'plant', dimMM: [400, 400, 1600] },
+  ] as LibraryItem[])('a print over a bed swapped for a $label stands it on the floor', (item) => {
+    const bed = part({ id: 'bed', category: 'bed', shape: 'bed-double', pos: [0, 0, -2], dimMM: [1600, 2000, 500] });
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.4, -3 + 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    room6([bed, print]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', item);
+    const s = useStudio.getState();
+    expect(s.positions.p![1]).toBe(0);
+    expect(s.parentIds.p).toBeUndefined();
+  });
+
+  it('…while a lamp swapped in over a table still stands on the table', () => {
+    // The gate is the add path's, not "never stack": the first case in this file is the
+    // other half, and this one is it at a wall piece's spot.
+    const shelf = part({ id: 'shelf', category: 'table', shape: 'desk-standard', pos: [0, 0, -3 + 0.2], dimMM: [1200, 400, 800] });
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.4, -3 + 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    room6([shelf, print]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', lamp);
+    const s = useStudio.getState();
+    expect(s.positions.p![1]).toBeCloseTo(0.8, 6);
+    expect(s.parentIds.p).toBe('shelf');
+  });
+
+  it('a corner print swapped for a sofa backs onto ITS wall, not the nearer return wall', () => {
+    // The corner case `ownWall` exists for, on the floor branch: the 400 mm curtain's
+    // centre is 210 mm off the north wall and 200 mm off the east one.
+    const curtain = part({ id: 'c', category: 'curtain', shape: 'curtain', pos: [2.8, 1.2, -2.79], rot: 0, dimMM: [400, 200, 2200], wallMounted: true });
+    room6([curtain]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('c', { label: 'Sofa', group: 'Seating', category: 'sofa', shape: 'sofa', dimMM: [2000, 850, 800] });
+    const s = useStudio.getState();
+    expect(s.rotations.c).toBeUndefined();
+    const [x, , z] = s.positions.c!;
+    expect(z).toBeCloseTo(-3 + 0.425 + 0.02, 9);
+    // Held off the return wall by the same gap, so the corner is not a contact.
+    expect(x).toBeCloseTo(3 - 1 - 0.02, 9);
+  });
+
+  it('in a U, the sofa slides along the wall it backs onto rather than past its end', () => {
+    // The notch's south-facing wall at z = 0 is shorter than the room: a print near its
+    // east end, swapped for a 2 m sofa, is slid west until the whole back is on that
+    // wall. Kept where the print was, the sofa's back runs off the wall's end, which in
+    // a rectangle cannot be told apart from containment and so needed a U to pin.
+    const W = 6;
+    const fp = footprintForLayout('u', W, W);
+    const print = part({ id: 'n', category: 'painting', shape: 'painting', pos: [1, 1.4, 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    useScene.setState({ room: { width: W, depth: W, height: 2.5, layoutId: 'u', footprint: fp, wallColors: {} }, parts: [print], ready: true });
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('n', { label: 'Sofa', group: 'Seating', category: 'sofa', shape: 'sofa', dimMM: [2000, 850, 800] });
+    const [x, , z] = useStudio.getState().positions.n!;
+    // The notch wall's east end, from the polygon rather than a literal.
+    const ends = fp.filter(([, vz]) => Math.abs(vz) < 1e-9).map(([vx]) => vx);
+    const east = Math.min(...ends.filter((vx) => vx > 0));
+    expect(z).toBeCloseTo(0.425 + 0.02, 9);
+    expect(x + 1).toBeLessThanOrEqual(east + 1e-9);
+  });
+
+  it('a print swapped for a coffee table or a monitor is not pushed onto the wall', () => {
+    // Only a piece that PREFERS a wall backs onto one. A coffee table prefers the middle
+    // and a monitor belongs on a desk, so neither is snapped or turned.
+    for (const item of [
+      { label: 'Coffee table', group: 'Tables', category: 'table', shape: 'coffee-table', dimMM: [1200, 600, 450] },
+      { label: 'Monitor', group: 'Tech', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 450] },
+    ] as LibraryItem[]) {
+      const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.4, 0], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+      room6([print]);
+      useStudio.setState({ positions: { p: [3 - 0.035, 1.4, 0.4] }, rotations: { p: -Math.PI / 2 }, dims: {}, parentIds: {} });
+      swapPartModel('p', item);
+      const s = useStudio.getState();
+      expect(s.rotations.p, item.label).toBeUndefined();
+      // Pulled in by containment at the authored turn: its half-WIDTH off the wall,
+      // not the half-depth a snap would have backed it onto.
+      expect(s.positions.p![0], item.label).toBeCloseTo(3 - item.dimMM[0] / 2000 - 0.02, 6);
+    }
+  });
+
+  it('a piece in the middle of the room swapped for one that prefers a wall stays put', () => {
+    // No wall of its own, so nothing to back onto: a coffee table swapped for a
+    // bookshelf mid-room must not jump to the nearest wall.
+    const t = part({ id: 't', category: 'table', shape: 'coffee-table', pos: [0.5, 0, 0.5], dimMM: [1200, 600, 450] });
+    room6([t]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('t', { label: 'Bookshelf', group: 'Storage', category: 'shelf', shape: 'bookshelf', dimMM: [800, 300, 1800] });
+    const s = useStudio.getState();
+    expect(s.positions.t).toEqual([0.5, 0, 0.5]);
+    expect(s.rotations.t).toBeUndefined();
+  });
+
+  // The containment and the support probe each take an input a rectangle cannot tell
+  // apart from a wrong one. One case per input, each built so the wrong one moves it.
+  it('a lamp swapped in for a print looks for its table where the lamp ENDS UP', () => {
+    // The table stands 100 mm off the wall. At the print's spot the lamp's footprint
+    // is 28% over it, under the half a support needs; pulled in off the plaster by its
+    // own depth it is 73% over. Asked at the old spot, it stood on the floor.
+    const shelf = part({ id: 'shelf', category: 'table', shape: 'desk-standard', pos: [0, 0, -3 + 0.1 + 0.2], dimMM: [1200, 400, 800] });
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.4, -3 + 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    room6([shelf, print]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', lamp);
+    const s = useStudio.getState();
+    expect(s.positions.p![2]).toBeCloseTo(-3 + 0.15 + 0.02, 6);
+    expect(s.positions.p![1]).toBeCloseTo(0.8, 6);
+    expect(s.parentIds.p).toBe('shelf');
+  });
+
+  it('a round piece is kept off the wall by its radius, not by the square around it', () => {
+    // At a 45° authored turn the square around an 800 mm disc reaches 566 mm toward
+    // the wall; the disc reaches 400. At x = 2.5 the disc is clear and stays put.
+    const t = part({ id: 't', category: 'table', shape: 'coffee-table', pos: [2.5, 0, 0], rot: Math.PI / 4, dimMM: [1200, 600, 450] });
+    room6([t]);
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('t', { label: 'Round table', group: 'Tables', category: 'table', shape: 'cylinder', dimMM: [800, 800, 600] });
+    expect(useStudio.getState().positions.t).toEqual([2.5, 0, 0]);
+  });
+
+  it("an L-shaped desk fits round a room's inside corner with its open corner", () => {
+    // A U's notch corner at (−1.32, 0) sits in the desk's open corner: its box pokes
+    // 620 × 500 mm into the notch and its two arms touch nothing. Contained as its box
+    // it was pushed away from a spot it fits.
+    const W = 6;
+    const fp = footprintForLayout('u', W, W);
+    const t = part({ id: 't', category: 'table', shape: 'coffee-table', pos: [-1.5, 0, 0.2], rot: Math.PI, dimMM: [1200, 600, 450] });
+    useScene.setState({ room: { width: W, depth: W, height: 2.5, layoutId: 'u', footprint: fp, wallColors: {} }, parts: [t], ready: true });
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('t', { label: 'L-shaped desk', group: 'Tables', category: 'desk', shape: 'desk-l', dimMM: [1600, 1400, 750] });
+    expect(useStudio.getState().positions.t).toEqual([-1.5, 0, 0.2]);
+  });
+
+  it("in a U, a sofa backed onto an arm's inner wall slides along it, not past its open end", () => {
+    // The east arm's inner wall runs from z = −3 to 0, and past 0 is floor — the bar of
+    // the U — so nothing but the snap's own slide keeps the sofa's back on the plaster:
+    // containment is satisfied with a sofa half in the arm and half in the bar.
+    const fp = footprintForLayout('u', 6, 6);
+    const wallX = Math.min(...fp.map(([vx]) => vx).filter((vx) => vx > 0));
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [wallX + 0.035, 1.4, -0.4], rot: Math.PI / 2, dimMM: [600, 30, 400], wallMounted: true });
+    useScene.setState({ room: { width: 6, depth: 6, height: 2.5, layoutId: 'u', footprint: fp, wallColors: {} }, parts: [print], ready: true });
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', { label: 'Sofa', group: 'Seating', category: 'sofa', shape: 'sofa', dimMM: [2000, 850, 800] });
+    const [x, , z] = useStudio.getState().positions.p!;
+    expect(x).toBeCloseTo(wallX + 0.425 + 0.02, 9);
+    expect(z + 1).toBeLessThanOrEqual(1e-9);
+  });
+
+  it('in a U, a piece too wide for its arm is walked toward the floor, not the notch', () => {
+    // A 2 m table at the authored turn cannot fit a 1.68 m arm. Containment's last
+    // resort walks it toward the middle of the room, and a U's corner average is IN the
+    // notch — outside the floor — so walked there it stayed in the arm, 340 mm through
+    // the plaster. Toward `interiorPoint` it ends in the bar, 27 mm short of clear: the
+    // containment's best, and why "pulled inside the walls" is not a promise in a U.
+    const fp = footprintForLayout('u', 6, 6);
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [-3 + 0.035, 1.4, -2.5], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    useScene.setState({ room: { width: 6, depth: 6, height: 2.5, layoutId: 'u', footprint: fp, wallColors: {} }, parts: [print], ready: true });
+    useStudio.setState({ positions: {}, rotations: { p: Math.PI / 2 }, dims: {}, parentIds: {} });
+    const table: LibraryItem = { label: 'Long table', group: 'Tables', category: 'table', shape: 'coffee-table', dimMM: [2000, 900, 750] };
+    swapPartModel('p', table);
+    const at = useStudio.getState().positions.p!;
+    expect(at[2]).toBeGreaterThan(0);
+    expect(outsideDeficit(footFromPart(at, 0, table.dimMM), fp)).toBeLessThan(0.03);
+  });
+
+  it('a room drawn the other way round contains the same way', () => {
+    // The presets all wind one way, so a containment handed a fixed winding passes on
+    // every one of them. A footprint is a polygon, and either order is a polygon.
+    const fp = footprintForLayout('rect', 6, 6).slice().reverse();
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [1, 1.4, -3 + 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    useScene.setState({ room: { width: 6, depth: 6, height: 2.5, layoutId: 'custom', footprint: fp, wallColors: {} }, parts: [print], ready: true });
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    swapPartModel('p', { label: 'Floor plant', group: 'Decor', category: 'plant', shape: 'plant', dimMM: [400, 400, 900] });
+    const [x, , z] = useStudio.getState().positions.p!;
+    expect(z).toBeCloseTo(-3 + 0.2 + 0.02, 6);
+    expect(x).toBeCloseTo(1, 6);
   });
 
   it('does nothing for a piece that is gone', () => {
