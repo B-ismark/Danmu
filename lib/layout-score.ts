@@ -64,7 +64,7 @@ import {
   routeWidth,
   rugKeepsOff,
   rugTarget,
-  profilesTuck,
+  tuckedAt,
   tuckProfile,
   TUCKED_CLASH_SHARE,
   wallDebt,
@@ -932,7 +932,7 @@ export function costBreakdown(
       // face: at share 1.0 the two ARE the same arrangement — one piece standing
       // where another is — and the tolerance only ever existed to forgive the part
       // of the overlap that is by design.
-      const tolerance = profilesTuck(tuck[i], tuck[j]) ? TUCKED_CLASH_SHARE : 0;
+      const tolerance = tuckedAt(tuck[i], feet[i], tuck[j], feet[j]) ? TUCKED_CLASH_SHARE : 0;
       if (share > tolerance) c.overlap += (share - tolerance) / (1 - tolerance);
     }
   }

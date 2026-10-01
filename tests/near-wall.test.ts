@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cutAwayWithWall } from '@/lib/near-wall';
+import { cutAwayHides, cutAwayWithWall } from '@/lib/near-wall';
 
 // A 6 × 4 room centred on the origin. A window on the SOUTH wall (z = +2) faces
 // north into the room, which is rot = π (front = (sin π, cos π) = (0, −1)).
@@ -35,5 +35,40 @@ describe('cutAwayWithWall', () => {
     const east: [number, number, number] = [3 - 0.05, 1.4, 0];
     expect(cutAwayWithWall([9, 6, 0], east, -Math.PI / 2, DEPTH)).toBe(true);
     expect(cutAwayWithWall([-9, 6, 0], east, -Math.PI / 2, DEPTH)).toBe(false);
+  });
+});
+
+// The user, 2026-09-30: keep a selected piece visible on the cut-away wall — "but
+// obviously, you shouldn't be able to select it if you hadn't selected it and now
+// it's not visible". So held changes the answer only where the wall has gone.
+describe('cutAwayHides', () => {
+  const OUTSIDE: [number, number, number] = [0, 6, 8];
+  const INSIDE: [number, number, number] = [0, 1.6, 0];
+
+  it('keeps a held piece in view on the wall the camera looks through', () => {
+    expect(cutAwayHides(OUTSIDE, SOUTH_WINDOW, FACING_NORTH, DEPTH, true)).toBe(false);
+  });
+
+  it('still hides a piece nobody is holding, so it cannot be picked from behind its wall', () => {
+    expect(cutAwayHides(OUTSIDE, SOUTH_WINDOW, FACING_NORTH, DEPTH, false)).toBe(true);
+  });
+
+  it('changes nothing where the wall is drawn', () => {
+    for (const held of [true, false]) {
+      expect(cutAwayHides(INSIDE, SOUTH_WINDOW, FACING_NORTH, DEPTH, held)).toBe(false);
+    }
+  });
+});
+
+// The component asks the held question, not the bare wall one — otherwise the rule
+// above holds in a function nobody calls.
+describe('CutAway', () => {
+  it('asks cutAwayHides and is handed the selection', async () => {
+    const { readFileSync } = await import('node:fs');
+    const cut = readFileSync('components/three/CutAway.tsx', 'utf8');
+    expect(cut).toContain('cutAwayHides(');
+    expect(cut).not.toMatch(/cutAwayWithWall\(/);
+    const drag = readFileSync('components/three/Draggable.tsx', 'utf8');
+    expect(drag).toMatch(/<CutAway[\s\S]*?held=\{inSelection \|\| isDraggingThis\}/);
   });
 });

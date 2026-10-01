@@ -78,25 +78,6 @@ defect can only ever be settled by looking at it. And **nothing here has been on
 GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
 shapes look under real lighting on a real device.*
 
-### A size box keeps what you are typing through a pause — this branch, NOT LOOKED AT
-
-The "Use my own size" item was looked at on 2026-09-30 and is gone. What the user found
-while looking: type `2`, pause, go on with `.7`, and the box read **2.007** — the pause
-had committed the `2` and the box answered by rewriting itself `2.00` under the caret.
-Both size editors keep the draft as typed now, and tidy it when you leave the box.
-
-**Where to click.** Any room. In the Inspector's **Exact size**, type `2` into Width,
-wait a second, then type `.7`. Do the same in the Room panel's **Height**. Then, on a
-curtain, type `0.1` into Width, wait, and click somewhere else.
-
-**What right looks like.** The piece (and the room) changes to 2 m during the pause and
-to 2.7 m after — while the box shows exactly what you typed, `2` then `2.7`, and becomes
-`2.70` only once you click away. The curtain's `0.1` stays `0.1` while you are in the box
-and reads `0.40` (the smallest a curtain can be) after you leave it.
-
-**What wrong looks like.** Digits appearing that you did not type; a box that still shows
-`2` after you have left it; a box that shows one number while the piece is another size.
-
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
 **What is already settled.** A newly added fan hangs flush: looked at on the preview and fine.
@@ -140,7 +121,8 @@ in this repo renders geometry.
 and so are the four that came after them: Move / Scale / Rotate, a TV changing walls, the
 wall pushing what it meets, and a short piece climbing a tall one. The user looked at each
 of those on 2026-09-30, and ruled that a nightstand may climb a wardrobe — and, the same
-day, a wall stopping at the rug it carries and its knob standing clear of the furniture. What is left is
+day, a wall stopping at the rug it carries and its knob standing clear of the furniture — and
+a table carrying a lamp dragging as smoothly as a bare one. What is left is
 here for a specific reason each. The rotate ring, because drei's `TransformControls` is a
 three.js object with **no DOM**, so nothing in Playwright can aim a press at its ring —
 the 2D half of that defect **is** browser-checked and is not in this list. The refusal
@@ -165,7 +147,73 @@ the way"* when nothing is. The turn reads *"It does not fit at that angle — "*
 same clause. Put a wardrobe where a normal-width curtain wants to go: that one should
 still say "something is in the way".
 
-**Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half on this branch.
+**It also used to vanish, and that is fixed on this branch — NOT LOOKED AT.** Looked at
+2026-09-30: dragged sideways the 5 m curtain *"wasn't moving"*, and pulled toward the
+camera it *"disappeared from my screen"*. Both were one defect. The room clamp was taken
+at the curtain's old angle before its wall was chosen, so it was held to the middle metre
+of its 6 m wall wherever the pointer went — the side wall was never the nearest, and
+past the room's middle the nearest was the near wall, which the see-through view cuts
+away along with the curtain. A wall piece now takes the wall the pointer is at. Do the
+drag above again, and keep going down the side wall toward the camera: the curtain goes
+onto the side wall, red, with the sentence above, and stays on screen the whole way. It
+reaches the near wall only when the pointer is at the near wall — and there it stays in
+view while it is selected (see the next item). *Wrong* looks like: the curtain stuck in the
+middle of its wall while the pointer is at a corner, or gone with the pointer nowhere
+near the near wall.
+
+**Where it rides.** Merged to `main` in `20654e5` (PR #74); the sizing half and the
+wall-from-the-pointer fix on this branch.
+
+### A selected wall piece seen from behind its wall has a clean back — this branch, NOT LOOKED AT
+
+The user looked at *a selected piece stays in view on the cut-away wall* on 2026-09-30 and
+it was right, except for *"some weird shading issue going on with the tv's back when viewing
+from the wall while it's selected"* — diagonal dark stripes across it. **Not a shadow, and
+not ambient occlusion:** a probe that switched the shadow map and then the whole post pass
+off kept the stripes. It was the frosted selection base. A wall piece's base stood ON the
+plaster, and the piece's back is on the plaster too, so the two shared one plane; from inside
+the room that face is turned away and never drawn, and seen through the cut-away wall it was
+the face on screen, the base's white and the TV's black fighting over it pixel by pixel. The
+base now stands `BASE_LIFT` (2 mm) off its wall, as the floor's always did, and the ceiling's
+2 mm under the slab (`lib/selection-base.ts`). And it is never thicker than the piece it is
+behind, which it used to be on anything under 24 mm deep: a 15 mm mirror wore the base's
+frosted face 11 mm in front of its glass. Re-rendered headless with shadows and AO on: the
+TV's back is one solid panel inside its rim. The mirror half is arithmetic only.
+
+**Where to click.** Rectangle, default 3D view. Put a **TV** on the near (cut-away) wall and
+select it from the rail's **Catalog**, then orbit a little either way. Then a **ceiling
+light**, selected, from a camera pulled up high.
+
+**What right looks like.** The TV's back is one even dark panel with the frosted rim round
+it, and stays even as you orbit. From inside the room the TV looks exactly as before: the
+rim round its edge, nothing on its screen. *Wrong* looks like: stripes or a jagged dark
+triangle on the back, a frosted sheet over the back, or — select a **mirror** from inside the
+room — a frosted veil over its glass rather than a rim round its edge.
+
+**Where it rides.** `lib/selection-base.ts`, `components/three/Highlight.tsx`.
+
+### A small wall piece turned in a corner stays on its own wall — this branch, NOT LOOKED AT
+
+Found in review, 2026-10-01: a 300–500 mm painting pushed flush into a corner and turned
+(**R**, or the plan's turn) went 0.16–0.30 m round onto the next wall, in four of the eight
+corner-and-wall spots. A 1.2 m TV never did. And a 400 mm curtain at its deepest flipped
+between a corner's two walls on every press, because its centre is nearer the return wall
+than its own. A turn now asks which wall the piece's BACK is against where it stands, not
+which wall is nearest the spot the corner clamp put it at (`standsAt` in
+`lib/drag-resolve.ts`), and so do the 3D tab's ring, wheel and two-finger twist, which never
+went through the keyboard's turn (found in the second review). The third review found the
+same flip twice more: with company (selected with another piece, or merged with its window,
+the wall pin `wallEdgeOf` in `lib/drag-convoy.ts` read the centre), and on a refused turn's
+slide back. Both read the back now. Swept in `tests/wall-rider-containment.test.ts`: 96
+turns, none moves; the 3D half is a source guard, since the ring cannot be driven from a
+test; the company half is in `tests/drag-convoy.test.ts`.
+
+**Where to click.** Rectangle. Drag a small painting into each corner in turn, select it,
+and turn it every way there is: **R** in the plan, and in 3D the rotate ring, the scroll
+wheel over it, and on a phone a two-finger twist. Then a curtain stretched to its narrowest,
+in a corner — once alone, once shift-selected with a chair, and once turned into something
+so the turn is refused. *Right:* it stays on its wall, square to it. *Wrong:* it hops onto the
+neighbouring wall, on the press or on letting go of the ring.
 
 ### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye
 
@@ -283,35 +331,12 @@ re-seeded room** and reports it as what the user got back.
    because a wall handle takes focus cleanly. A pointer drag runs a different code path into
    the same store action and nobody has watched the snapshot land after one.
 
-### The rotate ring no longer drags the piece behind it — 3D only
+### The rotate ring no longer drags the piece behind it — only the TOUCH half is left
 
-**Where to click.** 3D tab. Put a nightstand hard against the head of a bed, select the
-**bed**, press **R** for rotate. The ring is drawn around the bed and sweeps over the
-nightstand. Press **on the ring, at a point where it crosses the nightstand**, and drag to
-turn the bed. (Move mode used to have arrows and flat squares reaching over the same
-neighbour; it has no handles now, so only the ring is left to check.)
+**The mouse half was LOOKED AT 2026-09-30 and is right** — the bed turns on its ring over
+the nightstand and the nightstand stays put — so the three mouse checks are deleted.
 
-**What wrong looks like.** Three separate things, and only the first is the reported one:
-
-1. **The nightstand slides.** That was the bug: R3F cannot see the gizmo, so it handed the
-   same press to the furniture behind the ring and that piece started a drag of its own.
-2. **The selection jumps to the nightstand when you let go.** A gizmo gesture ends in a DOM
-   click like any drag, and by then nothing is guarding it. Watch the Inspector's title
-   after the drag, not during.
-3. **You end up holding one drawer unit instead of the bed.** Merge a bed and two
-   nightstands into a group first, then rotate it. A plain click is *drill into the group*,
-   so the click ending the gesture used to select one member. The rail's Catalog is where
-   this shows: after the rotate the header must still name the whole group.
-
-Also worth a second: rotating a piece with **nothing behind the ring** must be exactly as it
-was, and a plain click on a neighbour immediately after a rotate must select that neighbour
-— the gate is armed per gesture and dropped by the next press, so a click that goes missing
-means it is being armed and never consumed. Two more the review added, both about a gesture
-finishing somewhere other than on furniture: a rotate released over a **wall** must not
-select that wall, and one released over bare **floor** must not clear the selection.
-
-**And the one that needs two hands, which is why it is the last line of this item.** On a
-touch device: press a drawer unit, hold past a second so it picks up, start sliding it, and
+**The one that needs two hands.** On a touch device: press a drawer unit, hold past a second so it picks up, start sliding it, and
 while it is still moving put a **second finger on the ring** of whatever is selected. The
 drawer must keep following finger one. If it stops dead — and worse, if it is back where it
 started after a reload while 3D showed it moved — the hold is outliving its press again.
@@ -383,9 +408,10 @@ gate itself was per-row, so an empty table passed every assertion in it.
 **Where to click.** Select any piece. The banner sits above the decorating controls,
 between the name and the Colour row.
 
-**The last row is the whole point.** `collidesAt` calls a tucked chair a collision and
-the room report does not, deliberately — twenty seeded pairs behind that. The banner
-sides with the report, so a seeded dining set must not light up red.
+**The last row is the whole point.** The banner reads the room report rather than
+asking `collidesAt` itself, so a seeded dining set must not light up red. (The two
+used to disagree about a tucked chair; since § 17 the drag asks the report's own
+`tuckedAt`, so a red here would now be a disagreement neither side should have.)
 
 **What wrong looks like.**
 
@@ -570,8 +596,29 @@ under it again. Last, in the Library type `dining table 180x90x75cm` and press t
 
 **What right looks like.**
 - The ottoman ends up standing on the coffee table's top, like any piece dropped there.
-- The dining chair and the office chair at their Library sizes slide under as before and
-  stay on the floor.
+- ~~The dining chair and the office chair at their Library sizes slide under as before and
+  stay on the floor.~~ **Wrong, and struck rather than deleted.** Looked at 2026-09-30:
+  both chairs read *blocked* and will not slide under — which is what the code does and
+  has done since § H.6.3, because the drag's collision test (`collidesAt`) has no tuck
+  exemption. A tucked chair travels only as part of a set. This bullet was written from
+  the room report's rule, not from a drag, and "as before" described nothing that had
+  ever happened.
+- **Decided since, and this bullet is the one to look at — this branch, NOT LOOKED AT.**
+  The user chose "make the drag match Room check" (§ 17). Drag the dining chair, alone,
+  into its table from the front: it slides in under the top and stays on the floor,
+  with no *blocked* tag. Keep pushing and it stops about where 85% of the seat is under
+  the table — *blocked* there, and Room check would call that same spot a clash. The
+  office chair at its Library size does the same under a 750 mm table. *Wrong* looks
+  like: the chair jumping onto the tabletop, a *blocked* tag while it is only part way
+  in, or it disappearing wholly inside the table.
+  **Front first only — LOOKED AT 2026-09-30.** It had slid in back first with its back
+  up through the desktop; the rule now reads which way the seat faces. The user: *"Front
+  first slides under, sideways is blocked now."*
+  **Turning it once it is under — LOOKED AT 2026-09-30.** Slide it in front first and
+  turn it: the turn is held and said, on the 3D ring, the plan's keys and the context
+  menu. The user: *"everything looks good."*
+- **The ottoman bullet below was looked at on 2026-09-30 and is right:** it stands on the
+  coffee table's top.
 - Under the 650 mm desk the office chair's arms would hit the top, so it no longer goes
   under: dragged over the desk it lands on the desktop. A desk from about 690 mm up takes
   it again.
@@ -2085,30 +2132,6 @@ the riser on top of the monitor when the monitor was listed first — filed ther
 two more of the same kind that are older than this branch: a tray across a coffee table and
 a box beside it can lift the box onto the tray, and a lamp over a box on a table can end up
 inside the box.
-
-### A lamp dropped on a table's corner stands on it — this branch (§ H.6.4 follow-ups), NOT LOOKED AT
-
-Adding a piece, and swapping one in the Inspector, used to ask what it stands on as if it
-were an unturned square. A round lamp mostly over a table's corner went to the floor, and a
-monitor turned to face a side wall was tested across the wrong way.
-
-**Where to click.** In **2D Plan**, drag a **Table lamp** from the Library so its centre
-is just inside a coffee table's corner, then look in 3D. Separately, put a desk against a
-side wall, and drop a **Monitor** near one end of it. Last, select any small piece near a
-table's corner and **Change the model** to a Table lamp. And put a tray on a plain box,
-select the box and **Pick a model** → Ottoman.
-
-**What right looks like.** A lamp that is mostly over the table stands on the tabletop; one
-mostly over the floor stands on the floor. The monitor turns to face the side wall and stands
-on the desk while most of it is over the desk. The swapped-in lamp is drawn round in 2D Plan,
-its Inspector says it is on the table, and dragging the table carries it along. The
-ottoman stays on the floor with the tray on it.
-
-**What wrong looks like.** A lamp on the floor with most of its base under the tabletop, or
-a monitor on the floor beside a desk it is mostly over. After the swap: a square lamp in the
-plan, an Inspector saying the lamp is floating, or the table leaving it behind — the store
-kept the old piece's outline until the next reload, and the fix has only a test behind it.
-An ottoman up on its own tray, with the tray still under it.
 
 ## Look and light
 

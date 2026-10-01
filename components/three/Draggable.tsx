@@ -155,6 +155,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const isSelected = useStudio((s) => s.selectedPartId === partId);
   const inSelection = useStudio((s) => s.selection.includes(partId));
   const isHovered = useStudio((s) => s.hoveredPartId === partId);
+  /** Being carried right now — a wall piece on the camera's side of the room is
+   *  kept in view while it is (`CutAway`'s `held`). */
+  const isDraggingThis = useStudio((s) => s.draggingId === partId);
   const mode = useStudio((s) => s.transformMode);
   const snapMode = useStudio((s) => s.snapMode);
   // Snap increments, from the same module that applies them during a resolve, so
@@ -198,6 +201,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // Last collision-free spot DURING the current drag — an invalid drop falls
   // back here (slide up to the obstacle) instead of reverting the whole drag.
   const lastFreePos = useRef<[number, number, number] | null>(null);
+  /** The angle it had at `lastFreePos`, written with it and read only beside it. A
+   *  turn never moves the piece, so a spot without its angle is not a pose it fitted
+   *  in: the ring swung a tucked chair's back up through its desk and the drop kept
+   *  that angle at the one spot it had fitted (see `turnSwingsInto`). */
+  const lastFreeRot = useRef<number | null>(null);
+  /** The angle it STANDS at — the last one a resolve gave it, or the one it began the
+   *  gesture at — as opposed to `rotation.y`, which the ring turns live and a wheel or
+   *  twist is about to. A turn asks which wall its back is against at THIS angle
+   *  (`standsAt` in `lib/drag-resolve.ts`), or a small piece in a corner turned onto
+   *  the next wall. */
+  const standRot = useRef<number | null>(null);
   // Position captured at drag start — used to move merged-group siblings by the
   // same delta when the dragged part belongs to a group.
   const dragStartPos = useRef<[number, number, number] | null>(null);
@@ -359,6 +373,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     rot: number,
     dim: [number, number, number],
     effParts: ScenePart[],
+    /** Set by a resolve that TURNS the piece where it stands — see `standRot`. */
+    standsAt?: { at: [number, number, number]; rot: number },
   ): { pos: [number, number, number]; rot: number; valid: boolean; snapLines?: SnapLine[]; supportId?: string } {
     if (!part) return { pos: [rawX, 0, rawZ], rot, valid: false };
     return resolveDrag({
@@ -384,6 +400,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // At the rot and dim being resolved, which a wheel, the turn ring or a
       // stretch can have changed since pointer-down — see `leadInherited`.
       inherited: leadInherited(convoy(), rot, dim),
+      standsAt,
     });
   }
 
@@ -422,6 +439,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   function liveUpdate(resolved: Resolved, dim: [number, number, number]) {
     if (!ref.current || !part) return;
     ref.current.rotation.y = resolved.rot;
+    standRot.current = resolved.rot;
     // The convoy has a veto: a spot this piece could take but its company cannot
     // is not a spot the gesture may rest at, so it must not be remembered as the
     // fallback `commit()` slides back to either.
@@ -482,6 +500,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // pointer, so recording that spot made the fallback commit the lead a whole
       // slide ahead of its members, silently and with `valid` saying true.
       lastFreePos.current = [lead.pos[0], lead.pos[1], lead.pos[2]];
+      lastFreeRot.current = lead.rot;
       if (stretch.current) stretch.current.lastFreeDim = dim;
       // Only on a legal step. On an illegal one the set holds at the last legal
       // delta while the piece under the hand goes red and keeps following the
@@ -528,10 +547,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     /** Resolve here, ask the company, and keep going until the lead and its set
      *  agree on one delta — see `settleLead`. Both branches below need it, and the
      *  fallback branch is the one that used to skip it. */
-    const settleAt = (rot: number) => (x: number, z: number) =>
-      resolvePlacement(x, z, rot, dim, travelWorld(x, z));
-    const first = settleAt(ref.current.rotation.y)(p.x, p.z);
-    let settle = settleLead<Resolved>(settleAt(first.rot), (l) => carry(l.pos, l.rot), first);
+    const settleAt = (rot: number, standsAt?: { at: [number, number, number]; rot: number }) => (x: number, z: number) =>
+      resolvePlacement(x, z, rot, dim, travelWorld(x, z), standsAt);
+    // Resolved where it stands, so it is asked which wall it stands on — the ring
+    // turns `rotation.y` without a resolve, and this is the first one it gets.
+    const here = { at: [p.x, p.y, p.z] as [number, number, number], rot: standRot.current ?? ref.current.rotation.y };
+    const first = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, travelWorld(p.x, p.z), here);
+    let settle = settleLead<Resolved>(settleAt(first.rot, here), (l) => carry(l.pos, l.rot), first);
     let resolved = settle.lead;
     let co = settle.co;
 
@@ -560,16 +582,43 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           const [sx, sy, sz] = groupScaleForDim(st.base, dim);
           ref.current.scale.set(sx, sy, sz);
         }
+        // …and the ANGLE it had there, which is the whole fallback for a turn: `back`
+        // is where it is standing, so resting there at the refused angle is taking
+        // the turn. With a free frame, the angle of that frame. With none, the angle
+        // the gesture began at — but only if the piece fitted there; one that was
+        // already refused where it stood keeps the new angle, as `turnSwingsInto`
+        // says, or a piece in a tight spot could never be turned out of it. "Fitted
+        // there" means without being MOVED, as there: the resolve clamps into the
+        // room first, so a piece poking through a wall comes back valid somewhere
+        // else, and it is that piece that most needs to turn.
+        const startRot = dragStartRot.current;
+        // The angle it stood at, AT `back` — so every re-resolve below is asked which
+        // wall it stands on there, as `first` was. Without it a refused turn of a
+        // narrow curtain in a corner slid "back" onto the return wall, and read as
+        // moved, so it kept the refused angle too.
+        const standing = {
+          at: back,
+          rot: lastFreePos.current ? (lastFreeRot.current ?? ref.current.rotation.y) : (startRot ?? ref.current.rotation.y),
+        };
+        const atStart = startRot === null ? null : settleAt(startRot, standing)(back[0], back[2]);
+        const fittedAtStart =
+          atStart !== null && atStart.valid && Math.hypot(atStart.pos[0] - back[0], atStart.pos[2] - back[2]) <= 0.001;
+        const restRot = lastFreePos.current
+          ? (lastFreeRot.current ?? ref.current.rotation.y)
+          : fittedAtStart && startRot !== null
+            ? startRot
+            : ref.current.rotation.y;
+        ref.current.rotation.y = restRot;
         // Rebuilt at `back`, not reused from the drop point: the world the convoy
         // occupies is a function of the delta, so a world built for a spot the
         // gesture is no longer resting at puts the company in the wrong place.
-        const back0 = settleAt(ref.current.rotation.y)(back[0], back[2]);
+        const back0 = settleAt(ref.current.rotation.y, standing)(back[0], back[2]);
         // Settled here too. `lastFreePos` is a position the whole set could take,
         // so this normally agrees on the first pass — but "normally" is what the
         // first version of this assumed, and a fallback that writes the lead from
         // its own resolve while the members take `co.moves` is precisely the caller
         // `ConvoyResult.leadPos` was added to stop existing.
-        settle = settleLead<Resolved>(settleAt(back0.rot), (l) => carry(l.pos, l.rot), back0);
+        settle = settleLead<Resolved>(settleAt(back0.rot, standing), (l) => carry(l.pos, l.rot), back0);
         const r = settle.lead;
         // `r`, whole — never `back` raw with the live angle written beside it, which
         // is what this did. `resolvePlacement` returns a CONTAINMENT-CLAMPED position
@@ -751,7 +800,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const z = pp ? pp[1] : ref.current.position.z;
     const rot = pr ?? ref.current.rotation.y;
     const dim = currentDim();
-    liveUpdate(resolvePlacement(x, z, rot, dim, travelWorld(x, z)), dim);
+    // A wheel or a twist with the piece held still is a turn where it stands.
+    const turning =
+      pp === null ? { at: [x, ref.current.position.y, z] as [number, number, number], rot: standRot.current ?? ref.current.rotation.y } : undefined;
+    liveUpdate(resolvePlacement(x, z, rot, dim, travelWorld(x, z), turning), dim);
   }
 
   function schedule() {
@@ -836,6 +888,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       releasePress(partId);
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       dragStartRot.current = ref.current.rotation.y;
+      standRot.current = dragStartRot.current;
       cancelled.current = false;
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot();
@@ -1216,6 +1269,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       releasePress(partId);
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       dragStartRot.current = ref.current.rotation.y;
+      standRot.current = dragStartRot.current;
       cancelled.current = false;
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot(); // one world snapshot for the gesture
@@ -1339,6 +1393,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     setDragging(partId);
     dragStartPos.current = [g.position.x, g.position.y, g.position.z];
     dragStartRot.current = g.rotation.y;
+    standRot.current = dragStartRot.current;
     cancelled.current = false;
     lastFreePos.current = null;
     wantY.current = null;
@@ -1427,11 +1482,16 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         >
           <Pickable partId={partId}>{children}</Pickable>
         </Wobble>
-        {/* Wall pieces leave with their wall in the dollhouse cut-away. The depth is
-            the authored one for a group-scaled piece (the scale carries the rest)
-            and the effective one for a parametric piece, which is rebuilt at it. */}
+        {/* Wall pieces leave with their wall in the dollhouse cut-away — unless held:
+            a selected or dragged piece stays in view. The depth is the authored one
+            for a group-scaled piece (the scale carries the rest) and the effective
+            one for a parametric piece, which is rebuilt at it. */}
         {anchorFor(part.category, part.shape).startsWith('wall') && (
-          <CutAway groupRef={ref} depthMM={(isParametric(part.shape) ? (storedDim ?? part.dimMM) : part.dimMM)[1]} />
+          <CutAway
+            groupRef={ref}
+            depthMM={(isParametric(part.shape) ? (storedDim ?? part.dimMM) : part.dimMM)[1]}
+            held={inSelection || isDraggingThis}
+          />
         )}
         {(inSelection || isHovered || refused) && (
           <Highlight
@@ -1487,6 +1547,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             const pp = ref.current?.position;
             dragStartPos.current = pp ? [pp.x, pp.y, pp.z] : null;
             dragStartRot.current = ref.current?.rotation.y ?? null;
+            standRot.current = dragStartRot.current;
             cancelled.current = false;
             lastFreePos.current = null;
             effCache.current = buildEffSnapshot();

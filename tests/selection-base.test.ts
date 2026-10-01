@@ -21,18 +21,40 @@ describe('the selection base', () => {
   it('stands against the plaster behind a wall piece, sized by width and height', () => {
     const tv = selectionBase('wall-mid', [1200, 60, 700]);
     expect(tv.plane).toBe('wall');
-    // Its back face is the piece's back face: the base is between it and the wall.
-    expect(tv.at).toBeCloseTo(-0.03, 9);
+    // Just in front of the piece's back face, never in its plane: the two coplanar
+    // striped a selected TV seen from behind its cut-away wall.
+    expect(tv.at).toBeCloseTo(-0.03 + BASE_LIFT, 9);
+    expect(tv.at).toBeGreaterThan(-0.03);
     expect(tv.size[0]).toBeCloseTo(1.2 + 2 * tv.margin, 9);
     expect(tv.size[1]).toBeCloseTo(0.7 + 2 * tv.margin, 9);
     for (const a of ['wall-high', 'wall-low', 'wall-floor'] as const) expect(selectionBase(a, [500, 40, 500]).plane).toBe('wall');
   });
 
+  it('stays inside a wall or ceiling piece, never through the face you look at', () => {
+    for (const [anchor, dim] of [
+      ['wall-mid', [600, 15, 900]],
+      ['wall-mid', [800, 30, 600]],
+      ['wall-high', [1200, 80, 700]],
+      ['ceiling', [300, 10, 12]],
+      ['ceiling', [1000, 1000, 400]],
+    ] as const) {
+      const b = selectionBase(anchor, [...dim]);
+      const half = (b.plane === 'wall' ? dim[1] : dim[2]) / 2000;
+      const [near, far] = b.plane === 'wall' ? [b.at, b.at + b.thickness] : [b.at - b.thickness, b.at];
+      expect(near).toBeGreaterThan(-half);
+      expect(far).toBeLessThan(half);
+      expect(b.thickness).toBeGreaterThan(0);
+    }
+    expect(selectionBase('wall-mid', [1200, 80, 700]).thickness).toBe(BASE_THICKNESS);
+  });
+
   it('sits up against the slab over a ceiling piece', () => {
     const fan = selectionBase('ceiling', [1000, 1000, 400]);
     expect(fan.plane).toBe('ceiling');
-    // The piece is centred on its origin, so its top is h/2.
-    expect(fan.at).toBeCloseTo(0.2, 9);
+    // The piece is centred on its origin, so its top is h/2 — and the base stops
+    // just short of it, for the same reason as the wall's.
+    expect(fan.at).toBeCloseTo(0.2 - BASE_LIFT, 9);
+    expect(fan.at).toBeLessThan(0.2);
   });
 
   it('keeps its margin in proportion: visible on a vase, not a moat round a bed', () => {

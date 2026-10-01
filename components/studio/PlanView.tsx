@@ -32,6 +32,7 @@ import {
   resolvePlacement,
   snapSteps,
   turnInPlace,
+  turnSwingsInto,
   refusalCause,
   type Refusal,
 } from '@/lib/drag-resolve';
@@ -795,7 +796,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
         roomHeight: ROOM_DYN.height,
       });
     const world = drag?.world ?? parts;
-    const turned = turnInPlace({
+    const ask = {
       part,
       at: part.pos,
       rot: next,
@@ -805,7 +806,20 @@ export const PlanView = forwardRef<PlanViewHandle, {
       parts: convoy.travelling.size > 1 ? travellingWorld(convoy, world, 0, 0, convoy.own) : world,
       footprint: ROOM_DYN.footprint,
       roomHeight: ROOM_DYN.height,
-    });
+    };
+    const turned = turnInPlace(ask);
+    // Clear where it stands and not at the new angle: HELD, and written nowhere, so
+    // the handle drag stops at the last angle that fitted the way a drag stops at the
+    // last spot — a chair turned under its desk would otherwise put its back through
+    // the top (`turnSwingsInto`). Still painted, so the hand knows why it stopped.
+    if (turnSwingsInto(ask, turned, part.rot)) {
+      if (!blockedRef.current) {
+        if (blockTimer.current) clearTimeout(blockTimer.current);
+        setBlockedIds([part.id]);
+        blockedRef.current = true;
+      }
+      return { ...turned, held: true };
+    }
     const pos = turned.pos;
     if (pos[0] !== part.pos[0] || pos[1] !== part.pos[1] || pos[2] !== part.pos[2]) setPosition(part.id, pos);
     setRotation(part.id, turned.rot);
@@ -836,7 +850,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       setBlockedIds(refusal.ids);
       blockedRef.current = true;
     }
-    return turned;
+    return { ...turned, held: false };
   }
 
   // ── Pointer handling ──────────────────────────────────────────────────────
@@ -1323,6 +1337,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
     const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
     const wanted = part.rot + dir * spin;
     const turned = turnTo(part, wanted);
+    if (turned.held) {
+      announce(
+        `${part.name} stays at ${Math.round((part.rot * 180) / Math.PI)} degrees. It does not fit at that angle: ${refusalCause(turned)}`,
+      );
+      return;
+    }
     // A turn can move the piece DOWN as well as sideways, and neither the refusal nor
     // the nudge below can say so: a piece standing on a table that no longer covers
     // enough of it after the turn is written to the floor by the gravity branch of the

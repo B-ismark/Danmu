@@ -122,8 +122,10 @@ describe('analyzeRoom', () => {
     // under the top, past `CLASH_SHARE` and short of `TUCKED_CLASH_SHARE`. At ±0.5 the
     // chairs were 30% in, which is quiet with no exemption at all.
     const table = part({ category: 'table', shape: 'desk-standard', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
+    // Each chair FACES the table — its front, local +Z, towards the origin — because a
+    // chair pushed in back-first has its back through the top (`tuckedAt`), below.
     const chairs = [0.35, -0.35].map((z) =>
-      part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, z] }),
+      part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, z], rot: z > 0 ? Math.PI : 0 }),
     );
     expect(chairs.every((c) => tucksUnder(c, table))).toBe(true);
     const share = 0.3 / 0.5;
@@ -131,6 +133,19 @@ describe('analyzeRoom', () => {
     expect(share).toBeLessThan(TUCKED_CLASH_SHARE);
     const { issues } = analyzeRoom([table, ...chairs], ROOM);
     expect(issues.find((i) => i.id.startsWith('clash-'))).toBeUndefined();
+  });
+
+  it('calls a chair pushed in back-first, or side-on, a clash', () => {
+    // The same two chairs at the same depth, turned round: 850 mm of chair back through a
+    // 750 mm top. The roles and the heights still "tuck", which is all the rule used to
+    // ask, so this read as a tidy dining set with its backs standing on the tabletop.
+    const table = part({ category: 'table', shape: 'desk-standard', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
+    const turned = (rot: (z: number) => number) =>
+      [0.35, -0.35].map((z) => part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, z], rot: rot(z) }));
+    const clashes = (chairs: ScenePart[]) => analyzeRoom([table, ...chairs], ROOM).issues.filter((i) => i.rule === 'clash').length;
+    expect(clashes(turned((z) => (z > 0 ? Math.PI : 0)))).toBe(0);
+    expect(clashes(turned((z) => (z > 0 ? 0 : Math.PI)))).toBe(2);
+    expect(clashes(turned(() => Math.PI / 2))).toBe(2);
   });
 
   it('calls a seat pushed into a surface it does not fit under an ordinary clash', () => {

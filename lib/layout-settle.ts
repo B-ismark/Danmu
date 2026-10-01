@@ -61,7 +61,7 @@ import {
   type Foot,
   type Poly,
 } from './geometry';
-import { isObstacle, isSeating, profilesTuck, roleOf, tuckProfile, WALL_GAP, type TuckProfile } from './layout-rules';
+import { isObstacle, isSeating, roleOf, tuckedAt, tuckProfile, WALL_GAP, type TuckProfile } from './layout-rules';
 import { findSupportDetailed, highestSurfaceUnder, isFloorStanding, isTabletopProne, MOUNT_PAD, ridesWall, SUPPORT_Y_EPS, verticalExtent } from './physics';
 import type { ScenePart, Shape } from './scene-spec';
 
@@ -189,7 +189,7 @@ export function settleParts(parts: ScenePart[], footprint: Footprint, opts: Sett
         const mover = order[b];
         if (!movable[mover] || !world.obstacle[mover]) continue;
         if (stuck.has(mover)) continue;
-        if (profilesTuck(world.tuck[anchor], world.tuck[mover])) continue;
+        if (tuckedAt(world.tuck[anchor], world.feet[anchor], world.tuck[mover], world.feet[mover])) continue;
         if (!clashes(world, anchor, mover)) continue;
         if (pushClear(world, mover, poly, inward)) touched = true;
         else stuck.add(mover);
@@ -892,7 +892,7 @@ function clearOfAll(w: World, index: number, me: Foot): boolean {
   for (let j = 0; j < w.parts.length; j++) {
     if (j === index) continue;
     if (!w.obstacle[j]) continue;
-    if (profilesTuck(myFit, w.tuck[j])) continue;
+    if (tuckedAt(myFit, me, w.tuck[j], w.feet[j])) continue;
     if (shares(me, w.feet[j], Math.min(myArea, w.areas[j]))) return false;
   }
   return true;

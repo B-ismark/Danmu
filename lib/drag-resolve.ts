@@ -21,7 +21,7 @@
 
 import { collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
-import { aabbExtents, type Poly } from './geometry';
+import { aabbExtents, edgeProjection, frontVector, nearestEdge, type Poly } from './geometry';
 import { snapToNeighbors, type SnapLine } from './item-snap';
 import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
@@ -36,6 +36,12 @@ export function snapSteps(mode: SnapMode): { translate: number | null; rotate: n
   if (mode === 'fine') return { translate: 0.01, rotate: Math.PI / 12 };
   return { translate: 0.05, rotate: Math.PI / 4 };
 }
+
+/** How much nearer the pointer must be to another wall before a wall piece leaves
+ *  the one it is on — see the rider branch of `resolvePlacement`. About a hand's
+ *  width: enough that pushing a piece past the end of its wall rests it in the
+ *  corner, small enough that a pointer moved down the side wall takes it there. */
+export const WALL_SWITCH_M = 0.3;
 
 export type ResolveInput = {
   /** The piece being moved, at its authored identity — category, shape, circle. */
@@ -85,6 +91,17 @@ export type ResolveInput = {
    * is written down.
    */
   wallEdge?: number | null;
+  /**
+   * Where a wall rider stands NOW and the angle it stands at, when the caller knows
+   * and is resolving it at ANOTHER angle — a turn, from any surface. Its wall is
+   * then the one its BACK is against, rather than the one nearest the clamp taken at
+   * the new angle, which in a corner lies on the diagonal (see the rider branch).
+   * The back and not the centre: a 400 × 200 mm curtain's centre is 0.20 m from the
+   * return wall and 0.21 m from its own. A drag leaves it unset — there the angle is
+   * the piece's live one — and so must not read `part.pos` instead, which in the 3D
+   * tab is the AUTHORED position, not where the piece has been moved to.
+   */
+  standsAt?: { at: readonly [number, number, number]; rot: number };
   /**
    * Company this piece already overlapped when the gesture began, and whose overlap
    * the gesture therefore did not cause — a chair tucked under the table it is
@@ -136,6 +153,16 @@ export function refusalCause(r: Pick<Resolved, 'refusal'>): string {
   if (r.refusal === 'wall') return 'it is wider than that wall.';
   if (r.refusal === 'room') return 'it would stick out of the room.';
   return 'something is in the way.';
+}
+
+/** The middle of a wall rider's back face, on the floor plane: the point that is
+ *  against its wall whichever wall that is. Its centre is not — a curtain 200 mm
+ *  deep flush in a corner has its centre nearer the return wall than its own, so
+ *  "which wall is this on" asked of the centre names the wrong one. */
+export function backOf(at: readonly [number, number, number], rot: number, dim: [number, number, number]): [number, number] {
+  const [fx, fz] = frontVector(rot);
+  const half = dim[1] / 2000;
+  return [at[0] - fx * half, at[2] - fz * half];
 }
 
 /**
@@ -199,7 +226,58 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // free pass through the wall.
   const ridesAWall = ridesWall(part.category, part.shape);
   if (ridesAWall) {
-    const snapped = snapToWall([x, 0, z], dim, footprint, wallStandoff(part.shape), input.wallEdge);
+    // From the RAW point, not the clamped one. The clamp above is measured at the
+    // piece's CURRENT angle, which for a rider is the old wall's, and it decides
+    // which wall is nearest before the wall is chosen: a 5 m curtain on a 6 m wall
+    // is held to x ∈ [−0.5, 0.5], so a pointer on the 4 m side wall at x = −3 was
+    // pulled back to −0.5, from where the side wall is never the nearest — and a
+    // step toward the camera then put it on the near wall, which the dollhouse cuts
+    // away. Reported 2026-09-30 as a curtain that disappeared. `snapToWall` slides
+    // the piece along whichever wall it picks on its own, so the old-angle clamp
+    // bought nothing here but the wrong wall.
+    //
+    // Held to the room's BOX, not the box inset by the piece, so a pointer off the
+    // edge of the room still asks from the room's edge. Measured over the
+    // containment sweep (`tests/wall-rider-containment.test.ts`) against the old
+    // clamp, with the switching margin below, it accepts 96 placements that were
+    // refused and refuses 44 that were accepted: net curtain +40, window +19,
+    // painting −3, TV −4. Every one of the 44 is a piece wider than the wall now
+    // chosen — 42 with the pointer OUTSIDE an L, T or U, where the wall nearest the
+    // hand is a stub, and two with it inside and nearer a wall shorter than the
+    // curtain. They are refused as "wider than that wall", which is true of the wall
+    // the hand is at; the old clamp dragged the pointer back until a longer wall
+    // happened to be nearer.
+    //
+    // **…but only once the hand is CLEARLY at the other wall** (`WALL_SWITCH_M`).
+    // Nearest-wall-wins from the pointer alone flips a piece round the corner the
+    // moment it is pushed past the end of its own wall: a 1.2 m TV at the north
+    // wall's west end, pushed on, has its pointer 0.05 m from the north wall and
+    // 0 m from the west one, and turned the corner where the old clamp had it rest
+    // in the corner (found in review, 2026-09-30). So the old answer stands unless
+    // the pointer is nearer another wall by a margin; the curtain's case — the
+    // pointer well down the side wall — clears it by metres.
+    //
+    // On a TURN "the old answer" is the wall the piece stands on (`standsAt`), not the
+    // wall nearest the clamped point. The clamp is taken at the REQUESTED angle, and a
+    // turn requests another wall's angle: a 500 mm painting flush in a corner, turned,
+    // was clamped onto the corner's diagonal, where both walls are equally near, the
+    // tie picked the other wall, and the margin then held it there — a turn that moved
+    // the painting round the corner (found in review, 2026-10-01).
+    const ax = Math.max(bnd.minX, Math.min(bnd.maxX, gx));
+    const az = Math.max(bnd.minZ, Math.min(bnd.maxZ, gz));
+    const from = input.standsAt;
+    const back = from ? backOf(from.at, from.rot, dim) : null;
+    const stay = back ? nearestEdge(footprint, back[0], back[1]) : nearestEdge(footprint, x, z);
+    const follow = nearestEdge(footprint, ax, az);
+    const stayDist = stay ? edgeProjection(footprint, stay.index, ax, az)?.dist : undefined;
+    const switches =
+      !stay || !follow || stayDist === undefined || follow.index === stay.index || follow.dist + WALL_SWITCH_M < stayDist;
+    const [sx, sz] = switches ? [ax, az] : [x, z];
+    // Staying means staying on THAT wall, so a turn names it: from the clamped point,
+    // `snapToWall`'s own nearest-wall choice can be the same tie again. A drag keeps
+    // letting the snap choose, which is the answer `stay` was derived from anyway.
+    const edge = input.wallEdge ?? (back && !switches ? stay!.index : input.wallEdge);
+    const snapped = snapToWall([sx, 0, sz], dim, footprint, wallStandoff(part.shape), edge);
     x = snapped.x;
     z = snapped.z;
     if (snapped.rot !== undefined) outRot = snapped.rot;
@@ -276,6 +354,9 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // 18 TV — "wider than the wall it landed on", not a property of curtains), and
   // nothing else moves by one. Both columns are pinned, so the second half of that
   // sentence is a gate and not a memory.
+  // (Those are the figures at the deletion. Choosing a rider's wall from the pointer
+  // rather than from the old-angle clamp — above — shifted the pins since, and the
+  // live withdrawal is 516; the test carries both and the shift between them.)
   //
   // Five of the nine riders in the catalogue — `door`, `ac/ac-unit`, both mirrors
   // and `tv/soundbar`, the pieces that sit in or on the plaster and are the reason
@@ -381,8 +462,9 @@ export function resolvePlacement(input: ResolveInput): Resolved {
  * · `wallEdge: null`. A wall rider is re-aimed by the wall it lands on, in both
  *   tabs or in neither.
  * · The caller takes the CLAMP and not the legality. Refusing an invalid frame
- *   would make a piece in a tight spot unturnable, which no report has asked for;
- *   `valid` comes back so the caller can say so out loud instead.
+ *   would make a piece in a tight spot unturnable; `valid` comes back so the caller
+ *   can say so out loud instead. The one exception is a turn that swings a piece
+ *   into trouble it was clear of — see `turnSwingsInto`, which every caller asks.
  *
  * That last one is why this returns a whole `Resolved` and not a position. The
  * clamped position is produced whether or not the frame is legal, and the one
@@ -392,7 +474,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
  * merged set into its own siblings made the resolve invalid, so that was the path
  * every such turn took, and the bed was committed with its corner through the wall.
  */
-export function turnInPlace(input: {
+export type TurnInput = {
   part: ScenePart;
   /** Where it stands now. Its `y` is the mount height to preserve. */
   at: [number, number, number];
@@ -402,7 +484,9 @@ export function turnInPlace(input: {
   parts: ScenePart[];
   footprint: Poly;
   roomHeight: number;
-}): Resolved {
+};
+
+export function turnInPlace(input: TurnInput): Resolved {
   return resolvePlacement({
     part: input.part,
     rawX: input.at[0],
@@ -415,5 +499,41 @@ export function turnInPlace(input: {
     snapMode: 'off',
     currentY: input.at[1],
     wallEdge: null,
+    // `part.rot` is the angle it faces now — the contract `turnSwingsInto`'s
+    // `fromRot` already leans on at every caller.
+    standsAt: { at: input.at, rot: input.part.rot },
   });
 }
+
+/**
+ * Does this turn swing the piece INTO trouble it is clear of where it stands? Then
+ * the turn is HELD — the piece keeps the angle it has — rather than taken.
+ *
+ * The rule above ("the caller takes the clamp and not the legality") was written for
+ * a piece in a tight spot, which refusing would make unturnable, and that reason
+ * still holds: a piece that is already refused at its own angle is answered `false`
+ * here, so it turns as before and is reported. What it never covered is the other
+ * case, and the user found it on 2026-09-30: a chair tucked under a desk front first,
+ * turned on the ring, swung its back up through the desktop and stayed there, red.
+ * A drag has always stopped at the last spot that fitted; a turn now stops at the
+ * last angle that fitted, for the same reason.
+ *
+ * `fromRot` is the angle it faces NOW — the effective one, not the authored `rot`.
+ *
+ * "Clear where it stands" means clear WITHOUT being moved. The resolve clamps into
+ * the room first, so a piece poking through a wall — a wall dragged in on it, a
+ * detected room — comes back `valid` at a spot it is not at, and the first version
+ * held its turn on that answer: the one piece this rule promises can still turn was
+ * the one it could not (found in review). So a resolve that moved the piece more than
+ * `STANDS_TOL_M` along the floor counts as not clear, and the turn is taken.
+ */
+export function turnSwingsInto(input: TurnInput, turned: Resolved, fromRot: number): boolean {
+  if (turned.valid) return false;
+  const here = turnInPlace({ ...input, rot: fromRot });
+  if (!here.valid) return false;
+  return Math.hypot(here.pos[0] - input.at[0], here.pos[2] - input.at[2]) <= STANDS_TOL_M;
+}
+
+/** How far the resolve may move a piece and still call it where it stands: a
+ *  millimetre, for the float round trip through the clamp and the wall snap. */
+const STANDS_TOL_M = 0.001;

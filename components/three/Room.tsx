@@ -357,11 +357,34 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
   // drag would rebuild a cube target per pointer move. Half-hour steps are finer
   // than anyone can tell apart on a reflection and cost at most 48 bakes a day.
   const envStep = lighting === 'overcast' ? 'o' : String(Math.round(hour * 2));
+  // …and the panels are lit at that STEP's hour, not the live one. Their colours are
+  // what `Environment` re-bakes on, so panels coloured off the live hour re-baked on
+  // every tick of a sun scrub and the step above decided nothing (found in review).
+  const envHour = lighting === 'overcast' ? hour : Math.round(hour * 2) / 2;
+  const envL = useMemo(() => lightingAt(lighting, envHour, bearingDeg), [lighting, envHour, bearingDeg]);
   // The light the room throws back, on the quality where the shell is closed —
   // see lib/bounce.ts. Resolved parts, so a window stretched in the Inspector is
   // measured at the size it is drawn.
   const resolved = useRoomScene();
   const footprint = useScene((s) => s.room.footprint);
+  // Memoised, and not for tidiness: drei's `Environment` re-bakes its cube — six
+  // renders of the whole light rig — in a layout effect keyed on `children`, even at
+  // `frames={1}`. Written inline, the panels were new elements on every render of
+  // this component, and it renders whenever `useRoomScene` does, which is every frame
+  // a drag carries company (a lamp riding its table writes the store each move). The
+  // measured cost was ~2 textures and 7 attachments a frame, and the drag drew at a
+  // quarter of the rate it did with the lamp left on the floor. The bake's own key
+  // (`envStep`) is what is meant to decide when it re-bakes.
+  const panels = useMemo(
+    () => (
+      <>
+        <Lightformer intensity={0.7 * envL.envMul} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={envL.env[0]} />
+        <Lightformer intensity={0.35 * envL.envMul} position={[5, 2, 3]} scale={[4, 6, 1]} color={envL.env[1]} />
+        <Lightformer intensity={0.3 * envL.envMul} position={[-5, 2, -3]} scale={[4, 6, 1]} color={envL.env[2]} />
+      </>
+    ),
+    [envL],
+  );
   const glazing = useMemo(() => glazingArea(resolved), [resolved]);
   const bounce = hi && key ? bounceIntensity(key.intensity, glazing, footprint) : 0;
   const gl = useThree((s) => s.gl);
@@ -412,9 +435,7 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
           surface (chair bases, lamp poles, handles) goes near-black. Halving the
           cube resolution keeps the bake cheap while preserving that. */}
       <Environment key={`${envStep}-${quality}`} resolution={hi ? 256 : 128} frames={1}>
-        <Lightformer intensity={0.7 * L.envMul} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={L.env[0]} />
-        <Lightformer intensity={0.35 * L.envMul} position={[5, 2, 3]} scale={[4, 6, 1]} color={L.env[1]} />
-        <Lightformer intensity={0.3 * L.envMul} position={[-5, 2, -3]} scale={[4, 6, 1]} color={L.env[2]} />
+        {panels}
       </Environment>
     </>
   );
@@ -631,11 +652,18 @@ function GroundShadows({ hi }: { hi: boolean }) {
   // wall is a surface for that wall's blurred strip to paint on, outside the room.
   const spanX = Math.ceil(b.width * 2) / 2;
   const spanZ = Math.ceil(b.depth * 2) / 2;
+  // …and the pair is memoised, because drei keys that same useMemo on the `scale`
+  // ARRAY — identity, not value. This component re-renders on every write to
+  // `positions` (its re-bake triggers, above), and a drag that carries company writes
+  // it every move, so an inline `[spanX, spanZ]` rebuilt both targets, the blur plane
+  // and its materials once per frame and orphaned the old ones: the leak the
+  // quantising was for, reached through the other door.
+  const scale = useMemo<[number, number]>(() => [spanX, spanZ], [spanX, spanZ]);
   return (
     <ContactShadows
       ref={shadows}
       position={[b.cx, 0.004, b.cz]}
-      scale={[spanX, spanZ]}
+      scale={scale}
       // 512 on 'Fast' — a quarter of the texels to fill and blur.
       resolution={hi ? 1024 : 512}
       // A CONTACT shadow, so the depth band is a contact distance — not the whole

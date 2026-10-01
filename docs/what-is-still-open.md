@@ -161,7 +161,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 7 | **§ B.17** ~~the placement row — dragging a piece off a surface should DROP it~~ → **RESOLVED 2026-09-03, and the premise had expired** | The recorded answer — *"dragging would work"*, keep the operations and drop the row — rested on "neither Floor-off-a-table nor Surface-back-onto-it is reachable by dragging", which stopped being true when the drag pipeline moved into `lib/drag-resolve.ts` and nobody re-derived it. Measured against `resolvePlacement`: clear of a desk → y = 0, back over it → 0.75 with `supportId` set. Put back to the user with that measurement; they chose **drop Surface only**. Wall (nearest wall + face the room, gated on `ridesWall` so no drag reaches it) and Floor (drops IN PLACE where a drag carries it sideways) stay. `supportBelow`, `snapToSurface` and the `snap-surface` glyph went with the button — and so, after a browser measurement, did the `.rail-triple` class and the container-query rule that folded it, which a two-button row no longer needs. Confirmed on screen: the row is `Wall | Floor`, and Room check reads correctly in all five units with no clipping and 0px of document overflow | done | — |
 | 8 | ~~**§ H.3** every Library click drops its piece at the room centre, facing the same way~~ **ANSWERED AND BUILT** — fan out from the drop point with a legality gate (`openSpotForNewPart`, 2026-09-03), and **residue 1 answered and built 2026-09-04**: an explicit aim overrides `ceilingSpot`'s midpoint default, so the ceiling family fans out too and a dragged fan lands where it was dropped | **One residue left**, named in § H.3's section below: an unaimed click may still rest one tabletop-prone piece on another, and whether it should is a product question rather than a defect | — | **done, with one filed residue** |
 | 9 | ~~**§ H.8** two reports that need a real repro~~ — **BOTH HALVES BUILT; this row is CLOSED 2026-09-05** | The group drag was measured and pinned in `lib/` (`tests/drag-convoy.test.ts`) — the set refused 450 mm before the dragged bed ran out, because a nightstand the containment clamp corrects fails the rigidity test and vetoes the gesture. **It needed no browser**: it was filed as DOM-only and is arithmetic. The user then chose **slide to the limit**, and it is built — `ConvoyResult.leadPos`, both call sites, 11/14 mutations. **The drill-in half was ALREADY BUILT when this row still said it was untouched**, and the contradiction sat 1,500 lines below it in this file's own § H.8 section: `lib/press-selection.ts` records the press in the CAPTURE phase, so the drill-in survives the gizmo swallowing the press, and it was verified in a browser on a production build. `lib/drag-click.ts` is the second half — a click collapses the selection only on a release that never moved. Both are on `main` with tests, and `Pickable.tsx` calls the first. Re-derived 2026-09-05 by checking for the modules rather than by reading this row | done | nothing |
-| 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report | S once decided | done |
+| 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report. **Narrowed 2026-09-30:** a turn that swings a piece INTO trouble it was clear of is held (`turnSwingsInto`, every turn gesture) — a chair tucked front first and then turned put its back through the desk and stayed there. Already refused where it stands, a piece still turns, so the tight corner stays turnable | S once decided | done |
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly — relation groups through `proposeGroup`, and merged sets since § H.6.5 | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | **4a is MEASURED (2026-09-05) and the recommendation is to retire it — see § 4.6 of the research doc.** Swapping the box for the drawn geometry changes 0.11% of drag positions (189 of 172,032 once the instrument's own 299 are subtracted, 42 shapes, every shape a row) and **3.3% of sampled picking points** (5521 of 166,664 — the larger outcome by an order of magnitude, and not a collision question); every position in the *other* direction traces to a renderer drawing outside its own `dimMM`, which is literals in the wrong place rather than a case for compound footprints. **"Fix the six renderers" is not that work**: the 1120 geometry-only positions come from 20 shapes, the never-read-`dimMM` list is 6 renderers, and the two sets overlap in exactly two — two of the six are in the OPPOSITE column and two differ at no position at all. **~~`desk-l` draws 2.86 m where every consumer reads 1.60 m~~ **FIXED 2026-09-06****, and 32 of 46 shapes escape their box at all. What this row still holds, unmeasured, is `analyzeRoom`'s clearance findings and the solver's cost. Previously: every piece is one box or one ellipse, so a table's legs and a plant's canopy are the same rectangle — and "a sofa's L" was in that sentence for months describing a shape this codebase does not have. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). The duplication this row used to carry — *"six hand-written copies of the vertical-extent rule in five files"* — is **RETIRED (2026-09-04)**: all six call `verticalExtent`, plus a **seventh** the original list never named (`layout-settle.ts:380`), and `layout-score.ts:487` records it in the code. The only raw `pos[1] +` left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset, never an instance of the rule. **This row is smaller than it was**, and the seventh copy is why a grep for the old wording could not have closed it | XL | independent of row 11, but they meet |
 | 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
@@ -3564,7 +3564,7 @@ from a side table by its dimensions.
 
 **After, on the same 60 presses:** the same 27 solves. The set dragged by its table is
 valid 11 of 11, and by a deep chair 14 of 14, with 0 chairs lifted either way. The solo
-nudge lifts 0 of 14, and is refused (§ 17, below). No baseline moved.
+nudge lifts 0 of 14, and is refused (§ 17, below — since decided: it slides under). No baseline moved.
 
 *The first commit of this fix refused every one of those set drags*, by the table and by a
 chair alike, 25 of 25, and reported it as "0 chairs lifted". Both halves were true. A
@@ -3636,9 +3636,9 @@ asks `hasFloorSharers` first.
   the overlap term, since the solver is unchanged.
 - *A tucked chair nudged alone is refused now, at any depth.* Past half it used to be
   lifted, and the lift made the move valid. `collidesAt` has no `sharesFloor` exemption, so
-  it is refused like a chair tucked a quarter in always was. That is § 17's open decision,
-  unchanged. `tests/seat-support.test.ts` pins it and says which line to change if § 17
-  is ever decided the other way.
+  it is refused like a chair tucked a quarter in always was. That was § 17's open decision,
+  and **it is decided (2026-09-30): a lone chair now slides under**, up to the report's
+  bar — see § 17.
 - *A room saved with a chair already on its table keeps it there.* The banner still says
   *On Table*, and it rides the table. `settleHeights` would bring it down, but only on the
   detection path (`buildSceneFromRoom`), not on every room open. The first drag of that
@@ -5195,6 +5195,35 @@ places, and both are the app's own presets.** It is narrowed where it is asserte
 Both want the same decision — does `collidesAt` grow the report's exemptions, or does the
 report grow the drag's strictness — and it is the same shape as § 31: a question about
 which of two consumers is right, not a defect in either.
+
+**The tucked half is decided (2026-09-30), by the user: the drag matches Room check.**
+`collidesAt` forgives a `tucksUnder` pair while the overlap is below `TUCKED_CLASH_SHARE`
+of the smaller footprint — rule 2's predicate, bar and `<`, so the two cannot disagree
+about a tuck again. Asked of the mover's CANDIDATE size, so an office chair stretched
+mid-gesture past a desk's knee room stops tucking. Gravity is untouched (§ H.6.3): the
+seat slides under and stays on the floor. It came from a looked-at item — both Library
+chairs read *blocked* against their table — and no room baseline moved. The convoy's
+inherited-overlap set (`overlapsAtStart`) stays, for pairs already past the bar and
+overlaps that are not tucks. `tests/seat-support.test.ts` pins every clause, and each was
+mutated: dropping the predicate, the bar raised to 1 or lowered to 0.5, the branch
+removed, and asking the stored rather than the candidate size all fail it.
+
+**And a tuck is front first (2026-09-30, the next look).** The user pushed a chair in back
+first and its back went up through the desktop: `profilesTuck` read the seat's height
+against the knee room and never which way it faced, so the part of a chair that is taller
+than the seat — its back — was forgiven under the top from any side. `tuckedAt`
+(`lib/layout-rules.ts`) is the pair rule now: roles and heights as before, and, when the
+seat is taller than the knee room, the seat's BACK STRIP (`seatBackShare`: 55/420 of a
+dining chair's depth, 70/480 of an office chair's, measured off their drawings and pinned
+to them by `tests/seat-fit.test.tsx`) may not overlap the surface. Every consumer asks it
+— the drag, Room check, the solver, the settle's pair and destination checks, and
+fit-check — which is the reason it takes both footprints rather than letting each site add
+the facing test itself. Seeded rooms: 8 tucked pairs, 0 facing away, so no starter
+baseline moved; the shuffle's finalists did (158 → 159), because 11 of 158 had a chair in
+back first. Every site was mutated back to the facing-blind rule and each one fails a test;
+two of those tests (the settle's destination check, fit-check's own gate) had to be built,
+because upstream consumers already refuse the case and no search reaches them with it.
+**The mounted ↔ mounted half is still open.**
 
 **2. `lib/physics.ts:216` states the opposite of what the code does.** It says
 `isWallMountedPart` "answers yes for a ceiling fan and a pendant, which `ridesWall` and

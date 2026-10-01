@@ -887,6 +887,25 @@ describe('a wall rider leading a set', () => {
     expect(Math.abs(loose.rot)).toBeCloseTo(Math.PI, 5);
   });
 
+  it('names the wall a piece\'s BACK is against, as the lone resolve does', () => {
+    // Found in review, 2026-10-01: a 200 mm-deep curtain flush in a corner has its
+    // centre nearer the return wall than its own, and this pin was read off the
+    // centre — so the moment the curtain had company, as lead or as member, it was
+    // pinned to the return wall and every turn and drag took it round the corner.
+    const narrow = part({ id: 'cur', category: 'curtain', shape: 'curtain', dimMM: [400, 200, 800], pos: [1, 1.2, 0.5] });
+    const flush = resolvePlacement({ part: narrow, rawX: 0.1, rawZ: 0.05, rot: 0, dim: narrow.dimMM, parts: [narrow], footprint: ROOM, roomHeight: H, snapMode: 'off' });
+    expect(flush.rot).toBeCloseTo(0, 9);
+    const cur = { ...narrow, pos: flush.pos, rot: flush.rot };
+    // The control: from its centre the west wall (edge 3) really is the nearer one,
+    // which is the whole reason a centre cannot answer this.
+    expect(cur.pos[0]).toBeLessThan(cur.pos[2]);
+
+    const world = [cur, chair()];
+    expect(plan('cur', world, ['cur', 'chair']).leadEdge).toBe(0);
+    const asMember = plan('chair', world, ['cur', 'chair']).members.find((m) => m.part.id === 'cur');
+    expect(asMember?.edge).toBe(0);
+  });
+
   it('holds a pinned lead at the end of its wall rather than past it', () => {
     // `edgeProjection` clamps to the segment, so the pin cannot walk a piece off
     // the end of its own wall and out of the room. In this room the containment

@@ -57,6 +57,9 @@ const tuckedChair = part({
   // entirely left all eight tests green, so the file's headline claim was decoration.
   // At 0.40 the share is ~0.611 and both bars are live.
   pos: [0, 0, 0.40],
+  // Facing the table (its front, local +Z, towards the origin). Back-first, its back
+  // would be through the top, and that is not a tuck (`tuckedAt`).
+  rot: Math.PI,
 });
 
 function setUp(parts: ScenePart[], selected: string) {

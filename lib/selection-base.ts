@@ -27,15 +27,25 @@ export type SelectionBase = {
   radius: number;
   /** How far it reaches past the piece on every side. */
   margin: number;
-  /** The coordinate of its face against the surface: y for floor and ceiling, z
-   *  for a wall. The base runs from here toward the room by `thickness`. */
+  /** The coordinate of its face nearest the surface: y for floor and ceiling, z
+   *  for a wall — `BASE_LIFT` off the surface, never on it. The base runs from here
+   *  toward the room by `thickness`. */
   at: number;
 };
 
 /** Thick enough to read as a slab from the default camera, thin enough that a
  *  sofa does not look stood in a tray. */
 export const BASE_THICKNESS = 0.024;
-/** Off the floor by this much, so its underside does not flicker against it. */
+/** Off its surface by this much, so the face against it does not flicker against
+ *  whatever else lies in that plane. On every plane, not just the floor: a wall
+ *  piece's base is laid at the piece's own back face (`-d/2` in its frame — the
+ *  piece itself stands `WALL_GAP` or more off the plaster), so the base's outer face
+ *  shared the piece's back plane exactly. From inside the room that face is turned away and never
+ *  drawn, but once a held piece stayed in view through its cut-away wall it was the
+ *  face the camera saw, and it striped a selected TV's black back with the base's
+ *  frosted white (the user, 2026-09-30). A ceiling light seen from above is the same
+ *  case one plane over. 2 mm is far inside a TV, and depth precision at room scale
+ *  is hundredths of a millimetre. */
 export const BASE_LIFT = 0.002;
 
 /** What shows past the piece: about a twelfth of its smaller side, never less than
@@ -56,7 +66,11 @@ export function selectionBase(anchor: Anchor, sizeMM: [number, number, number]):
   const margin = marginFor(a, b);
   const size: [number, number] = [a + 2 * margin, b + 2 * margin];
   const radius = Math.min(0.05, Math.min(size[0], size[1]) / 4);
-  if (wall) return { plane: 'wall', size, thickness: BASE_THICKNESS, radius, margin, at: -d / 2 };
-  if (anchor === 'ceiling') return { plane: 'ceiling', size, thickness: BASE_THICKNESS, radius, margin, at: h / 2 };
+  // Behind a wall or ceiling piece the base is inside it, the margin all that shows,
+  // so it must not be thicker than the piece: a 15 mm mirror would otherwise wear its
+  // base's frosted face 11 mm in front of the glass.
+  const inside = (t: number) => Math.min(BASE_THICKNESS, Math.max(BASE_LIFT, t - 2 * BASE_LIFT));
+  if (wall) return { plane: 'wall', size, thickness: inside(d), radius, margin, at: -d / 2 + BASE_LIFT };
+  if (anchor === 'ceiling') return { plane: 'ceiling', size, thickness: inside(h), radius, margin, at: h / 2 - BASE_LIFT };
   return { plane: 'floor', size, thickness: BASE_THICKNESS, radius, margin, at: BASE_LIFT };
 }

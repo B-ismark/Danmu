@@ -75,7 +75,7 @@ import { useStudio } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useRoomScene } from '@/lib/room-scene';
 import { SCENE } from '@/lib/scene-palette';
-import { wallApertures, skirtingRuns } from '@/lib/apertures';
+import { wallApertures, skirtingRuns, type Aperture } from '@/lib/apertures';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { floorNormal, floorRoughness } from '@/lib/textures';
 
@@ -145,10 +145,16 @@ export function RoomShell() {
   // from the effective scene (`useRoomScene`) rather than the stored parts, so an
   // opening follows its window when the user slides it along the wall.
   const parts = useRoomScene();
-  const apertures = useMemo(
+  const cut = useMemo(
     () => wallApertures(parts, footprint, walls, height),
     [parts, footprint, walls, height],
   );
+  // Held by VALUE. `useRoomScene` hands back a new list whenever anything moves, and a
+  // drag that carries company writes the store every frame — so keyed on `cut` itself,
+  // every wall re-triangulated and re-uploaded its geometry per pointer move to redraw
+  // the same holes. Only a window or a door moving changes this string.
+  const cutKey = JSON.stringify([...cut]);
+  const apertures = useMemo(() => new Map<number, Aperture[]>(JSON.parse(cutKey)), [cutKey]);
 
   // `THREE.Shape` triangulates an outline with holes through Earcut, so cutting a
   // wall needs no CSG library — and a ShapeGeometry in the XY plane faces +Z just
