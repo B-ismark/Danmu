@@ -169,7 +169,7 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
-### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205); the lamp's table this branch, NOT LOOKED AT
+### Change the model keeps a floor piece inside the room — merged to `main` in `71373dd` (PR #205), NOT LOOKED AT; the floor lamp and tall plant this branch
 
 The curtain half (a print swapped for curtains hangs flat on the print's wall) was looked at
 on 2026-10-01 and is gone. This is the other way round. A print swapped for a **sofa** kept
@@ -179,10 +179,15 @@ the room. Anything else (a plant, a chair, a lamp) stays where the print was, pu
 wall. A big sofa swapped in for a small one by a wall stays against that wall, and a piece that
 already fits does not move.
 
-**This branch.** Only a small tabletop thing (a lamp, a vase, a plant pot) looks for a table to
-stand on now. A print hung above a bed and swapped for a nightstand used to stand the
-nightstand on the bed. And a lamp swapped in for a print looks for its table where the lamp ends
-up, not where the print hung.
+**Merged with it.** Only a small tabletop thing (a lamp, a vase, a plant pot) looks for a table
+to stand on. A print hung above a bed and swapped for a nightstand used to stand the nightstand
+on the bed. And a lamp swapped in for a print looks for its table where the lamp ends up, not
+where the print hung.
+
+**This branch.** "A lamp" used to mean any lamp, so a print above the bed swapped for a **floor
+lamp** stood the floor lamp on the duvet, and a 1.6 m floor plant the same. Now only a piece of
+tabletop size looks for a top, when swapped in and when added from the Library. An ottoman
+still goes on a top it does not fit under, which was decided before (§ 50 point 4).
 
 **One known limit, so it does not read as a regression.** In a U-shaped room a piece too wide
 for the arm it lands in — a 2 m table swapped in for a print on an arm's end wall — is carried
@@ -191,15 +196,17 @@ because there is no spot in an arm that holds it. A piece that fits the arm stay
 
 **Where to click.** Use the 2D plan. Put a print on a side wall, then **Change the model…** →
 Sofa. Then a second print → Floor plant. Then swap a small sofa standing against a wall for a
-large one. Then a print hung above a desk → Table lamp, and a print above the bed → Nightstand.
+large one. Then a print hung above a desk → Table lamp, and a print above the bed → Nightstand,
+then another print above the bed → Floor lamp.
 
 **What right looks like.** The sofa's back is against the print's wall, with its seat facing
 the room, at the same point along the wall. The plant stands just inside the wall where the
 print hung. The large sofa stays against its wall, inside the room. The lamp stands on the
-desk; the nightstand stands on the floor. *Wrong* looks like any piece crossing the wall line
-in the plan, a sofa with its back to the room, or a nightstand perched on the bed.
+desk; the nightstand and the floor lamp stand on the floor. *Wrong* looks like any piece
+crossing the wall line in the plan, a sofa with its back to the room, or a nightstand or floor
+lamp perched on the bed.
 
-**Where it rides.** `lib/swap-model.ts`.
+**Where it rides.** `lib/swap-model.ts`, `seeksSurface` in `lib/physics.ts`.
 
 ### Duplicate puts the copy beside the piece, not inside it — this branch, NOT LOOKED AT
 
@@ -212,19 +219,34 @@ along the piece's own width, with a 5 cm gap, and is dropped the way a drag drop
 (`lib/duplicate-place.ts`). Every piece in the Library is swept in an empty room in
 `tests/duplicate-place.test.ts`, and every one lands beside itself.
 
+**The user's second look, the same day:** *"Duplicated items are offset nicely but it seems
+they don't consider whether they're clipping with an object."* A copy was checked the way a
+drag is, and a drag forgives two things on purpose: a chair pushed in under a table, and a short
+piece stepping up onto a tall one. So a chair's copy could land half under the table and a
+nightstand's copy on the bed. Now a copy has to touch nothing, and stand on what the original
+stands on. When nothing beside it is clear, the rest of the room is searched, nearest spot
+first. A lamp copied off a full nightstand goes on the other nightstand, or on the floor beside
+it, never on the bed. Every piece of every starter room is copied in the test, and none touches
+anything.
+
 **Where to click.** The default bedroom, either tab. Select the wardrobe and press
 **Ctrl/⌘ D** (or right-click → Duplicate). Then the bed, a print on the wall, a lamp on the
 desk or nightstand, and a piece standing against a side wall. Then shift-select the bed and
-both nightstands and duplicate the three together. Last, fill a corner so nothing fits beside a
-piece and duplicate it there.
+both nightstands and duplicate the three together. Then a dining chair at its table, the sofa in
+the T-Shape (every spot beside it is taken), and a bedside lamp in the U-Shape. Last, fill a
+small room so nothing fits anywhere and duplicate a piece there.
 
 **What right looks like.** The copy sits right beside the original with a small gap, turned the
 same way. A print's copy hangs on the same wall at the same height. A lamp's copy stands on the
 same desk when there is room on it. A piece against a wall puts its copy on the open side. The
-bed and nightstands arrive as a set, in the same formation. With no space, the copy is still
-made, outlined red, and the message reads *"No clear space beside it, so the copy overlaps
-something."* *Wrong* looks like a copy you cannot see because it is inside the original, a
-lamp's copy in mid-air, or a set scattered across the room.
+bed and nightstands arrive as a set, in the same formation. The chair's copy stands clear of the
+table, not under it. The T's sofa copy goes to the nearest open floor, even if that is a little
+way off. The U's lamp copy stands on the floor beside the nightstand, which has room for one
+lamp. Only when nothing in the whole room is clear does the copy overlap something, and then it
+is outlined red and the message reads *"No clear space beside it, so the copy overlaps
+something."* *Wrong* looks like a copy you cannot see because it is inside the original, a copy
+overlapping another piece while there is open floor, a lamp's copy in mid-air or on the bed, or
+a set scattered across the room.
 
 **Where it rides.** `lib/duplicate-place.ts`, `components/studio/KeyboardShortcuts.tsx`.
 
@@ -500,31 +522,6 @@ solver produces no floor collisions at all; what goes through the bed is the LAM
 the nightstand, carried nowhere while the nightstand moved. That fix does want eyes, and it
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
-
-### A piece in one arm of a U stays in that arm — this branch, NOT LOOKED AT
-
-Found while testing the swap follow-up, 2026-10-01. Keeping a piece inside the walls measured
-how far it was through every wall, including walls in the OTHER arm of a U. Seen from behind,
-across the notch, those read as metres of shortfall, so a 600 mm box standing in the west arm
-was pushed 3.6 m into the east arm. The room's mirror symmetry hid it: a box in either arm
-came back unmoved when it was centred, and only a piece near an arm's outer wall jumped. Now a
-piece only counts walls it can see from where it stands (`lib/layout-settle.ts`). The U you
-pick at the start (6 × 5) furnishes exactly as before.
-
-**Where to click.** Pick the U-Shape. In the 2D plan, drag a chair, a nightstand and a small
-table into each arm in turn, near the arm's outer wall. Then add the same pieces from the
-Library while the view is on an arm, and press **Suggest**. Then resize the room to 6 × 4 and
-look at where the bedside pieces go.
-
-**What right looks like.** Every piece stays in the arm you put it in, inside its walls. *Wrong*
-looks like a piece jumping across the notch into the other arm.
-
-**One known thing, not a regression.** At 6 × 4 the starter's nightstand and lamp now stand
-beside the bed in a pocket the bed closes off, and Room check says *"You can't walk to
-everything"*. Before, they stood 3.5 m away from the bed. Both are the starter room's choice,
-and it is in `docs/what-is-still-open.md` § 50.
-
-**Where it rides.** `lib/layout-settle.ts`.
 
 ### Every idea is now an arranged room, not a tidied scatter — `0edf04e` on `main` (PR #184, § H.6.0), needs eyes on every preset
 

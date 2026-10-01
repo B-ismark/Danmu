@@ -10332,11 +10332,20 @@ It wants pieces off typical in both directions, and a look at what it does to a 
 user already sees as *up to about N wide*, since the number built would no longer be the number
 printed.
 
-## § 50 · Three limits the swap and duplicate follow-up left in place — MEASURED 2026-10-01, NOT FIXED
+## § 50 · Four limits the swap and duplicate follow-up left in place — MEASURED 2026-10-01, NOT FIXED
 
 All three are in the commit that fixed the U-arm containment (`wallDeficits` counting only
-walls the piece can see, `lib/layout-settle.ts`). None is a regression; each is written down
-so it does not get re-found as one.
+walls the piece can see, `lib/layout-settle.ts`). Each is written down so it does not get
+re-found as a regression. **This paragraph first said "none is a regression", and review
+disproved it:** counting only the walls a piece can see let a TURNED piece in a U's inner
+corner bounce between that corner's two walls, and the walk toward the middle crossed the
+notch — a 2137 × 1558 mm piece at 45° ended 0.3 m through the plaster with a seat 0.35 m
+away. `containedXZ` now tries rings around the asked spot, out to a metre, before giving up.
+Over 42 432 drops (four sizes, eight turns, every 250 mm of the 6 × 6 L, T and U), pieces left
+outside with a seat within a metre went **467 → 58**; the 1 618 left outside beyond that have
+their nearest seat further than a metre off — the arm is too narrow for them at that turn —
+and carrying a piece across the room to fit is a different place, not a correction. The 410
+drops that start inside and still move are the 20 mm wall gap, identical before and after.
 
 **1. In a U, a piece too wide for its arm ends ~27 mm through the plaster.** A 2000 × 900 table
 swapped in for a print on an arm's end wall, turned to run across the arm: no spot in the
@@ -10359,3 +10368,10 @@ wrong size or the wrong wall for that arm.
 bed stands on the floor inside the bed's footprint (it no longer stands on the bed — that half
 is fixed). The add path behaves the same, so the swap matches it; the fix is one for both, and
 `lib/duplicate-place.ts`'s candidate search is the shape it would take.
+
+**4. An ottoman over a bed still goes on the bed.** The swap and the add path now ask
+`seeksSurface` (`lib/physics.ts`) rather than the category, so a floor lamp or a 1.6 m plant
+put where a print hung above the bed stands on the floor. The ottoman was left in on purpose:
+one put over a top it does not fit under goes on it, § H.6.4's decision, which
+`tests/seat-support.test.ts` holds for a coffee table. A bed is a top by that rule. Whether
+a bed should be a top for anything is the open question, and it is a physics one.
