@@ -1,6 +1,6 @@
 'use client';
 
-import { useContext, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useContext, useEffect, useId, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   MARK_FILL_OPACITY,
@@ -114,9 +114,17 @@ export function EditableText({
   className,
   style,
   inputStyle,
+  suggest,
+  onPick,
 }: {
   value: string;
   onCommit: (next: string) => void;
+  /** Suggestions for what is being typed, recomputed per keystroke. Shown in a list
+   *  under the field, in the flow (never floating, so a clipping row cannot eat it).
+   *  Picking one calls `onPick` INSTEAD of `onCommit`: the suggestion is the answer,
+   *  and the half-typed word is not also committed over it. */
+  suggest?: (draft: string) => { key: string; label: string; hint?: string }[];
+  onPick?: (key: string) => void;
   /** called when a blank/whitespace-only name is submitted and the old value is
    *  kept, so the caller can say so instead of appearing to ignore the user */
   onReject?: () => void;
@@ -134,6 +142,8 @@ export function EditableText({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+  const [active, setActive] = useState(-1);
+  const listId = useId();
   const btnRef = useRef<HTMLButtonElement>(null);
   const restore = useRef(false);
 
@@ -148,6 +158,7 @@ export function EditableText({
 
   function start() {
     setDraft(value);
+    setActive(-1);
     restore.current = true;
     setEditing(true);
   }
@@ -161,8 +172,15 @@ export function EditableText({
     setEditing(false);
   }
 
+  const options = editing && suggest && onPick && draft.trim() && draft.trim() !== value ? suggest(draft) : [];
+  function pick(key: string) {
+    restore.current = true;
+    setEditing(false);
+    onPick?.(key);
+  }
+
   if (editing) {
-    return (
+    const field = (
       <input
         // `editable__input`: the rename stays the size of the name it replaces, so the
         // touch rule for the form pages' fields leaves it out (globals.css).
@@ -171,15 +189,61 @@ export function EditableText({
         autoFocus
         maxLength={maxLength}
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setActive(-1);
+        }}
         onBlur={commit}
+        role={options.length > 0 ? 'combobox' : undefined}
+        aria-expanded={options.length > 0 ? true : undefined}
+        aria-controls={options.length > 0 ? listId : undefined}
+        aria-activedescendant={active >= 0 && options[active] ? `${listId}-${active}` : undefined}
+        aria-autocomplete={suggest ? 'list' : undefined}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') commit();
+          if (options.length > 0 && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault();
+            // -1 is the typed text itself; the arrows walk the options and back to it.
+            const n = options.length;
+            setActive((a) => (e.key === 'ArrowDown' ? (a + 1 >= n ? -1 : a + 1) : a - 1 < -1 ? n - 1 : a - 1));
+          }
+          if (e.key === 'Enter') {
+            if (active >= 0 && options[active]) pick(options[active].key);
+            else commit();
+          }
           if (e.key === 'Escape') setEditing(false);
           e.stopPropagation();
         }}
         style={inputStyle}
       />
+    );
+    // A field with suggestions keeps ONE shape whether or not the list is showing:
+    // swapping a bare input for a wrapped one remounted the input on the first
+    // keystroke that matched, and focus left the field mid-word.
+    if (!suggest) return field;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        {field}
+        {options.length > 0 && <ul id={listId} role="listbox" aria-label="Models that match" className="rename-suggest">
+          {options.map((o, i) => (
+            <li
+              key={o.key}
+              id={`${listId}-${i}`}
+              role="option"
+              aria-selected={i === active}
+              className="rename-suggest__option"
+              // Down, not click: a click lands after the field's blur, which would
+              // commit the half-typed word first.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pick(o.key);
+              }}
+            >
+              <span>{o.label}</span>
+              {o.hint && <span className="rename-suggest__hint">{o.hint}</span>}
+            </li>
+          ))}
+        </ul>}
+      </div>
     );
   }
 

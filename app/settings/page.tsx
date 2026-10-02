@@ -535,7 +535,7 @@ function DownloadsSection() {
 
   async function download() {
     setBusy('download');
-    onDetectorDownload(setGot);
+    onDetectorDownload(setGot, st?.owed ?? 0);
     try {
       const ok = await downloadDetector(pack);
       toast(ok

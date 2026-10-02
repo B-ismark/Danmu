@@ -51,4 +51,29 @@ describe('detectorStatus', () => {
     const { detectorStatus } = await import('@/lib/local-detect');
     expect(await detectorStatus('full')).toMatchObject({ owed: 0, unreachable: true });
   });
+
+  it('counts a download against its whole size from the first byte, not file by file', async () => {
+    // The first file is 14 MB of a 65 MB pack: the count read "1 of 14 MB" until the
+    // second file started, then jumped to 65 (reported by the user, 2026-10-02).
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (url.startsWith('/models/')) return new Response(null, { status: 404 });
+      const file = url.slice(REMOTE.length);
+      if (init?.method === 'HEAD') return new Response(null, { status: 200, headers: { 'content-length': String(SIZE[file]) } });
+      const body = new ReadableStream({
+        start(c) {
+          c.enqueue(new Uint8Array(1000));
+          c.close();
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'content-length': String(SIZE[file]) } });
+    });
+    const { detectorStatus, downloadDetector, onDetectorDownload } = await import('@/lib/local-detect');
+    const { owed } = await detectorStatus('full');
+    const totals: number[] = [];
+    onDetectorDownload((p) => totals.push(p.total), owed);
+    await downloadDetector('full');
+    onDetectorDownload(null);
+    expect(totals.length).toBeGreaterThan(0);
+    expect(new Set(totals)).toEqual(new Set([owed]));
+  });
 });
