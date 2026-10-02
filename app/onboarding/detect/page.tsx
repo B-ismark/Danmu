@@ -412,6 +412,7 @@ export default function DetectPage() {
             let pack = useSettings.getState().detectorPack;
             const status = await detectorStatus(pack);
             let go = status.owed === 0;
+            let owed = status.owed;
             if (!go) {
               const [full, basic] = await Promise.all([detectorStatus('full'), detectorStatus('basic')]);
               const chosen = await new Promise<DetectorPack | null>((ask) =>
@@ -419,6 +420,7 @@ export default function DetectPage() {
               );
               setDownload(null);
               if (chosen) {
+                owed = (chosen === 'full' ? full : basic).owed;
                 pack = chosen;
                 useSettings.getState().setDetectorPack(chosen);
                 go = true;
@@ -427,7 +429,7 @@ export default function DetectPage() {
             if (cancelled || stopped.current) return;
             if (go) {
               setPath('local');
-              onDetectorDownload(setFetched);
+              onDetectorDownload(setFetched, owed);
               try {
                 dets = await detectLocalAcrossImages(entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })), pack);
                 if (dets && dets.length === 0) dets = null; // empty result → let Gemini try

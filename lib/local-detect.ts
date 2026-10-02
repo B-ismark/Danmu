@@ -288,10 +288,16 @@ async function fetchVerifiedBytes(base: string, file: string): Promise<ArrayBuff
 export type DownloadProgress = { loaded: number; total: number };
 let listener: ((p: DownloadProgress) => void) | null = null;
 const progress = new Map<string, DownloadProgress>();
+/** The whole download's size, told up front by the caller (`DetectorStatus.owed`). The
+ *  files arrive one after another, so a total summed from the files seen so far read
+ *  "1 of 14 MB" through the whole first file of a 65 MB download, then jumped. */
+let expected = 0;
 
-/** Hear how the detector's download is going; null to stop. */
-export function onDetectorDownload(fn: ((p: DownloadProgress) => void) | null): void {
+/** Hear how the detector's download is going; null to stop. `total` is the bytes the
+ *  whole download will be, so the count reads against it from the first byte. */
+export function onDetectorDownload(fn: ((p: DownloadProgress) => void) | null, total = 0): void {
   listener = fn;
+  expected = fn ? total : 0;
   progress.clear();
 }
 
@@ -303,7 +309,7 @@ function report(): void {
     loaded += p.loaded;
     total += p.total;
   }
-  listener({ loaded, total });
+  listener({ loaded, total: Math.max(total, expected) });
 }
 
 async function readWithProgress(res: Response, file: string): Promise<ArrayBuffer> {
