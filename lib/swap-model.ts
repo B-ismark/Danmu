@@ -15,7 +15,7 @@ import { containedXZ } from './layout-settle';
 import { placeArrival } from './duplicate-place';
 import { ridersOf } from './rider-height';
 import { isRoundPart, isWallMountedPart, type LibraryItem, type ScenePart } from './scene-spec';
-import { edgeProjection, polygonWinding } from './geometry';
+import { edgeProjection, footFromPart, outsideDeficit, polygonWinding } from './geometry';
 import { interiorPoint, polygonCentroid, type Footprint } from './footprint';
 
 /** Signed angle from `b` to `a`, in (−π, π]. */
@@ -38,16 +38,26 @@ function ownWall(footprint: Footprint, part: ScenePart, x: number, z: number): n
   return best?.index ?? null;
 }
 
+/** What a swap did. `refused` is a piece that cannot stand inside the room at this
+ *  spot at either turn: it is not swapped, and the caller says so, because rule 2 is
+ *  "say so, never silently resize it to fit" and a piece left through the plaster is
+ *  the silent version of that. */
+export type SwapResult = { ok: true; turned: boolean } | { ok: false; refused: 'does-not-fit' } | { ok: false; refused: 'gone' };
+
+/** How far through the walls a floor piece may end and still count as inside: the
+ *  float slack of containment, never a visible amount. */
+const INSIDE_EPS_M = 1e-6;
+
 /** Replace piece `id`'s model with `item`, re-grounded for the new size and mount.
  *  `dimOverride` carries a size the picker's search words named — already clamped
  *  by `sizeFromQuery`, so it is the same number as `item.dimMM` by the time it gets
  *  here; it stays a parameter so a caller with a size in hand can say so rather than
  *  mutate the item on the way in. Stale transform overrides are dropped (an old
  *  scale would distort the new base size). */
-export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [number, number, number]) {
+export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [number, number, number]): SwapResult {
   const scene = currentRoomScene();
   const part = scene.find((p) => p.id === id);
-  if (!part) return;
+  if (!part) return { ok: false, refused: 'gone' };
   const { room, updatePart } = useScene.getState();
   const s = useStudio.getState();
   // The rotation the swap LANDS on: `resetTransforms` below discards the overridden
@@ -59,6 +69,7 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
   let rot = baseRot;
   const wallMounted = isWallMountedPart(item.category, item.shape);
   let ny = y;
+  let turned = false;
   let support: { id: string; y: number } | null = null;
   if (wallMounted) {
     // `heightForNewCeiling` with the ceiling held still, NOT a hand-written clamp:
@@ -107,14 +118,31 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
         z = snapped.z;
         rot = snapped.rot ?? baseRot;
       }
-      [x, z] = containedXZ(
-        { rot, dimMM, circle: isRoundPart(item.shape), shape: item.shape },
-        x,
-        z,
-        fp,
-        interiorPoint(fp) ?? polygonCentroid(fp),
-        polygonWinding(fp),
-      );
+      const contain = (r: number): [number, number] =>
+        containedXZ(
+          { rot: r, dimMM, circle: isRoundPart(item.shape), shape: item.shape },
+          x,
+          z,
+          fp,
+          interiorPoint(fp) ?? polygonCentroid(fp),
+          polygonWinding(fp),
+        );
+      const through = (at: [number, number], r: number) =>
+        outsideDeficit(footFromPart([at[0], 0, at[1]], r, dimMM, isRoundPart(item.shape), item.shape), fp);
+      let at = contain(rot);
+      // Containment's best can still be through the plaster: a 2 m table swapped in on
+      // the end wall of a U's 1.68 m arm has no spot that holds it at that turn, and it
+      // ended 27 mm through the wall (§ 50 item 1). A quarter turn is the one answer a
+      // person would try; if that does not fit either, the swap is refused, not forced.
+      if (through(at, rot) > INSIDE_EPS_M) {
+        const quarter = rot + Math.PI / 2;
+        const atQ = contain(quarter);
+        if (through(atQ, quarter) > INSIDE_EPS_M) return { ok: false, refused: 'does-not-fit' };
+        at = atQ;
+        rot = quarter;
+        turned = true;
+      }
+      [x, z] = at;
     }
     const riders = ridersOf(id, scene, useScene.getState().parts, s.parentIds);
     const world = scene.filter((p) => !riders.has(p.id));
@@ -168,4 +196,5 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
   // did not stop it resting on whatever it landed on.
   if (!wallMounted && support && support.y > 0.3) s.setParent(id, support.id);
   else s.clearParent(id);
+  return { ok: true, turned };
 }

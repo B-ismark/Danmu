@@ -8,6 +8,7 @@ import { LibraryPicker } from './LibraryPicker';
 import { useStudio } from '@/lib/store';
 import { useRoomPart } from '@/lib/room-scene';
 import { swapPartModel } from '@/lib/swap-model';
+import { toast } from '@/components/ui/StorageToast';
 
 // The ONE way to change which model a piece uses. It used to be two buttons
 // side by side — "Swap model" (browse the catalog) and "AI refine" (describe it)
@@ -97,7 +98,14 @@ export function SwapModelHost() {
       part={part}
       onClose={close}
       onSwap={(item, dimMM) => {
-        swapPartModel(id, item, dimMM);
+        const result = swapPartModel(id, item, dimMM);
+        // Said, either way the room changed shape under the swap: a refusal leaves the
+        // old piece where it was, and a turn is a change nobody asked for by name.
+        if (!result.ok && result.refused === 'does-not-fit') {
+          toast({ title: `${item.label} doesn't fit here`, message: 'It would go through a wall at either turn, so the piece was kept as it was.' });
+        } else if (result.ok && result.turned) {
+          toast({ title: `${item.label} turned to fit`, message: 'It only fits here at a quarter turn.' });
+        }
         close();
       }}
     />

@@ -10540,7 +10540,7 @@ their nearest seat further than a metre off — the arm is too narrow for them a
 and carrying a piece across the room to fit is a different place, not a correction. The 410
 drops that start inside and still move are the 20 mm wall gap, identical before and after.
 
-**1. In a U, a piece too wide for its arm ends ~27 mm through the plaster.** A 2000 × 900 table
+**1. FIXED 2026-10-02 — turn to fit, else refuse.** `swapPartModel` checks the contained spot with `outsideDeficit`; through the plaster, it tries a quarter turn, and if that does not fit either it returns `refused: 'does-not-fit'`, changes nothing, and the swap screen says so. A turn is said too. Was: **In a U, a piece too wide for its arm ends ~27 mm through the plaster.** A 2000 × 900 table
 swapped in for a print on an arm's end wall, turned to run across the arm: no spot in the
 1.68 m arm holds it, so `containedXZ` walks it toward `interiorPoint` and it ends with
 `outsideDeficit` 0.027. With `polygonCentroid` as the walk's target (which lands in the
@@ -10557,7 +10557,7 @@ offered U (6 × 5, `app/onboarding/layout-pick/page.tsx`) is identical before an
 findings. This is a seeder question, not a containment one: at 6 × 4 the starter's bed is the
 wrong size or the wrong wall for that arm.
 
-**3. Change the model does no collision avoidance.** A nightstand swapped in for a print over a
+**3. ALREADY FIXED, re-checked 2026-10-02** — `82bde38` (2026-10-01) gave both the swap and the add path `placeArrival`, Duplicate's search for the nearest clear floor. Was: **Change the model does no collision avoidance.** A nightstand swapped in for a print over a
 bed stands on the floor inside the bed's footprint (it no longer stands on the bed — that half
 is fixed). The add path behaves the same, so the swap matches it; the fix is one for both, and
 `lib/duplicate-place.ts`'s candidate search is the shape it would take.

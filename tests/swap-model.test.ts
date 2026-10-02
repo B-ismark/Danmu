@@ -406,10 +406,27 @@ describe('changing the model', () => {
     useScene.setState({ room: { width: 6, depth: 6, height: 2.5, layoutId: 'u', footprint: fp, wallColors: {} }, parts: [print], ready: true });
     useStudio.setState({ positions: {}, rotations: { p: Math.PI / 2 }, dims: {}, parentIds: {} });
     const table: LibraryItem = { label: 'Long table', group: 'Tables', category: 'table', shape: 'coffee-table', dimMM: [2000, 900, 750] };
-    swapPartModel('p', table);
+    // It no longer ends 27 mm through the plaster: at a quarter turn the table runs
+    // along the arm, fits, and the swap says it turned (§ 50 item 1).
+    expect(swapPartModel('p', table)).toEqual({ ok: true, turned: true });
     const at = useStudio.getState().positions.p!;
-    expect(at[2]).toBeGreaterThan(0);
-    expect(outsideDeficit(footFromPart(at, 0, table.dimMM), fp)).toBeLessThan(0.03);
+    const rot = useStudio.getState().rotations.p!;
+    expect(Math.abs(Math.sin(rot))).toBeCloseTo(1, 9);
+    expect(outsideDeficit(footFromPart(at, rot, table.dimMM), fp)).toBeLessThan(1e-6);
+  });
+
+  it('refuses a piece that fits at neither turn, and leaves the old one as it was', () => {
+    const fp = footprintForLayout('u', 6, 6);
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [-3 + 0.035, 1.4, -2.5], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    useScene.setState({ room: { width: 6, depth: 6, height: 2.5, layoutId: 'u', footprint: fp, wallColors: {} }, parts: [print], ready: true });
+    useStudio.setState({ positions: {}, rotations: { p: Math.PI / 2 }, dims: {}, parentIds: {} });
+    // 2 × 2 m: no turn of a square changes what it needs, and the arm is 1.68 m.
+    const huge: LibraryItem = { label: 'Square table', group: 'Tables', category: 'table', shape: 'coffee-table', dimMM: [2000, 2000, 750] };
+    const before = { parts: useScene.getState().parts, positions: useStudio.getState().positions, rotations: useStudio.getState().rotations };
+    expect(swapPartModel('p', huge)).toEqual({ ok: false, refused: 'does-not-fit' });
+    expect(useScene.getState().parts).toBe(before.parts);
+    expect(useStudio.getState().positions).toBe(before.positions);
+    expect(useStudio.getState().rotations).toBe(before.rotations);
   });
 
   it('a room drawn the other way round contains the same way', () => {
