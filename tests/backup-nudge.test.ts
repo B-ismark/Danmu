@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   afterFileSaved,
   afterSave,
+  keepOnly,
+  pruneNudges,
   BACKUP_NUDGE_AFTER_SAVES,
   noteFileSaved,
   noteRoomSaved,
@@ -48,6 +50,14 @@ describe('afterFileSaved', () => {
   });
 });
 
+describe('keepOnly', () => {
+  it('drops the rooms that are gone and keeps the rest as they were', () => {
+    const state = { a: { saves: 3 }, b: { saves: 20, done: true as const }, c: { saves: 1 } };
+    expect(keepOnly(state, new Set(['b', 'c']))).toEqual({ b: { saves: 20, done: true }, c: { saves: 1 } });
+    expect(keepOnly(state, new Set())).toEqual({});
+  });
+});
+
 describe('the localStorage half', () => {
   afterEach(() => {
     localStorage.clear();
@@ -63,6 +73,14 @@ describe('the localStorage half', () => {
   it('a saved file stops the offer', () => {
     noteFileSaved('r');
     expect(Array.from({ length: 25 }, () => noteRoomSaved('r')).some(Boolean)).toBe(false);
+  });
+
+  it('prunes a deleted room, so its count starts again', () => {
+    for (let i = 0; i < 10; i++) noteRoomSaved('gone');
+    noteRoomSaved('kept');
+    pruneNudges(new Set(['kept']));
+    const stored = JSON.parse(localStorage.getItem('danmu:backup-nudge')!);
+    expect(Object.keys(stored)).toEqual(['kept']);
   });
 
   it('reads a corrupt record as empty rather than throwing', () => {

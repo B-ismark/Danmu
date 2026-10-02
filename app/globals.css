@@ -241,6 +241,12 @@
   --fs-title: 22px;      /* dialog and section titles */
   --fs-display: 30px;    /* page titles */
   --fs-hero: clamp(34px, 5vw, 54px);  /* the one first-run headline per screen */
+  /* The text inside a field. `--fs-body` for a mouse; raised to `--fs-lead` (16px)
+     under a coarse pointer, because iOS zooms the page on focus into anything
+     smaller. A token rather than a rule so `fieldMinWidth` and every inline field
+     style size from the same number, and a field row reflows rather than clipping
+     its digits when the text grows. */
+  --field-fs: var(--fs-body);
 
   /* Motion. Three speeds and two curves — the app had five durations with no
      rule about which. `quick` is feedback under the pointer (hover, press);
@@ -685,7 +691,7 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 
 .ds-input {
   font-family: var(--font-sans);
-  font-size: var(--fs-body);
+  font-size: var(--field-fs);
   height: 42px;
   padding: 0 14px;
   border-radius: var(--r-2);
@@ -1069,7 +1075,7 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 
 .field {
   width: 100%; height: 34px; padding: 0 12px;
-  font-family: var(--font-sans); font-size: var(--fs-body);
+  font-family: var(--font-sans); font-size: var(--field-fs);
   background: var(--paper); color: var(--ink);
   border: 1px solid var(--edge); border-radius: var(--r-2);
   outline: none; transition: border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
@@ -1856,7 +1862,8 @@ textarea.field { border-radius: var(--r-2); }
   /* iOS Safari zooms the page on focus into any field whose text is under 16px, and
      `--fs-lead` is the scale's 16. Done here, never with `maximum-scale=1`, which
      would take pinch-zoom from everyone who needs it (§ MOB M1). */
-  .field, .ds-input, input, textarea, select { font-size: var(--fs-lead); }
+  :root { --field-fs: var(--fs-lead); }
+  :where(input, textarea, select) { font-size: var(--field-fs); }
   /* No double-tap-zoom wait on a press: the phone toolbar had it alone (§ MOB M4). */
   /* `:where` keeps this at zero specificity, so a drag handle's own `touch-action: none`
      (a sash, the sheet's head, the sun handle) always wins over it. */

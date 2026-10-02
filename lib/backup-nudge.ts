@@ -90,6 +90,20 @@ export function noteFileSaved(roomId: string): void {
   write(afterFileSaved(read(), roomId));
 }
 
+/** The state with only the rooms in `rooms` left: a deleted room's entry would
+ *  otherwise outlive it. A room in the trash is dropped too, and restoring it costs
+ *  at most one repeat offer. */
+export function keepOnly(state: NudgeState, rooms: ReadonlySet<string>): NudgeState {
+  return Object.fromEntries(Object.entries(state).filter(([id]) => rooms.has(id)));
+}
+
+/** Drop the entries of rooms that no longer exist. Writes only when one went. */
+export function pruneNudges(rooms: ReadonlySet<string>): void {
+  const state = read();
+  const kept = keepOnly(state, rooms);
+  if (Object.keys(kept).length !== Object.keys(state).length) write(kept);
+}
+
 /** Ask the browser to keep this site's storage. Call from a press only. Answers
  *  whether storage is persistent now, or null where the browser cannot say. Never
  *  throws: a refusal changes nothing the person can see. */
