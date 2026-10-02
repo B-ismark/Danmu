@@ -775,10 +775,10 @@ export function deskForm(dimMM: readonly number[], lShape: boolean): HardPart[] 
   const dw = Math.min(0.5, (xb - xa) * 0.4);
   const zf = -d / 2 + armD - 0.02;
   const front = 0.018;
-  const depth = Math.min(0.38, armD * 0.55, armD - 0.2);
+  const depth = Math.min(0.38, armD * 0.55);
   const yPull = (yHang + yTop - 0.004) / 2;
   // The tray: a shallow channel across the back, its back lip screwed to the top.
-  const tx = Math.min(w * 0.3, legs[0].x0 - 0.02);
+  const tx = w * 0.3;
   const tz0 = -d / 2 + 0.03;
   const tz1 = -d / 2 + 0.13;
   const lip = 0.004;

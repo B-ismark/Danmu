@@ -1391,6 +1391,7 @@ describe('the desk', () => {
         if (lShape) {
           same([e('top-return').lo[0], e('top-return').hi[0], e('top-return').lo[2], e('top-return').hi[2]], [w / 2 - armW, w / 2, -d / 2 + armD, d / 2], at);
           expect(e('top-return').lo[1]).toBeCloseTo(e('top').lo[1], 12);
+          expect(e('top-return').hi[1]).toBeCloseTo(h, 12);
         }
         const yTop = e('top').lo[1];
         const [panel, ...legs] = surfacePostsLocal(lShape ? 'desk-l' : 'desk-standard', false, w, d);
