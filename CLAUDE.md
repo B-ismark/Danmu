@@ -1,7 +1,9 @@
 # CLAUDE.md
 
-Guidance for Claude Code / AI agents working in this repo. Read this first, then
-[`Design.md`](Design.md) for the full product + architecture reference.
+Guidance for Claude Code / AI agents working in this repo. **The one-page summary is
+[`docs/START-HERE.md`](docs/START-HERE.md)** — the ten rules without their history;
+keep it in step with this file. Read this next, then [`Design.md`](Design.md) for the
+full product + architecture reference.
 
 ## What this is
 

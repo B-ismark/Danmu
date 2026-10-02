@@ -8,6 +8,7 @@ piece. Runs entirely in the browser: no backend, no account. Optional AI is used
 Installable, and it **works offline** after the first visit — the studio does its
 geometry on your device, so there is nothing for a network to be needed for.
 
+🧭 **New here? Read [docs/START-HERE.md](docs/START-HERE.md) first** — one page, the ten rules.
 📖 **Full design & architecture → [Design.md](Design.md)** (product principles,
 every current feature, architecture, geometry engine, and roadmap).
 🤖 **Agents:** see [CLAUDE.md](CLAUDE.md) for working rules.
