@@ -37,7 +37,7 @@
 // where two parts' fronts face the same way, they are at different depths or meet only
 // along an edge. `tests/coplanar-faces.test.tsx` sweeps the result at three sizes.
 
-import { consoleSlabs, doorHandleY, drawerSlide, stoolSeat } from './scene-spec';
+import { consoleSlabs, doorHandleY, drawerSlide, radiatorFins, stoolSeat } from './scene-spec';
 
 type V3 = [number, number, number];
 
@@ -505,6 +505,113 @@ export function stoolForm(dimMM: readonly number[]): HardPart[] {
     out.push({ kind: 'strut', key: `rung-${i}`, tone: 'body', r: rung, a: at(a, kr), b: at(b, kr) });
   });
   return out;
+}
+
+/** A pedestal side table: a square top with its underside eased, a collar under it, a
+ *  turned column with a ring near each end, and a stepped round foot. It was a slab on a
+ *  plain cylinder on a disc.
+ *
+ *  NON-PARAMETRIC and ROUND: drawn on a square of the width, which the renderer stretches
+ *  to the declared depth, so a turned column stays a turned column on a deep table —
+ *  drawn on the width and depth separately, a 250 × 800 table's foot would have been a
+ *  circle of the width reaching 180 mm out of each side. So it reads the width and the
+ *  height alone, every length a share of one of them. */
+export function sideTableForm(dimMM: readonly number[]): HardPart[] {
+  const w = dimMM[0] / 1000;
+  const h = dimMM[2] / 1000;
+  const col = (key: string, r: number, rBottom: number, y0: number, y1: number): HardPart =>
+    ({ kind: 'post', key, tone: 'trim', r, rBottom, h: y1 - y0, pos: [0, (y0 + y1) / 2, 0] });
+  return [
+    slab('top', 'body', -w / 2, w / 2, h * 0.945, h, -w / 2, w / 2),
+    // The ease under the top: a step in, so the top's edge reads thinner than it is.
+    slab('top-ease', 'body', -w * 0.46, w * 0.46, h * 0.93, h * 0.945, -w * 0.46, w * 0.46),
+    slab('collar', 'trim', -w * 0.1, w * 0.1, h * 0.87, h * 0.93, -w * 0.1, w * 0.1),
+    col('column', w * 0.045, w * 0.07, h * 0.085, h * 0.87),
+    col('ring-top', w * 0.062, w * 0.062, h * 0.813, h * 0.827),
+    col('ring-foot', w * 0.085, w * 0.085, h * 0.113, h * 0.127),
+    col('foot-step', w * 0.24, w * 0.27, h * 0.04, h * 0.085),
+    col('foot', w * 0.36, w * 0.38, 0, h * 0.04),
+  ];
+}
+
+/** A column radiator's pieces: `columns`, the enamelled tubes, their rounded ends and the
+ *  joints between them, all in the radiator's own colour — hundreds of parts on a 2 m
+ *  one, which the renderer draws as two instanced sets — and `fittings`, the feet
+ *  and the valve, drawn one by one. */
+export type RadiatorForm = { columns: HardPart[]; fittings: HardPart[] };
+
+/** A radiator's fixed joinery, metres: the feet it stands on, the valve's share of the
+ *  width at its right-hand end, and the tube pitch across the depth. */
+export const RADIATOR = { foot: 0.04, valve: 0.05, row: 0.045 } as const;
+
+/** A column radiator: `radiatorFins(width)` sections, each one to four round tubes deep,
+ *  every tube capped round at both ends and joined across the depth at the top and the
+ *  foot, the sections joined along the width by a header through those joints, standing
+ *  on two feet, with a thermostatic valve and its pipe at the right-hand end. It was a row
+ *  of flat fins between two bars a twentieth DEEPER than the radiator — the one detail in
+ *  it that stood outside its own box.
+ *
+ *  PARAMETRIC: drawn at the stored size, so the feet and the valve are real fittings and
+ *  the section count follows the width (`radiatorFins`). Every part is inside `dimMM`,
+ *  the valve included: it takes the last `RADIATOR.valve` of the width, at most a tenth
+ *  of it, and the sections share the rest. Floor piece: `y` runs 0 → h. */
+export function radiatorForm(dimMM: readonly number[]): RadiatorForm {
+  const [w, d, h] = m(dimMM);
+  const n = radiatorFins(dimMM[0]);
+  const vW = Math.min(RADIATOR.valve, w * 0.1);
+  const pitch = (w - vW) / n;
+  const rows = Math.max(1, Math.min(4, Math.round(d / RADIATOR.row)));
+  const rowPitch = d / rows;
+  const rt = Math.min(pitch * 0.38, rowPitch * 0.42, 0.014);
+  const xs = Array.from({ length: n }, (_, i) => -w / 2 + (i + 0.5) * pitch);
+  const zs = Array.from({ length: rows }, (_, j) => -d / 2 + (j + 0.5) * rowPitch);
+  const yFoot = RADIATOR.foot;
+  // A tube runs between the centres of its two round ends, which reach the feet and `h`.
+  const y0 = yFoot + rt;
+  const y1 = h - rt;
+  const ball = (key: string, x: number, y: number, z: number): HardPart =>
+    ({ kind: 'ball', key, tone: 'body', radii: [rt, rt, rt], pos: [x, y, z] });
+  const columns: HardPart[] = [];
+  xs.forEach((x, i) => {
+    zs.forEach((z, j) => {
+      columns.push(
+        { kind: 'post', key: `tube-${i}-${j}`, tone: 'body', r: rt, rBottom: rt, h: y1 - y0, pos: [x, (y0 + y1) / 2, z] },
+        ball(`cap-${i}-${j}`, x, y1, z),
+        ball(`base-${i}-${j}`, x, y0, z),
+      );
+    });
+    // A section's tubes are one casting: joined across the depth where they turn.
+    if (rows > 1) {
+      for (const [end, y] of [['top', y1], ['foot', y0]] as const) {
+        columns.push({ kind: 'strut', key: `join-${end}-${i}`, tone: 'body', r: rt, a: [x, y, zs[0]], b: [x, y, zs[rows - 1]] });
+      }
+    }
+  });
+  // …and the sections to each other, through the joints, at the top and the foot.
+  const rh = rt * 0.7;
+  for (const [end, y] of [['top', y1], ['foot', y0]] as const) {
+    columns.push({ kind: 'strut', key: `header-${end}`, tone: 'body', r: rh, a: [xs[0], y, 0], b: [xs[n - 1], y, 0] });
+  }
+  // Two feet under the second section from each end, the full depth so it stands square.
+  const fittings: HardPart[] = [];
+  const footW = Math.min(0.03, pitch);
+  for (const [side, x] of [['l', xs[Math.min(1, n - 1)]], ['r', xs[Math.max(0, n - 2)]]] as const) {
+    fittings.push(slab(`foot-${side}`, 'body', x - footW / 2, x + footW / 2, 0, yFoot + rt, -d / 2, d / 2));
+  }
+  // The valve, in the strip at the right-hand end: a chrome pipe up out of the floor, the
+  // valve body on it fed from the last section's foot, and the white thermostatic head.
+  const xv = w / 2 - vW / 2;
+  const rp = Math.min(0.0075, vW * 0.2, d * 0.2);
+  const rHead = Math.min(0.02, vW * 0.4, d * 0.45);
+  const headH = Math.min(0.06, (h - y0) * 0.5);
+  fittings.push(
+    { kind: 'post', key: 'pipe', tone: 'steel', r: rp, rBottom: rp, h: y0, pos: [xv, y0 / 2, 0] },
+    { kind: 'strut', key: 'tail', tone: 'steel', r: rp, a: [xs[n - 1], y0, 0], b: [xv, y0, 0] },
+    { kind: 'post', key: 'valve', tone: 'steel', r: rp * 1.5, rBottom: rp * 1.5, h: rp * 3, pos: [xv, y0, 0] },
+    { kind: 'post', key: 'head', tone: 'body', r: rHead * 0.85, rBottom: rHead, h: headH, pos: [xv, y0 + rp * 1.5 + headH / 2, 0] },
+    { kind: 'post', key: 'head-grip', tone: 'trim', r: rHead * 0.93, rBottom: rHead * 0.96, h: headH * 0.25, pos: [xv, y0 + rp * 1.5 + headH * 0.55, 0] },
+  );
+  return { columns, fittings };
 }
 
 /** Every part's axis-aligned extent, as `[lo, hi]` on x, y and z. A disc lies on z and a

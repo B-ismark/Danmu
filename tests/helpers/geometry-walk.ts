@@ -250,9 +250,9 @@ export function walk(node: ReactNode): WalkReport {
 
     if (name === 'BoxInstances') {
       // MISSING and EMPTY are different answers and only one of them is legitimate.
-      // `?? []` alone made them one: rename the `items` prop and all three callers
-      // (`BookshelfGeo`'s spines, `ShoeRackGeo`'s slats, `RadiatorGeo`'s fins)
-      // contribute no primitives at all, every area in this
+      // `?? []` alone made them one: rename the `items` prop and every caller
+      // (`BookshelfGeo`'s spines, `ShoeRackGeo`'s slats, `ClothesRackGeo`'s hangers)
+      // contributes no primitives at all, every area in this
       // instrument shrinks, and nothing anywhere says so. An absent prop is reported
       // like any other thing the walk could not handle; a present, empty array is a
       // renderer that legitimately drew none at this size.
@@ -265,6 +265,24 @@ export function walk(node: ReactNode): WalkReport {
         const child = xform(m, it.pos, it.rot);
         const [w, h, d] = it.size;
         push(rep.prims, name, boxCorners(w, h, d), child, spun);
+      }
+      return;
+    }
+
+    if (name === 'RoundInstances') {
+      // A unit cylinder or sphere of diameter 1 per item, scaled by `size` and turned by
+      // `rot`, as `useInstanceTransforms` composes it. An unknown `unit` is reported.
+      if (!Array.isArray(props.items)) {
+        bump(rep.unhandled, `${name}.items`);
+        return;
+      }
+      const unit = props.unit === 'tube' ? rings(0.5, 0.5, 1) : props.unit === 'ball' ? shell(0.5) : null;
+      if (!unit) {
+        bump(rep.unhandled, `${name}.unit`);
+        return;
+      }
+      for (const it of props.items as Array<{ pos: number[]; size: number[]; rot?: number[] }>) {
+        push(rep.prims, name, unit, xform(m, it.pos, it.rot, it.size), spun);
       }
       return;
     }
