@@ -97,6 +97,15 @@ export const DETAIL = {
    *  cloth on wood. The frame takes the chair's colour; the pad keeps this, as a real
    *  chair's upholstery does when the frame is stained. */
   upholstery: '#CBBCA2',
+  /** A mirror's silvered glass: a cool grey with a gentle gloss, not a chrome plate. */
+  mirror: '#CDD7DF',
+  /** A print's mat, the cream card between the frame and the picture. */
+  mat: '#F2EEE6',
+  /** A print's three colour fields, floated on the user's colour as its ground: the
+   *  brand's terracotta, an ochre, and a dusk blue. */
+  artWarm: '#E2613A',
+  artOchre: '#D4A24C',
+  artCool: '#5C8DC2',
 } as const;
 
 // ─── Decor accents ──────────────────────────────────────────────────────────

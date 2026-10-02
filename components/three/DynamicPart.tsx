@@ -5,7 +5,7 @@
 // double bed, etc).
 
 import { Color } from 'three';
-import { Box, BoxInstances, LeafInstances, SoftInstances, SoftMesh, StemInstances, type InstanceItem } from './Box';
+import { Box, BoxInstances, LeafInstances, RoundInstances, SoftInstances, SoftMesh, StemInstances, type InstanceItem } from './Box';
 import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
@@ -18,7 +18,6 @@ import {
   plantForm,
   isParametric,
   lightFor,
-  radiatorFins,
   shoeRow,
   SHOE_TIER_TILT,
   windowPanes,
@@ -32,7 +31,7 @@ import { roleOf, bedPillows } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
 import { floorLampForm, tableLampForm, type LampForm } from '@/lib/lamp-form';
-import { armchairForm, diningChairForm, officeChairForm } from '@/lib/chair-form';
+import { armchairForm, diningChairForm, officeChairForm, ottomanForm } from '@/lib/chair-form';
 import { DINING_LEG, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from '@/lib/foot-cells';
 import {
   bedForm,
@@ -53,11 +52,17 @@ import {
 } from '@/lib/soft-goods';
 import {
   acUnitForm,
+  airPurifierForm,
   chestFreezerForm,
   doorForm,
   microwaveForm,
+  mirrorForm,
   nightstandForm,
   nightstandSlide,
+  ovalMirrorForm,
+  paintingForm,
+  radiatorForm,
+  sideTableForm,
   soundbarForm,
   stoolForm,
   strutPose,
@@ -419,6 +424,11 @@ function toneMaterial(tone: HardTone, bodyC: string, look: HardLook): ToneMateri
     case 'screen': return { color: DETAIL.screen, roughness: 0.18, metalness: 0.2, emissive: DETAIL.screenGlow, emissiveIntensity: 0.35 };
     case 'ceramic': return { color: DETAIL.ceramicGlaze, surface: 'ceramic', roughness: 0.22 };
     case 'bulb': return { color: DETAIL.bulb, roughness: 0.3, emissive: DETAIL.bulbGlow, emissiveIntensity: 0.6 };
+    case 'mirror': return { color: DETAIL.mirror, roughness: 0.12, metalness: 0.05 };
+    case 'mat': return { color: DETAIL.mat, roughness: 0.95 };
+    case 'art-warm': return { color: DETAIL.artWarm, roughness: 0.85 };
+    case 'art-ochre': return { color: DETAIL.artOchre, roughness: 0.85 };
+    case 'art-cool': return { color: DETAIL.artCool, roughness: 0.85 };
   }
 }
 
@@ -938,7 +948,7 @@ function BedGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       <SoftMesh mesh={form.duvet} color={shade(mattress, -8)} surface={SURFACE.fabric} doubleSide />
       <SoftInstances mesh={CUSHION_MESH.box} items={[form.fold]} color={linen} surface={SURFACE.fabric} />
       <Box surface="wood" size={[w, h * 1.4, HEADBOARD_T]} position={[0, h * 0.7, -d / 2]} color={frame} roughness={0.7} />
-      {/* pillows propped against the headboard, a scatter cushion in front of each */}
+      {/* pillows lying against the headboard, a scatter cushion in front of each */}
       <SoftInstances mesh={CUSHION_MESH.pillow} items={form.pillows} color={linen} surface={SURFACE.fabric} />
       <SoftInstances mesh={CUSHION_MESH.scatter} items={form.scatter} color="#ffffff" colorOf={scatterTone} surface={SURFACE.fabric} />
       {[
@@ -1243,28 +1253,13 @@ function CoffeeTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
   );
 }
 
+/** Drawn at its own size by `sideTableForm`: a square top on a turned column and a
+ *  stepped round foot, authored on a square of the width and stretched to the depth. */
 function SideTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const top = body(part, locked);
-  const dark = shade(top, -28);
-  const r = Math.min(w, d) * 0.38;
   return (
-    <>
-      {/* tabletop */}
-      <Box surface="wood" size={[w, 0.035, d]} position={[0, h - 0.017, 0]} color={top} roughness={0.65} />
-      {/* tapered pedestal */}
-      <mesh position={[0, h / 2, 0]}>
-        <cylinderGeometry args={[0.038, 0.058, h - 0.03, 14]} />
-        <meshStandardMaterial color={dark} roughness={0.7} />
-      </mesh>
-      {/* disc base */}
-      <mesh position={[0, 0.022, 0]}>
-        <cylinderGeometry args={[r, r * 1.08, 0.045, 20]} />
-        <meshStandardMaterial color={dark} roughness={0.68} />
-      </mesh>
-    </>
+    <group scale={[1, 1, part.dimMM[1] / part.dimMM[0]]}>
+      <HardParts parts={sideTableForm(part.dimMM)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.65 }} />
+    </group>
   );
 }
 
@@ -1280,75 +1275,34 @@ function NightstandGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   );
 }
 
+/** Drawn at its own size by `ottomanForm`: turned legs in brass ferrules, an upholstered
+ *  base with a piped welt, and a buttoned box cushion — all but the legs in its fabric. */
 function OttomanGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
+  const f = ottomanForm(part.dimMM);
   const fabric = body(part, locked);
-  const dark = shade(fabric, -14);
-  const leg = shade(fabric, -35);
-  // The welt's top is the piece's height. It stopped at 0.9 h, so a tray set on a
-  // 420 mm ottoman stood 42 mm above the cushion: everything else reads `dimMM[2]` as
-  // the top (`verticalExtent`), and only the drawing disagreed.
   return (
     <>
-      {/* main upholstered body — raised on legs */}
-      <Box surface="fabric" size={[w, h * 0.87, d]} position={[0, h * 0.545, 0]} color={fabric} roughness={0.97} />
-      {/* piping welt around top edge */}
-      <Box surface="fabric" size={[w * 1.02, h * 0.04, d * 1.02]} position={[0, h * 0.98, 0]} color={dark} roughness={0.97} />
-      {/* four short turned legs */}
-      {[
-        [-w / 2 + 0.06, -d / 2 + 0.06],
-        [w / 2 - 0.06, -d / 2 + 0.06],
-        [-w / 2 + 0.06, d / 2 - 0.06],
-        [w / 2 - 0.06, d / 2 - 0.06],
-      ].map(([x, z], i) => (
-        <Box surface="wood" key={i} size={[0.05, h * 0.15, 0.05]} position={[x, h * 0.075, z]} color={leg} roughness={0.7} />
-      ))}
+      <HardParts parts={f.parts} bodyC={fabric} look={{ surface: 'fabric', roughness: 0.95 }} />
+      <SoftInstances mesh={CUSHION_MESH.box} items={[f.top]} color={fabric} surface={SURFACE.fabric} />
     </>
   );
 }
 
 // ─── Wall-hung ──────────────────────────────────────────────────────────
+/** Drawn by `mirrorForm` / `ovalMirrorForm`: a frame in the piece's own colour, a step
+ *  inside it, and the glass set behind or upon it. The oval is a circle of the width,
+ *  stretched here to the height. */
 function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  // The frame is the recolourable surface (the glass is not). It was a literal in
-  // both branches, so recolouring a mirror did nothing.
   const frame = tint(part);
+  const look: HardLook = { surface: 'wood' };
   if (oval) {
-    // Ellipse from a unit circle scaled to W × H. Frame is a slightly larger
-    // ellipse behind the reflective face.
     return (
-      <>
-        {/* A frame with a real depth (the piece's own `dimMM[1]`), glass on its face.
-            It was a paper-thin disc with the glass floating 25 mm in front of it. The
-            cylinder's axis is Y, turned to Z; `scale` is applied before the turn, so
-            its Y entry is the depth. */}
-        <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[w / 2 + 0.03, d, h / 2 + 0.03]}>
-          <cylinderGeometry args={[1, 1, 1, 56]} />
-          <meshStandardMaterial color={frame} {...SURFACE.wood} />
-        </mesh>
-        <mesh position={[0, 0, d / 2 + 0.001]} scale={[w / 2, h / 2, 1]}>
-          <circleGeometry args={[1, 56]} />
-          <meshStandardMaterial color="#cdd7df" metalness={0.5} roughness={0.24} />
-        </mesh>
-      </>
+      <group scale={[1, part.dimMM[2] / part.dimMM[0], 1]}>
+        <HardParts parts={ovalMirrorForm(part.dimMM)} bodyC={frame} look={look} />
+      </group>
     );
   }
-  return (
-    <>
-      {/* frame at the piece's declared depth (it was a flat 40 mm whatever the Inspector
-          said), glass 1 mm proud of its face rather than 5 mm in front of it */}
-      <Box surface="wood" size={[w + 0.03, h + 0.03, d]} position={[0, 0, 0]} color={frame} />
-      <mesh position={[0, 0, d / 2 + 0.001]}>
-        <planeGeometry args={[w, h]} />
-        {/* Soft reflective mirror — gentle gloss, not a chrome plate. */}
-        <meshStandardMaterial color="#cdd7df" metalness={0.5} roughness={0.24} />
-      </mesh>
-    </>
-  );
+  return <HardParts parts={mirrorForm(part.dimMM)} bodyC={frame} look={look} />;
 }
 
 // Window — frame + translucent glass + cross mullions. Wall-mounted (centre-
@@ -1436,27 +1390,10 @@ function LaptopGeo({ part }: { part: ScenePart }) {
   );
 }
 
+/** Drawn by `paintingForm`: frame, gilt fillet, mat, and the picture — the user's colour
+ *  as its ground, three fields on it. */
 function PaintingGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const h = part.dimMM[2] / 1000;
-  return (
-    <>
-      <Box surface="wood" size={[w + 0.04, h + 0.04, 0.025]} position={[0, 0, 0]} color={DETAIL.darkWood} />
-      <mesh position={[0, 0, 0.014]}>
-        <planeGeometry args={[w, h]} />
-        <meshStandardMaterial color={tint(part)} roughness={0.85} />
-      </mesh>
-      {/* abstract bands */}
-      <mesh position={[0, h * 0.15, 0.015]}>
-        <planeGeometry args={[w * 0.88, h * 0.18]} />
-        <meshStandardMaterial color="#E2613A" />
-      </mesh>
-      <mesh position={[0, -h * 0.2, 0.015]}>
-        <planeGeometry args={[w * 0.88, h * 0.12]} />
-        <meshStandardMaterial color="#5C8DC2" />
-      </mesh>
-    </>
-  );
+  return <HardParts parts={paintingForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.85 }} />;
 }
 
 function ACUnitGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
@@ -1481,57 +1418,38 @@ function SoundbarGeo({ part }: { part: ScenePart }) {
   return <HardParts parts={soundbarForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.55 }} />;
 }
 
+/** Drawn at its own size by `radiatorForm`. Its columns — a 2 m radiator's are hundreds
+ *  of tubes, rounded ends and joints — are two instanced sets in its own colour, the
+ *  tubes and joints one and the ends the other; the feet and the valve are drawn one by
+ *  one. */
 function RadiatorGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
   const bodyC = tint(part);
-  const fins = radiatorFins(part.dimMM[0]);
-  const fw = w / fins;
-  // 33 fins on a 2 m radiator, all the same colour — a textbook instanced set. That
-  // number is `radiatorFins(2000)` and is now true of a RESIZED radiator too; before
-  // § 36 a stretched one kept the count it was authored with and drew 13.
-  const finItems: InstanceItem[] = Array.from({ length: fins }, (_, i) => ({
-    pos: [-w / 2 + (i + 0.5) * fw, h / 2, 0] as [number, number, number],
-    size: [fw * 0.6, h * 0.9, d] as [number, number, number],
-  }));
+  const { columns, fittings } = radiatorForm(part.dimMM);
+  const tubes: InstanceItem[] = [];
+  const ends: InstanceItem[] = [];
+  for (const p of columns) {
+    if (p.kind === 'post') tubes.push({ pos: p.pos, size: [2 * p.r, p.h, 2 * p.r] });
+    else if (p.kind === 'strut') {
+      const pose = strutPose(p);
+      tubes.push({ pos: pose.pos, size: [2 * p.r, pose.len, 2 * p.r], rot: pose.rot });
+    } else if (p.kind === 'ball') ends.push({ pos: p.pos, size: [2 * p.radii[0], 2 * p.radii[1], 2 * p.radii[2]] });
+  }
+  const enamel = { roughness: 0.5, metalness: 0.1 };
   return (
     <>
-      <BoxInstances items={finItems} color={bodyC} surface={{ roughness: 0.5, metalness: 0.1 }} />
-      <Box size={[w, h * 0.06, d * 1.05]} position={[0, h - h * 0.03, 0]} color={bodyC} />
-      <Box size={[w, h * 0.06, d * 1.05]} position={[0, h * 0.03, 0]} color={bodyC} />
+      <RoundInstances unit="tube" items={tubes} color={bodyC} surface={enamel} />
+      <RoundInstances unit="ball" items={ends} color={bodyC} surface={enamel} />
+      <HardParts parts={fittings} bodyC={bodyC} look={enamel} />
     </>
   );
 }
 
+/** Drawn by `airPurifierForm`, on a circle of the width stretched to the depth. */
 function AirPurifierGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const r = w / 2;
-  const bodyC = tint(part);
   return (
-    <>
-      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[r, r * 0.96, h, 28]} />
-        <meshStandardMaterial color={bodyC} roughness={0.5} />
-      </mesh>
-      {/* intake slats */}
-      {[0.22, 0.34, 0.46].map((y, i) => (
-        // A torus lies in XY with its axis on Z; the body's axis is Y. Unturned, the
-        // rings stood as vertical hoops through the body and 22–42 mm into the floor.
-        <mesh key={i} position={[0, h * y, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          {/* The body tapers from r at the top to 0.96r at the floor, so each ring is
-              sized to the body at its own height — a top-radius ring stood ~4 mm off it. */}
-          <torusGeometry args={[r * (0.96 + 0.04 * y) + 0.002, 0.006, 8, 28]} />
-          <meshStandardMaterial color={shade(bodyC, -22)} roughness={0.8} />
-        </mesh>
-      ))}
-      {/* top control disc */}
-      <mesh position={[0, h + 0.004, 0]}>
-        <cylinderGeometry args={[r * 0.36, r * 0.36, 0.02, 24]} />
-        <meshStandardMaterial color="#26262a" emissive="#3a6aa0" emissiveIntensity={0.25} roughness={0.3} />
-      </mesh>
-    </>
+    <group scale={[1, 1, part.dimMM[1] / part.dimMM[0]]}>
+      <HardParts parts={airPurifierForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.5 }} />
+    </group>
   );
 }
 

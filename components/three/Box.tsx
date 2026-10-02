@@ -208,6 +208,20 @@ export function BoxInstances({ items, color, surface }: InstancedProps) {
   );
 }
 
+/** One draw call for N cylinders, or N spheres: a unit one of diameter 1, scaled to each
+ *  item's size — a radiator's tubes and their rounded ends. A cylinder stands on its local
+ *  Y, so an item lying along X or Z carries the turn (`strutPose`'s) that lays it there. */
+export function RoundInstances({ items, color, surface, unit }: InstancedProps & { unit: 'tube' | 'ball' }) {
+  const ref = useInstanceTransforms(items);
+  if (items.length === 0) return null;
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
+      {unit === 'tube' ? <cylinderGeometry args={[0.5, 0.5, 1, 16]} /> : <sphereGeometry args={[0.5, 16, 12]} />}
+      <InstanceMaterial color={color} roughness={0.8} envMapIntensity={0.5} surface={surface} />
+    </instancedMesh>
+  );
+}
+
 // ─── Plant parts ─────────────────────────────────────────────────────────────
 
 let leafGeometry: BufferGeometry | null = null;

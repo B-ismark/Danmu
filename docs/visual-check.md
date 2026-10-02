@@ -711,10 +711,16 @@ realistic?"* and *"if there are any other pieces or decors we can improve the re
 free to add them."* They were boxes, and boxes read as furniture. Now they are cloth
 (`lib/soft-goods.ts`):
 
-- **The bed.** Pillows swell to a seam and lean back against the headboard. The duvet rolls
+- **The bed.** Pillows swell to a seam and lie on the mattress against the headboard (they
+  were tipped 10° and stood 90 mm clear of the mattress at the headboard end — the floating
+  pillows reported 2026-10-02, fixed on `claude/affectionate-ritchie-ilawx1`). The duvet rolls
   over the mattress's edge and hangs to a level hem, and a sheet is turned back over it at
   the head. A scatter cushion stands in front of each pillow, in a tone that stays with the
-  bed across a reload. The mattress is now its own layer under the duvet.
+  bed across a reload, its back resting on the pillow's front (it leaned on nothing once the
+  pillows lay flat — the floating cushions reported 2026-10-02, second report — and the
+  pillows themselves were 75 mm thin, 22 mm above the sheet; they loft 27% of the mattress
+  height now, 80–180 mm). Look from the side: no daylight between cushion and pillow, and
+  the pillow shows above the turned sheet. The mattress is now its own layer under the duvet.
 - **The sofa and armchair.** Seat and back cushions are plump with rounded edges, and the
   backs lean back. A sofa tall enough gets a scatter cushion in each end seat. The armchair
   gets one.
@@ -852,7 +858,7 @@ somewhere below it, a bulb poking out of the drum's mouth on a short lamp, or th
 standing clear of the base. **One to judge on purpose:** the sage glaze is a fixed colour;
 recolouring tints the shade only — the brass and the ceramic stay as they are, which may read as the colour control doing too little. And the floor lamp's base is a large disc of the same brass as the console pulls, which reads as dark bronze in screenshots — it is the darkest thing in a light room.
 
-### A dining chair, an office chair and an armchair drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### A dining chair, an office chair and an armchair drawn as the real objects — merged to `main` in `073a4b4` (PR #223), NOT LOOKED AT
 
 **Round four of the realism ask** (`lib/chair-form.ts`):
 
@@ -888,6 +894,77 @@ judge on purpose:** a recolour paints the dining chair's frame and leaves its pa
 while the office chair's cushions take the new colour with the rest — say whether either
 reads as the colour control doing the wrong thing. And the dining chair's default wood is
 dark enough that the slats and stretchers read only faintly in a dim room.
+
+### An ottoman, a side table and a radiator drawn as the real objects, and the bed's pillows on the mattress — merged in `d6fa818` (B-ismark/Danmu#225), NOT LOOKED AT
+
+**Round five of the realism ask** (`lib/chair-form.ts`, `lib/hard-goods.ts`):
+
+- **Ottoman.** Four turned, tapered legs in brass ferrules, an upholstered base piped round
+  its top edge, and a padded top with four buttons. It was a padded box on four sticks.
+- **Side table.** A pedestal: a square top eased underneath, a collar, a column tapering out
+  to the foot with a ring near each end, and a stepped round foot. It was a slab on a post.
+- **Radiator.** A column radiator: a section per 70-odd mm of width, each one to four round
+  tubes deep by its depth with rounded ends, joined across the depth and along the width,
+  standing on two feet, with a thermostatic valve in a strip at the right-hand end fed from
+  the floor. It was a box with fins. The tubes are drawn as two instanced sets, so a long
+  radiator costs two draw calls rather than a few hundred.
+- **The bed's pillows** lie on the mattress. Tipped 10° to look propped, each touched the
+  mattress along its front seam only and stood 90 mm clear of it at the headboard — an air
+  wedge under every pillow, which read as linen floating over the bed. **The scatter
+  cushions then floated** (second report, same day): they still leaned toward where the
+  tipped pillow had been, and the flat pillow was 22 mm above the sheet. Pillows loft 27% of
+  the mattress height now (80–180 mm), and each cushion rests on its pillow's front.
+
+**The sizes did not change.** All three stay inside the box the plan draws at every size.
+
+**Where to click.** Add one of each from the Library, and open a room with a double bed.
+Orbit each at eye level and from low down. Stretch the radiator from shortest to longest and
+from slimmest to deepest; stretch the side table so its top is no longer square. Recolour
+all three.
+
+**What right looks like.** The ottoman's legs stand in their ferrules and disappear into the
+base; its buttons sit in the top. The side table's column meets the collar and the foot,
+and a stretched table has an oblong top and an oval foot. The radiator's tubes stand on its
+feet, every tube in one section is joined to the others, a slim radiator is one tube deep
+and a deep one four, and the valve stands clear of the last section. The bed's pillows rest
+on the mattress with no light under them from the side. *Wrong* looks like a tube floating
+off the feet, a valve buried in a section, an ottoman leg outside the base, or any pillow
+with a gap beneath it. **One to judge on purpose:** a pillow lying flat reads as a made bed;
+say if it reads as too flat beside the scatter cushion standing in front of it.
+
+### A painting, two mirrors and an air purifier drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+**Round six of the realism ask** (`lib/hard-goods.ts`):
+
+- **Painting.** A framed print: a wood moulding, a thin gilt fillet stepped down inside it,
+  a cream mat stepped down again, and the picture behind the mat's window — the piece's own
+  colour as the ground, with three colour fields floated on it. It was a dark board 40 mm
+  larger than the piece on every side, with two stripes on it.
+- **Mirror.** A moulded frame in the piece's colour, a bead stepped down inside it, and pale
+  silvered glass set behind the bead. Its frame used to stand 15 mm past the piece and its
+  glass 1 mm proud of the frame.
+- **Oval mirror.** A backboard, a bevelled step and the glass, three ovals each a little
+  smaller than the one behind. Its frame was 30 mm past the piece.
+- **Air purifier.** A dark plinth, a collar, an intake of twenty ribs over a dark core, a
+  smooth upper shell, a chamfered top, and a sunk outlet grille with the dial and a green
+  status light in it. It was a tapered cylinder with three rings on it, and its dial stood
+  14 mm above its own height.
+
+**The sizes did not change, and the frames now fit them.** Both mirrors measure exactly the
+box the plan draws.
+
+**Where to click.** Add one of each from the Library. Look at the wall pieces straight on
+and from a steep angle along the wall; stretch the painting wide and tall, the oval mirror
+from round to tall. Recolour all four. Stretch the purifier so it is no longer round.
+
+**What right looks like.** Each frame steps back in layers toward the picture or the glass,
+with no gap at the corners and nothing standing proud of the frame's face. A tall painting
+keeps an even mat; an oval mirror's rim is the same thickness all round. The purifier's ribs
+read as slots with a dark core behind them, and a stretched purifier is an oval column. *Wrong*
+looks like glass in front of its frame, a corner open to the wall, or a mat thicker on one
+side. **Two to judge on purpose:** whether the glass reads as a mirror or as grey card (the
+room has no reflections, so it is a pale silvered sheen, not a reflection), and whether the
+painting's colour fields read as art or as a placeholder.
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 

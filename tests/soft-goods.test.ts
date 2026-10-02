@@ -9,7 +9,7 @@
 // how the first version left every leaning cushion hovering.
 
 import { describe, it, expect } from 'vitest';
-import { Euler, Matrix4, Vector3 } from 'three';
+import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import {
   bedForm,
   curtainCloth,
@@ -20,6 +20,7 @@ import {
   GARMENT_MESH,
   HEADBOARD_T,
   meshExtent,
+  PILLOW_LOFT,
   SCATTER_TOP,
   SHOE_KINDS,
   SHOE_LINING_MESH,
@@ -38,6 +39,14 @@ const EPS = 1e-9;
 const IDS = ['a', 'sofa-1', 'p_7f3c', 'zz-99'];
 
 type V3 = [number, number, number];
+
+/** A unit mesh's vertices placed as `useInstanceTransforms` places them. */
+function worldPoints(mesh: SoftMeshData, p: SoftItem): Vector3[] {
+  const m = new Matrix4().compose(new Vector3(...p.pos), new Quaternion().setFromEuler(new Euler(...(p.rot ?? [0, 0, 0]))), new Vector3(...p.size));
+  const out: Vector3[] = [];
+  for (let i = 0; i < mesh.positions.length; i += 3) out.push(new Vector3(mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]).applyMatrix4(m));
+  return out;
+}
 
 function bounds(mesh: SoftMeshData): { lo: V3; hi: V3 } {
   return meshExtent(mesh, [1, 1, 1]);
@@ -238,22 +247,68 @@ describe('bedForm — linen inside the bed, resting where it rests', () => {
           // The headboard is drawn to 1.4 h; a pillow over it is a bed without one.
           expect(hi[1]).toBeLessThan(1.4 * h);
         }
+        // ...and lies on it along its whole depth, not on one seam. A pillow tipped 10° to
+        // look propped touched the mattress at its front and stood 90 mm clear of it at the
+        // headboard — the bed's linen floating. Every band across the middle of its depth
+        // reaches down to the mattress.
+        for (const p of b.pillows) {
+          const m = new Matrix4().compose(new Vector3(...p.pos), new Quaternion().setFromEuler(new Euler(...(p.rot ?? [0, 0, 0]))), new Vector3(...p.size));
+          const pts = CUSHION_MESH.pillow.positions;
+          const bands = 6;
+          const low = Array<number>(bands).fill(Infinity);
+          const v = new Vector3();
+          for (let i = 0; i < pts.length; i += 3) {
+            v.set(pts[i], pts[i + 1], pts[i + 2]).applyMatrix4(m);
+            const u = (v.z - (p.pos[2] - p.size[2] * 0.4)) / (p.size[2] * 0.8);
+            if (u < 0 || u >= 1 || Math.abs(v.x - p.pos[0]) > p.size[0] * 0.4) continue;
+            const k = Math.floor(u * bands);
+            low[k] = Math.min(low[k], v.y);
+          }
+          // The pillow's own seam rolls up off the mattress a little, a tenth of its loft.
+          low.forEach((y, k) => expect(y - top, `pillow band ${k} of ${bands} clear of the mattress`).toBeLessThan(Math.max(0.01, p.size[1] * 0.1)));
+        }
         // Two pillows side by side do not pass through each other.
         if (b.pillows.length === 2) {
           const [l, r] = b.pillows.map((p) => reach(CUSHION_MESH.pillow, p));
           expect(l.hi[0]).toBeLessThanOrEqual(r.lo[0]);
         }
         const foldTop = b.fold.pos[1] + b.fold.size[1] / 2;
-        for (const s of b.scatter) {
+        b.scatter.forEach((s, i) => {
           scattered++;
           const { lo, hi } = reach(CUSHION_MESH.scatter, s);
           expect(lo[1]).toBeCloseTo(foldTop - CUSHION_SINK, 9);
+          // ...on the sheet, not over the gap behind it: its bottom seam is inside the fold.
+          const cloth = worldPoints(CUSHION_MESH.scatter, s);
+          const seam = cloth.filter((v) => v.y < lo[1] + 0.005);
+          for (const v of seam) {
+            expect(v.z, 'scatter cushion stands on the turned-back sheet').toBeGreaterThanOrEqual(b.fold.pos[2] - b.fold.size[2] / 2);
+            expect(v.z).toBeLessThanOrEqual(b.fold.pos[2] + b.fold.size[2] / 2);
+          }
+          // ...and LEANS ON something: its back meets its pillow's front, settled in by the
+          // sink and no further. Leaned against where a propped pillow used to be, it stood
+          // 30 mm clear of the flat one at its foot and 190 mm clear at its top — a cushion
+          // tipped back on nothing, the floating the user reported second.
+          const pillow = worldPoints(CUSHION_MESH.pillow, b.pillows[i]);
+          const xIn = (v: Vector3) => Math.abs(v.x - s.pos[0]) < s.size[0] * 0.3;
+          const bin = (v: Vector3) => Math.floor(v.y / 0.004);
+          const back = new Map<number, number>();
+          const front = new Map<number, number>();
+          for (const v of cloth) if (xIn(v)) back.set(bin(v), Math.min(back.get(bin(v)) ?? Infinity, v.z));
+          for (const v of pillow) if (xIn(v)) front.set(bin(v), Math.max(front.get(bin(v)) ?? -Infinity, v.z));
+          const gaps = [...back].filter(([k]) => front.has(k)).map(([k, z]) => z - front.get(k)!);
+          expect(gaps.length, 'the cushion and its pillow share heights').toBeGreaterThan(3);
+          expect(Math.min(...gaps), 'into the pillow by the sink').toBeCloseTo(-CUSHION_SINK, 6);
+          // A pillow it can lean on stands clear of the sheet: at 0.15 h of loft the Library
+          // bed's stood 12 mm above it, a ledge nothing rests against.
+          const pillowTop = Math.max(...pillow.map((v) => v.y));
+          expect(pillowTop - foldTop, 'the pillow stands above the turned-back sheet').toBeGreaterThan(0.025);
+          expect(b.pillows[i].size[1]).toBeCloseTo(Math.min(PILLOW_LOFT.max, Math.max(PILLOW_LOFT.min, h * 0.27)), 12);
           expect(hi[1]).toBeLessThanOrEqual(SCATTER_TOP * h + EPS);
           if (Math.abs(hi[1] - SCATTER_TOP * h) < EPS) atScatterTop++;
           expect(lo[0]).toBeGreaterThanOrEqual(-w / 2);
           expect(hi[0]).toBeLessThanOrEqual(w / 2);
           expect(hi[2]).toBeLessThan(d / 2);
-        }
+        });
         // The duvet: inside the outline on both floor axes, above the frame, from the
         // pillows to the foot.
         const du = bounds(b.duvet);
