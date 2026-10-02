@@ -572,7 +572,7 @@ through, a motor behind it, a pole, a heavy base. *Wrong* looks like the cage's 
 flickering or crawling as you orbit, the head drifting off its pole when resized, or the base
 sticking out past the oval in the plan.
 
-### Pillows, a duvet, clothes, shoes, sofa cushions and a curtain drawn as cloth — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### Pillows, a duvet, clothes, shoes, sofa cushions and a curtain drawn as cloth — merged to `main` in `882db71` (PR #216), NOT LOOKED AT
 
 **Asked 2026-10-01:** *"can you make the pillows, bed cover, clothes and shoes more
 realistic?"* and *"if there are any other pieces or decors we can improve the realism, feel
@@ -616,6 +616,49 @@ side. A recolour that leaves the cushions behind. A shoe's dark insole flickerin
 look at on purpose: under the curtain's hem the screenshot showed **thin bright slivers**
 between the folds. They look like sunlight getting between the back folds and the wall. That
 may be right, or it may read as gaps; it needs a real GPU and a human eye.
+
+### Appliances, a door and a TV console drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+**The other half of the 2026-10-01 realism ask** (*"if there are any other pieces or decors we
+can improve the realism, feel free to add them"*). Eight hard pieces were each a box with one
+or two things stuck on. They are built from their real parts now (`lib/hard-goods.ts`):
+
+- **Washing machine.** Four feet, a control strip with a detergent drawer, a display and a
+  programme dial, a steel ring round a smoked porthole, the door catch, and the filter hatch
+  at the foot.
+- **Microwave.** A door framing a smoked window with its pull, and a control column with a
+  display, a dial and a start button.
+- **Chest freezer.** A cabinet on a set-back plinth, a dark seal line under the lid, a handle
+  along the lid's edge, and the thermostat badge with its light.
+- **Water dispenser.** A recessed alcove where the hot and cold taps hang over a drip tray,
+  and a bottle with a neck and shoulder. The taps used to stand 47 mm in front of the
+  cabinet and the bottle 20 mm above its own height; both are inside the piece now.
+- **Air conditioner.** A lighter fascia, the dark outlet slot with its louvre flap, and a
+  small display with a light.
+- **Soundbar.** End caps, a cloth grille between them, two low feet.
+- **TV console.** It stands on four tapered walnut legs instead of a plinth. A door in each
+  end bay stands back inside its frame with a brass pull on the inner edge, and the bays
+  between are open niches with a shelf. A wider console gets more bays (two to five).
+- **Door.** A frame of stiles and rails round four panels set back on both faces, a brass
+  lever on a backplate with a keyhole at hand height, and three hinge knuckles. The lever
+  stands 50 mm off the face, as a real one does, which is why the door now measures 100 mm
+  deep in the drawn-size table rather than 75.
+
+**The sizes did not change**, except where a piece was drawn bigger than it said: the water
+dispenser now fits inside its own height.
+
+**Where to click.** Add each of the eight from the Library. Orbit each at eye level, then from
+low down. Recolour each one. Stretch the TV console from narrowest to widest in the Inspector
+and watch the bays split. Resize the washing machine and the microwave both wider and taller.
+
+**What right looks like.** At a glance each reads as the appliance itself. The console's doors
+sit *inside* the frame with a thin shadow line round them. A door's panels read as recessed.
+*Wrong* looks like a detail flickering where it meets the body (two faces fighting), a dial or
+ring stretched into an oval after a resize that should not have stretched it, or a console bay
+with no door and no shelf. **One to judge on purpose:** in the screenshots the brass lever and
+console pulls read as dark bronze, not bright brass. That is the brass the curtain rod already
+uses with no reflections to catch, and it needs a real GPU and a human eye to say whether it
+reads as metal. The default door colour is also dark enough that its panels show only faintly.
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 

@@ -72,6 +72,17 @@ export const DETAIL = {
   brass: '#8A6D44',
   /** The dark inside of a shoe, at the floor of its opening. */
   lining: '#2A2420',
+  /** An appliance's smoked glass — a microwave's window, a washing machine's porthole. */
+  glass: '#15181C',
+  /** A dark readout panel; it carries a faint glow of `led`. */
+  display: '#202226',
+  /** A status light. */
+  led: '#7FD3A0',
+  /** A water dispenser's bottle, drawn translucent. */
+  water: '#BCD6E6',
+  /** A dispenser's hot and cold taps — the two colours every one of them uses. */
+  tapHot: '#C0392B',
+  tapCold: '#2B6FD4',
 } as const;
 
 // ─── Decor accents ──────────────────────────────────────────────────────────
