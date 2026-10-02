@@ -592,7 +592,8 @@ export function coversEnoughToSupport(
  *
  *  `wallMounted` is not consulted: a wall fixture rests on nothing and this returns
  *  `null` for one, which is truthful. Whether that is worth SAYING is the caller's
- *  judgement — `Inspector` reports how the piece is anchored instead. */
+ *  judgement — `Inspector` says nothing for a piece on the floor, a wall or the ceiling,
+ *  and names what one rests on ("On Nightstand") only when this answers. */
 export function restingOn(
   parts: SupportCandidate[],
   selfId: string,

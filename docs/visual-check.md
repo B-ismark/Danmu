@@ -106,6 +106,42 @@ table's. A photo scan that finds a double bed cut off by the photo's edge comes 
 or two nightstands, a fridge with doors that do not meet in the middle, or fat legs on a long
 table.
 
+### A starter room names its pieces as the Library does, and the Inspector header is one row — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+
+The user's 2026-10-01 report: a seeded bedroom said **Queen bed** while the Library sells one
+**Bed**, and the Inspector spent three rows on a bed — its name, *Bed · Bed double*, and an
+*On floor* card. A starter room now uses the Library's own pieces and names (Bed, Rug,
+Curtain, Painting, Pendant lamp, Table lamp, TV · 65″). The Inspector's first row is the
+name with its Library shelf beside it (a bed reads **Bed**, then a quiet **Bedroom**);
+the second line is gone. A door and a window sit on a new **Openings** shelf (the word `lib/room-openings.ts` already uses), in the
+Library too, because the shelf now reads as what the piece is and a door is not an
+appliance. A scanned bed (a shape the Library no longer sells) takes its kind's shelf. The
+placement card shows only when it has something to say: a finding, a piece in mid-air, or
+a piece resting on another.
+
+**Where to click.** Create a room from any shape, open a bedroom, select the bed, then a
+nightstand, the lamp on it, the curtain and the TV. Hover a few pieces in the 3D tab.
+
+**What right looks like.** Every name in the room is one you can find in the Library. One
+header row: the name, then the shelf in grey. No card for the bed on the floor, the TV on
+the wall or the pendant on the ceiling. The lamp still says **On Nightstand**. A piece
+pushed into a walkway still gets its amber or red card.
+
+**What wrong looks like.** *Queen bed*, *Area rug* or *Bedside lamp* anywhere. A short name
+(*Bed*) with its shelf wrapped under it, or a long one (*Washing machine* from a photo, with
+its pill) ellipsised behind the shelf at 1024 px. The shelf dropping to a second line there
+is the intended reflow, not a defect. A door reading *Appliances*, a radiator hovering as
+*fridge*. And one to judge rather than check: the card coming and going moves the Colour,
+Light and Floor/Wall rows below it. Press **Floor** on a floating lamp and the row jumps up
+by the card's height. Say whether that reads as a jump.
+
+**Gates.** `tests/seed-library-names.test.ts`, `tests/library-shelf.test.ts`,
+`tests/hover-card.test.tsx`, `tests/placement-banner.test.tsx`.
+
+**Where it rides.** `lib/scene-spec.ts` (`BED_LADDER`, the seeder's names, the TV rows
+built from `SCREENS`, `libraryShelf`) + `components/studio/Inspector.tsx` +
+`components/studio/HoverCard.tsx`.
+
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 
 **What is already settled.** A newly added fan hangs flush: looked at on the preview and fine.
@@ -160,7 +196,7 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
-### A bed dragged between its nightstands leaves no dark streak on the floor — on `claude/amazing-davinci-m8zqys`, PROBED
+### A bed dragged between its nightstands leaves no dark streak on the floor — merged to `main` in `bd88347` (PR #215), PROBED
 
 The user's 2026-10-01 report: dragging a bed between two nightstands painted black streaks
 across the floor at its head and foot. The floor shadow was drawing every outline as a
@@ -906,7 +942,7 @@ and `tests/library-click-through.test.tsx`. The Catalog tree was looked at on 20
 and is gone. What is left is here because what a test can check about it and what a person
 can see are different halves.*
 
-### The rooms page opens the app, and Settings goes back where it came from — merged to `main` in `150e12a` (PR #211); Back moved to the heading's right, and the footprint page tightened, on `claude/amazing-davinci-m8zqys`
+### The rooms page opens the app, and Settings goes back where it came from — merged to `main` in `150e12a` (PR #211); Back moved to the heading's right, and the footprint page tightened, merged to `main` in `1ea06f1` (PR #213)
 
 **Where to click.**
 - A fresh profile (or cleared site data) on `/`. It should open on the empty rooms page, with **Create your first room**.

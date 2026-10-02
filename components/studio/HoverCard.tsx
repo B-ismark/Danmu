@@ -6,6 +6,7 @@ import { useRoomPart } from '@/lib/room-scene';
 import { formatDim } from '@/lib/units';
 import { Pill } from '@/components/ui/primitives';
 import type { CaptureSlot } from '@/lib/storage';
+import { libraryShelf } from '@/lib/scene-spec';
 
 // Which wall photo a detected piece came from, in the words a decorator uses.
 // The slot letters (n/e/s/w) are storage keys, not vocabulary.
@@ -52,6 +53,7 @@ export function HoverCard() {
   const left = Math.min(pos.x + 14, (typeof window !== 'undefined' ? window.innerWidth : 1440) - 240);
   const top = Math.min(pos.y - 10, (typeof window !== 'undefined' ? window.innerHeight : 900) - 140);
   const dimDisplay = part.dimMM.map((mm) => formatDim(mm, dimUnit)).join(' × ') + ' ' + dimUnit;
+  const shelf = libraryShelf(part.shape, part.category);
 
   return (
     <div
@@ -69,27 +71,36 @@ export function HoverCard() {
         pointerEvents: 'none',
       }}
     >
-      {/* Single identity — the name. The category eyebrow used to sit above it,
-          but name+category are near-duplicates ("Door" / "door") and could even
-          conflict after a swap, so we show just the one label. */}
+      {/* The name, and beside it the Library shelf — the same row the Inspector's
+          header is, laid out the same way: name, shelf, pill at the end, wrapping
+          rather than squeezing the name. Never `category`, an internal key that calls
+          a radiator "Fridge" (§ 41). */}
       <div
         style={{
           padding: '6px 10px',
           borderBottom: '1px solid var(--hairline)',
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'center',
-          gap: 8,
-          justifyContent: 'space-between',
+          columnGap: 8,
+          rowGap: 2,
         }}
       >
-        <span className="truncate sentence-case" style={{ fontSize: 'var(--fs-body)', fontWeight: 600 }}>
-          {part.name || part.category}
+        {/* Falls back to the category word for a name that is only whitespace (a scene
+            file can carry one), as it always did — a blank title is worse. */}
+        <span className="truncate sentence-case" style={{ minWidth: 0, fontSize: 'var(--fs-body)', fontWeight: 600 }}>
+          {part.name.trim() || part.category}
         </span>
+        {shelf && (
+          <span className="t-hint" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+            {shelf}
+          </span>
+        )}
         {/* Kept even though the "From" row below usually says the same thing more
             precisely: a room imported from a scene file carries `locked` but not
             `fromDetection` (scene-file.ts drops it), so for those pieces this pill
             is the only thing that says where they came from. */}
-        {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>From photo</Pill>}
+        {part.locked && <Pill tone="locked" style={{ flexShrink: 0, marginLeft: 'auto' }}>From photo</Pill>}
       </div>
       <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <Row label="Size" value={dimDisplay} mono />

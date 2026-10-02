@@ -167,6 +167,6 @@ describe('every wall of every starter room, dragged all the way in', () => {
     expect(walls).toBe(26);
     expect(escaped).toEqual([]);
     expect(silent).toEqual([]);
-    expect(rugStop).toBe('That wall stops here: the Area rug has no more room to move.');
+    expect(rugStop).toBe('That wall stops here: the Rug has no more room to move.');
   });
 });

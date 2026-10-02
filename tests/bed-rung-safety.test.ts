@@ -168,7 +168,7 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
       const runs = solveAll(rung.dim, 6, 5);
       const totals = runs.map((r) => r.total).sort((a, b) => a - b);
       return {
-        label: rung.label,
+        label: rung.size,
         width: rung.dim[0],
         worst: Math.max(...totals),
         median: totals[6],

@@ -206,7 +206,7 @@ describe('names read as sentences', () => {
       'components/studio/PhotoEditor.tsx': 1, // the tag on the photo
       'components/studio/HoverCard.tsx': 1,
       'components/studio/PartTree.tsx': 1, // the Catalog row
-      'components/studio/Inspector.tsx': 3, // the name, and the kind line's two labels
+      'components/studio/Inspector.tsx': 1, // the name — the kind line under it is gone (§ 41)
     };
     for (const [f, n] of Object.entries(SITES)) {
       const uses = stripComments(readFileSync(join(ROOT, f), 'utf8')).match(/\bsentence-case\b/g) ?? [];

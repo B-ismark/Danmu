@@ -60,7 +60,8 @@ screen; and row 17 above.
   A second site, `HoverCard.tsx:86`, shows the bare key. **Only looking found this** — it
   typechecks, lints and passes every test, and no assertion in the repo reads the string.
   *ANSWERED 2026-09-30: the Library shelf name, "Appliances · Radiator", in both places.
-  Not built yet.*
+  Refined 2026-10-01 and BUILT on `claude/amazing-davinci-m8zqys`: one row, the name with
+  the shelf beside it, no shape line; the hover card the same.*
 
 **Row 9 came off this list on 2026-09-05, and how it survived here is the lesson.** The
 header said the drill-in half was open; the table said it was untouched; § H.8, 1,500 lines
@@ -7542,7 +7543,17 @@ has been for as long as the pins have. Nothing here regressed; it was found by l
 
 **The user's call, 2026-09-30: the first row of the table below.** The second line reads
 the piece's Library shelf, *Appliances · Radiator*, and the hover card uses the same name.
-Not built yet.
+
+**Refined 2026-10-01 and BUILT on `claude/amazing-davinci-m8zqys`.** The user: *"Bed. Bed.
+Bed double is also redundant just keep the name and maybe next to it the category (if
+there's any). It doesn't need to take two lines."* So the second line is gone and the shelf
+sits beside the name on its row, in quiet type; the hover card does the same. `libraryShelf`
+(`lib/scene-spec.ts`) reads it off `PART_LIBRARY` by shape. For a shape the Library does
+not sell it falls back to the shelf of the piece's kind (a scanned `bed-single` reads
+*Bedroom*). It answers null, and shows nothing, only for the catch-all `other`. Review
+then found one more wrong word of the same kind: the Door sat on the *Appliances* shelf,
+so the header read *Door · Appliances*. Door and Window now share an **Openings**
+shelf, which is a Library change as well as an Inspector one.
 
 **Found by looking, on 2026-09-06, which is the only way it could have been found** — it
 typechecks, lints and passes every test, and no assertion in the repo reads this string.
