@@ -248,10 +248,14 @@ export function livingParents(
  *  The two extra conditions are the ones `highestSurfaceUnder` genuinely does not
  *  have, and each has a defect behind it:
  *
- *  · **A below-test.** It returns the highest top whose footprint covers the mover,
- *    ABOVE OR BELOW, so asking it about a sofa returns the wardrobe the sofa is
- *    standing in front of. `Math.abs(p.pos[1] - s.y) < SUPPORT_Y_EPS` is what makes
- *    the answer "resting on" rather than "overlapping".
+ *  · **A ceiling and a below-test.** It returns the highest top whose footprint
+ *    covers the mover, ABOVE OR BELOW, so asking it about a sofa returns the wardrobe
+ *    the sofa is standing in front of — and asking it about a stack of books with a
+ *    lamp on it returns the LAMP, whose foot covers more than half the books', so the
+ *    books read as riding nothing and the desk under them was forgotten. So it is
+ *    asked only about tops no higher than the piece's own bottom (the ceiling
+ *    `restingOn` passes too), and `Math.abs(p.pos[1] - s.y) < SUPPORT_Y_EPS` is what
+ *    makes the answer "resting on" rather than "hanging above".
  *  · **`p.pos[1] > 0`** — a piece on the floor is riding the floor, and the floor is
  *    not furniture. Without it a chair standing over a 40 mm mat passes the
  *    adjacency test and becomes the mat's rider, which is not a harmless
@@ -283,7 +287,7 @@ export function ridingParents(parts: ScenePart[]): Record<string, string> {
   for (const p of parts) {
     if (!isFloorStanding(p.category, p.shape)) continue;
     if (p.pos[1] <= 0) continue;
-    const s = highestSurfaceUnder(parts, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle, p.shape);
+    const s = highestSurfaceUnder(parts, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle, p.shape, p.pos[1] + SUPPORT_Y_EPS);
     if (!s) continue;
     if (Math.abs(p.pos[1] - s.y) >= SUPPORT_Y_EPS) continue;
     out[p.id] = s.id;
