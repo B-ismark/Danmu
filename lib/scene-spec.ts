@@ -833,13 +833,18 @@ const PLAN_RANKS = 4;
 
 /** The bed sizes a starter bedroom may be built from, widest first.
  *
- *  EU mattress standards, and the same four rungs the catalog ships, so the seeded
- *  room and the Library agree about what a Queen is. Every one of them is 2000 long
- *  — width is the only axis that separates them, which is why a bed that does not
- *  work in a bay cannot be fixed by shortening it.
+ *  EU mattress standards, and the widths `classSize` gives "queen", "double" and
+ *  "single" bed, so the seeded room and the search agree about what a Queen is. Every
+ *  one of them is 2000 long — width is the only axis that separates them, which is
+ *  why a bed that does not work in a bay cannot be fixed by shortening it.
  *
- *  It is a LADDER rather than one size because a single is a different piece of
- *  furniture, not a resized double. The seeder walks down it when a rung will not
+ *  **Every rung is the Library's one Bed** — its shape, its name — at a width. `size`
+ *  is the ladder's own word and is never shown: a seeded room holds only pieces the
+ *  Library sells, under the names it sells them by, so a person never meets a
+ *  "Queen bed" they cannot find to add (`tests/seed-library-names.test.ts`).
+ *
+ *  It is a LADDER rather than one size because a single fits rooms a double does
+ *  not. The seeder walks down it when a rung will not
  *  fit, and `SeedPlan.bedRung` lets the plan search start further down — which is
  *  what it needs when a rung fits geometrically and still strands the floor behind
  *  it. Correcting the bed's transposed dims made that case real: at 6 × 5 the U's
@@ -847,10 +852,10 @@ const PLAN_RANKS = 4;
  *  route to the door wider than 600 mm, so `navigabilityCost` charged the winning
  *  plan 750.6 where the mis-shaped bed had scored 0. The search was never blind; it
  *  had no better room to choose. This gives it one. */
-export const BED_LADDER: ReadonlyArray<{ label: string; shape: Shape; dim: [number, number, number] }> = [
-  { label: 'Queen bed', shape: 'bed-double', dim: [1600, 2000, 600] },
-  { label: 'Double bed', shape: 'bed-double', dim: [1400, 2000, 600] },
-  { label: 'Single bed', shape: 'bed-single', dim: [900, 2000, 600] },
+export const BED_LADDER: ReadonlyArray<{ size: 'queen' | 'double' | 'single'; shape: Shape; dim: [number, number, number] }> = [
+  { size: 'queen', shape: 'bed-double', dim: [1600, 2000, 600] },
+  { size: 'double', shape: 'bed-double', dim: [1400, 2000, 600] },
+  { size: 'single', shape: 'bed-double', dim: [900, 2000, 600] },
 ];
 
 
@@ -1081,7 +1086,7 @@ export function defaultScene(
           // Laid square to the wall (turn 0), so its depth is what runs out from the
           // sofa's front — which points toward the screen, down `v`.
           const vRug = vSofa - rugOffset('seat', sofaHalf, dim[1] / 2000);
-          if (place('rug', 'Area rug', 'rug', dim, f, uGroup, vRug)) break;
+          if (place('rug', 'Rug', 'rug', dim, f, uGroup, vRug)) break;
         }
       }
 
@@ -1190,7 +1195,7 @@ export function defaultScene(
         const rung = BED_LADDER[i];
         // Derived from the rung, never typed beside it: half the LENGTH is how far the
         // bed stands off the wall its head is against.
-        sleeper = place('bed', rung.label, rung.shape, rung.dim, f, 0, rung.dim[1] / 2000 + SEED_WALL_GAP);
+        sleeper = place('bed', 'Bed', rung.shape, rung.dim, f, 0, rung.dim[1] / 2000 + SEED_WALL_GAP);
         if (sleeper) bed = rung.dim;
       }
       const bedHalfW = bed[0] / 2000;
@@ -1714,7 +1719,7 @@ function dress(
     // the wall's yaw and local +Z faces into the room, so `localToWorld` is the
     // one expression that gets this right on all four walls of any footprint.
     const [ox, oz] = localToWorld(w.rot, 0, w.dimMM[1] / 2000 + CURTAIN_STANDOFF);
-    add('curtain', 'Curtains', 'curtain', dim, [w.pos[0] + ox, height - drop / 2 - 0.05, w.pos[2] + oz], w.rot);
+    add('curtain', 'Curtain', 'curtain', dim, [w.pos[0] + ox, height - drop / 2 - 0.05, w.pos[2] + oz], w.rot);
   }
 
   // ── A picture over the sofa, or over the bed ─────────────────────────────
@@ -1733,7 +1738,7 @@ function dress(
     const w = Math.min(1.2, (p.dimMM[0] / 1000) * 0.6);
     add(
       'painting',
-      'Framed print',
+      'Painting',
       'painting',
       [w * 1000, 30, w * 700],
       [back.px + back.nx * 0.03, Math.min(ART_CENTRE, height - 0.5), back.pz + back.nz * 0.03],
@@ -1746,7 +1751,7 @@ function dress(
   if (table >= 0) {
     const t = at(table);
     // Ceiling-anchored, so `groundY` decides the height rather than a number here.
-    add('lamp', 'Pendant', 'lamp-pendant', [350, 350, 400], [t.pos[0], 0, t.pos[2]], t.rot);
+    add('lamp', 'Pendant lamp', 'lamp-pendant', [350, 350, 400], [t.pos[0], 0, t.pos[2]], t.rot);
     const last = parts[parts.length - 1];
     last.pos[1] = groundY('lamp', 'lamp-pendant', last.dimMM, height);
   }
@@ -1764,7 +1769,7 @@ function dress(
     // list is how the eighth copy gets in. It also stops being correct the moment anyone
     // makes this rule fire for a centred support.
     const sTop = verticalExtent(s.category, s.shape, s.dimMM, s.pos[1])[1];
-    add('lamp', 'Bedside lamp', 'lamp-table', [250, 250, 500], [s.pos[0], sTop, s.pos[2]], s.rot, {});
+    add('lamp', 'Table lamp', 'lamp-table', [250, 250, 500], [s.pos[0], sTop, s.pos[2]], s.rot, {});
   }
 }
 
@@ -2250,9 +2255,9 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Window', group: 'Decor', category: 'other', shape: 'window', dimMM: [1200, 60, 1200] },
   // Tech — three real panel sizes, because a small room needs a smaller SET and
   // never a scaled one. `SCREENS` (above) picks between these for the starter scene.
-  { label: 'TV · 65"', group: 'Tech', category: 'tv', shape: 'tv', dimMM: [1450, 60, 820] },
-  { label: 'TV · 55"', group: 'Tech', category: 'tv', shape: 'tv', dimMM: [1230, 60, 710] },
-  { label: 'TV · 43"', group: 'Tech', category: 'tv', shape: 'tv', dimMM: [970, 60, 570] },
+  { label: 'TV · 65″', group: 'Tech', category: 'tv', shape: 'tv', dimMM: [1450, 60, 820] },
+  { label: 'TV · 55″', group: 'Tech', category: 'tv', shape: 'tv', dimMM: [1230, 60, 710] },
+  { label: 'TV · 43″', group: 'Tech', category: 'tv', shape: 'tv', dimMM: [970, 60, 570] },
   { label: 'Monitor', group: 'Tech', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 400] },
   { label: 'Laptop', group: 'Tech', category: 'monitor', shape: 'laptop', dimMM: [340, 240, 220] },
   // Appliances

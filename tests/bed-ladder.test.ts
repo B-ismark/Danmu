@@ -13,7 +13,7 @@
 // `--disableConsoleIntercept`: vitest 4 discards `console.log` from a passing run,
 // and a table printed to nobody is not a measurement.
 import { describe, it, expect } from 'vitest';
-import { defaultScene, PART_LIBRARY } from '../lib/scene-spec';
+import { defaultScene, PART_LIBRARY, BED_LADDER } from '../lib/scene-spec';
 import { classSize } from '../lib/shape-search';
 import { clampDims } from '../lib/dimension-ranges';
 
@@ -21,6 +21,10 @@ import { clampDims } from '../lib/dimension-ranges';
  *  were checked against those rows; the rows are one now (the Inspector resizes), so
  *  a rung is checked against what that row becomes when its class word is typed. */
 const LIBRARY_BEDS = PART_LIBRARY.filter((i) => i.category === 'bed');
+
+/** Which rung a seeded bed is, read off its width: every rung is named "Bed", like
+ *  the Library row it is. */
+const rungOf = (width: number) => BED_LADDER.find((r) => r.dim[0] === width)?.size ?? 'off the ladder';
 
 type Row = { w: number; d: number; label: string; key: string | null };
 
@@ -32,7 +36,7 @@ function sweep(): Row[] {
       rows.push({
         w: w / 10,
         d: d / 10,
-        label: bed?.name ?? 'NO BED',
+        label: bed ? rungOf(bed.dimMM[0]) : 'NO BED',
         key: bed ? `${bed.dimMM[0]}x${bed.dimMM[1]}` : null,
       });
     }
@@ -68,10 +72,10 @@ describe('the bed a starter bedroom gets', () => {
     const [bed] = LIBRARY_BEDS;
     for (const r of rows) {
       if (!r.key) continue;
-      const word = classSize('bed', r.label).w;
+      const word = classSize('bed', `${r.label} bed`).w;
       expect(word, `${r.label} names no bed size the search knows`).toBeDefined();
       const want = `${word}x${bed.dimMM[1]}`;
-      expect(r.key, `${r.w}x${r.d} seeded ${r.label} at ${r.key}; the Library's "${r.label.toLowerCase()}" is ${want}`)
+      expect(r.key, `${r.w}x${r.d} seeded ${r.label} at ${r.key}; the Library's "${r.label} bed" is ${want}`)
         .toBe(want);
       const asked: [number, number, number] = [word!, bed.dimMM[1], bed.dimMM[2]];
       expect(clampDims('bed', bed.shape, asked), `${r.label} is outside the Library bed's own band`).toEqual(asked);
@@ -98,7 +102,7 @@ describe('the bed a starter bedroom gets', () => {
     // in the footprint and a legitimate change moves them. "At least once" is the
     // claim that survives that and still fails on a deleted rung.
     const used = new Set(rows.filter((r) => r.key).map((r) => r.label));
-    for (const rung of ['Single bed', 'Double bed', 'Queen bed']) {
+    for (const rung of ['single', 'double', 'queen']) {
       expect(used, `no U size picks the ${rung} — that rung is unreachable`).toContain(rung);
     }
   });

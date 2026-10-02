@@ -145,7 +145,7 @@ describe('every shipped preset survives its own clamp', () => {
     expect(BED_LADDER.length).toBe(3);
     for (const rung of BED_LADDER) {
       const got = clampDims('bed', rung.shape, [...rung.dim] as [number, number, number]);
-      expect(got, `${rung.label} is rebuilt by its own clamp`).toEqual(rung.dim);
+      expect(got, `${rung.size} is rebuilt by its own clamp`).toEqual(rung.dim);
     }
     // Width is the separating axis, so the rungs must be strictly ordered on slot
     // 0 and constant on slot 1. This is the one place the convention IS asserted,
