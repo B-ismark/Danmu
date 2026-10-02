@@ -662,8 +662,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // broken before the cascade below, using `parentIds` as it stood at
     // drag-start (this part's own link can't affect who its own descendants
     // are, so the ordering here doesn't matter to the convoy). The plan tab's
-    // drop writes it through the same `landOn`.
+    // drop writes it through the same `landOn`. The rest of the selection was set
+    // down by this drop too, so each member's landing is recorded the same way —
+    // under the gate its move is written under, below, or a member that never moved
+    // would be linked to where it did not go.
     landOn(partId, resolved.supportId);
+    if (co.valid && settle.settled) for (const l of co.landings) landOn(l.id, l.on);
 
     // Everything the gesture carried, landed in one store update: this part's
     // rigid children about its resolved pivot, the rest of the multi-selection and

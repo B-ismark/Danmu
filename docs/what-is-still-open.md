@@ -4213,10 +4213,14 @@ cannot hang, both walkers keeping a visited set. A wall drag and a room resize s
 the raw map (above). Twenty-one more mutants, twenty-one killed.
 
 *Still open, each older than this fix and none of them the reported bug:*
-- **A multi-selection records a landing for the piece under the hand only.** The rest of
-  the set travels by the delta and keeps its old recorded link, so a lamp carried that way
-  onto another nightstand still follows the first. `resolveConvoy` resolves each member,
-  so the support is known; it is not handed back.
+- **FIXED 2026-10-02: a multi-selection records a landing for every member.** It used to
+  record the piece under the hand only, so a lamp carried in a set onto the other
+  nightstand still followed the first. `ConvoyResult.landings` hands back what each member
+  was set down on, from the pass the set was allowed (a slide's, not the refused one), and
+  both tabs record it through `landOn` under the gate the member moves are written under:
+  the plan at once for a key and once on release for a drag, 3D on the drop. Members only —
+  what rides a member, or the lead, travels rigidly and keeps its link. Eight mutants, eight
+  killed; the 3D drop has no harness and is in `docs/visual-check.md`.
 - **Wall moves the piece and its riders, and nothing else, unchecked.** Merged-set siblings
   stay behind, as they always did, and the riders are written without the containment and
   collision checks a drag's company gets — a lamp overhanging the back of its nightstand

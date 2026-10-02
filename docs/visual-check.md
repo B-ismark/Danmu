@@ -218,6 +218,21 @@ anywhere on those is the old bug back.
 `components/three/Highlight.tsx` + `components/three/RoomShell.tsx` +
 `components/three/Room.tsx`.
 
+### A lamp carried in a selection onto the other nightstand stays with it — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+
+In the seeded bedroom, shift-click a floor piece and the lamp on the left nightstand, and
+drag the floor piece until the lamp stands on the right nightstand. Then drag the RIGHT
+nightstand on its own. The lamp going with it is the fix; the lamp staying put, standing
+on air, is the old bug — the set's other pieces used to keep the link to where they
+started. Do it in **3D Model** first: the plan tab's half is driven in a test, the 3D
+drop is not.
+
+**Gates.** `tests/drag-convoy.test.ts` ("what each member was set down on"),
+`tests/plan-landing.test.tsx`.
+
+**Where it rides.** `lib/drag-convoy.ts` + `components/three/Draggable.tsx` +
+`components/studio/PlanView.tsx`.
+
 ### A fan dropped onto a fan moves aside, and a bed set stops at the wardrobe — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 
 Two reports from the 2026-10-01 batch. A ceiling fan dropped on 2D Plan and another dropped

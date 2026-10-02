@@ -48,15 +48,18 @@ function stubCanvas() {
   restoreRect = stubPlanCanvas();
 }
 
-function room(parentIds: Record<string, string>) {
+/** `withBox` adds a floor piece well clear of both nightstands, selected together with
+ *  the lamp, so the lamp travels as a MEMBER of a set led by the box. */
+function room(parentIds: Record<string, string>, withBox = false) {
   const lamp = part({ id: 'lamp', name: 'Lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0.1, 0.55, 0] });
+  const box = part({ id: 'box', name: 'Box', pos: [-1.5, 0, 1.5] });
   useScene.setState({
-    parts: [stand('n1', 'Left', 0), stand('n2', 'Right', 0.45), lamp],
+    parts: [stand('n1', 'Left', 0), stand('n2', 'Right', 0.45), lamp, ...(withBox ? [box] : [])],
     room: { ...useScene.getState().room, width: 6, depth: 5, height: 2.5, footprint: footprintForLayout('rect', 6, 5), layoutId: 'rect' },
   });
   useStudio.setState({
     positions: {}, rotations: {}, dims: {}, parentIds, hidden: {},
-    selection: [], selectedPartId: null, snapMode: 'off',
+    selection: withBox ? ['box', 'lamp'] : [], selectedPartId: withBox ? 'box' : null, snapMode: 'off',
   });
 }
 
@@ -149,5 +152,36 @@ describe('the plan tab records a landing (§ H.6.7)', () => {
     expect(currentRoomScene().find((p) => p.id === 'n2')!.pos[0]).toBeGreaterThan(0.45);
     fireEvent.pointerUp(svg, { clientX: 490, clientY: 500, pointerId: 1 });
     expect(useStudio.getState().parentIds).toEqual({ lamp: 'n1' });
+  });
+
+  // The rest of a selection is set down by the same gesture as the piece under the hand,
+  // and only the lead's landing used to be written: a lamp carried in a selection onto
+  // the other nightstand kept the first one's link and stayed behind when it moved.
+  it('records a carried lamp’s landing when a nudge moves the selection', () => {
+    room({ lamp: 'n1' }, true);
+    render(<PlanView />);
+    const key = screen.getAllByRole('button').find((b) => b.getAttribute('aria-label')?.startsWith('Box.'))!;
+    for (let i = 0; i < 30; i++) fireEvent.keyDown(key, { key: 'ArrowRight' });
+    expect(currentRoomScene().find((p) => p.id === 'lamp')!.pos[0]).toBeCloseTo(0.4, 6);
+    expect(useStudio.getState().parentIds).toEqual({ lamp: 'n2' });
+    expect(carriedBy('n2')).toEqual(['lamp']);
+  });
+
+  it('records a carried lamp’s landing once, on the release of a drag', () => {
+    room({ lamp: 'n1' }, true);
+    stubCanvas();
+    const { container } = render(<PlanView />);
+    const svg = container.querySelector('svg')!;
+    const key = screen.getAllByRole('button').find((b) => b.getAttribute('aria-label')?.startsWith('Box.'))!;
+    const lampX = () => currentRoomScene().find((p) => p.id === 'lamp')!.pos[0];
+    fireEvent.pointerDown(key, { button: 0, clientX: 500, clientY: 500, pointerId: 1 });
+    for (let dx = 2; dx <= 600 && lampX() < 0.4; dx += 2) {
+      fireEvent.pointerMove(svg, { clientX: 500 + dx, clientY: 500, pointerId: 1 });
+    }
+    expect(lampX()).toBeGreaterThanOrEqual(0.4);
+    expect(useStudio.getState().parentIds).toEqual({ lamp: 'n1' });
+    fireEvent.pointerUp(svg, { clientX: 500, clientY: 500, pointerId: 1 });
+    expect(useStudio.getState().parentIds).toEqual({ lamp: 'n2' });
+    expect(carriedBy('n2')).toEqual(['lamp']);
   });
 });

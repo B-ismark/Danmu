@@ -297,6 +297,10 @@ export function ridingParents(parts: ScenePart[]): Record<string, string> {
   return out;
 }
 
+/** One piece set down by a gesture, and what it was set down on (`on` undefined: the
+ *  floor, a wall, or nothing). */
+export type Landing = { id: string; on: string | undefined };
+
 /** `parentIds` once `childId` has been set down on `supportId` — or on nothing.
  *
  *  A drop is where the relation is written, in both tabs: landing ON something links
