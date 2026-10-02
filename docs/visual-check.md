@@ -364,7 +364,7 @@ and nothing says the spot was taken. On the other side it is moved out, and you 
 under at all. (The crooked-table cost this item used to warn about, 23 in 200 test solves
 against 14, is gone with the sets in the next item: 0 in 200.)
 
-### A table and its chairs, and a bed and its nightstands, move as one set — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### A table and its chairs, and a bed and its nightstands, move as one set — merged to `main` in `0972aed` (PR #214), NOT LOOKED AT
 
 Suggest and Ideas used to move a dining table and its chairs as separate pieces unless you had
 merged them. So Ideas handed back chairs turned through the table, and Suggest left tables
@@ -546,6 +546,51 @@ shortest in the Inspector.
 through, a motor behind it, a pole, a heavy base. *Wrong* looks like the cage's wires
 flickering or crawling as you orbit, the head drifting off its pole when resized, or the base
 sticking out past the oval in the plan.
+
+### Pillows, a duvet, clothes, shoes, sofa cushions and a curtain drawn as cloth — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+**Asked 2026-10-01:** *"can you make the pillows, bed cover, clothes and shoes more
+realistic?"* and *"if there are any other pieces or decors we can improve the realism, feel
+free to add them."* They were boxes, and boxes read as furniture. Now they are cloth
+(`lib/soft-goods.ts`):
+
+- **The bed.** Pillows swell to a seam and lean back against the headboard. The duvet rolls
+  over the mattress's edge and hangs to a level hem, and a sheet is turned back over it at
+  the head. A scatter cushion stands in front of each pillow, in a tone that stays with the
+  bed across a reload. The mattress is now its own layer under the duvet.
+- **The sofa and armchair.** Seat and back cushions are plump with rounded edges, and the
+  backs lean back. A sofa tall enough gets a scatter cushion in each end seat. The armchair
+  gets one.
+- **The clothes rail.** Coats, dresses, shirts and trousers, each narrowing at the shoulders,
+  on a hanger with a hook.
+- **The shoe rack.** Loafers, trainers and boots, each an upper on a sole with an opening
+  you can see into.
+- **The curtain.** One cloth hanging in waves from the rod, gathered at the top and deepening
+  toward the hem, on a brass rod and finials.
+
+**The sizes did not change.** Every soft thing stays inside the box the plan draws, and the
+sweep holds that at every size the app allows.
+
+**Where to click.** Start a room with a double bed, a sofa, an armchair, a shoe rack, a
+clothes rail and a curtain. Orbit each in 3D at eye level, then look from low down and from
+above. Recolour each one. Stretch the bed, sofa and curtain to their largest and smallest in
+the Inspector. Lock one piece.
+
+**What right looks like.** At a glance each reads as the real thing: pillows you would sit
+against, a duvet that drapes, clothes that hang, shoes you could step into, a curtain that
+falls in folds. Cushions sit *in* the seat, not on top of it, and never poke above the back
+or the headboard. Lock the bed and its scatter cushions take the locked tint with
+everything else. That one is worth a look because it was wrong before anyone saw it: the
+bed's cushions are remembered per size, and the colour refresh only fired when the cushions
+changed, so locking left them their own colour. Fixed in the same branch, and nothing below
+the browser can see it.
+
+**What wrong looks like.** Cloth flickering where it meets the frame. A pillow or cushion
+floating over the mattress or seat, or buried in it. A duvet showing through the frame's
+side. A recolour that leaves the cushions behind. A shoe's dark insole flickering. And one to
+look at on purpose: under the curtain's hem the screenshot showed **thin bright slivers**
+between the folds. They look like sunlight getting between the back folds and the wall. That
+may be right, or it may read as gaps; it needs a real GPU and a human eye.
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 

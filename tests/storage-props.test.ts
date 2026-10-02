@@ -92,9 +92,9 @@ describe('shoeRow — the shoes stay on the rack', () => {
   });
 
   it('leaves some slots empty and fills most of them', () => {
-    // Six boxes per pair: sole, heel and toe for each shoe.
+    // Four boxes per pair: a sole and the upper standing on it, for each shoe.
     const dim = libraryDim('shoe-rack');
-    const counts = IDS.map((id) => shoeRow({ id, dimMM: dim }).length / 6);
+    const counts = IDS.map((id) => shoeRow({ id, dimMM: dim }).length / 4);
     const full = Math.max(...IDS.map((id) => new Set(shoeRow({ id, dimMM: dim }).map((b) => `${b.tier}:${b.pos[0].toFixed(4)}`)).size / 2));
     for (const n of counts) {
       expect(n).toBeGreaterThan(0);
