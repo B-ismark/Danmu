@@ -45,7 +45,7 @@ import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
 import { claimPressForGizmo, clearGizmoClick, holdPress, releasePress } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
 import { currentRiderRelation, currentRoomScene, useSettledY } from '@/lib/room-scene';
-import { renderBaseDim, resolvePart } from '@/lib/transforms';
+import { overridesBroughtHome, renderBaseDim, resolvePart, type TransformOverrides } from '@/lib/transforms';
 import { useDragLive } from '@/lib/drag-live';
 import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { announce } from '@/lib/announce';
@@ -308,6 +308,31 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // is down waits for the next gesture — the same reason the world is a snapshot
   // (`PlanView`'s `dragRef.world` says why a live one shifts the company twice).
   const convoyCache = useRef<Convoy | null>(null);
+  /** The override maps as this gesture began, for `overridesBroughtHome` as it ends. */
+  const overridesAtStart = useRef<Pick<TransformOverrides, 'positions' | 'rotations'> | null>(null);
+  /** Every gesture opens its world here: the snapshot, a fresh convoy, and the
+   *  overrides that were already there. */
+  function openGestureWorld() {
+    effCache.current = buildEffSnapshot();
+    convoyCache.current = null;
+    const { positions, rotations } = useStudio.getState();
+    overridesAtStart.current = { positions, rotations };
+  }
+  /** …and closes it here, after `commit()` has read both caches or Escape has put
+   *  everything back. Whatever the gesture pinned where it already stood is
+   *  unpinned in the same breath, so a drag out and back leaves the room as it
+   *  found it (`overridesBroughtHome`). The plan's release asks the same question. */
+  function closeGestureWorld() {
+    const before = overridesAtStart.current;
+    const start = effCache.current;
+    overridesAtStart.current = null;
+    effCache.current = null;
+    convoyCache.current = null;
+    if (before && start) {
+      const s = useStudio.getState();
+      s.forgetOverrides(overridesBroughtHome(before, s, start), before);
+    }
+  }
   function convoy(): Convoy {
     if (!convoyCache.current) {
       convoyCache.current = planConvoy({
@@ -908,8 +933,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       cancelled.current = false;
       lastFreePos.current = null;
       lastFreeLandings.current = [];
-      effCache.current = buildEffSnapshot();
-      convoyCache.current = null;
+      openGestureWorld();
     }
   }
 
@@ -1070,6 +1094,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       if (drag.current?.hold) window.clearTimeout(drag.current.hold);
       if (_gestureOwner === partId) _gestureOwner = null;
       releasePress(partId);
+      // A gesture that ends here pinned its company as surely as one that ends on a
+      // release, so it is closed the same way. A no-op when no gesture is open.
+      closeGestureWorld();
       if (useStudio.getState().draggingId === partId) setDragging(null);
       detachTouch();
     },
@@ -1290,8 +1317,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       cancelled.current = false;
       lastFreePos.current = null;
       lastFreeLandings.current = [];
-      effCache.current = buildEffSnapshot(); // one world snapshot for the gesture
-      convoyCache.current = null;
+      openGestureWorld(); // one world snapshot for the gesture
       // Same rule as the touch pick-up above: a press that starts a drag selects
       // what a click would have selected.
       if (!inSelection) {
@@ -1374,8 +1400,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // After the commit, which reads it: the next gesture on this piece may be a
     // rotate, and a stale height would lift it.
     wantY.current = null;
-    effCache.current = null;
-    convoyCache.current = null;
+    closeGestureWorld();
     if (d.armed) setDragging(null);
     setLive(null);
     setDragInvalid(false);
@@ -1416,8 +1441,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     lastFreePos.current = null;
     lastFreeLandings.current = [];
     wantY.current = null;
-    effCache.current = buildEffSnapshot();
-    convoyCache.current = null;
+    openGestureWorld();
     const startDim = currentDim();
     stretch.current = {
       axis,
@@ -1459,8 +1483,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     }
     // After `commit()`, which reads the stretched size through `currentDim()`.
     stretch.current = null;
-    effCache.current = null;
-    convoyCache.current = null;
+    closeGestureWorld();
     setDragging(null);
     gizmoActive.current = false;
   }
@@ -1570,16 +1593,14 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             cancelled.current = false;
             lastFreePos.current = null;
             lastFreeLandings.current = [];
-            effCache.current = buildEffSnapshot();
-            convoyCache.current = null;
+            openGestureWorld();
           }}
           onMouseUp={() => {
             if (!cancelled.current) {
               flushNow();
               commit();
             }
-            effCache.current = null;
-            convoyCache.current = null;
+            closeGestureWorld();
             setDragging(null);
             gizmoActive.current = false;
           }}

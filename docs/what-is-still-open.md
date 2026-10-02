@@ -4264,8 +4264,35 @@ the raw map (above). Twenty-one more mutants, twenty-one killed.
   fix above, and older than it. Making the riders count toward the lead's own
   containment in `lib/drag-resolve.ts` is the likely fix; the Ideas solver already does
   the equivalent (SG-P4).
-- **A drag out and back pins its riders.** Undoing that means deleting the overrides the
-  gesture itself created, which neither tab can do today.
+- **FIXED: a drag out and back pinned everything it carried.** Both tabs write a drag's
+  company live, and a write is an override, so a nightstand dragged out and back — or
+  one Escape cancelled — left its lamp, the rest of the selection and the nightstand
+  itself pinned where they already stood, against a re-detect and saved with the room.
+  The zero-delta restore could only put them back, and putting back is a write. Each tab
+  now records the override maps as a gesture opens and, as it closes, drops every
+  override the gesture CREATED for a piece that ended where it began
+  (`overridesBroughtHome` in `lib/transforms.ts`, `forgetOverrides` in the store). An
+  override the user already had stays, whatever the gesture did. Position and turn are
+  asked separately, as they are stored: a piece turned in place keeps its turn and loses
+  the spot it never left, and a piece moved without turning loses the turn the 3D drop
+  stamps on every release. The 3D half is held by a source test, since nothing drives
+  `Draggable` under jsdom: it asserts the close comes after `commit()` at each release,
+  and that the unmount teardown closes too.
+  Review round 1 found two holes in it. A cancelled drag still cost an undo step that
+  changed nothing: the live writes copy every map they touch, and history compares by
+  reference, so `forgetOverrides` now hands back the maps the gesture BEGAN with when it
+  leaves them with those contents. And a heading was judged "home" against `SAME_M`, a
+  metre tolerance; it is `SAME_TURN` (radians, `lib/item-snap.ts`, shared with the Wall
+  button). **The "dead line" the first mutation pass removed was not dead.** It was
+  `return s` when nothing leaves, and a mutant that survives says only that no test
+  told the two versions apart. Here the difference was a store notification and a
+  rewrite of the saved prefs on every plain click, which none of the tests listened
+  for. Before deleting a line a mutant leaves standing, ask what the tests could not
+  see.
+- **Not measured: a wall dragged out and back.** The wall drag is not a piece gesture,
+  so it does not ask `overridesBroughtHome`, and it carries what is mounted on it by
+  summed steps (`moveWallCarrying`), so whether those pieces even land within `SAME_M` of
+  where they began is unknown. Measure before fixing.
 
 **§ H.6.8 · FIXED 2026-09-30: an arrow key in the plan moves a piece off the line it is
 lined up on.** Found while fixing § H.6.7. With the snap on, a key press ran through the

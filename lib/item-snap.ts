@@ -47,6 +47,13 @@ type Cand = { target: number; at: number; kind: SnapLine['kind']; into?: 1 | -1 
  *  the plan's "did this press move it", which asks the same question of the same lines. */
 export const SAME_M = 1e-9;
 
+/** Below this, two headings are the same heading, in radians. A wall's heading comes
+ *  out of `atan2` and a snapped piece carries it back to the last bit, so this is wider
+ *  than `SAME_M` on purpose: a metre tolerance read as an angle calls that noise a turn. */
+export const SAME_TURN = 1e-6;
+/** How far apart two headings are, the short way round, in radians. */
+export const turnBetween = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+
 /**
  * Every line a piece of this size at (x, z) could be pulled onto, per axis, in a
  * fixed order — for each neighbour, centre first and then the four edge pairings.

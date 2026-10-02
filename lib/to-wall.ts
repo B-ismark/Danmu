@@ -19,7 +19,7 @@
 // Pure, like the convoy: a snapshot of the world in, transforms out.
 import { leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld, type ConvoyMove } from './drag-convoy';
 import { refusalCause, resolvePlacement, type Refusal } from './drag-resolve';
-import { SAME_M } from './item-snap';
+import { SAME_M, SAME_TURN, turnBetween } from './item-snap';
 import { WALL_GAP } from './layout-rules';
 import { snapToWall, wallStandoff } from './physics';
 import type { Landing } from './rigid-parent';
@@ -27,10 +27,6 @@ import type { RiderRelation } from './rider-height';
 import type { Poly } from './geometry';
 import type { ScenePart } from './scene-spec';
 
-/** The same heading, in radians — `leadInherited`'s tolerance. A wall's own heading
- *  comes out of `atan2`, and a piece once snapped carries it back to the last bit. */
-const SAME_TURN = 1e-6;
-const turnBetween = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 /** How far a wall spot lies in FRONT of where the piece stands, facing `rot`: negative
  *  is a step back towards the wall behind it. */
 const intoRoomOf = (spot: { x: number; z: number }, from: readonly number[], rot: number) =>
