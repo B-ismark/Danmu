@@ -4804,6 +4804,39 @@ shipped rung is still the tidiest and much the safest but is no longer clean.
 exempt from it. So "nothing prices support" has a second half — **nothing contains a
 supported piece either.**
 
+**§ H.6.9 · FIXED 2026-10-02: a turn on the 3D ring past 90° was stored as its mirror.**
+Found by § H.6.7's review. The ring (drei's `TransformControls`, one vertical ring) writes
+the group's QUATERNION, and three reads that back as an XYZ Euler, which keeps `y` inside
+±90° and puts the rest into x = z = 180°. Everything in `Draggable` reads `rotation.y` — the
+commit, Escape's restore, the next gesture's start — so a piece turned to 150° was stored at
+30°, and a piece facing the back wall that was merely pressed on the ring was stored facing
+the front: a turn of nothing, recorded as half a turn. The 3D view hid it, because the
+object kept its x = z = 180° until it was next mounted. The plan, collision and the room
+report read the stored number from the first frame.
+Measured in three before fixing (`rotation.y` after a +0.1 turn from 2.5 rad reads 0.5416,
+and from π by nothing reads 0). The ring's `onObjectChange` now puts the group back to a
+pure turn read off the quaternion (`yawOf` in `lib/geometry.ts`, three's own YXZ yaw), so
+`rotation.y` is the heading again everywhere it is read. Five mutants, all killed, one only
+after the helper was pinned against three's YXZ for a tilted orientation too.
+**Not recoverable:** a heading stored mirrored before this cannot be told from a real one,
+so a room someone turned on the ring keeps what it was saved with.
+Rides `claude/amazing-davinci-m8zqys`, PR #230 (`ba4f8e2` and the review fix after it).
+**Review round 1 found three more in the same handler.** A press that turned nothing still
+rewrote the heading as read off the quaternion — measured, 225 of 666 headings came back a
+few ULPs off and all 1334 wound past ±π came back 2π off, and every `===` downstream reads
+that as a turn; `ringHeading` (`lib/drag-resolve.ts`) reads the TURN and keeps the start
+exactly within `SAME_TURN`. Escape mid-turn was not held: the ring kept turning until the
+release, which then committed nothing, so 3D and the plan disagreed again. And letting go
+of the ring ran grid and magnet snap, so a pressed off-grid piece moved; it resolves with
+snap off now, as the plan's turn and a stretch already did. Four mutants, all killed.
+**Still open, filed rather than fixed:** the ring snaps the AMOUNT turned, the plan's handle
+snaps the HEADING, so a piece at 37° turned on 15° steps lands on 52° in 3D and 45° in the
+plan. Making them agree changes what a turn of one step means in one tab, so it is a call to
+make, not a fix to slip in. **Decided against:** `rotation-order="YXZ"` on the group instead
+of the handler. It would fix the fold for every quaternion write, but the handler is needed
+anyway for the winding and for Escape, and changing the order touches every reader of the
+group's rotation for no further gain.
+
 ## What in this document has been in a browser, and what has not
 
 The heading here used to read *"nothing in this document has been in a browser"*. That is

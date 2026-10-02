@@ -62,8 +62,10 @@ import { StretchHandles } from './StretchHandles';
 import { CutAway } from './CutAway';
 import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
+import { yawOf } from '@/lib/geometry';
 import {
   resolvePlacement as resolveDrag,
+  ringHeading,
   snapSteps,
   refusalCause,
   type Resolved,
@@ -423,8 +425,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // A stretch asks to be kept in the room, not re-gridded or re-magnetised
       // where it stands — the same reason `turnInPlace` resolves a turn with snap
       // off. On the grid, a 10 mm wider piece moves its centre 5 mm and that 5 mm
-      // rounds, so the side that is supposed to stay still would step.
-      snapMode: stretch.current ? 'off' : snapMode,
+      // rounds, so the side that is supposed to stay still would step. The ring is
+      // a turn in place too: with snap on, letting go of it put an off-grid piece on
+      // the grid, or onto a neighbour's edge, where the plan's turn leaves it be.
+      snapMode: stretch.current || gizmoActive.current ? 'off' : snapMode,
       currentY: ref.current?.position.y,
       // Where the pointer has a wall piece on its wall, when it is dragging one.
       rawY: wantY.current ?? undefined,
@@ -1570,6 +1574,21 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           // Fingers need a target roughly twice the size a mouse does.
           size={coarsePointer() ? 1.5 : 0.8}
           rotationSnap={rotationSnap}
+          // The ring writes the quaternion, and three reads that back as an XYZ Euler
+          // whose `y` stops at ±90° (see `yawOf`). Everything here reads `rotation.y`
+          // — the commit, Escape's restore, the next gesture's start — so the group is
+          // put back to a pure turn on every change. Same orientation; the number
+          // `rotation.y` holds becomes the heading again, in the winding it began in.
+          // After Escape the ring goes on turning the piece until the release, and
+          // that release commits nothing — so it is held at the start, or 3D shows a
+          // turn the store never got.
+          onObjectChange={() => {
+            const g = ref.current;
+            if (!g) return;
+            const start = dragStartRot.current;
+            if (start === null) g.rotation.set(0, yawOf(g.quaternion), 0);
+            else g.rotation.set(0, cancelled.current ? start : ringHeading(g.quaternion, start), 0);
+          }}
           onMouseDown={() => {
             // This fires only when `pointerDown` found an axis — the press really
             // did land on a handle — and three-stdlib re-runs its hover test at the

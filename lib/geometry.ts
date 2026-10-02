@@ -53,6 +53,17 @@ export function frontVector(rot: number): Vec2 {
   return [Math.sin(rot), Math.cos(rot)];
 }
 
+/** A piece's turn about the vertical, read off its quaternion — which is all the 3D
+ *  ring writes. `rotation.y` is NOT that number once a quaternion has been written:
+ *  three re-derives the Euler in XYZ order, which keeps `y` inside ±90° and folds a
+ *  heading past it into x = z = 180°, so a piece turned to 150° reads 30°, and one
+ *  facing the back wall reads as facing the front. This is the YXZ yaw, which has the
+ *  whole circle, in [−π, π] — both ends, since a turn to −π reads −π. It reads the
+ *  orientation and not the winding; `ringHeading` is what puts the winding back. */
+export function yawOf(q: { x: number; y: number; z: number; w: number }): number {
+  return Math.atan2(2 * (q.x * q.z + q.w * q.y), 1 - 2 * (q.x * q.x + q.y * q.y));
+}
+
 /** Build an OBB from a part's scene transform + dims ([W, D, H] mm). */
 export function obbFromPart(
   pos: [number, number, number],
