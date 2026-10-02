@@ -63,6 +63,7 @@ import {
   WALL_GAP,
 } from './layout-rules';
 import { openingsForRoom, type Opening } from './room-openings';
+import { garmentKind, type GarmentKind, type ShoeKind } from './soft-goods';
 import { containedXZ, settleHeights, settleParts } from './layout-settle';
 // Runtime, but not a cycle: `layout-score` takes only `ScenePart` from here and takes
 // it as a TYPE, so the edge back is erased at compile.
@@ -2051,6 +2052,10 @@ function seededRand(s: string): () => number {
  *  `scene-palette.ts` and the arithmetic stays here, where a test can reach it. */
 export type PropBox = { pos: [number, number, number]; size: [number, number, number]; tone: number };
 
+/** One box of a shoe on a rack: its sole, or the upper standing on it, and which kind of
+ *  shoe it is, in its tier's frame. */
+export type ShoeBox = PropBox & { tier: number; sole: boolean; kind: ShoeKind };
+
 /** How far a shoe rack's tiers lean back, radians. Shared with `ShoeRackGeo`, which
  *  tilts each tier group by it, so the shoes and the slats lean together. */
 export const SHOE_TIER_TILT = 0.12;
@@ -2067,7 +2072,7 @@ export const SHOE_TIER_TILT = 0.12;
  *  as the tier is deep (to 280 mm), as tall as the tier above leaves room for, and the
  *  top tier is bounded by the rack's own height, so a shoe never stands proud of the
  *  `dimMM` the plan draws. A boot's shaft is cut to the headroom its tier has. */
-export function shoeRow(part: { id: string; dimMM: readonly number[] }): Array<PropBox & { tier: number; sole: boolean }> {
+export function shoeRow(part: { id: string; dimMM: readonly number[] }): ShoeBox[] {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
@@ -2087,7 +2092,7 @@ export function shoeRow(part: { id: string; dimMM: readonly number[] }): Array<P
   const used = slots * pitch - 0.035;
   const rand = seededRand(`${part.id}:shoes`);
   const slatTop = 0.006;
-  const out: Array<PropBox & { tier: number; sole: boolean }> = [];
+  const out: ShoeBox[] = [];
   for (let t = 0; t < tiers; t++) {
     // Room above this tier's slats: to the underside of the next tier's, or to the
     // top of the posts for the last one — measured where it is tightest, at the front.
@@ -2097,22 +2102,20 @@ export function shoeRow(part: { id: string; dimMM: readonly number[] }): Array<P
       if (rand() < 0.22) continue;
       const kind = rand();
       const tone = Math.floor(rand() * 64);
-      // boot ≥ 0.82, sneaker ≥ 0.4, flat otherwise
-      const want = kind >= 0.82 ? 0.24 : kind >= 0.4 ? 0.1 : 0.06;
+      // boot ≥ 0.82, trainer ≥ 0.4, loafer otherwise
+      const shoe: ShoeKind = kind >= 0.82 ? 'boot' : kind >= 0.4 ? 'trainer' : 'loafer';
+      const want = shoe === 'boot' ? 0.24 : shoe === 'trainer' ? 0.1 : 0.06;
       const sh = Math.min(want, room);
       const cx = -used / 2 + i * pitch + pairW / 2;
       for (const side of [-1, 1]) {
         const x = cx + side * (shoeW / 2 + 0.006);
         const soleH = Math.min(0.018, sh * 0.3);
-        out.push({ tier: t, sole: true, tone, pos: [x, slatTop + soleH / 2, 0], size: [shoeW, soleH, len] });
-        // The upper: the heel end carries the height (a boot's shaft, a trainer's
-        // collar), the toe end is lower — two boxes rather than one, which is what
-        // makes it read as a shoe rather than a brick.
+        out.push({ tier: t, sole: true, kind: shoe, tone, pos: [x, slatTop + soleH / 2, 0], size: [shoeW, soleH, len] });
+        // The upper stands on the sole and a hair inside its edge all round, so the sole
+        // shows as a welt; its shape — a boot's shaft, a trainer's collar, a loafer's low
+        // vamp — is `lib/soft-goods.ts`'s, drawn inside this box.
         const upH = sh - soleH;
-        const heelL = len * 0.5;
-        out.push({ tier: t, sole: false, tone, pos: [x, slatTop + soleH + upH / 2, -len / 2 + heelL / 2], size: [shoeW * 0.94, upH, heelL] });
-        const toeH = Math.min(upH, 0.05) * 0.75;
-        out.push({ tier: t, sole: false, tone, pos: [x, slatTop + soleH + toeH / 2, len / 2 - (len - heelL) / 2], size: [shoeW * 0.9, toeH, len - heelL] });
+        out.push({ tier: t, sole: false, kind: shoe, tone, pos: [x, slatTop + soleH + upH / 2, 0], size: [shoeW * 0.94, upH, len * 0.97] });
       }
     }
   }
@@ -2135,6 +2138,10 @@ export function railPipe(widthMM: number): number {
   return Math.min(0.0135, (widthMM / 1000) * 0.018);
 }
 
+/** One garment on a rail: where it hangs, the `[thick, length, width]` box it fills below
+ *  `top`, its tone, and what it is. */
+export type Garment = { x: number; thick: number; width: number; top: number; length: number; tone: number; kind: GarmentKind };
+
 /** What a clothes rail is built from — pipe frame, flanged feet, and the clothes on it.
  *
  *  Pure, like `fanBlade`, so the geometry that decides whether anything hangs past the
@@ -2151,7 +2158,7 @@ export function clothesRail(part: { id: string; dimMM: readonly number[] }): {
   footY: number;
   topY: number;
   lowY: number;
-  garments: Array<{ x: number; thick: number; width: number; top: number; length: number; tone: number }>;
+  garments: Garment[];
 } {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
@@ -2167,7 +2174,7 @@ export function clothesRail(part: { id: string; dimMM: readonly number[] }): {
   // A hanger's hook drops 60 mm below the bar; the garment hangs from its shoulders.
   const top = topY - pipe - 0.06;
   const floor = lowY + pipe + 0.04;
-  const garments: Array<{ x: number; thick: number; width: number; top: number; length: number; tone: number }> = [];
+  const garments: Garment[] = [];
   const lo = -postX + pipe + 0.06;
   const hi = postX - pipe - 0.06;
   let x = lo;
@@ -2177,7 +2184,7 @@ export function clothesRail(part: { id: string; dimMM: readonly number[] }): {
     const long = rand() < 0.3;
     const length = Math.min(long ? 1.0 + rand() * 0.15 : 0.62 + rand() * 0.16, top - floor);
     const tone = Math.floor(rand() * 64);
-    if (length > 0.15 && width > 0.1) garments.push({ x: x + thick / 2, thick, width, top, length, tone });
+    if (length > 0.15 && width > 0.1) garments.push({ x: x + thick / 2, thick, width, top, length, tone, kind: garmentKind(long, tone) });
     // Mostly hung close, now and then a gap where something was taken off the rail.
     x += thick + (rand() < 0.15 ? 0.09 : 0.012 + rand() * 0.02);
   }

@@ -13,9 +13,9 @@
 // 12-triangle boxGeometry instead of RoundedBox's few hundred, in the shadow
 // pass too. Visually identical, an order of magnitude cheaper.
 //
-// BoxInstances / PlaneInstances below exist because the parametric shapes repeat
-// ONE element dozens-to-hundreds of times: a maxed bookshelf is 7 bays × 42
-// books = 294 spines, a 5m curtain is 45 pleats, a 2m radiator 33 fins. As
+// BoxInstances below exists because the parametric shapes repeat ONE element
+// dozens-to-hundreds of times: a maxed bookshelf is 7 bays × 42 books = 294
+// spines, a 2m radiator 33 fins. As
 // individual meshes that is 300 geometries + 300 materials + 300 draw calls for
 // a single object. As an InstancedMesh it is one of each.
 
@@ -23,12 +23,13 @@ import { RoundedBox } from '@react-three/drei';
 // R3F 9 dropped the per-element `*Props` aliases; the element prop types now
 // come off the `ThreeElements` map instead.
 import type { ThreeElements } from '@react-three/fiber';
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import { BufferGeometry, Color, DoubleSide, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
 import { PHYSICAL_SURFACES, SURFACE, type SurfaceKey } from './materials';
 import { Edges } from './strokes';
 import { DETAIL } from '@/lib/scene-palette';
 import { LEAF_MESH, PLANT_STEM_TAPER, type PlantLeaf, type PlantStem } from '@/lib/plant-form';
+import type { SoftItem, SoftMeshData } from '@/lib/soft-goods';
 
 /** Below this (metres) the clamped bevel is invisible — skip RoundedBox. */
 const BEVEL_FLOOR = 0.05;
@@ -139,6 +140,11 @@ const _c = new Color();
  *  part's dims are resolved. */
 function useInstanceTransforms(items: readonly InstanceItem[], colorOf?: (i: number) => string) {
   const ref = useRef<InstancedMesh | null>(null);
+  // The colours, as a value. `colorOf` is a fresh closure every render, so it cannot be a
+  // dependency; but the items alone are not enough either, because a memoised form hands
+  // back the SAME items when only a colour moved — lock a bed and its scatter cushions
+  // kept their unlocked tone, since `bedForm` returns one object per size.
+  const tones = colorOf ? items.map((_, i) => colorOf(i)).join('|') : '';
   useLayoutEffect(() => {
     const mesh = ref.current;
     if (!mesh) return;
@@ -164,10 +170,9 @@ function useInstanceTransforms(items: readonly InstanceItem[], colorOf?: (i: num
     // InstancedMesh keeps its own bounds; without this the whole set can be
     // frustum-culled from the wrong place.
     mesh.computeBoundingSphere();
-    // `colorOf` is read, not depended on: callers pass a fresh closure each render, and
-    // the colours follow the items.
+    // `colorOf` is read, not depended on: `tones` is what it answers, as a value.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items]);
+  }, [items, tones]);
   return ref;
 }
 
@@ -199,18 +204,6 @@ export function BoxInstances({ items, color, surface }: InstancedProps) {
     <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
       <boxGeometry args={[1, 1, 1]} />
       <InstanceMaterial color={color} roughness={0.8} envMapIntensity={0.5} surface={surface} />
-    </instancedMesh>
-  );
-}
-
-/** One draw call for N double-sided planes — curtain pleats. */
-export function PlaneInstances({ items, color, surface }: InstancedProps) {
-  const ref = useInstanceTransforms(items);
-  if (items.length === 0) return null;
-  return (
-    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
-      <planeGeometry args={[1, 1]} />
-      <InstanceMaterial color={color} side={DoubleSide} envMapIntensity={0.5} surface={surface} />
     </instancedMesh>
   );
 }
@@ -264,5 +257,83 @@ export function StemInstances({ items, wood, green, noPick }: { items: readonly 
       <cylinderGeometry args={[PLANT_STEM_TAPER, 1, 1, 7]} />
       <InstanceMaterial color="#ffffff" roughness={0.8} envMapIntensity={0.5} />
     </instancedMesh>
+  );
+}
+
+// ─── Cloth ───────────────────────────────────────────────────────────────────
+//
+// The meshes `lib/soft-goods.ts` builds — pillows, cushions, garments, shoes, a duvet, a
+// curtain. Two components for two lifetimes. A UNIT mesh (a cushion, a garment, a shoe)
+// is one constant shared by every piece in the room, so its geometry is built once and
+// kept; `SoftInstances` places it per item, as `LeafInstances` places the unit leaf. A
+// PER-PIECE mesh (a duvet, a curtain) is a new object at every size a resize passes
+// through, so `SoftMesh` owns its geometry and disposes it when the mesh changes —
+// sharing a cache there would keep the GPU buffers of every size a drag went by.
+
+function geometryOf(mesh: SoftMeshData): BufferGeometry {
+  const g = new BufferGeometry();
+  g.setAttribute('position', new Float32BufferAttribute([...mesh.positions], 3));
+  g.setIndex([...mesh.index]);
+  g.computeVertexNormals();
+  return g;
+}
+
+const unitGeometry = new WeakMap<SoftMeshData, BufferGeometry>();
+function sharedGeometry(mesh: SoftMeshData): BufferGeometry {
+  let g = unitGeometry.get(mesh);
+  if (!g) {
+    g = geometryOf(mesh);
+    unitGeometry.set(mesh, g);
+  }
+  return g;
+}
+
+/** One draw call for N copies of a unit cloth mesh, each scaled to the box it fills. */
+export function SoftInstances({
+  mesh,
+  items,
+  color,
+  colorOf,
+  surface,
+  doubleSide,
+}: {
+  mesh: SoftMeshData;
+  items: readonly SoftItem[];
+  /** shared albedo; pass '#ffffff' with `colorOf` for a colour per item */
+  color: string;
+  colorOf?: (i: number) => string;
+  surface?: InstancedProps['surface'];
+  /** for cloth that is open somewhere — a garment's hem, a shoe's opening */
+  doubleSide?: boolean;
+}) {
+  const ref = useInstanceTransforms(items as InstanceItem[], colorOf);
+  if (items.length === 0) return null;
+  return (
+    <instancedMesh ref={ref} args={[sharedGeometry(mesh), undefined, items.length]} castShadow receiveShadow>
+      <InstanceMaterial color={color} envMapIntensity={0.5} side={doubleSide ? DoubleSide : undefined} surface={surface} />
+    </instancedMesh>
+  );
+}
+
+/** One cloth mesh built for this piece at this size — a duvet, a curtain. */
+export function SoftMesh({
+  mesh,
+  color,
+  surface,
+  position = [0, 0, 0],
+  doubleSide,
+}: {
+  mesh: SoftMeshData;
+  color: string;
+  surface?: InstancedProps['surface'];
+  position?: [number, number, number];
+  doubleSide?: boolean;
+}) {
+  const geometry = useMemo(() => geometryOf(mesh), [mesh]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <mesh geometry={geometry} position={position} castShadow receiveShadow>
+      <InstanceMaterial color={color} envMapIntensity={0.5} side={doubleSide ? DoubleSide : undefined} surface={surface} />
+    </mesh>
   );
 }
