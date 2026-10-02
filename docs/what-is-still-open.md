@@ -8479,7 +8479,7 @@ is `scene-spec`'s and survives. Not fixed here.
 
 ---
 
-## § 43 · Two loose ends from the wall-colour work
+## § 43 · Two loose ends from the wall-colour work — MOOT 2026-10-02: the feature was removed at the user's call ("Use my photos' colours", `lib/wall-sample.ts`, `lib/wall-colors.ts`)
 
 Filed **2026-09-09** alongside § 42. Neither blocks anything; both are recorded so they
 are not re-derived from scratch.

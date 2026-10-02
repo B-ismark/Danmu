@@ -329,9 +329,10 @@ export function RoomDimsEditor() {
   // replacement reason, that the fields are the measurement now, is only true while
   // the section is OPEN, which is exactly when a `meta` is not shown. It is back.
   return (
-    // `--hairline`, not `--edge`: a decorative divider between two groups in the
-    // rail, not the boundary of anything interactive.
-    <div style={{ paddingBottom: 14, marginBottom: 4, borderBottom: '1px solid var(--hairline)' }}>
+    // No divider under it: it is the section's last group since the photo-colours
+    // button went (the user's call, 2026-10-02), and a rule under the last thing in a
+    // section divides it from nothing.
+    <div>
         {/* The room still stands at its shape's typical size, because the size step
             was skipped (`RoomData.roughSize`). Said HERE, above the boxes that fix
             it, and nowhere louder: nothing is wrong, a size simply has not been
