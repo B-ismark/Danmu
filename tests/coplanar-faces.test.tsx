@@ -47,8 +47,13 @@ import { walk, type Prim } from './helpers/geometry-walk';
  *  and far above float noise in the transform stack. */
 const EPS = 1e-4;
 
-/** Boxes the sweep reaches on the two reported pieces at their library size. */
-const PRINT = { wardrobe: 16, bed: 10 };
+/** Boxes the sweep reaches on the two reported pieces at their library size.
+ *
+ *  The bed was 10 and is 7: frame, mattress, headboard and four legs. The three that went
+ *  are the duvet and the two pillows, which are cloth now (`lib/soft-goods.ts`) — a duvet
+ *  that rolls over the mattress's edge and hangs 22 mm clear of its side cannot share the
+ *  mattress's front face, which was the fight this file was written for. */
+const PRINT = { wardrobe: 16, bed: 7 };
 
 const categoryOf = (shape: Shape): Category =>
   PART_LIBRARY.find((l) => l.shape === shape)?.category ?? 'other';
@@ -69,7 +74,7 @@ type Aabb = { lo: [number, number, number]; hi: [number, number, number]; kind: 
 
 /** A box primitive as an axis-aligned box, or null when its corners say it is turned. */
 function aabbOf(p: Prim, i: number): Aabb | null {
-  if (!['Box', 'boxGeometry', 'planeGeometry', 'BoxInstances', 'PlaneInstances'].includes(p.kind)) return null;
+  if (!['Box', 'boxGeometry', 'planeGeometry', 'BoxInstances'].includes(p.kind)) return null;
   if (p.spun) return null;
   const distinct = (vs: number[]) => {
     const out: number[] = [];

@@ -5,13 +5,11 @@
 // double bed, etc).
 
 import { Color } from 'three';
-import { Box, BoxInstances, LeafInstances, PlaneInstances, StemInstances, type InstanceItem } from './Box';
+import { Box, BoxInstances, LeafInstances, SoftInstances, SoftMesh, StemInstances, type InstanceItem } from './Box';
 import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
 import {
-  consoleSlabs,
-  doorHandleY,
   drawerSlide,
   clothesRail,
   fanBlade,
@@ -36,6 +34,38 @@ import { roleOf, bedPillows } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
 import { DINING_LEG, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from '@/lib/foot-cells';
+import {
+  bedForm,
+  curtainCloth,
+  CUSHION_MESH,
+  HEADBOARD_T,
+  GARMENT_KINDS,
+  GARMENT_MESH,
+  leaningCushion,
+  SHOE_KINDS,
+  SHOE_LINING_MESH,
+  SHOE_SOLE_MESH,
+  SHOE_UPPER_MESH,
+  softHash,
+  sofaForm,
+  SOFA_BACK_LEAN,
+  standUp,
+  THROW_LEAN,
+  type SoftItem,
+} from '@/lib/soft-goods';
+import {
+  acUnitForm,
+  chestFreezerForm,
+  doorForm,
+  microwaveForm,
+  soundbarForm,
+  tvConsoleForm,
+  washingMachineForm,
+  waterDispenserForm,
+  type HardPart,
+  type HardTone,
+} from '@/lib/hard-goods';
+import type { SurfaceKey } from './materials';
 
 /** The module ranges the TILING parametric shapes are divided by, resolved once at module
  *  scope so a renderer reads a value rather than doing a table lookup per frame.
@@ -273,18 +303,22 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
 // Parametric: seat + back cushions tile across the width (loveseat → 4-seater)
 // instead of one stretched slab. Module count derives from the effective width.
 function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
+  const form = sofaForm(part);
+  const { w, d, h, arm, legH, seatTop, innerW, backTh } = form;
   const main = body(part, locked);
   const cushion = shade(main, 14);
-  const arm = Math.min(0.18, w * 0.12);
-  const legH = 0.1;
-  const seatTop = Math.min(0.46, Math.max(0.34, h * 0.5));
-  const innerW = Math.max(0.4, w - arm * 2);
   const seats = moduleCount(innerW, SEAT);
   const seatW = innerW / seats;
-  const backTh = Math.min(0.2, d * 0.2);
+  // Seat and back cushions are boxed cushions — a flat face, a rounded seam — in the boxes
+  // the sofa always drew them in; the back ones lean into the backrest a little.
+  const seatItems: SoftItem[] = [];
+  const backItems: SoftItem[] = [];
+  for (let i = 0; i < seats; i++) {
+    const x = -innerW / 2 + (i + 0.5) * seatW;
+    seatItems.push({ pos: [x, form.seatY, d * 0.04], size: [seatW * 0.94, form.seatH, form.seatD] });
+    backItems.push({ pos: [x, form.backY, form.backZ], size: [seatW * 0.92, form.backT, form.backH], rot: standUp(SOFA_BACK_LEAN) });
+  }
+  const throwTone = (i: number) => (locked ? shade(SCENE.lockedTint, 14) : DECOR.pillow[(form.throws[i].tone ?? 0) % DECOR.pillow.length]);
   const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * (w / 2 - 0.08), sz * (d / 2 - 0.08)] as [number, number]));
   return (
     <>
@@ -299,16 +333,10 @@ function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       {/* arms */}
       <Box size={[arm, h * 0.62 - legH - SEAM, d]} position={[-w / 2 + arm / 2, (h * 0.62 + legH + SEAM) / 2, 0]} color={main} surface="fabric" roughness={0.75} />
       <Box size={[arm, h * 0.62 - legH - SEAM, d]} position={[w / 2 - arm / 2, (h * 0.62 + legH + SEAM) / 2, 0]} color={main} surface="fabric" roughness={0.75} />
-      {/* per-seat cushions (tiled) */}
-      {Array.from({ length: seats }).map((_, i) => {
-        const x = -innerW / 2 + (i + 0.5) * seatW;
-        return (
-          <group key={i}>
-            <Box size={[seatW * 0.94, 0.2, d * 0.72]} position={[x, seatTop + 0.06, d * 0.04]} color={cushion} surface="fabric" />
-            <Box size={[seatW * 0.92, (h - seatTop) * 0.82, 0.16]} position={[x, seatTop + (h - seatTop) * 0.45, -d * 0.3]} color={cushion} surface="fabric" />
-          </group>
-        );
-      })}
+      {/* per-seat cushions (tiled), and a scatter cushion in each end seat */}
+      <SoftInstances mesh={CUSHION_MESH.box} items={seatItems} color={cushion} surface={SURFACE.fabric} />
+      <SoftInstances mesh={CUSHION_MESH.box} items={backItems} color={cushion} surface={SURFACE.fabric} />
+      <SoftInstances mesh={CUSHION_MESH.scatter} items={form.throws} color="#ffffff" colorOf={throwTone} surface={SURFACE.fabric} />
       {legs.map(([x, z], i) => (
         <Box surface="wood" key={i} size={[0.06, legH, 0.06]} position={[x, legH / 2, z]} color={DETAIL.darkWood} roughness={0.7} />
       ))}
@@ -369,6 +397,88 @@ function shade(hex: string, pct: number): string {
   const g = adj((n >> 8) & 255);
   const b = adj(n & 255);
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+/** How a `HardTone` is drawn: its colour and finish. `body` is the piece's own colour and
+ *  `look` its finish, so a recolour reaches every surface the user would call the piece;
+ *  the hardware keeps its own colour from `DETAIL`, as a real appliance's does. */
+type HardLook = { surface?: SurfaceKey; roughness?: number; metalness?: number };
+type ToneMaterial = HardLook & {
+  color: string;
+  emissive?: string;
+  emissiveIntensity?: number;
+  transparent?: boolean;
+  opacity?: number;
+};
+function toneMaterial(tone: HardTone, bodyC: string, look: HardLook): ToneMaterial {
+  switch (tone) {
+    case 'body': return { ...look, color: bodyC };
+    case 'trim': return { ...look, color: shade(bodyC, -10) };
+    case 'panel': return { ...look, color: shade(bodyC, 8) };
+    case 'grille': return { color: shade(bodyC, 6), roughness: 0.96 };
+    case 'dark': return { color: DETAIL.hardware, roughness: 0.7 };
+    case 'steel': return { color: DETAIL.steel, roughness: 0.35, metalness: 0.6 };
+    case 'brass': return { color: DETAIL.brass, roughness: 0.35, metalness: 0.7 };
+    case 'wood': return { color: DETAIL.darkWood, surface: 'wood' };
+    case 'glass': return { color: DETAIL.glass, roughness: 0.15, metalness: 0.3 };
+    case 'display': return { color: DETAIL.display, roughness: 0.3, emissive: DETAIL.led, emissiveIntensity: 0.12 };
+    case 'led': return { color: DETAIL.led, roughness: 0.3, emissive: DETAIL.led, emissiveIntensity: 0.9 };
+    case 'water': return { color: DETAIL.water, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.45 };
+    case 'hot': return { color: DETAIL.tapHot, roughness: 0.4 };
+    case 'cold': return { color: DETAIL.tapCold, roughness: 0.4 };
+  }
+}
+
+/** Draws a `lib/hard-goods.ts` form. Every number is the form's; this colours it. */
+function HardParts({ parts, bodyC, look }: { parts: HardPart[]; bodyC: string; look: HardLook }) {
+  return (
+    <>
+      {parts.map((p) => {
+        const mat = toneMaterial(p.tone, bodyC, look);
+        if (p.kind === 'box') {
+          return (
+            <Box
+              key={p.key}
+              size={p.size}
+              position={p.pos}
+              color={mat.color}
+              surface={mat.surface}
+              roughness={mat.roughness}
+              metalness={mat.metalness}
+              emissive={mat.emissive}
+              emissiveIntensity={mat.emissiveIntensity}
+            />
+          );
+        }
+        const { surface, ...plain } = mat;
+        const material = <meshStandardMaterial {...(surface ? SURFACE[surface] : undefined)} {...plain} />;
+        if (p.kind === 'post') {
+          return (
+            <mesh key={p.key} position={p.pos} castShadow receiveShadow>
+              <cylinderGeometry args={[p.r, p.rBottom, p.h, 20]} />
+              {material}
+            </mesh>
+          );
+        }
+        if (p.kind === 'disc') {
+          // A cylinder's axis is Y; turned a quarter about X it lies on the depth axis,
+          // its face to the front.
+          return (
+            <mesh key={p.key} position={p.pos} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+              <cylinderGeometry args={[p.r, p.r, p.t, 28]} />
+              {material}
+            </mesh>
+          );
+        }
+        return (
+          <mesh key={p.key} position={p.pos} castShadow receiveShadow>
+            <torusGeometry args={[p.r, p.tube, 12, 32]} />
+            {material}
+          </mesh>
+        );
+      })}
+    </>
+  );
 }
 
 /** Scales a renderer whose geometry is hard-coded metres to the size the piece DECLARES.
@@ -499,17 +609,23 @@ function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
 function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const seat = body(part, locked);
   const leg = body(part, locked, '#4A3526');
-  const cushionDark = shade(seat, -10);
+  // One scatter cushion leaning on the back, on the seat cushion's crown — read off the two
+  // cushions it touches, so moving either one carries it.
+  const seatCushion: SoftItem = { pos: [0, 0.43, SEAM / 2], size: [0.5, 0.12, 0.7 - SEAM] };
+  const backCushion: SoftItem = { pos: [0, 0.73, -0.29], size: [0.68, 0.12, 0.58], rot: standUp(0) };
+  const scatter = [
+    leaningCushion(0, 0.34, 0.1, 0.34, THROW_LEAN, seatCushion.pos[1] + seatCushion.size[1] / 2, backCushion.pos[2] + backCushion.size[1] / 2),
+  ];
+  const scatterTone = locked ? shade(SCENE.lockedTint, 14) : DECOR.pillow[Math.floor(softHash(part.id, 'throw') * 64) % DECOR.pillow.length];
   return (
     <FitToDim natural={[0.7, 1.02, 0.7]} part={part}>
-        {/* seat cushion */}
-        {/* between the arms, not under them: full width, its sides and underside lay on
-            the arms' own planes and fought them */}
-        <Box size={[0.5, 0.12, 0.7 - SEAM]} position={[0, 0.43, SEAM / 2]} color={seat} surface="fabric" />
-        {/* back cushion */}
-        <Box size={[0.68, 0.58, 0.12]} position={[0, 0.73, -0.29]} color={seat} surface="fabric" />
-        {/* back cushion crease line */}
-        <Box size={[0.62, 0.005, 0.1]} position={[0, 0.68, -0.24]} color={cushionDark} surface="fabric" roughness={0.98} />
+        {/* seat cushion — between the arms, not under them: full width, its sides and
+            underside lay on the arms' own planes and fought them */}
+        <SoftInstances mesh={CUSHION_MESH.box} items={[seatCushion]} color={seat} surface={SURFACE.fabric} />
+        {/* back cushion, stood up in the box the back always filled: its thickness, unit +Y,
+            turned to face forward */}
+        <SoftInstances mesh={CUSHION_MESH.box} items={[backCushion]} color={seat} surface={SURFACE.fabric} />
+        <SoftInstances mesh={CUSHION_MESH.scatter} items={scatter} color={scatterTone} surface={SURFACE.fabric} />
         {/* armrests */}
         <Box size={[0.1, 0.38, 0.68]} position={[-0.3, 0.56, 0]} color={seat} surface="fabric" roughness={0.95} />
         <Box size={[0.1, 0.38, 0.68]} position={[0.3, 0.56, 0]} color={seat} surface="fabric" roughness={0.95} />
@@ -802,10 +918,9 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const tiers = moduleCount(h, TIER);
   const gap = h / tiers;
   const posts = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * (w / 2 - 0.02), sz * (d / 2 - 0.02)] as [number, number]));
-  const shoes = shoeRow(part).map((b) => ({
-    ...b,
-    color: locked ? shade(SCENE.lockedTint, 10) : (b.sole ? DECOR.sole : DECOR.shoe)[b.tone % DECOR.shoe.length],
-  }));
+  const shoes = shoeRow(part);
+  const shoeTone = (b: (typeof shoes)[number]) => (locked ? shade(SCENE.lockedTint, b.sole ? -10 : 10) : (b.sole ? DECOR.sole : DECOR.shoe)[b.tone % DECOR.shoe.length]);
+  const lining = locked ? shade(SCENE.lockedTint, -30) : DETAIL.lining;
   return (
     <>
       {posts.map(([x, z], i) => (
@@ -820,7 +935,8 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
           pos: [0, 0, -d / 2 + (j + 0.5) * (d / slatCount)] as [number, number, number],
           size: [w - 0.06, 0.012, 0.018] as [number, number, number],
         }));
-        const pairs: InstanceItem[] = shoes.filter((b) => b.tier === i).map((b) => ({ pos: b.pos, size: b.size, color: b.color }));
+        const tier = shoes.filter((b) => b.tier === i);
+        const soles = tier.filter((b) => b.sole);
         return (
           <group key={i} position={[0, (i + 0.5) * gap, 0]} rotation={[-SHOE_TIER_TILT, 0, 0]}>
             <BoxInstances items={slats} color={wood} surface={{ roughness: 0.7 }} />
@@ -830,7 +946,18 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
             {[-1, 1].map((sx) => (
               <Box key={sx} surface="wood" size={[0.02, 0.025, d - 0.02]} position={[sx * (w / 2 - 0.03), -0.01, 0]} color={wood} roughness={0.7} />
             ))}
-            {pairs.length > 0 && <BoxInstances items={pairs} color="#ffffff" surface={{ roughness: 0.75 }} />}
+            {/* Each shoe is a sole and an upper of its kind standing on it, with the dark
+                lining showing at the floor of its opening. */}
+            <SoftInstances mesh={SHOE_SOLE_MESH} items={soles} color="#ffffff" colorOf={(k) => shoeTone(soles[k])} surface={{ roughness: 0.85 }} />
+            {SHOE_KINDS.map((kind) => {
+              const uppers = tier.filter((b) => !b.sole && b.kind === kind);
+              return (
+                <group key={kind}>
+                  <SoftInstances mesh={SHOE_UPPER_MESH[kind]} items={uppers} color="#ffffff" colorOf={(k) => shoeTone(uppers[k])} surface={{ roughness: 0.7 }} doubleSide />
+                  <SoftInstances mesh={SHOE_LINING_MESH[kind]} items={uppers} color={lining} surface={{ roughness: 0.95 }} doubleSide />
+                </group>
+              );
+            })}
           </group>
         );
       })}
@@ -852,18 +979,20 @@ function ClothesRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
   const span = 2 * postX;
   const footLen = d - 2 * flange;
   const hangerWood = locked ? shade(SCENE.lockedTint, 20) : DETAIL.lightWood;
-  const clothes: InstanceItem[] = [];
   const hangers: InstanceItem[] = [];
   for (const g of rail.garments) {
-    const color = locked ? shade(SCENE.lockedTint, 10) : DECOR.garment[g.tone % DECOR.garment.length];
-    // the hook, from the bar's underside down to the hanger
+    // the hook, from the bar's underside down to the hanger, and the hanger's neck the
+    // garment's shoulders fold over — its arms are inside the cloth
     hangers.push({ pos: [g.x, topY - pipe - 0.03, 0], size: [0.004, 0.06, 0.004] });
-    hangers.push({ pos: [g.x, g.top + 0.006, 0], size: [0.008, 0.012, g.width] });
-    // shoulders, then the body a touch narrower — a flat box reads as a board
-    const shoulder = Math.min(0.12, g.length * 0.2);
-    clothes.push({ pos: [g.x, g.top - shoulder / 2, 0], size: [g.thick, shoulder, g.width], color });
-    clothes.push({ pos: [g.x, g.top - shoulder - (g.length - shoulder) / 2, 0], size: [g.thick * 0.9, g.length - shoulder, g.width * 0.86], color });
+    hangers.push({ pos: [g.x, g.top, 0], size: [0.012, 0.016, 0.03] });
   }
+  // One instanced set per kind of garment, each hung in the box `clothesRail` gives it.
+  const byKind = GARMENT_KINDS.map((kind) => {
+    const hung = rail.garments.filter((g) => g.kind === kind);
+    const items: SoftItem[] = hung.map((g) => ({ pos: [g.x, g.top - g.length / 2, 0], size: [g.thick, g.length, g.width] }));
+    const tone = (k: number) => (locked ? shade(SCENE.lockedTint, 10) : DECOR.garment[hung[k].tone % DECOR.garment.length]);
+    return { kind, items, tone };
+  });
   return (
     <>
       {[-1, 1].map((sx) => (
@@ -907,21 +1036,22 @@ function ClothesRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
         </mesh>
       ))}
       {hangers.length > 0 && <BoxInstances items={hangers} color={hangerWood} surface={{ roughness: 0.6 }} />}
-      {clothes.length > 0 && <BoxInstances items={clothes} color="#ffffff" surface={SURFACE.fabric} />}
+      {byKind.map(({ kind, items, tone }) => (
+        <SoftInstances key={kind} mesh={GARMENT_MESH[kind]} items={items} color="#ffffff" colorOf={tone} surface={SURFACE.fabric} doubleSide />
+      ))}
     </>
   );
 }
 
 // ─── Beds ───────────────────────────────────────────────────────────────
 function BedGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
+  const form = bedForm(part, bedPillows(part.dimMM[0]));
+  const { w, d, h } = form;
   const frame = body(part, locked);
-  const mattress = body(part, locked, '#E8D5B0');
-  // Pillows always neutral — real beds have white/cream pillows regardless of frame color.
-  const pillow = locked ? shade(SCENE.lockedTint, 20) : '#F0ECE3';
-  const pillows = bedPillows(part.dimMM[0]);
+  const mattress = body(part, locked, DETAIL.mattress);
+  // Linen always neutral — real beds have white/cream pillows regardless of frame color.
+  const linen = locked ? shade(SCENE.lockedTint, 20) : DETAIL.linen;
+  const scatterTone = (i: number) => (locked ? shade(SCENE.lockedTint, 10) : DECOR.pillow[(form.scatter[i].tone ?? 0) % DECOR.pillow.length]);
   return (
     <>
       {/* The headboard is the bed's full width, so the frame stands `SEAM` inside it —
@@ -930,15 +1060,16 @@ function BedGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       {/* Inset 40 mm a side, not 2%. At 2% a single bed's mattress side rose 18 mm in
           from the frame's edge — inside the frame's 30 mm rounded edge, so the line where
           one met the other ran along a curve and came out ragged. */}
-      <Box surface="fabric" size={[w - 0.08, h * 0.35, d - 0.08]} position={[0, h * 0.5, 0]} color={mattress} roughness={0.96} />
-      {/* duvet draped over the foot two-thirds — it ended exactly on the mattress's
-          front face, and that seam was the dashed line along the foot of the bed. It
-          falls 10 mm past it now, and stops short of the pillows. */}
-      <Box surface="fabric" size={[w * 0.99, h * 0.2, d * 0.62]} position={[0, h * 0.62, d / 2 - 0.03 - d * 0.31]} color={shade(mattress, -8)} roughness={0.97} />
-      <Box surface="wood" size={[w, h * 1.4, 0.05]} position={[0, h * 0.7, -d / 2]} color={frame} roughness={0.7} />
-      {pillows.xs.map((x) => (
-        <Box key={x} surface="fabric" size={[pillows.w, h * 0.15, d * 0.25]} position={[x, h * 0.75, -d * 0.3]} color={pillow} roughness={0.93} />
-      ))}
+      <Box surface="fabric" size={form.mattress.size} position={[0, form.mattress.y, 0]} color={mattress} roughness={0.96} />
+      {/* The duvet is cloth laid over the mattress from the pillows to the foot, rolling
+          over the edges and hanging to a level hem above the frame; the sheet is turned
+          back over it at the head. */}
+      <SoftMesh mesh={form.duvet} color={shade(mattress, -8)} surface={SURFACE.fabric} doubleSide />
+      <SoftInstances mesh={CUSHION_MESH.box} items={[form.fold]} color={linen} surface={SURFACE.fabric} />
+      <Box surface="wood" size={[w, h * 1.4, HEADBOARD_T]} position={[0, h * 0.7, -d / 2]} color={frame} roughness={0.7} />
+      {/* pillows propped against the headboard, a scatter cushion in front of each */}
+      <SoftInstances mesh={CUSHION_MESH.pillow} items={form.pillows} color={linen} surface={SURFACE.fabric} />
+      <SoftInstances mesh={CUSHION_MESH.scatter} items={form.scatter} color="#ffffff" colorOf={scatterTone} surface={SURFACE.fabric} />
       {[
         [-w / 2 + 0.04, -d / 2 + 0.04],
         [w / 2 - 0.04, -d / 2 + 0.04],
@@ -1146,31 +1277,24 @@ function CurtainGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const h = part.dimMM[2] / 1000;
   const cloth = tint(part);
-  // Accordion pleats: vertical strips with alternating Y-rotation read as folds
-  // and catch light per-face — far less flat than two billboard planes.
-  const pleats = moduleCount(w, PLEAT);
-  const stripW = w / pleats;
-  // 45 planes on a 5m curtain — one instanced set instead of 45 meshes.
-  const folds: InstanceItem[] = Array.from({ length: pleats }, (_, i) => ({
-    pos: [-w / 2 + (i + 0.5) * stripW, -0.02, 0] as [number, number, number],
-    size: [stripW * 1.45, h - 0.04, 1] as [number, number, number],
-    rot: [0, (i % 2 === 0 ? 1 : -1) * 0.55, 0] as [number, number, number],
-  }));
+  // One cloth hanging in soft waves from the rod, a wave per two pleats — gathered at the
+  // header, deeper toward the hem, no two quite alike.
+  const drape = curtainCloth(part.dimMM, moduleCount(w, PLEAT));
   return (
     <>
       {/* horizontal rod */}
       <mesh position={[0, h / 2 - 0.015, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.018, 0.018, w * 1.05, 12]} />
-        <meshStandardMaterial color="#8A6D44" {...SURFACE.metal} />
+        <meshStandardMaterial color={DETAIL.brass} {...SURFACE.metal} />
       </mesh>
       {/* finials */}
       {[-1, 1].map((s) => (
         <mesh key={s} position={[s * (w / 2 + 0.025), h / 2 - 0.015, 0]}>
           <sphereGeometry args={[0.03, 12, 12]} />
-          <meshStandardMaterial color="#8A6D44" {...SURFACE.metal} />
+          <meshStandardMaterial color={DETAIL.brass} {...SURFACE.metal} />
         </mesh>
       ))}
-      <PlaneInstances items={folds} color={cloth} surface={SURFACE.fabric} />
+      <SoftMesh mesh={drape} color={cloth} surface={SURFACE.fabric} doubleSide />
     </>
   );
 }
@@ -1487,62 +1611,25 @@ function PaintingGeo({ part }: { part: ScenePart }) {
 }
 
 function ACUnitGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const shell = body(part, locked);
-  return (
-    <>
-      <Box size={[w, h, d]} position={[0, 0, 0]} color={shell} />
-      {/* louvered front grille */}
-      {[-0.12, -0.04, 0.04, 0.12].map((y, i) => (
-        <Box key={i} size={[w * 0.92, 0.02, 0.01]} position={[0, y * h, d / 2 + 0.005]} color="#888" edgeOpacity={0.3} />
-      ))}
-    </>
-  );
+  return <HardParts parts={acUnitForm(part.dimMM)} bodyC={body(part, locked)} look={{ roughness: 0.4 }} />;
 }
 
 function DoorGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const h = part.dimMM[2] / 1000;
   // A door anchors 'wall-floor' (physics.ts): CENTRED on the group origin like
   // every other wall-mounted part, with `groundY` putting that origin at h/2 so
-  // the panel still reaches the floor. Bottom-anchoring it here is what made a
+  // the leaf still reaches the floor. Bottom-anchoring it here is what made a
   // seeded door hang a metre up the wall — `wallApertures` cut the hole from the
   // mesh centre while this drew upwards from it, and the two disagreed by h/2.
-  return (
-    <>
-      {/* The panel is its DECLARED depth. It was a flat 0.04 here, which while the
-          shape group-scaled at least tracked `dimMM[1]` through the scale; parametric
-          pins the group at 1, so a literal would freeze the panel at 40 mm while the
-          Inspector's depth field went on editing a number nothing drew — and at the
-          band's 35 mm floor the drawn panel would be THICKER than the piece it is in. */}
-      <Box surface="wood" size={[w, h, part.dimMM[1] / 1000]} position={[0, 0, 0]} color={tint(part)} />
-      {/* handle at ~1 m from the floor, i.e. 1 m up from the panel's bottom edge */}
-      <mesh position={[w / 2 - 0.06, -h / 2 + doorHandleY(part.dimMM[2]), 0.025]}>
-        <sphereGeometry args={[0.025, 12, 12]} />
-        <meshStandardMaterial color="#B89060" />
-      </mesh>
-    </>
-  );
+  //
+  // Every part is drawn at the DECLARED depth (`doorForm`). A flat 0.04 once stood
+  // here, which parametric's scale-1 pin froze at 40 mm while the Inspector's depth
+  // field edited a number nothing drew.
+  return <HardParts parts={doorForm(part.dimMM)} bodyC={tint(part)} look={{ surface: 'wood' }} />;
 }
 
 // ─── Appliances ───────────────────────────────────────────────────────────
 function SoundbarGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const bodyC = tint(part);
-  return (
-    <>
-      <Box size={[w, h, d]} position={[0, h / 2, 0]} color={bodyC} roughness={0.55} />
-      {/* fabric grille front */}
-      <mesh position={[0, h / 2, d / 2 + 0.002]}>
-        <planeGeometry args={[w * 0.96, h * 0.78]} />
-        <meshStandardMaterial color={shade(bodyC, 6)} roughness={0.96} />
-      </mesh>
-    </>
-  );
+  return <HardParts parts={soundbarForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.55 }} />;
 }
 
 function RadiatorGeo({ part }: { part: ScenePart }) {
@@ -1600,74 +1687,15 @@ function AirPurifierGeo({ part }: { part: ScenePart }) {
 }
 
 function WashingMachineGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const bodyC = tint(part);
-  const doorR = Math.min(w, h) * 0.3;
-  return (
-    <>
-      <Box size={[w, h, d]} position={[0, h / 2, 0]} color={bodyC} roughness={0.45} metalness={0.05} />
-      {/* door ring + glass */}
-      <mesh position={[0, h * 0.44, d / 2 + 0.01]}>
-        <torusGeometry args={[doorR, 0.03, 12, 28]} />
-        <meshStandardMaterial color="#bfc3c6" metalness={0.6} roughness={0.3} />
-      </mesh>
-      <mesh position={[0, h * 0.44, d / 2 + 0.011]}>
-        <circleGeometry args={[doorR * 0.82, 28]} />
-        <meshStandardMaterial color="#22303a" metalness={0.4} roughness={0.15} />
-      </mesh>
-      {/* control panel */}
-      <Box size={[w * 0.92, h * 0.13, 0.012]} position={[0, h * 0.86, d / 2]} color={shade(bodyC, -6)} />
-    </>
-  );
+  return <HardParts parts={washingMachineForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.45, metalness: 0.05 }} />;
 }
 
 function MicrowaveGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const bodyC = tint(part);
-  return (
-    <>
-      <Box size={[w, h, d]} position={[0, h / 2, 0]} color={bodyC} roughness={0.5} metalness={0.1} />
-      {/* door window */}
-      <mesh position={[-w * 0.12, h / 2, d / 2 + 0.002]}>
-        <planeGeometry args={[w * 0.58, h * 0.72]} />
-        <meshStandardMaterial color="#15181c" roughness={0.2} metalness={0.2} />
-      </mesh>
-      {/* control strip */}
-      <mesh position={[w * 0.34, h / 2, d / 2 + 0.002]}>
-        <planeGeometry args={[w * 0.22, h * 0.82]} />
-        <meshStandardMaterial color={shade(bodyC, 12)} roughness={0.6} />
-      </mesh>
-      {/* handle */}
-      <Box size={[0.02, h * 0.6, 0.03]} position={[w * 0.17, h / 2, d / 2 + 0.015]} color="#cfcfcf" roughness={0.4} metalness={0.5} />
-    </>
-  );
+  return <HardParts parts={microwaveForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.5, metalness: 0.1 }} />;
 }
 
 function WaterDispenserGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const bodyC = tint(part);
-  return (
-    <>
-      <Box size={[w, h * 0.7, d]} position={[0, h * 0.35, 0]} color={bodyC} roughness={0.45} />
-      {/* taps (hot/cold) */}
-      {[-0.05, 0.05].map((x, i) => (
-        <Box key={i} size={[0.03, 0.06, 0.05]} position={[x, h * 0.52, d / 2 + 0.02]} color={i ? '#c0392b' : '#2b6fd4'} />
-      ))}
-      {/* drip tray */}
-      <Box size={[w * 0.6, 0.018, d * 0.5]} position={[0, h * 0.44, d / 2 - 0.04]} color="#9aa0a6" metalness={0.3} roughness={0.5} />
-      {/* inverted bottle */}
-      <mesh position={[0, h * 0.86, 0]}>
-        <cylinderGeometry args={[w * 0.3, w * 0.33, h * 0.32, 20]} />
-        <meshStandardMaterial color="#bcd6e6" transparent opacity={0.5} roughness={0.1} metalness={0.1} />
-      </mesh>
-    </>
-  );
+  return <HardParts parts={waterDispenserForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.45 }} />;
 }
 
 /** Pedestal fan: a weighted base, a telescoping column, a tilt bracket, and a head of
@@ -1842,47 +1870,12 @@ function StandingFanGeo({ part }: { part: ScenePart }) {
 
 /** Chest freezer — a lid-on-top box, which is what distinguishes it from `fridge`. */
 function ChestFreezerGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const c = body(part, locked);
-  const lid = h * 0.1;
-  return (
-    <>
-      <Box size={[w, h - lid, d]} position={[0, (h - lid) / 2, 0]} color={c} roughness={0.4} />
-      <Box size={[w, lid, d]} position={[0, h - lid / 2, 0]} color={c} roughness={0.3} />
-      {/* lid handle, along the front edge */}
-      <Box
-        size={[w * 0.34, 0.03, 0.035]}
-        position={[0, h - lid - 0.03, d / 2 + 0.018]}
-        color="#8d9296"
-        metalness={0.4}
-        roughness={0.4}
-      />
-    </>
-  );
+  return <HardParts parts={chestFreezerForm(part.dimMM)} bodyC={body(part, locked)} look={{ roughness: 0.35 }} />;
 }
 
-/** Low TV unit: a plinth, a top, and two open bays. */
+/** Low TV console on legs: doors in the end bays, open niches between (`tvConsoleForm`). */
 function TvConsoleGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const c = body(part, locked);
-  const { top: t, foot } = consoleSlabs(part.dimMM[2]);
-  return (
-    <>
-      <Box surface="wood" size={[w, t, d]} position={[0, h - t / 2, 0]} color={c} roughness={0.45} />
-      <Box surface="wood" size={[w, t, d]} position={[0, foot + t / 2, 0]} color={c} roughness={0.45} />
-      {/* sides and a centre divider */}
-      {/* between the two slabs: down to the foot, each side shared the bottom slab's
-          underside, front, back and end faces */}
-      {[-w / 2 + t / 2, 0, w / 2 - t / 2].map((x, i) => (
-        <Box surface="wood" key={i} size={[t, h - foot - 2 * t, d]} position={[x, (h + foot) / 2, 0]} color={c} roughness={0.45} />
-      ))}
-      <Box surface="wood" size={[w * 0.92, foot, d * 0.8]} position={[0, foot / 2, 0]} color={c} roughness={0.6} />
-    </>
-  );
+  return <HardParts parts={tvConsoleForm(part.dimMM)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.45 }} />;
 }
 
 /** Round wooden stool: seat plus three splayed legs. */

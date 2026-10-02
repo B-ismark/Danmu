@@ -22,6 +22,19 @@ for (let i = 0; i < LEAF_MESH.positions.length; i += 3) {
   UNIT_LEAF.push([LEAF_MESH.positions[i], LEAF_MESH.positions[i + 1], LEAF_MESH.positions[i + 2]]);
 }
 
+/** A flat-array mesh as points, once per mesh: a unit cushion is shared by every
+ *  instance and every bed. */
+const MESH_POINTS = new WeakMap<object, Array<[number, number, number]>>();
+function meshPoints(mesh: { positions: readonly number[] }): Array<[number, number, number]> {
+  let pts = MESH_POINTS.get(mesh);
+  if (!pts) {
+    pts = [];
+    for (let i = 0; i < mesh.positions.length; i += 3) pts.push([mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]]);
+    MESH_POINTS.set(mesh, pts);
+  }
+  return pts;
+}
+
 /** A primitive's footprint: its projection onto the floor, as a convex point set. */
 export type Prim = {
   /** what drew it, for attribution in a report */
@@ -235,11 +248,11 @@ export function walk(node: ReactNode): WalkReport {
       return;
     }
 
-    if (name === 'BoxInstances' || name === 'PlaneInstances') {
+    if (name === 'BoxInstances') {
       // MISSING and EMPTY are different answers and only one of them is legitimate.
-      // `?? []` alone made them one: rename the `items` prop and all four callers
-      // (`BookshelfGeo`'s spines, `ShoeRackGeo`'s slats, `CurtainGeo`'s folds,
-      // `RadiatorGeo`'s fins) contribute no primitives at all, every area in this
+      // `?? []` alone made them one: rename the `items` prop and all three callers
+      // (`BookshelfGeo`'s spines, `ShoeRackGeo`'s slats, `RadiatorGeo`'s fins)
+      // contribute no primitives at all, every area in this
       // instrument shrinks, and nothing anywhere says so. An absent prop is reported
       // like any other thing the walk could not handle; a present, empty array is a
       // renderer that legitimately drew none at this size.
@@ -251,7 +264,7 @@ export function walk(node: ReactNode): WalkReport {
       for (const it of items) {
         const child = xform(m, it.pos, it.rot);
         const [w, h, d] = it.size;
-        push(rep.prims, name, name === 'BoxInstances' ? boxCorners(w, h, d) : boxCorners(w, h, 0), child, spun);
+        push(rep.prims, name, boxCorners(w, h, d), child, spun);
       }
       return;
     }
@@ -265,6 +278,31 @@ export function walk(node: ReactNode): WalkReport {
         return;
       }
       const unit = name === 'LeafInstances' ? UNIT_LEAF : rings(PLANT_STEM_TAPER, 1, 1);
+      for (const it of props.items as Array<{ pos: number[]; size: number[]; rot?: number[] }>) {
+        push(rep.prims, name, unit, xform(m, it.pos, it.rot, it.size), spun);
+      }
+      return;
+    }
+
+    if (name === 'SoftInstances' || name === 'SoftMesh') {
+      // The cloth (`lib/soft-goods.ts`). Both use hooks, so neither can be called; both
+      // carry the mesh they draw as a prop, so its own vertices are the ground truth.
+      // `SoftInstances` composes each item as `useInstanceTransforms` does, unit mesh
+      // scaled by `size`; `SoftMesh` is a per-piece mesh placed at `position`.
+      const mesh = props.mesh as { positions?: readonly number[] } | undefined;
+      if (!mesh || !Array.isArray(mesh.positions)) {
+        bump(rep.unhandled, `${name}.mesh`);
+        return;
+      }
+      const unit = meshPoints(mesh as { positions: readonly number[] });
+      if (name === 'SoftMesh') {
+        push(rep.prims, name, unit, xform(m, props.position as number[], props.rotation as number[]), spun);
+        return;
+      }
+      if (!Array.isArray(props.items)) {
+        bump(rep.unhandled, `${name}.items`);
+        return;
+      }
       for (const it of props.items as Array<{ pos: number[]; size: number[]; rot?: number[] }>) {
         push(rep.prims, name, unit, xform(m, it.pos, it.rot, it.size), spun);
       }

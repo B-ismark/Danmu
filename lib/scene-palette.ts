@@ -63,6 +63,26 @@ export const DETAIL = {
   lightWood: '#C9B79C',
   /** Brushed steel — a fridge's handles. */
   steel: '#B9BCC0',
+  /** Cream bed linen — pillows and the sheet turned back over the duvet. A bed's linen
+   *  stays this whatever colour the frame is, as real beds' does. */
+  linen: '#F0ECE3',
+  /** A mattress's ticking — the bed's secondary surface, so it still follows a recolour. */
+  mattress: '#E8D5B0',
+  /** Antique brass — a curtain's rod and finials. */
+  brass: '#8A6D44',
+  /** The dark inside of a shoe, at the floor of its opening. */
+  lining: '#2A2420',
+  /** An appliance's smoked glass — a microwave's window, a washing machine's porthole. */
+  glass: '#15181C',
+  /** A dark readout panel; it carries a faint glow of `led`. */
+  display: '#202226',
+  /** A status light. */
+  led: '#7FD3A0',
+  /** A water dispenser's bottle, drawn translucent. */
+  water: '#BCD6E6',
+  /** A dispenser's hot and cold taps — the two colours every one of them uses. */
+  tapHot: '#C0392B',
+  tapCold: '#2B6FD4',
 } as const;
 
 // ─── Decor accents ──────────────────────────────────────────────────────────

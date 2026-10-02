@@ -3787,7 +3787,7 @@ so both have to be the heights the pieces are drawn at. `tests/drawn-height.test
 the renderer of every floor-standing shape (35 of them), and the desk-standard drawn as a
 dining table, at the bottom, catalogue and top of its height range. **The ottoman did not reach its own**: the welt stopped at 0.9 h, so a tray
 set on a 420 mm ottoman stood 42 mm above the cushion, and a fit test would have measured a
-seat 10% taller than anyone sees. It is drawn to h now. Eight shapes still miss by more than
+seat 10% taller than anyone sees. It is drawn to h now. Seven shapes still miss by more than
 1 mm, and the test holds them as a literal list, so a new miss fails and so does a fixed one
 left on it:
 
@@ -3798,7 +3798,6 @@ left on it:
 | monitor | 0.96 h + 10 mm, −14 mm at 600 | the screen stops short of the box |
 | laptop | 20 mm + 0.94 h, +13 mm at 150 | h is the lid's length, tilted back from the hinge |
 | air-purifier | h + 14 mm | a control disc sits on the top |
-| water-dispenser | 1.02 h, +24 mm at 1200 | the bottle |
 
 None is a seat or a surface a seat tucks under, so none touches this section. The one that
 could matter elsewhere is the purifier: something set on it lands at h, 14 mm inside the disc.
@@ -5619,7 +5618,7 @@ this on every green run, the `detect-pipeline` precedent:
 | fan · motor housing | 200 → 450 mm | 180.0 | 80.0 | **2.25×** |
 | lamp-pendant · shade | 400 → 900 mm | 360.0 | 210.0 | 1.71× |
 | tv-console · top slab | 500 → 800 mm | 48.0 | 30.0 | 1.60× |
-| tv-console · plinth | 500 → 800 mm | 96.0 | 60.0 | 1.60× |
+| tv-console · legs | 500 → 800 mm | 160.0 | 110.0 | 1.45× |
 | stool · seat pad | 450 → 700 mm | 77.8 | 50.0 | 1.56× |
 | nightstand · drawer slide | 400 → 600 mm | 270.0 | 180.0 | 1.50× |
 | door · handle height | 2100 → 2400 mm | 1080.0 | 1000.0 | 1.08× |
@@ -5628,6 +5627,10 @@ Read the ratios as a **lower bound**: the sweep moves one axis at a time. The pe
 1.71× there and **4×** in its own test, and both are right — its shade is capped against
 its own WIDTH, so the worst case needs two axes moving in opposite directions
 (narrowest × longest, 150 × 900), which a per-axis sweep cannot express.
+
+The console row read *plinth, 96.0 against 60.0* until `lib/hard-goods.ts` stood the console on
+four tapered legs; `consoleSlabs(h).foot` is the leg height now (110 mm at most), and the row
+is the test's current print.
 
 **The test is about the class, not the shapes**, and that is the part worth keeping:
 
