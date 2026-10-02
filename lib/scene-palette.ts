@@ -87,6 +87,16 @@ export const DETAIL = {
   screen: '#10141C',
   /** …with the faint blue a switched-off panel still throws back at the room. */
   screenGlow: '#1C2E48',
+  /** A lit bulb's glass and the warm light it gives off — every lamp in the catalogue. */
+  bulb: '#FFE4A0',
+  bulbGlow: '#FFD060',
+  /** A table lamp's glazed body: a soft sage, the accent family's quiet end, so a
+   *  linen shade over it reads as two materials rather than one painted object. */
+  ceramicGlaze: '#AEB9A4',
+  /** A dining chair's seat pad: an oat linen, so the pad and the frame it sits in read as
+   *  cloth on wood. The frame takes the chair's colour; the pad keeps this, as a real
+   *  chair's upholstery does when the frame is stained. */
+  upholstery: '#CBBCA2',
 } as const;
 
 // ─── Decor accents ──────────────────────────────────────────────────────────

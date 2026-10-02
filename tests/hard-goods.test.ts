@@ -32,6 +32,9 @@ import {
   waterDispenserForm,
   type HardPart,
 } from '../lib/hard-goods';
+import { floorLampForm, tableLampForm, type LampForm } from '../lib/lamp-form';
+import { armchairForm, diningChairForm, officeChairForm } from '../lib/chair-form';
+import type { SoftItem } from '../lib/soft-goods';
 import { consoleSlabs, doorHandleY, drawerSlide, isParametric, PART_LIBRARY, stoolSeat, type Category, type Shape } from '../lib/scene-spec';
 import { dimRangeFor } from '../lib/dimension-ranges';
 
@@ -62,7 +65,28 @@ const ROWS: Row[] = [
   { shape: 'door', category: 'door', form: doorForm, wall: true, parametric: true },
   { shape: 'nightstand', category: 'nightstand', form: (dimMM) => nightstandForm(dimMM), wall: false, parametric: true },
   { shape: 'stool', category: 'chair', form: stoolForm, wall: false, parametric: true, round: true },
+  { shape: 'lamp-floor', category: 'lamp', form: (dimMM) => withShade(floorLampForm(dimMM)), wall: false, parametric: false, round: true },
+  { shape: 'lamp-table', category: 'lamp', form: (dimMM) => withShade(tableLampForm(dimMM)), wall: false, parametric: false, round: true },
+  { shape: 'chair-dining', category: 'chair', form: (dimMM) => { const f = diningChairForm(dimMM); return [...f.parts, cushion('pad', f.pad)]; }, wall: false, parametric: false },
+  { shape: 'chair-office', category: 'chair', form: (dimMM) => { const f = officeChairForm(dimMM); return [...f.parts, cushion('seat', f.seat), cushion('back', f.back)]; }, wall: false, parametric: false },
+  // Without its scatter cushion, which leans and so is not proportions only — see
+  // `armchairForm`; `tests/chair-form.test.ts` holds it inside the chair.
+  { shape: 'chair-armchair', category: 'chair', form: (dimMM) => { const f = armchairForm(dimMM); return [...f.parts, cushion('seat', f.seat), cushion('back', f.back)]; }, wall: false, parametric: false },
 ];
+
+/** A chair's cushion as the box it fills, so every sweep here reaches the cushions too: a
+ *  flat one as it lies, a stood-up one (`standUp(0)`, thickness to the front) turned. */
+function cushion(key: string, it: SoftItem): HardPart {
+  const [w, t, tall] = it.size;
+  return { kind: 'box', key, tone: 'body', size: it.rot ? [w, tall, t] : [w, t, tall], pos: it.pos };
+}
+
+/** A lamp's parts with its shade among them, as the upright post it is drawn as (an open
+ *  one, but its extent is the same), so every sweep here reaches the shade too. */
+function withShade(f: LampForm): HardPart[] {
+  const { rTop, rBottom, h, y } = f.shade;
+  return [...f.parts, { kind: 'post', key: 'shade', tone: 'body', r: rTop, rBottom, h, pos: [0, y, 0] }];
+}
 
 type Strut = Extract<HardPart, { kind: 'strut' }>;
 const ext = (parts: HardPart[], key: string) => partExtent(parts.find((p) => p.key === key)!);
@@ -142,7 +166,7 @@ describe('strutPose', () => {
 describe('every hard good stays inside the box it declares', () => {
   it('the Library carries every shape this file draws', () => {
     for (const r of ROWS) expect(PART_LIBRARY.some((p) => p.shape === r.shape), r.shape).toBe(true);
-    expect(ROWS.length).toBe(11);
+    expect(ROWS.length).toBe(16);
   });
 
   for (const r of ROWS) {
@@ -227,6 +251,7 @@ describe('a group-scaled form is proportions only (§ 36)', () => {
       case 'disc': return [...p.pos, p.r, p.t];
       case 'ring': return [...p.pos, p.r, p.tube];
       case 'strut': return [...p.a, ...p.b, p.r];
+      case 'ball': return [...p.pos, ...p.radii];
     }
   };
   for (const r of ROWS.filter((q) => !q.parametric)) {

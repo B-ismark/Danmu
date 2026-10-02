@@ -1,6 +1,6 @@
 // Hard goods: the casework, appliances and joinery that `lib/soft-goods.ts` is the cloth
 // half of. Each function returns a piece as a list of named parts — boxes, upright posts,
-// front-facing discs and rings — in the piece's own frame, metres, and the renderer
+// front-facing discs and rings, ellipsoids — in the piece's own frame, metres, and the renderer
 // (`components/three/DynamicPart.tsx`) does nothing but colour them. A strut — a rod at
 // any angle, a splayed leg — is the one part three cannot place from its fields alone, so
 // `strutPose` does that arithmetic here too.
@@ -59,7 +59,9 @@ export type HardTone =
   | 'water' // a dispenser's bottle
   | 'hot'
   | 'cold'
-  | 'screen'; // a television's panel, switched off
+  | 'screen' // a television's panel, switched off
+  | 'ceramic' // a glazed vessel — a table lamp's body
+  | 'bulb'; // a lit lamp bulb
 
 export type HardPart =
   | { kind: 'box'; key: string; tone: HardTone; size: V3; pos: V3 }
@@ -72,7 +74,9 @@ export type HardPart =
   | { kind: 'ring'; key: string; tone: HardTone; r: number; tube: number; pos: V3 }
   /** A rod of radius `r` from end `a` to end `b`, at any angle: a splayed leg, a
    *  stretcher. `strutPose` says how the renderer stands a cylinder on it. */
-  | { kind: 'strut'; key: string; tone: HardTone; r: number; a: V3; b: V3 };
+  | { kind: 'strut'; key: string; tone: HardTone; r: number; a: V3; b: V3 }
+  /** An ellipsoid, its three semi-axes in `radii` — a bulb, a vessel's belly. */
+  | { kind: 'ball'; key: string; tone: HardTone; radii: V3; pos: V3 };
 
 /** A box from its extents rather than its centre and size — every form here is reasoned
  *  about edge by edge (this face sits on that one), and writing centres would put the
@@ -534,6 +538,10 @@ export function partExtent(p: HardPart): { lo: V3; hi: V3 } {
     case 'ring': {
       const o = p.r + p.tube;
       return { lo: [x - o, y - o, z - p.tube], hi: [x + o, y + o, z + p.tube] };
+    }
+    case 'ball': {
+      const [a, b, c] = p.radii;
+      return { lo: [x - a, y - b, z - c], hi: [x + a, y + b, z + c] };
     }
   }
 }

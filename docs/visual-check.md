@@ -750,7 +750,7 @@ console pulls read as dark bronze, not bright brass. That is the brass the curta
 uses with no reflections to catch, and it needs a real GPU and a human eye to say whether it
 reads as metal. The default door colour is also dark enough that its panels show only faintly.
 
-### A television, a nightstand and a stool drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### A television, a nightstand and a stool drawn as the real objects — merged to `main` in `7cea640` (PR #219), NOT LOOKED AT
 
 **The next round of the same realism ask**, in the same module (`lib/hard-goods.ts`):
 
@@ -781,6 +781,71 @@ through the seat's top, a drawer box showing through the nightstand's back as th
 starts to open, or the TV's frame flickering against the screen. **One to judge on purpose:**
 the knobs are the same brass as the console pulls, which reads as dark bronze in
 screenshots. On a dark wood nightstand they nearly disappear.
+
+### A floor lamp and a table lamp drawn as the real objects, lit from their own bulbs — merged to `main` in `a3f0ff4` (PR #221), NOT LOOKED AT
+
+**Round three of the realism ask** (`lib/lamp-form.ts`):
+
+- **Floor lamp.** A wide, low brass disc you could not tip it off, a turned collar, a slim
+  pole, and a socket holding a bulb up inside a near-upright drum shade, open at the bottom.
+  It was a cone on a stick on a puck.
+- **Table lamp.** A glazed ceramic vessel — a turned foot, a full belly and a short neck,
+  in a soft sage glaze — under a brass stem, socket and bulb, inside the same kind of drum.
+  It was a cone on a rod.
+
+**The half that is not cosmetic: where the light comes from.** Both lamps used to emit from a
+fixed height while the lamp itself stretched to its size, so a tall floor lamp lit the
+ceiling from above its own shade and a tall table lamp lit from inside its stem. The light
+now comes from the drawn bulb at every size.
+
+**Where to click.** Add both lamps from the Library, switch to an evening mood and turn them
+on. Orbit at eye level, from a seated height, and from above. Stretch each from shortest to
+tallest and narrowest to widest, and make one oval by changing only its depth. Recolour both.
+
+**What right looks like.** The glow pools *under* the shade and the inside of the drum is
+lit, at every size. From a seated eye you can see the bulb through the open bottom; from
+standing you cannot. The vessel reads as one turned piece, not three stacked lumps. *Wrong*
+looks like a bright patch on the ceiling above the shade, a dark shade with the light
+somewhere below it, a bulb poking out of the drum's mouth on a short lamp, or the pole
+standing clear of the base. **One to judge on purpose:** the sage glaze is a fixed colour;
+recolouring tints the shade only — the brass and the ceramic stay as they are, which may read as the colour control doing too little. And the floor lamp's base is a large disc of the same brass as the console pulls, which reads as dark bronze in screenshots — it is the darkest thing in a light room.
+
+### A dining chair, an office chair and an armchair drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+**Round four of the realism ask** (`lib/chair-form.ts`):
+
+- **Dining chair.** Four square legs braced by a low H-stretcher, a seat frame of rails set
+  in from the legs' faces, an oat-linen pad on the frame, and a back of a crest rail and a
+  lower rail between the rear uprights with three slats standing in both. It was a slab on
+  four sticks with three bars across the back.
+- **Office chair.** Five casters under a star of round spokes — one pointing straight
+  ahead — a hub, a gas lift rising out of its dust cover into the seat mechanism, a seat
+  cushion on a pan, T-arms on brackets, and a back cushion on a shell carried by a spine
+  from under the seat. It was a box on a box on a box over a star of flat plates.
+- **Armchair.** Four turned, tapered wooden legs, two rolled arms the depth of the chair, a
+  back panel between them, its seat and back cushions and the scatter cushion as before. It
+  had square posts and square-topped arms.
+
+**The sizes did not change, and neither does how a chair tucks.** How high a chair reaches
+under a table and how much of its depth the back takes up are now read from the same
+numbers the chair is drawn with, rather than copied beside them — and they are the numbers
+the old drawings had, so every chair tucks exactly as far as it did.
+
+**Where to click.** Add one of each from the Library. Orbit each at eye level, from low down
+and from behind. Tuck the dining chair under a dining table and the office chair under a
+desk. Stretch each from smallest to largest on each axis. Recolour all three.
+
+**What right looks like.** Every foot and caster stands *on* the floor. The dining chair's
+slats meet both rails, its rails disappear into the legs, and the pad sits on the frame
+rather than floating over it. The office chair's lift rises out of the hub and into the
+mechanism, and its arms stand on their posts. Tucked, the dining chair's back and the
+office chair's arms stop at the table's edge as they did before. *Wrong* looks like a slat
+stopping short of a rail, a caster sunk into the floor, the office chair's back cushion
+floating off its shell, or an armchair leg standing outside the arm it carries. **Two to
+judge on purpose:** a recolour paints the dining chair's frame and leaves its pad oat linen,
+while the office chair's cushions take the new colour with the rest — say whether either
+reads as the colour control doing the wrong thing. And the dining chair's default wood is
+dark enough that the slats and stretchers read only faintly in a dim room.
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 
