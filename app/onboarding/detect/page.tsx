@@ -1583,14 +1583,22 @@ function DetectionRow({
           // with the chips below to change the model afterwards.
           suggest={(draft) => {
             shown.current = suggestModels(draft).slice(0, 4);
+            // Keyed on the MODEL: two models of one category (shelf, shoe rack) are
+            // two options, and a category key collapsed them into one.
             return shown.current.map((c) => ({
-              key: c.category,
+              key: c.detection.shape ?? c.category,
               label: `${candidateLabel(c)} model`,
-              hint: c.unmeasured ? 'size is an estimate' : c.margin < 0 ? 'not the size the camera measured' : undefined,
+              hint: !c.detection.dimMM
+                ? 'standard size'
+                : c.unmeasured
+                  ? 'size is an estimate'
+                  : c.margin < 0
+                    ? 'not the size the camera measured'
+                    : undefined,
             }));
           }}
           onPick={(key) => {
-            const cand = shown.current.find((c) => c.category === key);
+            const cand = shown.current.find((c) => (c.detection.shape ?? c.category) === key);
             if (cand) onRepair(cand);
           }}
           label="Piece name"

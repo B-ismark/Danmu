@@ -349,7 +349,7 @@ export function candidatesFor(
   categories: Category[],
   cals: CalMap,
   room: RoomDims,
-  { requireFit = true }: { requireFit?: boolean } = {},
+  { requireFit = true, shape }: { requireFit?: boolean; shape?: Shape } = {},
 ): LabelCandidate[] {
   const out: LabelCandidate[] = [];
   // No lens, no measurement: `geoMeasure` hands every seed back and nothing is offered.
@@ -377,7 +377,10 @@ export function candidatesFor(
     // detector's, and are not second-guessed here.
     const kinds = kindsOf(c);
     const own = { shape: worded, ...(worded === kinds.plain ? {} : { name: kinds.variants.find((v) => v.shape === worded)?.name }) };
-    const tries = namesAKind(c, d.label) ? [own] : [own, ...kinds.variants];
+    // A caller that names the model (a pick from the Library's own list) gets that
+    // model measured and nothing else: it already knows which kind it means.
+    const named = shape ? [kinds.plain === shape ? { shape } : { shape, name: kinds.variants.find((v) => v.shape === shape)?.name }] : null;
+    const tries = named ?? (namesAKind(c, d.label) ? [own] : [own, ...kinds.variants]);
     const trials: Array<LabelCandidate & { fits: boolean; first: boolean }> = [];
     for (const [n, t] of tries.entries()) {
       const seed: Detection = { ...d, category: c, shape: t.shape, dimMM: undefined };
