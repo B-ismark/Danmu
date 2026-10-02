@@ -3949,7 +3949,24 @@ measure in a frame.
   navigation alone. The set is a 2.3 × 1.6 m block, and the T has few places to put it
   and still leave a way through. That is the honest answer to a merge. *Answered, the
   user's call 2026-09-30:* an empty Ideas panel in a room with a merged set says that the
-  set moves as one, and that ungrouping it gives more ideas. Not built yet.
+  set moves as one, and that ungrouping it gives more ideas. BUILT 2026-10-02:
+  `shuffleRefusal(blockers, groups)` adds "Your group moves as one piece: ungroup it for
+  more ideas" to the clean sentence (133 characters; the plural, "ungroup one", is 139),
+  in the app's own words rather than "merged set". **Only where ungrouping helps**
+  (`groupsToUngroup`): since § 52's formation sets, a dining table and its chairs, or a
+  bed and its nightstands, are one block to the solver whether grouped or not, so the
+  trade above is now mostly the formation's and telling someone to ungroup that set is
+  advice that cannot work. A group is worth ungrouping when its pieces, ungrouped, would
+  be two or more bodies, with a piece standing on another carried by it. Asked per
+  group, not as a body count over the room, because that reads the sofa grouped with
+  the dining table backwards: the group frees the chairs from their table, so the room
+  has more bodies grouped (9 against 6 on `open`), while on `t` 6 × 4 that group gave no
+  idea in three presses (0, 0, 0; the sofa with the coffee table, 0, 0, 1). A group held
+  by a kept piece does not move and is not named; nor is anything on the blocked branch,
+  whose finding comes first. Found in review: the first version named every group,
+  including the formation one its own visual-check script sent the reader to. Tested
+  through the panel three ways (`tests/shuffle-refusal-wired.test.tsx`) and over real
+  seeded rooms; 8 of 8 mutants caught.
 - **A merged member standing on a piece outside its set follows that piece**, and so leaves
   the set's shape (`carryRiders` runs after every pass). What stands on something goes
   where it goes.

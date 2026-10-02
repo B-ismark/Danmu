@@ -39,7 +39,7 @@ import { currentRoomScene } from '@/lib/room-scene';
 import { useSettings, useStudio } from '@/lib/store';
 import { analyzeRoom } from '@/lib/clearance';
 import { movableFor, type SolveResult } from '@/lib/layout-solve';
-import { lockedForShuffle, shuffleBlockers, shuffleRefusal, type ShuffleRoom } from '@/lib/layout-shuffle';
+import { groupsToUngroup, lockedForShuffle, shuffleBlockers, shuffleRefusal, type ShuffleRoom } from '@/lib/layout-shuffle';
 import { shuffleOffThread } from '@/lib/layout-offload';
 import { newLayout, roomStore } from '@/lib/storage';
 import {
@@ -456,7 +456,8 @@ export function IdeasPanel({
   const refusal = useMemo(() => {
     if (!base || !exhausted || found > 0) return null;
     const blockers = shuffleBlockers(analyzeRoom(base.parts, base.room, { accessibility: stepFree, dimUnit }).issues);
-    return { ...shuffleRefusal(blockers), blocked: blockers.length > 0 };
+    const groups = groupsToUngroup(base.parts, lockedForShuffle(base.parts, base.pinned));
+    return { ...shuffleRefusal(blockers, groups), blocked: blockers.length > 0 };
   }, [base, exhausted, found, stepFree, dimUnit]);
 
   return (

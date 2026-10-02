@@ -22,10 +22,15 @@ import {
   DIVERSITY_PENALTY,
   REPEAT_SIMILARITY,
   shuffleRefusal,
+  groupsToUngroup,
+  lockedForShuffle,
 } from '@/lib/layout-shuffle';
-import { defaultScene } from '@/lib/scene-spec';
+import { defaultScene, type ScenePart } from '@/lib/scene-spec';
 import { footprintForLayout, pointInFootprint, roomContainment, type LayoutId } from '@/lib/footprint';
 import { roleOf } from '@/lib/layout-rules';
+import { ridingParents } from '@/lib/rigid-parent';
+
+const NO_GROUP = { moving: 0, worth: 0 };
 
 /** Every cost term at zero, derived from the weight table so a new term cannot leave
  *  this fixture one key short of the type it claims to be. */
@@ -500,16 +505,75 @@ describe('shuffleRoom — the offer, not the search', () => {
     // away is the defect this repo keeps finding — so the assertion is that it moves
     // with the list, not that it equals 1.
     const issue = (title: string) => ({ title }) as unknown as Parameters<typeof shuffleRefusal>[0][number];
-    expect(shuffleRefusal([issue('Bed hard to get into')]).message).not.toContain(' more,');
+    expect(shuffleRefusal([issue('Bed hard to get into')], NO_GROUP).message).not.toContain(' more,');
     expect(
-      shuffleRefusal([issue('Bed hard to get into'), issue('Door blocked')]).message,
+      shuffleRefusal([issue('Bed hard to get into'), issue('Door blocked')], NO_GROUP).message,
     ).toContain('and 1 more,');
     expect(
-      shuffleRefusal([issue('A'), issue('B'), issue('C'), issue('D')]).message,
+      shuffleRefusal([issue('A'), issue('B'), issue('C'), issue('D')], NO_GROUP).message,
     ).toContain('and 3 more,');
     // The empty list is the OTHER sentence, and it must not fall through to this one:
     // forcing that branch open crashes on `blockers[0]`, so the guard is load-bearing.
-    expect(shuffleRefusal([]).title).toBe('No ideas this time');
+    expect(shuffleRefusal([], NO_GROUP).title).toBe('No ideas this time');
+  });
+
+  it('a room with a group worth ungrouping says so, and what gives more ideas (user call 1B)', () => {
+    // Pinned whole, not by fragments: the clean sentence the panel already wraps, then
+    // one more. One group and several read differently ("it" / "one").
+    const CLEAN = 'Every layout it tried left something in the way, so your room is unchanged.';
+    expect(shuffleRefusal([], NO_GROUP).message).toBe(`${CLEAN} Look again for a different try.`);
+    expect(shuffleRefusal([], { moving: 1, worth: 1 }).message).toBe(
+      `${CLEAN} Your group moves as one piece: ungroup it for more ideas.`,
+    );
+    expect(shuffleRefusal([], { moving: 2, worth: 1 }).message).toBe(
+      `${CLEAN} Your groups each move as one piece: ungroup one for more ideas.`,
+    );
+    expect(shuffleRefusal([], { moving: 1, worth: 1 }).message).toHaveLength(133);
+    expect(shuffleRefusal([], { moving: 2, worth: 1 }).message).toHaveLength(139);
+    // A group that moves but is not worth ungrouping says nothing about it: that
+    // advice could not work.
+    expect(shuffleRefusal([], { moving: 1, worth: 0 }).message).toBe(`${CLEAN} Look again for a different try.`);
+    expect(shuffleRefusal([], { moving: 1, worth: 1 }).title).toBe('No ideas this time');
+    // A blocked room keeps its own sentence: the finding is what to fix first.
+    const issue = { title: 'Door blocked' } as unknown as Parameters<typeof shuffleRefusal>[0][number];
+    expect(shuffleRefusal([issue], { moving: 1, worth: 1 })).toEqual(shuffleRefusal([issue], NO_GROUP));
+  });
+
+  it('a group is worth ungrouping only when its pieces would move apart (user call 1B)', () => {
+    // Real seeded rooms, grouped the way a person would, because the answer is the
+    // solver's own sets and a hand-built list could not show a formation.
+    const seeded = (id: LayoutId, w: number, d: number) =>
+      defaultScene(id, w, d, { footprint: footprintForLayout(id, w, d), height: 2.5 });
+    const group = (parts: ScenePart[], gid: string, pick: (p: ScenePart) => boolean) =>
+      parts.map((p) => (pick(p) ? { ...p, groupId: gid } : p));
+    const ask = (parts: ScenePart[], pinned: Record<string, boolean> = {}) =>
+      groupsToUngroup(parts, lockedForShuffle(parts, pinned));
+    const named = (...names: string[]) => (p: ScenePart) => names.includes(p.name);
+
+    const t = seeded('t', 6, 4);
+    // A dining table and its chairs are one body grouped or not: nothing to gain.
+    const dining = group(t, 'd', named('Dining table', 'Dining chair'));
+    expect(dining.filter((p) => p.groupId).length, 'the table and its four chairs').toBe(5);
+    expect(ask(dining)).toEqual({ moving: 1, worth: 0 });
+    // The sofa and its coffee table move apart once ungrouped.
+    const lounge = group(t, 'l', named('Sofa', 'Coffee table'));
+    expect(ask(lounge)).toEqual({ moving: 1, worth: 1 });
+    // Both groups: one of two is worth it, and the plural sentence says "ungroup one".
+    expect(ask(group(dining, 'l', named('Sofa', 'Coffee table')))).toEqual({ moving: 2, worth: 1 });
+    // The sofa grouped with the dining table: the case a count over the room reads
+    // backwards (the group frees the chairs from the table, so the room has MORE
+    // bodies grouped). The 0, 0, 0 presses on this `t` were this group.
+    expect(ask(group(t, 'x', named('Sofa', 'Dining table')))).toEqual({ moving: 1, worth: 1 });
+    // A group held by a kept piece does not move, so it is in neither count.
+    const sofa = lounge.find((p) => p.name === 'Sofa')!;
+    expect(ask(lounge, { [sofa.id]: true })).toEqual({ moving: 0, worth: 0 });
+
+    // A piece standing on another is carried by it, not a body of its own.
+    const u = seeded('u', 6, 4);
+    const rides = Object.entries(ridingParents(u));
+    expect(rides.length, 'the `u` seeds something standing on something').toBeGreaterThan(0);
+    const [rider, support] = rides[0];
+    expect(ask(group(u, 'r', (p) => p.id === rider || p.id === support))).toEqual({ moving: 1, worth: 0 });
   });
 
   it('a single solve is NOT reliably clean, which is why the pipeline exists', { timeout: 60_000 }, () => {

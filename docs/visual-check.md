@@ -106,7 +106,7 @@ table's. A photo scan that finds a double bed cut off by the photo's edge comes 
 or two nightstands, a fridge with doors that do not meet in the middle, or fat legs on a long
 table.
 
-### A starter room names its pieces as the Library does, and the Inspector header is one row — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+### A starter room names its pieces as the Library does, and the Inspector header is one row — merged to `main` in `b5414e0` (PR #217), NOT LOOKED AT
 
 The user's 2026-10-01 report: a seeded bedroom said **Queen bed** while the Library sells one
 **Bed**, and the Inspector spent three rows on a bed — its name, *Bed · Bed double*, and an
@@ -134,9 +134,6 @@ is the intended reflow, not a defect. A door reading *Appliances*, a radiator ho
 *fridge*. And one to judge rather than check: the card coming and going moves the Colour,
 Light and Floor/Wall rows below it. Press **Floor** on a floating lamp and the row jumps up
 by the card's height. Say whether that reads as a jump.
-
-**Gates.** `tests/seed-library-names.test.ts`, `tests/library-shelf.test.ts`,
-`tests/hover-card.test.tsx`, `tests/placement-banner.test.tsx`.
 
 **Where it rides.** `lib/scene-spec.ts` (`BED_LADDER`, the seeder's names, the TV rows
 built from `SCREENS`, `libraryShelf`) + `components/studio/Inspector.tsx` +
@@ -449,6 +446,34 @@ table is square and so are its chairs. The chair you pulled away goes its own wa
 a nightstand left behind when the bed moves, or the pulled-away chair dragged back to the
 table. Also watch the U: its arrangements are a little worse on average now (the bed set is a
 large body in a small room), and it may offer one idea fewer in three presses.
+
+### An Ideas panel that runs dry in a room with a group says to ungroup it, where that helps — on `claude/amazing-davinci-m8zqys` (PR #220), NOT LOOKED AT
+
+The user's call 2026-09-30: a group is one block to Ideas, and a large one leaves few
+places it fits with a way around it, so the panel can come back empty. It now says why,
+and what gives more: *Every layout it tried left something in the way, so your room is
+unchanged. Your group moves as one piece: ungroup it for more ideas.* Two groups read
+*Your groups each move…* and *ungroup one…*. **Look again** stays. It says this only where
+ungrouping lets the pieces move apart: a dining table and its chairs already move as one
+block when nobody grouped them, so for that group the sentence stays the ordinary one.
+
+**Where to click.** A `t` room at 6 × 4. Select the sofa and the dining table, press
+**Group**, then **Ideas** and wait for it to run dry (measured: no idea in three presses
+in a fresh room, 0, 0, 0). Then keep the sofa where it is (**Keep a piece where it is…** in
+the Ideas panel) and look again. Last, ungroup, group the dining table with its four
+chairs instead, and run Ideas dry if it will.
+
+**What right looks like.** The group sentence under *No ideas this time*, wrapping inside
+the card at 1024 px and on a phone. With the sofa kept where it is the group does not move
+at all, so the ordinary sentence comes back (*Look again for a different try*), and the
+table with its chairs gets the ordinary sentence too. A room with a Room check finding
+keeps *Try Fix first* and says nothing about the group.
+
+**What wrong looks like.** *merged set* anywhere on screen. The group sentence for the
+table and its chairs, or for a group that is held. The sentence spilling past the card.
+
+**Where it rides.** `lib/layout-shuffle.ts` (`shuffleRefusal`, `groupsToUngroup`) +
+`components/studio/IdeasPanel.tsx`.
 
 ### An idea keeps the rug inside the walls — § H.6.1, needs eyes on Open Plan and the L
 

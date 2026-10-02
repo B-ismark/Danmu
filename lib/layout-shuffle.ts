@@ -138,12 +138,14 @@ import {
   movableFor,
   NEGLIGIBLE_COST,
   randomizeStart,
+  rigidSets,
   solveLayout,
   LAYOUT_SIMILAR_M,
   TURN_EPSILON,
   type SolveResult,
 } from './layout-solve';
 import { layoutSimilarity, orderOffers } from './layout-offer';
+import { ridingParents } from './rigid-parent';
 import { RULE_HANDLING } from './layout-score';
 import { analyzeRoom, type ClearanceIssue } from './clearance';
 import type { Placement } from './layout-score';
@@ -553,8 +555,30 @@ export function shuffleBlockers(issues: readonly ClearanceIssue[]): ClearanceIss
  *  (`docs/visual-check.md`), so this stays away from the top. Derived across the five
  *  offered sizes and nine reachable ones when this was Shuffle's toast: clean was 116
  *  at every size, blocked ran 116-155. The gallery's clean sentence is 107, and the
- *  blocked one is one character shorter than it was. */
-export function shuffleRefusal(blockers: readonly ClearanceIssue[]): { title: string; message: string } {
+ *  blocked one is one character shorter than it was. The group sentences (user call
+ *  1B) are 133 and 139: the clean one with one more sentence after it. */
+export function shuffleRefusal(
+  blockers: readonly ClearanceIssue[],
+  groups: GroupsToUngroup,
+): { title: string; message: string } {
+  // A group moves whole (`rigidSets`), and a large one leaves few places it fits with
+  // a way around it (§ H.6.5, "Fewer ideas where the set is large"). The user's call:
+  // say so, and say what gives more. Only where ungrouping really does give the search
+  // more to move (`groupsToUngroup`): a dining table and its chairs are one block to
+  // the solver merged or not (`formationSets`), so telling someone to ungroup them is
+  // advice that cannot work, the kind § 4c took out of this sentence once already. Only
+  // on the clean branch: a blocked room has a finding to fix first, and that sentence
+  // is the longest here. The words are the app's own (Group / Ungroup). `groups` is
+  // required, so a second caller cannot leave it out and lose the sentence in silence.
+  if (blockers.length === 0 && groups.worth > 0)
+    return {
+      title: 'No ideas this time',
+      message:
+        'Every layout it tried left something in the way, so your room is unchanged. ' +
+        (groups.moving === 1
+          ? 'Your group moves as one piece: ungroup it for more ideas.'
+          : 'Your groups each move as one piece: ungroup one for more ideas.'),
+    };
   if (blockers.length === 0)
     return {
       title: 'No ideas this time',
@@ -568,6 +592,41 @@ export function shuffleRefusal(blockers: readonly ClearanceIssue[]): { title: st
       (more > 0 ? ` and ${more} more` : '') +
       ', and ideas only include rooms with nothing in the way. Try Fix first.',
   };
+}
+/** The user's groups an idea moves whole, and how many of them would give the search
+ *  more to move if ungrouped. A group is worth ungrouping when its pieces, ungrouped,
+ *  would move as two or more separate bodies, asked of the solver's own `rigidSets` so
+ *  the panel cannot drift from what the search does. A dining table and its chairs, or
+ *  a bed and its nightstands, are one body either way (`formationSets`), and a piece
+ *  standing on another (`ridingParents`) is carried by it, not a body of its own: a
+ *  nightstand grouped with its lamp is not worth ungrouping.
+ *
+ *  **Per group, and of the group's own pieces, not a count over the room.** Counting
+ *  the room's bodies with and without the group reads the sofa grouped with the dining
+ *  table backwards: that group takes the table out of its chairs' formation, so the
+ *  room has MORE bodies grouped (9 against 6 on `open`), while the group is the one
+ *  block that leaves a `t` at 6 × 4 with no idea in three presses (measured: 0, 0, 0,
+ *  where the sofa grouped with the coffee table gives 0, 0, 1). A group held by a kept
+ *  piece does not move at all, so it is in neither count. `locked` is
+ *  `lockedForShuffle`'s, which reads no group. */
+export type GroupsToUngroup = { moving: number; worth: number };
+export function groupsToUngroup(parts: ScenePart[], locked: boolean[]): GroupsToUngroup {
+  const here = rigidSets(parts, movableFor(parts, locked));
+  const mine = here.sets.filter((_, s) => !here.formation[s]);
+  const rides = ridingParents(parts);
+  let worth = 0;
+  for (const set of mine) {
+    const g = parts[set[0]].groupId;
+    const apart = parts.map((p) => {
+      if (p.groupId !== g) return p;
+      const { groupId: _ungrouped, ...q } = p;
+      return q;
+    });
+    const r = rigidSets(apart, movableFor(apart, locked));
+    const bodies = new Set(set.filter((i) => !rides[parts[i].id]).map((i) => (r.setOf[i] < 0 ? -1 - i : r.setOf[i])));
+    if (bodies.size > 1) worth++;
+  }
+  return { moving: mine.length, worth };
 }
 /** The three reasons a piece may not move, for a whole-room shuffle. A thin re-export
  *  of the solver's own composer so a caller does not have to know that a shuffle
