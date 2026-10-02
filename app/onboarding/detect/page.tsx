@@ -17,7 +17,8 @@ import { PhotoEditor } from '@/components/studio/PhotoEditor';
 import { boxCss } from '@/lib/photo-tag';
 import { isTypingOrDialog } from '@/components/studio/KeyboardShortcuts';
 import { sampleBoxColor } from '@/lib/color-sample';
-import { localDetectorAvailable, detectLocalAcrossImages } from '@/lib/local-detect';
+import { localDetectorAvailable, detectLocalAcrossImages, detectorDownloadBytes, onDetectorDownload, type DownloadProgress } from '@/lib/local-detect';
+import { megabytes } from '@/lib/model-cache';
 import {
   calForPhoto,
   findFloorLine,
@@ -88,6 +89,7 @@ type Notice = {
     | 'RATE_LIMIT'
     | 'INVALID_KEY'
     | 'PHOTOS_TOO_BIG'
+    | 'SKIPPED_DOWNLOAD'
     | 'BAD_RESPONSE'
     | 'UNKNOWN';
   tone: 'calm' | 'warn' | 'error';
@@ -272,6 +274,10 @@ export default function DetectPage() {
   const apiKey = useSettings((s) => s.apiKey);
   const dimUnit = useSettings((s) => s.dimUnit);
   const [running, setRunning] = useState(false);
+  // The detector's one-time download: asked about before a byte of it moves, then
+  // counted while it runs. `ask` resolves the question the scan is waiting on.
+  const [download, setDownload] = useState<{ bytes: number; ask: (go: boolean) => void } | null>(null);
+  const [fetched, setFetched] = useState<DownloadProgress | null>(null);
   const [saving, setSaving] = useState(false);
   const [slots, setSlots] = useState<SlotEntry[]>([]);
   const [detections, setDetections] = useState<Detection[]>([]);
@@ -389,14 +395,44 @@ export default function DetectPage() {
         setPath('checking');
         try {
           let dets: Detection[] | null = null;
+          let skipped = false;
           if (await localDetectorAvailable()) {
-            setPath('local');
-            try {
-              dets = await detectLocalAcrossImages(entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })));
-              if (dets && dets.length === 0) dets = null; // empty result → let Gemini try
-            } catch {
-              dets = null;
+            // ~65 MB the first time, nothing after (`lib/model-cache.ts`). Asked, never
+            // assumed: on mobile data that is the most this app ever costs anyone.
+            const owed = await detectorDownloadBytes();
+            const go = owed === 0 || (await new Promise<boolean>((ask) => setDownload({ bytes: owed, ask })));
+            setDownload(null);
+            if (cancelled || stopped.current) return;
+            if (go) {
+              setPath('local');
+              onDetectorDownload(owed > 0 ? setFetched : null);
+              try {
+                dets = await detectLocalAcrossImages(entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })));
+                if (dets && dets.length === 0) dets = null; // empty result → let Gemini try
+              } catch {
+                dets = null;
+              } finally {
+                onDetectorDownload(null);
+                setFetched(null);
+              }
+            } else {
+              skipped = true;
             }
+          }
+          if (skipped && !apiKeyRef.current) {
+            // Nothing was downloaded and nothing was sent: the by-hand path is the path,
+            // armed, with the way back to a scan for when the person is on Wi-Fi.
+            setAdding(true);
+            setPath('idle');
+            setNotice({
+              code: 'SKIPPED_DOWNLOAD',
+              tone: 'calm',
+              kicker: 'Scan skipped',
+              title: 'Add your furniture by hand',
+              body: 'Draw a box around each piece in your photos. When you are on Wi-Fi, press Look again to have Danmu find them for you.',
+              again: true,
+            });
+            return;
           }
           // How many of the reply's rows it refused beside the ones it kept (§ 49.19):
           // a scan that kept 6 of 9 pieces used to look exactly like one that found 6.
@@ -794,6 +830,11 @@ export default function DetectPage() {
   function stopDetecting() {
     stopped.current = true;
     setRunning(false);
+    // A scan waiting on the download question is answered no, so it does not wait forever.
+    setDownload((d) => {
+      d?.ask(false);
+      return null;
+    });
     setPath('stopped');
     setAdding(true);
     setNotice({
@@ -964,6 +1005,31 @@ export default function DetectPage() {
           title="Check your furniture"
           subtitle={roughSize ? 'Keep what’s yours. Sizes are rough until you set the room’s size.' : 'Keep what’s yours.'}
         />
+        {download && (
+          <section className="ds-card" aria-labelledby="dl-title" style={{ padding: '14px 16px', maxWidth: '68ch', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <h2 id="dl-title" className="sans" style={{ margin: 0, fontSize: 'var(--fs-lead)', fontWeight: 700 }}>
+              Download the furniture finder?
+            </h2>
+            <p className="t-small" style={{ margin: 0, lineHeight: 1.5 }}>
+              To spot your furniture on this device, Danmu needs a one-time download of about {megabytes(download.bytes)}. It is kept
+              afterwards, so later scans use no data. On mobile data, you can skip this and draw a box around each piece instead.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="ds-btn ds-btn--accent" onClick={() => download.ask(true)}>
+                <Icon name="download" size={13} />
+                Download {megabytes(download.bytes)}
+              </button>
+              <button className="ds-btn" onClick={() => download.ask(false)}>
+                Skip for now
+              </button>
+            </div>
+          </section>
+        )}
+        {fetched && fetched.total > 0 && fetched.loaded < fetched.total && (
+          <p className="t-small" role="status" style={{ margin: 0 }}>
+            Downloading the furniture finder… {megabytes(fetched.loaded)} of {megabytes(fetched.total)}
+          </p>
+        )}
         {privacyLine && (
           <p
             className="t-small"

@@ -38,7 +38,12 @@
 const VERSION = 'v2';
 const SHELL = `danmu-shell-${VERSION}`;
 const ASSETS = `danmu-assets-${VERSION}`;
-const KEEP = [SHELL, ASSETS];
+// The detector's verified weights, written by the PAGE (`lib/model-cache.ts`), not by
+// this worker. Kept across deployments on purpose: the cache is ~65 MB someone may have
+// paid for on mobile data, and the bytes are re-verified on every read, so a new
+// deployment never needs them gone. Its name must match `CACHE` there.
+const MODELS = 'danmu-detector-v1';
+const KEEP = [SHELL, ASSETS, MODELS];
 
 // The routes that exist at fixed URLs, so they can be had up front. The studio
 // lives under /room/<uuid>/, which is per-room and cached when visited.

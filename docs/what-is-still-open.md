@@ -10710,3 +10710,28 @@ built or partly built (re-checked 2026-10-02), but none has a `docs/visual-check
 One pass on a real notched phone closes them: install to the home screen, open a room, tap a
 field, double-tap a button.
 
+## § 54 · The detector downloaded ~65 MB on every scan — FIXED 2026-10-02, asked before it downloads
+
+**Measured 2026-10-02:** `yolov8n-oiv7.onnx` is 14.2 MB and `yolov8s-worldv2-danmu.onnx`
+50.4 MB, and the Hugging Face mirror serves both `cache-control: no-store`. So the browser
+kept neither, and every scan in a new page downloaded ~65 MB again, plus a ~5 MB runtime
+from jsDelivr (that one is `immutable`, cached a year). The app shell is ~1–2 MB, not
+measured exactly. On mobile data the scan was by far the most expensive thing the app did,
+and nothing said so.
+
+**Built on `claude/keen-einstein-dbmwuw`:**
+- `lib/model-cache.ts` keeps the VERIFIED bytes in Cache Storage under this origin. Every
+  read is verified again by the caller, and a kept copy that fails is dropped and fetched
+  once more. Public files fetched with no credentials, so the service worker's
+  "never cache cross-origin" rule (which protects responses to calls made with the user's
+  key) is not bent. `public/sw.js` lists the cache in `KEEP`, or its next activation would
+  delete it; `tests/model-cache.test.ts` pins the two names to each other.
+- The scan screen asks first: "Download the furniture finder?", with the size read off the
+  mirror's HEAD response, "Download N MB" or "Skip for now". Skipping arms drawing boxes
+  by hand, says how to scan later, and sends nothing. With a Gemini key set, skipping goes
+  straight to the cloud scan, which already discloses the upload.
+- While it downloads, the screen counts it: "Downloading the furniture finder… 23 of 65 MB".
+
+**NOT LOOKED AT** in a browser: the card, the count, and that a second scan in a new page
+skips the question.
+
