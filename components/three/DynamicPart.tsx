@@ -52,11 +52,15 @@ import {
 } from '@/lib/soft-goods';
 import {
   acUnitForm,
+  airPurifierForm,
   chestFreezerForm,
   doorForm,
   microwaveForm,
+  mirrorForm,
   nightstandForm,
   nightstandSlide,
+  ovalMirrorForm,
+  paintingForm,
   radiatorForm,
   sideTableForm,
   soundbarForm,
@@ -420,6 +424,11 @@ function toneMaterial(tone: HardTone, bodyC: string, look: HardLook): ToneMateri
     case 'screen': return { color: DETAIL.screen, roughness: 0.18, metalness: 0.2, emissive: DETAIL.screenGlow, emissiveIntensity: 0.35 };
     case 'ceramic': return { color: DETAIL.ceramicGlaze, surface: 'ceramic', roughness: 0.22 };
     case 'bulb': return { color: DETAIL.bulb, roughness: 0.3, emissive: DETAIL.bulbGlow, emissiveIntensity: 0.6 };
+    case 'mirror': return { color: DETAIL.mirror, roughness: 0.12, metalness: 0.05 };
+    case 'mat': return { color: DETAIL.mat, roughness: 0.95 };
+    case 'art-warm': return { color: DETAIL.artWarm, roughness: 0.85 };
+    case 'art-ochre': return { color: DETAIL.artOchre, roughness: 0.85 };
+    case 'art-cool': return { color: DETAIL.artCool, roughness: 0.85 };
   }
 }
 
@@ -1280,45 +1289,20 @@ function OttomanGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 }
 
 // ─── Wall-hung ──────────────────────────────────────────────────────────
+/** Drawn by `mirrorForm` / `ovalMirrorForm`: a frame in the piece's own colour, a step
+ *  inside it, and the glass set behind or upon it. The oval is a circle of the width,
+ *  stretched here to the height. */
 function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  // The frame is the recolourable surface (the glass is not). It was a literal in
-  // both branches, so recolouring a mirror did nothing.
   const frame = tint(part);
+  const look: HardLook = { surface: 'wood' };
   if (oval) {
-    // Ellipse from a unit circle scaled to W × H. Frame is a slightly larger
-    // ellipse behind the reflective face.
     return (
-      <>
-        {/* A frame with a real depth (the piece's own `dimMM[1]`), glass on its face.
-            It was a paper-thin disc with the glass floating 25 mm in front of it. The
-            cylinder's axis is Y, turned to Z; `scale` is applied before the turn, so
-            its Y entry is the depth. */}
-        <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[w / 2 + 0.03, d, h / 2 + 0.03]}>
-          <cylinderGeometry args={[1, 1, 1, 56]} />
-          <meshStandardMaterial color={frame} {...SURFACE.wood} />
-        </mesh>
-        <mesh position={[0, 0, d / 2 + 0.001]} scale={[w / 2, h / 2, 1]}>
-          <circleGeometry args={[1, 56]} />
-          <meshStandardMaterial color="#cdd7df" metalness={0.5} roughness={0.24} />
-        </mesh>
-      </>
+      <group scale={[1, part.dimMM[2] / part.dimMM[0], 1]}>
+        <HardParts parts={ovalMirrorForm(part.dimMM)} bodyC={frame} look={look} />
+      </group>
     );
   }
-  return (
-    <>
-      {/* frame at the piece's declared depth (it was a flat 40 mm whatever the Inspector
-          said), glass 1 mm proud of its face rather than 5 mm in front of it */}
-      <Box surface="wood" size={[w + 0.03, h + 0.03, d]} position={[0, 0, 0]} color={frame} />
-      <mesh position={[0, 0, d / 2 + 0.001]}>
-        <planeGeometry args={[w, h]} />
-        {/* Soft reflective mirror — gentle gloss, not a chrome plate. */}
-        <meshStandardMaterial color="#cdd7df" metalness={0.5} roughness={0.24} />
-      </mesh>
-    </>
-  );
+  return <HardParts parts={mirrorForm(part.dimMM)} bodyC={frame} look={look} />;
 }
 
 // Window — frame + translucent glass + cross mullions. Wall-mounted (centre-
@@ -1406,27 +1390,10 @@ function LaptopGeo({ part }: { part: ScenePart }) {
   );
 }
 
+/** Drawn by `paintingForm`: frame, gilt fillet, mat, and the picture — the user's colour
+ *  as its ground, three fields on it. */
 function PaintingGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const h = part.dimMM[2] / 1000;
-  return (
-    <>
-      <Box surface="wood" size={[w + 0.04, h + 0.04, 0.025]} position={[0, 0, 0]} color={DETAIL.darkWood} />
-      <mesh position={[0, 0, 0.014]}>
-        <planeGeometry args={[w, h]} />
-        <meshStandardMaterial color={tint(part)} roughness={0.85} />
-      </mesh>
-      {/* abstract bands */}
-      <mesh position={[0, h * 0.15, 0.015]}>
-        <planeGeometry args={[w * 0.88, h * 0.18]} />
-        <meshStandardMaterial color="#E2613A" />
-      </mesh>
-      <mesh position={[0, -h * 0.2, 0.015]}>
-        <planeGeometry args={[w * 0.88, h * 0.12]} />
-        <meshStandardMaterial color="#5C8DC2" />
-      </mesh>
-    </>
-  );
+  return <HardParts parts={paintingForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.85 }} />;
 }
 
 function ACUnitGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
@@ -1477,34 +1444,12 @@ function RadiatorGeo({ part }: { part: ScenePart }) {
   );
 }
 
+/** Drawn by `airPurifierForm`, on a circle of the width stretched to the depth. */
 function AirPurifierGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const r = w / 2;
-  const bodyC = tint(part);
   return (
-    <>
-      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[r, r * 0.96, h, 28]} />
-        <meshStandardMaterial color={bodyC} roughness={0.5} />
-      </mesh>
-      {/* intake slats */}
-      {[0.22, 0.34, 0.46].map((y, i) => (
-        // A torus lies in XY with its axis on Z; the body's axis is Y. Unturned, the
-        // rings stood as vertical hoops through the body and 22–42 mm into the floor.
-        <mesh key={i} position={[0, h * y, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          {/* The body tapers from r at the top to 0.96r at the floor, so each ring is
-              sized to the body at its own height — a top-radius ring stood ~4 mm off it. */}
-          <torusGeometry args={[r * (0.96 + 0.04 * y) + 0.002, 0.006, 8, 28]} />
-          <meshStandardMaterial color={shade(bodyC, -22)} roughness={0.8} />
-        </mesh>
-      ))}
-      {/* top control disc */}
-      <mesh position={[0, h + 0.004, 0]}>
-        <cylinderGeometry args={[r * 0.36, r * 0.36, 0.02, 24]} />
-        <meshStandardMaterial color="#26262a" emissive="#3a6aa0" emissiveIntensity={0.25} roughness={0.3} />
-      </mesh>
-    </>
+    <group scale={[1, 1, part.dimMM[1] / part.dimMM[0]]}>
+      <HardParts parts={airPurifierForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.5 }} />
+    </group>
   );
 }
 

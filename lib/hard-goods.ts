@@ -61,7 +61,12 @@ export type HardTone =
   | 'cold'
   | 'screen' // a television's panel, switched off
   | 'ceramic' // a glazed vessel — a table lamp's body
-  | 'bulb'; // a lit lamp bulb
+  | 'bulb' // a lit lamp bulb
+  | 'mirror' // a mirror's silvered glass
+  | 'mat' // a print's cream mat
+  | 'art-warm' // a print's three colour fields
+  | 'art-ochre'
+  | 'art-cool';
 
 export type HardPart =
   | { kind: 'box'; key: string; tone: HardTone; size: V3; pos: V3 }
@@ -271,6 +276,126 @@ export function tvForm(dimMM: readonly number[]): HardPart[] {
     slab('chin', 'body', -w / 2, w / 2, -h / 2, y0, zb, d / 2 - d * 0.02),
     slab('screen', 'screen', -w / 2 + side, w / 2 - side, y0, y1, zb, d / 2 - d * 0.05),
     slab('standby', 'led', -w * 0.006, w * 0.006, -h / 2 + chin * 0.35, -h / 2 + chin * 0.6, d / 2 - d * 0.04, d / 2),
+  ];
+}
+
+/** Four rails round an opening, `bx` wide at the sides and `by` at the head and foot, the
+ *  head and foot running the full width and the sides between them, so no two rails draw
+ *  the same corner twice. */
+function border(key: string, tone: HardTone, x0: number, x1: number, y0: number, y1: number, bx: number, by: number, z0: number, z1: number): HardPart[] {
+  return [
+    slab(`${key}-head`, tone, x0, x1, y1 - by, y1, z0, z1),
+    slab(`${key}-foot`, tone, x0, x1, y0, y0 + by, z0, z1),
+    slab(`${key}-l`, tone, x0, x0 + bx, y0 + by, y1 - by, z0, z1),
+    slab(`${key}-r`, tone, x1 - bx, x1, y0 + by, y1 - by, z0, z1),
+  ];
+}
+
+/** A framed print: a moulded frame, a gilt fillet stepped down inside it, a cream mat
+ *  stepped down again, and the picture behind the mat's window — the user's colour as its
+ *  ground, three colour fields floated on it. It was a dark board 40 mm larger than the
+ *  piece on every side, with two stripes laid on a plane of the user's colour.
+ *
+ *  Each layer sits behind the one round it, which is what a frame is: the light catches
+ *  three edges stepping down to the picture. Every share is taken off its own axis — at
+ *  the Library's 800 × 600 the frame is 42 mm all round, the mat 70 — so a group scale
+ *  draws the print it describes. Wall piece, centred on its origin, back on `-d/2`. */
+export function paintingForm(dimMM: readonly number[]): HardPart[] {
+  const [w, d, h] = m(dimMM);
+  const z0 = -d / 2;
+  const fx = w * 0.0525;
+  const fy = h * 0.07;
+  const gx = w * 0.01;
+  const gy = h * 0.0133;
+  const mx = w * 0.0875;
+  const my = h * 0.1167;
+  // The picture's window, inside the frame, the fillet and the mat.
+  const ax = w / 2 - fx - gx - mx;
+  const ay = h / 2 - fy - gy - my;
+  const zArt = d / 2 - d * 0.5;
+  const field = (key: string, tone: HardTone, y0: number, y1: number) =>
+    slab(key, tone, -ax * 0.8, ax * 0.8, ay * y0, ay * y1, zArt, zArt + d * 0.04);
+  return [
+    ...border('frame', 'wood', -w / 2, w / 2, -h / 2, h / 2, fx, fy, z0, d / 2),
+    ...border('fillet', 'brass', -w / 2 + fx, w / 2 - fx, -h / 2 + fy, h / 2 - fy, gx, gy, z0, d / 2 - d * 0.25),
+    ...border('mat', 'mat', -w / 2 + fx + gx, w / 2 - fx - gx, -h / 2 + fy + gy, h / 2 - fy - gy, mx, my, z0, d / 2 - d * 0.4),
+    slab('ground', 'body', -ax, ax, -ay, ay, z0, zArt),
+    field('field-warm', 'art-warm', 0.06, 0.8),
+    field('field-ochre', 'art-ochre', -0.1, 0.0),
+    field('field-cool', 'art-cool', -0.8, -0.2),
+  ];
+}
+
+/** A framed mirror: a moulded frame in the piece's own colour, a bead stepped down inside
+ *  it, and the glass set down again behind the bead. It drew its frame 15 mm wider than the
+ *  piece on every side and laid the glass 1 mm proud of the frame's face, so the mirror was
+ *  larger than the plan said and its glass stood in front of its own frame.
+ *
+ *  At the Library's 600 × 1400 the frame is 45 mm all round and the bead 10. Wall piece,
+ *  centred on its origin, back on `-d/2`. */
+export function mirrorForm(dimMM: readonly number[]): HardPart[] {
+  const [w, d, h] = m(dimMM);
+  const z0 = -d / 2;
+  const fx = w * 0.075;
+  const fy = h * 0.0321;
+  const bx = w * 0.0167;
+  const by = h * 0.0071;
+  return [
+    ...border('frame', 'body', -w / 2, w / 2, -h / 2, h / 2, fx, fy, z0, d / 2),
+    ...border('bead', 'trim', -w / 2 + fx, w / 2 - fx, -h / 2 + fy, h / 2 - fy, bx, by, z0, d / 2 - d * 0.2),
+    slab('glass', 'mirror', -w / 2 + fx + bx, w / 2 - fx - bx, -h / 2 + fy + by, h / 2 - fy - by, z0, d / 2 - d * 0.4),
+  ];
+}
+
+/** An oval mirror: a backboard in the piece's own colour, a bevelled step and the glass
+ *  laid on it, each a disc a little smaller than the one behind. Its frame was a disc 30 mm
+ *  larger than the piece all round.
+ *
+ *  Drawn on a CIRCLE of the width, which the renderer stretches to the height — an oval is
+ *  a circle scaled, and drawing it any other way would make its rim thicker at the sides
+ *  than at the top. Wall piece, centred on its origin, back on `-d/2`. */
+export function ovalMirrorForm(dimMM: readonly number[]): HardPart[] {
+  const [w, d] = m(dimMM);
+  const r = w / 2;
+  const disc = (key: string, tone: HardTone, rr: number, za: number, zb: number): HardPart =>
+    ({ kind: 'disc', key, tone, r: rr, t: zb - za, pos: [0, 0, (za + zb) / 2] });
+  return [
+    disc('frame', 'body', r, -d / 2, d / 2 - d * 0.4),
+    disc('bevel', 'trim', r * 0.92, d / 2 - d * 0.4, d / 2 - d * 0.2),
+    disc('glass', 'mirror', r * 0.88, d / 2 - d * 0.2, d / 2),
+  ];
+}
+
+/** An air purifier's intake: how many ribs the grille is cut into. */
+export const AIR_PURIFIER = { ribs: 20 } as const;
+
+/** An air purifier: a dark plinth, a collar, the intake — ribs round a dark core, the
+ *  slots between them where the air goes in — an upper shell, a chamfered top, and the
+ *  outlet grille with the control dial and a status light set into it. It was one tapered
+ *  cylinder with three rings stood off its surface.
+ *
+ *  Drawn on a CIRCLE of the width, which the renderer stretches to the depth. Twenty ribs
+ *  whatever the size: a share of the height each, so a group scale draws the same grille
+ *  taller. Floor piece: `y` runs 0 → h. */
+export function airPurifierForm(dimMM: readonly number[]): HardPart[] {
+  const w = dimMM[0] / 1000;
+  const h = dimMM[2] / 1000;
+  const col = (key: string, tone: HardTone, r: number, rBottom: number, y0: number, y1: number): HardPart =>
+    ({ kind: 'post', key, tone, r: w * r, rBottom: w * rBottom, h: h * (y1 - y0), pos: [0, h * ((y0 + y1) / 2), 0] });
+  const intake = [0.1, 0.62] as const;
+  const ribs = AIR_PURIFIER.ribs;
+  const pitch = (intake[1] - intake[0]) / ribs;
+  return [
+    col('plinth', 'dark', 0.45, 0.45, 0, 0.025),
+    col('collar', 'body', 0.5, 0.48, 0.025, intake[0]),
+    col('core', 'dark', 0.47, 0.47, intake[0], intake[1]),
+    ...Array.from({ length: ribs }, (_, i) =>
+      col(`rib-${i}`, 'grille', 0.49, 0.49, intake[0] + (i + 0.25) * pitch, intake[0] + (i + 0.75) * pitch)),
+    col('shell', 'body', 0.5, 0.5, intake[1], 0.95),
+    col('chamfer', 'trim', 0.46, 0.5, 0.95, 0.975),
+    col('outlet', 'dark', 0.42, 0.42, 0.975, 0.99),
+    col('dial', 'display', 0.1, 0.1, 0.975, 1),
+    { kind: 'post', key: 'status', tone: 'led', r: w * 0.015, rBottom: w * 0.015, h: h * 0.005, pos: [0, h * 0.9925, w * 0.28] },
   ];
 }
 
