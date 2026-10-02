@@ -6,6 +6,7 @@ import { useRoomPart } from '@/lib/room-scene';
 import { formatDim } from '@/lib/units';
 import { Pill } from '@/components/ui/primitives';
 import type { CaptureSlot } from '@/lib/storage';
+import { libraryShelf } from '@/lib/scene-spec';
 
 // Which wall photo a detected piece came from, in the words a decorator uses.
 // The slot letters (n/e/s/w) are storage keys, not vocabulary.
@@ -52,6 +53,7 @@ export function HoverCard() {
   const left = Math.min(pos.x + 14, (typeof window !== 'undefined' ? window.innerWidth : 1440) - 240);
   const top = Math.min(pos.y - 10, (typeof window !== 'undefined' ? window.innerHeight : 900) - 140);
   const dimDisplay = part.dimMM.map((mm) => formatDim(mm, dimUnit)).join(' × ') + ' ' + dimUnit;
+  const shelf = libraryShelf(part.shape);
 
   return (
     <div
@@ -82,9 +84,16 @@ export function HoverCard() {
           justifyContent: 'space-between',
         }}
       >
-        <span className="truncate sentence-case" style={{ fontSize: 'var(--fs-body)', fontWeight: 600 }}>
-          {part.name || part.category}
+        {/* The name, and beside it the Library shelf the Inspector shows — never
+            `category`, an internal key that calls a radiator "Fridge" (§ 41). */}
+        <span className="truncate sentence-case" style={{ minWidth: 0, fontSize: 'var(--fs-body)', fontWeight: 600 }}>
+          {part.name}
         </span>
+        {shelf && (
+          <span className="t-hint" style={{ flexShrink: 0, whiteSpace: 'nowrap', marginRight: 'auto' }}>
+            {shelf}
+          </span>
+        )}
         {/* Kept even though the "From" row below usually says the same thing more
             precisely: a room imported from a scene file carries `locked` but not
             `fromDetection` (scene-file.ts drops it), so for those pieces this pill

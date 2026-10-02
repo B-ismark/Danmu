@@ -16,8 +16,8 @@ import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { RailSection } from './RailSection';
 import { EmptyInspector } from './EmptyInspector';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
-import { supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { anchorFor, MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
+import { supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, libraryShelf, DECOR_KINDS, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
+import { MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
 import { useRoomReport } from './RoomTools';
 import { wallSegments, type Footprint } from '@/lib/footprint';
 import { describeSpaceRefusal, refuseForSpace, spaceLimits } from '@/lib/space-bound';
@@ -186,17 +186,6 @@ export function Inspector() {
   const restingName =
     rest?.on === 'part' ? (effParts.find((p) => p.id === rest.id)?.name ?? 'another piece') : null;
 
-  // Where the piece is ANCHORED, in the app's own three-way wording. Not "wall-mounted":
-  // `part.wallMounted` is `anchorFor(...) !== 'floor'`, so it is true for a ceiling fan
-  // and a pendant lamp, and calling those fixed to a wall is simply false.
-  // `lib/scene-file.ts` already solved this exact sentence for its `dropped` messages,
-  // with a comment saying the file "two lines up knows better" — so this reads the same
-  // three-way answer rather than inventing a fourth.
-  const anchor = anchorFor(part.category, part.shape);
-  const anchorSentence =
-    anchor === 'ceiling' ? 'Hanging from the ceiling.' : 'Fixed to a wall.';
-  const anchorLabel = anchor === 'ceiling' ? 'Hanging' : 'Wall-mounted';
-
   // Three severities, not a boolean. `warn` is "A bit tight" in amber in the room
   // report (`SEVERITY` in `RoomTools`), and painting it `--danger` here would make one
   // finding two colours on two surfaces — the same two-sources-of-truth defect this
@@ -217,22 +206,23 @@ export function Inspector() {
   // …and `floating` is not SUPPRESSED by an unrelated warn. A lamp in mid-air that also
   // happens to sit in a tight walkway used to read "Tight walkway" and nothing else —
   // the one state this feature was built for, erased by a finding about the floor.
+  //
+  // Null when there is nothing to say. "On floor", "Wall-mounted" and "Hanging" are what
+  // the piece plainly looks like, so a card for them was a row of reading spent on
+  // nothing (the user, 2026-10-01). A finding, a piece in mid-air, and a piece riding
+  // another — which decides what carries it — still get one.
   const placementLabel = worst
     ? worst.title
     : floating
       ? 'Floating'
-      : part.wallMounted
-        ? anchorLabel
-        : restingName
-          ? `On ${restingName}`
-          : 'On floor';
-  const restingSentence = part.wallMounted
-    ? anchorSentence
-    : floating
-      ? 'Nothing is holding it up. Drop it to the surface below, or move it onto something.'
       : restingName
-        ? `Resting on ${restingName}.`
-        : 'Standing on the floor.';
+        ? `On ${restingName}`
+        : null;
+  const restingSentence = floating
+    ? 'Nothing is holding it up. Drop it to the surface below, or move it onto something.'
+    : restingName
+      ? `Resting on ${restingName}.`
+      : '';
   // Both halves when both have something to say. A finding is about the floor plan and
   // the resting state is about the vertical; they are different facts and the report
   // cannot see the second, so a piece that is BOTH in a tight walkway and floating says
@@ -243,6 +233,7 @@ export function Inspector() {
       : worst.detail
     : restingSentence;
   const placementOk = placementTone === 'ok';
+  const shelf = libraryShelf(part.shape);
 
   // `rail-scroll` carries nothing but `container-type` — it is what makes THIS box
   // the one `@container rail` measures, rather than the rail outside the scrollbar.
@@ -279,19 +270,18 @@ export function Inspector() {
             style={{ flex: 1, minWidth: 0, fontSize: 'var(--fs-lead)', fontWeight: 500, letterSpacing: '-0.01em' }}
             inputStyle={{ fontSize: 'var(--fs-lead)', fontWeight: 500, height: 32 }}
           />
+          {/* The Library shelf, on the name's own row: one line of identity, not a
+              second one restating it ("Bed · Bed double"). The shelf, never
+              `category` — an internal key that calls a radiator "Fridge" (§ 41).
+              Nothing for a shape the Library does not sell. */}
+          {shelf && (
+            <span className="t-hint" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+              {shelf}
+            </span>
+          )}
           {/* Not "Locked": the piece drags, resizes and recolours like any other.
               What the flag means is where it came from — see ScenePart.locked. */}
           {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>From photo</Pill>}
-        </div>
-
-        <div className="t-hint" style={{ marginTop: 2, paddingLeft: 4 }}>
-          {/* Two labels, not one sentence, so each takes its own capital: "Chair ·
-              Chair armchair". Inline blocks, because `::first-letter` does not reach
-              a plain inline span. Shape ids are hyphenated internally
-              ("chair-armchair"), so the shape is said in words. */}
-          <span className="sentence-case" style={{ display: 'inline-block' }}>{part.category}</span>
-          {' · '}
-          <span className="sentence-case" style={{ display: 'inline-block' }}>{part.shape.replace(/-/g, ' ')}</span>
         </div>
       </div>
 
@@ -308,6 +298,7 @@ export function Inspector() {
           than the fill tokens: `--danger` and `--success` are FILLS and do not clear
           4.5:1 as type. The `-text` variants are the ones that do.
       */}
+      {placementLabel !== null && (
       <div
         role="status"
         // Named, so a test can find it by IDENTITY rather than by the text it is about
@@ -358,6 +349,7 @@ export function Inspector() {
           <span style={{ color: 'var(--ink-3)', overflowWrap: 'anywhere' }}>{placementDetail}</span>
         </span>
       </div>
+      )}
 
       {/* ── The decorating decisions, folded to a line each ────────────────── */}
       <PaintPicker

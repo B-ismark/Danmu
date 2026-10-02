@@ -2298,6 +2298,16 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Door', group: 'Appliances', category: 'door', shape: 'door', dimMM: [900, 50, 2100] },
 ];
 
+/** The Library shelf a shape sits on — "Appliances" for a radiator — or null for a
+ *  shape the Library does not sell (a scanned single bed). Shown beside a piece's name
+ *  in the Inspector and the hover card; null shows nothing rather than `category`,
+ *  which is an internal key and calls six appliances "Fridge" (§ 41). Read off
+ *  `PART_LIBRARY` rather than kept beside it, and a shape is on one shelf only
+ *  (`tests/library-shelf.test.ts`). */
+export function libraryShelf(shape: Shape): string | null {
+  return PART_LIBRARY.find((r) => r.shape === shape)?.group ?? null;
+}
+
 // ─── Detection → scene builder ────────────────────────────────────────────
 // Map detected category to a sensible primitive + default mm dimensions.
 // No `circle` here any more: roundness is a property of the SHAPE (`isRoundPart`), and

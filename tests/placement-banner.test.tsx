@@ -92,6 +92,12 @@ function banner(): HTMLElement {
   return screen.getByRole('status', { name: 'Placement' });
 }
 
+/** The card, or null — it is not drawn for a piece plainly where it looks (the user,
+ *  2026-10-01: "On floor" is obvious). */
+function maybeBanner(): HTMLElement | null {
+  return screen.queryByRole('status', { name: 'Placement' });
+}
+
 describe('the banner agrees with Room check, because it reads Room check', () => {
   beforeEach(() => setUp([table, tuckedChair], 'chair'));
 
@@ -121,12 +127,10 @@ describe('the banner agrees with Room check, because it reads Room check', () =>
     render(<PlanPage />);
     // The § 37 defect, in one line. `collidesAt` says these two overlap; the report
     // says they do not; the banner must side with the report.
-    expect(banner().textContent).not.toMatch(/Blocked/i);
-  });
-
-  it('says what it IS doing instead — standing on the floor', () => {
-    render(<PlanPage />);
-    expect(banner().textContent).toMatch(/On floor/i);
+    // No card at all: nothing to say. The finding test below is what stops this
+    // passing by never drawing one.
+    expect(maybeBanner()?.textContent ?? '').not.toMatch(/Blocked/i);
+    expect(maybeBanner(), 'a chair on the floor with nothing wrong needs no card').toBeNull();
   });
 
   it('and reports a real finding when the report has one', () => {
@@ -174,7 +178,7 @@ describe('the resting half, which the report cannot answer', () => {
     expect(banner().textContent).not.toMatch(/On table/i);
   });
 
-  it('says Wall-mounted for a fixture, rather than Floating', () => {
+  it('says nothing for a wall fixture — in particular not Floating', () => {
     // A wall fixture rests on nothing, and `restingOn` truthfully returns null for one.
     // Reporting that as "Floating" would be the same category error one step on.
     const tv = part({
@@ -186,40 +190,21 @@ describe('the resting half, which the report cannot answer', () => {
     });
     setUp([table, tv], 'tv');
     render(<PlanPage />);
-    expect(banner().textContent).toMatch(/Wall-mounted/i);
-    expect(banner().textContent).not.toMatch(/Floating/i);
+    expect(maybeBanner()).toBeNull();
   });
 });
 
 describe('what the review found after the first version', () => {
-  it('calls a ceiling fixture Hanging, not Wall-mounted', () => {
-    // `part.wallMounted` is `anchorFor(...) !== 'floor'`, so it is true for a ceiling
-    // fan and a pendant lamp — and telling someone their pendant is "fixed to a wall"
-    // is simply false. `lib/scene-file.ts` already solved this exact sentence for its
-    // `dropped` messages, with a comment noting the file "two lines up knows better",
-    // and this reads the same three-way answer off `anchorFor` rather than inventing a
-    // fourth.
+  it('says nothing for a ceiling fixture either, which rests on nothing too', () => {
+    // A fan rests on nothing, like a TV, and `restingOn` returns null for both; neither
+    // may be reported as Floating.
     const fan = part({
       id: 'fan', category: 'fan', shape: 'fan', dimMM: [1000, 1000, 200],
       pos: [0, 2.48, 0], wallMounted: true, circle: true,
     });
     setUp([table, fan], 'fan');
     render(<PlanPage />);
-    expect(banner().textContent).toMatch(/Hanging/i);
-    expect(banner().textContent).not.toMatch(/Wall-mounted/i);
-    expect(banner().textContent).toMatch(/ceiling/i);
-  });
-
-  it('still says Wall-mounted for something actually on a wall', () => {
-    // The other half, so the clause above cannot pass by saying "Hanging" about
-    // everything. A TV is `wall-mid`, which is neither floor nor ceiling.
-    const tv = part({
-      id: 'tv', category: 'tv', shape: 'tv', dimMM: [1200, 60, 700], pos: [0, 1.4, -1.9], wallMounted: true,
-    });
-    setUp([table, tv], 'tv');
-    render(<PlanPage />);
-    expect(banner().textContent).toMatch(/Wall-mounted/i);
-    expect(banner().textContent).not.toMatch(/Hanging/i);
+    expect(maybeBanner()).toBeNull();
   });
 
   it('does not let an unrelated finding erase the floating state', () => {
@@ -283,9 +268,35 @@ describe('the banner as an announcement', () => {
     // `role="status"` already carries an implicit polite live region. The first version
     // added `aria-live="polite"` on top, and the pair re-announces on every selection
     // change and every position write — a drag committed a stream of announcements.
-    setUp([table, tuckedChair], 'chair');
+    setUp([table, part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.75, 0] })], 'lamp');
     render(<PlanPage />);
     expect(banner().getAttribute('role')).toBe('status');
     expect(banner().getAttribute('aria-live')).toBeNull();
+  });
+});
+
+describe('the header: one row, the name and its Library shelf', () => {
+  // The user, 2026-10-01: "Bed. Bed. Bed double is also redundant — just keep the name
+  // and maybe next to it the category." The shelf is the Library's own word (§ 41), so a
+  // radiator reads "Appliances", never its internal category key "fridge".
+  const radiator = part({
+    id: 'radiator', name: 'Radiator', category: 'fridge', shape: 'radiator', dimMM: [800, 120, 580], pos: [0, 0, -1.9],
+  });
+
+  it('puts the shelf on the name’s own row and says neither the category nor the shape', () => {
+    setUp([table, radiator], 'radiator');
+    render(<PlanPage />);
+    const shelf = screen.getByText('Appliances');
+    expect(shelf.parentElement?.textContent, 'the shelf sits on the name’s row').toContain('Radiator');
+    expect(shelf.parentElement?.parentElement?.textContent).not.toMatch(/fridge/i);
+    expect(screen.queryByText(/^Fridge$/i)).toBeNull();
+  });
+
+  it('shows no shelf for a shape the Library does not sell, rather than the internal key', () => {
+    const single = part({ id: 'bed', name: 'Bed', category: 'bed', shape: 'bed-single', dimMM: [900, 2000, 600], pos: [0, 0, 0] });
+    setUp([single], 'bed');
+    render(<PlanPage />);
+    const row = screen.getByRole('button', { name: /Furniture name/i }).parentElement!;
+    expect(row.textContent).toBe('Bed');
   });
 });
