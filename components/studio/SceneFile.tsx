@@ -16,6 +16,7 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { downloadBlob } from '@/lib/snapshot';
+import { noteFileSaved, requestPersistentStorage } from '@/lib/backup-nudge';
 import {
   buildSceneFile,
   MAX_FILE_BYTES,
@@ -40,6 +41,8 @@ import {
  * Reports through a toast either way, so the caller does not have to.
  */
 export async function saveSceneFile(roomId: string) {
+  // A press that says the room matters: the moment to ask the browser to keep it.
+  void requestPersistentStorage();
   try {
     // The stores are the live truth; `meta` is written on a 300 ms debounce and
     // supplies only the name, which nothing in the studio holds.
@@ -77,6 +80,7 @@ export async function saveSceneFile(roomId: string) {
 
     const name = sceneFileName(meta?.name ?? 'room');
     downloadBlob(new Blob([sceneFileJson(file)], { type: 'application/json' }), name);
+    noteFileSaved(roomId);
     toast({ tone: 'success', title: 'Room saved to a file', message: name });
   } catch (e) {
     toast({
@@ -86,6 +90,18 @@ export async function saveSceneFile(roomId: string) {
       detail: String(e),
     });
   }
+}
+
+/** Offer a backup file for a room that has had real work put into it, once
+ *  (`lib/backup-nudge.ts` decides when). Neutral and on a timer: it is a
+ *  suggestion, and ignoring it is a fine answer. */
+export function offerBackup(roomId: string) {
+  toast({
+    title: 'Keep a copy of this room?',
+    message: 'Rooms live only in this browser, so clearing its data would remove them. A backup file keeps this one safe.',
+    action: { label: 'Save a backup file', onClick: () => void saveSceneFile(roomId) },
+    ttl: 15000,
+  });
 }
 
 /** Open a scene file as a NEW room, then go to it.
@@ -108,6 +124,7 @@ export function ImportSceneButton({
   async function open(fileList: FileList | null) {
     const file = fileList?.[0];
     if (!file || busy) return;
+    void requestPersistentStorage();
     setBusy(true);
     try {
       // Checked before reading, so a 2 GB file never becomes a 2 GB string. The

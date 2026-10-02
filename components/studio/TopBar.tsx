@@ -74,7 +74,7 @@ export function TopBar({
         toast({ title: 'Room kept its name', message: 'A room needs a name, so the old one stayed.' })
       }
       style={style}
-      inputStyle={{ fontSize: 'var(--fs-body)', fontWeight: 500, height: 28, width: 'min(280px, 100%)' }}
+      inputStyle={{ fontSize: 'var(--field-fs)', fontWeight: 500, height: 28, width: 'min(280px, 100%)' }}
     />
     );
   const savedStatus = (

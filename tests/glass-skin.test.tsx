@@ -119,10 +119,10 @@ describe('the glass rules', () => {
 
 describe('a row of number fields fits its longest number', () => {
   it('sizes from the longest value, in mono characters plus the field chrome', () => {
-    expect(fieldMinWidth(['6.00', '5.00', '2.60'])).toBe('calc(4 * 0.6 * var(--fs-body) + 30px)');
-    expect(fieldMinWidth(['12.5', '600.0', '2'])).toBe('calc(5 * 0.6 * var(--fs-body) + 30px)');
+    expect(fieldMinWidth(['6.00', '5.00', '2.60'])).toBe('calc(4 * 0.6 * var(--field-fs) + 30px)');
+    expect(fieldMinWidth(['12.5', '600.0', '2'])).toBe('calc(5 * 0.6 * var(--field-fs) + 30px)');
     // An empty field still has a caret to show.
-    expect(fieldMinWidth(['', '', ''])).toBe('calc(1 * 0.6 * var(--fs-body) + 30px)');
+    expect(fieldMinWidth(['', '', ''])).toBe('calc(1 * 0.6 * var(--field-fs) + 30px)');
   });
 
   it('agrees with the padding NumberField actually draws', () => {

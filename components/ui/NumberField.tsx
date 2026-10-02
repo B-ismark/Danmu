@@ -56,7 +56,7 @@ const PAD_RIGHT = 20;
  *  and "6.00" read "6.0", which an input does not report as overflow. */
 export function fieldMinWidth(values: string[]): string {
   const chars = Math.max(1, ...values.map((v) => v.length));
-  return `calc(${chars} * 0.6 * var(--fs-body) + ${PAD_LEFT + PAD_RIGHT + 2}px)`;
+  return `calc(${chars} * 0.6 * var(--field-fs) + ${PAD_LEFT + PAD_RIGHT + 2}px)`;
 }
 
 /** The two arrows. One list, so a change to how an arrow answers a press is made
@@ -196,7 +196,7 @@ export function NumberField({
         className="field"
         style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--fs-body)',
+          fontSize: 'var(--field-fs)',
           fontWeight: 600,
           height,
           // room for the stepper column, so long values never run under it

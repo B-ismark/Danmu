@@ -48,6 +48,10 @@ const TEST_TIMEOUT_MS = 15000;
 
 const KEY_INPUT_ID = 'settings-access-key';
 
+/** Where feedback goes: an email the person writes in their own mail app. The repo
+ *  is private, so its issue page would be a 404 for everyone else. */
+const FEEDBACK_URL = 'mailto:Bismarkgyau@gmail.com?subject=' + encodeURIComponent('Danmu feedback');
+
 export default function SettingsPage() {
   const s = useSettings();
   // The unit the server printed until hydration, so the example below is not a
@@ -471,6 +475,14 @@ export default function SettingsPage() {
               <Icon name="trash" size={12} />
               {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
             </button>
+          </Row>
+          <Row label="Send feedback" hint="Opens your email app to tell us what works and what doesn't. Nothing is sent from the app.">
+            {/* A plain link the person follows, never a form that posts from here:
+                rule 5 allows no egress but the optional detection call. */}
+            <a href={FEEDBACK_URL} className="ds-btn ds-btn--sm">
+              <Icon name="mail" size={12} />
+              Send feedback
+            </a>
           </Row>
         </Section>
       </div>

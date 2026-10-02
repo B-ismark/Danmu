@@ -11,6 +11,7 @@ import {
   update as idbUpdate,
 } from 'idb-keyval';
 import { v4 as uuid } from 'uuid';
+import { pruneNudges } from './backup-nudge';
 import { clearLeaveNote, dropLeaveNote, leaveNoteRooms, noteOwed, readLeaveNote, stillOwed, type SavePart } from './leave-note';
 
 // Every call in this file goes through ONE connection, the one the room's own load opens.
@@ -733,6 +734,7 @@ export const roomStore = {
     // same housekeeping, for the same reason.
     void roomStore.purgeTrash();
     roomStore.settleLeaveNotes(ids).catch((e) => console.error('[room] could not settle the leave notes', e));
+    pruneNudges(ids);
 
     return rows.filter((r): r is RoomSummary => r !== null).sort((a, b) => b.updatedAt - a.updatedAt);
   },

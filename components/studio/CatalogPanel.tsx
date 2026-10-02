@@ -123,6 +123,9 @@ export function CatalogToggle() {
         aria-expanded={open}
         className="chrome-pill__text"
         title="Add a piece"
+        // The rail's Add says "Add a piece to the room" to a screen reader; this one
+        // said only its visible "Add", so the two read as one control twice.
+        aria-label={open ? 'Close the Library' : 'Add a piece'}
       >
         <Icon name="plus" size={12} /> Add
       </button>
