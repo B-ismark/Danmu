@@ -51,7 +51,7 @@ screen; and row 17 above.
 
 **Opened 2026-09-06, both needing a decision only the user can make:**
 
-- **§ 40** — six more shapes declare a depth their renderer never reads. § 39 was one fan;
+- **§ 40** — CLOSED 2026-10-02: five of the six were already fixed, and the monitor's base now reads its depth. Was: six more shapes declare a depth their renderer never reads. § 39 was one fan;
   it is a class of seven. Four are already pinned (and the pin is the TIGHT case, ±0.03
   against the band’s ±0.10); two pass by coincidence. `window` declares 60 mm and draws 120.
   *Put to the user 2026-09-30: not sure, skip it for now. Nothing built.*
@@ -7600,7 +7600,22 @@ the rest-pose bounding box of three spokes — an instrument reading, corrected 
 `occupiedPts`. Do not re-file it.
 ---
 
-### § 40 — six more shapes declare a depth their renderer never reads — DECISION, skipped for now
+### § 40 — six more shapes declare a depth their renderer never reads — CLOSED 2026-10-02
+
+**Re-measured on `main` @ `95e3b64` (2026-10-02), and five of the six had already been fixed
+by the realism rounds** (`lib/hard-goods.ts`), without this item being updated:
+
+| shape | declared D | drawn D now | reads `dimMM[1]`? |
+|---|---|---|---|
+| `mirror`, `mirror-oval` | 30 | 30 | yes, `mirrorForm` / `ovalMirrorForm`; both pins retired |
+| `painting` | 30 | 30 | yes, `paintingForm` |
+| `curtain` | 80 | 76 | yes, `curtainCloth`; inside the band on its own drawing, not a literal |
+| `window` | 60 | 120 | **yes**: the frame and sashes fill the declared depth. `dimMM` is the OPENING, and the 60 mm past it is the sill reaching into the room, a real protrusion the pin keeps on purpose |
+| `monitor` | 200 | 300 → **200** | **was no**: a literal 300 mm base disc. Fixed on `claude/keen-einstein-dbmwuw`: the disc's diameter is `dimMM[1]`, and the `DRAWN_RATIO` pin is retired |
+
+So no shape in the table draws its thin axis from a literal any more. The original write-up
+follows, unchanged, for the reasoning.
+
 
 **Put to the user on 2026-09-30, who was not sure and chose to skip it for now.** Nothing is
 built; the item stands as written for when it comes back.

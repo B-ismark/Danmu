@@ -985,11 +985,15 @@ function MonitorGeo({ part }: { part: ScenePart }) {
   // The bezel, housing, neck and base follow the part's colour. They were four
   // literals, so the Inspector's colour picker did nothing to a monitor.
   const shell = tint(part);
+  // The base IS the declared depth: a disc whose diameter is `dimMM[1]`, so typing a
+  // depth in the Inspector changes the drawing. It was a literal 300 mm disc, which drew
+  // a 200 mm monitor 1.5 times as deep as it said it was (§ 40).
+  const baseR = part.dimMM[1] / 2000;
   return (
     <>
       {/* weighted base disc */}
-      <mesh position={[0, 0.012, 0.01]}>
-        <cylinderGeometry args={[0.12, 0.15, 0.024, 28]} />
+      <mesh position={[0, 0.012, 0]}>
+        <cylinderGeometry args={[baseR * 0.8, baseR, 0.024, 28]} />
         <meshStandardMaterial color={shell} roughness={0.5} metalness={0.35} />
       </mesh>
       {/* angled neck */}
