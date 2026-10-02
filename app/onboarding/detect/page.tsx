@@ -32,6 +32,7 @@ import { hfovFromFocal35 } from '@/lib/exif';
 import { geoPlace, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { acceptCandidate, judgeLabels, measuredPhrase, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
 import { suggestFromLabel } from '@/lib/label-suggest';
+import { PART_LIBRARY, sceneShapeFor } from '@/lib/scene-spec';
 import {
   canRedo,
   canUndo,
@@ -1364,6 +1365,7 @@ export default function DetectPage() {
                 onThisPhoto={d.slot === activeSlot}
                 onToggle={() => toggleConfirm(i)}
                 onRename={(label) => renameDetection(i, label)}
+                suggestModels={(draft) => suggestFromLabel(d, draft, cals, roomDims)}
                 onDelete={() => deleteDetection(i)}
                 onLink={(on) => setLinked(on ? i : null)}
                 onShow={() => setActiveSlot(d.slot)}
@@ -1465,6 +1467,7 @@ function DetectionRow({
   onThisPhoto,
   onToggle,
   onRename,
+  suggestModels,
   onRepair,
   onDismissOffer,
   offer,
@@ -1483,6 +1486,8 @@ function DetectionRow({
   onThisPhoto: boolean;
   onToggle: () => void;
   onRename: (label: string) => void;
+  /** Models the name being typed matches, recomputed per keystroke (`suggestFromLabel`). */
+  suggestModels: (draft: string) => LabelCandidate[];
   onRepair: (cand: LabelCandidate) => void;
   /** Models the piece’s current NAME suggests, best first — see suggestFromLabel.
    *  Empty for every row but the one just renamed. */
@@ -1493,6 +1498,14 @@ function DetectionRow({
   onShow: () => void;
 }) {
   const label = cleanLabelOf(d);
+  /** The suggestions the name field is showing, so a pick resolves to the same
+   *  candidate the person saw rather than one recomputed from a later draft. */
+  const shown = useRef<LabelCandidate[]>([]);
+  // The MODEL this row becomes, by the studio's own rule (`sceneShapeFor`), named as
+  // the Library names it. It said the category, so a row renamed "Shoe rack" still
+  // read "Shelf" while the studio was in fact going to build the shoe rack, and a
+  // rename looked like it changed nothing but the word.
+  const modelName = PART_LIBRARY.find((r) => r.shape === sceneShapeFor(d.category, label, d.shape))?.label ?? categoryLabel(d.category);
   // Derived from the range itself, never typed next to the number it describes,
   // and only the axes that actually missed get mentioned.
   const miss =
@@ -1564,10 +1577,26 @@ function DetectionRow({
         <EditableText
           value={label}
           onCommit={onRename}
+          // As the name is typed, the models it matches: picking one changes the MODEL,
+          // not only the word, which is what a person renaming a "bed" to "Fridge"
+          // meant. Typing a name and leaving the list alone is still a plain rename,
+          // with the chips below to change the model afterwards.
+          suggest={(draft) => {
+            shown.current = suggestModels(draft).slice(0, 4);
+            return shown.current.map((c) => ({
+              key: c.category,
+              label: `${candidateLabel(c)} model`,
+              hint: c.unmeasured ? 'size is an estimate' : c.margin < 0 ? 'not the size the camera measured' : undefined,
+            }));
+          }}
+          onPick={(key) => {
+            const cand = shown.current.find((c) => c.category === key);
+            if (cand) onRepair(cand);
+          }}
           label="Piece name"
           className="sentence-case"
           style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)', display: 'block' }}
-          inputStyle={{ height: 28, fontSize: 'var(--fs-small)' }}
+          inputStyle={{ height: 28, fontSize: 'var(--field-fs)' }}
         />
         {/* Confidence percentages and slot codes were telemetry. What helps is
             which photo it came from and what Danmu thinks it is. */}
@@ -1575,7 +1604,7 @@ function DetectionRow({
           {/* Who found it, said plainly. A row the user drew and a row a language
               model guessed at look identical otherwise, and they are not the same
               claim. */}
-          {categoryLabel(d.category)} · {slotLabel(d.slot)} · {sourceLabel(sourceOf(d))}
+          {modelName} · {slotLabel(d.slot)} · {sourceLabel(sourceOf(d))}
         </div>
         {/* Why this row started unticked, when that is the reason. Said rather than
             acted on — it is still on the list, one tap from kept, because a real
