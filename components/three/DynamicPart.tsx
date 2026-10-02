@@ -10,7 +10,6 @@ import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
 import {
-  drawerSlide,
   clothesRail,
   fanBlade,
   fanColumn,
@@ -22,7 +21,6 @@ import {
   radiatorFins,
   shoeRow,
   SHOE_TIER_TILT,
-  stoolSeat,
   windowPanes,
   moduleCount,
   moduleRangeFor,
@@ -58,8 +56,13 @@ import {
   chestFreezerForm,
   doorForm,
   microwaveForm,
+  nightstandForm,
+  nightstandSlide,
   soundbarForm,
+  stoolForm,
+  strutPose,
   tvConsoleForm,
+  tvForm,
   washingMachineForm,
   waterDispenserForm,
   type HardPart,
@@ -354,20 +357,7 @@ function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 // It also took no `part` at all, so recolouring a TV in the Inspector silently
 // did nothing.
 function TVGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const d = Math.max(0.03, part.dimMM[1] / 1000);
-  const bezel = body(part, locked);
-  return (
-    <>
-      <Box size={[w, h, d]} position={[0, 0, 0]} color={bezel} roughness={0.5} />
-      {/* recessed glowing screen */}
-      <mesh position={[0, 0, d / 2 + 0.002]}>
-        <planeGeometry args={[w * 0.95, h * 0.9]} />
-        <meshStandardMaterial color="#10141c" emissive="#1c2e48" emissiveIntensity={0.35} roughness={0.18} metalness={0.2} />
-      </mesh>
-    </>
-  );
+  return <HardParts parts={tvForm(part.dimMM)} bodyC={body(part, locked)} look={{ roughness: 0.5 }} />;
 }
 
 function RugGeo({ part }: { part: ScenePart }) {
@@ -426,6 +416,7 @@ function toneMaterial(tone: HardTone, bodyC: string, look: HardLook): ToneMateri
     case 'water': return { color: DETAIL.water, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.45 };
     case 'hot': return { color: DETAIL.tapHot, roughness: 0.4 };
     case 'cold': return { color: DETAIL.tapCold, roughness: 0.4 };
+    case 'screen': return { color: DETAIL.screen, roughness: 0.18, metalness: 0.2, emissive: DETAIL.screenGlow, emissiveIntensity: 0.35 };
   }
 }
 
@@ -455,7 +446,8 @@ function HardParts({ parts, bodyC, look }: { parts: HardPart[]; bodyC: string; l
         if (p.kind === 'post') {
           return (
             <mesh key={p.key} position={p.pos} castShadow receiveShadow>
-              <cylinderGeometry args={[p.r, p.rBottom, p.h, 20]} />
+              {/* A seat's rim shows its facets where a leg's does not. */}
+              <cylinderGeometry args={[p.r, p.rBottom, p.h, Math.max(p.r, p.rBottom) > 0.08 ? 48 : 20]} />
               {material}
             </mesh>
           );
@@ -466,6 +458,15 @@ function HardParts({ parts, bodyC, look }: { parts: HardPart[]; bodyC: string; l
           return (
             <mesh key={p.key} position={p.pos} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
               <cylinderGeometry args={[p.r, p.r, p.t, 28]} />
+              {material}
+            </mesh>
+          );
+        }
+        if (p.kind === 'strut') {
+          const pose = strutPose(p);
+          return (
+            <mesh key={p.key} position={pose.pos} rotation={pose.rot} castShadow receiveShadow>
+              <cylinderGeometry args={[p.r, p.r, pose.len, 12]} />
               {material}
             </mesh>
           );
@@ -1398,36 +1399,14 @@ function SideTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 }
 
 function NightstandGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const wood = body(part, locked);
-  const dark = shade(wood, -20);
-  const face = shade(wood, 8);
-  // Double-click toggles drawers open; slide the faces (+ pulls + a shallow
-  // drawer box) forward along +z.
+  // Double-click toggles the drawers open; the form slides them out along +z.
   const open = useStudio((s) => s.openState[part.id] ?? 0);
-  const slide = open * drawerSlide(part.dimMM[1]);
   return (
-    <>
-      {/* carcass */}
-      <Box surface="wood" size={[w, h, d]} position={[0, h / 2, 0]} color={wood} roughness={0.7} />
-      {/* routed groove between drawers (stays on the carcass) */}
-      <Box surface="wood" size={[w * 0.9, 0.008, 0.01]} position={[0, h * 0.5, d / 2 + 0.003]} color={dark} roughness={0.8} />
-      {/* two drawers — face + side box + pull, slid forward by `slide` */}
-      {[h * 0.71, h * 0.26].map((y, i) => (
-        <group key={i} position={[0, y, slide]}>
-          {open > 0.02 && (
-            <Box surface="wood" size={[w * 0.9, h * 0.38, d * 0.85]} position={[0, 0, d / 2 - d * 0.45]} color={dark} roughness={0.85} />
-          )}
-          <Box surface="wood" size={[w * 0.94, h * 0.4, 0.014]} position={[0, 0, d / 2 - 0.004]} color={face} roughness={0.65} />
-          <mesh position={[0, 0, d / 2 + 0.0095]}>
-            <boxGeometry args={[0.055, 0.013, 0.013]} />
-            <meshStandardMaterial color="#9A9088" roughness={0.35} metalness={0.55} />
-          </mesh>
-        </group>
-      ))}
-    </>
+    <HardParts
+      parts={nightstandForm(part.dimMM, nightstandSlide(open, part.dimMM[1]))}
+      bodyC={body(part, locked)}
+      look={{ surface: 'wood', roughness: 0.65 }}
+    />
   );
 }
 
@@ -1878,34 +1857,13 @@ function TvConsoleGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   return <HardParts parts={tvConsoleForm(part.dimMM)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.45 }} />;
 }
 
-/** Round wooden stool: seat plus three splayed legs. */
+/** Round wooden stool. `stoolForm` draws it on a circle of the declared width; the
+ *  ellipse is for the same reason as `FanGeo` — `stool` is a ROUND shape whose W and D
+ *  are separately editable, and the plan draws what `footFromPart` models. */
 function StoolGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const r = w / 2;
-  const c = body(part, locked);
-  const seat = stoolSeat(part.dimMM[2]);
-  // The ellipse, for the same reason as `FanGeo` — `stool` is a ROUND shape whose W
-  // and D are separately editable, and the plan draws what `footFromPart` models.
-  const oval = part.dimMM[1] / part.dimMM[0];
   return (
-    <group scale={[1, 1, oval]}>
-      <mesh position={[0, h - seat / 2, 0]}>
-        <cylinderGeometry args={[r, r, seat, 24]} />
-        <meshStandardMaterial color={c} roughness={0.55} />
-      </mesh>
-      {[0, 1, 2].map((i) => {
-        const a = (i / 3) * Math.PI * 2;
-        // Legs sit inside `r` at the floor as well as at the seat, so the stool never
-        // occupies more floor than the width it declares.
-        const rr = r * 0.66;
-        return (
-          <mesh key={i} position={[Math.cos(a) * rr, (h - seat) / 2, Math.sin(a) * rr]}>
-            <cylinderGeometry args={[0.016, 0.02, h - seat, 10]} />
-            <meshStandardMaterial color={c} roughness={0.6} />
-          </mesh>
-        );
-      })}
+    <group scale={[1, 1, part.dimMM[1] / part.dimMM[0]]}>
+      <HardParts parts={stoolForm(part.dimMM)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.55 }} />
     </group>
   );
 }
