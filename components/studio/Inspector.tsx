@@ -17,7 +17,8 @@ import { RailSection } from './RailSection';
 import { EmptyInspector } from './EmptyInspector';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, libraryShelf, DECOR_KINDS, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
+import { MOUNT_PAD, restingOn } from '@/lib/physics';
+import { moveToWall, wallSentence } from '@/lib/to-wall';
 import { useRoomReport } from './RoomTools';
 import { wallSegments, type Footprint } from '@/lib/footprint';
 import { describeSpaceRefusal, refuseForSpace, spaceLimits } from '@/lib/space-bound';
@@ -46,9 +47,9 @@ export function Inspector() {
   const hasOverrides = useHasOverrides(id);
   const setDim = useStudio((s) => s.setDim);
   const setPosition = useStudio((s) => s.setPosition);
-  const setRotation = useStudio((s) => s.setRotation);
   const clearParent = useStudio((s) => s.clearParent);
   const setTransformsFor = useStudio((s) => s.setTransformsFor);
+  const landAll = useStudio((s) => s.landAll);
   const resetTransforms = useStudio((s) => s.resetTransforms);
   const updatePart = useScene((s) => s.updatePart);
   // Resolved once for the whole panel: surface snapping and the dimension fields
@@ -61,6 +62,10 @@ export function Inspector() {
   const { report } = useRoomReport();
 
   const setSwapPartId = useStudio((s) => s.setSwapPartId);
+  /** What the last Wall press said, and where it left the piece. Shown only while the
+   *  piece is still there: "stopped short of the wall" under a piece since dragged
+   *  across the room is a sentence about somewhere else. */
+  const [wallSaid, setWallSaid] = useState<{ id: string; text: string; x: number; z: number; rot: number } | null>(null);
 
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
 
@@ -98,45 +103,63 @@ export function Inspector() {
     }));
   }
 
-  /** What stands on this piece goes where it goes. Both buttons are moves like any
-   *  other and used to move the piece alone, leaving a lamp in the air over the spot
-   *  its nightstand had left (§ H.6.7). Asked of the relation a drag plans its company
-   *  from, about the spot the piece actually lands on.
+  /** What stands on this piece goes where it goes. Floor is a move like any other and
+   *  used to move the piece alone (§ H.6.7). Asked of the relation a drag plans its
+   *  company from, about the spot the piece actually lands on. Wall used to come
+   *  through here too and is a whole gesture now — see `snapToNearestWall`.
    *
-   *  `'pinned'` writes only the riders that already have a stored position. Floor moves
+   *  It writes only the riders that already have a stored position. Floor moves
    *  a piece only upright, and the height pass brings down a rider with no position of
    *  its own; writing that one too would restate the height pass as an override a
    *  re-scan will not move. A rider WITH a stored position is the one it can miss: it
    *  follows an inferred link only while the support's top differs from its authored
    *  top, so a nightstand floored back to where the room put it left a lamp carried up
    *  with it standing at desk height. */
-  function carryRiders(to: [number, number, number], rot: number, which: 'all' | 'pinned') {
+  function carryPinnedRiders(to: [number, number, number], rot: number) {
     const riders = snapshotDescendants(id!, effParts, currentRiderRelation());
     if (riders.length === 0) return;
     const moves = cascadeTransform(id!, to, rot, riders);
     const stored = useStudio.getState().positions;
-    const write = which === 'all' ? moves : moves.filter((m) => stored[m.id] !== undefined);
+    const write = moves.filter((m) => stored[m.id] !== undefined);
     if (write.length > 0) setTransformsFor(write);
   }
 
   function groundToFloor() {
     const [x, , z] = currentXYZ();
     setPosition(id!, [x, 0, z]);
-    carryRiders([x, 0, z], part!.rot, 'pinned');
+    carryPinnedRiders([x, 0, z], part!.rot);
     clearParent(id!);
   }
 
   // The model swap is `lib/swap-model.ts` now, and its dialog is `SwapModelHost`:
   // the right-click menu offers the same verb, so neither can live in this panel.
 
+  /** A gesture like a drag, so it takes what a drag takes — the rest of the selection,
+   *  a merged set, what stands on the piece — and is checked the way a drag is. It used
+   *  to move the piece and its riders alone and unchecked (§ H.6.7). See `lib/to-wall.ts`. */
   function snapToNearestWall() {
-    const [x, y, z] = currentXYZ();
-    const snapped = snapToWallPhys([x, y, z], part!.dimMM, room.footprint, wallStandoff(part!.shape));
-    setPosition(id!, [snapped.x, y, snapped.z]);
-    if (snapped.rot !== undefined) setRotation(id!, snapped.rot);
-    carryRiders([snapped.x, y, snapped.z], snapped.rot ?? part!.rot, 'all');
-    clearParent(id!);
+    const move = moveToWall({
+      id: id!,
+      parts: effParts,
+      selection: useStudio.getState().selection,
+      restsOn: currentRiderRelation(),
+      footprint: room.footprint,
+      roomHeight: room.height,
+      memberHasPosOverride: (pid) => useStudio.getState().positions[pid] !== undefined,
+    });
+    if (move.kind === 'moved') {
+      setTransformsFor(move.moves);
+      landAll(move.landings);
+    }
+    const text = wallSentence(part!.name, move);
+    const lead = move.kind === 'moved' ? move.moves[0] : { pos: part!.pos, rot: part!.rot };
+    setWallSaid(text ? { id: id!, text, x: lead.pos[0], z: lead.pos[2], rot: lead.rot ?? part!.rot } : null);
+    if (text) announce(text);
   }
+  const wallNote =
+    wallSaid && wallSaid.id === id && wallSaid.x === part.pos[0] && wallSaid.z === part.pos[2] && wallSaid.rot === part.rot
+      ? wallSaid.text
+      : null;
 
   // `supportBelow` and `snapToSurface` lived here and are gone with the Surface button
   // (§ B.17). `supportBelow` existed only to decide whether Surface was worth showing,
@@ -443,6 +466,12 @@ export function Inspector() {
             <button onClick={groundToFloor} className="ds-btn ds-btn--sm" title="Put this piece on the floor, without moving it sideways" style={{ fontSize: 'var(--fs-caption)', gap: 6, justifyContent: 'center' }}>
               <Icon name="snap-floor" size={13} /> Floor
             </button>
+          </div>
+        )}
+        {!part.wallMounted && wallNote && (
+          <div role="status" style={{ fontSize: 'var(--fs-caption)', color: 'var(--warn-text)', lineHeight: 1.4, display: 'flex', gap: 6 }}>
+            <Icon name="info" size={12} />
+            <span style={{ minWidth: 0 }}>{wallNote}</span>
           </div>
         )}
         {part.wallMounted && (

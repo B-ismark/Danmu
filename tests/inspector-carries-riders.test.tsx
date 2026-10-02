@@ -15,7 +15,7 @@
 // nightstand floored back to where the room put it left the lamp at desk height.
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { footprintForLayout } from '@/lib/footprint';
@@ -129,5 +129,60 @@ describe('the Floor and Wall buttons carry what stands on the piece (§ H.6.7)',
     expect(at('ns').pos[1]).toBe(0);
     expect(at('lamp').pos[1]).toBeCloseTo(0.55, 6);
     expect(at('lamp').pos[0]).toBeCloseTo(1, 6);
+  });
+});
+
+describe('Wall takes the selection and says when it cannot (§ H.6.7)', () => {
+  const WALL = 'Move to the nearest wall and face the room';
+  const box = (id: string, name: string, pos: [number, number, number]) =>
+    part({ id, name, dimMM: [400, 400, 500], pos });
+  /** The note under the buttons. Not `getByRole('status')`: the panel's announcer is
+   *  one too. */
+  const note = () => screen.queryByText(/stopped short|Nothing moved|already against|will not fit against/);
+
+  it('moves the rest of the selection with the piece', () => {
+    room([box('a', 'Crate', [0, 0, -1.5]), box('b', 'Stool', [1.5, 0, -1.0])], 'a');
+    useStudio.setState({ selection: ['a', 'b'] });
+    render(<Inspector />);
+    fireEvent.click(screen.getByTitle(WALL));
+    const step = at('a').pos[2] - -1.5;
+    expect(step).toBeLessThan(-0.5);
+    expect(at('b').pos[2]).toBeCloseTo(-1.0 + step, 6);
+    expect(note()).toBeNull();
+  });
+
+  it('records what the piece was set down on', () => {
+    // A lamp sent to the wall from its nightstand lands on the floor there, so the link
+    // that would carry it with the nightstand goes.
+    room([
+      part({ id: 'ns', name: 'Nightstand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [0, 0, 0] }),
+      lamp([0, 0.55, 0]),
+    ], 'lamp');
+    useStudio.setState({ parentIds: { lamp: 'ns' } });
+    render(<Inspector />);
+    fireEvent.click(screen.getByTitle(WALL));
+    expect(at('lamp').pos[1]).toBe(0);
+    expect(useStudio.getState().parentIds).toEqual({});
+  });
+
+  it('says why nothing moved, until the piece is moved some other way', () => {
+    // The stool's wall spot is taken by a post too small to stand on, so it cannot
+    // follow; the whole press is refused and the panel names the stool.
+    room([
+      box('a', 'Crate', [0, 0, -1.5]),
+      box('b', 'Stool', [1.5, 0, -1.5]),
+      part({ id: 'post', name: 'Post', dimMM: [150, 150, 900], pos: [1.5, 0, -2.28] }),
+    ], 'a');
+    useStudio.setState({ selection: ['a', 'b'] });
+    render(<Inspector />);
+    fireEvent.click(screen.getByTitle(WALL));
+    expect(at('a').pos).toEqual([0, 0, -1.5]);
+    expect(at('b').pos).toEqual([1.5, 0, -1.5]);
+    expect(useStudio.getState().positions).toEqual({});
+    expect(note()?.textContent).toBe('Nothing moved: Stool has no room to follow.');
+    expect(note()?.closest('[role="status"]')).not.toBeNull();
+    // A sentence about where the crate WAS is not left under it once it is elsewhere.
+    act(() => useStudio.getState().setPosition('a', [0, 0, 0]));
+    expect(note()).toBeNull();
   });
 });

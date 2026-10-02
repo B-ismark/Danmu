@@ -218,7 +218,7 @@ anywhere on those is the old bug back.
 `components/three/Highlight.tsx` + `components/three/RoomShell.tsx` +
 `components/three/Room.tsx`.
 
-### A lamp carried in a selection onto the other nightstand stays with it — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+### A lamp carried in a selection onto the other nightstand stays with it — merged to `main` in `e2b77f1` (PR #224), NOT LOOKED AT
 
 In the seeded bedroom, shift-click a floor piece and the lamp on the left nightstand, and
 drag the floor piece until the lamp stands on the right nightstand. Then drag the RIGHT
@@ -234,6 +234,26 @@ before it. The lamp left behind after that notch is the review's finding back.
 
 **Where it rides.** `lib/drag-convoy.ts` + `components/three/Draggable.tsx` +
 `components/studio/PlanView.tsx`.
+
+### Wall takes the whole selection, and says when it cannot — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+
+The Inspector's **Wall** button used to move the selected piece and what stood on it, and
+nothing else, with no check. It now moves like a drag. In the seeded living room, shift-click
+the sofa and a chair beside it and press **Wall** with the sofa selected: both go, the chair
+by the same step and still at its own angle. Then put a chair where the sofa's wall spot is
+and press it again: nothing should move, and a short line under the Wall and Floor buttons
+should say why. Drag the sofa a little and the line should go — it describes a spot the
+sofa has left. Last, a lamp on a nightstand: **Wall** with the lamp selected should set it
+on the floor at the wall, not leave it floating at nightstand height, which is what it did.
+
+What would be wrong: the line overflowing the rail at its narrowest width (it wraps, like
+the size refusal below it), the line staying after a drag, or a selection that moves only
+partly. A set that stops short of the wall is allowed — a drag does the same when a member
+meets the wall first — but the line must then say so.
+
+**Gates.** `tests/to-wall.test.ts`, `tests/inspector-carries-riders.test.tsx`.
+
+**Where it rides.** `lib/to-wall.ts` + `components/studio/Inspector.tsx`.
 
 ### A fan dropped onto a fan moves aside, and a bed set stops at the wardrobe — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 
