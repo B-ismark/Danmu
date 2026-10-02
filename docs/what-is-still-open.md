@@ -60,8 +60,9 @@ screen; and row 17 above.
   A second site, `HoverCard.tsx:86`, shows the bare key. **Only looking found this** — it
   typechecks, lints and passes every test, and no assertion in the repo reads the string.
   *ANSWERED 2026-09-30: the Library shelf name, "Appliances · Radiator", in both places.
-  Refined 2026-10-01 and BUILT on `claude/amazing-davinci-m8zqys`: one row, the name with
-  the shelf beside it, no shape line; the hover card the same.*
+  Refined 2026-10-01 and BUILT; merged to `main` in #217 (`b5414e0`): one row, the name with
+  the shelf beside it, no shape line; the hover card the same. Closed — kept here only until
+  it has been looked at in a browser.*
 
 **Row 9 came off this list on 2026-09-05, and how it survived here is the lesson.** The
 header said the drill-in half was open; the table said it was untouched; § H.8, 1,500 lines
@@ -4820,7 +4821,7 @@ pure turn read off the quaternion (`yawOf` in `lib/geometry.ts`, three's own YXZ
 after the helper was pinned against three's YXZ for a tilted orientation too.
 **Not recoverable:** a heading stored mirrored before this cannot be told from a real one,
 so a room someone turned on the ring keeps what it was saved with.
-Rides `claude/amazing-davinci-m8zqys`, PR #230 (`ba4f8e2` and the review fix after it).
+Merged to `main` in `e08e790` (PR #230).
 **Review round 1 found three more in the same handler.** A press that turned nothing still
 rewrote the heading as read off the quaternion — measured, 225 of 666 headings came back a
 few ULPs off and all 1334 wound past ±π came back 2π off, and every `===` downstream reads
@@ -7682,7 +7683,7 @@ has been for as long as the pins have. Nothing here regressed; it was found by l
 **The user's call, 2026-09-30: the first row of the table below.** The second line reads
 the piece's Library shelf, *Appliances · Radiator*, and the hover card uses the same name.
 
-**Refined 2026-10-01 and BUILT on `claude/amazing-davinci-m8zqys`.** The user: *"Bed. Bed.
+**Refined 2026-10-01 and BUILT; merged to `main` in #217 (`b5414e0`).** The user: *"Bed. Bed.
 Bed double is also redundant just keep the name and maybe next to it the category (if
 there's any). It doesn't need to take two lines."* So the second line is gone and the shelf
 sits beside the name on its row, in quiet type; the hover card does the same. `libraryShelf`
@@ -8073,10 +8074,10 @@ mechanism by which the ruling is already true.
 
 | # | item | what it is | cost | state |
 |---|---|---|---|---|
-| M1 | **S1** every text field is 13px, and iOS Safari zooms the page on focus below 16px | **Re-derived on `main` @ `6c3c0c9`**: `.field` is `font-size: 13px` (`app/globals.css:717`). One block at a coarse-pointer media query fixes every screen at once. **The fix must not be `maximum-scale=1` / `userScalable: false`** — `app/layout.tsx`'s `viewport` correctly sets neither today, and adding them to stop the zoom would take pinch-zoom away from everyone who needs it. That is the trap this row exists to pre-empt | S | recorded, not built |
-| M2 | **S2** the app is installable and handles no safe area | **Re-derived**: `grep -rn safe-area app components lib` returns nothing, against a real `app/manifest.ts`. On a notched phone the installed PWA paints under the home indicator | S | recorded, not built |
-| M3 | **S3 + S4** sub-32px touch targets, and hover states that stick on iOS | The audit's figures, **not re-derived**. Both are a design-system pass rather than per-screen work, which is why they are one row | M | recorded, not built |
-| M4 | **S6** no `touch-action: manipulation` on controls | **Re-derived**: exactly one `touch-action` in the whole stylesheet (`globals.css:517`, `none`, on a drag surface). Every button keeps the double-tap-zoom delay | S | recorded, not built |
+| M1 | **S1** every text field is 13px, and iOS Safari zooms the page on focus below 16px | **Re-derived on `main` @ `6c3c0c9`**: `.field` is `font-size: 13px` (`app/globals.css:717`). One block at a coarse-pointer media query fixes every screen at once. **The fix must not be `maximum-scale=1` / `userScalable: false`** — `app/layout.tsx`'s `viewport` correctly sets neither today, and adding them to stop the zoom would take pinch-zoom away from everyone who needs it. That is the trap this row exists to pre-empt | S | **still open — re-checked on `main` @ `e08e790` (2026-10-02)**: `.field` is `var(--fs-body)`, 13.5px, and no coarse-pointer block raises its font size. Still under 16px, so iOS still zooms on focus |
+| M2 | **S2** the app is installable and handles no safe area | **Re-derived**: `grep -rn safe-area app components lib` returns nothing, against a real `app/manifest.ts`. On a notched phone the installed PWA paints under the home indicator | S | **BUILT — re-checked on `main` @ `e08e790` (2026-10-02)**: `body` pads the top / left / right insets (`globals.css:305`), the phone toolbar pads the bottom one (`globals.css:1678`, `viewport-fit=cover` in `app/layout.tsx`), and the studio subtracts the top inset from its `100dvh`. Never looked at on a notched phone — that is a `docs/visual-check.md` job, not a reason to reopen this row |
+| M3 | **S3 + S4** sub-32px touch targets, and hover states that stick on iOS | The audit's figures, **not re-derived**. Both are a design-system pass rather than per-screen work, which is why they are one row | M | **PARTLY BUILT — re-checked on `main` @ `e08e790` (2026-10-02)**: nine `min-height: 44px` rules under `(pointer: coarse)` or on phone surfaces — segmented controls, number fields, rail section toggles, `ui/Select`, the doc shells' buttons and fields, modal footers, sheet buttons. **Not** a general `.ds-btn` floor, so a small button outside those surfaces is still mouse-sized. The sticky-hover half (S4) is not addressed: no `@media (hover: hover)` guard exists |
+| M4 | **S6** no `touch-action: manipulation` on controls | **Re-derived**: exactly one `touch-action` in the whole stylesheet (`globals.css:517`, `none`, on a drag surface). Every button keeps the double-tap-zoom delay | S | **PARTLY BUILT — re-checked on `main` @ `e08e790` (2026-10-02)**: `.phone-tool` (the phone studio toolbar) carries `touch-action: manipulation` (`globals.css:1692`); no other control does |
 | M5 | **S7** the Android icon ladder — **and this is the one claim to check before acting on it** | `app/manifest.ts` ships **one** `image/svg+xml` at `sizes: 'any'`, `purpose: 'any'`, with a comment saying a PNG ladder would be "a manifest that lies about what it can render". Chrome has taken SVG icons for installability since M93, so *"Android install is broken"* is probably **overstated**; what is real is the absent `maskable` purpose, which is cosmetic. **Do not raise a PR on this row without measuring an actual install** | S to measure | recorded, **premise unverified** |
 | M6 | **S5 / S8 / S9** a modal with no height ceiling, top-right toasts with 26px actions, 10–11.5px meta text | The audit's P1/P2 tail, grouped because they are one "does this read and fit on a small screen" pass | M | recorded, not built |
 | M7 | **flows 1–8** the per-route findings: landscape-phone capture and `dvh` (C1), the detect sticky CTA and capped review sheet (D1), photo pinch-zoom on detect (D3), touch-first onboarding CTA order (W1+L1), the touch studio toolbar and coach card (M1+M2), the quality default on touch (M4) | The audit's own order is S1 → C1 → D1 → D3 → W1+L1 → S2 → S3+S4 → M1+M2 → M4 → S5. **Keep it** — it is the author's, it is sound, and re-ranking it here would be a second source of truth for a priority nobody has re-measured | L in total | recorded, not built |
@@ -8088,10 +8089,12 @@ because this is where they were found and they would otherwise be lost with the 
   plan** tab the only route into the Library is the right rail's footer button. Measured by a
   Playwright probe on 2026-09-05, not inferred from the source. Same tab and the same shape as
   § G.3's plan-tab help gap, and it is a desktop finding.
-- **Two buttons share the accessible name "Add"** (`CatalogToggle`, `AddPiecesButton`),
-  separated only by `title`. `CatalogPanel`'s own comment says the agreement is deliberate, so
-  this is a question rather than a defect: a screen-reader user on `/model` hears "Add,
-  collapsed" twice.
+- ~~**Two buttons share the accessible name "Add"**~~ **No longer true, re-checked on `main` @
+  `e08e790` (2026-10-02).** `AddPiecesButton` now carries `aria-label` "Add a piece to the room"
+  ("Close the Library" when open), so a screen-reader user on `/model` hears two different
+  names. `CatalogToggle` still has only `title` and its visible "Add", which is the one left to
+  listen to. The first bullet (no canvas Add on the plan tab) is still true: `CatalogToggle` is
+  imported by `app/room/[roomId]/model/page.tsx` alone.
 
 
 ---
@@ -10553,7 +10556,7 @@ a bed should be a top for anything is the open question, and it is a physics one
 
 ## § 51 · Start over on a room whose walls were moved and saved — WRITTEN DOWN, NOT FIXED
 
-**Exists in:** `abcb216` on `main` (PR #207), changed on `claude/affectionate-ritchie-ilawx1`:
+**Exists in:** `abcb216` on `main` (PR #207), changed by PR #209 (merged to `main` in `64bfa21`):
 `lib/room-start.ts` (the header names it), `components/studio/RailFooter.tsx` and
 `tests/start-over.test.tsx`.
 
@@ -10587,7 +10590,7 @@ pieces for a T, 9 against 8 for a U), measured by the 2026-10-01 follow-up revie
 
 ## § 52 · A table and its chairs, a bed and its nightstands, as one set — FIXED 2026-10-01, three costs written down
 
-**Exists in:** `claude/affectionate-ritchie-ilawx1` (the PR after #212). `lib/layout-rules.ts`
+**Exists in:** `main`, merged in `0972aed` (PR #214). `lib/layout-rules.ts`
 (`standsInSet`, `SET_SQUARE_RAD`), `lib/layout-solve.ts` (`formationSets`, `rigidSets`'
 `formation` flags, `withCompany`, `propose`'s `quarterOnly`), `tests/layout-formation-sets.test.ts`.
 
@@ -10656,3 +10659,30 @@ shuffle finalists 158 → 159 (`t` seed 1 fills its pool), three counts in
 n 8 → 9), and the fine-grid refusal fixture, which moved from scramble 35 seed 21 to scramble
 30 seed 7. Still one refusal in 532 (`scripts/openroutes-sweep.mjs`, 126 s, the same 19 of 54
 scrambles cut).
+
+## § 53 · No backup prompt and no way to send feedback — WRITTEN DOWN, NOT BUILT
+
+**Exists in:** nothing. Filed 2026-10-02 by a re-check of the open list against `main` @
+`e08e790`. Both were confirmed by searching the code, not inferred.
+
+**1. Nothing protects a person's rooms from the browser clearing them.** Rooms live only in
+IndexedDB (`lib/storage.ts`). Nothing calls `navigator.storage.persist()`, and no screen
+suggests saving a room file (`lib/scene-file.ts`) as a backup. A browser may evict storage
+for a site that has not asked to keep it. Safari's tracking prevention clears
+script-written storage for a site not used in seven days, unless the site is installed to
+the home screen. Clearing site data does the same. Either way every room is gone, with no
+warning. This is the largest risk left in the product, because it is the only failure that
+loses someone's work. The fix fits rule 5. Ask for persistent storage on a press (never on
+mount), then offer a quiet "Save a backup file" after a room has been worked on for a while.
+
+**2. There is no way for anyone to tell you anything.** No feedback link, no mailto and no
+issue link anywhere in `app/` or `components/`. With no analytics as well (by design), the
+app has no channel back to its maker. The fix fits rule 5 as long as it is a plain link the
+person follows, such as a mailto or a public issue page, and never a form that posts from
+the app. Settings, or the rooms page footer, is the place.
+
+**3. The phone fixes that were built have not been on a phone.** § MOB's M2–M4 rows are
+built or partly built (re-checked 2026-10-02), but none has a `docs/visual-check.md` entry.
+One pass on a real notched phone closes them: install to the home screen, open a room, tap a
+field, double-tap a button.
+

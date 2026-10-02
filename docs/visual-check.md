@@ -281,7 +281,7 @@ cancelled drag of something it stands on.
 **Where it rides.** `lib/transforms.ts` (`overridesBroughtHome`) + `lib/store.ts` +
 `components/three/Draggable.tsx` + `components/studio/PlanView.tsx`.
 
-### A piece turned on the 3D ring faces the same way in the plan — on `claude/amazing-davinci-m8zqys`, PR #230, NOT LOOKED AT
+### A piece turned on the 3D ring faces the same way in the plan — merged to `main` in `e08e790` (PR #230), NOT LOOKED AT
 
 In the seeded bedroom on **3D Model**, select a piece with its front towards the camera,
 press **R** for the ring, and turn it about two-thirds of the way round. Let go, then open
@@ -531,7 +531,7 @@ a nightstand left behind when the bed moves, or the pulled-away chair dragged ba
 table. Also watch the U: its arrangements are a little worse on average now (the bed set is a
 large body in a small room), and it may offer one idea fewer in three presses.
 
-### Ideas shows a seat on the floor, never standing on a table or a bed — on `claude/amazing-davinci-m8zqys` (PR #222), NOT LOOKED AT
+### Ideas shows a seat on the floor, never standing on a table or a bed — merged to `main` in `6a4b45a` (PR #222), NOT LOOKED AT
 
 The user's call 2026-09-30: a drag may stand a seat on a coffee table (that stays), but an
 idea never shows one there. Measured before the change: every idea in a room with an ottoman
@@ -755,7 +755,7 @@ free to add them."* They were boxes, and boxes read as furniture. Now they are c
 
 - **The bed.** Pillows swell to a seam and lie on the mattress against the headboard (they
   were tipped 10° and stood 90 mm clear of the mattress at the headboard end — the floating
-  pillows reported 2026-10-02, fixed on `claude/affectionate-ritchie-ilawx1`). The duvet rolls
+  pillows reported 2026-10-02, fixed in `1dd4f33`, merged to `main` in `2477e58`, PR #228). The duvet rolls
   over the mattress's edge and hangs to a level hem, and a sheet is turned back over it at
   the head. A scatter cushion lies back on each pillow, in a tone that stays with the bed
   across a reload, its foot on the turned sheet and its back on the pillow (it leaned on
@@ -1019,7 +1019,7 @@ side. **Two to judge on purpose:** whether the glass reads as a mirror or as gre
 room has no reflections, so it is a pale silvered sheen, not a reflection), and whether the
 painting's colour fields read as art or as a placeholder.
 
-### Two tables, two desks, a window and a laptop drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### Two tables, two desks, a window and a laptop drawn as the real objects — merged to `main` in `2477e58` (PR #228), NOT LOOKED AT
 
 **Round seven of the realism ask** (`lib/hard-goods.ts`):
 

@@ -1,5 +1,10 @@
 # Danmu — Mobile UX/UI Audit (2026-09-04)
 
+> **Point-in-time, and partly out of date.** Re-checked against `main` @ `e08e790` on
+> 2026-10-02: S2 (safe area) is built, S3 and S6 are partly built, and S1 (16px inputs) is
+> still open. The live status of every finding is the § MOB table in
+> `docs/what-is-still-open.md`. Read that, not this, for what is left.
+
 Scope: every route (`/`, `/onboarding/*`, `/workspace`, `/settings`, `/room/[id]/{model,plan}`),
 the studio shells, the design system in `app/globals.css`, the 3D touch layer
 (`components/three/Draggable.tsx`), camera pipeline (`lib/capture.ts`), and PWA surface
