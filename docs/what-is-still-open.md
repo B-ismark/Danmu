@@ -10562,7 +10562,7 @@ bed stands on the floor inside the bed's footprint (it no longer stands on the b
 is fixed). The add path behaves the same, so the swap matches it; the fix is one for both, and
 `lib/duplicate-place.ts`'s candidate search is the shape it would take.
 
-**4. An ottoman over a bed still goes on the bed.** The swap and the add path now ask
+**4. FIXED 2026-10-02 — a bed is not a top.** The user's call: nothing stands on a bed. `highestSurfaceUnder` skips beds, so a drag, an add, a swap or the scan's settle all put a piece over a bed on the floor beside it. Was: **An ottoman over a bed still goes on the bed.** The swap and the add path now ask
 `seeksSurface` (`lib/physics.ts`) rather than the category, so a floor lamp or a 1.6 m plant
 put where a print hung above the bed stands on the floor. The ottoman was left in on purpose:
 one put over a top it does not fit under goes on it, § H.6.4's decision, which

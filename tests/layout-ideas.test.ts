@@ -20,7 +20,7 @@ import {
 import { isSeating, roleOf, WALL_ATTACH_TOL } from '@/lib/layout-rules';
 import { footFromPart, footInsidePoly, footIntersectionArea } from '@/lib/geometry';
 import { ridingParents } from '@/lib/rigid-parent';
-import { highestSurfaceUnder } from '@/lib/physics';
+import { findSupportDetailed, highestSurfaceUnder } from '@/lib/physics';
 import type { LayoutId } from '@/lib/footprint';
 import { defaultScene, type ScenePart } from '@/lib/scene-spec';
 import { footprintForLayout } from '@/lib/footprint';
@@ -201,8 +201,12 @@ describe('Ideas never shows a seat standing on a table or a bed (user call 2A)',
       [part('side', { category: 'table', shape: 'side-table', dimMM: [500, 500, 550], pos: [0, 0, 0] }), 'side-table'],
       [part('stand', { category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [0, 0, 0] }), 'nightstand'],
       [part('desk', { category: 'desk', shape: 'desk-l', dimMM: [1400, 700, 750], pos: [0, 0, 0] }), 'desk'],
-      [part('bed', { category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 500], pos: [0, 0, 0] }), 'bed'],
     ];
+    // The bed is no longer a host at all: nothing can stand on it to be brought down
+    // (`highestSurfaceUnder` skips beds, the user's call 2026-10-02).
+    const bed = part('bed', { category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 500], pos: [0, 0, 0] });
+    expect(roleOf(bed)).toBe('bed');
+    expect(findSupportDetailed([bed], stool, 0, 0, stool.dimMM, 0, undefined)).toBeNull();
     for (const [host, role] of hosts) {
       expect(roleOf(host)).toBe(role);
       const stood = standOn([host], host, stool);

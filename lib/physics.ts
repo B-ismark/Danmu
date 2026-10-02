@@ -756,6 +756,12 @@ function topSurface(
     // luck, which is what it has been.
     if (!isFloorStanding(o.category, o.shape)) continue;
     if (o.category === 'rug') continue;
+    // **A bed is not a top.** Nothing is stood on a mattress: a lamp, a plant or an
+    // ottoman over a bed goes on the floor beside it, where it would really be, whether
+    // it is dragged there, added there or swapped in there (the user's call,
+    // 2026-10-02; § 50 item 4). The bed's own pillows and cushions are drawn by the
+    // bed, not stood on it.
+    if (o.category === 'bed') continue;
     // `verticalExtent`, not `pos[1] + h`. Unreachable for anything that survives the
     // skip above — a floor anchor's extent IS `[y, y + h]` — and written this way so
     // that the day something else is allowed through, the arithmetic is already right
