@@ -11,6 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { Euler, Vector3 } from 'three';
 import {
   acUnitForm,
+  AIR_PURIFIER,
+  airPurifierForm,
   chestFreezerForm,
   CONSOLE_BAY,
   CONSOLE_DOOR,
@@ -18,9 +20,12 @@ import {
   doorForm,
   LEVER_PROUD,
   microwaveForm,
+  mirrorForm,
   NIGHTSTAND,
   nightstandForm,
   nightstandSlide,
+  ovalMirrorForm,
+  paintingForm,
   partExtent,
   RADIATOR,
   radiatorForm,
@@ -54,6 +59,9 @@ interface Row {
   parametric: boolean;
   /** Drawn on a circle of the width, which the renderer stretches to the depth. */
   round?: boolean;
+  /** A wall piece drawn on a circle of the width, which the renderer stretches to the
+   *  HEIGHT: the oval mirror. */
+  oval?: boolean;
 }
 
 const ROWS: Row[] = [
@@ -78,6 +86,10 @@ const ROWS: Row[] = [
   { shape: 'ottoman', category: 'ottoman', form: (dimMM) => { const f = ottomanForm(dimMM); return [...f.parts, cushion('top', f.top)]; }, wall: false, parametric: false },
   { shape: 'side-table', category: 'table', form: sideTableForm, wall: false, parametric: false, round: true },
   { shape: 'radiator', category: 'fridge', form: (dimMM) => { const f = radiatorForm(dimMM); return [...f.columns, ...f.fittings]; }, wall: false, parametric: true },
+  { shape: 'painting', category: 'painting', form: paintingForm, wall: true, parametric: false },
+  { shape: 'mirror', category: 'mirror', form: mirrorForm, wall: true, parametric: false },
+  { shape: 'mirror-oval', category: 'mirror', form: ovalMirrorForm, wall: true, parametric: false, oval: true },
+  { shape: 'air-purifier', category: 'fridge', form: airPurifierForm, wall: false, parametric: false, round: true },
 ];
 
 /** A chair's cushion as the box it fills, so every sweep here reaches the cushions too: a
@@ -172,7 +184,7 @@ describe('strutPose', () => {
 describe('every hard good stays inside the box it declares', () => {
   it('the Library carries every shape this file draws', () => {
     for (const r of ROWS) expect(PART_LIBRARY.some((p) => p.shape === r.shape), r.shape).toBe(true);
-    expect(ROWS.length).toBe(19);
+    expect(ROWS.length).toBe(23);
   });
 
   for (const r of ROWS) {
@@ -180,9 +192,11 @@ describe('every hard good stays inside the box it declares', () => {
       const all = sizes(r);
       expect(all.length).toBe(9);
       for (const dimMM of all) {
-        const [w, dDeclared, h] = dimMM.map((v) => v / 1000);
-        // A round form is a circle of the width, stretched to the depth after.
+        const [w, dDeclared, hDeclared] = dimMM.map((v) => v / 1000);
+        // A round form is a circle of the width, stretched to the depth after; an oval one
+        // is stretched to the height.
         const d = r.round ? w : dDeclared;
+        const h = r.oval ? w : hDeclared;
         const yLo = r.wall ? -h / 2 : 0;
         const yHi = r.wall ? h / 2 : h;
         const parts = r.form(dimMM);
@@ -277,13 +291,32 @@ describe('a group-scaled form is proportions only (§ 36)', () => {
               // depth, so the depth scales z and the height scales y. A ROUND form is
               // drawn on a square of the width and stretched to the depth by its renderer,
               // so there the width scales x and z both and the depth scales nothing.
+              // An OVAL one is drawn on a circle of the width stretched to the height, so the
+              // width scales x and y and the height scales nothing.
               const f = r.round
                 ? (k === 0 && j !== 1) || (k === 2 && j === 1) ? s : 1
-                : j === SPACE_AXIS[k] ? s : 1;
+                : r.oval
+                  ? (k === 0 && j !== 2) || (k === 1 && j === 2) ? s : 1
+                  : j === SPACE_AXIS[k] ? s : 1;
               expect(anchor(pb)[j], `${r.shape} ${pa.key} pos[${j}] when axis ${k} x${s}`).toBeCloseTo(anchor(pa)[j] * f, 12);
               if (pa.kind === 'box' && pb.kind === 'box') {
                 expect(pb.size[j], `${r.shape} ${pa.key} size[${j}] when axis ${k} x${s}`).toBeCloseTo(pa.size[j] * f, 12);
               }
+            }
+            // A form on a circle of the width carries its radii off the width alone, and a
+            // post's height (a round form) or a disc's thickness (an oval one) off the axis
+            // that is not stretched. A radius taken off the height would draw an ellipse
+            // the renderer's stretch then distorts again.
+            const at = `${r.shape} ${pa.key} when axis ${k} x${s}`;
+            const byW = k === 0 ? s : 1;
+            if ((r.round || r.oval) && pa.kind === 'post' && pb.kind === 'post') {
+              expect(pb.r, `${at} r`).toBeCloseTo(pa.r * byW, 12);
+              expect(pb.rBottom, `${at} rBottom`).toBeCloseTo(pa.rBottom * byW, 12);
+              expect(pb.h, `${at} h`).toBeCloseTo(pa.h * (k === 2 ? s : 1), 12);
+            }
+            if (r.oval && pa.kind === 'disc' && pb.kind === 'disc') {
+              expect(pb.r, `${at} r`).toBeCloseTo(pa.r * byW, 12);
+              expect(pb.t, `${at} t`).toBeCloseTo(pa.t * (k === 1 ? s : 1), 12);
             }
           });
         }
@@ -867,6 +900,236 @@ describe('the radiator', () => {
       expect(grip.tone).toBe('trim');
       // A hand-sized head: 60 mm, or half what is left above the valve on a low radiator.
       expect(head.h, at).toBeCloseTo(Math.min(0.06, (h - yFoot) * 0.5), 12);
+    }
+  });
+});
+
+/** A wall piece's corners: the Library size and the band's four width × height corners. */
+function wallSizes(shape: Shape, category: Category): number[][] {
+  const band = dimRangeFor(category, shape);
+  const out = [PART_LIBRARY.find((p) => p.shape === shape)!.dimMM.slice()];
+  for (const w of [band.min[0], band.max[0]]) for (const h of [band.min[2], band.max[2]]) out.push([w, out[0][1], h]);
+  return out;
+}
+
+/** True when two parts' extents share volume — touching faces do not count. */
+function overlap(a: HardPart, b: HardPart): boolean {
+  const ea = partExtent(a);
+  const eb = partExtent(b);
+  return [0, 1, 2].every((k) => ea.lo[k] < eb.hi[k] - EPS && eb.lo[k] < ea.hi[k] - EPS);
+}
+
+/** A border's four rails as the window they leave: [x0, x1, y0, y1]. */
+function windowOf(parts: HardPart[], key: string): number[] {
+  return [ext(parts, `${key}-l`).hi[0], ext(parts, `${key}-r`).lo[0], ext(parts, `${key}-foot`).hi[1], ext(parts, `${key}-head`).lo[1]];
+}
+/** A border's four rails close round their window: the head and foot run its full width,
+ *  and each side runs from the foot's top to the head's foot, so no corner shows the wall
+ *  through it and none is drawn twice. */
+function closesRing(parts: HardPart[], key: string, at: string) {
+  const [l, r, head, foot] = ['l', 'r', 'head', 'foot'].map((k) => ext(parts, `${key}-${k}`));
+  for (const [k, e] of [['head', head], ['foot', foot]] as const) {
+    expect(e.lo[0], `${at} ${key}-${k} left`).toBeCloseTo(l.lo[0], 12);
+    expect(e.hi[0], `${at} ${key}-${k} right`).toBeCloseTo(r.hi[0], 12);
+  }
+  for (const [k, e] of [['l', l], ['r', r]] as const) {
+    expect(e.lo[1], `${at} ${key}-${k} foot`).toBeCloseTo(foot.hi[1], 12);
+    expect(e.hi[1], `${at} ${key}-${k} head`).toBeCloseTo(head.lo[1], 12);
+  }
+  for (const e of [l, r, head, foot]) {
+    expect(e.lo[2], `${at} ${key} back`).toBeCloseTo(l.lo[2], 12);
+    expect(e.hi[2], `${at} ${key} front`).toBeCloseTo(l.hi[2], 12);
+  }
+}
+const outline = (parts: HardPart[], key: string) => {
+  const e = ext(parts, key);
+  return [e.lo[0], e.hi[0], e.lo[1], e.hi[1]];
+};
+const borderOutline = (parts: HardPart[], key: string) => [ext(parts, `${key}-l`).lo[0], ext(parts, `${key}-r`).hi[0], ext(parts, `${key}-foot`).lo[1], ext(parts, `${key}-head`).hi[1]];
+const close = (a: number[], b: number[], at: string) => a.forEach((v, i) => expect(v, `${at} [${i}]`).toBeCloseTo(b[i], 12));
+
+describe('the painting', () => {
+  it('steps from the frame down through a fillet and a mat to the picture, each filling the window of the one round it', () => {
+    for (const dimMM of wallSizes('painting', 'painting')) {
+      const [w, d, h] = dimMM.map((v) => v / 1000);
+      const at = dimMM.join('x');
+      const parts = paintingForm(dimMM);
+      // The frame is the piece's own outline; each layer fills the window of the one round
+      // it exactly, so no light shows between them and no two draw the same face.
+      close(borderOutline(parts, 'frame'), [-w / 2, w / 2, -h / 2, h / 2], `${at} frame`);
+      close(borderOutline(parts, 'fillet'), windowOf(parts, 'frame'), `${at} fillet`);
+      close(borderOutline(parts, 'mat'), windowOf(parts, 'fillet'), `${at} mat`);
+      close(outline(parts, 'ground'), windowOf(parts, 'mat'), `${at} ground`);
+      for (const k of ['frame', 'fillet', 'mat']) closesRing(parts, k, at);
+      // Each layer stands back from the one round it: the light catches three edges.
+      const front = (k: string) => ext(parts, k).hi[2];
+      expect(front('frame-head')).toBeCloseTo(d / 2, 12);
+      expect(front('fillet-head')).toBeLessThan(front('frame-head') - EPS);
+      expect(front('mat-head')).toBeLessThan(front('fillet-head') - EPS);
+      expect(front('field-warm')).toBeLessThan(front('mat-head') - EPS);
+      expect(front('ground')).toBeLessThan(front('field-warm') - EPS);
+      // Everything is backed on the wall.
+      for (const p of parts.filter((q) => !q.key.startsWith('field'))) expect(partExtent(p).lo[2], `${at} ${p.key}`).toBeCloseTo(-d / 2, 12);
+      // The fields lie on the ground, inside the picture, clear of each other.
+      const fields = parts.filter((p) => p.key.startsWith('field'));
+      expect(fields.map((p) => p.tone)).toEqual(['art-warm', 'art-ochre', 'art-cool']);
+      const g = outline(parts, 'ground');
+      for (const f of fields) {
+        expect(partExtent(f).lo[2]).toBeCloseTo(front('ground'), 12);
+        const o = outline(parts, f.key);
+        expect(o[0]).toBeGreaterThan(g[0] + EPS);
+        expect(o[1]).toBeLessThan(g[1] - EPS);
+        expect(o[2]).toBeGreaterThan(g[2] + EPS);
+        expect(o[3]).toBeLessThan(g[3] - EPS);
+      }
+      for (let i = 0; i < fields.length; i++) for (let j = i + 1; j < fields.length; j++) expect(overlap(fields[i], fields[j]), `${fields[i].key} ${fields[j].key}`).toBe(false);
+      // No two parts share volume: the rails of a border meet at the corners once.
+      for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) expect(overlap(parts[i], parts[j]), `${at} ${parts[i].key} ${parts[j].key}`).toBe(false);
+      // The picture's ground is the user's colour; the frame is wood, the fillet gilt.
+      expect(parts.filter((p) => p.tone === 'body').map((p) => p.key)).toEqual(['ground']);
+      expect(new Set(parts.filter((p) => p.key.startsWith('frame')).map((p) => p.tone))).toEqual(new Set(['wood']));
+      expect(new Set(parts.filter((p) => p.key.startsWith('fillet')).map((p) => p.tone))).toEqual(new Set(['brass']));
+      expect(new Set(parts.filter((p) => p.key.startsWith('mat')).map((p) => p.tone))).toEqual(new Set(['mat']));
+    }
+  });
+
+  it('is framed as a real print at the Library size: a 42 mm moulding, a 70 mm mat', () => {
+    const parts = paintingForm([800, 30, 600]);
+    expect(ext(parts, 'frame-l').hi[0] - ext(parts, 'frame-l').lo[0]).toBeCloseTo(0.042, 12);
+    expect(ext(parts, 'frame-head').hi[1] - ext(parts, 'frame-head').lo[1]).toBeCloseTo(0.042, 12);
+    expect(ext(parts, 'fillet-l').hi[0] - ext(parts, 'fillet-l').lo[0]).toBeCloseTo(0.008, 12);
+    expect(ext(parts, 'mat-l').hi[0] - ext(parts, 'mat-l').lo[0]).toBeCloseTo(0.07, 12);
+    expect(ext(parts, 'mat-head').hi[1] - ext(parts, 'mat-head').lo[1]).toBeCloseTo(0.07, 3);
+    // 30 mm deep: the frame's face, the fillet 7.5 mm back, the mat 12, the picture 15.
+    expect([ext(parts, 'fillet-head').hi[2], ext(parts, 'mat-head').hi[2], ext(parts, 'ground').hi[2]]).toEqual([0.0075, 0.003, 0].map((v) => expect.closeTo(v, 12)));
+  });
+});
+
+describe('the mirror', () => {
+  it('sets its glass behind a bead behind the frame, filling the window exactly', () => {
+    for (const dimMM of wallSizes('mirror', 'mirror')) {
+      const [w, d, h] = dimMM.map((v) => v / 1000);
+      const at = dimMM.join('x');
+      const parts = mirrorForm(dimMM);
+      // The frame is the piece's outline — not 15 mm past it, as it was.
+      close(borderOutline(parts, 'frame'), [-w / 2, w / 2, -h / 2, h / 2], `${at} frame`);
+      close(borderOutline(parts, 'bead'), windowOf(parts, 'frame'), `${at} bead`);
+      close(outline(parts, 'glass'), windowOf(parts, 'bead'), `${at} glass`);
+      for (const k of ['frame', 'bead']) closesRing(parts, k, at);
+      // The glass behind the bead, the bead behind the frame's face — never proud of it.
+      const front = (k: string) => ext(parts, k).hi[2];
+      expect(front('frame-l')).toBeCloseTo(d / 2, 12);
+      expect(front('bead-l')).toBeLessThan(front('frame-l') - EPS);
+      expect(front('glass')).toBeLessThan(front('bead-l') - EPS);
+      for (const p of parts) expect(partExtent(p).lo[2], `${at} ${p.key}`).toBeCloseTo(-d / 2, 12);
+      for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) expect(overlap(parts[i], parts[j]), `${at} ${parts[i].key} ${parts[j].key}`).toBe(false);
+      expect(parts.find((p) => p.key === 'glass')!.tone).toBe('mirror');
+      expect(new Set(parts.filter((p) => p.key.startsWith('frame')).map((p) => p.tone))).toEqual(new Set(['body']));
+      expect(new Set(parts.filter((p) => p.key.startsWith('bead')).map((p) => p.tone))).toEqual(new Set(['trim']));
+    }
+  });
+
+  it('is a 45 mm frame and a 10 mm bead at the Library size', () => {
+    const parts = mirrorForm([600, 30, 1400]);
+    const wide = (k: string, axis: number) => ext(parts, k).hi[axis] - ext(parts, k).lo[axis];
+    expect(wide('frame-l', 0)).toBeCloseTo(0.045, 12);
+    expect(wide('frame-head', 1)).toBeCloseTo(0.045, 3);
+    expect(wide('bead-l', 0)).toBeCloseTo(0.010, 3);
+    expect(wide('bead-head', 1)).toBeCloseTo(0.010, 3);
+  });
+});
+
+describe('the oval mirror', () => {
+  it('is three concentric discs, each set on the one behind, the glass at the front', () => {
+    for (const dimMM of wallSizes('mirror-oval', 'mirror')) {
+      const [w, d] = dimMM.map((v) => v / 1000);
+      const parts = ovalMirrorForm(dimMM);
+      expect(parts.map((p) => p.key)).toEqual(['frame', 'bevel', 'glass']);
+      const discs = parts.map((p) => {
+        if (p.kind !== 'disc') throw new Error(p.key);
+        return p;
+      });
+      for (const p of discs) expect([p.pos[0], p.pos[1]]).toEqual([0, 0]);
+      expect(discs[0].r).toBeCloseTo(w / 2, 12);
+      expect(discs[1].r).toBeLessThan(discs[0].r);
+      expect(discs[2].r).toBeLessThan(discs[1].r);
+      const e = parts.map(partExtent);
+      expect(e[0].lo[2]).toBeCloseTo(-d / 2, 12);
+      expect(e[1].lo[2]).toBeCloseTo(e[0].hi[2], 12);
+      expect(e[2].lo[2]).toBeCloseTo(e[1].hi[2], 12);
+      expect(e[2].hi[2]).toBeCloseTo(d / 2, 12);
+      expect(discs.map((p) => p.tone)).toEqual(['body', 'trim', 'mirror']);
+      // A rim showing round the glass: 6% of the width at the bevel, 12% at the frame.
+      expect(discs[1].r / discs[0].r).toBeCloseTo(0.92, 12);
+      expect(discs[2].r / discs[0].r).toBeCloseTo(0.88, 12);
+    }
+  });
+
+  it('takes nothing off its height, which the renderer stretches it to', () => {
+    const lib = [600, 30, 1100];
+    expect(ovalMirrorForm([600, 30, 1900])).toEqual(ovalMirrorForm(lib));
+    expect(ovalMirrorForm([600, 30, 400])).toEqual(ovalMirrorForm(lib));
+  });
+});
+
+describe('the air purifier', () => {
+  type Post = Extract<HardPart, { kind: 'post' }>;
+  const posts = (dimMM: number[]) => airPurifierForm(dimMM).map((p) => {
+    if (p.kind !== 'post') throw new Error(p.key);
+    return p;
+  });
+  const band = dimRangeFor('fridge', 'air-purifier');
+  const dims = [[300, 300, 620], [band.min[0], band.min[0], band.min[2]], [band.max[0], band.max[0], band.max[2]]];
+
+  it('stacks plinth, collar, intake, shell, chamfer and outlet, each on the one below', () => {
+    for (const dimMM of dims) {
+      const at = dimMM.join('x');
+      const [w, , h] = dimMM.map((v) => v / 1000);
+      const parts = posts(dimMM);
+      const e = (k: string) => ext(parts, k);
+      const chain = ['plinth', 'collar', 'core', 'shell', 'chamfer', 'outlet'];
+      expect(e('plinth').lo[1]).toBe(0);
+      for (let i = 0; i + 1 < chain.length; i++) expect(e(chain[i + 1]).lo[1], `${at} ${chain[i + 1]} on ${chain[i]}`).toBeCloseTo(e(chain[i]).hi[1], 12);
+      // The body is the full circle; the plinth tucked under it, the outlet sunk in the top.
+      const r = (k: string) => parts.find((p) => p.key === k)!;
+      expect(r('shell').r).toBeCloseTo(w / 2, 12);
+      expect(r('collar').r).toBeCloseTo(w / 2, 12);
+      expect(r('collar').rBottom).toBeLessThan(r('collar').r);
+      expect(r('plinth').r).toBeLessThan(r('collar').rBottom);
+      expect(r('chamfer').rBottom).toBeCloseTo(r('shell').r, 12);
+      expect(r('chamfer').r).toBeLessThan(r('chamfer').rBottom);
+      expect(r('outlet').r).toBeLessThan(r('chamfer').r);
+      // The dial stands on the outlet and is the top; the status light sits on the outlet,
+      // between the dial and the outlet's rim.
+      expect(e('dial').lo[1]).toBeCloseTo(e('outlet').lo[1], 12);
+      expect(e('dial').hi[1]).toBeCloseTo(h, 12);
+      expect(e('status').lo[1]).toBeCloseTo(e('outlet').hi[1], 12);
+      const led = r('status');
+      expect(led.pos[2] - led.r).toBeGreaterThan(r('dial').r);
+      expect(led.pos[2] + led.r).toBeLessThan(r('outlet').r);
+      expect([led.tone, r('dial').tone, r('core').tone]).toEqual(['led', 'display', 'dark']);
+    }
+  });
+
+  it('cuts its intake into twenty ribs proud of a dark core, with a slot between each', () => {
+    for (const dimMM of dims) {
+      const at = dimMM.join('x');
+      const parts = posts(dimMM);
+      const core = parts.find((p) => p.key === 'core') as Post;
+      const ce = partExtent(core);
+      const ribs = parts.filter((p) => p.key.startsWith('rib-'));
+      expect(ribs.length).toBe(AIR_PURIFIER.ribs);
+      expect(AIR_PURIFIER.ribs).toBe(20);
+      const pitch = (ce.hi[1] - ce.lo[1]) / ribs.length;
+      ribs.forEach((rib, i) => {
+        const e = partExtent(rib);
+        expect(rib.r, `${at} ${rib.key} proud`).toBeGreaterThan(core.r);
+        expect(rib.r, `${at} ${rib.key} inside the shell`).toBeLessThan(dimMM[0] / 2000);
+        expect(rib.tone).toBe('grille');
+        // Centred in its own pitch, half of it wide: a slot of the same width each side.
+        expect((e.lo[1] + e.hi[1]) / 2, `${at} ${rib.key}`).toBeCloseTo(ce.lo[1] + (i + 0.5) * pitch, 12);
+        expect(e.hi[1] - e.lo[1], `${at} ${rib.key}`).toBeCloseTo(pitch / 2, 12);
+      });
     }
   });
 });

@@ -85,9 +85,10 @@ describe('a floor piece is drawn to the height it declares', () => {
     //                     beside the bed's size range): the height is the mattress top.
     //   monitor           the screen's top is 0.96 h + 10 mm, up to 14 mm short.
     //   laptop            `h` is the lid's LENGTH, tilted back from a 20 mm hinge.
-    //   air-purifier      a 14 mm control disc sits on the top.
+    // `air-purifier` was here (a 14 mm control disc stood on its top) and is retired:
+    // `airPurifierForm` sets the dial into the top, which is its declared height.
     // None is a seat or a surface a seat tucks under.
     const misses = rows.filter((r) => r.worst > TOLERANCE_MM).map((r) => r.shape);
-    expect(misses).toEqual(['rug', 'bed-single', 'bed-double', 'monitor', 'laptop', 'air-purifier', 'plane']);
+    expect(misses).toEqual(['rug', 'bed-single', 'bed-double', 'monitor', 'laptop', 'plane']);
   });
 });

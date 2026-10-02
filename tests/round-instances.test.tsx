@@ -89,6 +89,41 @@ describe('the side table, drawn', () => {
   });
 });
 
+// The oval mirror and the air purifier are authored on a circle of the width and stretched
+// by a group scale — the mirror to its height, the purifier to its depth — so the same
+// blindness applies: at a square Library size the stretch is the identity.
+describe('the oval mirror and the air purifier, drawn', () => {
+  const extent = (prims: ReturnType<typeof drawn>) => {
+    const b = horizontalBounds(prims);
+    return { w: b.x1 - b.x0, d: b.z1 - b.z0, y0: Math.min(...prims.map((p) => p.y[0])), y1: Math.max(...prims.map((p) => p.y[1])) };
+  };
+
+  it('the oval mirror is stretched from its circle to its own height', () => {
+    const band = dimRangeFor('mirror', 'mirror-oval');
+    for (const dim of [[600, 30, 1100], [band.min[0], 30, band.max[2]], [band.max[0], 30, band.min[2]]] as Array<[number, number, number]>) {
+      const at = dim.join('x');
+      const e = extent(drawn(partAt('mirror-oval', 'mirror', dim)));
+      expect(e.w, `${at} width`).toBeCloseTo(dim[0] / 1000, 6);
+      expect(e.d, `${at} depth`).toBeCloseTo(dim[1] / 1000, 6);
+      // Centred on its origin, as every wall piece is.
+      expect(e.y0, `${at} foot`).toBeCloseTo(-dim[2] / 2000, 6);
+      expect(e.y1, `${at} head`).toBeCloseTo(dim[2] / 2000, 6);
+    }
+  });
+
+  it('the air purifier is stretched from its circle to its own depth', () => {
+    const band = dimRangeFor('fridge', 'air-purifier');
+    for (const dim of [[300, 300, 620], [band.min[0], band.max[1], band.min[2]], [band.max[0], band.min[1], band.max[2]]] as Array<[number, number, number]>) {
+      const at = dim.join('x');
+      const e = extent(drawn(partAt('air-purifier', 'fridge', dim)));
+      expect(e.w, `${at} width`).toBeCloseTo(dim[0] / 1000, 6);
+      expect(e.d, `${at} depth`).toBeCloseTo(dim[1] / 1000, 6);
+      expect(e.y0, `${at} foot`).toBeCloseTo(0, 6);
+      expect(e.y1, `${at} top`).toBeCloseTo(dim[2] / 1000, 6);
+    }
+  });
+});
+
 describe("RoundInstances' unit meshes", () => {
   it('are the diameter-1 cylinder and sphere the walk measures them as', () => {
     const src = readFileSync(join(process.cwd(), 'components/three/Box.tsx'), 'utf8');
