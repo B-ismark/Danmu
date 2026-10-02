@@ -2549,6 +2549,7 @@ is expected where the photo could not measure that model.
 
 **Why eyes:** the guard against a blur committing the half-typed word over a pick cannot
 be exercised in jsdom (a removed field never blurs there), so only a real browser, and a
-real touch, can show it holds.
+real touch, can show it holds. The two costs this fix accepted are
+`docs/what-is-still-open.md` § 55.
 
-**Rides:** branch `claude/keen-einstein-dbmwuw`.
+**Rides:** `main` at `5dbcab0`.

@@ -10756,3 +10756,23 @@ storage screen that lists what is kept with a way to remove it.
 Seen in a browser: Settings › Downloads at 1280 and 390 px, with the mirror stubbed.
 NOT LOOKED AT: the scan card's choice and Update states, and a real download.
 
+
+## § 55 · Two costs the rename-suggestion fix left in place — WRITTEN DOWN, NOT FIXED
+
+Merged in `5dbcab0` ([B-ismark/Danmu#238](https://github.com/B-ismark/Danmu/pull/238)).
+The list under a piece's name now offers every Library model the typed words reach, not one
+per category, and still offers a model the photo cannot measure. Both changes were made on
+purpose, and each costs something:
+
+1. **Suggestions can show up after small name tweaks.** Renaming "Sofa" to "Grey sofa" can
+   now bring up other sofa styles, where before it stayed quiet: the old list dropped the
+   piece's whole category, the new one drops only the model it already builds. The offer can
+   be closed, and offering too much was chosen over going silent, which was the complaint.
+   A fix, if it is wanted, is to keep a same-category model out of the list unless the typed
+   words name that model better than the current one (`lib/label-suggest.ts`).
+2. **A "standard size" pick stays where the original piece was.** When the photo cannot
+   measure a model, the pick keeps the row's spot from the scan and takes the catalog's
+   normal size. It is not moved to where that kind of piece usually sits, so a lamp renamed
+   "Ceiling fan" with no ceiling in frame keeps the lamp's place rather than going up on the
+   ceiling. The fix belongs in the unmeasured branch of `suggestFromLabel`, which could place
+   the piece by its new anchor's default rather than keep the old position.
