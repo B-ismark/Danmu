@@ -10669,7 +10669,7 @@ backup file once per room after 20 saves, never to a room already saved to a fil
 `tests/backup-nudge.test.ts`. NOT LOOKED AT: whether Firefox's persist prompt reads well on
 the create press, and whether the offer arrives at a sensible moment.
 
-**Item 2 BUILT** on the same branch: a **Send feedback** row in Settings › Your rooms opens `FEEDBACK_URL` (`app/settings/page.tsx`), the repo's new-issue page, in a new tab. A plain link; nothing is sent from the app. If the repository is private, that page is a 404 for everyone else, so change the one constant.
+**Item 2 BUILT** on the same branch: a **Send feedback** row in Settings › Your rooms opens `FEEDBACK_URL` (`app/settings/page.tsx`), a `mailto:` to the maintainer with the subject "Danmu feedback". The repository is private, so an issue page would be a 404. A plain link the person's own mail app handles; nothing is sent from the app.
 
 **Exists in (item 3):** nothing. Filed 2026-10-02 by a re-check of the open list against `main` @
 `e08e790`. Both were confirmed by searching the code, not inferred.

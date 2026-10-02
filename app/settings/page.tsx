@@ -48,9 +48,9 @@ const TEST_TIMEOUT_MS = 15000;
 
 const KEY_INPUT_ID = 'settings-access-key';
 
-/** Where feedback goes: the project's public issue page, which a person opens and
- *  writes in themselves. Change it here if feedback should go somewhere else. */
-const FEEDBACK_URL = 'https://github.com/B-ismark/Danmu/issues/new';
+/** Where feedback goes: an email the person writes in their own mail app. The repo
+ *  is private, so its issue page would be a 404 for everyone else. */
+const FEEDBACK_URL = 'mailto:Bismarkgyau@gmail.com?subject=' + encodeURIComponent('Danmu feedback');
 
 export default function SettingsPage() {
   const s = useSettings();
@@ -476,10 +476,10 @@ export default function SettingsPage() {
               {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
             </button>
           </Row>
-          <Row label="Send feedback" hint="Opens a new page where you can tell us what works and what doesn't. Nothing is sent from the app.">
+          <Row label="Send feedback" hint="Opens your email app to tell us what works and what doesn't. Nothing is sent from the app.">
             {/* A plain link the person follows, never a form that posts from here:
                 rule 5 allows no egress but the optional detection call. */}
-            <a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer" className="ds-btn ds-btn--sm">
+            <a href={FEEDBACK_URL} className="ds-btn ds-btn--sm">
               Send feedback
               <Icon name="external" size={12} />
             </a>
