@@ -101,6 +101,7 @@ const firstMovable = () => parts.find((p) => !p.wallMounted && !p.locked && !use
 
 beforeEach(() => {
   handedOut = 0;
+  handed = [];
   calls = 0;
   mode = 'four';
   useIdeas.setState({ session: null });
@@ -160,31 +161,46 @@ describe('the ideas gallery', () => {
   // there. The stand-in moves the sofa and not the ottoman, which is the case that has
   // to be written anyway: left out of `moved`, the ottoman would keep its height with
   // nothing under it once the room took the idea.
-  it('a seat standing on the coffee table is on the floor in every idea, and back on the table after', async () => {
-    let ottoman: ScenePart | null = null;
-    mount((seeded) => {
-      const table = seeded.find((p) => p.name === 'Coffee table')!;
-      ottoman = {
-        ...table, id: 'zz-ottoman', name: 'Ottoman', category: 'ottoman', shape: 'ottoman',
-        dimMM: [550, 400, 420], pos: [table.pos[0], table.pos[1] + table.dimMM[2] / 1000, table.pos[2]],
-      };
-      return [...seeded, ottoman];
-    });
-    const o = ottoman!;
+  const ottomanOnTable = (seeded: ScenePart[]): ScenePart[] => {
+    const table = seeded.find((p) => p.name === 'Coffee table')!;
+    const ottoman: ScenePart = {
+      ...table, id: 'zz-ottoman', name: 'Ottoman', category: 'ottoman', shape: 'ottoman',
+      dimMM: [550, 400, 420], pos: [table.pos[0], table.pos[1] + table.dimMM[2] / 1000, table.pos[2]],
+    };
+    return [...seeded, ottoman];
+  };
+
+  it('a seat standing on the coffee table is on the floor beside it in every idea, and back on the table after', async () => {
+    mount(ottomanOnTable);
+    const o = parts.at(-1)!;
     expect(ridingParents(parts)[o.id], 'the fixture stands the ottoman on the table').toBe('table-1');
     await openIdeas();
-    expect(handed.find((p) => p.id === o.id)!.pos[1], 'the solver is handed it on the floor').toBe(0);
+    const set = handed.find((p) => p.id === o.id)!;
+    expect(set.pos[1], 'the solver is handed it on the floor').toBe(0);
+    expect(set.pos[2], 'beside the table, not inside it').not.toBeCloseTo(o.pos[2], 3);
     expect(firstMovable().id).not.toBe(o.id);
     await act(async () => {
       fireEvent.click(cards()[0]);
     });
-    expect(useStudio.getState().positions[o.id]).toEqual([o.pos[0], 0, o.pos[2]]);
+    expect(useStudio.getState().positions[o.id]).toEqual(set.pos);
     // It came down, so it is one of the pieces that move.
     expect(cards()[0].getAttribute('aria-label')).toMatch(/2 pieces move$/);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Back to your room/ }));
     });
     expect(useStudio.getState().positions).toEqual({});
+  });
+
+  it('a seat kept where it is stays on the table: kept means kept', async () => {
+    mount(ottomanOnTable);
+    const o = parts.at(-1)!;
+    act(() => useStudio.setState({ pinned: { [o.id]: true } }));
+    await openIdeas();
+    expect(handed.find((p) => p.id === o.id)!.pos).toEqual(o.pos);
+    await act(async () => {
+      fireEvent.click(cards()[0]);
+    });
+    expect(useStudio.getState().positions[o.id]).toBeUndefined();
   });
 
   it('the heart keeps an idea as a favourite layout, and a second press lets it go', async () => {

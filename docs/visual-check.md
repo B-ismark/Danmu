@@ -447,30 +447,34 @@ a nightstand left behind when the bed moves, or the pulled-away chair dragged ba
 table. Also watch the U: its arrangements are a little worse on average now (the bed set is a
 large body in a small room), and it may offer one idea fewer in three presses.
 
-### Ideas shows a seat on the floor, never standing on a table or a bed — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+### Ideas shows a seat on the floor, never standing on a table or a bed — on `claude/amazing-davinci-m8zqys` (PR #222), NOT LOOKED AT
 
 The user's call 2026-09-30: a drag may stand a seat on a coffee table (that stays), but an
 idea never shows one there. Measured before the change: every idea in a room with an ottoman
 on its coffee table kept it on the top, 48 of 48, because an idea moves pieces across the
-floor and keeps their height. Now the seat comes down to the floor where it stands before
-the search, and anything standing on it comes down with it: 0 of 59.
+floor and keeps their height. Now the seat comes down to the floor beside the table, a hand's
+width clear, before the search, and anything standing on it comes with it and stays on it.
+A seat kept where it is, or in a group, stays as you left it.
 
 **Where to click.** A Rectangle room at 6 × 4. Add an ottoman from the Library and drag it
-onto the coffee table, so it stands on the top. Open **Ideas**. Then press **Try** on a card,
-and **Back**.
+onto the coffee table, so it stands on the top. Put a tray (any small box) on the ottoman.
+Open **Ideas**. Then press **Try** on a card, and **Back**. Last, keep the ottoman where it
+is (**Keep a piece where it is…**) and look again.
 
-**What right looks like.** In every card the ottoman is on the floor, somewhere sensible, and
-the card counts it among the pieces that move. **Try** puts it on the floor in the room. **Back**
-puts it on the table again, exactly where it was. A room with nothing standing on anything
-looks the same as before.
+**What right looks like.** In every card the ottoman is on the floor, somewhere sensible,
+the tray still on it, and the card counts it among the pieces that move. **Try** puts it on
+the floor in the room. **Back** puts it on the table again, exactly where it was. Kept, it
+stays on the table in every card. A room with nothing standing on anything looks the same as
+before.
 
-**What wrong looks like.** An ottoman on the table in a card, or floating at table height
-beside it. A lamp on the table that came down with the ottoman. **Back** leaving the ottoman
-on the floor. A room that was clean saying *Try Fix first* because of the ottoman.
+**What wrong looks like.** An ottoman on the table in a card, floating at table height, or
+inside the table. The tray left on the table while the ottoman moves. A lamp on the table
+that came down with the ottoman. **Back** leaving the ottoman on the floor. A kept ottoman
+that moved. A room that was clean saying *Try Fix first* because of the ottoman.
 
-**Where it rides.** `lib/layout-ideas.ts` (`seatsDown`) + `components/studio/IdeasPanel.tsx`,
-and `lib/rigid-parent.ts` (`ridingParents`: a piece with something on it still rides what it
-stands on).
+**Where it rides.** `lib/layout-ideas.ts` (`seatsDown`, `ideaMoved`) +
+`components/studio/IdeasPanel.tsx`, and `lib/rigid-parent.ts` (`ridingParents`: a piece with
+something on it still rides what it stands on).
 
 ### An Ideas panel that runs dry in a room with a group says to ungroup it, where that helps — merged to `main` in `3d70896` (PR #220), NOT LOOKED AT
 

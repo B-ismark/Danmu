@@ -51,6 +51,7 @@ import {
   MAX_IDEAS,
   pageOf,
   pageRange,
+  ideaMoved,
   seatsDown,
   transformsKey,
   wantsMore,
@@ -92,14 +93,14 @@ type Session = {
   base: Maps & {
     key: string;
     /** Resolved, index-aligned to every idea's placements — and what the ideas were
-     *  arranged against, so a seat standing on a table or a bed is on the floor here
-     *  (`seatsDown`). */
+     *  arranged against, so a seat standing on a table or a bed is on the floor beside
+     *  it here (`seatsDown`). */
     parts: ScenePart[];
-    /** The indices `seatsDown` lowered. Every idea writes them. */
+    /** The indices `seatsDown` set down. Every idea writes them (`ideaMoved`). */
     down: number[];
     /** The room as it stands, before `seatsDown`. What Room check reports on, so the
-     *  empty state reads its findings off this and not off `parts`: a lowered ottoman
-     *  stands inside its coffee table, a clash the room on screen does not have. */
+     *  empty state reads its findings off this and not off `parts`: a seat set down
+     *  beside its table may stand in a walkway the room on screen keeps clear. */
     standing: ScenePart[];
     room: ShuffleRoom;
     pinned: Record<string, boolean>;
@@ -168,7 +169,7 @@ function begin(roomId: string, from: Session | null, placed: AppPlacedRef['curre
   const maps: Maps = { positions: t.positions, rotations: t.rotations, dims: t.dims };
   const key = transformsKey(maps);
   const standing = currentRoomScene();
-  const { parts, down } = seatsDown(standing);
+  const { parts, down } = seatsDown(standing, lockedForShuffle(standing, t.pinned), room.footprint);
   return {
     roomId,
     origin: from?.origin ?? { ...maps, key },
@@ -208,8 +209,7 @@ function land(run: number, attempt: number, found: SolveResult[] | 'failed') {
   let n = s.numbered;
   const fresh = found.slice(0, MAX_IDEAS - s.ideas.length).map((r): ShownIdea => {
     n += 1;
-    const moved = [...new Set([...r.moved, ...s.base.down])].sort((a, b) => a - b);
-    const idea = { id: `${run}-${n}`, placements: r.placements, moved };
+    const idea = { id: `${run}-${n}`, placements: r.placements, moved: ideaMoved(r.moved, s.base.down) };
     const t = ideaTransforms(s.base, s.base.parts, idea);
     return {
       ...idea,
