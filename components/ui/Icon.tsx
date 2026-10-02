@@ -29,7 +29,7 @@ export type IconName =
   | 'zap' | 'leaf' | 'crosshair'
   | 'sofa' | 'bed' | 'tv' | 'lamp' | 'table' | 'plant'
   | 'key' | 'eye' | 'eye-off'
-  | 'info' | 'help' | 'chart' | 'external'
+  | 'info' | 'help' | 'chart' | 'external' | 'mail'
   | 'edit' | 'trash' | 'refresh' | 'copy'
   | 'image' | 'play'
   | 'rotate-ccw' | 'rotate-cw' | 'fit'
