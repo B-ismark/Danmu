@@ -370,11 +370,13 @@ export function radiatorFins(widthMM: number): number {
   return Math.max(6, Math.round(widthMM / 1000 / 0.06));
 }
 
-/** A TV console's top slab and its plinth, in metres. 30 mm and 60 mm are joinery,
- *  not proportions of the piece. */
+/** A TV console's top slab and the height of the legs it stands on, in metres. 30 mm
+ *  and 110 mm are joinery, not proportions of the piece: a taller console is a deeper
+ *  carcass on the same legs, not a carcass on stilts. (`foot` was a 60 mm plinth until
+ *  `tvConsoleForm` stood it on legs.) */
 export function consoleSlabs(heightMM: number): { top: number; foot: number } {
   const h = heightMM / 1000;
-  return { top: Math.min(0.03, h * 0.08), foot: Math.min(0.06, h * 0.14) };
+  return { top: Math.min(0.03, h * 0.08), foot: Math.min(0.11, h * 0.2) };
 }
 
 /** A stool's seat thickness, in metres. 50 mm is a seat pad. */

@@ -427,14 +427,16 @@ describe('what a shape actually occupies, against the one box every consumer rea
     'bed-double': [1.0, 1.01, 1.4],
     monitor: [1.0, 1.5, 0.98],
     laptop: [1.0, 1.4, 1.04],
-    door: [1.0, 1.5, 1.0],
+    // Depth 2.0: a lever stands `LEVER_PROUD` (50 mm) off the face of a 50 mm leaf, which
+    // is what a real one does — the panelled door of `lib/hard-goods.ts` draws it to scale
+    // where the old slab drew a 20 mm stub at 1.5.
+    door: [1.0, 2.0, 1.0],
     // Depth 1.03 on both mirrors: the frame is drawn at `dimMM[1]` now and the glass
     // sits 1 mm proud of it. It was 1.5 (a flat 40 mm frame against a declared 30) and
     // 0.83 (a flat disc with glass 25 mm in front) until the model-integrity pass.
     mirror: [1.05, 1.03, 1.02],
     'mirror-oval': [1.1, 1.03, 1.05],
     window: [1.1, 2.0, 1.11],
-    'water-dispenser': [1.0, 1.14, 1.02],
     // A rug is 5 mm of declared thickness and 21 mm of drawn pile plus its border. The ratio
     // is 4.2 and the absolute error is 16 mm, which is the case for reading BOTH columns.
     rug: [1.0, 1.0, 4.2],
@@ -494,7 +496,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
     expect(RATIO_TOL, 'a tolerance is free at the top, so it needs its own ceiling').toBeLessThanOrEqual(0.03);
     expect(Object.keys(DRAWN_RATIO).sort(), 'shapes excused from the 0.90–1.10 band').toEqual([
       'bed-double', 'bed-single', 'door', 'laptop', 'mirror',
-      'mirror-oval', 'monitor', 'plane', 'rug', 'water-dispenser', 'window',
+      'mirror-oval', 'monitor', 'plane', 'rug', 'window',
     ]);
   });
 

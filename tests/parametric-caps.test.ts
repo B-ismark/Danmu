@@ -95,7 +95,7 @@ const CAPS: CapRow[] = [
     what: 'the shade',
   },
   { shape: 'tv-console', axis: 2, read: (mm) => consoleSlabs(mm).top, what: 'the top slab' },
-  { shape: 'tv-console', axis: 2, read: (mm) => consoleSlabs(mm).foot, what: 'the plinth' },
+  { shape: 'tv-console', axis: 2, read: (mm) => consoleSlabs(mm).foot, what: 'the legs' },
   { shape: 'stool', axis: 2, read: stoolSeat, what: 'the seat pad' },
   { shape: 'nightstand', axis: 1, read: drawerSlide, what: 'the drawer slide' },
   { shape: 'door', axis: 2, read: doorHandleY, what: 'the handle height' },

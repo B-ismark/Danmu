@@ -168,14 +168,20 @@ describe('the fit test reads the furniture as it is drawn', () => {
     // Each of these is a shape the profile takes as solid — the default — while its
     // drawing leaves a little room. None is worth a case of its own:
     //   plane       a flat 5 mm sheet, whatever it is called.
-    //   tv-console  a 42–60 mm toe-kick. No seat goes under that.
+    //   tv-console  60–110 mm of air between its legs (`consoleSlabs(h).foot`). No
+    //               seat goes under that. It was a 42–60 mm toe-kick before the legs.
+    //   chest-freezer  the instrument, not the piece: the cabinet stands on a plinth set
+    //               back 3% of the depth, so the thermostat badge on the cabinet's face
+    //               hangs over that toe-kick and reads as an underside 0.81 h up (606 mm
+    //               at 750). The badge is ON the cabinet, which is on the plinth; the
+    //               real room under the freezer is the 45–60 mm recess, and solid is right.
     // A stool was the third, read as a table by its size under two categories. It is a
     // seat under every category now, so it is never asked as a surface.
     // A shape that joins this list has had a drawing change under it, and should be
     // measured and, if it now makes real room, given a case in `tuckProfile`.
     const byShape = (rs: Array<{ shape: Shape }>) => [...new Set(rs.map((r) => r.shape))].sort();
     expect(byShape(seatRows().filter((r) => r.profile > r.drawn + TOLERANCE_MM))).toEqual(['plane']);
-    expect(byShape(surfaceRows().filter((r) => r.profile < r.drawn - TOLERANCE_MM))).toEqual(['plane', 'tv-console']);
+    expect(byShape(surfaceRows().filter((r) => r.profile < r.drawn - TOLERANCE_MM))).toEqual(['chest-freezer', 'plane', 'tv-console']);
   });
 
   it('the shapes it names are measured exactly', () => {

@@ -86,9 +86,8 @@ describe('a floor piece is drawn to the height it declares', () => {
     //   monitor           the screen's top is 0.96 h + 10 mm, up to 14 mm short.
     //   laptop            `h` is the lid's LENGTH, tilted back from a 20 mm hinge.
     //   air-purifier      a 14 mm control disc sits on the top.
-    //   water-dispenser   the bottle reaches 1.02 h.
     // None is a seat or a surface a seat tucks under.
     const misses = rows.filter((r) => r.worst > TOLERANCE_MM).map((r) => r.shape);
-    expect(misses).toEqual(['rug', 'bed-single', 'bed-double', 'monitor', 'laptop', 'air-purifier', 'water-dispenser', 'plane']);
+    expect(misses).toEqual(['rug', 'bed-single', 'bed-double', 'monitor', 'laptop', 'air-purifier', 'plane']);
   });
 });

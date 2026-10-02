@@ -10,8 +10,6 @@ import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
 import {
-  consoleSlabs,
-  doorHandleY,
   drawerSlide,
   clothesRail,
   fanBlade,
@@ -55,6 +53,19 @@ import {
   THROW_LEAN,
   type SoftItem,
 } from '@/lib/soft-goods';
+import {
+  acUnitForm,
+  chestFreezerForm,
+  doorForm,
+  microwaveForm,
+  soundbarForm,
+  tvConsoleForm,
+  washingMachineForm,
+  waterDispenserForm,
+  type HardPart,
+  type HardTone,
+} from '@/lib/hard-goods';
+import type { SurfaceKey } from './materials';
 
 /** The module ranges the TILING parametric shapes are divided by, resolved once at module
  *  scope so a renderer reads a value rather than doing a table lookup per frame.
@@ -386,6 +397,88 @@ function shade(hex: string, pct: number): string {
   const g = adj((n >> 8) & 255);
   const b = adj(n & 255);
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+/** How a `HardTone` is drawn: its colour and finish. `body` is the piece's own colour and
+ *  `look` its finish, so a recolour reaches every surface the user would call the piece;
+ *  the hardware keeps its own colour from `DETAIL`, as a real appliance's does. */
+type HardLook = { surface?: SurfaceKey; roughness?: number; metalness?: number };
+type ToneMaterial = HardLook & {
+  color: string;
+  emissive?: string;
+  emissiveIntensity?: number;
+  transparent?: boolean;
+  opacity?: number;
+};
+function toneMaterial(tone: HardTone, bodyC: string, look: HardLook): ToneMaterial {
+  switch (tone) {
+    case 'body': return { ...look, color: bodyC };
+    case 'trim': return { ...look, color: shade(bodyC, -10) };
+    case 'panel': return { ...look, color: shade(bodyC, 8) };
+    case 'grille': return { color: shade(bodyC, 6), roughness: 0.96 };
+    case 'dark': return { color: DETAIL.hardware, roughness: 0.7 };
+    case 'steel': return { color: DETAIL.steel, roughness: 0.35, metalness: 0.6 };
+    case 'brass': return { color: DETAIL.brass, roughness: 0.35, metalness: 0.7 };
+    case 'wood': return { color: DETAIL.darkWood, surface: 'wood' };
+    case 'glass': return { color: DETAIL.glass, roughness: 0.15, metalness: 0.3 };
+    case 'display': return { color: DETAIL.display, roughness: 0.3, emissive: DETAIL.led, emissiveIntensity: 0.12 };
+    case 'led': return { color: DETAIL.led, roughness: 0.3, emissive: DETAIL.led, emissiveIntensity: 0.9 };
+    case 'water': return { color: DETAIL.water, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.45 };
+    case 'hot': return { color: DETAIL.tapHot, roughness: 0.4 };
+    case 'cold': return { color: DETAIL.tapCold, roughness: 0.4 };
+  }
+}
+
+/** Draws a `lib/hard-goods.ts` form. Every number is the form's; this colours it. */
+function HardParts({ parts, bodyC, look }: { parts: HardPart[]; bodyC: string; look: HardLook }) {
+  return (
+    <>
+      {parts.map((p) => {
+        const mat = toneMaterial(p.tone, bodyC, look);
+        if (p.kind === 'box') {
+          return (
+            <Box
+              key={p.key}
+              size={p.size}
+              position={p.pos}
+              color={mat.color}
+              surface={mat.surface}
+              roughness={mat.roughness}
+              metalness={mat.metalness}
+              emissive={mat.emissive}
+              emissiveIntensity={mat.emissiveIntensity}
+            />
+          );
+        }
+        const { surface, ...plain } = mat;
+        const material = <meshStandardMaterial {...(surface ? SURFACE[surface] : undefined)} {...plain} />;
+        if (p.kind === 'post') {
+          return (
+            <mesh key={p.key} position={p.pos} castShadow receiveShadow>
+              <cylinderGeometry args={[p.r, p.rBottom, p.h, 20]} />
+              {material}
+            </mesh>
+          );
+        }
+        if (p.kind === 'disc') {
+          // A cylinder's axis is Y; turned a quarter about X it lies on the depth axis,
+          // its face to the front.
+          return (
+            <mesh key={p.key} position={p.pos} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+              <cylinderGeometry args={[p.r, p.r, p.t, 28]} />
+              {material}
+            </mesh>
+          );
+        }
+        return (
+          <mesh key={p.key} position={p.pos} castShadow receiveShadow>
+            <torusGeometry args={[p.r, p.tube, 12, 32]} />
+            {material}
+          </mesh>
+        );
+      })}
+    </>
+  );
 }
 
 /** Scales a renderer whose geometry is hard-coded metres to the size the piece DECLARES.
@@ -1518,62 +1611,25 @@ function PaintingGeo({ part }: { part: ScenePart }) {
 }
 
 function ACUnitGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const shell = body(part, locked);
-  return (
-    <>
-      <Box size={[w, h, d]} position={[0, 0, 0]} color={shell} />
-      {/* louvered front grille */}
-      {[-0.12, -0.04, 0.04, 0.12].map((y, i) => (
-        <Box key={i} size={[w * 0.92, 0.02, 0.01]} position={[0, y * h, d / 2 + 0.005]} color="#888" edgeOpacity={0.3} />
-      ))}
-    </>
-  );
+  return <HardParts parts={acUnitForm(part.dimMM)} bodyC={body(part, locked)} look={{ roughness: 0.4 }} />;
 }
 
 function DoorGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const h = part.dimMM[2] / 1000;
   // A door anchors 'wall-floor' (physics.ts): CENTRED on the group origin like
   // every other wall-mounted part, with `groundY` putting that origin at h/2 so
-  // the panel still reaches the floor. Bottom-anchoring it here is what made a
+  // the leaf still reaches the floor. Bottom-anchoring it here is what made a
   // seeded door hang a metre up the wall — `wallApertures` cut the hole from the
   // mesh centre while this drew upwards from it, and the two disagreed by h/2.
-  return (
-    <>
-      {/* The panel is its DECLARED depth. It was a flat 0.04 here, which while the
-          shape group-scaled at least tracked `dimMM[1]` through the scale; parametric
-          pins the group at 1, so a literal would freeze the panel at 40 mm while the
-          Inspector's depth field went on editing a number nothing drew — and at the
-          band's 35 mm floor the drawn panel would be THICKER than the piece it is in. */}
-      <Box surface="wood" size={[w, h, part.dimMM[1] / 1000]} position={[0, 0, 0]} color={tint(part)} />
-      {/* handle at ~1 m from the floor, i.e. 1 m up from the panel's bottom edge */}
-      <mesh position={[w / 2 - 0.06, -h / 2 + doorHandleY(part.dimMM[2]), 0.025]}>
-        <sphereGeometry args={[0.025, 12, 12]} />
-        <meshStandardMaterial color="#B89060" />
-      </mesh>
-    </>
-  );
+  //
+  // Every part is drawn at the DECLARED depth (`doorForm`). A flat 0.04 once stood
+  // here, which parametric's scale-1 pin froze at 40 mm while the Inspector's depth
+  // field edited a number nothing drew.
+  return <HardParts parts={doorForm(part.dimMM)} bodyC={tint(part)} look={{ surface: 'wood' }} />;
 }
 
 // ─── Appliances ───────────────────────────────────────────────────────────
 function SoundbarGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const bodyC = tint(part);
-  return (
-    <>
-      <Box size={[w, h, d]} position={[0, h / 2, 0]} color={bodyC} roughness={0.55} />
-      {/* fabric grille front */}
-      <mesh position={[0, h / 2, d / 2 + 0.002]}>
-        <planeGeometry args={[w * 0.96, h * 0.78]} />
-        <meshStandardMaterial color={shade(bodyC, 6)} roughness={0.96} />
-      </mesh>
-    </>
-  );
+  return <HardParts parts={soundbarForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.55 }} />;
 }
 
 function RadiatorGeo({ part }: { part: ScenePart }) {
@@ -1631,74 +1687,15 @@ function AirPurifierGeo({ part }: { part: ScenePart }) {
 }
 
 function WashingMachineGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const bodyC = tint(part);
-  const doorR = Math.min(w, h) * 0.3;
-  return (
-    <>
-      <Box size={[w, h, d]} position={[0, h / 2, 0]} color={bodyC} roughness={0.45} metalness={0.05} />
-      {/* door ring + glass */}
-      <mesh position={[0, h * 0.44, d / 2 + 0.01]}>
-        <torusGeometry args={[doorR, 0.03, 12, 28]} />
-        <meshStandardMaterial color="#bfc3c6" metalness={0.6} roughness={0.3} />
-      </mesh>
-      <mesh position={[0, h * 0.44, d / 2 + 0.011]}>
-        <circleGeometry args={[doorR * 0.82, 28]} />
-        <meshStandardMaterial color="#22303a" metalness={0.4} roughness={0.15} />
-      </mesh>
-      {/* control panel */}
-      <Box size={[w * 0.92, h * 0.13, 0.012]} position={[0, h * 0.86, d / 2]} color={shade(bodyC, -6)} />
-    </>
-  );
+  return <HardParts parts={washingMachineForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.45, metalness: 0.05 }} />;
 }
 
 function MicrowaveGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const bodyC = tint(part);
-  return (
-    <>
-      <Box size={[w, h, d]} position={[0, h / 2, 0]} color={bodyC} roughness={0.5} metalness={0.1} />
-      {/* door window */}
-      <mesh position={[-w * 0.12, h / 2, d / 2 + 0.002]}>
-        <planeGeometry args={[w * 0.58, h * 0.72]} />
-        <meshStandardMaterial color="#15181c" roughness={0.2} metalness={0.2} />
-      </mesh>
-      {/* control strip */}
-      <mesh position={[w * 0.34, h / 2, d / 2 + 0.002]}>
-        <planeGeometry args={[w * 0.22, h * 0.82]} />
-        <meshStandardMaterial color={shade(bodyC, 12)} roughness={0.6} />
-      </mesh>
-      {/* handle */}
-      <Box size={[0.02, h * 0.6, 0.03]} position={[w * 0.17, h / 2, d / 2 + 0.015]} color="#cfcfcf" roughness={0.4} metalness={0.5} />
-    </>
-  );
+  return <HardParts parts={microwaveForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.5, metalness: 0.1 }} />;
 }
 
 function WaterDispenserGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const bodyC = tint(part);
-  return (
-    <>
-      <Box size={[w, h * 0.7, d]} position={[0, h * 0.35, 0]} color={bodyC} roughness={0.45} />
-      {/* taps (hot/cold) */}
-      {[-0.05, 0.05].map((x, i) => (
-        <Box key={i} size={[0.03, 0.06, 0.05]} position={[x, h * 0.52, d / 2 + 0.02]} color={i ? '#c0392b' : '#2b6fd4'} />
-      ))}
-      {/* drip tray */}
-      <Box size={[w * 0.6, 0.018, d * 0.5]} position={[0, h * 0.44, d / 2 - 0.04]} color="#9aa0a6" metalness={0.3} roughness={0.5} />
-      {/* inverted bottle */}
-      <mesh position={[0, h * 0.86, 0]}>
-        <cylinderGeometry args={[w * 0.3, w * 0.33, h * 0.32, 20]} />
-        <meshStandardMaterial color="#bcd6e6" transparent opacity={0.5} roughness={0.1} metalness={0.1} />
-      </mesh>
-    </>
-  );
+  return <HardParts parts={waterDispenserForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.45 }} />;
 }
 
 /** Pedestal fan: a weighted base, a telescoping column, a tilt bracket, and a head of
@@ -1873,47 +1870,12 @@ function StandingFanGeo({ part }: { part: ScenePart }) {
 
 /** Chest freezer — a lid-on-top box, which is what distinguishes it from `fridge`. */
 function ChestFreezerGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const c = body(part, locked);
-  const lid = h * 0.1;
-  return (
-    <>
-      <Box size={[w, h - lid, d]} position={[0, (h - lid) / 2, 0]} color={c} roughness={0.4} />
-      <Box size={[w, lid, d]} position={[0, h - lid / 2, 0]} color={c} roughness={0.3} />
-      {/* lid handle, along the front edge */}
-      <Box
-        size={[w * 0.34, 0.03, 0.035]}
-        position={[0, h - lid - 0.03, d / 2 + 0.018]}
-        color="#8d9296"
-        metalness={0.4}
-        roughness={0.4}
-      />
-    </>
-  );
+  return <HardParts parts={chestFreezerForm(part.dimMM)} bodyC={body(part, locked)} look={{ roughness: 0.35 }} />;
 }
 
-/** Low TV unit: a plinth, a top, and two open bays. */
+/** Low TV console on legs: doors in the end bays, open niches between (`tvConsoleForm`). */
 function TvConsoleGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const c = body(part, locked);
-  const { top: t, foot } = consoleSlabs(part.dimMM[2]);
-  return (
-    <>
-      <Box surface="wood" size={[w, t, d]} position={[0, h - t / 2, 0]} color={c} roughness={0.45} />
-      <Box surface="wood" size={[w, t, d]} position={[0, foot + t / 2, 0]} color={c} roughness={0.45} />
-      {/* sides and a centre divider */}
-      {/* between the two slabs: down to the foot, each side shared the bottom slab's
-          underside, front, back and end faces */}
-      {[-w / 2 + t / 2, 0, w / 2 - t / 2].map((x, i) => (
-        <Box surface="wood" key={i} size={[t, h - foot - 2 * t, d]} position={[x, (h + foot) / 2, 0]} color={c} roughness={0.45} />
-      ))}
-      <Box surface="wood" size={[w * 0.92, foot, d * 0.8]} position={[0, foot / 2, 0]} color={c} roughness={0.6} />
-    </>
-  );
+  return <HardParts parts={tvConsoleForm(part.dimMM)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.45 }} />;
 }
 
 /** Round wooden stool: seat plus three splayed legs. */
