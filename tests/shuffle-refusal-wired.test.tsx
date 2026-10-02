@@ -59,7 +59,7 @@ const { useIdeas } = await import('@/components/studio/IdeasPanel');
 
 const HEIGHT = 2.5;
 
-function mount(id: 'u' | 'rect', w: number, d: number, edit: (parts: ScenePart[]) => ScenePart[] = (p) => p) {
+function mount(id: 'u' | 'rect' | 'open', w: number, d: number, edit: (parts: ScenePart[]) => ScenePart[] = (p) => p) {
   const footprint = footprintForLayout(id, w, d);
   const parts = edit(defaultScene(id, w, d, { footprint, height: HEIGHT }));
   act(() => {
@@ -150,29 +150,37 @@ describe('the shuffle refusal says which of the two "no" it is', () => {
     expect(searches).toBe(2 * DRY_SEARCHES);
   });
 
-  // User call 1B: a room whose group moves whole says so, and that ungrouping gives
-  // more ideas. The PAIR again: a group held by a kept piece does not move at all, so
-  // it gets the ordinary sentence — which is what a panel passing every piece as free
-  // would get wrong.
-  const grouped = (parts: ScenePart[]) => {
-    const free = parts.filter((p) => !p.wallMounted && !p.locked).slice(0, 2).map((p) => p.id);
-    expect(free, 'the fixture needs two pieces that can move').toHaveLength(2);
-    return parts.map((p) => (free.includes(p.id) ? { ...p, groupId: 'set' } : p));
+  // User call 1B: a room whose group is worth ungrouping says so, and that ungrouping
+  // gives more ideas. Three cases, because the panel can be wrong three ways: say it
+  // nowhere, say it for a group held by a kept piece (which does not move at all), or
+  // say it for a dining table and its chairs, which move as one block grouped or not.
+  const grouped = (...names: string[]) => (parts: ScenePart[]) => {
+    const picked = parts.filter((p) => names.includes(p.name));
+    expect(picked.length, `the fixture seeds ${names.join(' and ')}`).toBeGreaterThanOrEqual(names.length);
+    return parts.map((p) => (picked.includes(p) ? { ...p, groupId: 'set' } : p));
   };
 
-  it('a clean room with a group that moves says it moves as one, and to ungroup it', async () => {
-    const { parts, footprint } = mount('rect', 6, 4, grouped);
+  it('a clean room with a group worth ungrouping says it moves as one, and to ungroup it', async () => {
+    const { parts, footprint } = mount('rect', 6, 4, grouped('Sofa', 'Coffee table'));
     expect(shuffleBlockers(analyzeRoom(parts, { footprint, height: HEIGHT }).issues)).toEqual([]);
     const said = await openIdeasUntilDry('No ideas this time');
-    expect(said).toContain('Your group moves as one piece');
-    expect(said).toContain('Ungroup it for more ideas');
+    expect(said).toContain('Your group moves as one piece: ungroup it for more ideas.');
     expect(screen.getByRole('button', { name: 'Look again' })).toBeTruthy();
   });
 
   it('a group held by a kept piece is not one that moves, so the sentence is the plain one', async () => {
-    const { parts } = mount('rect', 6, 4, grouped);
+    const { parts } = mount('rect', 6, 4, grouped('Sofa', 'Coffee table'));
     const member = parts.find((p) => p.groupId === 'set')!;
     act(() => useStudio.setState({ pinned: { [member.id]: true } }));
+    const said = await openIdeasUntilDry('No ideas this time');
+    expect(said).toContain('Look again for a different try');
+    expect(said).not.toContain('group');
+  });
+
+  it('a dining table grouped with its chairs is one block either way, so it is not named', async () => {
+    const { parts, footprint } = mount('open', 7, 5, grouped('Dining table', 'Dining chair'));
+    expect(parts.filter((p) => p.groupId === 'set')).toHaveLength(5);
+    expect(shuffleBlockers(analyzeRoom(parts, { footprint, height: HEIGHT }).issues)).toEqual([]);
     const said = await openIdeasUntilDry('No ideas this time');
     expect(said).toContain('Look again for a different try');
     expect(said).not.toContain('group');
