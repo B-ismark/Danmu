@@ -33,6 +33,7 @@ import { GradeEffect } from './grade';
 import { PartGeometry } from './DynamicPart';
 import { Dressing } from './Dressing';
 import { CameraRig } from './CameraRig';
+import { SeeStrokes } from './strokes';
 
 /** Drop the hover highlight when the pointer leaves the canvas.
  *
@@ -328,6 +329,7 @@ export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
       <AdaptiveDpr pixelated />
 
       <CameraRig />
+      <SeeStrokes />
       <SceneCapture composer={hi ? composer : null} />
       <DropConnector apiRef={dropApi} />
       <FirstFrame onFrame={onFirstFrame} />

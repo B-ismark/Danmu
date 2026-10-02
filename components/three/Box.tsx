@@ -19,13 +19,14 @@
 // individual meshes that is 300 geometries + 300 materials + 300 draw calls for
 // a single object. As an InstancedMesh it is one of each.
 
-import { Edges, RoundedBox } from '@react-three/drei';
+import { RoundedBox } from '@react-three/drei';
 // R3F 9 dropped the per-element `*Props` aliases; the element prop types now
 // come off the `ThreeElements` map instead.
 import type { ThreeElements } from '@react-three/fiber';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { BufferGeometry, Color, DoubleSide, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
 import { PHYSICAL_SURFACES, SURFACE, type SurfaceKey } from './materials';
+import { Edges } from './strokes';
 import { DETAIL } from '@/lib/scene-palette';
 import { LEAF_MESH, PLANT_STEM_TAPER, type PlantLeaf, type PlantStem } from '@/lib/plant-form';
 
@@ -90,9 +91,7 @@ export function Box({
       <meshStandardMaterial {...matProps} />
     );
   const outline = edgeOpacity > 0 && (
-    <Edges threshold={30} renderOrder={1}>
-      <lineBasicMaterial color={edgeColor} transparent opacity={edgeOpacity} />
-    </Edges>
+    <Edges threshold={30} renderOrder={1} color={edgeColor} transparent opacity={edgeOpacity} />
   );
   return (
     <group position={position} rotation={rotation}>

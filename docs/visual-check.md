@@ -160,6 +160,31 @@ the 2D half of that defect **is** browser-checked and is not in this list. The r
 sentence, because it is a sentence a person has to read in place — the judgement it once
 raised was answered on 2026-09-30.*
 
+### A bed dragged between its nightstands leaves no dark streak on the floor — on `claude/amazing-davinci-m8zqys`, PROBED
+
+The user's 2026-10-01 report: dragging a bed between two nightstands painted black streaks
+across the floor at its head and foot. The floor shadow was drawing every outline as a
+solid sheet; outlines now live on a layer that shadow cannot see.
+
+**PROBED** in headless Chromium on a software renderer: the bed's drag, its blocked state
+and its release leave a clean floor, and the outlines — the selection rim, the wall
+frame — still draw. **What is left for an eye** is a real GPU: drag the bed in the seeded
+bedroom slowly across the nightstands and back. A dark band crossing the floor under the
+bed is this defect back. A missing outline anywhere — the bed's legs, the rim round a
+selected piece, the frame round a selected wall — is the fix gone too far.
+
+**The outlines have their colours back, which is a change you will see.** Every outline
+used to draw opaque white whatever it asked for (the colour sat on a material drei
+ignored). Now a selected piece's rim is terracotta, a hovered one's sage, a refused
+move's red, and a bed's legs carry a soft dark edge rather than a white one. White
+anywhere on those is the old bug back.
+
+**Gates.** `tests/strokes.test.tsx`.
+
+**Where it rides.** `components/three/strokes.tsx` + `components/three/Box.tsx` +
+`components/three/Highlight.tsx` + `components/three/RoomShell.tsx` +
+`components/three/Room.tsx`.
+
 ### A fan dropped onto a fan moves aside, and a bed set stops at the wardrobe — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 
 Two reports from the 2026-10-01 batch. A ceiling fan dropped on 2D Plan and another dropped

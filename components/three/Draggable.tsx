@@ -72,6 +72,7 @@ import { convoyRestore, gestureFor, leadInherited, planConvoy, resolveConvoy, se
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 import { Wobble } from './Wobble';
+import { isStroke } from './strokes';
 import { playSound } from '@/lib/sound';
 
 // Touch pick-up: dwell time, and how far the finger may drift while dwelling
@@ -118,7 +119,9 @@ function ShadowCaster({
     if (!g) return;
     g.traverse((o) => {
       const mesh = o as Mesh;
-      if (!(mesh as { isMesh?: boolean }).isMesh) return;
+      // A stroke is a Mesh to three, and a 2 × 3 m sheet to any depth pass — see
+      // `strokes.tsx`.
+      if (!(mesh as { isMesh?: boolean }).isMesh || isStroke(mesh)) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
     });
