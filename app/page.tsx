@@ -240,8 +240,7 @@ export default function RoomsPage() {
                       outline and the display serif never rendered on it. */}
                   <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginBottom: 4 }}>Your rooms</h1>
                   <div className="t-small">
-                    <span className="mono">{rooms.length}</span> room{rooms.length === 1 ? '' : 's'}, newest edit
-                    first
+                    <span className="mono">{rooms.length}</span> room{rooms.length === 1 ? '' : 's'}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 1 360px', minWidth: 0, flexWrap: 'wrap' }}>
@@ -683,11 +682,7 @@ function EmptyState({ unreadable }: { unreadable: boolean }) {
       <div className="ds-kicker" style={{ marginBottom: 12 }}>
         No rooms yet
       </div>
-      <h1 style={{ fontSize: 'var(--fs-hero)', letterSpacing: '-0.02em', marginBottom: 10 }}>Decorate your first room.</h1>
-      <p className="t-body" style={{ lineHeight: 1.55, marginBottom: 28 }}>
-        Pick a footprint and arrange furniture in a scaled 3D room. Move, recolour, restyle and relight
-        every piece. No account needed. Capturing your real room is optional.
-      </p>
+      <h1 style={{ fontSize: 'var(--fs-hero)', letterSpacing: '-0.02em', marginBottom: 28 }}>Decorate your first room.</h1>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
         {/* --primary, not --accent. This is the page you are reading, not a step in
             the onboarding flow, and the bar hides its own "New Room" in this state,

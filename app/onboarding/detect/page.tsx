@@ -1028,7 +1028,7 @@ export default function DetectPage() {
         <StepHeader
           kicker="Last step"
           title="Check your furniture"
-          subtitle={roughSize ? 'Keep what’s yours. Sizes are rough until you set the room’s size.' : 'Keep what’s yours.'}
+          subtitle={roughSize ? 'Sizes are rough until you set the room’s size.' : undefined}
         />
         {download && (
           <section className="ds-card" aria-labelledby="dl-title" style={{ padding: '14px 16px', maxWidth: '68ch', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1039,9 +1039,7 @@ export default function DetectPage() {
               {download.update
                 ? 'This version of Danmu finds furniture better than the copy on this device. It is a one-time download, kept afterwards.'
                 : 'To spot your furniture on this device, Danmu needs a one-time download. It is kept afterwards, so later scans use no data.'}{' '}
-              {download.metered
-                ? 'You seem to be on mobile data, so you may want to wait for Wi-Fi.'
-                : 'On mobile data, you can skip this and draw a box around each piece instead.'}
+              {download.metered ? 'You seem to be on mobile data, so you may want to wait for Wi-Fi.' : null}
             </p>
             <DetectorPackPicker
               value={detectorPack}

@@ -238,10 +238,7 @@ export default function LayoutPickPage() {
           two-column stack beside the drawing, which ran the page to ~900px with the
           buttons under the fold and the drawing's column half empty. */}
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <StepHeader
-          title="Which footprint is closest to your room?"
-          subtitle={touch ? 'Pick one to see it below.' : 'Pick one to see it below, or double-click it to start straight away.'}
-        />
+        <StepHeader title="Which footprint is closest to your room?" />
         <div role="radiogroup" aria-label="Room footprint" className="shape-options">
           {layouts.map((l, i) => {
             const active = sel === l.id;
@@ -261,6 +258,9 @@ export default function LayoutPickPage() {
                 onClick={() => setSel(l.id)}
                 // The first click of the two has already picked it; this opens it.
                 onDoubleClick={() => createRoom('model', l.id)}
+                // The shortcut is said where it works, on the card and to a mouse
+                // only, rather than in a standing sentence over the whole row.
+                title={touch ? undefined : 'Double-click to start with this shape'}
                 className="shape-option"
                 data-active={active || undefined}
               >
@@ -367,9 +367,7 @@ export default function LayoutPickPage() {
               </div>
               <div className="size-entry__foot">
                 <p className="t-note">
-                  {entry
-                    ? 'Wall to wall, at the widest point.'
-                    : 'Not sure? Leave these as they are. Sizes stay rough until you set your own, and you can change them any time in the studio.'}
+                  {entry ? 'Wall to wall, at the widest point.' : null}
                 </p>
                 {entry && (
                   <button type="button" onClick={resetSize} className="ds-btn ds-btn--sm ds-btn--ghost size-entry__reset">

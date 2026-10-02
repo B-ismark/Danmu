@@ -885,11 +885,6 @@ function AddTile({
         <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: 'var(--ink)' }}>
           {first ? 'Add photos' : 'Add another'}
         </span>
-        {!compact && (
-          <span className="t-note" style={{ lineHeight: 1.35 }}>
-            Up to four, one per wall.
-          </span>
-        )}
       </button>
 
       {/* .sr-only, never display:none — a hidden-by-display file input is gone
@@ -1315,7 +1310,7 @@ function CameraPanel({
           </>
         ) : (
           <span style={{ color: 'var(--ink-2)' }}>
-            All four walls have a photo. Remove one to retake it.
+            All four walls have a photo.
           </span>
         )}
       </p>
