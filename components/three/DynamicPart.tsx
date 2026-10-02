@@ -938,7 +938,7 @@ function BedGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       <SoftMesh mesh={form.duvet} color={shade(mattress, -8)} surface={SURFACE.fabric} doubleSide />
       <SoftInstances mesh={CUSHION_MESH.box} items={[form.fold]} color={linen} surface={SURFACE.fabric} />
       <Box surface="wood" size={[w, h * 1.4, HEADBOARD_T]} position={[0, h * 0.7, -d / 2]} color={frame} roughness={0.7} />
-      {/* pillows propped against the headboard, a scatter cushion in front of each */}
+      {/* pillows lying against the headboard, a scatter cushion in front of each */}
       <SoftInstances mesh={CUSHION_MESH.pillow} items={form.pillows} color={linen} surface={SURFACE.fabric} />
       <SoftInstances mesh={CUSHION_MESH.scatter} items={form.scatter} color="#ffffff" colorOf={scatterTone} surface={SURFACE.fabric} />
       {[

@@ -167,7 +167,7 @@ export type SoftItem = { pos: V3; size: V3; rot?: V3; tone?: number };
  *  A turned cushion does not reach the corners of its turned box: its edges are a seam with
  *  no thickness, so the lowest point of a cushion leaning back is its bottom seam, not the
  *  box's front-bottom corner. Placed by the box, every leaning cushion hovered above the seat
- *  it sat on — by 8 mm on a long sofa, by most of 30 mm for a pillow propped on a bed. So a
+ *  it sat on — by 8 mm on a long sofa, by most of 30 mm for a pillow tipped against a headboard. So a
  *  cushion is placed by its own surface. */
 export function meshExtent(mesh: SoftMeshData, size: V3, rot: V3 = [0, 0, 0]): { lo: V3; hi: V3 } {
   const [cx, sx] = [Math.cos(rot[0]), Math.sin(rot[0])];
@@ -272,8 +272,6 @@ export function sofaForm(part: { id: string; dimMM: readonly number[] }) {
 
 // ─── Bed ─────────────────────────────────────────────────────────────────────
 
-/** How far a bed's pillows prop up against the headboard, radians. */
-export const PILLOW_PROP = 0.18;
 /** How far in from the frame's side and ends the mattress stands, metres a side. Not a
  *  share of the width: at 2% a single bed's mattress side rose inside the frame's 30 mm
  *  rounded edge, and the line where one met the other ran along a curve. */
@@ -288,7 +286,11 @@ export const HEADBOARD_T = 0.05;
  *  1.3 m — passed in rather than imported, so the count has one home and that home is
  *  `lib/layout-rules.ts`, which the nightstands read as well.
  *
- *  The pillows lean back against the headboard, resting on their near edge; a scatter
+ *  The pillows lie on the mattress with their backs to the headboard. They used to be
+ *  tipped 10° to look propped, and a rigid tilt rests on ONE edge: a 500 mm pillow touched
+ *  the mattress along its front seam and stood 90 mm clear of it at the headboard, an air
+ *  wedge under every pillow that read, from the side, as linen floating over the bed. A
+ *  real pillow is soft and settles flat, so these do, sunk `CUSHION_SINK / 2` in; a scatter
  *  cushion stands in front of each on the turned-back sheet, sized so it stays below
  *  `SCATTER_TOP` of the bed's height — the headboard is drawn to 1.4 h, and a cushion
  *  showing over it reads as a bed with no headboard. */
@@ -309,12 +311,11 @@ const bedMemo = memoLast(
     const top = mattress.y + mattress.size[1] / 2;
     const pt = h * 0.15;
     const pd = d * 0.25;
-    const pillowRot: V3 = [PILLOW_PROP, 0, 0];
     // Its back seam against the headboard's face, its underside on the mattress.
-    const reach = meshExtent(CUSHION_MESH.pillow, [pw, pt, pd], pillowRot);
+    const reach = meshExtent(CUSHION_MESH.pillow, [pw, pt, pd]);
     const pz = -d / 2 + HEADBOARD_T / 2 - reach.lo[2] - CUSHION_SINK;
     const pillowY = top - reach.lo[1] - CUSHION_SINK / 2;
-    const pillowItems: SoftItem[] = xs.map((x) => ({ pos: [x, pillowY, pz], size: [pw, pt, pd], rot: pillowRot }));
+    const pillowItems: SoftItem[] = xs.map((x) => ({ pos: [x, pillowY, pz], size: [pw, pt, pd] }));
     const pillowFront = pz + reach.hi[2];
     const duvet = duvetMesh(w, d, h, pillowFront - 0.02, frameTop);
     const foldTop = duvet.fold.pos[1] + duvet.fold.size[1] / 2;

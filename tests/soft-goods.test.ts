@@ -9,7 +9,7 @@
 // how the first version left every leaning cushion hovering.
 
 import { describe, it, expect } from 'vitest';
-import { Euler, Matrix4, Vector3 } from 'three';
+import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import {
   bedForm,
   curtainCloth,
@@ -237,6 +237,26 @@ describe('bedForm — linen inside the bed, resting where it rests', () => {
           expect(hi[0]).toBeLessThanOrEqual(w / 2);
           // The headboard is drawn to 1.4 h; a pillow over it is a bed without one.
           expect(hi[1]).toBeLessThan(1.4 * h);
+        }
+        // ...and lies on it along its whole depth, not on one seam. A pillow tipped 10° to
+        // look propped touched the mattress at its front and stood 90 mm clear of it at the
+        // headboard — the bed's linen floating. Every band across the middle of its depth
+        // reaches down to the mattress.
+        for (const p of b.pillows) {
+          const m = new Matrix4().compose(new Vector3(...p.pos), new Quaternion().setFromEuler(new Euler(...(p.rot ?? [0, 0, 0]))), new Vector3(...p.size));
+          const pts = CUSHION_MESH.pillow.positions;
+          const bands = 6;
+          const low = Array<number>(bands).fill(Infinity);
+          const v = new Vector3();
+          for (let i = 0; i < pts.length; i += 3) {
+            v.set(pts[i], pts[i + 1], pts[i + 2]).applyMatrix4(m);
+            const u = (v.z - (p.pos[2] - p.size[2] * 0.4)) / (p.size[2] * 0.8);
+            if (u < 0 || u >= 1 || Math.abs(v.x - p.pos[0]) > p.size[0] * 0.4) continue;
+            const k = Math.floor(u * bands);
+            low[k] = Math.min(low[k], v.y);
+          }
+          // The pillow's own seam rolls up off the mattress a little, a tenth of its loft.
+          low.forEach((y, k) => expect(y - top, `pillow band ${k} of ${bands} clear of the mattress`).toBeLessThan(Math.max(0.01, p.size[1] * 0.1)));
         }
         // Two pillows side by side do not pass through each other.
         if (b.pillows.length === 2) {

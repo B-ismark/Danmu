@@ -640,7 +640,9 @@ realistic?"* and *"if there are any other pieces or decors we can improve the re
 free to add them."* They were boxes, and boxes read as furniture. Now they are cloth
 (`lib/soft-goods.ts`):
 
-- **The bed.** Pillows swell to a seam and lean back against the headboard. The duvet rolls
+- **The bed.** Pillows swell to a seam and lie on the mattress against the headboard (they
+  were tipped 10° and stood 90 mm clear of the mattress at the headboard end — the floating
+  pillows reported 2026-10-02, fixed on `claude/affectionate-ritchie-ilawx1`). The duvet rolls
   over the mattress's edge and hangs to a level hem, and a sheet is turned back over it at
   the head. A scatter cushion stands in front of each pillow, in a tone that stays with the
   bed across a reload. The mattress is now its own layer under the duvet.
