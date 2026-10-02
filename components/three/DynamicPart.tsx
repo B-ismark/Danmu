@@ -26,6 +26,7 @@ import {
   type ScenePart,
 } from '@/lib/scene-spec';
 import { useStudio } from '@/lib/store';
+import { useScene } from '@/lib/scene-store';
 import { roleOf, bedPillows } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
@@ -312,10 +313,24 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
 }
 
 // ─── Sofas / TVs / Rugs ──────────────────────────────────────────────────
+/** The piece as its DRESSING is rolled: the same piece under an id that includes the
+ *  room's. The cushions' colours, the shoes on a rack and the clothes on a rail are seeded
+ *  from the id, and the ids starter rooms and scans hand out (`bed-1`, `sofa-1`) repeat in
+ *  every room, so every new room came out in the same colours. Salted with the room id
+ *  they differ room to room, and a room keeps its own across reloads. Only the seeds read
+ *  this; everything that places, collides or saves the piece reads its real id. */
+function dressed<T extends { id: string }>(part: T): T {
+  // Read, not subscribed: the room id changes only when the room does, and that remounts
+  // the scene. A hook here would also make the geometry uncallable outside a render,
+  // which is how the catalogue sweeps measure it.
+  const roomId = useScene.getState().hydratedRoomId;
+  return roomId ? { ...part, id: `${roomId}/${part.id}` } : part;
+}
+
 // Parametric: seat + back cushions tile across the width (loveseat → 4-seater)
 // instead of one stretched slab. Module count derives from the effective width.
 function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const form = sofaForm(part);
+  const form = sofaForm(dressed(part));
   const { w, d, h, arm, legH, seatTop, innerW, backTh } = form;
   const main = body(part, locked);
   const cushion = shade(main, 14);
@@ -538,8 +553,9 @@ function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
  *  chair's fabric, turned walnut legs, its two cushions and a scatter cushion. */
 function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const f = armchairForm(part.dimMM);
+  const dressedId = dressed(part).id;
   const fabric = body(part, locked);
-  const scatterTone = locked ? shade(SCENE.lockedTint, 14) : DECOR.pillow[Math.floor(softHash(part.id, 'throw') * 64) % DECOR.pillow.length];
+  const scatterTone = locked ? shade(SCENE.lockedTint, 14) : DECOR.pillow[Math.floor(softHash(dressedId, 'throw') * 64) % DECOR.pillow.length];
   return (
     <>
       <HardParts parts={f.parts} bodyC={fabric} look={{ surface: 'fabric', roughness: 0.95 }} />
@@ -803,7 +819,7 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const tiers = moduleCount(h, TIER);
   const gap = h / tiers;
   const posts = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * (w / 2 - 0.02), sz * (d / 2 - 0.02)] as [number, number]));
-  const shoes = shoeRow(part);
+  const shoes = shoeRow(dressed(part));
   const shoeTone = (b: (typeof shoes)[number]) => (locked ? shade(SCENE.lockedTint, b.sole ? -10 : 10) : (b.sole ? DECOR.sole : DECOR.shoe)[b.tone % DECOR.shoe.length]);
   const lining = locked ? shade(SCENE.lockedTint, -30) : DETAIL.lining;
   return (
@@ -857,7 +873,7 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 function ClothesRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const rail = clothesRail(part);
+  const rail = clothesRail(dressed(part));
   const { pipe, flange, postX, footY, topY, lowY } = rail;
   const iron = body(part, locked);
   const joint = shade(iron, 12);
@@ -930,7 +946,7 @@ function ClothesRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
 
 // ─── Beds ───────────────────────────────────────────────────────────────
 function BedGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const form = bedForm(part, bedPillows(part.dimMM[0]));
+  const form = bedForm(dressed(part), bedPillows(part.dimMM[0]));
   const { w, d, h } = form;
   const frame = body(part, locked);
   const mattress = body(part, locked, DETAIL.mattress);

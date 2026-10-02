@@ -1536,26 +1536,13 @@ pair and they are **one row**, and the measured one survives in either photo ord
   room saved with one still loads; the value is ignored, and a room file does not
   write it out.
 
-### Wall colours read out of the photos — `lib/wall-sample.ts`, `lib/wall-colors.ts`
+### Wall colours read out of the photos — removed 2026-10-02
 
-**"Use the colours in my photos"** in the left rail's Room section samples each
-wall's real colour from the capture of it and writes it through the ordinary
-`setWallColor` / `setAllWallColors`, so it is one undo step and every wall stays
-editable afterwards. Zero API cost, no upload, and no photograph leaves the
-device — the sample happens in the page and only a hex reaches the store.
-
-**Where the wall is, is derived — not detected.** `findFloorLine` is the obvious
-tool and the wrong one: it is a luminance heuristic with no pure core, no test,
-and a `bestE ≥ 2.2·meanE` dominance gate that makes an oblique junction *lose*
-the answer rather than bias it. The room's own numbers already say.
-`wallRowAtHeight` (`lib/photo-geometry.ts`) is the **forward** direction of the
-one equation `calibrateFromFloorLine` and `heightFromFloorLine` each invert, so
-the wall–floor and wall–ceiling junctions are calls rather than cases, and
-`wallColumnsAtHeight` puts the return walls outside the region. Both vertical
-bounds are real lengths in metres — a skirting allowance and a coving allowance —
-never a percentage of the frame, and the lateral pair comes from `wallFrame`,
-which reads the **polygon** rather than ±width/2, per the contract `moveWall` states in
-`lib/scene-store.ts`.
+The Room section's **"Use my photos' colours"** button, which sampled each wall's colour
+from its capture, was removed at the user's call, with `lib/wall-sample.ts`,
+`lib/wall-colors.ts` and `wallColumnsAtHeight`, which nothing else read. Wall colours are
+set by hand or by a Style palette. The geometry it used (`wallRowAtHeight`, `wallFrame`)
+stays: the scan's own placers read it.
 
 ### The ±half pair, retired
 
@@ -1707,25 +1694,6 @@ justification for a piece of the design and all three were false:
   depends on how high up the wall it is, and the wall's ends move inward as the row
   drops. The columns take a height now and the band uses the intersection of its
   two ends; `forwardAtHeight` is monotonic, so those two bound the interior.
-
-**Which wall a photo paints reads the polygon's winding**, not `layoutId` — a
-dragged rectangle is `custom` while still being four walls facing four ways. It
-asks for a bijection (every wall claims one slot, every slot gets one wall) and
-refuses otherwise; an L / T / U has no four-wall mapping, so the offer collapses
-to one colour for every wall, which is a different answer rather than a worse one.
-
-Furniture is excluded when the room has detection boxes (`part.fromDetection`),
-and **that is best-effort on purpose**: `lib/scene-file.ts` strips
-`fromDetection` on export, so a room opened from a file has none. Whether it
-happened is reported to the user rather than silently done, as is every skipped
-photo and why.
-
-The pure/browser seam is the same one `calibrateFromPhoto` draws, at the typed
-array: `lib/wall-sample.ts` and `lib/color-reduce.ts` are pure and tested;
-`lib/wall-colors.ts` and `lib/color-sample.ts` only decode and draw. That split
-was made *because* `sampleBoxColor` had no test for as long as its arithmetic sat
-inside its `createImageBitmap` call — see `lib/image-quality.ts` for the same
-shape still untested.
 
 ### Procedural & parametric furniture — `DynamicPart.tsx`, `scene-spec.ts`
 - Furniture is **procedural geometry, not imported models** — zero asset weight.

@@ -528,44 +528,6 @@ export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | 
 }
 
 /**
- * The image columns the framed wall's two ends occupy, at one height on it.
- *
- * The lateral companion to `wallRowAtHeight`, and the reason a wall sample does
- * not need a guessed horizontal margin: a point on the wall plane at lateral
- * offset `x` projects to `u = 0.5 + (x / forward) / k`, so the wall's own ends are
- * a computed pair. Outside them lie the RETURN walls, which are a different
- * colour under different light, and are exactly what a percentage margin would
- * have been protecting against by luck.
- *
- * **It takes a height because the answer depends on one.** The previous version
- * divided by the wall distance and its docstring claimed the ends sit at
- * `0.5 ± (span/2 / d) / k` exactly; that is true only on the row level with the
- * lens. Tilt rotates about the right axis, so `forward` grows as the row drops
- * (`forwardAtHeight`) and the wall's ends move inward with it — measured at 3.6%
- * of the sampled band on the return wall at 30° of tilt, and the docstring was
- * the worse half of that defect. A caller wanting columns valid over a whole band
- * intersects the answer at the band's two ends; `forwardAtHeight` is monotonic in
- * `y`, so the two ends bound the interior and no sweep is needed.
- *
- * NOT clamped to the frame, for `wallRowAtHeight`'s reason: in a small room the
- * wall is wider than the lens can see and both ends are legitimately off-screen,
- * and which side they left by is the caller's to use. Null when the row is level
- * with or behind the lens.
- */
-export function wallColumnsAtHeight(
-  y: number,
-  wall: WallFrame,
-  cal: CameraCal,
-): { left: number; right: number } | null {
-  const fwd = forwardAtHeight(y, wall.distance, cal);
-  if (!(fwd > 0)) return null;
-  const left = 0.5 + wall.left / fwd / cal.k;
-  const right = 0.5 + wall.right / fwd / cal.k;
-  if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
-  return { left, right };
-}
-
-/**
  * The inverse of `slotToWorld`: a world XZ point (or direction) in the framing
  * camera's own axes, `forward` along the view axis and `right` across the image.
  *
