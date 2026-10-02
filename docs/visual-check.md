@@ -113,8 +113,11 @@ The user's 2026-10-01 report: a seeded bedroom said **Queen bed** while the Libr
 *On floor* card. A starter room now uses the Library's own pieces and names (Bed, Rug,
 Curtain, Painting, Pendant lamp, Table lamp, TV · 65″). The Inspector's first row is the
 name with its Library shelf beside it (a bed reads **Bed**, then a quiet **Bedroom**);
-the second line is gone. The placement card shows only when it has something
-to say: a finding, a piece in mid-air, or a piece resting on another.
+the second line is gone. A door and a window sit on a new **Doors & windows** shelf, in the
+Library too, because the shelf now reads as what the piece is and a door is not an
+appliance. A scanned bed (a shape the Library no longer sells) takes its kind's shelf. The
+placement card shows only when it has something to say: a finding, a piece in mid-air, or
+a piece resting on another.
 
 **Where to click.** Create a room from any shape, open a bedroom, select the bed, then a
 nightstand, the lamp on it, the curtain and the TV. Hover a few pieces in the 3D tab.
@@ -124,15 +127,20 @@ header row: the name, then the shelf in grey. No card for the bed on the floor, 
 the wall or the pendant on the ceiling. The lamp still says **On Nightstand**. A piece
 pushed into a walkway still gets its amber or red card.
 
-**What wrong looks like.** *Queen bed*, *Area rug* or *Bedside lamp* anywhere. The shelf
-wrapping under the name, or pushing the name off the rail at 1024 px. A radiator hovering
-as *fridge*.
+**What wrong looks like.** *Queen bed*, *Area rug* or *Bedside lamp* anywhere. A short name
+(*Bed*) with its shelf wrapped under it, or a long one (*Washing machine* from a photo, with
+its pill) ellipsised behind the shelf at 1024 px. The shelf dropping to a second line there
+is the intended reflow, not a defect. A door reading *Appliances*, a radiator hovering as
+*fridge*. And one to judge rather than check: the card coming and going moves the Colour,
+Light and Floor/Wall rows below it. Press **Floor** on a floating lamp and the row jumps up
+by the card's height. Say whether that reads as a jump.
 
 **Gates.** `tests/seed-library-names.test.ts`, `tests/library-shelf.test.ts`,
 `tests/hover-card.test.tsx`, `tests/placement-banner.test.tsx`.
 
-**Where it rides.** `lib/scene-spec.ts` (`BED_LADDER`, the seeder's names,
-`libraryShelf`) + `components/studio/Inspector.tsx` + `components/studio/HoverCard.tsx`.
+**Where it rides.** `lib/scene-spec.ts` (`BED_LADDER`, the seeder's names, the TV rows
+built from `SCREENS`, `libraryShelf`) + `components/studio/Inspector.tsx` +
+`components/studio/HoverCard.tsx`.
 
 ### An OLD room's ceiling fan still hangs short of the slab — the new-room half LOOKED AT 2026-09-30
 

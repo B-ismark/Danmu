@@ -7545,8 +7545,12 @@ the piece's Library shelf, *Appliances · Radiator*, and the hover card uses the
 Bed double is also redundant just keep the name and maybe next to it the category (if
 there's any). It doesn't need to take two lines."* So the second line is gone and the shelf
 sits beside the name on its row, in quiet type; the hover card does the same. `libraryShelf`
-(`lib/scene-spec.ts`) reads it off `PART_LIBRARY` by shape, and answers null — nothing shown
-— for a shape the Library does not sell, which is the fallback recommended below.
+(`lib/scene-spec.ts`) reads it off `PART_LIBRARY` by shape. For a shape the Library does
+not sell it falls back to the shelf of the piece's kind (a scanned `bed-single` reads
+*Bedroom*). It answers null, and shows nothing, only for the catch-all `other`. Review
+then found one more wrong word of the same kind: the Door sat on the *Appliances* shelf,
+so the header read *Door · Appliances*. Door and Window now share a **Doors & windows**
+shelf, which is a Library change as well as an Inspector one.
 
 **Found by looking, on 2026-09-06, which is the only way it could have been found** — it
 typechecks, lints and passes every test, and no assertion in the repo reads this string.

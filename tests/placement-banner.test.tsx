@@ -19,7 +19,7 @@
 // the Inspector is reached the way a user reaches it.
 import 'fake-indexeddb/auto';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, act } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
 import { analyzeRoom, CLASH_SHARE } from '@/lib/clearance';
 import { tucksUnder, TUCKED_CLASH_SHARE } from '@/lib/layout-rules';
@@ -92,10 +92,11 @@ function banner(): HTMLElement {
   return screen.getByRole('status', { name: 'Placement' });
 }
 
-/** The card, or null — it is not drawn for a piece plainly where it looks (the user,
- *  2026-10-01: "On floor" is obvious). */
-function maybeBanner(): HTMLElement | null {
-  return screen.queryByRole('status', { name: 'Placement' });
+/** The card inside the region, or null. The region is always there (a live region
+ *  inserted with its text is not reliably announced); the card is drawn only when it
+ *  has something to say — the user, 2026-10-01: "On floor" is obvious. */
+function card(): HTMLElement | null {
+  return banner().firstElementChild as HTMLElement | null;
 }
 
 describe('the banner agrees with Room check, because it reads Room check', () => {
@@ -129,8 +130,8 @@ describe('the banner agrees with Room check, because it reads Room check', () =>
     // says they do not; the banner must side with the report.
     // No card at all: nothing to say. The finding test below is what stops this
     // passing by never drawing one.
-    expect(maybeBanner()?.textContent ?? '').not.toMatch(/Blocked/i);
-    expect(maybeBanner(), 'a chair on the floor with nothing wrong needs no card').toBeNull();
+    expect(card(), 'a chair on the floor with nothing wrong needs no card').toBeNull();
+    expect(banner().textContent).toBe('');
   });
 
   it('and reports a real finding when the report has one', () => {
@@ -190,7 +191,8 @@ describe('the resting half, which the report cannot answer', () => {
     });
     setUp([table, tv], 'tv');
     render(<PlanPage />);
-    expect(maybeBanner()).toBeNull();
+    expect(card()).toBeNull();
+    expect(banner().textContent).toBe('');
   });
 });
 
@@ -204,7 +206,8 @@ describe('what the review found after the first version', () => {
     });
     setUp([table, fan], 'fan');
     render(<PlanPage />);
-    expect(maybeBanner()).toBeNull();
+    expect(card()).toBeNull();
+    expect(banner().textContent).toBe('');
   });
 
   it('does not let an unrelated finding erase the floating state', () => {
@@ -243,7 +246,7 @@ describe('what the review found after the first version', () => {
     setUp([table, floater], 'lamp');
     render(<PlanPage />);
     expect(banner().textContent).toMatch(/Floating/i);
-    const border = banner().style.border;
+    const border = card()!.style.border;
     expect(border, 'a floating piece is a warning, not a fault').toContain('--warn');
     expect(border).not.toContain('--danger');
   });
@@ -259,7 +262,7 @@ describe('what the review found after the first version', () => {
       .filter((i) => i.partIds.includes('chair') && i.severity !== 'info');
     expect(issues[0].severity, 'the premise: this fixture is an ERROR').toBe('error');
     render(<PlanPage />);
-    expect(banner().style.border).toContain('--danger');
+    expect(card()!.style.border).toContain('--danger');
   });
 });
 
@@ -272,6 +275,19 @@ describe('the banner as an announcement', () => {
     render(<PlanPage />);
     expect(banner().getAttribute('role')).toBe('status');
     expect(banner().getAttribute('aria-live')).toBeNull();
+  });
+
+  it('is one region for the whole selection, so a piece starting to float is announced', () => {
+    // A live region inserted already holding its text is commonly not read out. So the
+    // region stays and only the card inside it comes and goes: lifting a lamp off the
+    // floor fills the SAME element rather than mounting a new one.
+    setUp([table, part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [1.5, 0, 1.5] })], 'lamp');
+    render(<PlanPage />);
+    const before = banner();
+    expect(before.textContent, 'on the floor: nothing to say').toBe('');
+    act(() => useStudio.setState({ positions: { lamp: [1.5, 0.6, 1.5] } }));
+    expect(banner()).toBe(before);
+    expect(before.textContent).toMatch(/Floating/i);
   });
 });
 
@@ -286,17 +302,26 @@ describe('the header: one row, the name and its Library shelf', () => {
   it('puts the shelf on the name’s own row and says neither the category nor the shape', () => {
     setUp([table, radiator], 'radiator');
     render(<PlanPage />);
-    const shelf = screen.getByText('Appliances');
-    expect(shelf.parentElement?.textContent, 'the shelf sits on the name’s row').toContain('Radiator');
-    expect(shelf.parentElement?.parentElement?.textContent).not.toMatch(/fridge/i);
-    expect(screen.queryByText(/^Fridge$/i)).toBeNull();
+    // Scoped to the header row, so a "Fridge" anywhere else on the page (a Library
+    // row, say) can neither fail this nor stand in for it.
+    const row = screen.getByRole('button', { name: /Furniture name/i }).parentElement!;
+    expect(row.textContent, 'the shelf sits on the name’s row').toBe('RadiatorAppliances');
+    expect(row.parentElement?.textContent).not.toMatch(/fridge/i);
   });
 
-  it('shows no shelf for a shape the Library does not sell, rather than the internal key', () => {
+  it('gives a scanned bed (a shape the Library no longer sells) the Bedroom shelf', () => {
     const single = part({ id: 'bed', name: 'Bed', category: 'bed', shape: 'bed-single', dimMM: [900, 2000, 600], pos: [0, 0, 0] });
     setUp([single], 'bed');
     render(<PlanPage />);
     const row = screen.getByRole('button', { name: /Furniture name/i }).parentElement!;
-    expect(row.textContent).toBe('Bed');
+    expect(row.textContent).toBe('BedBedroom');
+  });
+
+  it('shows no shelf for a piece of unknown kind, rather than the internal key', () => {
+    const box = part({ id: 'box', name: 'Box', category: 'other', shape: 'box', dimMM: [600, 600, 800], pos: [0, 0, 0] });
+    setUp([box], 'box');
+    render(<PlanPage />);
+    const row = screen.getByRole('button', { name: /Furniture name/i }).parentElement!;
+    expect(row.textContent).toBe('Box');
   });
 });

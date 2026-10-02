@@ -611,6 +611,8 @@ const SCREENS: Array<{ name: string; dimMM: [number, number, number] }> = [
   { name: 'TV · 55″', dimMM: [1230, 60, 710] },
   { name: 'TV · 43″', dimMM: [970, 60, 570] },
 ];
+// `PART_LIBRARY`'s TV rows are built FROM this list rather than typed out again
+// beside it, so the starter room's screen and the Library's are one name and one size.
 
 /** The furthest a sofa is worth putting from the biggest screen there is — the top of
  *  `layout-rules`' 1.2–2.5 × diagonal band, resolved for `SCREENS[0]` rather than
@@ -1850,7 +1852,7 @@ function seats(part: ScenePart, placed: ScenePart[], poly: Footprint): boolean {
 // `group` only drives section headers in the Add-model picker.
 export type LibraryItem = {
   label: string;
-  group: 'Seating' | 'Tables' | 'Storage' | 'Bedroom' | 'Lighting' | 'Decor' | 'Tech' | 'Appliances';
+  group: 'Seating' | 'Tables' | 'Storage' | 'Bedroom' | 'Lighting' | 'Decor' | 'Tech' | 'Appliances' | 'Doors & windows';
   category: Category;
   shape: Shape;
   dimMM: [number, number, number];
@@ -2252,12 +2254,9 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Oval mirror', group: 'Decor', category: 'mirror', shape: 'mirror-oval', dimMM: [600, 30, 1100] },
   { label: 'Painting', group: 'Decor', category: 'painting', shape: 'painting', dimMM: [800, 30, 600] },
   { label: 'Curtain', group: 'Decor', category: 'curtain', shape: 'curtain', dimMM: [1600, 80, 2200] },
-  { label: 'Window', group: 'Decor', category: 'other', shape: 'window', dimMM: [1200, 60, 1200] },
   // Tech — three real panel sizes, because a small room needs a smaller SET and
   // never a scaled one. `SCREENS` (above) picks between these for the starter scene.
-  { label: 'TV · 65″', group: 'Tech', category: 'tv', shape: 'tv', dimMM: [1450, 60, 820] },
-  { label: 'TV · 55″', group: 'Tech', category: 'tv', shape: 'tv', dimMM: [1230, 60, 710] },
-  { label: 'TV · 43″', group: 'Tech', category: 'tv', shape: 'tv', dimMM: [970, 60, 570] },
+  ...SCREENS.map((s): LibraryItem => ({ label: s.name, group: 'Tech', category: 'tv', shape: 'tv', dimMM: s.dimMM })),
   { label: 'Monitor', group: 'Tech', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 400] },
   { label: 'Laptop', group: 'Tech', category: 'monitor', shape: 'laptop', dimMM: [340, 240, 220] },
   // Appliances
@@ -2295,17 +2294,29 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Standing fan', group: 'Appliances', category: 'fan', shape: 'fan-standing', dimMM: [450, 310, 1300] },
   { label: 'Chest freezer', group: 'Appliances', category: 'fridge', shape: 'chest-freezer', dimMM: [1250, 650, 850] },
   { label: 'AC unit', group: 'Appliances', category: 'ac', shape: 'ac-unit', dimMM: [800, 220, 280] },
-  { label: 'Door', group: 'Appliances', category: 'door', shape: 'door', dimMM: [900, 50, 2100] },
+  // Doors & windows — their own shelf, because the shelf is also what the Inspector
+  // shows beside a piece's name, and a door is not an appliance nor a window decor.
+  { label: 'Door', group: 'Doors & windows', category: 'door', shape: 'door', dimMM: [900, 50, 2100] },
+  { label: 'Window', group: 'Doors & windows', category: 'other', shape: 'window', dimMM: [1200, 60, 1200] },
 ];
 
-/** The Library shelf a shape sits on — "Appliances" for a radiator — or null for a
- *  shape the Library does not sell (a scanned single bed). Shown beside a piece's name
- *  in the Inspector and the hover card; null shows nothing rather than `category`,
- *  which is an internal key and calls six appliances "Fridge" (§ 41). Read off
- *  `PART_LIBRARY` rather than kept beside it, and a shape is on one shelf only
- *  (`tests/library-shelf.test.ts`). */
-export function libraryShelf(shape: Shape): string | null {
-  return PART_LIBRARY.find((r) => r.shape === shape)?.group ?? null;
+/** The Library shelf a shape sits on — "Appliances" for a radiator — shown beside a
+ *  piece's name in the Inspector and the hover card. Never `category`, which is an
+ *  internal key and calls six appliances "Fridge" (§ 41).
+ *
+ *  A shape the Library does not sell (a scanned single bed, an old room's closet) takes
+ *  its CATEGORY's shelf, so a scanned bed reads "Bedroom" like the starter room's —
+ *  which is only an answer while every category sits on one shelf, and
+ *  `tests/library-shelf.test.ts` fails the catalogue row that breaks that. Otherwise
+ *  null, and nothing is shown. Read off `PART_LIBRARY` once rather than kept beside it. */
+const SHELF_BY_SHAPE = new Map<Shape, string>(PART_LIBRARY.map((r) => [r.shape, r.group]));
+const SHELF_BY_CATEGORY = new Map<Category, string>(
+  // `other` is the catch-all, not a kind: the Library's one `other` is the window, and
+  // a scanned box of unknown kind is not a window.
+  PART_LIBRARY.filter((r) => r.category !== 'other').map((r) => [r.category, r.group]),
+);
+export function libraryShelf(shape: Shape, category: Category): string | null {
+  return SHELF_BY_SHAPE.get(shape) ?? SHELF_BY_CATEGORY.get(category) ?? null;
 }
 
 // ─── Detection → scene builder ────────────────────────────────────────────

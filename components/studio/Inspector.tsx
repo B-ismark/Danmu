@@ -233,7 +233,7 @@ export function Inspector() {
       : worst.detail
     : restingSentence;
   const placementOk = placementTone === 'ok';
-  const shelf = libraryShelf(part.shape);
+  const shelf = libraryShelf(part.shape, part.category);
 
   // `rail-scroll` carries nothing but `container-type` — it is what makes THIS box
   // the one `@container rail` measures, rather than the rail outside the scrollbar.
@@ -261,13 +261,16 @@ export function Inspector() {
   return (
     <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', flex: '0 0 auto', minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Wraps rather than squeezes: the shelf and the pill drop to a second line
+            before the name ellipsises behind them, so a "Washing machine" from a photo
+            keeps its name in a 248px rail. One row whenever they fit. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 2 }}>
           <EditableText
             value={part.name}
             label="Furniture name"
             className="sentence-case"
             onCommit={(next) => updatePart(id!, { name: next })}
-            style={{ flex: 1, minWidth: 0, fontSize: 'var(--fs-lead)', fontWeight: 500, letterSpacing: '-0.01em' }}
+            style={{ flex: '0 1 auto', minWidth: 0, fontSize: 'var(--fs-lead)', fontWeight: 500, letterSpacing: '-0.01em' }}
             inputStyle={{ fontSize: 'var(--fs-lead)', fontWeight: 500, height: 32 }}
           />
           {/* The Library shelf, on the name's own row: one line of identity, not a
@@ -281,7 +284,7 @@ export function Inspector() {
           )}
           {/* Not "Locked": the piece drags, resizes and recolours like any other.
               What the flag means is where it came from — see ScenePart.locked. */}
-          {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>From photo</Pill>}
+          {part.locked && <Pill tone="locked" style={{ flexShrink: 0, marginLeft: 'auto' }}>From photo</Pill>}
         </div>
       </div>
 
@@ -298,7 +301,10 @@ export function Inspector() {
           than the fill tokens: `--danger` and `--success` are FILLS and do not clear
           4.5:1 as type. The `-text` variants are the ones that do.
       */}
-      {placementLabel !== null && (
+      {/* The region is ALWAYS mounted and only the card inside it comes and goes: a
+          live region inserted already holding its text is commonly not announced, so
+          "Floating" — the change this exists to report — would go unspoken. Empty, it
+          takes no space. */}
       <div
         role="status"
         // Named, so a test can find it by IDENTITY rather than by the text it is about
@@ -308,6 +314,9 @@ export function Inspector() {
         // element by the answer and, on a wall selection where this banner does not
         // render at all, matched the keyboard-shortcut announcer instead.
         aria-label="Placement"
+      >
+      {placementLabel !== null && (
+      <div
         style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -350,6 +359,7 @@ export function Inspector() {
         </span>
       </div>
       )}
+      </div>
 
       {/* ── The decorating decisions, folded to a line each ────────────────── */}
       <PaintPicker
