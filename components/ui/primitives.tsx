@@ -146,6 +146,7 @@ export function EditableText({
   const listId = useId();
   const btnRef = useRef<HTMLButtonElement>(null);
   const restore = useRef(false);
+  const picked = useRef(false);
 
   // Return focus to the trigger after an edit ends, so keyboard position is
   // never lost. Only on a real edit — not on first mount.
@@ -157,6 +158,7 @@ export function EditableText({
   }, [editing]);
 
   function start() {
+    picked.current = false;
     setDraft(value);
     setActive(-1);
     restore.current = true;
@@ -164,6 +166,9 @@ export function EditableText({
   }
 
   function commit() {
+    // A pick has already answered. Removing the focused field can still fire its
+    // blur, and committing the half-typed word then wrote "fri" over the fridge.
+    if (picked.current) return;
     const next = draft.trim();
     // An empty or whitespace-only name is a mistake, not an intent: revert, and
     // let the caller explain why nothing changed.
@@ -174,6 +179,8 @@ export function EditableText({
 
   const options = editing && suggest && onPick && draft.trim() && draft.trim() !== value ? suggest(draft) : [];
   function pick(key: string) {
+    if (picked.current) return;
+    picked.current = true;
     restore.current = true;
     setEditing(false);
     onPick?.(key);
@@ -210,7 +217,10 @@ export function EditableText({
             if (active >= 0 && options[active]) pick(options[active].key);
             else commit();
           }
-          if (e.key === 'Escape') setEditing(false);
+          if (e.key === 'Escape') {
+            picked.current = true;
+            setEditing(false);
+          }
           e.stopPropagation();
         }}
         style={inputStyle}
@@ -234,6 +244,14 @@ export function EditableText({
               // Down, not click: a click lands after the field's blur, which would
               // commit the half-typed word first.
               onMouseDown={(e) => {
+                e.preventDefault();
+                pick(o.key);
+              }}
+              // A touch can blur the field before any mouse event is synthesised, so
+              // the pick happens on the first contact too; `picked` makes the second
+              // arrival a no-op.
+              onPointerDown={(e) => {
+                if (e.pointerType === 'mouse') return;
                 e.preventDefault();
                 pick(o.key);
               }}

@@ -6,7 +6,7 @@
 // detector's word, and typing a word is not a measurement disagreement.
 
 import { describe, expect, it } from 'vitest';
-import { categoriesFromLabel, suggestFromLabel } from '@/lib/label-suggest';
+import { suggestFromLabel } from '@/lib/label-suggest';
 import { candidatesFor } from '@/lib/label-repair';
 import { frameCuts, type CameraCal } from '@/lib/photo-geometry';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
@@ -26,56 +26,6 @@ function det(p: Partial<Detection> & Pick<Detection, 'category' | 'slot'>): Dete
   return { label: 'thing', conf: 0.9, box: FLOOR_BOX, ...p };
 }
 
-describe('categoriesFromLabel', () => {
-  it('folds a synonym the label itself never contains', () => {
-    // The whole point of going through `searchLibrary` rather than matching the word
-    // against category names: no category is spelled "refrigerator".
-    expect(categoriesFromLabel('refrigerator')).toContain('fridge');
-    expect(categoriesFromLabel('couch')).toContain('sofa');
-    expect(categoriesFromLabel('closet')).toContain('wardrobe');
-  });
-
-  it('drops the category the piece already has', () => {
-    // Renaming "sofa" to "big comfy sofa" must offer nothing, or the screen nags on
-    // every keystroke that happens to land on a real word.
-    expect(categoriesFromLabel('big comfy sofa', 'sofa')).not.toContain('sofa');
-  });
-
-  it('never offers `other`', () => {
-    // Its band fits everything and its model is a neutral box, so the offer carries no
-    // information. Same reason `categoriesFittingSize` excludes it.
-    //
-    // "window" specifically, and the first version of this test did not use it. Words
-    // like "thing" and "object" reach nothing in the catalog at all, so asserting
-    // `other` is absent from an empty list proved nothing and the exclusion survived
-    // being mutated away. `Window` is the one PART_LIBRARY row filed under `other`, so
-    // it is the only word that can actually reach it.
-    expect(categoriesFromLabel('window'), 'window is the row that reaches other').not.toContain('other');
-    // The guard on the fixture: if that row is ever recategorised, this assertion goes
-    // back to proving nothing and should say so rather than stay green.
-    expect(
-      PART_LIBRARY.some((i) => i.category === 'other'),
-      'no library row is filed under `other` any more — this test no longer exercises the exclusion',
-    ).toBe(true);
-    // Worth knowing rather than fixing: because the exclusion is right, renaming a
-    // piece to "window" offers nothing at all. The window is a SHAPE under `other`,
-    // and `candidatesFor` drops the shape hint so `refineShape` can pick one from the
-    // category — so offering `other` would hand back a neutral box, not a window.
-    // Offering shapes as well as categories is a larger change than a rename hook.
-    expect(categoriesFromLabel('window')).toEqual([]);
-  });
-
-  it('is empty for words the catalog has never heard of', () => {
-    expect(categoriesFromLabel('zzqqxx')).toEqual([]);
-    expect(categoriesFromLabel('')).toEqual([]);
-  });
-
-  it('returns each category once, however many rows reached it', () => {
-    const out = categoriesFromLabel('table');
-    expect(new Set(out).size).toBe(out.length);
-  });
-});
-
 describe('suggestFromLabel', () => {
   it('offers the fridge model for a bed renamed Fridge — the reported case', () => {
     const bed = det({ category: 'bed', slot: 'n' });
@@ -93,12 +43,15 @@ describe('suggestFromLabel', () => {
     const out = suggestFromLabel(bed, 'Fridge', CALS, ROOM);
     for (const c of out) {
       expect(c.detection.category, 'the candidate must carry its own category').toBe(c.category);
-      expect(c.detection.dimMM, 'a candidate with no measurement must not be offered').toBeDefined();
+      // Measured where the photo allows it; where it does not, no size at all, never
+      // the old one.
+      if (!c.unmeasured) expect(c.detection.dimMM).toBeDefined();
+      expect(c.detection.dimMM).not.toBe(bed.dimMM);
       // The old category's shape hint is dropped, and the candidate carries the shape
       // the new category makes of the words just typed — or of the Library name it
       // was measured as, when those words name no kind — which is the one accepting
       // it builds.
-      expect(c.detection.shape).toBe(sceneShapeFor(c.category, c.name ?? 'Fridge', undefined));
+      expect(c.detection.shape).toBe(sceneShapeFor(c.category, c.name ?? 'Fridge', c.detection.shape));
     }
   });
 
@@ -132,32 +85,47 @@ describe('suggestFromLabel', () => {
     expect(suggestFromLabel(bed, 'zzqqxx', CALS, ROOM)).toEqual([]);
   });
 
-  it('offers nothing with no room to measure against', () => {
-    // Accepting a candidate writes a size, so a candidate whose size is a guess is
-    // worse than no candidate. `null` room means no calibration ran.
+  it('still offers the model with no room to measure against, at the standard size', () => {
+    // It used to offer nothing here, which is the "doesn't always suggest" report:
+    // the list went quiet whenever the photo could not measure. A model with no size
+    // is built at the catalog's own size through clampDims, which is not a guess.
     const bed = det({ category: 'bed', slot: 'n' });
-    expect(suggestFromLabel(bed, 'Fridge', CALS, null)).toEqual([]);
+    const [first] = suggestFromLabel(bed, 'Fridge', CALS, null);
+    expect(first.category).toBe('fridge');
+    expect(first.unmeasured).toBe(true);
+    expect(first.detection.dimMM).toBeUndefined();
   });
 
-  it('offers nothing for a slot with no calibration', () => {
-    // 's' is absent from CALS, so `geoRefine` returns its input and there is nothing
-    // measured to offer.
+  it('still offers the model for a photo with no calibration', () => {
     const bed = det({ category: 'bed', slot: 's' });
-    expect(suggestFromLabel(bed, 'Fridge', CALS, ROOM)).toEqual([]);
+    const [first] = suggestFromLabel(bed, 'Fridge', CALS, ROOM);
+    expect(first.category).toBe('fridge');
+    expect(first.detection.dimMM).toBeUndefined();
   });
 
-  it('ranks a candidate that fits the measurement above one that does not', () => {
-    // The ordering is the whole of how the caveat is expressed: `axisMargin` is
-    // signed, so a candidate outside its own band has a negative margin and lands
-    // last. Asserted as an ordering property rather than against literal margins,
-    // which are a scoring detail with no meaning on their own.
+  it('offers another model of the SAME category', () => {
+    // The screenshot case: a shelf renamed "Shoe rack". Both are `shelf`, so a
+    // per-category list dropped it and the piece stayed a bookshelf.
+    const shelf = det({ category: 'shelf', slot: 'n', label: 'Bookshelf' });
+    const out = suggestFromLabel(shelf, 'Shoe rack', CALS, ROOM);
+    expect(out[0]?.detection.shape).toBe('shoe-rack');
+    expect(out[0]?.name).toBe('Shoe rack');
+  });
+
+  it('reaches every Library model by its own name', () => {
+    // Swept, not sampled: choosing examples is how the per-category gap was missed.
+    const bed = det({ category: 'bed', slot: 'n', label: 'Bed' });
+    const own = sceneShapeFor('bed', 'Bed', undefined);
+    const missed = PART_LIBRARY.filter((r) => r.shape !== own)
+      .filter((r) => !suggestFromLabel(bed, r.label, CALS, ROOM).some((c) => c.detection.shape === r.shape))
+      .map((r) => r.label);
+    expect(missed).toEqual([]);
+  });
+
+  it('keeps the order of the words, not of the fit', () => {
+    // "fri" means the fridge first, even where something else fits the box better.
     const bed = det({ category: 'bed', slot: 'n' });
-    const out = suggestFromLabel(bed, 'lamp fridge wardrobe', CALS, ROOM);
-    expect(out.length).toBeGreaterThan(1);
-    for (let i = 1; i < out.length; i++) {
-      expect(out[i - 1].margin, `${out[i - 1].category} must not rank below ${out[i].category}`)
-        .toBeGreaterThanOrEqual(out[i].margin);
-    }
+    expect(suggestFromLabel(bed, 'fri', CALS, ROOM)[0]?.category).toBe('fridge');
   });
 
   it('still offers a word whose measurement does not fit it', () => {
@@ -194,7 +162,7 @@ describe('suggestFromLabel', () => {
     const lamp = det({ label: 'lamp', category: 'lamp', slot: 'n', box });
     expect(frameCuts(box)).toEqual({ left: false, right: false, top: true, bottom: false });
     const out = suggestFromLabel(lamp, 'ceiling fan', { n: wide }, deep);
-    expect(out.map((c) => [c.category, c.unmeasured, c.margin])).toEqual([['fan', true, -Infinity]]);
+    expect([out[0].category, out[0].unmeasured, out[0].margin]).toEqual(['fan', true, -Infinity]);
     expect(out[0].detection.category).toBe('fan');
     // The judge's own repairs stay strict: a size the camera never saw proposes nothing.
     expect(candidatesFor(lamp, ['fan'], { n: wide }, deep)).toEqual([]);

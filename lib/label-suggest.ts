@@ -25,66 +25,61 @@ import { candidatesFor, type LabelCandidate } from './label-repair';
 import type { CalMap, RoomDims } from './detect-refine';
 import type { Detection } from './detection';
 import { searchLibrary } from './shape-search';
-import type { Category } from './scene-spec';
+import { sceneShapeFor, type Category, type Shape } from './scene-spec';
 
-/** How many catalog rows a typed word is allowed to reach through. Deliberately
- *  larger than the number of chips a caller will show: several rows share a category
- *  ("Wardrobe" and a closet preset both land on `wardrobe`), so the distinct-category
- *  count after folding is a good deal smaller than the row count going in. */
+/** How many catalog rows a typed word is allowed to reach through. Larger than the
+ *  number a caller shows, because rows sharing a model fold to one. */
 const ROWS = 8;
 
-/** The categories a typed word suggests, best-scored first, folded to distinct
- *  values and with the piece's current category dropped.
+/** Models worth offering for a piece the user is renaming to `label`, best first.
  *
- *  `searchLibrary` is the same token scorer the library search box uses, which is why
- *  "fridge" reaches the fridge (its `SYNONYM` table folds refrigerator and freezer)
- *  and a bare "thing" reaches nothing. Exported for its own test: the ranking and the
- *  re-measurement are separate questions and only the first one is cheap to assert. */
-export function categoriesFromLabel(label: string, exclude?: Category): Category[] {
-  const seen = new Set<Category>();
-  const out: Category[] = [];
-  for (const item of searchLibrary(label, ROWS)) {
-    // 'other' is never worth offering — the same reason `categoriesFittingSize`
-    // excludes it. Its band fits everything and its model is a neutral box, so
-    // "use the Other model?" is an offer with nothing behind it.
-    if (item.category === 'other' || item.category === exclude) continue;
-    if (seen.has(item.category)) continue;
-    seen.add(item.category);
-    out.push(item.category);
-  }
-  return out;
-}
-
-/** Models worth offering for a piece the user has just renamed to `label`.
+ *  One entry per catalog MODEL the words reach, not per category. It was per
+ *  category, with the piece's own category dropped, and that is why the list kept
+ *  going quiet: a shelf renamed "Shoe rack", a bed renamed "Bunk", a lamp renamed
+ *  "Pendant" all stay inside their category, so they offered nothing, and the piece
+ *  kept its old model under its new name. Only the model the row already builds is
+ *  left out, so renaming "sofa" to "big sofa" still offers nothing.
  *
- *  Empty when the words reach nothing in the catalog, or when they reach only the
- *  category the piece already has — which is the common case and the reason this
- *  returns a list rather than a boolean: renaming "sofa" to "big sofa" must offer
- *  nothing at all, or the screen nags on every keystroke that lands.
+ *  Each model is re-measured under its own anchor when the photo allows it. When it
+ *  does not — no room yet, no lens for that photo, or the model's anchor is out of
+ *  frame — the model is STILL offered, flagged `unmeasured`, with no size at all:
+ *  accepting it builds the piece at the catalog's own size, through `clampDims`
+ *  like every other piece. That is not a guess written as a measurement, and the
+ *  alternative was silence, which is the behaviour being fixed.
  *
- *  Ordering is by the re-measurement's own margin, so a word that also FITS what the
- *  camera measured is offered above one that does not, and one that does not is still
- *  offered — with a negative margin a caller can caveat. That asymmetry is deliberate:
- *  the user typed the word, and a screen that silently declines to act on it is the
- *  behaviour being fixed.
- *
- *  `room` may be null, in which case there is no calibration to re-measure against
- *  and there are no candidates. A suggestion whose measurement is a guess would be
- *  worse than none: accepting it writes a size. */
+ *  Ordering is the search's, best match for the words first. */
 export function suggestFromLabel(
   d: Detection,
   label: string,
   cals: CalMap,
   room: RoomDims | null,
 ): LabelCandidate[] {
-  if (!room) return [];
-  const current = (d.category ?? 'other') as Category;
-  const wanted = categoriesFromLabel(label, current);
-  if (wanted.length === 0) return [];
-  // Measured under the words just TYPED, not the words they replace. The row still
-  // carries its old label, and `candidatesFor` reads the label to pick which kind of
-  // the new category to measure — so a sofa renamed "double bed" was measured as the
-  // plain single bed its old word "sofa" names none of, and offered at a single bed's
-  // size for a piece the user had just called double.
-  return candidatesFor({ ...d, label }, wanted, cals, room, { requireFit: false });
+  const current = sceneShapeFor((d.category ?? 'other') as Category, d.label, d.shape);
+  const seen = new Set<Shape>([current]);
+  const out: LabelCandidate[] = [];
+  for (const item of searchLibrary(label, ROWS)) {
+    if (seen.has(item.shape)) continue;
+    seen.add(item.shape);
+    // Measured as exactly this model, named as the Library names it.
+    const measured = room
+      ? candidatesFor({ ...d, label: item.label }, [item.category], cals, room, { requireFit: false, shape: item.shape })[0]
+      : undefined;
+    out.push(
+      measured
+        ? { ...measured, name: item.label }
+        : {
+            category: item.category,
+            // No size: the catalog's, at build time. The position, if one was read,
+            // stays — it is where the piece is, whatever it is called.
+            detection: { ...d, label: item.label, category: item.category, shape: item.shape, dimMM: undefined },
+            name: item.label,
+            margin: -Infinity,
+            unmeasured: true,
+          },
+    );
+  }
+  // In the search's own order, never re-sorted by fit: the list answers what was
+  // TYPED, so "fri" puts the fridge first even where a weaker match fits the box
+  // better. Fit is said beside each option instead.
+  return out;
 }

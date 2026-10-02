@@ -2534,3 +2534,21 @@ the person who can check the phone is the account holder and nobody else.
 One caution that comes with the local route, and it is the same one in `sw.js`'s own
 comment: a worker registered on a port **outlives the server on it**. Iterating on a
 production build at `:3000` leaves one intercepting whatever you run there next.
+
+## Renaming a scanned piece suggests models every time
+
+**Where:** scan screen, any row, press its name and type. Try a shelf → "Shoe rack", a lamp
+→ "Pendant", a bed → "fri", and the same on a photo with no room measured yet. On a phone,
+tap an option rather than pressing Enter.
+
+**What wrong looks like:** no list under the field while the typed word names something in
+the Library; the list showing one option where two models share a family; picking an
+option and the row reading the half-typed word afterwards, or keeping its old model (the
+grey line under the name says which model it builds). An option that says "standard size"
+is expected where the photo could not measure that model.
+
+**Why eyes:** the guard against a blur committing the half-typed word over a pick cannot
+be exercised in jsdom (a removed field never blurs there), so only a real browser, and a
+real touch, can show it holds.
+
+**Rides:** branch `claude/keen-einstein-dbmwuw`.
