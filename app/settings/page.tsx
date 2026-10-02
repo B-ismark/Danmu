@@ -480,8 +480,8 @@ export default function SettingsPage() {
             {/* A plain link the person follows, never a form that posts from here:
                 rule 5 allows no egress but the optional detection call. */}
             <a href={FEEDBACK_URL} className="ds-btn ds-btn--sm">
+              <Icon name="mail" size={12} />
               Send feedback
-              <Icon name="external" size={12} />
             </a>
           </Row>
         </Section>
