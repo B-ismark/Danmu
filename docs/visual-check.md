@@ -260,7 +260,7 @@ first — but the line must then say so.
 
 **Where it rides.** `lib/to-wall.ts` + `components/studio/Inspector.tsx`.
 
-### A drag that is cancelled, or comes back, leaves nothing marked as moved — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+### A drag that is cancelled, or comes back, leaves nothing marked as moved — merged to `main` in `624bfda` (PR #229), NOT LOOKED AT
 
 The mark is the Inspector's **Back to where it started** button: it shows only for a
 piece that carries a move, turn or resize of yours. In the seeded bedroom, select a
@@ -280,6 +280,23 @@ cancelled drag of something it stands on.
 
 **Where it rides.** `lib/transforms.ts` (`overridesBroughtHome`) + `lib/store.ts` +
 `components/three/Draggable.tsx` + `components/studio/PlanView.tsx`.
+
+### A piece turned on the 3D ring faces the same way in the plan — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+
+In the seeded bedroom on **3D Model**, select a piece with its front towards the camera,
+press **R** for the ring, and turn it about two-thirds of the way round. Let go, then open
+**2D Plan**: it must face the way 3D showed it. Before, anything past a quarter turn came out
+mirrored in the plan, because the number stored was not the turn on screen. Second check:
+select a piece facing the back wall, press the ring and let go without turning. Nothing may
+change, in either tab. That one used to store the piece facing the front.
+
+What would be wrong: the plan disagreeing with 3D about which way a piece faces after a
+ring turn, or a piece flipping when the ring is only pressed.
+
+**Gates.** `tests/gizmo-turn.test.ts`.
+
+**Where it rides.** `lib/geometry.ts` (`yawOf`) + `components/three/Draggable.tsx`
+(`onObjectChange`).
 
 ### A fan dropped onto a fan moves aside, and a bed set stops at the wardrobe — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 

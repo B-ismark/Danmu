@@ -62,6 +62,7 @@ import { StretchHandles } from './StretchHandles';
 import { CutAway } from './CutAway';
 import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
+import { yawOf } from '@/lib/geometry';
 import {
   resolvePlacement as resolveDrag,
   snapSteps,
@@ -1570,6 +1571,15 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           // Fingers need a target roughly twice the size a mouse does.
           size={coarsePointer() ? 1.5 : 0.8}
           rotationSnap={rotationSnap}
+          // The ring writes the quaternion, and three reads that back as an XYZ Euler
+          // whose `y` stops at ±90° (see `yawOf`). Everything here reads `rotation.y`
+          // — the commit, Escape's restore, the next gesture's start — so the group is
+          // put back to a pure turn on every change. Same orientation; the number
+          // `rotation.y` holds becomes the heading again.
+          onObjectChange={() => {
+            const g = ref.current;
+            if (g) g.rotation.set(0, yawOf(g.quaternion), 0);
+          }}
           onMouseDown={() => {
             // This fires only when `pointerDown` found an axis — the press really
             // did land on a handle — and three-stdlib re-runs its hover test at the

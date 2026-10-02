@@ -4803,6 +4803,23 @@ shipped rung is still the tidiest and much the safest but is no longer clean.
 exempt from it. So "nothing prices support" has a second half — **nothing contains a
 supported piece either.**
 
+**§ H.6.9 · FIXED 2026-10-02: a turn on the 3D ring past 90° was stored as its mirror.**
+Found by § H.6.7's review. The ring (drei's `TransformControls`, one vertical ring) writes
+the group's QUATERNION, and three reads that back as an XYZ Euler, which keeps `y` inside
+±90° and puts the rest into x = z = 180°. Everything in `Draggable` reads `rotation.y` — the
+commit, Escape's restore, the next gesture's start — so a piece turned to 150° was stored at
+30°, and a piece facing the back wall that was merely pressed on the ring was stored facing
+the front: a turn of nothing, recorded as half a turn. The 3D view hid it, because the
+object kept its x = z = 180° until it was next mounted. The plan, collision and the room
+report read the stored number from the first frame.
+Measured in three before fixing (`rotation.y` after a +0.1 turn from 2.5 rad reads 0.5416,
+and from π by nothing reads 0). The ring's `onObjectChange` now puts the group back to a
+pure turn read off the quaternion (`yawOf` in `lib/geometry.ts`, three's own YXZ yaw), so
+`rotation.y` is the heading again everywhere it is read. Five mutants, all killed, one only
+after the helper was pinned against three's YXZ for a tilted orientation too.
+**Not recoverable:** a heading stored mirrored before this cannot be told from a real one,
+so a room someone turned on the ring keeps what it was saved with.
+
 ## What in this document has been in a browser, and what has not
 
 The heading here used to read *"nothing in this document has been in a browser"*. That is
