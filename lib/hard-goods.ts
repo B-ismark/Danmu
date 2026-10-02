@@ -37,7 +37,8 @@
 // where two parts' fronts face the same way, they are at different depths or meet only
 // along an edge. `tests/coplanar-faces.test.tsx` sweeps the result at three sizes.
 
-import { consoleSlabs, doorHandleY, drawerSlide, radiatorFins, stoolSeat } from './scene-spec';
+import { consoleSlabs, doorHandleY, drawerSlide, radiatorFins, stoolSeat, windowPanes } from './scene-spec';
+import { COFFEE_SHELF, DESK_TOP, DINING_LEG, DINING_TOP, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from './foot-cells';
 
 type V3 = [number, number, number];
 
@@ -657,6 +658,267 @@ export function sideTableForm(dimMM: readonly number[]): HardPart[] {
     col('foot-step', w * 0.24, w * 0.27, h * 0.04, h * 0.085),
     col('foot', w * 0.36, w * 0.38, 0, h * 0.04),
   ];
+}
+
+/** A mid-century coffee table: a top eased underneath, an apron of four rails tying the
+ *  legs together under it, four tapered legs in brass ferrules, and a lower shelf between
+ *  the legs. It was a slab on four square sticks of a fixed 45 mm, with rails a fixed
+ *  60 mm in from the edge — absolutes in a form the renderer stretches, so the legs grew
+ *  as the table did.
+ *
+ *  Every share is taken off its own axis, so a group scale draws the table it describes;
+ *  the legs are round, so a stretched table has oval legs, which is what a scale does to
+ *  any round part and reads, at 25 mm, as nothing. At the Library's 1100 × 600 × 420 the
+ *  top is 25 mm, the apron 59 and the legs 48 mm across at the top. Floor piece: `y` runs
+ *  0 → h. */
+export function coffeeTableForm(dimMM: readonly number[]): HardPart[] {
+  const [w, d, h] = m(dimMM);
+  // The legs' centres, and the rails' faces on them.
+  const lx = w * 0.43;
+  const lz = d * 0.38;
+  const rx = w * 0.0136;
+  const rz = d * 0.025;
+  // A leg is round, so its girth is taken off the narrower side: off the width alone, a
+  // short deep table would hang a rail thicker than the leg it meets.
+  const s = Math.min(w, d);
+  const yTop = h * 0.94;
+  const yEase = h * 0.92;
+  const yApron = h * 0.78;
+  const leg = (key: string, tone: HardTone, r: number, rBottom: number, x: number, z: number, y0: number, y1: number): HardPart =>
+    ({ kind: 'post', key, tone, r, rBottom, h: y1 - y0, pos: [x, (y0 + y1) / 2, z] });
+  const corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const;
+  return [
+    slab('top', 'body', -w / 2, w / 2, yTop, h, -d / 2, d / 2),
+    slab('top-ease', 'body', -w * 0.485, w * 0.485, yEase, yTop, -d * 0.475, d * 0.475),
+    // The front and back rails run leg to leg; the side rails stop against them, so no
+    // corner is drawn twice.
+    ...[-1, 1].map((s) => slab(`apron-${s < 0 ? 'back' : 'front'}`, 'trim', -lx, lx, yApron, yEase, s * lz - rz / 2, s * lz + rz / 2)),
+    ...[-1, 1].map((s) => slab(`apron-${s < 0 ? 'l' : 'r'}`, 'trim', s * lx - rx / 2, s * lx + rx / 2, yApron, yEase, -lz + rz / 2, lz - rz / 2)),
+    ...corners.map(([sx, sz], i) => leg(`leg-${i}`, 'trim', s * 0.04, s * 0.025, sx * lx, sz * lz, h * 0.05, (yEase + yTop) / 2)),
+    ...corners.map(([sx, sz], i) => leg(`ferrule-${i}`, 'brass', s * 0.029, s * 0.029, sx * lx, sz * lz, 0, h * 0.05)),
+    // The shelf runs corner to corner between the leg centres, so the legs pass through it.
+    // Its underside is the knee room the tuck rule reads (`COFFEE_SHELF`).
+    slab('shelf', 'body', -lx, lx, h * COFFEE_SHELF.lo, h * COFFEE_SHELF.hi, -lz, lz),
+  ];
+}
+
+/** A dining table: a top, an ease stepped in under it so its edge reads thinner than it
+ *  is, an apron of four rails hung from the ease and set back from the legs' faces — the
+ *  reveal a joiner leaves so a rail's face never has to line up with a leg's — four
+ *  square legs, and a felt glide under each.
+ *
+ *  Drawn at the stored size (`desk-standard` is parametric, § 36): the legs are a real
+ *  55 mm and the apron a real 77 mm at every size, so a long table does not grow
+ *  fence-post legs. The legs ARE `surfacePostsLocal`'s rectangles, and the top, ease and
+ *  apron are `DINING_TOP`, so the tuck rule stops a chair at the leg and the rail the
+ *  user sees. They used to run to the top's underside alongside the rails, so each
+ *  leg's cap and the rails' tops shared a plane; they run up into the ease now. Floor
+ *  piece: `y` runs 0 → h. */
+export function diningTableForm(dimMM: readonly number[]): HardPart[] {
+  const [w, d, h] = m(dimMM);
+  const { top, ease, apron } = DINING_TOP;
+  const { size, inset } = DINING_LEG;
+  const easeIn = 0.012;
+  const reveal = 0.008;
+  const rail = 0.02;
+  const glide = 0.008;
+  const yTop = h - top;
+  const yEase = yTop - ease;
+  const yApron = yEase - apron;
+  const lx = w / 2 - inset - size / 2;
+  const lz = d / 2 - inset - size / 2;
+  // The rails' outer faces, a reveal inside the legs'.
+  const ox = lx + size / 2 - reveal;
+  const oz = lz + size / 2 - reveal;
+  const posts = surfacePostsLocal('desk-standard', true, w, d);
+  return [
+    slab('top', 'body', -w / 2, w / 2, yTop, h, -d / 2, d / 2),
+    slab('top-ease', 'body', -w / 2 + easeIn, w / 2 - easeIn, yEase, yTop, -d / 2 + easeIn, d / 2 - easeIn),
+    // The long rails run leg centre to leg centre; the end rails stop against them.
+    ...[-1, 1].map((s) => slab(`apron-${s < 0 ? 'back' : 'front'}`, 'trim', -lx, lx, yApron, yEase, s < 0 ? -oz : oz - rail, s < 0 ? -oz + rail : oz)),
+    ...[-1, 1].map((s) => slab(`apron-${s < 0 ? 'l' : 'r'}`, 'trim', s < 0 ? -ox : ox - rail, s < 0 ? -ox + rail : ox, yApron, yEase, -oz + rail, oz - rail)),
+    // Up into the ease, so a leg's cap is hidden rather than level with the rails' tops.
+    ...posts.map((r, i) => slab(`leg-${i}`, 'trim', r.x0, r.x1, glide, yEase + ease / 2, r.z0, r.z1)),
+    ...posts.map((r, i) => {
+      const cx = (r.x0 + r.x1) / 2;
+      const cz = (r.z0 + r.z1) / 2;
+      const g = size * 0.4;
+      return slab(`glide-${i}`, 'dark', cx - g, cx + g, 0, glide, cz - g, cz + g);
+    }),
+  ];
+}
+
+/** A desk, straight or L: a 25 mm top (the long arm, and in L form the return filling the
+ *  depth it leaves at the right-hand end), the side panel and the two legs the tuck rule
+ *  reads (`surfacePostsLocal`) with a glide under each leg, a pencil drawer under the
+ *  long arm's front edge with a pull, and a cable tray screwed to the underside at the
+ *  back. The drawer and the tray both stop at `DESK_TOP.hang`, the knee room a chair is
+ *  measured against, so nothing hangs lower than the rule says.
+ *
+ *  It replaces a 45 mm slab and a bar floating under the back edge. Drawn at the stored
+ *  size (both desks are parametric, § 36): the panel, legs and drawer are joinery, real
+ *  sizes at every width. Floor piece: `y` runs 0 → h. */
+export function deskForm(dimMM: readonly number[], lShape: boolean): HardPart[] {
+  const [w, d, h] = m(dimMM);
+  const yTop = h - DESK_TOP.top;
+  const yHang = h - DESK_TOP.hang;
+  const glide = 0.008;
+  const armD = lShape ? d * ELL_ARM_DEPTH : d;
+  const armW = w * ELL_RETURN_WIDTH;
+  const posts = surfacePostsLocal(lShape ? 'desk-l' : 'desk-standard', false, w, d);
+  const [panel, ...legs] = posts;
+  // The drawer: centred under the long arm's open front edge — between the panel and the
+  // front leg, or in L form the return — and set 20 mm behind that edge.
+  const xa = panel.x1;
+  const xb = lShape ? w / 2 - armW : legs[1].x0;
+  const cx = (xa + xb) / 2;
+  const dw = Math.min(0.5, (xb - xa) * 0.4);
+  const zf = -d / 2 + armD - 0.02;
+  const front = 0.018;
+  const depth = Math.min(0.38, armD * 0.55);
+  const yPull = (yHang + yTop - 0.004) / 2;
+  // The tray: a shallow channel across the back, its back lip screwed to the top.
+  const tx = w * 0.3;
+  const tz0 = -d / 2 + 0.03;
+  const tz1 = -d / 2 + 0.13;
+  const lip = 0.004;
+  return [
+    slab('top', 'body', -w / 2, w / 2, yTop, h, -d / 2, -d / 2 + armD),
+    ...(lShape ? [slab('top-return', 'body', w / 2 - armW, w / 2, yTop, h, -d / 2 + armD, d / 2)] : []),
+    slab('panel', 'trim', panel.x0, panel.x1, 0, yTop, panel.z0, panel.z1),
+    ...legs.map((r, i) => slab(`leg-${i}`, 'trim', r.x0, r.x1, glide, yTop, r.z0, r.z1)),
+    ...legs.map((r, i) => {
+      const gx = (r.x0 + r.x1) / 2;
+      const gz = (r.z0 + r.z1) / 2;
+      const g = (r.x1 - r.x0) * 0.4;
+      return slab(`glide-${i}`, 'dark', gx - g, gx + g, 0, glide, gz - g, gz + g);
+    }),
+    slab('drawer-box', 'trim', cx - dw / 2 + 0.01, cx + dw / 2 - 0.01, yHang + 0.005, yTop, zf - front - depth, zf - front),
+    slab('drawer-front', 'body', cx - dw / 2, cx + dw / 2, yHang, yTop - 0.004, zf - front, zf),
+    slab('drawer-pull', 'brass', cx - 0.04, cx + 0.04, yPull - 0.004, yPull + 0.004, zf, zf + 0.012),
+    slab('tray', 'dark', -tx, tx, yHang, yHang + lip, tz0, tz1),
+    slab('tray-back', 'dark', -tx, tx, yHang + lip, yTop, tz0, tz0 + lip),
+    slab('tray-lip', 'dark', -tx, tx, yHang + lip, yHang + 0.035, tz1 - lip, tz1),
+  ];
+}
+
+/** A window's joinery, real sizes in metres. */
+export const WINDOW = { casing: 0.05, frame: 0.045, mullion: 0.04, sash: 0.035, sill: 0.03, apron: 0.05, sillReach: 0.12, sillOver: 0.06 } as const;
+
+/** One pane of glass, in the window's own frame: an opening in a sash, at `z`. */
+export interface WindowGlass { x0: number; x1: number; y0: number; y1: number; z: number }
+
+/** A window: `dimMM` is the OPENING — the hole `lib/apertures.ts` cuts in the wall — so
+ *  the frame, the sashes and the glass fill it, and the trim a carpenter puts round a
+ *  window sits on the plaster outside it: a casing up the sides and across the head, a
+ *  sill under the opening reaching into the room, and an apron under the sill. Inside the
+ *  frame, `windowPanes` casements, each a sash with its pane and a brass handle on the
+ *  stile it opens from, divided by mullions.
+ *
+ *  It was a frame of four boxes, a mullion per pane and ONE plane of glass the size of the
+ *  whole opening behind them. The outline is unchanged — 50 mm of casing, the sill 60 mm
+ *  past it each side and 120 mm deep, which is what `DRAWN_RATIO` pins — and the glass is
+ *  handed back on its own because it is the one part that must not cast a shadow: the
+ *  sun reaches the room through this hole and nothing else (`RoomShell`). Drawn at the
+ *  stored size (§ 36: the pane count is a module count). Wall piece: centred on its
+ *  origin, its back on the wall at `-d/2`. */
+export function windowForm(dimMM: readonly number[]): { parts: HardPart[]; glass: WindowGlass[] } {
+  const [w, d, h] = m(dimMM);
+  const { casing, frame, mullion, sash, sill, apron, sillReach, sillOver } = WINDOW;
+  const back = -d / 2;
+  const n = windowPanes(dimMM[0]);
+  const xi = w / 2 - frame;
+  const yi = h / 2 - frame;
+  const pw = (2 * xi - (n - 1) * mullion) / n;
+  // Every sash sits in the frame's depth, set in from both faces so none of its faces
+  // lies on the frame's.
+  const sz0 = back + d * 0.3;
+  const sz1 = d / 2 - d * 0.15;
+  const parts: HardPart[] = [
+    // On the plaster, outside the opening.
+    slab('casing-head', 'body', -w / 2 - casing, w / 2 + casing, h / 2, h / 2 + casing, back, back + 0.02),
+    slab('casing-l', 'body', -w / 2 - casing, -w / 2, -h / 2, h / 2, back, back + 0.02),
+    slab('casing-r', 'body', w / 2, w / 2 + casing, -h / 2, h / 2, back, back + 0.02),
+    // At least 60 mm past the frame's room face, however deep the frame.
+    slab('sill', 'body', -w / 2 - sillOver, w / 2 + sillOver, -h / 2 - sill, -h / 2, back, back + Math.max(sillReach, d + 0.06)),
+    slab('apron', 'trim', -w / 2 - casing, w / 2 + casing, -h / 2 - sill - apron, -h / 2 - sill, back, back + 0.02),
+    // In the opening.
+    ...border('frame', 'body', -w / 2, w / 2, -h / 2, h / 2, frame, frame, back, d / 2),
+  ];
+  const glass: WindowGlass[] = [];
+  for (let i = 0; i < n; i++) {
+    const x0 = -xi + i * (pw + mullion);
+    const x1 = x0 + pw;
+    if (i > 0) parts.push(slab(`mullion-${i}`, 'body', x0 - mullion, x0, -yi, yi, back + d * 0.1, d / 2 - d * 0.1));
+    parts.push(...border(`sash-${i}`, 'panel', x0, x1, -yi, yi, sash, sash, sz0, sz1));
+    glass.push({ x0: x0 + sash, x1: x1 - sash, y0: -yi + sash, y1: yi - sash, z: (sz0 + sz1) / 2 });
+    // The handle on the stile the casement opens from: the meeting stile of a pair, the
+    // right-hand one otherwise.
+    const right = n === 1 || i % 2 === 0;
+    const hx = right ? x1 - sash / 2 : x0 + sash / 2;
+    parts.push(slab(`handle-${i}`, 'brass', hx - 0.006, hx + 0.006, -0.05, 0.05, sz1, sz1 + 0.015));
+  }
+  return { parts, glass };
+}
+
+/** A laptop's proportions: the base's thickness and the lid's as shares of the height,
+ *  and how far back the open lid leans from upright, in radians. */
+export const LAPTOP = { base: 0.065, lid: 0.03, tilt: 0.34, keyCols: 12, keyRows: 5 } as const;
+
+/** An open laptop: `base` stands on the desk; `lid` is in the lid's own frame — the hinge
+ *  on its origin, the lid running up `+y`, its screen facing `+z` — and `hinge` says where
+ *  that frame sits and how far it leans back. The renderer turns the lid by `-tilt` about
+ *  `x` at `[0, y, z]`.
+ *
+ *  The base is a unibody slab on four rubber feet, with a keyboard of `keyCols` keys in
+ *  `keyRows` rows and a space-bar row below them, a trackpad, and a hinge barrel along
+ *  its back edge. The lid is a shell in the piece's colour faced with a dark bezel, the
+ *  screen and a camera in it.
+ *
+ *  `dimMM`'s height is the OPEN height, and the lid's length is solved for it: its top
+ *  front edge lands on `h` exactly, where a fixed-length lid on a 20 mm hinge stood 7 mm
+ *  over it. The lean is real and stays outside the depth, which describes the base — a
+ *  laptop open on a desk does lean behind its own footprint (`footprint-fidelity` pins
+ *  it). Every length is a share of its own axis (§ 36: the laptop is group-scaled), the
+ *  lid's along its own frame. Floor piece: `y` runs 0 → h. */
+export function laptopForm(dimMM: readonly number[]): { base: HardPart[]; lid: HardPart[]; hinge: { y: number; z: number; tilt: number } } {
+  const [w, d, h] = m(dimMM);
+  const { tilt, keyCols, keyRows } = LAPTOP;
+  const t = h * LAPTOP.base;
+  const foot = h * 0.006;
+  const kh = h * 0.004;
+  const hingeY = t * 0.6;
+  const hingeZ = -d / 2 + d * 0.05;
+  const L = (h - hingeY) / Math.cos(tilt);
+  const lt = d * 0.028;
+  const base: HardPart[] = [
+    slab('base', 'body', -w / 2, w / 2, foot, t, -d / 2, d / 2),
+    ...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz], i) => slab(`foot-${i}`, 'dark', sx * w * 0.42 - w * 0.03, sx * w * 0.42 + w * 0.03, 0, foot, sz * d * 0.4 - d * 0.02, sz * d * 0.4 + d * 0.02)),
+  ];
+  // The keyboard: a grid across the back of the deck, each key a share of its pitch.
+  const kx = w * 0.42;
+  const kz0 = -d * 0.4;
+  const kz1 = -d * 0.02;
+  const px = (2 * kx) / keyCols;
+  const pz = (kz1 - kz0) / (keyRows + 1);
+  const key = (k: string, x0: number, x1: number, row: number) =>
+    slab(k, 'dark', x0 + px * 0.08, x1 - px * 0.08, t, t + kh, kz0 + row * pz + pz * 0.1, kz0 + (row + 1) * pz - pz * 0.1);
+  for (let r = 0; r < keyRows; r++) {
+    for (let c = 0; c < keyCols; c++) base.push(key(`key-${r}-${c}`, -kx + c * px, -kx + (c + 1) * px, r));
+  }
+  // The bottom row: two modifiers each side of a space bar the width of the middle six.
+  base.push(key('key-mod-0', -kx, -kx + px, keyRows), key('key-mod-1', -kx + px, -kx + 3 * px, keyRows));
+  base.push(key('key-space', -kx + 3 * px, kx - 3 * px, keyRows));
+  base.push(key('key-mod-2', kx - 3 * px, kx - px, keyRows), key('key-mod-3', kx - px, kx, keyRows));
+  base.push(slab('trackpad', 'panel', -w * 0.18, w * 0.18, t, t + kh * 0.5, d * 0.08, d * 0.42));
+  base.push({ kind: 'strut', key: 'hinge', tone: 'trim', r: t * 0.45, a: [-w * 0.45, hingeY, hingeZ], b: [w * 0.45, hingeY, hingeZ] });
+  const lid: HardPart[] = [
+    slab('lid', 'body', -w / 2, w / 2, 0, L, -lt, 0),
+    slab('bezel', 'dark', -w * 0.49, w * 0.49, L * 0.02, L * 0.99, 0, lt * 0.25),
+    slab('screen', 'screen', -w * 0.455, w * 0.455, L * 0.07, L * 0.93, lt * 0.25, lt * 0.3),
+    slab('camera', 'dark', -w * 0.006, w * 0.006, L * 0.95, L * 0.96, lt * 0.25, lt * 0.3),
+  ];
+  return { base, lid, hinge: { y: hingeY, z: hingeZ, tilt } };
 }
 
 /** A column radiator's pieces: `columns`, the enamelled tubes, their rounded ends and the

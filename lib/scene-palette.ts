@@ -99,6 +99,9 @@ export const DETAIL = {
   upholstery: '#CBBCA2',
   /** A mirror's silvered glass: a cool grey with a gentle gloss, not a chrome plate. */
   mirror: '#CDD7DF',
+  /** A window's panes: a pale sky tint, drawn translucent. It was a literal in the
+   *  renderer. */
+  windowGlass: '#BFD9EC',
   /** A print's mat, the cream card between the frame and the picture. */
   mat: '#F2EEE6',
   /** A print's three colour fields, floated on the user's colour as its ground: the
