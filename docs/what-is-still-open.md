@@ -4227,11 +4227,43 @@ the raw map (above). Twenty-one more mutants, twenty-one killed.
   the plan drops a drag's held landing that an arrow key mid-drag has already replaced.
   Fifteen mutants, fifteen killed; the 3D drop has no harness and is in
   `docs/visual-check.md`.
-- **Wall moves the piece and its riders, and nothing else, unchecked.** Merged-set siblings
-  stay behind, as they always did, and the riders are written without the containment and
-  collision checks a drag's company gets — a lamp overhanging the back of its nightstand
-  goes into the plaster. Routing Wall through `planConvoy` + `resolveConvoy` is the fix
-  for both, and it has to decide what Wall says when a member cannot follow.
+- **FIXED 2026-10-02: Wall moves through the convoy.** It moved the piece and its riders,
+  and nothing else, unchecked: merged-set siblings and the rest of the selection stayed
+  behind, a press into a taken wall spot stacked the piece inside its neighbour, and a lamp
+  sent to the wall from a nightstand hung at nightstand height. `lib/to-wall.ts` makes the
+  press a drag that lets go at the wall spot: `planConvoy`, the lead resolved there with
+  snap off, `settleLead`, `resolveConvoy`, then one write and one `landAll`. It decides
+  what a drag does not have to. A set that runs out of room on the way **stops short**,
+  which is the drag's slide, and the panel says so — a button has no hand watching it. A
+  member that cannot follow at all refuses the press and is named. A set that must stop
+  short at a spot the piece cannot stand on is refused as a set, with no piece named,
+  because no one piece is the reason. A piece already there is told so, not written —
+  and "there" is anywhere between its wall spot and the plaster, because a drag clamps
+  flush with the plaster and the button pulling that piece 20 mm back into the room is a
+  move AWAY from the wall. The line sits under the Wall and Floor buttons and shows only
+  while the room it describes stands: any move, turn, resize or change of selection
+  takes it down.
+  Three decisions came out of the one review round, each measured before it was made.
+  **A piece with company never turns.** The convoy translates and never turns, so a desk
+  turned to meet the nearer side wall arrived with its chair at its end instead of its
+  front — valid, and silent — and a merged bed turned onto its own nightstands was
+  refused as "something is in the way". It goes to the nearest wall it already backs
+  onto instead, says so, and refuses when there is none (an angled piece); that is
+  `Convoy.leadEdge`'s decision for a drag, made for a button. "Backs onto" means a step
+  BACK: in an L the notch's wall faces the way the far wall does, and from the stem it is
+  reached by walking forward through the corner. **The lead obeys the convoy's climb
+  rule**, since gravity is now the drag's: a crate sent to a wall where a sideboard stands
+  was set on top of it. **Every member that cannot follow is named**, in the drag's own
+  words, because a button has no outline to show the rest. Thirty-six mutants over the
+  two rounds, all killed bar one dead input (`company`, which does nothing with snap off)
+  that was removed. Floor is unchanged.
+- **The lead's own riders are carried unchecked, in a drag and in Wall.** `resolveConvoy`
+  cascades what stands on the piece under the hand (`ownAt`) with no containment or
+  collision test, so a lamp overhanging the back of its nightstand goes 30 mm into the
+  plaster when the nightstand is sent flush to the wall — measured while building the
+  fix above, and older than it. Making the riders count toward the lead's own
+  containment in `lib/drag-resolve.ts` is the likely fix; the Ideas solver already does
+  the equivalent (SG-P4).
 - **A drag out and back pins its riders.** Undoing that means deleting the overrides the
   gesture itself created, which neither tab can do today.
 

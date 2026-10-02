@@ -218,7 +218,7 @@ anywhere on those is the old bug back.
 `components/three/Highlight.tsx` + `components/three/RoomShell.tsx` +
 `components/three/Room.tsx`.
 
-### A lamp carried in a selection onto the other nightstand stays with it — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+### A lamp carried in a selection onto the other nightstand stays with it — merged to `main` in `e2b77f1` (PR #224), NOT LOOKED AT
 
 In the seeded bedroom, shift-click a floor piece and the lamp on the left nightstand, and
 drag the floor piece until the lamp stands on the right nightstand. Then drag the RIGHT
@@ -234,6 +234,31 @@ before it. The lamp left behind after that notch is the review's finding back.
 
 **Where it rides.** `lib/drag-convoy.ts` + `components/three/Draggable.tsx` +
 `components/studio/PlanView.tsx`.
+
+### Wall takes the whole selection, and says when it cannot — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+
+The Inspector's **Wall** button used to move the selected piece and what stood on it, and
+nothing else, with no check. It now moves like a drag. In the seeded living room the Sofa
+already stands against its wall, so press Wall on it first: it should say *already
+against the nearest wall* and do nothing. Then, in 2D Plan, drag the Coffee table and the
+Plant out into open floor, a metre or more from every wall, shift-click both, and press
+**Wall** with the Coffee table selected: both go, the Plant by the same step and at its
+own angle. If the nearest wall would have turned the table, it goes to the wall behind it
+instead and the line under Wall and Floor says so. Next, drag a third piece onto the
+spot the Plant would land on and press again: nothing moves, and the line names the
+Plant. Move anything or change the selection and the line goes. Last, set a table lamp
+on a nightstand away from the walls and press Wall with the lamp selected: it should
+land on the floor at the wall, not float at nightstand height, which is what it did.
+
+What would be wrong: the line overflowing the rail at its narrowest width (it wraps, like
+the size refusal below it), the line staying after something moves, a selection that
+moves only partly, or a set arriving with a piece turned and its company not. A set that
+stops short of the wall is allowed — a drag does the same when a member meets the wall
+first — but the line must then say so.
+
+**Gates.** `tests/to-wall.test.ts`, `tests/inspector-carries-riders.test.tsx`.
+
+**Where it rides.** `lib/to-wall.ts` + `components/studio/Inspector.tsx`.
 
 ### A fan dropped onto a fan moves aside, and a bed set stops at the wardrobe — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 
