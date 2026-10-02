@@ -108,6 +108,20 @@ describe('the dining chair', () => {
         expect(rail.hi[2]).toBeLessThan(front.hi[2]);
         expect(rail.hi[1], `${at}: under the pad`).toBeLessThan(pad.lo[1]);
       }
+      // The front and back rails are set in from the legs' faces, never flush with them —
+      // a rail face on a leg face is one plane drawn twice, and it shimmers — with both of
+      // their faces inside the legs they join.
+      const front = get(f.parts, 'leg-f1');
+      const rear = get(f.parts, 'leg-r1');
+      const railF = get(f.parts, 'rail-front');
+      const railB = get(f.parts, 'rail-back');
+      expect(railF.hi[2], `${at}: front rail set in`).toBeLessThan(front.hi[2] - EPS);
+      expect(railF.lo[2], `${at}: front rail in its legs`).toBeGreaterThan(front.lo[2] + EPS);
+      expect(railB.hi[2], `${at}: back rail set in`).toBeLessThan(rear.hi[2] - EPS);
+      expect(railB.lo[2], `${at}: back rail in its legs`).toBeGreaterThan(rear.lo[2] + EPS);
+      // One stock for the whole frame: the back rail is the front rail's thickness.
+      expect(railB.hi[2] - railB.lo[2], `${at}: one rail stock`).toBeCloseTo(railF.hi[2] - railF.lo[2], 12);
+      expect(railF.hi[2] - railF.lo[2]).toBeCloseTo((dimMM[1] / 1000) * DINING_CHAIR.rail, 12);
       // A low stretcher, and the slats standing in both back rails.
       expect(get(f.parts, 'stretcher-1').hi[1], at).toBeLessThan(h * 0.2);
       const low = get(f.parts, 'rail-low');
@@ -141,6 +155,25 @@ describe('the office chair', () => {
         const spoke = get(f.parts, `spoke-${i}`);
         expect(stem.lo[1], `${at} ${i}`).toBeLessThan(partExtent(casters[i]).hi[1]);
         expect(stem.hi[1]).toBeGreaterThan(spoke.lo[1]);
+      }
+      // A caster is rubber on a steel star.
+      for (const c of casters) expect(c.tone, `${at} ${c.key}`).toBe('dark');
+      for (let i = 0; i < 5; i++) expect(f.parts.find((p) => p.key === `spoke-${i}`)!.tone).toBe('steel');
+      // Each arm stands on a post that rises out of its bracket and into the pad.
+      for (const s of [-1, 1]) {
+        const bracket = get(f.parts, `bracket${s}`);
+        const post = get(f.parts, `arm-post${s}`);
+        const arm = get(f.parts, `arm${s}`);
+        expect(post.lo[1], `${at} ${s}: the post stands in its bracket`).toBeLessThan(bracket.hi[1]);
+        expect(post.lo[1]).toBeGreaterThan(bracket.lo[1]);
+        expect(post.hi[1], `${at} ${s}: and reaches into the arm`).toBeGreaterThan(arm.lo[1]);
+        expect(post.hi[1]).toBeLessThan(arm.hi[1]);
+        for (const k of [0, 2]) {
+          expect(post.lo[k], `${at} ${s} axis ${k}: over the bracket`).toBeGreaterThanOrEqual(bracket.lo[k] - EPS);
+          expect(post.hi[k]).toBeLessThanOrEqual(bracket.hi[k] + EPS);
+          expect(post.lo[k], `${at} ${s} axis ${k}: under the arm`).toBeGreaterThanOrEqual(arm.lo[k] - EPS);
+          expect(post.hi[k]).toBeLessThanOrEqual(arm.hi[k] + EPS);
+        }
       }
       // Hub, cover, lift, mechanism: each reaches into the next.
       const chain = ['hub', 'cover', 'lift', 'mechanism', 'pan'].map((k) => get(f.parts, k));

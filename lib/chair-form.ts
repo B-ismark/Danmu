@@ -190,7 +190,7 @@ export function officeChairForm(dimMM: readonly number[]): OfficeChairForm {
   );
   for (const s of [-1, 1] as const) {
     const xs = (a: number, b: number): [number, number] => (s < 0 ? [-b, -a] : [a, b]);
-    parts.push(slab(`bracket${s}`, 'dark', ...xs(w * 0.1, w * 0.455), h * 0.38, h * 0.398, -d * 0.13, -d * 0.05));
+    parts.push(slab(`bracket${s}`, 'dark', ...xs(w * 0.1, w * 0.485), h * 0.38, h * 0.398, -d * 0.13, -d * 0.05));
     parts.push(slab(`arm-post${s}`, 'dark', ...xs(w * 0.435, w * 0.475), h * 0.385, yArm - h * 0.012, -d * 0.12, -d * 0.06));
     parts.push(slab(`arm${s}`, 'dark', ...xs(w * 0.42, w * 0.49), yArm - h * 0.028, yArm, -d * 0.28, d * 0.2));
   }
