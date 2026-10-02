@@ -696,7 +696,7 @@ console pulls read as dark bronze, not bright brass. That is the brass the curta
 uses with no reflections to catch, and it needs a real GPU and a human eye to say whether it
 reads as metal. The default door colour is also dark enough that its panels show only faintly.
 
-### A television, a nightstand and a stool drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### A television, a nightstand and a stool drawn as the real objects — merged to `main` in `7cea640` (PR #219), NOT LOOKED AT
 
 **The next round of the same realism ask**, in the same module (`lib/hard-goods.ts`):
 
@@ -727,6 +727,34 @@ through the seat's top, a drawer box showing through the nightstand's back as th
 starts to open, or the TV's frame flickering against the screen. **One to judge on purpose:**
 the knobs are the same brass as the console pulls, which reads as dark bronze in
 screenshots. On a dark wood nightstand they nearly disappear.
+
+### A floor lamp and a table lamp drawn as the real objects, lit from their own bulbs — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+**Round three of the realism ask** (`lib/lamp-form.ts`):
+
+- **Floor lamp.** A wide, low brass disc you could not tip it off, a turned collar, a slim
+  pole, and a socket holding a bulb up inside a near-upright drum shade, open at the bottom.
+  It was a cone on a stick on a puck.
+- **Table lamp.** A glazed ceramic vessel — a turned foot, a full belly and a short neck,
+  in a soft sage glaze — under a brass stem, socket and bulb, inside the same kind of drum.
+  It was a cone on a rod.
+
+**The half that is not cosmetic: where the light comes from.** Both lamps used to emit from a
+fixed height while the lamp itself stretched to its size, so a tall floor lamp lit the
+ceiling from above its own shade and a tall table lamp lit from inside its stem. The light
+now comes from the drawn bulb at every size.
+
+**Where to click.** Add both lamps from the Library, switch to an evening mood and turn them
+on. Orbit at eye level, from a seated height, and from above. Stretch each from shortest to
+tallest and narrowest to widest, and make one oval by changing only its depth. Recolour both.
+
+**What right looks like.** The glow pools *under* the shade and the inside of the drum is
+lit, at every size. From a seated eye you can see the bulb through the open bottom; from
+standing you cannot. The vessel reads as one turned piece, not three stacked lumps. *Wrong*
+looks like a bright patch on the ceiling above the shade, a dark shade with the light
+somewhere below it, a bulb poking out of the drum's mouth on a short lamp, or the pole
+standing clear of the base. **One to judge on purpose:** the sage glaze is a fixed colour;
+recolouring tints the shade only — the brass and the ceramic stay as they are, which may read as the colour control doing too little. And the floor lamp's base is a large disc of the same brass as the console pulls, which reads as dark bronze in screenshots — it is the darkest thing in a light room.
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 

@@ -43,6 +43,7 @@ import {
   type Poly,
 } from './geometry';
 import { aabbExtents, polygonWinding } from './geometry';
+import { lampForm } from './lamp-form';
 import { backWall, baySides, roomBays, splitBay, type Bay } from './room-bays';
 import {
   accessZones,
@@ -124,10 +125,9 @@ export type DecorItem = { id: string; kind: DecorKind; x: number; z: number };
 //
 // Units are real (see lib/light-units.ts) so two lamps relate correctly to each
 // other. Where the bulb physically sits inside each shape belongs with that
-// shape's geometry, not here — see `lightAnchor` in components/three/PartLight.tsx.
-// For the pendant that IS this file now (`pendantDrop().bulbY`), which is the point:
-// the emitter reads the function the mesh is drawn from rather than a copy of last
-// year's answer to it.
+// shape's geometry, not here — see `lightAnchor` below, which reads the function each
+// lamp's mesh is drawn from (`pendantDrop().bulbY`, `lampForm().bulb`) rather than a
+// copy of last year's answer to it.
 
 export type PartLight = {
   /** Luminous flux off the box. 800 lm is the usual "60 W equivalent". */
@@ -408,41 +408,30 @@ export {
   LEAF_MESH, plantForm, plantLeafPoints, type PlantForm, type PlantLeaf, type PlantStem,
 } from './plant-form';
 
-/** Where the bulb sits inside each fixture, in the part's local metres. These
- *  track the geometry in DynamicPart — a light at the origin would sit on the
- *  floor and illuminate the inside of its own shade.
+/** The bulb's local position for a part, derived where the geometry derives: every
+ *  fixture reads the same function its renderer draws the bulb from, so the emitter and
+ *  the glowing bulb are one number by construction rather than by two people
+ *  remembering. A light at the origin would sit on the floor and illuminate the inside
+ *  of its own shade, which is what anything that is not a lamp gets — none of it emits.
  *
- *  **A shape whose bulb moves with its size cannot live in this table**, and the
- *  pendant is the one that does. Its row used to read `[0, -0.05, 0]`, which was a
- *  hand-typed copy of the `sphereGeometry` position in `PendantLampGeo`; correct
- *  while that position was a literal, and silently wrong the moment it became a
- *  function of `dimMM`. Measured before it was fixed: at the catalogue 350x400 the
- *  emitter sat 62 mm above its own glowing sphere, and at 350x900 it sat 285 mm
- *  above it and **190 mm above the shade's own rim** — a 110-degree spot, the
- *  brightest fixture in the catalogue and a shadow-caster candidate, emitting from a
- *  point on the bare cord with its shade underneath it as an occluder.
+ *  `lamp-pendant` reads `pendantDrop`. Its row in the old `LIGHT_ANCHORS` table read
+ *  `[0, -0.05, 0]`, a hand-typed copy of the `sphereGeometry` position in
+ *  `PendantLampGeo`: correct while that position was a literal, and silently wrong the
+ *  moment it became a function of `dimMM`. At 350x900 the emitter sat 285 mm above its
+ *  own glowing sphere and **190 mm above the shade's own rim** (§ 34).
  *
- *  So it is `lightAnchor`, not a lookup: a shape that derives comes from the same
- *  function the renderer draws from, and one that does not keeps its constant. */
-const LIGHT_ANCHORS: Partial<Record<Shape, [number, number, number]>> = {
-  'lamp-table': [0, 0.4, 0],
-  'lamp-floor': [0, 1.66, 0],
-};
-
-/** The bulb's local position for a part, derived where the geometry derives.
- *
- *  `lamp-pendant` reads `pendantDrop` — the same call `PendantLampGeo` makes for
- *  the mesh — so the emitter and the sphere are one number by construction rather
- *  than by two people remembering. Everything else falls back to `LIGHT_ANCHORS`,
- *  whose entries are constants because those shapes draw their bulbs at constants.
- *  (`lamp-table` and `lamp-floor` are the same class of hazard waiting to happen:
- *  the day either renderer starts reading `dimMM`, its row has to move here too.) */
+ *  The floor and table lamps are the same defect, and were kept in that table on a claim
+ *  that was false: that they "draw their bulbs at literals". Their geometry was literals
+ *  inside `FitToDim`, which stretches it to the declared size, so their shades moved with
+ *  the size and their light did not. A 1500 mm floor lamp emitted from 1.66 m — 160 mm
+ *  above its own top; a 900 mm table lamp from 0.40 m, in its stem 150 mm below the
+ *  shade. They read `lampForm` now, and the table is gone. */
 export function lightAnchor(
   shape: Shape,
   dimMM: [number, number, number],
 ): [number, number, number] {
   if (shape === 'lamp-pendant') return [0, pendantDrop(dimMM[0], dimMM[2]).bulbY, 0];
-  return LIGHT_ANCHORS[shape] ?? [0, 0, 0];
+  return lampForm(shape, dimMM)?.bulb ?? [0, 0, 0];
 }
 
 /** True for shapes that are fixtures — the Inspector shows lighting controls for

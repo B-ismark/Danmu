@@ -290,8 +290,8 @@ backend, no account. The 3D studio *is* the product.
    `lib/parts-catalog.ts`). 3D scene, 2D plan, inspector, catalog and decor all
    read from it. Add a shape / behaviour flag there, not ad-hoc in a component.
    **Adding a shape has a written contract** — `Design.md` § Adding a shape for the
-   eleven places and why, `tests/shape-contract.test.ts` for the executable half. Read
-   it before adding one; the SIX `Partial<Record<Shape, …>>` tables are the half
+   ten places and why, `tests/shape-contract.test.ts` for the executable half. Read
+   it before adding one; the FIVE `Partial<Record<Shape, …>>` tables are the half
    the compiler does not hold (the layout zones are not among them — they are keyed
    on `Role`, reached through `ROLE_BY_SHAPE`), and a shape absent from one does not
    fail, it

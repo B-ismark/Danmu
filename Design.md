@@ -1791,7 +1791,7 @@ shape still untested.
 
 ### Adding a shape — the contract
 
-Eleven places — five you add the shape to and six tables it otherwise inherits from
+Ten places — five you add the shape to and five tables it otherwise inherits from
 its category — and knowing which of them the compiler holds is the whole point. It
 holds **one**. This list is the answer to "what rules does a new model have to
 follow"; the executable half is `tests/shape-contract.test.ts`, whose clauses are
@@ -1813,7 +1813,7 @@ right size, which reads as deliberately blocky furniture rather than as a missin
 Those four are the first clauses of the contract, and they exist because the compiler
 does not cover them.
 
-**The six `Partial<Record<Shape, …>>` tables, which is where shapes go wrong.** A partial
+**The five `Partial<Record<Shape, …>>` tables, which is where shapes go wrong.** A partial
 table is how a shape inherits behaviour from its category, and inheriting is silent — you
 get an answer, just not yours.
 
@@ -1823,14 +1823,23 @@ get an answer, just not yours.
 | `ANCHOR_BY_SHAPE` | `physics.ts` | **the scar below** |
 | `ROLE_BY_SHAPE` | `layout-rules.ts` | role `other`: no access zone, nothing it belongs beside, and no `RULE_HANDLING` term that can move it |
 | `LIGHT_BY_SHAPE` | `scene-spec.ts` | a fixture that looks lit and emits nothing |
-| `LIGHT_ANCHORS` | `three/PartLight.tsx` | the bulb sits on the floor and lights the inside of its own shade |
 | `MODULE_RANGE` | `scene-spec.ts` | a parametric piece tiles at the wrong module count |
 
 The room-layout rules are **not** in that list and it matters: `ACCESS_BY_ROLE` and the
 belongs-together relations are keyed on **`Role`**, not on `Shape`. A shape never joins
 them directly — it reaches them through `ROLE_BY_SHAPE`, which is why that row is the one
-to get right. Only the first four have a contract clause today; `LIGHT_BY_SHAPE`,
-`LIGHT_ANCHORS` and `MODULE_RANGE` do not, and that is a gap rather than a decision.
+to get right. Only the first four have a contract clause today; `LIGHT_BY_SHAPE` and
+`MODULE_RANGE` do not, and that is a gap rather than a decision.
+
+There used to be a sixth, `LIGHT_ANCHORS` — where in a fixture its light comes from — and
+it is **deleted** rather than listed, because every row it held was a hand-typed copy of
+a bulb the renderer drew somewhere else. The pendant's row went stale when its bulb began
+deriving from `dimMM` (§ 34); the two lamp rows were pinned by a test under the claim
+that those bulbs were drawn "at literals", while `FitToDim` stretched both lamps to their
+declared size — a 1500 mm floor lamp lit from 160 mm above its own top. `lightAnchor`
+reads the same function the bulb is drawn from (`pendantDrop`, `lampForm`) and answers
+the origin for anything else, so a new light-giving shape that draws a bulb owes it a
+branch there, not a row.
 
 **The scar.** `fan-standing` shipped with no `ANCHOR_BY_SHAPE` row, so it took its
 category's — and `fan` means the *ceiling* one. A 1300 mm pedestal fan hung from the
@@ -3175,6 +3184,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | `lib/plant-form.ts` | **The plant, drawn at its own size.** Pure: `plantForm(dimMM)` returns the pot, the stems and the leaves, in metres, and `PlantGeo` instances them (one unit leaf, one unit stalk). The box's proportions choose the habit rather than stretching one drawing: tall for its spread is a fig (a bare trunk, broad leaves up the top), squat is an arching bush (stems out of the soil), in between is a blend, a long narrow box is a row of plants in a trough. Every leaf is the same unit leaf scaled evenly, so none is ever squashed, and each is solved to stay inside the w × d ellipse the plan draws. Re-exported from `scene-spec.ts`. |
 | `lib/soft-goods.ts` | **The soft things, drawn as cloth.** Pure meshes in metres for everything a room holds that is not hard: cushions (seat, back, scatter, pillow), the duvet and its turned-back sheet, the garments on a clothes rail, the shoes on a rack, a curtain's folds. A unit mesh (a cushion, a garment, a shoe) never leaves the box it is scaled to, so the box that collides and the box the plan draws are the box the cloth is drawn inside; a per-piece mesh (a duvet, a curtain) is authored at the piece's own `dimMM` and memoised by size. `SofaGeo`, `ArmchairGeo`, `BedGeo`, `ShoeRackGeo`, `ClothesRackGeo` and `CurtainGeo` draw them through `SoftInstances` / `SoftMesh` (`components/three/Box.tsx`). Cushions are placed by where their **cloth** reaches (`meshExtent`, the same XYZ turn three applies), never by their box's corners, because a cushion's lowest point is its seam — box-corner placement floated pillows 30 mm over the mattress — and sized against what they must stay below by the cloth's own height (`standingHeight`). Colours are not here; tones index `DECOR` in `scene-palette.ts`. |
 | `lib/hard-goods.ts` | **The hard half: casework, appliances and joinery.** Each of eleven shapes (chest freezer, AC unit, soundbar, water dispenser, washing machine, microwave, television, TV console, door, nightstand, stool) is a list of named parts — boxes, upright posts, front-facing discs and rings, and struts at any angle (`strutPose` turns a cylinder onto one) — in the piece's own frame, and its renderer in `DynamicPart.tsx` only colours them (`HardParts`, tones resolved against `DETAIL` or a shade of the body). Two rules, both swept in `tests/hard-goods.test.ts` at every corner of each size band: nothing leaves the declared box except a door's lever and hinge knuckles, and the seven group-scaled forms are **proportions only** — scaling one axis moves and grows every part along that axis alone — so § 36 holds for a module the renderer regex cannot see. The four parametric forms carry real joinery: a TV console's 18 mm doors and its bay count (`consoleBays`, 550 mm a bay, two to five), a door's stiles, rails and 50 mm lever (`LEVER_PROUD`), a nightstand's overhang, reveals and drawer travel (`NIGHTSTAND`, `nightstandSlide`), and a stool's 16 mm splayed legs and stretchers (`STOOL`), whose feet are lifted by exactly the dip of their square-cut ends so they stand on the floor. |
+| `lib/lamp-form.ts` | **The floor and table lamps, and where each one's light comes from.** A floor lamp is a weighted brass disc, a turned collar, a slim pole and a socket carrying a bulb up into a near-upright open drum; a table lamp is a glazed ceramic vessel — foot, belly and neck, each sunk into the next so it reads as one turned piece — under a brass stem. Both are hard-goods parts (posts and the `ball` ellipsoid, which the bulbs and the belly are), NON-parametric and ROUND, so § 36 holds and `tests/hard-goods.test.ts` sweeps them with the rest. The bulb is the half that is not cosmetic: `lightAnchor` reads `lampForm(…).bulb`, the same call the bulb is drawn from, where it used to read hand-typed constants that stayed put while `FitToDim` stretched the lamp — a 1500 mm floor lamp emitted from 160 mm above its own top and a 900 mm table lamp from inside its stem. The bulb's height is a share of the DRUM's height, not of the width, so a squat lamp's shallow shade still holds it; `tests/lamp-form.test.ts` holds the bulb inside the drum, clear of both openings, across 82 sizes of each band. Imports only a type, because `scene-spec.ts` imports it and `hard-goods.ts` imports `scene-spec.ts`. |
 | `lib/parts-catalog.ts` | Room defaults + catalog data. |
 | `lib/scene-store.ts` | Scene parts CRUD + grouping. |
 | `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`, `version`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. `reslotCaptures` moves the whole set of wall photos in one operation, for three reasons that each cost something: the WHOLE record travels (the pairwise swap it replaces re-wrote `{ slot, blob, takenAt }` and silently dropped `pose`, so reordering photos threw away the focal length, the tilt and the bearing — `pose` being optional is what let it typecheck); writes precede deletes (a vacated key that outlives its write is a duplicate the user can delete, a deleted key whose write never landed is a photograph that is gone); and a mapping that would land two photos on one wall is refused rather than absorbed. |
