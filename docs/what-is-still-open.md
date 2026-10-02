@@ -3887,7 +3887,18 @@ clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/
   staying on the floor, clashing, until it is dragged clear — changes § H.6.4, so it is not
   decided here. **Answered 2026-09-30: a drag stays as it is**, so the nudged ottoman goes
   on top. The user added one thing: Ideas must never show a seat standing on a table or a
-  bed. Not built yet, and to be measured first.
+  bed. **Built 2026-10-02.** Measured first: with an ottoman on the coffee table, 48 of 48
+  ideas across the five presets kept it on the top, because an idea moves pieces across the
+  floor and keeps each one's height. `seatsDown` (`lib/layout-ideas.ts`) now sets a seat on a
+  table or the bed down on the floor before the search, carrying whatever stands on it, and
+  the panel counts it as moved: 0 of 59. A platform is a floor, so a seat on one stays. Two
+  finds on the way. `ridingParents` said a piece with a lamp on it rode NOTHING, because it
+  asked about every top under the piece, its own load included; it asks only below its own
+  bottom now, as `restingOn` does. And one pass is not enough: a stool on the ottoman sits
+  level with the table top once the ottoman comes down, so the solver (which carries riders
+  by `ridingParents` on the room it is handed) would read it as standing on the table. It
+  re-reads until no seat is left on a top. The refusal sentence still reads the room on
+  screen, so a lowered ottoman inside its table does not send a clean room to Fix.
 
 **§ H.6.5 · FIXED 2026-09-30: a merged set is one body to the solver.** The second half of
 the first observation above. Merging says *these belong together as they stand*: a click

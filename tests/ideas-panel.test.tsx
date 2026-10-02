@@ -26,6 +26,7 @@ import { roomStore } from '@/lib/storage';
 import type { SolveResult } from '@/lib/layout-solve';
 import { viewportAt } from './helpers/mount';
 import { DRY_SEARCHES } from '@/lib/layout-ideas';
+import { ridingParents } from '@/lib/rigid-parent';
 
 const ROOM_ID = 'ideas-room';
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('ideas-room'));
@@ -37,6 +38,8 @@ let calls = 0;
 /** What the stand-in does: hand out four ideas a call; throw; or four once and then
  *  nothing, which is a room that runs dry after one page. */
 let mode: 'four' | 'throw' | 'once' = 'four';
+/** The room the stand-in was last handed, as the solver would see it. */
+let handed: ScenePart[] = [];
 
 vi.mock('@/lib/layout-shuffle', async () => {
   const actual = await vi.importActual<typeof import('@/lib/layout-shuffle')>('@/lib/layout-shuffle');
@@ -44,6 +47,7 @@ vi.mock('@/lib/layout-shuffle', async () => {
     ...actual,
     shuffleRoom: (parts: ScenePart[], _room: unknown, locked: boolean[]) => {
       calls += 1;
+      handed = parts;
       if (mode === 'throw') throw new Error('solver fell over');
       if (mode === 'once' && calls > 1) return { tried: 12, clean: 0, ideas: [] };
       const m = parts.findIndex((p, i) => !locked[i] && !p.wallMounted);
@@ -68,9 +72,9 @@ const HEIGHT = 2.5;
 let parts: ScenePart[] = [];
 let restoreViewport: (() => void) | null = null;
 
-function mount() {
+function mount(edit: (parts: ScenePart[]) => ScenePart[] = (p) => p) {
   const footprint = footprintForLayout('rect', W, D);
-  parts = defaultScene('rect', W, D, { footprint, height: HEIGHT });
+  parts = edit(defaultScene('rect', W, D, { footprint, height: HEIGHT }));
   act(() => {
     useScene.setState({
       parts,
@@ -150,6 +154,37 @@ describe('the ideas gallery', () => {
     });
     expect(useStudio.getState().positions).toEqual({});
     expect(screen.queryByRole('button', { name: /Back to your room/ })).toBeNull();
+  });
+
+  // User call 2A: a drag may stand a seat on a coffee table, and Ideas never shows one
+  // there. The stand-in moves the sofa and not the ottoman, which is the case that has
+  // to be written anyway: left out of `moved`, the ottoman would keep its height with
+  // nothing under it once the room took the idea.
+  it('a seat standing on the coffee table is on the floor in every idea, and back on the table after', async () => {
+    let ottoman: ScenePart | null = null;
+    mount((seeded) => {
+      const table = seeded.find((p) => p.name === 'Coffee table')!;
+      ottoman = {
+        ...table, id: 'zz-ottoman', name: 'Ottoman', category: 'ottoman', shape: 'ottoman',
+        dimMM: [550, 400, 420], pos: [table.pos[0], table.pos[1] + table.dimMM[2] / 1000, table.pos[2]],
+      };
+      return [...seeded, ottoman];
+    });
+    const o = ottoman!;
+    expect(ridingParents(parts)[o.id], 'the fixture stands the ottoman on the table').toBe('table-1');
+    await openIdeas();
+    expect(handed.find((p) => p.id === o.id)!.pos[1], 'the solver is handed it on the floor').toBe(0);
+    expect(firstMovable().id).not.toBe(o.id);
+    await act(async () => {
+      fireEvent.click(cards()[0]);
+    });
+    expect(useStudio.getState().positions[o.id]).toEqual([o.pos[0], 0, o.pos[2]]);
+    // It came down, so it is one of the pieces that move.
+    expect(cards()[0].getAttribute('aria-label')).toMatch(/2 pieces move$/);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Back to your room/ }));
+    });
+    expect(useStudio.getState().positions).toEqual({});
   });
 
   it('the heart keeps an idea as a favourite layout, and a second press lets it go', async () => {

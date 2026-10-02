@@ -20,7 +20,8 @@
  * arranged each one against the base and nothing else.
  */
 import { distToBoundary, frontVector } from './geometry';
-import { roleOf, roomProfile, WALL_ATTACH_TOL, isSoftFurnishing, type Role } from './layout-rules';
+import { isSeating, roleOf, roomProfile, WALL_ATTACH_TOL, isSoftFurnishing, type Role } from './layout-rules';
+import { ridingParents } from './rigid-parent';
 import type { Placement } from './layout-score';
 import type { Footprint } from './footprint';
 import type { ScenePart } from './scene-spec';
@@ -85,6 +86,56 @@ export function ideaTransforms(base: Transform2, parts: readonly ScenePart[], id
     rotations[p.id] = at.yaw;
   }
   return { positions, rotations };
+}
+
+/** The tops a seat is never shown standing on: every table, and the bed. A
+ *  platform is `other` (see `roleOf`) and is a floor, so a seat on one stays. */
+const SEAT_NEVER_ON: ReadonlySet<Role> = new Set<Role>(['bed', 'dining-table', 'coffee-table', 'side-table', 'nightstand', 'desk']);
+
+/** The room Ideas arranges: the room as it stands, with every seat that is standing
+ *  on a table or a bed set down on the floor where it is, and whatever stands on that
+ *  seat brought down by the same distance. `down` is every index it lowered, and every
+ *  idea writes them, moved or not: an idea that left the ottoman's spot alone would
+ *  otherwise leave it at the table's height with the table gone from under it.
+ *
+ *  The user's call (2026-09-30, `docs/what-is-still-open.md` § H.6.4): a drag may
+ *  stand a seat on a coffee table, and Ideas may never show one there. It used to in
+ *  all of them, measured — a seat riding a table or a bed is carried with it
+ *  (`carryRiders`), so it was on its top in 48 of 48 ideas across five presets.
+ *
+ *  Read again after each seat until none is left, because the solver reads the room
+ *  it is handed the same way (`ridingParents`, which `carryRiders` carries by) and
+ *  that room must have no seat on a top in it. The re-read is not tidiness: an
+ *  ottoman set down inside its coffee table puts the stool on it exactly level with
+ *  the table's top, and read once, that stool still stood on the table. Each pass
+ *  puts one more seat on the floor and none back up, so it ends. */
+export function seatsDown(parts: ScenePart[]): { parts: ScenePart[]; down: number[] } {
+  let out = parts;
+  const down = new Set<number>();
+  const at = new Map(parts.map((p, i) => [p.id, i]));
+  for (;;) {
+    const rides = ridingParents(out);
+    const seat = out.findIndex((p) => {
+      const under = rides[p.id];
+      return under !== undefined && isSeating(roleOf(p)) && SEAT_NEVER_ON.has(roleOf(out[at.get(under)!]));
+    });
+    if (seat < 0) return { parts: out, down: [...down].sort((a, b) => a - b) };
+    const drop = out[seat].pos[1];
+    const carried = new Set([seat]);
+    for (let grew = true; grew; ) {
+      grew = false;
+      out.forEach((p, i) => {
+        const under = rides[p.id];
+        if (under === undefined || carried.has(i) || !carried.has(at.get(under)!)) return;
+        carried.add(i);
+        grew = true;
+      });
+    }
+    out = out.map((p, i) =>
+      carried.has(i) ? { ...p, pos: [p.pos[0], p.pos[1] - drop, p.pos[2]] as [number, number, number] } : p,
+    );
+    for (const i of carried) down.add(i);
+  }
 }
 
 /** One string for "are these the same transform maps", by content.

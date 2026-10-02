@@ -37,7 +37,7 @@ import { analyzeRoom } from '@/lib/clearance';
 import { shuffleBlockers } from '@/lib/layout-shuffle';
 import { useScene } from '@/lib/scene-store';
 import { useStudio, useSettings } from '@/lib/store';
-import { DRY_SEARCHES } from '@/lib/layout-ideas';
+import { DRY_SEARCHES, seatsDown } from '@/lib/layout-ideas';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('shuffle-room'));
 
@@ -148,6 +148,31 @@ describe('the shuffle refusal says which of the two "no" it is', () => {
     });
     await screen.findByText('No ideas this time');
     expect(searches).toBe(2 * DRY_SEARCHES);
+  });
+
+  // User call 2A sets a seat standing on a table down on the floor for the search, and
+  // that lowered ottoman stands inside its coffee table: a clash in the room the ideas
+  // were arranged against, and not in the room on screen. The empty state is about the
+  // room on screen, so it must not send this room to Fix.
+  it('a seat set down for the search does not make a clean room read as blocked', async () => {
+    const onTable = (parts: ScenePart[]) => {
+      const table = parts.find((p) => p.name === 'Coffee table')!;
+      const ottoman: ScenePart = {
+        ...table, id: 'zz-ottoman', name: 'Ottoman', category: 'ottoman', shape: 'ottoman',
+        dimMM: [550, 400, 420], pos: [table.pos[0], table.pos[1] + table.dimMM[2] / 1000, table.pos[2]],
+      };
+      return [...parts, ottoman];
+    };
+    const { parts, footprint } = mount('rect', 6, 4, onTable);
+    const room = { footprint, height: HEIGHT };
+    expect(shuffleBlockers(analyzeRoom(parts, room).issues)).toEqual([]);
+    expect(
+      shuffleBlockers(analyzeRoom(seatsDown(parts).parts, room).issues).length,
+      'set down, the ottoman is inside the table — or this case cannot fail',
+    ).toBeGreaterThan(0);
+    const said = await openIdeasUntilDry('No ideas this time');
+    expect(said).toContain('Look again for a different try');
+    expect(said).not.toContain('Try Fix first');
   });
 
   // User call 1B: a room whose group is worth ungrouping says so, and that ungrouping

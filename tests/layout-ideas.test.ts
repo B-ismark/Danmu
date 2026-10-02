@@ -12,10 +12,14 @@ import {
   ideaTransforms,
   pageOf,
   pageRange,
+  seatsDown,
   transformsKey,
   wantsMore,
 } from '@/lib/layout-ideas';
-import { WALL_ATTACH_TOL } from '@/lib/layout-rules';
+import { roleOf, WALL_ATTACH_TOL } from '@/lib/layout-rules';
+import { ridingParents } from '@/lib/rigid-parent';
+import { highestSurfaceUnder } from '@/lib/physics';
+import type { LayoutId } from '@/lib/footprint';
 import { defaultScene, type ScenePart } from '@/lib/scene-spec';
 import { footprintForLayout } from '@/lib/footprint';
 import type { Placement } from '@/lib/layout-score';
@@ -127,6 +131,98 @@ describe('an idea is applied onto the room the gallery opened with', () => {
     const t = { ...ideaTransforms(base, parts, { placements: [at(0, 0), at(3, 1), at(2, 0)], moved: [1] }), dims: {} };
     expect(transformsKey(structuredClone(t))).toBe(transformsKey(t));
     expect(transformsKey({ ...t, rotations: { ...t.rotations, b: 0.01 } })).not.toBe(transformsKey(t));
+  });
+});
+
+describe('Ideas never shows a seat standing on a table or a bed (user call 2A)', () => {
+  // A drag may stand a seat on a coffee table (§ H.6.4); Ideas sets it down where it
+  // is and arranges it from the floor. Measured before this existed: a seat riding a
+  // top is carried with it, so it stood on that top in 48 of 48 ideas.
+  const room = defaultScene('rect', W, D, { footprint: RECT, height: 2.5 });
+
+  /** `seat` standing on `host`'s top, as a drag leaves it, and checked to be riding it
+   *  — a fixture that only looks stacked would make every assertion below vacuous. */
+  function standOn(parts: ScenePart[], host: ScenePart, seat: ScenePart): ScenePart[] {
+    const top = highestSurfaceUnder(parts, seat.id, host.pos[0], host.pos[2], seat.dimMM, seat.rot, seat.circle, seat.shape);
+    const placed = { ...seat, pos: [host.pos[0], top?.y ?? 0, host.pos[2]] as [number, number, number] };
+    const out = [...parts, placed];
+    expect(ridingParents(out)[seat.id], `${seat.id} is riding ${host.id}`).toBe(host.id);
+    return out;
+  }
+  const ottoman = part('otto', { category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420] });
+  const stool = part('stool', { category: 'chair', shape: 'stool', dimMM: [350, 350, 450] });
+  const coffee = room.find((p) => roleOf(p) === 'coffee-table')!;
+
+  it('an ottoman on the coffee table comes down where it is, and nothing else moves', () => {
+    const parts = standOn(room, coffee, ottoman);
+    const { parts: out, down } = seatsDown(parts);
+    expect(down).toEqual([parts.length - 1]);
+    expect(out.at(-1)!.pos).toEqual([coffee.pos[0], 0, coffee.pos[2]]);
+    out.slice(0, -1).forEach((p, i) => expect(p).toBe(parts[i]));
+  });
+
+  it('every table and the bed, and never a platform, which is a floor', () => {
+    const hosts: [ScenePart, string][] = [
+      [part('dining', { category: 'table', shape: 'box', dimMM: [1600, 900, 750], pos: [0, 0, 0] }), 'dining-table'],
+      [part('coffee', { category: 'table', shape: 'box', dimMM: [1100, 600, 420], pos: [0, 0, 0] }), 'coffee-table'],
+      [part('side', { category: 'table', shape: 'side-table', dimMM: [500, 500, 550], pos: [0, 0, 0] }), 'side-table'],
+      [part('stand', { category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [0, 0, 0] }), 'nightstand'],
+      [part('desk', { category: 'desk', shape: 'desk-l', dimMM: [1400, 700, 750], pos: [0, 0, 0] }), 'desk'],
+      [part('bed', { category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 500], pos: [0, 0, 0] }), 'bed'],
+    ];
+    for (const [host, role] of hosts) {
+      expect(roleOf(host)).toBe(role);
+      const { parts: out, down } = seatsDown(standOn([host], host, stool));
+      expect(down, role).toEqual([1]);
+      expect(out[1].pos[1], role).toBe(0);
+    }
+    const platform = part('deck', { category: 'other', shape: 'box', dimMM: [3000, 2000, 300], pos: [0, 0, 0] });
+    expect(roleOf(platform)).toBe('other');
+    const onDeck = standOn([platform], platform, ottoman);
+    expect(seatsDown(onDeck)).toEqual({ parts: onDeck, down: [] });
+  });
+
+  /** The promise itself, read the way the solver reads the room it is handed. */
+  const seatsOnTops = (parts: ScenePart[]) =>
+    Object.entries(ridingParents(parts))
+      .map(([child, parent]) => [parts.find((p) => p.id === child)!, parts.find((p) => p.id === parent)!])
+      .filter(([c, p]) => ['ottoman', 'dining-chair', 'armchair', 'office-chair', 'sofa'].includes(roleOf(c)) &&
+        ['bed', 'dining-table', 'coffee-table', 'side-table', 'nightstand', 'desk'].includes(roleOf(p)))
+      .map(([c, p]) => `${c.id} on ${p.id}`);
+
+  it('what stands on the seat comes down with it, all the way up; what stands beside it stays', () => {
+    const withOttoman = standOn(room, coffee, ottoman);
+    const otto = withOttoman.at(-1)!;
+    const lamp = part('lamp', { category: 'lamp', shape: 'lamp-table', dimMM: [200, 200, 400] });
+    const tray = part('tray', { category: 'other', shape: 'box', dimMM: [300, 250, 40] });
+    const besideLamp = { ...lamp, pos: [coffee.pos[0] + 0.4, otto.pos[1], coffee.pos[2]] as [number, number, number] };
+    // Two deep, so the carry is followed past the first rider: a tray on a stool on
+    // the ottoman.
+    const withStool = standOn([...withOttoman, besideLamp], otto, stool);
+    const stack = standOn(withStool, withStool.at(-1)!, tray);
+    expect(ridingParents(stack).lamp).toBe(coffee.id);
+    expect(seatsOnTops(stack)).toEqual(['otto on table-1']);
+    const { parts: out, down } = seatsDown(stack);
+    const y = (id: string) => out.find((p) => p.id === id)!.pos[1];
+    expect(seatsOnTops(out)).toEqual([]);
+    expect(y('otto')).toBe(0);
+    // Set down inside the coffee table, the ottoman leaves the stool level with the
+    // table's top, which reads as standing on it — so the stool comes down too, and
+    // its tray with it. Read once, the stool stayed on the table for the solver.
+    expect(y('stool')).toBe(0);
+    expect(y('tray')).toBeCloseTo(stool.dimMM[2] / 1000, 12);
+    expect(y('lamp')).toBe(besideLamp.pos[1]);
+    expect(down.map((i) => out[i].id).sort()).toEqual(['otto', 'stool', 'tray']);
+  });
+
+  it('a lamp on a nightstand is not a seat: the seeded rooms have nothing to set down', () => {
+    let riders = 0;
+    for (const id of ['rect', 'open', 'l', 't', 'u'] as LayoutId[]) {
+      const scene = defaultScene(id, 6, 5, { footprint: footprintForLayout(id, 6, 5), height: 2.5 });
+      riders += Object.keys(ridingParents(scene)).length;
+      expect(seatsDown(scene), id).toEqual({ parts: scene, down: [] });
+    }
+    expect(riders, 'some preset stands a piece on another, or this is a test of nothing').toBeGreaterThan(0);
   });
 });
 
