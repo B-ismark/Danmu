@@ -653,7 +653,7 @@ look at on purpose: under the curtain's hem the screenshot showed **thin bright 
 between the folds. They look like sunlight getting between the back folds and the wall. That
 may be right, or it may read as gaps; it needs a real GPU and a human eye.
 
-### Appliances, a door and a TV console drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### Appliances, a door and a TV console drawn as the real objects — merged to `main` in `304b9b4` (PR #218), NOT LOOKED AT
 
 **The other half of the 2026-10-01 realism ask** (*"if there are any other pieces or decors we
 can improve the realism, feel free to add them"*). Eight hard pieces were each a box with one
@@ -695,6 +695,38 @@ with no door and no shelf. **One to judge on purpose:** in the screenshots the b
 console pulls read as dark bronze, not bright brass. That is the brass the curtain rod already
 uses with no reflections to catch, and it needs a real GPU and a human eye to say whether it
 reads as metal. The default door colour is also dark enough that its panels show only faintly.
+
+### A television, a nightstand and a stool drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+**The next round of the same realism ask**, in the same module (`lib/hard-goods.ts`):
+
+- **Television.** A slim frame round a screen set back behind it, a slightly deeper chin at
+  the foot with a small standby light, and the electronics housing stepped in behind the
+  panel. It was one box with a glowing plane laid on its face.
+- **Nightstand.** Four short tapered legs, a top that overhangs the carcass a little all
+  round, and two drawers set *inside* the frame with a thin reveal round each and a brass
+  knob centred on it. Double-click still opens the drawers; the drawer box now slides out
+  with its front. It was a block with two faces glued on.
+- **Stool.** Three legs splayed out from under the seat to a wider stance, tied by a triangle
+  of stretchers a third of the way up, under a seat with its underside eased. It was a disc
+  on three plumb sticks. A tall stool keeps the same leg and stretcher thickness, so a bar
+  stool reads as a bar stool, not a footstool stretched upward.
+
+**The sizes did not change**, and every part is inside the size the piece declares.
+
+**Where to click.** Add a stool, a nightstand and a TV from the Library. Orbit each at eye
+level and from low down. Double-click the nightstand to open its drawers, and again to close
+them. Stretch the stool from shortest to tallest and widest to narrowest, and make one oval
+by changing only its depth. Recolour all three.
+
+**What right looks like.** The stool's feet stand *on* the floor, neither sunk into it nor
+floating. The stretchers meet the legs rather than stopping short of them. The nightstand's
+drawers sit flush inside the frame with a thin shadow line round each, and an open drawer
+shows its box rather than a front floating on air. *Wrong* looks like a stool leg poking
+through the seat's top, a drawer box showing through the nightstand's back as the drawer
+starts to open, or the TV's frame flickering against the screen. **One to judge on purpose:**
+the knobs are the same brass as the console pulls, which reads as dark bronze in
+screenshots. On a dark wood nightstand they nearly disappear.
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 

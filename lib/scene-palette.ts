@@ -83,6 +83,10 @@ export const DETAIL = {
   /** A dispenser's hot and cold taps — the two colours every one of them uses. */
   tapHot: '#C0392B',
   tapCold: '#2B6FD4',
+  /** A television's panel when it is off — near-black glass… */
+  screen: '#10141C',
+  /** …with the faint blue a switched-off panel still throws back at the room. */
+  screenGlow: '#1C2E48',
 } as const;
 
 // ─── Decor accents ──────────────────────────────────────────────────────────
