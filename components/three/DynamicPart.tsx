@@ -31,6 +31,7 @@ import { useStudio } from '@/lib/store';
 import { roleOf, bedPillows } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
+import { floorLampForm, tableLampForm, type LampForm } from '@/lib/lamp-form';
 import { DINING_LEG, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from '@/lib/foot-cells';
 import {
   bedForm,
@@ -417,6 +418,8 @@ function toneMaterial(tone: HardTone, bodyC: string, look: HardLook): ToneMateri
     case 'hot': return { color: DETAIL.tapHot, roughness: 0.4 };
     case 'cold': return { color: DETAIL.tapCold, roughness: 0.4 };
     case 'screen': return { color: DETAIL.screen, roughness: 0.18, metalness: 0.2, emissive: DETAIL.screenGlow, emissiveIntensity: 0.35 };
+    case 'ceramic': return { color: DETAIL.ceramicGlaze, surface: 'ceramic', roughness: 0.22 };
+    case 'bulb': return { color: DETAIL.bulb, roughness: 0.3, emissive: DETAIL.bulbGlow, emissiveIntensity: 0.6 };
   }
 }
 
@@ -458,6 +461,15 @@ function HardParts({ parts, bodyC, look }: { parts: HardPart[]; bodyC: string; l
           return (
             <mesh key={p.key} position={p.pos} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
               <cylinderGeometry args={[p.r, p.r, p.t, 28]} />
+              {material}
+            </mesh>
+          );
+        }
+        if (p.kind === 'ball') {
+          // A unit sphere scaled to its three semi-axes.
+          return (
+            <mesh key={p.key} position={p.pos} scale={p.radii} castShadow receiveShadow>
+              <sphereGeometry args={[1, 32, 20]} />
               {material}
             </mesh>
           );
@@ -704,50 +716,29 @@ function LampShade({ part, color }: { part: ScenePart; color: string }) {
   return <meshPhysicalMaterial color={color} side={2} {...SURFACE.fabric} emissive={emissive} emissiveIntensity={glow} />;
 }
 
-function FloorLampGeo({ part }: { part: ScenePart }) {
-  const metal = '#9A7848';
-  const shade = tint(part);
+/** A standing lamp: `lampForm` draws it on a circle of the declared width, and the
+ *  ellipse is for the same reason as `StoolGeo`'s — both lamps are ROUND shapes whose W
+ *  and D are separately editable. The shade is the one part `HardParts` does not draw,
+ *  because it is cloth lit from inside (`LampShade`) and open at both ends. */
+function StandingLampGeo({ part, form }: { part: ScenePart; form: LampForm }) {
+  const { shade } = form;
   return (
-    <FitToDim natural={[0.36, 1.85, 0.36]} part={part}>
-        <mesh position={[0, 0.02, 0]}>
-          <cylinderGeometry args={[0.15, 0.18, 0.04, 16]} />
-          <meshStandardMaterial color={metal} {...SURFACE.metal} />
-        </mesh>
-        {/* pole from inside the base (it started 10 mm above it) up into the shade */}
-        <mesh position={[0, 0.84, 0]}>
-          <cylinderGeometry args={[0.015, 0.015, 1.62, 8]} />
-          <meshStandardMaterial color={metal} {...SURFACE.metal} />
-        </mesh>
-        <mesh position={[0, 1.7, 0]}>
-          <coneGeometry args={[0.18, 0.3, 16, 1, true]} />
-          <LampShade part={part} color={shade} />
-        </mesh>
-    </FitToDim>
+    <group scale={[1, 1, part.dimMM[1] / part.dimMM[0]]}>
+      <HardParts parts={form.parts} bodyC={tint(part)} look={{}} />
+      <mesh position={[0, shade.y, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[shade.rTop, shade.rBottom, shade.h, 48, 1, true]} />
+        <LampShade part={part} color={tint(part)} />
+      </mesh>
+    </group>
   );
 }
 
+function FloorLampGeo({ part }: { part: ScenePart }) {
+  return <StandingLampGeo part={part} form={floorLampForm(part.dimMM)} />;
+}
+
 function TableLampGeo({ part }: { part: ScenePart }) {
-  const metal = '#9A7848';
-  const shade = tint(part);
-  return (
-    <FitToDim natural={[0.28, 0.52, 0.28]} part={part}>
-        {/* base */}
-        <mesh position={[0, 0.03, 0]}>
-          <cylinderGeometry args={[0.08, 0.1, 0.06, 16]} />
-          <meshStandardMaterial color={metal} {...SURFACE.metal} />
-        </mesh>
-        {/* short stem */}
-        <mesh position={[0, 0.2, 0]}>
-          <cylinderGeometry args={[0.012, 0.012, 0.28, 8]} />
-          <meshStandardMaterial color={metal} {...SURFACE.metal} />
-        </mesh>
-        {/* shade */}
-        <mesh position={[0, 0.42, 0]}>
-          <coneGeometry args={[0.14, 0.2, 16, 1, true]} />
-          <LampShade part={part} color={shade} />
-        </mesh>
-    </FitToDim>
-  );
+  return <StandingLampGeo part={part} form={tableLampForm(part.dimMM)} />;
 }
 
 function PendantLampGeo({ part }: { part: ScenePart }) {
@@ -783,7 +774,7 @@ function PendantLampGeo({ part }: { part: ScenePart }) {
           {/* bulb */}
           <mesh position={[0, g.bulbY, 0]}>
             <sphereGeometry args={[g.bulbR, 12, 12]} />
-            <meshStandardMaterial color="#FFE4A0" emissive="#FFD060" emissiveIntensity={0.4} />
+            <meshStandardMaterial color={DETAIL.bulb} emissive={DETAIL.bulbGlow} emissiveIntensity={0.4} />
           </mesh>
         </group>
       </Sway>

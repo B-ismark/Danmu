@@ -87,6 +87,12 @@ export const DETAIL = {
   screen: '#10141C',
   /** …with the faint blue a switched-off panel still throws back at the room. */
   screenGlow: '#1C2E48',
+  /** A lit bulb's glass and the warm light it gives off — every lamp in the catalogue. */
+  bulb: '#FFE4A0',
+  bulbGlow: '#FFD060',
+  /** A table lamp's glazed body: a soft sage, the accent family's quiet end, so a
+   *  linen shade over it reads as two materials rather than one painted object. */
+  ceramicGlaze: '#AEB9A4',
 } as const;
 
 // ─── Decor accents ──────────────────────────────────────────────────────────

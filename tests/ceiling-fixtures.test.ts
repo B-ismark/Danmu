@@ -178,14 +178,19 @@ describe('the pendant emits its light from where it draws its bulb', () => {
     }
   });
 
-  it('leaves the two fixtures whose bulbs really are constants alone', () => {
-    // `lamp-table` and `lamp-floor` draw their bulbs at literals, so a constant is
-    // the honest answer for them and the table is the right home. Pinned so that
-    // "derive everything" does not silently move them too.
-    expect(lightAnchor('lamp-table', [400, 400, 500])).toEqual([0, 0.4, 0]);
-    expect(lightAnchor('lamp-table', [250, 250, 900]), 'and does not vary with size')
-      .toEqual([0, 0.4, 0]);
-    expect(lightAnchor('lamp-floor', [400, 400, 1500])).toEqual([0, 1.66, 0]);
+  it('has no constants left for the standing lamps either', () => {
+    // This test used to pin `lamp-table` at 0.40 m and `lamp-floor` at 1.66 m, under a
+    // comment saying their bulbs were drawn "at literals" so a constant was honest. It
+    // was not: both lamps were stretched to their declared size by `FitToDim`, so the
+    // drawn bulb moved and the constant did not — a 1500 mm floor lamp emitted from
+    // 160 mm above its own top, a 900 mm table lamp from inside its stem. A pin that
+    // certifies the claim beside it is the defect it was meant to prevent. Both derive
+    // from `lampForm` now; `tests/lamp-form.test.ts` holds them across the band.
+    const small = lightAnchor('lamp-floor', [400, 400, 1200])[1];
+    const large = lightAnchor('lamp-floor', [400, 400, 1800])[1];
+    expect(large - small, 'a floor lamp’s light rises with it').toBeGreaterThan(0.4);
+    expect(lightAnchor('lamp-table', [250, 250, 900])[1], 'a tall table lamp’s light is up in its shade')
+      .toBeGreaterThan(0.6);
     expect(lightAnchor('sofa', [2000, 900, 800]), 'anything else sits at its origin')
       .toEqual([0, 0, 0]);
   });

@@ -1,8 +1,8 @@
 // The contract every shape in the catalogue has to satisfy.
 //
-// Adding a shape means touching eleven places (Design.md § Adding a shape lists them
-// and is the prose half of this file). FIVE are places you put the shape and SIX are
-// tables it otherwise inherits from its category — and of all eleven the compiler holds
+// Adding a shape means touching ten places (Design.md § Adding a shape lists them
+// and is the prose half of this file). FIVE are places you put the shape and FIVE are
+// tables it otherwise inherits from its category — and of all ten the compiler holds
 // exactly ONE: `scene-palette`'s `BY_SHAPE`, the only exhaustive `Record<Shape, …>` in
 // the tree. `CATALOG_SHAPES_ORDERED` is a `readonly Shape[]` and `PART_LIBRARY` a
 // `LibraryItem[]`; omitting a shape from either compiles. That asymmetry is the whole
