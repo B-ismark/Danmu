@@ -48,6 +48,10 @@ const TEST_TIMEOUT_MS = 15000;
 
 const KEY_INPUT_ID = 'settings-access-key';
 
+/** Where feedback goes: the project's public issue page, which a person opens and
+ *  writes in themselves. Change it here if feedback should go somewhere else. */
+const FEEDBACK_URL = 'https://github.com/B-ismark/Danmu/issues/new';
+
 export default function SettingsPage() {
   const s = useSettings();
   // The unit the server printed until hydration, so the example below is not a
@@ -471,6 +475,14 @@ export default function SettingsPage() {
               <Icon name="trash" size={12} />
               {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
             </button>
+          </Row>
+          <Row label="Send feedback" hint="Opens a new page where you can tell us what works and what doesn't. Nothing is sent from the app.">
+            {/* A plain link the person follows, never a form that posts from here:
+                rule 5 allows no egress but the optional detection call. */}
+            <a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer" className="ds-btn ds-btn--sm">
+              Send feedback
+              <Icon name="external" size={12} />
+            </a>
           </Row>
         </Section>
       </div>
