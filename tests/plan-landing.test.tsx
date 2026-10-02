@@ -184,4 +184,25 @@ describe('the plan tab records a landing (§ H.6.7)', () => {
     expect(useStudio.getState().parentIds).toEqual({ lamp: 'n2' });
     expect(carriedBy('n2')).toEqual(['lamp']);
   });
+
+  it('keeps an arrow key’s landing when the drag it interrupted is released', () => {
+    // The drag holds the lamp on the left nightstand; the keys then carry the set until
+    // the lamp stands on the right one, and record that. The release, with no frame
+    // after the keys, used to write the drag's older answer back over it.
+    room({ lamp: 'n1' }, true);
+    stubCanvas();
+    const { container } = render(<PlanView />);
+    const svg = container.querySelector('svg')!;
+    const box = screen.getAllByRole('button').find((b) => b.getAttribute('aria-label')?.startsWith('Box.'))!;
+    fireEvent.pointerDown(box, { button: 0, clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(svg, { clientX: 490, clientY: 500, pointerId: 1 });
+    const lampX = () => currentRoomScene().find((p) => p.id === 'lamp')!.pos[0];
+    expect(useStudio.getState().parentIds).toEqual({ lamp: 'n1' });
+    for (let i = 0; i < 60 && lampX() < 0.4; i++) fireEvent.keyDown(box, { key: 'ArrowRight' });
+    expect(lampX()).toBeGreaterThanOrEqual(0.4);
+    expect(useStudio.getState().parentIds).toEqual({ lamp: 'n2' });
+    fireEvent.pointerUp(svg, { clientX: 490, clientY: 500, pointerId: 1 });
+    expect(useStudio.getState().parentIds).toEqual({ lamp: 'n2' });
+  });
 });
+

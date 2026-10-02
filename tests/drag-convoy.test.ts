@@ -2213,8 +2213,12 @@ describe('resolveConvoy — what each member was set down on', () => {
   it('is empty when nobody landed anywhere new', () => {
     const world = [stand('nA', 1), stand('nB', 2), lamp(1), chair];
     const c = plan('chair', world, ['chair', 'lamp'], { lamp: 'nA' });
-    // A turn moves no member; back at the start is the start.
+    // A turn moves no member — after a move too, which is the case that matters: the set
+    // is a metre out, and the turn still says nothing. The caller keeps the last move
+    // frame's landings for the drop (`Draggable`'s `lastFreeLandings`).
     expect(carry(c, 'chair', world, [1, 0, 3], [1, 0, 3], Math.PI / 2, () => false, 'turn').landings).toEqual([]);
+    expect(carry(c, 'chair', world, [1, 0, 3], [2, 0, 3], Math.PI / 2, () => false, 'turn').landings).toEqual([]);
+    // Back at the start is the start.
     expect(carry(c, 'chair', world, [1, 0, 3], [1, 0, 3]).landings).toEqual([]);
     // No company at all.
     const alone = plan('chair', world, ['chair']);

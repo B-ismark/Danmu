@@ -127,7 +127,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
   const setTransformsFor = useStudio((s) => s.setTransformsFor);
-  const landOn = useStudio((s) => s.landOn);
+  const landAll = useStudio((s) => s.landAll);
   const setDragging = useStudio((s) => s.setDragging);
   const panKey = useStudio((s) => s.panKeyHeld);
   const selectedWall = useStudio((s) => s.selectedWall);
@@ -812,7 +812,16 @@ export const PlanView = forwardRef<PlanViewHandle, {
         // was set down too, by the same frame, and is recorded with it.
         const landings = [{ id: part.id, on: r.supportId }, ...co.landings];
         if (drag) drag.landed = landings;
-        else for (const l of landings) landOn(l.id, l.on);
+        else {
+          landAll(landings);
+          // A key pressed mid-drag that set a piece of that drag down is the newer
+          // answer, so the release must not write the drag's older one over it.
+          const held = dragRef.current;
+          if (held?.landed) {
+            const now = new Set(landings.map((l) => l.id));
+            held.landed = held.landed.filter((l) => !now.has(l.id));
+          }
+        }
       }
       // A wall-mounted piece is turned by the wall it lands on, not by the drag.
       if (r.rot !== part.rot) setRotation(part.id, r.rot);
@@ -1339,9 +1348,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       }
       // A drop, not a click: a press that never left its slop records nothing, or a
       // few pixels of jitter would turn a lamp's inferred link into a recorded one.
-      if (dragRef.current.moved && dragRef.current.landed) {
-        for (const l of dragRef.current.landed) landOn(l.id, l.on);
-      }
+      if (dragRef.current.moved && dragRef.current.landed) landAll(dragRef.current.landed);
       // The per-gesture convoy snapshot dies with it — see the comment on the ref.
       dragRef.current = null;
       setDragging(null);

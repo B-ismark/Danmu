@@ -335,8 +335,12 @@ export type ConvoyResult = {
    * support is already known; it was simply not handed back.
    *
    * Members only. The pieces riding a member, or the lead, travel rigidly and still
-   * stand on what they stood on. Empty when nobody landed anywhere new: a turn, a
-   * gesture back at its start, or no company at all. Record it only when `valid`.
+   * stand on what they stood on. One entry per member whenever this pass moved the set,
+   * whether or not its support changed; empty for a gesture back at its start (the
+   * members are home, on what they started on) and for no company at all. A TURN is
+   * empty too, and that is not "nobody landed anywhere new": a turn moves no member, so
+   * after a move it leaves them where the last move frame put them, and a caller that
+   * records on the drop keeps that frame's landings. Record it only when `valid`.
    */
   landings: Landing[];
 };

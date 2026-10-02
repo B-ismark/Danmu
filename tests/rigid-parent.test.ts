@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { snapshotDescendants, cascadeTransform, landedLinks, livingParents, wouldCreateCycle } from '@/lib/rigid-parent';
+import { snapshotDescendants, cascadeTransform, landedLinks, landedLinksAll, livingParents, wouldCreateCycle } from '@/lib/rigid-parent';
 import type { ScenePart } from '@/lib/scene-spec';
 
 function part(overrides: Partial<ScenePart> & Pick<ScenePart, 'id' | 'pos' | 'dimMM'>): ScenePart {
@@ -272,5 +272,37 @@ describe('landedLinks — what a drop writes', () => {
     const links = { lamp: 'n1' };
     expect(landedLinks(links, 'lamp', 'n1')).toBe(links);
     expect(landedLinks(links, 'mug', undefined)).toBe(links);
+  });
+});
+
+describe('landedLinksAll — one gesture’s landings, written as one', () => {
+  it('moves every link the gesture set down, and leaves the rest alone', () => {
+    expect(landedLinksAll({ lamp: 'n1', mug: 'desk', book: 'shelf' }, [
+      { id: 'lamp', on: 'n2' },
+      { id: 'mug', on: undefined },
+    ])).toEqual({ lamp: 'n2', book: 'shelf' });
+    // A gesture whose only news is an unlink: every link left is unchanged, and the map
+    // is still a different one.
+    expect(landedLinksAll({ lamp: 'n1', mug: 'desk' }, [{ id: 'mug', on: undefined }])).toEqual({ lamp: 'n1' });
+  });
+
+  it('does not refuse a link over an old one the same gesture is replacing, in either order', () => {
+    // The tray carried a stale link to the ottoman now standing on it. Set down one at
+    // a time, the ottoman's landing met that link, was refused as a loop and unlinked —
+    // and then the tray's own landing on the floor deleted the link that was in the way.
+    const stale = { tray: 'o' };
+    const want = { o: 'tray' };
+    expect(landedLinksAll(stale, [{ id: 'o', on: 'tray' }, { id: 'tray', on: undefined }])).toEqual(want);
+    expect(landedLinksAll(stale, [{ id: 'tray', on: undefined }, { id: 'o', on: 'tray' }])).toEqual(want);
+  });
+
+  it('still refuses a loop the gesture itself would close', () => {
+    expect(landedLinksAll({}, [{ id: 'a', on: 'b' }, { id: 'b', on: 'a' }])).toEqual({ a: 'b' });
+  });
+
+  it('hands back the same map when nothing changes, though every link was taken up and put back', () => {
+    const links = { lamp: 'n1', mug: 'desk' };
+    expect(landedLinksAll(links, [{ id: 'lamp', on: 'n1' }, { id: 'rug', on: undefined }])).toBe(links);
+    expect(landedLinksAll(links, [])).toBe(links);
   });
 });

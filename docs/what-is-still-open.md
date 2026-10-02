@@ -4219,8 +4219,13 @@ the raw map (above). Twenty-one more mutants, twenty-one killed.
   was set down on, from the pass the set was allowed (a slide's, not the refused one), and
   both tabs record it through `landOn` under the gate the member moves are written under:
   the plan at once for a key and once on release for a drag, 3D on the drop. Members only —
-  what rides a member, or the lead, travels rigidly and keeps its link. Eight mutants, eight
-  killed; the 3D drop has no harness and is in `docs/visual-check.md`.
+  what rides a member, or the lead, travels rigidly and keeps its link. One gesture's
+  landings are one write (`landedLinksAll`): every old link goes before any new one is
+  checked for a loop, since one at a time the answer depended on the order. 3D keeps the
+  last legal move frame's landings, so a drag ended with a wheel notch still records them;
+  the plan drops a drag's held landing that an arrow key mid-drag has already replaced.
+  Fifteen mutants, fifteen killed; the 3D drop has no harness and is in
+  `docs/visual-check.md`.
 - **Wall moves the piece and its riders, and nothing else, unchecked.** Merged-set siblings
   stay behind, as they always did, and the riders are written without the containment and
   collision checks a drag's company gets — a lamp overhanging the back of its nightstand

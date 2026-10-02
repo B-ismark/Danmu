@@ -225,7 +225,9 @@ drag the floor piece until the lamp stands on the right nightstand. Then drag th
 nightstand on its own. The lamp going with it is the fix; the lamp staying put, standing
 on air, is the old bug — the set's other pieces used to keep the link to where they
 started. Do it in **3D Model** first: the plan tab's half is driven in a test, the 3D
-drop is not.
+drop is not. Then once more in 3D, giving the set one wheel notch just before letting
+go: a turn sets nobody down, so the drop must keep the lamp's landing from the move
+before it. The lamp left behind after that notch is the review's finding back.
 
 **Gates.** `tests/drag-convoy.test.ts` ("what each member was set down on"),
 `tests/plan-landing.test.tsx`.
