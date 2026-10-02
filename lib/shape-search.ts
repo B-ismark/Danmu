@@ -134,6 +134,16 @@ function scoreItem(qTokens: string[], item: LibraryItem): number {
   return score;
 }
 
+/** How well `query` names `shape`: the best score any Library row building that
+ *  model earns, 0 when none does (or the shape has no row). The same scorer
+ *  `searchLibrary` ranks by, so a caller comparing a model it already has against
+ *  the ones a search returns is comparing like with like. */
+export function libraryScore(query: string, shape: Shape): number {
+  const q = tokens(query);
+  if (q.length === 0) return 0;
+  return ALL.filter((item) => item.shape === shape).reduce((best, item) => Math.max(best, scoreItem(q, item)), 0);
+}
+
 /** Top catalog matches for a freeform description. Empty when nothing scores. */
 export function searchLibrary(query: string, limit = 5): LibraryItem[] {
   const q = tokens(query);

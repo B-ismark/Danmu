@@ -2549,7 +2549,8 @@ is expected where the photo could not measure that model.
 
 **Why eyes:** the guard against a blur committing the half-typed word over a pick cannot
 be exercised in jsdom (a removed field never blurs there), so only a real browser, and a
-real touch, can show it holds. The two costs this fix accepted are
-`docs/what-is-still-open.md` § 55.
+real touch, can show it holds. The two costs this fix accepted were closed afterwards
+(`docs/what-is-still-open.md` § 55): also check that "Floor lamp" → "Tall lamp" offers no
+other lamp, and that a floor piece renamed "Painting" hangs on the wall in its photo.
 
-**Rides:** `main` at `5dbcab0`.
+**Rides:** `main` at `5dbcab0`; the § 55 follow-up rides branch `claude/elegant-volta-q7yy89`.

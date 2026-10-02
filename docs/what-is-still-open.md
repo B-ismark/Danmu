@@ -10757,7 +10757,7 @@ Seen in a browser: Settings › Downloads at 1280 and 390 px, with the mirror st
 NOT LOOKED AT: the scan card's choice and Update states, and a real download.
 
 
-## § 55 · Two costs the rename-suggestion fix left in place — WRITTEN DOWN, NOT FIXED
+## § 55 · Two costs the rename-suggestion fix left in place — FIXED 2026-10-02
 
 Merged in `5dbcab0` ([B-ismark/Danmu#238](https://github.com/B-ismark/Danmu/pull/238)).
 The list under a piece's name now offers every Library model the typed words reach, not one
@@ -10776,3 +10776,23 @@ purpose, and each costs something:
    "Ceiling fan" with no ceiling in frame keeps the lamp's place rather than going up on the
    ceiling. The fix belongs in the unmeasured branch of `suggestFromLabel`, which could place
    the piece by its new anchor's default rather than keep the old position.
+
+**Both fixed 2026-10-02**, in `lib/label-suggest.ts`, with `tests/label-suggest.test.ts`
+holding each half (every rule mutated, all four mutants killed):
+
+1. A model of the piece's own category is offered only when the typed words score it
+   **strictly above** the model it already builds, by the search's own scorer
+   (`libraryScore` in `lib/shape-search.ts`). "Floor lamp" → "Tall lamp" no longer offers
+   the table lamp and the pendant; "Table lamp" still reaches the table lamp, and other
+   categories are untouched. (The "Grey sofa" example above cannot be reproduced on the
+   current Library, which has one sofa; the lamps are the case that showed it.)
+2. A standard-size pick keeps the scan's spot only when the new model hangs from the **same
+   anchor**. Otherwise the position and yaw are dropped and the build places it on the
+   photographed wall by its new anchor (`startingSpot`'s fallback).
+   **The description above was wrong about what reached the user, and the fix is narrower
+   because of it.** Measured by building the room: a lamp renamed "Ceiling fan" was already
+   hung at the ceiling (`groundY` owns the height for every anchor), directly above the
+   lamp's floor spot. The real defect was that the spot itself was read for a floor piece,
+   so it said nothing about a ceiling or wall piece, and a wall piece snapped from it went
+   to the **nearest** wall: a lamp against the east wall in a photo of the north wall,
+   renamed "Painting", was hung on the east wall. The test asserts the north wall.
