@@ -21,9 +21,9 @@
 
 import { canCollideWith, collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
-import { aabbExtents, edgeProjection, footFromPart, footIsBox, frontVector, nearestEdge, TOUCH_M, type Poly } from './geometry';
+import { aabbExtents, edgeProjection, footFromPart, footIsBox, frontVector, nearestEdge, TOUCH_M, yawOf, type Poly } from './geometry';
 import { tuckedAt, tuckProfile } from './layout-rules';
-import { snapAhead, snapToNeighbors, type SnapLine } from './item-snap';
+import { SAME_TURN, snapAhead, snapToNeighbors, turnBetween, type SnapLine } from './item-snap';
 import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
 export type SnapMode = 'off' | 'fine' | 'coarse';
@@ -572,6 +572,25 @@ export function turnInPlace(input: TurnInput): Resolved {
     // `fromRot` already leans on at every caller.
     standsAt: { at: input.at, rot: input.part.rot },
   });
+}
+
+/**
+ * The heading the 3D ring has turned a piece to, given the heading the gesture began
+ * at: written in the start's own winding, and EXACTLY the start for a press that
+ * turned nothing.
+ *
+ * The ring writes a quaternion, and a quaternion has no winding — `yawOf` reads it
+ * back inside [−π, π] with noise in the last bits. Written raw, a press on a piece the
+ * wheel had wound to 3.49 rad stored −2.79, and a press on almost any piece stored a
+ * number a few ULPs off the one it had. Same piece, different number, and every exact
+ * comparison downstream reads that as a turn: `forgetOverrides` records an undo step,
+ * `cascadeTransform` writes overrides on the rigid children. So the ring's TURN is
+ * read rather than its heading, and a turn within `SAME_TURN` is no turn.
+ */
+export function ringHeading(q: { x: number; y: number; z: number; w: number }, start: number): number {
+  const yaw = yawOf(q);
+  if (turnBetween(yaw, start) <= SAME_TURN) return start;
+  return start + Math.atan2(Math.sin(yaw - start), Math.cos(yaw - start));
 }
 
 /**

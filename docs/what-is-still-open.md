@@ -4819,6 +4819,22 @@ pure turn read off the quaternion (`yawOf` in `lib/geometry.ts`, three's own YXZ
 after the helper was pinned against three's YXZ for a tilted orientation too.
 **Not recoverable:** a heading stored mirrored before this cannot be told from a real one,
 so a room someone turned on the ring keeps what it was saved with.
+Rides `claude/amazing-davinci-m8zqys`, PR #230 (`ba4f8e2` and the review fix after it).
+**Review round 1 found three more in the same handler.** A press that turned nothing still
+rewrote the heading as read off the quaternion — measured, 225 of 666 headings came back a
+few ULPs off and all 1334 wound past ±π came back 2π off, and every `===` downstream reads
+that as a turn; `ringHeading` (`lib/drag-resolve.ts`) reads the TURN and keeps the start
+exactly within `SAME_TURN`. Escape mid-turn was not held: the ring kept turning until the
+release, which then committed nothing, so 3D and the plan disagreed again. And letting go
+of the ring ran grid and magnet snap, so a pressed off-grid piece moved; it resolves with
+snap off now, as the plan's turn and a stretch already did. Four mutants, all killed.
+**Still open, filed rather than fixed:** the ring snaps the AMOUNT turned, the plan's handle
+snaps the HEADING, so a piece at 37° turned on 15° steps lands on 52° in 3D and 45° in the
+plan. Making them agree changes what a turn of one step means in one tab, so it is a call to
+make, not a fix to slip in. **Decided against:** `rotation-order="YXZ"` on the group instead
+of the handler. It would fix the fold for every quaternion write, but the handler is needed
+anyway for the winding and for Escape, and changing the order touches every reader of the
+group's rotation for no further gain.
 
 ## What in this document has been in a browser, and what has not
 

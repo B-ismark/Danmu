@@ -281,17 +281,21 @@ cancelled drag of something it stands on.
 **Where it rides.** `lib/transforms.ts` (`overridesBroughtHome`) + `lib/store.ts` +
 `components/three/Draggable.tsx` + `components/studio/PlanView.tsx`.
 
-### A piece turned on the 3D ring faces the same way in the plan — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+### A piece turned on the 3D ring faces the same way in the plan — on `claude/amazing-davinci-m8zqys`, PR #230, NOT LOOKED AT
 
 In the seeded bedroom on **3D Model**, select a piece with its front towards the camera,
 press **R** for the ring, and turn it about two-thirds of the way round. Let go, then open
 **2D Plan**: it must face the way 3D showed it. Before, anything past a quarter turn came out
 mirrored in the plan, because the number stored was not the turn on screen. Second check:
 select a piece facing the back wall, press the ring and let go without turning. Nothing may
-change, in either tab. That one used to store the piece facing the front.
+change, in either tab, with snap on or off — not the angle and not the spot, since letting go
+of the ring used to put an off-grid piece on the grid. That one used to store the piece facing
+the front. Third: start a turn, press **Escape**, keep moving, then let go. The piece must
+stay at the angle it began at, in both tabs.
 
 What would be wrong: the plan disagreeing with 3D about which way a piece faces after a
-ring turn, or a piece flipping when the ring is only pressed.
+ring turn, a piece flipping or stepping when the ring is only pressed, or 3D still turning
+after Escape.
 
 **Gates.** `tests/gizmo-turn.test.ts`.
 
