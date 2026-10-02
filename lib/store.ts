@@ -194,6 +194,9 @@ type StudioState = {
   }) => void;
   /** Drop transform overrides — used by Reset-to-detected. Targets a specific id, or all. */
   resetTransforms: (id?: string) => void;
+  /** Drop these position and rotation overrides, and nothing else, in one update —
+   *  what a gesture ending hands over from `overridesBroughtHome`. */
+  forgetOverrides: (ids: { positions: string[]; rotations: string[] }) => void;
 };
 
 /** The only studio fields that survive a reload. These are *preferences* — the
@@ -355,6 +358,26 @@ export const useStudio = create<StudioState>()(
       delete d[id];
       delete pr[id];
       return { positions: p, rotations: r, dims: d, parentIds: pr };
+    }),
+  forgetOverrides: ({ positions: posIds, rotations: rotIds }) =>
+    set((s) => {
+      // A map is replaced only when something leaves it, for the reason
+      // `setTransformsFor` gives: a fresh map with the same contents reads as an edit
+      // to history.
+      const pos = posIds.filter((id) => id in s.positions);
+      const rot = rotIds.filter((id) => id in s.rotations);
+      const out: Partial<StudioState> = {};
+      if (pos.length > 0) {
+        const positions = { ...s.positions };
+        for (const id of pos) delete positions[id];
+        out.positions = positions;
+      }
+      if (rot.length > 0) {
+        const rotations = { ...s.rotations };
+        for (const id of rot) delete rotations[id];
+        out.rotations = rotations;
+      }
+      return out;
     }),
   frameSelected: () => set((s) => ({ frameSelectedToken: s.frameSelectedToken + 1 })),
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),

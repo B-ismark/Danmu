@@ -31,6 +31,7 @@
 import { isParametric, type ScenePart } from './scene-spec';
 import { heightForNewCeiling } from './physics';
 import { carryForResize } from './wall-move';
+import { SAME_M } from './item-snap';
 import type { Footprint } from './footprint';
 
 /** The user's edits, as the studio store holds them. */
@@ -96,6 +97,40 @@ export function renderBaseDim(p: ScenePart, o: Partial<TransformOverrides>): [nu
  *  override is still there to be dropped. */
 export function hasOverride(id: string, o: Partial<TransformOverrides>): boolean {
   return !!o.positions?.[id] || o.rotations?.[id] !== undefined || !!o.dims?.[id];
+}
+
+/** The overrides a gesture CREATED for pieces it set back down where they began.
+ *
+ *  Both tabs write a drag's company live, frame by frame, and a write is a pin (see
+ *  `heightForNewCeiling` below for what a pin costs). So a drag out and back, or one
+ *  Escape cancelled, left every piece it carried pinned where it already stood: the
+ *  lamp on the nightstand, the rest of the selection, the piece under the hand. The
+ *  zero-delta restore puts each one back, and putting back is a write too. Only the
+ *  gesture knows which overrides it made, so it asks this as it ends.
+ *
+ *  `before` is the override maps as the gesture began; `after`, as it ends; `start`,
+ *  the world at its effective transforms as it began. An override that was there
+ *  before is the user's own earlier placement and is never on the list. Position and
+ *  rotation are asked separately, because they are stored separately: a piece turned
+ *  in place came home on the floor and keeps its turn. "Where it began" is `SAME_M`,
+ *  since replaying a cascade about the same pivot is float noise, not a step. */
+export function overridesBroughtHome(
+  before: Pick<TransformOverrides, 'positions' | 'rotations'>,
+  after: Pick<TransformOverrides, 'positions' | 'rotations'>,
+  start: readonly ScenePart[],
+): { positions: string[]; rotations: string[] } {
+  const startOf = new Map(start.map((p) => [p.id, p]));
+  const positions = Object.keys(after.positions).filter((id) => {
+    const was = startOf.get(id);
+    const now = after.positions[id];
+    return !(id in before.positions) && !!was && now.every((v, i) => Math.abs(v - was.pos[i]) <= SAME_M);
+  });
+  const rotations = Object.keys(after.rotations).filter((id) => {
+    const was = startOf.get(id);
+    const turn = after.rotations[id] - (was?.rot ?? NaN);
+    return !(id in before.rotations) && !!was && Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) <= SAME_M;
+  });
+  return { positions, rotations };
 }
 /** Every Y a ceiling move changes, in BOTH transform layers.
  *

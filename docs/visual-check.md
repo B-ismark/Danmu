@@ -235,7 +235,7 @@ before it. The lamp left behind after that notch is the review's finding back.
 **Where it rides.** `lib/drag-convoy.ts` + `components/three/Draggable.tsx` +
 `components/studio/PlanView.tsx`.
 
-### Wall takes the whole selection, and says when it cannot — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+### Wall takes the whole selection, and says when it cannot — merged to `main` in `42d2a7d` (PR #226), NOT LOOKED AT
 
 The Inspector's **Wall** button used to move the selected piece and what stood on it, and
 nothing else, with no check. It now moves like a drag. In the seeded living room the Sofa
@@ -259,6 +259,27 @@ first — but the line must then say so.
 **Gates.** `tests/to-wall.test.ts`, `tests/inspector-carries-riders.test.tsx`.
 
 **Where it rides.** `lib/to-wall.ts` + `components/studio/Inspector.tsx`.
+
+### A drag that is cancelled, or comes back, leaves nothing marked as moved — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+
+The mark is the Inspector's **Back to where it started** button: it shows only for a
+piece that carries a move, turn or resize of yours. In the seeded bedroom, select a
+nightstand that nobody has touched, start dragging it, and press **Escape** before letting
+go. Everything goes back, as before. Now select the nightstand, then the lamp on it: neither
+should offer *Back to where it started*. Both used to, and so did every other piece in the
+selection, because the cancelled drag had written each of them where it already stood.
+Do it in **3D Model** and in **2D Plan**: the plan's half is driven in a test, the 3D half
+only checked in its source. Then drag the nightstand somewhere and let go: now both should
+offer the button, which is the control.
+
+What would be wrong: the button on a piece after a cancelled drag, the button missing
+after a real one, or a piece the user had already moved losing its button after a
+cancelled drag of something it stands on.
+
+**Gates.** `tests/drag-out-and-back.test.tsx`.
+
+**Where it rides.** `lib/transforms.ts` (`overridesBroughtHome`) + `lib/store.ts` +
+`components/three/Draggable.tsx` + `components/studio/PlanView.tsx`.
 
 ### A fan dropped onto a fan moves aside, and a bed set stops at the wardrobe — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 

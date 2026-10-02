@@ -18,6 +18,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useStudio, useSettings, WALL_DRAG_ID } from '@/lib/store';
 import { currentRiderRelation, currentRoomScene, useRoomScene } from '@/lib/room-scene';
+import { overridesBroughtHome, type TransformOverrides } from '@/lib/transforms';
 import { useScene } from '@/lib/scene-store';
 import { DND_MIME, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
@@ -264,6 +265,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
      * only because `Draggable` happens to cache `effParts()` for the gesture.
      */
     world: ScenePart[];
+    /** The override maps at pointer-down, so the release can tell the overrides this
+     *  gesture made from the ones the user already had (`overridesBroughtHome`). */
+    overridesAtStart: Pick<TransformOverrides, 'positions' | 'rotations'>;
     /**
      * Everything travelling with this piece — what is resting on it, the rest of
      * the multi-selection, whatever merged group any of them belongs to, and where
@@ -427,6 +431,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
           (id) => useStudio.getState().rotations[id] !== undefined,
         ),
       );
+      unpinWhatCameHome(d);
       dragRef.current = null;
       setDragging(null);
       if (blockedRef.current) clearBlocked();
@@ -1138,6 +1143,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       convoy,
       // Frozen here for the whole gesture — see `world` on the ref.
       world: parts,
+      overridesAtStart: { positions: useStudio.getState().positions, rotations: useStudio.getState().rotations },
       snapLines: [] as SnapLine[],
       grab: { x: down.x - part.pos[0], z: down.z - part.pos[2] },
     };
@@ -1349,6 +1355,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // A drop, not a click: a press that never left its slop records nothing, or a
       // few pixels of jitter would turn a lamp's inferred link into a recorded one.
       if (dragRef.current.moved && dragRef.current.landed) landAll(dragRef.current.landed);
+      unpinWhatCameHome(dragRef.current);
       // The per-gesture convoy snapshot dies with it — see the comment on the ref.
       dragRef.current = null;
       setDragging(null);
@@ -2194,6 +2201,13 @@ const HALO_SIDES: Array<[ZoneSide, number, number, number, number]> = [
   ['right', 0, 0, 1, 0],
   ['left', 1, 0, 0, 0],
 ];
+
+/** What a piece gesture pinned where it already stood, unpinned as it ends: see
+ *  `overridesBroughtHome`, and `Draggable`'s `closeGestureWorld` for the 3D half. */
+function unpinWhatCameHome(d: { overridesAtStart: Pick<TransformOverrides, 'positions' | 'rotations'>; world: ScenePart[] }) {
+  const s = useStudio.getState();
+  s.forgetOverrides(overridesBroughtHome(d.overridesAtStart, s, d.world));
+}
 
 /** The comfort bands for one piece, drawn in its own local frame — which is
  *  exactly the frame `accessZones` authors them in, so this is a unit conversion
