@@ -3887,7 +3887,25 @@ clamped to 600 mm when placed. It is a dining/desk table now (`FIT_KINDS`, `lib/
   staying on the floor, clashing, until it is dragged clear — changes § H.6.4, so it is not
   decided here. **Answered 2026-09-30: a drag stays as it is**, so the nudged ottoman goes
   on top. The user added one thing: Ideas must never show a seat standing on a table or a
-  bed. Not built yet, and to be measured first.
+  bed. **Built 2026-10-02.** Measured first: with an ottoman on the coffee table, 48 of 48
+  ideas across the five presets kept it on the top, because an idea moves pieces across the
+  floor and keeps each one's height. `seatsDown` (`lib/layout-ideas.ts`) now sets a seat
+  standing on a table or the bed down BESIDE it before the search — out through the nearest
+  side that keeps it inside the room, 50 mm clear, at the level the table stands on —
+  carrying whatever stands on the seat, and every idea writes it as moved: 0 of 60, none
+  floating. A platform is a floor, so a seat on one stays; so does a kept seat, one carrying
+  a kept piece, and one in a group, because kept means kept. Review took the first version
+  apart, and the reasons are worth keeping. It set the seat straight down, which is INSIDE
+  the table: a tray on a 420 mm ottoman then sits level with a 420 mm table's top, the
+  solver reads riders off the room it is handed, and every idea took the ottoman away and
+  left its tray on the table. It re-read the room after each seat, so array order decided
+  which of two stacked seats came down; it reads once now, lowest seat first, and walks
+  each seat's chain of supports, so a stool on a board on the dining table is on that
+  table too. And it set kept and grouped seats down with the rest. One find on the way:
+  `ridingParents` said a piece with a lamp on it rode NOTHING, because it asked about every
+  top under the piece, its own load included; it asks only up to `SUPPORT_Y_EPS` above its
+  own bottom now, as `restingOn` does. The refusal sentence still reads the room on screen,
+  so a seat set down in a walkway does not send a clean room to Fix.
 
 **§ H.6.5 · FIXED 2026-09-30: a merged set is one body to the solver.** The second half of
 the first observation above. Merging says *these belong together as they stand*: a click

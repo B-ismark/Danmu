@@ -19,8 +19,11 @@
  * would make each thumbnail a lie about the room it produces, because the solver
  * arranged each one against the base and nothing else.
  */
-import { distToBoundary, frontVector } from './geometry';
-import { roleOf, roomProfile, WALL_ATTACH_TOL, isSoftFurnishing, type Role } from './layout-rules';
+import { distToBoundary, footFromPart, footInsidePoly, frontVector, localToWorld, worldToLocal } from './geometry';
+import { isSeating, roleOf, roomProfile, WALL_ATTACH_TOL, isSoftFurnishing, type Role } from './layout-rules';
+import { highestSurfaceUnder, SUPPORT_Y_EPS } from './physics';
+import { ridingParents } from './rigid-parent';
+import { withRiders } from './layout-solve';
 import type { Placement } from './layout-score';
 import type { Footprint } from './footprint';
 import type { ScenePart } from './scene-spec';
@@ -85,6 +88,105 @@ export function ideaTransforms(base: Transform2, parts: readonly ScenePart[], id
     rotations[p.id] = at.yaw;
   }
   return { positions, rotations };
+}
+
+/** The tops a seat is never shown standing on: every table, and the bed. A
+ *  platform is `other` (see `roleOf`) and is a floor, so a seat on one stays. */
+const SEAT_NEVER_ON: ReadonlySet<Role> = new Set<Role>(['bed', 'dining-table', 'coffee-table', 'side-table', 'nightstand', 'desk']);
+
+/** How far clear of its table or bed a seat is set down: a hand's width, so the two
+ *  read as separate pieces and nothing is left touching. */
+const SET_DOWN_GAP_M = 0.05;
+
+/** The room Ideas arranges: the room as it stands, with every seat that is standing
+ *  on a table or a bed set down BESIDE it, at the level the table stands on, and
+ *  whatever stands on that seat carried with it. `down` is every index it moved, and
+ *  every idea writes them (`ideaMoved`), moved by the search or not: an idea that
+ *  left the ottoman alone would otherwise leave it hanging at the table's height.
+ *
+ *  The user's call (2026-09-30, `docs/what-is-still-open.md` § H.6.4): a drag may
+ *  stand a seat on a coffee table, and Ideas may never show one there. It used to in
+ *  all of them, measured — a seat riding a table or a bed is carried with it
+ *  (`carryRiders`), so it was on its top in 48 of 48 ideas across five presets.
+ *
+ *  **Beside, not straight down.** Set down where it stands, the seat is inside its
+ *  table, and the solver reads what stands on what from the room it is handed
+ *  (`ridingParents`): a tray on a 420 mm ottoman inside a 420 mm coffee table sits
+ *  level with the table's top and reads as standing on the TABLE, so every idea took
+ *  the ottoman away and left its tray behind. Clear of the table, the stack reads as
+ *  it stands. The side is the nearest one that keeps the seat inside the room.
+ *
+ *  **Kept means kept.** A seat that is kept where it is, or that carries a kept
+ *  piece, stays as the user left it, and so does one in a group: setting it down
+ *  moves it against its group, which the group exists to stop. `locked` is
+ *  `lockedForShuffle`'s.
+ *
+ *  Read once, off the room as it stands, lowest seat first, so a stool on an ottoman
+ *  on the table goes down with the ottoman rather than on its own. A seat on
+ *  something that stands on a table (a stool on a board on the dining table) is on
+ *  that table too: the chain is walked to the first table or bed under it. */
+export function seatsDown(
+  parts: ScenePart[],
+  locked: readonly boolean[],
+  footprint: Footprint,
+): { parts: ScenePart[]; down: number[] } {
+  const rides = ridingParents(parts);
+  const at = new Map(parts.map((p, i) => [p.id, i]));
+  const out = parts.slice();
+  const down = new Set<number>();
+  const lowestFirst = parts.map((_, i) => i).sort((a, b) => parts[a].pos[1] - parts[b].pos[1]);
+  for (const i of lowestFirst) {
+    const seat = parts[i];
+    if (down.has(i) || !isSeating(roleOf(seat))) continue;
+    let host: ScenePart | undefined;
+    // Bounded, because `ridingParents` can close a loop between two pieces thinner
+    // than `SUPPORT_Y_EPS` (see its comment).
+    for (let u = rides[seat.id], n = 0; u !== undefined && !host && n < parts.length; u = rides[u], n++) {
+      const q = parts[at.get(u)!];
+      if (SEAT_NEVER_ON.has(roleOf(q))) host = q;
+    }
+    if (!host) continue;
+    const stack = [...withRiders(new Set([seat.id]), parts)].map((id) => at.get(id)!);
+    if (stack.some((k) => locked[k] || parts[k].groupId)) continue;
+    const [dx, dz] = besideHost(seat, host, footprint);
+    const x = seat.pos[0] + dx;
+    const z = seat.pos[2] + dz;
+    const under = highestSurfaceUnder(out, seat.id, x, z, seat.dimMM, seat.rot, seat.circle, seat.shape, host.pos[1] + SUPPORT_Y_EPS);
+    const drop = seat.pos[1] - (under ? under.y : 0);
+    for (const k of stack) {
+      const p = out[k];
+      out[k] = { ...p, pos: [p.pos[0] + dx, p.pos[1] - drop, p.pos[2] + dz] };
+      down.add(k);
+    }
+  }
+  return { parts: out, down: [...down].sort((a, b) => a - b) };
+}
+
+/** The world offset that puts `seat` just clear of `host`'s footprint, out through
+ *  the nearest of its four sides that leaves the seat inside the room — or the
+ *  nearest side at all, when none does (the search then has to move it, which it
+ *  can: nothing in the stack is kept). Worked in the host's own frame, with the
+ *  seat's turn against the host folded into how far it reaches along each axis. */
+function besideHost(seat: ScenePart, host: ScenePart, footprint: Footprint): [number, number] {
+  const [lx, lz] = worldToLocal(host.rot, seat.pos[0] - host.pos[0], seat.pos[2] - host.pos[2]);
+  const turn = seat.rot - host.rot;
+  const c = Math.abs(Math.cos(turn));
+  const s = Math.abs(Math.sin(turn));
+  const reachX = host.dimMM[0] / 2000 + (c * seat.dimMM[0] + s * seat.dimMM[1]) / 2000 + SET_DOWN_GAP_M;
+  const reachZ = host.dimMM[1] / 2000 + (s * seat.dimMM[0] + c * seat.dimMM[1]) / 2000 + SET_DOWN_GAP_M;
+  const ways = ([[reachX - lx, 0], [-reachX - lx, 0], [0, reachZ - lz], [0, -reachZ - lz]] as const)
+    .map(([sx, sz]) => localToWorld(host.rot, sx, sz))
+    .sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]));
+  const inside = ways.find(([dx, dz]) =>
+    footInsidePoly(footFromPart([seat.pos[0] + dx, 0, seat.pos[2] + dz], seat.rot, seat.dimMM, seat.circle, seat.shape), footprint),
+  );
+  return inside ?? ways[0];
+}
+
+/** What an idea writes: the pieces the search moved, and every piece `seatsDown`
+ *  set down, which the search may have left where it was put. */
+export function ideaMoved(moved: readonly number[], down: readonly number[]): number[] {
+  return [...new Set([...moved, ...down])].sort((a, b) => a - b);
 }
 
 /** One string for "are these the same transform maps", by content.

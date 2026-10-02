@@ -113,6 +113,19 @@ describe('ridingParents — who is standing on what', () => {
     expect(ridingParents([wardrobe, near])).toEqual({});
   });
 
+  // THE CEILING. Asked without one, `highestSurfaceUnder` hands back whatever stands
+  // ON the piece when its foot covers enough of the piece's own: the lamp below covers
+  // 83% of the books, so the books rode nothing and the nightstand under them was
+  // forgotten — and an ottoman with a stool on it was not on its coffee table.
+  it('a piece with something standing on it still rides what it stands on', () => {
+    const books = part({ id: 'books', category: 'other', shape: 'box', dimMM: [300, 250, 40], pos: [0, 0.55, 0] });
+    const lamp = part({
+      id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.59, 0],
+    });
+    expect(footIntersectionArea(foot(lamp), foot(books)) / footArea(foot(books))).toBeGreaterThan(MIN_SUPPORT_SHARE);
+    expect(ridingParents([stand, books, lamp])).toEqual({ books: 'stand', lamp: 'books' });
+  });
+
   it('does not claim a lamp left hanging above the nightstand is riding it', () => {
     const lamp = part({
       id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.75, 0],
