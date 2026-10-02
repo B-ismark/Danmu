@@ -113,7 +113,7 @@ The user's 2026-10-01 report: a seeded bedroom said **Queen bed** while the Libr
 *On floor* card. A starter room now uses the Library's own pieces and names (Bed, Rug,
 Curtain, Painting, Pendant lamp, Table lamp, TV · 65″). The Inspector's first row is the
 name with its Library shelf beside it (a bed reads **Bed**, then a quiet **Bedroom**);
-the second line is gone. A door and a window sit on a new **Doors & windows** shelf, in the
+the second line is gone. A door and a window sit on a new **Openings** shelf (the word `lib/room-openings.ts` already uses), in the
 Library too, because the shelf now reads as what the piece is and a door is not an
 appliance. A scanned bed (a shape the Library no longer sells) takes its kind's shelf. The
 placement card shows only when it has something to say: a finding, a piece in mid-air, or

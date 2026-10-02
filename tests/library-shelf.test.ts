@@ -21,8 +21,8 @@ describe('libraryShelf', () => {
     expect(libraryShelf('radiator', 'fridge')).toBe('Appliances');
     expect(libraryShelf('bed-double', 'bed')).toBe('Bedroom');
     // The shelf is shown as what the piece IS, so a door is not filed as an appliance.
-    expect(libraryShelf('door', 'door')).toBe('Doors & windows');
-    expect(libraryShelf('window', 'other')).toBe('Doors & windows');
+    expect(libraryShelf('door', 'door')).toBe('Openings');
+    expect(libraryShelf('window', 'other')).toBe('Openings');
   });
 
   it('finds every category but the catch-all on exactly one shelf', () => {

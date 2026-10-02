@@ -381,24 +381,24 @@ describe('the tail of a compound word', () => {
     expect(searchLibrary('wave', PART_LIBRARY.length).map((i) => i.label)).toContain('Microwave');
   });
 
-  it('but three letters do not, because "ing" would reach fourteen rows', () => {
+  it('but three letters do not, because "ing" would reach sixteen rows', () => {
     // The floor, pinned as the decision it is. At a floor of 3 the gerund tail `ing`
     // matches Lighting, Seating, Dining and every row in those groups — a query that
     // is not a word anybody typed on purpose, admitting a third of the catalog. This
     // is the assertion that fails if CONTAINS_MIN drops.
     expect(searchLibrary('ing', PART_LIBRARY.length)).toEqual([]);
     const wouldMatch = PART_LIBRARY.filter((i) => hayTokens(i).some((h) => h.includes('ing')));
-    // 14 — the number in this test's name, and its count when the name was written. It
-    // was 16 for a while with a King bed and a Single bed in the Library, both of which
-    // carry the tail; they merged into one Bed.
-    expect(wouldMatch.length).toBe(14);
+    // 16 — the number in this test's name. It was 16 once before with a King bed and a
+    // Single bed in the Library, 14 after they merged into one Bed, and 16 again since
+    // Door and Window moved onto the `Openings` shelf, which carries the tail too.
+    expect(wouldMatch.length).toBe(16);
   });
 
   it('and no query in the catalog\'s own substring space becomes a catch-all', () => {
     // The floor was MEASURED rather than picked, so the measurement is the assertion
     // rather than the number 4 sitting alone above it. Every substring of every hay
     // token is a query a user can type; none may reach more than a quarter of the
-    // catalog. At a floor of 3 `ing` reaches 14 of 43 and this goes red — which is
+    // catalog. At a floor of 3 `ing` reaches 16 of 43 and this goes red — which is
     // the same fact as the test above, arrived at without naming `ing`.
     const subs = new Set<string>();
     for (const t of new Set(PART_LIBRARY.flatMap(hayTokens))) {

@@ -1852,7 +1852,7 @@ function seats(part: ScenePart, placed: ScenePart[], poly: Footprint): boolean {
 // `group` only drives section headers in the Add-model picker.
 export type LibraryItem = {
   label: string;
-  group: 'Seating' | 'Tables' | 'Storage' | 'Bedroom' | 'Lighting' | 'Decor' | 'Tech' | 'Appliances' | 'Doors & windows';
+  group: 'Seating' | 'Tables' | 'Storage' | 'Bedroom' | 'Lighting' | 'Decor' | 'Tech' | 'Appliances' | 'Openings';
   category: Category;
   shape: Shape;
   dimMM: [number, number, number];
@@ -2294,10 +2294,13 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Standing fan', group: 'Appliances', category: 'fan', shape: 'fan-standing', dimMM: [450, 310, 1300] },
   { label: 'Chest freezer', group: 'Appliances', category: 'fridge', shape: 'chest-freezer', dimMM: [1250, 650, 850] },
   { label: 'AC unit', group: 'Appliances', category: 'ac', shape: 'ac-unit', dimMM: [800, 220, 280] },
-  // Doors & windows — their own shelf, because the shelf is also what the Inspector
-  // shows beside a piece's name, and a door is not an appliance nor a window decor.
-  { label: 'Door', group: 'Doors & windows', category: 'door', shape: 'door', dimMM: [900, 50, 2100] },
-  { label: 'Window', group: 'Doors & windows', category: 'other', shape: 'window', dimMM: [1200, 60, 1200] },
+  // Openings — their own shelf, because the shelf is also what the Inspector shows
+  // beside a piece's name, and a door is not an appliance nor a window decor. Not
+  // "Doors & windows": the shelf is searched as well as shown, so that name made
+  // renaming a piece "window" offer the Door model (`tests/label-suggest.test.ts`),
+  // and it would have read "Door · Doors & windows" — the echo the header lost.
+  { label: 'Door', group: 'Openings', category: 'door', shape: 'door', dimMM: [900, 50, 2100] },
+  { label: 'Window', group: 'Openings', category: 'other', shape: 'window', dimMM: [1200, 60, 1200] },
 ];
 
 /** The Library shelf a shape sits on — "Appliances" for a radiator — shown beside a

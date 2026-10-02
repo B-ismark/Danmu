@@ -301,7 +301,8 @@ describe('a shape is reachable by the two things a person types', () => {
     }
     // The picker renders one heading per group present; a group named in the type
     // but shipped empty is a heading with nothing under it.
-    expect(groups.size, 'every group in the LibraryItem union should ship something').toBe(8);
+    // Nine since Door and Window left Appliances and Decor for their own `Openings`.
+    expect(groups.size, 'every group in the LibraryItem union should ship something').toBe(9);
   });
 });
 
