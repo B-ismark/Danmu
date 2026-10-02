@@ -17,8 +17,10 @@ import { PhotoEditor } from '@/components/studio/PhotoEditor';
 import { boxCss } from '@/lib/photo-tag';
 import { isTypingOrDialog } from '@/components/studio/KeyboardShortcuts';
 import { sampleBoxColor } from '@/lib/color-sample';
-import { localDetectorAvailable, detectLocalAcrossImages, detectorDownloadBytes, onDetectorDownload, type DownloadProgress } from '@/lib/local-detect';
+import { localDetectorAvailable, detectLocalAcrossImages, detectorStatus, onDetectorDownload, type DetectorStatus, type DownloadProgress } from '@/lib/local-detect';
 import { megabytes } from '@/lib/model-cache';
+import type { DetectorPack } from '@/lib/model-verify';
+import { DetectorPackPicker, onMeteredConnection } from '@/components/ui/DetectorPackPicker';
 import {
   calForPhoto,
   findFloorLine,
@@ -276,7 +278,13 @@ export default function DetectPage() {
   const [running, setRunning] = useState(false);
   // The detector's one-time download: asked about before a byte of it moves, then
   // counted while it runs. `ask` resolves the question the scan is waiting on.
-  const [download, setDownload] = useState<{ bytes: number; ask: (go: boolean) => void } | null>(null);
+  const [download, setDownload] = useState<{
+    sizes: Record<DetectorPack, DetectorStatus>;
+    update: boolean;
+    metered: boolean;
+    ask: (pack: DetectorPack | null) => void;
+  } | null>(null);
+  const detectorPack = useSettings((s) => s.detectorPack);
   const [fetched, setFetched] = useState<DownloadProgress | null>(null);
   const [saving, setSaving] = useState(false);
   const [slots, setSlots] = useState<SlotEntry[]>([]);
@@ -399,15 +407,29 @@ export default function DetectPage() {
           if (await localDetectorAvailable()) {
             // ~65 MB the first time, nothing after (`lib/model-cache.ts`). Asked, never
             // assumed: on mobile data that is the most this app ever costs anyone.
-            const owed = await detectorDownloadBytes();
-            const go = owed === 0 || (await new Promise<boolean>((ask) => setDownload({ bytes: owed, ask })));
-            setDownload(null);
+            // An update is asked about the same way: a kept copy for another version
+            // of the file is a download, and nobody's data plan is spent unasked.
+            let pack = useSettings.getState().detectorPack;
+            const status = await detectorStatus(pack);
+            let go = status.owed === 0;
+            if (!go) {
+              const [full, basic] = await Promise.all([detectorStatus('full'), detectorStatus('basic')]);
+              const chosen = await new Promise<DetectorPack | null>((ask) =>
+                setDownload({ sizes: { full, basic }, update: status.update, metered: onMeteredConnection(), ask }),
+              );
+              setDownload(null);
+              if (chosen) {
+                pack = chosen;
+                useSettings.getState().setDetectorPack(chosen);
+                go = true;
+              }
+            }
             if (cancelled || stopped.current) return;
             if (go) {
               setPath('local');
-              onDetectorDownload(owed > 0 ? setFetched : null);
+              onDetectorDownload(setFetched);
               try {
-                dets = await detectLocalAcrossImages(entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })));
+                dets = await detectLocalAcrossImages(entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })), pack);
                 if (dets && dets.length === 0) dets = null; // empty result → let Gemini try
               } catch {
                 dets = null;
@@ -832,7 +854,7 @@ export default function DetectPage() {
     setRunning(false);
     // A scan waiting on the download question is answered no, so it does not wait forever.
     setDownload((d) => {
-      d?.ask(false);
+      d?.ask(null);
       return null;
     });
     setPath('stopped');
@@ -1006,20 +1028,31 @@ export default function DetectPage() {
           subtitle={roughSize ? 'Keep what’s yours. Sizes are rough until you set the room’s size.' : 'Keep what’s yours.'}
         />
         {download && (
-          <section className="ds-card" aria-labelledby="dl-title" style={{ padding: '14px 16px', maxWidth: '68ch', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <section className="ds-card" aria-labelledby="dl-title" style={{ padding: '14px 16px', maxWidth: '68ch', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <h2 id="dl-title" className="sans" style={{ margin: 0, fontSize: 'var(--fs-lead)', fontWeight: 700 }}>
-              Download the furniture finder?
+              {download.update ? 'An improved furniture finder is ready' : 'Download the furniture finder?'}
             </h2>
             <p className="t-small" style={{ margin: 0, lineHeight: 1.5 }}>
-              To spot your furniture on this device, Danmu needs a one-time download of about {megabytes(download.bytes)}. It is kept
-              afterwards, so later scans use no data. On mobile data, you can skip this and draw a box around each piece instead.
+              {download.update
+                ? 'This version of Danmu finds furniture better than the copy on this device. It is a one-time download, kept afterwards.'
+                : 'To spot your furniture on this device, Danmu needs a one-time download. It is kept afterwards, so later scans use no data.'}{' '}
+              {download.metered
+                ? 'You seem to be on mobile data, so you may want to wait for Wi-Fi.'
+                : 'On mobile data, you can skip this and draw a box around each piece instead.'}
             </p>
+            <DetectorPackPicker
+              value={detectorPack}
+              onChange={(p) => useSettings.getState().setDetectorPack(p)}
+              sizes={download.sizes}
+            />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="ds-btn ds-btn--accent" onClick={() => download.ask(true)}>
+              <button className="ds-btn ds-btn--accent" onClick={() => download.ask(detectorPack)}>
                 <Icon name="download" size={13} />
-                Download {megabytes(download.bytes)}
+                {download.sizes[detectorPack].owed === 0
+                  ? `Use ${detectorPack === 'full' ? 'Full' : 'Basic'}, already kept`
+                  : `${download.update ? 'Update' : 'Download'} ${megabytes(download.sizes[detectorPack].owed)}`}
               </button>
-              <button className="ds-btn" onClick={() => download.ask(false)}>
+              <button className="ds-btn" onClick={() => download.ask(null)}>
                 Skip for now
               </button>
             </div>

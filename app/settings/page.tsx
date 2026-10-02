@@ -13,6 +13,10 @@ import { Dot, IconButton, Pill, Segmented } from '@/components/ui/primitives';
 import { useConfirm, useConfirmDeleteRooms } from '@/components/ui/Confirm';
 import { BackButton, DocShell } from '@/components/ui/DocShell';
 import { toast } from '@/components/ui/StorageToast';
+import { DetectorPackPicker } from '@/components/ui/DetectorPackPicker';
+import { detectorStatus, downloadDetector, onDetectorDownload, removeDetector, type DetectorStatus, type DownloadProgress } from '@/lib/local-detect';
+import { megabytes } from '@/lib/model-cache';
+import type { DetectorPack } from '@/lib/model-verify';
 
 // Authored copy per failure code. The old screen printed the raw exception,
 // `.slice(0, 80)` — which told a user with a perfect key on a flaky connection
@@ -425,6 +429,8 @@ export default function SettingsPage() {
           </Row>
         </Section>
 
+        <DownloadsSection />
+
         <Section
           icon="layers"
           tint="var(--paper-3)"
@@ -487,6 +493,107 @@ export default function SettingsPage() {
         </Section>
       </div>
     </DocShell>
+  );
+}
+
+/** What is kept on this device so it never has to be downloaded again, and the
+ *  controls a storage manager gives you over it: the pack, Download now (on Wi-Fi,
+ *  ahead of a scan), Update when this version expects a newer file, and Remove.
+ *  The sizes are the mirror's, read live; nothing here downloads until a press. */
+function DownloadsSection() {
+  const pack = useSettings((s) => s.detectorPack);
+  const setPack = useSettings((s) => s.setDetectorPack);
+  const [sizes, setSizes] = useState<Record<DetectorPack, DetectorStatus | null>>({ full: null, basic: null });
+  const [busy, setBusy] = useState<'download' | 'remove' | null>(null);
+  const [got, setGot] = useState<DownloadProgress | null>(null);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    void Promise.all([detectorStatus('full'), detectorStatus('basic')]).then(([full, basic]) => {
+      if (live) setSizes({ full, basic });
+    });
+    return () => {
+      live = false;
+    };
+  }, [tick]);
+
+  const st = sizes[pack];
+  const served = st !== null && !st.unreachable && st.size === 0;
+  const hint =
+    st === null
+      ? 'Checking what is on this device…'
+      : st.unreachable && st.kept === 0
+        ? "Can't reach the download right now. Check your connection, then come back."
+      : served
+        ? 'Served by this copy of Danmu, so nothing needs downloading.'
+        : st.owed === 0
+          ? `Kept on this device, ${megabytes(st.kept)}. Scans use no data.`
+          : st.update
+            ? `An improved version is ready, ${megabytes(st.owed)} to download.`
+            : `Not downloaded yet. The first scan will ask before it downloads ${megabytes(st.owed)}.`;
+
+  async function download() {
+    setBusy('download');
+    onDetectorDownload(setGot);
+    try {
+      const ok = await downloadDetector(pack);
+      toast(ok
+        ? { tone: 'success', title: 'Furniture finder kept on this device', message: 'Scans will use no data.' }
+        : { tone: 'danger', title: "Couldn't download the furniture finder", message: 'Check your connection and try again.' });
+    } finally {
+      onDetectorDownload(null);
+      setGot(null);
+      setBusy(null);
+      setTick((t) => t + 1);
+    }
+  }
+
+  async function remove() {
+    setBusy('remove');
+    try {
+      await removeDetector();
+      toast({ title: 'Furniture finder removed', message: 'The next scan will ask before downloading it again.' });
+    } finally {
+      setBusy(null);
+      setTick((t) => t + 1);
+    }
+  }
+
+  const keptAny = (sizes.full?.kept ?? 0) > 0 || (sizes.basic?.kept ?? 0) > 0;
+  return (
+    <Section
+      icon="download"
+      tint="var(--locked-tint)"
+      color="var(--locked)"
+      title="Downloads"
+      desc="What Danmu keeps on this device so it never downloads it twice."
+    >
+      <Row label="Furniture finder" hint={hint}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <DetectorPackPicker value={pack} onChange={setPack} sizes={sizes} />
+          {got && got.total > 0 && (
+            <p className="t-small" role="status" style={{ margin: 0 }}>
+              Downloading… {megabytes(got.loaded)} of {megabytes(got.total)}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {st !== null && !served && !st.unreachable && st.owed > 0 && (
+              <button className="ds-btn ds-btn--sm" onClick={download} disabled={busy !== null}>
+                <Icon name="download" size={12} />
+                {busy === 'download' ? 'Downloading…' : `${st.update ? 'Update' : 'Download now'}, ${megabytes(st.owed)}`}
+              </button>
+            )}
+            {keptAny && (
+              <button className="ds-btn ds-btn--sm" onClick={remove} disabled={busy !== null}>
+                <Icon name="trash" size={12} />
+                {busy === 'remove' ? 'Removing…' : 'Remove from this device'}
+              </button>
+            )}
+          </div>
+        </div>
+      </Row>
+    </Section>
   );
 }
 

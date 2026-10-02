@@ -38,23 +38,35 @@ export async function readCachedModel(url: string): Promise<ArrayBuffer | null> 
   }
 }
 
-/** Whether `url` is kept, without reading 50 MB to find out. */
-export async function hasCachedModel(url: string): Promise<boolean> {
+/** The header a kept copy carries its digest in, written when it was verified. */
+const DIGEST_HEADER = 'x-danmu-digest';
+
+/** Whether `url` is kept and is the version `digest` names, without reading 50 MB to
+ *  find out: `stale` is a copy verified against a different pin, which is what an app
+ *  update that ships a new model looks like from here. A copy with no recorded digest
+ *  (kept before this header existed) reads as stale, so it is offered as an update
+ *  rather than trusted unread. The read itself still verifies the bytes. */
+export async function keptState(url: string, digest: string | undefined): Promise<'kept' | 'stale' | 'missing'> {
   try {
     const c = store();
-    if (!c) return false;
-    return (await (await c.open(CACHE)).match(url)) !== undefined;
+    if (!c) return 'missing';
+    const hit = await (await c.open(CACHE)).match(url);
+    if (!hit) return 'missing';
+    return digest !== undefined && hit.headers.get(DIGEST_HEADER) === digest ? 'kept' : 'stale';
   } catch {
-    return false;
+    return 'missing';
   }
 }
 
-/** Keep verified bytes for `url`. Call only after the digest check passed. */
-export async function writeCachedModel(url: string, buf: ArrayBuffer): Promise<void> {
+/** Keep verified bytes for `url`, labelled with the digest they were checked against.
+ *  Call only after that check passed. */
+export async function writeCachedModel(url: string, buf: ArrayBuffer, digest: string | undefined): Promise<void> {
   try {
     const c = store();
     if (!c) return;
-    await (await c.open(CACHE)).put(url, new Response(buf, { headers: { 'content-type': 'application/octet-stream' } }));
+    const headers: Record<string, string> = { 'content-type': 'application/octet-stream' };
+    if (digest) headers[DIGEST_HEADER] = digest;
+    await (await c.open(CACHE)).put(url, new Response(buf, { headers }));
   } catch {
     // Full or blocked: the next scan downloads again, which is today's behaviour.
   }
@@ -66,6 +78,17 @@ export async function dropCachedModel(url: string): Promise<void> {
     const c = store();
     if (!c) return;
     await (await c.open(CACHE)).delete(url);
+  } catch {
+    // Nothing to do.
+  }
+}
+
+/** Remove every kept file: Settings' "Remove". */
+export async function clearCachedModels(): Promise<void> {
+  try {
+    const c = store();
+    if (!c) return;
+    await c.delete(CACHE);
   } catch {
     // Nothing to do.
   }

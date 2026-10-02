@@ -1,5 +1,6 @@
 'use client';
 
+import type { DetectorPack } from './model-verify';
 import { useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
@@ -489,12 +490,17 @@ type SettingsState = {
    *  room, so it lives here. On by default: they are quiet enough to sit under
    *  anything else playing, and the switch is in the View panel. */
   sound: boolean;
+  /** Which furniture finder to keep on this device (`lib/local-detect.ts`): `full` is both
+   *  models, ~65 MB, and finds the most; `basic` is the smaller one alone, ~14 MB. A
+   *  property of the device and its data plan, so it lives here. */
+  detectorPack: DetectorPack;
   setApiKey: (k: string) => void;
   setDimUnit: (u: DimUnit) => void;
   setKeyValid: (v: boolean | null, reason?: string | null) => void;
   setCamHeight: (m: number) => void;
   setStepFree: (on: boolean) => void;
   setSound: (on: boolean) => void;
+  setDetectorPack: (p: DetectorPack) => void;
 };
 
 /** Bounds on the remembered camera height. Outside these it is a typo, and a
@@ -513,6 +519,7 @@ export const useSettings = create<SettingsState>()(
       camHeightSet: false,
       stepFree: false,
       sound: true,
+      detectorPack: 'full',
       // Setting a new key invalidates the cached test result.
       setApiKey: (k) => set({ apiKey: k, keyValid: null, keyValidReason: null }),
       setDimUnit: (u) => set({ dimUnit: u }),
@@ -524,6 +531,7 @@ export const useSettings = create<SettingsState>()(
         }),
       setStepFree: (on) => set({ stepFree: on }),
       setSound: (on) => set({ sound: on }),
+      setDetectorPack: (p) => set({ detectorPack: p }),
     }),
     {
       name: 'danmu-settings',
