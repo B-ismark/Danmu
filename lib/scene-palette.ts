@@ -93,6 +93,10 @@ export const DETAIL = {
   /** A table lamp's glazed body: a soft sage, the accent family's quiet end, so a
    *  linen shade over it reads as two materials rather than one painted object. */
   ceramicGlaze: '#AEB9A4',
+  /** A dining chair's seat pad: an oat linen, so the pad and the frame it sits in read as
+   *  cloth on wood. The frame takes the chair's colour; the pad keeps this, as a real
+   *  chair's upholstery does when the frame is stained. */
+  upholstery: '#CBBCA2',
 } as const;
 
 // ─── Decor accents ──────────────────────────────────────────────────────────

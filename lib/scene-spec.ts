@@ -422,7 +422,7 @@ export {
  *
  *  The floor and table lamps are the same defect, and were kept in that table on a claim
  *  that was false: that they "draw their bulbs at literals". Their geometry was literals
- *  inside `FitToDim`, which stretches it to the declared size, so their shades moved with
+ *  inside `FitToDim` (since deleted), which stretched it to the declared size, so their shades moved with
  *  the size and their light did not. A 1500 mm floor lamp emitted from 1.66 m — 160 mm
  *  above its own top; a 900 mm table lamp from 0.40 m, in its stem 150 mm below the
  *  shade. They read `lampForm` now, and the table is gone. */

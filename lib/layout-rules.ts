@@ -77,6 +77,7 @@ import { WALK_RADIUS } from './clearance-field';
 import { footFromPart, footOverlap, frontVector, localToWorld, obbGap, polygonArea, worldToLocal, type Foot, type OBB } from './geometry';
 import { surfacePostsLocal, type LocalRect } from './foot-cells';
 import { dimRangeFor } from './dimension-ranges';
+import { DINING_CHAIR, OFFICE_CHAIR } from './chair-form';
 
 // ─── Roles ──────────────────────────────────────────────────────────────────
 //
@@ -886,14 +887,13 @@ function nearestCell(seat: Foot, cells: readonly OBB[]): OBB {
 
 function seatBackShare(shape: Shape): number {
   switch (shape) {
-    // `DiningChairGeo` is 420 deep; the top rail's front face, the frontmost thing
-    // above the seat, is 155 mm behind the centre — the rear 55 of the 420.
+    // The share of the depth, from the back, that a chair's back stands in: the dining
+    // chair's rear uprights, the office chair's back cushion (`lib/chair-form.ts`, which
+    // draws them from these same numbers).
     case 'chair-dining':
-      return 55 / 420;
-    // `OfficeChairGeo` is 480 deep; the lumbar pad's front face is 170 mm behind the
-    // centre — the rear 70 of the 480. (The armrests top out AT the tuck height.)
+      return DINING_CHAIR.back;
     case 'chair-office':
-      return 70 / 480;
+      return OFFICE_CHAIR.back;
     default:
       return 0;
   }
@@ -901,14 +901,13 @@ function seatBackShare(shape: Shape): number {
 
 function seatTuckMM(shape: Shape, h: number): number {
   switch (shape) {
-    // `DiningChairGeo` is authored 1090 tall with the seat's top at 490; the back
-    // slats, rail and rear legs are all behind the front 85%.
+    // The dining chair's seat pad top; its back is all behind the front 85%.
     case 'chair-dining':
-      return (h * 490) / 1090;
-    // `OfficeChairGeo` is authored 1150 tall; the armrests' top is 640, and they
-    // reach well into the front 85% while the backrest stays behind it.
+      return h * DINING_CHAIR.seatTop;
+    // The office chair's armrests' top, which reaches well into the front 85% while the
+    // back stays behind it.
     case 'chair-office':
-      return (h * 640) / 1150;
+      return h * OFFICE_CHAIR.armTop;
     default:
       return h;
   }
