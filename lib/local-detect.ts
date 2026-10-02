@@ -29,6 +29,7 @@
 // and would put an AGPL artifact under an MIT project — don't, without either
 // relicensing or hosting the weights separately under their own AGPL terms.
 
+import { dropCachedModel, hasCachedModel, readCachedModel, writeCachedModel } from './model-cache';
 import type { Detection } from './detection';
 import type { CaptureSlot } from './storage';
 import type { Category, Shape } from './scene-spec';
@@ -244,21 +245,91 @@ const ORT_ENTRY = 'ort.min.mjs';
  *
  *  A file with no pinned digest passes: the registry is allowed to be partial so
  *  that adding a model file does not require a release to pin it first. */
-async function fetchBytes(base: string, file: string): Promise<ArrayBuffer | null> {
-  const res = await fetch(base + file);
+async function fetchBytes(base: string, file: string): Promise<{ buf: ArrayBuffer; kept: boolean } | null> {
+  const url = base + file;
+  // A remote file kept from an earlier scan (`lib/model-cache.ts`). The caller verifies
+  // it like any download, so a kept copy earns nothing by being kept.
+  if (base !== LOCAL_BASE) {
+    const kept = await readCachedModel(url);
+    if (kept) return { buf: kept, kept: true };
+  }
+  const res = await fetch(url);
   if (!res.ok) return null;
-  return res.arrayBuffer();
+  return { buf: await readWithProgress(res, file), kept: false };
+}
+
+/** Verified, then kept for next time; a kept copy that fails is dropped and
+ *  fetched again once. */
+async function fetchChecked(base: string, file: string, ok: (file: string, buf: ArrayBuffer) => Promise<boolean>): Promise<ArrayBuffer | null> {
+  const got = await fetchBytes(base, file);
+  if (!got) return null;
+  if (await ok(file, got.buf)) {
+    if (!got.kept && base !== LOCAL_BASE) await writeCachedModel(base + file, got.buf);
+    return got.buf;
+  }
+  if (!got.kept) return null;
+  await dropCachedModel(base + file);
+  return fetchChecked(base, file, ok);
 }
 
 async function fetchVerifiedBytes(base: string, file: string): Promise<ArrayBuffer | null> {
-  const buf = await fetchBytes(base, file);
-  return buf && (await digestMatches(file, buf)) ? buf : null;
+  return fetchChecked(base, file, digestMatches);
+}
+
+// ─── Download progress ──────────────────────────────────────────
+//
+// The weights are the one large download, so a person watching a scan start is told
+// how far it has got rather than shown a spinner for a minute on a slow line.
+
+/** Bytes so far and bytes in all, across the files of the current download. */
+export type DownloadProgress = { loaded: number; total: number };
+let listener: ((p: DownloadProgress) => void) | null = null;
+const progress = new Map<string, DownloadProgress>();
+
+/** Hear how the detector's download is going; null to stop. */
+export function onDetectorDownload(fn: ((p: DownloadProgress) => void) | null): void {
+  listener = fn;
+  progress.clear();
+}
+
+function report(): void {
+  if (!listener) return;
+  let loaded = 0;
+  let total = 0;
+  for (const p of progress.values()) {
+    loaded += p.loaded;
+    total += p.total;
+  }
+  listener({ loaded, total });
+}
+
+async function readWithProgress(res: Response, file: string): Promise<ArrayBuffer> {
+  const total = Number(res.headers.get('content-length')) || remoteSize.get(file) || 0;
+  if (!res.body || !listener || total === 0) return res.arrayBuffer();
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    progress.set(file, { loaded, total });
+    report();
+  }
+  const out = new Uint8Array(loaded);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.byteLength;
+  }
+  return out.buffer;
 }
 
 /** …and for a graph, the format check as well. */
 async function fetchVerifiedModel(base: string, file: string): Promise<Uint8Array | null> {
-  const buf = await fetchBytes(base, file);
-  return buf && (await acceptableModel(file, buf)) ? new Uint8Array(buf) : null;
+  const buf = await fetchChecked(base, file, acceptableModel);
+  return buf ? new Uint8Array(buf) : null;
 }
 
 /** The class-name table. It is not code, but it silently decides what every
@@ -309,7 +380,13 @@ function resolveFile(file: string): Promise<string | null> {
       for (const candidate of [LOCAL_BASE, REMOTE_BASE]) {
         try {
           const r = await fetch(candidate + file, { method: 'HEAD' });
-          if (r.ok) return candidate;
+          if (r.ok) {
+            // The size a person will be told before anything downloads, read off the
+            // mirror rather than typed beside the file name.
+            const n = Number(r.headers.get('x-linked-size') ?? r.headers.get('content-length'));
+            if (candidate === REMOTE_BASE && n > 0) remoteSize.set(file, n);
+            return candidate;
+          }
         } catch {
           // Network error / CORS rejection — try the next candidate.
         }
@@ -319,6 +396,23 @@ function resolveFile(file: string): Promise<string | null> {
     bases.set(file, hit);
   }
   return hit;
+}
+
+/** Sizes the mirror reported for its files, from the HEAD probe. */
+const remoteSize = new Map<string, number>();
+
+/** How many bytes the detector still has to download before a scan can run: 0 when
+ *  both models are served from this origin or were kept from an earlier scan. The
+ *  runtime itself (~5 MB, cached by the browser for a year) is not counted. */
+export async function detectorDownloadBytes(): Promise<number> {
+  let owed = 0;
+  for (const file of [MODEL_FILE, WORLD_FILE]) {
+    const base = await resolveFile(file);
+    if (base !== REMOTE_BASE) continue;
+    if (await hasCachedModel(base + file)) continue;
+    owed += remoteSize.get(file) ?? 0;
+  }
+  return owed;
 }
 
 /** Whether the detector can run at all — the OIV7 model is the floor, the
