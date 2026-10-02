@@ -10660,9 +10660,16 @@ n 8 → 9), and the fine-grid refusal fixture, which moved from scramble 35 seed
 30 seed 7. Still one refusal in 532 (`scripts/openroutes-sweep.mjs`, 126 s, the same 19 of 54
 scrambles cut).
 
-## § 53 · No backup prompt and no way to send feedback — WRITTEN DOWN, NOT BUILT
+## § 53 · No backup prompt and no way to send feedback — items 1 BUILT, 2 and 3 open
 
-**Exists in:** nothing. Filed 2026-10-02 by a re-check of the open list against `main` @
+**Item 1 BUILT** on `claude/keen-einstein-dbmwuw` (PR #231): `lib/backup-nudge.ts` asks for
+persistent storage on three presses (create a room, open a file, save a file) and offers a
+backup file once per room after 20 saves, never to a room already saved to a file. Wired in
+`components/studio/RoomSync.tsx` and `components/studio/SceneFile.tsx`; tested in
+`tests/backup-nudge.test.ts`. NOT LOOKED AT: whether Firefox's persist prompt reads well on
+the create press, and whether the offer arrives at a sensible moment.
+
+**Exists in (items 2 and 3):** nothing. Filed 2026-10-02 by a re-check of the open list against `main` @
 `e08e790`. Both were confirmed by searching the code, not inferred.
 
 **1. Nothing protects a person's rooms from the browser clearing them.** Rooms live only in

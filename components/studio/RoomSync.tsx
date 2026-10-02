@@ -16,6 +16,8 @@ import { normalizeStoredParts } from '@/lib/scene-spec';
 import { toast } from '@/components/ui/StorageToast';
 import { onPageLeave } from '@/lib/page-leave';
 import { clearLeaveNote, leaveNoteOf, pendingOf, readLeaveNote, writeLeaveNote } from '@/lib/leave-note';
+import { noteRoomSaved } from '@/lib/backup-nudge';
+import { offerBackup } from './SceneFile';
 
 const DEBOUNCE_MS = 300;
 
@@ -191,6 +193,8 @@ export function RoomSync() {
       writeLeaveNote(roomId, leaveNoteOf(at, shell, { transforms: w.transforms, parts: w.parts, pin: w.room?.pin }));
     roomStore.savePending(roomId, w).then(() => {
       if (noted) clearLeaveNote(roomId, at);
+      // Counted only while the page stays: an offer made on the way out is made to nobody.
+      if (!leaving && noteRoomSaved(roomId)) offerBackup(roomId);
     }).catch((e) => {
       // None of it landed. What is on screen is still whole, and the next save of each
       // kind writes it whole again — the positions, the scene and the shell are each

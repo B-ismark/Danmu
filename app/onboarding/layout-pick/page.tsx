@@ -25,6 +25,7 @@ import { NumberField, fieldMinWidth } from '@/components/ui/NumberField';
 import { Select } from '@/components/ui/Select';
 import { StepHeader } from '@/components/ui/primitives';
 import { BackButton, DocShell } from '@/components/ui/DocShell';
+import { requestPersistentStorage } from '@/lib/backup-nudge';
 
 const PRESETS = [
   { id: 'rect' as const, name: 'Rectangle', width: 6.0, depth: 4.0, starter: 'Living room' },
@@ -175,6 +176,8 @@ export default function LayoutPickPage() {
     }
     setSaving(dest);
     setError(null);
+    // The press that makes a room is the moment to ask the browser to keep rooms.
+    void requestPersistentStorage();
     const id = uuid();
     try {
       await roomStore.saveRoom({
