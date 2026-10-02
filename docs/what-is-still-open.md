@@ -4275,8 +4275,20 @@ the raw map (above). Twenty-one more mutants, twenty-one killed.
   override the user already had stays, whatever the gesture did. Position and turn are
   asked separately, as they are stored: a piece turned in place keeps its turn and loses
   the spot it never left, and a piece moved without turning loses the turn the 3D drop
-  stamps on every release. Fourteen mutants, all killed bar one dead line, removed. The
-  3D half is held by a source test, since nothing drives `Draggable` under jsdom.
+  stamps on every release. The 3D half is held by a source test, since nothing drives
+  `Draggable` under jsdom: it asserts the close comes after `commit()` at each release,
+  and that the unmount teardown closes too.
+  Review round 1 found two holes in it. A cancelled drag still cost an undo step that
+  changed nothing: the live writes copy every map they touch, and history compares by
+  reference, so `forgetOverrides` now hands back the maps the gesture BEGAN with when it
+  leaves them with those contents. And a heading was judged "home" against `SAME_M`, a
+  metre tolerance; it is `SAME_TURN` (radians, `lib/item-snap.ts`, shared with the Wall
+  button). **The "dead line" the first mutation pass removed was not dead.** It was
+  `return s` when nothing leaves, and a mutant that survives says only that no test
+  told the two versions apart. Here the difference was a store notification and a
+  rewrite of the saved prefs on every plain click, which none of the tests listened
+  for. Before deleting a line a mutant leaves standing, ask what the tests could not
+  see.
 - **Not measured: a wall dragged out and back.** The wall drag is not a piece gesture,
   so it does not ask `overridesBroughtHome`, and it carries what is mounted on it by
   summed steps (`moveWallCarrying`), so whether those pieces even land within `SAME_M` of

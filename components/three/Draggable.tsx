@@ -330,7 +330,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     convoyCache.current = null;
     if (before && start) {
       const s = useStudio.getState();
-      s.forgetOverrides(overridesBroughtHome(before, s, start));
+      s.forgetOverrides(overridesBroughtHome(before, s, start), before);
     }
   }
   function convoy(): Convoy {
@@ -1094,6 +1094,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       if (drag.current?.hold) window.clearTimeout(drag.current.hold);
       if (_gestureOwner === partId) _gestureOwner = null;
       releasePress(partId);
+      // A gesture that ends here pinned its company as surely as one that ends on a
+      // release, so it is closed the same way. A no-op when no gesture is open.
+      closeGestureWorld();
       if (useStudio.getState().draggingId === partId) setDragging(null);
       detachTouch();
     },

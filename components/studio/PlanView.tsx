@@ -2206,7 +2206,7 @@ const HALO_SIDES: Array<[ZoneSide, number, number, number, number]> = [
  *  `overridesBroughtHome`, and `Draggable`'s `closeGestureWorld` for the 3D half. */
 function unpinWhatCameHome(d: { overridesAtStart: Pick<TransformOverrides, 'positions' | 'rotations'>; world: ScenePart[] }) {
   const s = useStudio.getState();
-  s.forgetOverrides(overridesBroughtHome(d.overridesAtStart, s, d.world));
+  s.forgetOverrides(overridesBroughtHome(d.overridesAtStart, s, d.world), d.overridesAtStart);
 }
 
 /** The comfort bands for one piece, drawn in its own local frame — which is

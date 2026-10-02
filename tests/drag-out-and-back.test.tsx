@@ -42,7 +42,10 @@ describe('overridesBroughtHome', () => {
     ['home, both made by the gesture', none, after([1, 0, 2], 0.5), ['a'], ['a']],
     ['home to float noise', none, after([1 + 1e-12, 0, 2 - 1e-12], 0.5 + 1e-12), ['a'], ['a']],
     ['a whole turn is home', none, after([1, 0, 2], 0.5 + 2 * Math.PI), ['a'], ['a']],
-    ['a micron off is a placement', none, after([1 + 1e-6, 0, 2], 0.5 + 1e-6), [], []],
+    ['a micron off is a placement', none, after([1 + 1e-6, 0, 2], 0.5 + 1e-5), [], []],
+    // Radians, not metres: a wall's heading out of `atan2` is noise at this size, and
+    // `SAME_M` read as an angle called it a turn.
+    ['a heading inside SAME_TURN is home', none, after([1, 0, 2], 0.5 + 5e-7), ['a'], ['a']],
     ['moved, not turned: the turn goes, the move stays', none, after([1.4, 0, 2], 0.5), [], ['a']],
     ['turned in place: the spot goes, the turn stays', none, after([1, 0, 2], 1.2), ['a'], []],
     ['lifted is not home', none, after([1, 0.3, 2], 0.5), [], ['a']],
@@ -59,20 +62,54 @@ describe('overridesBroughtHome', () => {
 describe('forgetOverrides', () => {
   it('drops exactly the named overrides, in one update', () => {
     useStudio.setState({ positions: { a: [0, 0, 0], b: [1, 0, 0] }, rotations: { a: 1, b: 2 }, dims: { a: [1, 1, 1] } });
-    useStudio.getState().forgetOverrides({ positions: ['a'], rotations: ['b'] });
+    useStudio.getState().forgetOverrides({ positions: ['a'], rotations: ['b'] }, { positions: {}, rotations: {} });
     const s = useStudio.getState();
     expect(s.positions).toEqual({ b: [1, 0, 0] });
     expect(s.rotations).toEqual({ a: 1 });
     expect(s.dims).toEqual({ a: [1, 1, 1] });
   });
 
-  it('writes nothing when there is nothing to drop', () => {
+  it('writes nothing, and tells no one, when there is nothing to drop', () => {
     useStudio.setState({ positions: { a: [0, 0, 0] }, rotations: {} });
-    const { positions, rotations } = useStudio.getState();
-    useStudio.getState().forgetOverrides({ positions: ['zz'], rotations: ['a'] });
-    expect(useStudio.getState().positions).toBe(positions);
-    expect(useStudio.getState().rotations).toBe(rotations);
+    const was = useStudio.getState();
+    const heard = vi.fn();
+    const off = useStudio.subscribe(heard);
+    useStudio.getState().forgetOverrides({ positions: ['zz'], rotations: ['a'] }, was);
+    off();
+    expect(useStudio.getState()).toBe(was);
+    expect(heard).not.toHaveBeenCalled();
   });
+
+  it('hands back the maps the gesture began with when it leaves them as they were', () => {
+    // History compares by reference: a copy of the room it already holds is an undo
+    // step that changes nothing.
+    const before = { positions: { b: [1, 0, 0] as [number, number, number] }, rotations: { a: 1 } };
+    useStudio.setState({ positions: { a: [0, 0, 0], b: [1, 0, 0] }, rotations: { a: 1 } });
+    useStudio.getState().forgetOverrides({ positions: ['a'], rotations: [] }, before);
+    expect(useStudio.getState().positions).toBe(before.positions);
+    expect(useStudio.getState().rotations).toBe(before.rotations);
+  });
+
+  it('keeps its own copy when the contents differ', () => {
+    const before = { positions: { b: [1, 0, 0] as [number, number, number] }, rotations: { b: 1 } };
+    useStudio.setState({ positions: { a: [0, 0, 0], b: [1.5, 0, 0] }, rotations: { b: 2 } });
+    useStudio.getState().forgetOverrides({ positions: ['a'], rotations: [] }, before);
+    expect(useStudio.getState().positions).toEqual({ b: [1.5, 0, 0] });
+    expect(useStudio.getState().positions).not.toBe(before.positions);
+    expect(useStudio.getState().rotations).toEqual({ b: 2 });
+  });
+
+  it.each([
+    ['fewer', { a: [0, 0, 0], b: [1, 0, 0] }, { a: [0, 0, 0] }],
+    ['other', { b: [1, 0, 0] }, { a: [1, 0, 0] }],
+  ] as [string, Record<string, [number, number, number]>, Record<string, [number, number, number]>][])(
+    'keeps its own copy when it holds %s pieces than it began with',
+    (_, began, now) => {
+      useStudio.setState({ positions: { ...now, gone: [9, 9, 9] }, rotations: {} });
+      useStudio.getState().forgetOverrides({ positions: ['gone'], rotations: [] }, { positions: began, rotations: {} });
+      expect(useStudio.getState().positions).toEqual(now);
+    },
+  );
 });
 
 let restoreRect: (() => void) | null = null;
@@ -117,27 +154,31 @@ function comeBack(svg: Element) {
 describe('a drag out and back in the plan', () => {
   it('pins nothing: not the piece, its lamp or the rest of the selection', () => {
     const { svg, handle } = room();
+    const was = useStudio.getState();
     dragOut(svg, handle);
     comeBack(svg);
     fireEvent.pointerUp(svg, { clientX: 500, clientY: 500, pointerId: 1 });
-    expect(useStudio.getState().positions).toEqual({});
-    expect(useStudio.getState().rotations).toEqual({});
+    // The very maps it began with, so history records no step.
+    expect(useStudio.getState().positions).toBe(was.positions);
+    expect(useStudio.getState().rotations).toBe(was.rotations);
   });
 
   it('nor does one Escape cancelled', () => {
     const { svg, handle } = room();
+    const was = useStudio.getState();
     dragOut(svg, handle);
     fireEvent.keyDown(window, { key: 'Escape' });
-    expect(useStudio.getState().positions).toEqual({});
-    expect(useStudio.getState().rotations).toEqual({});
+    expect(useStudio.getState().positions).toBe(was.positions);
+    expect(useStudio.getState().rotations).toBe(was.rotations);
   });
 
   it('keeps an override the lamp already had', () => {
     const { svg, handle } = room({ lampPinned: true });
+    const was = useStudio.getState();
     dragOut(svg, handle);
     comeBack(svg);
     fireEvent.pointerUp(svg, { clientX: 500, clientY: 500, pointerId: 1 });
-    expect(useStudio.getState().positions).toEqual({ lamp: [0.05, 0.55, 0] });
+    expect(useStudio.getState().positions).toBe(was.positions);
   });
 
   it('keeps every override of a drag that went somewhere', () => {
@@ -158,7 +199,8 @@ describe('the 3D tab asks the same question', () => {
   it('clears the gesture world only in closeGestureWorld, which unpins', () => {
     expect(src.match(/effCache\.current = null/g)).toHaveLength(1);
     expect(body('closeGestureWorld')).toMatch(/effCache\.current = null/);
-    expect(body('closeGestureWorld')).toMatch(/forgetOverrides\(overridesBroughtHome\(/);
+    // …handing over the maps it began with, so history sees the room it already holds.
+    expect(body('closeGestureWorld')).toMatch(/forgetOverrides\(overridesBroughtHome\(before, s, start\), before\)/);
   });
 
   it('opens it only in openGestureWorld, which records the overrides it began with', () => {
@@ -167,8 +209,30 @@ describe('the 3D tab asks the same question', () => {
     expect(body('openGestureWorld')).toMatch(/overridesAtStart\.current = \{ positions, rotations \}/);
   });
 
-  it('closes on every release: a drag, a stretch and the gizmo', () => {
-    expect(src.match(/closeGestureWorld\(\);/g)).toHaveLength(3);
+  it('closes on every release: a drag, a stretch and the gizmo, and on unmount', () => {
+    expect(src.match(/closeGestureWorld\(\);/g)).toHaveLength(4);
     expect(src.match(/openGestureWorld\(\);/g)).toHaveLength(4);
+  });
+
+  // After `commit()`, every time: the close clears the snapshot `commit()` resolves the
+  // company against, and unpins before `commit()` stamps the lead's turn.
+  it.each([
+    ['the drag', 'function onPointerUp('],
+    ['the stretch', 'function releaseStretch()'],
+    ['the gizmo', 'onMouseUp={() => {'],
+  ])('closes %s after committing it', (_, from) => {
+    const at = src.indexOf(from);
+    expect(at).toBeGreaterThan(-1);
+    const close = src.indexOf('closeGestureWorld();', at);
+    const commit = src.indexOf('commit();', at);
+    expect(commit).toBeGreaterThan(at);
+    expect(commit).toBeLessThan(close);
+  });
+
+  it('closes on unmount, the teardown that ends a gesture with no release', () => {
+    const from = src.indexOf('if (drag.current?.hold) window.clearTimeout(drag.current.hold);');
+    expect(from).toBeGreaterThan(-1);
+    const teardown = src.slice(from, src.indexOf('detachTouch();', from));
+    expect(teardown).toMatch(/closeGestureWorld\(\);/);
   });
 });

@@ -31,7 +31,7 @@
 import { isParametric, type ScenePart } from './scene-spec';
 import { heightForNewCeiling } from './physics';
 import { carryForResize } from './wall-move';
-import { SAME_M } from './item-snap';
+import { SAME_M, SAME_TURN, turnBetween } from './item-snap';
 import type { Footprint } from './footprint';
 
 /** The user's edits, as the studio store holds them. */
@@ -112,8 +112,9 @@ export function hasOverride(id: string, o: Partial<TransformOverrides>): boolean
  *  the world at its effective transforms as it began. An override that was there
  *  before is the user's own earlier placement and is never on the list. Position and
  *  rotation are asked separately, because they are stored separately: a piece turned
- *  in place came home on the floor and keeps its turn. "Where it began" is `SAME_M`,
- *  since replaying a cascade about the same pivot is float noise, not a step. */
+ *  in place came home on the floor and keeps its turn. "Where it began" is `SAME_M`
+ *  for a place and `SAME_TURN` for a heading, since replaying a cascade about the same
+ *  pivot is float noise, not a step. */
 export function overridesBroughtHome(
   before: Pick<TransformOverrides, 'positions' | 'rotations'>,
   after: Pick<TransformOverrides, 'positions' | 'rotations'>,
@@ -127,11 +128,11 @@ export function overridesBroughtHome(
   });
   const rotations = Object.keys(after.rotations).filter((id) => {
     const was = startOf.get(id);
-    const turn = after.rotations[id] - (was?.rot ?? NaN);
-    return !(id in before.rotations) && !!was && Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) <= SAME_M;
+    return !(id in before.rotations) && !!was && turnBetween(after.rotations[id], was.rot) <= SAME_TURN;
   });
   return { positions, rotations };
 }
+
 /** Every Y a ceiling move changes, in BOTH transform layers.
  *
  *  A part's height lives in two places on purpose — the authored `ScenePart` and

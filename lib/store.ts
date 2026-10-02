@@ -195,8 +195,14 @@ type StudioState = {
   /** Drop transform overrides — used by Reset-to-detected. Targets a specific id, or all. */
   resetTransforms: (id?: string) => void;
   /** Drop these position and rotation overrides, and nothing else, in one update —
-   *  what a gesture ending hands over from `overridesBroughtHome`. */
-  forgetOverrides: (ids: { positions: string[]; rotations: string[] }) => void;
+   *  what a gesture ending hands over from `overridesBroughtHome`. `before` is the
+   *  maps as the gesture began: a map left with exactly those contents is handed back
+   *  AS that map, because history compares by reference and a copy of the room it
+   *  already holds reads as an undo step that changes nothing. */
+  forgetOverrides: (
+    ids: { positions: string[]; rotations: string[] },
+    before: Pick<StudioState, 'positions' | 'rotations'>,
+  ) => void;
 };
 
 /** The only studio fields that survive a reload. These are *preferences* — the
@@ -216,6 +222,26 @@ const STUDIO_PREFS = [
   'railLeftW',
   'railRightW',
 ] as const;
+
+/** `map` without `ids`, for `forgetOverrides`. When what is left matches `before` entry
+ *  for entry, `before` itself: the live writes replaced every entry they touched with a
+ *  copy, so a map back to its old contents is still a new object. */
+function withoutOverrides<T>(
+  map: Record<string, T>,
+  ids: string[],
+  before: Record<string, T>,
+  same: (a: T, b: T) => boolean,
+): Record<string, T> {
+  const gone = ids.filter((id) => id in map);
+  let out = map;
+  if (gone.length > 0) {
+    out = { ...map };
+    for (const id of gone) delete out[id];
+  }
+  const keys = Object.keys(out);
+  const asBefore = keys.length === Object.keys(before).length && keys.every((k) => k in before && same(out[k], before[k]));
+  return asBefore ? before : out;
+}
 
 export const useStudio = create<StudioState>()(
   persist(
@@ -359,25 +385,15 @@ export const useStudio = create<StudioState>()(
       delete pr[id];
       return { positions: p, rotations: r, dims: d, parentIds: pr };
     }),
-  forgetOverrides: ({ positions: posIds, rotations: rotIds }) =>
+  forgetOverrides: (ids, before) =>
     set((s) => {
-      // A map is replaced only when something leaves it, for the reason
-      // `setTransformsFor` gives: a fresh map with the same contents reads as an edit
-      // to history.
-      const pos = posIds.filter((id) => id in s.positions);
-      const rot = rotIds.filter((id) => id in s.rotations);
-      const out: Partial<StudioState> = {};
-      if (pos.length > 0) {
-        const positions = { ...s.positions };
-        for (const id of pos) delete positions[id];
-        out.positions = positions;
-      }
-      if (rot.length > 0) {
-        const rotations = { ...s.rotations };
-        for (const id of rot) delete rotations[id];
-        out.rotations = rotations;
-      }
-      return out;
+      const positions = withoutOverrides(s.positions, ids.positions, before.positions, (a, b) =>
+        a.every((v, i) => v === b[i]),
+      );
+      const rotations = withoutOverrides(s.rotations, ids.rotations, before.rotations, (a, b) => a === b);
+      // Nothing changed: the state itself, so no subscriber hears an update that is not
+      // one and `persist` does not rewrite the prefs. A plain click ends here.
+      return positions === s.positions && rotations === s.rotations ? s : { positions, rotations };
     }),
   frameSelected: () => set((s) => ({ frameSelectedToken: s.frameSelectedToken + 1 })),
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
