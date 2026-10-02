@@ -62,10 +62,25 @@ export function Inspector() {
   const { report } = useRoomReport();
 
   const setSwapPartId = useStudio((s) => s.setSwapPartId);
-  /** What the last Wall press said, and where it left the piece. Shown only while the
-   *  piece is still there: "stopped short of the wall" under a piece since dragged
-   *  across the room is a sentence about somewhere else. */
-  const [wallSaid, setWallSaid] = useState<{ id: string; text: string; x: number; z: number; rot: number } | null>(null);
+  /** What the last Wall press said, and the room it said it about. Shown only while
+   *  that room still stands: a sentence naming the stool that could not follow is
+   *  about somewhere else once anything has moved, turned or been resized, or the
+   *  selection it judged has changed. The store replaces each of those maps on any
+   *  write, so comparing references is the whole test — and a boolean selector, so
+   *  the panel re-renders when the note goes, not on every frame of a drag. */
+  const [wallSaid, setWallSaid] = useState<{
+    id: string;
+    text: string;
+    world: Pick<ReturnType<typeof useStudio.getState>, 'positions' | 'rotations' | 'dims' | 'selection'>;
+  } | null>(null);
+  const wallWorldStands = useStudio(
+    (s) =>
+      wallSaid !== null &&
+      s.positions === wallSaid.world.positions &&
+      s.rotations === wallSaid.world.rotations &&
+      s.dims === wallSaid.world.dims &&
+      s.selection === wallSaid.world.selection,
+  );
 
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
 
@@ -152,14 +167,12 @@ export function Inspector() {
       landAll(move.landings);
     }
     const text = wallSentence(part!.name, move);
-    const lead = move.kind === 'moved' ? move.moves[0] : { pos: part!.pos, rot: part!.rot };
-    setWallSaid(text ? { id: id!, text, x: lead.pos[0], z: lead.pos[2], rot: lead.rot ?? part!.rot } : null);
+    // Read after the writes, so the note describes the room the press left.
+    const { positions, rotations, dims, selection } = useStudio.getState();
+    setWallSaid(text ? { id: id!, text, world: { positions, rotations, dims, selection } } : null);
     if (text) announce(text);
   }
-  const wallNote =
-    wallSaid && wallSaid.id === id && wallSaid.x === part.pos[0] && wallSaid.z === part.pos[2] && wallSaid.rot === part.rot
-      ? wallSaid.text
-      : null;
+  const wallNote = wallSaid && wallSaid.id === id && wallWorldStands ? wallSaid.text : null;
 
   // `supportBelow` and `snapToSurface` lived here and are gone with the Surface button
   // (§ B.17). `supportBelow` existed only to decide whether Surface was worth showing,

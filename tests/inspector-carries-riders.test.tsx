@@ -138,7 +138,7 @@ describe('Wall takes the selection and says when it cannot (§ H.6.7)', () => {
     part({ id, name, dimMM: [400, 400, 500], pos });
   /** The note under the buttons. Not `getByRole('status')`: the panel's announcer is
    *  one too. */
-  const note = () => screen.queryByText(/stopped short|Nothing moved|already against|will not fit against/);
+  const note = () => screen.queryByText(/stopped short|Nothing moved|already against|will not fit against|wall behind/);
 
   it('moves the rest of the selection with the piece', () => {
     room([box('a', 'Crate', [0, 0, -1.5]), box('b', 'Stool', [1.5, 0, -1.0])], 'a');
@@ -179,10 +179,40 @@ describe('Wall takes the selection and says when it cannot (§ H.6.7)', () => {
     expect(at('a').pos).toEqual([0, 0, -1.5]);
     expect(at('b').pos).toEqual([1.5, 0, -1.5]);
     expect(useStudio.getState().positions).toEqual({});
-    expect(note()?.textContent).toBe('Nothing moved: Stool has no room to follow.');
+    expect(note()?.textContent).toBe('Nothing moved: Stool will not fit there, so the rest of the selection cannot follow.');
     expect(note()?.closest('[role="status"]')).not.toBeNull();
-    // A sentence about where the crate WAS is not left under it once it is elsewhere.
-    act(() => useStudio.getState().setPosition('a', [0, 0, 0]));
+    // A sentence about the room as it WAS is not left standing once anything in it
+    // moves — here the post that blocked the stool, which the crate never noticed.
+    act(() => useStudio.getState().setPosition('post', [2, 0, 0]));
     expect(note()).toBeNull();
+  });
+
+  it.each<[string, () => void]>([
+    ['the selection it judged changes', () => useStudio.getState().setSelection(['a'], 'a')],
+    ['the post that blocked the stool turns', () => useStudio.getState().setRotation('post', 1)],
+    ['the post is resized', () => useStudio.getState().setDim('post', [100, 100, 900])],
+  ])('takes the note down when %s', (_, change) => {
+    room([
+      box('a', 'Crate', [0, 0, -1.5]),
+      box('b', 'Stool', [1.5, 0, -1.5]),
+      part({ id: 'post', name: 'Post', dimMM: [150, 150, 900], pos: [1.5, 0, -2.28] }),
+    ], 'a');
+    useStudio.setState({ selection: ['a', 'b'] });
+    render(<Inspector />);
+    fireEvent.click(screen.getByTitle(WALL));
+    expect(note()).not.toBeNull();
+    act(change);
+    expect(note()).toBeNull();
+  });
+
+  it('keeps the note a press left, while the room it describes stands', () => {
+    // The crate faces north and the west wall is nearer, but the stool is coming too,
+    // so the crate goes to the wall behind it instead of turning — and says so.
+    room([box('a', 'Crate', [-2, 0, 0]), box('b', 'Stool', [-2, 0, 0.8])], 'a');
+    useStudio.setState({ selection: ['a', 'b'] });
+    render(<Inspector />);
+    fireEvent.click(screen.getByTitle(WALL));
+    expect(at('a').pos[2]).toBeCloseTo(-2.28, 9);
+    expect(note()?.textContent).toBe('Crate went to the wall behind it, so the rest of the selection did not have to turn.');
   });
 });

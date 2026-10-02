@@ -238,18 +238,23 @@ before it. The lamp left behind after that notch is the review's finding back.
 ### Wall takes the whole selection, and says when it cannot — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
 
 The Inspector's **Wall** button used to move the selected piece and what stood on it, and
-nothing else, with no check. It now moves like a drag. In the seeded living room, shift-click
-the sofa and a chair beside it and press **Wall** with the sofa selected: both go, the chair
-by the same step and still at its own angle. Then put a chair where the sofa's wall spot is
-and press it again: nothing should move, and a short line under the Wall and Floor buttons
-should say why. Drag the sofa a little and the line should go — it describes a spot the
-sofa has left. Last, a lamp on a nightstand: **Wall** with the lamp selected should set it
-on the floor at the wall, not leave it floating at nightstand height, which is what it did.
+nothing else, with no check. It now moves like a drag. In the seeded living room the Sofa
+already stands against its wall, so press Wall on it first: it should say *already
+against the nearest wall* and do nothing. Then, in 2D Plan, drag the Coffee table and the
+Plant out into open floor, a metre or more from every wall, shift-click both, and press
+**Wall** with the Coffee table selected: both go, the Plant by the same step and at its
+own angle. If the nearest wall would have turned the table, it goes to the wall behind it
+instead and the line under Wall and Floor says so. Next, drag a third piece onto the
+spot the Plant would land on and press again: nothing moves, and the line names the
+Plant. Move anything or change the selection and the line goes. Last, set a table lamp
+on a nightstand away from the walls and press Wall with the lamp selected: it should
+land on the floor at the wall, not float at nightstand height, which is what it did.
 
 What would be wrong: the line overflowing the rail at its narrowest width (it wraps, like
-the size refusal below it), the line staying after a drag, or a selection that moves only
-partly. A set that stops short of the wall is allowed — a drag does the same when a member
-meets the wall first — but the line must then say so.
+the size refusal below it), the line staying after something moves, a selection that
+moves only partly, or a set arriving with a piece turned and its company not. A set that
+stops short of the wall is allowed — a drag does the same when a member meets the wall
+first — but the line must then say so.
 
 **Gates.** `tests/to-wall.test.ts`, `tests/inspector-carries-riders.test.tsx`.
 
