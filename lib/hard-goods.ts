@@ -425,8 +425,10 @@ export function nightstandForm(dimMM: readonly number[], slide = 0): HardPart[] 
     slab('side-l', 'body', x0, x0 + s, legH, yTop, zBack, zFront),
     slab('side-r', 'body', x1 - s, x1, legH, yTop, zBack, zFront),
     slab('bottom', 'body', x0 + s, x1 - s, legH, legH + s, zBack, zFront),
-    // The inside of the carcass, a shade darker, which is what the reveals show.
-    slab('cavity', 'trim', x0 + s, x1 - s, legH + s, yTop, zBack, zFront - ft - 0.004),
+    // The inside of the carcass, a shade darker, which is what the reveals show. It runs
+    // forward to the drawer fronts' backs, which is what holds them: a front that stopped
+    // short of it hung in its reveal on nothing, detached from the rest of the piece.
+    slab('cavity', 'trim', x0 + s, x1 - s, legH + s, yTop, zBack, zFront - 0.001 - ft),
   );
   const fy0 = legH + s;
   const half = (yTop - fy0) / 2;

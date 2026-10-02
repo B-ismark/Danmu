@@ -514,8 +514,9 @@ describe('the nightstand', () => {
         expect(k.lo[2]).toBeLessThan(f.hi[2]);
         expect(k.hi[2]).toBeGreaterThan(f.hi[2]);
       }
-      // The cavity sits behind the drawers with air between.
-      expect(ext(parts, 'cavity').hi[2]).toBeLessThan(f0.lo[2]);
+      // The cavity runs forward to the drawers' backs and stops there: it is what holds
+      // them. Air between left both fronts hanging in their reveals, detached.
+      expect(ext(parts, 'cavity').hi[2]).toBeCloseTo(f0.lo[2], 9);
     }
   });
 
