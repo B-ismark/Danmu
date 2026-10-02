@@ -51,7 +51,7 @@ screen; and row 17 above.
 
 **Opened 2026-09-06, both needing a decision only the user can make:**
 
-- **§ 40** — six more shapes declare a depth their renderer never reads. § 39 was one fan;
+- **§ 40** — CLOSED 2026-10-02: five of the six were already fixed, and the monitor is drawn by `monitorForm` inside its declared box. Was: six more shapes declare a depth their renderer never reads. § 39 was one fan;
   it is a class of seven. Four are already pinned (and the pin is the TIGHT case, ±0.03
   against the band’s ±0.10); two pass by coincidence. `window` declares 60 mm and draws 120.
   *Put to the user 2026-09-30: not sure, skip it for now. Nothing built.*
@@ -7600,7 +7600,22 @@ the rest-pose bounding box of three spokes — an instrument reading, corrected 
 `occupiedPts`. Do not re-file it.
 ---
 
-### § 40 — six more shapes declare a depth their renderer never reads — DECISION, skipped for now
+### § 40 — six more shapes declare a depth their renderer never reads — CLOSED 2026-10-02
+
+**Re-measured on `main` @ `95e3b64` (2026-10-02), and five of the six had already been fixed
+by the realism rounds** (`lib/hard-goods.ts`), without this item being updated:
+
+| shape | declared D | drawn D now | reads `dimMM[1]`? |
+|---|---|---|---|
+| `mirror`, `mirror-oval` | 30 | 30 | yes, `mirrorForm` / `ovalMirrorForm`; both pins retired |
+| `painting` | 30 | 30 | yes, `paintingForm` |
+| `curtain` | 80 | 76 | yes, `curtainCloth`; inside the band on its own drawing, not a literal |
+| `window` | 60 | 120 | **yes**: the frame and sashes fill the declared depth. `dimMM` is the OPENING, and the 60 mm past it is the sill reaching into the room, a real protrusion the pin keeps on purpose |
+| `monitor` | 200 | 300 → **200** | **was no**: a literal 300 mm base disc. Fixed on `claude/keen-einstein-dbmwuw`: drawn by `monitorForm` now, its plate `dimMM[1]` deep and every part inside the declared box; the `DRAWN_RATIO` pin is retired |
+
+So no shape in the table draws its thin axis from a literal any more. The original write-up
+follows, unchanged, for the reasoning.
+
 
 **Put to the user on 2026-09-30, who was not sure and chose to skip it for now.** Nothing is
 built; the item stands as written for when it comes back.
@@ -10525,7 +10540,7 @@ their nearest seat further than a metre off — the arm is too narrow for them a
 and carrying a piece across the room to fit is a different place, not a correction. The 410
 drops that start inside and still move are the 20 mm wall gap, identical before and after.
 
-**1. In a U, a piece too wide for its arm ends ~27 mm through the plaster.** A 2000 × 900 table
+**1. FIXED 2026-10-02 — turn to fit, else refuse.** `swapPartModel` checks the contained spot with `outsideDeficit`; through the plaster, it tries a quarter turn, and if that does not fit either it returns `refused: 'does-not-fit'`, changes nothing, and the swap screen says so. A turn is said too. Was: **In a U, a piece too wide for its arm ends ~27 mm through the plaster.** A 2000 × 900 table
 swapped in for a print on an arm's end wall, turned to run across the arm: no spot in the
 1.68 m arm holds it, so `containedXZ` walks it toward `interiorPoint` and it ends with
 `outsideDeficit` 0.027. With `polygonCentroid` as the walk's target (which lands in the
@@ -10542,12 +10557,12 @@ offered U (6 × 5, `app/onboarding/layout-pick/page.tsx`) is identical before an
 findings. This is a seeder question, not a containment one: at 6 × 4 the starter's bed is the
 wrong size or the wrong wall for that arm.
 
-**3. Change the model does no collision avoidance.** A nightstand swapped in for a print over a
+**3. ALREADY FIXED, re-checked 2026-10-02** — `82bde38` (2026-10-01) gave both the swap and the add path `placeArrival`, Duplicate's search for the nearest clear floor. Was: **Change the model does no collision avoidance.** A nightstand swapped in for a print over a
 bed stands on the floor inside the bed's footprint (it no longer stands on the bed — that half
 is fixed). The add path behaves the same, so the swap matches it; the fix is one for both, and
 `lib/duplicate-place.ts`'s candidate search is the shape it would take.
 
-**4. An ottoman over a bed still goes on the bed.** The swap and the add path now ask
+**4. FIXED 2026-10-02 — a bed is not a top.** The user's call: nothing stands on a bed. `highestSurfaceUnder` skips beds, so a drag, an add, a swap or the scan's settle all put a piece over a bed on the floor beside it. Was: **An ottoman over a bed still goes on the bed.** The swap and the add path now ask
 `seeksSurface` (`lib/physics.ts`) rather than the category, so a floor lamp or a 1.6 m plant
 put where a print hung above the bed stands on the floor. The ottoman was left in on purpose:
 one put over a top it does not fit under goes on it, § H.6.4's decision, which

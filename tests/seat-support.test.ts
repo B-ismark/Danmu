@@ -628,12 +628,15 @@ describe('every caller that moves a piece to what it finds', () => {
     expect(settleHeights([COFFEE, ottoman(0, 0, 0.2)], H)).toEqual([{ id: 'ottoman', y: 0 }]);
     expect(settleHeights([COFFEE, chair('c', 0, 0, 0.2)], H)).toEqual([{ id: 'c', y: 0 }]);
     // Onto anything: a platform too big to be a table, and a bed. What a scan put on the
-    // floor over one of those stays there, and Room check says so.
+    // floor over one of those stays there, and Room check says so. A platform is still a
+    // top a drop can find; a bed is not one at all (the user's call, 2026-10-02).
     const platform = part({ id: 'plat', category: 'other', shape: 'box', dimMM: [3000, 2000, 400], pos: [0, 0, 0] });
     const bed = part({ id: 'bed', category: 'bed', shape: 'bed-double', dimMM: [1600, 2100, 550], pos: [0, 0, 0] });
     expect(roleOf(platform)).toBe('other');
+    expect(findSupportDetailed([platform], ottoman(0, 0), 0, 0, ottoman(0, 0).dimMM, 0, undefined)?.id).toBe('plat');
+    expect(findSupportDetailed([bed], ottoman(0, 0), 0, 0, ottoman(0, 0).dimMM, 0, undefined)).toBeNull();
+    expect(findSupportDetailed([bed], lamp(0, 0), 0, 0, lamp(0, 0).dimMM, 0, undefined)).toBeNull();
     for (const under of [platform, bed]) {
-      expect(findSupportDetailed([under], ottoman(0, 0), 0, 0, ottoman(0, 0).dimMM, 0, undefined)?.id, under.id).toBe(under.id);
       expect(settleHeights([under, ottoman(0, 0)], H), under.id).toEqual([]);
       const clashes = analyzeRoom([under, ottoman(0, 0)], { footprint: ROOM, height: H }).issues.filter((i) => i.rule === 'clash');
       expect(clashes, under.id).toHaveLength(1);

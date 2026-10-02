@@ -422,11 +422,12 @@ describe('what a shape actually occupies, against the one box every consumer rea
   const RATIO_TOL = 0.03;
   const DRAWN_RATIO: Partial<Record<Shape, [number, number, number]>> = {
     // Real protrusions above the declared box, all on ONE axis and all defensible: a bed's
-    // headboard rises past the mattress height `dimMM` describes, a monitor and a laptop
-    // lean back past their base, a door and a mirror carry a handle and a frame.
+    // headboard rises past the mattress height `dimMM` describes, a laptop leans back
+    // past its base, a door and a mirror carry a handle and a frame.
     'bed-single': [1.0, 1.01, 1.4],
     'bed-double': [1.0, 1.01, 1.4],
-    monitor: [1.0, 1.5, 0.98],
+    // `monitor` [1.0, 1.5, 0.98] is RETIRED: its base was a literal 300 mm disc whatever
+    // the declared depth. `monitorForm`'s plate is `dimMM[1]` deep now, and it measures 1.00.
     laptop: [1.0, 1.29, 1.0],
     // Depth 2.0: a lever stands `LEVER_PROUD` (50 mm) off the face of a 50 mm leaf, which
     // is what a real one does — the panelled door of `lib/hard-goods.ts` draws it to scale
@@ -497,7 +498,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
     expect(RATIO_TOL, 'a tolerance is free at the top, so it needs its own ceiling').toBeLessThanOrEqual(0.03);
     expect(Object.keys(DRAWN_RATIO).sort(), 'shapes excused from the 0.90–1.10 band').toEqual([
       'bed-double', 'bed-single', 'door', 'laptop',
-      'monitor', 'plane', 'rug', 'window',
+      'plane', 'rug', 'window',
     ]);
   });
 
