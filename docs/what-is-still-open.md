@@ -10735,3 +10735,24 @@ and nothing said so.
 **NOT LOOKED AT** in a browser: the card, the count, and that a second scan in a new page
 skips the question.
 
+**Follow-up, same day: a choice, updates, and a place to manage it.** Modelled on how
+offline maps, streaming downloads and game DLC handle large optional content: the size
+beside every download button, the user in control of when an update downloads, and a
+storage screen that lists what is kept with a way to remove it.
+- **Basic or Full** (`detectorPack` in `useSettings`, `packFiles` in `lib/model-verify.ts`):
+  Full is both models, ~65 MB; Basic is the OIV7 model alone, ~14 MB, which finds about
+  half as much. One picker (`components/ui/DetectorPackPicker.tsx`) on the scan card and
+  in Settings, each option labelled with its size from the mirror.
+- **Updates are asked about.** A kept copy now carries the digest it was verified against
+  (`x-danmu-digest`), so `keptState` tells a current copy from one a newer app no longer
+  pins without reading 50 MB. A stale copy makes the scan card read "An improved furniture
+  finder is ready" with an Update button, instead of downloading it silently.
+- **Settings › Downloads**: what is kept and its size, Download now (on Wi-Fi, ahead of a
+  scan), Update, and Remove from this device. An unreachable mirror says so; it is never
+  read as "nothing to download" (a bug found by screenshot, fixed before merge).
+- On Chromium the card says "You seem to be on mobile data" when the connection reports
+  `cellular` or Data Saver. Other browsers report neither, so it is a hint, never a gate.
+
+Seen in a browser: Settings › Downloads at 1280 and 390 px, with the mirror stubbed.
+NOT LOOKED AT: the scan card's choice and Update states, and a real download.
+

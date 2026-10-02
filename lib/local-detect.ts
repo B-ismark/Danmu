@@ -29,7 +29,7 @@
 // and would put an AGPL artifact under an MIT project — don't, without either
 // relicensing or hosting the weights separately under their own AGPL terms.
 
-import { dropCachedModel, hasCachedModel, readCachedModel, writeCachedModel } from './model-cache';
+import { clearCachedModels, dropCachedModel, keptState, readCachedModel, writeCachedModel } from './model-cache';
 import type { Detection } from './detection';
 import type { CaptureSlot } from './storage';
 import type { Category, Shape } from './scene-spec';
@@ -40,8 +40,11 @@ import {
   MODEL_FILE,
   NAMES_FILE,
   WORLD_FILE,
+  MODEL_DIGESTS,
   acceptableModel,
   digestMatches,
+  packFiles,
+  type DetectorPack,
 } from './model-verify';
 import { boxInPhoto } from './photo-geometry';
 // Served from public/ when the export script has been run locally.
@@ -264,7 +267,7 @@ async function fetchChecked(base: string, file: string, ok: (file: string, buf: 
   const got = await fetchBytes(base, file);
   if (!got) return null;
   if (await ok(file, got.buf)) {
-    if (!got.kept && base !== LOCAL_BASE) await writeCachedModel(base + file, got.buf);
+    if (!got.kept && base !== LOCAL_BASE) await writeCachedModel(base + file, got.buf, MODEL_DIGESTS[file]);
     return got.buf;
   }
   if (!got.kept) return null;
@@ -362,7 +365,9 @@ type Loaded = {
   world: Session | null;
 };
 
-let loader: Promise<Loaded | null> | null = null;
+/** One load per pack: a person who switches from basic to full mid-session gets the
+ *  world model on the next scan rather than the basic session forever. */
+const loaders = new Map<DetectorPack, Promise<Loaded | null>>();
 
 /** Resolve which base URL serves one file — the local export first, the
  *  Hugging Face mirror second. Cached per file, per session. null = that file
@@ -401,18 +406,66 @@ function resolveFile(file: string): Promise<string | null> {
 /** Sizes the mirror reported for its files, from the HEAD probe. */
 const remoteSize = new Map<string, number>();
 
-/** How many bytes the detector still has to download before a scan can run: 0 when
- *  both models are served from this origin or were kept from an earlier scan. The
- *  runtime itself (~5 MB, cached by the browser for a year) is not counted. */
-export async function detectorDownloadBytes(): Promise<number> {
+/** Where one of the detector's files stands on this device. `stale` is a kept copy
+ *  made for a different version of the file than this app expects: an update. */
+export type FileState = 'served' | 'kept' | 'stale' | 'missing';
+
+/** What a pack needs before a scan can run, and what is kept already. */
+export type DetectorStatus = {
+  /** Bytes still to download: 0 when every file is served here or kept and current. */
+  owed: number;
+  /** True when what is owed replaces kept copies, rather than being new. */
+  update: boolean;
+  /** Bytes kept on this device for this pack, current or not. */
+  kept: number;
+  /** The whole pack's size, from the mirror. */
+  size: number;
+  /** A file of the pack that neither this origin nor the mirror answered for: offline,
+   *  or the mirror is down. Never read as "nothing to download". */
+  unreachable: boolean;
+};
+
+/** Where `pack` stands. Sizes come off the mirror's HEAD response, never a typed
+ *  number; a file served from this origin owes nothing. */
+export async function detectorStatus(pack: DetectorPack): Promise<DetectorStatus> {
   let owed = 0;
-  for (const file of [MODEL_FILE, WORLD_FILE]) {
+  let kept = 0;
+  let size = 0;
+  let update = false;
+  let unreachable = false;
+  for (const file of packFiles(pack)) {
     const base = await resolveFile(file);
+    if (base === null) unreachable = true;
     if (base !== REMOTE_BASE) continue;
-    if (await hasCachedModel(base + file)) continue;
-    owed += remoteSize.get(file) ?? 0;
+    const bytes = remoteSize.get(file) ?? 0;
+    size += bytes;
+    const state = await keptState(base + file, MODEL_DIGESTS[file]);
+    if (state !== 'missing') kept += bytes;
+    if (state === 'kept') continue;
+    owed += bytes;
+    if (state === 'stale') update = true;
   }
-  return owed;
+  return { owed, update, kept, size, unreachable };
+}
+
+/** Download `pack` now, verified and kept, without running a scan: Settings'
+ *  "Download now", for doing it on Wi-Fi ahead of time. True when every file is
+ *  in hand. */
+export async function downloadDetector(pack: DetectorPack): Promise<boolean> {
+  for (const file of packFiles(pack)) {
+    const base = await resolveFile(file);
+    if (base === null) return false;
+    if (base !== REMOTE_BASE) continue;
+    const ok = file.endsWith('.onnx') ? await fetchChecked(base, file, acceptableModel) : await fetchVerifiedBytes(base, file);
+    if (!ok) return false;
+  }
+  return true;
+}
+
+/** Remove every kept detector file. The next scan asks again. */
+export async function removeDetector(): Promise<void> {
+  await clearCachedModels();
+  loaders.clear();
 }
 
 /** Whether the detector can run at all — the OIV7 model is the floor, the
@@ -436,8 +489,10 @@ function resolveOrtBase(): Promise<string> {
   return ortBase;
 }
 
-async function load(): Promise<Loaded | null> {
-  loader ??= (async () => {
+async function load(pack: DetectorPack): Promise<Loaded | null> {
+  let loader = loaders.get(pack);
+  if (loader) return loader;
+  loader = (async () => {
     try {
       const modelBase = await resolveFile(MODEL_FILE);
       if (!modelBase) return null;
@@ -475,7 +530,7 @@ async function load(): Promise<Loaded | null> {
       // export missing this file still picks it up from the mirror. Only when
       // neither has it does detection run on the OIV7 model alone.
       let world: Session | null = null;
-      const worldBase = await resolveFile(WORLD_FILE);
+      const worldBase = pack === 'full' ? await resolveFile(WORLD_FILE) : null;
       if (worldBase) {
         try {
           world = await open(worldBase, WORLD_FILE);
@@ -488,6 +543,7 @@ async function load(): Promise<Loaded | null> {
       return null;
     }
   })();
+  loaders.set(pack, loader);
   return loader;
 }
 
@@ -654,14 +710,16 @@ function serialized<T>(fn: () => Promise<T>): Promise<T> {
  *  Concurrent calls are queued, not run in parallel. */
 export function detectLocalAcrossImages(
   images: Array<{ slot: CaptureSlot; blob: Blob }>,
+  pack: DetectorPack = 'full',
 ): Promise<Detection[] | null> {
-  return serialized(() => runDetection(images));
+  return serialized(() => runDetection(images, pack));
 }
 
 async function runDetection(
   images: Array<{ slot: CaptureSlot; blob: Blob }>,
+  pack: DetectorPack,
 ): Promise<Detection[] | null> {
-  const loaded = await load();
+  const loaded = await load(pack);
   if (!loaded) return null;
   const { ort, session, names, world } = loaded;
 

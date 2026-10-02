@@ -45,6 +45,16 @@ export const NAMES_FILE = 'yolov8n-oiv7.names.json';
 export const WORLD_FILE = 'yolov8s-worldv2-danmu.onnx';
 export const REMOTE_FILES = [MODEL_FILE, NAMES_FILE, WORLD_FILE] as const;
 
+/** The two furniture finders a device can keep. `basic` is the OIV7 model and its names;
+ *  `full` adds the open-vocabulary pass, which finds roughly twice as much. */
+export type DetectorPack = 'basic' | 'full';
+export const DETECTOR_PACKS: readonly DetectorPack[] = ['basic', 'full'];
+
+/** The files each pack downloads, in the order they are fetched. */
+export function packFiles(pack: DetectorPack): string[] {
+  return pack === 'full' ? [NAMES_FILE, MODEL_FILE, WORLD_FILE] : [NAMES_FILE, MODEL_FILE];
+}
+
 export const MODEL_DIGESTS: Record<string, string> = {
   'yolov8n-oiv7.names.json':
     'sha256-8126ccfbc3780e25825a1beae446edf7d663b69223b5ce796d8499ea8c3ce13d',
