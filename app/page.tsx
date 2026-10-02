@@ -51,6 +51,10 @@ export default function RoomsPage() {
   const roomsShown = useRef(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
+  // Select mode is its own state, not `selected.length > 0`: "Select" opens it with
+  // nothing picked yet, and unpicking the last room must not throw the bar away
+  // under the pointer that is about to pick the next one.
+  const [selecting, setSelecting] = useState(false);
   const filterRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
@@ -88,7 +92,15 @@ export default function RoomsPage() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      // A checkbox is not a text field: Esc from the select-all box still leaves.
+      const typing =
+        !!t && ((t.tagName === 'INPUT' && (t as HTMLInputElement).type !== 'checkbox') || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (typing) return;
+      if (e.key === 'Escape') {
+        setSelected([]);
+        setSelecting(false);
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
         router.push('/settings');
@@ -138,6 +150,7 @@ export default function RoomsPage() {
     const tokens = await Promise.all(targets.map((t) => roomStore.clearRoom(t.id)));
     if (roomId && targets.some((t) => t.id === roomId)) setRoomId(null);
     setSelected([]);
+    setSelecting(false);
     await reload();
     toast({
       title:
@@ -159,6 +172,14 @@ export default function RoomsPage() {
   }
 
   const selectedRooms = rooms.filter((r) => selected.includes(r.id));
+  // Select all reads the rooms on screen, so a filter narrows it to what you can see.
+  const shownPicked = matches.filter((r) => selected.includes(r.id)).length;
+  const allShown = matches.length > 0 && shownPicked === matches.length;
+
+  function toggleRoom(id: string) {
+    setSelecting(true);
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
 
   return (
     <DocShell
@@ -223,53 +244,77 @@ export default function RoomsPage() {
                     first
                   </div>
                 </div>
-                <div style={{ flex: '0 1 280px', minWidth: 180 }}>
-                  <label htmlFor="room-filter" className="sr-only">
-                    Filter rooms by name
-                  </label>
-                  <input
-                    id="room-filter"
-                    ref={filterRef}
-                    className="field"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') setQuery('');
-                    }}
-                    placeholder="Filter rooms (press /)"
-                    autoComplete="off"
-                  />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 1 360px', minWidth: 0, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+                    <label htmlFor="room-filter" className="sr-only">
+                      Filter rooms by name
+                    </label>
+                    <input
+                      id="room-filter"
+                      ref={filterRef}
+                      className="field"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setQuery('');
+                      }}
+                      placeholder="Filter rooms (press /)"
+                      autoComplete="off"
+                    />
+                  </div>
+                  {!selecting && (
+                    <button onClick={() => setSelecting(true)} className="ds-btn ds-btn--sm">
+                      Select
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {selected.length > 0 && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    flexWrap: 'wrap',
-                    marginBottom: 16,
-                    padding: '10px 12px',
-                    background: 'var(--paper)',
-                    border: '1px solid var(--edge)',
-                    borderRadius: 'var(--r-3)',
-                  }}
-                >
+              {selecting && (
+                <div className="room-selbar" role="toolbar" aria-label="Selected rooms">
+                  <SelectAllBox
+                    checked={allShown}
+                    mixed={shownPicked > 0 && !allShown}
+                    onChange={() =>
+                      setSelected((prev) =>
+                        allShown
+                          ? prev.filter((id) => !matches.some((r) => r.id === id))
+                          : [...new Set([...prev, ...matches.map((r) => r.id)])],
+                      )
+                    }
+                  />
                   <span style={{ fontSize: 'var(--fs-small)', fontWeight: 700 }}>
-                    <span className="mono">{selected.length}</span> selected
+                    {selected.length > 0 ? (
+                      <>
+                        <span className="mono">{selected.length}</span> selected
+                      </>
+                    ) : (
+                      'Select rooms'
+                    )}
                   </span>
                   <div style={{ flex: 1 }} />
-                  <button onClick={() => setSelected([])} className="ds-btn ds-btn--sm">
-                    Clear selection
+                  <button
+                    onClick={() => {
+                      setSelected([]);
+                      setSelecting(false);
+                    }}
+                    className="ds-btn ds-btn--sm ds-btn--ghost"
+                  >
+                    Done
                   </button>
                   <button
                     onClick={() => removeRooms(selectedRooms)}
-                    className="ds-btn ds-btn--sm"
-                    style={{ color: 'var(--danger-text)', borderColor: 'var(--danger)' }}
+                    disabled={selected.length === 0}
+                    className="ds-btn ds-btn--sm ds-btn--danger-line"
                   >
                     <Icon name="trash" size={12} />
-                    Delete selected
+                    {selected.length > 1 ? (
+                      <>
+                        Delete <span className="mono">{selected.length}</span> rooms
+                      </>
+                    ) : (
+                      'Delete'
+                    )}
                   </button>
                 </div>
               )}
@@ -315,7 +360,7 @@ export default function RoomsPage() {
 
                           Hidden while the filter is on. A filtered grid is a set
                           of search results, and "create" is not one of them. */}
-                      {gi === 0 && query.trim() === '' && <NewRoomCard />}
+                      {gi === 0 && query.trim() === '' && <NewRoomCard receded={selecting} />}
                       {g.rooms.map((r) => (
                         <RoomCard
                           key={r.id}
@@ -324,11 +369,8 @@ export default function RoomsPage() {
                           reducedMotion={reducedMotion}
                           alwaysShowActions={noHover}
                           selected={selected.includes(r.id)}
-                          onToggleSelect={() =>
-                            setSelected((prev) =>
-                              prev.includes(r.id) ? prev.filter((id) => id !== r.id) : [...prev, r.id],
-                            )
-                          }
+                          selecting={selecting}
+                          onToggleSelect={() => toggleRoom(r.id)}
                           onOpen={() => openRoom(r.id)}
                           onDelete={() => removeRooms([r])}
                           onRename={async (name) => {
@@ -359,10 +401,15 @@ export default function RoomsPage() {
  *  go in rather than as a room that has lost its drawing. It stretches to the
  *  row's height on its own — grid items default to `stretch` — which is why it
  *  carries no height of its own to drift out of step with `RoomCard`. */
-function NewRoomCard() {
+function NewRoomCard({ receded }: { receded: boolean }) {
   const [hover, setHover] = useState(false);
   return (
     <Link
+      // While rooms are being picked it steps back: it is not a room, so it cannot
+      // be selected, and a click that made a room in the middle of a cleanup would
+      // be the wrong click. `inert` takes it out of the tab order and the pointer.
+      inert={receded}
+      aria-hidden={receded || undefined}
       href="/onboarding/layout-pick"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -382,7 +429,8 @@ function NewRoomCard() {
         background: hover ? 'var(--accent-tint)' : 'transparent',
         borderColor: hover ? 'var(--accent-text)' : 'var(--edge)',
         color: hover ? 'var(--accent-text)' : 'var(--ink-2)',
-        transition: 'background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out)',
+        opacity: receded ? 0.4 : 1,
+        transition: 'background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out)',
       }}
     >
       <span
@@ -411,6 +459,7 @@ function RoomCard({
   reducedMotion,
   alwaysShowActions,
   selected,
+  selecting,
   onToggleSelect,
   onOpen,
   onDelete,
@@ -422,6 +471,8 @@ function RoomCard({
   /** touch device: nothing ever hovers, so the actions have to stay put */
   alwaysShowActions: boolean;
   selected: boolean;
+  /** select mode: every card shows its tick, and the drawing picks rather than opens */
+  selecting: boolean;
   onToggleSelect: () => void;
   onOpen: () => void;
   onDelete: () => void;
@@ -435,6 +486,7 @@ function RoomCard({
   // one. (The CSS .row-actions rule needs a .list-row ancestor, which a card is
   // not — hence the same behaviour in state here.)
   const revealed = hover || focused || selected || alwaysShowActions;
+  const tickShown = revealed || selecting;
   const lift = hover && !reducedMotion;
   const href = `/room/${room.id}/model`;
 
@@ -452,26 +504,62 @@ function RoomCard({
         overflow: 'hidden',
         transition: 'box-shadow var(--dur-base) var(--ease-out), transform var(--dur-quick) var(--ease-out)',
         transform: lift ? 'translateY(-2px)' : 'none',
-        boxShadow: [
-          selected ? 'inset 0 0 0 2px var(--accent-text)' : '',
-          lift ? 'var(--shadow-lift)' : 'var(--shadow-soft)',
-        ]
-          .filter(Boolean)
-          .join(', '),
+        // An outline, not an inset shadow: an inset shadow is painted UNDER the card's
+        // children, so the plan drawing covered the ring along the whole top edge.
+        outline: selected ? '2px solid var(--accent-text)' : 'none',
+        outlineOffset: -2,
+        boxShadow: lift ? 'var(--shadow-lift)' : 'var(--shadow-soft)',
       }}
     >
       {/* A real <a>, not a div onClick: that restores keyboard focus, Enter,
           middle-click and Cmd-click for free. The plan drawing is the open
           target because it is the only reliable recognition cue on this screen. */}
-      <Link
-        href={href}
-        onClick={onOpen}
-        className="card-link"
-        aria-label={`Open ${room.name}`}
-        style={{ display: 'block' }}
+      {/* The tick sits on the drawing's corner, where a picked room is seen first.
+          In select mode it shows on every card, so what is and is not picked can be
+          read across the whole grid without hovering each one. */}
+      <button
+        type="button"
+        onClick={onToggleSelect}
+        aria-pressed={selected}
+        aria-label={selected ? `Deselect ${room.name}` : `Select ${room.name}`}
+        className="icon-btn room-tick"
+        style={{
+          opacity: tickShown ? 1 : 0,
+          // Same reason as the actions below: invisible must mean unclickable.
+          pointerEvents: tickShown ? 'auto' : 'none',
+          transition: 'opacity var(--dur-base) var(--ease-out)',
+        }}
       >
-        <PlanThumb roomId={room.id} />
-      </Link>
+        <Icon name="check" size={14} />
+      </button>
+      {selecting ? (
+        // Picking, not opening: in select mode the drawing is the biggest target on
+        // the card, and opening a room out from under a half-made selection would
+        // throw the selection away.
+        <button
+          type="button"
+          onClick={onToggleSelect}
+          aria-pressed={selected}
+          aria-label={selected ? `Deselect ${room.name}` : `Select ${room.name}`}
+          className="card-link"
+          tabIndex={-1}
+          style={{ display: 'block', position: 'relative', width: '100%', padding: 0, border: 0, background: 'none', cursor: 'pointer' }}
+        >
+          <PlanThumb roomId={room.id} />
+          {selected && <span className="room-thumb-wash" aria-hidden="true" />}
+        </button>
+      ) : (
+        <Link
+          href={href}
+          onClick={onOpen}
+          className="card-link"
+          aria-label={`Open ${room.name}`}
+          style={{ display: 'block', position: 'relative' }}
+        >
+          <PlanThumb roomId={room.id} />
+          {selected && <span className="room-thumb-wash" aria-hidden="true" />}
+        </Link>
+      )}
 
       <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
@@ -496,22 +584,16 @@ function RoomCard({
               transition: 'opacity var(--dur-base) var(--ease-out)',
             }}
           >
-            <IconButton
-              icon="check"
-              label={selected ? `Deselect ${room.name}` : `Select ${room.name}`}
-              active={selected}
-              onClick={onToggleSelect}
-              size={30}
-              iconSize={14}
-            />
-            <IconButton
+            {/* Hidden in select mode: the bar's Delete acts on the selection, and a
+                second delete per card beside it would be two answers to one question. */}
+            {!selecting && <IconButton
               icon="trash"
               label={`Delete ${room.name}`}
               tone="danger"
               onClick={onDelete}
               size={30}
               iconSize={14}
-            />
+            />}
           </div>
         </div>
 
@@ -621,5 +703,17 @@ function EmptyState({ unreadable }: { unreadable: boolean }) {
         <ImportSceneButton size="large" />
       </div>
     </div>
+  );
+}
+
+/** The bar's select-all box. A native checkbox, so its three states are announced
+ *  for free; `indeterminate` has no attribute and is set on the element. */
+function SelectAllBox({ checked, mixed, onChange }: { checked: boolean; mixed: boolean; onChange: () => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = mixed;
+  }, [mixed]);
+  return (
+    <input ref={ref} type="checkbox" checked={checked} onChange={onChange} aria-label="Select all rooms shown" />
   );
 }

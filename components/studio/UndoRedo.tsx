@@ -16,7 +16,7 @@ export function UndoRedo() {
   return (
     <div className="chrome-pill" role="group" aria-label="Edit history">
       <IconButton
-        icon="arrow-left"
+        icon="undo"
         label="Undo"
         title="Undo (Ctrl+Z)"
         onClick={() => {
@@ -31,7 +31,7 @@ export function UndoRedo() {
         iconSize={14}
       />
       <IconButton
-        icon="arrow-right"
+        icon="redo"
         label="Redo"
         title="Redo (Ctrl+Shift+Z)"
         onClick={() => {

@@ -53,7 +53,7 @@ export function ViewMenu() {
         title="View settings"
         className="icon-btn icon-btn--round"
       >
-        <Icon name="settings" size={14} />
+        <Icon name="eye" size={14} />
       </button>
 
       {open && (

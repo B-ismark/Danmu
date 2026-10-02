@@ -537,7 +537,7 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 .icon-btn--outline:hover { background: var(--paper); border-color: var(--accent-text); }
 .icon-btn--danger { color: var(--danger); }
 .icon-btn--danger:hover { background: var(--danger-tint); color: var(--danger-text); }
-/* The top bar's round openers: View's gear and Help's "?". One class, so the two
+/* The top bar's round openers: View's eye and Help's "?". One class, so the two
    stay one control drawn twice rather than two copies of the same inline style.
    Lit while their card is open, and after `:hover` so hovering an open one keeps
    the tint. */
@@ -546,6 +546,33 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   border-color: var(--edge); background: var(--paper); color: var(--ink-2);
 }
 .icon-btn--round[aria-expanded="true"] { border-color: var(--accent-text); background: var(--accent-tint); color: var(--accent-text); }
+
+/* The rooms page's select mode. The bar sticks to the top of the page while the
+   cards scroll under it, so it carries the card's own surface and edge rather than
+   a dark band: it is a toolbar for the cards, not a banner over them. */
+.room-selbar {
+  position: sticky; top: 12px; z-index: var(--z-sticky-local);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 16px; padding: 6px 6px 6px 14px;
+  background: var(--paper); border: 1px solid var(--edge);
+  border-radius: var(--r-3); box-shadow: var(--shadow-soft);
+}
+.room-selbar input[type='checkbox'] { width: 18px; height: 18px; margin: 0; accent-color: var(--accent-text); }
+.ds-btn--danger-line { color: var(--danger-text); border-color: var(--danger); }
+.ds-btn--danger-line:hover:not(:disabled) { background: var(--danger-tint); }
+/* The round tick in a room card's corner. Over the plan drawing, so it keeps an
+   opaque fill even when empty; filled with the accent once the room is picked. */
+.room-tick {
+  position: absolute; top: 10px; left: 10px; z-index: var(--z-sticky-local);
+  width: 28px; height: 28px; border-radius: var(--r-full);
+  border-color: var(--edge); background: var(--paper); color: transparent;
+}
+.room-tick[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.room-tick:hover { background: var(--paper); color: var(--ink-3); }
+.room-tick[aria-pressed='true']:hover { background: var(--accent); color: var(--on-accent); }
+/* The picked card's drawing takes a wash of the accent, so a selection reads at a
+   glance across a grid and not only on the ring. */
+.room-thumb-wash { position: absolute; inset: 0; background: var(--accent-tint); pointer-events: none; }
 
 /* What a top-bar popover hangs from: its trigger's wrapper, which the card is
    absolutely positioned against. */

@@ -2554,3 +2554,23 @@ real touch, can show it holds. The two costs this fix accepted were closed after
 other lamp, and that a floor piece renamed "Painting" hangs on the wall in its photo.
 
 **Rides:** `main` at `5dbcab0`; the § 55 follow-up rides branch `claude/elegant-volta-q7yy89`.
+
+## The rooms page's select mode
+
+**Where:** the rooms page with a few rooms. Press **Select** beside the filter, pick two
+rooms by their tick and one by its drawing, then the select-all box; scroll with the bar
+open; press Esc; select one and Delete.
+
+**What wrong looks like:** the bar scrolling away instead of staying pinned near the top;
+the ring around a picked card missing an edge; a picked card's drawing without its wash;
+a click on a drawing opening the room while in select mode; the New room tile still
+clickable or focusable while picking; a per-card bin showing beside the bar's Delete; Esc
+leaving the bar on screen; the select-all box not showing a dash when only some rooms are
+picked, or not narrowing to the filtered rooms. On a touch device, check the ticks are
+visible on every card without hovering.
+
+**Why eyes:** sticky positioning, the outline drawn over the plan thumbnail and `inert` on
+the New room tile are browser behaviour, not logic a test here can reach. A Playwright walk
+at 1280 and 1020 px passed all of the above once, on a dev build.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

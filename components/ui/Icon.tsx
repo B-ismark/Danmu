@@ -7,7 +7,7 @@ import {
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
   Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Mail, Pencil, Trash2, RefreshCw,
   Image, Play, Replace, Circle, Sun, Sunrise, Sunset, Moon, Cloud, Compass,
-  RotateCcw, RotateCw, Maximize, Copy, type LucideIcon,
+  RotateCcw, RotateCw, Maximize, Copy, Undo2, Redo2, type LucideIcon,
   Ellipsis, List, SlidersHorizontal, Heart, Lightbulb,
 } from 'lucide-react';
 
@@ -33,6 +33,7 @@ export type IconName =
   | 'edit' | 'trash' | 'refresh' | 'copy'
   | 'image' | 'play'
   | 'rotate-ccw' | 'rotate-cw' | 'fit'
+  | 'undo' | 'redo'
   | 'sun' | 'sunrise' | 'sunset'
   | 'moon' | 'cloud' | 'compass'
   | 'swap' | 'snap-wall' | 'snap-floor'
@@ -55,6 +56,7 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, Lu
   edit: Pencil, trash: Trash2, refresh: RefreshCw, copy: Copy,
   image: Image, play: Play, swap: Replace,
   'rotate-ccw': RotateCcw, 'rotate-cw': RotateCw, fit: Maximize,
+  undo: Undo2, redo: Redo2,
   sun: Sun, sunrise: Sunrise, sunset: Sunset,
   moon: Moon, cloud: Cloud, compass: Compass,
   more: Ellipsis, list: List, sliders: SlidersHorizontal, heart: Heart, idea: Lightbulb,
