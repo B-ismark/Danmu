@@ -14,10 +14,15 @@ import {
   AIR_PURIFIER,
   airPurifierForm,
   chestFreezerForm,
+  coffeeTableForm,
+  deskForm,
+  diningTableForm,
   CONSOLE_BAY,
   CONSOLE_DOOR,
   consoleBays,
   doorForm,
+  LAPTOP,
+  laptopForm,
   LEVER_PROUD,
   microwaveForm,
   mirrorForm,
@@ -37,14 +42,17 @@ import {
   tvConsoleForm,
   tvForm,
   washingMachineForm,
+  WINDOW,
+  windowForm,
   waterDispenserForm,
   type HardPart,
 } from '../lib/hard-goods';
 import { floorLampForm, tableLampForm, type LampForm } from '../lib/lamp-form';
 import { armchairForm, diningChairForm, officeChairForm, ottomanForm } from '../lib/chair-form';
 import type { SoftItem } from '../lib/soft-goods';
-import { consoleSlabs, doorHandleY, drawerSlide, isParametric, PART_LIBRARY, radiatorFins, stoolSeat, type Category, type Shape } from '../lib/scene-spec';
+import { consoleSlabs, doorHandleY, drawerSlide, isParametric, PART_LIBRARY, radiatorFins, stoolSeat, windowPanes, type Category, type Shape } from '../lib/scene-spec';
 import { dimRangeFor } from '../lib/dimension-ranges';
+import { COFFEE_SHELF, DESK_TOP, DINING_LEG, DINING_TOP, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from '../lib/foot-cells';
 
 const EPS = 1e-9;
 
@@ -62,6 +70,31 @@ interface Row {
   /** A wall piece drawn on a circle of the width, which the renderer stretches to the
    *  HEIGHT: the oval mirror. */
   oval?: boolean;
+  /** Reaches behind its footprint by design: the open laptop's lid. */
+  leansBack?: boolean;
+}
+
+/** Every corner of an open laptop's lid boxes, carried into the piece's frame the way
+ *  the renderer carries the lid: turned by `-tilt` about `x`, then moved to the hinge. */
+function lidWorld(dimMM: readonly number[]) {
+  const { lid, hinge } = laptopForm(dimMM);
+  const turn = new Euler(-hinge.tilt, 0, 0);
+  return lid.map((p) => {
+    const { lo, hi } = partExtent(p);
+    const pts: Vector3[] = [];
+    for (const x of [lo[0], hi[0]]) for (const y of [lo[1], hi[1]]) for (const z of [lo[2], hi[2]]) {
+      pts.push(new Vector3(x, y, z).applyEuler(turn).add(new Vector3(0, hinge.y, hinge.z)));
+    }
+    return { key: p.key, pts };
+  });
+}
+
+/** The box the open lid fills in the piece's frame. */
+function lidBox(dimMM: readonly number[]): HardPart {
+  const pts = lidWorld(dimMM).flatMap((p) => p.pts);
+  const lo = [0, 1, 2].map((a) => Math.min(...pts.map((v) => v.getComponent(a))));
+  const hi = [0, 1, 2].map((a) => Math.max(...pts.map((v) => v.getComponent(a))));
+  return { kind: 'box', key: 'lid', tone: 'body', size: [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]], pos: [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2] };
 }
 
 const ROWS: Row[] = [
@@ -90,6 +123,13 @@ const ROWS: Row[] = [
   { shape: 'mirror', category: 'mirror', form: mirrorForm, wall: true, parametric: false },
   { shape: 'mirror-oval', category: 'mirror', form: ovalMirrorForm, wall: true, parametric: false, oval: true },
   { shape: 'air-purifier', category: 'fridge', form: airPurifierForm, wall: false, parametric: false, round: true },
+  { shape: 'coffee-table', category: 'table', form: coffeeTableForm, wall: false, parametric: false },
+  { shape: 'desk-standard', category: 'table', form: diningTableForm, wall: false, parametric: true },
+  { shape: 'desk-standard', category: 'desk', form: (dimMM) => deskForm(dimMM, false), wall: false, parametric: true },
+  { shape: 'desk-l', category: 'desk', form: (dimMM) => deskForm(dimMM, true), wall: false, parametric: true },
+  // The open lid as the box its turned corners fill, which leans behind the footprint on
+  // purpose (`laptopForm`) and is the one row exempt at the back.
+  { shape: 'laptop', category: 'monitor', form: (dimMM) => [...laptopForm(dimMM).base, lidBox(dimMM)], wall: false, parametric: false, leansBack: true },
 ];
 
 /** A chair's cushion as the box it fills, so every sweep here reaches the cushions too: a
@@ -184,7 +224,8 @@ describe('strutPose', () => {
 describe('every hard good stays inside the box it declares', () => {
   it('the Library carries every shape this file draws', () => {
     for (const r of ROWS) expect(PART_LIBRARY.some((p) => p.shape === r.shape), r.shape).toBe(true);
-    expect(ROWS.length).toBe(23);
+    expect(ROWS.length).toBe(28);
+    expect(ROWS.filter((r) => r.leansBack).map((r) => r.shape)).toEqual(['laptop']);
   });
 
   for (const r of ROWS) {
@@ -213,7 +254,7 @@ describe('every hard good stays inside the box it declares', () => {
           expect(hi[0], `${at} right`).toBeLessThanOrEqual(w / 2 + EPS);
           expect(lo[1], `${at} bottom`).toBeGreaterThanOrEqual(yLo - EPS);
           expect(hi[1], `${at} top`).toBeLessThanOrEqual(yHi + EPS);
-          expect(lo[2], `${at} back`).toBeGreaterThanOrEqual(-d / 2 - EPS);
+          if (!(r.leansBack && p.key === 'lid')) expect(lo[2], `${at} back`).toBeGreaterThanOrEqual(-d / 2 - EPS);
           expect(hi[2], `${at} front`).toBeLessThanOrEqual(d / 2 + EPS);
         }
         // And reaches it: a form that drew short of its own height would leave a gap the
@@ -277,12 +318,16 @@ describe('a group-scaled form is proportions only (§ 36)', () => {
   for (const r of ROWS.filter((q) => !q.parametric)) {
     it(`${r.shape}: scaling one axis scales every part on that axis alone`, () => {
       const base = PART_LIBRARY.find((p) => p.shape === r.shape)!.dimMM.slice();
-      const a = r.form(base);
+      // A turned lid's box mixes the axes it leans across, so it is no proportion of any
+      // one; it is drawn at the authored size and group-scaled with the base all the same,
+      // and its own block holds it to the height at every size.
+      const form = r.leansBack ? (dim: number[]) => r.form(dim).filter((p) => p.key !== 'lid') : r.form;
+      const a = form(base);
       for (let k = 0; k < 3; k++) {
         for (const s of FACTORS) {
           const dim = base.slice();
           dim[k] *= s;
-          const b = r.form(dim);
+          const b = form(dim);
           expect(b.map((p) => p.key), `${r.shape} same parts`).toEqual(a.map((p) => p.key));
           b.forEach((pb, i) => {
             const pa = a[i];
@@ -336,7 +381,7 @@ describe('a group-scaled form is proportions only (§ 36)', () => {
   }
 
   it('the parametric forms are exactly the ones the renderer draws at the stored size', () => {
-    expect(ROWS.filter((r) => r.parametric).map((r) => r.shape)).toEqual(['tv-console', 'door', 'nightstand', 'stool', 'radiator']);
+    expect(ROWS.filter((r) => r.parametric).map((r) => r.shape)).toEqual(['tv-console', 'door', 'nightstand', 'stool', 'radiator', 'desk-standard', 'desk-standard', 'desk-l']);
     for (const r of ROWS) expect(isParametric(r.shape), r.shape).toBe(r.parametric);
     // And none would pass the property above, which is the point of their being
     // parametric: a door's stiles, a console's 18 mm doors, a nightstand's drawer fronts
@@ -1130,6 +1175,508 @@ describe('the air purifier', () => {
         expect((e.lo[1] + e.hi[1]) / 2, `${at} ${rib.key}`).toBeCloseTo(ce.lo[1] + (i + 0.5) * pitch, 12);
         expect(e.hi[1] - e.lo[1], `${at} ${rib.key}`).toBeCloseTo(pitch / 2, 12);
       });
+    }
+  });
+});
+
+describe('the coffee table', () => {
+  type Post = Extract<HardPart, { kind: 'post' }>;
+  const band = dimRangeFor('table', 'coffee-table');
+  const dims: number[][] = [];
+  for (const wMM of [band.min[0], 1100, band.max[0]]) {
+    for (const dMM of [band.min[1], 600, band.max[1]]) {
+      for (const hMM of [band.min[2], 420, band.max[2]]) dims.push([wMM, dMM, hMM]);
+    }
+  }
+
+  it('hangs an apron under an eased top, on four tapered legs in brass ferrules', () => {
+    for (const dimMM of dims) {
+      const at = dimMM.join('x');
+      const [w, d, h] = dimMM.map((v) => v / 1000);
+      const parts = coffeeTableForm(dimMM);
+      const e = (k: string) => ext(parts, k);
+      const post = (k: string) => parts.find((p) => p.key === k) as Post;
+      // The top is the whole footprint and reaches the height; the ease steps in under it.
+      expect(e('top').hi[1]).toBeCloseTo(h, 12);
+      expect([e('top').lo[0], e('top').hi[0], e('top').lo[2], e('top').hi[2]]).toEqual([-w / 2, w / 2, -d / 2, d / 2]);
+      expect(e('top-ease').hi[1], at).toBeCloseTo(e('top').lo[1], 12);
+      expect(e('top-ease').hi[0]).toBeLessThan(w / 2 - EPS);
+      expect(e('top-ease').hi[2]).toBeLessThan(d / 2 - EPS);
+      // Every rail hangs from the ease, to one depth.
+      const rails = ['apron-back', 'apron-front', 'apron-l', 'apron-r'];
+      for (const k of rails) {
+        expect(e(k).hi[1], `${at} ${k}`).toBeCloseTo(e('top-ease').lo[1], 12);
+        expect(e(k).lo[1], `${at} ${k}`).toBeCloseTo(e('apron-front').lo[1], 12);
+      }
+      // The front and back rails run leg centre to leg centre; the side rails stop against
+      // their inner faces, so the ring closes and no corner is drawn twice.
+      const lx = post('leg-3').pos[0];
+      const lz = post('leg-3').pos[2];
+      for (const k of ['apron-back', 'apron-front']) {
+        expect(e(k).lo[0]).toBeCloseTo(-lx, 12);
+        expect(e(k).hi[0]).toBeCloseTo(lx, 12);
+      }
+      expect(e('apron-front').hi[2] + e('apron-front').lo[2]).toBeCloseTo(2 * lz, 12);
+      expect(e('apron-back').hi[2] + e('apron-back').lo[2]).toBeCloseTo(-2 * lz, 12);
+      for (const k of ['apron-l', 'apron-r']) {
+        expect(e(k).lo[2], `${at} ${k}`).toBeCloseTo(e('apron-back').hi[2], 12);
+        expect(e(k).hi[2], `${at} ${k}`).toBeCloseTo(e('apron-front').lo[2], 12);
+      }
+      expect(e('apron-r').hi[0] + e('apron-r').lo[0]).toBeCloseTo(2 * lx, 12);
+      expect(e('apron-l').hi[0] + e('apron-l').lo[0]).toBeCloseTo(-2 * lx, 12);
+      // Four legs, one under each corner of the apron; each tapers to its foot and runs up
+      // into the ease, so its cap is hidden and the rails meet it inside its own girth.
+      for (let i = 0; i < 4; i++) {
+        const leg = post(`leg-${i}`);
+        const fer = post(`ferrule-${i}`);
+        const [sx, sz] = [[-1, -1], [1, -1], [-1, 1], [1, 1]][i];
+        expect([leg.pos[0], leg.pos[2]], `${at} leg ${i}`).toEqual([sx * lx, sz * lz]);
+        expect([fer.pos[0], fer.pos[2]], `${at} ferrule ${i}`).toEqual([sx * lx, sz * lz]);
+        expect(leg.rBottom, at).toBeLessThan(leg.r);
+        const le = partExtent(leg);
+        expect(le.hi[1], at).toBeGreaterThan(e('top-ease').lo[1] + EPS);
+        expect(le.hi[1], at).toBeLessThan(e('top-ease').hi[1] - EPS);
+        // The rails sit inside the leg where they meet it, at the apron's foot, where the
+        // taper has made the leg thinnest.
+        const rAt = leg.rBottom + (leg.r - leg.rBottom) * ((e('apron-front').lo[1] - le.lo[1]) / leg.h);
+        expect(e('apron-r').hi[0] - e('apron-r').lo[0], at).toBeLessThan(2 * rAt);
+        expect(e('apron-front').hi[2] - e('apron-front').lo[2], at).toBeLessThan(2 * rAt);
+        // The ferrule is the foot: on the floor, the leg standing on it, a sleeve wider than
+        // the leg's own foot.
+        const fe = partExtent(fer);
+        expect(fe.lo[1]).toBe(0);
+        expect(le.lo[1], at).toBeCloseTo(fe.hi[1], 12);
+        expect(fer.r, at).toBeGreaterThan(leg.rBottom);
+        expect(fer.tone).toBe('brass');
+        // Inside the top's footprint.
+        expect(Math.abs(leg.pos[0]) + leg.r, at).toBeLessThan(w / 2);
+        expect(Math.abs(leg.pos[2]) + leg.r, at).toBeLessThan(d / 2);
+      }
+      // The shelf runs leg centre to leg centre, low down, clear of the floor.
+      expect([e('shelf').lo[0], e('shelf').hi[0], e('shelf').lo[2], e('shelf').hi[2]]).toEqual([-lx, lx, -lz, lz]);
+      expect(e('shelf').lo[1]).toBeGreaterThan(post('ferrule-0').h);
+      expect(e('shelf').hi[1]).toBeLessThan(h / 2);
+      // The wood is the table's colour; the rails and legs a shade darker.
+      expect(parts.filter((p) => p.tone === 'body').map((p) => p.key)).toEqual(['top', 'top-ease', 'shelf']);
+    }
+  });
+
+  it('draws the Library’s table at the proportions it describes', () => {
+    const parts = coffeeTableForm([1100, 600, 420]);
+    const mm = (v: number) => Math.round(v * 1000);
+    const e = (k: string) => ext(parts, k);
+    expect(mm(e('top').hi[1] - e('top').lo[1])).toBe(25);
+    expect(mm(e('apron-front').hi[1] - e('apron-front').lo[1])).toBe(59);
+    expect(mm(2 * (parts.find((p) => p.key === 'leg-0') as Post).r)).toBe(48);
+  });
+});
+
+describe('the dining table', () => {
+  const band = dimRangeFor('table', 'desk-standard');
+  const dims: number[][] = [[1500, 850, 750]];
+  for (const wMM of [band.min[0], band.max[0]]) for (const dMM of [band.min[1], band.max[1]]) for (const hMM of [band.min[2], band.max[2]]) dims.push([wMM, dMM, hMM]);
+
+  it('hangs a set-back apron from an eased top, on the legs the tuck rule reads', () => {
+    for (const dimMM of dims) {
+      const at = dimMM.join('x');
+      const [w, d, h] = dimMM.map((v) => v / 1000);
+      const parts = diningTableForm(dimMM);
+      const e = (k: string) => ext(parts, k);
+      // The top and the ease under it are `DINING_TOP`, real thicknesses at every size.
+      expect([e('top').lo[0], e('top').hi[0], e('top').lo[2], e('top').hi[2]]).toEqual([-w / 2, w / 2, -d / 2, d / 2]);
+      expect(e('top').hi[1]).toBeCloseTo(h, 12);
+      expect(e('top').hi[1] - e('top').lo[1]).toBeCloseTo(DINING_TOP.top, 12);
+      expect(e('top-ease').hi[1], at).toBeCloseTo(e('top').lo[1], 12);
+      expect(e('top-ease').hi[1] - e('top-ease').lo[1]).toBeCloseTo(DINING_TOP.ease, 12);
+      expect(e('top-ease').hi[0]).toBeLessThan(w / 2 - EPS);
+      expect(e('top-ease').hi[2]).toBeLessThan(d / 2 - EPS);
+      // The legs ARE the tuck rule's rectangles, standing on their glides, and run up
+      // into the ease so their caps are hidden.
+      const posts = surfacePostsLocal('desk-standard', true, w, d);
+      expect(posts.length).toBe(4);
+      posts.forEach((r, i) => {
+        const le = e(`leg-${i}`);
+        expect([le.lo[0], le.hi[0], le.lo[2], le.hi[2]], `${at} leg ${i}`).toEqual([r.x0, r.x1, r.z0, r.z1]);
+        expect(le.hi[1], at).toBeGreaterThan(e('top-ease').lo[1] + EPS);
+        expect(le.hi[1], at).toBeLessThan(e('top-ease').hi[1] - EPS);
+        expect(r.x0, at).toBeGreaterThan(e('top-ease').lo[0]);
+        expect(r.x1, at).toBeLessThan(e('top-ease').hi[0]);
+        const g = e(`glide-${i}`);
+        expect(g.lo[1]).toBe(0);
+        expect(le.lo[1], at).toBeCloseTo(g.hi[1], 12);
+        // A glide is under its leg, a little inside its faces.
+        expect(g.lo[0]).toBeGreaterThan(r.x0);
+        expect(g.hi[0]).toBeLessThan(r.x1);
+        expect(g.lo[2]).toBeGreaterThan(r.z0);
+        expect(g.hi[2]).toBeLessThan(r.z1);
+      });
+      // Every rail hangs from the ease to the depth the tuck rule reads.
+      const rails = ['apron-back', 'apron-front', 'apron-l', 'apron-r'];
+      for (const k of rails) {
+        expect(e(k).hi[1], `${at} ${k}`).toBeCloseTo(e('top-ease').lo[1], 12);
+        expect(e(k).hi[1] - e(k).lo[1], `${at} ${k}`).toBeCloseTo(DINING_TOP.apron, 12);
+        expect(h - e(k).lo[1]).toBeCloseTo(DINING_TOP.top + DINING_TOP.ease + DINING_TOP.apron, 12);
+      }
+      // Set back from the legs' outer faces, inside their girth, so no rail's face lies on
+      // a leg's.
+      const leg3 = e('leg-3');
+      expect(e('apron-front').hi[2], at).toBeLessThan(leg3.hi[2] - EPS);
+      expect(e('apron-front').lo[2], at).toBeGreaterThan(leg3.lo[2] + EPS);
+      expect(e('apron-r').hi[0], at).toBeLessThan(leg3.hi[0] - EPS);
+      expect(e('apron-r').lo[0], at).toBeGreaterThan(leg3.lo[0] + EPS);
+      expect(e('apron-back').lo[2]).toBeCloseTo(-e('apron-front').hi[2], 12);
+      expect(e('apron-l').lo[0]).toBeCloseTo(-e('apron-r').hi[0], 12);
+      // The long rails run leg centre to leg centre; the end rails stop against them.
+      const lx = (leg3.lo[0] + leg3.hi[0]) / 2;
+      expect(e('apron-front').lo[0]).toBeCloseTo(-lx, 12);
+      expect(e('apron-front').hi[0]).toBeCloseTo(lx, 12);
+      for (const k of ['apron-l', 'apron-r']) {
+        expect(e(k).lo[2], `${at} ${k}`).toBeCloseTo(e('apron-back').hi[2], 12);
+        expect(e(k).hi[2], `${at} ${k}`).toBeCloseTo(e('apron-front').lo[2], 12);
+      }
+      // The wood is the table's colour; the frame a shade darker; the glides dark.
+      expect(parts.filter((p) => p.tone === 'body').map((p) => p.key)).toEqual(['top', 'top-ease']);
+      expect(parts.filter((p) => p.tone === 'dark').length).toBe(4);
+    }
+  });
+
+  it('keeps its joinery at real sizes on the smallest and largest tables', () => {
+    for (const dimMM of [[band.min[0], band.min[1], 750], [band.max[0], band.max[1], 750]]) {
+      const parts = diningTableForm(dimMM);
+      const mm = (v: number) => Math.round(v * 1000);
+      const leg = ext(parts, 'leg-0');
+      expect(mm(leg.hi[0] - leg.lo[0])).toBe(mm(DINING_LEG.size));
+      expect(mm(leg.lo[0] + dimMM[0] / 2000)).toBe(mm(DINING_LEG.inset));
+      const front = ext(parts, 'apron-front');
+      expect(mm(front.hi[2] - front.lo[2])).toBe(20);
+      expect(mm(leg.hi[2] - leg.lo[2])).toBe(55);
+    }
+  });
+});
+
+describe('the knee room the tuck rule reads is the joinery drawn', () => {
+  it('a coffee table’s shelf and a dining table’s apron', () => {
+    expect(COFFEE_SHELF).toEqual({ lo: 0.25, hi: 0.3 });
+    expect(Math.round((DINING_TOP.top + DINING_TOP.ease + DINING_TOP.apron) * 1000)).toBe(115);
+    const coffee = coffeeTableForm([1100, 600, 420]);
+    expect(ext(coffee, 'shelf').lo[1]).toBeCloseTo(0.42 * COFFEE_SHELF.lo, 12);
+    expect(ext(coffee, 'shelf').hi[1]).toBeCloseTo(0.42 * COFFEE_SHELF.hi, 12);
+  });
+});
+
+describe('the desk', () => {
+  const same = (a: number[], b: number[], msg: string) => a.forEach((v, i) => expect(v, msg).toBeCloseTo(b[i], 12));
+  const cases: [boolean, number[][]][] = [false, true].map((lShape) => {
+    const band = dimRangeFor('desk', lShape ? 'desk-l' : 'desk-standard');
+    const dims: number[][] = [lShape ? [1600, 1400, 750] : [1400, 700, 750]];
+    for (const wMM of [band.min[0], band.max[0]]) for (const dMM of [band.min[1], band.max[1]]) for (const hMM of [band.min[2], band.max[2]]) dims.push([wMM, dMM, hMM]);
+    return [lShape, dims];
+  });
+
+  it('stands its top on the panel and legs the tuck rule reads, each leg on a glide', () => {
+    for (const [lShape, dims] of cases) {
+      for (const dimMM of dims) {
+        const at = `${lShape ? 'L' : 'straight'} ${dimMM.join('x')}`;
+        const [w, d, h] = dimMM.map((v) => v / 1000);
+        const parts = deskForm(dimMM, lShape);
+        const e = (k: string) => ext(parts, k);
+        const armD = lShape ? d * ELL_ARM_DEPTH : d;
+        const armW = w * ELL_RETURN_WIDTH;
+        // A 25 mm top: the long arm against the back, and in L form the return filling
+        // the rest of the depth at the right-hand end — the outline the plan draws.
+        same([e('top').lo[0], e('top').hi[0], e('top').lo[2], e('top').hi[2]], [-w / 2, w / 2, -d / 2, -d / 2 + armD], at);
+        expect(e('top').hi[1]).toBeCloseTo(h, 12);
+        expect(e('top').hi[1] - e('top').lo[1]).toBeCloseTo(DESK_TOP.top, 12);
+        expect(parts.some((p) => p.key === 'top-return')).toBe(lShape);
+        if (lShape) {
+          same([e('top-return').lo[0], e('top-return').hi[0], e('top-return').lo[2], e('top-return').hi[2]], [w / 2 - armW, w / 2, -d / 2 + armD, d / 2], at);
+          expect(e('top-return').lo[1]).toBeCloseTo(e('top').lo[1], 12);
+        }
+        const yTop = e('top').lo[1];
+        const [panel, ...legs] = surfacePostsLocal(lShape ? 'desk-l' : 'desk-standard', false, w, d);
+        expect(legs.length).toBe(2);
+        same([e('panel').lo[0], e('panel').hi[0], e('panel').lo[2], e('panel').hi[2]], [panel.x0, panel.x1, panel.z0, panel.z1], at);
+        expect(e('panel').lo[1]).toBe(0);
+        expect(e('panel').hi[1]).toBeCloseTo(yTop, 12);
+        legs.forEach((r, i) => {
+          const le = e(`leg-${i}`);
+          same([le.lo[0], le.hi[0], le.lo[2], le.hi[2]], [r.x0, r.x1, r.z0, r.z1], `${at} leg ${i}`);
+          expect(le.hi[1], at).toBeCloseTo(yTop, 12);
+          const g = e(`glide-${i}`);
+          expect(g.lo[1]).toBe(0);
+          expect(le.lo[1]).toBeCloseTo(g.hi[1], 12);
+          expect(g.lo[0]).toBeGreaterThan(r.x0);
+          expect(g.hi[0]).toBeLessThan(r.x1);
+          expect(g.lo[2]).toBeGreaterThan(r.z0);
+          expect(g.hi[2]).toBeLessThan(r.z1);
+        });
+        // In L form the front leg stands under the return, not in the notch.
+        if (lShape) expect(legs[1].x0, at).toBeGreaterThan(w / 2 - armW);
+      }
+    }
+  });
+
+  it('hangs a pencil drawer and a cable tray no lower than the knee room the rule reads', () => {
+    for (const [lShape, dims] of cases) {
+      for (const dimMM of dims) {
+        const at = `${lShape ? 'L' : 'straight'} ${dimMM.join('x')}`;
+        const [w, d, h] = dimMM.map((v) => v / 1000);
+        const parts = deskForm(dimMM, lShape);
+        const e = (k: string) => ext(parts, k);
+        const armD = lShape ? d * ELL_ARM_DEPTH : d;
+        const yTop = e('top').lo[1];
+        const hung = ['drawer-box', 'drawer-front', 'drawer-pull', 'tray', 'tray-back', 'tray-lip'];
+        const lowest = Math.min(...hung.map((k) => e(k).lo[1]));
+        expect(lowest, at).toBeCloseTo(h - DESK_TOP.hang, 12);
+        for (const k of hung) expect(e(k).hi[1], `${at} ${k}`).toBeLessThanOrEqual(yTop + EPS);
+        // The drawer box and the tray's back are screwed to the top's underside.
+        expect(e('drawer-box').hi[1]).toBeCloseTo(yTop, 12);
+        expect(e('tray-back').hi[1]).toBeCloseTo(yTop, 12);
+        // The drawer: under the long arm's open front edge, set back from it, between
+        // the panel and whatever closes that edge on the right (the front leg, or the
+        // return); its front on the box, the pull on its front.
+        const [panel, , front] = surfacePostsLocal(lShape ? 'desk-l' : 'desk-standard', false, w, d);
+        const xb = lShape ? w / 2 - w * ELL_RETURN_WIDTH : front.x0;
+        expect(e('drawer-front').lo[0], at).toBeGreaterThan(panel.x1);
+        expect(e('drawer-front').hi[0], at).toBeLessThan(xb);
+        expect(e('drawer-front').hi[2], at).toBeLessThan(-d / 2 + armD - EPS);
+        expect(e('drawer-front').hi[2], at).toBeGreaterThan(-d / 2 + armD - 0.03);
+        expect(e('drawer-front').lo[2]).toBeCloseTo(e('drawer-box').hi[2], 12);
+        expect(e('drawer-pull').lo[2]).toBeCloseTo(e('drawer-front').hi[2], 12);
+        expect(e('drawer-box').lo[0]).toBeGreaterThan(e('drawer-front').lo[0]);
+        expect(e('drawer-box').hi[0]).toBeLessThan(e('drawer-front').hi[0]);
+        const py = (e('drawer-pull').lo[1] + e('drawer-pull').hi[1]) / 2;
+        expect(py).toBeGreaterThan(e('drawer-front').lo[1]);
+        expect(py).toBeLessThan(e('drawer-front').hi[1]);
+        // A gap under the top, so the front reads as a drawer and not more desk.
+        expect(e('drawer-front').hi[1]).toBeLessThan(yTop - EPS);
+        // The tray: a channel across the back, clear of the drawer, the panel and the legs,
+        // its back and lip standing on its floor.
+        expect(e('tray').hi[2], at).toBeLessThan(e('drawer-box').lo[2]);
+        expect(e('tray').lo[0], at).toBeGreaterThan(panel.x1);
+        expect(e('tray').hi[0], at).toBeLessThan(surfacePostsLocal(lShape ? 'desk-l' : 'desk-standard', false, w, d)[1].x0);
+        for (const k of ['tray-back', 'tray-lip']) expect(e(k).lo[1]).toBeCloseTo(e('tray').hi[1], 12);
+        expect(e('tray-back').lo[2]).toBeCloseTo(e('tray').lo[2], 12);
+        expect(e('tray-lip').hi[2]).toBeCloseTo(e('tray').hi[2], 12);
+        expect(e('tray-lip').hi[1]).toBeLessThan(e('tray-back').hi[1]);
+        expect(parts.filter((p) => p.tone === 'body').map((p) => p.key)).toEqual(lShape ? ['top', 'top-return', 'drawer-front'] : ['top', 'drawer-front']);
+      }
+    }
+  });
+});
+
+describe('the window', () => {
+  const band = dimRangeFor('other', 'window');
+  const dims: number[][] = [[1200, 60, 1200]];
+  for (const wMM of [band.min[0], 1400, 2100, band.max[0]]) for (const hMM of [band.min[2], band.max[2]]) dims.push([wMM, 60, hMM]);
+  for (const dMM of [band.min[1], band.max[1]]) dims.push([1200, dMM, 1200]);
+
+  it('fills the opening with frame, sashes and glass, and keeps its trim on the plaster outside it', () => {
+    for (const dimMM of dims) {
+      const at = dimMM.join('x');
+      const [w, d, h] = dimMM.map((v) => v / 1000);
+      const { parts } = windowForm(dimMM);
+      const e = (k: string) => ext(parts, k);
+      const keys = parts.map((p) => p.key);
+      expect(new Set(keys).size).toBe(keys.length);
+      const trim = ['casing-head', 'casing-l', 'casing-r', 'sill', 'apron'];
+      for (const p of parts) {
+        const { lo, hi } = partExtent(p);
+        if (trim.includes(p.key)) {
+          // Outside the opening, on the wall face, standing off it no further than the sill.
+          expect(lo[2], `${at} ${p.key}`).toBeCloseTo(-d / 2, 12);
+          expect(hi[1] <= -h / 2 + EPS || lo[1] >= h / 2 - EPS || hi[0] <= -w / 2 + EPS || lo[0] >= w / 2 - EPS, `${at} ${p.key} outside the opening`).toBe(true);
+          continue;
+        }
+        // Everything else is in the opening, within the wall piece's depth — the handles
+        // alone standing proud of the sashes' room face.
+        expect(lo[0], `${at} ${p.key}`).toBeGreaterThanOrEqual(-w / 2 - EPS);
+        expect(hi[0], `${at} ${p.key}`).toBeLessThanOrEqual(w / 2 + EPS);
+        expect(lo[1], `${at} ${p.key}`).toBeGreaterThanOrEqual(-h / 2 - EPS);
+        expect(hi[1], `${at} ${p.key}`).toBeLessThanOrEqual(h / 2 + EPS);
+        expect(lo[2], `${at} ${p.key}`).toBeGreaterThanOrEqual(-d / 2 - EPS);
+        if (!p.key.startsWith('handle-')) expect(hi[2], `${at} ${p.key}`).toBeLessThanOrEqual(d / 2 + EPS);
+      }
+      // The frame's outer faces are the opening's.
+      expect([e('frame-head').hi[1], e('frame-foot').lo[1], e('frame-l').lo[0], e('frame-r').hi[0]].map((v) => +v.toFixed(12))).toEqual([h / 2, -h / 2, -w / 2, w / 2].map((v) => +v.toFixed(12)));
+      // The casing frames it: up both sides from the sill and across the head, the head
+      // running over the side casings' tops.
+      const { casing, sillOver, sillReach } = WINDOW;
+      expect(e('casing-head').lo[0]).toBeCloseTo(-w / 2 - casing, 12);
+      expect(e('casing-head').hi[0]).toBeCloseTo(w / 2 + casing, 12);
+      expect(e('casing-head').lo[1]).toBeCloseTo(e('casing-l').hi[1], 12);
+      expect(e('casing-l').lo[1]).toBeCloseTo(e('sill').hi[1], 12);
+      expect(e('casing-r').lo[1]).toBeCloseTo(e('sill').hi[1], 12);
+      expect(e('casing-l').hi[0]).toBeCloseTo(-w / 2, 12);
+      expect(e('casing-r').lo[0]).toBeCloseTo(w / 2, 12);
+      // The sill is the opening's floor, past the casing each side and reaching into the
+      // room; the apron hangs under it, as wide as the casing.
+      expect(e('sill').hi[1]).toBeCloseTo(-h / 2, 12);
+      expect(e('sill').hi[0]).toBeCloseTo(w / 2 + sillOver, 12);
+      expect(sillOver).toBeGreaterThan(casing);
+      expect(e('sill').hi[2] - e('sill').lo[2]).toBeCloseTo(Math.max(sillReach, d + 0.06), 12);
+      expect(e('sill').hi[2], `${at} the sill stands past the frame`).toBeGreaterThan(e('frame-head').hi[2] + 0.05);
+      expect(e('apron').hi[1]).toBeCloseTo(e('sill').lo[1], 12);
+      expect(e('apron').hi[0]).toBeCloseTo(w / 2 + casing, 12);
+      // The outline DRAWN_RATIO pins: 50 mm of casing over the head, the sill and apron
+      // 80 mm under the opening, the sill 60 mm past each side.
+      const all = parts.map(partExtent);
+      expect(Math.max(...all.map((x) => x.hi[1]))).toBeCloseTo(h / 2 + 0.05, 12);
+      expect(Math.min(...all.map((x) => x.lo[1]))).toBeCloseTo(-h / 2 - 0.08, 12);
+      expect(Math.max(...all.map((x) => x.hi[0]))).toBeCloseTo(w / 2 + 0.06, 12);
+      expect(Math.max(...all.map((x) => x.hi[2]))).toBeCloseTo(e('sill').hi[2], 12);
+      if (dimMM[1] === 60) expect(e('sill').hi[2]).toBeCloseTo(-d / 2 + 0.12, 12);
+    }
+  });
+
+  it('divides the frame into its casements: a sash, a pane and a handle each, mullions between', () => {
+    for (const dimMM of dims) {
+      const at = dimMM.join('x');
+      const [w, d] = dimMM.map((v) => v / 1000);
+      const { parts, glass } = windowForm(dimMM);
+      const e = (k: string) => ext(parts, k);
+      const n = windowPanes(dimMM[0]);
+      expect(glass.length, at).toBe(n);
+      expect(parts.filter((p) => p.key.startsWith('mullion-')).length).toBe(n - 1);
+      expect(parts.filter((p) => p.key.startsWith('handle-')).length).toBe(n);
+      const { frame, mullion, sash } = WINDOW;
+      // The sashes tile the frame's opening exactly: frame, sash, mullion, sash, …, frame.
+      let x = -w / 2 + frame;
+      for (let i = 0; i < n; i++) {
+        if (i > 0) {
+          expect(e(`mullion-${i}`).lo[0], `${at} mullion ${i}`).toBeCloseTo(x, 12);
+          x += mullion;
+          expect(e(`mullion-${i}`).hi[0]).toBeCloseTo(x, 12);
+          expect(e(`mullion-${i}`).hi[1]).toBeCloseTo(e('frame-head').lo[1], 12);
+          expect(e(`mullion-${i}`).lo[1]).toBeCloseTo(e('frame-foot').hi[1], 12);
+        }
+        const l = e(`sash-${i}-l`);
+        const r = e(`sash-${i}-r`);
+        expect(l.lo[0], `${at} sash ${i}`).toBeCloseTo(x, 12);
+        expect(e(`sash-${i}-head`).hi[1]).toBeCloseTo(e('frame-head').lo[1], 12);
+        expect(e(`sash-${i}-foot`).lo[1]).toBeCloseTo(e('frame-foot').hi[1], 12);
+        x = r.hi[0];
+        // The pane fills the sash's opening, and stands inside the sash's depth.
+        const g = glass[i];
+        expect(g.x0).toBeCloseTo(l.hi[0], 12);
+        expect(g.x1).toBeCloseTo(r.lo[0], 12);
+        expect(g.y1).toBeCloseTo(e(`sash-${i}-head`).lo[1], 12);
+        expect(g.y0).toBeCloseTo(e(`sash-${i}-foot`).hi[1], 12);
+        expect(g.z).toBeGreaterThan(l.lo[2]);
+        expect(g.z).toBeLessThan(l.hi[2]);
+        expect(r.hi[0] - r.lo[0]).toBeCloseTo(sash, 12);
+        // The handle stands on the sash's room face, on one of its stiles, at mid-height.
+        const hd = e(`handle-${i}`);
+        expect(hd.lo[2]).toBeCloseTo(l.hi[2], 12);
+        const hx = (hd.lo[0] + hd.hi[0]) / 2;
+        const onStile = n === 1 || i % 2 === 0 ? r : l;
+        expect(hx, `${at} handle ${i}`).toBeCloseTo((onStile.lo[0] + onStile.hi[0]) / 2, 12);
+        expect((hd.lo[1] + hd.hi[1]) / 2).toBeCloseTo(0, 12);
+        expect(parts.find((p) => p.key === `handle-${i}`)!.tone).toBe('brass');
+      }
+      expect(x, `${at} the last sash meets the frame`).toBeCloseTo(w / 2 - frame, 12);
+      // A pair of casements opens from the meeting stiles.
+      if (n === 2) {
+        const h0 = e('handle-0');
+        const h1 = e('handle-1');
+        expect(h0.hi[0]).toBeLessThan(0);
+        expect(h1.lo[0]).toBeGreaterThan(0);
+        expect(h1.lo[0] - h0.hi[0]).toBeLessThan(mullion + 2 * sash);
+      }
+      // Each sash is set in from both faces of the frame, so none of its faces lies on one.
+      expect(e('sash-0-l').lo[2]).toBeGreaterThan(-d / 2 + EPS);
+      expect(e('sash-0-l').hi[2]).toBeLessThan(d / 2 - EPS);
+    }
+  });
+
+  it('really draws more panes as it widens, which is why it is parametric', () => {
+    expect([600, 1200, 1400, 2100, 3000].map(windowPanes)).toEqual([1, 2, 2, 3, 4]);
+    expect(isParametric('window')).toBe(true);
+  });
+});
+
+describe('the laptop', () => {
+  const band = dimRangeFor('monitor', 'laptop');
+  const all: number[][] = [[340, 240, 220]];
+  for (const w of [band.min[0], band.max[0]]) for (const d of [band.min[1], band.max[1]]) for (const h of [band.min[2], band.max[2]]) all.push([w, d, h]);
+
+  it('opens to exactly its height, leaning back from the hinge', () => {
+    for (const dimMM of all) {
+      const h = dimMM[2] / 1000;
+      const ys = lidWorld(dimMM).flatMap((p) => p.pts.map((v) => v.y));
+      expect(Math.max(...ys), `${dimMM}`).toBeCloseTo(h, 12);
+      // The lid's top edge is behind the hinge: it leans back, not forward over the keys.
+      const top = lidWorld(dimMM).find((p) => p.key === 'lid')!.pts.reduce((a, b) => (b.y > a.y ? b : a));
+      expect(top.z).toBeLessThan(laptopForm(dimMM).hinge.z);
+      expect(LAPTOP.tilt).toBeGreaterThan(0.2);
+      expect(LAPTOP.tilt).toBeLessThan(0.45);
+    }
+  });
+
+  it('hinges on the back edge of the base, the lid foot inside the footprint', () => {
+    for (const dimMM of all) {
+      const [w, d] = dimMM.map((v) => v / 1000);
+      const { base, hinge } = laptopForm(dimMM);
+      const e = (k: string) => ext(base, k);
+      expect(e('hinge').lo[2]).toBeGreaterThanOrEqual(-d / 2 - EPS);
+      expect(e('hinge').hi[2]).toBeLessThan(-d / 2 + d * 0.15);
+      expect(hinge.y).toBeLessThan(e('base').hi[1]);
+      expect(hinge.y).toBeGreaterThan(e('base').lo[1]);
+      // The lid's lowest corners stay over the deck and above the desk.
+      const foot = lidWorld(dimMM).flatMap((p) => p.pts).filter((v) => v.y < e('base').hi[1] + 0.02);
+      expect(foot.length).toBeGreaterThan(0);
+      for (const v of foot) {
+        expect(v.z, `${dimMM}`).toBeGreaterThanOrEqual(-d / 2 - EPS);
+        expect(v.y).toBeGreaterThan(0);
+        expect(Math.abs(v.x)).toBeLessThanOrEqual(w / 2 + EPS);
+      }
+    }
+  });
+
+  it('faces its screen and bezel forward, out of the shell', () => {
+    const { lid } = laptopForm([340, 240, 220]);
+    const e = (k: string) => ext(lid, k);
+    expect(e('bezel').lo[2]).toBeCloseTo(e('lid').hi[2], 12);
+    expect(e('screen').lo[2]).toBeCloseTo(e('bezel').hi[2], 12);
+    expect(e('camera').lo[2]).toBeCloseTo(e('bezel').hi[2], 12);
+    // The screen sits inside the bezel with a border all round, the camera above it.
+    expect(e('screen').lo[0]).toBeGreaterThan(e('bezel').lo[0]);
+    expect(e('screen').hi[1]).toBeLessThan(e('camera').lo[1]);
+    expect(e('camera').hi[1]).toBeLessThan(e('bezel').hi[1]);
+    expect(e('bezel').hi[1]).toBeLessThan(e('lid').hi[1]);
+  });
+
+  it('lays its keys on the deck behind a trackpad, every one inside the base', () => {
+    for (const dimMM of all) {
+      const { base } = laptopForm(dimMM);
+      const deck = ext(base, 'base');
+      const keys = base.filter((p) => p.key.startsWith('key-'));
+      expect(keys.length).toBe(LAPTOP.keyCols * LAPTOP.keyRows + 5);
+      for (const k of keys) {
+        const x = partExtent(k);
+        expect(x.lo[1]).toBeCloseTo(deck.hi[1], 12);
+        expect(x.lo[0]).toBeGreaterThanOrEqual(deck.lo[0]);
+        expect(x.hi[0]).toBeLessThanOrEqual(deck.hi[0]);
+        expect(x.lo[2]).toBeGreaterThanOrEqual(deck.lo[2]);
+        expect(x.hi[2]).toBeLessThan(ext(base, 'trackpad').lo[2]);
+      }
+      // No two keys touch: every row and column keeps a gap.
+      const boxes = keys.map(partExtent);
+      for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        const apart = a.hi[0] <= b.lo[0] || b.hi[0] <= a.lo[0] || a.hi[2] <= b.lo[2] || b.hi[2] <= a.lo[2];
+        expect(apart, `${keys[i].key} / ${keys[j].key}`).toBe(true);
+      }
+      // The space bar is the wide one, centred.
+      const sp = ext(base, 'key-space');
+      expect(sp.lo[0] + sp.hi[0]).toBeCloseTo(0, 12);
+      expect(sp.hi[0] - sp.lo[0]).toBeGreaterThan(4 * (partExtent(keys[0]).hi[0] - partExtent(keys[0]).lo[0]));
+      expect(ext(base, 'trackpad').lo[1]).toBeCloseTo(deck.hi[1], 12);
+      // The feet carry the base off the desk.
+      for (let i = 0; i < 4; i++) {
+        expect(ext(base, `foot-${i}`).lo[1]).toBe(0);
+        expect(ext(base, `foot-${i}`).hi[1]).toBeCloseTo(deck.lo[1], 12);
+      }
     }
   });
 });

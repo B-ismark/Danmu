@@ -907,7 +907,7 @@ off the feet, a valve buried in a section, an ottoman leg outside the base, or a
 with a gap beneath it. **One to judge on purpose:** a pillow lying flat reads as a made bed;
 say if it reads as too flat beside the scatter cushion standing in front of it.
 
-### A painting, two mirrors and an air purifier drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### A painting, two mirrors and an air purifier drawn as the real objects — merged to `main` in `a1f1755` (PR #227), NOT LOOKED AT
 
 **Round six of the realism ask** (`lib/hard-goods.ts`):
 
@@ -940,6 +940,46 @@ looks like glass in front of its frame, a corner open to the wall, or a mat thic
 side. **Two to judge on purpose:** whether the glass reads as a mirror or as grey card (the
 room has no reflections, so it is a pale silvered sheen, not a reflection), and whether the
 painting's colour fields read as art or as a placeholder.
+
+### Two tables, two desks, a window and a laptop drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+**Round seven of the realism ask** (`lib/hard-goods.ts`):
+
+- **Coffee table.** Four slim posts standing in brass ferrules, aprons under a top with a
+  soft ease, and a shelf low between the legs. It was a slab on four sticks.
+- **Dining table** (a table by category, drawn at its real size). Square legs on dark glides,
+  20 mm aprons set in from the legs' faces, a top with an ease under it. The legs are the
+  same rectangles the chair-tuck rule checks, as they were.
+- **Desk and L-desk.** A side panel at one end, two legs at the other, a drawer with a
+  brass pull between them, and a dark cable tray under the back. The L-desk has the same
+  stack on both arms. Its legs are now drawn at their real size when you stretch it, the
+  same as the tuck rule assumes.
+- **Window.** Casing round the opening, a sill that reaches into the room past the frame,
+  an apron under the sill, a frame, and casement sashes, one per `windowPanes` width,
+  each with a brass handle and a mullion between them. The glass is a pale translucent
+  sheet that lets the light through and casts no shadow.
+- **Laptop.** A base on four rubber feet with a keyboard of 12 × 5 keys, a space-bar row and
+  a trackpad, a hinge barrel along the back, and a lid in a darker shade of the piece leaning
+  back with a bezel, screen and camera. Its top edge is now exactly the piece's height; it
+  used to stand 7 mm over.
+
+**The sizes did not change.** Every one still measures the box the plan draws, except the
+laptop's screen, which leans behind the base as it always did (69 mm at the Library size).
+
+**Where to click.** Add each from the Library. Stretch the dining table and desk long and
+short, the L-desk both ways, the window wide (to see two, three, four sashes) and tall.
+Recolour each one. Push a dining chair under the table and an office chair under the desk.
+Turn the sun mood on and look at the window's light patch on the floor.
+
+**What right looks like.** Legs meet the floor on their glides or ferrules with nothing
+floating. The aprons and the drawer sit under the top with no gap and no wood showing
+through. A chair tucks under the dining table and the desk exactly as far as before. The
+window's light still lands on the floor through the glass, with the sash bars' shadows in
+it. Laptop keys sit on the deck in even rows. *Wrong* looks like a leg poking through the
+top, a drawer front over the leg, a sill shorter than the frame, glass casting a solid
+shadow, or the laptop's lid coming loose from its hinge when the piece is stretched.
+**Two to judge on purpose:** whether the window's glass reads as glass or as a blue panel,
+and whether the cable tray under the desk reads as a tray or as clutter.
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 

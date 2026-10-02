@@ -10,7 +10,7 @@
  *
  * So the outline is authored HERE, once, as rectangles in the piece's own frame, and
  * three readers take it from here: `footFromPart` (containment, collision, picking,
- * the solver's costs), `PlanView` (the outline it draws) and `DeskGeo` (the tabletop
+ * the solver's costs), `PlanView` (the outline it draws) and `deskForm` (the tabletop
  * it builds). The renderer used to carry its own `0.52` and `0.42` — the same numbers
  * in a TSX file no test could reach, which is CLAUDE.md rule 2's corollary about a
  * renderer with its own idea of the piece's size.
@@ -62,6 +62,18 @@ export function footOutlineLocal(shape: Shape | undefined, w: number, d: number)
 /** What a dining table's legs are: 55 mm square, their outer faces 40 mm inside the
  *  top's edge. */
 export const DINING_LEG = { size: 0.055, inset: 0.04 } as const;
+/** A dining table's top, the ease stepped in under it, and the apron hung from the ease,
+ *  in metres. Their sum is the knee room a tucked chair is measured against
+ *  (`surfaceKneeMM`, `lib/layout-rules.ts`), so the rail a chair is stopped by is the
+ *  rail on screen. */
+export const DINING_TOP = { top: 0.028, ease: 0.01, apron: 0.077 } as const;
+/** A desk's top, and how far under it its lowest hung part reaches — the pencil drawer
+ *  and the cable tray both stop at `hang` — in metres. `hang` is the knee room the tuck
+ *  rule measures a chair against (`surfaceKneeMM`, `lib/layout-rules.ts`). */
+export const DESK_TOP = { top: 0.025, hang: 0.075 } as const;
+/** A coffee table's lower shelf, as shares of the height: its underside is the knee
+ *  room an ottoman or stool slid under it has. */
+export const COFFEE_SHELF = { lo: 0.25, hi: 0.3 } as const;
 /** A desk's floor-standing members: the left side panel's thickness and the share of
  *  the long arm's depth it covers, and the two right-hand legs' size and inset. */
 export const DESK_POSTS = { panel: 0.018, panelDepth: 0.88, leg: 0.05, legInset: 0.04 } as const;
@@ -71,7 +83,7 @@ export const DESK_POSTS = { panel: 0.018, panelDepth: 0.88, leg: 0.05, legInset:
  * the legs and panels a seat tucked under it must not pass through.
  *
  * Authored here for the reason the outline above is: two readers must agree on it.
- * `DiningTableGeo` and `DeskGeo` build their legs from these rectangles, and
+ * `diningTableForm` and `deskForm` (`lib/hard-goods.ts`) build their legs from these rectangles, and
  * `tuckedAt` (`lib/layout-rules.ts`) refuses a tuck whose seat footprint reaches one —
  * so the leg the chair is stopped by is the leg on screen, not a second copy of its
  * position that drifts. `[]` for a surface with nothing to pass through, or none the

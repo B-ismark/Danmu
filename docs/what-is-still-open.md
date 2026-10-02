@@ -3787,7 +3787,7 @@ so both have to be the heights the pieces are drawn at. `tests/drawn-height.test
 the renderer of every floor-standing shape (35 of them), and the desk-standard drawn as a
 dining table, at the bottom, catalogue and top of its height range. **The ottoman did not reach its own**: the welt stopped at 0.9 h, so a tray
 set on a 420 mm ottoman stood 42 mm above the cushion, and a fit test would have measured a
-seat 10% taller than anyone sees. It is drawn to h now. Six shapes still miss by more than
+seat 10% taller than anyone sees. It is drawn to h now. Five shapes still miss by more than
 1 mm, and the test holds them as a literal list, so a new miss fails and so does a fixed one
 left on it:
 
@@ -3796,12 +3796,13 @@ left on it:
 | rug, plane | fixed thickness | a flat piece, whatever the height field says |
 | bed-single, bed-double | 1.4 h | the headboard, on purpose: h is the mattress top |
 | monitor | 0.96 h + 10 mm, −14 mm at 600 | the screen stops short of the box |
-| laptop | 20 mm + 0.94 h, +13 mm at 150 | h is the lid's length, tilted back from the hinge |
 
 None is a seat or a surface a seat tucks under, so none touches this section. (Seven when this
 was written: `air-purifier` drew a control disc 14 mm above h, so something set on it landed
 inside the disc. Its realism pass sets the dial into the top and it reaches h exactly; the row
-is retired from the test's list, which is how a fixed miss is meant to leave it.)
+is retired from the test's list, which is how a fixed miss is meant to leave it. `laptop` left
+the same way in round 7: it drew 20 mm + 0.94 h, 13 mm over at 150, because h was the lid's
+LENGTH; `laptopForm` solves the length for the open height, so the lid's top edge is h.)
 
 *The fit test.* Two numbers per piece, both read off the drawings (`tuckProfile` in
 `lib/layout-rules.ts`). For a seat, how high it reaches in the front 85% of its depth — the
