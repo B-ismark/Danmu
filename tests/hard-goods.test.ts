@@ -22,6 +22,9 @@ import {
   nightstandForm,
   nightstandSlide,
   partExtent,
+  RADIATOR,
+  radiatorForm,
+  sideTableForm,
   soundbarForm,
   STOOL,
   stoolForm,
@@ -33,9 +36,9 @@ import {
   type HardPart,
 } from '../lib/hard-goods';
 import { floorLampForm, tableLampForm, type LampForm } from '../lib/lamp-form';
-import { armchairForm, diningChairForm, officeChairForm } from '../lib/chair-form';
+import { armchairForm, diningChairForm, officeChairForm, ottomanForm } from '../lib/chair-form';
 import type { SoftItem } from '../lib/soft-goods';
-import { consoleSlabs, doorHandleY, drawerSlide, isParametric, PART_LIBRARY, stoolSeat, type Category, type Shape } from '../lib/scene-spec';
+import { consoleSlabs, doorHandleY, drawerSlide, isParametric, PART_LIBRARY, radiatorFins, stoolSeat, type Category, type Shape } from '../lib/scene-spec';
 import { dimRangeFor } from '../lib/dimension-ranges';
 
 const EPS = 1e-9;
@@ -72,6 +75,9 @@ const ROWS: Row[] = [
   // Without its scatter cushion, which leans and so is not proportions only — see
   // `armchairForm`; `tests/chair-form.test.ts` holds it inside the chair.
   { shape: 'chair-armchair', category: 'chair', form: (dimMM) => { const f = armchairForm(dimMM); return [...f.parts, cushion('seat', f.seat), cushion('back', f.back)]; }, wall: false, parametric: false },
+  { shape: 'ottoman', category: 'ottoman', form: (dimMM) => { const f = ottomanForm(dimMM); return [...f.parts, cushion('top', f.top)]; }, wall: false, parametric: false },
+  { shape: 'side-table', category: 'table', form: sideTableForm, wall: false, parametric: false, round: true },
+  { shape: 'radiator', category: 'fridge', form: (dimMM) => { const f = radiatorForm(dimMM); return [...f.columns, ...f.fittings]; }, wall: false, parametric: true },
 ];
 
 /** A chair's cushion as the box it fills, so every sweep here reaches the cushions too: a
@@ -166,7 +172,7 @@ describe('strutPose', () => {
 describe('every hard good stays inside the box it declares', () => {
   it('the Library carries every shape this file draws', () => {
     for (const r of ROWS) expect(PART_LIBRARY.some((p) => p.shape === r.shape), r.shape).toBe(true);
-    expect(ROWS.length).toBe(16);
+    expect(ROWS.length).toBe(19);
   });
 
   for (const r of ROWS) {
@@ -268,8 +274,12 @@ describe('a group-scaled form is proportions only (§ 36)', () => {
             const pa = a[i];
             for (let j = 0; j < 3; j++) {
               // `dimMM` is [w, d, h]; a part's frame is [x, y, z] with y up and z the
-              // depth, so the depth scales z and the height scales y.
-              const f = j === SPACE_AXIS[k] ? s : 1;
+              // depth, so the depth scales z and the height scales y. A ROUND form is
+              // drawn on a square of the width and stretched to the depth by its renderer,
+              // so there the width scales x and z both and the depth scales nothing.
+              const f = r.round
+                ? (k === 0 && j !== 1) || (k === 2 && j === 1) ? s : 1
+                : j === SPACE_AXIS[k] ? s : 1;
               expect(anchor(pb)[j], `${r.shape} ${pa.key} pos[${j}] when axis ${k} x${s}`).toBeCloseTo(anchor(pa)[j] * f, 12);
               if (pa.kind === 'box' && pb.kind === 'box') {
                 expect(pb.size[j], `${r.shape} ${pa.key} size[${j}] when axis ${k} x${s}`).toBeCloseTo(pa.size[j] * f, 12);
@@ -293,7 +303,7 @@ describe('a group-scaled form is proportions only (§ 36)', () => {
   }
 
   it('the parametric forms are exactly the ones the renderer draws at the stored size', () => {
-    expect(ROWS.filter((r) => r.parametric).map((r) => r.shape)).toEqual(['tv-console', 'door', 'nightstand', 'stool']);
+    expect(ROWS.filter((r) => r.parametric).map((r) => r.shape)).toEqual(['tv-console', 'door', 'nightstand', 'stool', 'radiator']);
     for (const r of ROWS) expect(isParametric(r.shape), r.shape).toBe(r.parametric);
     // And none would pass the property above, which is the point of their being
     // parametric: a door's stiles, a console's 18 mm doors, a nightstand's drawer fronts
@@ -656,6 +666,207 @@ describe('the stool', () => {
       // Each pair of legs is tied once.
       const ends = rungs.map((r) => [r.a, r.b].map((pt) => legs.findIndex((l) => Math.abs(Math.atan2(l.a[2], l.a[0]) - Math.atan2(pt[2], pt[0])) < 1e-9)).sort().join());
       expect(ends.sort()).toEqual(['0,1', '0,2', '1,2']);
+    }
+  });
+});
+
+describe('the side table', () => {
+  it('stacks top, ease, collar, turned column and stepped foot, each on the one below', () => {
+    const band = dimRangeFor('table', 'side-table');
+    for (const wMM of [band.min[0], 450, band.max[0]]) {
+      for (const hMM of [band.min[2], 550, band.max[2]]) {
+        const dimMM = [wMM, 450, hMM];
+        const [w, , h] = dimMM.map((v) => v / 1000);
+        const parts = sideTableForm(dimMM);
+        const at = dimMM.join('x');
+        const e = (k: string) => ext(parts, k);
+        const post = (k: string) => {
+          const p = parts.find((q) => q.key === k);
+          if (p?.kind !== 'post') throw new Error(k);
+          return p;
+        };
+        // The top: the full square, reaching the height.
+        expect(e('top').hi[1]).toBeCloseTo(h, 12);
+        for (const k of [0, 2]) {
+          expect(e('top').lo[k]).toBeCloseTo(-w / 2, 12);
+          expect(e('top').hi[k]).toBeCloseTo(w / 2, 12);
+        }
+        // Each layer standing on the next, none floating, none buried.
+        const chain = ['top', 'top-ease', 'collar', 'column', 'foot-step', 'foot'];
+        for (let i = 0; i + 1 < chain.length; i++) {
+          expect(e(chain[i]).lo[1], `${at} ${chain[i]} on ${chain[i + 1]}`).toBeCloseTo(e(chain[i + 1]).hi[1], 12);
+        }
+        expect(e('foot').lo[1]).toBeCloseTo(0, 12);
+        // …and each narrower than the one it stands on or hangs from, going inward from
+        // the top and outward again to the foot.
+        const half = (k: string) => e(k).hi[0];
+        expect(half('top-ease')).toBeLessThan(half('top') - EPS);
+        expect(half('collar')).toBeLessThan(half('top-ease') - EPS);
+        expect(half('column')).toBeLessThan(half('collar') - EPS);
+        expect(half('foot-step')).toBeGreaterThan(half('column') + EPS);
+        expect(half('foot')).toBeGreaterThan(half('foot-step') + EPS);
+        // The column tapers out toward the foot, and each ring stands proud of it at its
+        // own height, inside the column's run.
+        const col = post('column');
+        expect(col.rBottom, at).toBeGreaterThan(col.r);
+        const colAt = (y: number) => col.rBottom + (col.r - col.rBottom) * ((y - e('column').lo[1]) / col.h);
+        for (const k of ['ring-top', 'ring-foot']) {
+          const ring = post(k);
+          const re = e(k);
+          expect(re.lo[1], `${at} ${k}`).toBeGreaterThan(e('column').lo[1] + EPS);
+          expect(re.hi[1], `${at} ${k}`).toBeLessThan(e('column').hi[1] - EPS);
+          expect(Math.min(ring.r, ring.rBottom), `${at} ${k} proud`).toBeGreaterThan(colAt(re.hi[1]) + EPS);
+          expect(Math.min(ring.r, ring.rBottom)).toBeGreaterThan(colAt(re.lo[1]) + EPS);
+        }
+        // One ring under the collar, one over the foot.
+        expect(e('ring-top').lo[1]).toBeGreaterThan(h / 2);
+        expect(e('ring-foot').hi[1]).toBeLessThan(h / 2);
+        // The wood is the table's colour; the turned parts a shade darker.
+        expect(parts.filter((p) => p.tone === 'body').map((p) => p.key)).toEqual(['top', 'top-ease']);
+      }
+    }
+  });
+});
+
+describe('the radiator', () => {
+  it('pins its fittings', () => {
+    expect(RADIATOR).toEqual({ foot: 0.04, valve: 0.05, row: 0.045 });
+  });
+
+  const band = dimRangeFor('fridge', 'radiator');
+  const grid: number[][] = [];
+  for (const w of [band.min[0], 800, 1200, band.max[0]]) for (const d of [band.min[1], 90, 120, band.max[1]]) for (const h of [band.min[2], 580, band.max[2]]) grid.push([w, d, h]);
+
+  it('is radiatorFins(width) sections, one to four tubes deep by its depth', () => {
+    const rowsAt = (dMM: number) => {
+      const f = radiatorForm([800, dMM, 580]);
+      return new Set(f.columns.filter((p) => p.key.startsWith('tube-')).map((p) => (p as { pos: number[] }).pos[2].toFixed(9))).size;
+    };
+    expect([60, 70, 90, 120, 160, 200].map(rowsAt)).toEqual([1, 2, 2, 3, 4, 4]);
+    for (const dimMM of grid) {
+      const f = radiatorForm(dimMM);
+      const tubes = f.columns.filter((p) => p.key.startsWith('tube-'));
+      const xs = new Set(tubes.map((p) => (p as { pos: number[] }).pos[0].toFixed(9)));
+      expect(xs.size, dimMM.join('x')).toBe(radiatorFins(dimMM[0]));
+      expect(tubes.length % xs.size).toBe(0);
+    }
+  });
+
+  it('caps every tube round at both ends, joins each section across its depth and all of them along the width', () => {
+    for (const dimMM of grid) {
+      const [w, d, h] = dimMM.map((v) => v / 1000);
+      const at = dimMM.join('x');
+      const { columns, fittings } = radiatorForm(dimMM);
+      const tubes = columns.filter((p): p is Extract<HardPart, { kind: 'post' }> => p.kind === 'post');
+      expect(tubes.every((t) => t.key.startsWith('tube-'))).toBe(true);
+      const n = radiatorFins(dimMM[0]);
+      const rows = tubes.length / n;
+      const rt = tubes[0].r;
+      const pitch = Math.abs(tubes[rows].pos[0] - tubes[0].pos[0]);
+      // A real column tube is about an inch across: 14 mm at most, less where the pitch
+      // either way is too tight to keep the tubes apart.
+      expect(rt, at).toBeCloseTo(Math.min(pitch * 0.38, (d / rows) * 0.42, 0.014), 12);
+      // Round tubes, apart from their neighbours both ways.
+      expect(2 * rt, `${at} tubes clear along the width`).toBeLessThan(pitch - EPS);
+      if (rows > 1) expect(2 * rt, `${at} tubes clear across the depth`).toBeLessThan(Math.abs(tubes[1].pos[2] - tubes[0].pos[2]) - EPS);
+      const yTop = h - rt;
+      const yFoot = RADIATOR.foot + rt;
+      for (const t of tubes) {
+        expect(t.rBottom).toBe(t.r);
+        const [, i, j] = t.key.split('-');
+        const e = partExtent(t);
+        // A tube runs between the centres of its two rounded ends…
+        expect(e.lo[1], `${at} ${t.key}`).toBeCloseTo(yFoot, 12);
+        expect(e.hi[1], `${at} ${t.key}`).toBeCloseTo(yTop, 12);
+        for (const [cap, y] of [[`cap-${i}-${j}`, yTop], [`base-${i}-${j}`, yFoot]] as const) {
+          const c = columns.find((p) => p.key === cap);
+          if (c?.kind !== 'ball') throw new Error(`${at} no ${cap}`);
+          expect(c.radii).toEqual([rt, rt, rt]);
+          expect(c.pos[0]).toBe(t.pos[0]);
+          expect(c.pos[1]).toBeCloseTo(y, 12);
+          expect(c.pos[2]).toBe(t.pos[2]);
+        }
+      }
+      // …so the caps are what reach the height, and the foot caps sit on the feet.
+      expect(Math.max(...columns.map((p) => partExtent(p).hi[1]))).toBeCloseTo(h, 12);
+      expect(Math.min(...columns.map((p) => partExtent(p).lo[1]))).toBeCloseTo(RADIATOR.foot, 12);
+      // A joint across the depth at both ends of every section deeper than one tube.
+      const joins = columns.filter((p): p is Extract<HardPart, { kind: 'strut' }> => p.kind === 'strut' && p.key.startsWith('join-'));
+      expect(joins.length, at).toBe(rows > 1 ? 2 * n : 0);
+      const zs = tubes.slice(0, rows).map((t) => t.pos[2]);
+      for (const jn of joins) {
+        expect(jn.r).toBe(rt);
+        expect([jn.a[2], jn.b[2]]).toEqual([Math.min(...zs), Math.max(...zs)]);
+        expect([yTop, yFoot].some((y) => Math.abs(jn.a[1] - y) < 1e-12 && Math.abs(jn.b[1] - y) < 1e-12), `${at} ${jn.key} at a cap`).toBe(true);
+      }
+      // Two headers, first section to last, through the joints, thinner than a tube.
+      const headers = columns.filter((p): p is Extract<HardPart, { kind: 'strut' }> => p.kind === 'strut' && p.key.startsWith('header-'));
+      expect(headers.map((p) => p.key)).toEqual(['header-top', 'header-foot']);
+      const xs = tubes.map((t) => t.pos[0]);
+      headers.forEach((hd, k) => {
+        expect(hd.r).toBeLessThan(rt);
+        expect([hd.a[0], hd.b[0]]).toEqual([Math.min(...xs), Math.max(...xs)]);
+        expect(hd.a[1]).toBeCloseTo(k === 0 ? yTop : yFoot, 12);
+        expect(hd.b[1]).toBe(hd.a[1]);
+      });
+      // Every column part is the radiator's own enamel.
+      expect(columns.every((p) => p.tone === 'body')).toBe(true);
+      // The feet: on the floor under the second section from each end, up to the foot caps'
+      // centres, the full depth.
+      for (const [side, x] of [['l', xs[rows]], ['r', xs[tubes.length - 1 - rows]]] as const) {
+        const ft = ext(fittings, `foot-${side}`);
+        expect(ft.lo[1]).toBe(0);
+        expect(ft.hi[1]).toBeCloseTo(yFoot, 12);
+        expect((ft.lo[0] + ft.hi[0]) / 2).toBeCloseTo(x, 12);
+        expect(ft.hi[0] - ft.lo[0], `${at} foot-${side} a 30 mm blade`).toBeCloseTo(Math.min(0.03, pitch), 12);
+        expect([ft.lo[2], ft.hi[2]].map((v) => +v.toFixed(12))).toEqual([-d / 2, d / 2].map((v) => +v.toFixed(12)));
+      }
+      void w;
+    }
+  });
+
+  it('keeps its valve in the strip at the right-hand end, fed from the last section', () => {
+    for (const dimMM of grid) {
+      const [w, , h] = dimMM.map((v) => v / 1000);
+      const at = dimMM.join('x');
+      const { columns, fittings } = radiatorForm(dimMM);
+      const vW = Math.min(RADIATOR.valve, w * 0.1);
+      const strip = w / 2 - vW;
+      // The sections stop at the strip; the valve, its pipe and head stand inside it.
+      expect(Math.max(...columns.map((p) => partExtent(p).hi[0])), at).toBeLessThanOrEqual(strip + EPS);
+      for (const k of ['pipe', 'valve', 'head', 'head-grip']) {
+        const e = ext(fittings, k);
+        expect(e.lo[0], `${at} ${k}`).toBeGreaterThanOrEqual(strip - EPS);
+        expect(e.hi[0], `${at} ${k}`).toBeLessThanOrEqual(w / 2 + EPS);
+      }
+      const tubes = columns.filter((p) => p.kind === 'post');
+      const yFoot = RADIATOR.foot + (tubes[0] as { r: number }).r;
+      const lastX = Math.max(...tubes.map((t) => (t as { pos: number[] }).pos[0]));
+      // The pipe up out of the floor to the valve, the tail from the last section to it.
+      expect(ext(fittings, 'pipe').lo[1]).toBe(0);
+      expect(ext(fittings, 'pipe').hi[1]).toBeCloseTo(yFoot, 12);
+      const tail = fittings.find((p) => p.key === 'tail');
+      if (tail?.kind !== 'strut') throw new Error('tail');
+      expect(tail.a).toEqual([lastX, yFoot, 0]);
+      const valve = fittings.find((p) => p.key === 'valve');
+      if (valve?.kind !== 'post') throw new Error('valve');
+      expect(tail.b).toEqual(valve.pos);
+      // The head on the valve, the grip ring round it proud, everything below the top.
+      expect(ext(fittings, 'head').lo[1]).toBeCloseTo(ext(fittings, 'valve').hi[1], 12);
+      const head = fittings.find((p) => p.key === 'head');
+      const grip = fittings.find((p) => p.key === 'head-grip');
+      if (head?.kind !== 'post' || grip?.kind !== 'post') throw new Error('head');
+      expect(ext(fittings, 'head-grip').lo[1]).toBeGreaterThan(ext(fittings, 'head').lo[1]);
+      expect(ext(fittings, 'head-grip').hi[1]).toBeLessThan(ext(fittings, 'head').hi[1]);
+      const headAt = (y: number) => head.rBottom + (head.r - head.rBottom) * ((y - ext(fittings, 'head').lo[1]) / head.h);
+      expect(grip.rBottom).toBeGreaterThan(headAt(ext(fittings, 'head-grip').lo[1]));
+      expect(grip.r).toBeGreaterThan(headAt(ext(fittings, 'head-grip').hi[1]));
+      expect(ext(fittings, 'head').hi[1]).toBeLessThan(h);
+      expect(['pipe', 'tail', 'valve'].map((k) => fittings.find((p) => p.key === k)!.tone)).toEqual(['steel', 'steel', 'steel']);
+      expect(head.tone).toBe('body');
+      expect(grip.tone).toBe('trim');
+      // A hand-sized head: 60 mm, or half what is left above the valve on a low radiator.
+      expect(head.h, at).toBeCloseTo(Math.min(0.06, (h - yFoot) * 0.5), 12);
     }
   });
 });

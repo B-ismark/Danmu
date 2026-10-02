@@ -1,11 +1,11 @@
-// The three chairs of `lib/chair-form.ts`: what is particular to each beyond the box and
+// The three chairs and the ottoman of `lib/chair-form.ts`: what is particular to each beyond the box and
 // proportions `tests/hard-goods.test.ts` already holds them to. Above all, that the two
 // numbers `tuckProfile` reads are the drawing's own — `tests/seat-fit.test.tsx` measures
 // the rendered chair against the rule, and this holds the form to it directly, across
 // the band, so a share moved in one file and not the other fails here by name.
 
 import { describe, expect, it } from 'vitest';
-import { ARMCHAIR, armchairForm, DINING_CHAIR, diningChairForm, OFFICE_CHAIR, officeChairForm } from '../lib/chair-form';
+import { ARMCHAIR, armchairForm, DINING_CHAIR, diningChairForm, OFFICE_CHAIR, officeChairForm, OTTOMAN, ottomanForm } from '../lib/chair-form';
 import { partExtent, type HardPart } from '../lib/hard-goods';
 import { CUSHION_MESH, meshExtent, type SoftItem } from '../lib/soft-goods';
 import { tuckProfile } from '../lib/layout-rules';
@@ -17,7 +17,7 @@ const EPS = 1e-9;
 /** The Library size, every corner of the band, and a run of sizes between. */
 function sizes(shape: Shape): number[][] {
   const lib = PART_LIBRARY.find((p) => p.shape === shape)!.dimMM;
-  const band = dimRangeFor('chair', shape);
+  const band = dimRangeFor(shape === 'ottoman' ? 'ottoman' : 'chair', shape);
   const out: number[][] = [lib.slice()];
   const at = (k: number, t: number) => band.min[k] + (band.max[k] - band.min[k]) * t;
   for (const i of [0, 0.5, 1]) for (const j of [0, 0.5, 1]) for (const k of [0, 0.25, 0.5, 0.75, 1]) out.push([at(0, i), at(1, j), at(2, k)]);
@@ -230,6 +230,91 @@ describe('the armchair', () => {
   });
 });
 
+describe('the ottoman', () => {
+  it('stands on turned legs in brass ferrules, a welted base and a buttoned cushion', () => {
+    for (const dimMM of sizes('ottoman')) {
+      const [w, d, h] = dimMM.map((v) => v / 1000);
+      const at = dimMM.join('x');
+      const f = ottomanForm(dimMM);
+      const base = get(f.parts, 'base');
+      const welt = get(f.parts, 'welt');
+      const top = reach('box', f.top);
+      // Base inside the welt inside the cushion, on both axes: a padded top over a piped,
+      // set-in base — and none of the three the same size as another.
+      for (const k of [0, 2]) {
+        expect(welt.lo[k], `${at} welt round the base [${k}]`).toBeLessThan(base.lo[k] - EPS);
+        expect(welt.hi[k]).toBeGreaterThan(base.hi[k] + EPS);
+        expect(top.lo[k], `${at} cushion over the welt [${k}]`).toBeLessThan(welt.lo[k] - EPS);
+        expect(top.hi[k]).toBeGreaterThan(welt.hi[k] + EPS);
+      }
+      // The welt straddles the base's top edge, and the cushion sits down into it: no gap.
+      expect(welt.lo[1], at).toBeLessThan(base.hi[1] - EPS);
+      expect(welt.hi[1], at).toBeGreaterThan(base.hi[1] + EPS);
+      expect(top.lo[1], at).toBeLessThan(welt.hi[1] - EPS);
+      expect(top.lo[1], at).toBeGreaterThan(welt.lo[1] + EPS);
+      // The buttons are what reach the top, standing exactly their height proud of the
+      // cushion, inside its outline.
+      const by = h * OTTOMAN.button;
+      expect(top.hi[1], `${at} cushion stops a button below the top`).toBeCloseTo(h - by, 9);
+      const buttons = f.parts.filter((p) => p.key.startsWith('button-'));
+      expect(buttons.length).toBe(4);
+      for (const b of buttons) {
+        const e = partExtent(b);
+        expect(e.hi[1], `${at} ${b.key} reaches the top`).toBeCloseTo(h, 9);
+        expect(e.lo[1], `${at} ${b.key} sunk into the cushion`).toBeLessThan(top.hi[1] - EPS);
+        for (const k of [0, 2]) {
+          expect(e.lo[k]).toBeGreaterThan(top.lo[k] + EPS);
+          expect(e.hi[k]).toBeLessThan(top.hi[k] - EPS);
+        }
+      }
+      // Two either side of the centre on each axis — a grid, not a heap.
+      expect(new Set(buttons.map((b) => Math.sign((b as { pos: number[] }).pos[0]))).size).toBe(2);
+      expect(new Set(buttons.map((b) => Math.sign((b as { pos: number[] }).pos[2]))).size).toBe(2);
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const legP = f.parts.find((p) => p.key === `leg-${sx}${sz}`)!;
+          const ferP = f.parts.find((p) => p.key === `ferrule-${sx}${sz}`)!;
+          const leg = partExtent(legP);
+          const fer = partExtent(ferP);
+          const id = `${at} leg ${sx}${sz}`;
+          // The ferrule on the floor; the leg standing in it and running up into the base.
+          expect(fer.lo[1], id).toBeCloseTo(0, 12);
+          expect(leg.lo[1], id).toBeGreaterThan(EPS);
+          expect(leg.lo[1], id).toBeLessThan(fer.hi[1] - EPS);
+          expect(leg.hi[1], id).toBeGreaterThan(base.lo[1] + EPS);
+          expect(leg.hi[1], id).toBeLessThan(base.hi[1] - EPS);
+          // Under the base, in the corner it belongs to.
+          for (const k of [0, 2]) {
+            expect(leg.lo[k], id).toBeGreaterThan(base.lo[k] + EPS);
+            expect(leg.hi[k], id).toBeLessThan(base.hi[k] - EPS);
+          }
+          expect(Math.sign(leg.lo[0] + leg.hi[0])).toBe(sx);
+          expect(Math.sign(leg.lo[2] + leg.hi[2])).toBe(sz);
+          // Turned and tapered, the ferrule proud of the foot it caps and not of the leg.
+          if (legP.kind !== 'post' || ferP.kind !== 'post') throw new Error('posts');
+          expect(legP.r).toBeGreaterThan(legP.rBottom);
+          expect(ferP.r).toBeGreaterThan(legP.rBottom);
+          expect(ferP.r).toBeLessThan(legP.r);
+          expect(legP.tone).toBe('wood');
+          expect(ferP.tone).toBe('brass');
+          // Set in from the base's corners by a pinned share, the ferrule a short cap that
+          // takes the leg's foot and no more.
+          expect(legP.pos[0], id).toBeCloseTo(sx * w * 0.4, 12);
+          expect(legP.pos[2], id).toBeCloseTo(sz * d * 0.39, 12);
+          expect(fer.hi[1], id).toBeCloseTo(h * 0.03, 12);
+        }
+      }
+      // Tufted on the cushion's quarter points, in the welt's colour.
+      for (const b of buttons) {
+        if (b.kind !== 'ball') throw new Error('ball');
+        expect(b.tone).toBe('trim');
+        expect(Math.abs(b.pos[0]), `${at} ${b.key}`).toBeCloseTo(w * 0.22, 12);
+        expect(Math.abs(b.pos[2]), `${at} ${b.key}`).toBeCloseTo(d * 0.22, 12);
+      }
+    }
+  });
+});
+
 describe('the proportions they were drawn with', () => {
   it('are pinned', () => {
     expect(DINING_CHAIR).toEqual({
@@ -241,5 +326,6 @@ describe('the proportions they were drawn with', () => {
       armTop: 640 / 1150, back: 70 / 480, seatTop: 0.47, caster: 0.45, spoke: 0.022, backTh: 0.1, backY: 0.6,
     });
     expect(ARMCHAIR).toEqual({ legH: 0.17, legR: 0.032, arm: 0.13, armTop: 0.64, roll: 0.07, seatTop: 0.49 });
+    expect(OTTOMAN).toEqual({ legH: 0.16, base: 0.74, button: 0.008 });
   });
 });

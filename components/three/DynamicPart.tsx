@@ -5,7 +5,7 @@
 // double bed, etc).
 
 import { Color } from 'three';
-import { Box, BoxInstances, LeafInstances, SoftInstances, SoftMesh, StemInstances, type InstanceItem } from './Box';
+import { Box, BoxInstances, LeafInstances, RoundInstances, SoftInstances, SoftMesh, StemInstances, type InstanceItem } from './Box';
 import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
@@ -18,7 +18,6 @@ import {
   plantForm,
   isParametric,
   lightFor,
-  radiatorFins,
   shoeRow,
   SHOE_TIER_TILT,
   windowPanes,
@@ -32,7 +31,7 @@ import { roleOf, bedPillows } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
 import { floorLampForm, tableLampForm, type LampForm } from '@/lib/lamp-form';
-import { armchairForm, diningChairForm, officeChairForm } from '@/lib/chair-form';
+import { armchairForm, diningChairForm, officeChairForm, ottomanForm } from '@/lib/chair-form';
 import { DINING_LEG, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from '@/lib/foot-cells';
 import {
   bedForm,
@@ -58,6 +57,8 @@ import {
   microwaveForm,
   nightstandForm,
   nightstandSlide,
+  radiatorForm,
+  sideTableForm,
   soundbarForm,
   stoolForm,
   strutPose,
@@ -1243,28 +1244,13 @@ function CoffeeTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
   );
 }
 
+/** Drawn at its own size by `sideTableForm`: a square top on a turned column and a
+ *  stepped round foot, authored on a square of the width and stretched to the depth. */
 function SideTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const top = body(part, locked);
-  const dark = shade(top, -28);
-  const r = Math.min(w, d) * 0.38;
   return (
-    <>
-      {/* tabletop */}
-      <Box surface="wood" size={[w, 0.035, d]} position={[0, h - 0.017, 0]} color={top} roughness={0.65} />
-      {/* tapered pedestal */}
-      <mesh position={[0, h / 2, 0]}>
-        <cylinderGeometry args={[0.038, 0.058, h - 0.03, 14]} />
-        <meshStandardMaterial color={dark} roughness={0.7} />
-      </mesh>
-      {/* disc base */}
-      <mesh position={[0, 0.022, 0]}>
-        <cylinderGeometry args={[r, r * 1.08, 0.045, 20]} />
-        <meshStandardMaterial color={dark} roughness={0.68} />
-      </mesh>
-    </>
+    <group scale={[1, 1, part.dimMM[1] / part.dimMM[0]]}>
+      <HardParts parts={sideTableForm(part.dimMM)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.65 }} />
+    </group>
   );
 }
 
@@ -1280,31 +1266,15 @@ function NightstandGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   );
 }
 
+/** Drawn at its own size by `ottomanForm`: turned legs in brass ferrules, an upholstered
+ *  base with a piped welt, and a buttoned box cushion — all but the legs in its fabric. */
 function OttomanGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
+  const f = ottomanForm(part.dimMM);
   const fabric = body(part, locked);
-  const dark = shade(fabric, -14);
-  const leg = shade(fabric, -35);
-  // The welt's top is the piece's height. It stopped at 0.9 h, so a tray set on a
-  // 420 mm ottoman stood 42 mm above the cushion: everything else reads `dimMM[2]` as
-  // the top (`verticalExtent`), and only the drawing disagreed.
   return (
     <>
-      {/* main upholstered body — raised on legs */}
-      <Box surface="fabric" size={[w, h * 0.87, d]} position={[0, h * 0.545, 0]} color={fabric} roughness={0.97} />
-      {/* piping welt around top edge */}
-      <Box surface="fabric" size={[w * 1.02, h * 0.04, d * 1.02]} position={[0, h * 0.98, 0]} color={dark} roughness={0.97} />
-      {/* four short turned legs */}
-      {[
-        [-w / 2 + 0.06, -d / 2 + 0.06],
-        [w / 2 - 0.06, -d / 2 + 0.06],
-        [-w / 2 + 0.06, d / 2 - 0.06],
-        [w / 2 - 0.06, d / 2 - 0.06],
-      ].map(([x, z], i) => (
-        <Box surface="wood" key={i} size={[0.05, h * 0.15, 0.05]} position={[x, h * 0.075, z]} color={leg} roughness={0.7} />
-      ))}
+      <HardParts parts={f.parts} bodyC={fabric} look={{ surface: 'fabric', roughness: 0.95 }} />
+      <SoftInstances mesh={CUSHION_MESH.box} items={[f.top]} color={fabric} surface={SURFACE.fabric} />
     </>
   );
 }
@@ -1481,25 +1451,28 @@ function SoundbarGeo({ part }: { part: ScenePart }) {
   return <HardParts parts={soundbarForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.55 }} />;
 }
 
+/** Drawn at its own size by `radiatorForm`. Its columns — a 2 m radiator's are hundreds
+ *  of tubes, rounded ends and joints — are two instanced sets in its own colour, the
+ *  tubes and joints one and the ends the other; the feet and the valve are drawn one by
+ *  one. */
 function RadiatorGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
   const bodyC = tint(part);
-  const fins = radiatorFins(part.dimMM[0]);
-  const fw = w / fins;
-  // 33 fins on a 2 m radiator, all the same colour — a textbook instanced set. That
-  // number is `radiatorFins(2000)` and is now true of a RESIZED radiator too; before
-  // § 36 a stretched one kept the count it was authored with and drew 13.
-  const finItems: InstanceItem[] = Array.from({ length: fins }, (_, i) => ({
-    pos: [-w / 2 + (i + 0.5) * fw, h / 2, 0] as [number, number, number],
-    size: [fw * 0.6, h * 0.9, d] as [number, number, number],
-  }));
+  const { columns, fittings } = radiatorForm(part.dimMM);
+  const tubes: InstanceItem[] = [];
+  const ends: InstanceItem[] = [];
+  for (const p of columns) {
+    if (p.kind === 'post') tubes.push({ pos: p.pos, size: [2 * p.r, p.h, 2 * p.r] });
+    else if (p.kind === 'strut') {
+      const pose = strutPose(p);
+      tubes.push({ pos: pose.pos, size: [2 * p.r, pose.len, 2 * p.r], rot: pose.rot });
+    } else if (p.kind === 'ball') ends.push({ pos: p.pos, size: [2 * p.radii[0], 2 * p.radii[1], 2 * p.radii[2]] });
+  }
+  const enamel = { roughness: 0.5, metalness: 0.1 };
   return (
     <>
-      <BoxInstances items={finItems} color={bodyC} surface={{ roughness: 0.5, metalness: 0.1 }} />
-      <Box size={[w, h * 0.06, d * 1.05]} position={[0, h - h * 0.03, 0]} color={bodyC} />
-      <Box size={[w, h * 0.06, d * 1.05]} position={[0, h * 0.03, 0]} color={bodyC} />
+      <RoundInstances unit="tube" items={tubes} color={bodyC} surface={enamel} />
+      <RoundInstances unit="ball" items={ends} color={bodyC} surface={enamel} />
+      <HardParts parts={fittings} bodyC={bodyC} look={enamel} />
     </>
   );
 }

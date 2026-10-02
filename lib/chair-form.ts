@@ -255,3 +255,56 @@ export function armchairForm(dimMM: readonly number[]): ArmchairForm {
   const scatter = leaningCushion(0, w * 0.486, d * 0.143, h * 0.333, THROW_LEAN, h * C.seatTop, -d * 0.23);
   return { parts, seat, back, scatter };
 }
+
+// ─── Ottoman ─────────────────────────────────────────────────────────────────
+
+/** An ottoman's proportions: `legH` and `base` are shares of the height — where the legs
+ *  meet the upholstered base, and where the base meets the top cushion — and `button` the
+ *  tufting buttons' height, which is the share of the height the cushion stops below the
+ *  top: the buttons are what reach `dimMM[2]`, so a tray set on one sits on its buttons. */
+export const OTTOMAN = { legH: 0.16, base: 0.74, button: 0.008 } as const;
+
+export type OttomanForm = { parts: HardPart[]; top: SoftItem };
+
+/** An upholstered ottoman: four turned, tapered legs in brass ferrules, a base a little
+ *  inside the outline with a piped welt round its top edge, and a box cushion the full
+ *  outline buttoned twice each way. It was a block on four square sticks with a band of
+ *  darker block round its top.
+ *
+ *  NON-PARAMETRIC (proportions only, § 36). The legs' radii are shares of the width, so a
+ *  deep ottoman's legs are stretched to ovals by the group scale, as the armchair's are —
+ *  and a long, shallow one's must still stand under its base. A leg at 0.39 of the depth
+ *  has 0.08 of it to the base's face; the band's longest, shallowest corner (1200 × 350)
+ *  fits a radius of 0.02 of the width inside that, where 0.03 at 0.4 of the depth stood a
+ *  leg 1 mm outside the box and 0.025 still stood one 5.5 mm outside the base. */
+export function ottomanForm(dimMM: readonly number[]): OttomanForm {
+  const [w, d, h] = m(dimMM);
+  const C = OTTOMAN;
+  const yLeg = h * C.legH;
+  const yBase = h * C.base;
+  const by = h * C.button;
+  const yFerrule = h * 0.03;
+  const parts: HardPart[] = [];
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+    const x = sx * w * 0.4;
+    const z = sz * d * 0.39;
+    // The leg stands in its ferrule and runs a little up into the base.
+    const y0 = h * 0.02;
+    const y1 = yLeg + h * 0.01;
+    parts.push(
+      { kind: 'post', key: `leg-${sx}${sz}`, tone: 'wood', r: w * 0.02, rBottom: w * 0.014, h: y1 - y0, pos: [x, (y0 + y1) / 2, z] },
+      { kind: 'post', key: `ferrule-${sx}${sz}`, tone: 'brass', r: w * 0.016, rBottom: w * 0.016, h: yFerrule, pos: [x, yFerrule / 2, z] },
+    );
+  }
+  parts.push(
+    slab('base', 'body', -w * 0.47, w * 0.47, yLeg, yBase, -d * 0.47, d * 0.47),
+    slab('welt', 'trim', -w * 0.48, w * 0.48, yBase - h * 0.03, yBase + h * 0.004, -d * 0.48, d * 0.48),
+  );
+  for (const sx of [-1, 1] as const) {
+    for (const sz of [-1, 1] as const) {
+      parts.push({ kind: 'ball', key: `button-${sx}${sz}`, tone: 'trim', radii: [w * 0.012, by, d * 0.016], pos: [sx * w * 0.22, h - by, sz * d * 0.22] });
+    }
+  }
+  const top = pad(-w / 2, w / 2, yBase - h * 0.01, h - by, -d / 2, d / 2);
+  return { parts, top };
+}
