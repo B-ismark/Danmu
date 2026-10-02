@@ -192,6 +192,17 @@ nothing, which is the same asymmetry as a green from a hollow `node_modules`.
 a baseline run at the top of every battery so a pre-existing red is visible before the
 first mutation.
 
+**The sixth occurrence is the mirror image: the COPY was red, not the repo.** Mutating a copy
+is what the entry above recommends, and a copy that lives across batteries keeps whatever an
+earlier one left in it. On 2026-10-02 a 34-mutant chair battery reported 34 kills, every one
+of them against a scratch copy whose `partExtent` still carried a planted `y - a` for a
+ball's height from a previous session — so each "kill" was the same pre-existing red, and
+the tell was a mutant that replaced a value with itself and was still "killed". → **Diff the
+copy against the tree (`diff -rq lib copy/lib`) before the battery, not just the files you are
+about to mutate**, and have the script itself refuse to start on a red baseline rather than
+trusting the prose to be remembered. *(No `rsync` in the cloud container: `rm -rf` + `cp -a`
+per directory.)*
+
 **Symptom: three separate comments confidently describe a token, class or handler as
 "applied to nothing" / "read nowhere" — and it ships.**
 The reader is a **template string**. `var(--rail-${side}-tight)` in `DockedShell.tsx`
