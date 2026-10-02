@@ -2053,6 +2053,7 @@ describe('settling the lead against the set it is dragging', () => {
     valid,
     blockedIds: [] as string[],
     leadPos: [leadX, 0, 0] as [number, number, number],
+    landings: [],
   });
 
   it('asks once when the set can take the delta the lead was resolved at', () => {
@@ -2161,5 +2162,84 @@ describe('settling the lead against the set it is dragging', () => {
     );
     expect(s.settled).toBe(false);
     expect(s.lead.pos[0]).toBe(4.88);
+  });
+});
+
+describe('resolveConvoy — what each member was set down on', () => {
+  // Only the lead's landing used to reach the record, so a lamp carried in a selection
+  // onto the other nightstand kept its link to the first one and stayed behind the next
+  // time THAT one moved (§ H.6.7). Each member is resolved here, so its support is known.
+  const stand = (id: string, x: number) =>
+    part({ id, category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [x, 0, 1] });
+  const lamp = (x: number) =>
+    part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [x, 0.55, 1] });
+  // The piece under the hand: on the floor, well clear of both nightstands.
+  const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [450, 500, 900], pos: [1, 0, 3] });
+
+  it('hands back the nightstand a carried lamp was set down on', () => {
+    const world = [stand('nA', 1), stand('nB', 2), lamp(1), chair];
+    const c = plan('chair', world, ['chair', 'lamp'], { lamp: 'nA' });
+    const r = carry(c, 'chair', world, [1, 0, 3], [2, 0, 3]);
+    expect(r.valid).toBe(true);
+    expect(posOf(r.moves, 'lamp')![1]).toBeCloseTo(0.55, 6);
+    expect(r.landings).toEqual([{ id: 'lamp', on: 'nB' }]);
+  });
+
+  it('says the floor when a carried lamp is set down on bare floor', () => {
+    const world = [stand('nA', 1), lamp(1), chair];
+    const c = plan('chair', world, ['chair', 'lamp'], { lamp: 'nA' });
+    const r = carry(c, 'chair', world, [1, 0, 3], [3, 0, 3]);
+    expect(r.valid).toBe(true);
+    expect(posOf(r.moves, 'lamp')![1]).toBe(0);
+    expect(r.landings).toEqual([{ id: 'lamp', on: undefined }]);
+  });
+
+  it('names only the members: what rides a member, or the lead, keeps its own link', () => {
+    // The desk is a member and the lamp rides it. The lamp travels rigidly on the desk,
+    // so it is still standing on the desk, and a landing for it would be a claim about
+    // a gesture it did not make. The lead's own rider is the same.
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1200, 800, 750], pos: [3, 0, 1] });
+    const onDesk = part({ id: 'dl', category: 'lamp', shape: 'lamp-table', dimMM: [200, 200, 400], pos: [3, 0.75, 1] });
+    const lead = part({ id: 'lead', category: 'desk', shape: 'desk-standard', dimMM: [1200, 800, 750], pos: [1, 0, 3] });
+    const onLead = part({ id: 'll', category: 'lamp', shape: 'lamp-table', dimMM: [200, 200, 400], pos: [1, 0.75, 3] });
+    const world = [desk, onDesk, lead, onLead];
+    const c = plan('lead', world, ['lead', 'desk'], { dl: 'desk', ll: 'lead' });
+    const r = carry(c, 'lead', world, [1, 0, 3], [1.5, 0, 3]);
+    expect(r.valid).toBe(true);
+    expect(r.moves.map((m) => m.id).sort()).toEqual(['desk', 'dl', 'll']);
+    expect(r.landings).toEqual([{ id: 'desk', on: undefined }]);
+  });
+
+  it('is empty when nobody landed anywhere new', () => {
+    const world = [stand('nA', 1), stand('nB', 2), lamp(1), chair];
+    const c = plan('chair', world, ['chair', 'lamp'], { lamp: 'nA' });
+    // A turn moves no member — after a move too, which is the case that matters: the set
+    // is a metre out, and the turn still says nothing. The caller keeps the last move
+    // frame's landings for the drop (`Draggable`'s `lastFreeLandings`).
+    expect(carry(c, 'chair', world, [1, 0, 3], [1, 0, 3], Math.PI / 2, () => false, 'turn').landings).toEqual([]);
+    expect(carry(c, 'chair', world, [1, 0, 3], [2, 0, 3], Math.PI / 2, () => false, 'turn').landings).toEqual([]);
+    // Back at the start is the start.
+    expect(carry(c, 'chair', world, [1, 0, 3], [1, 0, 3]).landings).toEqual([]);
+    // No company at all.
+    const alone = plan('chair', world, ['chair']);
+    expect(carry(alone, 'chair', world, [1, 0, 3], [2, 0, 3]).landings).toEqual([]);
+  });
+
+  it('hands back the landings of the delta the set was allowed, not the one asked for', () => {
+    // `far` has 0.1 m before the wall, so asking for a metre slides the whole set 0.1.
+    // At a full metre the lamp would be over the right nightstand; at 0.1 it is still on
+    // the left one, and that is where it is drawn. A landing from the refused pass would
+    // link it to a nightstand it is nowhere near.
+    const far = part({ id: 'far', pos: [5.5, 0, 3], dimMM: [800, 800, 400] });
+    const world = [stand('nA', 1), stand('nB', 2), lamp(1), chair, far];
+    const c = plan('chair', world, ['chair', 'lamp', 'far'], { lamp: 'nA' });
+    const r = carry(c, 'chair', world, [1, 0, 3], [2, 0, 3]);
+    expect(r.valid).toBe(true);
+    expect(r.leadPos[0]).toBeCloseTo(1.1, 9);
+    expect(posOf(r.moves, 'lamp')![0]).toBeCloseTo(1.1, 9);
+    expect(r.landings).toEqual([
+      { id: 'lamp', on: 'nA' },
+      { id: 'far', on: undefined },
+    ]);
   });
 });

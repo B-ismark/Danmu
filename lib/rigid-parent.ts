@@ -297,6 +297,10 @@ export function ridingParents(parts: ScenePart[]): Record<string, string> {
   return out;
 }
 
+/** One piece set down by a gesture, and what it was set down on (`on` undefined: the
+ *  floor, a wall, or nothing). */
+export type Landing = { id: string; on: string | undefined };
+
 /** `parentIds` once `childId` has been set down on `supportId` — or on nothing.
  *
  *  A drop is where the relation is written, in both tabs: landing ON something links
@@ -320,6 +324,23 @@ export function landedLinks(
   const next = { ...parentIds };
   delete next[childId];
   return next;
+}
+
+/** `parentIds` once every piece in `landings` has been set down — one gesture's
+ *  landings, written as one.
+ *
+ *  Every old link goes first, then each new one is checked for a loop. One at a time,
+ *  the answer depended on the order: a lead set down on a member that still carried a
+ *  link back to it was refused as a cycle, though that link was itself being replaced
+ *  by the same gesture, and the pair ended with no link at all. Returns the SAME object
+ *  when nothing changes, as `landedLinks` does. */
+export function landedLinksAll(parentIds: Record<string, string>, landings: Landing[]): Record<string, string> {
+  let next = parentIds;
+  for (const l of landings) next = landedLinks(next, l.id, undefined);
+  for (const l of landings) if (l.on !== undefined) next = landedLinks(next, l.id, l.on);
+  const keys = Object.keys(next);
+  const same = keys.length === Object.keys(parentIds).length && keys.every((k) => parentIds[k] === next[k]);
+  return same ? parentIds : next;
 }
 
 /** Would linking `childId` under `candidateParentId` create a cycle? Checked

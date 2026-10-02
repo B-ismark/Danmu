@@ -29,7 +29,7 @@
 import { collidesAt, type ScenePart } from './scene-spec';
 import { ridesWall } from './physics';
 import { backOf, resolvePlacement } from './drag-resolve';
-import { cascadeTransform, snapshotDescendants, type DescendantOffset } from './rigid-parent';
+import { cascadeTransform, snapshotDescendants, type DescendantOffset, type Landing } from './rigid-parent';
 import type { RiderRelation } from './rider-height';
 import { nearestEdge, type Poly } from './geometry';
 
@@ -325,6 +325,24 @@ export type ConvoyResult = {
    * here re-asks it.
    */
   leadPos: [number, number, number];
+  /**
+   * What each member was set down on, in the order they were asked — for the caller
+   * to record on the drop through `landOn`, as it records the lead's.
+   *
+   * Only the lead's landing used to be written, so a lamp carried in a selection onto
+   * the other nightstand kept its link to the first and was left behind the next time
+   * that one moved (§ H.6.7, "Still open"). Each member is resolved here, so its
+   * support is already known; it was simply not handed back.
+   *
+   * Members only. The pieces riding a member, or the lead, travel rigidly and still
+   * stand on what they stood on. One entry per member whenever this pass moved the set,
+   * whether or not its support changed; empty for a gesture back at its start (the
+   * members are home, on what they started on) and for no company at all. A TURN is
+   * empty too, and that is not "nobody landed anywhere new": a turn moves no member, so
+   * after a move it leaves them where the last move frame put them, and a caller that
+   * records on the drop keeps that frame's landings. Record it only when `valid`.
+   */
+  landings: Landing[];
 };
 
 /**
@@ -714,7 +732,7 @@ export function resolveConvoy(input: {
   // Nothing is coming, so there is no delta to take and no world to build. Every
   // ordinary single-piece drag lands here at input rate, and the shifted-world copy
   // below is O(parts) — it was being paid for a loop that runs zero times.
-  if (convoy.members.length === 0) return { moves, valid: true, blockedIds, leadPos: pos };
+  if (convoy.members.length === 0) return { moves, valid: true, blockedIds, leadPos: pos, landings: [] };
 
   // A turn moves nobody sideways, and it is deliberately NOT folded into the
   // zero-delta path below. That path RESTORES every member to its start position,
@@ -724,7 +742,7 @@ export function resolveConvoy(input: {
   // turn leaves every member exactly where the last move frame put it — the dragged
   // piece's own rigid children have already pivoted with it, above, which is the
   // only company a rotation has.
-  if (gesture === 'turn') return { moves, valid: true, blockedIds, leadPos: pos };
+  if (gesture === 'turn') return { moves, valid: true, blockedIds, leadPos: pos, landings: [] };
 
   const dx = pos[0] - startPos[0];
   const dz = pos[2] - startPos[2];
@@ -772,7 +790,7 @@ export function resolveConvoy(input: {
         );
       }
     }
-    return { moves, valid: true, blockedIds, leadPos: pos };
+    return { moves, valid: true, blockedIds, leadPos: pos, landings: [] };
   }
 
   // The world a member resolves against: everything that is NOT travelling at the
@@ -818,6 +836,7 @@ export function resolveConvoy(input: {
   function runMembers(ddx: number, ddz: number) {
     const shared = travellingWorld(convoy, parts, ddx, ddz, []);
     const out: ConvoyMove[] = [];
+    const landings: Landing[] = [];
     const ids: string[] = [];
     let ok = true;
     let first: ScenePart | undefined;
@@ -924,13 +943,14 @@ export function resolveConvoy(input: {
           ? { id: m.part.id, pos: r.pos }
           : { id: m.part.id, pos: r.pos, rot: r.rot },
       );
+      landings.push({ id: m.part.id, on: r.supportId });
       if (m.descendants.length > 0) {
         out.push(...cascadeTransform(m.part.id, r.pos, r.rot, m.descendants));
       }
     }
 
 
-    return { moves: out, valid: ok, blocked: first, blockedIds: ids, overX, overZ };
+    return { moves: out, valid: ok, blocked: first, blockedIds: ids, overX, overZ, landings };
   }
 
   /**
@@ -1006,6 +1026,7 @@ export function resolveConvoy(input: {
     blocked: chosen.blocked,
     blockedIds: chosen.blockedIds,
     leadPos,
+    landings: chosen.landings,
   };
 }
 

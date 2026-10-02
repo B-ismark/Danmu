@@ -69,6 +69,7 @@ import {
   type Resolved,
 } from '@/lib/drag-resolve';
 import { convoyRestore, gestureFor, leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
+import type { Landing } from '@/lib/rigid-parent';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 import { Wobble } from './Wobble';
@@ -173,7 +174,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const setRotation = useStudio((s) => s.setRotation);
   const setTransformsFor = useStudio((s) => s.setTransformsFor);
   const setDim = useStudio((s) => s.setDim);
-  const landOn = useStudio((s) => s.landOn);
+  const landAll = useStudio((s) => s.landAll);
   const setDragging = useStudio((s) => s.setDragging);
   const setLive = useDragLive((s) => s.setLive);
   /** Is THIS piece one of the ones the current gesture cannot place?
@@ -209,6 +210,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
    *  in: the ring swung a tucked chair's back up through its desk and the drop kept
    *  that angle at the one spot it had fitted (see `turnSwingsInto`). */
   const lastFreeRot = useRef<number | null>(null);
+  /** What the last legal MOVE frame set the rest of the selection down on — where the
+   *  members are standing, since they are written only on a legal frame. A turn sets
+   *  nobody down, so a drag ended with a wheel notch records these on the drop rather
+   *  than the turn's empty answer. Reset with `lastFreePos` at every gesture's start. */
+  const lastFreeLandings = useRef<Landing[]>([]);
   /** The angle it STANDS at — the last one a resolve gave it, or the one it began the
    *  gesture at — as opposed to `rotation.y`, which the ring turns live and a wheel or
    *  twist is about to. A turn asks which wall its back is against at THIS angle
@@ -509,6 +515,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // delta while the piece under the hand goes red and keeps following the
       // pointer — the separation IS the feedback, and the drop reunites them.
       if (co.moves.length > 0) setTransformsFor(co.moves);
+      if (currentGesture() === 'move') lastFreeLandings.current = co.landings;
     }
     setLive({
       partId,
@@ -662,8 +669,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // broken before the cascade below, using `parentIds` as it stood at
     // drag-start (this part's own link can't affect who its own descendants
     // are, so the ordering here doesn't matter to the convoy). The plan tab's
-    // drop writes it through the same `landOn`.
-    landOn(partId, resolved.supportId);
+    // drop writes it through the same `landAll`. The rest of the selection is
+    // recorded with it, from the frame that last WROTE the members: this drop's when
+    // it writes them below, else the last legal move frame's — a refused drop and a
+    // final turn both leave the members where that frame put them.
+    const companyLands = co.valid && settle.settled;
+    const memberLandings = companyLands && currentGesture() === 'move' ? co.landings : lastFreeLandings.current;
+    landAll([{ id: partId, on: resolved.supportId }, ...memberLandings]);
 
     // Everything the gesture carried, landed in one store update: this part's
     // rigid children about its resolved pivot, the rest of the multi-selection and
@@ -677,10 +689,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // Members are only ever written on a legal frame, so skipping them here leaves
     // them at the last delta the whole set could take — which is the fallback the
     // block above describes.
-    if (co.valid && settle.settled && co.moves.length > 0) setTransformsFor(co.moves);
+    if (companyLands && co.moves.length > 0) setTransformsFor(co.moves);
 
     lastValidPos.current = [x, y, z];
     lastFreePos.current = null;
+    lastFreeLandings.current = [];
     // The gesture is over, so the next refusal is news again even if it names the
     // same piece. Without this a drag that ended while refusing left the key set and
     // the following drag hit the same obstacle in silence.
@@ -894,6 +907,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       standRot.current = dragStartRot.current;
       cancelled.current = false;
       lastFreePos.current = null;
+      lastFreeLandings.current = [];
       effCache.current = buildEffSnapshot();
       convoyCache.current = null;
     }
@@ -1275,6 +1289,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       standRot.current = dragStartRot.current;
       cancelled.current = false;
       lastFreePos.current = null;
+      lastFreeLandings.current = [];
       effCache.current = buildEffSnapshot(); // one world snapshot for the gesture
       convoyCache.current = null;
       // Same rule as the touch pick-up above: a press that starts a drag selects
@@ -1399,6 +1414,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     standRot.current = dragStartRot.current;
     cancelled.current = false;
     lastFreePos.current = null;
+    lastFreeLandings.current = [];
     wantY.current = null;
     effCache.current = buildEffSnapshot();
     convoyCache.current = null;
@@ -1553,6 +1569,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             standRot.current = dragStartRot.current;
             cancelled.current = false;
             lastFreePos.current = null;
+            lastFreeLandings.current = [];
             effCache.current = buildEffSnapshot();
             convoyCache.current = null;
           }}

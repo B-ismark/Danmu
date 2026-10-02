@@ -43,7 +43,7 @@ import { SAME_M, snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { playSound } from '@/lib/sound';
 import { sizeOf } from '@/lib/sound-cues';
 import { convoyRestore, leadInherited, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
-import { cascadeTransform } from '@/lib/rigid-parent';
+import { cascadeTransform, type Landing } from '@/lib/rigid-parent';
 import { formatDim, formatLength } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
 import { addPieceToRoom } from '@/lib/add-piece';
@@ -127,7 +127,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
   const setTransformsFor = useStudio((s) => s.setTransformsFor);
-  const landOn = useStudio((s) => s.landOn);
+  const landAll = useStudio((s) => s.landAll);
   const setDragging = useStudio((s) => s.setDragging);
   const panKey = useStudio((s) => s.panKeyHeld);
   const selectedWall = useStudio((s) => s.selectedWall);
@@ -292,10 +292,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
      * against a position the piece may not have taken.
      */
     snapLines: SnapLine[];
-    /** What the last accepted frame set the piece down on (`on` undefined: the
-     *  floor), written into the relation on the drop — not per frame, so Escape has
-     *  no link to put back. Absent until a frame is accepted. */
-    landed?: { on: string | undefined };
+    /** What the last accepted frame set the piece — and each member of its set —
+     *  down on (`on` undefined: the floor), written into the relation on the drop —
+     *  not per frame, so Escape has no link to put back. Absent until a frame is
+     *  accepted. */
+    landed?: Landing[];
   } | null>(null);
   const [, force] = useState(0);
 
@@ -807,9 +808,20 @@ export const PlanView = forwardRef<PlanViewHandle, {
         // What it now stands on, the way the 3D tab's drop records it. This tab never
         // did, so a lamp moved here onto the other nightstand kept the first one's
         // link and stayed behind when the second one moved (§ H.6.7). A nudge has no
-        // drop to wait for; a drag records it on release.
-        if (drag) drag.landed = { on: r.supportId };
-        else landOn(part.id, r.supportId);
+        // drop to wait for; a drag records it on release. The rest of the selection
+        // was set down too, by the same frame, and is recorded with it.
+        const landings = [{ id: part.id, on: r.supportId }, ...co.landings];
+        if (drag) drag.landed = landings;
+        else {
+          landAll(landings);
+          // A key pressed mid-drag that set a piece of that drag down is the newer
+          // answer, so the release must not write the drag's older one over it.
+          const held = dragRef.current;
+          if (held?.landed) {
+            const now = new Set(landings.map((l) => l.id));
+            held.landed = held.landed.filter((l) => !now.has(l.id));
+          }
+        }
       }
       // A wall-mounted piece is turned by the wall it lands on, not by the drag.
       if (r.rot !== part.rot) setRotation(part.id, r.rot);
@@ -1336,7 +1348,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       }
       // A drop, not a click: a press that never left its slop records nothing, or a
       // few pixels of jitter would turn a lamp's inferred link into a recorded one.
-      if (dragRef.current.moved && dragRef.current.landed) landOn(dragRef.current.id, dragRef.current.landed.on);
+      if (dragRef.current.moved && dragRef.current.landed) landAll(dragRef.current.landed);
       // The per-gesture convoy snapshot dies with it — see the comment on the ref.
       dragRef.current = null;
       setDragging(null);
