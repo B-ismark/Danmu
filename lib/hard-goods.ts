@@ -1,7 +1,9 @@
 // Hard goods: the casework, appliances and joinery that `lib/soft-goods.ts` is the cloth
 // half of. Each function returns a piece as a list of named parts — boxes, upright posts,
 // front-facing discs and rings — in the piece's own frame, metres, and the renderer
-// (`components/three/DynamicPart.tsx`) does nothing but colour them.
+// (`components/three/DynamicPart.tsx`) does nothing but colour them. A strut — a rod at
+// any angle, a splayed leg — is the one part three cannot place from its fields alone, so
+// `strutPose` does that arithmetic here too.
 //
 // They were each a box with one or two details stuck on: a chest freezer was a body, a
 // lid and a handle, a TV console two slabs and three uprights round open air, a door a
@@ -26,15 +28,16 @@
 //     `tests/parametric-caps.test.ts` guards in the renderer by regex and which a module
 //     outside the renderer would otherwise slip past. So the test asks the property
 //     itself: scale the declared size along one axis and every box moves and grows along
-//     that axis alone, by exactly that factor. The two parametric forms here
-//     (`tvConsoleForm`, `doorForm`) are drawn at the size actually stored and are free to
-//     hold real joinery dimensions, which is the point of their being parametric.
+//     that axis alone, by exactly that factor. The parametric forms here
+//     (`tvConsoleForm`, `doorForm`, `nightstandForm`, `stoolForm`) are drawn at the size
+//     actually stored and are free to hold real joinery dimensions, which is the point of
+//     their being parametric.
 //
 // Faces that would share a plane are kept apart by construction rather than by luck:
 // where two parts' fronts face the same way, they are at different depths or meet only
 // along an edge. `tests/coplanar-faces.test.tsx` sweeps the result at three sizes.
 
-import { consoleSlabs, doorHandleY } from './scene-spec';
+import { consoleSlabs, doorHandleY, drawerSlide, stoolSeat } from './scene-spec';
 
 type V3 = [number, number, number];
 
@@ -55,7 +58,8 @@ export type HardTone =
   | 'led' // a status light
   | 'water' // a dispenser's bottle
   | 'hot'
-  | 'cold';
+  | 'cold'
+  | 'screen'; // a television's panel, switched off
 
 export type HardPart =
   | { kind: 'box'; key: string; tone: HardTone; size: V3; pos: V3 }
@@ -65,7 +69,10 @@ export type HardPart =
    *  porthole's glass, a lever's neck. `t` is its depth. */
   | { kind: 'disc'; key: string; tone: HardTone; r: number; t: number; pos: V3 }
   /** A torus facing the front: a washing machine's door ring. */
-  | { kind: 'ring'; key: string; tone: HardTone; r: number; tube: number; pos: V3 };
+  | { kind: 'ring'; key: string; tone: HardTone; r: number; tube: number; pos: V3 }
+  /** A rod of radius `r` from end `a` to end `b`, at any angle: a splayed leg, a
+   *  stretcher. `strutPose` says how the renderer stands a cylinder on it. */
+  | { kind: 'strut'; key: string; tone: HardTone; r: number; a: V3; b: V3 };
 
 /** A box from its extents rather than its centre and size — every form here is reasoned
  *  about edge by edge (this face sits on that one), and writing centres would put the
@@ -237,6 +244,32 @@ export function microwaveForm(dimMM: readonly number[]): HardPart[] {
   ];
 }
 
+/** A flat-panel television: a slim frame round a recessed screen, a deeper chin at the
+ *  foot with its standby light, and the electronics housing stepped in behind the panel
+ *  the way every real set's is. It was one box with a glowing plane laid on its face.
+ *
+ *  Wall piece, centred on its origin, back on `-d/2`. */
+export function tvForm(dimMM: readonly number[]): HardPart[] {
+  const [w, d, h] = m(dimMM);
+  const zb = d / 2 - d * 0.4; // the panel's back; the housing fills the rest
+  const side = w * 0.008;
+  const top = h * 0.014;
+  const chin = h * 0.035;
+  const y0 = -h / 2 + chin;
+  const y1 = h / 2 - top;
+  return [
+    slab('housing', 'trim', -w * 0.34, w * 0.34, -h * 0.34, h * 0.3, -d / 2, zb),
+    slab('frame-l', 'body', -w / 2, -w / 2 + side, y0, y1, zb, d / 2),
+    slab('frame-r', 'body', w / 2 - side, w / 2, y0, y1, zb, d / 2),
+    slab('frame-top', 'body', -w / 2, w / 2, y1, h / 2, zb, d / 2),
+    // The chin stops a hair behind the frame so the light can stand flush with the
+    // frame's face without sharing a plane with the chin's.
+    slab('chin', 'body', -w / 2, w / 2, -h / 2, y0, zb, d / 2 - d * 0.02),
+    slab('screen', 'screen', -w / 2 + side, w / 2 - side, y0, y1, zb, d / 2 - d * 0.05),
+    slab('standby', 'led', -w * 0.006, w * 0.006, -h / 2 + chin * 0.35, -h / 2 + chin * 0.6, d / 2 - d * 0.04, d / 2),
+  ];
+}
+
 // ─── Parametric: real joinery dimensions ─────────────────────────────────────
 
 /** How far a TV console's doors stand back inside their frame, how thick they are, and
@@ -358,10 +391,133 @@ export function doorForm(dimMM: readonly number[]): HardPart[] {
   return out;
 }
 
+/** A nightstand's joinery, metres: the top's overhang past the carcass, its thickness,
+ *  the carcass sides, a drawer front's thickness and the reveal round each drawer. */
+export const NIGHTSTAND = { overhang: 0.012, top: 0.022, side: 0.018, front: 0.018, reveal: 0.003 } as const;
+
+/** A nightstand on four short tapered legs: a top overhanging a carcass of sides, bottom
+ *  rail and back, and two drawers set inside the frame — each a front with a reveal round
+ *  it and a brass knob, and, while it is open, the drawer box behind it. `slide` is how
+ *  far the drawers stand open, metres (`drawerSlide` at most); closed, the drawer boxes
+ *  are not drawn, because nothing could see them. It was a block with two faces glued
+ *  on. Floor piece. */
+export function nightstandForm(dimMM: readonly number[], slide = 0): HardPart[] {
+  const [w, d, h] = m(dimMM);
+  const o = Math.min(NIGHTSTAND.overhang, w * 0.03, d * 0.03);
+  const t = Math.min(NIGHTSTAND.top, h * 0.05);
+  const s = Math.min(NIGHTSTAND.side, w * 0.05);
+  const ft = Math.min(NIGHTSTAND.front, d * 0.05);
+  const rv = NIGHTSTAND.reveal;
+  const legH = Math.min(0.1, h * 0.18);
+  const x0 = -w / 2 + o;
+  const x1 = w / 2 - o;
+  const zBack = -d / 2 + o;
+  const zFront = d / 2 - o; // the frame's face
+  const yTop = h - t;
+  const out: HardPart[] = [];
+  const lx = x1 - Math.min(0.03, w * 0.08);
+  const lz = zFront - Math.min(0.03, d * 0.08);
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+    out.push({ kind: 'post', key: `leg-${sx}${sz}`, tone: 'body', r: 0.016, rBottom: 0.01, h: legH, pos: [sx * lx, legH / 2, sz * lz] });
+  }
+  out.push(
+    slab('top', 'body', -w / 2, w / 2, yTop, h, -d / 2, d / 2),
+    slab('side-l', 'body', x0, x0 + s, legH, yTop, zBack, zFront),
+    slab('side-r', 'body', x1 - s, x1, legH, yTop, zBack, zFront),
+    slab('bottom', 'body', x0 + s, x1 - s, legH, legH + s, zBack, zFront),
+    // The inside of the carcass, a shade darker, which is what the reveals show. It runs
+    // forward to the drawer fronts' backs, which is what holds them: a front that stopped
+    // short of it hung in its reveal on nothing, detached from the rest of the piece.
+    slab('cavity', 'trim', x0 + s, x1 - s, legH + s, yTop, zBack, zFront - 0.001 - ft),
+  );
+  const fy0 = legH + s;
+  const half = (yTop - fy0) / 2;
+  const fx0 = x0 + s + rv;
+  const fx1 = x1 - s - rv;
+  const zf = zFront - 0.001; // a drawer front stands a millimetre back from the frame
+  const knobR = Math.min(0.014, half * 0.12);
+  for (let i = 0; i < 2; i++) {
+    const y0 = fy0 + i * half + rv;
+    const y1 = fy0 + (i + 1) * half - rv;
+    const ym = (y0 + y1) / 2;
+    out.push(slab(`front-${i}`, 'panel', fx0, fx1, y0, y1, zf - ft + slide, zf + slide));
+    // Seated a millimetre into the front rather than on its face, and stopping a
+    // millimetre inside the declared depth.
+    out.push({ kind: 'disc', key: `knob-${i}`, tone: 'brass', r: knobR, t: d / 2 - zf, pos: [0, ym, (zf - 0.001 + d / 2 - 0.001) / 2 + slide] });
+    if (slide > 0.002) {
+      const bd = Math.min(d * 0.8, zf - ft - zBack);
+      out.push(slab(`box-${i}`, 'trim', fx0 + 0.006, fx1 - 0.006, y0 + 0.004, y1 - half * 0.15, zf - ft - bd + slide, zf - ft + slide));
+    }
+  }
+  return out;
+}
+
+/** How far a nightstand's drawers stand open when `openState` is 1. */
+export function nightstandSlide(open: number, depthMM: number): number {
+  return Math.max(0, Math.min(1, open)) * drawerSlide(depthMM);
+}
+
+/** A stool's legs and stretchers, metres: a leg's radius, a stretcher's, and how far in
+ *  from the seat's rim a leg meets the seat as a share of its radius. */
+export const STOOL = { leg: 0.016, rung: 0.01, splayIn: 0.55 } as const;
+
+/** A round stool: a seat with its underside eased, three legs splayed out to a wider
+ *  stance than the seat's meeting point, and a ring of stretchers a third of the way up.
+ *  It was a disc on three plumb sticks.
+ *
+ *  Floor piece, ROUND: drawn on a circle of the declared width, and the renderer stretches
+ *  the circle to the declared depth — so it reads the width alone. */
+export function stoolForm(dimMM: readonly number[]): HardPart[] {
+  const w = dimMM[0] / 1000;
+  const h = dimMM[2] / 1000;
+  const r = w / 2;
+  const seat = stoolSeat(dimMM[2]);
+  const ease = Math.min(0.008, r * 0.05);
+  const yS = h - seat;
+  const { leg, rung } = STOOL;
+  const rTop = r * STOOL.splayIn;
+  const rFoot = r - leg - 0.002;
+  const out: HardPart[] = [
+    { kind: 'post', key: 'seat', tone: 'body', r, rBottom: r, h: seat - ease, pos: [0, h - (seat - ease) / 2, 0] },
+    { kind: 'post', key: 'seat-ease', tone: 'body', r, rBottom: r - ease, h: ease, pos: [0, yS + ease / 2, 0] },
+  ];
+  // A leg's end is cut square to its own axis, so a splayed one dips below its centre by
+  // `leg · sin(splay)`; the foot is lifted by exactly that and stands ON the floor. The
+  // splay itself depends on the lift, so the two are settled together. Each round shrinks
+  // the error by under 2% (about `leg / seat height`), so ten is past a float's precision
+  // at the band's widest, lowest corner — where four left the feet 0.8 nm under the floor.
+  let yLift = 0;
+  for (let i = 0; i < 10; i++) yLift = leg * Math.sin(Math.atan2(rFoot - rTop, yS - yLift));
+  /** A point `k` of the way up a leg at bearing `a`: 0 at the foot, 1 under the seat. */
+  const at = (a: number, k: number): V3 => {
+    const rr = rFoot + (rTop - rFoot) * k;
+    return [Math.cos(a) * rr, yLift + (yS - yLift) * k, Math.sin(a) * rr];
+  };
+  const angles = [0, 1, 2].map((i) => Math.PI / 2 + (i / 3) * Math.PI * 2);
+  angles.forEach((a, i) => out.push({ kind: 'strut', key: `leg-${i}`, tone: 'body', r: leg, a: at(a, 0), b: at(a, 1) }));
+  const kr = 0.32;
+  angles.forEach((a, i) => {
+    const b = angles[(i + 1) % 3];
+    out.push({ kind: 'strut', key: `rung-${i}`, tone: 'body', r: rung, a: at(a, kr), b: at(b, kr) });
+  });
+  return out;
+}
+
 /** Every part's axis-aligned extent, as `[lo, hi]` on x, y and z. A disc lies on z and a
  *  ring is a torus facing +z, so their extents are what three draws, not what their
  *  fields name. Exported for the test, which asks every form where its parts are. */
 export function partExtent(p: HardPart): { lo: V3; hi: V3 } {
+  if (p.kind === 'strut') {
+    // A cylinder's extent along an axis is its ends', widened by the radius of its end
+    // discs as that axis sees them: `r · sqrt(1 − u²)` for the axis's share `u` of the
+    // rod's direction.
+    const { u } = strutAxis(p.a, p.b);
+    const pad = (i: number) => p.r * Math.sqrt(Math.max(0, 1 - u[i] * u[i]));
+    return {
+      lo: [0, 1, 2].map((i) => Math.min(p.a[i], p.b[i]) - pad(i)) as V3,
+      hi: [0, 1, 2].map((i) => Math.max(p.a[i], p.b[i]) + pad(i)) as V3,
+    };
+  }
   const [x, y, z] = p.pos;
   switch (p.kind) {
     case 'box':
@@ -380,4 +536,20 @@ export function partExtent(p: HardPart): { lo: V3; hi: V3 } {
       return { lo: [x - o, y - o, z - p.tube], hi: [x + o, y + o, z + p.tube] };
     }
   }
+}
+
+function strutAxis(a: V3, b: V3): { len: number; u: V3 } {
+  const v: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const len = Math.hypot(v[0], v[1], v[2]);
+  return { len, u: len > 0 ? [v[0] / len, v[1] / len, v[2] / len] : [0, 1, 0] };
+}
+
+/** How the renderer stands an upright cylinder on a strut: its centre, its length, and the
+ *  XYZ Euler rotation that turns +Y onto the strut's direction. With no turn about Y,
+ *  `Rx(α)·Rz(γ)` takes +Y to `(−sin γ, cos γ cos α, cos γ sin α)`, which is read back off
+ *  the direction directly. */
+export function strutPose(p: Extract<HardPart, { kind: 'strut' }>): { pos: V3; len: number; rot: V3 } {
+  const { len, u } = strutAxis(p.a, p.b);
+  const pos: V3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+  return { pos, len, rot: [Math.atan2(u[2], u[1]), 0, -Math.asin(Math.max(-1, Math.min(1, u[0])))] };
 }
