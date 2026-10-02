@@ -645,7 +645,11 @@ free to add them."* They were boxes, and boxes read as furniture. Now they are c
   pillows reported 2026-10-02, fixed on `claude/affectionate-ritchie-ilawx1`). The duvet rolls
   over the mattress's edge and hangs to a level hem, and a sheet is turned back over it at
   the head. A scatter cushion stands in front of each pillow, in a tone that stays with the
-  bed across a reload. The mattress is now its own layer under the duvet.
+  bed across a reload, its back resting on the pillow's front (it leaned on nothing once the
+  pillows lay flat — the floating cushions reported 2026-10-02, second report — and the
+  pillows themselves were 75 mm thin, 22 mm above the sheet; they loft 27% of the mattress
+  height now, 80–180 mm). Look from the side: no daylight between cushion and pillow, and
+  the pillow shows above the turned sheet. The mattress is now its own layer under the duvet.
 - **The sofa and armchair.** Seat and back cushions are plump with rounded edges, and the
   backs lean back. A sofa tall enough gets a scatter cushion in each end seat. The armchair
   gets one.
