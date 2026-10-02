@@ -199,35 +199,86 @@ function eachPoint(mesh: SoftMeshData, size: V3, rot: V3, at: (v: V3) => void): 
   }
 }
 
-/** How far `item` must move along +Z for its back to rest on the front of `onto`, settled
- *  in by `sink`: the two cloths compared height by height, across the middle of the width
- *  they share, so the leaning one touches the other where they actually meet — its lower
- *  back on a pillow's front shoulder — rather than where their boxes say they might.
- *  `null` when the two share no height, which is a cushion with nothing behind it. */
-export function restGap(mesh: SoftMeshData, item: SoftItem, ontoMesh: SoftMeshData, onto: SoftItem, sink: number): number | null {
+/** The middle of the width two items share, where `restOn` compares them. */
+function sharedBand(item: SoftItem, onto: SoftItem): readonly [number, number] | null {
   const x0 = Math.max(item.pos[0] - item.size[0] * 0.3, onto.pos[0] - onto.size[0] * 0.3);
   const x1 = Math.min(item.pos[0] + item.size[0] * 0.3, onto.pos[0] + onto.size[0] * 0.3);
-  if (x1 <= x0) return null;
-  const bin = 0.004;
-  const back = new Map<number, number>();
-  const front = new Map<number, number>();
-  const collect = (m: SoftMeshData, it: SoftItem, into: Map<number, number>, pick: (a: number, b: number) => number) =>
-    eachPoint(m, it.size, it.rot ?? [0, 0, 0], (v) => {
-      const x = v[0] + it.pos[0];
-      if (x < x0 || x > x1) return;
-      const k = Math.floor((v[1] + it.pos[1]) / bin);
-      const z = v[2] + it.pos[2];
-      const was = into.get(k);
-      into.set(k, was === undefined ? z : pick(was, z));
-    });
-  collect(mesh, item, back, Math.min);
-  collect(ontoMesh, onto, front, Math.max);
+  return x1 > x0 ? [x0, x1] : null;
+}
+
+/** How far `item` must move along +Z for its back to rest on `front`, the front of the cloth
+ *  behind it, settled in by `sink`: the two compared height by height across `band`, so the
+ *  leaning one touches the other where they actually meet rather than where their boxes say
+ *  they might. `front` is cut once by the caller, so a search that turns one cloth against a
+ *  still one cuts the still one once. `meets` is the depth where they meet once moved, the
+ *  leaning cloth's back there; `null` when the two share no height, which is a cushion with
+ *  nothing behind it.
+ *
+ *  Each cloth is cut by its EDGES at every height, not read off whichever vertices fall in
+ *  a band of heights: read off vertices, where two cloths met jumped from vertex to vertex
+ *  as one turned, so a bed 10 mm taller laid its cushions back 49° where its neighbours lay
+ *  them 40°. Cut by edges, both answers move smoothly with the cloth. */
+function restOn(mesh: SoftMeshData, item: SoftItem, band: readonly [number, number], front: Profile, sink: number): { gap: number; meets: number } | null {
+  const back = depthProfile(mesh, item, band, -1);
   let need = -Infinity;
-  for (const [k, z] of back) {
-    const f = front.get(k);
-    if (f !== undefined) need = Math.max(need, f - sink - z);
+  let meets = 0;
+  const k0 = Math.max(back.k0, front.k0);
+  const k1 = Math.min(back.k0 + back.z.length, front.k0 + front.z.length);
+  for (let k = k0; k < k1; k++) {
+    const z = -back.z[k - back.k0];
+    const f = front.z[k - front.k0];
+    // A height either cloth misses is −∞ or +∞ here, and loses this comparison on its own.
+    if (f - sink - z > need) {
+      need = f - sink - z;
+      meets = f - sink;
+    }
   }
-  return need === -Infinity ? null : need;
+  return need === -Infinity ? null : { gap: need, meets };
+}
+
+/** The height step `restOn` compares two cloths at, metres. */
+const PROFILE_STEP = 0.002;
+
+/** A cloth's furthest depth at each multiple of `PROFILE_STEP` in height, from step `k0`
+ *  up, signed by `dir` (+1 its front, the most +Z; −1 its back, stored negated); `-Infinity`
+ *  at a height it does not reach. */
+type Profile = { k0: number; z: Float64Array };
+
+/** A placed mesh's `Profile` across `band` in x: each edge with an end in the band cut at
+ *  every height it crosses. */
+function depthProfile(m: SoftMeshData, it: SoftItem, band: readonly [number, number], dir: 1 | -1): Profile {
+  const n = m.positions.length / 3;
+  const w = new Float64Array(n * 3);
+  let i = 0;
+  let lo = Infinity;
+  let hi = -Infinity;
+  eachPoint(m, it.size, it.rot ?? [0, 0, 0], (v) => {
+    w[i++] = v[0] + it.pos[0];
+    w[i++] = v[1] + it.pos[1];
+    w[i++] = dir * (v[2] + it.pos[2]);
+    lo = Math.min(lo, v[1] + it.pos[1]);
+    hi = Math.max(hi, v[1] + it.pos[1]);
+  });
+  const k0 = Math.ceil(lo / PROFILE_STEP);
+  const z = new Float64Array(Math.max(0, Math.floor(hi / PROFILE_STEP) - k0 + 1)).fill(-Infinity);
+  const inX = (a: number) => w[a * 3] >= band[0] && w[a * 3] <= band[1];
+  const cut = (a: number, b: number) => {
+    if (!inX(a) && !inX(b)) return;
+    let [ya, za, yb, zb] = [w[a * 3 + 1], w[a * 3 + 2], w[b * 3 + 1], w[b * 3 + 2]];
+    if (ya > yb) [ya, za, yb, zb] = [yb, zb, ya, za];
+    for (let k = Math.ceil(ya / PROFILE_STEP); k * PROFILE_STEP <= yb; k++) {
+      const at = yb - ya < 1e-12 ? Math.max(za, zb) : za + ((zb - za) * (k * PROFILE_STEP - ya)) / (yb - ya);
+      const j = k - k0;
+      if (j >= 0 && j < z.length && at > z[j]) z[j] = at;
+    }
+  };
+  const ix = m.index;
+  for (let t = 0; t < ix.length; t += 3) {
+    cut(ix[t], ix[t + 1]);
+    cut(ix[t + 1], ix[t + 2]);
+    cut(ix[t + 2], ix[t]);
+  }
+  return { k0, z };
 }
 
 /** A turn about X that stands a unit cushion up (its thickness, unit +Y, toward +Z) and
@@ -363,18 +414,12 @@ const bedMemo = memoLast(
     const pillowFront = pz + reach.hi[2];
     const duvet = duvetMesh(w, d, h, pillowFront - 0.02, frameTop);
     const foldTop = duvet.fold.pos[1] + duvet.fold.size[1] / 2;
-    const ct0 = 0.28;
-    const cs = Math.min(0.42, pw * 0.62, (SCATTER_TOP * h - foldTop + CUSHION_SINK) / standingHeight(ct0, THROW_LEAN));
-    const ct = cs * ct0;
-    const scatter: SoftItem[] =
-      cs >= 0.2
-        ? xs.map((x, i) => {
-            // Stood on the sheet, then moved back until it rests on its pillow's front.
-            const c = leaningCushion(x, cs, ct, cs, THROW_LEAN, foldTop, pillowFront);
-            const gap = restGap(CUSHION_MESH.scatter, c, CUSHION_MESH.pillow, pillowItems[i], CUSHION_SINK) ?? 0;
-            return { ...c, pos: [c.pos[0], c.pos[1], c.pos[2] + gap] as V3, tone: Math.floor(softHash(id, `scatter${i}`) * 64) };
-          })
-        : [];
+    // Every pillow is the same pillow moved along X, so one cushion is found and each one
+    // is it moved the same way.
+    const one = scatterOnPillow(pw, h, foldTop, pillowFront, { pos: [0, pillowY, pz], size: [pw, pt, pd] });
+    const scatter: SoftItem[] = one
+      ? xs.map((x, i) => ({ ...one, pos: [x, one.pos[1], one.pos[2]] as V3, tone: Math.floor(softHash(id, `scatter${i}`) * 64) }))
+      : [];
     return { w, d, h, frameTop, mattress, top, pillows: pillowItems, scatter, duvet: duvet.mesh, fold: duvet.fold };
   },
   (...a) => a.join('|'),
@@ -392,6 +437,54 @@ const bedMemo = memoLast(
  *  centimetre inside the frame's side), and above the frame, which it would otherwise
  *  hang through. */
 export const DUVET_LIP = 0.02;
+/** How far in front of where a scatter cushion meets its pillow its centre must be, metres,
+ *  for the pillow to be holding it up rather than balancing it. */
+export const SCATTER_SETTLE = 0.015;
+
+/** The most a bed's scatter cushion lies back, radians: past this it is lying down. */
+const SCATTER_LEAN_MAX = 1.25;
+
+/** A bed's scatter cushion, centred on `pillow`, its foot on the turned-back sheet and its
+ *  back lying on the pillow, or `null` when the bed is too low to carry one.
+ *
+ *  Stood up against the pillow at the sofa's `THROW_LEAN`, it met the pillow low on its front
+ *  edge, a few centimetres above the sheet, with its centre BEHIND that point at every size
+ *  the bed sweep in `tests/soft-goods.test.ts` reaches: a cushion that would fall back onto the pillow, standing in the air
+ *  instead — the floating the user reported third. A sofa's back is tall enough to hold a
+ *  cushion that upright; a pillow lying flat is not. So it lies back as far as it would
+ *  fall: until its centre is in front of where its back meets the pillow, by
+ *  `SCATTER_SETTLE`, so it lies between the two things holding it up. How far that is
+ *  depends on the pillow, so it is searched rather than set.
+ *
+ *  Sized as it would stand, to the largest that stood up would stay below `SCATTER_TOP`, so
+ *  it is one cushion whichever way it lies. */
+function scatterOnPillow(pw: number, h: number, foldTop: number, pillowFront: number, pillow: SoftItem): SoftItem | null {
+  const x = pillow.pos[0];
+  const share = 0.28;
+  const cs = Math.min(0.42, pw * 0.62, (SCATTER_TOP * h - foldTop + CUSHION_SINK) / standingHeight(share, THROW_LEAN));
+  if (cs < 0.2) return null;
+  // The pillow does not move while the cushion turns, so it is cut once. The cushion turns
+  // only about X, so the band of its width that faces the pillow is the same at every lean.
+  const band = sharedBand({ pos: [x, 0, 0], size: [cs, 0, 0] }, pillow);
+  if (!band) return null;
+  const front = depthProfile(CUSHION_MESH.pillow, pillow, band, 1);
+  const at = (lean: number) => {
+    // Its foot on the sheet, then moved back until it rests on its pillow.
+    const c = leaningCushion(x, cs, cs * share, cs, lean, foldTop, pillowFront);
+    const rest = restOn(CUSHION_MESH.scatter, c, band, front, CUSHION_SINK);
+    const item: SoftItem = { ...c, pos: [x, c.pos[1], c.pos[2] + (rest?.gap ?? 0)] };
+    return { item, held: !!rest && item.pos[2] - rest.meets >= SCATTER_SETTLE };
+  };
+  // Coarse, then fine across the step it was first held in: the first lean that holds it.
+  let lean = THROW_LEAN;
+  while (lean < SCATTER_LEAN_MAX && !at(lean).held) lean = Math.min(SCATTER_LEAN_MAX, lean + 0.05);
+  for (let fine = Math.max(THROW_LEAN, lean - 0.05); fine < lean; fine += 0.01) {
+    const r = at(fine);
+    if (r.held) return r.item;
+  }
+  return at(lean).item;
+}
+
 /** How far the duvet's fall stands out from the mattress's side, metres. */
 export const DUVET_LOFT = 0.022;
 const DUVET_FOLD_AMP = 0.008;

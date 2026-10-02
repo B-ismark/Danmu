@@ -690,12 +690,17 @@ free to add them."* They were boxes, and boxes read as furniture. Now they are c
   were tipped 10° and stood 90 mm clear of the mattress at the headboard end — the floating
   pillows reported 2026-10-02, fixed on `claude/affectionate-ritchie-ilawx1`). The duvet rolls
   over the mattress's edge and hangs to a level hem, and a sheet is turned back over it at
-  the head. A scatter cushion stands in front of each pillow, in a tone that stays with the
-  bed across a reload, its back resting on the pillow's front (it leaned on nothing once the
-  pillows lay flat — the floating cushions reported 2026-10-02, second report — and the
-  pillows themselves were 75 mm thin, 22 mm above the sheet; they loft 27% of the mattress
-  height now, 80–180 mm). Look from the side: no daylight between cushion and pillow, and
-  the pillow shows above the turned sheet. The mattress is now its own layer under the duvet.
+  the head. A scatter cushion lies back on each pillow, in a tone that stays with the bed
+  across a reload, its foot on the turned sheet and its back on the pillow (it leaned on
+  nothing once the pillows lay flat — the floating cushions reported 2026-10-02, second
+  report — and the pillows themselves were 75 mm thin, 22 mm above the sheet; they loft 27%
+  of the mattress height now, 80–180 mm). **Then it stood too upright** (third report, same
+  day): at the sofa's 17° lean it touched the pillow low on the cushion's face with its
+  centre behind that point, so it was balancing rather than leaning, and read as standing in
+  the air. It now lies back until its centre is 15 mm in front of where the pillow holds it
+  — about 50° on a Library double bed, more on a low bed, less on a tall one. Look from the
+  side: no daylight between cushion and pillow, the cushion's top resting ON the pillow
+  rather than standing proud of it, and the pillow showing above the turned sheet. The mattress is now its own layer under the duvet.
 - **The sofa and armchair.** Seat and back cushions are plump with rounded edges, and the
   backs lean back. A sofa tall enough gets a scatter cushion in each end seat. The armchair
   gets one.
@@ -889,6 +894,10 @@ dark enough that the slats and stretchers read only faintly in a dim room.
   cushions then floated** (second report, same day): they still leaned toward where the
   tipped pillow had been, and the flat pillow was 22 mm above the sheet. Pillows loft 27% of
   the mattress height now (80–180 mm), and each cushion rests on its pillow's front.
+  **Third report, same day:** they still stood. A cushion leaned 17° against a flat pillow
+  touches it below its own centre, so nothing is holding it up; each one now lies back on its
+  pillow as far as it would fall, searched per bed (`scatterOnPillow` in
+  `lib/soft-goods.ts`).
 
 **The sizes did not change.** All three stay inside the box the plan draws at every size.
 
@@ -905,7 +914,9 @@ and a deep one four, and the valve stands clear of the last section. The bed's p
 on the mattress with no light under them from the side. *Wrong* looks like a tube floating
 off the feet, a valve buried in a section, an ottoman leg outside the base, or any pillow
 with a gap beneath it. **One to judge on purpose:** a pillow lying flat reads as a made bed;
-say if it reads as too flat beside the scatter cushion standing in front of it.
+say if it reads as too flat beside the scatter cushion lying back on it. And the cushion's
+own lean is a judgement too: it is set by when the pillow would hold it, not by taste, so say
+if ~50° reads as slumped.
 
 ### A painting, two mirrors and an air purifier drawn as the real objects — merged to `main` in `a1f1755` (PR #227), NOT LOOKED AT
 

@@ -9,7 +9,7 @@
 // how the first version left every leaning cushion hovering.
 
 import { describe, it, expect } from 'vitest';
-import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
+import { Euler, Line3, Matrix4, Plane, Quaternion, Vector3 } from 'three';
 import {
   bedForm,
   curtainCloth,
@@ -19,6 +19,7 @@ import {
   GARMENT_KINDS,
   GARMENT_MESH,
   HEADBOARD_T,
+  leaningCushion,
   meshExtent,
   PILLOW_LOFT,
   SCATTER_TOP,
@@ -28,6 +29,9 @@ import {
   SHOE_UPPER_MESH,
   sofaForm,
   softHash,
+  SCATTER_SETTLE,
+  standingHeight,
+  THROW_LEAN,
   type SoftItem,
   type SoftMeshData,
 } from '../lib/soft-goods';
@@ -46,6 +50,47 @@ function worldPoints(mesh: SoftMeshData, p: SoftItem): Vector3[] {
   const out: Vector3[] = [];
   for (let i = 0; i < mesh.positions.length; i += 3) out.push(new Vector3(mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]).applyMatrix4(m));
   return out;
+}
+
+/** The drawn surface sliced at every millimetre of height: each triangle edge cut by the
+ *  level plane and kept where the cut lands inside `|x − cx| < half`, the furthest depth one
+ *  way (`pick`) per height. Two cloths meet on their faces, between vertices: read off the
+ *  vertices alone, a cushion settled 12 mm into a pillow showed as barely touching it, and
+ *  read off 4 mm bands of height, a steeply leaning one showed 4 mm deeper than it was. */
+function slices(mesh: SoftMeshData, p: SoftItem, cx: number, half: number, pick: (a: number, b: number) => number): Map<number, number> {
+  const v = worldPoints(mesh, p);
+  const ix = mesh.index;
+  const out = new Map<number, number>();
+  const level = new Plane(new Vector3(0, 1, 0), 0);
+  const hit = new Vector3();
+  for (let t = 0; t < ix.length; t += 3)
+    for (const [i, j] of [[0, 1], [1, 2], [2, 0]]) {
+      const line = new Line3(v[ix[t + i]], v[ix[t + j]]);
+      const lo = Math.min(line.start.y, line.end.y);
+      const hi = Math.max(line.start.y, line.end.y);
+      for (let mm = Math.ceil(lo * 1000); mm <= hi * 1000; mm++) {
+        level.constant = -mm / 1000;
+        if (!level.intersectLine(line, hit) || Math.abs(hit.x - cx) >= half) continue;
+        const was = out.get(mm);
+        out.set(mm, was === undefined ? hit.z : pick(was, hit.z));
+      }
+    }
+  return out;
+}
+
+/** How a leaning scatter cushion rests on the pillow behind it, off the sliced surfaces:
+ *  how far it must move forward to sit no deeper than `CUSHION_SINK` in (`need`), and how
+ *  far its centre is in front of where its back meets the pillow (`clear`). */
+function held(s: SoftItem, pillow: SoftItem): { need: number; clear: number } {
+  const back = slices(CUSHION_MESH.scatter, s, s.pos[0], s.size[0] * 0.3, Math.min);
+  const front = slices(CUSHION_MESH.pillow, pillow, s.pos[0], s.size[0] * 0.3, Math.max);
+  let need = -Infinity;
+  let meets = 0;
+  for (const [k, z] of back) {
+    const f = front.get(k);
+    if (f !== undefined && f - CUSHION_SINK - z > need) [need, meets] = [f - CUSHION_SINK - z, z];
+  }
+  return { need, clear: s.pos[2] - meets };
 }
 
 function bounds(mesh: SoftMeshData): { lo: V3; hi: V3 } {
@@ -232,6 +277,7 @@ describe('sofaForm — the scatter cushions sit on the seat and lean on the back
 describe('bedForm — linen inside the bed, resting where it rests', () => {
   let scattered = 0;
   let atScatterTop = 0;
+  let uprighted = 0;
   for (const shape of ['bed-single', 'bed-double'] as const) {
     for (const dim of sizes(shape, 'bed')) {
       it(`${shape} ${dim.join('×')}`, () => {
@@ -289,22 +335,40 @@ describe('bedForm — linen inside the bed, resting where it rests', () => {
           // 30 mm clear of the flat one at its foot and 190 mm clear at its top — a cushion
           // tipped back on nothing, the floating the user reported second.
           const pillow = worldPoints(CUSHION_MESH.pillow, b.pillows[i]);
-          const xIn = (v: Vector3) => Math.abs(v.x - s.pos[0]) < s.size[0] * 0.3;
-          const bin = (v: Vector3) => Math.floor(v.y / 0.004);
-          const back = new Map<number, number>();
-          const front = new Map<number, number>();
-          for (const v of cloth) if (xIn(v)) back.set(bin(v), Math.min(back.get(bin(v)) ?? Infinity, v.z));
-          for (const v of pillow) if (xIn(v)) front.set(bin(v), Math.max(front.get(bin(v)) ?? -Infinity, v.z));
+          const back = slices(CUSHION_MESH.scatter, s, s.pos[0], s.size[0] * 0.3, Math.min);
+          const front = slices(CUSHION_MESH.pillow, b.pillows[i], s.pos[0], s.size[0] * 0.3, Math.max);
           const gaps = [...back].filter(([k]) => front.has(k)).map(([k, z]) => z - front.get(k)!);
           expect(gaps.length, 'the cushion and its pillow share heights').toBeGreaterThan(3);
-          expect(Math.min(...gaps), 'into the pillow by the sink').toBeCloseTo(-CUSHION_SINK, 6);
+          expect(Math.abs(Math.min(...gaps) + CUSHION_SINK), 'into the pillow by the sink').toBeLessThan(0.001);
+          // ...and the pillow HOLDS it: its centre lies between its bottom seam on the sheet
+          // and where its back meets the pillow, clear of that point by 10 mm. Touching was
+          // not enough — tipped back 17° against a pillow lying flat, it met the pillow low
+          // down with its centre 2–9 mm BEHIND the meeting, at every size: a cushion that
+          // would fall back onto the pillow, standing in the air, the floating reported third.
+          const foot = Math.max(...seam.map((v) => v.z));
+          expect(held(s, b.pillows[i]).clear, 'its centre is in front of where it meets the pillow').toBeGreaterThan(0.01);
+          expect(s.pos[2], 'and behind its own foot: it leans back').toBeLessThan(foot);
+          // ...and lies back no further than it must, or a cushion lying flat would pass: 2°
+          // more upright, stood on the same sheet and settled on the same pillow, it is not
+          // held. It leans as far as it would fall, not as far as looks safe.
+          const lean = Math.PI / 2 - s.rot![0];
+          if (lean > THROW_LEAN + 0.035) {
+            uprighted++;
+            const up = leaningCushion(s.pos[0], s.size[0], s.size[1], s.size[2], lean - 0.035, foldTop, reach(CUSHION_MESH.pillow, b.pillows[i]).hi[2]);
+            const settled = { ...up, pos: [up.pos[0], up.pos[1], up.pos[2] + held(up, b.pillows[i]).need] as V3 };
+            expect(held(settled, b.pillows[i]).clear, '2° more upright, the pillow does not hold it').toBeLessThan(SCATTER_SETTLE);
+          }
           // A pillow it can lean on stands clear of the sheet: at 0.15 h of loft the Library
           // bed's stood 12 mm above it, a ledge nothing rests against.
           const pillowTop = Math.max(...pillow.map((v) => v.y));
           expect(pillowTop - foldTop, 'the pillow stands above the turned-back sheet').toBeGreaterThan(0.025);
           expect(b.pillows[i].size[1]).toBeCloseTo(Math.min(PILLOW_LOFT.max, Math.max(PILLOW_LOFT.min, h * 0.27)), 12);
           expect(hi[1]).toBeLessThanOrEqual(SCATTER_TOP * h + EPS);
-          if (Math.abs(hi[1] - SCATTER_TOP * h) < EPS) atScatterTop++;
+          // Sized as it would STAND, so lying back it is the same cushion: stood up on the
+          // sheet at the sofa's lean, it would reach no higher than `SCATTER_TOP` either.
+          const stood = s.size[0] * standingHeight(s.size[1] / s.size[0], THROW_LEAN) + foldTop - CUSHION_SINK;
+          expect(stood).toBeLessThanOrEqual(SCATTER_TOP * h + EPS);
+          if (Math.abs(stood - SCATTER_TOP * h) < EPS) atScatterTop++;
           expect(lo[0]).toBeGreaterThanOrEqual(-w / 2);
           expect(hi[0]).toBeLessThanOrEqual(w / 2);
           expect(hi[2]).toBeLessThan(d / 2);
@@ -326,8 +390,14 @@ describe('bedForm — linen inside the bed, resting where it rests', () => {
     }
   }
   it('the sweep reached the scatter cushions', () => {
-    expect(scattered).toBeGreaterThan(0);
-    expect(atScatterTop).toBeGreaterThan(0);
+    // Literals, not floors: every bed in the sweep that carries cushions,
+    // the two whose cushions would stand exactly to the top line, and —
+    // the floating the user reported — every one of them leaning back past
+    // the old fixed throw lean, which is what it takes for the pillow to
+    // hold it.
+    expect(scattered).toBe(13);
+    expect(atScatterTop).toBe(2);
+    expect(uprighted).toBe(13);
   });
 
   it('is memoised: the same bed is the same object, so the duvet is built once', () => {
