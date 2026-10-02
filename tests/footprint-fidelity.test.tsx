@@ -427,7 +427,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
     'bed-single': [1.0, 1.01, 1.4],
     'bed-double': [1.0, 1.01, 1.4],
     // `monitor` [1.0, 1.5, 0.98] is RETIRED: its base was a literal 300 mm disc whatever
-    // the declared depth. The disc's diameter is `dimMM[1]` now, and it measures 1.00 deep.
+    // the declared depth. `monitorForm`'s plate is `dimMM[1]` deep now, and it measures 1.00.
     laptop: [1.0, 1.29, 1.0],
     // Depth 2.0: a lever stands `LEVER_PROUD` (50 mm) off the face of a 50 mm leaf, which
     // is what a real one does — the panelled door of `lib/hard-goods.ts` draws it to scale

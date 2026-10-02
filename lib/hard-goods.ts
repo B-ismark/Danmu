@@ -921,6 +921,55 @@ export function laptopForm(dimMM: readonly number[]): { base: HardPart[]; lid: H
   return { base, lid, hinge: { y: hingeY, z: hingeZ, tilt } };
 }
 
+/** A desk monitor's proportions, as shares of its own axes: the panel's share of the
+ *  height, the plate's share of the width, and how far into the depth the stand's
+ *  column rises. */
+export const MONITOR = { panel: 0.6, plate: 0.38, column: 0.3 } as const;
+
+/** A desk monitor, every part inside `dimMM`: a flat plate as wide as `plate` of the
+ *  width and as deep as the monitor says it is, a column rising from its back third to
+ *  a mount on the panel's back, and the panel itself across the full width and the top
+ *  `panel` of the height — a thin shell with a rear housing, a narrow bezel, a deeper
+ *  chin with a power light, and the screen set in it.
+ *
+ *  It was six primitives at literal sizes, the base a 300 mm disc whatever the monitor
+ *  declared, so typing a depth changed nothing. Every length here is a share of its own
+ *  axis, so the stored size draws the monitor it describes. Floor piece: `y` runs 0 → h,
+ *  the screen faces `+z`. */
+export function monitorForm(dimMM: readonly number[]): HardPart[] {
+  const [w, d, h] = m(dimMM);
+  const ph = h * MONITOR.panel;
+  const py0 = h - ph;
+  const plateT = Math.min(0.014, h * 0.035);
+  const pw = (w * MONITOR.plate) / 2;
+  // The panel stands over the plate's middle: a thin shell, its screen face at z0 + pt.
+  const pt = Math.min(0.02, d * 0.12);
+  const z0 = -pt / 2;
+  const bez = Math.min(0.008, w * 0.012);
+  const chin = Math.min(0.022, ph * 0.07);
+  // The column rises from the plate's back third to the housing's back.
+  const housingT = Math.min(0.03, d * 0.15);
+  const hz1 = z0;
+  const hz0 = z0 - housingT;
+  const cw = Math.min(0.06, w * 0.08) / 2;
+  const cz1 = hz0 + housingT * 0.4;
+  const cz0 = Math.max(-d / 2 + 0.005, cz1 - Math.min(0.025, d * 0.12));
+  return [
+    slab('plate', 'steel', -pw, pw, 0, plateT, -d / 2, d / 2),
+    slab('column', 'steel', -cw, cw, plateT, py0 + ph * 0.55, cz0, cz1),
+    slab('mount', 'trim', -cw * 1.6, cw * 1.6, py0 + ph * 0.35, py0 + ph * 0.6, hz0 - 0.004, hz0 + 0.002),
+    slab('housing', 'trim', -w * 0.36, w * 0.36, py0 + ph * 0.12, h - ph * 0.12, hz0, hz1),
+    slab('shell', 'body', -w / 2, w / 2, py0, h, z0, z0 + pt * 0.8),
+    // The bezel's head and sides; the chin is its foot, deeper and in the shell's colour.
+    slab('bezel-head', 'dark', -w / 2, w / 2, h - bez, h, z0 + pt * 0.8, z0 + pt),
+    slab('bezel-l', 'dark', -w / 2, -w / 2 + bez, py0 + chin, h - bez, z0 + pt * 0.8, z0 + pt),
+    slab('bezel-r', 'dark', w / 2 - bez, w / 2, py0 + chin, h - bez, z0 + pt * 0.8, z0 + pt),
+    slab('chin', 'body', -w / 2, w / 2, py0, py0 + chin, z0 + pt * 0.8, z0 + pt),
+    slab('screen', 'screen', -w / 2 + bez, w / 2 - bez, py0 + chin, h - bez, z0 + pt * 0.8, z0 + pt * 0.95),
+    slab('power', 'bulb', w * 0.4, w * 0.4 + 0.004, py0 + chin * 0.4, py0 + chin * 0.6, z0 + pt, z0 + pt + 0.001),
+  ];
+}
+
 /** A column radiator's pieces: `columns`, the enamelled tubes, their rounded ends and the
  *  joints between them, all in the radiator's own colour — hundreds of parts on a 2 m
  *  one, which the renderer draws as two instanced sets — and `fittings`, the feet

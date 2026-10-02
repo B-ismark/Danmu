@@ -83,13 +83,13 @@ describe('a floor piece is drawn to the height it declares', () => {
     //   rug, plane        drawn at a fixed thickness whatever the height says.
     //   bed-single/double the headboard is 1.4 h, deliberately (`lib/scene-spec.ts`,
     //                     beside the bed's size range): the height is the mattress top.
-    //   monitor           the screen's top is 0.96 h + 10 mm, up to 14 mm short.
     // `air-purifier` was here (a 14 mm control disc stood on its top) and is retired:
     // `airPurifierForm` sets the dial into the top, which is its declared height. So was
     // `laptop` (`h` was the lid's LENGTH, tilted back from a 20 mm hinge, 7 mm over):
     // `laptopForm` solves the lid's length for the open height.
     // None is a seat or a surface a seat tucks under.
     const misses = rows.filter((r) => r.worst > TOLERANCE_MM).map((r) => r.shape);
-    expect(misses).toEqual(['rug', 'bed-single', 'bed-double', 'monitor', 'plane']);
+    // `monitor` came off this list 2026-10-02: `monitorForm` reaches `h` exactly.
+    expect(misses).toEqual(['rug', 'bed-single', 'bed-double', 'plane']);
   });
 });

@@ -52,6 +52,7 @@ import {
   acUnitForm,
   coffeeTableForm,
   laptopForm,
+  monitorForm,
   windowForm,
   deskForm,
   diningTableForm,
@@ -977,45 +978,10 @@ function DeskGeo({ part, locked, lShape }: { part: ScenePart; locked: boolean; l
 }
 
 // ─── Tech / Appliances ──────────────────────────────────────────────────
+/** Drawn at its stored size by `monitorForm`: a plate as deep as the monitor says, a
+ *  column to a mount on the back, and a thin panel with its bezel, chin and screen. */
 function MonitorGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const screenH = h * 0.6;
-  const screenY = h * 0.66;
-  // The bezel, housing, neck and base follow the part's colour. They were four
-  // literals, so the Inspector's colour picker did nothing to a monitor.
-  const shell = tint(part);
-  // The base IS the declared depth: a disc whose diameter is `dimMM[1]`, so typing a
-  // depth in the Inspector changes the drawing. It was a literal 300 mm disc, which drew
-  // a 200 mm monitor 1.5 times as deep as it said it was (§ 40).
-  const baseR = part.dimMM[1] / 2000;
-  return (
-    <>
-      {/* weighted base disc */}
-      <mesh position={[0, 0.012, 0]}>
-        <cylinderGeometry args={[baseR * 0.8, baseR, 0.024, 28]} />
-        <meshStandardMaterial color={shell} roughness={0.5} metalness={0.35} />
-      </mesh>
-      {/* angled neck */}
-      {/* neck from the base plate up into the screen's back — it started h·0.06 up,
-          which cleared the 24 mm plate on the tall sizes */}
-      <Box size={[0.05, h * 0.38 - 0.02, 0.028]} position={[0, (h * 0.38 + 0.02) / 2, -0.005]} color={shade(shell, 6)} roughness={0.5} metalness={0.3} />
-      {/* housing / back bulge (gives the panel real depth) */}
-      <Box size={[w * 0.98, screenH, 0.05]} position={[0, screenY, -0.022]} color={shade(shell, -8)} roughness={0.55} />
-      {/* bezel frame */}
-      <Box size={[w, screenH + 0.02, 0.02]} position={[0, screenY, 0.006]} color={shell} roughness={0.6} />
-      {/* lit screen, inset into the bezel */}
-      <mesh position={[0, screenY + 0.008, 0.017]}>
-        <planeGeometry args={[w * 0.93, screenH * 0.84]} />
-        <meshStandardMaterial color="#2b3a55" emissive="#3a5a8a" emissiveIntensity={0.5} roughness={0.16} metalness={0.1} />
-      </mesh>
-      {/* chin brand dot */}
-      <mesh position={[0, screenY - screenH * 0.46, 0.018]}>
-        <circleGeometry args={[0.006, 12]} />
-        <meshStandardMaterial color="#666" metalness={0.4} roughness={0.4} />
-      </mesh>
-    </>
-  );
+  return <HardParts parts={monitorForm(part.dimMM)} bodyC={tint(part)} look={{ roughness: 0.5, metalness: 0.25 }} />;
 }
 
 function FanGeo({ part }: { part: ScenePart }) {
