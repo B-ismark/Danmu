@@ -39,7 +39,7 @@ import { currentRoomScene } from '@/lib/room-scene';
 import { useSettings, useStudio } from '@/lib/store';
 import { analyzeRoom } from '@/lib/clearance';
 import { movableFor, type SolveResult } from '@/lib/layout-solve';
-import { lockedForShuffle, shuffleBlockers, shuffleRefusal, type ShuffleRoom } from '@/lib/layout-shuffle';
+import { lockedForShuffle, movingGroupCount, shuffleBlockers, shuffleRefusal, type ShuffleRoom } from '@/lib/layout-shuffle';
 import { shuffleOffThread } from '@/lib/layout-offload';
 import { newLayout, roomStore } from '@/lib/storage';
 import {
@@ -301,10 +301,11 @@ export function IdeasPanel({
   }, [routeRoom, roomId]);
 
   const base = session?.base ?? null;
-  const anyMovable = useMemo(
-    () => (base ? movableFor(base.parts, lockedForShuffle(base.parts, base.pinned)).some(Boolean) : false),
+  const movable = useMemo(
+    () => (base ? movableFor(base.parts, lockedForShuffle(base.parts, base.pinned)) : []),
     [base],
   );
+  const anyMovable = movable.some(Boolean);
 
   // The search: while this page and the next are not full. One at a time, since
   // each is up to twelve solves in the arranging worker.
@@ -456,8 +457,8 @@ export function IdeasPanel({
   const refusal = useMemo(() => {
     if (!base || !exhausted || found > 0) return null;
     const blockers = shuffleBlockers(analyzeRoom(base.parts, base.room, { accessibility: stepFree, dimUnit }).issues);
-    return { ...shuffleRefusal(blockers), blocked: blockers.length > 0 };
-  }, [base, exhausted, found, stepFree, dimUnit]);
+    return { ...shuffleRefusal(blockers, movingGroupCount(base.parts, movable)), blocked: blockers.length > 0 };
+  }, [base, movable, exhausted, found, stepFree, dimUnit]);
 
   return (
     <div

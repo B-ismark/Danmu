@@ -106,7 +106,7 @@ table's. A photo scan that finds a double bed cut off by the photo's edge comes 
 or two nightstands, a fridge with doors that do not meet in the middle, or fat legs on a long
 table.
 
-### A starter room names its pieces as the Library does, and the Inspector header is one row — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+### A starter room names its pieces as the Library does, and the Inspector header is one row — merged to `main` in `b5414e0` (PR #217), NOT LOOKED AT
 
 The user's 2026-10-01 report: a seeded bedroom said **Queen bed** while the Library sells one
 **Bed**, and the Inspector spent three rows on a bed — its name, *Bed · Bed double*, and an
@@ -134,9 +134,6 @@ is the intended reflow, not a defect. A door reading *Appliances*, a radiator ho
 *fridge*. And one to judge rather than check: the card coming and going moves the Colour,
 Light and Floor/Wall rows below it. Press **Floor** on a floating lamp and the row jumps up
 by the card's height. Say whether that reads as a jump.
-
-**Gates.** `tests/seed-library-names.test.ts`, `tests/library-shelf.test.ts`,
-`tests/hover-card.test.tsx`, `tests/placement-banner.test.tsx`.
 
 **Where it rides.** `lib/scene-spec.ts` (`BED_LADDER`, the seeder's names, the TV rows
 built from `SCREENS`, `libraryShelf`) + `components/studio/Inspector.tsx` +
@@ -376,6 +373,29 @@ it should not chatter.
 surfaces. Restoring `aria-live` goes red there.
 
 ## Layout and Ideas
+
+### An Ideas panel that runs dry in a room with a group says the group moves as one — on `claude/amazing-davinci-m8zqys`, NOT LOOKED AT
+
+The user's call 2026-09-30: a group is one block to Ideas, and a large one leaves few
+places it fits with a way around it, so the panel can come back empty. It now says why,
+and what gives more: *Your group moves as one piece, and every layout it tried left
+something in the way. Ungroup it for more ideas, or look again.* Two groups read *Your
+groups each move…* and *Ungroup one…*. **Look again** stays.
+
+**Where to click.** A `t` room at 6 × 4. Select the dining table and its chairs, press
+**Group**, then **Ideas** and wait for it to run dry (three empty searches). Then keep
+one chair where it is (**Keep a piece where it is…** in the Ideas panel) and look again.
+
+**What right looks like.** The group sentence under *No ideas this time*, wrapping inside
+the card at 1024 px and on a phone. With a chair kept where it is the set does not move at
+all, so the ordinary sentence comes back (*Look again for a different try*). A room with a
+Room check finding keeps *Try Fix first* and says nothing about the group.
+
+**What wrong looks like.** *merged set* anywhere on screen. The group sentence in a room
+with no group, or one whose group is held. The sentence spilling past the card's edge.
+
+**Where it rides.** `lib/layout-shuffle.ts` (`shuffleRefusal`, `movingGroupCount`) +
+`components/studio/IdeasPanel.tsx`.
 
 *Owner: `layout`. The Shuffle item was a look rather than a check, and the look was taken on
 2026-08-30: Shuffle declined to close a 300–400 mm bedside gap, which **confirms the measured

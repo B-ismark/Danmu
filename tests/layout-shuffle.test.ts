@@ -22,8 +22,9 @@ import {
   DIVERSITY_PENALTY,
   REPEAT_SIMILARITY,
   shuffleRefusal,
+  movingGroupCount,
 } from '@/lib/layout-shuffle';
-import { defaultScene } from '@/lib/scene-spec';
+import { defaultScene, type ScenePart } from '@/lib/scene-spec';
 import { footprintForLayout, pointInFootprint, roomContainment, type LayoutId } from '@/lib/footprint';
 import { roleOf } from '@/lib/layout-rules';
 
@@ -510,6 +511,37 @@ describe('shuffleRoom — the offer, not the search', () => {
     // The empty list is the OTHER sentence, and it must not fall through to this one:
     // forcing that branch open crashes on `blockers[0]`, so the guard is load-bearing.
     expect(shuffleRefusal([]).title).toBe('No ideas this time');
+  });
+
+  it('a room with a group that moves says so, and what gives more ideas (user call 1B)', () => {
+    // Clean branch only: the group is one reason a clean room runs dry, and the
+    // sentence names it and the press that gives more. One group and several read
+    // differently ("it" / "one"), and none is the sentence that shipped before.
+    expect(shuffleRefusal([], 1).message).toContain('Your group moves as one piece');
+    expect(shuffleRefusal([], 1).message).toContain('Ungroup it for more ideas');
+    expect(shuffleRefusal([], 2).message).toContain('Your groups each move as one piece');
+    expect(shuffleRefusal([], 2).message).toContain('Ungroup one for more ideas');
+    expect(shuffleRefusal([], 0).message).not.toContain('group');
+    expect(shuffleRefusal([], 1).title).toBe('No ideas this time');
+    // A blocked room keeps its own sentence: the finding is what to fix first.
+    const issue = { title: 'Door blocked' } as unknown as Parameters<typeof shuffleRefusal>[0][number];
+    expect(shuffleRefusal([issue], 1).message).toContain('Try Fix first');
+    expect(shuffleRefusal([issue], 1).message).not.toContain('group');
+    // Inside the range the panel's other refusals already wrap at (93-169).
+    for (const n of [1, 2]) expect(shuffleRefusal([], n).message.length).toBeLessThanOrEqual(155);
+  });
+
+  it('counts the groups an idea moves whole, not a held set or a group of one', () => {
+    const at = (id: string, groupId?: string) => ({ id, groupId }) as unknown as ScenePart;
+    const parts = [at('a', 'g1'), at('b', 'g1'), at('c', 'g2'), at('d', 'g2'), at('e', 'g3'), at('f')];
+    // Both sets free, the lone g3 left after a delete, and an ungrouped piece.
+    expect(movingGroupCount(parts, [true, true, true, true, true, true])).toBe(2);
+    // g2 held (as `movableFor` answers for a set with a kept member): it does not move.
+    expect(movingGroupCount(parts, [true, true, false, false, true, true])).toBe(1);
+    expect(movingGroupCount(parts, [false, false, false, false, true, true])).toBe(0);
+    // Wired through the real `movableFor`: a kept chair holds its set.
+    const real = movableFor(parts, [false, false, true, false, false, false]);
+    expect(movingGroupCount(parts, real)).toBe(1);
   });
 
   it('a single solve is NOT reliably clean, which is why the pipeline exists', { timeout: 60_000 }, () => {

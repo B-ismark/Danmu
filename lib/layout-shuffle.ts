@@ -554,7 +554,25 @@ export function shuffleBlockers(issues: readonly ClearanceIssue[]): ClearanceIss
  *  offered sizes and nine reachable ones when this was Shuffle's toast: clean was 116
  *  at every size, blocked ran 116-155. The gallery's clean sentence is 107, and the
  *  blocked one is one character shorter than it was. */
-export function shuffleRefusal(blockers: readonly ClearanceIssue[]): { title: string; message: string } {
+export function shuffleRefusal(
+  blockers: readonly ClearanceIssue[],
+  groups = 0,
+): { title: string; message: string } {
+  // A group moves whole (`rigidSets`), and a large one leaves few places it fits with a
+  // way around it — measured at none in three presses on a `t` (§ H.6.5, "Fewer ideas
+  // where the set is large"). The user's call: say so, and say what gives more. Only on
+  // the clean branch: a blocked room has a finding to fix first, and that sentence is
+  // already the longest here. The words are the app's own (Group / Ungroup), not
+  // "merged set". `groups` is `movingGroupCount`, so a set held by a kept piece, which
+  // does not move at all, is not one that "moves as one".
+  if (blockers.length === 0 && groups > 0)
+    return {
+      title: 'No ideas this time',
+      message:
+        groups === 1
+          ? 'Your group moves as one piece, and every layout it tried left something in the way. Ungroup it for more ideas, or look again.'
+          : 'Your groups each move as one piece, and every layout it tried left something in the way. Ungroup one for more ideas, or look again.',
+    };
   if (blockers.length === 0)
     return {
       title: 'No ideas this time',
@@ -568,6 +586,17 @@ export function shuffleRefusal(blockers: readonly ClearanceIssue[]): { title: st
       (more > 0 ? ` and ${more} more` : '') +
       ', and ideas only include rooms with nothing in the way. Try Fix first.',
   };
+}
+/** How many groups an idea moves whole: sets of two or more pieces that are free to
+ *  move. `movable` is `movableFor`'s answer, which holds a whole set by any one member,
+ *  so a set is counted entirely or not at all. A group left with one piece (the rest
+ *  deleted) is not a set anything moves with. */
+export function movingGroupCount(parts: readonly ScenePart[], movable: readonly boolean[]): number {
+  const size = new Map<string, number>();
+  parts.forEach((p, i) => {
+    if (p.groupId && movable[i]) size.set(p.groupId, (size.get(p.groupId) ?? 0) + 1);
+  });
+  return [...size.values()].filter((n) => n >= 2).length;
 }
 /** The three reasons a piece may not move, for a whole-room shuffle. A thin re-export
  *  of the solver's own composer so a caller does not have to know that a shuffle

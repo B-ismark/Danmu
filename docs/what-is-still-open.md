@@ -3949,7 +3949,14 @@ measure in a frame.
   navigation alone. The set is a 2.3 × 1.6 m block, and the T has few places to put it
   and still leave a way through. That is the honest answer to a merge. *Answered, the
   user's call 2026-09-30:* an empty Ideas panel in a room with a merged set says that the
-  set moves as one, and that ungrouping it gives more ideas. Not built yet.
+  set moves as one, and that ungrouping it gives more ideas. BUILT 2026-10-02:
+  `shuffleRefusal(blockers, groups)` says "Your group moves as one piece … Ungroup it for
+  more ideas, or look again" (125 characters; the plural is 131), in the app's own words
+  rather than "merged set". `groups` is `movingGroupCount` over `movableFor`'s answer, so a
+  set held by a kept piece, which does not move at all, gets the ordinary sentence, and so
+  does a group left with one piece. Only on the clean branch: a blocked room's sentence
+  names a finding to fix first and is already the longest here. Tested both ways through
+  the panel (`tests/shuffle-refusal-wired.test.tsx`); 5 of 5 mutants caught.
 - **A merged member standing on a piece outside its set follows that piece**, and so leaves
   the set's shape (`carryRiders` runs after every pass). What stands on something goes
   where it goes.
