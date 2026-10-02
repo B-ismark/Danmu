@@ -1909,6 +1909,12 @@ const PARAMETRIC_SHAPES = new Set<Shape>([
   // with. `bed-single` stays out: its band stops at 1200, below `SLEEPS_TWO_MM`, so its
   // pillow count cannot change and there is nothing for a scale to distort.
   'bed-double', 'fridge', 'desk-standard',
+  // …and `desk-l`, for the dining table's reason one shape over: its side panel and two
+  // legs are `surfacePostsLocal`'s real 18 mm and 50 mm, the rectangles the tuck rule
+  // stops a chair at. Stretched from the Library's 1600, a 2600 mm L drew 81 mm legs
+  // centred 65 mm in from the edge while the rule kept the chair out of 50 mm ones
+  // centred 40 mm in.
+  'desk-l',
 ]);
 export function isParametric(shape: Shape): boolean {
   return PARAMETRIC_SHAPES.has(shape);

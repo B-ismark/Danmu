@@ -123,6 +123,15 @@ const CAPS: CapRow[] = [
     },
     what: 'a dining leg',
   },
+  {
+    // The same reason one shape over: the L's legs are the tuck rule's real 50 mm posts.
+    shape: 'desk-l', axis: 0,
+    read: (mm) => {
+      const [, leg] = surfacePostsLocal('desk-l', false, mm / 1000, authoredDim('desk-l')[1] / 1000);
+      return leg.x1 - leg.x0;
+    },
+    what: 'a desk leg',
+  },
 ];
 
 /** Worst disagreement between drawing at the stored size and drawing at the authored

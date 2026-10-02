@@ -20,7 +20,6 @@ import {
   lightFor,
   shoeRow,
   SHOE_TIER_TILT,
-  windowPanes,
   moduleCount,
   moduleRangeFor,
   type ModuleRange,
@@ -32,7 +31,6 @@ import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
 import { floorLampForm, tableLampForm, type LampForm } from '@/lib/lamp-form';
 import { armchairForm, diningChairForm, officeChairForm, ottomanForm } from '@/lib/chair-form';
-import { DINING_LEG, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from '@/lib/foot-cells';
 import {
   bedForm,
   curtainCloth,
@@ -52,6 +50,11 @@ import {
 } from '@/lib/soft-goods';
 import {
   acUnitForm,
+  coffeeTableForm,
+  laptopForm,
+  windowForm,
+  deskForm,
+  diningTableForm,
   airPurifierForm,
   chestFreezerForm,
   doorForm,
@@ -964,70 +967,13 @@ function BedGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 }
 
 // ─── Desks ──────────────────────────────────────────────────────────────
+/** Drawn at its stored size by `deskForm`, straight or L. THE L IS BUILT INSIDE `dimMM`:
+ *  its return arm once ran a further `d * 0.9` past the box's right edge, 2860 mm of desk
+ *  against a declared 1600, so the plan, picking and every clearance answer reserved
+ *  1260 mm less floor than the 3D tab drew. The proportions live in `lib/foot-cells.ts`,
+ *  where the plan's outline and the containment and tuck tests read them too. */
 function DeskGeo({ part, locked, lShape }: { part: ScenePart; locked: boolean; lShape: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const top = body(part, locked);
-  const leg = shade(top, -25);
-
-  // THE L IS BUILT INSIDE `dimMM`, and it used to be built outside it.
-  //
-  // The return arm was `size={[d * 0.9, …]}` at `position={[w / 2 + (d * 0.9) / 2, …]}`,
-  // which starts at the box's right edge and runs a further `d * 0.9` beyond it — while
-  // the main tabletop was already the full `w x d`, so there was no room inside the
-  // declared footprint for an L in the first place. At the library size that drew
-  // 2860 mm of desk against a `dimMM` of 1600: `tests/footprint-fidelity.test.tsx`
-  // measured `overX` 1260 mm, and the ratio held at every size (0.75 / 0.79 / 0.76), so
-  // it was never a rounding artefact at one end of the range.
-  //
-  // It is not cosmetic, and the plan is the half that shows it: `footFromPart` gives one
-  // box per piece, so `PlanView` drew 1600 mm while the 3D tab drew 2860. Everything
-  // reading that box — `plan-hit` picking, `footOverlap`, `outsideShare`, every clearance
-  // and collision answer, and the solver's own cost — reserved 1600 mm of floor for a
-  // piece occupying 2860. Suggest could park something in the other 1260 and score it
-  // clean. That is CLAUDE.md rule 2's corollary exactly: a renderer with its own idea of
-  // how big the piece is, in a TSX file where no test could reach the arithmetic.
-  //
-  // So the long arm now takes `armD` of the depth and the return takes the rest, both
-  // within `w x d`. `desk-standard` is untouched by construction: at `lShape === false`
-  // `armD === d` and `armZ === 0`, which is the tabletop this function always drew.
-  //
-  // The proportions live in `lib/foot-cells.ts` now, where the plan's outline and every
-  // containment and collision test read them too — so the notch the room lets a wall
-  // corner into is the notch this draws.
-  const armD = lShape ? d * ELL_ARM_DEPTH : d;
-  const armZ = -d / 2 + armD / 2;
-  const armW = w * ELL_RETURN_WIDTH;
-
-  return (
-    <>
-      {/* tabletop with a subtle lip edge — the long arm, against the back edge */}
-      <Box surface="wood" size={[w, 0.045, armD]} position={[0, h - 0.022, armZ]} color={top} roughness={0.65} />
-      {lShape && (
-        /* the return, filling the depth the long arm leaves at the right-hand end */
-        <Box surface="wood"
-          size={[armW, 0.045, d - armD]}
-          position={[w / 2 - armW / 2, h - 0.022, -d / 2 + armD + (d - armD) / 2]}
-          color={top}
-          roughness={0.65}
-        />
-      )}
-      {/* The side panel on the left, then the right rear and right front legs (the
-          front one under the return in L form) — `surfacePostsLocal`'s rectangles, the
-          ones a tucked chair is kept out of. The panel carries that end of the top, so
-          it runs floor to underside: at 0.82h it stopped 90 mm short and the desktop's
-          left end sat on air; the legs stop 5 mm higher, under the top's lip. */}
-      {surfacePostsLocal(lShape ? 'desk-l' : 'desk-standard', false, w, d).map((r, i) => {
-        const tall = i === 0 ? h - 0.045 : h - 0.04;
-        return (
-          <Box key={i} surface="wood" size={[r.x1 - r.x0, tall, r.z1 - r.z0]} position={[(r.x0 + r.x1) / 2, tall / 2, (r.z0 + r.z1) / 2]} color={leg} roughness={i === 0 ? 0.68 : 0.7} />
-        );
-      })}
-      {/* cable management rail under back edge */}
-      <Box surface="wood" size={[w * 0.75, 0.03, 0.04]} position={[0, h - 0.06, -d / 2 + 0.05]} color={shade(leg, 8)} roughness={0.6} />
-    </>
-  );
+  return <HardParts parts={deskForm(part.dimMM, lShape)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.65 }} />;
 }
 
 // ─── Tech / Appliances ──────────────────────────────────────────────────
@@ -1181,76 +1127,16 @@ function CurtainGeo({ part }: { part: ScenePart }) {
 }
 
 // ─── Tables ─────────────────────────────────────────────────────────────
-/** Four legs, four aprons and a top — a table you walk all the way round. Leg and
- *  apron sizes are fixed rather than proportional, like the desk's, because this
- *  shape is scaled per axis rather than as a group. */
+/** Drawn at its stored size by `diningTableForm`: a top eased underneath, an apron set
+ *  back from the legs' faces, four square legs on felt glides. */
 function DiningTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const top = body(part, locked);
-  const frame = shade(top, -20);
-  const topT = 0.035;
-  const apron = 0.08;
-  // Leg centres, inset so a leg's outer faces sit 40 mm inside the top's edge. The legs
-  // themselves are `surfacePostsLocal`'s, the rectangles a tucked chair is kept out of.
-  const lx = w / 2 - DINING_LEG.inset - DINING_LEG.size / 2;
-  const lz = d / 2 - DINING_LEG.inset - DINING_LEG.size / 2;
-  return (
-    <>
-      <Box surface="wood" size={[w, topT, d]} position={[0, h - topT / 2, 0]} color={top} roughness={0.65} />
-      {/* aprons on the legs' centre lines, so each rail's ends run into a leg */}
-      {[-1, 1].map((s) => (
-        <Box key={`ax${s}`} surface="wood" size={[2 * lx, apron, 0.022]} position={[0, h - topT - apron / 2, s * lz]} color={frame} roughness={0.7} />
-      ))}
-      {[-1, 1].map((s) => (
-        <Box key={`az${s}`} surface="wood" size={[0.022, apron, 2 * lz]} position={[s * lx, h - topT - apron / 2, 0]} color={frame} roughness={0.7} />
-      ))}
-      {surfacePostsLocal('desk-standard', true, w, d).map((r, i) => (
-        <Box key={i} surface="wood" size={[r.x1 - r.x0, h - topT, r.z1 - r.z0]} position={[(r.x0 + r.x1) / 2, (h - topT) / 2, (r.z0 + r.z1) / 2]} color={frame} roughness={0.7} />
-      ))}
-    </>
-  );
+  return <HardParts parts={diningTableForm(part.dimMM)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.65 }} />;
 }
 
+/** Drawn by `coffeeTableForm`: a top eased underneath, an apron, tapered legs in brass
+ *  ferrules and a lower shelf. */
 function CoffeeTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const top = body(part, locked);
-  const frame = shade(top, -20);
-  const topT = h * 0.15;
-  // Proportional, not capped: this shape is group-scaled on a resize (§ 36).
-  const apron = h * 0.14;
-  return (
-    <>
-      {/* top surface */}
-      <Box surface="wood" size={[w, topT, d]} position={[0, h - topT / 2, 0]} color={top} roughness={0.65} />
-      {/* aprons — the rails under the top that tie the legs together. Without them
-          the top read as a slab resting on four sticks. Drawn on the legs' centre
-          lines, so each rail's ends run into a leg. */}
-      {[-1, 1].map((s) => (
-        <Box key={`ax${s}`} surface="wood" size={[w - 0.06, apron, 0.02]} position={[0, h - topT - apron / 2, s * (d / 2 - 0.03)]} color={frame} roughness={0.7} />
-      ))}
-      {[-1, 1].map((s) => (
-        <Box key={`az${s}`} surface="wood" size={[0.02, apron, d - 0.06]} position={[s * (w / 2 - 0.03), h - topT - apron / 2, 0]} color={frame} roughness={0.7} />
-      ))}
-      {/* lower shelf, corner to corner between the leg centres so its corners sit
-          INSIDE the legs. At 0.88w it stopped 13 mm short of them (55 mm at the
-          largest size) and hung in mid-air. */}
-      <Box surface="wood" size={[w - 0.06, h * 0.06, d - 0.06]} position={[0, h * 0.28, 0]} color={frame} roughness={0.7} />
-      {/* four legs, floor to the underside of the top — they stopped at 0.82h, 13 mm
-          below it, so the top floated */}
-      {[
-        [-w / 2 + 0.03, -d / 2 + 0.03],
-        [w / 2 - 0.03, -d / 2 + 0.03],
-        [-w / 2 + 0.03, d / 2 - 0.03],
-        [w / 2 - 0.03, d / 2 - 0.03],
-      ].map(([x, z], i) => (
-        <Box key={i} surface="wood" size={[0.045, h - topT, 0.045]} position={[x, (h - topT) / 2, z]} color={frame} roughness={0.7} />
-      ))}
-    </>
-  );
+  return <HardParts parts={coffeeTableForm(part.dimMM)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.65 }} />;
 }
 
 /** Drawn at its own size by `sideTableForm`: a square top on a turned column and a
@@ -1305,86 +1191,35 @@ function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
   return <HardParts parts={mirrorForm(part.dimMM)} bodyC={frame} look={look} />;
 }
 
-// Window — frame + translucent glass + cross mullions. Wall-mounted (centre-
-// anchored like mirror/painting); a wider window gains vertical mullions.
+/** Drawn at its stored size by `windowForm`: a frame and casement sashes in the opening,
+ *  casing, sill and apron on the plaster round it. The glass is drawn here, translucent and
+ *  casting nothing, because the sun reaches the room through this opening alone. */
 function WindowGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const h = part.dimMM[2] / 1000;
-  const frame = tint(part);
-  // One pane per ~0.7m of width, separated by slim mullions. `windowPanes` rather than
-  // the expression, because a count off an absolute pitch is § 36's class and the
-  // arithmetic has to sit where a test can reach it.
-  const panes = windowPanes(part.dimMM[0]);
-  const paneW = w / panes;
+  const { parts, glass } = windowForm(part.dimMM);
   return (
     <>
-      {/* outer frame */}
-      {/* head and foot rails run BETWEEN the stiles; overlapping them, each corner drew
-          the frame's front, back and top faces twice */}
-      <Box size={[w, 0.05, 0.06]} position={[0, h / 2 + 0.025, 0]} color={frame} roughness={0.7} />
-      <Box size={[w, 0.05, 0.06]} position={[0, -h / 2 - 0.025, 0]} color={frame} roughness={0.7} />
-      <Box size={[0.05, h + 0.1, 0.06]} position={[-w / 2 - 0.025, 0, 0]} color={frame} roughness={0.7} />
-      <Box size={[0.05, h + 0.1, 0.06]} position={[w / 2 + 0.025, 0, 0]} color={frame} roughness={0.7} />
-      {/* sill */}
-      <Box size={[w + 0.12, 0.03, 0.12]} position={[0, -h / 2 - 0.065, 0.03]} color={frame} roughness={0.6} />
-      {/* mullions between panes */}
-      {Array.from({ length: panes - 1 }).map((_, i) => (
-        <Box key={i} size={[0.03, h, 0.04]} position={[-w / 2 + (i + 1) * paneW, 0, 0]} color={frame} roughness={0.7} />
+      <HardParts parts={parts} bodyC={tint(part)} look={{ roughness: 0.7 }} />
+      {glass.map((g, i) => (
+        <mesh key={i} position={[(g.x0 + g.x1) / 2, (g.y0 + g.y1) / 2, g.z]}>
+          <planeGeometry args={[g.x1 - g.x0, g.y1 - g.y0]} />
+          <meshStandardMaterial color={DETAIL.windowGlass} transparent opacity={0.32} roughness={0.1} metalness={0.1} side={2} />
+        </mesh>
       ))}
-      {/* glass — sky-tinted, translucent both sides */}
-      <mesh>
-        <planeGeometry args={[w, h]} />
-        <meshStandardMaterial color="#BFD9EC" transparent opacity={0.32} roughness={0.1} metalness={0.1} side={2} />
-      </mesh>
     </>
   );
 }
 
-// Open clamshell laptop — rests on a desk/surface (floor-anchored, tabletop-prone).
+/** Drawn by `laptopForm`: a base with its keyboard, trackpad and hinge, and the lid
+ *  turned back on the hinge. Rests on a desk or any surface. */
 function LaptopGeo({ part }: { part: ScenePart }) {
-  const w = part.dimMM[0] / 1000;
-  const d = part.dimMM[1] / 1000;
-  const h = part.dimMM[2] / 1000; // open height (lid raised)
-  // Was a local `const body`, which shadowed the body() helper above and pinned
-  // the chassis to one literal — so a laptop could not be recoloured either.
+  const { base, lid, hinge } = laptopForm(part.dimMM);
   const shell = tint(part);
-  const deck = shade(shell, -10);
+  const look: HardLook = { roughness: 0.45, metalness: 0.4 };
   return (
     <>
-      {/* chassis — tapered: thin front lip, thicker back (reads as a real base) */}
-      <Box size={[w, 0.012, d]} position={[0, 0.006, d * 0.12]} color={shell} roughness={0.45} metalness={0.4} />
-      <Box size={[w - 2 * SEAM, 0.022, d * 0.7]} position={[0, 0.011, -d * 0.12]} color={shell} roughness={0.45} metalness={0.4} />
-      {/* recessed keyboard well */}
-      <Box size={[w * 0.9, 0.006, d * 0.5]} position={[0, 0.016, -d * 0.1]} color="#202327" roughness={0.6} />
-      {/* key rows — a few thin ridges hint at keys without thousands of meshes */}
-      {[0, 1, 2, 3].map((r) => (
-        // 1 mm proud of the deck: flush, every key's top was the deck's own plane
-        <Box key={r} size={[w * 0.84, 0.004, d * 0.07]} position={[0, 0.021, -d * 0.26 + r * d * 0.11]} color="#34383d" roughness={0.7} />
-      ))}
-      {/* trackpad */}
-      <mesh position={[0, 0.019, d * 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[w * 0.32, d * 0.24]} />
-        <meshStandardMaterial color="#2b2e33" roughness={0.35} metalness={0.2} />
-      </mesh>
-      {/* hinge barrel across the back */}
-      <mesh position={[0, 0.02, -d / 2 + 0.01]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.01, 0.01, w * 0.94, 12]} />
-        <meshStandardMaterial color="#202327" roughness={0.5} metalness={0.4} />
-      </mesh>
-      {/* hinged lid */}
-      <group position={[0, 0.02, -d / 2 + 0.01]} rotation={[-0.34, 0, 0]}>
-        <Box size={[w, h, 0.01]} position={[0, h / 2, 0]} color={deck} roughness={0.4} metalness={0.45} />
-        {/* bezel + lit screen */}
-        <Box size={[w * 0.97, h * 0.94, 0.004]} position={[0, h / 2, 0.006]} color="#0E0E10" roughness={0.6} />
-        <mesh position={[0, h / 2 + 0.004, 0.009]}>
-          <planeGeometry args={[w * 0.9, h * 0.82]} />
-          <meshStandardMaterial color="#1b2740" emissive="#34507e" emissiveIntensity={0.45} roughness={0.18} metalness={0.1} />
-        </mesh>
-        {/* camera dot */}
-        <mesh position={[0, h * 0.95, 0.009]}>
-          <circleGeometry args={[0.003, 10]} />
-          <meshStandardMaterial color="#111" />
-        </mesh>
+      <HardParts parts={base} bodyC={shell} look={look} />
+      <group position={[0, hinge.y, hinge.z]} rotation={[-hinge.tilt, 0, 0]}>
+        <HardParts parts={lid} bodyC={shade(shell, -10)} look={look} />
       </group>
     </>
   );

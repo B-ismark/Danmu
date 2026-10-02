@@ -75,7 +75,7 @@ import type { Category, Shape, ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { WALK_RADIUS } from './clearance-field';
 import { footFromPart, footOverlap, frontVector, localToWorld, obbGap, polygonArea, worldToLocal, type Foot, type OBB } from './geometry';
-import { surfacePostsLocal, type LocalRect } from './foot-cells';
+import { COFFEE_SHELF, DESK_TOP, DINING_TOP, surfacePostsLocal, type LocalRect } from './foot-cells';
 import { dimRangeFor } from './dimension-ranges';
 import { DINING_CHAIR, OFFICE_CHAIR } from './chair-form';
 
@@ -916,15 +916,16 @@ function seatTuckMM(shape: Shape, h: number): number {
 function surfaceKneeMM(shape: Shape, role: Role, h: number): number {
   switch (shape) {
     // Drawn as a dining table when that is its role, and as a desk otherwise — the
-    // renderer asks `roleOf` the same question. The dining table's apron hangs 80 mm
-    // under a 35 mm top; the desk's cable rail hangs lowest, 75 mm under its top.
+    // renderer asks `roleOf` the same question. The dining table's apron hangs from the
+    // ease under its top (`DINING_TOP`, 115 mm in all); a desk's pencil drawer and cable
+    // tray both stop `DESK_TOP.hang` under its top.
     case 'desk-standard':
-      return role === 'dining-table' ? h - 115 : h - 75;
+      return role === 'dining-table' ? h - Math.round((DINING_TOP.top + DINING_TOP.ease + DINING_TOP.apron) * 1000) : h - Math.round(DESK_TOP.hang * 1000);
     case 'desk-l':
-      return h - 75;
+      return h - Math.round(DESK_TOP.hang * 1000);
     // The lower shelf's underside, at a quarter of the height.
     case 'coffee-table':
-      return h * 0.25;
+      return h * COFFEE_SHELF.lo;
     default:
       return 0;
   }

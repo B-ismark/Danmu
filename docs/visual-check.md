@@ -757,12 +757,17 @@ free to add them."* They were boxes, and boxes read as furniture. Now they are c
   were tipped 10° and stood 90 mm clear of the mattress at the headboard end — the floating
   pillows reported 2026-10-02, fixed on `claude/affectionate-ritchie-ilawx1`). The duvet rolls
   over the mattress's edge and hangs to a level hem, and a sheet is turned back over it at
-  the head. A scatter cushion stands in front of each pillow, in a tone that stays with the
-  bed across a reload, its back resting on the pillow's front (it leaned on nothing once the
-  pillows lay flat — the floating cushions reported 2026-10-02, second report — and the
-  pillows themselves were 75 mm thin, 22 mm above the sheet; they loft 27% of the mattress
-  height now, 80–180 mm). Look from the side: no daylight between cushion and pillow, and
-  the pillow shows above the turned sheet. The mattress is now its own layer under the duvet.
+  the head. A scatter cushion lies back on each pillow, in a tone that stays with the bed
+  across a reload, its foot on the turned sheet and its back on the pillow (it leaned on
+  nothing once the pillows lay flat — the floating cushions reported 2026-10-02, second
+  report — and the pillows themselves were 75 mm thin, 22 mm above the sheet; they loft 27%
+  of the mattress height now, 80–180 mm). **Then it stood too upright** (third report, same
+  day): at the sofa's 17° lean it touched the pillow low on the cushion's face with its
+  centre behind that point, so it was balancing rather than leaning, and read as standing in
+  the air. It now lies back until its centre is 15 mm in front of where the pillow holds it
+  — about 50° on a Library double bed, more on a low bed, less on a tall one. Look from the
+  side: no daylight between cushion and pillow, the cushion's top resting ON the pillow
+  rather than standing proud of it, and the pillow showing above the turned sheet. The mattress is now its own layer under the duvet.
 - **The sofa and armchair.** Seat and back cushions are plump with rounded edges, and the
   backs lean back. A sofa tall enough gets a scatter cushion in each end seat. The armchair
   gets one.
@@ -956,6 +961,10 @@ dark enough that the slats and stretchers read only faintly in a dim room.
   cushions then floated** (second report, same day): they still leaned toward where the
   tipped pillow had been, and the flat pillow was 22 mm above the sheet. Pillows loft 27% of
   the mattress height now (80–180 mm), and each cushion rests on its pillow's front.
+  **Third report, same day:** they still stood. A cushion leaned 17° against a flat pillow
+  touches it below its own centre, so nothing is holding it up; each one now lies back on its
+  pillow as far as it would fall, searched per bed (`scatterOnPillow` in
+  `lib/soft-goods.ts`).
 
 **The sizes did not change.** All three stay inside the box the plan draws at every size.
 
@@ -972,9 +981,11 @@ and a deep one four, and the valve stands clear of the last section. The bed's p
 on the mattress with no light under them from the side. *Wrong* looks like a tube floating
 off the feet, a valve buried in a section, an ottoman leg outside the base, or any pillow
 with a gap beneath it. **One to judge on purpose:** a pillow lying flat reads as a made bed;
-say if it reads as too flat beside the scatter cushion standing in front of it.
+say if it reads as too flat beside the scatter cushion lying back on it. And the cushion's
+own lean is a judgement too: it is set by when the pillow would hold it, not by taste, so say
+if ~50° reads as slumped.
 
-### A painting, two mirrors and an air purifier drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+### A painting, two mirrors and an air purifier drawn as the real objects — merged to `main` in `a1f1755` (PR #227), NOT LOOKED AT
 
 **Round six of the realism ask** (`lib/hard-goods.ts`):
 
@@ -1007,6 +1018,46 @@ looks like glass in front of its frame, a corner open to the wall, or a mat thic
 side. **Two to judge on purpose:** whether the glass reads as a mirror or as grey card (the
 room has no reflections, so it is a pale silvered sheen, not a reflection), and whether the
 painting's colour fields read as art or as a placeholder.
+
+### Two tables, two desks, a window and a laptop drawn as the real objects — on `claude/affectionate-ritchie-ilawx1`, NOT LOOKED AT
+
+**Round seven of the realism ask** (`lib/hard-goods.ts`):
+
+- **Coffee table.** Four slim posts standing in brass ferrules, aprons under a top with a
+  soft ease, and a shelf low between the legs. It was a slab on four sticks.
+- **Dining table** (a table by category, drawn at its real size). Square legs on dark glides,
+  20 mm aprons set in from the legs' faces, a top with an ease under it. The legs are the
+  same rectangles the chair-tuck rule checks, as they were.
+- **Desk and L-desk.** A side panel at one end, two legs at the other, a drawer with a
+  brass pull between them, and a dark cable tray under the back. The L-desk has the same
+  stack on both arms. Its legs are now drawn at their real size when you stretch it, the
+  same as the tuck rule assumes.
+- **Window.** Casing round the opening, a sill that reaches into the room past the frame,
+  an apron under the sill, a frame, and casement sashes, one per `windowPanes` width,
+  each with a brass handle and a mullion between them. The glass is a pale translucent
+  sheet that lets the light through and casts no shadow.
+- **Laptop.** A base on four rubber feet with a keyboard of 12 × 5 keys, a space-bar row and
+  a trackpad, a hinge barrel along the back, and a lid in a darker shade of the piece leaning
+  back with a bezel, screen and camera. Its top edge is now exactly the piece's height; it
+  used to stand 7 mm over.
+
+**The sizes did not change.** Every one still measures the box the plan draws, except the
+laptop's screen, which leans behind the base as it always did (69 mm at the Library size).
+
+**Where to click.** Add each from the Library. Stretch the dining table and desk long and
+short, the L-desk both ways, the window wide (to see two, three, four sashes) and tall.
+Recolour each one. Push a dining chair under the table and an office chair under the desk.
+Turn the sun mood on and look at the window's light patch on the floor.
+
+**What right looks like.** Legs meet the floor on their glides or ferrules with nothing
+floating. The aprons and the drawer sit under the top with no gap and no wood showing
+through. A chair tucks under the dining table and the desk exactly as far as before. The
+window's light still lands on the floor through the glass, with the sash bars' shadows in
+it. Laptop keys sit on the deck in even rows. *Wrong* looks like a leg poking through the
+top, a drawer front over the leg, a sill shorter than the frame, glass casting a solid
+shadow, or the laptop's lid coming loose from its hinge when the piece is stretched.
+**Two to judge on purpose:** whether the window's glass reads as glass or as a blue panel,
+and whether the cable tray under the desk reads as a tray or as clutter.
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 

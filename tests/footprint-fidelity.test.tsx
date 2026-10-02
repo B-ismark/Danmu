@@ -389,10 +389,11 @@ describe('what a shape actually occupies, against the one box every consumer rea
     // known limitation and quietly permits a 260 mm regression forever.
     //
     // Physical rather than a slip, and the distinction is why it is 70 and not 260. The
-    // lid is hinged at the back edge (`-d / 2 + 0.01`) and tilted -0.34 rad, so an OPEN
-    // screen leans behind the base — which is what a real laptop does. `dimMM`'s depth
-    // describes the base, so the lid's sweep is outside it by 68.1 mm at the library size
-    // and the ratio grows with the piece (44.7 / 68.1 / 94.8 across min / lib / max).
+    // lid is hinged at the back edge (`-d / 2 + 0.05 d`, `laptopForm`) and tilted -0.34
+    // rad, so an OPEN screen leans behind the base — which is what a real laptop does.
+    // `dimMM`'s depth describes the base, so the lid's sweep is outside it by 69.1 mm at
+    // the library size and the ratio grows with the piece (46.5 / 69.1 / 94.9 across
+    // min / lib / max).
     // Closing it would mean either standing the screen up or restating the depth; both
     // are worse than recording 70 mm of leaning screen. Found BY this gate on its first
     // run, not before it — it sat under the eyeball threshold used to draft the table.
@@ -426,7 +427,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
     'bed-single': [1.0, 1.01, 1.4],
     'bed-double': [1.0, 1.01, 1.4],
     monitor: [1.0, 1.5, 0.98],
-    laptop: [1.0, 1.4, 1.04],
+    laptop: [1.0, 1.29, 1.0],
     // Depth 2.0: a lever stands `LEVER_PROUD` (50 mm) off the face of a 50 mm leaf, which
     // is what a real one does — the panelled door of `lib/hard-goods.ts` draws it to scale
     // where the old slab drew a 20 mm stub at 1.5.
