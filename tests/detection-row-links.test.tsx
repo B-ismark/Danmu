@@ -64,10 +64,26 @@ describe('DetectionRow — same piece', () => {
   it('shows a settled link instead of the question, with Unlink', () => {
     const unlink = vi.fn();
     render(<DetectionRow {...props({ repeatOf: bedN, sameAs: bedN, onUnlink: unlink })} />);
-    expect(screen.getByText('Same bed as on Wall 1')).toBeTruthy();
+    expect(screen.getByText(/^Same bed as on Wall 1/)).toBeTruthy();
     expect(screen.queryByText('Yes, same one')).toBeNull();
     fireEvent.click(screen.getByText('Unlink'));
     expect(unlink).toHaveBeenCalledTimes(1);
+  });
+
+  it('wears its piece’s tick: kept or left out, on the button and in the line', () => {
+    const { rerender } = render(<DetectionRow {...props({ sameAs: bedN, confirmed: true })} />);
+    expect(screen.getByRole('button', { name: 'Keep bed' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Same bed as on Wall 1 · kept')).toBeTruthy();
+    rerender(<DetectionRow {...props({ sameAs: bedN, confirmed: false })} />);
+    expect(screen.getByRole('button', { name: 'Keep bed' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText('Same bed as on Wall 1 · left out')).toBeTruthy();
+  });
+
+  it('says "Built once" only while the piece is in the room', () => {
+    const { rerender } = render(<DetectionRow {...props({ d: bedN, index: 0, confirmed: true, alsoSeenOn: ['e'] })} />);
+    expect(screen.getByText('Also seen on Wall 2. Built once')).toBeTruthy();
+    rerender(<DetectionRow {...props({ d: bedN, index: 0, confirmed: false, alsoSeenOn: ['e'] })} />);
+    expect(screen.getByText('Also seen on Wall 2')).toBeTruthy();
   });
 
   it('says where else a kept piece was seen', () => {

@@ -803,6 +803,14 @@ own row — unticking or deleting it — **hands the piece to its next sighting*
 (`handOver`), which is kept in its place; the removed row is left unlinked rather than
 pointed at the heir, so removing every sighting in turn takes the piece out instead of
 handing it back.
+**A linked row wears its piece's tick** (`pieceRow`): its own is always off, which read
+as "this bed is not in your room" on every wall but the first, so the row, its tag on
+the photo and its line (*"Same bed as on Wall 1 · kept"* / *"· left out"*) all show the
+tick of the row it is linked to, and its model line names the model that row is built
+as. Pressing that tick from the linked row switches the **piece** on or off, with no
+hand-over — unticking the bed from another view of it means "no bed" — and the link
+stays, so ticking any of its rows brings the same piece back. Deleting a row whose
+piece is already left out hands its links on without ticking the heir.
 
 A link adds **placement and nothing else** — the size stays the catalogue's (rule 2).
 At Continue, `withSeenAt` writes each kept floor piece's combined spot as `seenAt`,

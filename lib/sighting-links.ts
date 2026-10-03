@@ -41,6 +41,14 @@ export function linkedTo(dets: readonly Detection[], i: number): number | null {
   return j >= 0 && j !== i ? j : null;
 }
 
+/** The row whose tick decides whether row `i`'s piece is in the room: the row it is
+ *  linked to, or `i` itself. A linked row is never built, so its own tick says nothing
+ *  about the piece; the review list shows this row's tick on it instead, so a person
+ *  looking at Wall 2 can see the bed is kept without going back to Wall 1. */
+export function pieceRow(dets: readonly Detection[], i: number): number {
+  return linkedTo(dets, i) ?? i;
+}
+
 /** Every row linked to row `i`, in list order. */
 export function sightingsOf(dets: readonly Detection[], i: number): number[] {
   const uid = dets[i]?.uid;

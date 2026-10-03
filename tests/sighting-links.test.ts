@@ -19,6 +19,7 @@ import {
   withSeenAt,
   withoutRow,
   handOver,
+  pieceRow,
 } from '@/lib/sighting-links';
 import { refineDetections, type CalMap } from '@/lib/detect-refine';
 import { keptAtFirst } from '@/lib/repeat-sightings';
@@ -115,6 +116,13 @@ describe('linking', () => {
     expect('sameAs' in second.dets[2]).toBe(false);
     // And the last one has nothing to hand on: the bed can be taken out.
     expect(handOver(second.dets, 2).heir).toBeNull();
+  });
+
+  it('answers a linked row’s tick from the row it is linked to, and any other row’s from itself', () => {
+    const linked = linkSighting(linkSighting([bedN, lampE, bedE, bedS], 2, 0), 3, 0);
+    expect([0, 1, 2, 3].map((i) => pieceRow(linked, i))).toEqual([0, 1, 0, 0]);
+    // A link to a row that is gone reads as its own piece, so its own tick shows.
+    expect(pieceRow([row({ uid: 'x', category: 'bed', sameAs: 'nobody' })], 0)).toBe(0);
   });
 
   it('reads a link to a row that is gone as no link', () => {

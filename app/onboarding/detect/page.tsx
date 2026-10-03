@@ -46,7 +46,7 @@ import {
 } from '@/lib/review-history';
 import { shouldAutoConfirm } from '@/lib/detect-confidence';
 import { findRepeats, keptAtFirst } from '@/lib/repeat-sightings';
-import { handOver, linkCandidates, linkSighting, linkedTo, sightingsOf, unlinkSighting, withSeenAt, withoutRow } from '@/lib/sighting-links';
+import { handOver, linkCandidates, linkSighting, linkedTo, pieceRow, sightingsOf, unlinkSighting, withSeenAt, withoutRow } from '@/lib/sighting-links';
 import { cleanLabelOf } from '@/lib/detection-record';
 import { fromRecords, toRecord } from '@/lib/detection-record';
 import { adoptEditedList, adoptFreshScan, listEditSentence } from '@/lib/rescan';
@@ -569,6 +569,23 @@ export default function DetectPage() {
     });
   }
 
+  /** The tick on a LINKED row is its piece's tick, so pressing it there switches the
+   *  piece itself on or off. Off takes the piece out of the room with no hand-over:
+   *  the hand-over answers "drop this view of the bed", and a person unticking the bed
+   *  from another of its views is saying "no bed". The link stays, so ticking any of
+   *  its rows again brings the same piece back. */
+  function togglePiece(i: number) {
+    const root = pieceRow(detections, i);
+    if (root === i) return toggleConfirm(i);
+    remember();
+    setConfirmed((prev) => {
+      const next = new Set(prev);
+      if (next.has(root)) next.delete(root);
+      else next.add(root);
+      return next;
+    });
+  }
+
   const measuredRows = detections;
 
   // Only the geometry may accuse a word, and only the user may change it. The
@@ -707,7 +724,9 @@ export default function DetectPage() {
         if (x < i) next.add(x);
         else if (x > i) next.add(x - 1);
       });
-      if (heir !== null) next.add(heir);
+      // The heir steps in for a piece that was in the room; a piece already left out
+      // stays out, rather than coming back because one of its views was deleted.
+      if (heir !== null && prev.has(i)) next.add(heir);
       return next;
     });
   }
@@ -1201,9 +1220,11 @@ export default function DetectPage() {
                 // string, which is the whole review queue reading identically to a
                 // screen reader. The prop existed; nothing passed it.
                 slotLabel={slotLabel(active.slot)}
-                items={activeDetections.map(({ d, i }) => ({ index: i, d, locked: confirmed.has(i) }))}
+                // The box's tick is its row's: a linked view of a kept bed is kept, on the
+                // photo as on the list, and clicking it does what the row's tick does.
+                items={activeDetections.map(({ d, i }) => ({ index: i, d, locked: confirmed.has(pieceRow(detections, i)) }))}
                 mode={adding ? 'add' : 'select'}
-                onToggleLock={toggleConfirm}
+                onToggleLock={togglePiece}
                 onDelete={deleteDetection}
                 onAddBox={addManual}
                 hovered={linked}
@@ -1350,7 +1371,7 @@ export default function DetectPage() {
               <DetectionRow
                 key={d.uid ?? `row-${i}`}
                 d={d}
-                confirmed={confirmed.has(i)}
+                confirmed={confirmed.has(pieceRow(detections, i))}
                 repeatOf={repeats[i] == null ? null : (detections[repeats[i]] ?? null)}
                 doubted={verdicts[i]?.status === 'suspect'}
                 index={i}
@@ -1360,7 +1381,7 @@ export default function DetectPage() {
                 highlighted={linked === i}
                 scrollWhenHovered={linked === i && hover?.from === 'photo'}
                 onThisPhoto={d.slot === activeSlot}
-                onToggle={() => toggleConfirm(i)}
+                onToggle={() => togglePiece(i)}
                 onRename={(label) => renameDetection(i, label)}
                 suggestModels={(draft) => suggestFromLabel(d, draft, cals, roomDims)}
                 onDelete={() => deleteDetection(i)}
