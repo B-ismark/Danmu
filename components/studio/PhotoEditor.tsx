@@ -12,10 +12,11 @@
 // All coordinates are normalized 0..1 in image space — the same convention used
 // by the detection pipeline. The element is responsive to its container.
 
-import { Children, Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Detection } from '@/lib/detection';
 import { cleanLabelOf } from '@/lib/detection-record';
 import { Icon } from '@/components/ui/Icon';
+import { pieceColor } from '@/lib/piece-colors';
 import { BOX_BORDER_PX, TAG_HEIGHT_PX, TAG_PAD_Y_PX, TAG_X_PX, boxCss, tagCss, tagSpot } from '@/lib/photo-tag';
 
 export type PhotoEditorItem = {
@@ -35,6 +36,8 @@ export function PhotoEditor({
   onToggleLock,
   onDelete,
   onAddBox,
+  hovered = null,
+  onHover,
   children,
 }: {
   imageUrl: string;
@@ -49,6 +52,12 @@ export function PhotoEditor({
   onToggleLock: (i: number) => void;
   onDelete: (i: number) => void;
   onAddBox: (box: [number, number, number, number]) => void;
+  /** The item (by `index`) the pointer or keyboard is on anywhere on the screen — here
+   *  or on its row in the list. It is drawn raised and the rest step back. */
+  hovered?: number | null;
+  /** Called with an item's index as the pointer or focus arrives on it, and `null` as it
+   *  leaves. The same state the list's rows write, so the two cannot disagree. */
+  onHover?: (index: number | null) => void;
   /** The page's own layers over the photo, in the same 0..1 space as the boxes and
    *  painted over all of them. Inside the frame, so they cannot drift off it. */
   children?: ReactNode;
@@ -166,8 +175,21 @@ export function PhotoEditor({
           piece's X. */}
       {items.map((item) => (
         <Fragment key={item.index}>
-          <ItemBox item={item} mode={mode} onToggleLock={() => onToggleLock(item.index)} />
-          <ItemTag item={item} mode={mode} photoH={photoH} onDelete={() => onDelete(item.index)} />
+          <ItemBox
+            item={item}
+            mode={mode}
+            state={pieceState(item.index, hovered)}
+            onHover={onHover}
+            onToggleLock={() => onToggleLock(item.index)}
+          />
+          <ItemTag
+            item={item}
+            mode={mode}
+            photoH={photoH}
+            state={pieceState(item.index, hovered)}
+            onHover={onHover}
+            onDelete={() => onDelete(item.index)}
+          />
         </Fragment>
       ))}
 
@@ -207,43 +229,59 @@ export function PhotoEditor({
   );
 }
 
-/** A box's fill and label, shared by its outline and its tag. Fill tokens, not the
- *  plain hues: --accent is 3.5:1 with white, so 10px label copy on it fails.
- *  --accent-ink (4.73:1) and --locked (6.97:1) do not. */
-function look({ d, locked }: PhotoEditorItem) {
-  return {
-    fill: locked ? 'var(--locked)' : 'var(--accent-ink)',
-    cleanLabel: cleanLabelOf(d),
-  };
+type PieceState = 'rest' | 'hover' | 'dim';
+
+/** What a piece looks like given which one is hovered: raised if it is, stepped back if
+ *  another is, and at rest when nothing is. The look itself is `.piece-box` and
+ *  `.piece-tag` in globals.css, keyed on the data attribute. */
+function pieceState(index: number, hovered: number | null): PieceState {
+  if (hovered === null) return 'rest';
+  return hovered === index ? 'hover' : 'dim';
+}
+
+/** A box's label, shared by its outline and its tag. Its colour is the piece's own
+ *  (`pieceColor`), every one of which clears 4.5:1 with the label's white — the label
+ *  is 10px copy set on it as a fill. Kept is solid and not kept is dashed; it is never
+ *  a hue, because the hue says WHICH piece. */
+function look({ d }: PhotoEditorItem) {
+  return { cleanLabel: cleanLabelOf(d) };
 }
 
 function ItemBox({
   item,
   mode,
+  state,
+  onHover,
   onToggleLock,
 }: {
   item: PhotoEditorItem;
   mode: Mode;
+  state: PieceState;
+  onHover?: (index: number | null) => void;
   onToggleLock: () => void;
 }) {
   const { d, locked } = item;
-  const { fill, cleanLabel } = look(item);
+  const { cleanLabel } = look(item);
   // While drawing, boxes step aside entirely: a half-interactive overlay under a
   // crosshair was ambiguous for the mouse and unreachable for the keyboard.
   const drawing = mode === 'add';
 
   return (
     <div
+      className="piece-box"
+      data-piece-box={item.index}
+      data-piece-state={state}
+      data-kept={locked}
       style={{
+        '--piece': pieceColor(item.index),
         position: 'absolute',
         // Only the part of the box that is on the photo. The on-device finder keeps x and
         // w in 0..1 but not their sum, and the cloud's boxes are not clamped at all, so a
         // box can run past the frame — and one that did scrolled the whole review sideways.
         ...boxCss(d.box, BOX_BORDER_PX),
-        border: `${BOX_BORDER_PX}px ${locked ? 'solid' : 'dashed'} ${fill}`,
-        background: locked ? 'var(--locked-tint)' : 'var(--accent-tint)',
+        border: `${BOX_BORDER_PX}px ${locked ? 'solid' : 'dashed'} var(--piece)`,
         pointerEvents: 'none',
-      }}
+      } as CSSProperties}
     >
       {/* A real toggle rather than a <div onClick>: keyboard reachable, and its
           state is announced instead of being carried by border style alone. */}
@@ -253,6 +291,10 @@ function ItemBox({
         aria-pressed={locked}
         aria-label={`${cleanLabel}, ${(d.conf * 100).toFixed(0)} percent confident. ${locked ? 'Kept' : 'Not kept'}. Activate to ${locked ? 'stop keeping' : 'keep'} it.`}
         onPointerDown={(e) => e.stopPropagation()}
+        onPointerEnter={() => onHover?.(item.index)}
+        onPointerLeave={() => onHover?.(null)}
+        onFocus={() => onHover?.(item.index)}
+        onBlur={() => onHover?.(null)}
         onClick={(e) => {
           e.stopPropagation();
           onToggleLock();
@@ -279,16 +321,20 @@ function ItemTag({
   item,
   mode,
   photoH,
+  state,
+  onHover,
   onDelete,
 }: {
   item: PhotoEditorItem;
   mode: Mode;
   photoH: number;
+  state: PieceState;
+  onHover?: (index: number | null) => void;
   onDelete: () => void;
 }) {
   const { d, locked } = item;
   const [hoverX, setHoverX] = useState(false);
-  const { fill, cleanLabel } = look(item);
+  const { cleanLabel } = look(item);
   const drawing = mode === 'add';
   const css = tagCss(tagSpot(d.box, photoH));
 
@@ -307,12 +353,20 @@ function ItemTag({
     >
       <div style={{ flex: `0 1 ${css.start}` }} />
       <div
+        className="piece-tag"
+        data-piece-tag={item.index}
+        data-piece-state={state}
+        onPointerEnter={() => onHover?.(item.index)}
+        onPointerLeave={() => onHover?.(null)}
+        onFocus={() => onHover?.(item.index)}
+        onBlur={() => onHover?.(null)}
         style={{
+          '--piece': pieceColor(item.index),
           flex: '0 0 auto',
           maxWidth: '100%',
           height: TAG_HEIGHT_PX,
           padding: `${TAG_PAD_Y_PX}px 4px ${TAG_PAD_Y_PX}px 7px`,
-          background: fill,
+          background: 'var(--piece)',
           color: 'var(--on-accent)',
           fontFamily: 'var(--font-sans)',
           fontSize: 'var(--fs-micro)',
@@ -326,7 +380,7 @@ function ItemTag({
           // Like the boxes, the tag steps aside while a new box is being drawn: it sits on
           // the photo now, so a press on it has to be able to start one. Its X does not.
           pointerEvents: drawing ? 'none' : 'auto',
-        }}
+        } as CSSProperties}
         onPointerDown={(e) => e.stopPropagation()}
       >
         {locked && <Icon name="check" size={9} color="var(--on-accent)" />}

@@ -43,6 +43,22 @@
   --locked: #7A4B63;        /* 6.63:1 on --paper */
   --locked-tint: rgba(122, 75, 99, 0.14);
 
+  /* One colour per found piece on the scan review, so a box on the photo and its row
+     in the list are the same object at a glance. Eight muted hues, each at least 4.5:1
+     with --on-accent because the box's label is set on it as a fill. Not the state
+     colours: kept vs not kept is solid vs dashed, never hue. The halos are what keep
+     an outline readable on a photo that is dark or light where it falls. */
+  --piece-1: #A64B2A;  /* terracotta, 5.74:1 */
+  --piece-2: #5F7A2E;  /* olive, 4.87:1 */
+  --piece-3: #2F7478;  /* teal, 5.40:1 */
+  --piece-4: #4A67A1;  /* dusty blue, 5.61:1 */
+  --piece-5: #6D5399;  /* violet, 6.27:1 */
+  --piece-6: #8F6A12;  /* ochre, 4.95:1 */
+  --piece-7: #A4455F;  /* rose, 5.84:1 */
+  --piece-8: #7A5A43;  /* cocoa, 6.23:1 */
+  --piece-halo-dark: rgba(0, 0, 0, 0.5);
+  --piece-halo-light: rgba(255, 255, 255, 0.7);
+
   /* Alignment guides while a piece is being dragged: "this edge is level with
      that one". Neither selection (moss) nor hover (amber) nor invalid (red), so a
      brighter green that is none of them. The 2D plan draws them; the 3D view does not —
@@ -277,6 +293,7 @@
   --dur-base: 160ms;
   --dur-slow: 300ms;
   --dur-breathe: 1100ms; /* one half-cycle of a placeholder's breathing */
+  --dur-loop: 9s;          /* one pass of a waiting illustration (FindingFurniture) */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
 
@@ -1705,6 +1722,13 @@ textarea.field { border-radius: var(--r-2); }
 
    `svh`, not `dvh`: the dynamic unit changes as a phone's address bar slides away on
    the first scroll, which would resize the pinned photo while the list moves. */
+/* The two columns, sized to the photo (`--scan-photo-w`, published by the page) so the list
+   sits against it; the pair is centred in what is left. Before the page has measured, 1fr.
+   Stacked, the 720px block below makes it one column. */
+.scan-split { grid-template-columns: var(--scan-photo-w, 1fr) 380px; justify-content: center; }
+/* As tall as the photo's cap and nothing else: the page reads its height to learn how wide
+   the photo will be drawn, which a percentage-wide frame cannot say of itself. */
+.scan-cap-probe { position: absolute; inset-inline-start: 0; inset-block-start: 0; inline-size: 0; block-size: var(--scan-photo-cap); visibility: hidden; pointer-events: none; }
 .scan-photo-pane {
   --scan-photo-cap: max(120px, calc(100svh - max(200px, var(--scan-photo-room, 200px))));
   position: sticky; top: 0; align-self: start; max-height: 100svh;
@@ -2171,6 +2195,107 @@ textarea.field { border-radius: var(--r-2); }
   margin: 0 16px 12px; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
 }
 
+/* ── Found pieces on the scan review (PhotoEditor boxes, DetectionRow rows) ───
+   One `--piece` per piece (`lib/piece-colors.ts`) shared by its box, its label and its
+   row, and one hovered piece for the whole screen: raise it here and the other side
+   raises it there. Rest is a thin outline over a faint tint with a hairline halo either
+   side so it reads on a dark or a light patch of photo; hover is a thicker ring, a
+   stronger tint and a lifted label, and the other pieces step back. Kept is solid and
+   not kept is dashed (the box's own border-style), never a different hue. */
+.piece-box {
+  background: color-mix(in srgb, var(--piece) 8%, transparent);
+  box-shadow: 0 0 0 1px var(--piece-halo-light), inset 0 0 0 1px var(--piece-halo-dark);
+  transition: background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), opacity var(--dur-quick) var(--ease-out);
+}
+.piece-box[data-piece-state="hover"] {
+  background: color-mix(in srgb, var(--piece) 30%, transparent);
+  box-shadow: 0 0 0 2px var(--piece), 0 0 0 3px var(--piece-halo-light), inset 0 0 0 1px var(--piece-halo-dark);
+}
+.piece-box[data-piece-state="dim"] { opacity: 0.45; }
+.piece-tag {
+  opacity: 0.94;
+  box-shadow: 0 0 0 1px var(--piece-halo-light);
+  transition: transform var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), opacity var(--dur-quick) var(--ease-out);
+}
+.piece-tag[data-piece-state="hover"] {
+  opacity: 1;
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 2px var(--piece-halo-light), 0 3px 8px var(--piece-halo-dark);
+}
+.piece-tag[data-piece-state="dim"] { opacity: 0.55; }
+
+.piece-row {
+  position: relative;
+  border: 1px solid var(--hairline); border-radius: var(--r-2); background: var(--paper);
+  /* The swatch: the piece's own colour down the row's left edge. */
+  box-shadow: inset 4px 0 0 var(--piece);
+  transition: background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out);
+}
+.piece-row[data-kept="true"] { border-color: var(--locked); background: var(--locked-tint); }
+.piece-row[data-hovered="true"] {
+  background: color-mix(in srgb, var(--piece) 14%, var(--paper));
+  box-shadow: inset 6px 0 0 var(--piece), inset 0 0 0 2px var(--piece);
+}
+
+/* ── Finding your furniture (components/ui/FindingFurniture.tsx) ──────────────
+   The waiting picture on the scan card. One cycle is `--dur-loop` and has six beats, one
+   per piece drawn and a last for measuring; every piece, the magnifier and the status
+   lines run on that same duration and are staggered by `--i` beats, so they cannot drift
+   apart. Reduced motion shows the finished drawing and the last line, and nothing moves
+   (the block after this one). */
+.ff { --ff-beat: calc(var(--dur-loop) / 6); display: grid; justify-items: center; gap: 8px; margin: 0 0 14px; }
+.ff__art { inline-size: 100%; max-inline-size: 380px; block-size: auto; overflow: visible; }
+.ff__floor { stroke: var(--hairline-strong); stroke-width: 2; stroke-linecap: round; }
+.ff__ruler {
+  stroke: var(--accent-text); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0;
+  animation: ff-ruler var(--dur-loop) var(--ease-in-out) infinite;
+}
+.ff__piece { animation: ff-piece var(--dur-loop) linear calc(var(--i) * var(--ff-beat)) infinite; }
+.ff__line {
+  fill: none; stroke: var(--piece); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: ff-draw var(--dur-loop) var(--ease-out) calc(var(--i) * var(--ff-beat)) infinite;
+}
+.ff__fill {
+  fill: var(--piece); stroke: none; opacity: 0;
+  animation: ff-tint var(--dur-loop) var(--ease-out) calc(var(--i) * var(--ff-beat)) infinite;
+}
+.ff__box {
+  fill: none; stroke: var(--piece); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0;
+  animation: ff-box var(--dur-loop) var(--ease-out) calc(var(--i) * var(--ff-beat)) infinite;
+}
+.ff__lens { animation: ff-lens var(--dur-loop) var(--ease-in-out) infinite; transform: translate(66px, 128px); }
+.ff__lens circle { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--ink-2); stroke-width: 2.5; }
+.ff__lens line { stroke: var(--ink-2); stroke-width: 4; stroke-linecap: round; }
+.ff__says { display: grid; justify-items: center; min-block-size: 1.6em; }
+.ff__say {
+  grid-area: 1 / 1; opacity: 0; text-align: center;
+  font-size: var(--fs-small); font-weight: 600; color: var(--ink-2);
+  animation: ff-say var(--dur-loop) var(--ease-out) calc(var(--i) * var(--ff-beat)) infinite;
+}
+.ff__meta { margin: 0; }
+@keyframes ff-piece { 0%, 90% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes ff-draw { 0% { stroke-dashoffset: 1; } 11% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 0; } }
+@keyframes ff-tint { 0%, 8% { opacity: 0; } 14% { opacity: 0.5; } 30%, 100% { opacity: 0.16; } }
+@keyframes ff-box { 0%, 11% { opacity: 0; } 16%, 100% { opacity: 0.75; } }
+@keyframes ff-say { 0% { opacity: 0; } 2.5% { opacity: 1; } 15% { opacity: 1; } 17.5%, 100% { opacity: 0; } }
+@keyframes ff-ruler {
+  0%, 80% { stroke-dashoffset: 1; opacity: 1; }
+  96% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes ff-lens {
+  0%, 10% { transform: translate(66px, 128px); }
+  13.5%, 27% { transform: translate(150px, 140px); }
+  30%, 43% { transform: translate(200px, 130px); }
+  46.5%, 60% { transform: translate(252px, 112px); }
+  63%, 76% { transform: translate(296px, 134px); }
+  80% { transform: translate(30px, 180px); }
+  96% { transform: translate(300px, 180px); }
+  100% { transform: translate(66px, 128px); }
+}
+}
+
 /* ── Building your room (components/ui/BuildingRoom.tsx) ──────────────────────
    The photo route's last screen, up while the review is written into the room. The
    illustrated room fills piece by piece; under reduced motion every piece is there
@@ -2463,7 +2588,14 @@ textarea.field { border-radius: var(--r-2); }
   /* The capture plan's wall shimmer: lit and still, no pulse and no marching dashes. */
   .capture-plan__wall[data-shimmer] line:not(.capture-plan__shine) { animation: none; stroke-width: 7; }
   .capture-plan__wall[data-shimmer] line.capture-plan__shine { display: none; animation: none; }
-}
+  /* The scan card's drawing (FindingFurniture): the finished picture and its last line, still. */
+  .ff__ruler, .ff__piece, .ff__line, .ff__fill, .ff__box, .ff__lens, .ff__say { animation: none !important; }
+  .ff__line { stroke-dashoffset: 0; }
+  .ff__fill { opacity: 0.16; }
+  .ff__box { opacity: 0; }
+  .ff__ruler { stroke-dashoffset: 0; opacity: 0.8; }
+  .ff__lens { display: none; }
+  .ff__say:last-child { opacity: 1; }
 
 
 /* ── The day over the canvas (components/studio/DayStrip.tsx) ────────────────

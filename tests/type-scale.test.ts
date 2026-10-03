@@ -202,7 +202,7 @@ describe('names read as sentences', () => {
     // Pinned per file, so taking the class off one place is a failure and not a quiet
     // return to lowercase names beside capitalised ones.
     const SITES: Record<string, number> = {
-      'app/onboarding/detect/page.tsx': 1, // the scan screen's row name
+      'components/studio/DetectionRow.tsx': 1, // the scan screen's row name
       'components/studio/PhotoEditor.tsx': 1, // the tag on the photo
       'components/studio/HoverCard.tsx': 1,
       'components/studio/PartTree.tsx': 1, // the Catalog row

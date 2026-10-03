@@ -8,15 +8,15 @@ import { useRoom, useSettings } from '@/lib/store';
 import { roomStore, blobToObjectUrl, type Capture, type CaptureSlot } from '@/lib/storage';
 import { detectAcrossImages, DetectError, type Detection } from '@/lib/detection';
 import { setAsideSentence, setAsideTitle } from '@/lib/set-aside';
-import { CAPTURE_SLOTS } from '@/lib/capture';
-import { Icon, type IconName } from '@/components/ui/Icon';
-import { EditableText, FlowBarLead, IconButton } from '@/components/ui/primitives';
+import { Icon } from '@/components/ui/Icon';
+import { FlowBarLead, IconButton } from '@/components/ui/primitives';
+import { DetectionRow, EMPTY_OFFER, MANUAL_CATEGORIES, categoryLabel, candidateLabel, slotLabel } from '@/components/studio/DetectionRow';
+import { FindingFurniture } from '@/components/ui/FindingFurniture';
 import { FlowStepper } from '@/components/ui/FlowStepper';
 import { BuildingRoom } from '@/components/ui/BuildingRoom';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { Select } from '@/components/ui/Select';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
-import { boxCss } from '@/lib/photo-tag';
 import { isTypingOrDialog } from '@/components/studio/KeyboardShortcuts';
 import { sampleBoxColor } from '@/lib/color-sample';
 import { localDetectorAvailable, detectLocalAcrossImages, detectorStatus, onDetectorDownload, type DetectorStatus, type DownloadProgress } from '@/lib/local-detect';
@@ -32,34 +32,29 @@ import {
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
 import { geoPlace, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
-import { acceptCandidate, judgeLabels, measuredPhrase, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
+import { acceptCandidate, judgeLabels, type LabelCandidate } from '@/lib/label-repair';
 import { suggestFromLabel } from '@/lib/label-suggest';
-import { PART_LIBRARY, sceneShapeFor } from '@/lib/scene-spec';
 import {
   canRedo,
   canUndo,
   emptyHistory,
+  keptAfterPick,
   record as recordStep,
   redo as redoStep,
   restoreConfirmed,
   snapshotConfirmed,
   undo as undoStep,
 } from '@/lib/review-history';
-import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
+import { shouldAutoConfirm } from '@/lib/detect-confidence';
 import { findRepeats, keptAtFirst, sameButColor } from '@/lib/repeat-sightings';
-import { cleanLabelOf, fromRecords, toRecord } from '@/lib/detection-record';
+import { fromRecords, toRecord } from '@/lib/detection-record';
 import { adoptEditedList, adoptFreshScan, listEditSentence } from '@/lib/rescan';
 import { toast } from '@/components/ui/StorageToast';
-import { formatDim } from '@/lib/units';
-import type { DimUnit } from '@/lib/store';
 import { roomFootprint } from '@/lib/footprint';
 import { settingsHref } from '@/lib/settings-return';
 
 type SlotEntry = { slot: CaptureSlot; url: string; cap: Capture };
 type Box = [number, number, number, number];
-/** One shared empty list, so a row with no offer is handed the same reference every
- *  render rather than a fresh `[]`. */
-const EMPTY_OFFER: LabelCandidate[] = [];
 
 // How long the Building screen stays up at the least, so it is read rather than
 // glimpsed. The save behind it usually takes a fraction of this.
@@ -115,67 +110,11 @@ type Notice = {
   again?: boolean;
 };
 
-// The by-hand path needs a name for the thing being drawn — the geometry engine
-// takes the category for its depth default and anchor, and the label is what the
-// user sees in the studio. Wording is a decorator's, not the model's enum.
-const MANUAL_CATEGORIES: { value: Detection['category']; label: string }[] = [
-  { value: 'sofa', label: 'Sofa' },
-  { value: 'chair', label: 'Chair' },
-  { value: 'table', label: 'Table' },
-  { value: 'desk', label: 'Desk' },
-  { value: 'bed', label: 'Bed' },
-  { value: 'wardrobe', label: 'Wardrobe' },
-  { value: 'shelf', label: 'Shelf' },
-  { value: 'nightstand', label: 'Bedside table' },
-  { value: 'ottoman', label: 'Footstool' },
-  { value: 'tv', label: 'TV' },
-  { value: 'monitor', label: 'Monitor' },
-  { value: 'lamp', label: 'Lamp' },
-  { value: 'plant', label: 'Plant' },
-  { value: 'rug', label: 'Rug' },
-  { value: 'mirror', label: 'Mirror' },
-  { value: 'painting', label: 'Picture' },
-  { value: 'curtain', label: 'Curtain' },
-  { value: 'fridge', label: 'Fridge' },
-  { value: 'fan', label: 'Fan' },
-  { value: 'ac', label: 'Air conditioner' },
-  { value: 'door', label: 'Door' },
-  { value: 'other', label: 'Something else' },
-];
 
 // Keyboard placement: a box you can walk into position instead of dragging.
 const KEY_BOX: Box = [0.38, 0.44, 0.24, 0.3];
 const KEY_STEP = 0.02;
 const KEY_MIN = 0.05;
-
-// Wall names come from the capture step, so the two screens can never disagree
-// about what the user photographed. The n/e/s/w ids stay; only labels are human.
-function slotLabel(slot: CaptureSlot): string {
-  return CAPTURE_SLOTS.find((c) => c.id === slot)?.label ?? slot.toUpperCase();
-}
-
-/** A piece's name mid-sentence: "the bed", but "the TV". */
-function inSentence(label: string): string {
-  return /^.[A-Z]/.test(label) ? label : label.charAt(0).toLowerCase() + label.slice(1);
-}
-
-function categoryLabel(cat?: string): string {
-  return MANUAL_CATEGORIES.find((c) => c.value === cat)?.label ?? 'Furniture';
-}
-
-/** What a repair is called on its chip and on the row once accepted: its kind's own
- *  name when it was measured as one ("Double bed"), else its category's. */
-function candidateLabel(cand: LabelCandidate): string {
-  return cand.name ?? categoryLabel(cand.category);
-}
-
-/** Measured, and the measurement is not this word's size. Neither kind of
- *  `unmeasured` offer is a misfit, though both carry `margin: -Infinity`: one has no
- *  size at all (`label-suggest`'s standard-size offer), the other runs past the edge
- *  of the photo and its size is an estimate. Both mean "the camera could not say". */
-function misfit(cand: LabelCandidate): boolean {
-  return !cand.unmeasured && cand.margin < 0;
-}
 
 // Per-photo camera calibration: read what each photo can tell, and let
 // `calForPhoto` decide. The ladder itself, and why it is shaped the way it is, lives
@@ -318,9 +257,11 @@ export default function DetectPage() {
   const [manualCat, setManualCat] = useState<Detection['category']>('sofa');
   // Keyboard-placed box in flight — the pointer-free alternative to dragging.
   const [pending, setPending] = useState<Box | null>(null);
-  // The one item hovered/focused anywhere, so the row and its box on the photo
-  // are visibly the same object.
-  const [linked, setLinked] = useState<number | null>(null);
+  // The one piece hovered or focused anywhere — its box on the photo or its row in the
+  // list — so the two are visibly the same object, whichever side the pointer is on.
+  // `from` says which, because only a hover that began on the photo scrolls the list.
+  const [hover, setHover] = useState<{ index: number; from: 'photo' | 'row' } | null>(null);
+  const linked = hover?.index ?? null;
   const [path, setPath] = useState<Path>('idle');
   // Geometry context for deterministic dims — per-slot camera calibration +
   // the room's real dimensions. Used on fresh detections and manual adds.
@@ -334,6 +275,8 @@ export default function DetectPage() {
   const padRef = useRef<HTMLButtonElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const photoBoxRef = useRef<HTMLDivElement>(null);
+  const splitRef = useRef<HTMLDivElement>(null);
+  const capProbeRef = useRef<HTMLDivElement>(null);
   // Flipped by Stop so an in-flight run stops writing to state.
   const stopped = useRef(false);
   // The detection run, set by the loading effect so **Look again** can start it.
@@ -716,7 +659,7 @@ export default function DetectPage() {
     setConfirmed(restoreConfirmed(snap.confirmed));
     // Both are about a row by index, and an undo can change what is at that index.
     setOffer(null);
-    setLinked(null);
+    setHover(null);
   }
 
   function doUndo() {
@@ -758,9 +701,13 @@ export default function DetectPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [history, detections, confirmed]);
 
-  function applyRepair(i: number, cand: LabelCandidate) {
+  function applyRepair(i: number, cand: LabelCandidate, keep = false) {
     remember();
     setOffer(null);
+    // A model the person chose from what they typed is a piece they want: it is ticked
+    // here, in the same step, so one undo takes back both. A tick they then remove
+    // stays removed — nothing re-ticks it.
+    if (keep) setConfirmed((prev) => keptAfterPick(prev, i));
     // In place, never a filter or a re-sort: `confirmed` is a Set of array
     // INDICES, so reordering here would silently move every confirmation onto a
     // different piece of furniture.
@@ -777,7 +724,7 @@ export default function DetectPage() {
     // slid into that slot.
     setOffer(null);
     setDetections((d) => d.filter((_, idx) => idx !== i));
-    setLinked(null);
+    setHover(null);
     setConfirmed((prev) => {
       const next = new Set<number>();
       prev.forEach((x) => {
@@ -947,7 +894,11 @@ export default function DetectPage() {
   // column outgrew the window, and the box round the photo became a 30px scroll area of
   // its own that took every swipe and hid the photo's bottom edge. `--scan-pin-h` is the
   // column's own height, which the list keeps clear of when focus scrolls a row into
-  // view, so a row focused while stacked does not land under the photo.
+  // view, so a row focused while stacked does not land under the photo. `--scan-photo-w`
+  // is how wide the photo's column needs to be: the photo is drawn at its cap's height and
+  // its own shape, so it is usually narrower than the column `1fr` gives it, and the list
+  // sat a hundred pixels off its right edge — more for a portrait photo. The column is
+  // that width instead (never more than leaves the list its own), and the pair is centred.
   const hasWallButtons = slots.length > 1;
   const hasPhoto = active !== undefined;
   useEffect(() => {
@@ -955,7 +906,21 @@ export default function DetectPage() {
     const box = photoBoxRef.current;
     if (!pane || !box) return;
     const root = document.documentElement;
+    const split = splitRef.current;
+    const probe = capProbeRef.current;
     const publish = () => {
+      const img = box.querySelector('img');
+      const rail = split?.querySelector('.rail');
+      if (split && probe && img && rail && img.naturalWidth > 0 && img.naturalHeight > 0) {
+        // The photo's own width at its cap (`.scan-cap-probe` is as tall as the cap), plus
+        // the box's padding; stacked, the list is as wide as the page and there is no
+        // room to give back, so the variable goes.
+        const cap = probe.getBoundingClientRect().height;
+        const room = split.clientWidth - rail.getBoundingClientRect().width;
+        const want = Math.ceil((cap * img.naturalWidth) / img.naturalHeight + 32);
+        if (room > 0 && rail.getBoundingClientRect().width < split.clientWidth - 1) split.style.setProperty('--scan-photo-w', `${Math.min(want, Math.floor(room))}px`);
+        else split.style.removeProperty('--scan-photo-w');
+      }
       const cs = getComputedStyle(box);
       // The box's padding is room too; its height, squeezed or not, is not.
       const room = pane.getBoundingClientRect().height - box.getBoundingClientRect().height + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
@@ -976,8 +941,15 @@ export default function DetectPage() {
     // Every row, not only the column: a row that wraps inside a column already at its
     // cap changes nothing about the column's own size.
     ro.observe(pane);
+    if (split) ro.observe(split);
     for (const row of pane.children) ro.observe(row);
+    // A photo that has just loaded is a new shape for the column; its load is not a resize
+    // of anything observed here, and does not bubble, hence the capture.
+    const onLoad = () => publish();
+    box.addEventListener('load', onLoad, true);
     return () => {
+      box.removeEventListener('load', onLoad, true);
+      split?.style.removeProperty('--scan-photo-w');
       ro.disconnect();
       cancelAnimationFrame(frame);
       // Removed rather than left: the next page has no column to keep clear of.
@@ -1018,8 +990,6 @@ export default function DetectPage() {
         facts={roomDims && { ...roomDims, rough: roughSize, pieces: keptCount, photos: photoCount }}
       />
     );
-
-  const linkedBox = linked !== null && detections[linked]?.slot === activeSlot ? detections[linked].box : null;
 
   return (
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
@@ -1132,7 +1102,7 @@ export default function DetectPage() {
                 remember();
                 setNotice(null);
                 setOffer(null);
-                setLinked(null);
+                setHover(null);
                 void runRef.current?.();
               }}
               className="ds-btn ds-btn--sm"
@@ -1174,7 +1144,7 @@ export default function DetectPage() {
 
       {/* .split--stack turns the rail into a sheet under the photo on narrow
           screens; the fixed 380px track left the canvas about 10px wide. */}
-      <div className="split split--stack scan-split" style={{ flex: 1, gridTemplateColumns: '1fr 380px', minHeight: 0 }}>
+      <div ref={splitRef} className="split split--stack scan-split" style={{ flex: 1, minHeight: 0 }}>
         {/* Pinned while the list scrolls (`.scan-photo-pane`): a long list used to
             take the photo off screen, so the rows at its end had no picture to be
             matched against. */}
@@ -1219,26 +1189,12 @@ export default function DetectPage() {
                 onToggleLock={toggleConfirm}
                 onDelete={deleteDetection}
                 onAddBox={addManual}
+                hovered={linked}
+                onHover={(i) => setHover(i === null ? null : { index: i, from: 'photo' })}
               >
                 {/* Page-level box layer, in the same normalized space as the
-                    editor's own overlays: the row↔box link and the keyboard
-                    placement preview. Pointer events off so it never eats a
-                    click meant for the box underneath. */}
-                {linkedBox && (
-                  <div
-                    aria-hidden="true"
-                    style={{
-                      position: 'absolute',
-                      // The same part of the box the editor draws: the raw box ran past
-                      // the photo and scrolled the review sideways on a row's hover.
-                      ...boxCss(linkedBox, 0),
-                      outline: '2px solid var(--accent-text)',
-                      outlineOffset: 2,
-                      borderRadius: 'var(--r-1)',
-                      pointerEvents: 'none',
-                    }}
-                  />
-                )}
+                    editor's own overlays: the keyboard placement preview. Pointer
+                    events off so it never eats a click meant for the box underneath. */}
                 {pending && (
                   <div
                     aria-hidden="true"
@@ -1262,6 +1218,8 @@ export default function DetectPage() {
               </div>
             )}
           </div>
+
+          <div ref={capProbeRef} aria-hidden="true" className="scan-cap-probe" />
 
           {active && (
             <div className="scan-hand">
@@ -1358,16 +1316,18 @@ export default function DetectPage() {
                 verdict={verdicts[i] ?? { status: 'unmeasured' }}
                 repeatOf={repeats[i] == null ? null : (detections[repeats[i]] ?? null)}
                 dimUnit={dimUnit}
-                onRepair={(cand) => applyRepair(i, cand)}
+                index={i}
+                onRepair={(cand, keep) => applyRepair(i, cand, keep)}
                 offer={offer?.index === i ? offer.candidates : EMPTY_OFFER}
                 onDismissOffer={() => setOffer(null)}
                 highlighted={linked === i}
+                scrollWhenHovered={linked === i && hover?.from === 'photo'}
                 onThisPhoto={d.slot === activeSlot}
                 onToggle={() => toggleConfirm(i)}
                 onRename={(label) => renameDetection(i, label)}
                 suggestModels={(draft) => suggestFromLabel(d, draft, cals, roomDims)}
                 onDelete={() => deleteDetection(i)}
-                onLink={(on) => setLinked(on ? i : null)}
+                onLink={(on) => setHover(on ? { index: i, from: 'row' } : null)}
                 onShow={() => setActiveSlot(d.slot)}
               />
             ))}
@@ -1385,6 +1345,7 @@ export default function DetectPage() {
           }
           onCancel={stopDetecting}
           cancelLabel="Stop and add by hand"
+          art={<FindingFurniture photos={photoCount} />}
         />
       )}
     </div>
@@ -1441,322 +1402,6 @@ function NoticeCard({
         {onDismiss && <IconButton icon="x" label="Dismiss this message" onClick={onDismiss} size={28} iconSize={12} />}
       </div>
       {children && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>{children}</div>}
-    </div>
-  );
-}
-
-/** A line under a row's name saying why the row is as it is. One markup for every
- *  such line, so two of them under one name cannot drift apart. Wraps rather than
- *  clips: a sentence holding a piece name is as long as the name makes it. */
-function RowNote({ icon, children }: { icon: IconName; children: ReactNode }) {
-  return (
-    <div className="t-hint" style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 3, lineHeight: 1.45 }}>
-      <Icon name={icon} size={11} style={{ flex: '0 0 auto', marginTop: 2 }} />
-      <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>{children}</span>
-    </div>
-  );
-}
-
-function DetectionRow({
-  d,
-  confirmed,
-  verdict,
-  repeatOf,
-  dimUnit,
-  highlighted,
-  onThisPhoto,
-  onToggle,
-  onRename,
-  suggestModels,
-  onRepair,
-  onDismissOffer,
-  offer,
-  onDelete,
-  onLink,
-  onShow,
-}: {
-  d: Detection;
-  confirmed: boolean;
-  verdict: LabelVerdict;
-  /** The row this one is probably a second sighting of — see
-   *  lib/repeat-sightings.ts. Null for a piece in its own right. */
-  repeatOf: Detection | null;
-  dimUnit: DimUnit;
-  highlighted: boolean;
-  onThisPhoto: boolean;
-  onToggle: () => void;
-  onRename: (label: string) => void;
-  /** Models the name being typed matches, recomputed per keystroke (`suggestFromLabel`). */
-  suggestModels: (draft: string) => LabelCandidate[];
-  onRepair: (cand: LabelCandidate) => void;
-  /** Models the piece’s current NAME suggests, best first — see suggestFromLabel.
-   *  Empty for every row but the one just renamed. */
-  offer: LabelCandidate[];
-  onDismissOffer: () => void;
-  onDelete: () => void;
-  onLink: (on: boolean) => void;
-  onShow: () => void;
-}) {
-  const label = cleanLabelOf(d);
-  /** The suggestions the name field is showing, so a pick resolves to the same
-   *  candidate the person saw rather than one recomputed from a later draft. */
-  const shown = useRef<LabelCandidate[]>([]);
-  // The MODEL this row becomes, by the studio's own rule (`sceneShapeFor`), named as
-  // the Library names it. It said the category, so a row renamed "Shoe rack" still
-  // read "Shelf" while the studio was in fact going to build the shoe rack, and a
-  // rename looked like it changed nothing but the word.
-  const modelName = PART_LIBRARY.find((r) => r.shape === sceneShapeFor(d.category, label, d.shape))?.label ?? categoryLabel(d.category);
-  // Derived from the range itself, never typed next to the number it describes,
-  // and only the axes that actually missed get mentioned.
-  const miss =
-    verdict.status === 'suspect'
-      ? verdict.failed
-          .map((axis) =>
-            axis === 'width'
-              ? `${formatDim(verdict.allowed.width[0], dimUnit)}–${formatDim(verdict.allowed.width[1], dimUnit)} ${dimUnit} wide`
-              : `${formatDim(verdict.allowed.height[0], dimUnit)}–${formatDim(verdict.allowed.height[1], dimUnit)} ${dimUnit} tall`,
-          )
-          .join(' and ')
-      : '';
-  // Only the axes that were actually measured. A ceiling item is measured on width
-  // alone, so printing a "×" and a second number there would put a catalogue
-  // default on screen in the sentence that says "Measured".
-  // The same for an axis the photo's edge cut off: its size is an estimate, and
-  // `measured` leaves it out rather than print it as a reading.
-  // And an axis read at a distance the photo did not show says "about"
-  // (`measuredPhrase`): it was judged at that reading, and it is an estimate.
-  const took = verdict.status === 'suspect' ? measuredPhrase(verdict, dimUnit) : '';
-  // The note covers both: a size the photo's edge cut off and a size read at the
-  // distance the placer assumed for a piece whose foot it cut. To the person they are
-  // one fact — this number is not the camera's measurement of the piece — and it is
-  // said the same way.
-  const unsure = [...(verdict.status === 'unmeasured' ? [] : (verdict.bounded ?? [])), ...(verdict.cut ?? [])];
-  const cutWord = unsure.length === 2 ? 'size' : unsure[0];
-  return (
-    // Hover AND focus drive the same highlight, so a keyboard user gets the
-    // row↔photo link too. onFocus/onBlur bubble from the child buttons.
-    <div
-      onMouseEnter={() => onLink(true)}
-      onMouseLeave={() => onLink(false)}
-      onFocus={() => onLink(true)}
-      onBlur={() => onLink(false)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '8px 10px',
-        border: `1px solid ${confirmed ? 'var(--locked)' : 'var(--hairline)'}`,
-        borderRadius: 'var(--r-2)',
-        background: confirmed ? 'var(--locked-tint)' : 'var(--paper)',
-        boxShadow: highlighted ? 'inset 0 0 0 1px var(--accent-text)' : 'none',
-        transition: 'background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out)',
-      }}
-    >
-      {/* Was the whole row as a `div onClick`: unreachable by keyboard and with
-          no state announced. Now a real toggle with aria-pressed. */}
-      <IconButton
-        icon={confirmed ? 'check' : 'plus'}
-        label={`Keep ${label}`}
-        title={
-          confirmed
-            ? 'Kept: this piece goes into your room as measured'
-            : 'Not kept: it stays on this list and out of your room'
-        }
-        active={confirmed}
-        onClick={onToggle}
-        variant="outline"
-        size={28}
-        iconSize={13}
-        style={
-          confirmed
-            ? { background: 'var(--locked-tint)', color: 'var(--locked)', borderColor: 'var(--locked)' }
-            : undefined
-        }
-      />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <EditableText
-          value={label}
-          onCommit={onRename}
-          // As the name is typed, the models it matches: picking one changes the MODEL,
-          // not only the word, which is what a person renaming a "bed" to "Fridge"
-          // meant. Typing a name and leaving the list alone is still a plain rename,
-          // with the chips below to change the model afterwards.
-          suggest={(draft) => {
-            shown.current = suggestModels(draft).slice(0, 4);
-            // Keyed on the MODEL: two models of one category (shelf, shoe rack) are
-            // two options, and a category key collapsed them into one.
-            return shown.current.map((c) => ({
-              key: c.detection.shape ?? c.category,
-              label: `${candidateLabel(c)} model`,
-              hint: !c.detection.dimMM
-                ? 'standard size'
-                : c.unmeasured
-                  ? 'size is an estimate'
-                  : c.margin < 0
-                    ? 'not the size the camera measured'
-                    : undefined,
-            }));
-          }}
-          onPick={(key) => {
-            const cand = shown.current.find((c) => (c.detection.shape ?? c.category) === key);
-            if (cand) onRepair(cand);
-          }}
-          label="Piece name"
-          className="sentence-case"
-          style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)', display: 'block' }}
-          inputStyle={{ height: 28, fontSize: 'var(--field-fs)' }}
-        />
-        {/* Confidence percentages and slot codes were telemetry. What helps is
-            which photo it came from and what Danmu thinks it is. */}
-        <div className="t-hint">
-          {/* Who found it, said plainly. A row the user drew and a row a language
-              model guessed at look identical otherwise, and they are not the same
-              claim. */}
-          {modelName} · {slotLabel(d.slot)} · {sourceLabel(sourceOf(d))}
-        </div>
-        {/* Why this row started unticked, when that is the reason. Said rather than
-            acted on — it is still on the list, one tap from kept, because a real
-            piece that never appears is worse than a duplicate. Wraps rather than
-            clips: the sentence is as long as two piece names make it. */}
-        {repeatOf && (
-          <RowNote icon="copy">
-            Probably the {inSentence(cleanLabelOf(repeatOf))} from {slotLabel(repeatOf.slot)} again
-          </RowNote>
-        )}
-        {/* The part of the size the camera did not measure. A floor or wall piece
-            running out of the picture is grown on that side from the edge the photo
-            did see — to a typical size, or to the wall's end, or not at all when what
-            it saw was already bigger. A ceiling piece is not grown at all: its width
-            is read on a row the edge moved, long or short. And a floor piece whose FOOT
-            the edge cut was seen whole but read from the far end of where it could
-            stand, so its width and height are estimates (`bounded`). "An estimate" is true
-            of all five; "typical" was true of one. Said here because "Measured" should
-            not cover a number the photo did not give. */}
-        {cutWord && <RowNote icon="ruler">Runs past the edge of the photo, so its {cutWord} is an estimate</RowNote>}
-        {/* The measurement disagreeing with the word. Said out loud rather than
-            acted on: a silent re-label is the same mistake as a silent resize.
-            Wraps rather than clips — the sentence is as long as the unit setting
-            and the category name make it. */}
-        {verdict.status === 'suspect' && (
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: 6,
-              marginTop: 5,
-              fontSize: 'var(--fs-caption)',
-              lineHeight: 1.45,
-              color: 'var(--warn-text)',
-            }}
-          >
-            <span style={{ flex: '1 1 auto', minWidth: 0 }}>
-              Measured {took}. {categoryLabel(d.category)} range is {miss}.
-            </span>
-            {verdict.candidates.slice(0, 2).map((cand) => (
-              <button
-                key={cand.category}
-                onClick={() => onRepair(cand)}
-                className="ds-chip"
-                title={`Measure this again as ${candidateLabel(cand)}`}
-                style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px', flex: '0 0 auto' }}
-              >
-                {candidateLabel(cand)}?
-              </button>
-            ))}
-          </div>
-        )}
-        {/* A model offered because of the WORD, not because of the measurement.
-            Same chip vocabulary as the row above deliberately — to the user these
-            are one affordance ("this might be the wrong kind of thing"), and two
-            visual languages for that would read as two features.
-
-            What differs is the sentence, because the evidence differs: above, the
-            camera disagrees with the detector; here, the user has typed something
-            the model does not match. And it is an OFFER — accepting re-measures the
-            piece, which is a size nobody asked for yet. */}
-        {offer.length > 0 && (
-          <div
-            className="t-hint"
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: 6,
-              marginTop: 5,
-              lineHeight: 1.45,
-            }}
-          >
-            <span style={{ flex: '1 1 auto', minWidth: 0 }}>
-              Still the {categoryLabel(d.category).toLowerCase()} model
-            </span>
-            {offer.slice(0, 2).map((cand) => (
-              <button
-                // Keyed on the MODEL, like the typed list above: a word can reach two
-                // models of one category (floor lamp, table lamp).
-                key={cand.detection.shape ?? cand.category}
-                onClick={() => onRepair(cand)}
-                className="ds-chip"
-                // A negative margin means the re-measurement does not fit this word's
-                // own size band. Said in the tooltip rather than hidden: the user
-                // typed it, so it is offered either way, but they should know the
-                // camera does not agree. The order is the search's, best match for
-                // the words first, so a caveated chip can come first.
-                // The other two are not misfits, so they take no warn colour: one
-                // with no size at all is built at the catalog's standard size (no
-                // room yet, no lens, or its anchor out of frame), and an `unmeasured`
-                // one WITH a size runs past the edge of the photo.
-                title={
-                  !cand.detection.dimMM
-                    ? `Use the ${candidateLabel(cand)} model at its standard size`
-                    : cand.unmeasured
-                      ? `Use the ${candidateLabel(cand)} model. It runs past the edge of the photo, so its size is an estimate`
-                      : cand.margin < 0
-                        ? `Use the ${candidateLabel(cand)} model, though what the camera measured is not ${candidateLabel(cand).toLowerCase()}-sized`
-                        : `Use the ${candidateLabel(cand)} model and measure it again`
-                }
-                style={{
-                  height: 22,
-                  fontSize: 'var(--fs-caption)',
-                  padding: '0 8px',
-                  flex: '0 0 auto',
-                  ...(misfit(cand) ? { color: 'var(--warn-text)' } : null),
-                }}
-              >
-                Use {candidateLabel(cand)}
-                {misfit(cand) ? '?' : ''}
-              </button>
-            ))}
-            <IconButton
-              icon="x"
-              label="Keep this model"
-              onClick={onDismissOffer}
-              size={22}
-              iconSize={11}
-            />
-          </div>
-        )}
-      </div>
-      {!onThisPhoto && (
-        <button
-          onClick={onShow}
-          className="ds-btn ds-btn--xs ds-btn--ghost"
-          aria-label={`Show ${label} on the ${slotLabel(d.slot).toLowerCase()} photo`}
-          style={{ padding: '0 8px', color: 'var(--accent-text)' }}
-        >
-          Show
-        </button>
-      )}
-      <IconButton
-        icon="x"
-        label={`Remove ${label}`}
-        variant="outline"
-        tone="danger"
-        onClick={onDelete}
-        size={26}
-        iconSize={11}
-        style={{ borderRadius: 'var(--r-1)' }}
-      />
     </div>
   );
 }
