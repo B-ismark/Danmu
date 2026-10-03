@@ -7,9 +7,6 @@ import {
   describePlacement,
   patchIfSame,
   placePhotos,
-  rotateSet,
-  rotateSlot,
-  rotationMapping,
   slotFromBearing,
   slotIndex,
   swapMapping,
@@ -30,17 +27,6 @@ describe('the slot order is the quarter-turn count', () => {
     expect([...SLOT_ORDER]).toEqual(['n', 'e', 's', 'w']);
     expect(slotIndex('n')).toBe(0);
     expect(slotIndex('s')).toBe(2);
-  });
-
-  it('rotates in both directions and wraps', () => {
-    expect(rotateSlot('n', 1)).toBe('e');
-    expect(rotateSlot('w', 1)).toBe('n');
-    // Anticlockwise is the half nobody tests, and a `%` on a negative number in
-    // JS returns a negative number — the bug this asserts against.
-    expect(rotateSlot('n', -1)).toBe('w');
-    expect(rotateSlot('e', -3)).toBe('s');
-    expect(rotateSlot('s', 4)).toBe('s');
-    expect(rotateSlot('s', -8)).toBe('s');
   });
 });
 
@@ -130,7 +116,7 @@ describe('placePhotos — the ladder', () => {
     // The FIRST photo is placed by order, not by bearing: its own bearing had
     // nothing to be measured against yet, and any wall would have done. It
     // becomes the anchor, and the other three are then measured against it — so
-    // the one thing the rotation control fixes is where this first photo landed.
+    // moving this first photo is what re-anchors the rest.
     const { placed, rejected } = placePhotos([], [
       { bearingDeg: 35 },
       { bearingDeg: 215 },
@@ -154,16 +140,16 @@ describe('placePhotos — the ladder', () => {
     const { placed } = placePhotos(existing, [{ bearingDeg: 125 }]);
     expect(placed).toEqual([{ index: 0, slot: 'w', by: 'bearing' }]);
     // The caller's array is not ours. A reslot of what is already on screen is
-    // the rotation control's job, and it says so before it does it.
+    // the user's, one photo at a time, from the wall picker under it.
     expect(JSON.stringify(existing)).toBe(frozen);
   });
 
-  it('carries the rotation the user made into where the next photo lands', () => {
-    // The set was placed, then rotated one turn clockwise: the photo that was on
-    // n now reads e. A new photo from the same room must follow the correction,
-    // and it does because the anchor is DERIVED from where the photos now sit.
-    const rotated: PlacedPhoto[] = [{ slot: rotateSlot('n', 1), bearingDeg: 215 }];
-    const { placed } = placePhotos(rotated, [{ bearingDeg: 305 }]);
+  it('carries a move the user made into where the next photo lands', () => {
+    // The photo was placed on n, then the user moved it to e. A new photo from the
+    // same room must follow the correction, and it does because the anchor is
+    // DERIVED from where the photos now sit.
+    const moved: PlacedPhoto[] = [{ slot: 'e', bearingDeg: 215 }];
+    const { placed } = placePhotos(moved, [{ bearingDeg: 305 }]);
     expect(placed[0].slot).toBe('s');
     expect(placed[0].by).toBe('bearing');
   });
@@ -271,28 +257,6 @@ function set(spec: Partial<Record<CaptureSlot, Partial<Card>>>): SlotMap<Card> {
 const walls = (m: SlotMap<Card>) =>
   Object.fromEntries(SLOT_ORDER.filter((s) => m[s]).map((s) => [s, (m[s]!.blob as { id: string }).id]));
 
-describe('rotateSet', () => {
-  it('turns the whole set round and keeps every photo', () => {
-    expect(walls(rotateSet(set({ n: {}, e: {} }), 1))).toEqual({ e: 'n', s: 'e' });
-  });
-
-  it('claims the placement as the user’s, because it now is', () => {
-    expect(rotateSet(set({ n: { by: 'bearing' } }), 1).e!.by).toBe('manual');
-  });
-
-  it('relabels a clash rather than dropping or stranding it', () => {
-    // Two photos of one wall are still two photos of one wall after a rotation —
-    // both moved together, so the reference is only renamed.
-    const after = rotateSet(set({ n: {}, e: { clashedWith: 'n' } }), 1);
-    expect(after.s!.clashedWith).toBe('e');
-    expect(after.e!.clashedWith).toBeUndefined();
-  });
-
-  it('goes backwards too', () => {
-    expect(walls(rotateSet(set({ n: {}, e: {} }), -1))).toEqual({ n: 'e', w: 'n' });
-  });
-});
-
 describe('swapSet', () => {
   it('swaps two photos past each other', () => {
     expect(walls(swapSet(set({ n: {}, s: {} }), 'n', 's'))).toEqual({ n: 's', s: 'n' });
@@ -337,22 +301,22 @@ describe('patchIfSame', () => {
 
   it('refuses to write onto the photo that replaced the one it was scored for', () => {
     // The shipped bug: quality scoring is async and was written back by SLOT, so
-    // rotating a set mid-scoring relabelled every score and the chip then
-    // described a different image.
+    // moving a photo mid-scoring (it was a whole-set rotation then) relabelled the
+    // score and the chip then described a different image.
     //
     // TWO photos, deliberately. A one-photo fixture leaves the old wall EMPTY
-    // after the rotation, and an empty wall is refused by the `!at` guard whether
+    // after the move, and an empty wall is refused by the `!at` guard whether
     // or not identity is checked at all — so it passed against a mutant with the
     // identity check removed. Mutation testing is what caught that; the case that
     // matters is a wall occupied by a DIFFERENT photo.
     const before = set({ n: {}, w: {} });
-    const rotated = rotateSet(before, 1);
+    const moved = swapSet(before, 'n', 'w');
     const stale = before.n!.blob;
-    expect(rotated.n!.blob).toBe(before.w!.blob);
-    expect(patchIfSame(rotated, 'n', stale, { quality: 'sharp' })).toBe(rotated);
-    expect(rotated.n!.quality).toBeUndefined();
+    expect(moved.n!.blob).toBe(before.w!.blob);
+    expect(patchIfSame(moved, 'n', stale, { quality: 'sharp' })).toBe(moved);
+    expect(moved.n!.quality).toBeUndefined();
     // …and it lands correctly when addressed to where that photo actually went.
-    expect(patchIfSame(rotated, 'e', stale, { quality: 'sharp' }).e!.quality).toBe('sharp');
+    expect(patchIfSame(moved, 'w', stale, { quality: 'sharp' }).w!.quality).toBe('sharp');
   });
 
   it('returns the same object for an empty wall, so React can skip the render', () => {
@@ -362,12 +326,6 @@ describe('patchIfSame', () => {
 });
 
 describe('the mapping handed to the store matches what the screen does', () => {
-  it('rotation: every wall moves, and it agrees with rotateSet', () => {
-    const m = rotationMapping(1);
-    expect(m).toEqual({ n: 'e', e: 's', s: 'w', w: 'n' });
-    for (const s of SLOT_ORDER) expect(m[s]).toBe(rotateSlot(s, 1));
-  });
-
   it('move: a swap when the target is taken, a plain move when it is not', () => {
     expect(swapMapping(set({ n: {}, s: {} }), 'n', 's')).toEqual({ n: 's', s: 'n' });
     expect(swapMapping(set({ n: {} }), 'n', 's')).toEqual({ n: 's' });

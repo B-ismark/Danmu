@@ -71,7 +71,7 @@ export function AddPiecesButton({ wide = false }: { wide?: boolean } = {}) {
         }}
         aria-expanded={open}
         aria-label={tip}
-        className={`ds-btn ds-btn--sm ds-btn--accent${wide ? ' rail-wide' : ''}`}
+        className={`ds-btn ds-btn--sm ds-btn--accent rail-cta${wide ? ' rail-wide' : ''}`}
       >
         {/* The label says the action, not the state: a button that reads "Library is
             open" is a status line you can press.

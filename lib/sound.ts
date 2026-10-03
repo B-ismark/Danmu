@@ -334,22 +334,28 @@ export function voice(name: SoundName, opts: SoundOptions = {}): Voice {
       // Overcast rolling in: a slow, low swell of air with no note in it.
       return { tones: [], knocks: [{ at: 0, freq: 420, dur: 0.34, peak: 0.12, attack: 0.14 }] };
     case 'dawn':
-      // The sun clearing the horizon: three high notes rising, very quiet.
+      // The sun clearing the horizon — the moon in the day strip opening into the sun.
+      // A four-note phrase climbing a major arpeggio (G C E G), each note leaning up
+      // into its pitch, so it lifts the way the light does. Very quiet.
       return {
         tones: [
-          { type: 'sine', from: 1320, to: 1320, dur: 0.2, peak: 0.05, at: 0 },
-          { type: 'sine', from: 1760, to: 1760, dur: 0.2, peak: 0.045, at: 0.06 },
-          { type: 'sine', from: 2217, to: 2217, dur: 0.22, peak: 0.04, at: 0.12 },
+          { type: 'sine', from: 770, to: 784, dur: 0.16, peak: 0.045, at: 0 },
+          { type: 'sine', from: 1030, to: 1047, dur: 0.16, peak: 0.045, at: 0.06 },
+          { type: 'sine', from: 1300, to: 1319, dur: 0.16, peak: 0.04, at: 0.12 },
+          { type: 'sine', from: 1545, to: 1568, dur: 0.17, peak: 0.04, at: 0.18 },
         ],
         knocks: [],
       };
     case 'dusk':
-      // …and going down: the same notes a sixth lower, falling.
+      // …and going down: the sun closing into the moon. The same shape falling through
+      // A minor (E C A E), each note settling down onto its pitch, a little lower and a
+      // little softer at the end, like the light going.
       return {
         tones: [
-          { type: 'sine', from: 1109, to: 1109, dur: 0.2, peak: 0.055, at: 0 },
-          { type: 'sine', from: 880, to: 880, dur: 0.2, peak: 0.05, at: 0.07 },
-          { type: 'sine', from: 659, to: 659, dur: 0.2, peak: 0.05, at: 0.14 },
+          { type: 'sine', from: 1335, to: 1319, dur: 0.16, peak: 0.045, at: 0 },
+          { type: 'sine', from: 1060, to: 1047, dur: 0.16, peak: 0.045, at: 0.06 },
+          { type: 'sine', from: 890, to: 880, dur: 0.16, peak: 0.042, at: 0.12 },
+          { type: 'sine', from: 667, to: 659, dur: 0.17, peak: 0.04, at: 0.18 },
         ],
         knocks: [],
       };

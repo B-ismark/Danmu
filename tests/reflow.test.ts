@@ -574,16 +574,20 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     // flex's default `0 1 auto` — as wide as its label, and allowed to SHRINK — with
     // `minWidth: 0` letting it go below its own text, and the button inside is
     // capped at the wrapper (`max-width: 100%`), which is where the ellipsis starts.
-    // No `flex: 1`: the buttons hug their labels rather than splitting the rail into
-    // halves that read as a segmented control.
+    // The columns are a grid (`1fr 1fr`), not `flex: 1`; nothing in the TSX grows.
     //
     // Three wrappers, not two: the selection slot is Delete for a piece and Done
     // for a wall, written as two branches of one slot because the store makes those
     // two selections mutually exclusive.
-    const wrappers = CODE.match(/style=\{\{ minWidth: 0(?:, marginLeft: 'auto')? \}\}/g) ?? [];
+    const wrappers = CODE.match(/style=\{\{ minWidth: 0 \}\}/g) ?? [];
     expect(wrappers, 'every labelled button in the row needs a shrinkable wrapper').toHaveLength(3);
     expect(CODE, 'footer buttons hug their labels; nothing grows').not.toMatch(/flex: 1\b/);
     expect(rule('.rail-footer .ds-btn')).toContain('max-width: 100%');
+    // The button reaches its cell through a Tooltip's inline-flex wrapper, which
+    // hugs the label: without the cell stretching what it holds, `width: 100%` fills
+    // the wrapper and Delete stood 81px wide in a 139px half (walked in a browser).
+    expect(rule('.rail-footer__row > *')).toContain('display: flex');
+    expect(rule('.rail-footer__row > * > *')).toContain('flex: 1 1 auto');
 
     // And the label needs its OWN element or the ellipsis has nowhere to happen: a
     // bare text node beside an icon is an anonymous flex item, which is what
@@ -610,7 +614,6 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
   it('fits its fixed geometry inside the narrowest rail, with room for the labels', () => {
     const footer = rule('.rail-footer');
     const padX = Number(/padding: \d+px (\d+)px/.exec(footer)![1]);
-    const gap = Number(/gap: (\d+)px/.exec(footer)![1]);
     // Anchored on the icon name: the trash glyph's own `size={12}` comes first in
     // the file, so a bare /size=\{(\d+)\}/ reads 12 and silently under-counts the
     // widest fixed item in the row by 20px. Anchoring is not enough on its own,
@@ -659,14 +662,16 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     // labelled button `fixed` accounts for.
     expect((CODE.match(/<AddPiecesButton/g) ?? []).length).toBe(1);
 
-    // Two labelled buttons, the gap between them, and the footer's own padding at
-    // both ends.
-    const fixed =
-      2 * padX + gap +
-      (2 * btnPadX + btnGap + trash) +
-      (2 * btnPadX + btnGap + plus);
+    // The row is two EQUAL columns now, so the budget is per cell: the footer's
+    // padding at both ends and the one gap between the columns come off the rail,
+    // the rest is halved, and each cell holds one button's padding, icon gap and icon.
+    const rowGap = Number(/gap: (\d+)px/.exec(rule('.rail-footer__row'))![1]);
     const floor = railFloor('rail-right');
-    const room = floor - fixed;
+    const cell = (floor - 2 * padX - rowGap) / 2;
+    const fixedDelete = 2 * btnPadX + btnGap + trash;
+    const fixedAdd = 2 * btnPadX + btnGap + plus;
+    const roomDelete = cell - fixedDelete;
+    const roomAdd = cell - fixedAdd;
 
     // The longest each label ever renders. Delete is the wider of the two selection
     // branches; Add swaps to "Close" while the panel is open, which is the state
@@ -674,14 +679,34 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     const slot = [...CODE.matchAll(/<span style=\{LABEL\}>([^<]+)<\/span>/g)].map((m) => m[1]);
     expect(slot.length, 'the selection slot lost a branch').toBe(2);
     const add = /textOverflow: 'ellipsis'[^>]*>\s*\{open \? '([^']+)' : '([^']+)'\}/.exec(CATCODE)!;
-    const chars =
-      Math.max(...slot.map((l) => l.length)) + Math.max(add[1].length, add[2].length);
+    const addChars = Math.max(add[1].length, add[2].length);
+    const deleteChars = Math.max(...slot.map((l) => l.length));
 
     const PX_PER_CHAR = 7; // estimate: 12px --font-sans at 700
     expect(
-      room,
-      `the row's fixed parts take ${fixed}px of the ${floor}px rail, leaving ${room}px for ${chars} characters`,
-    ).toBeGreaterThanOrEqual(chars * PX_PER_CHAR);
+      roomDelete,
+      `each ${cell}px cell spends ${fixedDelete}px on its fixed parts, leaving ${roomDelete}px for ${deleteChars} characters`,
+    ).toBeGreaterThanOrEqual(deleteChars * PX_PER_CHAR);
+    expect(
+      roomAdd,
+      `each ${cell}px cell spends ${fixedAdd}px on its fixed parts, leaving ${roomAdd}px for ${addChars} characters`,
+    ).toBeGreaterThanOrEqual(addChars * PX_PER_CHAR);
+  });
+
+  it('is two equal columns that fill the width, with no auto margin on Add', () => {
+    const row = rule('.rail-footer__row');
+    expect(row).toContain('display: grid');
+    expect(row).toMatch(/grid-template-columns: 1fr 1fr;/);
+    // A lone button takes the whole row rather than half of it.
+    expect(rule('.rail-footer__row > :only-child')).toContain('grid-column: 1 / -1');
+    // Buttons fill their cell; Add is the same height as the rest and bolder.
+    const btns = rule('.rail-footer .ds-btn');
+    expect(btns).toContain('width: 100%');
+    expect(btns).toMatch(/height: \d+px/);
+    expect(rule('.rail-footer .rail-cta')).toMatch(/font-weight: 800/);
+    expect(CODE, 'the auto margin is what made the gap').not.toContain('marginLeft');
+    expect(CODE).not.toMatch(/margin-?left:\s*'?auto/i);
+    expect(CATCODE).toContain('rail-cta');
   });
 
   it('is the ONLY --paper-2 band at the foot of the right rail', () => {
@@ -1359,5 +1384,18 @@ describe('nothing spreads wide because the window did', () => {
     // `auto-fill` keeps a sixth, empty track in an 1100px column, so five tiles stop
     // ~185px short of the drawing's right edge below them.
     expect(rule('.shape-options')).toMatch(/repeat\(auto-fit, /);
+  });
+});
+
+describe('the canvas is not a query container', () => {
+  it('leaves #studio-canvas without container-type, so fixed children place by the screen', () => {
+    // `container-type` applies layout containment, which makes the element the
+    // containing block for every `position: fixed` descendant. The view pill's narrow-
+    // canvas fallback put it on `#studio-canvas` for one commit, and the piece hover
+    // card — fixed, placed by client coordinates — landed a rail's width and an app
+    // bar's height off the piece it described.
+    const rules = codeOnly(CSS).match(/#studio-canvas[^{]*\{[^}]*\}/g) ?? [];
+    expect(rules.length).toBeGreaterThan(0);
+    for (const r of rules) expect(r).not.toMatch(/container(-type)?\s*:/);
   });
 });

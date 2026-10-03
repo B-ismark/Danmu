@@ -95,4 +95,27 @@ describe('SoundCues', () => {
     });
     expect(glides).toBe(1);
   });
+  it('plays the dusk phrase when a sun drag carries the clock past sunset, and dawn coming back', async () => {
+    const { SUN_DRAG_ID } = await import('@/lib/store');
+    useStudio.setState({ lighting: 'daylight', hour: 19 });
+    press();
+    await act(async () => {
+      useStudio.getState().setDragging(SUN_DRAG_ID);
+    });
+    await act(async () => {
+      useStudio.getState().setHour(19.25);
+    });
+    await act(async () => {
+      useStudio.getState().setHour(19.75);
+    });
+    expect(played).toContain('dusk');
+    played.length = 0;
+    await act(async () => {
+      useStudio.getState().setHour(19.25);
+    });
+    expect(played).toEqual(['dawn']);
+    await act(async () => {
+      useStudio.getState().setDragging(null);
+    });
+  });
 });

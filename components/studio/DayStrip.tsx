@@ -1,70 +1,57 @@
 'use client';
 
-// The day, over the canvas: a rainbow of dashes the sun rides along, with the
-// time under it. Grab the sun, or press anywhere on the arc, and drag to scrub the
-// day. On a narrow canvas — a phone, or a desktop one with the Library open — the
-// same track lies flat and is a plain slider.
+// The day, over the canvas: a strip painted as the sky it scrubs, with the sun — or
+// the moon — riding it in a pill beside the time. Grab the pill, or press anywhere on
+// the strip, and drag to scrub the day.
 //
 // It sits in the canvas's top-centre slot, under the tool row (see `CanvasDay` in
-// `CanvasChrome`), and it does NOT move with the camera. It used to: the arc was the
-// sun's real path round the room, drawn in 3D, and a control that moves every time
-// the view does is one you have to find again — pinned to the frame's edge at dawn,
-// under the toolbar at noon, and on a phone wandering across the furniture. The
-// light still comes from the real direction, so orbiting still shows which wall the
-// morning comes through; the control just stays where the hand left it.
+// `CanvasChrome`), and it does NOT move with the camera: a control that moves every
+// time the view does is one you have to find again. The light still comes from the
+// real direction, so orbiting still shows which wall the morning comes through.
 //
-// Where the handle sits is `lib/sun-arc.ts`; what the hour MEANS for the light is
-// `lib/lighting-moods.ts`. This file draws the one and turns a drag into the other.
+// Where the handle sits and how the strip is painted is `lib/day-strip.ts`; what the
+// hour MEANS for the light is `lib/lighting-moods.ts`. This file draws the one and
+// turns a drag into the other.
 //
 // Interaction contract:
-//   · the sun is a real slider (role, value text, arrow keys), because a drag is a
+//   · the pill is a real slider (role, value text, arrow keys), because a drag is a
 //     pointer gesture and this is a control for a fact;
 //   · a drag holds `draggingId` for its length (`SUN_DRAG_ID`), which stops the
 //     camera orbiting under it and makes the undo stack record the whole scrub as
 //     ONE step rather than one per pointer move;
-//   · by day the handle is the sun and the arc is the day; by night it is the moon
-//     and the arc is the night. Crossing between them is the rail's Morning / Night
-//     stops or the arrow keys, not a drag past the horizon — a gesture whose meaning
-//     flips at an invisible point is one nobody can learn;
+//   · the strip is the WHOLE clock, so a drag can cross the horizon — and the place
+//     it crosses is painted gold on the strip, which is what makes that learnable.
+//     The rainbow this replaced split the clock into a day half and a night half
+//     because its horizon was invisible. Crossing morphs the sun into the moon (or
+//     back) under the hand, and `SoundCues` answers with the dawn or dusk phrase;
 //   · it gives way to the furniture: gone while anything else is carried, quieter
 //     while a piece is selected, back the moment you reach for it;
-//   · at rest it is FOLDED: the sun (or the moon, or the cloud) alone at the arc's
-//     crown, no arc and no clock. Reaching for it opens it — the pointer coming near
-//     (a ring round the disc, wider than the disc), keyboard focus, or on a touch
-//     screen a first tap, which opens and does nothing else, because a drag from the
-//     crown would start the day at noon wherever the clock stood. The ring exists only
-//     while folded: open, the sky under the arc is the room's to orbit, as it always
-//     was. It folds again when the mouse leaves the arc's box, on a press anywhere
-//     else, and when the keyboard leaves it — and never while the keyboard is still
-//     on it, or the arrows would move a clock nobody can see. A finger lifting off
-//     the glass is not leaving, so a touch drag does not fold it under the thumb.
+//   · at rest it is FOLDED: the pill alone, centred, the strip drawn in behind it.
+//     Reaching for it opens it — the pointer coming near (a ring round the pill,
+//     wider than the pill), keyboard focus, or on a touch screen a first tap, which
+//     opens and does nothing else, because the folded pill stands at the centre,
+//     not at the hour, and a drag from there would start the day at noon. It folds
+//     again when the mouse leaves the strip's box, on a press anywhere else, and when
+//     the keyboard leaves it — and never while the keyboard is still on it, or the
+//     arrows would move a clock nobody can see. A finger lifting off the glass is not
+//     leaving, so a touch drag does not fold it under the thumb.
 
-import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useId, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { SUN_DRAG_ID, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
-import {
-  DEFAULT_BEARING_DEG,
-  dayFraction,
-  formatClock,
-  isDaytime,
-  lightingAt,
-  nightFraction,
-  sunAt,
-} from '@/lib/lighting-moods';
-import { scrubHour, tAtX, trackFor, trackPath, trackPoint } from '@/lib/sun-arc';
+import { DEFAULT_BEARING_DEG, formatClock, isDaytime, lightingAt, sunAt } from '@/lib/lighting-moods';
+import { hourT, scrubHour, skyGradient, stripFor, stripX, tAtX } from '@/lib/day-strip';
 import { playSound } from '@/lib/sound';
 import { Icon } from '@/components/ui/Icon';
 
-/** The handle's disc and the glow ring round it, in px. The track's ends are kept
- *  this far in, and its crown this far down, so the sun is whole at every hour. */
-const DISC = 34;
-const GLOW = 6;
-const INSET = DISC / 2 + GLOW;
-/** The time pill under the disc, and a breath above it. */
-const PILL = 26;
-/** The ring round the folded disc that counts as near, in px. */
-const REACH = 64;
-/** How far outside the arc's box the mouse may stray and still be on it, in px. */
+/** The pill's width and height, in px: a glyph and a five-character clock. */
+const PILL_W = 86;
+const PILL_H = 32;
+/** The strip's ends are kept this far in, so the pill is whole at midnight. */
+const INSET = PILL_W / 2;
+/** How far round the folded pill counts as near, in px. */
+const REACH = 22;
+/** How far outside the strip's box the mouse may stray and still be on it, in px. */
 const SLACK = 12;
 /** How long the mouse may be off the control before it folds, in ms. */
 const FOLD_DELAY_MS = 280;
@@ -76,7 +63,35 @@ function isDark(hex: string): boolean {
   return lum < 128;
 }
 
-export function SunArc() {
+/** One glyph that is the sun by day and the moon by night, and moves between them
+ *  rather than swapping: the rays draw in and turn away, the disc swells, and a
+ *  shadow slides across it to carve the crescent. Every part is in the drawing at
+ *  every hour, so CSS can animate the change (`.celestial` in globals.css). */
+function Celestial({ night }: { night: boolean }) {
+  const mask = `celestial-${useId().replace(/:/g, '')}`;
+  return (
+    <svg className={`celestial${night ? ' celestial--night' : ''}`} viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+      <defs>
+        <mask id={mask}>
+          <rect width="24" height="24" fill="white" />
+          <circle className="celestial__bite" cx="16.5" cy="8" r="6.5" fill="black" />
+        </mask>
+      </defs>
+      <g className="celestial__rays" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        {Array.from({ length: 8 }, (_, i) => {
+          const a = (i * Math.PI) / 4;
+          const [s, c] = [Math.sin(a), Math.cos(a)];
+          return <line key={i} x1={12 + 8 * c} y1={12 + 8 * s} x2={12 + 10.5 * c} y2={12 + 10.5 * s} />;
+        })}
+      </g>
+      <g mask={`url(#${mask})`}>
+        <circle className="celestial__disc" cx="12" cy="12" r="5" fill="currentColor" />
+      </g>
+    </svg>
+  );
+}
+
+export function DayStrip() {
   const lighting = useStudio((s) => s.lighting);
   const hour = useStudio((s) => s.hour);
   const setHour = useStudio((s) => s.setHour);
@@ -87,17 +102,17 @@ export function SunArc() {
   const overcast = lighting === 'overcast';
   const day = isDaytime(hour);
 
-  // Giving way. Anything else being carried — a piece, a wall — and the sun is not
+  // Giving way. Anything else being carried — a piece, a wall — and the day is not
   // there at all, so it can neither catch the pointer nor sit over the size tags.
   // A piece selected and it quietens; reaching for it (hover, focus, a drag) brings
   // it back.
   const otherGesture = useStudio((s) => s.draggingId !== null && s.draggingId !== SUN_DRAG_ID);
   const pieceInHand = useStudio((s) => s.selection.length > 0 || s.selectedWall !== null);
-  /** Reached for by a pointer: the mouse is over the arc's box, or a finger opened it. */
+  /** Reached for by a pointer: the mouse is over the strip's box, or a finger opened it. */
   const [near, setNear] = useState(false);
-  /** The keyboard is on the sun. Apart from `near`, so neither can fold the other's. */
+  /** The keyboard is on the pill. Apart from `near`, so neither can fold the other's. */
   const [focused, setFocused] = useState(false);
-  /** Leaving the disc for the arc crosses a gap of sky, so the fold waits a breath. */
+  /** Leaving the pill for the strip can cross a sliver of canvas, so the fold waits a breath. */
   const foldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdOpen = () => {
     if (foldTimer.current) clearTimeout(foldTimer.current);
@@ -115,14 +130,11 @@ export function SunArc() {
     if (foldTimer.current) clearTimeout(foldTimer.current);
   }, []);
 
-  /** Which half of the clock the drag started in, fixed for the gesture: a drag
-   *  that reaches sunset exactly must not swap to the night's arc under the hand. */
-  const phase = useRef<'day' | 'night'>('day');
   // THIS control's gesture, not merely "the clock is being scrubbed": the rail's day
   // track holds the same `draggingId` for its own drags.
   const [carrying, setCarrying] = useState(false);
   /** The gesture in flight: where it started, so Esc can put it back, and whether
-   *  it has moved, so a click on the sun is not heard or treated as a scrub. */
+   *  it has moved, so a click on the pill is not heard or treated as a scrub. */
   const gesture = useRef<{
     pointerId: number;
     target: Element;
@@ -130,10 +142,9 @@ export function SunArc() {
     lighting: typeof lighting;
     moved: boolean;
   } | null>(null);
-  const half: 'day' | 'night' = carrying ? phase.current : day ? 'day' : 'night';
 
-  // The width the track may have, measured: the slot is the canvas minus whatever
-  // is docked on the right, and it decides between the arc and the flat slider.
+  // The width the strip may have, measured: the slot is the canvas minus whatever is
+  // docked on the right.
   const slotRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const [available, setAvailable] = useState(0);
@@ -147,21 +158,18 @@ export function SunArc() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const track = trackFor(available, INSET);
+  const strip = stripFor(available, INSET);
 
   const open = carrying || near || focused;
-  const t = Math.min(1, Math.max(0, half === 'day' ? dayFraction(hour) : nightFraction(hour)));
-  const [hx, hy] = trackPoint(track, t);
-  // Folded, the sun waits at the crown: the one point of the track that is the same
-  // whatever the hour, so the folded control never wanders.
-  const [cx, cy] = trackPoint(track, 0.5);
-  const [px, py] = open ? [hx, hy] : [cx, cy];
+  // Folded, the pill waits at the centre: the one place that is the same whatever the
+  // hour, so the folded control never wanders.
+  const px = open ? stripX(strip, hourT(hour)) : strip.width / 2;
   const light = lightingAt(lighting, hour, bearingDeg);
   const dark = isDark(light.bg);
 
   function tAt(clientX: number): number {
     const box = boxRef.current?.getBoundingClientRect();
-    return box ? tAtX(track, clientX - box.left) : t;
+    return box ? tAtX(strip, clientX - box.left) : hourT(hour);
   }
 
   function begin(e: PointerEvent, jump: boolean) {
@@ -171,21 +179,20 @@ export function SunArc() {
     if (e.button !== 0 || gesture.current) return;
     e.preventDefault();
     e.stopPropagation();
-    // A press on the folded sun opens it and is spent: the disc stands at the crown,
-    // not at the hour, so a scrub from here would jump the day to noon.
+    // A press on the folded pill opens it and is spent: it stands at the centre, not
+    // at the hour, so a scrub from here would jump the day to noon.
     if (!open) {
       holdOpen();
       return;
     }
     const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
-    phase.current = day ? 'day' : 'night';
     // The gesture's flag first, so every write below lands inside ONE undo step
     // rather than the lighting switch being scheduled as its own.
     setDragging(SUN_DRAG_ID);
     setCarrying(true);
     gesture.current = { pointerId: e.pointerId, target, hour, lighting, moved: false };
-    // A press on the track is a slider's press: the sun comes to it.
+    // A press on the strip is a slider's press: the pill comes to it.
     if (jump) move(e);
   }
 
@@ -200,9 +207,9 @@ export function SunArc() {
       if (overcast) setLighting('daylight');
       playSound('pick');
     }
-    // The hour's detent, the air under the scrub and the dawn and dusk cues are
+    // The hour's detent, the air under the scrub and the dawn and dusk phrases are
     // `SoundCues`' — they follow the clock whatever moves it.
-    setHour(scrubHour(phase.current, tAt(e.clientX)));
+    setHour(scrubHour(tAt(e.clientX)));
   }
 
   function endGesture(heard: boolean) {
@@ -234,10 +241,9 @@ export function SunArc() {
     return () => window.removeEventListener('keydown', onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [carrying]);
-  // Open to a pointer, it watches where the mouse goes: anywhere inside the arc's box
-  // keeps it, sky included, without the sky catching a single press; out of the box it
-  // folds a breath later. A press anywhere else folds it at once — the only way off it
-  // a finger has.
+  // Open to a pointer, it watches where the mouse goes: anywhere inside the strip's
+  // box keeps it; out of the box it folds a breath later. A press anywhere else folds
+  // it at once — the only way off it a finger has.
   useEffect(() => {
     if (!near) return;
     const onMove = (e: globalThis.PointerEvent) => {
@@ -276,18 +282,16 @@ export function SunArc() {
     if (!overcast) playSound('tick', { brightness: day ? sunAt(hour).elevationDeg / 60 : 0 });
   };
 
-  const engaged = open;
-  const quiet = pieceInHand && !engaged;
-  const height = INSET + track.sag + DISC / 2 + PILL;
+  const quiet = pieceInHand && !open;
   // Arriving opens it. Leaving is the window's `pointermove` above, measured against
-  // the arc's box rather than these elements: a finger or a pen lifting off the glass
-  // reports a leave too, and the gap of sky between the disc and the arc is not away.
+  // the strip's box rather than these elements: a finger or a pen lifting off the
+  // glass reports a leave too.
   const reach = { onPointerEnter: holdOpen };
   const gestureHandlers = {
     onPointerMove: move,
     onPointerUp: () => endGesture(true),
     onPointerCancel: () => endGesture(false),
-    // The canvas answers clicks and menus from the last press it saw; the sun's
+    // The canvas answers clicks and menus from the last press it saw; the day's
     // presses are its own.
     onClick: (e: MouseEvent) => e.stopPropagation(),
     onDoubleClick: (e: MouseEvent) => e.stopPropagation(),
@@ -298,16 +302,14 @@ export function SunArc() {
   };
 
   const cls = [
-    'sun-day',
-    track.sag === 0 && 'sun-day--flat',
-    dark && 'sun-day--on-dark',
-    overcast && 'sun-day--muted',
-    half === 'night' && 'sun-day--night',
-    engaged && 'sun-day--engaged',
-    !open && 'sun-day--folded',
-    carrying && 'sun-day--carrying',
-    quiet && 'sun-day--quiet',
-    otherGesture && 'sun-day--away',
+    'day-strip',
+    dark && 'day-strip--on-dark',
+    overcast && 'day-strip--muted',
+    !day && 'day-strip--night',
+    open ? 'day-strip--open' : 'day-strip--folded',
+    carrying && 'day-strip--carrying',
+    quiet && 'day-strip--quiet',
+    otherGesture && 'day-strip--away',
   ]
     .filter(Boolean)
     .join(' ');
@@ -315,36 +317,32 @@ export function SunArc() {
   return (
     <div ref={slotRef} className={cls} aria-hidden={otherGesture || undefined}>
       {available > 0 && (
-        <div ref={boxRef} className="sun-day__box" style={{ width: track.width, height }}>
-          <svg className="sun-day__svg" width={track.width} height={height} aria-hidden>
-            <path className="sun-day__path" d={trackPath(track, 0, 1, INSET)} />
-            {t > 0 && <path className="sun-day__travelled" d={trackPath(track, 0, t, INSET)} />}
-            {/* The press target: the arc, fattened to a finger's width and
-                invisible. Pointer events on the stroke only, so the sky inside the
-                rainbow is still the room's to orbit. */}
-            <path
-              className="sun-day__hit"
-              d={trackPath(track, 0, 1, INSET)}
-              onPointerDown={(e) => begin(e, true)}
-              {...gestureHandlers}
-              {...reach}
-            />
-          </svg>
-          {/* Near enough to open it: a ring round the folded disc, wider than the disc,
-              so the arc opens as the pointer arrives rather than on contact. Folded
-              only — open, it would sit on the sky the room orbits in. */}
+        <div ref={boxRef} className="day-strip__box" style={{ width: strip.width, height: PILL_H }}>
+          {/* The sky. Folded, it is drawn in to the pill's own width behind it, so
+              opening reads as the strip growing out of the pill. */}
+          <div
+            className="day-strip__sky"
+            aria-hidden
+            style={{
+              background: skyGradient(),
+              clipPath: open ? 'inset(0 0 round 999px)' : `inset(0 calc(50% - ${PILL_W / 2}px) round 999px)`,
+            }}
+          />
+          {/* The press target: the whole strip, open only — folded, the canvas
+              either side of the pill is the room's. */}
+          <div className="day-strip__hit" aria-hidden onPointerDown={(e) => begin(e, true)} {...gestureHandlers} {...reach} />
           {!open && (
             <div
-              className="sun-day__reach"
+              className="day-strip__reach"
               aria-hidden
-              style={{ left: cx - REACH / 2, top: INSET + cy - REACH / 2 }}
+              style={{ left: strip.width / 2 - PILL_W / 2 - REACH, top: -REACH, width: PILL_W + REACH * 2, height: PILL_H + REACH * 2 }}
               onPointerDown={(e) => begin(e, false)}
               {...reach}
             />
           )}
           <div
-            className="sun-day__handle"
-            style={{ transform: `translate(${px - DISC / 2}px, ${INSET + py - DISC / 2}px)` }}
+            className="day-strip__handle"
+            style={{ width: PILL_W, height: PILL_H, transform: `translateX(${px - PILL_W / 2}px)` }}
             role="slider"
             tabIndex={0}
             aria-label="Time of day"
@@ -375,10 +373,10 @@ export function SunArc() {
               if (overcast) setLighting('daylight');
             }}
           >
-            <span className="sun-day__body" aria-hidden>
-              <Icon name={overcast ? 'cloud' : half === 'day' ? 'sun' : 'moon'} size={18} />
+            <span className="day-strip__glyph" aria-hidden>
+              {overcast ? <Icon name="cloud" size={18} /> : <Celestial night={!day} />}
             </span>
-            <span className="sun-day__time mono">{formatClock(hour)}</span>
+            <span className="day-strip__time mono">{formatClock(hour)}</span>
           </div>
         </div>
       )}

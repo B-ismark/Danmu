@@ -14,12 +14,11 @@ import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
 import { onPageLeave } from '@/lib/page-leave';
 import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
-import { Icon } from '@/components/ui/Icon';
+import { RoughSizeCallout } from './RoughSizeCallout';
 
 export function RoomDimsEditor() {
   const room = useScene((s) => s.room);
   const setRoom = useScene((s) => s.setRoom);
-  const confirmSize = useScene((s) => s.confirmSize);
   const dimUnit = useSettings((s) => s.dimUnit);
   const prec = precisionFor(dimUnit);
   const step = stepFor(dimUnit);
@@ -333,22 +332,11 @@ export function RoomDimsEditor() {
     // button went (the user's call, 2026-10-02), and a rule under the last thing in a
     // section divides it from nothing.
     <div>
-        {/* The room still stands at its shape's typical size, because the size step
-            was skipped (`RoomData.roughSize`). Said HERE, above the boxes that fix
-            it, and nowhere louder: nothing is wrong, a size simply has not been
-            given. Typing a size clears it (`setRoom`); so does saying the typical
-            one is right, which is a real answer — a person whose room happens to
-            be the typical size should not have to retype it to be believed. */}
-        {room.roughSize && (
-          <div className="rough-note" role="note">
-            <Icon name="info" size={14} />
-            <p className="rough-note__text">Typical sizes, not yours yet.</p>
-            <button type="button" className="ds-btn ds-btn--ghost ds-btn--sm rough-note__confirm" onClick={confirmSize}>
-              These are right
-            </button>
-          </div>
-        )}
-        <div className="fields-row" style={{ ['--field-min' as string]: fieldMinWidth(local) }}>
+        {/* A room still at its shape's typical size (`RoomData.roughSize`) is said
+            by a floating callout beside these fields (`RoughSizeCallout`), anchored
+            on the row below by `data-room-dims` — not by a note in the section. */}
+        <RoughSizeCallout />
+        <div className="fields-row" style={{ ['--field-min' as string]: fieldMinWidth(local) }} data-room-dims="">
           {labels.map((axis, i) => (
             <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span className="t-note" style={{ fontWeight: 600 }}>{axis}</span>

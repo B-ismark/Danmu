@@ -76,6 +76,10 @@ describe('with a piece selected', () => {
     expect(row.querySelector('button[aria-label^="Delete"]')).not.toBeNull();
     expect(adds()).toHaveLength(1);
     expect(row.contains(adds()[0])).toBe(true);
+    // Add is a direct cell of the two-column row, with no auto margin pushing it.
+    const cell = adds()[0].closest('div')!;
+    expect(cell.parentElement).toBe(row);
+    expect(cell.getAttribute('style') ?? '').not.toMatch(/margin/);
     expect(startOvers()).toHaveLength(1);
     expect(row.contains(startOvers()[0])).toBe(false);
     expect(footer()!.contains(startOvers()[0])).toBe(true);
@@ -88,6 +92,7 @@ describe('the Add button', () => {
     const add = adds()[0];
     expect(add.className).toContain('ds-btn--accent');
     expect(add.getAttribute('style') ?? '').not.toMatch(/accent-tint/);
+    expect(add.className).toContain('rail-cta');
   });
 });
 

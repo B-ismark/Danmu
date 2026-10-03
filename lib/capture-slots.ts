@@ -147,20 +147,6 @@ export function slotFromBearing(bearingDeg: number, anchorDeg: number): CaptureS
   return SLOT_ORDER[turns];
 }
 
-/** Shift one slot `steps` quarter-turns clockwise. Applied across the whole set,
- *  this is the entirety of the "rotate them all" control: the labels move
- *  together, so the set stays four consecutive walls in order and only its
- *  starting point changes.
- *
- *  It also re-teaches the anchor for free. `anchorFrom` reads the bearings off
- *  the photos where they now sit, so a rotation carries the anchor with them and
- *  the next bearing-carrying photo lands consistently with what the user just
- *  said. Nothing needs to persist the correction. */
-export function rotateSlot(slot: CaptureSlot, steps: number): CaptureSlot {
-  const i = (((slotIndex(slot) + steps) % 4) + 4) % 4;
-  return SLOT_ORDER[i];
-}
-
 /**
  * Give each photo in a batch a wall.
  *
@@ -169,7 +155,9 @@ export function rotateSlot(slot: CaptureSlot, steps: number): CaptureSlot {
  * design — re-optimising the whole assignment on every add would shuffle a screen
  * the user is looking at, rewrite up to four IndexedDB keys per drop, and turn a
  * correction they had already made into a suggestion. The way to change the
- * anchor is the rotation control, which says what it does.
+ * anchor is to move a photo with the wall picker under it: `anchorFrom` reads the
+ * bearings off the photos where they now sit, so the next photo follows the
+ * correction and nothing needs to persist it.
  *
  * `shotAt` orders the batch only when EVERY photo in it has one. A partial set
  * sorted by time interleaves the timed photos through the untimed ones' positions
@@ -234,9 +222,9 @@ export function placePhotos(
 
 // ─── Moving a placed set around ─────────────────────────────────────────────
 //
-// The screen holds one record per wall and lets the user permute them: turn the
-// whole set round, swap two, drop one. Those permutations lived in the component
-// as three hand-written spreads, and three separate bugs came out of a
+// The screen holds one record per wall and lets the user permute them: move one
+// (a swap when the wall is taken), drop one. Those permutations lived in the
+// component as three hand-written spreads, and three separate bugs came out of a
 // read-through of them — a quality score landing on the photo that had replaced
 // the one it was scored for, a clash flag pointing at a wall whose photo had been
 // deleted, and a clash flag left pointing at the old wall after a move. All three
@@ -246,9 +234,7 @@ export function placePhotos(
 // beside the ladder that creates `by` and `clashedWith` in the first place.
 //
 // THE LIFETIME OF A CLASH FLAG, because it is a cross-reference and those rot:
-// it survives a rotation (both photos move together, so "these two may be one
-// wall" is still true and the reference is just relabelled) and nothing else. A
-// swap, a delete or a replace means the user is working on the assignment
+// it survives nothing that moves a photo. A swap, a delete or a replace means the user is working on the assignment
 // themselves, which is what the flag was asking for — and it is better to drop a
 // hint that has been acted on than to maintain a pointer to a photo that may no
 // longer exist.
@@ -264,17 +250,8 @@ export type Slotted = { by?: SlotSignal; clashedWith?: CaptureSlot };
  *  copy of the same literal — the one place four slot ids are written down. */
 export const emptySlotMap = <T>(): SlotMap<T> => ({ n: null, e: null, s: null, w: null });
 
-/** The `from → to` mapping a rotation implies, for `roomStore.reslotCaptures`.
- *  Derived from the same `rotateSlot` the screen's own state uses, so the store
- *  and the screen cannot disagree about where a photo went. */
-export function rotationMapping(steps: number): Record<CaptureSlot, CaptureSlot> {
-  const out = {} as Record<CaptureSlot, CaptureSlot>;
-  for (const s of SLOT_ORDER) out[s] = rotateSlot(s, steps);
-  return out;
-}
-
-/** …and the mapping for one move, which is a swap when the target is occupied
- *  and a plain move when it is not. */
+/** The `from → to` mapping one move implies, for `roomStore.reslotCaptures`: a swap
+ *  when the target is occupied and a plain move when it is not. */
 export function swapMapping<T>(
   map: SlotMap<T>,
   from: CaptureSlot,
@@ -283,23 +260,6 @@ export function swapMapping<T>(
   const out: Partial<Record<CaptureSlot, CaptureSlot>> = { [from]: to };
   if (map[to]) out[to] = from;
   return out;
-}
-
-/** Turn the whole set `steps` walls round. Every photo keeps its payload; `by`
- *  becomes `manual`, because after this the reason it is where it is *is* the
- *  user; and a clash reference is relabelled along with the walls it names. */
-export function rotateSet<T extends Slotted>(map: SlotMap<T>, steps: number): SlotMap<T> {
-  const next = emptySlotMap<T>();
-  for (const s of SLOT_ORDER) {
-    const p = map[s];
-    if (!p) continue;
-    next[rotateSlot(s, steps)] = {
-      ...p,
-      by: 'manual',
-      clashedWith: p.clashedWith ? rotateSlot(p.clashedWith, steps) : undefined,
-    };
-  }
-  return next;
 }
 
 /** Move one photo, swapping with whatever is already there. Clash flags across
@@ -346,7 +306,7 @@ function withoutClashes<T extends Slotted>(map: SlotMap<T>): SlotMap<T> {
  *
  * Quality scoring is async and keyed on nothing: it is started for one blob and
  * resolves whenever it resolves. Written back by slot alone, it lands on whatever
- * occupies that wall by then — so rotating a set while its photos were still
+ * occupies that wall by then — so moving photos while they were still
  * being scored relabelled every score, and the chip then described a different
  * image. The blob is the identity, and the identity is the check.
  *

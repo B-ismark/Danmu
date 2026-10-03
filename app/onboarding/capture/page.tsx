@@ -23,8 +23,6 @@ import {
   emptySlotMap,
   patchIfSame,
   placePhotos,
-  rotateSet,
-  rotationMapping,
   swapMapping,
   swapSet,
   type PlacedPhoto,
@@ -39,6 +37,7 @@ import { scoreQuality, flagHelp, flagLabel, flagTone, type Quality } from '@/lib
 import { useMediaQuery } from '@/lib/use-media-query';
 import { formatDim } from '@/lib/units';
 import { Icon } from '@/components/ui/Icon';
+import { Select, type SelectOption } from '@/components/ui/Select';
 import { NumberField } from '@/components/ui/NumberField';
 import { FlowBarLead, Pill, Segmented } from '@/components/ui/primitives';
 import { FlowStepper } from '@/components/ui/FlowStepper';
@@ -50,7 +49,7 @@ type Source = 'upload' | 'camera';
 /** One photo, everything this screen knows about it.
  *
  *  Was four parallel `Record<CaptureSlot, T | null>` maps, which is fine until
- *  the walls can be permuted: rotating the set then means permuting four maps in
+ *  the walls can be permuted: moving a photo then means permuting four maps in
  *  step, and the quality read is the one that got left behind last time and ended
  *  up describing a different image. One record moves as one thing. */
 type Photo = {
@@ -93,10 +92,10 @@ const turnOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.inst
  *  the only one who can see whether we got it right. (It named `wallDistance` until
  *  § 44 deleted it; the convention is the same, the function is not.) */
 const REASON: Record<SlotSignal, string> = {
-  bearing: 'from this photo’s compass',
-  time: 'from when it was taken',
-  order: 'from the order you added it',
-  manual: 'wall you chose',
+  bearing: 'Placed by compass',
+  time: 'Placed by shutter time',
+  order: 'Placed by order added',
+  manual: 'Placed by you',
 };
 
 /** The photos already placed, in the shape `placePhotos` reads. */
@@ -128,6 +127,10 @@ export default function CapturePage() {
     roughSize: boolean;
   } | null>(null);
   const [draggingFrom, setDraggingFrom] = useState<CaptureSlot | null>(null);
+  /** The wall whose name is being pointed at or focused, on a card or in its Wall
+   *  list. The plan shimmers that wall, so a name on a card and a line on the room
+   *  are the same thing to the eye. */
+  const [shimmer, setShimmer] = useState<CaptureSlot | null>(null);
   const takesDrop = (e: React.DragEvent) => draggingFrom !== null || carriesFiles(e);
   /** single polite live region for everything that happens without a page change */
   const [announce, setAnnounce] = useState('');
@@ -227,7 +230,7 @@ export default function CapturePage() {
         });
       for (const c of caps) {
         // `patchIfSame`, not a write by slot: scoring is async and the user can
-        // rotate the set while it is still running.
+        // move a photo to another wall while it is still running.
         scoreQuality(c.blob).then((q) => setPhotos((prev) => patchIfSame(prev, c.slot, c.blob, { quality: q })));
       }
     })();
@@ -272,7 +275,7 @@ export default function CapturePage() {
     if (retiring) URL.revokeObjectURL(retiring);
     // Keyed on the blob, not the wall. A score started for this photo must not
     // land on whichever photo occupies this wall by the time it resolves — which
-    // is exactly what a rotation mid-scoring used to make happen.
+    // is exactly what moving photos mid-scoring used to make happen.
     scoreQuality(blob).then((q) => setPhotos((prev) => patchIfSame(prev, slot, blob, { quality: q })));
   }
 
@@ -393,22 +396,6 @@ export default function CapturePage() {
     );
   }
 
-  /** Turn every label one wall round. The set stays four consecutive walls in
-   *  order; only where it starts changes — and because the anchor is derived from
-   *  where the photos now sit, the next photo to arrive follows the correction
-   *  without anything having to remember it. */
-  async function rotateAll(steps: number) {
-    if (!roomId) return;
-    try {
-      await roomStore.reslotCaptures(roomId, rotationMapping(steps));
-    } catch {
-      setAnnounce(writeFailed(`Turning the walls ${steps > 0 ? 'forwards' : 'back'}`));
-      return;
-    }
-    setPhotos((p) => rotateSet(p, steps));
-    setAnnounce(`Walls turned ${steps > 0 ? 'forwards' : 'back'} one.`);
-  }
-
   const filledSlots = SLOT_ORDER.filter((s) => photos[s]);
   const filled = filledSlots.length;
   const anyCaptured = filled > 0;
@@ -443,7 +430,7 @@ export default function CapturePage() {
     return out;
   }, [room]);
   /** Only worth showing when the walls are actually different lengths; in a square
-   *  room every rotation measures the same and the number would be noise. */
+   *  room every wall measures the same and the number would be noise. */
   const spanLabel = (slot: CaptureSlot) => {
     const span = wallSpans?.[slot];
     if (span == null || !wallSpans) return null;
@@ -520,7 +507,7 @@ export default function CapturePage() {
       </ol>
       {room && (
         <figure className="capture-card">
-          <WallPlan footprint={roomFootprint(room)} filled={photos} next={nextSlot} />
+          <WallPlan footprint={roomFootprint(room)} filled={photos} next={nextSlot} shimmer={shimmer} />
           <figcaption className="t-small">
             {nextSlot ? (
               <>
@@ -578,6 +565,7 @@ export default function CapturePage() {
           onReplace={(list) => replacePhoto(slot, list)}
           onRemove={() => removePhoto(slot)}
           onMoveTo={(to) => movePhoto(slot, to)}
+          onShimmer={setShimmer}
           draggingFrom={draggingFrom}
           setDraggingFrom={setDraggingFrom}
           onDropFrom={(from) => movePhoto(from, slot)}
@@ -715,7 +703,7 @@ export default function CapturePage() {
                     {gallery(false)}
                   </div>
                   {anyCaptured && (
-                    <WallControls square={!!room && room.width === room.depth} onRotate={rotateAll} />
+                    <WallHint square={!!room && room.width === room.depth} />
                   )}
                 </div>
                 {guide}
@@ -800,7 +788,18 @@ function photoChrome(tier: ChromeTier = 'fact'): CSSProperties {
  *  moss and numbered, the ones already photographed inked with a tick, the rest
  *  quiet. A dot at the middle is where to stand — the origin the geometry assumes
  *  the photos were taken from. Drawn in plan metres (north up), fitted to its box. */
-function WallPlan({ footprint, filled, next }: { footprint: [number, number][]; filled: PhotoMap; next: CaptureSlot | null }) {
+function WallPlan({
+  footprint,
+  filled,
+  next,
+  shimmer,
+}: {
+  footprint: [number, number][];
+  filled: PhotoMap;
+  next: CaptureSlot | null;
+  /** The wall to play the shimmer on — see `.capture-plan__wall[data-shimmer]`. */
+  shimmer: CaptureSlot | null;
+}) {
   const xs = footprint.map((p) => p[0]);
   const zs = footprint.map((p) => p[1]);
   const pad = 0.9;
@@ -829,8 +828,10 @@ function WallPlan({ footprint, filled, next }: { footprint: [number, number][]; 
         const cx = mx - (mx / len) * r * 1.8;
         const cz = mz - (mz / len) * r * 1.8;
         return (
-          <g key={slot} data-state={state} className="capture-plan__wall">
+          <g key={slot} data-state={state} data-shimmer={shimmer === slot ? 'on' : undefined} className="capture-plan__wall">
             <line x1={ax} y1={az} x2={bx} y2={bz} vectorEffect="non-scaling-stroke" />
+            {/* The moving highlight. Present always, drawn only under data-shimmer. */}
+            <line className="capture-plan__shine" x1={ax} y1={az} x2={bx} y2={bz} vectorEffect="non-scaling-stroke" aria-hidden="true" />
             <circle cx={cx} cy={cz} r={r} />
             <text x={cx} y={cz} fontSize={r * 1.15} textAnchor="middle" dominantBaseline="central">
               {SLOT_ORDER.indexOf(slot) + 1}
@@ -843,46 +844,16 @@ function WallPlan({ footprint, filled, next }: { footprint: [number, number][]; 
   );
 }
 
-/** Turn the whole set of labels round by one wall.
- *
- *  This is the control the no-bearing case needs, and the one a bad magnetometer
- *  reading needs too. A set can only ever be wrong by a whole number of
- *  quarter-turns — the photos are four consecutive walls whatever else is true —
- *  so one control fixes every case of it at once. */
-function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps: number) => void }) {
+/** The line under the photos: what to check, now that each card carries its own
+ *  wall picker. A whole-set "turn it round" pair used to sit here; one move per
+ *  photo covers the same mistake with the control already in front of the user. */
+function WallHint({ square }: { square: boolean }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        flexWrap: 'wrap',
-      }}
-    >
-      <span className="t-small" style={{ minWidth: 0 }}>
-        {square
-          ? 'Wrong wall on a photo? Move it, or turn the whole set round.'
-          : 'Check each photo against the wall length beside it. If the whole set is one wall out, turn it round.'}
-      </span>
-      <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-        <button
-          className="ds-btn ds-btn--sm"
-          onClick={() => onRotate(-1)}
-          title="Every photo moves back one wall"
-        >
-          <Icon name="rotate-ccw" size={12} />
-          Back one
-        </button>
-        <button
-          className="ds-btn ds-btn--sm"
-          onClick={() => onRotate(1)}
-          title="Every photo moves on one wall"
-        >
-          <Icon name="rotate-cw" size={12} />
-          On one
-        </button>
-      </div>
-    </div>
+    <p className="t-small" style={{ margin: 0, minWidth: 0 }}>
+      {square
+        ? 'Wrong wall on a photo? Pick the right one under it.'
+        : 'Check each photo against the wall length on it, and pick the right wall under it if it is out.'}
+    </p>
   );
 }
 
@@ -979,6 +950,32 @@ function AddTile({
   );
 }
 
+/** The two round buttons over a photo's top corner. Paper, so they read on any
+ *  photograph (the badge is the dark one), and `--edge` because they are pressed. */
+const ROUND_BUTTON: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  inlineSize: 32,
+  blockSize: 32,
+  padding: 0,
+  borderRadius: 'var(--r-full)',
+  background: 'var(--paper)',
+  border: '1px solid var(--edge)',
+  color: 'var(--ink)',
+  cursor: 'pointer',
+};
+
+/** One wall's option in a card's Wall list. A wall that already holds a photo says
+ *  so, because choosing it swaps the two. */
+function wallOptions(slot: CaptureSlot, filled: PhotoMap): SelectOption<CaptureSlot>[] {
+  return SLOT_ORDER.map((o) => ({
+    value: o,
+    label: o !== slot && filled[o] ? `${labelOf(o)} (swap)` : labelOf(o),
+    short: labelOf(o),
+  }));
+}
+
 function PhotoCard({
   slot,
   photo,
@@ -988,6 +985,7 @@ function PhotoCard({
   onReplace,
   onRemove,
   onMoveTo,
+  onShimmer,
   draggingFrom,
   setDraggingFrom,
   onDropFrom,
@@ -1000,6 +998,8 @@ function PhotoCard({
   onReplace: (list: FileList | File[] | null) => void;
   onRemove: () => void;
   onMoveTo: (to: CaptureSlot) => void;
+  /** Which wall's name is being pointed at or focused, or null. */
+  onShimmer: (wall: CaptureSlot | null) => void;
   draggingFrom: CaptureSlot | null;
   setDraggingFrom: (s: CaptureSlot | null) => void;
   onDropFrom: (from: CaptureSlot) => void;
@@ -1007,6 +1007,30 @@ function PhotoCard({
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const label = labelOf(slot);
+  // Whether the pointer or focus is on this card's own Wall control, so a list that
+  // closes hands the shimmer back to this card's wall rather than switching it off.
+  const onControl = useRef(false);
+  const settle = () => onShimmer(onControl.current ? slot : null);
+  // A photo moved to an EMPTY wall takes its card with it (cards are keyed by wall),
+  // with the pointer still on this control — so no leave or blur ever arrives, and
+  // the list's close has just handed the shimmer back to the wall it left. A card
+  // that goes while it holds the shimmer switches it off.
+  const shimmerRef = useRef(onShimmer);
+  shimmerRef.current = onShimmer;
+  useEffect(
+    () => () => {
+      if (onControl.current) shimmerRef.current(null);
+    },
+    [],
+  );
+  // The Wall list is portalled to <body>, and React still delivers its pointer and
+  // focus events to this wrapper: only what happens on the wrapper's own DOM counts,
+  // or a pointer resting on a list that has just closed would keep the wall lit.
+  const control = (e: React.SyntheticEvent<HTMLElement>, on: boolean) => {
+    if (!e.currentTarget.contains(e.target as Node)) return;
+    onControl.current = on;
+    onShimmer(on ? slot : null);
+  };
 
   return (
     <div
@@ -1034,137 +1058,173 @@ function PhotoCard({
       style={{
         position: 'relative',
         display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
         borderRadius: 'var(--r-3)',
-        background: 'var(--ink)',
+        background: compact ? 'var(--ink)' : 'var(--paper)',
         border: over ? '2px solid var(--accent)' : '1px solid var(--edge)',
-        minHeight: compact ? 96 : 150,
+        minHeight: compact ? 96 : undefined,
         ...(compact ? { flex: '0 0 148px' } : { minWidth: 0 }),
       }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={photo.url}
-        alt={`Your photo of ${label}`}
-        draggable
-        onDragStart={(e) => {
-          setDraggingFrom(slot);
-          e.dataTransfer.effectAllowed = 'move';
-        }}
-        onDragEnd={() => setDraggingFrom(null)}
-        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', cursor: 'grab' }}
-      />
-
-      {/* ONE wrapping row, not a chip pinned left and a cluster pinned right.
-          Two absolutely-positioned children cannot reflow past each other, and
-          these are opaque: measured at 11px/700, the label runs 159px and the
-          three actions 189px, so on the narrowest gallery card (240px, 224px of
-          content) they overlapped by 132px and the buttons simply printed over
-          the wall name. That is the second failure mode CLAUDE.md rule 4 names,
-          and the fix is the one it prescribes — let it wrap. */}
       <div
         style={{
-          position: 'absolute',
-          top: 8,
-          left: 8,
-          right: 8,
+          position: 'relative',
           display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 6,
+          background: 'var(--ink)',
+          minHeight: compact ? undefined : 150,
+          ...(compact ? { flex: 1 } : { aspectRatio: '4 / 3' }),
         }}
       >
-        <span style={photoChrome()}>
-          <Icon name="check" size={11} color="var(--on-ink)" />
-          {label}
-          {/* Derived from the room's own width and depth — never a number typed in
-              beside the thing it describes. It is what makes "turn the set round"
-              a decision the user can take rather than a guess. Dropped in the
-              filmstrip, where 132px of content cannot hold it and a `nowrap` chip
-              does not shrink, it spills. */}
-          {span && !compact && (
-            <span style={{ fontWeight: 600, color: 'var(--on-ink-2)' }}>· {span} wall</span>
-          )}
-        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photo.url}
+          alt={`Your photo of ${label}`}
+          draggable
+          onDragStart={(e) => {
+            setDraggingFrom(slot);
+            e.dataTransfer.effectAllowed = 'move';
+          }}
+          onDragEnd={() => setDraggingFrom(null)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'grab' }}
+        />
 
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {/* Replace and Move belong to the gallery, where there is room for them
-              and where someone is actually working on the assignment. The
-              filmstrip under a live viewfinder keeps only Remove — it is a
-              reference strip, and the one thing you want from a bad shot there is
-              to get rid of it and take another. */}
-          {!compact && (
-            <button type="button" style={photoChrome('action')} onClick={() => inputRef.current?.click()}>
-              Replace
-            </button>
-          )}
-          {/* There was previously no way to take a photo back out — someone who
-              uploaded a shot with family in it was stuck with it. */}
-          <button type="button" style={photoChrome('action')} onClick={onRemove}>
-            Remove
-          </button>
-          {/* Reordering was drag-only, i.e. impossible without a mouse. */}
-          {!compact && <MoveMenu slot={slot} filled={filled} onMoveTo={onMoveTo} />}
-        </div>
-      </div>
-
-      <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {photo.clashedWith && (
+        {/* ONE wrapping row, not a badge pinned left and buttons pinned right: two
+            absolutely-positioned children cannot reflow past each other (CLAUDE.md
+            rule 4), so if the badge ever outgrows its half the buttons drop under it
+            instead of printing over it. */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            right: 8,
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            gap: 6,
+            // The row spans the photo; only what is on it should take a press.
+            pointerEvents: 'none',
+          }}
+        >
           <span
-            title={`This photo’s compass pointed at ${labelOf(photo.clashedWith)}, which already had one. It may be a second photo of the same wall.`}
-            // Signalled in the TYPE, not the ground. A --warn ground looked louder and
-            // cost the chip its outline against any mid-tone photo (1.93:1) — on the one
-            // chip that is actually asking for something.
-            style={{ ...photoChrome(), color: 'var(--on-ink-warn)' }}
+            data-wall-badge={slot}
+            style={{ ...photoChrome(), pointerEvents: 'auto' }}
+            onMouseEnter={() => onShimmer(slot)}
+            onMouseLeave={() => onShimmer(null)}
           >
-            <Icon name="info" size={11} color="var(--on-ink-warn)" />
-            Maybe {labelOf(photo.clashedWith)} again
+            {label}
+            {/* Derived from the room's own footprint — never a number typed in beside
+                the thing it describes. It is what makes "turn the set round" a
+                decision the user can take rather than a guess. Dropped in the
+                filmstrip, where 132px of content cannot hold it and a `nowrap` chip
+                does not shrink, it spills. */}
+            {span && !compact && <span>· {span}</span>}
           </span>
-        )}
-        {/* Reason and quality are gallery-only for the same reason as Replace:
-            a 148px filmstrip card cannot hold a nowrap chip reading "from the
-            order you added it", and the top bar already carries the count of
-            photos that could be clearer. The clash chip stays in both, because it
-            is the only one that is asking for something. */}
-        {!compact && photo.by && !photo.clashedWith && (
-          // Was an inverted light chip, which made a derived footnote the only
-          // thing on the card in a second colour scheme. Same ground as everything
-          // else now, quiet by weight and size.
-          <span style={photoChrome('quiet')}>{REASON[photo.by]}</span>
-        )}
-        {!compact &&
-          (photo.quality ? (
-            photo.quality.flags.map((f) => {
-              const good = flagTone(f) === 'good';
-              return (
-                <span
-                  key={f}
-                  title={flagHelp(f)}
-                  // Same rule as the clash chip: the ground is never overridden, so
-                  // these two carried the same silhouette defect (2.03:1 and 1.93:1).
-                  style={{
-                    ...photoChrome(),
-                    color: good ? 'var(--on-ink-success)' : 'var(--on-ink-warn)',
-                  }}
-                >
-                  {/* Icon + words: the badge used to lean on colour and a bare
-                      ✓ / ⚠ glyph, which renders differently on every platform. */}
-                  <Icon
-                    name={good ? 'check' : 'info'}
-                    size={11}
-                    color={good ? 'var(--on-ink-success)' : 'var(--on-ink-warn)'}
-                  />
-                  {flagLabel(f)}
-                  <span className="sr-only">. {flagHelp(f)}</span>
-                </span>
-              );
-            })
-          ) : (
-            <span role="status" aria-live="polite" style={photoChrome('quiet')}>
-              Checking this photo…
+
+          <div style={{ display: 'flex', gap: 6, pointerEvents: 'auto' }}>
+            {/* Replace belongs to the gallery. The filmstrip under a live viewfinder
+                keeps only Remove — a reference strip, where the one thing you want
+                from a bad shot is to get rid of it and take another. */}
+            {!compact && (
+              <button
+                type="button"
+                style={ROUND_BUTTON}
+                aria-label={`Replace the photo for ${label}`}
+                title="Replace this photo"
+                onClick={() => inputRef.current?.click()}
+              >
+                <Icon name="refresh" size={14} />
+              </button>
+            )}
+            {/* There was previously no way to take a photo back out — someone who
+                uploaded a shot with family in it was stuck with it. */}
+            <button
+              type="button"
+              style={ROUND_BUTTON}
+              aria-label={`Remove the photo for ${label}`}
+              title="Remove this photo"
+              onClick={onRemove}
+            >
+              <Icon name="trash" size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* The clash is the one finding that is asking for something, so it stays on
+            the filmstrip card, which has no footer to hold it. */}
+        {compact && photo.clashedWith && (
+          <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <span
+              title={`This photo’s compass pointed at ${labelOf(photo.clashedWith)}, which already had one. It may be a second photo of the same wall.`}
+              // Signalled in the TYPE, not the ground — see photoChrome.
+              style={{ ...photoChrome(), color: 'var(--on-ink-warn)' }}
+            >
+              <Icon name="info" size={11} color="var(--on-ink-warn)" />
+              Maybe {labelOf(photo.clashedWith)} again
             </span>
-          ))}
+          </div>
+        )}
       </div>
+
+      {!compact && (
+        <div className="capture-foot">
+          <div className="capture-foot__status">
+            {photo.clashedWith && (
+              <span
+                className="capture-status"
+                data-tone="warn"
+                title={`This photo’s compass pointed at ${labelOf(photo.clashedWith)}, which already had one. It may be a second photo of the same wall.`}
+              >
+                <Icon name="info" size={12} />
+                Maybe {labelOf(photo.clashedWith)} again
+              </span>
+            )}
+            {photo.quality ? (
+              photo.quality.flags.map((f) => {
+                const good = flagTone(f) === 'good';
+                return (
+                  <span key={f} className="capture-status" data-tone={good ? 'good' : 'warn'} title={flagHelp(f)}>
+                    {/* Icon + words: never colour alone. */}
+                    <Icon name={good ? 'check' : 'info'} size={12} />
+                    {flagLabel(f)}
+                    <span className="sr-only">. {flagHelp(f)}</span>
+                  </span>
+                );
+              })
+            ) : (
+              <span role="status" aria-live="polite" className="capture-status" data-tone="quiet">
+                Checking this photo…
+              </span>
+            )}
+          </div>
+
+          <div className="capture-foot__wall">
+            <div
+              style={{ flex: '0 1 140px', minWidth: 0 }}
+              onMouseEnter={(e) => control(e, true)}
+              onMouseLeave={(e) => control(e, false)}
+              onFocus={(e) => control(e, true)}
+              onBlur={(e) => control(e, false)}
+            >
+              <Select
+                options={wallOptions(slot, filled)}
+                value={slot}
+                onChange={(to) => onMoveTo(to)}
+                onActiveChange={(to) => (to ? onShimmer(to) : settle())}
+                ariaLabel={`Wall for the ${label} photo`}
+                height={32}
+                fontSize="var(--fs-small)"
+              />
+            </div>
+            {/* Why it is on this wall: the user is the only one who can see whether
+                the assignment is right, so the screen says what it stood on. Absent
+                for a photo read back from storage, which has no moment to describe. */}
+            {photo.by && <span className="capture-foot__reason">{REASON[photo.by]}</span>}
+          </div>
+        </div>
+      )}
 
       <input
         ref={inputRef}
@@ -1177,88 +1237,6 @@ function PhotoCard({
           e.target.value = '';
         }}
       />
-    </div>
-  );
-}
-
-/** Keyboard path for reordering. Drag-and-drop stays, but it is no longer the
- *  only way to get a photo onto the right wall. */
-function MoveMenu({
-  slot,
-  filled,
-  onMoveTo,
-}: {
-  slot: CaptureSlot;
-  filled: PhotoMap;
-  onMoveTo: (to: CaptureSlot) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const others = SLOT_ORDER.filter((s) => s !== slot);
-
-  return (
-    <div
-      style={{ position: 'relative' }}
-      onKeyDown={(e) => {
-        if (e.key !== 'Escape') return;
-        setOpen(false);
-        btnRef.current?.focus();
-      }}
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
-      }}
-    >
-      <button
-        ref={btnRef}
-        type="button"
-        style={photoChrome('action')}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <Icon name="swap" size={11} color="var(--on-ink)" />
-        Move
-      </button>
-      {open && (
-        <div
-          className="popover"
-          role="menu"
-          aria-label={`Move the ${labelOf(slot)} photo`}
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            right: 0,
-            zIndex: 'var(--z-popover)',
-            padding: 6,
-            minWidth: 172,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-          }}
-        >
-          <span className="section-title" style={{ padding: '4px 8px' }}>
-            Move this photo to
-          </span>
-          {others.map((o) => (
-            <button
-              key={o}
-              type="button"
-              role="menuitem"
-              className="list-row"
-              style={{ fontSize: 'var(--fs-small)' }}
-              onClick={() => {
-                onMoveTo(o);
-                setOpen(false);
-              }}
-            >
-              {labelOf(o)}
-              <span className="t-hint" style={{ marginLeft: 'auto' }}>
-                {filled[o] ? 'swap' : 'empty'}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

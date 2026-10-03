@@ -4,10 +4,10 @@
 // Overcast as one row of glyphs, a 24-hour track under them, and which way the
 // room faces.
 //
-// The BIG control for the day is the sun on its arc over the canvas
-// (`components/studio/SunArc.tsx`) — that is where you drag the day through. This
+// The BIG control for the day is the strip over the canvas
+// (`components/studio/DayStrip.tsx`) — that is where you drag the day through. This
 // is its companion for the moments you want by name, for keyboard and
-// screen-reader use through native controls, and for the one fact the arc cannot
+// screen-reader use through native controls, and for the one fact the strip cannot
 // set, the room's bearing.
 //
 // **Dropping the words does not drop the labels.** Each glyph keeps its
@@ -170,7 +170,7 @@ export function LightingPicker() {
       {/* Which way the room faces — the one input the sun still takes from the
           user, because it is the only one whose effect is visible at furniture
           scale: it changes WHICH WALL the light comes through. It was the Sun
-          direction dial in the Room section; the arc over the room now shows the
+          direction dial in the Room section; the strip over the room now shows the
           answer, so what is left here is the setting, one compass point a press. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <span className="t-micro" style={{ flexShrink: 0 }}>Plan top faces</span>
