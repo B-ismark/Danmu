@@ -89,10 +89,9 @@ export function DemoBanner() {
     >
       <Icon name="sparkles" size={15} style={{ flexShrink: 0 }} />
       <p style={{ minWidth: 0, flex: 1, margin: 0, fontSize: phone ? 'var(--fs-small)' : undefined }}>
-        {/* One short sentence on every screen. It used to go on to narrate the
-            gestures ("drag a piece to move it, click a wall to paint it"), which the
-            copy pass removed as a standing tip; the link is the one real next step. */}
-        This room is yours to rearrange.{' '}
+        {/* Only the link: it is the one real next step. The sentence before it
+            ("This room is yours to rearrange.") and the gesture narration before that
+            were both standing tips, removed in the copy passes. */}
         <Link
           href="/onboarding/capture"
           style={{
@@ -100,12 +99,12 @@ export function DemoBanner() {
             color: 'var(--accent-text)',
             textDecoration: 'underline',
             textUnderlineOffset: 3,
-            // One unit: when the sentence wraps, the whole invitation moves to the
-            // next line instead of breaking after "Rather".
+            // One unit: if it wraps, the whole invitation moves to the next line
+            // instead of breaking after "Want".
             display: 'inline-block',
           }}
         >
-          {phone ? 'Use your own room' : 'Rather use your own room? Photograph it'}
+          {phone ? 'Use your own room' : 'Want your own room? Photograph it'}
         </Link>
       </p>
       <IconButton

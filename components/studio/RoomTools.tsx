@@ -1309,7 +1309,7 @@ function CheckPanel({
       <CheckSummary freeShare={freeShare} stepFree={stepFree} onStepFree={onStepFree} />
       {issues.length === 0 ? (
         <div className="t-small" style={{ padding: '18px 14px', lineHeight: 1.55 }}>
-          No problems found. Doors open and walkways are wide enough.
+          No problems found.
         </div>
       ) : (
         issues.map((issue) => (

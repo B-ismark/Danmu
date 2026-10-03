@@ -254,11 +254,11 @@ export function Inspector() {
       : restingName
         ? `On ${restingName}`
         : null;
+  // A piece riding another gets no sentence: "On {name}" already says it, and the
+  // "Resting on {name}." that used to sit under it was the same words twice.
   const restingSentence = floating
     ? 'Nothing is holding it up. Drop it to the surface below, or move it onto something.'
-    : restingName
-      ? `Resting on ${restingName}.`
-      : '';
+    : '';
   // Both halves when both have something to say. A finding is about the floor plan and
   // the resting state is about the vertical; they are different facts and the report
   // cannot see the second, so a piece that is BOTH in a tight walkway and floating says
@@ -391,7 +391,9 @@ export function Inspector() {
         <Icon name={placementOk ? 'check' : 'info'} size={14} style={{ flexShrink: 0, marginTop: 1 }} />
         <span style={{ minWidth: 0 }}>
           <strong style={{ display: 'block', overflowWrap: 'anywhere' }}>{placementLabel}</strong>
-          <span style={{ color: 'var(--ink-3)', overflowWrap: 'anywhere' }}>{placementDetail}</span>
+          {placementDetail && (
+            <span style={{ color: 'var(--ink-3)', overflowWrap: 'anywhere' }}>{placementDetail}</span>
+          )}
         </span>
       </div>
       )}
