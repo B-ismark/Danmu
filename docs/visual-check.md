@@ -3096,7 +3096,7 @@ the turn buttons missing.
 **Why eyes:** the strip's position and the Library's dock are tested; whether the golden
 sun sits well on both the day sky and the night sky is a judgement.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `0e11438` (B-ismark/Danmu#256), not yet looked at.
 
 ## No Light section in Style, and a new room opens without decor
 
@@ -3110,7 +3110,7 @@ you turn it on.
 **Why eyes:** the default and the reset are tested; whether an empty room now looks bare
 rather than calm is a judgement.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `0e11438` (B-ismark/Danmu#256), not yet looked at.
 
 ## The Add photos tile fills the photo column
 
@@ -3123,7 +3123,7 @@ strip; the tile not shrinking back into the grid once a photo is in.
 **Why eyes:** sizes are measured (about 714×578 at 1366, 356×318 on a phone); whether that
 reads as well proportioned is a judgement.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `0e11438` (B-ismark/Danmu#256), not yet looked at.
 
 ## Check furniture rows with a colour dot, and a centred Building screen
 
@@ -3135,7 +3135,7 @@ anything moving with reduced motion.
 
 **Why eyes:** the markup is tested; the bar's pace is not.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `0e11438` (B-ismark/Danmu#256), not yet looked at.
 
 ## Scanned pieces wear model colours, and a Style theme recolours them
 
@@ -3147,7 +3147,7 @@ pick it.
 
 **Why eyes:** both halves are tested in source; a real scan built is not.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `0e11438` (B-ismark/Danmu#256), not yet looked at.
 
 ## 3D Model comes back instantly from 2D Plan
 
@@ -3162,4 +3162,4 @@ should be paused).
 **Why eyes:** in a production build under software rendering the switch measured about a
 tenth of a second; a real GPU, and a phone, have not been tried.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `0e11438` (B-ismark/Danmu#256), not yet looked at.
