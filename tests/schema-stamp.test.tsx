@@ -66,11 +66,11 @@ describe('opening an older room', () => {
   });
 });
 
-describe('an open room saving its shell', () => {
+describe('an open room whose migration write was lost', () => {
   // The stamp says the overrides are up to date IN STORAGE. If the open's own write is
-  // lost, a later room-only save (a repaint) must not claim it, or no open ever lifts
-  // the pendant's override again.
-  it('does not stamp current when the open write was lost and no overrides ride along', async () => {
+  // lost, the next save carries it again — overrides and stamp together — whatever kind
+  // of save it is; a room-only one must not stamp without them.
+  async function openWithLostWrite() {
     await set('room:old-room:meta', OLD);
     const real = roomStore.savePending.bind(roomStore);
     const spy = vi.spyOn(roomStore, 'savePending').mockRejectedValueOnce(new Error('quota'));
@@ -78,12 +78,31 @@ describe('an open room saving its shell', () => {
     render(<RoomSync />);
     await waitFor(() => expect(useScene.getState().hydratedRoomId).toBe('old-room'));
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
     spy.mockImplementation(real);
+    return spy;
+  }
+  afterEach(() => vi.restoreAllMocks());
+
+  it('a repaint carries the overrides with the stamp', async () => {
+    const spy = await openWithLostWrite();
     useScene.getState().setSite({ bearingDeg: 90 } as never);
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2), { timeout: 2000 });
     await spy.mock.results[1].value;
-    expect(spy.mock.calls[1][1].transforms).toBeUndefined();
-    expect((await meta())?.version).toBe(2);
-    vi.restoreAllMocks();
+    expect(spy.mock.calls[1][1].transforms).toBeDefined();
+    expect((await meta())?.version).toBe(ROOM_SCHEMA_VERSION);
+  });
+
+  it('a move alone stamps too, and only the first save owes it', async () => {
+    const spy = await openWithLostWrite();
+    const { useStudio } = await import('@/lib/store');
+    useStudio.setState((s) => ({ positions: { ...s.positions, x: [1, 0, 1] } }) as never);
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    await spy.mock.results[1].value;
+    expect(spy.mock.calls[1][1].room?.migrated).toBe(true);
+    expect((await meta())?.version).toBe(ROOM_SCHEMA_VERSION);
+    useStudio.setState((s) => ({ positions: { ...s.positions, x: [2, 0, 1] } }) as never);
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(3), { timeout: 2000 });
+    expect(spy.mock.calls[2][1].room).toBeUndefined();
   });
 });

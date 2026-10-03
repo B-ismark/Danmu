@@ -77,6 +77,10 @@ export function RoomSync() {
    *  in the subscriber loses this the moment a second room change replaces the
    *  timer. */
   const reshapedSince = useRef(false);
+  /** The open's schema-3 write was lost, so the next save carries it again: the migrated
+   *  overrides with the stamp, in one write. Until one lands the record stays below 3 and
+   *  the next open migrates again — never a stamp over overrides that were not stored. */
+  const stampOwed = useRef(false);
 
   /** Whatever the three saves below still have waiting, written as ONE transaction
    *  (`roomStore.savePending`), whichever of them comes due first — its timer, the room
@@ -179,18 +183,15 @@ export function RoomSync() {
       // now.)
       if (p) {
         shell = p.room;
-        // `migrated` only when the overrides ride this same write: the open brought them up
-        // to date in memory, but the stamp says they are up to date IN STORAGE, and the
-        // open's own write is fire-and-forget. A room-only save after that write failed
-        // would stamp v3 over pendant-era overrides and no later open would migrate them.
-        w.room = {
-          edit: (stored) => withShell(stored, p.room),
-          pin: wasReshaped ? p.parts : undefined,
-          migrated: w.transforms ? true : undefined,
-        };
+        w.room = { edit: (stored) => withShell(stored, p.room), pin: wasReshaped ? p.parts : undefined };
       }
     }
     if (!w.transforms && w.parts === undefined && !w.room) return;
+    const carriesStamp = stampOwed.current;
+    if (carriesStamp) {
+      w.transforms ??= transformsOf(useStudio.getState());
+      w.room = { ...(w.room ?? { edit: (r: RoomData) => r }), migrated: true };
+    }
     // The whole save, as data, so a reload that ends it before its read comes back can be
     // finished by the next open. Cleared once it lands on a page still alive to see it. The
     // save and its note share one time, which is what each part the save writes is stamped
@@ -201,6 +202,7 @@ export function RoomSync() {
       leaving && shell !== undefined &&
       writeLeaveNote(roomId, leaveNoteOf(at, shell, { transforms: w.transforms, parts: w.parts, pin: w.room?.pin }));
     roomStore.savePending(roomId, w).then(() => {
+      if (carriesStamp) stampOwed.current = false;
       if (noted) clearLeaveNote(roomId, at);
       // Counted only while the page stays: an offer made on the way out is made to nobody.
       if (!leaving && noteRoomSaved(roomId)) offerBackup(roomId);
@@ -220,6 +222,7 @@ export function RoomSync() {
   useEffect(() => {
     if (!roomId) return;
     ready.current = false;
+    stampOwed.current = false;
     // Even for the room the store already holds: it may have changed in another tab.
     useScene.getState().setHydrated(null);
     let live = true;
@@ -338,7 +341,10 @@ export function RoomSync() {
             room: { edit: (r) => r, migrated: true },
             untouched: moved || (savedScene && retired.length > 0) ? undefined : true,
           })
-          .catch((err) => console.error('[room] could not save the migrated ceiling light', err));
+          .catch((err) => {
+            if (live) stampOwed.current = true;
+            console.error('[room] could not save the migrated ceiling light', err);
+          });
       }
       // The room on screen is this one now, so the canvas veil can lift.
       useScene.getState().setHydrated(roomId);
