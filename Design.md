@@ -586,16 +586,10 @@ Furniture detection runs through a fallback chain, best-effort:
 **One piece, several walls.** A big piece is in two or three of the four photos.
 `lib/repeat-sightings.ts` is the app's *guess* (shared footprint on the floor; boxes in
 one photo that do not touch are two things): a probable repeat starts unticked and asks
-which row it repeats. `lib/sighting-links.ts` is the person's *answer*: a row's
-**Seen this already?** picker (`linkCandidates`: same kind first, other walls first)
-stores `sameAs` (the earlier row's `uid`, never an index) on the later row and unticks
-it, so the room builder, which builds kept rows only, builds one piece. Unlinking puts
-it back. Removing or unticking the piece hands it to its next sighting (`handOver`,
-`withoutRow`) rather than orphaning the links; picking a model on a linked row ends the
-link. A link adds **placement only**, never size: a floor piece's combined spot
-(`combinedFloorSpot`, written as `seenAt` beside `position` by `withSeenAt`) averages
-sightings only where that was measured to help — all of them on an assumed lens, only
-uncut ones on a measured lens.
+which row it repeats. `lib/sighting-links.ts` is the person's *answer* — a
+**Seen this already?** link on any row, and the hand-over when the kept row goes — set
+out under **The person can link what the guess missed** in §4. A link adds placement
+only, never size.
 
 Detection returns labels + boxes only. The **geometry engine derives positions** (and a
 rough size reading), and a scanned piece is then **built at an approximate catalogue size**
