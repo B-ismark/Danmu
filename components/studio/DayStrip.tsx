@@ -36,17 +36,19 @@
 //     arrows would move a clock nobody can see. A finger lifting off the glass is not
 //     leaving, so a touch drag does not fold it under the thumb.
 
-import { useEffect, useId, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FocusEvent, type MouseEvent, type PointerEvent } from 'react';
 import { SUN_DRAG_ID, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
-import { DEFAULT_BEARING_DEG, formatClock, isDaytime, lightingAt, sunAt } from '@/lib/lighting-moods';
+import { DEFAULT_BEARING_DEG, compassName, formatClock, isDaytime, lightingAt, sunAt, turnedBearing } from '@/lib/lighting-moods';
+import { isAperture } from '@/lib/apertures';
 import { hourT, scrubHour, skyGradient, stripFor, stripX, tAtX } from '@/lib/day-strip';
 import { playSound } from '@/lib/sound';
 import { Icon } from '@/components/ui/Icon';
+import { DAY_ROW_H } from './CanvasChrome';
 
 /** The pill's width and height, in px: a glyph and a five-character clock. */
 const PILL_W = 86;
-const PILL_H = 32;
+const PILL_H = DAY_ROW_H;
 /** The strip's ends are kept this far in, so the pill is whole at midnight. */
 const INSET = PILL_W / 2;
 /** How far round the folded pill counts as near, in px. */
@@ -98,6 +100,13 @@ export function DayStrip() {
   const setLighting = useStudio((s) => s.setLighting);
   const setDragging = useStudio((s) => s.setDragging);
   const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
+  const setSite = useScene((s) => s.setSite);
+  // Whether the sun has anything to shine through. The room is a closed shell, so a
+  // sealed room is lit by sky and lamps alone (`components/three/RoomShell.tsx`);
+  // said here, beside the control that raises the question, rather than leaving
+  // someone to wonder why moving the sun does nothing. The predicate is
+  // `lib/apertures.ts`'s, so the sentence cannot disagree with the holes it cuts.
+  const sunHasNoWayIn = useScene((s) => lighting === 'daylight' && !s.parts.some(isAperture));
 
   const overcast = lighting === 'overcast';
   const day = isDaytime(hour);
@@ -147,6 +156,7 @@ export function DayStrip() {
   // docked on the right.
   const slotRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const extrasRef = useRef<HTMLDivElement>(null);
   const [available, setAvailable] = useState(0);
   useEffect(() => {
     const el = slotRef.current;
@@ -167,6 +177,14 @@ export function DayStrip() {
   }, [available]);
 
   const open = carrying || near || focused;
+  // Focus moving from the slider into the extras row (or between its buttons) is still
+  // focus on the strip: folding on every blur removed the row before Tab could land in
+  // it, so the keyboard could never reach Overcast or the turn buttons.
+  const leave = (e: FocusEvent) => {
+    const to = e.relatedTarget as Node | null;
+    if (to && slotRef.current?.contains(to)) return;
+    setFocused(false);
+  };
   // Folded, the pill waits at the centre: the one place that is the same whatever the
   // hour, so the folded control never wanders.
   const px = open ? stripX(strip, hourT(hour)) : strip.width / 2;
@@ -254,8 +272,11 @@ export function DayStrip() {
     if (!near) return;
     const onMove = (e: globalThis.PointerEvent) => {
       if (e.pointerType !== 'mouse' || gesture.current) return;
-      const r = boxRef.current?.getBoundingClientRect();
-      const inside = !!r && e.clientX >= r.left - SLACK && e.clientX <= r.right + SLACK && e.clientY >= r.top - SLACK && e.clientY <= r.bottom + SLACK;
+      const within = (el: HTMLElement | null) => {
+        const r = el?.getBoundingClientRect();
+        return !!r && e.clientX >= r.left - SLACK && e.clientX <= r.right + SLACK && e.clientY >= r.top - SLACK && e.clientY <= r.bottom + SLACK;
+      };
+      const inside = within(boxRef.current) || within(extrasRef.current);
       if (inside) holdOpen();
       else if (!foldTimer.current) foldSoon();
     };
@@ -369,7 +390,7 @@ export function DayStrip() {
             {...gestureHandlers}
             {...reach}
             onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            onBlur={leave}
             // Arrows move a quarter of an hour, Shift a whole one; Page a named
             // stop's worth. Home and End are the declared ends: the role is a
             // promise about the keys.
@@ -393,6 +414,44 @@ export function DayStrip() {
             </span>
             <span className="day-strip__time mono">{formatClock(hour)}</span>
           </div>
+          {/* What the strip cannot say by position: flat light, which way the room
+              faces (the one input the sun still takes from the user — it changes WHICH
+              WALL the light comes through), and why the sun might do nothing. Under
+              the strip, in the same box of attention: the mouse may travel to it and
+              the keyboard may tab to it without the strip folding away. */}
+          {open && (
+            <div
+              ref={extrasRef}
+              className="day-strip__extras"
+              onPointerEnter={(e) => { if (e.pointerType !== 'touch') holdOpen(); }}
+              onFocus={() => setFocused(true)}
+              onBlur={leave}
+            >
+              <div className="day-strip__tools">
+                <button
+                  type="button"
+                  className="day-strip__tool"
+                  aria-pressed={overcast}
+                  onClick={() => setLighting(overcast ? 'daylight' : 'overcast')}
+                >
+                  <Icon name="cloud" size={13} />
+                  <span>Overcast</span>
+                </button>
+                <span className="day-strip__facing">
+                  <button type="button" className="icon-btn" aria-label="Turn the room anticlockwise" onClick={() => setSite({ ...useScene.getState().room.site, bearingDeg: turnedBearing(bearingDeg, -1) })}>
+                    <Icon name="rotate-ccw" size={12} />
+                  </button>
+                  <span className="t-micro" aria-live="polite" title="Which way the top of the plan faces">Plan top faces {compassName(bearingDeg)}</span>
+                  <button type="button" className="icon-btn" aria-label="Turn the room clockwise" onClick={() => setSite({ ...useScene.getState().room.site, bearingDeg: turnedBearing(bearingDeg, 1) })}>
+                    <Icon name="rotate-cw" size={12} />
+                  </button>
+                </span>
+              </div>
+              {sunHasNoWayIn && (
+                <p className="t-micro day-strip__hint">No window or door, so no sunlight gets in. Add one from the Library.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

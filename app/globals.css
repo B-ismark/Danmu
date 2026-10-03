@@ -34,6 +34,7 @@
   --accent-text: #3F6436;     /* 6.64:1 on --paper, 5.54:1 on --accent-tint — accent-coloured type */
   --accent-2: #D99A2B;      /* amber — fills, the 3D hover; never type (2.44:1 with white) */
   --accent-2-tint: rgba(217, 154, 43, 0.16);
+  --sun: #C48500;           /* golden yellow — the sun glyph in the day pill. 3.1:1 on --paper, enough for a graphic (WCAG 1.4.11); never type */
 
   /* Furniture that came out of the user's own photo. Used to be an institutional
      CAD blue; warm aubergine instead, a third brand-compatible hue that reads
@@ -293,6 +294,7 @@
   --dur-base: 160ms;
   --dur-slow: 300ms;
   --dur-breathe: 1100ms; /* one half-cycle of a placeholder's breathing */
+  --dur-sweep: 1800ms;     /* one pass of an indeterminate progress bar (BuildingRoom) */
   --dur-loop: 9s;          /* one pass of a waiting illustration (FindingFurniture) */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
@@ -2361,15 +2363,20 @@ textarea.field { border-radius: var(--r-2); }
 .piece-row {
   position: relative;
   border: 1px solid var(--hairline); border-radius: var(--r-2); background: var(--paper);
-  /* The swatch: the piece's own colour down the row's left edge. */
-  box-shadow: inset 4px 0 0 var(--piece);
   transition: background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out);
 }
 .piece-row[data-kept="true"] { border-color: var(--locked); background: var(--locked-tint); }
 .piece-row[data-hovered="true"] {
   background: color-mix(in srgb, var(--piece) 14%, var(--paper));
-  box-shadow: inset 6px 0 0 var(--piece), inset 0 0 0 2px var(--piece);
+  box-shadow: inset 0 0 0 2px var(--piece);
 }
+/* The row's link to its box on the photo: a small round dot in the piece's colour. */
+.piece-row__dot {
+  flex: 0 0 auto; inline-size: 10px; block-size: 10px; border-radius: var(--r-full);
+  background: var(--piece);
+  transition: transform var(--dur-quick) var(--ease-out);
+}
+.piece-row[data-hovered="true"] .piece-row__dot { transform: scale(1.4); }
 
 /* ── Finding your furniture (components/ui/FindingFurniture.tsx) ──────────────
    The waiting picture on the scan card. One cycle is `--dur-loop` and has six beats, one
@@ -2433,23 +2440,33 @@ textarea.field { border-radius: var(--r-2); }
    The photo route's last screen, up while the review is written into the room. The
    illustrated room fills piece by piece; under reduced motion every piece is there
    at once (the global reduced-motion block zeroes the stagger too). */
-.build-screen { min-block-size: 100dvh; padding: 24px 16px 32px; background: var(--paper); }
+.build-screen { min-block-size: 100dvh; display: flex; flex-direction: column; padding: 24px 16px 32px; background: var(--paper); }
+/* Everything below the stepper is one centred column, and the column is centred in what
+   is left of the viewport. */
 .build-screen__layout {
-  display: grid; gap: 24px 40px; align-items: center; margin-inline: auto;
-  max-inline-size: var(--measure-page); grid-template-columns: minmax(0, 1.2fr) minmax(260px, 1fr);
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; margin-inline: auto; inline-size: 100%; max-inline-size: 600px; text-align: center; padding-block: 16px;
 }
-@media (max-width: 799px) { .build-screen__layout { grid-template-columns: minmax(0, 1fr); } }
-.build-screen__art { aspect-ratio: 4 / 3; max-inline-size: 640px; inline-size: 100%; justify-self: center; }
-.build-screen__side { display: flex; flex-direction: column; gap: 14px; max-inline-size: 44ch; }
-.build-screen__title { font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
+.build-screen__art { aspect-ratio: 4 / 3; max-inline-size: 420px; inline-size: 100%; margin-block-end: 6px; }
+.build-screen__title { margin: 0; font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
 .build-screen__lede { margin: 0; font-size: var(--fs-lead); color: var(--ink-2); }
-.build-screen__stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; }
+/* Indeterminate: the save is real but quick, so this says "working", never "n percent". */
+.build-screen__bar {
+  position: relative; overflow: hidden; inline-size: min(220px, 70%); block-size: 6px;
+  border-radius: var(--r-full); background: var(--paper-2);
+}
+.build-screen__bar::after {
+  content: ""; position: absolute; inset-block: 0; inline-size: 40%; border-radius: var(--r-full);
+  background: var(--accent); animation: build-sweep var(--dur-sweep) var(--ease-in-out) infinite;
+}
+@keyframes build-sweep { from { inset-inline-start: -40%; } to { inset-inline-start: 100%; } }
+.build-screen__stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 6px 0 0; }
 .build-screen__stats > div {
-  flex: 1 1 90px; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
+  flex: 1 1 0; min-inline-size: 0; max-inline-size: 170px; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
 }
 .build-screen__stats dt { font-size: var(--fs-caption); font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
 .build-screen__stats dd { margin: 2px 0 0; font-size: var(--fs-lead); font-weight: 700; color: var(--ink); }
-.build-screen__note { margin: 0; font-size: var(--fs-small); color: var(--ink-3); line-height: 1.5; }
+.build-screen__note { margin: 6px 0 0; max-inline-size: 38ch; font-size: var(--fs-small); color: var(--ink-3); line-height: 1.5; }
 .iso-room__piece {
   animation: iso-settle var(--dur-slow) var(--ease-out) both;
   animation-delay: calc(var(--i, 0) * var(--dur-base));
@@ -2718,6 +2735,8 @@ textarea.field { border-radius: var(--r-2); }
   /* The duration above is cut, the stagger is not: without this the Building screen's
      pieces wait their turn invisibly, on a screen that is up only as long as the save. */
   .iso-room__piece { animation-delay: 0s !important; }
+  /* The Building screen's sweeping bar: a full, still, pale bar. */
+  .build-screen__bar::after { animation: none; inset-inline-start: 0; inline-size: 100%; opacity: 0.35; }
   /* The capture plan's wall shimmer: lit and still, no pulse and no marching dashes. */
   .capture-plan__wall[data-wall-state="hover"] line:not(.capture-plan__shine):not(.capture-plan__hit),
   .capture-plan__wall[data-wall-state="preview"] line:not(.capture-plan__shine):not(.capture-plan__hit) { animation: none; stroke-width: 7; }
@@ -2801,7 +2820,30 @@ textarea.field { border-radius: var(--r-2); }
   70% { transform: rotate(-6deg) scale(0.97); }
   100% { transform: rotate(0) scale(1); }
 }
-.day-strip__glyph { display: inline-flex; color: var(--accent-text); transition: color var(--dur-slow) var(--ease-out); }
+.day-strip__glyph { display: inline-flex; color: var(--sun); transition: color var(--dur-slow) var(--ease-out); }
+.day-strip__extras {
+  position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: min(100vw - 32px, 420px);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  pointer-events: auto;
+}
+.day-strip__tools {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px;
+  padding: 4px 8px; border-radius: var(--r-full);
+  background: var(--paper); border: 1px solid var(--edge); box-shadow: var(--shadow-float);
+}
+.day-strip__tool {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
+  border: 1px solid var(--edge); border-radius: var(--r-full);
+  background: var(--paper); color: var(--ink-2); cursor: pointer;
+  font-size: var(--fs-caption); font-weight: 600;
+}
+.day-strip__tool[aria-pressed='true'] { background: var(--accent-tint); border-color: var(--accent); color: var(--accent-text); }
+.day-strip__facing { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); }
+.day-strip__hint {
+  margin: 0; padding: 3px 10px; text-align: center; line-height: 1.4;
+  background: var(--paper); border-radius: var(--r-2); box-shadow: var(--shadow-float);
+}
 .day-strip__time {
   font-size: var(--fs-small); font-weight: 700;
   white-space: nowrap;
@@ -2824,7 +2866,8 @@ textarea.field { border-radius: var(--r-2); }
 .day-strip--away { opacity: 0; }
 .day-strip--away .day-strip__handle,
 .day-strip--away .day-strip__hit,
-.day-strip--away .day-strip__reach { pointer-events: none; }
+.day-strip--away .day-strip__reach,
+.day-strip--away .day-strip__extras { pointer-events: none; }
 
 /* The sun that becomes the moon (`Celestial` in DayStrip.tsx). Every part is drawn
    at every hour; night draws the rays in and turns them away, swells the disc, and
@@ -2845,39 +2888,6 @@ textarea.field { border-radius: var(--r-2); }
   .day-strip__sky { transition: opacity var(--dur-base) var(--ease-out); }
   .day-strip--open .day-strip__glyph { animation: none; }
 }
-
-/* ── The day as a track (components/studio/LightingPicker.tsx) ────────────────
-   A native range, painted as the sky it scrubs: night at both ends, gold at the
-   horizons, paper at noon. The stops are tokens, so the track sits in the palette
-   rather than beside it. */
-.day-track {
-  -webkit-appearance: none; appearance: none;
-  height: 6px; margin: 0;
-  border-radius: var(--r-full);
-  background: linear-gradient(90deg,
-    var(--ink) 0%, var(--ink-2) 20%, var(--accent) 27%, var(--paper-3) 40%,
-    var(--paper) 53%, var(--paper-3) 66%, var(--accent) 79%, var(--ink-2) 86%, var(--ink) 100%);
-  border: 1px solid var(--edge);
-  cursor: pointer;
-}
-.day-track::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none;
-  width: 16px; height: 16px;
-  border-radius: var(--r-full);
-  background: var(--paper);
-  border: 2px solid var(--accent-text);
-  box-shadow: var(--shadow-soft);
-  transition: transform var(--dur-quick) var(--ease-out);
-}
-.day-track::-moz-range-thumb {
-  width: 14px; height: 14px;
-  border-radius: var(--r-full);
-  background: var(--paper);
-  border: 2px solid var(--accent-text);
-  box-shadow: var(--shadow-soft);
-}
-.day-track:active::-webkit-slider-thumb { transform: scale(1.15); }
-.day-track:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; }
 
 /* Models that match a name being typed (`EditableText`'s `suggest`). In the flow under
    the field, never floating: the rows it sits in clip, and a floating list would be

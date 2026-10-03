@@ -131,7 +131,7 @@ describe('the Library has a sign on it', () => {
     // Each of these is a different surface, and the point of the item is that they
     // agreed with each other and disagreed with the screen. The word — not a direction
     // — is what is asserted, because a direction is the thing that went stale.
-    expect(code('components/studio/PartTree.tsx')).toContain('from the Library');
+    expect(code('components/studio/DayStrip.tsx')).toContain('from the Library');
     expect(code('components/studio/SceneContextMenu.tsx')).toContain('Add from the Library');
     // The third is the help card, and it renders below rather than being grepped.
   });

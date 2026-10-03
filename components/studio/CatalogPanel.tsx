@@ -34,7 +34,7 @@ import { LibraryPicker } from './LibraryPicker';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 import { announce } from '@/lib/announce';
 import { usePhoneStudio } from './NarrowViewportBanner';
-import { usePublishedBox } from './CanvasChrome';
+import { DAY_ROW_BOTTOM } from './CanvasChrome';
 
 /** The id the pages put on their canvas element, so the rail's trigger can bring
  *  the panel into view when the studio is stacked and the rail sits below the
@@ -221,14 +221,16 @@ export function CatalogPanel({
    *  tab it is the taller `ComfortLegend`, and only while shading is on — which is
    *  why the plan passes a bigger number rather than sharing this one. */
   bottomGap = 56,
+  belowDay = false,
 }: {
   canDrag?: boolean;
   bottomGap?: number;
+  /** The 3D tab has the day strip across the top-centre, which a card this wide would
+   *  sit on; dock beneath it instead, so opening the Library moves nothing. */
+  belowDay?: boolean;
 }) {
   const setOpen = useStudio((s) => s.setCatalogOpen);
   const phone = usePhoneStudio();
-  // Its width, so the sun's row over the canvas keeps clear of it (`CanvasDay`).
-  const boxRef = usePublishedBox('--canvas-panel-width', null);
 
   // Esc closes it, like every other panel in the studio (Look, Room, help). It
   // yields to a field being edited or a dialog in front — so Esc out of the search
@@ -253,7 +255,6 @@ export function CatalogPanel({
 
   return (
     <div
-      ref={boxRef}
       className="ds-card"
       style={{
         position: 'absolute',
@@ -264,7 +265,7 @@ export function CatalogPanel({
         // own height for exactly this; the fallback reproduces the old number for
         // the one frame before the ResizeObserver reports, and for a jsdom render
         // where there is no layout at all.
-        top: 'calc(12px + var(--canvas-view-height, 30px) + 12px)',
+        top: belowDay ? `calc(${DAY_ROW_BOTTOM} + 8px)` : 'calc(12px + var(--canvas-view-height, 30px) + 12px)',
         right: 12,
         // Stops short of the bottom-RIGHT corner, which is where the one canvas
         // aide lives — see `bottomGap` above.

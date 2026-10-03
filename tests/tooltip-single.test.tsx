@@ -57,11 +57,10 @@ describe('every Tooltip call site', () => {
 
   it('is found, so the sweep below is looking at something', () => {
     // RailFooter's two (Done, Delete), the rail's Add, the rail strip, the Catalog's
-    // re-scan, the lighting moods, and the bar's View settings and Switch room. Start over is not one: it says its own name. A literal, so a new call site is
+    // re-scan, and the bar's View settings and Switch room. Start over is not one: it says its own name. A literal, so a new call site is
     // a decision to update it.
     expect(sites.map((s) => s.file.split('/').pop()).sort()).toEqual([
       'CatalogPanel.tsx',
-      'LightingPicker.tsx',
       'PartTree.tsx',
       'RailFooter.tsx',
       'RailFooter.tsx',

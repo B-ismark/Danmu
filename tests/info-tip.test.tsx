@@ -134,10 +134,9 @@ describe('InfoTip', () => {
 describe('the sun dial is gone, and its two jobs have new homes', () => {
   // The dial did two things: it SHOWED where the light came from and it SET which
   // way the room faces. The strip over the canvas shows it now (components/studio/
-  // DayStrip.tsx), and the rail's daylight control sets the bearing. Both have to be
+  // DayStrip.tsx), and the strip's own extras row sets the bearing. Both have to be
   // reachable without a pointer, or deleting the dial deleted a control.
   const ARC = readFileSync('components/studio/DayStrip.tsx', 'utf8');
-  const PICKER = readFileSync('components/studio/LightingPicker.tsx', 'utf8');
   it('leaves no dial behind', () => {
     expect(existsSync('components/studio/NorthDial.tsx')).toBe(false);
   });
@@ -146,7 +145,7 @@ describe('the sun dial is gone, and its two jobs have new homes', () => {
     expect(ARC).toMatch(/onKeyDown=/);
   });
   it('keeps the bearing settable, both ways, by name', () => {
-    expect(PICKER).toMatch(/aria-label="Turn the room anticlockwise"/);
-    expect(PICKER).toMatch(/aria-label="Turn the room clockwise"/);
+    expect(ARC).toMatch(/aria-label="Turn the room anticlockwise"/);
+    expect(ARC).toMatch(/aria-label="Turn the room clockwise"/);
   });
 });

@@ -118,10 +118,11 @@ const PLEAT = moduleRangeFor('curtain') ?? ONE;
  *  browser. */
 const SEAM = 0.002;
 
-// Body albedo for a part's main surfaces. An explicit colour (photo-sampled on
-// detection, or chosen in the Inspector) ALWAYS wins — otherwise recolouring a
-// locked item did nothing, since most detections auto-lock. Falls back to the
-// "from your photo" tint for locked items with no colour, else the shape default.
+// Body albedo for a part's main surfaces. An explicit colour (chosen in the
+// Inspector) ALWAYS wins. Falls back to the "from your photo" tint for a `locked`
+// item with no colour, else the shape default. `Room` passes `locked={false}`, so a
+// scanned piece shows its model's colour like any other and the tint is not reached
+// in the studio.
 // (Locked status still reads from the PartTree dot, Inspector badge + plan view.)
 //
 // Both the tint and the shape default come from lib/scene-palette. The tint used

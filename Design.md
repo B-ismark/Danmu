@@ -247,6 +247,20 @@ just cleared.
 
 There are **only two studio tabs**: `3D Model` and `2D Plan` (`StudioTabs.tsx`).
 
+**The 3D canvas is not owned by the 3D tab.** `/model` used to mount `Room` and
+leaving destroyed it, so every 2D to 3D switch rebuilt the WebGL context, geometry,
+materials, shaders and shadow maps (measured on a production build under software GL:
+14-17 s per switch, against 0.03-0.13 s to a visible room now). `RoomHostProvider`
+(`components/three/RoomHost.tsx`, mounted by `app/room/[roomId]/layout.tsx`) mounts
+`Room` once, after the 3D tab is first opened, into a DOM node owned by
+`lib/room-host.ts`. `/model` renders a `RoomSlot` that attaches that node into its
+canvas area; leaving parks it off-screen at its last size (`visibility: hidden`,
+`inert`, `aria-hidden`) and `Room` gets `paused`, i.e. `frameloop="never"`. Coming
+back is a re-attach plus one `invalidate()`. Anything on the canvas that listens on
+`window` must check `roomHost.get().attached` (`CameraRig`'s arrow/Q/E handler does),
+or it answers keys meant for the plan. Landing on the plan first still builds the 3D
+view on the first switch (only its chunk is warmed). `tests/room-host.test.ts`.
+
 Capture is **four wall photos**, not six — `CAPTURE_SLOTS` in `lib/capture.ts` is
 the four walls in clockwise order; floor and ceiling were dropped. The slots are
 labelled relationally ("Wall 1", "Wall 2") while keeping `n`/`e`/`s`/`w` as the
@@ -1594,7 +1608,9 @@ tiny — and a measurement the user cannot trust is worse than an honest typical
   `lib/color-reduce.ts`, the detect screen's fill, `Detection.color`, the cloud prompt's
   `color` field and `sameButColor`/`acceptCandidate` (which existed only to carry it). A
   scanned piece takes `defaultBodyColor(category, shape)` like one added from the Library.
-  A saved detection or scene file that still carries a `color` is read and ignored. A
+  The 3D scene does not pass `ScenePart.locked` to the geometry (`Room.tsx`), so the "from
+  photo" aubergine tint no longer repaints every scanned piece one colour; the badge and plan
+  outline still mark where a piece came from. A saved detection or scene file that still carries a `color` is read and ignored. A
   colour the user sets in the studio lives on the part / override map and wins.
 - **Screen** — the detect screen says "typical size" and no longer shows the "Measured X.
   Category range is Y" accusation, the "runs past the edge" size note or `measuredPhrase`
@@ -2038,10 +2054,13 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     step — and the rail's day track claims the same id for its own pull, so
     both are one step. The sky and exposure live in `Daylight` inside
     `Room.tsx`, so scrubbing re-renders the lights and not the furniture.
-  - **The rail keeps the names** (`LightingPicker.tsx`, rail **Style → Light**):
-    the four stops and Overcast as five 32px glyphs with tooltips and full
-    `aria-label`s, a native 24-hour range for keyboard and screen readers, and
-    **Plan top faces** — the room's bearing, one compass point a press.
+  - **The strip carries the rest** (no rail control any more — `LightingPicker`
+    and the Style → Light section are deleted): while it is open, an extras row
+    under it holds the **Overcast** toggle, **Plan top faces** — the room's bearing,
+    one compass point a press (`turnedBearing`, `lib/lighting-moods.ts`) — and the
+    "no window or door, so no sunlight gets in" hint. The strip's span is the
+    canvas's own: it does **not** back off for the Library card, so opening the
+    Library never moves it. The sun glyph is `--sun` (golden), the moon stays paper.
   - **`Site.bearingDeg` still turns the whole day** with the room, so which wall
     the morning comes through is the user's answer. It was the Sun direction dial
     (`NorthDial.tsx`, deleted); the arc now shows the answer and the rail keeps the
@@ -3221,7 +3240,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 ### State stores
 | Store | File | Holds |
 |---|---|---|
-| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
+| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`; `dressed` — auto set-dressing — is **off by default**, and `STUDIO_PREFS_VERSION` 1 resets the old `true` default once). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
 | `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache. Persisted to localStorage (`danmu-settings`). |
 | `useRoom` | `lib/store.ts` | active room id. Persisted (`danmu-room`). |
 | `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup + room. |
