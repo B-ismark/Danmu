@@ -1928,6 +1928,59 @@ textarea.field { border-radius: var(--r-2); }
    fit a 320px column, and the row would wrap into an uneven pair. */
 .pick-side__actions { display: grid; margin-top: 16px; }
 
+/* The capture screen (app/onboarding/capture): the step tracker over a guide
+   column — the how-to, the room's plan with the next wall lit, the phone height —
+   beside the photos. One column under 860px, and under 1100px while the camera
+   rail takes its 360px on the right. */
+.capture-page { inline-size: 100%; max-inline-size: var(--measure-page); margin-inline: auto; padding: 24px 16px 32px; }
+.capture-layout {
+  display: grid; gap: 16px 32px; align-items: start;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas: "head photos" "guide photos";
+}
+.capture-head { grid-area: head; }
+.capture-photos { grid-area: photos; display: flex; flex-direction: column; gap: 12px; min-inline-size: 0; }
+.capture-guide { grid-area: guide; }
+@media (max-width: 859px) {
+  .capture-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "head" "photos" "guide"; gap: 20px; }
+}
+@media (max-width: 1099px) {
+  .capture-layout--camera { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "head" "photos" "guide"; gap: 20px; }
+}
+.capture-guide { display: flex; flex-direction: column; gap: 16px; min-inline-size: 0; }
+.capture-guide__title { font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
+.capture-guide__lede { margin: 6px 0 0; color: var(--ink-3); font-size: var(--fs-body); line-height: 1.5; }
+.capture-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: capture-step; }
+.capture-steps > li {
+  display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start;
+  font-size: var(--fs-body); line-height: 1.45; color: var(--ink); counter-increment: capture-step;
+}
+.capture-steps > li::before {
+  content: counter(capture-step); inline-size: 24px; block-size: 24px; border-radius: var(--r-full);
+  display: grid; place-items: center; font-size: var(--fs-caption); font-weight: 700;
+  background: var(--paper-2); color: var(--ink-2);
+}
+.capture-card {
+  margin: 0; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-3);
+}
+.capture-plan { display: block; inline-size: 100%; block-size: auto; max-block-size: 200px; background: var(--paper-2); border-radius: var(--r-2); }
+/* Walls still to shoot in --ink-3, not the outline's --ink-4: a mark a person reads
+   needs 3:1 against the plan, and the outline is decoration. */
+.capture-plan__wall line { stroke: var(--ink-3); stroke-width: 3; stroke-linecap: round; }
+.capture-plan__wall circle { fill: var(--paper); stroke: var(--ink-3); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.capture-plan__wall text { fill: var(--ink-3); font-family: var(--font-sans); font-weight: 700; }
+.capture-plan__wall[data-state="done"] line { stroke: var(--ink-2); }
+.capture-plan__wall[data-state="done"] circle { fill: var(--ink); stroke: var(--ink); }
+.capture-plan__wall[data-state="done"] text { fill: var(--on-ink); }
+.capture-plan__wall[data-state="next"] line { stroke: var(--accent); stroke-width: 5; }
+.capture-plan__wall[data-state="next"] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
+.capture-plan__wall[data-state="next"] text { fill: var(--on-accent); }
+.capture-height { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+.capture-height__text { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; font-size: var(--fs-body); }
+.capture-height__field { display: flex; align-items: center; gap: 6px; }
+
 /* The shape picker's options: as many across as the column takes at ~170px, so
    three in the laptop's left column and two on a phone. `auto-fit`, not
    `auto-fill`: an empty extra track would stop the row short of the column's

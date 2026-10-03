@@ -2688,3 +2688,22 @@ edge, or the card not following the shapes. The *ROOM SIZE* label in the serif.
 **Why eyes:** walked once in headless Chromium at 1280, 1024 and 375 wide.
 
 **Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## The photo screen in the Flow design
+
+**Where:** New room → pick an L-Shape → *Continue to photos*, at a laptop width and on a
+phone; add two photos. The steps sit over the page with Photos current. On a laptop: the
+title, three numbered instructions, a small plan of the room and the phone height on the
+left, photos on the right. The plan lights the next wall in green with its number, ticks
+off the walls already added, and the caption names the next wall and its length. On a
+phone the order is title, photos, then the guide — the add tile comes before the plan.
+
+**What wrong looks like:** the lit wall not sitting on the room's outline, or not the wall
+the caption names; a number badge outside the room; on a U-Shape the north wall lit (it
+should say no wall is straight ahead); on a phone the add tile below the plan; any
+sideways scroll. Camera mode at a laptop width keeps the guide beside the viewfinder.
+
+**Why eyes:** walked once in headless Chromium at 1280 and 375 wide, empty and with two
+photos; camera mode at 1280 and 1440.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

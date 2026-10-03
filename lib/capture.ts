@@ -34,9 +34,14 @@ export const CAPTURE_SLOTS: { id: CaptureSlot; label: string; instruction: strin
 
 /** The shooting method the geometry step assumes (room centre, ~chest height,
  *  clockwise). It used to live only inside the detection prompt, so the user was
- *  never told how to take photos the pipeline could actually use. */
-export const CAPTURE_METHOD =
-  'Stand in the middle of the room, hold your phone at chest height, and turn right after each shot.';
+ *  never told how to take photos the pipeline could actually use. One list, said
+ *  as numbered steps beside the photos and as one paragraph in the camera panel. */
+export const CAPTURE_STEPS = [
+  'Stand in the middle of the room.',
+  'Hold your phone at chest height, level with the floor.',
+  'Photograph a wall, then turn right and do the next one.',
+] as const;
+export const CAPTURE_METHOD = CAPTURE_STEPS.join(' ');
 
 export async function startCamera(): Promise<MediaStream> {
   return navigator.mediaDevices.getUserMedia({

@@ -8,6 +8,7 @@ import { roomStore, blobToObjectUrl } from '@/lib/storage';
 import {
   ACCEPTED_PHOTO_TYPES,
   CAPTURE_METHOD,
+  CAPTURE_STEPS,
   CAPTURE_SLOTS,
   isAcceptedPhoto,
   normalizePhoto,
@@ -40,6 +41,8 @@ import { formatDim } from '@/lib/units';
 import { Icon } from '@/components/ui/Icon';
 import { NumberField } from '@/components/ui/NumberField';
 import { FlowBarLead, Pill, Segmented } from '@/components/ui/primitives';
+import { FlowStepper } from '@/components/ui/FlowStepper';
+import { framedWall } from '@/lib/capture-plan';
 import type { CaptureSlot, CapturePose } from '@/lib/storage';
 
 type Source = 'upload' | 'camera';
@@ -493,43 +496,71 @@ export default function CapturePage() {
     </button>
   );
 
-  const method = (
-    <div style={{ padding: narrow ? '12px 14px 0' : '14px 16px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <Icon name="info" size={14} color="var(--accent-text)" style={{ marginTop: 2 }} />
-        <p className="t-small" style={{ margin: 0, lineHeight: 1.45, minWidth: 0 }}>
-          {CAPTURE_METHOD}
-        </p>
-      </div>
+  const nextSpan = nextSlot ? spanLabel(nextSlot) : null;
+  // The how-to, the room's plan with the next wall lit, and the phone height: what
+  // a person reads before the first shot, kept beside the photos rather than in a
+  // line over them.
+  //
+  // Two pieces, so a phone can put the photos between them: the title, then the
+  // add tile, then the how-to. In that order in the DOM too, rather than a visual
+  // reorder — on a laptop the grid's areas stack the two pieces in the left column.
+  // The height can be answered after the photos: committing it re-stamps them.
+  const guideHead = (
+    <div className="capture-head">
+      <h1 className="capture-guide__title">Photograph your room</h1>
+      <p className="capture-guide__lede">One photo of each wall, taken from the middle of the room.</p>
+    </div>
+  );
+  const guide = (
+    <div className="capture-guide">
+      <ol className="capture-steps">
+        {CAPTURE_STEPS.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+      {room && (
+        <figure className="capture-card">
+          <WallPlan footprint={roomFootprint(room)} filled={photos} next={nextSlot} />
+          <figcaption className="t-small">
+            {nextSlot ? (
+              <>
+                Next: <b>{labelOf(nextSlot)}</b>
+                {nextSpan && <>, the {nextSpan} wall</>}
+                {/* The plan lights what the geometry measures from, and from the
+                    middle of some outlines one view has no wall straight ahead (the
+                    U's first). Said, rather than a caption pointing at nothing. */}
+                {!framedWall(nextSlot, roomFootprint(room)) && <> — from the middle of this shape there is no wall straight ahead, so it is not marked</>}
+              </>
+            ) : (
+              <b>All four walls added</b>
+            )}
+          </figcaption>
+        </figure>
+      )}
       {/* "Chest height" above is the one number the geometry engine cannot see and
           cannot do without: every distance it reads off a photo scales directly
           with it. Asking is a 10-second question that removes a ±17% error, so it
           sits with the instruction it makes precise rather than in Settings. */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          flexWrap: 'wrap',
-          margin: '10px 0 0',
-          paddingLeft: 22,
-        }}
-      >
-        {/* A span, not a label: NumberField takes no `id`, so the `htmlFor` that
-            used to be here pointed at nothing. The field carries its own
-            accessible name via `ariaLabel`. */}
-        <span className="t-small">Phone height off the floor</span>
-        <NumberField
-          value={heightDraft}
-          onChange={setHeightDraft}
-          step={0.05}
-          min={CAM_HEIGHT_MIN}
-          max={CAM_HEIGHT_MAX}
-          height={30}
-          ariaLabel="Phone height off the floor, in metres"
-          style={{ width: 96 }}
-        />
-        <span className="t-meta">m</span>
+      <div className="capture-card capture-height">
+        {/* A span, not a label: NumberField takes no `id`. The field carries its
+            own accessible name via `ariaLabel`. */}
+        <span className="capture-height__text">
+          <b>Phone height</b>
+          <span className="t-small">Off the floor, to the lens</span>
+        </span>
+        <span className="capture-height__field">
+          <NumberField
+            value={heightDraft}
+            onChange={setHeightDraft}
+            step={0.05}
+            min={CAM_HEIGHT_MIN}
+            max={CAM_HEIGHT_MAX}
+            height={36}
+            ariaLabel="Phone height off the floor, in metres"
+            style={{ width: 96 }}
+          />
+          <span className="t-meta">m</span>
+        </span>
       </div>
     </div>
   );
@@ -665,35 +696,29 @@ export default function CapturePage() {
                 does not grow with the window. At 1920 the drop zone was 1,886px
                 wide, and the buttons that turn the walls sat at the window's far
                 edge, away from the sentence they answer. */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                flex: 1,
-                width: '100%',
-                maxWidth: 'var(--measure-page)',
-                marginInline: 'auto',
-              }}
-            >
-              {method}
-              {anyCaptured && (
-                <WallControls square={!!room && room.width === room.depth} onRotate={rotateAll} />
-              )}
-              <div
-                style={{
-                  display: 'grid',
-                  // auto-fill, not two fixed columns: the gallery now holds one to
-                  // four cards plus an add tile, and a 2×2 grid left a lone photo
-                  // occupying a quarter of the screen next to three empty cells.
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
-                  gap: 8,
-                  padding: narrow ? 14 : 16,
-                  alignContent: 'start',
-                  flex: 1,
-                  minHeight: 0,
-                }}
-              >
-                {gallery(false)}
+            <div className="capture-page">
+              <FlowStepper current="Photos" />
+              <div className={`capture-layout${source === 'camera' ? ' capture-layout--camera' : ''}`}>
+                {guideHead}
+                <div className="capture-photos">
+                  <div
+                    style={{
+                      display: 'grid',
+                      // auto-fill, not two fixed columns: the gallery now holds one to
+                      // four cards plus an add tile, and a 2×2 grid left a lone photo
+                      // occupying a quarter of the screen next to three empty cells.
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
+                      gap: 12,
+                      alignContent: 'start',
+                    }}
+                  >
+                    {gallery(false)}
+                  </div>
+                  {anyCaptured && (
+                    <WallControls square={!!room && room.width === room.depth} onRotate={rotateAll} />
+                  )}
+                </div>
+                {guide}
               </div>
             </div>
           </div>
@@ -771,6 +796,53 @@ function photoChrome(tier: ChromeTier = 'fact'): CSSProperties {
   };
 }
 
+/** The room's outline with each photo's wall marked: the next one to shoot lit in
+ *  moss and numbered, the ones already photographed inked with a tick, the rest
+ *  quiet. A dot at the middle is where to stand — the origin the geometry assumes
+ *  the photos were taken from. Drawn in plan metres (north up), fitted to its box. */
+function WallPlan({ footprint, filled, next }: { footprint: [number, number][]; filled: PhotoMap; next: CaptureSlot | null }) {
+  const xs = footprint.map((p) => p[0]);
+  const zs = footprint.map((p) => p[1]);
+  const pad = 0.9;
+  const minX = Math.min(...xs) - pad;
+  const minZ = Math.min(...zs) - pad;
+  const w = Math.max(...xs) - minX + pad;
+  const h = Math.max(...zs) - minZ + pad;
+  const walls = SLOT_ORDER.map((slot) => ({ slot, seg: framedWall(slot, footprint) }));
+  const r = Math.max(w, h) * 0.055;
+  return (
+    <svg
+      className="capture-plan"
+      viewBox={`${minX} ${minZ} ${w} ${h}`}
+      role="img"
+      aria-label={`Your room from above. ${next ? `Next: ${labelOf(next)}.` : 'All four walls added.'}`}
+    >
+      <polygon points={footprint.map(([x, z]) => `${x},${z}`).join(' ')} fill="var(--paper)" stroke="var(--ink-4)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+      {walls.map(({ slot, seg }) => {
+        if (!seg) return null;
+        const state = slot === next ? 'next' : filled[slot] ? 'done' : 'later';
+        const [[ax, az], [bx, bz]] = seg;
+        // The number sits just inside the wall, toward the stander.
+        const mx = (ax + bx) / 2;
+        const mz = (az + bz) / 2;
+        const len = Math.hypot(mx, mz) || 1;
+        const cx = mx - (mx / len) * r * 1.8;
+        const cz = mz - (mz / len) * r * 1.8;
+        return (
+          <g key={slot} data-state={state} className="capture-plan__wall">
+            <line x1={ax} y1={az} x2={bx} y2={bz} vectorEffect="non-scaling-stroke" />
+            <circle cx={cx} cy={cz} r={r} />
+            <text x={cx} y={cz} fontSize={r * 1.15} textAnchor="middle" dominantBaseline="central">
+              {SLOT_ORDER.indexOf(slot) + 1}
+            </text>
+          </g>
+        );
+      })}
+      <circle cx={0} cy={0} r={r * 0.45} fill="var(--ink)" />
+    </svg>
+  );
+}
+
 /** Turn the whole set of labels round by one wall.
  *
  *  This is the control the no-bearing case needs, and the one a bad magnetometer
@@ -785,7 +857,6 @@ function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps:
         alignItems: 'center',
         gap: 8,
         flexWrap: 'wrap',
-        padding: '12px 16px 0',
       }}
     >
       <span className="t-small" style={{ minWidth: 0 }}>
