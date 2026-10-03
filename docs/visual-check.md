@@ -2608,3 +2608,20 @@ colour with a *"?"* for a model offered at its standard size (its tooltip should
 **Why eyes:** no test renders this chip row.
 
 **Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## A tapped rename suggestion clicks nothing else
+
+**Where:** a real phone, the scan review screen. Rename a detected piece so the list of
+matching models opens under the field, then tap a model in that list. Do it on a row whose
+next row, or whose own offer chips (*"Use X"*), sit right below the list.
+
+**What wrong looks like:** after the pick, the next row's Keep toggling, an offer chip
+being applied, or anything else changing that you did not tap. The pick itself should
+happen once.
+
+**Why eyes:** the pick happens on the finger going down, the list closes and the rows
+below slide up, and the browser's own click arrives on the finger lifting. The swallowing
+of that click is tested in jsdom (`tests/rename-suggest.test.tsx`), which fires the events
+by hand; the real ordering is a browser's on a touch screen.
+
+**Rides:** branch `claude/elegant-volta-q7yy89` (after PR #240).
