@@ -57,10 +57,10 @@ describe('the gear', () => {
     expect(screen.queryByRole('group', { name: 'View settings' })).toBeNull();
   });
 
-  it('and Help lets go the same way, so the two never stack', () => {
-    // Help had Esc and no outside press, so opening View over it left both open, with
-    // Help's card painted on top of View's. A real press is a pointerdown and then a
-    // click; the down is what lets the open one go.
+  it('and Help is a modal: it takes the screen, so it and View never stack', () => {
+    // Help used to be a popover that had to let go when another opened. It is a dialog
+    // over a scrim now, so View cannot be reached while it is up; closing it (Esc, the
+    // scrim, or its own close button) gives focus back to the "?".
     render(
       <>
         <ViewMenu />
@@ -70,29 +70,22 @@ describe('the gear', () => {
     const help = screen.getByRole('button', { name: 'How this works' });
     fireEvent.click(help);
     expect(help.getAttribute('aria-expanded')).toBe('true');
-    const gear = screen.getByRole('button', { name: 'View settings' });
-    fireEvent.pointerDown(gear);
-    fireEvent.click(gear);
+    expect(screen.getByRole('dialog', { name: 'How this works' }).getAttribute('aria-modal')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Close help' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(help.getAttribute('aria-expanded')).toBe('false');
-    expect(gear.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.pointerDown(help);
-    fireEvent.click(help);
-    expect(gear.getAttribute('aria-expanded')).toBe('false');
-    expect(help.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it("Help's Escape still belongs to a field being typed in first", () => {
-    render(
-      <>
-        <input aria-label="A field" />
-        <StudioHelp />
-      </>,
-    );
+  it("Help's Escape closes it and puts focus back on the button", () => {
+    render(<StudioHelp />);
     const help = screen.getByRole('button', { name: 'How this works' });
+    // The app's own Tooltip names it on hover; a native title would be a second label.
+    expect(help.hasAttribute('title')).toBe(false);
+    help.focus();
     fireEvent.click(help);
-    fireEvent.keyDown(screen.getByRole('textbox', { name: 'A field' }), { key: 'Escape' });
-    expect(help.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.queryByRole('dialog')).not.toBeNull();
     fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(help.getAttribute('aria-expanded')).toBe('false');
     expect(document.activeElement).toBe(help);
   });

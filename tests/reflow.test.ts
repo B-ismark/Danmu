@@ -237,22 +237,13 @@ describe('a floating card is capped against the window, not just stated', () => 
     expect(readFileSync(root(...file.split('/')), 'utf8')).toMatch(pattern);
   });
 
-  // The help card keeps its width in the stylesheet, because a
-  // phone replaces it with its own margins (`.app-bar .help-pop`). So the cap is
-  // asserted where it lives, and the components are held to the classes carrying it —
-  // a class the component stopped using would leave the rule capping nothing.
-  it.each([
-    ['components/studio/HelpCard.tsx', 'help-card'],
-  ])('%s caps its width through .%s', (file, cls) => {
-    expect(readFileSync(root(...file.split('/')), 'utf8')).toContain(cls);
+  // The help dialog is a `Modal` that takes the screen on a phone: width is the Modal's
+  // own `min(Npx, 92vw)`, and the sheet rule lifts it to the whole screen below 600px.
+  it('help is a Modal, and a phone gets it as a full-height sheet', () => {
+    expect(readFileSync(root('components', 'studio', 'HelpCard.tsx'), 'utf8')).toMatch(/<Modal[^>]*\bsheet\b/);
     const css = readFileSync(root('app', 'globals.css'), 'utf8');
-    const rule = new RegExp(`\\n\\.${cls} \\{[^}]*width: min\\(\\d+px, calc\\(100vw`);
-    expect(css).toMatch(rule);
-  });
-
-  it('a phone gives help the screen margins, not the edge of the More button', () => {
-    const css = readFileSync(root('app', 'globals.css'), 'utf8');
-    expect(css).toMatch(/\.app-bar \.help-pop \{[^}]*position: fixed;[^}]*left: 16px; right: 16px;/);
+    expect(css).toMatch(/\.modal-card--sheet \{[^}]*width: 100vw[^}]*height: 100dvh/);
+    expect(css).toMatch(/\.help-dlg__nav \{ display: none; \}/);
   });
 
   // A third guard stood here: the sun graph's `<svg>` had a 272-wide viewBox left

@@ -279,6 +279,17 @@
   --dur-breathe: 1100ms; /* one half-cycle of a placeholder's breathing */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoots a little, then settles — a thing arriving with some play in it */
+
+  /* The sky the day strip is painted with (lib/day-strip.ts `skyGradient`): muted and
+     warm so it sits beside --paper rather than shouting over it. Fixed in both themes,
+     because a sky is not a surface. */
+  --sky-night: #3b3f5e;    /* deep, soft indigo */
+  --sky-twilight: #7a6f94; /* the lilac either side of a horizon */
+  --sky-dawn: #e0ac92;     /* dusty peach */
+  --sky-dusk: #cc8f9b;     /* muted rose */
+  --sky-haze: #efe3cd;     /* soft warm haze between horizon and noon */
+  --sky-noon: #f5eedf;
 
   --shadow-soft: 0 1px 2px rgba(38, 42, 32, 0.04), 0 6px 16px rgba(38, 42, 32, 0.06);
   --shadow-lift: 0 2px 4px rgba(38, 42, 32, 0.06), 0 12px 28px rgba(38, 42, 32, 0.10);
@@ -1800,25 +1811,83 @@ textarea.field { border-radius: var(--r-2); }
 
 /* The More menu: rows a thumb can hit — 48px, Material's target — under the bar's
    trailing edge, never wider than the screen. */
-/* The help card scrolls past this. On a laptop 420px sits beside the room; on a
-   phone the card hangs from the app bar over a room nobody is using while they
-   read, so it may reach down to just above the toolbar and show its whole touch
-   card rather than stop mid-sentence at 420. */
-/* Width is capped against the window as well as stated: none of the slots that
-   render the card can promise it 320px. */
-.help-card { max-height: min(420px, 60vh); width: min(320px, calc(100vw - 32px)); }
-/* Help hangs under the "?" it opens from, right edges aligned, so it grows left. */
-.help-pop {
-  position: absolute; top: calc(100% + 8px); right: 0;
-  z-index: var(--z-popover); text-align: left;
+/* ── How this works (components/studio/HelpCard.tsx) ─────────────────────────
+   A dialog, not a popover: a list of topics on the left, the reading pane beside it,
+   every section in the pane in order. A phone gets a full-height sheet with no list,
+   the sections stacked. */
+.help-dlg {
+  display: grid;
+  grid-template: "head head" auto "nav body" minmax(0, 1fr) / 188px minmax(0, 1fr);
+  height: min(620px, calc(100dvh - 80px));
 }
+.help-dlg__head {
+  grid-area: head;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px 12px 20px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--accent-text);
+}
+.help-dlg__title { flex: 1; margin: 0; font-family: var(--font-display); font-size: var(--fs-lead); font-weight: 600; color: var(--ink); }
+.help-dlg__nav {
+  grid-area: nav;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 10px; overflow-y: auto;
+  background: var(--paper-2);
+  border-right: 1px solid var(--hairline);
+}
+.help-dlg__navbtn {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 36px; padding: 0 10px;
+  border: 0; border-radius: var(--r-2); background: transparent;
+  font: inherit; font-size: var(--fs-small); font-weight: 600; color: var(--ink-2);
+  text-align: left; cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.help-dlg__navbtn:hover { background: var(--paper-3); color: var(--ink); }
+.help-dlg__navbtn[aria-current="true"] { background: var(--accent-tint); color: var(--accent-text); }
+.help-dlg__body {
+  grid-area: body; position: relative;
+  overflow-y: auto; padding: 6px 24px 28px;
+  scroll-behavior: auto;
+}
+.help-sec { padding: 16px 0 18px; border-bottom: 1px solid var(--hairline-soft); }
+.help-sec:last-child { border-bottom: 0; }
+.help-sec__title {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 10px; font-size: var(--fs-body); font-weight: 700; color: var(--ink);
+}
+.help-sec__icon {
+  display: inline-grid; place-items: center; width: 28px; height: 28px;
+  border-radius: var(--r-full); background: var(--accent-tint); color: var(--accent-text);
+}
+.help-sec__lines { display: flex; flex-direction: column; gap: 8px; }
+.help-sec__note { margin-top: 10px; line-height: 1.45; }
+.help-line { margin: 0; font-size: var(--fs-small); line-height: 1.55; color: var(--ink-2); }
+.help-line b { color: var(--ink); }
+.help-keys { display: grid; border: 1px solid var(--hairline); border-radius: var(--r-2); overflow: hidden; }
+.help-keys__row {
+  display: grid; grid-template-columns: minmax(104px, 34%) minmax(0, 1fr); align-items: center; gap: 12px;
+  padding: 7px 12px; font-size: var(--fs-small); color: var(--ink-2);
+}
+.help-keys__row:nth-child(even) { background: var(--paper-2); }
+.help-keys__caps { display: flex; flex-wrap: wrap; gap: 4px; }
+.help-kb {
+  font-family: var(--font-sans); font-size: var(--fs-micro); font-weight: 700; color: var(--ink);
+  padding: 1px 6px; min-width: 22px; text-align: center;
+  background: var(--paper-2); border: 1px solid var(--hairline-strong); border-bottom-width: 2px;
+  border-radius: var(--r-1); white-space: nowrap;
+}
+.help-keys__row:nth-child(even) .help-kb { background: var(--paper); }
+.help-line .help-kb { margin: 0 1px; }
+/* The sheet a phone gets for any Modal that asks for one: the whole screen, no scrim
+   showing round it, the list of topics dropped so the sections simply stack. */
 @media (max-width: 599px) {
-  .help-card { max-height: calc(100dvh - 160px); }
-  /* A phone opens help from More, at the bar's far edge, and a card anchored there
-     sat 6px from one side of the screen and 34–64px from the other. It takes the
-     screen's 16px margins instead, just under the 56px bar. */
-  .app-bar .help-pop { position: fixed; top: 64px; left: 16px; right: 16px; }
-  .app-bar .help-pop .help-card { width: auto; }
+  .modal-scrim--sheet { padding: 0 !important; place-items: stretch !important; }
+  .modal-card--sheet { width: 100vw !important; height: 100dvh; border-radius: 0 !important; border: 0 !important; }
+  .modal-card--sheet .help-dlg { height: 100dvh; grid-template: "head" auto "body" minmax(0, 1fr) / minmax(0, 1fr); }
+  .help-dlg__nav { display: none; }
+  .help-dlg__body { padding: 4px 16px 28px; }
+  .help-keys__row { grid-template-columns: minmax(96px, 40%) minmax(0, 1fr); }
 }
 .more-menu {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: var(--z-popover);
@@ -2309,7 +2378,7 @@ textarea.field { border-radius: var(--r-2); }
   animation: rough-callout-in var(--dur-slow) var(--ease-out) both;
 }
 .rough-callout--phone {
-  /* Below the 56px app bar, where `.help-pop` sits too: the room name and the tabs
+  /* Below the 56px app bar, where the help sheet starts too: the room name and the tabs
      stay pressable while it shows. */
   left: 16px; right: 16px; top: 64px; width: auto; transform: none;
   animation-name: rough-callout-in-top;
@@ -2487,7 +2556,8 @@ textarea.field { border-radius: var(--r-2); }
   border-radius: var(--r-full);
   box-shadow: inset 0 0 0 1px var(--edge), var(--shadow-float);
   opacity: 1;
-  transition: clip-path var(--dur-slow) var(--ease-out), opacity var(--dur-base) var(--ease-out), filter var(--dur-base) var(--ease-out);
+  /* The strip grows out of the pill on a spring: it overshoots its ends a hair and settles. */
+  transition: clip-path calc(var(--dur-slow) * 1.5) var(--ease-spring), opacity var(--dur-base) var(--ease-out), filter var(--dur-base) var(--ease-out);
 }
 .day-strip--folded .day-strip__sky { opacity: 0; }
 .day-strip--muted .day-strip__sky { filter: saturate(0.25); }
@@ -2510,10 +2580,10 @@ textarea.field { border-radius: var(--r-2); }
   color: var(--ink);
   background: var(--paper);
   border: 1px solid var(--edge);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-2) 24%, transparent), var(--shadow-float);
+  box-shadow: var(--shadow-float);
   outline-offset: 3px;
   transition:
-    transform var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-spring),
     background-color var(--dur-slow) var(--ease-out),
     color var(--dur-slow) var(--ease-out),
     box-shadow var(--dur-slow) var(--ease-out);
@@ -2521,6 +2591,16 @@ textarea.field { border-radius: var(--r-2); }
 /* Under a drag the pill follows the hand exactly: a lagging handle reads as a sticky one. */
 .day-strip--carrying .day-strip__handle { transition: background-color var(--dur-slow) var(--ease-out), color var(--dur-slow) var(--ease-out), box-shadow var(--dur-slow) var(--ease-out); }
 .day-strip__handle:active { cursor: grabbing; }
+/* Only a keyboard sees a ring; the pill at rest is as calm as the other chrome pills. */
+.day-strip__handle:focus-visible { outline: 2px solid var(--accent-text); }
+/* Opening plays the sun's little hello: a tilt up, a lean back, home. */
+.day-strip--open .day-strip__glyph { animation: day-glyph-hello calc(var(--dur-slow) * 2) var(--ease-spring) both; }
+@keyframes day-glyph-hello {
+  0% { transform: rotate(-24deg) scale(0.8); }
+  40% { transform: rotate(14deg) translateY(-3px) scale(1.18); }
+  70% { transform: rotate(-6deg) scale(0.97); }
+  100% { transform: rotate(0) scale(1); }
+}
 .day-strip__glyph { display: inline-flex; color: var(--accent-text); transition: color var(--dur-slow) var(--ease-out); }
 .day-strip__time {
   font-size: var(--fs-small); font-weight: 700;
@@ -2532,11 +2612,10 @@ textarea.field { border-radius: var(--r-2); }
   color: var(--on-ink);
   background: var(--ink);
   border-color: var(--ink);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--paper) 16%, transparent), var(--shadow-float);
+  box-shadow: var(--shadow-float);
 }
 .day-strip--night .day-strip__glyph { color: var(--on-ink); }
 .day-strip--muted .day-strip__glyph { color: var(--ink-3); }
-.day-strip--muted .day-strip__handle { box-shadow: var(--shadow-float); }
 .day-strip--on-dark:not(.day-strip--night) .day-strip__handle { border-color: var(--paper); }
 /* Giving way to the furniture (the contract in DayStrip.tsx). Quiet while a piece is
    selected — still there, still grabbable, not competing with it — and away while
@@ -2560,8 +2639,11 @@ textarea.field { border-radius: var(--r-2); }
 .celestial--night .celestial__disc { transform: scale(1.55); }
 .celestial--night .celestial__bite { transform: translate(0, 0); }
 @media (prefers-reduced-motion: reduce) {
-  .day-strip, .day-strip__sky, .day-strip__handle, .day-strip__glyph,
+  .day-strip, .day-strip__handle, .day-strip__glyph,
   .celestial__rays, .celestial__disc, .celestial__bite { transition: none; }
+  /* No overshoot, no hello: the strip simply fades in. */
+  .day-strip__sky { transition: opacity var(--dur-base) var(--ease-out); }
+  .day-strip--open .day-strip__glyph { animation: none; }
 }
 
 /* ── The day as a track (components/studio/LightingPicker.tsx) ────────────────

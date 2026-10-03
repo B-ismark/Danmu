@@ -20,7 +20,7 @@
 //     camera orbiting under it and makes the undo stack record the whole scrub as
 //     ONE step rather than one per pointer move;
 //   · the strip is the WHOLE clock, so a drag can cross the horizon — and the place
-//     it crosses is painted gold on the strip, which is what makes that learnable.
+//     it crosses is painted peach and rose on the strip, which is what makes that learnable.
 //     The rainbow this replaced split the clock into a day half and a night half
 //     because its horizon was invisible. Crossing morphs the sun into the moon (or
 //     back) under the hand, and `SoundCues` answers with the dawn or dusk phrase;
@@ -159,6 +159,12 @@ export function DayStrip() {
     return () => ro.disconnect();
   }, []);
   const strip = stripFor(available, INSET);
+  // The strip collapsing mid-drag (the slot measured 0) unmounts the box that holds the
+  // capture; end the gesture rather than rely on the browser reporting it.
+  useEffect(() => {
+    if (available === 0 && gesture.current) endGesture(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [available]);
 
   const open = carrying || near || focused;
   // Folded, the pill waits at the centre: the one place that is the same whatever the
@@ -278,7 +284,9 @@ export function DayStrip() {
   const step = (dh: number) => {
     // Overcast is switched off by `onKeyDown`, and `SoundCues` answers that change
     // with its own chime; a tick on top of it would be two sounds for one key.
-    setHour(hour + dh);
+    // Clamped to the clock's ends, not wrapped: the pill at 23:59 pressing right would
+    // otherwise teleport across the whole strip, playing a dawn phrase for a nudge.
+    setHour(Math.min(23.99, Math.max(0, hour + dh)));
     if (!overcast) playSound('tick', { brightness: day ? sunAt(hour).elevationDeg / 60 : 0 });
   };
 
@@ -286,11 +294,18 @@ export function DayStrip() {
   // Arriving opens it. Leaving is the window's `pointermove` above, measured against
   // the strip's box rather than these elements: a finger or a pen lifting off the
   // glass reports a leave too.
-  const reach = { onPointerEnter: holdOpen };
+  // A finger does not hover: its "enter" arrives with the press itself, so honouring it
+  // opened the pill an event before `begin` looked, and the first touch started a scrub
+  // from the folded pill's centre — the jump to noon the first-tap rule exists to stop.
+  const reach = { onPointerEnter: (e: PointerEvent) => { if (e.pointerType !== 'touch') holdOpen(); } };
   const gestureHandlers = {
     onPointerMove: move,
     onPointerUp: () => endGesture(true),
     onPointerCancel: () => endGesture(false),
+    // Capture taken away with no up or cancel — the element unmounted under the hand, the
+    // page lost the pointer — would leave `SUN_DRAG_ID` held: a frozen camera and one
+    // undo step that never closes. A normal release lands here too, finding it done.
+    onLostPointerCapture: () => endGesture(false),
     // The canvas answers clicks and menus from the last press it saw; the day's
     // presses are its own.
     onClick: (e: MouseEvent) => e.stopPropagation(),

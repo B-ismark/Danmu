@@ -65,6 +65,7 @@ describe('every Tooltip call site', () => {
       'PartTree.tsx',
       'RailFooter.tsx',
       'RailFooter.tsx',
+      'StudioHelp.tsx',
       'shell-parts.tsx',
     ]);
   });
