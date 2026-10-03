@@ -447,8 +447,7 @@ export function RoomTools() {
           the buttons GROW to fill a line they fit on, and because they may not
           shrink, a line they do not fit on wraps instead of cutting a word. Wrapping
           costs a row of height in the worst case and removes the failure mode
-          entirely; `LightingPicker` next door already does exactly this, and
-          `tests/reflow.test.ts` holds the arithmetic. */}
+          entirely, and `tests/reflow.test.ts` holds the arithmetic. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         <FixAllButton appPlaced={appPlaced} />
         <IdeasButton open={panel === 'ideas'} onToggle={() => setPanel((v) => (v === 'ideas' ? null : 'ideas'))} />

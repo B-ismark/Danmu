@@ -13,10 +13,8 @@ import Link from 'next/link';
 import { RoomDimsEditor } from './RoomDimsEditor';
 import { RailSection } from './RailSection';
 import { RoomTools } from './RoomTools';
-import { LightingPicker } from './LightingPicker';
 import { duplicateSelection, removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
-import { isAperture } from '@/lib/apertures';
 import { groupRows, type TreeRow } from '@/lib/part-rows';
 import type { ScenePart, Shape } from '@/lib/scene-spec';
 import { useRailIntent, type LeftSection } from '@/lib/rail-intent';
@@ -48,7 +46,6 @@ export function PartTree() {
   const setSelection = useStudio((s) => s.setSelection);
   const toggleInSelection = useStudio((s) => s.toggleInSelection);
   const frameSelected = useStudio((s) => s.frameSelected);
-  const lighting = useStudio((s) => s.lighting);
   const setLighting = useStudio((s) => s.setLighting);
   const [query, setQuery] = useState('');
   // Local, not persisted: which drawer you left open is not a preference worth
@@ -137,16 +134,6 @@ export function PartTree() {
       THEMES.find((t) => restyled.every((p) => p.color === themeColorFor(p.category, t)))?.id ?? null
     );
   }, [parts]);
-
-  // Whether a sun mood has anything to shine through. Since the walls became
-  // shadow casters the sun reaches the inside of the room ONLY through a window or
-  // a door (`components/three/RoomShell.tsx`), which is the physically right answer
-  // and also means a sealed room is lit by sky and lamps alone. That is worth
-  // saying rather than leaving someone to wonder why moving the sun does nothing —
-  // rule 2's "say so, never silently" — and the predicate comes from
-  // `lib/apertures.ts` so the sentence cannot disagree with the geometry that cuts
-  // the holes.
-  const sunHasNoWayIn = lighting === 'daylight' && !parts.some(isAperture);
 
   function applyTheme(theme: Theme) {
     // One store write for one gesture. The old per-part `updatePart` loop fired
@@ -529,34 +516,6 @@ export function PartTree() {
               );
             })}
           </div>
-        </div>
-
-        {/* Lighting joins the themes rather than sitting in View, because a theme
-            SETS a mood (`applyTheme` calls `setLighting`) — so the two were one
-            question in two drawers, and picking a theme silently moved a control
-            the user could not see. Same construction as the swatch row above: one
-            line of 32px targets, no words, name on hover and on focus. */}
-        <div style={{ marginTop: 12 }}>
-          <span id="lighting-label" className="ds-label" style={{ display: 'block', marginBottom: 8 }}>Light</span>
-          <LightingPicker />
-          {/* The room is closed to the sun now, so a sun mood in a room with no
-              opening has nothing to come through. Said in the same 10.5px --ink-3
-              hint voice the view settings use, directly under the control that
-              raises the question, and worded about the ROOM rather than about the
-              renderer — on Fast quality there are no cast shadows at all, so a
-              sentence claiming the room is unlit would be wrong half the time
-              while this one stays true.
-              It is NOT the common case, and I had that backwards for a while:
-              `lib/room-openings.ts` gives every preset room a door and a window
-              before any furniture is placed, so a starter room has two ways in for
-              the light. What is left is a room someone has emptied, and a room
-              rebuilt from photographs where detection found no opening — which is
-              exactly where a silent flat sun mood would be most confusing. */}
-          {sunHasNoWayIn && (
-            <p className="t-micro" style={{ lineHeight: 1.4, margin: '6px 0 0' }}>
-              No window or door, so no sunlight gets in. Add one from the Library.
-            </p>
-          )}
         </div>
 
         {generics.length > 0 && (

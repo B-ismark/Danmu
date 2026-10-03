@@ -11,7 +11,7 @@
 // panel is not it.) Two groups, in the order someone reaches for them: Display,
 // Quality.
 //
-// **Lighting has left.** It is in the Style section now, as `LightingPicker`.
+// **Lighting has left.** It lives on the canvas now, as the day strip (`DayStrip`).
 // Style already held the one-tap theme chips, and a theme SETS a lighting mood
 // (`lib/themes.ts`) — so the two controls were one question ("how should this
 // room look?") asked in two different drawers, and the answer to one silently

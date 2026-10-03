@@ -185,20 +185,23 @@ export function CanvasTools({ children }: { children: ReactNode }) {
   );
 }
 
-/** How much of the right edge the Library card covers while it is open: its
- *  published width plus its own edge gap and one more between it and the day. The
- *  fallback cancels the two gaps, so with nothing docked this is exactly 0. */
-const PANEL_R = `calc(var(--canvas-panel-width, ${-EDGE * 2}px) + ${EDGE * 2}px)`;
+/** The day row's height, in px: the strip's pill (`DayStrip`'s `PILL_H`). */
+export const DAY_ROW_H = 32;
+
+/** Where the day row's bottom edge is, measured from the canvas top. Shared with
+ *  `CatalogPanel`, which docks beneath it so the Library never sits on the strip. */
+export const DAY_ROW_BOTTOM = `calc(${EDGE}px + max(var(--canvas-tools-height, 36px), var(--canvas-view-height, 0px)) + 4px + ${DAY_ROW_H}px)`;
 
 /**
  * Top-centre, second row: the day. Not a fourth slot — it is the TOOLS slot's
  * lower line, centred on the same span, and the only thing on it is the sun.
  *
  * It begins below BOTH top clusters, whichever reaches further down, since the
- * view cluster wraps too; and its right edge keeps clear of whatever is docked
- * there (the Library card publishes its width for exactly this). With the Library
- * open on a mid-sized canvas that leaves too little for an arc, and the sun lies
- * flat into a plain slider rather than running under the card — see `trackFor`.
+ * view cluster wraps too. Its span is the canvas's own, and it deliberately does
+ * NOT reserve room for the Library card: that card used to publish its width here
+ * and the span's right edge backed off by it, so opening the Library re-centred
+ * the day and shoved it left. The strip's anchor is the canvas; its width is
+ * `stripFor`'s, measured from that span, so it only ever shrinks with the window.
  */
 export function CanvasDay({ children }: { children: ReactNode }) {
   return (
@@ -206,9 +209,12 @@ export function CanvasDay({ children }: { children: ReactNode }) {
       className="canvas-chrome"
       style={{
         ...BASE,
-        top: `calc(${EDGE}px + max(var(--canvas-tools-height, 36px), var(--canvas-view-height, 0px)) + 4px)`,
+        top: `calc(${DAY_ROW_BOTTOM} - ${DAY_ROW_H}px)`,
+        // Above the Library card: the strip's extras row opens over the card's top edge
+        // while the strip is reached for, and must not be cut by it.
+        zIndex: 'var(--z-canvas-hint)',
         left: `calc(${EDGE}px + ${INSET_L})`,
-        right: `calc(${EDGE}px + ${INSET_R} + ${PANEL_R})`,
+        right: `calc(${EDGE}px + ${INSET_R})`,
         justifyContent: 'center',
       }}
     >

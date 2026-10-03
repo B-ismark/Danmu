@@ -1,6 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { LIGHTINGS } from '@/lib/store';
 import {
   SKY_KEYS,
@@ -37,8 +35,6 @@ import { THEMES } from '@/lib/themes';
 //   4. A retired id that maps to nothing, which used to take the scene down on the
 //      first paint (`Room` indexed a mood table by it).
 
-const src = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8');
-const PICKER = src('components', 'studio', 'LightingPicker.tsx');
 
 /** A colour distance, 0–441, crude and sufficient for "did this jump". */
 function dist(a: string, b: string): number {
@@ -168,17 +164,6 @@ describe('the named times', () => {
     expect(sunAt(evening).elevationDeg).toBeGreaterThan(5);
     expect(sunAt(evening).azimuthDeg).toBeGreaterThan(225);
     expect(sunAt(night).elevationDeg).toBeLessThan(0);
-  });
-
-  it('each have a glyph and a hint in the picker', () => {
-    // The one source-level check: `STOP_UI` is a Record keyed by stop id, which is
-    // the exhaustiveness check, and its hint is the half of the accessible name that
-    // says "from the east" — no glyph conveys a direction.
-    const start = PICKER.indexOf('const STOP_UI: Record<TimeStopId, { hint: string; icon: IconName }> = {');
-    expect(start).toBeGreaterThan(-1);
-    const inner = PICKER.slice(start, PICKER.indexOf('\n};', start));
-    const named = [...inner.matchAll(/^ {2}(\w+): \{ hint: '[^']+', icon: '[^']+' \}/gm)].map((m) => m[1]);
-    expect(named).toEqual(TIME_STOPS.map((t) => t.id));
   });
 });
 

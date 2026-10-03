@@ -34,6 +34,7 @@
   --accent-text: #3F6436;     /* 6.64:1 on --paper, 5.54:1 on --accent-tint — accent-coloured type */
   --accent-2: #D99A2B;      /* amber — fills, the 3D hover; never type (2.44:1 with white) */
   --accent-2-tint: rgba(217, 154, 43, 0.16);
+  --sun: #C48500;           /* golden yellow — the sun glyph in the day pill. 3.1:1 on --paper, enough for a graphic (WCAG 1.4.11); never type */
 
   /* Furniture that came out of the user's own photo. Used to be an institutional
      CAD blue; warm aubergine instead, a third brand-compatible hue that reads
@@ -2801,7 +2802,30 @@ textarea.field { border-radius: var(--r-2); }
   70% { transform: rotate(-6deg) scale(0.97); }
   100% { transform: rotate(0) scale(1); }
 }
-.day-strip__glyph { display: inline-flex; color: var(--accent-text); transition: color var(--dur-slow) var(--ease-out); }
+.day-strip__glyph { display: inline-flex; color: var(--sun); transition: color var(--dur-slow) var(--ease-out); }
+.day-strip__extras {
+  position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: min(100vw - 32px, 420px);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  pointer-events: auto;
+}
+.day-strip__tools {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px;
+  padding: 4px 8px; border-radius: var(--r-full);
+  background: var(--paper); border: 1px solid var(--edge); box-shadow: var(--shadow-float);
+}
+.day-strip__tool {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
+  border: 1px solid var(--edge); border-radius: var(--r-full);
+  background: var(--paper); color: var(--ink-2); cursor: pointer;
+  font-size: var(--fs-caption); font-weight: 600;
+}
+.day-strip__tool[aria-pressed='true'] { background: var(--accent-tint); border-color: var(--accent); color: var(--accent-text); }
+.day-strip__facing { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); }
+.day-strip__hint {
+  margin: 0; padding: 3px 10px; text-align: center; line-height: 1.4;
+  background: var(--paper); border-radius: var(--r-2); box-shadow: var(--shadow-float);
+}
 .day-strip__time {
   font-size: var(--fs-small); font-weight: 700;
   white-space: nowrap;
@@ -2824,7 +2848,8 @@ textarea.field { border-radius: var(--r-2); }
 .day-strip--away { opacity: 0; }
 .day-strip--away .day-strip__handle,
 .day-strip--away .day-strip__hit,
-.day-strip--away .day-strip__reach { pointer-events: none; }
+.day-strip--away .day-strip__reach,
+.day-strip--away .day-strip__extras { pointer-events: none; }
 
 /* The sun that becomes the moon (`Celestial` in DayStrip.tsx). Every part is drawn
    at every hour; night draws the rays in and turns them away, swells the disc, and
@@ -2845,39 +2870,6 @@ textarea.field { border-radius: var(--r-2); }
   .day-strip__sky { transition: opacity var(--dur-base) var(--ease-out); }
   .day-strip--open .day-strip__glyph { animation: none; }
 }
-
-/* ── The day as a track (components/studio/LightingPicker.tsx) ────────────────
-   A native range, painted as the sky it scrubs: night at both ends, gold at the
-   horizons, paper at noon. The stops are tokens, so the track sits in the palette
-   rather than beside it. */
-.day-track {
-  -webkit-appearance: none; appearance: none;
-  height: 6px; margin: 0;
-  border-radius: var(--r-full);
-  background: linear-gradient(90deg,
-    var(--ink) 0%, var(--ink-2) 20%, var(--accent) 27%, var(--paper-3) 40%,
-    var(--paper) 53%, var(--paper-3) 66%, var(--accent) 79%, var(--ink-2) 86%, var(--ink) 100%);
-  border: 1px solid var(--edge);
-  cursor: pointer;
-}
-.day-track::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none;
-  width: 16px; height: 16px;
-  border-radius: var(--r-full);
-  background: var(--paper);
-  border: 2px solid var(--accent-text);
-  box-shadow: var(--shadow-soft);
-  transition: transform var(--dur-quick) var(--ease-out);
-}
-.day-track::-moz-range-thumb {
-  width: 14px; height: 14px;
-  border-radius: var(--r-full);
-  background: var(--paper);
-  border: 2px solid var(--accent-text);
-  box-shadow: var(--shadow-soft);
-}
-.day-track:active::-webkit-slider-thumb { transform: scale(1.15); }
-.day-track:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; }
 
 /* Models that match a name being typed (`EditableText`'s `suggest`). In the flow under
    the field, never floating: the rows it sits in clip, and a floating list would be
