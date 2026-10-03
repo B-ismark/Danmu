@@ -65,3 +65,25 @@ describe('opening an older room', () => {
     expect(await get('room:old-room:touched')).toBeUndefined();
   });
 });
+
+describe('an open room saving its shell', () => {
+  // The stamp says the overrides are up to date IN STORAGE. If the open's own write is
+  // lost, a later room-only save (a repaint) must not claim it, or no open ever lifts
+  // the pendant's override again.
+  it('does not stamp current when the open write was lost and no overrides ride along', async () => {
+    await set('room:old-room:meta', OLD);
+    const real = roomStore.savePending.bind(roomStore);
+    const spy = vi.spyOn(roomStore, 'savePending').mockRejectedValueOnce(new Error('quota'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<RoomSync />);
+    await waitFor(() => expect(useScene.getState().hydratedRoomId).toBe('old-room'));
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    spy.mockImplementation(real);
+    useScene.getState().setSite({ bearingDeg: 90 } as never);
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    await spy.mock.results[1].value;
+    expect(spy.mock.calls[1][1].transforms).toBeUndefined();
+    expect((await meta())?.version).toBe(2);
+    vi.restoreAllMocks();
+  });
+});

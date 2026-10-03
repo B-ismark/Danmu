@@ -179,10 +179,15 @@ export function RoomSync() {
       // now.)
       if (p) {
         shell = p.room;
-        // `migrated`: this room is open, so its overrides were brought up to date when it
-        // loaded — a save of it may stamp the record current. That keeps the stamp from
-        // resting on the open's one fire-and-forget write.
-        w.room = { edit: (stored) => withShell(stored, p.room), pin: wasReshaped ? p.parts : undefined, migrated: true };
+        // `migrated` only when the overrides ride this same write: the open brought them up
+        // to date in memory, but the stamp says they are up to date IN STORAGE, and the
+        // open's own write is fire-and-forget. A room-only save after that write failed
+        // would stamp v3 over pendant-era overrides and no later open would migrate them.
+        w.room = {
+          edit: (stored) => withShell(stored, p.room),
+          pin: wasReshaped ? p.parts : undefined,
+          migrated: w.transforms ? true : undefined,
+        };
       }
     }
     if (!w.transforms && w.parts === undefined && !w.room) return;
