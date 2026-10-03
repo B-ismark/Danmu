@@ -99,12 +99,60 @@ export type AddOutcome = { id: string; note?: string } | { refused: string };
  *  overlap that no drag would allow. When nothing near is clear it keeps the aim and
  *  `note` says so. */
 export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: AddPieceOptions): AddOutcome {
-  const { room, addPart } = useScene.getState();
+  const plan = planPiece(item, aim, opts);
+  if ('refused' in plan) return { refused: plan.refused };
+  const { pose: { pos, rot, wallMounted, supportId }, note } = plan;
+  const { addPart } = useScene.getState();
+  const id = `${item.category}-${uuid().slice(0, 6)}`;
+  addPart({
+    id,
+    category: item.category,
+    name: item.label,
+    shape: item.shape,
+    pos,
+    rot,
+    dimMM: item.dimMM,
+    locked: false,
+    wallMounted,
+  });
+  // RECORD THE EDGE, and this is the half a review found missing rather than the
+  // placement itself. `pos[1]` here came off `currentRoomScene()` — resolved parts
+  // PLUS the rider-height correction — and it is written into the AUTHORED layer,
+  // while `ridingParents` infers who rides what from the AUTHORED array within
+  // `SUPPORT_Y_EPS` (50 mm). The two disagree the moment anything overrides the
+  // support: resize a desk to 900 mm, drop a lamp, resize back to 750, and the lamp
+  // is stored at 0.90 against an authored top of 0.75, rides nothing, and hangs
+  // 150 mm in the air — invisible from directly above, and permanent, because
+  // `normalizeStoredParts` does not settle and `settleHeights`' only production
+  // caller is the detection builder. That is § 12's own failure shape arriving
+  // through the door § 12 warned about.
+  //
+  // `Draggable.commit` has always recorded it for a DRAGGED piece. Not doing it here
+  // is also what made a dropped lamp sit out of its desk's convoy while a dragged one
+  // travelled with it: two ways to put a lamp on a desk, two behaviours.
+  if (supportId) useStudio.getState().setParent(id, supportId);
+  useStudio.getState().setSelected(id);
+  if (!opts?.silent) announce(note ? `${item.label} added. ${note}` : `${item.label} added.`);
+  return note ? { id, note } : { id };
+}
+
+export type PiecePose = { pos: [number, number, number]; rot: number; wallMounted: boolean; supportId: string | null };
+/** A refusal carries the pose it was refused AT when there was one, so the ghost can
+ *  stand there in the refusal colour; `checkFit`'s refusals have none. */
+export type PiecePlan = { pose: PiecePose; note?: string } | { refused: string; pose?: PiecePose };
+
+/** Where `addPieceToRoom` WOULD put `item`, or why it would refuse — without adding
+ *  anything. The ghost a Library drag shows over the 3D room is this answer, so what
+ *  you see while dragging and where the piece lands on release are one computation,
+ *  not an imitation of it (the drag-resolve scar: two paths that render the same
+ *  must not be two code paths). Reads the room; writes nothing. */
+export function planPiece(item: NewPiece, aim?: [number, number], opts?: AddPieceOptions): PiecePlan {
+  const { room } = useScene.getState();
   const parts = currentRoomScene();
   const unit = useSettings.getState().dimUnit;
   const len = (mm: number) => `${formatDim(mm, unit)} ${unit}`;
 
-  let pose: { pos: [number, number, number]; rot: number; wallMounted: boolean; supportId: string | null };
+  let pose: PiecePose;
   let note: string | undefined;
 
   const fitsTheFloorQuestion =
@@ -153,7 +201,7 @@ export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: Ad
         } else refused = still;
       }
     }
-    if (refused) return { refused: describeSpaceRefusal(item.label, refused, unit) };
+    if (refused) return { refused: describeSpaceRefusal(item.label, refused, unit), pose };
     // An aimed drop goes where it was aimed — unless something is already standing
     // there. Two ceiling fans, one dropped in each tab at the same point, used to share
     // one hub, a state no drag would let you leave (`collidesAt` refuses it) and so one
@@ -184,38 +232,7 @@ export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: Ad
       }
     }
   }
-  const { pos, rot, wallMounted, supportId } = pose;
-  const id = `${item.category}-${uuid().slice(0, 6)}`;
-  addPart({
-    id,
-    category: item.category,
-    name: item.label,
-    shape: item.shape,
-    pos,
-    rot,
-    dimMM: item.dimMM,
-    locked: false,
-    wallMounted,
-  });
-  // RECORD THE EDGE, and this is the half a review found missing rather than the
-  // placement itself. `pos[1]` here came off `currentRoomScene()` — resolved parts
-  // PLUS the rider-height correction — and it is written into the AUTHORED layer,
-  // while `ridingParents` infers who rides what from the AUTHORED array within
-  // `SUPPORT_Y_EPS` (50 mm). The two disagree the moment anything overrides the
-  // support: resize a desk to 900 mm, drop a lamp, resize back to 750, and the lamp
-  // is stored at 0.90 against an authored top of 0.75, rides nothing, and hangs
-  // 150 mm in the air — invisible from directly above, and permanent, because
-  // `normalizeStoredParts` does not settle and `settleHeights`' only production
-  // caller is the detection builder. That is § 12's own failure shape arriving
-  // through the door § 12 warned about.
-  //
-  // `Draggable.commit` has always recorded it for a DRAGGED piece. Not doing it here
-  // is also what made a dropped lamp sit out of its desk's convoy while a dragged one
-  // travelled with it: two ways to put a lamp on a desk, two behaviours.
-  if (supportId) useStudio.getState().setParent(id, supportId);
-  useStudio.getState().setSelected(id);
-  if (!opts?.silent) announce(note ? `${item.label} added. ${note}` : `${item.label} added.`);
-  return note ? { id, note } : { id };
+  return note ? { pose, note } : { pose };
 }
 
 /** The midpoint of the room's longest wall, as an aim — the one spot a wall piece

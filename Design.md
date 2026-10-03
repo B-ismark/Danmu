@@ -2745,8 +2745,20 @@ outlined box around outlined buttons, which put two boundaries on every control.
   into, which is also the drop target. `LibraryPicker.tsx` now owns the one list and
   takes `columns` / `draggable` / `initialQuery`, so the dock and the swap modal
   cannot drift apart
-  again. `draggable` is **off on the 2D plan**, which has no drop handler — a drag
-  that cannot land is worse than no drag.
+  again. Both tabs take the drop (`Room.onDrop`, `PlanView.onDrop`, one
+  `addPieceToRoom`); `draggable` is off only on touch and in the swap modal.
+- **A Library drag over the 3D room shows a ghost where the drop will land**
+  (`components/three/DropGhost.tsx`). The browser hides a drag's payload until the
+  drop, so the row parks what it carries in `lib/drop-carry.ts` on `dragstart` and
+  clears it on `dragend`. The ghost's pose is `planPiece` (`lib/add-piece.ts`) — the
+  drop's own computation with the write taken out, so `addPieceToRoom` is literally
+  `planPiece` plus the write and a lamp over a desk previews ON the desk, a sofa aimed
+  at a taken spot previews at the clear spot it will move to. A drop that would be
+  refused previews in `SCENE.invalid` with the reason beside the pointer.
+  `tests/drop-ghost.test.ts` holds plan and drop to each other over every Library
+  piece at five aims. It runs at most once a frame and not at all while the aim stays
+  within a centimetre; the body is the real `PartGeometry` with cloned, faded
+  materials, no shadows, no lights and no raycast. Mouse only, as the drag is.
 - **Changing which model a piece uses is ONE surface** (`RegenerateModal.tsx`),
   reusing the same `LibraryPicker` as the Add flow and seeding its search with the
   piece's own name through `initialQuery`, so opening it on something called "office

@@ -2906,3 +2906,25 @@ textarea.field { border-radius: var(--r-2); }
 .rename-suggest__option[aria-selected='true'] { background: var(--accent-tint); color: var(--accent-text); }
 .rename-suggest__hint { font-size: var(--fs-caption); font-weight: 500; color: var(--ink-3); }
 
+
+/* Why a Library piece dragged over the 3D room would be refused here, beside the
+   pointer (`components/three/DropGhost.tsx`). Offset down-right of the hotspot so it
+   never sits under the cursor, and capped narrower than a phone so a long reason wraps
+   rather than running off the canvas. Never takes a pointer: it must not become the
+   drop target the drag is aimed through. */
+.drop-ghost-say {
+  position: absolute;
+  z-index: var(--z-canvas-hint);
+  transform: translate(14px, 14px);
+  max-width: min(280px, calc(100vw - 32px));
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--r-2);
+  /* Solid paper, not --danger-tint: that is 10% alpha, and over a lit room it is no
+     ground at all for the words. */
+  background: var(--paper);
+  color: var(--danger-text);
+  border: 1px solid var(--danger);
+  box-shadow: var(--shadow-float);
+  pointer-events: none;
+}

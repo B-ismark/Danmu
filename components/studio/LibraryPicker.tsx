@@ -19,6 +19,7 @@
 
 import { useRef, useState } from 'react';
 import { PART_LIBRARY, DND_MIME, type LibraryItem } from '@/lib/scene-spec';
+import { dropCarry } from '@/lib/drop-carry';
 import { rankLibrary, sizeFromQuery, queryNamesSize, resolveQuerySize, describeOverruled } from '@/lib/shape-search';
 import { Icon } from '@/components/ui/Icon';
 import { ShapeIcon } from '@/components/ui/ShapeIcon';
@@ -231,9 +232,13 @@ export function LibraryPicker({
                             }),
                           );
                           e.dataTransfer.effectAllowed = 'copy';
+                          // The room cannot read the payload until the drop, so the
+                          // ghost it draws on the way reads it from here.
+                          dropCarry.start({ label: added.label, category: added.category, shape: added.shape, dimMM: added.dimMM });
                         }
                       : undefined
                   }
+                  onDragEnd={draggable ? () => dropCarry.end() : undefined}
                   onClick={(e) => press(e, added)}
                   aria-pressed={marked.some((m) => m.label === item.label) || undefined}
                   className="ds-btn ds-btn--sm pick-row"
