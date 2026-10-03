@@ -2827,7 +2827,7 @@ over not full width beneath them, or either verb appearing twice across the rail
 **Why eyes:** the jsdom tests count the buttons; where they sit, and whether the moss reads
 as the primary verb, is a judgement.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `d603126` (B-ismark/Danmu#248), not yet looked at.
 
 ## Paint dabs in two rows, and the mixer
 
@@ -2840,7 +2840,7 @@ reset should read *"Default colour"*.
 
 **Why eyes:** the count is tested; the paint highlight is a gradient no test can see.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `d603126` (B-ismark/Danmu#248), not yet looked at.
 
 ## Library rows without outlines, one TV, an outline window
 
@@ -2852,7 +2852,7 @@ drawn as a solid black block.
 
 **Why eyes:** the glyph's fill is tested; how the rows sit on the glass rail is not.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `d603126` (B-ismark/Danmu#248), not yet looked at.
 
 ## Settled states in sage, menu states in ink
 
@@ -2866,4 +2866,4 @@ option the same colour as the selected one.
 **Why eyes:** the tokens clear contrast on paper; whether sage and amber now read as two
 meanings is a judgement.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `d603126` (B-ismark/Danmu#248), not yet looked at.
