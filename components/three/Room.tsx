@@ -20,7 +20,8 @@ import { shadowFit } from '@/lib/shadow-fit';
 import { bounceIntensity, glazingArea } from '@/lib/bounce';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { snapshotFileName } from '@/lib/exports';
-import { addPieceToRoom } from '@/lib/add-piece';
+import { addPieceToRoom, planPiece } from '@/lib/add-piece';
+import { dropCarry } from '@/lib/drop-carry';
 import { sayAdded } from '@/components/studio/say-added';
 import { toast } from '@/components/ui/StorageToast';
 import { pickIdsFrom } from '@/lib/pick-through';
@@ -28,6 +29,7 @@ import { openSceneMenu } from '@/components/studio/SceneContextMenu';
 import { RoomShell } from './RoomShell';
 import { WallHandles } from './WallHandles';
 import { DragTag } from './DragTag';
+import { DropGhost, DropGhostSay } from './DropGhost';
 import { Draggable } from './Draggable';
 import { GradeEffect } from './grade';
 import { PartGeometry } from './DynamicPart';
@@ -155,16 +157,14 @@ export function Room({
     return pickIdsFrom(_raycaster.intersectObjects(api.scene.children, true));
   }
 
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    const raw = e.dataTransfer.getData(DND_MIME);
-    if (!raw) return;
-    let item: DropItem;
-    try { item = JSON.parse(raw); } catch { return; }
+  /** The world x/z a pointer at (clientX, clientY) aims `item` at, or null when the
+   *  ray misses the plane the piece will live on. Shared by the drop and the ghost
+   *  drawn on the way to it, so the two cannot aim differently. */
+  function aimAt(clientX: number, clientY: number, item: DropItem): [number, number] | null {
     const api = dropApi.current;
-    if (!api) return;
+    if (!api) return null;
     const rect = api.gl.domElement.getBoundingClientRect();
-    _ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    _ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     _raycaster.setFromCamera(_ndc, api.camera);
 
     // The room, for the drop PLANE only. Which parts the placement sees is
@@ -195,7 +195,20 @@ export function Room({
     // drift apart — a second copy here would fail as a piece landing NEAR where it was
     // dropped, which is the hardest kind of wrong to notice.
     _dropPlane.set(_up, dropPlaneConstant(item.category, item.shape, item.dimMM, r.height));
-    if (!_raycaster.ray.intersectPlane(_dropPlane, _hit)) return;
+    if (!_raycaster.ray.intersectPlane(_dropPlane, _hit)) return null;
+    return [_hit.x, _hit.z];
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    cancelAnimationFrame(ghostFrame.current);
+    dropCarry.show(null);
+    const raw = e.dataTransfer.getData(DND_MIME);
+    if (!raw) return;
+    let item: DropItem;
+    try { item = JSON.parse(raw); } catch { return; }
+    const aim = aimAt(e.clientX, e.clientY, item);
+    if (!aim) return;
 
     // The drop point goes in: a wall part takes the wall nearest where it was
     // aimed rather than the wall nearest the room's centre.
@@ -210,7 +223,44 @@ export function Room({
     // it at +0.25. That is the argument for the extraction as much as for the clamp:
     // this handler was ALSO the copy with no `announce`, so a screen-reader user could
     // not tell a successful 3D drop from the silent `intersectPlane` early return.
-    sayAdded(addPieceToRoom(item, [_hit.x, _hit.z]), item.label);
+    sayAdded(addPieceToRoom(item, aim), item.label);
+  }
+
+  // The ghost. `dragover` fires every few milliseconds whether the pointer moved or
+  // not, and `planPiece` is the full placement — support search, space bound, nearest
+  // clear spot — so it runs at most once a frame, and not at all while the aim has
+  // stayed within a centimetre of the last one it answered.
+  const ghostFrame = useRef(0);
+  const lastAim = useRef<{ x: number; z: number; item: DropItem } | null>(null);
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    const item = dropCarry.carried();
+    if (!item) return;
+    const { clientX, clientY } = e;
+    const box = e.currentTarget.getBoundingClientRect();
+    cancelAnimationFrame(ghostFrame.current);
+    ghostFrame.current = requestAnimationFrame(() => {
+      const aim = aimAt(clientX, clientY, item);
+      if (!aim) return dropCarry.show(null);
+      const at = { x: clientX - box.left, y: clientY - box.top };
+      const was = lastAim.current;
+      const shown = dropCarry.ghost();
+      if (shown && was && was.item === item && Math.hypot(was.x - aim[0], was.z - aim[1]) < 0.01) {
+        dropCarry.show({ ...shown, at });
+        return;
+      }
+      lastAim.current = { x: aim[0], z: aim[1], item };
+      dropCarry.show({ item, plan: planPiece(item, aim), at });
+    });
+  }
+  function onDragLeave(e: React.DragEvent) {
+    // `dragleave` fires on every child boundary; only leaving the room itself counts.
+    const to = e.relatedTarget as Node | null;
+    if (to && e.currentTarget.contains(to)) return;
+    cancelAnimationFrame(ghostFrame.current);
+    lastAim.current = null;
+    dropCarry.show(null);
   }
 
   return (
@@ -219,7 +269,8 @@ export function Room({
       // 'pointer' that Pickable writes to body while a piece is hovered — Space
       // over a sofa is still a pan, and has to look like one.
       style={{ position: 'absolute', inset: 0, cursor: panKey ? 'grab' : undefined }}
-      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
       onDrop={onDrop}
       // Right-click. OrbitControls no longer pans on this button, so it opens the
       // studio's context menu instead — on the piece under the cursor if there is
@@ -355,8 +406,10 @@ export function Room({
       <SeeStrokes />
       <SceneCapture composer={hi ? composer : null} />
       <DropConnector apiRef={dropApi} />
+      <DropGhost />
       <FirstFrame onFrame={onFirstFrame} />
     </Canvas>
+    <DropGhostSay />
     </div>
   );
 }

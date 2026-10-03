@@ -3163,3 +3163,23 @@ should be paused).
 tenth of a second; a real GPU, and a phone, have not been tried.
 
 **Merged:** `0e11438` (B-ismark/Danmu#256), not yet looked at.
+
+## A Library piece dragged over the 3D room shows a ghost where it will land
+
+**Where:** the 3D room with the Library open. Drag a sofa over open floor, over the
+existing sofa, along a wall; drag a table lamp over a desk; a painting toward a wall; a
+ceiling fan. Let go each time. Then start a drag and press Esc, and drag out of the room
+and back.
+
+**What wrong looks like:** the ghost somewhere other than where the piece lands on
+release; a ghost that lags well behind the pointer or stutters; a ghost casting a shadow
+or lighting the room (a lamp); a ghost left standing after Esc, a drop, or leaving the
+room; the real sofa going see-through. A drop that would be refused should show red with
+the reason beside the pointer — reaching one by hand needs a room too small for the
+piece, which the unit test reaches and nobody has yet seen.
+
+**Why eyes:** pose agreement is swept over the whole Library in a test; whether the
+ghost reads as a preview (and not as a piece already there) and stays smooth on a real
+GPU is a judgement.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
