@@ -1257,7 +1257,7 @@ describe('a repair is built as the shape it was measured as', () => {
   // label like "Ceiling light" added there would build every accepted lamp as a
   // pendant whatever it was measured as.
   it('the scan screen only ever writes labels that leave the shape alone', () => {
-    const src = readFileSync(join(process.cwd(), 'app/onboarding/detect/page.tsx'), 'utf8');
+    const src = readFileSync(join(process.cwd(), 'components/studio/DetectionRow.tsx'), 'utf8');
     const start = src.indexOf('const MANUAL_CATEGORIES');
     const table = src.slice(start, src.indexOf('\n];', start));
     const pairs = [...table.matchAll(/\{ value: '([a-z-]+)', label: '([^']+)' \}/g)].map((m) => [m[1], m[2]] as const);

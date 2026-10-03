@@ -308,6 +308,19 @@ EXIF parser and deliberately **not** carried into the decision for that reason.
 > one is happening at the moment it happens — a privacy promise displayed
 > during an upload is the one bug class this section exists to prevent.
 >
+
+> **The scan screen's review is one linked surface.** Each piece has a colour from
+> `--piece-1..8` (`lib/piece-colors.ts`, cycling), used on its box, label and row
+> swatch; the page holds ONE hovered state `{index, from}` handed to `PhotoEditor`
+> and every `DetectionRow` (now `components/studio/DetectionRow.tsx`), so hovering
+> either side raises the other. Only a hover that began on the photo scrolls the
+> list (`scrollIntoView({block:'nearest'})`, no focus move). Picking a suggested model
+> from the name field keeps the piece (`keptAfterPick`); unticking is still the
+> person's. The photo column is sized by `--scan-photo-w`, published by the page's
+> `ResizeObserver` from the pinned photo's height and aspect, so the rail sits beside
+> the photo rather than a screen away. While it runs the card shows
+> `components/ui/FindingFurniture.tsx`, decoration only: aria-hidden, a photo count and
+> steps the code really takes, static under reduced motion.
 > What leaves is **pixels only**. `normalizePhoto` strips EXIF / XMP / IPTC
 > before a photo is stored or sent (`lib/jpeg-strip.ts`), because a phone writes
 > `GPSLatitude` / `GPSLongitude` into a photo taken at home and the promise above

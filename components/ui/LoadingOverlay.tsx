@@ -14,7 +14,7 @@
 // 3. No duration claims. We don't know how long a download or a round-trip
 //    takes, so the copy never says "a moment" or "10-20 seconds".
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dot } from './primitives';
 import { Icon } from './Icon';
 
@@ -33,6 +33,7 @@ export function LoadingOverlay({
   note,
   onCancel,
   cancelLabel = 'Stop',
+  art,
 }: {
   title: string;
   step?: number;
@@ -43,6 +44,9 @@ export function LoadingOverlay({
   /** Strongly recommended: without it this overlay has no exit. */
   onCancel?: () => void;
   cancelLabel?: string;
+  /** A picture to wait with, above the title. Decoration: it must be `aria-hidden`
+   *  itself and say nothing the title does not. */
+  art?: ReactNode;
 }) {
   const pct = step !== undefined && totalSteps ? Math.min(100, (step / totalSteps) * 100) : null;
   const hasBar = pct !== null;
@@ -175,6 +179,8 @@ export function LoadingOverlay({
             </button>
           )}
         </div>
+
+        {art}
 
         <h2
           id="loading-overlay-title"
