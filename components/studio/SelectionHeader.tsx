@@ -58,7 +58,7 @@ export function SelectionHeader() {
           }}
           className="ds-btn ds-btn--xs"
         >
-          <Icon name="swap" size={11} /> Ungroup
+          <Icon name="ungroup" size={11} /> Ungroup
         </button>
       ) : (
         <button

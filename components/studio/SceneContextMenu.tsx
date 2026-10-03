@@ -393,7 +393,7 @@ function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
       kind: 'item',
       id: 'ungroup',
       label: `Ungroup ${groupMembers.length}`,
-      icon: 'swap',
+      icon: 'ungroup',
       run: () => {
         sc.ungroupParts(groupMembers);
         s.setSelected(partId);

@@ -18,10 +18,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dot } from './primitives';
 import { Icon } from './Icon';
 
-// After this long, offer the way out rather than let someone keep waiting on a
-// download that may never land.
-const SLOW_MS = 18000;
-
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -51,7 +47,6 @@ export function LoadingOverlay({
   const pct = step !== undefined && totalSteps ? Math.min(100, (step / totalSteps) * 100) : null;
   const hasBar = pct !== null;
   const [t, setT] = useState(0);
-  const [slow, setSlow] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const returnTo = useRef<HTMLElement | null>(null);
 
@@ -64,10 +59,8 @@ export function LoadingOverlay({
 
     const timers: ReturnType<typeof setInterval>[] = [];
     if (!still && hasBar) timers.push(setInterval(() => setT((v) => v + 1), 80));
-    const slowTimer = setTimeout(() => setSlow(true), SLOW_MS);
     return () => {
       timers.forEach(clearInterval);
-      clearTimeout(slowTimer);
     };
   }, [hasBar]);
 
@@ -182,10 +175,10 @@ export function LoadingOverlay({
 
         {art}
 
-        <h2
-          id="loading-overlay-title"
-          style={{ fontSize: 'var(--fs-title)', fontWeight: 600, marginBottom: 8, letterSpacing: '-0.015em' }}
-        >
+        {/* Named, not shown: the picture and the Stop button already say what is
+            happening, and a heading over them repeated it. The dialog still needs
+            a name, so the title stays for screen readers. */}
+        <h2 id="loading-overlay-title" className="sr-only">
           {title}
         </h2>
 
@@ -194,11 +187,6 @@ export function LoadingOverlay({
           {description && (
             <p className="t-small" style={{ lineHeight: 1.55, margin: '0 0 12px' }}>
               {description}
-            </p>
-          )}
-          {slow && onCancel && (
-            <p className="t-small" style={{ lineHeight: 1.55, margin: '0 0 12px' }}>
-              Still working. You can stop without losing anything.
             </p>
           )}
         </div>

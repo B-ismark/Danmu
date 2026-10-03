@@ -3183,3 +3183,11 @@ ghost reads as a preview (and not as a piece already there) and stays smooth on 
 GPU is a judgement.
 
 **Merged:** `61e4324` (B-ismark/Danmu#258), not yet looked at.
+
+### Quieter small surfaces: Library row corner, empty swap search, swap icon, scan waiting card
+
+- **Library row hover** (Add a piece → hover any row): the soft fill's corner now nests around the small drawing chip — 10px, the Catalog's corner — rather than a 16px lozenge. Wrong would be a pill-ended highlight or a chip whose corner sits off the row's curve.
+- **Change the model** (Inspector button or right-click a piece): the search opens empty with the cursor in it; typing starts a fresh search. The icon is two opposed arrows (exchange) in the Inspector, the dialog kicker and the right-click menu; **Ungroup** has its own ungroup glyph now instead of sharing it.
+- **Scan waiting card** (capture → detect with a key): only the picture, the privacy note and "Stop and add by hand" show. No "Finding your furniture" heading, and no "Still working…" line after waiting ~20 s. A screen reader still announces the dialog as "Finding your furniture".
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

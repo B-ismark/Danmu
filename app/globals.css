@@ -1380,7 +1380,10 @@ textarea.field { border-radius: var(--r-2); }
    panel read as thirty separate buttons fighting for the eye rather than one list to
    scan. Keyboard focus keeps the house ring (`.ds-btn:focus-visible`), and a row
    marked with Shift keeps the moss tint the tree's picked rows wear. */
-.pick-row { border-color: transparent; background: transparent; box-shadow: none; }
+/* The Catalog's corner, not the button's: 16px on a 32px row is a lozenge, and a
+   square 6px chip 3px inside it sat in a curve that did not echo it. 10px is the
+   chip's corner plus that inset, so the two corners nest. */
+.pick-row { border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--r-2); }
 .pick-row:hover { background: var(--paper-2); border-color: transparent; box-shadow: none; transform: none; }
 .pick-row:active { background: var(--accent-tint); box-shadow: none; }
 .pick-row[aria-pressed="true"] { background: var(--accent-tint-strong); color: var(--accent-text); }

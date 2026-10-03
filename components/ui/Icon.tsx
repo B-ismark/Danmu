@@ -6,9 +6,9 @@ import {
   Download, Share2, FileText, FileArchive, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
   Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Mail, Pencil, Trash2, RefreshCw,
-  Image, Play, Replace, Circle, Sun, Sunrise, Sunset, Moon, Cloud, Compass,
+  Image, Play, ArrowRightLeft, Circle, Sun, Sunrise, Sunset, Moon, Cloud, Compass,
   RotateCcw, RotateCw, Maximize, Copy, Undo2, Redo2, type LucideIcon,
-  Ellipsis, List, SlidersHorizontal, Heart, Lightbulb, House, Search, SquareDashed,
+  Ellipsis, List, SlidersHorizontal, Heart, Lightbulb, House, Search, SquareDashed, Ungroup,
 } from 'lucide-react';
 
 // Single icon surface for the whole app. Backed by Lucide (MIT, free) — a
@@ -36,7 +36,7 @@ export type IconName =
   | 'undo' | 'redo'
   | 'sun' | 'sunrise' | 'sunset'
   | 'moon' | 'cloud' | 'compass'
-  | 'swap' | 'snap-wall' | 'snap-floor'
+  | 'swap' | 'ungroup' | 'snap-wall' | 'snap-floor'
   | 'more' | 'list' | 'sliders' | 'heart' | 'idea'
   | 'palette' | 'pointer'
   | 'home' | 'search' | 'footprint';
@@ -55,7 +55,7 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, Lu
   key: KeyRound, eye: Eye, 'eye-off': EyeOff,
   info: Info, help: HelpCircle, chart: BarChart3, external: ExternalLink, mail: Mail,
   edit: Pencil, trash: Trash2, refresh: RefreshCw, copy: Copy,
-  image: Image, play: Play, swap: Replace,
+  image: Image, play: Play, swap: ArrowRightLeft, ungroup: Ungroup,
   'rotate-ccw': RotateCcw, 'rotate-cw': RotateCw, fit: Maximize,
   undo: Undo2, redo: Redo2,
   sun: Sun, sunrise: Sunrise, sunset: Sunset,
