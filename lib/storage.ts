@@ -11,6 +11,7 @@ import {
   update as idbUpdate,
 } from 'idb-keyval';
 import { v4 as uuid } from 'uuid';
+import { partsOnOpen, type ScenePart } from './scene-spec';
 import { pruneNudges } from './backup-nudge';
 import { clearLeaveNote, dropLeaveNote, leaveNoteRooms, noteOwed, readLeaveNote, stillOwed, type SavePart } from './leave-note';
 
@@ -388,6 +389,19 @@ export type RoomSummary = {
   detected: boolean;
 };
 
+/** A room card's piece count: what the room opens with (`partsOnOpen`). Built, for a
+ *  room with no saved scene, from a record no migration has seen yet — so a record the
+ *  builder cannot read costs its own card the count, never the whole list, which a
+ *  throw inside `listRooms`' `Promise.all` would empty. */
+function countOnOpen(meta: RoomData, scene: unknown): number {
+  try {
+    return partsOnOpen(meta, Array.isArray(scene) ? (scene as ScenePart[]) : undefined).length;
+  } catch (e) {
+    console.error(`[room] could not count the pieces of ${meta.id}`, e);
+    return 0;
+  }
+}
+
 export const roomStore = {
   async saveRoom(room: RoomData) {
     await set(k(room.id, 'meta'), { ...room, version: ROOM_SCHEMA_VERSION });
@@ -722,7 +736,10 @@ export const roomStore = {
           // would: a scene file bakes its transforms into the parts, so its override
           // map is legitimately empty. One extra parallel get per room, on a path that
           // was already reading three keys at once.
-          itemCount: Array.isArray(scene) ? scene.length : 0,
+          // With no saved scene, it is the room the studio BUILDS on open (`partsOnOpen`):
+          // a starter room nobody has edited has no scene key, and read "0 pieces" while
+          // it opened with twelve.
+          itemCount: countOnOpen(meta, scene),
           captureCount: captureCounts.get(id) ?? 0,
           detected: !!(meta.detectedObjects && meta.detectedObjects.length > 0),
         } satisfies RoomSummary;

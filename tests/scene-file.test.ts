@@ -1062,8 +1062,16 @@ describe('every path that loads a persisted scene re-derives it', () => {
       const calls = src.match(/setParts\([^)]*\)/g) ?? [];
       expect(calls.length, `${rel} must have a setParts call to check`).toBeGreaterThan(0);
       for (const call of calls) {
-        expect(call, `${rel}: ${call} does not re-derive`).toMatch(/normalizeStoredParts|null/);
+        expect(call, `${rel}: ${call} does not re-derive`).toMatch(/normalizeStoredParts|partsOnOpen|null/);
       }
     }
+  });
+
+  it('counts partsOnOpen as a re-derivation only because it is one', () => {
+    // The sweep above accepts the name, so the name has to keep its promise: a saved
+    // scene goes through `normalizeStoredParts` on its way out of it.
+    const src = readFileSync(join(process.cwd(), 'lib/scene-spec.ts'), 'utf8');
+    const body = /export function partsOnOpen\([^)]*\)[^{]*\{([\s\S]*?)\n\}/.exec(src)?.[1] ?? '';
+    expect(body).toMatch(/normalizeStoredParts\(saved\)/);
   });
 });

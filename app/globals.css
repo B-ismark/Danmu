@@ -2402,9 +2402,25 @@ textarea.field { border-radius: var(--r-2); }
 .sun-day--quiet { opacity: 0.5; }
 .sun-day--away { opacity: 0; }
 .sun-day--away .sun-day__handle,
-.sun-day--away .sun-day__hit { pointer-events: none; }
+.sun-day--away .sun-day__hit,
+.sun-day--away .sun-day__reach { pointer-events: none; }
+/* Folded (the contract in SunArc.tsx): the disc alone at the crown. The arc and the
+   clock fade rather than vanish, and the disc glides between the crown and its hour —
+   but not under a drag, where a lagging handle reads as a sticky one. */
+.sun-day__reach {
+  position: absolute; width: 64px; height: 64px;
+  border-radius: var(--r-full);
+  pointer-events: auto; touch-action: none;
+}
+.sun-day__svg, .sun-day__time { transition: opacity var(--dur-base) var(--ease-out); }
+.sun-day:not(.sun-day--carrying) .sun-day__handle { transition: transform var(--dur-base) var(--ease-out); }
+.sun-day--folded .sun-day__svg,
+.sun-day--folded .sun-day__time { opacity: 0; }
+.sun-day--folded .sun-day__hit { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
-  .sun-day, .sun-day__body, .sun-day__path, .sun-day__travelled { transition: none; }
+  .sun-day, .sun-day__body, .sun-day__path, .sun-day__travelled,
+  .sun-day__svg, .sun-day__time,
+  .sun-day:not(.sun-day--carrying) .sun-day__handle { transition: none; }
 }
 
 /* ── The day as a track (components/studio/LightingPicker.tsx) ────────────────

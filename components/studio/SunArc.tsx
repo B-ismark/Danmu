@@ -27,7 +27,17 @@
 //     stops or the arrow keys, not a drag past the horizon — a gesture whose meaning
 //     flips at an invisible point is one nobody can learn;
 //   · it gives way to the furniture: gone while anything else is carried, quieter
-//     while a piece is selected, back the moment you reach for it.
+//     while a piece is selected, back the moment you reach for it;
+//   · at rest it is FOLDED: the sun (or the moon, or the cloud) alone at the arc's
+//     crown, no arc and no clock. Reaching for it opens it — the pointer coming near
+//     (a ring round the disc, wider than the disc), keyboard focus, or on a touch
+//     screen a first tap, which opens and does nothing else, because a drag from the
+//     crown would start the day at noon wherever the clock stood. The ring exists only
+//     while folded: open, the sky under the arc is the room's to orbit, as it always
+//     was. It folds again when the mouse leaves the arc's box, on a press anywhere
+//     else, and when the keyboard leaves it — and never while the keyboard is still
+//     on it, or the arrows would move a clock nobody can see. A finger lifting off
+//     the glass is not leaving, so a touch drag does not fold it under the thumb.
 
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { SUN_DRAG_ID, useStudio } from '@/lib/store';
@@ -52,6 +62,12 @@ const GLOW = 6;
 const INSET = DISC / 2 + GLOW;
 /** The time pill under the disc, and a breath above it. */
 const PILL = 26;
+/** The ring round the folded disc that counts as near, in px. */
+const REACH = 64;
+/** How far outside the arc's box the mouse may stray and still be on it, in px. */
+const SLACK = 12;
+/** How long the mouse may be off the control before it folds, in ms. */
+const FOLD_DELAY_MS = 280;
 
 /** Relative luminance of a `#rrggbb`, good enough to decide ink-or-paper. */
 function isDark(hex: string): boolean {
@@ -77,7 +93,27 @@ export function SunArc() {
   // it back.
   const otherGesture = useStudio((s) => s.draggingId !== null && s.draggingId !== SUN_DRAG_ID);
   const pieceInHand = useStudio((s) => s.selection.length > 0 || s.selectedWall !== null);
-  const [reached, setReached] = useState(false);
+  /** Reached for by a pointer: the mouse is over the arc's box, or a finger opened it. */
+  const [near, setNear] = useState(false);
+  /** The keyboard is on the sun. Apart from `near`, so neither can fold the other's. */
+  const [focused, setFocused] = useState(false);
+  /** Leaving the disc for the arc crosses a gap of sky, so the fold waits a breath. */
+  const foldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdOpen = () => {
+    if (foldTimer.current) clearTimeout(foldTimer.current);
+    foldTimer.current = null;
+    setNear(true);
+  };
+  const foldSoon = () => {
+    if (foldTimer.current) clearTimeout(foldTimer.current);
+    foldTimer.current = setTimeout(() => {
+      foldTimer.current = null;
+      setNear(false);
+    }, FOLD_DELAY_MS);
+  };
+  useEffect(() => () => {
+    if (foldTimer.current) clearTimeout(foldTimer.current);
+  }, []);
 
   /** Which half of the clock the drag started in, fixed for the gesture: a drag
    *  that reaches sunset exactly must not swap to the night's arc under the hand. */
@@ -113,8 +149,13 @@ export function SunArc() {
   }, []);
   const track = trackFor(available, INSET);
 
+  const open = carrying || near || focused;
   const t = Math.min(1, Math.max(0, half === 'day' ? dayFraction(hour) : nightFraction(hour)));
   const [hx, hy] = trackPoint(track, t);
+  // Folded, the sun waits at the crown: the one point of the track that is the same
+  // whatever the hour, so the folded control never wanders.
+  const [cx, cy] = trackPoint(track, 0.5);
+  const [px, py] = open ? [hx, hy] : [cx, cy];
   const light = lightingAt(lighting, hour, bearingDeg);
   const dark = isDark(light.bg);
 
@@ -130,6 +171,12 @@ export function SunArc() {
     if (e.button !== 0 || gesture.current) return;
     e.preventDefault();
     e.stopPropagation();
+    // A press on the folded sun opens it and is spent: the disc stands at the crown,
+    // not at the hour, so a scrub from here would jump the day to noon.
+    if (!open) {
+      holdOpen();
+      return;
+    }
     const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
     phase.current = day ? 'day' : 'night';
@@ -187,6 +234,32 @@ export function SunArc() {
     return () => window.removeEventListener('keydown', onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [carrying]);
+  // Open to a pointer, it watches where the mouse goes: anywhere inside the arc's box
+  // keeps it, sky included, without the sky catching a single press; out of the box it
+  // folds a breath later. A press anywhere else folds it at once — the only way off it
+  // a finger has.
+  useEffect(() => {
+    if (!near) return;
+    const onMove = (e: globalThis.PointerEvent) => {
+      if (e.pointerType !== 'mouse' || gesture.current) return;
+      const r = boxRef.current?.getBoundingClientRect();
+      const inside = !!r && e.clientX >= r.left - SLACK && e.clientX <= r.right + SLACK && e.clientY >= r.top - SLACK && e.clientY <= r.bottom + SLACK;
+      if (inside) holdOpen();
+      else if (!foldTimer.current) foldSoon();
+    };
+    const onDown = (e: globalThis.PointerEvent) => {
+      if (slotRef.current?.contains(e.target as Node)) return;
+      if (foldTimer.current) clearTimeout(foldTimer.current);
+      foldTimer.current = null;
+      setNear(false);
+    };
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerdown', onDown, true);
+    return () => {
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerdown', onDown, true);
+    };
+  }, [near]);
   // Unmounted mid-scrub (the tab switched, the room closed): `draggingId` must not
   // be left holding the sun, which would freeze the camera and the undo stack.
   useEffect(
@@ -203,13 +276,13 @@ export function SunArc() {
     if (!overcast) playSound('tick', { brightness: day ? sunAt(hour).elevationDeg / 60 : 0 });
   };
 
-  const engaged = carrying || reached;
+  const engaged = open;
   const quiet = pieceInHand && !engaged;
   const height = INSET + track.sag + DISC / 2 + PILL;
-  const reach = {
-    onPointerEnter: () => setReached(true),
-    onPointerLeave: () => setReached(false),
-  };
+  // Arriving opens it. Leaving is the window's `pointermove` above, measured against
+  // the arc's box rather than these elements: a finger or a pen lifting off the glass
+  // reports a leave too, and the gap of sky between the disc and the arc is not away.
+  const reach = { onPointerEnter: holdOpen };
   const gestureHandlers = {
     onPointerMove: move,
     onPointerUp: () => endGesture(true),
@@ -231,6 +304,8 @@ export function SunArc() {
     overcast && 'sun-day--muted',
     half === 'night' && 'sun-day--night',
     engaged && 'sun-day--engaged',
+    !open && 'sun-day--folded',
+    carrying && 'sun-day--carrying',
     quiet && 'sun-day--quiet',
     otherGesture && 'sun-day--away',
   ]
@@ -255,9 +330,21 @@ export function SunArc() {
               {...reach}
             />
           </svg>
+          {/* Near enough to open it: a ring round the folded disc, wider than the disc,
+              so the arc opens as the pointer arrives rather than on contact. Folded
+              only — open, it would sit on the sky the room orbits in. */}
+          {!open && (
+            <div
+              className="sun-day__reach"
+              aria-hidden
+              style={{ left: cx - REACH / 2, top: INSET + cy - REACH / 2 }}
+              onPointerDown={(e) => begin(e, false)}
+              {...reach}
+            />
+          )}
           <div
             className="sun-day__handle"
-            style={{ transform: `translate(${hx - DISC / 2}px, ${INSET + hy - DISC / 2}px)` }}
+            style={{ transform: `translate(${px - DISC / 2}px, ${INSET + py - DISC / 2}px)` }}
             role="slider"
             tabIndex={0}
             aria-label="Time of day"
@@ -268,8 +355,8 @@ export function SunArc() {
             onPointerDown={(e) => begin(e, false)}
             {...gestureHandlers}
             {...reach}
-            onFocus={() => setReached(true)}
-            onBlur={() => setReached(false)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             // Arrows move a quarter of an hour, Shift a whole one; Page a named
             // stop's worth. Home and End are the declared ends: the role is a
             // promise about the keys.
