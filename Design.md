@@ -2428,11 +2428,13 @@ choosing differently.
 
 | Slot | Holds | 3D tab | 2D tab |
 |---|---|---|---|
-| `CanvasTools` top-centre | What you do TO the room | `TransformToolbar` · `CatalogToggle` | Comfort-zones toggle |
+| `CanvasTools` top-centre | What you do TO the room | `TransformToolbar` · `CatalogToggle` (a phone's Add is its toolbar's, so no toggle) | Comfort-zones toggle |
+| `CanvasDay` under the tools | The one setting you scrub rather than press | `DayStrip`: the day painted as a sky, a sun that morphs into the moon (`lib/day-strip.ts`) | — |
 | `CanvasView` top-right | How you look at it, plus undo/redo | `UndoRedo` | `UndoRedo` · zoom / rotate / fit |
 | `CanvasAide` bottom-right | At most ONE thing | `ViewGizmo` | `ComfortLegend`, only while shading is on |
 
-Bottom-left and bottom-centre are **deliberately empty**. If you are reaching for
+`CanvasDay` is a second row of the tools slot, not a fourth slot, and the Library dock
+sits below it (`CatalogPanel belowDay`). Bottom-left and bottom-centre are **deliberately empty**. If you are reaching for
 a fourth slot, the answer is a rail.
 
 Three things left the canvas to make that true:
@@ -2480,13 +2482,16 @@ and closes when you are not using it.
   scroll box clips an absolute card, the same reason and the same fix as
   `ui/Select.tsx`'s portalled listbox. It opens to the *right* of the rail so the
   room a finding flies to stays visible.
-- **Sections**: Room (dimensions + Re-scan) · Style (themes) · Pieces (search +
-  the listbox, and it takes the leftover height). `RailSection.tsx` owns the
+- **Sections**: Room (dimensions; **Re-scan** is a refresh icon in the section's header,
+  so it survives the section being closed) · Style (themes) · **Catalog** (search +
+  the listbox, with the piece count as its meta, and it takes the leftover height).
+  Room and Catalog start open, Style closed. Above them, with the health chip, sit
+  **Fix** and **Ideas** (`RoomTools.tsx`). `RailSection.tsx` owns the
   header — a real `<button>` controlling a
   region, with the count in `.section-meta`. Open/closed is **local, not
   persisted**: which drawer you left open is not a preference worth carrying
   between rooms, and `partialize` should stay about how the room *looks*.
-  **View is behind the top bar's gear now** (`ViewMenu`), described under the top
+  **View is behind the top bar's View button now** (`ViewMenu`), described under the top
   bar below. For a while it was the right rail's last section.
   **A rail section's body is inline, never a popover.** `ViewOptions` shipped for
   a while as a "Look" button opening a 300px absolute card inside a 260px rail:
@@ -2495,10 +2500,11 @@ and closes when you are not using it.
   it goes `position: fixed` and measured, like the room report and
   `ui/Select.tsx` — but the first question is whether the section header is
   already the affordance.
-- **`+ Catalog` is pinned to the bottom edge** and never scrolls away. It
-  used to sit mid-column inside the Furniture section. It says *catalog*, not
-  *furniture*: the same panel holds doors, windows, curtains, appliances and
-  lighting, so the narrower word named about half of what is in there.
+- **The left rail no longer carries an Add button.** A `+ Catalog` button used to be
+  pinned to its bottom edge; Add is the right rail's now (the footer, or the empty
+  Inspector below), so the verb sits beside the piece you are editing instead of
+  diagonally across the window. The section says *Catalog*, not *furniture*: it lists
+  doors, windows, curtains, appliances and lighting too.
 - **Re-scan moved here** from the top bar: it changes what is *in* the room, not
   how the app is framed.
 
@@ -2509,15 +2515,19 @@ own for a while, and the paragraph describing it was filed under *The left rail*
 above, which is how the only canonical statement of one rail's composition came to
 sit under the other's name.
 
-- **With nothing selected, the Inspector is a mark and one line**
-  (`EmptyInspector.tsx`): *"Click a piece to style it"*, or *Tap* on a touch screen.
+- **With nothing selected, the Inspector is a mark, a line and the room's two verbs**
+  (`EmptyInspector.tsx`): a *Details* heading, *"Click a piece to style it"* (*Tap* on a
+  touch screen), a hint that Add brings something in from the Library, and then **Add**
+  and **Start over** (the latter only once there is something to start over from; on a
+  phone Add is the toolbar's, so only Start over can appear).
   It was once the words *"Nothing selected"* over 700px of blank column, then for a
   release a room-at-a-glance card plus two shortcuts into the left rail (Restyle,
   Resize). Those were cut in review because a panel seen before every pick should
   not read as instructions, and the left rail already holds both edits under their
-  own names. **No Add button here**, because Add is the pinned footer directly
-  below it.
-- **View left this rail for the top bar's gear.** It was the last section before the
+  own names. Add lives here because `RailFooter` renders nothing with no
+  selection: a second Add pinned under the same prompt would be the same verb twice.
+  With a selection the pinned footer holds Delete (or Done, for a wall), Add and Start over.
+- **View left this rail for the top bar's View button.** It was the last section before the
   footer, and it filled the no-selection state by standing in for an empty state the
   rail did not have. Three values set once and never touched again were sitting under
   the panel people actually came to edit. The reason once given for putting it on
@@ -2547,11 +2557,11 @@ covers the next one down, the one the pointer is moving to.
 
 ### The studio top bar — four controls, no primary
 
-`Rooms / <name>` as a breadcrumb, the tab switcher, then the **View gear** · `?` ·
-room switcher · **Export**. The gear (`ViewMenu.tsx`) holds how the room is drawn on
-this device (floor grid, decor, sounds, quality) and links to Settings for units,
+`Rooms / <name>` as a breadcrumb, the tab switcher, then **View** (an eye icon) · `?` ·
+room switcher · **Export**. View (`ViewMenu.tsx`) holds how the room is drawn on
+this device (floor grid, decor, sounds, and High / Fast quality; decor is off by default and the light is not here, it is the day strip) and links to Settings for units,
 detection and storage. Those are app settings, and a second copy of them here would
-be a second place to keep in step. The gear and Help sit together because they are
+be a second place to keep in step. View and Help sit together because they are
 the same kind of control: one you open, read and close. Every top-bar popover (View,
 Help, Export, and the phone's More) shares its dismissal (`usePopoverDismiss`): a
 press outside, or Escape, which returns focus to the trigger. So opening one closes
@@ -2559,7 +2569,7 @@ whichever was open, rather than stacking Help's card over View's. It was undo/re
 Snapshot styled as the primary action, which downloading a PNG is not. Undo/redo went
 to `CanvasView`, Rescan to the rail, and every "take this away with you" action
 collapsed into one `ExportMenu.tsx`: the 3D snapshot (3D tab only — it captures that
-view), the floor-plan PNG, and the room itself as a `.danmu.json`. Those were three
+view), the floor-plan PNG, and the room itself as a `.danmu.json` (rows *This 3D view*, *Floor plan*, *Room file*). Once a room has had real work put into it (`lib/backup-nudge.ts`), a one-time toast offers *Save a backup file*, because a room lives only in this browser and the file is the one copy that outlives it. Those were three
 actions in three places at three visual weights, which is how you end up not knowing
 the other two exist. The scene file is last in the menu and labelled as the one you
 can open again, since that is what separates it from the two pictures.
@@ -2601,7 +2611,7 @@ asks about width.
   toolbar.
 - **View is its own sheet.** The toolbar's View button used to open Details, where
   View's controls sat under an empty Inspector. With those controls behind the
-  laptop's gear, the phone gets a View sheet of its own rather than a row in More:
+  laptop's View button, the phone gets a View sheet of its own rather than a row in More:
   a sheet is how this layout shows controls, and More is for leaving (help, export).
 - **One primary action, and it is Add.** Apple: specify one primary action. Material:
   one FAB, for the primary or most common action.
@@ -2817,8 +2827,8 @@ outlined box around outlined buttons, which put two boundaries on every control.
 - **Adding pieces is ONE surface** (`CatalogPanel.tsx`) — a docked, non-blocking
   strip holding the searchable, grouped library: drag a row onto the 3D floor, or
   click to drop it at centre. Two triggers open it and both live in `useStudio`
-  (`catalogOpen`): `AddPiecesButton` in the right rail's footer and `CatalogToggle`
-  in the canvas toolbar. The panel docks on the **right**, the same side as both of
+  (`catalogOpen`): `AddPiecesButton` in the right rail (its footer, or the empty Inspector) and
+  `CatalogToggle` in the canvas toolbar. The panel docks on the **right**, the same side as both of
   them — pressing a control on one side to have a list appear on the other is a trip
   across the product.
   **There is no "Describe it" tab, and its worth was kept rather than deleted.**
@@ -2894,16 +2904,20 @@ outlined box around outlined buttons, which put two boundaries on every control.
   the second advertised an AI that does not exist here: matching is local token
   search (`lib/shape-search.ts`), instant and offline. The modal hands the swap
   back to the caller, because re-grounding the piece for its new dimensions and
-  mount type is physics the Inspector owns.
-- **One-tap themes** (`lib/themes.ts`) — recolour all unlocked parts + set a
-  matching lighting mood. **Four, not five**, and the chip reports the colours
+  mount type is physics the Inspector owns (`lib/swap-model.ts`). The swap **fits or
+  says so**: it checks the contained spot, tries a quarter turn when the new piece
+  would go through a wall (toast *"turned to fit"*), and refuses, leaving the old
+  piece as it was, when neither turn fits.
+- **One-tap themes** (`lib/themes.ts`) — recolour **every** piece (scanned ones too;
+  they used to be skipped as locked) and set a matching lighting mood, plus the hour
+  where the theme names one. **Four, not five**, and the chip reports the colours
   rather than the mood. Both halves answer one report: "some of the lighting and the
   style override each other". The override was real and mutual — `activeTheme`
   tested `t.lighting === lighting` alongside the colours, so moving the light
   UNTICKED the theme while the room stayed every colour that theme had painted it,
   and the section header stopped naming it. Pressing a swatch moving the light is the
-  feature (one tap, whole look) and is legible now that both controls sit in the same
-  section; the reverse never was. The merge took `Coastal` and `Studio Loft` — two
+  feature (one tap, whole look) and is the feature; the reverse never was (the light is
+  the canvas's day strip now, so the two controls no longer share a drawer). The merge took `Coastal` and `Studio Loft` — two
   of the five offering the same `cool` mood — into `Cool Neutral`, keeping Coastal's
   sage accent and Studio Loft's charcoal case goods.
   **One claim about that merge was wrong and the measurement is in
@@ -2920,7 +2934,7 @@ outlined box around outlined buttons, which put two boundaries on every control.
   room. A tuned threshold is a record of today's palette wearing a gate's clothes.
   The mood criterion is **not** fully satisfied by the surviving set: `Warm Minimal`
   and `Afro-Modern` both set `day`, at 0.266 — closer than the merged pair — so the
-  Lighting row still offers one mood twice. Left as-is because four swatches is the
+  two themes still set one mood. Left as-is because four swatches is the
   fit ceiling, and recorded because the rule the merge was made on would take that
   pair next.
 - **2D plan** (`PlanView.tsx`) synced with the 3D scene; export via
@@ -2940,10 +2954,10 @@ outlined box around outlined buttons, which put two boundaries on every control.
   modelling-tool convention; the word on the menu item, the tree's tooltip and both
   help cards is "Hide", and a mnemonic that matches the label beats one borrowed
   from software this app is not.)
-- **Snapshot** (`lib/snapshot.ts`) — PNG of the 3D view (replaces the deleted
-  photoreal render).
+- **Snapshot** (`lib/snapshot.ts`) — PNG of the 3D view, Export → *This 3D view*
+  (replaces the deleted photoreal render).
 - **The scene file** (`lib/scene-file.ts`, `components/studio/SceneFile.tsx`) —
-  `Save file` in the top bar writes the whole room as readable JSON
+  Export → *Room file* writes the whole room as readable JSON
   (`front-room.danmu.json`); `Open a file` on the rooms page lands one as a **new**
   room. See §6a — it is the app's only import path, and therefore its only
   untrusted input.
