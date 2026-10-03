@@ -26,7 +26,7 @@
 //     whatever bar it sits in and stays legible in either theme;
 //   · as an icon it strokes with the accent, because a favicon has no inherited
 //     colour to take (an SVG icon's `currentColor` resolves to plain black) and
-//     because at 16px on unknown browser chrome the terracotta is what reads.
+//     because at 16px on unknown browser chrome the moss is what reads.
 
 /** Everything is authored in a 32×32 box, the size the favicon is smallest at. */
 export const MARK_VIEWBOX = '0 0 32 32';
@@ -61,11 +61,11 @@ export const MARK_TILE_RADIUS = 9;
  *  under. */
 export const MARK_COLORS = {
   /** `--paper` — the tile the mark sits on. */
-  tile: '#FBF9F6',
+  tile: '#FFFCF5',
   /** `--accent` — the volume's fill and, for an icon, its stroke. */
-  accent: '#E2613A',
+  accent: '#5F8A52',
   /** `--accent-2` — the piece of furniture. */
-  piece: '#5E8B6E',
+  piece: '#D99A2B',
 } as const;
 
 /** The mark as a standalone SVG document.

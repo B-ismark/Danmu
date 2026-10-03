@@ -2,7 +2,7 @@
 
 // The app's dropdown. Replaces <select>, whose option list is drawn by the OS —
 // square corners, system blue highlight, system font, a scrollbar nothing here
-// controls — dropped on top of a warm, rounded, Nunito interface. Same reason
+// controls — dropped on top of a warm, rounded, Figtree interface. Same reason
 // ColorPicker replaced <input type="color"> and Confirm replaced window.confirm.
 //
 // It keeps the parts of a native select that matter:

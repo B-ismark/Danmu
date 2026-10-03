@@ -18,18 +18,18 @@ import type { Category, Shape } from './scene-spec';
 
 export const SCENE = {
   /** selection highlight — matches --accent */
-  accent: '#E2613A',
-  /** hover highlight. Sage, not the old construction blue: it has to read as
-   *  clearly distinct from the terracotta selection without importing a cold
-   *  CAD hue the brand does not use. Matches --accent-2. */
-  accentHover: '#5E8B6E',
+  accent: '#5F8A52',
+  /** hover highlight. Amber, not the old construction blue: it has to read as
+   *  clearly distinct from the moss selection without importing a cold CAD hue
+   *  the brand does not use. Matches --accent-2. */
+  accentHover: '#D99A2B',
   /** drag position collides or leaves the room — matches --danger */
-  invalid: '#C8472A',
+  invalid: '#B4432F',
   /** the frosted slab under a selected or hovered piece — matches --paper. The
-   *  base is glass, and the brand hue is only its rim: --danger and --accent are
-   *  one step apart on the wheel, so a terracotta slab and a refused red slab
-   *  read as the same thing and the refusal said nothing. */
-  glass: '#FBF9F6',
+   *  base is glass, and the brand hue is only its rim: a slab tinted with the
+   *  selection colour competes with the refused red slab, and the refusal has to
+   *  be the only coloured slab in the room. */
+  glass: '#FFFCF5',
   /** "kept as-is". Warm aubergine, matching --locked; replaced an institutional
    *  blue (#3A78C2 / #6E94C8 / #7AA4D2) that belonged to no part of the brand. */
   locked: '#7A4B63',
@@ -105,7 +105,7 @@ export const DETAIL = {
   /** A print's mat, the cream card between the frame and the picture. */
   mat: '#F2EEE6',
   /** A print's three colour fields, floated on the user's colour as its ground: the
-   *  brand's terracotta, an ochre, and a dusk blue. */
+   *  terracotta, an ochre, and a dusk blue. */
   artWarm: '#E2613A',
   artOchre: '#D4A24C',
   artCool: '#5C8DC2',
@@ -138,19 +138,19 @@ export const DECOR = {
 // as deliberately removed from the brand.
 export const PLAN = {
   /** page — matches --paper */
-  paper: '#FBF9F6',
+  paper: '#FFFCF5',
   /** the floor inside the footprint */
   floor: '#FFFFFF',
   /** titles, wall stroke, badge numerals — matches --ink */
-  ink: '#1D1816',
+  ink: '#262A20',
   /** secondary type (scale bar, dimension labels) — matches --ink-2 */
-  ink2: '#544D47',
+  ink2: '#4E4D3F',
   /** dimension lines + ticks — matches --hairline-strong, flattened to opaque */
-  rule: '#A7A29D',
+  rule: '#AEAFA6',
   /** furniture outline */
   outline: '#3A3A36',
   /** furniture fill when the piece has no colour of its own, and the legend
-   *  index — terracotta, matching --accent, NOT the retired CAD blue. */
+   *  index — moss, matching --accent, NOT the retired CAD blue. */
   accent: SCENE.accent,
 } as const;
 

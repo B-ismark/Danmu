@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistMono } from 'geist/font/mono';
-import { Fraunces, Nunito } from 'next/font/google';
+import { Figtree, Fraunces } from 'next/font/google';
 import { Providers } from './providers';
 import { ConfirmHost } from '@/components/ui/Confirm';
 import { StorageToast } from '@/components/ui/StorageToast';
@@ -21,9 +21,9 @@ const fraunces = Fraunces({
   axes: ['opsz', 'SOFT'],
 });
 
-const nunito = Nunito({
+const figtree = Figtree({
   subsets: ['latin'],
-  variable: '--font-nunito',
+  variable: '--font-figtree',
   display: 'swap',
   weight: ['400', '500', '600', '700', '800'],
 });
@@ -77,12 +77,12 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
   // Matches --paper-0, the actual page wash, so mobile browser chrome blends
   // with the app instead of introducing a fourth unrelated cream.
-  themeColor: '#EEE9E4',
+  themeColor: '#F4EFE4',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${nunito.variable} ${GeistMono.variable} ${fraunces.variable}`}>
+    <html lang="en" className={`${figtree.variable} ${GeistMono.variable} ${fraunces.variable}`}>
       <body>
         <Providers>
           {children}

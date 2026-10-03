@@ -31,7 +31,7 @@ export default function AppleIcon() {
           alignItems: 'center',
           justifyContent: 'center',
           // --paper, matching the tile app/icon.svg draws for itself.
-          background: '#FBF9F6',
+          background: '#FFFCF5',
         }}
       >
         {/* The mark at 74% of the square: iOS crops a few pixels at the corners of

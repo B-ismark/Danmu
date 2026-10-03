@@ -437,7 +437,7 @@ export function RoomTools() {
           `12px 16px`, so the content box is 176px; a `1fr` column is (176 − 6) / 2 =
           85px; `.ds-btn--sm` spends `0 12px` of padding plus a 12px icon plus a 6px
           gap = 42px of chrome, leaving **43px** for the word. "Fixing…" wants ~41px
-          at 11px Nunito — two pixels on an estimate, which is no margin — and the
+          at 11px Figtree — two pixels on an estimate, which is no margin — and the
           busy string is the tell that has to survive `prefers-reduced-motion`, where
           the ring does not turn. (With Shuffle's "Shuffling…", ~59px, it did not fit
           at all.)

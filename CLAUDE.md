@@ -530,8 +530,8 @@ backend, no account. The 3D studio *is* the product.
    is the material that opts out of drawing.
 
 4. **No hard-coded design values.** Colours / spacing / type / radii go through
-   CSS tokens in `app/globals.css` (`--paper`, `--ink`, `--accent` terracotta,
-   `--accent-2` sage, `--r-*`, `--font-sans` Nunito / `--font-display`
+   CSS tokens in `app/globals.css` (`--paper`, `--ink`, `--accent` moss,
+   `--accent-2` amber, `--r-*`, `--font-sans` Figtree / `--font-display`
    Fraunces, the `--fs-*` type scale and the `--dur-*` / `--ease-*` motion tokens —
    `tests/type-scale.test.ts` fails on a literal font size or transition speed).
    Match the warm, rounded, playful direction. **Fill tokens and text

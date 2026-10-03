@@ -19,7 +19,7 @@ import type { MetadataRoute } from 'next';
 // One export, not two: an `--ink` constant lived here briefly with nothing in the
 // manifest using it — a value that exists only for its own test, which is the thing
 // `tests/helpers/` exists to keep out of shipped code.
-export const PAPER_0 = '#EEE9E4';
+export const PAPER_0 = '#F4EFE4';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {

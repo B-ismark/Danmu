@@ -2,67 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Danmu — design tokens. Warm, rounded, editorial-casual (matches the soft 3D
-   models). Friendlier than the old CAD/blueprint look: rounded corners, warm
-   cream paper, clay accent + sage secondary, soft layered shadows.
+/* Danmu — design tokens. "Moss Ink": warm, rounded, editorial-casual (matches
+   the soft 3D models). Linen paper, an olive near-black for type, a moss green
+   accent and an amber secondary, soft layered shadows.
 
    Contrast rule for this file: any token used for *text* or for an interactive
    *boundary* carries its measured ratio in a comment. Decorative-only values
    are allowed to be soft, and say so. Paper surfaces are the reference
-   backgrounds (--paper 0.949 L, --paper-2 0.866, --paper-3 0.773). */
+   backgrounds (--paper, --paper-2, --paper-3). */
 :root {
-  --paper-0: #EEE9E4;       /* page wash behind every surface — was an untokenized body colour */
-  --paper: #FBF9F6;
-  --paper-2: #F2EFEA;
-  --paper-3: #E8E3DC;
-  --ink: #1D1816;           /* warm near-black: deep, but never pure black */
-  --ink-2: #544D47;
-  --ink-3: #625C56;         /* 6.27:1 on --paper, 5.17:1 on --paper-3 — safe for 10-12px hint text */
-  --ink-4: #B8B1AA;         /* decorative fills only (2.02:1) */
-  --ink-hover: #322D28;     /* --ink one step darker, for primary-button hover */
+  --paper-0: #F4EFE4;       /* page wash behind every surface — was an untokenized body colour */
+  --paper: #FFFCF5;
+  --paper-2: #EDE6D6;
+  --paper-3: #E3DAC6;
+  --ink: #262A20;           /* olive near-black: deep, but never pure black */
+  --ink-2: #4E4D3F;
+  --ink-3: #5F5C4A;         /* 6.58:1 on --paper, 4.85:1 on --paper-3 — safe for 10-12px hint text */
+  --ink-4: #B4AE98;         /* decorative fills only (2.17:1) */
+  --ink-hover: #383D30;     /* --ink one step darker, for primary-button hover */
 
-  --hairline: rgba(29, 24, 22, 0.12);        /* decorative divider */
-  --hairline-soft: rgba(29, 24, 22, 0.05);   /* decorative divider */
-  --hairline-strong: rgba(29, 24, 22, 0.20); /* decorative divider, heavier */
-  --edge: rgba(29, 24, 22, 0.50);            /* 3.31:1 — boundary of anything interactive (WCAG 1.4.11) */
+  --hairline: rgba(38, 42, 32, 0.12);        /* decorative divider */
+  --hairline-soft: rgba(38, 42, 32, 0.05);   /* decorative divider */
+  --hairline-strong: rgba(38, 42, 32, 0.20); /* decorative divider, heavier */
+  --edge: rgba(38, 42, 32, 0.52);            /* 3.19:1 on --paper — boundary of anything interactive (WCAG 1.4.11) */
 
-  --accent: #E2613A;        /* warm clay-terracotta — fills, tints, 3D highlights. NOT for text. */
-  --accent-tint: rgba(226, 97, 58, 0.12);
-  --accent-tint-strong: rgba(226, 97, 58, 0.20);   /* darker terracotta — decorative hover fills */
-  --accent-ink: #C24A22;      /* 4.73:1 with white — the accent-button surface */
-  --accent-ink-hover: #A83D1A;/* 6.27:1 with white */
-  --accent-text: #B03F1E;     /* 5.59:1 on --paper, 4.89:1 on --accent-tint — accent-coloured type */
-  --accent-2: #5E8B6E;      /* friendly sage — fills */
-  --accent-2-tint: rgba(94, 139, 110, 0.14);
+  --accent: #5F8A52;        /* moss — fills, tints, 3D highlights. NOT for text (3.91:1). */
+  --accent-tint: rgba(95, 138, 82, 0.16);
+  --accent-tint-strong: rgba(95, 138, 82, 0.26);   /* deeper moss — decorative hover fills */
+  --accent-ink: #4A7340;      /* 5.50:1 with white — the accent-button surface */
+  --accent-ink-hover: #3D6034;/* 7.19:1 with white */
+  --accent-text: #3F6436;     /* 6.64:1 on --paper, 5.54:1 on --accent-tint — accent-coloured type */
+  --accent-2: #D99A2B;      /* amber — fills, the 3D hover; never type (2.44:1 with white) */
+  --accent-2-tint: rgba(217, 154, 43, 0.16);
 
   /* Furniture that came out of the user's own photo. Used to be an institutional
      CAD blue; warm aubergine instead, a third brand-compatible hue that reads
-     deliberate next to clay + sage. Named for a word the UI no longer says — see
+     deliberate next to moss + amber. Named for a word the UI no longer says — see
      `ScenePart.locked`, which cannot be renamed without breaking the saved-file
      format. */
   --locked: #7A4B63;        /* 6.63:1 on --paper */
   --locked-tint: rgba(122, 75, 99, 0.14);
 
   /* Alignment guides while a piece is being dragged: "this edge is level with
-     that one". Neither selection (clay) nor hover (sage) nor invalid (red), so a
-     green that is none of them. The 2D plan draws them; the 3D view does not —
+     that one". Neither selection (moss) nor hover (amber) nor invalid (red), so a
+     brighter green that is none of them. The 2D plan draws them; the 3D view does not —
      a carried piece there shows its translucent base instead. Guides, never type:
      they are 1.6px lines on a drawing, so no contrast ratio is claimed here. */
   --snap-edge: #1E9E54;
   --snap-center: #27A06A;
 
-  --danger: #C8472A;        /* 4.55:1 on --paper */
-  --danger-tint: rgba(200, 71, 42, 0.10);
-  --danger-text: #A63A20;   /* 5.37:1 on --danger-tint — for text sitting in a danger banner */
-  --warn: #9A6233;          /* 4.79:1 on --paper */
-  --warn-text: #85511F;     /* 5.73:1 on --paper-2 — for warn text on a tinted chip */
-  --warn-tint: rgba(154, 98, 51, 0.16); /* the plan's cut-off floor wash — a fill, never type */
-  --success: #5E8B6E;       /* fills only (3.70:1) */
-  --success-text: #46705A;  /* 5.36:1 on --paper */
+  --danger: #B4432F;        /* 5.42:1 on --paper */
+  --danger-tint: rgba(180, 67, 47, 0.10);
+  --danger-text: #963523;   /* 6.28:1 on --danger-tint — for text sitting in a danger banner */
+  --warn: #9A5E12;          /* 5.14:1 on --paper */
+  --warn-text: #80500F;     /* 5.50:1 on --paper-2 — for warn text on a tinted chip */
+  --warn-tint: rgba(154, 94, 18, 0.16); /* the plan's cut-off floor wash — a fill, never type */
+  --success: #6E9461;       /* fills only (3.38:1) */
+  --success-text: #45683A;  /* 6.22:1 on --paper */
 
   /* Text/icons that sit on top of a filled surface. One knob, so a brand
      change can't silently produce white-on-light in 30 places. */
-  --on-accent: #FFFFFF;
+  --on-accent: var(--paper);
   --on-ink: var(--paper);
   /* Quieter type on a chip over a photo. An ALIAS rather than a second literal:
      it is the same colour as --ink-4, and two names holding one hex drift in the
@@ -70,13 +70,13 @@
      stays behind, with every contrast assertion still green because it reads this
      one. Aliased, a bad edit to either moves both and the 4.5:1 assertion in
      tests/color-tokens.test.ts goes red. It keeps its own NAME because --ink-4 is
-     a decorative fill (2.02:1 on --paper, never text) and this is type: rule 4
+     a decorative fill (2.17:1 on --paper, never text) and this is type: rule 4
      says a fill token and a text token are not interchangeable, and the name is
      what records which ground makes it legal. */
-  --on-ink-2: var(--ink-4);  /* 8.29:1 on --ink */
+  --on-ink-2: var(--ink-4);  /* 6.59:1 on --ink */
 
   /* Signal colours for type on a chip over a photo. --warn and --success-text
-     cannot serve here — they are built for --paper and land at 3.49:1 and 3.12:1
+     cannot serve here — they are built for --paper and land under 3:1
      on --ink, under the 4.5:1 that 11px type owes. These are those two colours at
      OKLCH lightness 0.70 with hue and chroma untouched, which is why they still
      read as the same warning and the same success; the shared lightness is what
@@ -84,14 +84,14 @@
 
      They exist because the chips they belong to used to recolour their GROUND
      instead, which escaped the silhouette guarantee below and failed it: a --warn
-     ground is 1.93:1 against its worst photo tone and a --success-text ground
-     2.03:1, against --ink's 3.32:1. That is not fixable by a heavier boundary —
+     ground is under 2:1 against its worst photo tone and a --success-text ground
+     barely over 2:1, against --ink's 3.1:1. That is not fixable by a heavier boundary —
      even a solid --paper edge on a --warn ground tops out at 2.19:1, because a
      mid-dark ground and a light boundary sit too close together in luminance. So
      the ground is never overridden and the signal moved to the type. */
-  --on-ink-warn: #CB9060;    /* 6.44:1 on --ink */
-  --on-ink-success: #7EAA92; /* 6.74:1 on --ink */
-  --edge-on-ink: rgba(251, 249, 246, 0.80);
+  --on-ink-warn: #CF8F4C;    /* 5.35:1 on --ink */
+  --on-ink-success: #85AB7A; /* 5.64:1 on --ink */
+  --edge-on-ink: rgba(255, 252, 245, 0.80);
   /* Silhouette of a dark chip standing on a user's photograph. --edge is --ink at
      50%, so on an --ink chip it is invisible; and the chip's own dark ground only
      carries its outline against a LIGHT photo — against a dark one the chip
@@ -126,8 +126,8 @@
 
   --grid-unit: 16px;
   --grid-major: 80px;
-  --grid-line: rgba(29, 24, 22, 0.03);
-  --grid-line-major: rgba(29, 24, 22, 0.05);
+  --grid-line: rgba(38, 42, 32, 0.03);
+  --grid-line-major: rgba(38, 42, 32, 0.05);
 
   /* Content measures. How wide a column of content is allowed to get is a design
      value like a radius or a colour, and it was the one that never made it into
@@ -210,7 +210,7 @@
   --rail-right: clamp(var(--rail-right-min), 24vw, 320px); /* the inspector — holds controls, needs the room */
   --rail-closed: 44px;          /* the reopen toggle over an icon strip: a closed rail must not vanish, or go blank */
 
-  --font-sans: var(--font-nunito), ui-rounded, 'SF Pro Rounded', -apple-system, sans-serif;
+  --font-sans: var(--font-figtree), system-ui, -apple-system, sans-serif;
   /* Must reference a *different* source name than the one next/font defines,
      or the property is cyclic and the whole value (fallbacks included) is
      discarded — which silently drops Fraunces app-wide. */
@@ -228,7 +228,7 @@
      twenty-two sizes, half a pixel apart, and no two panels agreed on what a
      caption was. Reach for the step that names the JOB, not the one whose pixels
      match what was there before. The half-pixel steps are deliberate: this is a
-     dense tool UI in Nunito, where 11 and 12 are genuinely different jobs and a
+     dense tool UI in Figtree, where 11 and 12 are genuinely different jobs and a
      modular ratio would jump straight past one of them.
 
      Held by `tests/type-scale.test.ts`, which fails on a literal font size
@@ -260,8 +260,8 @@
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
 
-  --shadow-soft: 0 1px 2px rgba(29, 24, 22, 0.04), 0 6px 16px rgba(29, 24, 22, 0.06);
-  --shadow-lift: 0 2px 4px rgba(29, 24, 22, 0.06), 0 12px 28px rgba(29, 24, 22, 0.10);
+  --shadow-soft: 0 1px 2px rgba(38, 42, 32, 0.04), 0 6px 16px rgba(38, 42, 32, 0.06);
+  --shadow-lift: 0 2px 4px rgba(38, 42, 32, 0.06), 0 12px 28px rgba(38, 42, 32, 0.10);
   /* Glasshouse — the laptop studio (DockedShell, 1024px up). The room and both
      rails are panes standing on a warm wash, `--pane-gap` apart. Every value here
      is decorative: text on glass is measured on the COMPOSITE, and the wash is built
@@ -269,19 +269,19 @@
      every text token already clears (tests/glass-skin.test.ts). */
   --studio-wash: radial-gradient(120% 90% at 70% 0%, var(--paper) 0%, var(--paper-2) 45%, var(--paper-3) 100%);
   --pane-gap: 10px;
-  --glass-fill: rgba(251, 249, 246, 0.74);        /* --paper at 74%: a rail */
-  --glass-fill-strong: rgba(251, 249, 246, 0.82); /* --paper at 82%: chrome over the room */
-  --glass-tone: rgba(29, 24, 22, 0.035);          /* a quieter band inside a pane (rail footer) */
+  --glass-fill: rgba(255, 252, 245, 0.74);        /* --paper at 74%: a rail */
+  --glass-fill-strong: rgba(255, 252, 245, 0.82); /* --paper at 82%: chrome over the room */
+  --glass-tone: rgba(38, 42, 32, 0.035);          /* a quieter band inside a pane (rail footer) */
   --glass-rim: rgba(255, 255, 255, 0.72);         /* the pane's lit edge — decorative */
   --glass-blur: blur(14px) saturate(140%);
-  --shadow-float: 0 1px 2px rgba(29, 24, 22, 0.05), 0 10px 30px rgba(60, 40, 20, 0.12);
+  --shadow-float: 0 1px 2px rgba(38, 42, 32, 0.05), 0 10px 30px rgba(50, 48, 28, 0.12);
   /* Clay: a control is raised (a soft warm shadow under a lit top edge) or it is a
      well (pressed in). It never replaces `--edge`, which stays the boundary. */
-  --clay-raise: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(120, 80, 50, 0.10), 0 3px 8px rgba(120, 80, 50, 0.10);
-  --clay-raise-hover: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 4px rgba(120, 80, 50, 0.12), 0 8px 18px rgba(120, 80, 50, 0.14);
-  --clay-well: inset 0 1px 2px rgba(120, 80, 50, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.7);
+  --clay-raise: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(70, 66, 40, 0.10), 0 3px 8px rgba(70, 66, 40, 0.10);
+  --clay-raise-hover: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 4px rgba(70, 66, 40, 0.12), 0 8px 18px rgba(70, 66, 40, 0.14);
+  --clay-well: inset 0 1px 2px rgba(70, 66, 40, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.7);
   /* The lift, cast upward: a bottom sheet stands on the room from below. */
-  --shadow-sheet: 0 -1px 3px rgba(29, 24, 22, 0.06), 0 -12px 28px rgba(29, 24, 22, 0.10);
+  --shadow-sheet: 0 -1px 3px rgba(38, 42, 32, 0.06), 0 -12px 28px rgba(38, 42, 32, 0.10);
   /* A tablet's one docked panel (SheetShell's pane): a rail's width, and at
      768px the room keeps ~60% — Material's supporting pane asks 50/50 at a
      medium width, and the room is the primary content here. */
