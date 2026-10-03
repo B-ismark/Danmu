@@ -953,10 +953,17 @@ function AddTile({
         borderRadius: 'var(--r-3)',
         background: 'var(--paper-2)',
         border: over ? '2px solid var(--accent)' : '1px dashed var(--edge)',
-        minHeight: compact ? 96 : 132,
-        // The first tile is the whole screen's call to action, so it may run wider
-        // than one column; every later one is just the next card along.
-        ...(compact ? { flex: '0 0 148px' } : { minWidth: 0, ...(first ? { gridColumn: '1 / -1' } : {}) }),
+        // Squarish, never a bar: the tile is a place to drop photos, not a banner.
+        aspectRatio: '1 / 1',
+        // The first tile is the whole screen's call to action: it takes the full row
+        // but stays a square of its own, centred in it. Every later one is just the
+        // next card along.
+        ...(compact
+          ? { flex: '0 0 112px' }
+          : {
+              minWidth: 0,
+              ...(first ? { gridColumn: '1 / -1', justifySelf: 'center', inlineSize: 'min(280px, 100%)' } : {}),
+            }),
       }}
     >
       <button

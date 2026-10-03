@@ -39,11 +39,12 @@ export function BuildingRoom({ facts, dimUnit }: { facts: BuildingFacts | null; 
         <div className="build-screen__art">
           <IsoRoom room={HERO_ROOM} pieces={HERO_PIECES} settle />
         </div>
-        <div className="build-screen__side">
+        <>
           <h1 className="build-screen__title">Building your room</h1>
           <p className="sr-only" role="status">
             {announce}
           </p>
+          <div className="build-screen__bar" aria-hidden="true" />
           {facts && (
             <>
               <p className="build-screen__lede">
@@ -69,9 +70,9 @@ export function BuildingRoom({ facts, dimUnit }: { facts: BuildingFacts | null; 
             </>
           )}
           <p className="build-screen__note">
-            Sizes stay inside real furniture ranges. Anything that does not fit is flagged, never squeezed.
+            Pieces come in at typical sizes. Anything that does not fit is flagged, never squeezed.
           </p>
-        </div>
+        </>
       </div>
     </main>
   );

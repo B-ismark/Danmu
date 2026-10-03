@@ -293,6 +293,7 @@
   --dur-base: 160ms;
   --dur-slow: 300ms;
   --dur-breathe: 1100ms; /* one half-cycle of a placeholder's breathing */
+  --dur-sweep: 1800ms;     /* one pass of an indeterminate progress bar (BuildingRoom) */
   --dur-loop: 9s;          /* one pass of a waiting illustration (FindingFurniture) */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
@@ -2361,15 +2362,20 @@ textarea.field { border-radius: var(--r-2); }
 .piece-row {
   position: relative;
   border: 1px solid var(--hairline); border-radius: var(--r-2); background: var(--paper);
-  /* The swatch: the piece's own colour down the row's left edge. */
-  box-shadow: inset 4px 0 0 var(--piece);
   transition: background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out);
 }
 .piece-row[data-kept="true"] { border-color: var(--locked); background: var(--locked-tint); }
 .piece-row[data-hovered="true"] {
   background: color-mix(in srgb, var(--piece) 14%, var(--paper));
-  box-shadow: inset 6px 0 0 var(--piece), inset 0 0 0 2px var(--piece);
+  box-shadow: inset 0 0 0 2px var(--piece);
 }
+/* The row's link to its box on the photo: a small round dot in the piece's colour. */
+.piece-row__dot {
+  flex: 0 0 auto; inline-size: 10px; block-size: 10px; border-radius: var(--r-full);
+  background: var(--piece);
+  transition: transform var(--dur-quick) var(--ease-out);
+}
+.piece-row[data-hovered="true"] .piece-row__dot { transform: scale(1.4); }
 
 /* ── Finding your furniture (components/ui/FindingFurniture.tsx) ──────────────
    The waiting picture on the scan card. One cycle is `--dur-loop` and has six beats, one
@@ -2433,23 +2439,33 @@ textarea.field { border-radius: var(--r-2); }
    The photo route's last screen, up while the review is written into the room. The
    illustrated room fills piece by piece; under reduced motion every piece is there
    at once (the global reduced-motion block zeroes the stagger too). */
-.build-screen { min-block-size: 100dvh; padding: 24px 16px 32px; background: var(--paper); }
+.build-screen { min-block-size: 100dvh; display: flex; flex-direction: column; padding: 24px 16px 32px; background: var(--paper); }
+/* Everything below the stepper is one centred column, and the column is centred in what
+   is left of the viewport. */
 .build-screen__layout {
-  display: grid; gap: 24px 40px; align-items: center; margin-inline: auto;
-  max-inline-size: var(--measure-page); grid-template-columns: minmax(0, 1.2fr) minmax(260px, 1fr);
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; margin-inline: auto; inline-size: 100%; max-inline-size: 600px; text-align: center; padding-block: 16px;
 }
-@media (max-width: 799px) { .build-screen__layout { grid-template-columns: minmax(0, 1fr); } }
-.build-screen__art { aspect-ratio: 4 / 3; max-inline-size: 640px; inline-size: 100%; justify-self: center; }
-.build-screen__side { display: flex; flex-direction: column; gap: 14px; max-inline-size: 44ch; }
-.build-screen__title { font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
+.build-screen__art { aspect-ratio: 4 / 3; max-inline-size: 420px; inline-size: 100%; margin-block-end: 6px; }
+.build-screen__title { margin: 0; font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
 .build-screen__lede { margin: 0; font-size: var(--fs-lead); color: var(--ink-2); }
-.build-screen__stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; }
+/* Indeterminate: the save is real but quick, so this says "working", never "n percent". */
+.build-screen__bar {
+  position: relative; overflow: hidden; inline-size: min(220px, 70%); block-size: 6px;
+  border-radius: var(--r-full); background: var(--paper-2);
+}
+.build-screen__bar::after {
+  content: ""; position: absolute; inset-block: 0; inline-size: 40%; border-radius: var(--r-full);
+  background: var(--accent); animation: build-sweep var(--dur-sweep) var(--ease-in-out) infinite;
+}
+@keyframes build-sweep { from { inset-inline-start: -40%; } to { inset-inline-start: 100%; } }
+.build-screen__stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 6px 0 0; }
 .build-screen__stats > div {
-  flex: 1 1 90px; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
+  flex: 1 1 0; min-inline-size: 0; max-inline-size: 170px; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
 }
 .build-screen__stats dt { font-size: var(--fs-caption); font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
 .build-screen__stats dd { margin: 2px 0 0; font-size: var(--fs-lead); font-weight: 700; color: var(--ink); }
-.build-screen__note { margin: 0; font-size: var(--fs-small); color: var(--ink-3); line-height: 1.5; }
+.build-screen__note { margin: 6px 0 0; max-inline-size: 38ch; font-size: var(--fs-small); color: var(--ink-3); line-height: 1.5; }
 .iso-room__piece {
   animation: iso-settle var(--dur-slow) var(--ease-out) both;
   animation-delay: calc(var(--i, 0) * var(--dur-base));
@@ -2718,6 +2734,8 @@ textarea.field { border-radius: var(--r-2); }
   /* The duration above is cut, the stagger is not: without this the Building screen's
      pieces wait their turn invisibly, on a screen that is up only as long as the save. */
   .iso-room__piece { animation-delay: 0s !important; }
+  /* The Building screen's sweeping bar: a full, still, pale bar. */
+  .build-screen__bar::after { animation: none; inset-inline-start: 0; inline-size: 100%; opacity: 0.35; }
   /* The capture plan's wall shimmer: lit and still, no pulse and no marching dashes. */
   .capture-plan__wall[data-wall-state="hover"] line:not(.capture-plan__shine):not(.capture-plan__hit),
   .capture-plan__wall[data-wall-state="preview"] line:not(.capture-plan__shine):not(.capture-plan__hit) { animation: none; stroke-width: 7; }

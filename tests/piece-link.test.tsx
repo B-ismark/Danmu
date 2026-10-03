@@ -5,6 +5,7 @@
 // piece. The colours are `--piece-1..8` in globals.css and `lib/piece-colors.ts`; the look
 // of each state is CSS and is in the browser's hands, so what is asserted here is the
 // state the CSS keys on (`data-piece-state`, `data-hovered`) and the calls that move it.
+import { readFileSync } from 'node:fs';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -158,6 +159,20 @@ describe('a colour per piece', () => {
       expect(row(i).style.getPropertyValue('--piece')).toBe(c);
     }
     expect(new Set([0, 1, 2].map((i) => row(i).style.getPropertyValue('--piece'))).size).toBe(3);
+  });
+
+  it('shows a row’s colour as a round dot, with no edge strip down its side', () => {
+    render(<Screen />);
+    for (const i of [0, 1, 2]) {
+      const dot = row(i).querySelector('.piece-row__dot');
+      expect(dot).not.toBeNull();
+      expect(dot!.getAttribute('aria-hidden')).toBe('true');
+    }
+    // The strip was an inset shadow on the row's left edge; the rule must not carry one.
+    const css = readFileSync('app/globals.css', 'utf8');
+    const rules = css.match(/\.piece-row(\[[^\]]*\])?\s*\{[^}]*\}/g)!;
+    expect(rules.length).toBeGreaterThanOrEqual(3);
+    for (const r of rules) expect(r).not.toMatch(/inset\s+\d+px\s+0\s+0/);
   });
 });
 
