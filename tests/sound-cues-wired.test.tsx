@@ -7,9 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 
 const played: string[] = [];
+let glides = 0;
 vi.mock('@/lib/sound', () => ({
   playSound: (n: string) => played.push(n),
-  glide: () => {},
+  glide: () => {
+    glides++;
+  },
   glideStop: () => {},
 }));
 
@@ -30,6 +33,7 @@ const vase = {
 beforeEach(async () => {
   vi.useFakeTimers();
   played.length = 0;
+  glides = 0;
   useScene.getState().setHydrated('room-a');
   render(<SoundCues />);
   // Past the settle after a room opens.
@@ -74,5 +78,21 @@ describe('SoundCues', () => {
       useScene.getState().addPart({ ...vase, id: 'vase-late' });
     });
     expect(played).toEqual([]);
+  });
+
+  it('glides for a scrubbed sun, and not for a room opening at the clock', async () => {
+    useStudio.setState({ lighting: 'daylight', hour: 15 });
+    await act(async () => {
+      useStudio.getState().setHour(15.5);
+    });
+    expect(glides).toBe(1);
+    // `RoomSync` sets the clock's hour while no room is hydrated.
+    await act(async () => {
+      useScene.getState().setHydrated(null);
+    });
+    await act(async () => {
+      useStudio.getState().setHour(16.25);
+    });
+    expect(glides).toBe(1);
   });
 });

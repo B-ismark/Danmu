@@ -1922,6 +1922,15 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     the rule that retired the solar calculator — *accuracy the user cannot verify
     is accuracy not worth holding* — still holds, and what a clock adds is
     continuity, not precision.
+  - **It opens at the person's own clock** (`hourNow`, to the scrub's five
+    minutes) on every room open — `RoomSync` sets it before seeding history, since
+    the store outlives a navigation and a tab can sit on the rooms list for hours —
+    and the hour is **not remembered**: `hour` left `STUDIO_PREFS`, and a
+    stored one is dropped on load, so a room opened in the evening is lit for the
+    evening whatever it was scrubbed to yesterday. Local time is not a location —
+    7 pm is the same evening of the one typical day everywhere — so this asks for no
+    permission and stores nothing. Overcast IS still remembered: it is a choice of
+    weather, not a reading of the clock. A server renders `DEFAULT_HOUR` (midday).
   - **The sky is a keyframe table** (`SKY_KEYS`) eased hour to hour: background,
     exposure, hemisphere and fill colours and `envMul`, which scales the
     `<Environment>` lightformers with it. Dimming the lights and leaving the

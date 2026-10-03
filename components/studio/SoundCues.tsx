@@ -148,8 +148,10 @@ export function SoundCues() {
       }
       // The day, scrubbed: air that brightens as the sun climbs and goes dark and
       // soft at night. Any small change counts — the arc, the track, a key — and a
-      // jump to a named time is a chime instead. Not an undo putting the hour back.
-      if (next.lighting === 'daylight' && prev.lighting === 'daylight' && !next.restoring && next.room === prev.room) {
+      // jump to a named time is a chime instead. Not an undo putting the hour back,
+      // and not a room opening: `RoomSync` sets the clock's hour while no room is
+      // hydrated, and two nulls are "the same room" to the check beside it.
+      if (next.lighting === 'daylight' && prev.lighting === 'daylight' && !next.restoring && next.room !== null && next.room === prev.room) {
         const dh = hourDelta(prev.hour, next.hour);
         if (dh !== 0 && Math.abs(dh) < 1.5) {
           const el = sunAt(next.hour).elevationDeg;

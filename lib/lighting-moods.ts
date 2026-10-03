@@ -82,12 +82,20 @@ const PEAK_MOON_DEG = 38;
 const RISE_AZ = 65;
 const SET_AZ = 295;
 
-/** The hour everything starts at, and what a fresh browser shows. */
+/** Midday: the hour a server renders, and the fallback for an hour that is not one.
+ *  A browser opens at its own clock instead (`hourNow`). */
 export const DEFAULT_HOUR = 12.8;
 
 /** `h` folded into [0, 24). */
 export function wrapHour(h: number): number {
   return ((h % 24) + 24) % 24;
+}
+
+/** The hour on the person's own clock, to the scrub's five minutes — the light the
+ *  studio opens at. Local time, not a place: the day is still the one typical day
+ *  above, so 7 pm here is the same evening it is anywhere. */
+export function hourNow(now: Date = new Date()): number {
+  return wrapHour((Math.round((now.getHours() * 60 + now.getMinutes()) / 5) * 5) / 60);
 }
 
 /** How far through the day (0 at sunrise, 1 at sunset). Outside [0, 1] at night. */
