@@ -2897,7 +2897,7 @@ the way out — not a chime, not a phrase per frame.
 reads as one object turning, and whether the phrase sounds nice, are judgements, and
 headless Chromium cannot hear it.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `9ac44bf` (B-ismark/Danmu#252), not yet looked at.
 
 ## Delete and Add as two equal halves, Add the loud one
 
@@ -2910,7 +2910,7 @@ not the 8 px the row sets; Add not reading as the stronger of the two; a label t
 **Why eyes:** both widths were measured in Chromium (139 px each in a 286 px row); weight is
 a judgement.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `9ac44bf` (B-ismark/Danmu#252), not yet looked at.
 
 ## Corner, Front, Top
 
@@ -2924,7 +2924,7 @@ on a plain click on the floor.
 **Why eyes:** the pressed state is tested; whether "free" after an orbit feels right on a
 trackpad is not.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `9ac44bf` (B-ismark/Danmu#252), not yet looked at.
 
 ## "These are typical sizes" as a bubble beside the room size
 
@@ -2939,7 +2939,7 @@ under it); the ✕ hard to find; the bubble coming back on the same room after �
 **Why eyes:** placement is measured, and walked at 1366 and 390 px; how it tracks a rail in
 motion is not.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `9ac44bf` (B-ismark/Danmu#252), not yet looked at.
 
 ## Photo cards that wear their wall, and a plan wall that shimmers
 
@@ -2954,4 +2954,4 @@ On one* pair still under the photos.
 **Why eyes:** the move, the swap and the shimmer flag are tested; whether the shimmer is
 visible enough to connect the name to the wall is a judgement.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `9ac44bf` (B-ismark/Danmu#252), not yet looked at.
