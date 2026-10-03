@@ -9,13 +9,13 @@ import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonit
 import { EffectComposer, N8AO, SMAA, wrapEffect } from '@react-three/postprocessing';
 import type { EffectComposer as Composer } from 'postprocessing';
 import { ACESFilmicToneMapping, Color, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Group, type Mesh, type MeshBasicMaterial, type Scene, type WebGLRenderTarget, type WebGLRenderer } from 'three';
-import { useStudio, type Quality } from '@/lib/store';
+import { SUN_DRAG_ID, useStudio, type Quality } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
 import { useRoomScene } from '@/lib/room-scene';
 import { dropPlaneConstant, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
-import { lightingAt, KEY_DIR, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
+import { lightingAt, KEY_DIR, DEFAULT_BEARING_DEG, type KeyLightSpec } from '@/lib/lighting-moods';
 import { shadowFit } from '@/lib/shadow-fit';
 import { bounceIntensity, glazingArea } from '@/lib/bounce';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
@@ -430,15 +430,33 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
   const hour = useStudio((s) => s.hour);
   const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
   const L = useMemo(() => lightingAt(lighting, hour, bearingDeg), [lighting, hour, bearingDeg]);
-  const key = L.key;
-  // The environment is BAKED (frames={1}), and re-baking on every frame of a sun
-  // drag would rebuild a cube target per pointer move. Half-hour steps are finer
-  // than anyone can tell apart on a reflection and cost at most 48 bakes a day.
-  const envStep = lighting === 'overcast' ? 'o' : String(Math.round(hour * 2));
-  // …and the panels are lit at that STEP's hour, not the live one. Their colours are
+  // Gone below the horizon, the key light stays MOUNTED, dark and aimed where it last
+  // was. Unmounting it changed the number of directional lights in the scene, and
+  // three keys every material's shader program on that number: crossing sunrise or
+  // sunset under a scrub recompiled every material in the room — out at 19:30, back
+  // in for the moon at 19:35 — measured as ~1.5 s long tasks on the first crossing in
+  // a production build under software GL. Intensity 0 is the same picture and the
+  // same program; `KeyLight` also stops refreshing its shadow map while it is dark.
+  const lastKey = useRef<KeyLightSpec>(L.key ?? { dir: KEY_DIR, color: L.fill.color, intensity: 0, body: 'sun' });
+  if (L.key) lastKey.current = L.key;
+  const key: KeyLightSpec = L.key ?? { ...lastKey.current, intensity: 0 };
+  // The environment is BAKED (frames={1}): six renders of the panels into a cube and
+  // then three's PMREM blur of it, inside a layout effect — so inside the commit of
+  // whatever changed the hour, which under a scrub is the pointer event itself. Two
+  // things keep that off the drag. Its BRIGHTNESS is not baked at all: the panels are
+  // baked at unit strength and the scene's `environmentIntensity` carries the hour's
+  // `envMul`, a uniform, so the room's ambient follows a scrub continuously without a
+  // bake (the cube is linear in the panels' intensity, so the picture is the one the
+  // per-step bake drew). Only the panels' COLOURS are baked — on half-hour steps at
+  // rest, finer than anyone can tell apart on a reflection, and on two-hour steps
+  // while the sun is being dragged, settling to the half hour on release. A scrub
+  // across the day used to cross ~36 half-hour lines a second and pay a cube bake, a
+  // PMREM and a fresh render target (the bake was keyed, so it REMOUNTED) for each.
+  const scrubbing = useStudio((s) => s.draggingId === SUN_DRAG_ID);
+  // The panels are coloured at that STEP's hour, not the live one: their colours are
   // what `Environment` re-bakes on, so panels coloured off the live hour re-baked on
-  // every tick of a sun scrub and the step above decided nothing (found in review).
-  const envHour = lighting === 'overcast' ? hour : Math.round(hour * 2) / 2;
+  // every tick of a sun scrub and the step decided nothing (found in review).
+  const envHour = lighting === 'overcast' ? 0 : scrubbing ? Math.round(hour / 2) * 2 : Math.round(hour * 2) / 2;
   const envL = useMemo(() => lightingAt(lighting, envHour, bearingDeg), [lighting, envHour, bearingDeg]);
   // The light the room throws back, on the quality where the shell is closed —
   // see lib/bounce.ts. Resolved parts, so a window stretched in the Inspector is
@@ -451,26 +469,34 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
   // this component, and it renders whenever `useRoomScene` does, which is every frame
   // a drag carries company (a lamp riding its table writes the store each move). The
   // measured cost was ~2 textures and 7 attachments a frame, and the drag drew at a
-  // quarter of the rate it did with the lamp left on the floor. The bake's own key
-  // (`envStep`) is what is meant to decide when it re-bakes.
+  // quarter of the rate it did with the lamp left on the floor. The step above
+  // (`envHour`) is what decides when it re-bakes, and nothing else may.
   const panels = useMemo(
     () => (
       <>
-        <Lightformer intensity={0.7 * envL.envMul} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={envL.env[0]} />
-        <Lightformer intensity={0.35 * envL.envMul} position={[5, 2, 3]} scale={[4, 6, 1]} color={envL.env[1]} />
-        <Lightformer intensity={0.3 * envL.envMul} position={[-5, 2, -3]} scale={[4, 6, 1]} color={envL.env[2]} />
+        <Lightformer intensity={0.7} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={envL.env[0]} />
+        <Lightformer intensity={0.35} position={[5, 2, 3]} scale={[4, 6, 1]} color={envL.env[1]} />
+        <Lightformer intensity={0.3} position={[-5, 2, -3]} scale={[4, 6, 1]} color={envL.env[2]} />
       </>
     ),
     [envL],
   );
   const glazing = useMemo(() => glazingArea(resolved), [resolved]);
-  const bounce = hi && key ? bounceIntensity(key.intensity, glazing, footprint) : 0;
+  const bounce = hi ? bounceIntensity(key.intensity, glazing, footprint) : 0;
   const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
   const invalidate = useThree((s) => s.invalidate);
   useLayoutEffect(() => {
     gl.toneMappingExposure = L.exposure;
     invalidate();
   }, [gl, invalidate, L.exposure]);
+  // The environment's strength, live. `Environment` applies the same value on each
+  // bake (its prop below); this carries it between bakes. A child's layout effect
+  // runs before its parent's, so on a bake this one still has the last word.
+  useLayoutEffect(() => {
+    scene.environmentIntensity = L.envMul;
+    invalidate();
+  }, [scene, invalidate, L.envMul]);
 
   return (
     <>
@@ -496,13 +522,14 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
       <hemisphereLight color={L.hemi[0]} groundColor={L.hemi[1]} intensity={L.hemi[2]} />
       {/* The key light IS the sun by day and the moon by night — and in the gap
           either side of the horizon there is no key light at all, which is the
-          honest picture of a room at dusk and the reason this is a conditional
-          rather than a dimmer. */}
-      {key && <KeyLight intensity={key.intensity} color={key.color} cast={hi} dir={key.dir} />}
+          honest picture of a room at dusk. It is OUT there, not gone: intensity 0,
+          still mounted, for the shader-program reason given at `lastKey` above. */}
+      <KeyLight intensity={key.intensity} color={key.color} cast={hi} dir={key.dir} />
       <directionalLight position={[-4, 3, -5]} intensity={L.fill.intensity} color={L.fill.color} />
       {/* Interreflection, which a shadow-mapped rasteriser does not compute: soft,
-          shadowless, the key's own colour, sized by the glass it came through. */}
-      {bounce > 0 && key && <ambientLight intensity={bounce} color={key.color} />}
+          shadowless, the key's own colour, sized by the glass it came through. (An
+          ambient light is summed into one uniform, so this one may come and go.) */}
+      {bounce > 0 && <ambientLight intensity={bounce} color={key.color} />}
 
       {/* Offline studio environment built from emissive panels — gives metals
           something to reflect and adds soft specular gloss to all standard
@@ -512,7 +539,10 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
           It is NOT dropped on 'Fast': without an environment every metalness > 0
           surface (chair bases, lamp poles, handles) goes near-black. Halving the
           cube resolution keeps the bake cheap while preserving that. */}
-      <Environment key={`${envStep}-${quality}`} resolution={hi ? 256 : 128} frames={1}>
+      {/* Keyed on the quality alone, so a new hour re-bakes into the SAME cube
+          target (drei re-bakes when `panels` changes) rather than remounting and
+          allocating a fresh one per step. */}
+      <Environment key={quality} resolution={hi ? 256 : 128} frames={1} environmentIntensity={L.envMul}>
         {panels}
       </Environment>
     </>
@@ -620,6 +650,10 @@ function KeyLight({
       intensity={intensity}
       color={color}
       castShadow={cast}
+      // Dark (the gap either side of a horizon), its shadow map shades nothing, so
+      // it is not re-rendered every frame; `castShadow` itself stays put, because
+      // it is part of every material's program key just as the light count is.
+      shadow-autoUpdate={intensity > 0}
       shadow-mapSize-width={mapSize}
       shadow-mapSize-height={mapSize}
       // normalBias carries the offset now, so the constant bias only has to cover

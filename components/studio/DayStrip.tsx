@@ -36,12 +36,12 @@
 //     arrows would move a clock nobody can see. A finger lifting off the glass is not
 //     leaving, so a touch drag does not fold it under the thumb.
 
-import { useEffect, useId, useRef, useState, type FocusEvent, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type FocusEvent, type MouseEvent, type PointerEvent } from 'react';
 import { SUN_DRAG_ID, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { DEFAULT_BEARING_DEG, compassName, formatClock, isDaytime, lightingAt, sunAt, turnedBearing } from '@/lib/lighting-moods';
 import { isAperture } from '@/lib/apertures';
-import { hourT, scrubHour, skyGradient, stripFor, stripX, tAtX } from '@/lib/day-strip';
+import { glyphAt, hourT, phaseWords, scrubHour, skyGradient, stripFor, stripX, tAtX, type DayPhase } from '@/lib/day-strip';
 import { playSound } from '@/lib/sound';
 import { Icon } from '@/components/ui/Icon';
 import { DAY_ROW_H } from './CanvasChrome';
@@ -65,30 +65,62 @@ function isDark(hex: string): boolean {
   return lum < 128;
 }
 
-/** One glyph that is the sun by day and the moon by night, and moves between them
- *  rather than swapping: the rays draw in and turn away, the disc swells, and a
- *  shadow slides across it to carve the crescent. Every part is in the drawing at
- *  every hour, so CSS can animate the change (`.celestial` in globals.css). */
-function Celestial({ night }: { night: boolean }) {
-  const mask = `celestial-${useId().replace(/:/g, '')}`;
+/** Where the horizon line is drawn, and where it cuts the sun, in the glyph's 24-unit
+ *  box. The cut sits a little above the line so a rising sun reads as a half-disc
+ *  over a line, not a disc with a line through it. */
+const HORIZON_Y = 18.5;
+const CUT_Y = 16.5;
+
+/** One glyph for the whole day, and it moves between its pictures rather than
+ *  swapping: the moon; the sun rising out of a horizon line; the sun clear of it; the
+ *  sun sinking back into it, warmer; the moon again. Every part is in the drawing at
+ *  every hour, so the change is CSS (`.celestial` in globals.css). Within the day the
+ *  morph is the hour's own — `lift` (`glyphAt`, lib/day-strip.ts) sets how far the sun
+ *  stands above the line, how much of the line is left and how warm the sun is, so a
+ *  scrub moves it continuously. At a horizon the sun becomes the moon: the rays draw
+ *  in and turn away, the disc swells, and a shadow slides across it to carve the
+ *  crescent — a transition, which reduced motion turns into a plain change. */
+function Celestial({ phase, lift }: { phase: DayPhase; lift: number }) {
+  const id = useId().replace(/:/g, '');
+  const bite = `celestial-bite-${id}`;
+  const below = `celestial-below-${id}`;
   return (
-    <svg className={`celestial${night ? ' celestial--night' : ''}`} viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+    <svg
+      className={`celestial celestial--${phase}`}
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      aria-hidden
+      style={{ '--lift': lift } as CSSProperties}
+    >
       <defs>
-        <mask id={mask}>
+        <mask id={bite}>
           <rect width="24" height="24" fill="white" />
           <circle className="celestial__bite" cx="16.5" cy="8" r="6.5" fill="black" />
         </mask>
+        {/* Above the cut, everything; below it, as much as the sun has risen — so
+            the horizon hides the lower half of a sun ON it and nothing of one
+            clear of it, and the change between is a fade rather than a wipe. */}
+        <mask id={below} maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+          <rect width="24" height={CUT_Y} fill="white" />
+          <rect className="celestial__under" y={CUT_Y} width="24" height={24 - CUT_Y} fill="white" />
+        </mask>
       </defs>
-      <g className="celestial__rays" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        {Array.from({ length: 8 }, (_, i) => {
-          const a = (i * Math.PI) / 4;
-          const [s, c] = [Math.sin(a), Math.cos(a)];
-          return <line key={i} x1={12 + 8 * c} y1={12 + 8 * s} x2={12 + 10.5 * c} y2={12 + 10.5 * s} />;
-        })}
+      <g mask={`url(#${below})`}>
+        <g className="celestial__body">
+          <g className="celestial__rays" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            {Array.from({ length: 8 }, (_, i) => {
+              const a = (i * Math.PI) / 4;
+              const [s, c] = [Math.sin(a), Math.cos(a)];
+              return <line key={i} x1={12 + 8 * c} y1={12 + 8 * s} x2={12 + 10.5 * c} y2={12 + 10.5 * s} />;
+            })}
+          </g>
+          <g mask={`url(#${bite})`}>
+            <circle className="celestial__disc" cx="12" cy="12" r="5" fill="currentColor" />
+          </g>
+        </g>
       </g>
-      <g mask={`url(#${mask})`}>
-        <circle className="celestial__disc" cx="12" cy="12" r="5" fill="currentColor" />
-      </g>
+      <line className="celestial__horizon" x1="2.5" y1={HORIZON_Y} x2="21.5" y2={HORIZON_Y} stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -110,6 +142,7 @@ export function DayStrip() {
 
   const overcast = lighting === 'overcast';
   const day = isDaytime(hour);
+  const glyph = glyphAt(hour);
 
   // Giving way. Anything else being carried — a piece, a wall — and the day is not
   // there at all, so it can neither catch the pointer nor sit over the size tags.
@@ -150,7 +183,14 @@ export function DayStrip() {
     hour: number;
     lighting: typeof lighting;
     moved: boolean;
+    /** Where the pointer has put the pill's centre, px from the strip's left. */
+    x: number | null;
+    /** The hour the pointer means, not yet handed to the store. */
+    pending: number | null;
+    /** The animation frame that will hand it over. */
+    frame: number | null;
   } | null>(null);
+  const handleRef = useRef<HTMLDivElement>(null);
 
   // The width the strip may have, measured: the slot is the canvas minus whatever is
   // docked on the right.
@@ -186,8 +226,10 @@ export function DayStrip() {
     setFocused(false);
   };
   // Folded, the pill waits at the centre: the one place that is the same whatever the
-  // hour, so the folded control never wanders.
-  const px = open ? stripX(strip, hourT(hour)) : strip.width / 2;
+  // hour, so the folded control never wanders. Under a drag it is wherever the
+  // POINTER put it (`move` below), not wherever the stored hour says.
+  const dragX = carrying ? gesture.current?.x ?? null : null;
+  const px = dragX ?? (open ? stripX(strip, hourT(hour)) : strip.width / 2);
   const light = lightingAt(lighting, hour, bearingDeg);
   const dark = isDark(light.bg);
 
@@ -215,7 +257,7 @@ export function DayStrip() {
     // rather than the lighting switch being scheduled as its own.
     setDragging(SUN_DRAG_ID);
     setCarrying(true);
-    gesture.current = { pointerId: e.pointerId, target, hour, lighting, moved: false };
+    gesture.current = { pointerId: e.pointerId, target, hour, lighting, moved: false, x: null, pending: null, frame: null };
     // A press on the strip is a slider's press: the pill comes to it.
     if (jump) move(e);
   }
@@ -231,14 +273,39 @@ export function DayStrip() {
       if (overcast) setLighting('daylight');
       playSound('pick');
     }
-    // The hour's detent, the air under the scrub and the dawn and dusk phrases are
-    // `SoundCues`' — they follow the clock whatever moves it.
-    setHour(scrubHour(tAt(e.clientX)));
+    // The pill follows the hand NOW, written straight onto the element: it waits for
+    // nothing — not the store, not React, not the room's lights — because a handle that
+    // trails the pointer reads as a sticky one. The render that follows writes the same
+    // number (`dragX` above), so the two never disagree.
+    const t = tAt(e.clientX);
+    g.x = stripX(strip, t);
+    const el = handleRef.current;
+    if (el) el.style.transform = `translateX(${g.x - PILL_W / 2}px)`;
+    // The hour, at most once a frame. Every write to it re-renders the strip and the
+    // scene's lights and asks the canvas for a frame, and a pointer can report several
+    // moves per frame; only the last one before the paint can ever be seen. The hour's
+    // detent, the air under the scrub and the dawn and dusk phrases are `SoundCues'` —
+    // they follow the clock whatever moves it, so they hear these writes too.
+    g.pending = scrubHour(t);
+    if (g.frame === null) g.frame = requestAnimationFrame(() => commitHour(g));
+  }
+
+  /** Hands the pointer's latest hour to the store, now, and cancels the frame that
+   *  would have. Called by that frame, and by the gesture's end — which must commit
+   *  before it lets go of `draggingId`, or the undo step closes on the hour before. */
+  function commitHour(g: NonNullable<typeof gesture.current>) {
+    if (g.frame !== null) cancelAnimationFrame(g.frame);
+    g.frame = null;
+    if (g.pending === null) return;
+    const h = g.pending;
+    g.pending = null;
+    setHour(h);
   }
 
   function endGesture(heard: boolean) {
     const g = gesture.current;
     if (!g) return;
+    commitHour(g);
     gesture.current = null;
     setCarrying(false);
     if (g.target.hasPointerCapture?.(g.pointerId)) g.target.releasePointerCapture(g.pointerId);
@@ -256,6 +323,8 @@ export function DayStrip() {
       if (e.key !== 'Escape' || !g) return;
       e.preventDefault();
       e.stopPropagation();
+      // The hour still in flight is dropped, not committed: Esc means none of it.
+      g.pending = null;
       setHour(g.hour);
       setLighting(g.lighting);
       g.moved = false;
@@ -297,7 +366,9 @@ export function DayStrip() {
   // be left holding the sun, which would freeze the camera and the undo stack.
   useEffect(
     () => () => {
-      if (gesture.current && useStudio.getState().draggingId === SUN_DRAG_ID) useStudio.getState().setDragging(null);
+      const g = gesture.current;
+      if (g?.frame != null) cancelAnimationFrame(g.frame);
+      if (g && useStudio.getState().draggingId === SUN_DRAG_ID) useStudio.getState().setDragging(null);
     },
     [],
   );
@@ -377,6 +448,7 @@ export function DayStrip() {
             />
           )}
           <div
+            ref={handleRef}
             className="day-strip__handle"
             style={{ width: PILL_W, height: PILL_H, transform: `translateX(${px - PILL_W / 2}px)` }}
             role="slider"
@@ -385,7 +457,7 @@ export function DayStrip() {
             aria-valuemin={0}
             aria-valuemax={24}
             aria-valuenow={Math.round(hour * 100) / 100}
-            aria-valuetext={`${formatClock(hour)}${overcast ? ', overcast' : day ? '' : ', night'}`}
+            aria-valuetext={`${formatClock(hour)}${phaseWords(glyph.phase, overcast)}`}
             onPointerDown={(e) => begin(e, false)}
             {...gestureHandlers}
             {...reach}
@@ -410,7 +482,7 @@ export function DayStrip() {
             }}
           >
             <span className="day-strip__glyph" aria-hidden>
-              {overcast ? <Icon name="cloud" size={18} /> : <Celestial night={!day} />}
+              {overcast ? <Icon name="cloud" size={18} /> : <Celestial phase={glyph.phase} lift={glyph.lift} />}
             </span>
             <span className="day-strip__time mono">{formatClock(hour)}</span>
           </div>

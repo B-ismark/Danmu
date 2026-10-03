@@ -35,6 +35,8 @@
   --accent-2: #D99A2B;      /* amber — fills, the 3D hover; never type (2.44:1 with white) */
   --accent-2-tint: rgba(217, 154, 43, 0.16);
   --sun: #C48500;           /* golden yellow — the sun glyph in the day pill. 3.1:1 on --paper, enough for a graphic (WCAG 1.4.11); never type */
+  --sun-rise: #CC6E1F;      /* amber-orange — the sun ON the horizon at sunrise; the glyph blends to --sun as it climbs. 3.5:1 on --paper; never type */
+  --sun-set: #C7502F;       /* coral — the sun on the horizon at sunset, warmer than sunrise. 4.4:1 on --paper; never type */
 
   /* Furniture that came out of the user's own photo. Used to be an institutional
      CAD blue; warm aubergine instead, a third brand-compatible hue that reads
@@ -2872,13 +2874,26 @@ textarea.field { border-radius: var(--r-2); }
 .day-strip--away .day-strip__reach,
 .day-strip--away .day-strip__extras { pointer-events: none; }
 
-/* The sun that becomes the moon (`Celestial` in DayStrip.tsx). Every part is drawn
-   at every hour; night draws the rays in and turns them away, swells the disc, and
-   slides the shadow across it to carve the crescent. Dawn plays it backwards. */
-.celestial__rays, .celestial__disc, .celestial__bite {
+/* The day's one glyph (`Celestial` in DayStrip.tsx): moon → sunrise → sun → sunset →
+   moon. Every part is drawn at every hour. Inside the day the hour drives it through
+   `--lift` (`glyphAt`, lib/day-strip.ts): 0 is the sun's centre on the horizon line,
+   1 the sun clear of it. Lift slides the sun up out of the line, fades the line and
+   uncovers what the line hid, and cools the sun from the horizon's colour — amber in
+   the morning, coral in the evening — to --sun. At a horizon the sun becomes the moon:
+   night draws the rays in and turns them away, swells the disc, and slides the shadow
+   across it to carve the crescent; dawn plays it backwards. */
+.celestial { color: var(--sun); transition: color var(--dur-slow) var(--ease-out); }
+.celestial--morning { color: color-mix(in srgb, var(--sun-rise) calc((1 - var(--lift)) * 100%), var(--sun)); }
+.celestial--evening { color: color-mix(in srgb, var(--sun-set) calc((1 - var(--lift)) * 100%), var(--sun)); }
+/* The moon takes the pill's own colour (paper on the night pill), not the sun's. */
+.celestial--night { color: inherit; }
+.celestial__rays, .celestial__disc, .celestial__bite, .celestial__body, .celestial__horizon, .celestial__under {
   transform-box: fill-box; transform-origin: center;
-  transition: transform var(--dur-slow) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  transition: transform var(--dur-slow) var(--ease-out), opacity var(--dur-base) var(--ease-out), fill-opacity var(--dur-base) var(--ease-out);
 }
+.celestial__body { transform-box: view-box; transform: translateY(calc((1 - var(--lift)) * 4.5px)); }
+.celestial__horizon { opacity: calc(1 - var(--lift)); }
+.celestial__under { fill-opacity: var(--lift); }
 .celestial__rays { transform-box: view-box; transform-origin: 12px 12px; }
 .celestial__bite { transform: translate(10px, -10px); }
 .celestial--night .celestial__rays { transform: rotate(45deg) scale(0.4); opacity: 0; }
@@ -2886,7 +2901,8 @@ textarea.field { border-radius: var(--r-2); }
 .celestial--night .celestial__bite { transform: translate(0, 0); }
 @media (prefers-reduced-motion: reduce) {
   .day-strip, .day-strip__handle, .day-strip__glyph,
-  .celestial__rays, .celestial__disc, .celestial__bite { transition: none; }
+  .celestial, .celestial__rays, .celestial__disc, .celestial__bite,
+  .celestial__body, .celestial__horizon, .celestial__under { transition: none; }
   /* No overshoot, no hello: the strip simply fades in. */
   .day-strip__sky { transition: opacity var(--dur-base) var(--ease-out); }
   .day-strip--open .day-strip__glyph { animation: none; }
