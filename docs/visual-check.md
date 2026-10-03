@@ -2880,4 +2880,4 @@ opening. Overcast, once chosen, should still be overcast after a reload.
 **Why eyes:** the clock read and the forgetting are tested in jsdom, and walked in Chromium
 in two time zones; a flash on first paint is not something a test sees.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `0580af5` (B-ismark/Danmu#250), not yet looked at.
