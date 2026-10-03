@@ -1501,6 +1501,12 @@ pair and they are **one row**, and the measured one survives in either photo ord
     coarse pointer (44 px hit target). The stretch resolves with snap off, as a turn
     does, so the fixed face does not step; a pull into a wall rests at the last size
     that fitted rather than being refused.
+- **A Library piece dragged over the 3D room shows a ghost** (`DropGhost.tsx`): the real
+  geometry, translucent, standing where `planPiece` (`lib/add-piece.ts`, the drop's own
+  computation) would put it, and in the refusal colour with the reason beside the pointer
+  when the drop would be refused. The camera views are one pill — Corner, Front, Top
+  (`ViewGizmo.tsx`) — and the 3D canvas stays mounted across the 2D/3D tabs
+  (`RoomHost.tsx`, `lib/room-host.ts`) rather than rebuilding on each switch.
 - Snap: `off` / `fine` **1 cm · 15°** / `coarse` **5 cm · 45°** — `snapSteps` in
   `lib/drag-resolve.ts`, which is the only home for those four numbers. This line read
   "2.5°" and "7.5°" for both angles; nothing derives them and nothing checked.
@@ -1691,7 +1697,11 @@ pair and they are **one row**, and the measured one survives in either photo ord
   multi-piece drag looked impossible in one tab and self-undoing in the other.
 
 ### Recolour — `Inspector.tsx`
-- One **Colour** section (24-swatch palette + a custom mixer). There is no sheen
+- One **Colour** section (thirteen named swatches in two rows of seven, the mixer taking
+  the last cell, so a custom colour is the fourteenth; the names are what a screen
+  reader announces). A Style theme (`lib/themes.ts`) recolours the room's pieces in one
+  tap, and that now includes pieces built from a photo; a colour the user sets on a piece
+  still wins. There is no sheen
   control. A Finish row (Auto / Matte / Satin / Polished / Metal) used to sit inside
   it and was removed in review because it changed nothing a person could see. A
   room saved with one still loads; the value is ignored, and a room file does not
@@ -2068,6 +2078,9 @@ and re-pinning `MODEL_DIGESTS`. The cloud path has no such limit: its prompt
 interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
 
 ### Set-dressing & decor — `Dressing.tsx`
+- Decor is **off by default** (`useStudio.dressed` starts `false`; a stored `true` from
+  before the default changed is rewritten once, `STUDIO_PREFS_VERSION`). **Decor** is a
+  toggle in the top bar's View menu, beside the floor grid, sounds and Quality.
 - Surface-capable parts carry props (books, vase, plant, bowl, candle),
   auto-suggested via a **seeded** generator (stable per part id) or user-managed
   as a per-part `decor` collection. Decor renders as a **sibling** of the part
@@ -2106,8 +2119,9 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   the sun and the moon are all derived from, plus **Overcast**, which ignores it —
   so `Lighting` is `'daylight' | 'overcast'` and `useStudio.hour` is the rest. It
   replaced five fixed moods (Sunrise / Day / Sunset / Evening / Cool), and the four
-  named times in the rail — **Morning 07:36, Midday 12:48, Evening 18:30, Night
-  22:12** — are those pictures kept as stops, so `legacyLighting` maps every retired
+  named times — **Morning 07:36, Midday 12:48, Evening 18:30, Night 22:12**
+  (`TIME_STOPS`) — are those pictures kept as stops on the clock (no control lists
+  them any more; the strip below is how you reach them), so `legacyLighting` maps every retired
   id onto the stop that looks like it and a stored preference lands where it was.
   - **One typical day, not a place.** Sunrise 06:00, sunset 19:30, the sun on a
     tilted circle from 65° to 295° peaking 60° due south, the moon on the same
@@ -2164,10 +2178,9 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     the folded pill only opens it, and Esc mid-drag puts the hour back. Dragging it while overcast
     brings the sun back. `SUN_DRAG_ID` (`lib/store.ts`, beside `WALL_DRAG_ID`)
     is its `draggingId`, which blocks orbiting and makes the whole pull ONE undo
-    step — and the rail's day track claims the same id for its own pull, so
-    both are one step. The sky and exposure live in `Daylight` inside
+    step. The sky and exposure live in `Daylight` inside
     `Room.tsx`, so scrubbing re-renders the lights and not the furniture.
-  - **The strip carries the rest** (no rail control any more — `LightingPicker`
+  - **The strip carries the rest** (there is no rail Light section: `LightingPicker`
     and the Style → Light section are deleted): while it is open, an extras row
     under it holds the **Overcast** toggle, **Plan top faces** — the room's bearing,
     one compass point a press (`turnedBearing`, `lib/lighting-moods.ts`) — and the
@@ -2176,7 +2189,7 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     Library never moves it. The sun glyph is `--sun` (golden), the moon stays paper.
   - **`Site.bearingDeg` still turns the whole day** with the room, so which wall
     the morning comes through is the user's answer. It was the Sun direction dial
-    (`NorthDial.tsx`, deleted); the arc now shows the answer and the rail keeps the
+    (`NorthDial.tsx`, deleted); the strip shows the answer and its extras row keeps the
     setting.
 - **Carried pieces sway** (`lib/wobble.ts`, `components/three/Wobble.tsx`). A floor
   piece being dragged lifts 14 mm and leans back against its travel, up to 7°, and
@@ -2259,8 +2272,8 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   masking is the real fix and is a change to how the scene is lit. And a sealed room
   is lit by sky, environment and lamps alone, so a **sun mood in a room with no
   opening does nothing** — which is the honest answer and is said out loud in the
-  rail's Style section, under the Lighting row, through the same `isAperture`
-  predicate that cuts the holes.
+  day strip's extras row ("No window or door, so no sunlight gets in"), through the
+  same `isAperture` predicate that cuts the holes.
 
 - **What the sun used to be, and why it is not that any more.** This was a single
   `Sun` mood that computed a real solar position: `lib/solar.ts` carried the full
@@ -2336,8 +2349,8 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   **Plan top faces** turner beside the light, with the light in the room drawing its answer.
 
   **What holds the shape.** `LIGHTINGS` in `lib/store.ts` is an `as const` array
-  with the `Lighting` union derived from it, and `TIME_STOPS` is keyed by id into
-  the picker's `Record<TimeStopId, …>`, so a stop with no glyph is a compile error.
+  with the `Lighting` union derived from it, and `TIME_STOPS` keeps the four stops by id
+  (`TimeStopId`) for `legacyLighting` and the test to land on.
   `tests/lighting-moods.test.ts` covers what the compiler cannot see: a seam in the
   sky anywhere in the day (walked minute by minute, midnight included), a sun up
   outside its day or a moon up beside it, a key light pointing below the floor or
