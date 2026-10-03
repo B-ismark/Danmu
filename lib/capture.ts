@@ -66,7 +66,7 @@ export async function startCamera(): Promise<MediaStream> {
 //
 // ~1600px keeps a wall legible while cutting a typical upload by an order of
 // magnitude.
-const MAX_EDGE = 1600;
+export const MAX_EDGE = 1600;
 const JPEG_QUALITY = 0.9;
 
 /** Raster formats the pipeline can actually measure. `image/*` also matches
