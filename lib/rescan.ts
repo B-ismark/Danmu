@@ -82,7 +82,10 @@ export async function adoptFreshScan(
  *  every piece was rebuilt for having been looked at. */
 function buildsAs(r: SavedDetection): string {
   const d = fromRecord(r);
-  return JSON.stringify([d.label, d.slot, d.category, d.box, d.dimMM ?? null, d.position ?? null, d.yaw ?? null, d.shape ?? null]);
+  // `seenAt` is read off the record, not the codec: it is derived on Continue and
+  // the review screen never holds it, but it moves the piece, so a link made or
+  // undone has to rebuild the piece it moved.
+  return JSON.stringify([d.label, d.slot, d.category, d.box, d.dimMM ?? null, d.position ?? null, d.yaw ?? null, d.shape ?? null, r.seenAt ?? null]);
 }
 
 export type ListEdit = {

@@ -93,6 +93,7 @@ export function toRecord(d: Detection, index: number, locked: boolean, mintUid: 
     position: d.position,
     yaw: d.yaw,
     shape: d.shape,
+    ...(d.sameAs ? { sameAs: d.sameAs } : {}),
   };
 }
 
@@ -125,6 +126,7 @@ export function fromRecord(r: SavedDetection): Detection {
     position: r.position,
     yaw: r.yaw,
     shape: r.shape,
+    ...(typeof r.sameAs === 'string' && r.sameAs ? { sameAs: r.sameAs } : {}),
   };
 }
 

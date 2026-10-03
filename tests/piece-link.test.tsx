@@ -42,6 +42,12 @@ const rowProps = (i: number) => ({
   onDismissOffer: () => {},
   onDelete: () => {},
   onShow: () => {},
+  sameAs: null,
+  alsoSeenOn: [],
+  linkOptions: [],
+  onLinkTo: () => {},
+  onUnlink: () => {},
+  onConfirmRepeat: () => {},
 });
 
 /** The page's wiring in miniature: one hovered state, handed to the photo and to every row. */
