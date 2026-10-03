@@ -2707,3 +2707,22 @@ sideways scroll. Camera mode at a laptop width keeps the guide beside the viewfi
 photos; camera mode at 1280 and 1440.
 
 **Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Check furniture in the Flow design
+
+**Where:** the photo route through to *Check your furniture*, at a laptop width and on a
+phone, with two photos or more. The steps sit over the page with Furniture current, then
+the serif title. The wall photos are pill tabs, the chosen one dark with its piece count
+in a green badge; *Add a piece by hand* is its own rounded card under the photo. With a
+detector offer showing, it is a card with a download icon in a green circle. After a
+scan, the privacy line is a green pill with a padlock on this device, and a plain grey
+box with an info mark when the photos went to Google.
+
+**What wrong looks like:** a padlock beside the line saying photos were sent; the count
+badge unreadable on the dark tab; the tabs or the hand-add card running off a phone's
+edge; the pinned photo sliding under the steps as the list scrolls.
+
+**Why eyes:** walked once in headless Chromium at 1280 and 375 with no detector (so no
+scan, no privacy line, and no download card in that walk).
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

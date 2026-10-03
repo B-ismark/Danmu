@@ -10,7 +10,8 @@ import { detectAcrossImages, DetectError, type Detection } from '@/lib/detection
 import { setAsideSentence, setAsideTitle } from '@/lib/set-aside';
 import { CAPTURE_SLOTS } from '@/lib/capture';
 import { Icon, type IconName } from '@/components/ui/Icon';
-import { EditableText, FlowBarLead, IconButton, StepHeader } from '@/components/ui/primitives';
+import { EditableText, FlowBarLead, IconButton } from '@/components/ui/primitives';
+import { FlowStepper } from '@/components/ui/FlowStepper';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { Select } from '@/components/ui/Select';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
@@ -1032,16 +1033,23 @@ export default function DetectPage() {
         </button>
       </header>
 
-      <div style={{ padding: '16px 18px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <StepHeader
-          kicker="Last step"
-          title="Check your furniture"
-          subtitle={roughSize ? 'Sizes are rough until you set the room’s size.' : undefined}
-        />
+      <div className="scan-head">
+        <FlowStepper current="Furniture" />
+        <div className="scan-head__text">
+          <h1 className="scan-head__title">Check your furniture</h1>
+          <p className="scan-head__lede">
+            Keep what’s yours. Anything you leave out stays out of the room.
+            {roughSize ? ' Sizes are rough until you set the room’s size.' : null}
+          </p>
+        </div>
         {download && (
-          <section className="ds-card" aria-labelledby="dl-title" style={{ padding: '14px 16px', maxWidth: '68ch', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <h2 id="dl-title" className="sans" style={{ margin: 0, fontSize: 'var(--fs-lead)', fontWeight: 700 }}>
-              {download.update ? 'An improved furniture finder is ready' : 'Download the furniture finder?'}
+          <section className="ds-card scan-download" aria-labelledby="dl-title">
+            <span className="scan-download__icon" aria-hidden="true">
+              <Icon name="download" size={18} />
+            </span>
+            <div className="scan-download__body">
+            <h2 id="dl-title" className="scan-download__title">
+              {download.update ? 'An improved furniture finder is ready' : 'Find furniture on this device'}
             </h2>
             <p className="t-small" style={{ margin: 0, lineHeight: 1.5 }}>
               {download.update
@@ -1065,6 +1073,7 @@ export default function DetectPage() {
                 Skip for now
               </button>
             </div>
+            </div>
           </section>
         )}
         {fetched && fetched.total > 0 && fetched.loaded < fetched.total && (
@@ -1073,22 +1082,9 @@ export default function DetectPage() {
           </p>
         )}
         {privacyLine && (
-          <p
-            className="t-small"
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 8,
-              margin: 0,
-              maxWidth: '68ch',
-              lineHeight: 1.5,
-              background: 'var(--paper-2)',
-              border: '1px solid var(--hairline)',
-              borderRadius: 'var(--r-2)',
-              padding: '9px 11px',
-            }}
-          >
-            <Icon name="info" size={14} color="var(--ink-3)" style={{ marginTop: 2 }} />
+          // A padlock only where it is true: on the cloud path the photos do leave.
+          <p className="scan-privacy" data-sends={sendsPhotos || undefined}>
+            <Icon name={sendsPhotos ? 'info' : 'lock'} size={14} />
             <span>{privacyLine}</span>
           </p>
         )}
@@ -1157,11 +1153,7 @@ export default function DetectPage() {
             matched against. */}
         <div ref={paneRef} className="scan-photo-pane" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {slots.length > 1 && (
-            <div
-              role="group"
-              aria-label="Your wall photos"
-              style={{ display: 'flex', flexWrap: 'wrap', padding: '10px 16px 0', gap: 6, flexShrink: 0 }}
-            >
+            <div role="group" aria-label="Your wall photos" className="scan-walls">
               {slots.map((s) => {
                 const sel = activeSlot === s.slot;
                 const count = detections.filter((d) => d.slot === s.slot).length;
@@ -1170,27 +1162,12 @@ export default function DetectPage() {
                     key={s.slot}
                     onClick={() => setActiveSlot(s.slot)}
                     aria-pressed={sel}
-                    className="ds-btn"
-                    style={{
-                      // Share the row, up to a button's width: two walls at 1920 were
-                      // 751px each for six characters.
-                      flex: '1 1 130px',
-                      maxWidth: 240,
-                      justifyContent: 'space-between',
-                      fontSize: 'var(--fs-small)',
-                      background: sel ? 'var(--ink)' : 'var(--paper)',
-                      color: sel ? 'var(--on-ink)' : 'var(--ink-2)',
-                      borderColor: sel ? 'var(--ink)' : 'var(--edge)',
-                    }}
+                    className="scan-walls__tab"
                   >
                     <span className="truncate">
                       {slotLabel(s.slot)}
                     </span>
-                    {count > 0 && (
-                      <span className="mono" style={{ fontSize: 'var(--fs-caption)', fontWeight: 600, opacity: 0.85 }}>
-                        {count}
-                      </span>
-                    )}
+                    {count > 0 && <span className="scan-walls__count">{count}</span>}
                   </button>
                 );
               })}
@@ -1260,17 +1237,7 @@ export default function DetectPage() {
           </div>
 
           {active && (
-            <div
-              style={{
-                padding: '10px 16px',
-                borderTop: '1px solid var(--hairline)',
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                gap: 10,
-                flexShrink: 0,
-              }}
-            >
+            <div className="scan-hand">
               <button
                 onClick={() => {
                   setAdding((v) => !v);
@@ -1339,7 +1306,7 @@ export default function DetectPage() {
           <div className="section">
             <div className="section-head">
               <h2 className="section-title">Your pieces</h2>
-              {total > 0 && <span className="section-meta mono">{total}</span>}
+              {total > 0 && <span className="section-meta">{keptCount} of {total} kept</span>}
             </div>
           </div>
 

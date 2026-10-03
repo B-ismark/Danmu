@@ -1981,6 +1981,58 @@ textarea.field { border-radius: var(--r-2); }
 .capture-height__text { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; font-size: var(--fs-body); }
 .capture-height__field { display: flex; align-items: center; gap: 6px; }
 
+/* ── Check furniture, in the Flow design ───────────────────────────────────────
+   The steps and a serif title over the review, as on the photo screen before it;
+   the wall photos as tabs; the privacy line as a quiet pill. The pinned photo and
+   the list's split below are unchanged (`.scan-photo-pane`, `.scan-split`). */
+.scan-head { padding: 20px 16px 12px; display: flex; flex-direction: column; gap: 12px; }
+.scan-head .flow-stepper { margin-bottom: 8px; }
+.scan-head__text { max-inline-size: 68ch; }
+.scan-head__title { font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
+.scan-head__lede { margin: 6px 0 0; color: var(--ink-3); font-size: var(--fs-body); line-height: 1.5; }
+.scan-download {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start;
+  padding: 14px 16px; max-inline-size: 68ch; border-radius: var(--r-3);
+}
+.scan-download__icon {
+  display: grid; place-items: center; inline-size: 36px; block-size: 36px; border-radius: var(--r-full);
+  background: var(--accent-tint); color: var(--accent-text);
+}
+.scan-download__body { display: flex; flex-direction: column; gap: 10px; min-inline-size: 0; }
+.scan-download__title { margin: 0; font-family: var(--font-sans); font-size: var(--fs-lead); font-weight: 700; }
+.scan-download__body > p { margin: 0; font-size: var(--fs-small); line-height: 1.5; color: var(--ink-2); }
+.scan-privacy {
+  display: inline-flex; align-items: flex-start; gap: 8px; align-self: flex-start;
+  margin: 0; max-inline-size: 68ch; padding: 7px 14px; border-radius: var(--r-full);
+  background: var(--accent-tint); color: var(--accent-text); font-size: var(--fs-small); line-height: 1.5;
+}
+.scan-privacy svg { flex: none; margin-block-start: 3px; }
+.scan-privacy[data-sends] { background: var(--paper-2); color: var(--ink-2); border-radius: var(--r-2); }
+.scan-walls { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px 0; flex-shrink: 0; }
+.scan-walls__tab {
+  /* Share the row, up to a button's width: two walls at 1920 were 751px each for
+     six characters. */
+  flex: 1 1 130px; max-inline-size: 240px; min-block-size: 36px;
+  display: inline-flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px;
+  padding: 6px 14px; border: 1px solid var(--edge); border-radius: var(--r-full);
+  background: var(--paper); color: var(--ink-2); font: inherit; font-size: var(--fs-small); font-weight: 700;
+  cursor: pointer; transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.scan-walls__tab:hover { background: var(--paper-2); }
+/* The app's focus ring, in a rule of its own: the shared list squares the corners. */
+.scan-walls__tab:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.scan-walls__tab[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.scan-walls__count {
+  min-inline-size: 20px; padding: 0 6px; border-radius: var(--r-full); text-align: center;
+  background: var(--paper-3); color: var(--ink); font-size: var(--fs-caption); font-weight: 700; line-height: 18px;
+}
+/* --accent-ink, not --accent: the count is type, and white on --accent is 3.91:1. */
+.scan-walls__tab[aria-pressed="true"] .scan-walls__count { background: var(--accent-ink); color: var(--on-accent); }
+.scan-hand {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex-shrink: 0;
+  margin: 0 16px 12px; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
+}
+
 /* The shape picker's options: as many across as the column takes at ~170px, so
    three in the laptop's left column and two on a phone. `auto-fit`, not
    `auto-fill`: an empty extra track would stop the row short of the column's
