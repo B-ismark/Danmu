@@ -3275,13 +3275,27 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
   `lib/local-detect.ts`; move both together or the compiled types drift from the
   executed wasm.
 
+### Routes
+
+| Route | File | What it is |
+|---|---|---|
+| `/` | `app/page.tsx` | The rooms list, the first screen. `/workspace` and `/onboarding/welcome` redirect here. |
+| `/onboarding/layout-pick` | `app/onboarding/layout-pick/page.tsx` | **New room**: the preset shapes (`lib/room-presets.ts`), a size row, and the way on to photographing. |
+| `/onboarding/capture` | `app/onboarding/capture/page.tsx` | The wall photos (`FlowStepper` shows the step). |
+| `/onboarding/detect` | `app/onboarding/detect/page.tsx` | The review queue: what was found, kept or not, linked (`sameAs`), renamed. |
+| `/room/[roomId]` | `app/room/[roomId]/page.tsx` | A server redirect to `/room/[roomId]/model`. |
+| `/room/[roomId]/model` · `/plan` | `…/model/page.tsx`, `…/plan/page.tsx` | The two studio tabs, both inside `StudioShell`. |
+| `/settings` | `app/settings/page.tsx` | Key, units, detector pack. |
+
+`app/` also holds the file-convention routes `manifest.ts`, `icon.svg`, `apple-icon.tsx`, `opengraph-image.tsx`, `error.tsx`, `global-error.tsx` and `not-found.tsx`.
+
 ### State stores
 | Store | File | Holds |
 |---|---|---|
-| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`; `dressed` — auto set-dressing — is **off by default**, and `STUDIO_PREFS_VERSION` 1 resets the old `true` default once). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
-| `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache. Persisted to localStorage (`danmu-settings`). |
+| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, `parentIds` (rigid parenting), `hidden`, `pinned` (the user's **Lock**), lighting + `hour`, quality, dressed, snap, open state, grid, view preset, transform mode, the two rails' open state and width. **Only the view *preferences* persist** (`STUDIO_PREFS`: `lighting`, `quality`, `dressed`, `snapMode`, `showGrid`, `railLeftOpen`, `railRightOpen`, `railLeftW`, `railRightW` → `danmu-studio-prefs`, via `partialize`; `dressed` — auto set-dressing — is **off by default**, and `STUDIO_PREFS_VERSION` 1 resets the old `true` default once; an `hour` from an earlier visit is dropped on load, the light opens at the clock). Selection / camera / open drawers are ephemeral; transforms, `hidden`, `pinned` and `parentIds` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
+| `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache (`keyValid`, `keyValidReason`). Persisted to localStorage (`danmu-settings`). |
 | `useRoom` | `lib/store.ts` | active room id. Persisted (`danmu-room`). |
-| `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup + room. |
+| `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup, the room (`room`: size, footprint, wall colours, `site`), `moveWall`, and `hydratedRoomId` — set only by `RoomSync` once its reads are in, which is what lifts the `CanvasVeil`. |
 
 > There is no `useCompose` — it was deleted with the render pipeline.
 
@@ -3296,7 +3310,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | `lib/chair-form.ts` | **The dining chair, the office chair, the armchair and the ottoman.** A dining chair is four legs under a seat frame of rails set in from their faces, a low H-stretcher, an upholstered pad on the frame, and a back of a crest rail and a lower rail between the rear uprights with three slats in both; an office chair is five casters under a star with one spoke straight ahead, a hub, a gas lift in its dust cover, a mechanism and pan, T-arms on brackets and a back cushion on a shell carried by a spine; an armchair is four turned, tapered legs, rolled arms the depth of the chair, a back panel and three cushions; an ottoman (`ottomanForm`, `OTTOMAN`) is four turned legs in brass ferrules, a base piped round its top and a buttoned padded top. All three are hard-goods parts plus soft-goods cushions, NON-parametric (§ 36) and swept by `tests/hard-goods.test.ts` with the rest; the armchair's leaning scatter cushion is the one placement that mixes two axes, as it did before. It replaced `FitToDim`, the per-axis stretch of fixed metres whose last users these three were. **The half that is not cosmetic is `DINING_CHAIR` / `OFFICE_CHAIR`'s `seatTop` / `armTop` and `back`**: `tuckProfile` and `seatBackShare` (`lib/layout-rules.ts`) read them, so how high a chair reaches under a table and how much of its depth its back takes are the drawing's own numbers, not literals beside it — and they are the old drawings' values, so a chair tucks exactly as far as it did. `tests/chair-form.test.ts` holds the drawn seat top and back face to them at 46 sizes, and the joinery (slats in both rails, casters on the floor, a straight-ahead spoke, legs under the arms they carry). |
 | `lib/parts-catalog.ts` | Room defaults + catalog data. |
 | `lib/scene-store.ts` | Scene parts CRUD + grouping. |
-| `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`, `version`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. `reslotCaptures` moves the whole set of wall photos in one operation, for three reasons that each cost something: the WHOLE record travels (the pairwise swap it replaces re-wrote `{ slot, blob, takenAt }` and silently dropped `pose`, so reordering photos threw away the focal length, the tilt and the bearing — `pose` being optional is what let it typecheck); writes precede deletes (a vacated key that outlives its write is a duplicate the user can delete, a deleted key whose write never landed is a photograph that is gone); and a mapping that would land two photos on one wall is refused rather than absorbed. |
+| `lib/storage.ts` | IndexedDB room persistence. One room is a set of keys: `room:{id}:meta` (`RoomData`: name, `layoutId`, size, `roughSize`, `wallColors`, `site`, `footprint`, `detectedObjects`, `version` — `ROOM_SCHEMA_VERSION` is 2, the first non-additive change, where `locked` came to mean *kept*), `:scene` (the parts), `:transforms` (positions, rotations, dims, `hidden`, `pinned`, `parentIds`), `:cap:*` (photos, each with its `pose`), `:layout:*` (saved arrangements), `:touched` and `:wrote:{part}`. A `detectedObjects` row holds `uid`, `label`, `conf`, `source`, `locked`, `box`, `category`, `dimMM`, `position`, `yaw`, `shape` and the two a person's review adds: **`sameAs`** (the uid of an earlier row this one repeats, so it is not built) and **`seenAt`** (the spot combined from every sighting linked to a kept floor piece, written on Continue and preferred by the room builder; both from `lib/sighting-links.ts`, read and written by `lib/detection-record.ts`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. `reslotCaptures` moves the whole set of wall photos in one operation, for three reasons that each cost something: the WHOLE record travels (the pairwise swap it replaces re-wrote `{ slot, blob, takenAt }` and silently dropped `pose`, so reordering photos threw away the focal length, the tilt and the bearing — `pose` being optional is what let it typecheck); writes precede deletes (a vacated key that outlives its write is a duplicate the user can delete, a deleted key whose write never landed is a photograph that is gone); and a mapping that would land two photos on one wall is refused rather than absorbed. |
 | `lib/scene-palette.ts` | Scene-side semantic colours — the one home for values the 3D layer, the canvas exports and the panels that edit them must agree on, since neither Three.js materials nor a 2D canvas can read a CSS custom property. Exports `SCENE` (selection / hover / locked / shell), `PLAN` (the floor-plan PNG's palette) and `defaultBodyColor(category, shape)`. Kept in sync with `globals.css` by hand, guarded by a test. **`defaultBodyColor` takes BOTH arguments**: within one category the shapes do not match (a dining chair is walnut, an office chair charcoal), and the renderer and the Inspector's "Default for this piece" swatch must return the same value. The predecessor took a single loosely-typed `category` and was keyed on material-group names, so 18 of 22 categories fell through to one tan default. It also carries **`DETAIL`** (the outline every `Box` draws, dark walnut legs, near-black hardware) and **`DECOR`** (the book / pot / vase / pillow sets `Dressing` scatters) — not recolourable, so deliberately out of `defaultBodyColor`, but each was a literal repeated across renderers, which is several values pretending to be one. There were literally two book palettes, six spines in `Dressing` and eight in `BookshelfGeo`, so the books on a shelf did not match the books beside it. A test now scans `components/three/*.tsx` and fails on any hex this module owns, shorthand included. |
 | `lib/fit-check.ts` | **Will this actually fit?** `checkFit` seats one candidate with everything else locked and reports one of four answers with the room report's own reasons. Pure; asked from the Library's "Use my own size" through `addPieceToRoom`. See §5. |
 | `lib/space-bound.ts` | **How wide a piece may be made here.** A wall piece's limit is its own wall (found by heading, not nearest point); anything else's is the room's reach at its angle, the drag's `roomIsWideEnough` solved for one side. Measures only; the Inspector's size fields and `addPieceToRoom` refuse and say `describeSpaceRefusal`'s sentence. Only a growing axis is refused; height never. |
@@ -3308,13 +3322,19 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | `lib/themes.ts` | One-tap restyle palettes — four, each a different room. |
 | `lib/capture.ts` / `lib/image-quality.ts` | Photo capture + quality (the colour-sampling module is deleted — scanned pieces take default colours). `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. `readCaptureFacts` is the one EXIF read, returning two things with two lifetimes: the `pose` persisted onto the `Capture` for as long as the room exists, and the transient facts that decide which wall this is and are then dropped. It MUST run on the original file — the strip destroys exactly what it reads, which is the point of the strip. |
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
-| `lib/color.ts` | Colour arithmetic: WCAG contrast, and OKLab as a space where "same colour" means something. `globals.css` states a ratio next to almost every token and `CLAUDE.md` turns those into a rule, but nothing checked any of it — a comment claiming a ratio is a comment. It also lets `scene-palette.ts`' hand-copied duplicates be compared perceptually rather than by string equality, which is brittle one way and blind the other. |
 | `lib/drag-live.ts` | The high-frequency drag channel, deliberately **outside** `useStudio` — see §5. |
 | `lib/scene-file.ts` | The `.danmu.json` scene file — build, serialise, and defensively parse. The app's only import path and so its only untrusted input; see §6a. `buildSceneFile` bakes the studio's transform overrides so the file holds one truth per piece, and `parseSceneFile` never throws: it returns a reason, or a file plus the list of what it dropped. Its filename comes from `exports.ts`' `fileSlug`. |
-| `lib/exports.ts` | **What to call a file the user is taking away** — `fileSlug` and `snapshotFileName`. The three downloads each named themselves: the scene file slugged the room's name with a length cap, the export menu slugged it without one, the floor plan did not slug at all — it was `floor-plan.png` every time — and the 3D view was the last holdout, a fixed `room-snapshot.png` that was the same for every room, so exporting three rooms left three files the browser silently numbered `(1)` and `(2)`. The cap earns its place too: a 300-character room name produces a filename the OS may refuse to write, which surfaces as a download that did nothing. Two things are deliberately NOT here — the furniture CSV (retired; see the top bar above) and the transform merge (that is `lib/transforms.ts`, enforced by `tests/room-scene.test.ts`). Tested in `tests/exports.test.ts`. |
+| `lib/exports.ts` | **What to call a file the user is taking away** — `fileSlug` and `snapshotFileName`. The three downloads each named themselves: the scene file slugged the room's name with a length cap, the export menu slugged it without one, the floor plan did not slug at all — it was `floor-plan.png` every time — and the 3D view was the last holdout, a fixed `room-snapshot.png` that was the same for every room, so exporting three rooms left three files the browser silently numbered `(1)` and `(2)`. The cap earns its place too: a 300-character room name produces a filename the OS may refuse to write, which surfaces as a download that did nothing. Two things are deliberately NOT here — the furniture CSV (retired; see §5's top bar) and the transform merge (that is `lib/transforms.ts`, enforced by `tests/room-scene.test.ts`). Tested in `tests/exports.test.ts`. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
 | `lib/dates.ts` | Timestamp formatting — the counterpart to `units.ts`. Relative `editedLabel`, absolute `savedLabel`, and the workspace's recency buckets. |
 | `lib/use-media-query.ts` | The one `matchMedia` hook. `useMediaQueryState` also returns `ready`, for callers that pick a whole layout and must not paint the wrong one first. |
+| `lib/detection-record.ts` · `lib/sighting-links.ts` · `lib/repeat-sightings.ts` · `lib/slot-names.ts` · `lib/review-history.ts` | **Detection records and the review's answers.** `detection-record` is the one codec between a `Detection` and the stored `detectedObjects` row (both directions, so a field cannot be written and not read). `repeat-sightings` is the app's *guess* that two rows are one piece seen twice; `sighting-links` is the person's answer — `sameAs` on the later row — plus the combined floor spot (`seenAt`). `slot-names` holds the words a wall goes by and the one reader of them. `review-history` is undo / redo for the review, which lives in component state until `finish()`. |
+| `lib/room-presets.ts` · `lib/room-start.ts` | The room shapes a new room starts from and the one way a room is made from one (the New room page and the empty rooms page's starter share it); `room-start` is the room as it first arrived, which **Start over** puts back. |
+| `lib/rigid-parent.ts` · `lib/orphan-drop.ts` · `lib/to-wall.ts` · `lib/duplicate-place.ts` · `lib/press-selection.ts` | Gestures' company and edges: `cascadeTransform` carries what rests on a piece; `orphan-drop` says what happens to pieces standing on something deleted; `to-wall` is the Inspector's **Wall** button as a convoy gesture; `duplicate-place` puts a copy beside its original, never inside it; `press-selection` is what was selected when a press landed. |
+| `lib/plan-annotations.ts` · `lib/plan-view-transform.ts` · `lib/plan-export.ts` · `lib/plan-hit.ts` | The 2D plan's arithmetic: where the outside-the-room annotations sit, client pixels to viewBox, the PNG export, and what is under the pointer. |
+| `lib/model-cache.ts` · `lib/backup-nudge.ts` · `lib/leave-note.ts` · `lib/page-leave.ts` | Local persistence beyond rooms: the detector's verified weights kept in Cache Storage after the first download (written by the page, not the service worker); the nudge to keep rooms from vanishing with site data; the synchronous leave note; the save-on-leave hooks. |
+| `lib/label-suggest.ts` · `lib/photo-drop.ts` · `lib/photo-tag.ts` | The review and capture screens' small decisions: what to offer when a detected piece is renamed; what a drop onto a photo tile means (replace vs reorder); where a piece's name tag sits on the photo. |
+| `lib/after-paint.ts` · `lib/brand-mark.ts` · `lib/site-url.ts` | Let a busy state paint before blocking work; the Danmu mark drawn once for the places that cannot share a renderer; the absolute site URL Open Graph tags need. |
 
 ### Two shells, and what each route stands in
 
@@ -3393,6 +3413,8 @@ target in a way an explicit Back button is not. Do not "fix" detect's to match.
 | `NumberField.tsx` | Measurement input with our own two-chevron stepper (the native spinner is suppressed app-wide). Hold-to-repeat reads the clock and pays at most 3 steps per tick — a plain interval drifts badly when every step re-renders an inspector and a 3D scene, and pure clock catch-up turns one starved tick into a huge leap. It calls `onChange` through a ref, since callers rebuild that closure each render over their own local state. Chevrons are `aria-hidden` + `tabIndex -1`: the input is already a spinbutton and Up/Down step it. |
 | `StorageToast.tsx` | One live region for the whole app, plus the imperative `toast()`. Lifted clear of the studio's bottom-right control cluster on `/room/` routes — the card takes pointer events, so at the default offset it swallowed their clicks. |
 | `DocShell.tsx` | The document-route shell — see above. Takes `trail` (the breadcrumb), `actions`, `back`, `measure` (`page` \| `prose`) and `variant` (`plain` \| `hero`). |
+| `FlowStepper.tsx` · `BuildingRoom.tsx` · `FindingFurniture.tsx` · `LoadingOverlay.tsx` · `DetectorPackPicker.tsx` | The photo route's furniture: where you are (Shape, Photos, Furniture, Room), the last step's "building" screen, the wait while the finder runs, a blocking progress overlay, and the Basic / Full detector choice shared by the scan screen and Settings. |
+| `IsoRoom.tsx` · `ShapeIcon.tsx` | The empty rooms page's isometric hero, and the chip that draws a piece's shape at the start of list rows. |
 | `Confirm.tsx` · `ColorPicker.tsx` | Promise-based confirm modal; HSV picker. Both exist to keep an OS widget out of the UI. |
 
 ### Waiting: what the app shows while it works
@@ -3603,9 +3625,8 @@ rather than a room that lists in the workspace and opens empty
 
 ## 8. Roadmap
 - **Group rotate / scale-as-one** to finish multi-select (translate done).
-- Bundle a curated **CC0 GLB library** for higher-fidelity pieces.
 - More parametric shapes + richer decor kinds.
-- Multi-room projects / rooms dashboard.
+- Grouping rooms into one project (the rooms page lists rooms; there is no parent above a room).
 - Export polish — the scene file and both PNG exports have shipped; what is left is
   a nicer share affordance around them.
 
@@ -3621,7 +3642,8 @@ rather than a room that lists in the workspace and opens empty
 pnpm install
 pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest run — pure logic, plus the jsdom files (storage*, history)
+pnpm test         # vitest run --disableConsoleIntercept — pure logic, plus the files that opt into jsdom
+pnpm test:watch   # the same, watching
 pnpm build        # next build
 pnpm lint         # eslint . --max-warnings 0 — `next lint` is gone in Next 16
                   # flat config; ESLint must stay >= 9 or `next build` lints nothing
@@ -3629,10 +3651,11 @@ pnpm audit        # dependency advisories; transitive fixes live in pnpm.overrid
 pnpm vendor:ort   # copy onnxruntime-web into public/ort/ so it loads same-origin
 pnpm hash:models  # print SHA-256 digests of public/models/ for MODEL_DIGESTS
 pnpm hash:models --verify   # …and check the mirror serves the same bytes (~62 MB)
+pnpm sweep:routes # minutes-long refusal-set sweep behind tests/suggest-tidiness.test.ts — a measurement, not a gate
 ```
 
-`.github/workflows/ci.yml` runs the first four on every push to `main` and every
-pull request. One job, `contents: read`, no secrets — a local-first app with no
+`.github/workflows/ci.yml` runs typecheck, lint, test and build on every push to `main` and every
+pull request, plus `pnpm audit` as an advisory step that cannot fail the job. One job, `contents: read`, no secrets — a local-first app with no
 backend has nothing to give a build. Node is 22 and pnpm comes from
 `packageManager`, so CI does not carry a second copy of either version.
 
@@ -3655,13 +3678,13 @@ geometry engine, the solver, the room report and IndexedDB keep working, because
 none of them fetch. What failed was a **reload**: the browser had nowhere to get
 the document from, so it showed its own error page for an app that needed no
 network. `public/sw.js` closes that, and `app/manifest.ts` makes the result
-installable.
+installable (`components/ServiceWorkerRegistrar.tsx` registers the worker, in production only).
 
 | Request | Strategy | Why |
 |---|---|---|
 | Cross-origin | **not intercepted** | Gemini, the ORT CDN, the weights. A cache is storage; storing those is not the worker's business. |
 | `/_next/static/*` | cache-first | Content-hashed, so a URL match is always the right bytes. |
-| Navigations | network-first, then this exact URL, then `/` | A reload of `/room/<id>/model` must come back as that room, not the home page. |
+| Navigations | network-first, then this exact URL, then the same page under another query (`/settings?from=…` is one document), then `/` | A reload of `/room/<id>/model` must come back as that room, not the home page. |
 | Other same-origin | network-first, cache fallback | The manifest, the icon, RSC payloads for client-side navigation. |
 
 Verified in a real browser rather than reasoned about: after an offline reload of
@@ -3669,7 +3692,7 @@ the studio, the room panel renders **identically** to online — same clear-floo
 percentage, same verdict — with no console errors. Non-GET and `Range` requests
 are passed through untouched.
 
-Two limits, both deliberate. **The first visit must be online**: there is no
+The worker precaches only the two routes with fixed URLs, `/` and `/settings` (its cache names carry a version, rotated when a route moves); everything else is cached on first use. Two limits, both deliberate. **The first visit must be online**: there is no
 build-time precache manifest, because a hand-written file in `public/` cannot know
 Next's content-hashed chunk names, and generating one means writing into `public/`
 after a build that the target hosts have already snapshotted — it would work
