@@ -71,6 +71,39 @@ describe('a drag that carries company re-renders the room without rebuilding it'
     expect(ROOM).toMatch(/const scale = useMemo<\[number, number\]>\(\(\) => \[spanX, spanZ\], \[spanX, spanZ\]\)/);
   });
 
+  it('the hour does not re-bake the environment\'s brightness, only its colours', () => {
+    // The panels are baked at unit strength; the hour's `envMul` is a uniform on the
+    // scene, applied by drei on a bake and by `Daylight` between bakes.
+    const drei = read('node_modules', '@react-three', 'drei', 'core', 'Environment.js');
+    expect(drei).toMatch(/environmentIntensity: 1,/);
+    expect(drei).toMatch(/applyProps\(target, sceneProps\)/);
+    const env = element(ROOM, 'Environment', false);
+    expect(env).toMatch(/environmentIntensity=\{L\.envMul\}/);
+    expect(ROOM).toMatch(/scene\.environmentIntensity = L\.envMul;/);
+    expect(element(ROOM, 'Lightformer', true)).not.toMatch(/envMul/);
+    expect(ROOM).not.toMatch(/\* envL\.envMul/);
+  });
+
+  it('a new hour re-bakes into the same cube target, and a scrub re-bakes on a coarser step', () => {
+    // Keyed by quality alone: a key with the hour in it REMOUNTED the Environment per
+    // step, allocating a fresh cube target and a fresh PMREM each time.
+    expect(element(ROOM, 'Environment', false)).toMatch(/^<Environment key=\{quality\} /);
+    expect(ROOM).not.toMatch(/envStep/);
+    expect(ROOM).toMatch(/const envHour = lighting === 'overcast' \? 0 : scrubbing \? Math\.round\(hour \/ 2\) \* 2 : Math\.round\(hour \* 2\) \/ 2;/);
+    expect(ROOM).toMatch(/const scrubbing = useStudio\(\(s\) => s\.draggingId === SUN_DRAG_ID\);/);
+  });
+
+  it('crossing a horizon dims the key light rather than unmounting it', () => {
+    // Three keys every material's program on the number of directional lights, so a
+    // key light that comes and goes recompiles the room at every sunrise and sunset.
+    expect(ROOM).not.toMatch(/&&\s*<KeyLight/);
+    expect(ROOM).toMatch(/\n\s*<KeyLight intensity=\{key\.intensity\}/);
+    expect(ROOM).toMatch(/const key: KeyLightSpec = L\.key \?\? \{ \.\.\.lastKey\.current, intensity: 0 \};/);
+    // Dark, its shadow map is not refreshed; `castShadow` stays (also a program key).
+    expect(element(ROOM, 'directionalLight\n      ref={ref}', true)).toMatch(/shadow-autoUpdate=\{intensity > 0\}/);
+    expect(element(ROOM, 'directionalLight\n      ref={ref}', true)).toMatch(/castShadow=\{cast\}/);
+  });
+
   it('the wall holes are held by value, so a piece that is not a window leaves the walls alone', () => {
     // The shapes are keyed on `apertures`, and `apertures` on a string of what the holes
     // ARE — not on the Map `wallApertures` builds fresh from every new scene list.
