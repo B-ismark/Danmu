@@ -1850,7 +1850,7 @@ right looks like, so seeing it is no reason to delete this item.
   unless the word reads as an acronym (*TV*), and a detector's own wording is the
   untested half.
 
-### One piece on two walls, linked by hand on the review list — branch `ccr-02d40e8d-fzmw33`, PROBED at 1280
+### One piece on two walls, linked by hand on the review list — merged to `main` in `420576e` (PR #260), PROBED at 1280, NOT LOOKED AT
 
 The automatic guess above misses a bed it cannot match — a different word on each wall,
 or two readings too far apart — and the room came back with two beds. Now the review
