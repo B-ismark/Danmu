@@ -186,8 +186,20 @@ export function migrateRoom(rec: RoomData): RoomData {
  *  schema, and stamped current after. The room's two writers (`editRoom` and
  *  `savePending`) both write through this, so neither can stamp the version without
  *  migrating — the rename bug `migrateRoom`'s note describes, one writer over. */
-function rewritten(old: RoomData, edit: (room: RoomData) => RoomData): RoomData {
-  return { ...edit(migrateRoom(old)), version: ROOM_SCHEMA_VERSION };
+function rewritten(old: RoomData, edit: (room: RoomData) => RoomData, stamp = ROOM_SCHEMA_VERSION): RoomData {
+  return { ...edit(migrateRoom(old)), version: stamp };
+}
+
+/** The newest schema a write of the RECORD ALONE can complete. Everything up to 2 lives in
+ *  the record and `migrateRoom` does it; 3 also moves the room's overrides (a moved
+ *  pendant's height), which only `RoomSync` migrates, on open. So a rename from the rooms
+ *  list — `editRoom`, room never opened — must not stamp 3: it would tell the next open the
+ *  overrides were already done, and the old pendant's move would hang the new disc about
+ *  160 mm under the ceiling. */
+const RECORD_ONLY_SCHEMA = 2;
+function recordOnlyStamp(old: RoomData): number {
+  const was = old.version ?? 0;
+  return was >= ROOM_SCHEMA_VERSION ? was : Math.max(was, RECORD_ONLY_SCHEMA);
 }
 
 /** How a room is oriented, for the sun.
@@ -463,7 +475,7 @@ export const roomStore = {
     try {
       await update<RoomData>(k(roomId, 'meta'), (old) => {
         if (!old) throw NO_ROOM;
-        written = rewritten(old, edit);
+        written = rewritten(old, edit, recordOnlyStamp(old));
         return written;
       });
     } catch (e) {

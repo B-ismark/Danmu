@@ -198,10 +198,11 @@ size"), because the drawing it asked about no longer exists.
 - The plan draws a square, or a circle of a different size than the 3D disc.
 - The Library tile still says "Pendant lamp".
 
-**Known gap.** Renaming an old room from the rooms list *before* opening it stamps the new
-schema version. If that room was never edited (it has no saved scene) and its starter light
-had been moved, the move is then not lifted. The disc hangs about 160 mm low until it is
-nudged or the ceiling height is changed.
+**Closed: renaming first.** Renaming an old room from the rooms list *before* opening it used
+to stamp the new schema version, so the open that followed skipped lifting a moved light and
+the disc hung about 160 mm low. A rename writes only the record now, so it stamps at most
+version 2 (`RECORD_ONLY_SCHEMA` in `lib/storage.ts`) and leaves the lift to the open. To check
+it: rename such a room from the rooms list, then open it. The light should sit flush.
 
 **Gates.** `tests/retired-shapes.test.ts` covers the migration. `tests/ceiling-fixtures.test.ts`
 and `tests/parametric-caps.test.ts` cover the geometry. No test renders geometry, so the look

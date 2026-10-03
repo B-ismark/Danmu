@@ -659,7 +659,9 @@ question whose answer nothing read. `migrateRoom` marks every row of a pre-2 rec
 kept, which is exactly what those rooms rendered, and runs in `loadRoom` and in
 `renameRoom` (a rename rewrites the record at the current version, so an unmigrated
 rename would silently empty a legacy room). (Version 3 retires a shape — the pendant
-became the flush ceiling light; see § Adding a shape, *Retiring a shape*.) Three details are
+became the flush ceiling light; see § Adding a shape, *Retiring a shape*. A write of the
+record alone — a rename from the rooms list — stamps at most 2, because 3 also moves the
+room's overrides and only opening the room does that.) Three details are
 load-bearing and each has a test:
 
 - the per-category counter advances **before** the skip, so a legacy ordinal id
