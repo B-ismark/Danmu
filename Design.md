@@ -280,11 +280,16 @@ good", warn for a flag or a clash, "Checking this photo…" while unscored, all 
 `flagTone` / `flagLabel` / `flagHelp`), then the **Wall** dropdown (`Select`; a wall that
 already holds a photo reads "Wall 3 (swap)" because `movePhoto` swaps) beside the rung that
 placed it in quiet text — `REASON`: "Placed by compass", "Placed by shutter time", "Placed
-by order added", "Placed by you". Pointing at or focusing a wall's name — the badge, the
-Wall control, or an option highlighted in its open list (`Select`'s optional
-`onActiveChange`) — sets `data-shimmer` on that wall's `<g>` in the plan beside the how-to,
-where a CSS pulse and marching highlight run for `calc(var(--dur-slow) * 4)` a loop (still
-and lit under reduced motion). The filmstrip under the live camera is photo + Remove only.
+by order added", "Placed by you". Pointing at or focusing anywhere on a card sets `data-wall-state="hover"` on its wall's `<g>` in
+the plan beside the how-to: a moss CSS pulse and marching highlight, `calc(var(--dur-slow) * 4)` a loop
+(still and lit under reduced motion). With the card's Wall list open (`Select`'s optional
+`onActiveChange`) the picture is two states, not one: the card's own wall is `current` (steady, thick moss) and
+the option highlighted is `preview` (the same shimmer in amber, a dashed arrow between the two numbers,
+and "Current" beside the card's own option in the list); highlighting the card's own wall previews
+nothing. The reverse link: a wall's edge on the plan (given an invisible `.capture-plan__hit` stroke to
+hover) sets `data-plan-hover` on that wall's card, which lifts and takes an accent ring; a wall with no
+photo does nothing. With no photos the Add tile centres in the space beside the guide
+(`.capture-photos--empty`). The filmstrip under the live camera is photo + Remove only.
 `tests/capture-card.test.tsx` mounts the page to hold it.
 
 That works because the slot ids are a **cyclic order, not compass directions**.
