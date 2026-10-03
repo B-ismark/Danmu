@@ -570,6 +570,8 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/room-openings.ts` | **Where a room is entered, and where its light comes from.** Two rules over the footprint's own edges, and no per-preset constants: the door goes on the shortest **outer** wall that can hold one, set against a corner so the wall keeps one long usable run; the window faces the door, and a room over 18 m² gets a second on the *shorter* side wall, because the longest wall is the room's best furniture wall and glazing it costs the room its focal wall. Until this existed no preset had either, and the consequences were not cosmetic: `roomProfile.apertures` was empty, so `navigabilityCost` returned 0 by its own no-door guard and the solver's reachability pass was inert on every new room; `entranceComponents` returned null, so the report's `reach`, `cut-off`, `door` and `entry` rules never fired; the `desk ← window` relation was unreachable; and — the reason anyone noticed — **with no door, no wall had a reason to be the back wall**, so the seeder chose by arithmetic and the result read as arbitrary. |
 | `lib/room-bays.ts` | **Where in the room there is actually room.** The footprint's maximal axis-aligned rectangles of real floor, largest first, plus each bay's sides (which of them are real walls, how deep the bay runs from each) and `splitBay` for putting two groups in one rectangle. Exact for rectilinear rooms — the candidate grid is the polygon's own vertex coordinates — and conservative for anything with a diagonal wall, since a candidate is only returned once it has been proved inside. This exists because arranging furniture against the polygon's *bounding box* furnished the quadrant an L / T / U cuts away: the starter scene put five of the L-shape's nine pieces outside the house. |
 | `lib/layout-settle.ts` | The guarantee both scene paths end on: nothing outside the room, nothing inside anything else. Containment pushes a piece in by its own half-extent along the wall it overhangs (clamping the *centre* leaves a 2.2 m sofa half in the garden), then clashing pairs are separated smaller-piece-first using the room report's own clash bar, `tucksUnder` and rug exemptions. Cheap and deterministic on purpose — it runs on every room open, where the annealer has no business. It never resizes, never moves a wall-mounted piece, and when a room is genuinely too full it leaves the piece where it was for `clearance.ts` to report. |
+| `lib/scene-spec.ts` — `approximateDims` | **What size a scanned piece is built at.** The shape's Library size, with the photo's width estimate allowed to nudge the width only (±25%, `APPROX_WIDTH_BAND`, or the shape's legal range if tighter); depth and height are the catalogue's, and a window, door or curtain is never narrower than its default. A generic box alone keeps its hint, clamped. The single place `buildSceneFromRoom` sizes a detection — see step 4 below and `CLAUDE.md` rule 2. |
+| `lib/sighting-links.ts` | **One piece seen on two walls.** A link is the later row's `sameAs` (a uid, never an index); `handOver` gives a removed piece to its next sighting; `withSeenAt` writes `combinedFloorSpot` — the placement combined from the linked floor sightings — as `seenAt` beside `position`. Placement only, never a size. Described under *A second sighting starts unticked* below. |
 
 ### The detection pipeline, in order
 
@@ -579,7 +581,8 @@ decision it makes.
 
 1. **Measure** — `geoRefine` runs the geometry engine over every detection and every
    manual box, replacing the AI's guessed position and size with values computed
-   from the calibrated camera. What comes back measured depends on the piece's own
+   from the calibrated camera. (The *size* is a reading for placement, the judge and
+   the merge below; the piece is no longer built at it — see step 4.) What comes back measured depends on the piece's own
    anchor: a floor or wall piece gets position, W and H; a **ceiling** piece gets
    **width only** (a fan seen from below projects as a disc, so its bbox holds a
    foreshortened diameter and no thickness); an uncalibrated slot gets nothing at
@@ -628,13 +631,22 @@ decision it makes.
    a reason: a duplicate the user unticks in one tap beats a real piece that never
    appears. Two rows of one photo it keeps apart stay two ticked rows, since that pass
    never compares them.
-4. **Build** — `buildSceneFromRoom` clamps, snaps and settles. It reads only the two
+4. **Build** — `buildSceneFromRoom` clamps, snaps and settles. **A scanned piece is built
+   at an APPROXIMATE size** (rule 2's decision of 2026-10-03): `approximateDims`
+   (`lib/scene-spec.ts`) starts from the shape's Library size, lets the photo's width
+   estimate nudge the WIDTH only (`APPROX_WIDTH_BAND`, ±25% of that, or the shape's legal
+   range if tighter), and takes depth and height from the catalogue; a window, door or
+   curtain is never narrower than its default. A generic box has no standard, so it alone
+   keeps its hint, clamped. Scanned pieces take their model's default colour — photo
+   colour reuse (`color-sample`, `color-reduce`, `Detection.color`) was deleted — and a
+   colour the user chose in the studio still wins. The measured placement above is what
+   survives: position, wall and yaw. It reads only the two
    axes a photograph can locate: `groundY` owns Y outright, and the placement gate
    used to test Y as well, so a fan the model put 3.2 m up in a 2.8 m room lost its
    perfectly good floor position too.
 
-The AI's remaining contribution is a label, a category, a shape and a depth hint —
-and the label is no longer taken on trust either.
+The AI's remaining contribution is a label, a category, a shape and, at most, a width
+nudge — and the label is no longer taken on trust either.
 
 **Whose answer is this, and is it worth ticking?** `lib/detect-confidence.ts`.
 `Detection.conf` carries three unrelated scales — a class score off the ONNX head, a
@@ -683,7 +695,7 @@ five beds, all ticked. `lib/repeat-sightings.ts` is the **soft** half of the sam
 decision and deletes nothing. It asks what a person looking at the list asks —
 *could these two rows be standing in the same spot?* — and answers with the index of
 the row a sighting probably repeats. The review leaves that row unticked and asks
-*Same bed as on Wall 1?* — **Yes** links it (below), **No** ticks it back — one tap, which is
+*Same bed as on Wall 1?* — **Yes, same one** links it (below), **No, it’s another** ticks it back — one tap, which is
 the asymmetry the merge argues for: a real piece that never appears is worse than a
 duplicate, so the duplicate is paid for once on the list rather than in the studio.
 The rule is two facts about rooms, not about detectors:
@@ -824,8 +836,8 @@ on a cut axis both ways — grown to a typical size, it would pass every word th
 judging the catalogue — and reports the axes it skipped as `cut`. It judges one on its HIGH
 side alone (§ 49.5): the typical size a cut axis grows to is inside the band, so a reading
 past a word's top can only be the part the photo saw, and a piece is at least that big. That
-reading accuses the word and is printed as one — *at least 1.96 m wide* — and it is the
-verdict's `atLeast`. Not a ceiling piece's width, below, and not on a piece its placer
+reading accuses the word and is the verdict's `atLeast`. The scan screen no longer
+prints it as a size (see below). Not a ceiling piece's width, below, and not on a piece its placer
 read at a distance the photo did not show — a floor piece cut at its foot, asked of the
 placer's own `ReadBounds` rather than of the box — whose whole axes are judged both ways at
 that reading (D8) and whose cut ones not at all, since what the photo saw from an assumed
@@ -838,13 +850,14 @@ TOP, the usual one, is now read from the three edges the photo saw instead and c
 (§ 49.13), but it falls back on the centre row wherever no disc draws the box, and the verdict
 cannot tell which it got, so it is still not judged; a row cut on every axis it
 could judge is `unmeasured`, so it starts unticked. A rename still offers the word the person
-typed when the photo measured nothing of it — flagged `unmeasured`, ranked last, and titled
-*its size is an estimate* — because refusing it would hide the one word they asked for, while
-the judge's own strict repairs never reach it. And the scan screen says so on the row:
-*Runs past the edge of the photo, so its width is an estimate.* An estimate the person can
-see is an estimate. Not "a typical one", which it said first and which was true of one case
-in three: a piece whose visible part is already bigger than typical keeps what was seen, and
-one stopped by the wall's end is neither. A piece cut only at its FOOT was seen whole across
+typed when the photo measured nothing of it — flagged `unmeasured`, ranked last — because refusing it would hide the one word they asked for, while
+the judge's own strict repairs never reach it. The scan screen used to say so on the row, with *Runs past the edge of the photo, so its
+width is an estimate* and a *Measured about 1.27 × 0.27 m* sentence. Both are gone: a
+scanned piece is built at an approximate catalogue size (`approximateDims`, rule 2's
+decision of 2026-10-03), so the screen says "typical size" and prints no measurement to
+qualify. A row the judge doubts starts unticked with *Left out: its outline does not look
+like a …. Tick it if it is one* and no size in it. The cut and bounded reasoning below still
+decides the placement and the verdict. A piece cut only at its FOOT was seen whole across
 and to its top, but its distance is the wall's rather than its own: it is read at the far end
 of where it could stand, its back on the plaster at its kind's typical depth. **It is judged at
 that reading, and that is the user's call (D8, § 49.10).** Its back on the wall is the
@@ -859,18 +872,14 @@ for 12 of 28 flagged, because a round piece's far end is its own diameter off th
 standing fan's typical size sits on its band's edges. The placer still says which way each
 axis could be wrong (`GeoPlacement.bounds`, `lib/photo-geometry.ts`, which `geoMeasure`
 carries out beside the row), and the verdict names the axes it read at an assumed distance
-(`bounded`). **And the row says so**, because an estimate printed as a measurement is an
-estimate passed off as a size: the sentence reads *Measured about 1.27 × 0.27 m*, and the row
-gets the *Runs past the edge of the photo, so its … is an estimate* note a side cut gets,
-naming its size where a side cut names its width. To the person they are one fact, that this
-number is not the camera's measurement of the piece. A round piece read with the lens tipped
+(`bounded`). A round piece read with the lens tipped
 DOWN claims no limit at all. Its solve read each side on the box's top row, and its residual
 crossed the bound, by 35 mm at 20°; a limit the truth falls outside is worse than none. Each
 side is read at the end where its column is extreme in the photo now, and not one row of that
 fixture crosses, but the exception stays until a measurement of its own retires it (§ 49.9).
-So it is judged like the rest, and says it was read at an assumed distance
-(`AT_ASSUMED_DISTANCE`), so its row has the "about" and the note too. It went without them for
-a commit, handed the bounds of a piece seen whole.
+So it is judged like the rest, and its verdict names the axis it read at an assumed distance
+(`bounded`, from `AT_ASSUMED_DISTANCE`). It went without that for a commit, handed the
+bounds of a piece seen whole.
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,
@@ -1167,7 +1176,9 @@ shape)` — code-owned, narrowed to the shape's own range. `depthM` moves the de
 rule 2 exists to prevent. `geoRefine` writes the same number into `dimMM[1]`, so a floor
 piece is DRAWN with the depth it was placed by and its near face lands where the photograph
 put it; a hint kept for the render beside a default used for the maths would leave the two
-disagreeing by half their difference, on the one axis the photo did measure.
+disagreeing by half their difference, on the one axis the photo did measure. (A scanned
+piece's depth is the catalogue's at build time too, via `approximateDims`, so the two stay
+the same number.)
 
 ### …and so is a wall piece, which was the same fix one anchor over
 
@@ -1312,12 +1323,12 @@ a verdict rather than accusing. (For the print that verdict had been `ok`: `pain
 is 150–2400 × 150–1800, so a fabricated 893 × 803 fits it comfortably and was given a false
 clean bill. The row that was genuinely accused is the vent, at 386 mm against `fan`'s floor.)
 
-**What size it arrives at is NOT the catalogue's on the path that spends the user's quota**,
-and this section claimed otherwise. `buildSceneFromRoom` prefers the detector's own `dimMM`
-through `clampDims` and falls back to `cfg.dim` only when there is no hint at all — and the
-cloud prompt asks for `dimMM`. So a refused *cloud* detection is drawn at the AI's clamped
-guess; only an on-device one, which sends no size, reaches the catalogue. Whether a refusal
-should also discard that hint is a trust-boundary decision, filed in § 42.3, not taken here.
+**What size it arrives at** is the catalogue's, give or take a width nudge, on every path now.
+This section used to say a refused *cloud* detection was drawn at the AI's clamped `dimMM`
+(`buildSceneFromRoom` preferred the hint and reached `cfg.dim` only with no hint at all).
+That is gone: `approximateDims` takes depth and height from the catalogue and lets the hint
+move the width only, within ±25%, so a refusal no longer leaves a guessed size standing.
+The one exception is a generic box, which keeps its clamped hint.
 
 It tests the CENTRE, not the extent: the wholly-off-the-wall variant accepts a 1400 mm
 curtain on the return wall as **1815 × 942**.
