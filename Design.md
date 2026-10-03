@@ -1594,7 +1594,9 @@ tiny — and a measurement the user cannot trust is worse than an honest typical
   `lib/color-reduce.ts`, the detect screen's fill, `Detection.color`, the cloud prompt's
   `color` field and `sameButColor`/`acceptCandidate` (which existed only to carry it). A
   scanned piece takes `defaultBodyColor(category, shape)` like one added from the Library.
-  A saved detection or scene file that still carries a `color` is read and ignored. A
+  The 3D scene does not pass `ScenePart.locked` to the geometry (`Room.tsx`), so the "from
+  photo" aubergine tint no longer repaints every scanned piece one colour; the badge and plan
+  outline still mark where a piece came from. A saved detection or scene file that still carries a `color` is read and ignored. A
   colour the user sets in the studio lives on the part / override map and wins.
 - **Screen** — the detect screen says "typical size" and no longer shows the "Measured X.
   Category range is Y" accusation, the "runs past the edge" size note or `measuredPhrase`

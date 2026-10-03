@@ -278,7 +278,12 @@ export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
         <WallHandles />
         {parts.map((part) => (
           <Draggable key={part.id} partId={part.id}>
-            <PartGeometry part={part} locked={part.locked} />
+            {/* `locked` is "came out of your photo" (ScenePart.locked), and it is NOT
+                handed to the geometry: a scanned piece takes its model's own
+                colour (`defaultBodyColor`), exactly like a preset room's. Passing
+                it painted every scanned piece the one "from photo" aubergine tint.
+                The From-photo badge and plan outline still say where it came from. */}
+            <PartGeometry part={part} locked={false} />
           </Draggable>
         ))}
         {dressed && parts.map((part) => <Dressing key={`dress-${part.id}`} part={part} />)}
