@@ -70,8 +70,9 @@ describe('an open room whose migration write was lost', () => {
   // The stamp says the overrides are up to date IN STORAGE. If the open's own write is
   // lost, the next save carries it again — overrides and stamp together — whatever kind
   // of save it is; a room-only one must not stamp without them.
-  async function openWithLostWrite() {
+  async function openWithLostWrite(scene?: unknown[]) {
     await set('room:old-room:meta', OLD);
+    if (scene) await set('room:old-room:scene', scene);
     const real = roomStore.savePending.bind(roomStore);
     const spy = vi.spyOn(roomStore, 'savePending').mockRejectedValueOnce(new Error('quota'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -104,5 +105,26 @@ describe('an open room whose migration write was lost', () => {
     useStudio.setState((s) => ({ positions: { ...s.positions, x: [2, 0, 1] } }) as never);
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(3), { timeout: 2000 });
     expect(spy.mock.calls[2][1].room).toBeUndefined();
+  });
+
+  it('carries the migrated scene when the lost write carried one, and only then', async () => {
+    const pendant = {
+      id: 'lamp-1', category: 'lamp', name: 'Pendant lamp', shape: 'lamp-pendant',
+      pos: [0.4, 2.0, -0.6], rot: 0, dimMM: [350, 350, 400], locked: false, wallMounted: true,
+    };
+    const spy = await openWithLostWrite([pendant]);
+    useScene.getState().setSite({ bearingDeg: 90 } as never);
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    await spy.mock.results[1].value;
+    const stored = await get<{ shape: string }[]>('room:old-room:scene');
+    expect(stored?.map((p) => p.shape)).toEqual(['lamp-ceiling']);
+    expect((await meta())?.version).toBe(ROOM_SCHEMA_VERSION);
+  });
+
+  it('writes no scene for a room that had none', async () => {
+    const spy = await openWithLostWrite();
+    useScene.getState().setSite({ bearingDeg: 90 } as never);
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    expect(spy.mock.calls[1][1].parts).toBeUndefined();
   });
 });

@@ -78,9 +78,12 @@ export function RoomSync() {
    *  timer. */
   const reshapedSince = useRef(false);
   /** The open's schema-3 write was lost, so the next save carries it again: the migrated
-   *  overrides with the stamp, in one write. Until one lands the record stays below 3 and
-   *  the next open migrates again — never a stamp over overrides that were not stored. */
-  const stampOwed = useRef(false);
+   *  overrides with the stamp, in one write — and the migrated scene too when the lost
+   *  write carried one (`parts`), or the next open finds the pendant in the saved scene
+   *  and lifts overrides that were already lifted. Only then: writing a scene for a room
+   *  that had none would stop *Re-scan* rebuilding it. Until one lands the record stays
+   *  below 3 and the next open migrates again — never a stamp over a half-stored room. */
+  const stampOwed = useRef<false | { parts: boolean }>(false);
 
   /** Whatever the three saves below still have waiting, written as ONE transaction
    *  (`roomStore.savePending`), whichever of them comes due first — its timer, the room
@@ -187,9 +190,11 @@ export function RoomSync() {
       }
     }
     if (!w.transforms && w.parts === undefined && !w.room) return;
-    const carriesStamp = stampOwed.current;
-    if (carriesStamp) {
+    const owed = stampOwed.current;
+    const carriesStamp = owed !== false;
+    if (owed) {
       w.transforms ??= transformsOf(useStudio.getState());
+      if (owed.parts) w.parts ??= useScene.getState().parts;
       w.room = { ...(w.room ?? { edit: (r: RoomData) => r }), migrated: true };
     }
     // The whole save, as data, so a reload that ends it before its read comes back can be
@@ -334,15 +339,16 @@ export function RoomSync() {
       // not reorder the rooms list.
       if (room && (room.version ?? 0) < ROOM_SCHEMA_VERSION) {
         const moved = migrated !== stored;
+        const sceneMoved = !!savedScene && retired.length > 0;
         roomStore
           .savePending(roomId, {
             transforms: moved ? migrated : undefined,
-            parts: savedScene && retired.length > 0 ? useScene.getState().parts : undefined,
+            parts: sceneMoved ? useScene.getState().parts : undefined,
             room: { edit: (r) => r, migrated: true },
-            untouched: moved || (savedScene && retired.length > 0) ? undefined : true,
+            untouched: moved || sceneMoved ? undefined : true,
           })
           .catch((err) => {
-            if (live) stampOwed.current = true;
+            if (live) stampOwed.current = { parts: sceneMoved };
             console.error('[room] could not save the migrated ceiling light', err);
           });
       }
