@@ -2881,3 +2881,77 @@ opening. Overcast, once chosen, should still be overcast after a reload.
 in two time zones; a flash on first paint is not something a test sees.
 
 **Merged:** `0580af5` (B-ismark/Danmu#250), not yet looked at.
+
+## The day strip: one sky, a sun that turns into the moon, and a tune at the horizon
+
+**Where:** the 3D studio. Point at the time pill over the room; drag it from the afternoon
+past 19:30 into the night, then back past 06:00. Sound on.
+
+**What wrong looks like:** the pill and the time on two lines; a sky band whose gold does
+not sit under the moment the glyph turns; a sun that swaps to a moon in one frame rather
+than its rays folding in and the bite sliding across; the night pill not turning ink. The
+falling four-note phrase should play once on the way into night and the rising one once on
+the way out — not a chime, not a phrase per frame.
+
+**Why eyes:** the drag, the glyph state and the cue are tested in jsdom; whether the morph
+reads as one object turning, and whether the phrase sounds nice, are judgements, and
+headless Chromium cannot hear it.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Delete and Add as two equal halves, Add the loud one
+
+**Where:** the 3D studio with a piece selected; then the rail at its narrowest (1024 px).
+
+**What wrong looks like:** either button narrower than its half; a gap between them that is
+not the 8 px the row sets; Add not reading as the stronger of the two; a label truncating at
+1280 px. A wall selected should give *Done* and Add the same two halves.
+
+**Why eyes:** both widths were measured in Chromium (139 px each in a 286 px row); weight is
+a judgement.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Corner, Front, Top
+
+**Where:** the view pill at the bottom right of the 3D canvas; then a phone, then orbit the
+room by hand.
+
+**What wrong looks like:** words cut off on a laptop; words instead of the three icons on a
+phone; a pressed button still showing after you orbit by hand; the pressed state clearing
+on a plain click on the floor.
+
+**Why eyes:** the pressed state is tested; whether "free" after an orbit feels right on a
+trackpad is not.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## "These are typical sizes" as a bubble beside the room size
+
+**Where:** start a new room from a shape without measuring. The bubble should point at the
+Room section's width/depth/height. Collapse the rail, scroll it, resize the window; then a
+phone.
+
+**What wrong looks like:** the arrow not on the fields; the bubble left floating where the
+fields were after a collapse or scroll; on a phone, covering the app bar (it should sit just
+under it); the ✕ hard to find; the bubble coming back on the same room after ✕.
+
+**Why eyes:** placement is measured, and walked at 1366 and 390 px; how it tracks a rail in
+motion is not.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Photo cards that wear their wall, and a plan wall that shimmers
+
+**Where:** *Photograph my room*; upload three photos. Open a card's Wall list and point at
+each option; pick one that is taken.
+
+**What wrong looks like:** the badge not reading as part of the photo; the plan wall not
+shimmering for the option under the pointer (or still shimmering after the list closes); a
+swap that leaves the "Placed by" line saying anything other than *you*; the old *Back one /
+On one* pair still under the photos.
+
+**Why eyes:** the move, the swap and the shimmer flag are tested; whether the shimmer is
+visible enough to connect the name to the wall is a judgement.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

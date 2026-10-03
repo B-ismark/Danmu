@@ -78,6 +78,13 @@ describe('a filled photo card', () => {
     expect(within(card).queryByText('Remove')).toBeNull();
   });
 
+  it('leaves the set-wide turn-round pair out: each card moves its own photo', async () => {
+    await mounted();
+    expect(screen.queryByRole('button', { name: /Back one/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /On one/ })).toBeNull();
+    expect(screen.getByText(/pick the right (one|wall) under it/i)).toBeTruthy();
+  });
+
   it('has the two icon buttons, named for their wall', async () => {
     await mounted();
     expect(screen.getByRole('button', { name: 'Replace the photo for Wall 1' })).toBeTruthy();

@@ -23,8 +23,6 @@ import {
   emptySlotMap,
   patchIfSame,
   placePhotos,
-  rotateSet,
-  rotationMapping,
   swapMapping,
   swapSet,
   type PlacedPhoto,
@@ -51,7 +49,7 @@ type Source = 'upload' | 'camera';
 /** One photo, everything this screen knows about it.
  *
  *  Was four parallel `Record<CaptureSlot, T | null>` maps, which is fine until
- *  the walls can be permuted: rotating the set then means permuting four maps in
+ *  the walls can be permuted: moving a photo then means permuting four maps in
  *  step, and the quality read is the one that got left behind last time and ended
  *  up describing a different image. One record moves as one thing. */
 type Photo = {
@@ -232,7 +230,7 @@ export default function CapturePage() {
         });
       for (const c of caps) {
         // `patchIfSame`, not a write by slot: scoring is async and the user can
-        // rotate the set while it is still running.
+        // move a photo to another wall while it is still running.
         scoreQuality(c.blob).then((q) => setPhotos((prev) => patchIfSame(prev, c.slot, c.blob, { quality: q })));
       }
     })();
@@ -277,7 +275,7 @@ export default function CapturePage() {
     if (retiring) URL.revokeObjectURL(retiring);
     // Keyed on the blob, not the wall. A score started for this photo must not
     // land on whichever photo occupies this wall by the time it resolves — which
-    // is exactly what a rotation mid-scoring used to make happen.
+    // is exactly what moving photos mid-scoring used to make happen.
     scoreQuality(blob).then((q) => setPhotos((prev) => patchIfSame(prev, slot, blob, { quality: q })));
   }
 
@@ -398,22 +396,6 @@ export default function CapturePage() {
     );
   }
 
-  /** Turn every label one wall round. The set stays four consecutive walls in
-   *  order; only where it starts changes — and because the anchor is derived from
-   *  where the photos now sit, the next photo to arrive follows the correction
-   *  without anything having to remember it. */
-  async function rotateAll(steps: number) {
-    if (!roomId) return;
-    try {
-      await roomStore.reslotCaptures(roomId, rotationMapping(steps));
-    } catch {
-      setAnnounce(writeFailed(`Turning the walls ${steps > 0 ? 'forwards' : 'back'}`));
-      return;
-    }
-    setPhotos((p) => rotateSet(p, steps));
-    setAnnounce(`Walls turned ${steps > 0 ? 'forwards' : 'back'} one.`);
-  }
-
   const filledSlots = SLOT_ORDER.filter((s) => photos[s]);
   const filled = filledSlots.length;
   const anyCaptured = filled > 0;
@@ -448,7 +430,7 @@ export default function CapturePage() {
     return out;
   }, [room]);
   /** Only worth showing when the walls are actually different lengths; in a square
-   *  room every rotation measures the same and the number would be noise. */
+   *  room every wall measures the same and the number would be noise. */
   const spanLabel = (slot: CaptureSlot) => {
     const span = wallSpans?.[slot];
     if (span == null || !wallSpans) return null;
@@ -721,7 +703,7 @@ export default function CapturePage() {
                     {gallery(false)}
                   </div>
                   {anyCaptured && (
-                    <WallControls square={!!room && room.width === room.depth} onRotate={rotateAll} />
+                    <WallHint square={!!room && room.width === room.depth} />
                   )}
                 </div>
                 {guide}
@@ -862,46 +844,16 @@ function WallPlan({
   );
 }
 
-/** Turn the whole set of labels round by one wall.
- *
- *  This is the control the no-bearing case needs, and the one a bad magnetometer
- *  reading needs too. A set can only ever be wrong by a whole number of
- *  quarter-turns — the photos are four consecutive walls whatever else is true —
- *  so one control fixes every case of it at once. */
-function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps: number) => void }) {
+/** The line under the photos: what to check, now that each card carries its own
+ *  wall picker. A whole-set "turn it round" pair used to sit here; one move per
+ *  photo covers the same mistake with the control already in front of the user. */
+function WallHint({ square }: { square: boolean }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        flexWrap: 'wrap',
-      }}
-    >
-      <span className="t-small" style={{ minWidth: 0 }}>
-        {square
-          ? 'Wrong wall on a photo? Move it, or turn the whole set round.'
-          : 'Check each photo against the wall length beside it. If the whole set is one wall out, turn it round.'}
-      </span>
-      <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-        <button
-          className="ds-btn ds-btn--sm"
-          onClick={() => onRotate(-1)}
-          title="Every photo moves back one wall"
-        >
-          <Icon name="rotate-ccw" size={12} />
-          Back one
-        </button>
-        <button
-          className="ds-btn ds-btn--sm"
-          onClick={() => onRotate(1)}
-          title="Every photo moves on one wall"
-        >
-          <Icon name="rotate-cw" size={12} />
-          On one
-        </button>
-      </div>
-    </div>
+    <p className="t-small" style={{ margin: 0, minWidth: 0 }}>
+      {square
+        ? 'Wrong wall on a photo? Pick the right one under it.'
+        : 'Check each photo against the wall length on it, and pick the right wall under it if it is out.'}
+    </p>
   );
 }
 

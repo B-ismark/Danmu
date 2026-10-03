@@ -1167,6 +1167,11 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 /* One button alone in the row (Add hidden on a phone) fills it rather than
    sitting in half a row beside an empty cell. */
 .rail-footer__row > :only-child { grid-column: 1 / -1; }
+/* A cell holds its button through a Tooltip's inline-flex wrapper, which hugs the
+   label — so the cell is a flex row and whatever it holds stretches to fill it, or
+   the `width: 100%` below fills the wrapper and stops a label's width short. */
+.rail-footer__row > * { display: flex; }
+.rail-footer__row > * > * { flex: 1 1 auto; min-width: 0; }
 /* Every rail action fills the cell it is given and stands the same height, so the
    footer and the empty panel read as one tidy stack. Add is the loud one. */
 .rail-footer .ds-btn { width: 100%; max-width: 100%; height: 44px; justify-content: center; }
@@ -2312,7 +2317,9 @@ textarea.field { border-radius: var(--r-2); }
   animation: rough-callout-in var(--dur-slow) var(--ease-out) both;
 }
 .rough-callout--phone {
-  left: 16px; right: 16px; top: 12px; width: auto; transform: none;
+  /* Below the 56px app bar, where `.help-pop` sits too: the room name and the tabs
+     stay pressable while it shows. */
+  left: 16px; right: 16px; top: 64px; width: auto; transform: none;
   animation-name: rough-callout-in-top;
 }
 .rough-callout__arrow {

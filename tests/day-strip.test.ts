@@ -61,6 +61,9 @@ describe('scrubbing the strip', () => {
     expect(scrubHour(1)).toBeCloseTo(24 - 1 / 12, 9);
     expect(scrubHour(1.4)).toBeCloseTo(24 - 1 / 12, 9);
     expect(scrubHour(-0.4)).toBe(0);
+    // Nearest step, not the one below: 12:04 lands on 12:05, 12:02 on 12:00.
+    expect(scrubHour((12 + 4 / 60) / 24)).toBeCloseTo(12 + 5 / 60, 9);
+    expect(scrubHour((12 + 2 / 60) / 24)).toBeCloseTo(12, 9);
   });
 
   it('crosses the horizon where the paint says it does', () => {

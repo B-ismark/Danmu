@@ -583,6 +583,11 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     expect(wrappers, 'every labelled button in the row needs a shrinkable wrapper').toHaveLength(3);
     expect(CODE, 'footer buttons hug their labels; nothing grows').not.toMatch(/flex: 1\b/);
     expect(rule('.rail-footer .ds-btn')).toContain('max-width: 100%');
+    // The button reaches its cell through a Tooltip's inline-flex wrapper, which
+    // hugs the label: without the cell stretching what it holds, `width: 100%` fills
+    // the wrapper and Delete stood 81px wide in a 139px half (walked in a browser).
+    expect(rule('.rail-footer__row > *')).toContain('display: flex');
+    expect(rule('.rail-footer__row > * > *')).toContain('flex: 1 1 auto');
 
     // And the label needs its OWN element or the ellipsis has nowhere to happen: a
     // bare text node beside an icon is an anonymous flex item, which is what
