@@ -55,7 +55,7 @@ describe('a wall pushes what it meets', () => {
   it('only meets what shares its height', () => {
     // A pendant hung over the path, well above a low table: the table goes under it.
     const low = part({ id: 'low', pos: [0, 0, -2], dimMM: [800, 600, 400] });
-    const pendant = part({ id: 'pendant', category: 'lamp', shape: 'lamp-pendant', pos: [0, 2.0, -1.2], dimMM: [300, 300, 300] });
+    const pendant = part({ id: 'pendant', category: 'lamp', shape: 'lamp-ceiling', pos: [0, 2.0, -1.2], dimMM: [300, 300, 300] });
     // The table's near face 0.7 m in, the pendant's 1.65: at 1.2 only the table is met.
     const r = pushedByWall([low, pendant], ROOM, NORTH, 1.2, [], {});
     expect(z(r.moves, 'low')).toBeCloseTo(-1.5, 9);

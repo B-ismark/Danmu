@@ -3,7 +3,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useDimUnit, useSettings, useRoom } from '@/lib/store';
+import { useAppearance, useDimUnit, useSettings, useRoom } from '@/lib/store';
+import { APPEARANCE_OPTIONS } from '@/lib/appearance';
 import { roomStore } from '@/lib/storage';
 import { validateKey, type KeyFailure, type KeyResult } from '@/lib/validate-key';
 import { UNIT_OPTIONS, formatLength } from '@/lib/units';
@@ -62,6 +63,8 @@ export default function SettingsPage() {
   // The unit the server printed until hydration, so the example below is not a
   // hydration mismatch for anyone who chose feet.
   const dimUnit = useDimUnit();
+  // Same reason as the unit: the page is prerendered as System.
+  const appearance = useAppearance();
   const roomId = useRoom((r) => r.roomId);
   const setRoomId = useRoom((r) => r.setRoomId);
   const confirm = useConfirm();
@@ -254,7 +257,7 @@ export default function SettingsPage() {
           />
         </div>
         <SettingsIndex />
-        {/* Three cards in the same dress as the room cards, each with its own tile —
+        {/* The cards, in the same dress as the room cards, each with its own tile —
             the page used to be three loose headings over hairline rows, which read
             as a form left unstyled beside every other screen's cards. */}
         <div className="settings__cards">
@@ -433,6 +436,28 @@ export default function SettingsPage() {
             </Row>
           </Section>
 
+          <Section
+            icon="moon"
+            tint="var(--paper-3)"
+            color="var(--ink-2)"
+            id="appearance"
+            title="Appearance"
+          >
+            {/* The whole choice. System is the default and follows the device, which is
+                what most people want and the only answer that changes at sunset by
+                itself. The 3D room keeps its own colours and light either way — it is
+                the room, not the app's paper — and the View menu in the studio carries
+                the same switch. */}
+            <Row label="Night mode" hint="System follows your device. The room itself keeps its own colours and light.">
+              <Segmented
+                ariaLabel="Night mode"
+                value={appearance}
+                onChange={(a) => s.setAppearance(a)}
+                options={[...APPEARANCE_OPTIONS]}
+              />
+            </Row>
+          </Section>
+
           <DownloadsSection />
 
           <Section
@@ -510,6 +535,7 @@ const CEILING_MM = 2800;
 const SETTINGS_SECTIONS = [
   { id: 'detection', label: 'Furniture detection' },
   { id: 'units', label: 'Units' },
+  { id: 'appearance', label: 'Appearance' },
   { id: 'downloads', label: 'Downloads' },
   { id: 'rooms', label: 'Your rooms' },
 ] as const;

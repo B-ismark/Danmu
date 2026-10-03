@@ -65,7 +65,8 @@
 // width this app runs at.
 
 import { type ReactNode } from 'react';
-import { useSettings, useStudio } from '@/lib/store';
+import { useAppearance, useSettings, useStudio } from '@/lib/store';
+import { APPEARANCE_OPTIONS } from '@/lib/appearance';
 import { playSound } from '@/lib/sound';
 import { Segmented, Toggle } from '@/components/ui/primitives';
 
@@ -79,6 +80,8 @@ export function ViewOptions() {
 
   const sound = useSettings((s) => s.sound);
   const setSound = useSettings((s) => s.setSound);
+  const appearance = useAppearance();
+  const setAppearance = useSettings((s) => s.setAppearance);
   const hi = quality === 'high';
 
   return (
@@ -117,6 +120,24 @@ export function ViewOptions() {
           options={[{ value: 'high', label: 'High' }, { value: 'low', label: 'Fast' }]}
           value={hi ? 'high' : 'low'}
           onChange={(v) => setQuality(v === 'high' ? 'high' : 'low')}
+          stretch
+        />
+      </Group>
+
+      <div style={{ height: 1, background: 'var(--hairline)' }} />
+
+      {/* Night mode, as a quick switch. It is an app setting rather than a view of
+          THIS room — Settings has the same control under Appearance — but it is the
+          one app setting someone reaches for mid-session, when the lights go down,
+          and this gear is where the studio keeps "how the screen looks". It does not
+          touch the room: walls, furniture and the light stay as they are. Three
+          short words, so `stretch` fits every width this panel runs at. */}
+      <Group label="Night mode">
+        <Segmented
+          ariaLabel="Night mode"
+          options={[...APPEARANCE_OPTIONS]}
+          value={appearance}
+          onChange={setAppearance}
           stretch
         />
       </Group>

@@ -111,7 +111,7 @@ table.
 The user's 2026-10-01 report: a seeded bedroom said **Queen bed** while the Library sells one
 **Bed**, and the Inspector spent three rows on a bed — its name, *Bed · Bed double*, and an
 *On floor* card. A starter room now uses the Library's own pieces and names (Bed, Rug,
-Curtain, Painting, Pendant lamp, Table lamp, TV · 65″). The Inspector's first row is the
+Curtain, Painting, Ceiling light, Table lamp, TV · 65″). The Inspector's first row is the
 name with its Library shelf beside it (a bed reads **Bed**, then a quiet **Bedroom**);
 the second line is gone. A door and a window sit on a new **Openings** shelf (the word `lib/room-openings.ts` already uses), in the
 Library too, because the shelf now reads as what the piece is and a door is not an
@@ -124,7 +124,7 @@ nightstand, the lamp on it, the curtain and the TV. Hover a few pieces in the 3D
 
 **What right looks like.** Every name in the room is one you can find in the Library. One
 header row: the name, then the shelf in grey. No card for the bed on the floor, the TV on
-the wall or the pendant on the ceiling. The lamp still says **On Nightstand**. A piece
+the wall or the ceiling light on the ceiling. The lamp still says **On Nightstand**. A piece
 pushed into a walkway still gets its amber or red card.
 
 **What wrong looks like.** *Queen bed*, *Area rug* or *Bedside lamp* anywhere. A short name
@@ -158,23 +158,57 @@ difference reads as a bug to a user. Changing the ceiling height by 1 cm and bac
 both bands and seven ceiling heights. It cannot see the old-room case, because no test loads
 a room saved by an older build.
 
-### A room saved BEFORE § 34 draws its pendant half the size
+### The pendant is gone: a flush ceiling light replaces it, in new rooms and old ones
 
-**Where to click.** A room already in this browser holding a pendant or a ceiling fan —
-not a fresh one. The § 34 look was on a seeded room, which is a different program.
+The user asked for the ceiling light found in Ghanaian homes: a round, flush-mount white disc
+fixed flat to the ceiling, often an LED panel, sometimes with a thin trim ring, with no cord
+and no drop. The Library's **Pendant lamp** is now **Ceiling light** (`lamp-ceiling`). It is
+350 mm across and 80 mm deep. It has a white housing against the slab, a thin steel ring and
+an opal diffuser that glows in the colour of its own light (4000 K, a wide cone). Its top
+sits 20 mm under the ceiling: `MOUNT_PAD`, the same gap every ceiling fixture keeps.
 
-**What wrong looks like.** Nothing moves, resizes or re-settles — that was derived, and
-every load-path consumer reads `dimMM` rather than the renderer. What changes is the
-picture: a catalogue pendant drawn 800 mm now draws 400, a 150 mm one shrinks 5.3x, and
-the shade's width goes from a constant 300 mm to whatever the piece declares.
+The old `lamp-pendant` id is mapped on every read, never dropped:
 
-**The case worth looking for.** Someone who sized a pendant *by eye* under the old
-renderer — dragging the scale gizmo until it looked right — wrote a stored dim of about
-half what they were seeing, because `renderBaseDim` returns `p.dimMM` while the drawing
-ignored it. That room now opens with the pendant at half again.
+- a saved scene, a saved layout and an imported scene file come back with a ceiling light;
+- a scanned room's shape hint is mapped too;
+- a pendant's size or position override is lifted, so the disc sits flush rather than a
+  hand-span below the ceiling.
 
-**Gates.** None possible: the old and new drawings are both self-consistent, and no test
-in this repo renders geometry.
+This item replaces the § 34 one ("A room saved BEFORE § 34 draws its pendant half the
+size"), because the drawing it asked about no longer exists.
+
+**Where to click.**
+- **Library → Lighting → Ceiling light.** Add one. Look at it in **3D** from below and from
+  the side. Then look at it in the **2D Plan**: a circle with the round-light icon.
+- **A starter room.** Create a T-Shape or Open Plan room. The light should be centred over
+  the dining table, flush with the ceiling.
+- **A room saved before this change that holds a pendant.** A T-Shape or Open Plan room
+  made earlier in this browser will do. Check three variants:
+  - one you never edited;
+  - one where you moved or resized the pendant;
+  - one with a saved layout (Ideas / Layouts).
+
+  Open each and switch to the saved layout.
+
+**What wrong looks like.**
+- The old room's light is missing, or a cone shade on a cord still shows.
+- The disc hangs visibly below the ceiling, or pokes through it.
+- A moved light jumps back to the table.
+- The diffuser is dark while the light is on, or lit after the light is removed.
+- The plan draws a square, or a circle of a different size than the 3D disc.
+- The Library tile still says "Pendant lamp".
+
+**Closed: renaming first.** Renaming an old room from the rooms list *before* opening it used
+to stamp the new schema version, so the open that followed skipped lifting a moved light and
+the disc hung about 160 mm low. A rename writes only the record now, so it stamps at most
+version 2 (`RECORD_ONLY_SCHEMA` in `lib/storage.ts`) and leaves the lift to the open. To check
+it: rename such a room from the rooms list, then open it. The light should sit flush.
+
+**Gates.** `tests/retired-shapes.test.ts` covers the migration. `tests/ceiling-fixtures.test.ts`
+and `tests/parametric-caps.test.ts` cover the geometry. No test renders geometry, so the look
+itself is for eyes only.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
 
 ## Drag and selection
 
@@ -3212,12 +3246,99 @@ and back.
 **What wrong looks like:** the ghost somewhere other than where the piece lands on
 release; a ghost that lags well behind the pointer or stutters; a ghost casting a shadow
 or lighting the room (a lamp); a ghost left standing after Esc, a drop, or leaving the
-room; the real sofa going see-through. A drop that would be refused should show red with
-the reason beside the pointer — reaching one by hand needs a room too small for the
-piece, which the unit test reaches and nobody has yet seen.
+room; the real sofa going see-through. The ghost should stand on the same terracotta
+base, under the same W × D tag, as a piece dragged in the room. A drop that would be
+refused should turn that base red and the tag to "blocked", with the reason beside the
+pointer — reaching one by hand needs a room too small for the piece, which the unit
+test reaches and nobody has yet seen.
 
 **Why eyes:** pose agreement is swept over the whole Library in a test; whether the
 ghost reads as a preview (and not as a piece already there) and stays smooth on a real
 GPU is a judgement.
 
 **Merged:** `61e4324` (B-ismark/Danmu#258), not yet looked at.
+
+### Quieter small surfaces: Library row corner, empty swap search, swap icon, scan waiting card
+
+- **Library row hover** (Add a piece → hover any row): the soft fill's corner now nests around the small drawing chip — 10px, the Catalog's corner — rather than a 16px lozenge. Wrong would be a pill-ended highlight or a chip whose corner sits off the row's curve.
+- **Change the model** (Inspector button or right-click a piece): the search opens empty with the cursor in it; typing starts a fresh search. The icon is two opposed arrows (exchange) in the Inspector, the dialog kicker and the right-click menu; **Ungroup** has its own ungroup glyph now instead of sharing it.
+- **Scan waiting card** (capture → detect with a key): only the picture, the privacy note and "Stop and add by hand" show. No "Finding your furniture" heading, and no "Still working…" line after waiting ~20 s. A screen reader still announces the dialog as "Finding your furniture".
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## The day strip's sun rises and sets in the pill, and a scrub keeps up with the hand
+
+**Where:** the 3D room; hover the day strip at the top of the canvas to open it. Drag
+the pill slowly from 05:00 to 22:00 and back. Then drag fast, back and forth across
+06:00 and 19:30. Repeat with the OS set to reduce motion, once with Overcast on, and
+once on a phone.
+
+**What wrong looks like:** the glyph jumping between pictures inside the day rather
+than morphing (it should only swap at 06:00 and 19:30, sun for moon); a sun that
+stays on its horizon line at 10:00 or sits on it at noon; a line or a half-disc below
+the line still showing at noon; morning and evening the same colour, or a colour
+that does not read against the paper pill; the pill trailing the pointer, or a
+hitch as the hour crosses a horizon or a half hour; the room's light lagging well
+behind the pill and not catching up on release; the hour after release, or after
+Undo, not the one the hand let go at. Under reduced motion, anything that animates.
+
+**Why eyes:** the bands, the lift, the paint and the coalescing are tested, and a
+headless build under software rendering showed the colours and the horizon right at
+05:00, 06:30, 07:00, 09:00, 12:00, 16:30, 18:30, 19:15 and 22:00; it also cut the
+scene renders during a 2 s scrub by roughly a factor of 3–14 with no long tasks at
+default quality. Whether that feels like the pill is in the hand on a real GPU, and
+whether the 4.5 px rise reads at phone size, is a judgement.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Night mode, on a real screen and a real phone
+
+**Where:** Settings → Appearance → Night mode, and the same row at the foot of the
+studio's View settings (the gear on a laptop, the View sheet on a phone). Try Dark on a
+light device, Light on a dark device, and System while flipping the device's own
+setting with the app open. Then walk the rooms page, layout pick, the capture screen
+(with a photo in it — the piece tags and the clash / quality chips), the studio's both
+tabs with a piece selected, the Library, Room check, a toast, the help dialog, and Esc
+out of a drag that was refused (the red tag).
+
+**What wrong looks like:** a frame of cream before the dark page on a reload or a cold
+open (or of dark before a pinned Light); colours fading one by one when the switch is
+pressed; a cream patch anywhere in Dark (a card, a popover, a menu, a toggle thumb); type
+that has to be squinted at, above all the quiet `--ink-3` captions on `--paper-3`; the
+phone's status bar staying cream over a pinned Dark after moving between pages (this was
+caught once in the browser and fixed — Next rewrites the theme-color tags on every
+client navigation); the 3D room's walls, furniture or sky changing with the theme (they
+must not); the floor plan's comfort-zone amber reading as a brown slab rather than a
+tint over the floor; a downloaded floor-plan PNG coming out dark (it stays light).
+
+**Why eyes:** every token pair is asserted at WCAG contrast in both themes and a
+production build was walked in headless Chromium at 1440 and 390 px in both System-dark
+and pinned-Dark, but "warm dark, not black" and whether the plan's amber is too heavy
+are judgements, and Safari's handling of a re-pointed `theme-color` and of
+`color-scheme` on form controls has not been seen.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## The Library drag in 3D: solid ghost, no row riding the cursor, Delete right after
+
+**Where:** the 3D room with the Library open, on a real GPU, mouse. Drag a Stool slowly
+then fast across open floor; drag a sofa along a wall. Drop one and press Delete
+straight away without clicking anything; then click a Library row (no drag) and press
+Backspace. Type in the Library search and press Backspace there. Repeat the drag on the
+2D Plan tab.
+
+**What wrong looks like:** the ghost trailing the pointer by a visible gap or settling a
+beat after the pointer stops; the ghost flickering between two positions; a copy of the
+Library row's name still riding the cursor in 3D (it should be the ghost alone, with
+the copy cursor); NO drag picture at all on the Plan tab, which has no ghost and should
+keep the browser's own; Delete or Backspace after a drop or a click-add doing nothing,
+or deleting something other than the piece just added; Backspace in the search
+deleting a piece; Enter on a Library row moving focus off the list.
+
+**Why eyes:** lag was measured here only under software WebGL at roughly a frame a
+second, where every simulated pointer move waits about a frame and so hides most of a
+one-frame deferral — the gain on a real GPU at 60 Hz is reasoned from the code, not
+measured. The blank drag picture is a browser surface no headless screenshot captures,
+and the focus hand-off is tested in jsdom, not in a browser's own drag-and-drop.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

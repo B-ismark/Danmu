@@ -15,7 +15,7 @@ import { footprintForLayout } from '@/lib/footprint';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { addPieceToRoom, planPiece, type NewPiece } from '@/lib/add-piece';
-import { dropCarry } from '@/lib/drop-carry';
+import { dropCarry, ghostLook, sameLook, type Ghost } from '@/lib/drop-carry';
 import { PART_LIBRARY, type ScenePart } from '@/lib/scene-spec';
 import * as announceModule from '@/lib/announce';
 import { stripComments } from './helpers/source';
@@ -127,9 +127,11 @@ describe('what the drag carries', () => {
 
   it('is turned into a ghost by the room with the drop\'s own planner and aim', () => {
     const src = stripComments(readFileSync(join(__dirname, '../components/three/Room.tsx'), 'utf8'));
-    const over = src.slice(src.indexOf('function onDragOver'), src.indexOf('function onDragLeave'));
+    // The planner runs inside the frame gate that `onDragOver` feeds.
+    const over = src.slice(src.indexOf('const [ghostGate]'), src.indexOf('function onDragLeave'));
     expect(over).toMatch(/planPiece\(item, aim\)/);
     expect(over).toMatch(/aimAt\(/);
+    expect(over).toMatch(/function onDragOver[\s\S]*ghostGate\.call\(/);
     const drop = src.slice(src.indexOf('function onDrop'), src.indexOf('function onDragOver'));
     expect(drop).toMatch(/aimAt\(/);
     expect(drop).toMatch(/dropCarry\.show\(null\)/);
@@ -141,5 +143,65 @@ describe('what the drag carries', () => {
     const src = stripComments(readFileSync(join(__dirname, '../components/three/DropGhost.tsx'), 'utf8'));
     expect(src).toMatch(/clones\.current\.add\(c\)/);
     expect(src).toMatch(/made\.forEach\(\(m\) => m\.dispose\(\)\)/);
+  });
+});
+
+// "It's too ghostly. It doesn't have any area indicators like when you're moving actual
+// models." and "the ghost seems laggy / out of sync with the mouse".
+describe('the ghost wears what a carried piece wears, and moves without re-rendering', () => {
+  const src = () => stripComments(readFileSync(join(__dirname, '../components/three/DropGhost.tsx'), 'utf8'));
+
+  it('is solid enough to read as a piece', async () => {
+    // Imported from the component would pull R3F into this file; the literal is read.
+    const m = /GHOST_OPACITY = ([\d.]+)/.exec(src());
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBeGreaterThanOrEqual(0.7);
+    expect(Number(m![1])).toBeLessThan(0.9);
+  });
+
+  it('mounts the drag\'s own base and size tag rather than an imitation of them', () => {
+    const s = src();
+    expect(s).toMatch(/import \{ Highlight \} from '\.\/Highlight'/);
+    expect(s).toMatch(/import \{ SizeTag, sizeTagLift \} from '\.\/DragTag'/);
+    // In the state a carried piece would be in.
+    expect(s).toMatch(/<Highlight[^>]*state=\{refused \? 'invalid' : 'selected'\}/);
+    expect(s).toMatch(/<SizeTag[^>]*valid=\{!refused\}/);
+    // And the real drag's tag is the same component, lifted by the same function.
+    const tag = stripComments(readFileSync(join(__dirname, '../components/three/DragTag.tsx'), 'utf8'));
+    const drag = tag.slice(tag.indexOf('export function DragTag'), tag.indexOf('export function sizeTagLift'));
+    expect(drag).toMatch(/<SizeTag/);
+    expect(drag).toMatch(/sizeTagLift\(live\.dimMM, live\.floor\)/);
+  });
+
+  it('fades only its body: the base and the tag keep their own materials', () => {
+    const s = src();
+    const body = s.slice(s.indexOf('function FadedBody'), s.indexOf('const useGhost'));
+    expect(body).toMatch(/ref\.current\?\.traverse/);
+    expect(body).not.toMatch(/<Highlight|<SizeTag/);
+  });
+
+  it('writes the pose onto its group instead of rendering it', () => {
+    const s = src();
+    expect(s).toMatch(/node\.position\.set\(pose\.pos\[0\], pose\.pos\[1\], pose\.pos\[2\]\)/);
+    expect(s).toMatch(/node\.rotation\.set\(0, pose\.rot, 0\)/);
+    expect(s).not.toMatch(/position=\{pose/);
+    expect(s).toMatch(/setLook\(\(was\) => \(sameLook\(was, next\) \? was : next\)\)/);
+  });
+
+  it('a move that changes only the pose is the SAME look; a new piece or a refusal is not', () => {
+    const item = PART_LIBRARY.find((p) => p.shape === 'sofa')!;
+    const other = PART_LIBRARY.find((p) => p.shape === 'lamp-table')!;
+    const pose = { pos: [0, 0, 0] as [number, number, number], rot: 0, wallMounted: false, supportId: null };
+    const at = { x: 0, y: 0 };
+    const here: Ghost = { item, plan: { pose }, at };
+    const there: Ghost = { item, plan: { pose: { ...pose, pos: [1, 0, 2] } }, at: { x: 40, y: 9 } };
+    expect(sameLook(ghostLook(here), ghostLook(there))).toBe(true);
+    expect(sameLook(ghostLook(here), ghostLook({ ...here, item: other }))).toBe(false);
+    expect(sameLook(ghostLook(here), ghostLook({ ...here, plan: { refused: 'no', pose } }))).toBe(false);
+    expect(sameLook(ghostLook(here), null)).toBe(false);
+    expect(sameLook(null, null)).toBe(true);
+    // A refusal with nowhere to stand shows no ghost at all (the reason still shows).
+    expect(ghostLook({ ...here, plan: { refused: 'no' } })).toBeNull();
+    expect(ghostLook({ ...here, plan: { refused: 'no', pose } })).toEqual({ item, refused: true });
   });
 });

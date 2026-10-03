@@ -14,7 +14,7 @@
 // is a place you can see before your hand gets there. The value is read off x alone,
 // the way a slider's is.
 
-import { SUNRISE_H, SUNSET_H } from './lighting-moods';
+import { SUNRISE_H, SUNSET_H, TIME_STOPS, isDaytime, sunAt } from './lighting-moods';
 
 export type Strip = {
   /** The strip's box, in CSS px. */
@@ -94,3 +94,52 @@ export function skyGradient(): string {
 /** The two horizons, 0–1 along the strip: where the paint turns peach or rose and the handle
  *  turns between sun and moon. */
 export const HORIZONS: readonly [number, number] = [SUNRISE_H / 24, SUNSET_H / 24];
+
+// ── The glyph in the pill ──────────────────────────────────────────────────
+//
+// Four pictures, not two: the moon, the sun rising out of a horizon line, the sun
+// clear of it, and the sun sinking back into it. They are not invented hours. Night
+// is `isDaytime`'s, so the moon is drawn exactly while the key light is the moon or
+// nothing; and the morning and evening bands are the app's own named moments —
+// `TIME_STOPS` — read as a nearest-neighbour map: the glyph is the morning one for as
+// long as Morning is the nearer of Morning and Midday, and the evening one from the
+// hour Evening becomes nearer than Midday. With the stops as they stand that is
+// sunrise to 10:12 and 15:39 to sunset, and moving a stop moves its band.
+
+/** What the pill is drawing. */
+export type DayPhase = 'night' | 'morning' | 'day' | 'evening';
+
+const stopAt = (id: (typeof TIME_STOPS)[number]['id']) => TIME_STOPS.find((s) => s.id === id)!.hour;
+/** The hour the morning glyph has finished rising: halfway from Morning to Midday. */
+export const MORNING_ENDS_H = (stopAt('morning') + stopAt('midday')) / 2;
+/** The hour the evening glyph starts to sink: halfway from Midday to Evening. */
+export const EVENING_BEGINS_H = (stopAt('midday') + stopAt('evening')) / 2;
+
+/** The glyph at `hour`: which picture, and how far the sun stands above its horizon
+ *  line — `lift` 0 is the disc's centre ON the line (the moment of sunrise or sunset),
+ *  1 is the full day sun with no horizon drawn. It is the sun's own ELEVATION, scaled
+ *  so the band's far edge is 1, which makes the morph follow the sky rather than the
+ *  clock: the sun clears the line quickly after dawn and lingers high, the way the
+ *  light in the room does. Continuous in the hour everywhere inside the day, so a
+ *  scrub morphs the glyph rather than swapping it; the horizons themselves are where
+ *  the sun becomes the moon, and that one change is a transition in CSS. Night's lift
+ *  is 1, so the moon is drawn centred and clear of any line. Rounded to a thousandth:
+ *  it is written into a style, and a finer step is a write nobody can see. */
+export function glyphAt(hour: number): { phase: DayPhase; lift: number } {
+  if (!isDaytime(hour)) return { phase: 'night', lift: 1 };
+  // Folded only when it needs folding: `(h + 24) % 24` moves 15.65 off itself by an
+  // ulp, and the band edges are exactly such sums.
+  const h = hour >= 0 && hour < 24 ? hour : ((hour % 24) + 24) % 24;
+  const phase: DayPhase = h < MORNING_ENDS_H ? 'morning' : h >= EVENING_BEGINS_H ? 'evening' : 'day';
+  if (phase === 'day') return { phase, lift: 1 };
+  const edge = sunAt(phase === 'morning' ? MORNING_ENDS_H : EVENING_BEGINS_H).elevationDeg;
+  const lift = Math.min(1, Math.max(0, sunAt(h).elevationDeg / edge));
+  return { phase, lift: Math.round(lift * 1000) / 1000 };
+}
+
+/** What the slider's value text says after the clock: the picture's name, except by
+ *  day, where the clock alone is the answer. Overcast is hour-blind, and says so. */
+export function phaseWords(phase: DayPhase, overcast: boolean): string {
+  if (overcast) return ', overcast';
+  return phase === 'day' ? '' : `, ${phase}`;
+}

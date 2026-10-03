@@ -412,7 +412,10 @@ function ItemTag({
             // height is built from the two (`lib/photo-tag.ts`).
             width: TAG_X_PX,
             height: TAG_X_PX,
-            background: hoverX ? 'var(--scrim-photo)' : 'transparent',
+            // `--ink`, not `--scrim-photo`: the glyph is `--on-accent`, which is DARK in
+            // night mode, and a black scrim under a dark ✕ is no hover state at all.
+            // `--ink` inverts with it, so the press always deepens the contrast.
+            background: hoverX ? 'color-mix(in srgb, var(--ink) 55%, transparent)' : 'transparent',
             border: '1px solid transparent',
             display: 'inline-flex',
             alignItems: 'center',

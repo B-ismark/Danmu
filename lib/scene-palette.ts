@@ -90,6 +90,9 @@ export const DETAIL = {
   /** A lit bulb's glass and the warm light it gives off — every lamp in the catalogue. */
   bulb: '#FFE4A0',
   bulbGlow: '#FFD060',
+  /** A flush ceiling light's opal diffuser — milky white plastic. It glows in the colour
+   *  of the fitting's own light (`hexFromKelvin`), so it carries no glow colour here. */
+  opal: '#FBFAF6',
   /** A table lamp's glazed body: a soft sage, the accent family's quiet end, so a
    *  linen shade over it reads as two materials rather than one painted object. */
   ceramicGlaze: '#AEB9A4',
@@ -136,6 +139,12 @@ export const DECOR = {
 // either — so it reads these rather than carrying its own hex set. It used to
 // carry sixteen literals including #3E8FD8, the cold CAD blue this file records
 // as deliberately removed from the brand.
+//
+// LIGHT ONLY, on purpose, and night mode does not reach it. The on-screen plan
+// (`components/studio/PlanView.tsx`) is drawn with CSS tokens and themes with the
+// app; the PNG is a document — saved, printed, sent to someone whose screen is in a
+// different mode — and a sheet of dark paper prints as a block of toner. So it is
+// always on light paper, whatever the studio looked like when Export was pressed.
 export const PLAN = {
   /** page — matches --paper */
   paper: '#FFFCF5',
@@ -194,7 +203,7 @@ const BY_SHAPE: Record<Shape, string> = {
   // lighting
   'lamp-floor': '#E8E0CB',
   'lamp-table': '#E8E0CB',
-  'lamp-pendant': '#E8B833',
+  'lamp-ceiling': '#F2F1EB',
   // wall-hung
   mirror: '#5D3820',
   'mirror-oval': '#5D3820',

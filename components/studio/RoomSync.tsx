@@ -6,14 +6,14 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { markRoughSize, roomStore, saveTime, type PendingWrite, type RoomData, type Transforms } from '@/lib/storage';
+import { markRoughSize, ROOM_SCHEMA_VERSION, roomStore, saveTime, type PendingWrite, type RoomData, type Transforms } from '@/lib/storage';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { livingParents } from '@/lib/rigid-parent';
 import { seedHistory } from '@/lib/history';
 import { hourNow } from '@/lib/lighting-moods';
 import type { ScenePart } from '@/lib/scene-spec';
-import { normalizeStoredParts } from '@/lib/scene-spec';
+import { migrateRetiredOverrides, normalizeStoredParts, retiredOverridesFor } from '@/lib/scene-spec';
 import { toast } from '@/components/ui/StorageToast';
 import { onPageLeave } from '@/lib/page-leave';
 import { clearLeaveNote, leaveNoteOf, pendingOf, readLeaveNote, writeLeaveNote } from '@/lib/leave-note';
@@ -77,6 +77,13 @@ export function RoomSync() {
    *  in the subscriber loses this the moment a second room change replaces the
    *  timer. */
   const reshapedSince = useRef(false);
+  /** The open's schema-3 write was lost, so the next save carries it again: the migrated
+   *  overrides with the stamp, in one write — and the migrated scene too when the lost
+   *  write carried one (`parts`), or the next open finds the pendant in the saved scene
+   *  and lifts overrides that were already lifted. Only then: writing a scene for a room
+   *  that had none would stop *Re-scan* rebuilding it. Until one lands the record stays
+   *  below 3 and the next open migrates again — never a stamp over a half-stored room. */
+  const stampOwed = useRef<false | { parts: boolean }>(false);
 
   /** Whatever the three saves below still have waiting, written as ONE transaction
    *  (`roomStore.savePending`), whichever of them comes due first — its timer, the room
@@ -183,6 +190,13 @@ export function RoomSync() {
       }
     }
     if (!w.transforms && w.parts === undefined && !w.room) return;
+    const owed = stampOwed.current;
+    const carriesStamp = owed !== false;
+    if (owed) {
+      w.transforms ??= transformsOf(useStudio.getState());
+      if (owed.parts) w.parts ??= useScene.getState().parts;
+      w.room = { ...(w.room ?? { edit: (r: RoomData) => r }), migrated: true };
+    }
     // The whole save, as data, so a reload that ends it before its read comes back can be
     // finished by the next open. Cleared once it lands on a page still alive to see it. The
     // save and its note share one time, which is what each part the save writes is stamped
@@ -193,6 +207,7 @@ export function RoomSync() {
       leaving && shell !== undefined &&
       writeLeaveNote(roomId, leaveNoteOf(at, shell, { transforms: w.transforms, parts: w.parts, pin: w.room?.pin }));
     roomStore.savePending(roomId, w).then(() => {
+      if (carriesStamp) stampOwed.current = false;
       if (noted) clearLeaveNote(roomId, at);
       // Counted only while the page stays: an offer made on the way out is made to nobody.
       if (!leaving && noteRoomSaved(roomId)) offerBackup(roomId);
@@ -212,6 +227,7 @@ export function RoomSync() {
   useEffect(() => {
     if (!roomId) return;
     ready.current = false;
+    stampOwed.current = false;
     // Even for the room the store already holds: it may have changed in another tab.
     useScene.getState().setHydrated(null);
     let live = true;
@@ -276,6 +292,16 @@ export function RoomSync() {
       // Re-derived, not trusted. See `normalizeStoredParts` — this snapshot can be
       // older than the derivation that replaced the stored flag.
       if (savedScene) setParts(normalizeStoredParts(savedScene));
+      // A retired shape's overrides (schema 3: the pendant became the flush ceiling light).
+      // The parts migrate themselves above; a position or size the user gave the old
+      // pendant is in `t`, measured for a 400 mm drop, and would hang the new disc a
+      // hand-span under the slab. Read against the RAW saved scene, before anything
+      // rewrites it, or — with no saved scene — against the record's version. Idempotent,
+      // so a room whose write-back below never lands just does this again next time.
+      const retired = retiredOverridesFor(savedScene, useScene.getState().parts, room?.version);
+      const stored = t ?? { positions: {}, rotations: {}, dims: {} };
+      const migrated = migrateRetiredOverrides(stored, retired, room?.height);
+      const tx: Transforms | undefined = migrated === stored ? t : migrated;
       // Every override is reset, whether or not this room saved any: the store outlives
       // the navigation, and `t` is undefined for a room that has never been edited at
       // all. Ids are `${category}-${counter}` and collide across rooms by construction,
@@ -285,12 +311,12 @@ export function RoomSync() {
       // never edited showed the last room's moves and sizes on its pieces, and its first
       // save stored them there. A size typed just before leaving made it certain: it is
       // committed on the way out (`RoomDimsEditor`, `Inspector`), into this same store.
-      loadTransforms(t ?? {});
-      setHiddenMap(t?.hidden ?? {});
+      loadTransforms(tx ?? {});
+      setHiddenMap(tx?.hidden ?? {});
       // The locks, for the same reason: a room with no saved `pinned` of its own would
       // otherwise inherit the PREVIOUS room's, and silently exempt a different sofa from
       // Suggest.
-      setPinnedMap(t?.pinned ?? {});
+      setPinnedMap(tx?.pinned ?? {});
       // And the rigid-parent edges. `snapshotDescendants` re-validates every edge
       // physically before trusting it, so a leaked entry can't cause a wrong
       // cascade — but there's no reason to leave it live when a clean reset
@@ -302,8 +328,30 @@ export function RoomSync() {
       // unparented — where a surviving edge simply re-validates at the position
       // they returned to. So the map is allowed to go stale for a session and is
       // swept on the next load, which is what stops it growing forever in IDB.
-      setParentIds(livingParents(t?.parentIds, useScene.getState().parts));
+      setParentIds(livingParents(tx?.parentIds, useScene.getState().parts));
       ready.current = true;
+      // …and written back with the version stamp, in one transaction, so the migration
+      // happens once. EVERY older room is stamped, whether or not this open changed
+      // anything: a room whose light had no overrides yet would otherwise stay below 3,
+      // and the next open would read the size or position the user has since given the
+      // NEW light as a pendant's and squash it back (`retiredOverridesFor`'s version
+      // evidence). Stamped `untouched` when nothing moved, so an open nobody edited does
+      // not reorder the rooms list.
+      if (room && (room.version ?? 0) < ROOM_SCHEMA_VERSION) {
+        const moved = migrated !== stored;
+        const sceneMoved = !!savedScene && retired.length > 0;
+        roomStore
+          .savePending(roomId, {
+            transforms: moved ? migrated : undefined,
+            parts: sceneMoved ? useScene.getState().parts : undefined,
+            room: { edit: (r) => r, migrated: true },
+            untouched: moved || sceneMoved ? undefined : true,
+          })
+          .catch((err) => {
+            if (live) stampOwed.current = { parts: sceneMoved };
+            console.error('[room] could not save the migrated ceiling light', err);
+          });
+      }
       // The room on screen is this one now, so the canvas veil can lift.
       useScene.getState().setHydrated(roomId);
       // Record the loaded room as the state undo returns *to*. Without a

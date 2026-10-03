@@ -7,7 +7,8 @@ import {
   fanColumn,
   isParametric,
   moduleRangeFor,
-  pendantDrop,
+  ceilingLight,
+  CEILING_RING_H,
   plantForm,
   radiatorFins,
   railPipe,
@@ -37,7 +38,7 @@ import { bedPillows } from '@/lib/layout-rules';
 //   a MODULE   `max(1, round(w / 0.7))`      — a pane is a real width
 //
 // Both are an absolute chosen at one size. A cap is then stretched past itself; a
-// count is frozen and its members stretched instead. `fan` and `lamp-pendant` were
+// count is frozen and its members stretched instead. `fan` and `lamp-ceiling` were
 // found by review, `tv-console` / `stool` / `nightstand` / `door` by grepping for the
 // first form, and `window` / `radiator` only by a second review asking what else had
 // the second. That progression is why this file ends with a completeness sweep rather
@@ -90,9 +91,9 @@ type CapRow = {
 const CAPS: CapRow[] = [
   { shape: 'fan', axis: 2, read: (mm) => fanColumn(mm).hubH, what: 'the motor housing' },
   {
-    shape: 'lamp-pendant', axis: 2,
-    read: (mm) => pendantDrop(authoredDim('lamp-pendant')[0], mm).domeH,
-    what: 'the shade',
+    shape: 'lamp-ceiling', axis: 2,
+    read: (mm) => ceilingLight(authoredDim('lamp-ceiling')[0], mm).ringH,
+    what: 'the trim ring',
   },
   { shape: 'tv-console', axis: 2, read: (mm) => consoleSlabs(mm).top, what: 'the top slab' },
   { shape: 'tv-console', axis: 2, read: (mm) => consoleSlabs(mm).foot, what: 'the legs' },
@@ -172,26 +173,19 @@ describe('an absolute is violated by a group scale, so its shape must be paramet
     expect(isParametric('fan')).toBe(true);
   });
 
-  it('the pendant lamp: a narrow, long drop draws a shade four times its cap', () => {
-    const [authoredW, , authoredH] = authoredDim('lamp-pendant');
-    const band = dimRangeFor('lamp', 'lamp-pendant');
-    // Narrowest and longest, both legal — the shade's cap is against its own WIDTH, so
-    // exposing the worst of it takes the two axes moving in opposite directions, which
-    // is why the per-axis sweep below reads this row milder.
-    const storedW = band.min[0];
-    const storedH = band.max[2];
-    const authored = pendantDrop(authoredW, authoredH);
-    const drawnDomeH = authored.domeH * (storedH / authoredH);
-    const drawnDomeR = authored.domeR * (storedW / authoredW);
-    const honest = pendantDrop(storedW, storedH);
+  it('the ceiling light: a deeper fitting draws a trim ring past its cap', () => {
+    // The ring is a few millimetres of metal whatever the fitting's size. Authored at the
+    // Library's 80 mm it already binds its cap; scale the group to the deepest legal
+    // fitting and the ring is drawn two and a half times as thick as any real one.
+    const [authoredW, , authoredH] = authoredDim('lamp-ceiling');
+    const storedH = dimRangeFor('lamp', 'lamp-ceiling').max[2];
+    const drawn = ceilingLight(authoredW, authoredH).ringH * (storedH / authoredH);
+    const honest = ceilingLight(authoredW, storedH).ringH;
 
-    expect(honest.domeH, "the helper's own cap is the width one at this size")
-      .toBeCloseTo(honest.domeR * 1.2, 9);
-    expect(drawnDomeH, 'and the group scale draws a shade far past it')
-      .toBeGreaterThan(drawnDomeR * 1.2);
-    expect(drawnDomeH).toBeCloseTo(0.36, 6);
-    expect(honest.domeH).toBeCloseTo(0.09, 6);
-    expect(isParametric('lamp-pendant')).toBe(true);
+    expect(honest, 'the cap binds at the top of the band').toBeCloseTo(CEILING_RING_H, 9);
+    expect(drawn, 'and a group scale walks straight through it').toBeGreaterThan(honest);
+    expect(drawn / honest).toBeCloseTo(2.5, 6);
+    expect(isParametric('lamp-ceiling')).toBe(true);
   });
 
   it('the extent is unharmed either way, which is why no size test could see this', () => {
@@ -208,10 +202,10 @@ describe('an absolute is violated by a group scale, so its shape must be paramet
       const g = fanColumn(mm);
       expect(g.top - g.bottom, `fan at ${mm} mm`).toBeCloseTo(mm / 1000, 9);
     }
-    const pband = dimRangeFor('lamp', 'lamp-pendant');
-    for (let mm = pband.min[2]; mm <= pband.max[2]; mm += 50) {
-      const g = pendantDrop(350, mm);
-      expect(g.top - g.bottom, `pendant at ${mm} mm`).toBeCloseTo(mm / 1000, 9);
+    const pband = dimRangeFor('lamp', 'lamp-ceiling');
+    for (let mm = pband.min[2]; mm <= pband.max[2]; mm += 10) {
+      const g = ceilingLight(350, mm);
+      expect(g.top - g.bottom, `ceiling light at ${mm} mm`).toBeCloseTo(mm / 1000, 9);
     }
   });
 });

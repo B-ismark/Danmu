@@ -57,6 +57,23 @@ export function studioSurfaceFocused(): boolean {
   return !!el && document.activeElement === el;
 }
 
+/** Give the keyboard back to the room after a piece arrived from the Library.
+ *
+ *  A press on a Library row focuses the row — the browser does that for any button,
+ *  and a drag starts with that same press — so after a drop or a click-add the new
+ *  piece was selected while focus sat on the row. Delete and Backspace are armed only
+ *  while the room itself has focus (`studioSurfaceFocused`, WCAG 2.1.4), so the key
+ *  did nothing to the piece, and the keypress lit the row's focus ring instead: the
+ *  user's "weird highlighting of the row". The new piece is what the user is now
+ *  working on, so the room is where the keys belong.
+ *
+ *  Only for a pointer gesture. A keyboard user who added a piece with Enter is
+ *  working down the list, and taking their place in it away would be the worse
+ *  failure. */
+export function focusStudioSurface(): void {
+  surfaceEl()?.focus({ preventScroll: true });
+}
+
 /** Spread onto the element that wraps the studio's work surface (rails + canvas).
  *  Makes it programmatically focusable and gives it focus on a press that isn't
  *  on a control, which is what scopes the single-character shortcuts. */

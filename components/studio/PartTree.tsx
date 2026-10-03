@@ -497,8 +497,12 @@ export function PartTree() {
                   {/* The active swatch can't be tint-and-border only: a check mark
                       carries the state without relying on hue — and it sits OVER the
                       palette rather than beside it, because a swatch-sized button has
-                      no beside. `--on-ink` on a scrim, since what is underneath is an
-                      arbitrary colour and no token can be legible on all of them. */}
+                      no beside. `--on-ink` on a scrim of `--ink`, since what is underneath
+                      is an arbitrary colour and no token can be legible on all of them:
+                      the scrim pulls any swatch toward --ink and the mark is the colour
+                      made to read on --ink. Both are theme tokens, so the pair flips
+                      together in night mode — it was a black scrim under --on-ink,
+                      which is dark there: a dark tick on a darkened swatch. */}
                   {on && (
                     <span
                       style={{
@@ -507,7 +511,7 @@ export function PartTree() {
                         display: 'grid',
                         placeItems: 'center',
                         borderRadius: 'inherit',
-                        background: 'rgba(0,0,0,0.42)',
+                        background: 'color-mix(in srgb, var(--ink) 55%, transparent)',
                         color: 'var(--on-ink)',
                       }}
                     >

@@ -35,7 +35,7 @@ describe('a starter room', () => {
     // A literal list, so a seeder that stopped placing one of these cannot pass by
     // having nothing left to check.
     const names = new Set([...seen.keys()].map((k) => k.split(' / ')[2]));
-    for (const n of ['Bed', 'Rug', 'Curtain', 'Painting', 'Pendant lamp', 'Table lamp', 'TV']) {
+    for (const n of ['Bed', 'Rug', 'Curtain', 'Painting', 'Ceiling light', 'Table lamp', 'TV']) {
       expect(names, n).toContain(n);
     }
   });

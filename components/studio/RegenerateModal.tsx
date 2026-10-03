@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import type { LibraryItem, ScenePart } from '@/lib/scene-spec';
 import { Icon } from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
@@ -43,10 +43,6 @@ export function SwapModelModal({
    *  before handing the item over. Caller re-grounds and clears stale transforms. */
   onSwap: (item: LibraryItem, dimMM?: [number, number, number]) => void;
 }) {
-  // Seeded with the piece's current name, which is what the description box used
-  // to be seeded with and is the reason this is stateful at all: opening the modal
-  // on a piece called "office chair" should already be showing office chairs.
-  const [query] = useState(part.name);
 
   return (
     <Modal
@@ -71,7 +67,7 @@ export function SwapModelModal({
           nothing that can catch it, and a drag that cannot land is worse than no
           drag at all. No `onPickMany` either — swapping one piece for a SET is not
           a thing, and offering the Shift gesture here would lead nowhere. */}
-      <LibraryPicker onPick={(item) => onSwap(item, item.dimMM)} initialQuery={query} maxHeight={320} />
+      <LibraryPicker onPick={(item) => onSwap(item, item.dimMM)} maxHeight={320} />
     </Modal>
   );
 }

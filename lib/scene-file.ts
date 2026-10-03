@@ -52,6 +52,8 @@ import {
   type Shape,
   isWallMountedPart,
   isRoundPart,
+  migrateRetiredPart,
+  retiredShapeFor,
 } from './scene-spec';
 import { clampDims, roomAxisRange, ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import { anchorFor, heightForNewCeiling } from './physics';
@@ -562,14 +564,21 @@ function readSite(v: unknown): Site | null {
  *  piece goes; an unreadable `color` just means the shape's default, so the field
  *  goes and the piece stays. */
 function readPart(
-  v: unknown,
+  input: unknown,
   seen: Set<string>,
   /** Same channel `readRoom` takes, for the same reason: this parser is lossy on
    *  purpose and never silent. A field overruled is content the user wrote and did
    *  not get, so it is reported rather than quietly corrected. */
   dropped: string[],
 ): { part: SceneFilePart; originalId: string } | null {
-  if (!isObj(v)) return null;
+  if (!isObj(input)) return null;
+  // A file written before a shape was retired names it. The vocabulary below would drop
+  // the part outright — a saved room's light gone on import — so it is mapped to what
+  // replaced it first, size and height included (`migrateRetiredPart`). Not reported in
+  // `dropped`: nothing the file said is lost, it is the same light as this app now draws it.
+  const v = retiredShapeFor(input.shape)
+    ? (migrateRetiredPart(input as unknown as ScenePart) as unknown as typeof input)
+    : input;
 
   const shape = oneOf<Shape>(v.shape, SHAPES);
   const category = oneOf<Category>(v.category, CATEGORIES);
@@ -657,9 +666,9 @@ function readPart(
   const saidMount: unknown = v.wallMounted;
   if (saidMount !== undefined) {
     // Named by ANCHOR, not by the flag. `derivedMount` is `anchorFor(...) !== 'floor'`,
-    // so rendering it as "is wall-mounted" said a pendant and a ceiling fan are fixed to
+    // so rendering it as "is wall-mounted" said a ceiling light and a fan are fixed to
     // a wall — false, and the file two lines up knows better. It also interpolated
-    // `shape`, which is the internal kebab-case id, so the user was shown "a lamp-pendant"
+    // `shape`, which is the internal kebab-case id, so the user was shown "a lamp-ceiling"
     // and "an ac-unit". The piece is already named in quotes at the front of the sentence,
     // so this clause only has to say where it belongs.
     const anchor = anchorFor(category, shape);

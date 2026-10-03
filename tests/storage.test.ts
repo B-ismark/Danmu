@@ -15,6 +15,7 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { clear, keys, set } from 'idb-keyval';
 import { markRoughSize, roomStore, ROOM_SCHEMA_VERSION, type RoomData } from '@/lib/storage';
+import { retiredOverridesFor, type ScenePart } from '@/lib/scene-spec';
 
 function room(id: string, over: Partial<RoomData> = {}): RoomData {
   return {
@@ -75,13 +76,14 @@ describe('saveRoom / loadRoom', () => {
     });
 
     it('keeps them kept through a rename, which re-stamps the version', async () => {
-      // The rename is the dangerous write: it stamps the record current, so if it
+      // The rename is the dangerous write: it stamps the record past 1, so if it
       // copied the old rows across unmigrated, the next load would believe them.
+      // It stamps 2, not current — see the ceiling-light test below for why.
       await writeOld(1);
       await roomStore.renameRoom('old', 'Bedroom');
       const back = await roomStore.loadRoom('old');
       expect(back?.name).toBe('Bedroom');
-      expect(back?.version).toBe(ROOM_SCHEMA_VERSION);
+      expect(back?.version).toBe(2);
       expect(back?.detectedObjects?.map((d) => d.locked)).toEqual([true, true]);
     });
 
@@ -113,9 +115,27 @@ describe('saveRoom / loadRoom', () => {
     await set('room:old:meta', { ...room('old'), version: 1, detectedObjects: [{ id: 0, label: 'bed', conf: 0.9, locked: false, box: [0, 0, 1, 1] }] });
     const written = await roomStore.editRoom('old', (r) => ({ ...r, width: 5 }));
     expect(written?.width).toBe(5);
-    expect(written?.version).toBe(ROOM_SCHEMA_VERSION);
+    expect(written?.version).toBe(2);
     expect(written?.detectedObjects?.map((d) => d.locked)).toEqual([true]);
     expect(await roomStore.loadRoom('old')).toEqual(written);
+  });
+
+  // Schema 3 moved a pendant's overrides, which live beside the record and only the
+  // studio migrates, on open. A rename from the rooms list writes the record alone, so it
+  // must not claim 3: the next open would skip the move, and a pendant the user had moved
+  // would come back as a disc hanging a hand-span under the ceiling.
+  it('does not let a rename of an unopened old room skip its ceiling-light move', async () => {
+    await set('room:old:meta', { ...room('old'), version: 2 });
+    const renamed = await roomStore.renameRoom('old', 'Bedroom');
+    expect(renamed?.version).toBeLessThan(ROOM_SCHEMA_VERSION);
+    // What a starter rebuilt from the record holds: its light, built as the new shape.
+    const built: ScenePart[] = [{ id: 'lamp-1', name: 'Ceiling light', category: 'lamp', shape: 'lamp-ceiling', dimMM: [350, 350, 80], pos: [0, 2.4, 0], rot: 0, locked: false }];
+    expect(retiredOverridesFor(undefined, built, renamed!.version)).toHaveLength(1);
+  });
+
+  it('leaves a current room current through a rename', async () => {
+    await roomStore.saveRoom(room('a'));
+    expect((await roomStore.renameRoom('a', 'Kitchen'))?.version).toBe(ROOM_SCHEMA_VERSION);
   });
 
   it('ignores a rename for a room that is not there', async () => {

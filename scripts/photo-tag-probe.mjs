@@ -103,7 +103,7 @@ const capFor = (vw, vh, room) =>
 // [label, category, shape, box] — boxes in the photo's 0..1 space, as detections are.
 const PIECES = [
   ['Armchair', 'chair', 'chair-armchair', [0.82, 0.62, 0.18, 0.2]], // at the right edge
-  ['Pendant light', 'lamp', 'lamp-pendant', [0.05, 0, 0.12, 0.15]], // small, touching the top
+  ['Pendant light', 'lamp', 'lamp-ceiling', [0.05, 0, 0.12, 0.15]], // small, touching the top
   ["Grandmother's reading armchair by the window", 'chair', 'chair-armchair', [0.02, 0.4, 0.2, 0.15]],
   ['Picture', 'painting', 'painting', [0.9, 0, 0.1, 0.12]], // the top-right corner
   ['Floor lamp', 'lamp', 'lamp-floor', [0.95, 0.3, 0.03, 0.25]], // thin, at the right edge

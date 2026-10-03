@@ -740,8 +740,11 @@ two sightings of one bed got two beds whatever the user ticked — the screen as
 question whose answer nothing read. `migrateRoom` marks every row of a pre-2 record
 kept, which is exactly what those rooms rendered, and runs in `loadRoom` and in
 `renameRoom` (a rename rewrites the record at the current version, so an unmigrated
-rename would silently empty a legacy room). Three details are load-bearing and each
-has a test:
+rename would silently empty a legacy room). (Version 3 retires a shape — the pendant
+became the flush ceiling light; see § Adding a shape, *Retiring a shape*. A write of the
+record alone — a rename from the rooms list — stamps at most 2, because 3 also moves the
+room's overrides and only opening the room does that.) Three details are
+load-bearing and each has a test:
 
 - the per-category counter advances **before** the skip, so a legacy ordinal id
   (`sofa-2`) names the same row whether or not an earlier one is dropped, and a
@@ -2011,13 +2014,26 @@ to get right. Only the first four have a contract clause today; `LIGHT_BY_SHAPE`
 
 There used to be a sixth, `LIGHT_ANCHORS` — where in a fixture its light comes from — and
 it is **deleted** rather than listed, because every row it held was a hand-typed copy of
-a bulb the renderer drew somewhere else. The pendant's row went stale when its bulb began
+a bulb the renderer drew somewhere else. The (since retired) pendant's row went stale when its bulb began
 deriving from `dimMM` (§ 34); the two lamp rows were pinned by a test under the claim
 that those bulbs were drawn "at literals", while `FitToDim` stretched both lamps to their
 declared size — a 1500 mm floor lamp lit from 160 mm above its own top. `lightAnchor`
-reads the same function the bulb is drawn from (`pendantDrop`, `lampForm`) and answers
+reads the same function the light is drawn from (`ceilingLight`, `lampForm`) and answers
 the origin for anything else, so a new light-giving shape that draws a bulb owes it a
 branch there, not a row.
+
+**Retiring a shape** is not deleting it from a table. `lamp-pendant` became `lamp-ceiling`
+— the round flush-mount disc that is the everyday ceiling light in a Ghanaian home, drawn by
+`ceilingLight` in `scene-spec.ts` — and old rooms, layouts and scene files still say the old
+id, which the vocabulary check in `scene-file.ts` would drop along with the light. So a
+retired id lives in exactly one place, `RETIRED_SHAPES`, as a key a reader maps away:
+`migrateRetiredPart` runs inside `normalizeStoredParts` (every stored scene) and in the
+scene-file reader, `migrateRoom` maps a detection's shape hint, `migrateLayout` a saved
+layout, and `migrateRetiredOverrides` the user's own position and size overrides, which were
+measured for the old piece's size. `ROOM_SCHEMA_VERSION` 3 is the evidence for a room with
+no saved scene, whose light is rebuilt as the new shape and so cannot say it was a pendant;
+`RoomSync` writes the migrated overrides back with the stamp in one transaction. The old id
+is in no table the app draws from, which is what keeps it from being dead plumbing.
 
 **The scar.** `fan-standing` shipped with no `ANCHOR_BY_SHAPE` row, so it took its
 category's — and `fan` means the *ceiling* one. A 1300 mm pedestal fan hung from the
@@ -2162,7 +2178,20 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     `SUNSET_H` so the gold is exactly where the light turns). A pill rides it with
     the sun or moon **in line with the time**, and the glyph *morphs* rather than
     swaps: the rays draw in, the disc swells and a shadow slides across to carve the
-    crescent (`Celestial`, `.celestial` in `globals.css`); crossing a horizon plays
+    crescent (`Celestial`, `.celestial` in `globals.css`). It is **four pictures on
+    one continuous morph** (`glyphAt`, `lib/day-strip.ts`): night (the moon, exactly
+    while `isDaytime` is false), **morning** (sunrise to halfway from the Morning stop
+    to Midday — 10:12), day, and **evening** (halfway from Midday to Evening — 15:39 —
+    to sunset). The bands are read off `TIME_STOPS`, so moving a stop moves its band.
+    In morning and evening the sun stands on a horizon line, and `lift` — its real
+    elevation scaled to 1 at the band's far edge — slides the disc up out of the line
+    (or down into it), fades the line and the half below it, and mixes the colour from
+    `--sun` toward `--sun-rise` (amber) or `--sun-set` (red-orange) through a `--lift`
+    custom property; a scrub moves `lift` continuously, so the sun rises in the pill as
+    the hour does. Only the moon/sun change at a horizon is a transition, and under
+    reduced motion there are none. The value text names the picture
+    (`07:00, morning`, `18:30, evening`, `22:00, night`; noon is the clock alone;
+    `, overcast` when the cloud glyph stands in). Crossing a horizon plays
     the dawn or dusk phrase (`lib/sound.ts`) through `SoundCues`, from any source.
     It is **screen chrome, not a thing in the room**: the TOOLS slot's second row
     (`CanvasDay` in `CanvasChrome.tsx`), centred between the rails, so it is in the
@@ -2182,13 +2211,28 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     is its `draggingId`, which blocks orbiting and makes the whole pull ONE undo
     step. The sky and exposure live in `Daylight` inside
     `Room.tsx`, so scrubbing re-renders the lights and not the furniture.
+    **A scrub is cheap by construction, and each piece of that has a scar.** The
+    pill is moved by a direct `transform` write in the pointer handler, so it is
+    under the hand whatever the scene costs; the hour reaches the store at most
+    once per animation frame, and the last one is committed on release before
+    `draggingId` clears, so the undo step holds the hour the hand let go at.
+    The key light is **always mounted** and goes dark below the horizon rather
+    than unmounting — three keys every material's program on the number of
+    directional lights, so a key that came and went recompiled the whole room at
+    each sunrise and sunset (~1.5 s, twice, on the first crossing). The
+    `Environment` is keyed on quality alone and re-bakes into the same cube
+    target (an hour in its key remounted it — new target, new PMREM — every half
+    hour of a scrub), re-bakes on a two-hour step while scrubbing, and its
+    brightness is `scene.environmentIntensity`, a uniform, not a bake.
+    `tests/render-churn.test.ts` holds all three.
   - **The strip carries the rest** (there is no rail Light section: `LightingPicker`
     and the Style → Light section are deleted): while it is open, an extras row
     under it holds the **Overcast** toggle, **Plan top faces** — the room's bearing,
     one compass point a press (`turnedBearing`, `lib/lighting-moods.ts`) — and the
     "no window or door, so no sunlight gets in" hint. The strip's span is the
     canvas's own: it does **not** back off for the Library card, so opening the
-    Library never moves it. The sun glyph is `--sun` (golden), the moon stays paper.
+    Library never moves it. The sun glyph is `--sun` (golden) by day, warming to `--sun-rise` / `--sun-set`
+    at its horizon; the moon stays paper.
   - **`Site.bearingDeg` still turns the whole day** with the room, so which wall
     the morning comes through is the user's answer. It was the Sun direction dial
     (`NorthDial.tsx`, deleted); the strip shows the answer and its extras row keeps the
@@ -2417,7 +2461,8 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   which puts it on `STROKE_LAYER`: the main camera sees that layer, the bake's
   camera does not. `tests/strokes.test.tsx` fails on a drei stroke imported
   anywhere else.
-- **Idle micro-motion** (`Motion.tsx`): fan spins, plant sways, pendant swings.
+- **Idle micro-motion** (`Motion.tsx`): fan spins, plant sways. The ceiling light is
+  flush to the slab and does not swing.
 
 ### Studio chrome — where a control lives
 
@@ -2891,12 +2936,34 @@ outlined box around outlined buttons, which put two boundaries on every control.
   clears it on `dragend`. The ghost's pose is `planPiece` (`lib/add-piece.ts`) — the
   drop's own computation with the write taken out, so `addPieceToRoom` is literally
   `planPiece` plus the write and a lamp over a desk previews ON the desk, a sofa aimed
-  at a taken spot previews at the clear spot it will move to. A drop that would be
-  refused previews in `SCENE.invalid` with the reason beside the pointer.
+  at a taken spot previews at the clear spot it will move to.
   `tests/drop-ghost.test.ts` holds plan and drop to each other over every Library
-  piece at five aims. It runs at most once a frame and not at all while the aim stays
-  within a centimetre; the body is the real `PartGeometry` with cloned, faded
-  materials, no shadows, no lights and no raycast. Mouse only, as the drag is.
+  piece at five aims. **It wears what a carried piece wears, by the same
+  components:** the body at `GHOST_OPACITY` (0.78 — 0.45 read as "too ghostly"),
+  standing on `Highlight`'s base under `SizeTag`'s W × D reading (`DragTag.tsx`
+  exports both the tag and its lift, so a drag and a ghost cannot hold the tag at two
+  heights). A drop that would be refused turns the base red and the tag to
+  `blocked`, exactly as a refused drag does, with the reason beside the pointer
+  (`DropGhostSay`); the body itself is not tinted. **It moves without React:**
+  `dropCarry`'s listener writes the pose onto the group and invalidates, and React
+  renders only when what is SHOWN changes (`ghostLook` / `sameLook` — another piece,
+  refused or not). The aim is planned through `lib/frame-gate.ts`, a LEADING
+  once-a-frame gate: the first `dragover` of a frame plans at once and later ones
+  collapse into one run with the newest pointer, where the trailing rAF it replaced
+  put every plan a frame late and the draw a frame after that. Not at all while the
+  aim stays within a centimetre. The body is the real `PartGeometry` with cloned,
+  faded materials (walked once per piece, not per move), no shadows, no lights and no
+  raycast. In 3D the browser's own drag picture — a copy of the Library row riding
+  the cursor — is blanked (`LibraryPicker`'s `ghostedDrag`, a 1 × 1 transparent
+  image), because the ghost IS the picture there; the plan keeps the default, having
+  no ghost. **A pointer add hands the keyboard to the room:** after a drop or a
+  click-add, focus moves to the studio surface (`focusStudioSurface`), so Delete /
+  Backspace act on the new, selected piece instead of landing on the Library row,
+  which the single-key gate (`studioSurfaceFocused`) rightly ignores. A keyboard add
+  (Enter on a row, `detail === 0`) leaves focus where the user is, and a drag nothing
+  took (`dropEffect: 'none'`) moves nothing. `tests/library-keyboard-after-add.test.tsx`
+  holds all of it, including Backspace in the Library search still editing the search.
+  Mouse only, as the drag is.
 - **Changing which model a piece uses is ONE surface** (`RegenerateModal.tsx`),
   reusing the same `LibraryPicker` as the Add flow and seeding its search with the
   piece's own name through `initialQuery`, so opening it on something called "office
@@ -3409,7 +3476,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | Store | File | Holds |
 |---|---|---|
 | `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, `parentIds` (rigid parenting), `hidden`, `pinned` (the user's **Lock**), lighting + `hour`, quality, dressed, snap, open state, grid, view preset, transform mode, the two rails' open state and width. **Only the view *preferences* persist** (`STUDIO_PREFS`: `lighting`, `quality`, `dressed`, `snapMode`, `showGrid`, `railLeftOpen`, `railRightOpen`, `railLeftW`, `railRightW` → `danmu-studio-prefs`, via `partialize`; `dressed` — auto set-dressing — is **off by default**, and `STUDIO_PREFS_VERSION` 1 resets the old `true` default once; an `hour` from an earlier visit is dropped on load, the light opens at the clock). Selection / camera / open drawers are ephemeral; transforms, `hidden`, `pinned` and `parentIds` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
-| `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache (`keyValid`, `keyValidReason`). Persisted to localStorage (`danmu-settings`). |
+| `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache (`keyValid`, `keyValidReason`), `appearance` (night mode: `system` / `light` / `dark`, checked against the vocabulary on read — see "Night mode" below). Persisted to localStorage (`danmu-settings`, a key named once in `lib/appearance.ts` because the inline boot script reads it too). |
 | `useRoom` | `lib/store.ts` | active room id. Persisted (`danmu-room`). |
 | `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup, the room (`room`: size, footprint, wall colours, `site`), `moveWall`, and `hydratedRoomId` — set only by `RoomSync` once its reads are in, which is what lifts the `CanvasVeil`. |
 
@@ -3418,7 +3485,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 ### Key library files (beyond §4)
 | File | Role |
 |---|---|
-| `lib/scene-spec.ts` | **Single source of truth** — `Shape` union, `ScenePart`, `PART_LIBRARY` (the one catalog — the old "Real sizes" preset sheet was dissolved into it: duplicates deleted, beds and fridges kept as proper entries in their own groups — and since 2026-10-01 **one** Bed and **one** Fridge, because a size is a field and four bed rows were one piece in four sizes: the Bed is a `bed-double` whose band reaches a single's 800 mm, `sleepsTwo` in `lib/layout-rules.ts` reads a second sleeper (and so a second nightstand) off its width rather than its shape, and the fridge draws French doors from `FRENCH_DOOR_MM`, 800 mm, wide — both counts, pillows and doors, are why `bed-double` and `fridge` are parametric: drawn at the Library size and stretched, they kept the count that size chose), `defaultScene` starters, parametric/decor/support flags, DnD MIME. `defaultScene` is authored against `lib/room-bays.ts`, in each wall's own frame (`u` along it, `v` out from it) rather than in room coordinates: a rectangle reads as it always did, an L furnishes its leg and its wing, and a footprint whose walls the user has dragged is furnished as it now is. Every seeded piece is **gated on fitting** — whole footprint inside the room, clear of what is already there — so a room too small for a sofa gets fewer pieces, never a smaller sofa. What a shallow room gets instead is **different furniture**: `SCREENS` picks the largest real panel (65″ / 55″ / 43″, all three in the catalog) whose own 1.2 × diagonal minimum fits the distance the wall can offer, a bed comes off `BED_LADDER` — Queen 1600 / Double 1400 / Single 900, EU standards and every rung 2000 long, so **width is the only axis that separates them and a bed that will not work in a bay cannot be fixed by shortening it** — and a dining table with no room for 900 mm of pull-back on both sides goes against the wall and seats three — a real arrangement, not a fault (`layout-rules`’ `seats` rule is `atLeast: 3` of four sides), and one the plan search below now avoids needing wherever the room has a wall that seats four. The living group also takes the bay with the **viewing depth** rather than the most floor, and leaves a route behind the sofa where the bay opens onto another group — circulation over screen size, the same order `layout-score`'s weights give it. Gaps come from `layout-rules`' bands, sizes through `clampDims`, heights through `groundY`; all five presets seed with an empty room report. **The openings go in first** (`lib/room-openings.ts`) and everything else is arranged against them: the screen takes neither the door's wall nor a window's, the wardrobe takes a cross wall without a window, a door's swing and the route in from it are floor nothing may be seeded onto, and the living group is placed by searching **along** its wall rather than centring on it — because a seat centred across a 2.42 m alcove seals it, and a door on the *next* wall reaches round the corner far enough to refuse a sofa the app then simply did without. Then it is **dressed** — a picture over the sofa or bed, curtains at every window, a pendant over the dining table, a lamp on each nightstand — all wall- or ceiling-mounted, so `isObstacle` is false for every one and the dressing costs nothing in floor, routes or access zones. Finally the whole arrangement is **searched, not merely built**: the choices the seeder cannot make well in isolation (which wall a group backs onto, which bay the living group gets) become a `SeedPlan`, `enumeratePlans` returns at most thirty-two of them — one, and no search, for a room with a single usable viewing wall — each is built in full, and `costBreakdown` with the navigation term on picks the winner. A piece that could not be placed is charged what a piece nobody can reach is charged, so a tidy empty room cannot win. Plan zero is always the greedy plan, so the search can only return that room or a better one. A seeded seat is also **turned toward the group it belongs to**, not merely put at the right distance from it: `relationCost` charges a `faces` relation twice — once for the gap, once for the heading — and the seeder answered only the first, which was the entire relation cost of the L. Its armchair sat 2.355 m from the sofa inside a 1.2–2.6 m band, dead centre, and was charged 0.479 for sitting square to its own wall with the sofa 43° off its nose; `Suggest` could then only answer by shoving a chair that was already in the right place, up to 735 mm, at every seed. The turn is derived per candidate spot rather than chosen, so `seats` tests the footprint the chair will actually have, and `place` wraps the composed rotation to (−π, π] — a frame on the −π wall plus a turn away from the room had been producing −188°, the right rotation written wrong. The L's starter cost fell 10.8 → 4.4 and the other four presets did not move.  **Which rung is chosen before which wall, and not on cost.** The plan search scores whole candidate rooms, and `DEFAULT_WEIGHTS` has no opinion about bed size — measured at the U's 8 x 7.5, all three rungs place thirteen pieces with navigation 0.0 and totals of 4.31 / 4.29 / 4.28, so the bed was being decided by 0.7% of a total that says nothing about beds, and 8 x 6.5 gave a Queen where 8 x 7.5 gave a Single off the same ladder. So `SeedPlan.bedRung` is resolved in two stages: **the widest rung whose best plan places the bed and strands nothing** (`navigation === 0` is the definition of stranding nothing, not a tuned threshold), and failing that **the widest rung that places a bed at all**, with `clearance.ts` left to report the route. The second stage is rule 2 of `CLAUDE.md` where nobody had applied it: dropping the piece is the limit case of silently resizing it to fit, and the one form of it the user cannot see — a stranded route is a warning they can act on, a missing bed is absence. Before it, five U sizes seeded no bed at all, because `missing` charges an absent bed the same `STRANDED_PIECE` as an absent nightstand and a bedless 484.06 beat the best bed-bearing 496.95. It is **not** monotonic in room size and that is measured, not hoped: thirteen of eighty-one steps still give a bigger room a narrower bed, because whether a rung strands floor depends on all the other furniture and a deeper bay fits more of it. `tests/bed-ladder.test.ts` ratchets that count and prints the list.|
+| `lib/scene-spec.ts` | **Single source of truth** — `Shape` union, `ScenePart`, `PART_LIBRARY` (the one catalog — the old "Real sizes" preset sheet was dissolved into it: duplicates deleted, beds and fridges kept as proper entries in their own groups — and since 2026-10-01 **one** Bed and **one** Fridge, because a size is a field and four bed rows were one piece in four sizes: the Bed is a `bed-double` whose band reaches a single's 800 mm, `sleepsTwo` in `lib/layout-rules.ts` reads a second sleeper (and so a second nightstand) off its width rather than its shape, and the fridge draws French doors from `FRENCH_DOOR_MM`, 800 mm, wide — both counts, pillows and doors, are why `bed-double` and `fridge` are parametric: drawn at the Library size and stretched, they kept the count that size chose), `defaultScene` starters, parametric/decor/support flags, DnD MIME. `defaultScene` is authored against `lib/room-bays.ts`, in each wall's own frame (`u` along it, `v` out from it) rather than in room coordinates: a rectangle reads as it always did, an L furnishes its leg and its wing, and a footprint whose walls the user has dragged is furnished as it now is. Every seeded piece is **gated on fitting** — whole footprint inside the room, clear of what is already there — so a room too small for a sofa gets fewer pieces, never a smaller sofa. What a shallow room gets instead is **different furniture**: `SCREENS` picks the largest real panel (65″ / 55″ / 43″, all three in the catalog) whose own 1.2 × diagonal minimum fits the distance the wall can offer, a bed comes off `BED_LADDER` — Queen 1600 / Double 1400 / Single 900, EU standards and every rung 2000 long, so **width is the only axis that separates them and a bed that will not work in a bay cannot be fixed by shortening it** — and a dining table with no room for 900 mm of pull-back on both sides goes against the wall and seats three — a real arrangement, not a fault (`layout-rules`’ `seats` rule is `atLeast: 3` of four sides), and one the plan search below now avoids needing wherever the room has a wall that seats four. The living group also takes the bay with the **viewing depth** rather than the most floor, and leaves a route behind the sofa where the bay opens onto another group — circulation over screen size, the same order `layout-score`'s weights give it. Gaps come from `layout-rules`' bands, sizes through `clampDims`, heights through `groundY`; all five presets seed with an empty room report. **The openings go in first** (`lib/room-openings.ts`) and everything else is arranged against them: the screen takes neither the door's wall nor a window's, the wardrobe takes a cross wall without a window, a door's swing and the route in from it are floor nothing may be seeded onto, and the living group is placed by searching **along** its wall rather than centring on it — because a seat centred across a 2.42 m alcove seals it, and a door on the *next* wall reaches round the corner far enough to refuse a sofa the app then simply did without. Then it is **dressed** — a picture over the sofa or bed, curtains at every window, a flush ceiling light over the dining table, a lamp on each nightstand — all wall- or ceiling-mounted, so `isObstacle` is false for every one and the dressing costs nothing in floor, routes or access zones. Finally the whole arrangement is **searched, not merely built**: the choices the seeder cannot make well in isolation (which wall a group backs onto, which bay the living group gets) become a `SeedPlan`, `enumeratePlans` returns at most thirty-two of them — one, and no search, for a room with a single usable viewing wall — each is built in full, and `costBreakdown` with the navigation term on picks the winner. A piece that could not be placed is charged what a piece nobody can reach is charged, so a tidy empty room cannot win. Plan zero is always the greedy plan, so the search can only return that room or a better one. A seeded seat is also **turned toward the group it belongs to**, not merely put at the right distance from it: `relationCost` charges a `faces` relation twice — once for the gap, once for the heading — and the seeder answered only the first, which was the entire relation cost of the L. Its armchair sat 2.355 m from the sofa inside a 1.2–2.6 m band, dead centre, and was charged 0.479 for sitting square to its own wall with the sofa 43° off its nose; `Suggest` could then only answer by shoving a chair that was already in the right place, up to 735 mm, at every seed. The turn is derived per candidate spot rather than chosen, so `seats` tests the footprint the chair will actually have, and `place` wraps the composed rotation to (−π, π] — a frame on the −π wall plus a turn away from the room had been producing −188°, the right rotation written wrong. The L's starter cost fell 10.8 → 4.4 and the other four presets did not move.  **Which rung is chosen before which wall, and not on cost.** The plan search scores whole candidate rooms, and `DEFAULT_WEIGHTS` has no opinion about bed size — measured at the U's 8 x 7.5, all three rungs place thirteen pieces with navigation 0.0 and totals of 4.31 / 4.29 / 4.28, so the bed was being decided by 0.7% of a total that says nothing about beds, and 8 x 6.5 gave a Queen where 8 x 7.5 gave a Single off the same ladder. So `SeedPlan.bedRung` is resolved in two stages: **the widest rung whose best plan places the bed and strands nothing** (`navigation === 0` is the definition of stranding nothing, not a tuned threshold), and failing that **the widest rung that places a bed at all**, with `clearance.ts` left to report the route. The second stage is rule 2 of `CLAUDE.md` where nobody had applied it: dropping the piece is the limit case of silently resizing it to fit, and the one form of it the user cannot see — a stranded route is a warning they can act on, a missing bed is absence. Before it, five U sizes seeded no bed at all, because `missing` charges an absent bed the same `STRANDED_PIECE` as an absent nightstand and a bedless 484.06 beat the best bed-bearing 496.95. It is **not** monotonic in room size and that is measured, not hoped: thirteen of eighty-one steps still give a bigger room a narrower bed, because whether a rung strands floor depends on all the other furniture and a deeper bay fits more of it. `tests/bed-ladder.test.ts` ratchets that count and prints the list.|
 | `lib/plant-form.ts` | **The plant, drawn at its own size.** Pure: `plantForm(dimMM)` returns the pot, the stems and the leaves, in metres, and `PlantGeo` instances them (one unit leaf, one unit stalk). The box's proportions choose the habit rather than stretching one drawing: tall for its spread is a fig (a bare trunk, broad leaves up the top), squat is an arching bush (stems out of the soil), in between is a blend, a long narrow box is a row of plants in a trough. Every leaf is the same unit leaf scaled evenly, so none is ever squashed, and each is solved to stay inside the w × d ellipse the plan draws. Re-exported from `scene-spec.ts`. |
 | `lib/soft-goods.ts` | **The soft things, drawn as cloth.** Pure meshes in metres for everything a room holds that is not hard: cushions (seat, back, scatter, pillow), the duvet and its turned-back sheet, the garments on a clothes rail, the shoes on a rack, a curtain's folds. A unit mesh (a cushion, a garment, a shoe) never leaves the box it is scaled to, so the box that collides and the box the plan draws are the box the cloth is drawn inside; a per-piece mesh (a duvet, a curtain) is authored at the piece's own `dimMM` and memoised by size. `SofaGeo`, `ArmchairGeo`, `BedGeo`, `ShoeRackGeo`, `ClothesRackGeo` and `CurtainGeo` draw them through `SoftInstances` / `SoftMesh` (`components/three/Box.tsx`). Cushions are placed by where their **cloth** reaches (`meshExtent`, the same XYZ turn three applies), never by their box's corners, because a cushion's lowest point is its seam — box-corner placement floated pillows 30 mm over the mattress — and sized against what they must stay below by the cloth's own height (`standingHeight`). A bed's scatter cushion is the one whose LEAN is searched rather than set (`scatterOnPillow`): a sofa's back is tall enough to hold a cushion at `THROW_LEAN`, a flat pillow is not — at that lean the cushion met the pillow below its own centre, balancing on its foot — so it lies back until its centre is `SCATTER_SETTLE` in front of where the pillow holds it. Where two cloths meet is read by cutting their meshes' edges at every 2 mm of height, not off whichever vertices fall in a band, which made the lean jump 9° between beds 10 mm apart. Colours are not here; tones index `DECOR` in `scene-palette.ts`. |
 | `lib/hard-goods.ts` | **The hard half: casework, appliances and joinery.** Each of twenty-two shapes (chest freezer, AC unit, soundbar, water dispenser, washing machine, microwave, television, TV console, door, nightstand, stool, side table, radiator, painting, mirror, oval mirror, air purifier, coffee table, desk — a dining table too, by category — L-desk, window, laptop) is a list of named parts — boxes, upright posts, front-facing discs and rings, and struts at any angle (`strutPose` turns a cylinder onto one) — in the piece's own frame, and its renderer in `DynamicPart.tsx` only colours them (`HardParts`, tones resolved against `DETAIL` or a shade of the body). Two rules, both swept in `tests/hard-goods.test.ts` at every corner of each size band: nothing leaves the declared box except a door's lever and hinge knuckles, and the fourteen group-scaled forms are **proportions only** — scaling one axis moves and grows every part along that axis alone — so § 36 holds for a module the renderer regex cannot see. The parametric forms carry real joinery: a TV console's 18 mm doors and its bay count (`consoleBays`, 550 mm a bay, two to five), a door's stiles, rails and 50 mm lever (`LEVER_PROUD`), a nightstand's overhang, reveals and drawer travel (`NIGHTSTAND`, `nightstandSlide`), and a stool's 16 mm splayed legs and stretchers (`STOOL`), whose feet are lifted by exactly the dip of their square-cut ends so they stand on the floor. Two more since: a pedestal side table (`sideTableForm`, NON-parametric and ROUND — authored on a square of its width and stretched to its depth by the renderer, as the stool and lamps are), and a column radiator (`radiatorForm`, PARAMETRIC) of `radiatorFins(width)` sections, each one to four round tubes deep by its depth (`RADIATOR.row`, 45 mm a row), capped round at both ends, joined across the depth and along the width, on two feet, with a valve in a strip at the right-hand end. Its `columns` are drawn as two instanced sets (`RoundInstances`, a unit cylinder and a unit sphere) so a long radiator is two draw calls, not a few hundred; `tests/round-instances.test.tsx` holds every drawn tube and cap to its part's extent. Four wall and floor pieces after that, all group-scaled: a framed print (`paintingForm` — a wood moulding, a gilt fillet, a cream mat and the picture, each a `border` of four rails stepped back behind the one round it, and three colour fields on a ground of the user's colour), a framed mirror (`mirrorForm`, frame, bead and glass, the frame inside the piece's own outline where it used to stand 15 mm past it), an oval mirror (`ovalMirrorForm`, three concentric discs authored on a CIRCLE of the width and stretched to the height by its renderer — the `oval` row flag in the test), and an air purifier (`airPurifierForm`, ROUND: plinth, collar, an intake of `AIR_PURIFIER.ribs` ribs over a dark core, shell, chamfer and a sunk outlet with the dial and status light in it, which retired its `drawn-height` excuse). Round 7 did the tables, the desks, the window and the laptop. A coffee table (`coffeeTableForm`, group-scaled) on four posts in brass ferrules, with aprons, a top ease and a shelf at `COFFEE_SHELF`. A dining table (`diningTableForm`, PARAMETRIC) on `surfacePostsLocal`'s legs with glides, 20 mm aprons set in from the legs' faces and a top ease, the stack `DINING_TOP`. A desk and an L-desk (`deskForm`, both PARAMETRIC — the L-desk was group-scaled with absolute posts and is not any more): a side panel and two legs, a drawer between them with its pull, and a cable tray under the back, `DESK_TOP`. `foot-cells.ts` holds all three stacks because the tuck rule's knee room (`surfaceKneeMM`) reads the same numbers the drawing does. A window (`windowForm`, PARAMETRIC) with casing, a sill that always reaches past its frame, an apron, a frame, `windowPanes` casement sashes with a handle each and mullions between them; its glass comes back on its own, because `HardParts` boxes cast shadows and glass must not. And a laptop (`laptopForm`, group-scaled): a base on four feet with a 12 × 5 keyboard, a space-bar row and a trackpad, a hinge barrel, and a lid in its own frame turned back by `LAPTOP.tilt` about the hinge. The lid's length is solved so its top edge lands on the open height, which retired the laptop's `drawn-height` excuse. |
@@ -3438,6 +3505,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | `lib/themes.ts` | One-tap restyle palettes — four, each a different room. |
 | `lib/capture.ts` / `lib/image-quality.ts` | Photo capture + quality (the colour-sampling module is deleted — scanned pieces take default colours). `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. `readCaptureFacts` is the one EXIF read, returning two things with two lifetimes: the `pose` persisted onto the `Capture` for as long as the room exists, and the transient facts that decide which wall this is and are then dropped. It MUST run on the original file — the strip destroys exactly what it reads, which is the point of the strip. |
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
+| `lib/appearance.ts` | Night mode's vocabulary and plumbing: `APPEARANCES`, the inline `APPEARANCE_BOOT` script that sets `<html data-theme>` before first paint, `applyAppearance` (with the one-frame transition blackout) and `applyThemeColor`. Applied after hydration by `components/AppearanceSync.tsx`. See "Night mode" in §6. |
 | `lib/drag-live.ts` | The high-frequency drag channel, deliberately **outside** `useStudio` — see §5. |
 | `lib/scene-file.ts` | The `.danmu.json` scene file — build, serialise, and defensively parse. The app's only import path and so its only untrusted input; see §6a. `buildSceneFile` bakes the studio's transform overrides so the file holds one truth per piece, and `parseSceneFile` never throws: it returns a reason, or a file plus the list of what it dropped. Its filename comes from `exports.ts`' `fileSlug`. |
 | `lib/exports.ts` | **What to call a file the user is taking away** — `fileSlug` and `snapshotFileName`. The three downloads each named themselves: the scene file slugged the room's name with a length cap, the export menu slugged it without one, the floor plan did not slug at all — it was `floor-plan.png` every time — and the 3D view was the last holdout, a fixed `room-snapshot.png` that was the same for every room, so exporting three rooms left three files the browser silently numbered `(1)` and `(2)`. The cap earns its place too: a 300-character room name produces a filename the OS may refuse to write, which surfaces as a download that did nothing. Two things are deliberately NOT here — the furniture CSV (retired; see §5's top bar) and the transform merge (that is `lib/transforms.ts`, enforced by `tests/room-scene.test.ts`). Tested in `tests/exports.test.ts`. |
@@ -3451,6 +3519,70 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | `lib/model-cache.ts` · `lib/backup-nudge.ts` · `lib/leave-note.ts` · `lib/page-leave.ts` | Local persistence beyond rooms: the detector's verified weights kept in Cache Storage after the first download (written by the page, not the service worker); the nudge to keep rooms from vanishing with site data; the synchronous leave note; the save-on-leave hooks. |
 | `lib/label-suggest.ts` · `lib/photo-drop.ts` · `lib/photo-tag.ts` | The review and capture screens' small decisions: what to offer when a detected piece is renamed; what a drop onto a photo tile means (replace vs reorder); where a piece's name tag sits on the photo. |
 | `lib/after-paint.ts` · `lib/brand-mark.ts` · `lib/site-url.ts` | Let a busy state paint before blocking work; the Danmu mark drawn once for the places that cannot share a renderer; the absolute site URL Open Graph tags need. |
+
+### Night mode — `lib/appearance.ts`
+
+**One setting, three answers.** `useSettings.appearance` is `system` (the default),
+`light` or `dark`. It has two controls and only two: a **Night mode** segmented row in
+Settings → Appearance, and the same row at the foot of the studio's View settings (the
+laptop's gear, the phone's View sheet), because it is the one app setting someone
+reaches for mid-session when the lights go down. Both read `APPEARANCE_OPTIONS`, so
+the two cannot name a choice differently. No new canvas corner.
+
+**How it reaches the page.** A pinned choice is written to `<html data-theme>`;
+System writes nothing and lets `@media (prefers-color-scheme: dark)` decide, so a
+device that flips at sunset takes the app with it and no script has to notice.
+`[data-theme="light"]` is what lets Light win on a dark device.
+
+**No flash.** React runs after first paint, so it cannot set the attribute in time.
+`APPEARANCE_BOOT` is a few lines of ES5 inlined in `<head>` by `app/layout.tsx`: it
+reads the same `danmu-settings` record the store persists, through the same
+vocabulary, and sets the attribute before the stylesheet paints. It never throws
+(blocked storage is simply System). The CSP needed nothing: `script-src` already
+carries `'unsafe-inline'` for Next's bootstrap — if that ever tightens to a hash, this
+string is the thing to hash. `<html>` carries `suppressHydrationWarning` for exactly
+that one attribute. After hydration `components/AppearanceSync.tsx` keeps the
+attribute in step, re-points the two `theme-color` metas (`viewport.themeColor` emits
+one per scheme, which follows the DEVICE, so a pinned choice sets the matching one to
+`all`) — and again whenever Next rewrites those tags, which it does on every
+client-side navigation (a MutationObserver; found in the browser walk, where a pinned
+Dark lost its status-bar colour on the way into the studio) — and re-reads the record
+when another tab changes it.
+
+**No transition storm.** Every control with a colour transition would fade on its own
+clock. `applyAppearance` sets `data-theme-switching` for the frame the colours change
+in, and `globals.css` turns every transition off under it; the attribute comes off two
+frames later. A System flip while the app is open gets the same treatment.
+
+**The palette.** `globals.css`' `:root[data-theme="dark"]` restates every COLOUR
+token — a warm dark, never black: the papers keep the light paper's hue and step
+LIGHTER with elevation, the ink is the light theme's cream, moss is lifted
+(`--accent` still a fill, under 4.5:1 on purpose), amber stays warm, shadows go black
+and heavier. Ink surfaces invert with the rest: `--ink` is cream and `--on-ink` /
+`--on-accent` (aliases of `--paper`) are dark, so the primary button and the photo
+chips are cream with dark type, and their warn/success type is brought DOWN to a
+shared lightness. CSS cannot OR a media query with an attribute selector, so the
+palette is written twice; the second copy, under the media query, is generated by
+`node scripts/sync-dark-palette.mjs` (`--check` to verify).
+
+**What does not theme, deliberately:** the 3D room — walls, floor, furniture, and the
+lighting mood's sky behind it — is the user's room under its own light, not the app's
+paper (`SCENE` and `lib/lighting-moods.ts` stay single-valued); the sky tokens; the
+piece halos and `--scrim-photo`, which stand on a photograph; the floor-plan PNG
+(`PLAN`), which is a document to print or send and stays on light paper; and the
+rasters and `app/global-error.tsx`, which render without the stylesheet. The 2D plan
+on screen is drawn with tokens and themes with everything else.
+
+**Held by tests.** `tests/color-tokens.test.ts` reads the light and dark blocks
+separately (the dark one layered over the light, as the cascade does), checks every
+contrast claim in each against its own palette, asserts the body-type tokens clear
+4.5:1 on all four papers and `--edge` 3:1 on the grounds controls stand on, that the
+mirror equals the dark block, that every light colour token has a dark value, that the
+dark papers are warm and not black, the photo-chip silhouette in both themes, and
+that `viewport.themeColor` is the manifest's `PAPER_0` / `PAPER_0_DARK`.
+`tests/appearance.test.tsx` runs the boot script itself against stored records,
+corrupt ones and a throwing storage, and drives the View menu's switch through to the
+attribute.
 
 ### Two shells, and what each route stands in
 

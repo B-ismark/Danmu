@@ -304,7 +304,7 @@ describe('defaultDepthFor', () => {
 
   it('lets the named shape narrow the category default', () => {
     // A pendant lamp is not a floor lamp. The category default is the floor
-    // lamp's 300 mm; 'lamp-pendant' caps at 800, 'lamp-table' at 450 — so this
+    // lamp's 300 mm; 'lamp-ceiling' caps at 800, 'lamp-table' at 450 — so this
     // asserts the shape is consulted at all, which a category-only lookup would
     // not be.
     expect(defaultDepthFor('lamp', 'lamp-floor')).toBe(300);
@@ -509,11 +509,11 @@ describe('geoLocate and geoPlace', () => {
     // ceiling anchor only when the detector's shape hint says pendant or fan — its
     // category's own anchor is 'wall-high', so the row above never asks — and cloth the
     // model called a pendant still hangs on a wall.
-    const hung = corner({ category: 'curtain', shape: 'lamp-pendant' }, 1.4, 2.3, 0.08);
+    const hung = corner({ category: 'curtain', shape: 'lamp-ceiling' }, 1.4, 2.3, 0.08);
     expect(anchorFor('curtain', sceneShapeFor('curtain', hung.label, hung.shape))).toBe('ceiling');
     expect(geoRefine(hung, WCALS, ROOM)).toBe(hung);
     expect(geoLocate(hung, WCALS, ROOM).position).toBeDefined();
-    const pendant = corner({ category: 'lamp', shape: 'lamp-pendant' });
+    const pendant = corner({ category: 'lamp', shape: 'lamp-ceiling' });
     expect(geoLocate(pendant, WCALS, ROOM)).toBe(pendant);
     const sofa = det({ category: 'sofa', slot: 'e', box: [0.02, 0.9, 0.1, 0.09] });
     expect(geoLocate(sofa, WCALS, ROOM)).toBe(sofa);

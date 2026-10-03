@@ -574,6 +574,13 @@ backend, no account. The 3D studio *is* the product.
    put a literal hex in a renderer for a surface the user can recolour. The manifest
    and `viewport.themeColor` in `app/layout.tsx` are two files answering "what
    colour is this app", so a test pins them to each other too.
+   **Every colour token has a night-mode value** (`:root[data-theme="dark"]`, with a
+   generated mirror under `prefers-color-scheme` — `node scripts/sync-dark-palette.mjs`;
+   see Design.md § Night mode). A new colour token without one fails
+   `tests/color-tokens.test.ts`, and so does a dark value that misses its contrast. A
+   colour that must invert with the theme is a token or a `color-mix` of one, never a
+   literal black scrim under `--on-ink`/`--on-accent` — those are DARK in night mode.
+   The 3D room and the plan PNG export deliberately do not theme.
    **A control that does not fit must reflow, not spill or vanish** — the UI half
    of rule 2's "never silently resize it to fit", and violated at least as often.
    Widths here are ceilings, not promises: `min(Npx, calc(100vw - 32px))` for a

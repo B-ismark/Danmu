@@ -336,7 +336,7 @@ const asPart = (over: Partial<ScenePart>): ScenePart =>
 
 describe('lightFor', () => {
   it('gives every lamp shape a sensible domestic bulb', () => {
-    for (const shape of ['lamp-table', 'lamp-floor', 'lamp-pendant'] as const) {
+    for (const shape of ['lamp-table', 'lamp-floor', 'lamp-ceiling'] as const) {
       const spec = lightFor(asPart({ shape }))!;
       expect(spec).not.toBeNull();
       expect(spec.lumens).toBeGreaterThan(100);
@@ -348,7 +348,7 @@ describe('lightFor', () => {
 
   it('only a shaded fixture aims its light', () => {
     // Which matters beyond looks: a cone is one shadow map, a bare bulb is six.
-    expect(lightFor(asPart({ shape: 'lamp-pendant' }))!.coneDeg).toBeGreaterThan(0);
+    expect(lightFor(asPart({ shape: 'lamp-ceiling' }))!.coneDeg).toBeGreaterThan(0);
     expect(lightFor(asPart({ shape: 'lamp-floor' }))!.coneDeg).toBeUndefined();
   });
 
@@ -623,7 +623,7 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
 // `overlapsSomething`, `layout-score`'s window branch and `layout-solve`'s `movable`
 // mask. (A sixth, the 3D tab's wall-gap guides, went with those guides.)
 //
-// A `lamp-pendant` was seeded `wallMounted: false` directly beneath a comment saying
+// A `lamp-ceiling` was seeded `wallMounted: false` directly beneath a comment saying
 // "Ceiling-anchored, so `groundY` decides the height", so its `pos[1]` was a mesh
 // CENTRE while its flag claimed floor-standing. Found by danmu-bc's sweep, and this
 // is that sweep as an assertion: the seeder's default derives now, and the two
@@ -699,7 +699,7 @@ describe('every part the app builds agrees with the derived mount flag', () => {
     // `defaultScene` never sets, so the fallback cannot satisfy this again silently.
     // Categories ALONE cannot find this. The label is what `refineShape` reads, and the
     // disagreement only exists where a label refines to a shape the category's own row
-    // did not describe — `lamp` + "pendant" is `lamp-pendant`, which anchors to the
+    // did not describe — `lamp` + "pendant" is `lamp-ceiling`, which anchors to the
     // ceiling, out of a row that carried no flag at all. Sweeping one label per category
     // gives each category its DEFAULT shape, where a hand-typed row and the derivation
     // agree by construction, so the first version of this test was green against a full
@@ -724,7 +724,7 @@ describe('every part the app builds agrees with the derived mount flag', () => {
     // The pair that made this a defect has to be IN the sweep, or the sweep is a sweep
     // over agreement. Named, so a future narrowing of `refineShape` fails here loudly
     // rather than quietly removing the only case with teeth.
-    expect(seen, 'the sweep must reach a ceiling-anchored refinement').toContain('lamp/pendant->lamp-pendant');
+    expect(seen, 'the sweep must reach a ceiling-anchored refinement').toContain('lamp/pendant->lamp-ceiling');
     // A count with a floor, for the same reason the sweep above has one: a detection
     // the builder refuses produces no parts, and a loop over nothing is green.
     expect(seen.length, 'the sweep must have produced detected parts').toBeGreaterThanOrEqual(
@@ -746,7 +746,7 @@ describe('every part the app builds agrees with the derived mount flag', () => {
     // green against the defect and would have been decoration. `lamp` carried no flag
     // and "pendant" refines to a ceiling anchor, which is the disagreement.
     const [lamp] = buildSceneFromRoom(room([saved(1, { category: 'lamp', label: 'pendant__slot:n' })]));
-    expect(lamp.shape, 'the fixture must actually refine to a pendant').toBe('lamp-pendant');
+    expect(lamp.shape, 'the fixture must actually refine to a pendant').toBe('lamp-ceiling');
     expect(isWallMountedPart(lamp.category, lamp.shape)).toBe(true);
     expect(lamp.wallMounted, 'the builder must not answer this by category').toBe(true);
   });

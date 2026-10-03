@@ -25,7 +25,7 @@ const SHAPES: Shape[] = [
   'chair-dining', 'chair-office', 'chair-armchair', 'ottoman',
   'bed-single', 'bed-double',
   'desk-standard', 'desk-l', 'coffee-table', 'side-table', 'nightstand',
-  'lamp-floor', 'lamp-table', 'lamp-pendant',
+  'lamp-floor', 'lamp-table', 'lamp-ceiling',
   'mirror', 'mirror-oval', 'painting', 'ac-unit', 'window',
   'monitor', 'laptop', 'fan', 'fridge', 'wardrobe', 'curtain',
   'bookshelf', 'shoe-rack', 'door',
