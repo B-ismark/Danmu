@@ -208,7 +208,7 @@ it: rename such a room from the rooms list, then open it. The light should sit f
 and `tests/parametric-caps.test.ts` cover the geometry. No test renders geometry, so the look
 itself is for eyes only.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `e4e3f4e` (B-ismark/Danmu#261), not yet looked at.
 
 ## Drag and selection
 
@@ -3264,7 +3264,7 @@ GPU is a judgement.
 - **Change the model** (Inspector button or right-click a piece): the search opens empty with the cursor in it; typing starts a fresh search. The icon is two opposed arrows (exchange) in the Inspector, the dialog kicker and the right-click menu; **Ungroup** has its own ungroup glyph now instead of sharing it.
 - **Scan waiting card** (capture → detect with a key): only the picture, the privacy note and "Stop and add by hand" show. No "Finding your furniture" heading, and no "Still working…" line after waiting ~20 s. A screen reader still announces the dialog as "Finding your furniture".
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `e4e3f4e` (B-ismark/Danmu#261), not yet looked at.
 
 ## The day strip's sun rises and sets in the pill, and a scrub keeps up with the hand
 
@@ -3289,7 +3289,7 @@ scene renders during a 2 s scrub by roughly a factor of 3–14 with no long task
 default quality. Whether that feels like the pill is in the hand on a real GPU, and
 whether the 4.5 px rise reads at phone size, is a judgement.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `e4e3f4e` (B-ismark/Danmu#261), not yet looked at.
 
 ## Night mode, on a real screen and a real phone
 
@@ -3317,7 +3317,7 @@ and pinned-Dark, but "warm dark, not black" and whether the plan's amber is too 
 are judgements, and Safari's handling of a re-pointed `theme-color` and of
 `color-scheme` on form controls has not been seen.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `e4e3f4e` (B-ismark/Danmu#261), not yet looked at.
 
 ## The Library drag in 3D: solid ghost, no row riding the cursor, Delete right after
 
@@ -3341,4 +3341,4 @@ one-frame deferral — the gain on a real GPU at 60 Hz is reasoned from the code
 measured. The blank drag picture is a browser surface no headless screenshot captures,
 and the focus hand-off is tested in jsdom, not in a browser's own drag-and-drop.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `e4e3f4e` (B-ismark/Danmu#261), not yet looked at.
