@@ -87,6 +87,7 @@ import { formatDim, formatLength } from '@/lib/units';
 import { normalizeStoredParts } from '@/lib/scene-spec';
 import { savedLabel } from '@/lib/dates';
 import { Icon } from '@/components/ui/Icon';
+import { ShapeIcon } from '@/components/ui/ShapeIcon';
 import { MiniPlan } from './MiniPlan';
 import { IdeasPanel } from './IdeasPanel';
 import { useBesideRail } from './useBesideRail';
@@ -1332,13 +1333,15 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
   const dimUnit = useSettings((s) => s.dimUnit);
   const [copied, setCopied] = useState(false);
 
-  // Group identical pieces (same name + dims + colour) into one line with a count.
+  // Group identical pieces (same name, model, dims and colour) into one line with a
+  // count. The model is in the key because the line is drawn with it: two pieces
+  // renamed alike are still a chair and a sofa.
   // Inline rather than shared: the CSV that was the second consumer is retired, and
   // this is the only thing that reads it now.
   const rows = useMemo(() => {
     const map = new Map<string, { part: ScenePart; count: number }>();
     for (const p of parts) {
-      const key = `${p.name}|${p.dimMM.join('x')}|${p.color ?? ''}`;
+      const key = `${p.name}|${p.shape}|${p.dimMM.join('x')}|${p.color ?? ''}`;
       const e = map.get(key);
       if (e) e.count += 1;
       else map.set(key, { part: p, count: 1 });
@@ -1387,11 +1390,7 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
       ) : (
         rows.map(({ part: p, count }, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
-            {p.color ? (
-              <span style={{ width: 12, height: 12, borderRadius: 'var(--r-1)', background: p.color, border: '1px solid var(--hairline-strong)', flexShrink: 0 }} />
-            ) : (
-              <span style={{ width: 12, height: 12, borderRadius: 'var(--r-1)', background: 'var(--paper-2)', border: '1px dashed var(--hairline-strong)', flexShrink: 0 }} />
-            )}
+            <ShapeIcon shape={p.shape} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="truncate" style={{ fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)' }}>
                 {count > 1 && <span style={{ color: 'var(--accent-text)' }}>{count}× </span>}
@@ -1401,6 +1400,12 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
                 {formatDim(p.dimMM[0], dimUnit)} × {formatDim(p.dimMM[1], dimUnit)} × {formatDim(p.dimMM[2], dimUnit)} {dimUnit}
               </div>
             </div>
+            {/* Its colour, where one was chosen; a dashed square where it keeps the default. */}
+            {p.color ? (
+              <span style={{ width: 12, height: 12, borderRadius: 'var(--r-1)', background: p.color, border: '1px solid var(--hairline-strong)', flexShrink: 0 }} />
+            ) : (
+              <span style={{ width: 12, height: 12, borderRadius: 'var(--r-1)', background: 'var(--paper-2)', border: '1px dashed var(--hairline-strong)', flexShrink: 0 }} />
+            )}
           </div>
         ))
       )}

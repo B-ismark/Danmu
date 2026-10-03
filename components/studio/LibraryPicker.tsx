@@ -21,6 +21,7 @@ import { useRef, useState } from 'react';
 import { PART_LIBRARY, DND_MIME, type LibraryItem } from '@/lib/scene-spec';
 import { rankLibrary, sizeFromQuery, queryNamesSize, resolveQuerySize, describeOverruled } from '@/lib/shape-search';
 import { Icon } from '@/components/ui/Icon';
+import { ShapeIcon } from '@/components/ui/ShapeIcon';
 
 const ALL_ITEMS: LibraryItem[] = PART_LIBRARY;
 
@@ -251,12 +252,15 @@ export function LibraryPicker({
                   }
                   style={{
                     justifyContent: 'flex-start',
-                    paddingLeft: 10,
+                    // The chip sits 3px in, square to the button's rounded corner.
+                    paddingLeft: 3,
                     cursor: draggable ? 'grab' : 'pointer',
                     minWidth: 0,
                   }}
                 >
-                  <Icon name="plus" size={11} />
+                  {/* What it is, drawn. The row is the add button, so a plus beside every
+                      name said one thing many times; the drawing tells two lamps apart. */}
+                  <ShapeIcon shape={added.shape} />
                   {/* Left-aligned: a list of names reads down its left edge, and
                       `.ds-btn` centres its text, which set each name floating in
                       the middle of a full-width row. */}
