@@ -234,12 +234,12 @@ dimension labels sized in screen pixels so they read the same on a phone as on a
 A room built at the typical size, because nothing was typed, is **marked rough**
 (`RoomData.roughSize: true`; absent otherwise, so every older room reads as measured).
 The mark is a claim about every number beside it, so it is said wherever a size is: a
-quiet note above the studio's size boxes, a `≈` on the Room section's collapsed size
+floating callout beside the studio's size boxes (`RoughSizeCallout`: portalled, measured and `position: fixed`, since a note in the rail would be clipped by it; its ✕ hides it for that room for the session, and on a phone it is a card at the top of the screen), a `≈` on the Room section's collapsed size
 and on each capture card's wall length, and the scan screen's subtitle, which says sizes
 are rough until the room's size is set — true, since every size read off a wall or the
 floor line scales with the assumed wall distance. It clears on exactly the two
 answers that mean *this is my room's size*: a size committed in the studio's Room
-section (`setRoom`, even one equal to the typical size) and the note's **These are
+section (`setRoom`, even one equal to the typical size) and the callout's **These are
 right** (`confirmSize`). A wall drag keeps it — shaping by eye is not measuring. Both
 studio savers write it from the live room through `markRoughSize`, because each reads
 the stored record and spreads it, and would otherwise put back a mark the other had

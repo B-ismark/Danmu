@@ -2272,21 +2272,43 @@ textarea.field { border-radius: var(--r-2); }
    negative right margin cancels its own padding, so the LABEL lines up with the
    fields' right edge rather than the invisible button box. */
 .size-entry__reset { margin-left: auto; margin-right: -12px; }
-/* The studio's "rough sizes" note (`RoomDimsEditor`), shown while a room still
-   stands at its shape's typical size. Neutral paper rather than `--warn`: nothing
-   is wrong, a size simply has not been given. A grid, so the words wrap beside the
-   icon and the button sits under the words rather than under the icon — at the
-   compact rail's ~176px of content as much as the wide one's. */
-.rough-note {
-  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px;
-  align-items: start; margin-bottom: 12px; padding: 8px 10px 4px;
-  border-radius: var(--r-2); background: var(--paper-2); color: var(--ink-2);
+/* The studio's "typical sizes" callout (`RoughSizeCallout`): a speech bubble to the
+   right of the Room section's size fields, `position: fixed` and measured (a card
+   inside the rail would be clipped by it). Neutral paper rather than `--warn`:
+   nothing is wrong, a size simply has not been given. The width is a ceiling. */
+.rough-callout {
+  position: fixed; z-index: var(--z-popover);
+  width: min(248px, calc(100vw - 32px)); box-sizing: border-box;
+  transform: translateY(-50%);
+  padding: 12px 36px 12px 12px;
+  border-radius: var(--r-3); border: 1px solid var(--edge);
+  background: var(--paper); color: var(--ink-2); box-shadow: var(--shadow-float);
+  animation: rough-callout-in var(--dur-slow) var(--ease-out) both;
 }
-.rough-note > svg { margin-top: 1px; color: var(--ink-3); }
-.rough-note__text { margin: 0; font-size: var(--fs-caption); line-height: 1.4; overflow-wrap: anywhere; }
-/* Right-aligned under the words, like the shape picker's reset; the negative right
-   margin lines the LABEL up with the words' right edge rather than the button box. */
-.rough-note__confirm { grid-column: 2; justify-self: end; margin-right: -8px; }
+.rough-callout--phone {
+  left: 16px; right: 16px; top: 12px; width: auto; transform: none;
+  animation-name: rough-callout-in-top;
+}
+.rough-callout__arrow {
+  position: absolute; left: -6px; top: 50%; width: 10px; height: 10px;
+  margin-top: -5px; transform: rotate(45deg);
+  background: var(--paper); border-left: 1px solid var(--edge); border-bottom: 1px solid var(--edge);
+}
+.rough-callout__close { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; }
+.rough-callout__title {
+  display: flex; align-items: center; gap: 6px; margin: 0 0 4px;
+  font-size: var(--fs-caption); font-weight: 600; color: var(--ink);
+}
+.rough-callout__title > svg { flex: none; color: var(--ink-3); }
+.rough-callout__text { margin: 0 0 10px; font-size: var(--fs-caption); line-height: 1.4; overflow-wrap: anywhere; }
+@keyframes rough-callout-in {
+  from { opacity: 0; transform: translate(-6px, -50%); }
+  to { opacity: 1; transform: translate(0, -50%); }
+}
+@keyframes rough-callout-in-top {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
 .num-field__steps {
   position: absolute; right: 3px; top: 3px; bottom: 3px;
   display: flex; flex-direction: column; justify-content: center;
@@ -2300,9 +2322,9 @@ textarea.field { border-radius: var(--r-2); }
      mouse; a minimum wins over it, so a finger gets 44px without every caller
      having to know it is on a phone. */
   .select-trigger, .select-option { min-height: 44px; }
-  /* The studio's "These are right": a small button for a mouse, a thumb-sized one
+  /* The callout's "These are right": a small button for a mouse, a thumb-sized one
      for a finger. */
-  .rough-note .ds-btn--sm { min-height: 44px; }
+  .rough-callout .ds-btn--sm { min-height: 44px; }
   /* The pages that are read and filled in (`ui/DocShell`): the workspace, settings
      and the layout picker. Their buttons and fields are sized for a mouse inline;
      `.key-field` is settings' key input, whose boundary is a wrapper round it. Not a
