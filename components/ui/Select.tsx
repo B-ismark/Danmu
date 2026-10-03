@@ -42,6 +42,7 @@ export function Select<T extends string>({
   options,
   value,
   onChange,
+  onActiveChange,
   ariaLabel,
   title,
   id,
@@ -53,6 +54,10 @@ export function Select<T extends string>({
   options: SelectOption<T>[];
   value: T;
   onChange: (v: T) => void;
+  /** Optional. Called with the option the open list is highlighting (pointer or
+   *  arrows), and with `null` when the list closes. Lets a caller preview what an
+   *  option refers to before it is chosen. Never fires for a closed Select. */
+  onActiveChange?: (v: T | null) => void;
   ariaLabel?: string;
   title?: string;
   id?: string;
@@ -134,6 +139,17 @@ export function Select<T extends string>({
   useEffect(() => {
     if (!open) return;
     document.getElementById(optionId(active))?.scrollIntoView({ block: 'nearest' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, active]);
+
+  // Reported only while open, and `null` on close or unmount so a preview cannot be
+  // left on. The callback is read through a ref: callers pass an inline function.
+  const activeCb = useRef(onActiveChange);
+  activeCb.current = onActiveChange;
+  useEffect(() => {
+    if (!open) return;
+    activeCb.current?.(options[active]?.value ?? null);
+    return () => activeCb.current?.(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, active]);
 

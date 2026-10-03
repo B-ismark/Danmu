@@ -273,6 +273,20 @@ one check a person can make against their own picture. This is what makes an
 arbitrary upload first-class instead of force-fitting it to a ritual — a single
 photo is a supported way to use the screen, not a degraded one.
 
+**The photo card** is two halves. The photo carries a dark badge (`Wall 1 · 6.0 m` — the
+label and the derived span) and two round buttons on paper, Replace and Remove, named by
+wall in their `aria-label`s. Under it, a paper footer holds a status pill (sage "Looks
+good", warn for a flag or a clash, "Checking this photo…" while unscored, all from
+`flagTone` / `flagLabel` / `flagHelp`), then the **Wall** dropdown (`Select`; a wall that
+already holds a photo reads "Wall 3 (swap)" because `movePhoto` swaps) beside the rung that
+placed it in quiet text — `REASON`: "Placed by compass", "Placed by shutter time", "Placed
+by order added", "Placed by you". Pointing at or focusing a wall's name — the badge, the
+Wall control, or an option highlighted in its open list (`Select`'s optional
+`onActiveChange`) — sets `data-shimmer` on that wall's `<g>` in the plan beside the how-to,
+where a CSS pulse and marching highlight run for `calc(var(--dur-slow) * 4)` a loop (still
+and lit under reduced motion). The filmstrip under the live camera is photo + Remove only.
+`tests/capture-card.test.tsx` mounts the page to hold it.
+
 That works because the slot ids are a **cyclic order, not compass directions**.
 Nothing outside `capture-slots`' own arithmetic cares where north is — the room's
 own relationship to true north lives separately in `Site.bearingDeg`, which the

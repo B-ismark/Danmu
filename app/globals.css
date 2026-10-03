@@ -2092,6 +2092,32 @@ textarea.field { border-radius: var(--r-2); }
 .capture-plan__wall[data-state="next"] line { stroke: var(--accent); stroke-width: 5; }
 .capture-plan__wall[data-state="next"] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
 .capture-plan__wall[data-state="next"] text { fill: var(--on-accent); }
+/* The wall's name was hovered or focused on a card (page.tsx `shimmer`): that wall's
+   line glows in moss and a paper highlight marches along it. One loop is four
+   `--dur-slow`s, so the speed is a token and not a number. */
+.capture-plan__wall line.capture-plan__shine { display: none; fill: none; pointer-events: none; }
+.capture-plan__wall[data-shimmer] line:not(.capture-plan__shine) { stroke: var(--accent); stroke-width: 6; animation: capture-wall-pulse calc(var(--dur-slow) * 4) var(--ease-in-out) infinite; }
+.capture-plan__wall[data-shimmer] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
+.capture-plan__wall[data-shimmer] text { fill: var(--on-accent); }
+.capture-plan__wall[data-shimmer] line.capture-plan__shine {
+  display: inline; stroke: var(--paper); stroke-width: 3; stroke-dasharray: 10 30;
+  animation: capture-wall-march calc(var(--dur-slow) * 4) linear infinite;
+}
+@keyframes capture-wall-pulse { 50% { stroke-width: 8; } }
+@keyframes capture-wall-march { to { stroke-dashoffset: -40; } }
+/* Reduced motion (the block near the end of this file): the wall stays lit, still. */
+/* The card's footer: what the photo is (status), then which wall it is on. */
+.capture-foot { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--paper); min-inline-size: 0; }
+.capture-foot__status { display: flex; flex-wrap: wrap; gap: 6px; }
+.capture-status {
+  display: inline-flex; align-items: center; gap: 5px; min-block-size: 24px; padding: 2px 10px; max-inline-size: 100%;
+  border-radius: var(--r-full); font-size: var(--fs-caption); font-weight: 700; line-height: 1.25;
+}
+.capture-status[data-tone="good"] { background: var(--success-tint); color: var(--success-text); }
+.capture-status[data-tone="warn"] { background: var(--warn-tint); color: var(--warn-text); }
+.capture-status[data-tone="quiet"] { background: var(--paper-2); color: var(--ink-3); font-weight: 600; }
+.capture-foot__wall { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.capture-foot__reason { color: var(--ink-3); font-size: var(--fs-caption); min-inline-size: 0; }
 .capture-height { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
 .capture-height__text { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; font-size: var(--fs-body); }
 .capture-height__field { display: flex; align-items: center; gap: 6px; }
@@ -2435,6 +2461,9 @@ textarea.field { border-radius: var(--r-2); }
   /* The duration above is cut, the stagger is not: without this the Building screen's
      pieces wait their turn invisibly, on a screen that is up only as long as the save. */
   .iso-room__piece { animation-delay: 0s !important; }
+  /* The capture plan's wall shimmer: lit and still, no pulse and no marching dashes. */
+  .capture-plan__wall[data-shimmer] line:not(.capture-plan__shine) { animation: none; stroke-width: 7; }
+  .capture-plan__wall[data-shimmer] line.capture-plan__shine { display: none; animation: none; }
 }
 
 
