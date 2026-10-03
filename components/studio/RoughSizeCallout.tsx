@@ -82,7 +82,9 @@ export function RoughSizeCallout() {
   useLayoutEffect(() => {
     if (!show || phone) return;
     const anchor = document.querySelector('[data-room-dims]');
-    const update = () => setSpot(measure(anchor));
+    // Looked up again on every measure: folding the Room section away and back mounts
+    // a NEW fields row, and a callout measuring the detached one would never return.
+    const update = () => setSpot(measure(document.querySelector('[data-room-dims]')));
     update();
     window.addEventListener('resize', update);
     window.addEventListener('scroll', update, true);

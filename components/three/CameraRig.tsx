@@ -31,6 +31,8 @@ export function CameraRig() {
   const targetCam = useRef(new Vector3());
   const targetLook = useRef(new Vector3());
   const animatingUntil = useRef(0);
+  /** A pointer or wheel gesture of the user's own is on the controls. */
+  const handOn = useRef(false);
   // Only the F key (which bumps frameSelectedToken) should frame a part. Track
   // the last handled token so merely *selecting* a different part never moves
   // the camera — previously `selectedId` was an effect dep, so once the token
@@ -88,10 +90,19 @@ export function CameraRig() {
         minPolarAngle={0.15}
         maxPolarAngle={Math.PI - 0.15}
         target={[0, 1.0, 0]}
-        onChange={() => invalidate()}
         // Orbiting, panning or zooming makes the camera the user's: none of the three
-        // view buttons is true any more, so none shows pressed (ViewGizmo).
+        // view buttons is true any more, so none shows pressed (ViewGizmo). On the first
+        // CHANGE of a gesture, not on its start — OrbitControls starts on every press,
+        // and a click on the floor to deselect has not moved the camera anywhere.
         onStart={() => {
+          handOn.current = true;
+        }}
+        onEnd={() => {
+          handOn.current = false;
+        }}
+        onChange={() => {
+          invalidate();
+          if (!handOn.current) return;
           animatingUntil.current = 0;
           if (useStudio.getState().viewPreset !== 'free') useStudio.getState().setView('free');
         }}
