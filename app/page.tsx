@@ -498,6 +498,9 @@ function RoomCard({
       onBlur={() => setFocused(false)}
       style={{
         position: 'relative',
+        // Its own stack, so the corner tick's z-index stays inside the card and the
+        // sticky select bar stays above every card scrolling under it.
+        isolation: 'isolate',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',

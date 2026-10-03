@@ -561,7 +561,9 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 .ds-btn--danger-line { color: var(--danger-text); border-color: var(--danger); }
 .ds-btn--danger-line:hover:not(:disabled) { background: var(--danger-tint); }
 /* The round tick in a room card's corner. Over the plan drawing, so it keeps an
-   opaque fill even when empty; filled with the accent once the room is picked. */
+   opaque fill even when empty; filled with the accent once the room is picked.
+   Its z-index is LOCAL: the card is `isolation: isolate`, so the tick rises over its
+   own drawing and never over the sticky select bar the cards scroll under. */
 .room-tick {
   position: absolute; top: 10px; left: 10px; z-index: var(--z-sticky-local);
   width: 28px; height: 28px; border-radius: var(--r-full);
