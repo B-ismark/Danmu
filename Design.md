@@ -1,6 +1,6 @@
 # Danmu — Design & Architecture
 
-> Last updated: 2026-08-23 · reflects the codebase on `main`.
+> Last updated: 2026-10-03 · reflects the codebase on `main`.
 > Canonical design doc. Point-in-time studies that fed it — the platform audit,
 > the engine research, the remediation plan — are kept under `docs/history/`.
 
@@ -175,15 +175,15 @@ owned by a deterministic geometry engine, not by a model.
 ## 2. User journey
 
 ```
-/                         rooms list — the first screen; create / resume / delete
+/                         rooms list — the first screen; create / open / select & delete / open a file
 └─ /onboarding
    ├─ /layout-pick        pick footprint preset + (optionally) its size → starter scene
    ├─ /capture            add up to 4 wall photos (upload or getUserMedia)
-   └─ /detect             furniture detection on captured photos
+   └─ /detect             check furniture on the photos, then the Building screen → studio
 /room/[roomId]
    ├─ /model              ★ 3D decoration studio (default landing)
    └─ /plan               2D top-down floor plan
-/settings                 API key, display unit, your rooms
+/settings                 detection key, display unit, Downloads (the detector), your rooms, feedback
 ```
 
 **The rooms page is the first screen.** There used to be a welcome page at `/` in
@@ -208,15 +208,31 @@ breadcrumb's *Rooms* stays, because it is a fixed destination and Back is histor
 `from` is typed into the address bar as easily as clicked, so only a same-app path
 is honoured, and "same-app" is decided the way the router will decide it: resolved
 as a URL and compared by origin, since `/<tab>/host` passes any character test and
-arrives as `//host`. Settings' key row carries the "Get a free key" link and the
+arrives as `//host`. Settings' key row carries the "Get a key" link and the
 "AIza" hint the welcome page used to.
+
+**The rooms page** is a grid of room cards grouped by recency (*Today*, *Earlier this week*, *Earlier this month*, *Older*)
+with a name filter (`/` focuses it) and a **Select** mode: it opens a pinned bar with
+select-all, a count, *Done* and *Delete*, and a delete is soft (recoverable for 30
+days, with an Undo toast). The first tile of the grid is *New room*; **Open a file**
+(`ImportSceneButton`) lands a saved room file as a new room, and each card says how
+many pieces are in it. A card for a room whose photos were never finished offers to add
+the remaining walls or to find the furniture. With no rooms at all the page is three
+cards instead — **Photograph your room** (`/onboarding/layout-pick?then=photos`),
+**Pick a footprint**, and **Try the starter room** — and the bar carries navigation only.
 
 Two ways in:
 
 1. **Quick start** — pick a footprint, skip capture, land straight in the studio
-   with a contextual starter scene. Zero credentials. A double-click on a shape
-   starts that shape; a single click picks it and shows it beside the size fields.
-2. **Capture flow** — footprint → photograph room → detect furniture → studio.
+   with a contextual starter scene (*Start decorating*). Zero credentials. A
+   double-click on a shape starts that shape; a single click picks it and shows it
+   beside the size fields.
+2. **Capture flow** — footprint → photograph room → check furniture → studio. Arriving
+   with `?then=photos` the same footprint page leads with *Continue to photos* (the
+   other way on becomes *Skip photos and start decorating*) and every screen on the route
+   carries a four-step tracker (`FlowStepper`: Shape · Photos · Furniture · Room). It is
+   shown only on this route and its steps are marked done, never linked: the shape page
+   MAKES a room, so a link back to it would start a second one.
 
 **The size is asked for on the shape picker, and skipping it is allowed** (D7). Three
 boxes under the outlines — width, depth, ceiling, in the user's unit — start at the
@@ -268,7 +284,7 @@ internal ids the geometry and storage depend on — compass bearings asked the u
 a question they cannot answer in their own living room, and the engine only needs
 four *consecutive* walls.
 
-**Which of the four a photo is, the app now works out** (`lib/capture-slots.ts`).
+**Which of the four a photo is, the app works out** (`lib/capture-slots.ts`).
 The screen is "add photos", not four labelled bays: drop or pick any number in
 any order, and each one is filed by the strongest signal available — its own EXIF
 compass bearing measured against an anchor derived from the photos already
@@ -278,8 +294,9 @@ turning right as instructed. Every card says which rung answered, because a wron
 wall is a wrong room: the framed wall's distance runs n/s across the depth and e/w
 across the width,
 so a photo of the long wall filed under a short one is measured from the wrong
-distance. A set can only ever be wrong by a whole number of quarter-turns, so one
-"turn the set round" control fixes every case of it, and each card carries the
+distance. A set can only ever be wrong by a whole number of quarter-turns (the cyclic
+order is what makes that so), and each card's **Wall** dropdown, which swaps with a
+wall already holding a photo, is how the person corrects it. Each card carries the
 length its wall ought to be (`wallFrame`'s own two ends — the wall's real length, not a
 bounding-box side; `wallSpan` was that side and is deleted, because a span is the one
 quantity the two conventions agree on for a RECTANGLE and for nothing else) as the
@@ -304,7 +321,22 @@ nothing. The reverse link: a wall's edge on the plan (given an invisible `.captu
 hover) sets `data-plan-hover` on that wall's card, which lifts and takes an accent ring; a wall with no
 photo does nothing. With no photos the Add tile centres in the space beside the guide
 (`.capture-photos--empty`). The filmstrip under the live camera is photo + Remove only.
-`tests/capture-card.test.tsx` mounts the page to hold it.
+`tests/capture-card.test.tsx` mounts the page to hold it. The tile that adds more is
+**Add photos** while the gallery is empty and **Add another** after.
+
+**Check furniture** (`/detect`) is a review list, one row per piece, following the
+wall tab being looked at. A piece the guess in `lib/repeat-sightings.ts` took for the
+same one seen twice is folded, and every row can say it by hand with **Seen this
+already?** (`lib/sighting-links.ts`): link it to an earlier row and the later row stops
+being built, so one bed seen from three walls is one bed, and unticking a piece hands it to
+its next sighting. A scanned piece is built at its model's typical size and default colour (rule 2 in
+CLAUDE.md), so the screen says "typical size", never "measured". The local detector is
+a one-time download of **Basic** (smaller, finds about half as much) or **Full** (finds the
+most), asked about before it starts and kept afterwards; Settings' **Downloads** section
+holds the same choice, its size and a remove. When the review is confirmed, the **Building
+your room** screen (`components/ui/BuildingRoom.tsx`) shows the room's real size, floor
+area, the pieces kept and the photos used while the list is written and the studio opens.
+
 
 That works because the slot ids are a **cyclic order, not compass directions**.
 Nothing outside `capture-slots`' own arithmetic cares where north is — the room's
