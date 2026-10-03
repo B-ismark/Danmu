@@ -414,7 +414,7 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
     const before = p.pos[1];
 
     // **The ANCHOR, not the `wallMounted` flag, and not a list of shapes.** This read
-    // `p.wallMounted || p.shape === 'fan' || p.shape === 'lamp-pendant'` — a predicate
+    // `p.wallMounted || p.shape === 'fan' || p.shape === 'lamp-ceiling'` — a predicate
     // that had already needed two shapes appended to it, which is the tell CLAUDE.md
     // names for being at the wrong layer. `isFloorStanding` is `anchorFor(...) ===
     // 'floor'`, so a door (`wall-floor`), a curtain and a television are centred

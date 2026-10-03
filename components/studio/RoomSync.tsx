@@ -13,7 +13,7 @@ import { livingParents } from '@/lib/rigid-parent';
 import { seedHistory } from '@/lib/history';
 import { hourNow } from '@/lib/lighting-moods';
 import type { ScenePart } from '@/lib/scene-spec';
-import { normalizeStoredParts } from '@/lib/scene-spec';
+import { migrateRetiredOverrides, normalizeStoredParts, retiredOverridesFor } from '@/lib/scene-spec';
 import { toast } from '@/components/ui/StorageToast';
 import { onPageLeave } from '@/lib/page-leave';
 import { clearLeaveNote, leaveNoteOf, pendingOf, readLeaveNote, writeLeaveNote } from '@/lib/leave-note';
@@ -276,6 +276,16 @@ export function RoomSync() {
       // Re-derived, not trusted. See `normalizeStoredParts` — this snapshot can be
       // older than the derivation that replaced the stored flag.
       if (savedScene) setParts(normalizeStoredParts(savedScene));
+      // A retired shape's overrides (schema 3: the pendant became the flush ceiling light).
+      // The parts migrate themselves above; a position or size the user gave the old
+      // pendant is in `t`, measured for a 400 mm drop, and would hang the new disc a
+      // hand-span under the slab. Read against the RAW saved scene, before anything
+      // rewrites it, or — with no saved scene — against the record's version. Idempotent,
+      // so a room whose write-back below never lands just does this again next time.
+      const retired = retiredOverridesFor(savedScene, useScene.getState().parts, room?.version);
+      const stored = t ?? { positions: {}, rotations: {}, dims: {} };
+      const migrated = migrateRetiredOverrides(stored, retired, room?.height);
+      const tx: Transforms | undefined = migrated === stored ? t : migrated;
       // Every override is reset, whether or not this room saved any: the store outlives
       // the navigation, and `t` is undefined for a room that has never been edited at
       // all. Ids are `${category}-${counter}` and collide across rooms by construction,
@@ -285,12 +295,12 @@ export function RoomSync() {
       // never edited showed the last room's moves and sizes on its pieces, and its first
       // save stored them there. A size typed just before leaving made it certain: it is
       // committed on the way out (`RoomDimsEditor`, `Inspector`), into this same store.
-      loadTransforms(t ?? {});
-      setHiddenMap(t?.hidden ?? {});
+      loadTransforms(tx ?? {});
+      setHiddenMap(tx?.hidden ?? {});
       // The locks, for the same reason: a room with no saved `pinned` of its own would
       // otherwise inherit the PREVIOUS room's, and silently exempt a different sofa from
       // Suggest.
-      setPinnedMap(t?.pinned ?? {});
+      setPinnedMap(tx?.pinned ?? {});
       // And the rigid-parent edges. `snapshotDescendants` re-validates every edge
       // physically before trusting it, so a leaked entry can't cause a wrong
       // cascade — but there's no reason to leave it live when a clean reset
@@ -302,8 +312,20 @@ export function RoomSync() {
       // unparented — where a surviving edge simply re-validates at the position
       // they returned to. So the map is allowed to go stale for a session and is
       // swept on the next load, which is what stops it growing forever in IDB.
-      setParentIds(livingParents(t?.parentIds, useScene.getState().parts));
+      setParentIds(livingParents(tx?.parentIds, useScene.getState().parts));
       ready.current = true;
+      // …and written back with the version stamp, in one transaction, so the migration
+      // happens once. Only when it changed something: stamping every old room on open
+      // would mark it touched, and reorder the rooms list, for an edit nobody made.
+      if (room && retired.length > 0 && (migrated !== stored || savedScene)) {
+        roomStore
+          .savePending(roomId, {
+            transforms: migrated !== stored ? migrated : undefined,
+            parts: savedScene ? useScene.getState().parts : undefined,
+            room: { edit: (r) => r },
+          })
+          .catch((err) => console.error('[room] could not save the migrated ceiling light', err));
+      }
       // The room on screen is this one now, so the canvas veil can lift.
       useScene.getState().setHydrated(roomId);
       // Record the loaded room as the state undo returns *to*. Without a

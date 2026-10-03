@@ -42,6 +42,10 @@ const SYNONYM: Record<string, string> = {
   shelves: 'bookshelf',
   carpet: 'rug',
   mat: 'rug',
+  // The Library's ceiling light replaced its pendant; someone who still types the old
+  // word, or names the fitting they have, should land on the one that exists.
+  pendant: 'ceiling',
+  chandelier: 'ceiling',
   drape: 'curtain',
   drapes: 'curtain',
   artwork: 'painting',

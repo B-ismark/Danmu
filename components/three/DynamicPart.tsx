@@ -14,7 +14,7 @@ import {
   fanBlade,
   fanColumn,
   fridgeDoors,
-  pendantDrop,
+  ceilingLight,
   plantForm,
   isParametric,
   lightFor,
@@ -165,18 +165,19 @@ export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolea
   // component of its own rather than in one that also renders the light". That split
   // is exactly what broke: the light was the thing excluded from it.
   //
-  // `lightAnchor('lamp-pendant', dimMM)` returns `pendantDrop(dimMM[0], dimMM[2]).bulbY`
-  // — the same function the renderer draws the shade from — and while both read the
-  // AUTHORED dim and both were group-scaled by the same factor, they were coincident by
-  // construction. Making the shape parametric pinned the mesh at scale 1 and left the
-  // light at the authored anchor: a catalogue pendant dragged to 900 mm put its emitter
+  // `lightAnchor('lamp-ceiling', dimMM)` returns `ceilingLight(dimMM[0], dimMM[2]).glowY`
+  // — the same function the renderer draws the diffuser from (it was the retired
+  // pendant's `bulbY` when this was found) — and while both read the AUTHORED dim and
+  // both were group-scaled by the same factor, they were coincident by construction.
+  // Making the shape parametric pinned the mesh at scale 1 and left the light at the
+  // authored anchor: a catalogue pendant dragged to 900 mm put its emitter
   // 222 mm from its own bulb and 128 mm above the shade's top rim, on the bare cord,
   // with the shade underneath it as an occluder. That is § 34's defect exactly — 190 mm
   // above the rim, measured and fixed there — re-entered by a different route one
   // commit later.
   //
   // `tests/ceiling-fixtures.test.ts` asserts that property and stayed GREEN, because it
-  // hands ONE dim to both `lightAnchor` and `pendantDrop`. Production was handing them
+  // hands ONE dim to both `lightAnchor` and the geometry helper. Production was handing them
   // two. A fixture that cannot express its defect, which is why the gate for this is
   // `tests/parametric-caps.test.ts`'s "one dim reaches both" clause instead.
   const p = useEffectivePart(part);
@@ -233,8 +234,8 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
       return <FloorLampGeo part={part} />;
     case 'lamp-table':
       return <TableLampGeo part={part} />;
-    case 'lamp-pendant':
-      return <PendantLampGeo part={part} />;
+    case 'lamp-ceiling':
+      return <CeilingLightGeo part={part} />;
     case 'bed-single':
     case 'bed-double':
       // Pillows by width, not by shape: one Library bed is resized from a single to a
@@ -651,43 +652,36 @@ function TableLampGeo({ part }: { part: ScenePart }) {
   return <StandingLampGeo part={part} form={tableLampForm(part.dimMM)} />;
 }
 
-function PendantLampGeo({ part }: { part: ScenePart }) {
-  const dome = tint(part);
-  // Every number here was a literal, on both axes: a 600 mm cord and a 200 mm shade
-  // for a declared 400 mm, 300 mm wide for a declared 350. See `pendantDrop`.
-  const g = pendantDrop(part.dimMM[0], part.dimMM[2]);
-  // …and the ellipse again. `lamp-pendant` is ROUND, so a shade on a piece whose depth
-  // has been edited away from its width is an oval from above, which is what the plan
-  // and `collidesAt` are both already using.
+/** The flush-mount ceiling light: a white housing against the slab, a thin trim ring,
+ *  and an opal diffuser below that glows with the fitting's own light. Every size is
+ *  `ceilingLight`'s, so the plan's circle, `verticalExtent` and the emitter all read the
+ *  same numbers this draws. No `Sway` — a fitting screwed to the ceiling does not swing.
+ *
+ *  The diffuser is a shallow drum tapering toward its face — the rounded-edge opal of an
+ *  LED surface panel seen from below — hung from the housing's underside. */
+function CeilingLightGeo({ part }: { part: ScenePart }) {
+  const g = ceilingLight(part.dimMM[0], part.dimMM[2]);
+  // ROUND, so an edited depth makes an oval from above, which the plan and
+  // `collidesAt` already use.
   const oval = part.dimMM[1] / part.dimMM[0];
-  // Swing from the ceiling mount — the pivot is the top of the drop, which is the
-  // part's own top rather than a number that happened to match one catalogue size.
+  const spec = lightFor(part);
+  // The diffuser glows in the colour of the light behind it; removing the light leaves
+  // the opal plain. Same reasoning, and the same no-hook rule, as `LampShade`.
+  const glow = spec ? hexFromKelvin(spec.kelvin) : '#000000';
   return (
-    <group position={[0, g.top, 0]} scale={[1, 1, oval]}>
-      <Sway amp={0.05} speed={0.7} axis="x">
-        <group position={[0, -g.top, 0]}>
-          {/* cord */}
-          <Box surface="metal" size={[0.01, g.cordH, 0.01]} position={[0, g.cordY, 0]} color={DETAIL.hardware} edgeOpacity={0.2} />
-          {/* Shade, mouth DOWN. There was a `rotation={[Math.PI, 0, 0]}` here, and it
-              was upside down: `ConeGeometry(r, h)` is `CylinderGeometry(0, r, h)`, so
-              the apex is already at +Y and the wide mouth at -Y — a lampshade before
-              anything rotates it. `FloorLampGeo` and `TableLampGeo` use the same cone
-              with no rotation, and this was the one lamp in the catalogue whose shade
-              faced the slab. Deriving `domeR` from the declared width made it louder
-              rather than causing it: at the band's top it is an 800 mm funnel aimed at
-              the ceiling instead of a fixed 300 mm one. The Y extent is unchanged
-              either way, which is why no size assertion could see it. */}
-          <mesh position={[0, g.domeY, 0]}>
-            <coneGeometry args={[g.domeR, g.domeH, 16, 1, true]} />
-            <meshStandardMaterial color={dome} side={2} {...SURFACE.ceramic} />
-          </mesh>
-          {/* bulb */}
-          <mesh position={[0, g.bulbY, 0]}>
-            <sphereGeometry args={[g.bulbR, 12, 12]} />
-            <meshStandardMaterial color={DETAIL.bulb} emissive={DETAIL.bulbGlow} emissiveIntensity={0.4} />
-          </mesh>
-        </group>
-      </Sway>
+    <group scale={[1, 1, oval]}>
+      <mesh position={[0, g.baseY, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[g.baseR, g.baseR, g.baseH, 48]} />
+        <meshStandardMaterial color={tint(part)} {...SURFACE.plastic} />
+      </mesh>
+      <mesh position={[0, g.ringY, 0]}>
+        <cylinderGeometry args={[g.ringR, g.ringR, g.ringH, 48]} />
+        <meshStandardMaterial color={DETAIL.steel} {...SURFACE.metal} />
+      </mesh>
+      <mesh position={[0, g.diffTopY - g.diffH / 2, 0]}>
+        <cylinderGeometry args={[g.diffR, g.diffR * 0.8, g.diffH, 48]} />
+        <meshStandardMaterial color={DETAIL.opal} roughness={0.35} emissive={glow} emissiveIntensity={spec ? 0.8 : 0} />
+      </mesh>
     </group>
   );
 }

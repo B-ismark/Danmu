@@ -827,9 +827,9 @@ describe('scene file · wallMounted is derived, and the note about it is true', 
   const MOUNTED = { category: 'tv', name: 'Telly', shape: 'tv', dimMM: [1450, 60, 820], expectMounted: true };
   const FLOOR = { category: 'sofa', name: 'Sofa', shape: 'sofa', dimMM: [2200, 950, 880], expectMounted: false };
   /** The ceiling family, which `wallMounted` lumps in with the wall pieces and which is
-   *  the reason the note is phrased by anchor. `lamp-pendant` is also the one shape id
+   *  the reason the note is phrased by anchor. `lamp-ceiling` is also the one shape id
    *  whose leak into user copy would be unmistakable. */
-  const CEILING = { category: 'lamp', name: 'Pendant', shape: 'lamp-pendant', dimMM: [350, 350, 400], expectMounted: true };
+  const CEILING = { category: 'lamp', name: 'Ceiling light', shape: 'lamp-ceiling', dimMM: [350, 350, 80], expectMounted: true };
 
   function notesFor(base: Record<string, unknown>, over: Record<string, unknown>) {
     const { file, dropped } = withParts([rawPart({ ...base, ...over })]);
@@ -894,13 +894,13 @@ describe('scene file · wallMounted is derived, and the note about it is true', 
     // which is two defects in one clause. `derivedMount` is `anchorFor(...) !== 'floor'`,
     // so it called a pendant and a ceiling fan "wall-mounted" — false, about a piece the
     // file two lines above knows hangs from the ceiling. And `shape` is the internal
-    // kebab-case id, so a user was shown "a lamp-pendant" and "an ac-unit". The three
+    // kebab-case id, so a user was shown "a lamp-ceiling" and "an ac-unit". The three
     // anchors are asserted TOGETHER because a single one is satisfied by a constant.
     expect(notesFor(MOUNTED, { wallMounted: false }).notes[0]).toContain('it is fixed to a wall');
     expect(notesFor(CEILING, { wallMounted: false }).notes[0]).toContain('it hangs from the ceiling');
     expect(notesFor(FLOOR, { wallMounted: true }).notes[0]).toContain('it stands on the floor');
 
-    // And no internal id reaches the user. `lamp-pendant` is the one that would.
+    // And no internal id reaches the user. `lamp-ceiling` is the one that would.
     for (const base of [MOUNTED, CEILING, FLOOR]) {
       const note = notesFor(base, { wallMounted: !base.expectMounted }).notes[0] ?? '';
       expect(note, `${base.shape} leaked its shape id`).not.toContain(base.shape);
@@ -960,7 +960,7 @@ describe('scene file · a detected room reloads as the room that was saved', () 
 
   it('keeps every mount flag across save and reload, and says nothing', () => {
     const built = buildSceneFromRoom(DETECTED);
-    const pendant = built.find((p) => p.shape === 'lamp-pendant');
+    const pendant = built.find((p) => p.shape === 'lamp-ceiling');
     expect(pendant, 'the fixture must produce a pendant').toBeDefined();
 
     const out = parseSceneFile(sceneFileJson(buildSceneFile(DETECTED, built, NO_TRANSFORMS, 1)));
@@ -1000,7 +1000,7 @@ describe('a persisted snapshot is re-derived, not trusted', () => {
 
   it('corrects a stale flag in both directions', () => {
     // The real case, verbatim: a pendant written as floor-standing.
-    const pendant = stored({ id: 'p', category: 'lamp', shape: 'lamp-pendant', dimMM: [350, 350, 400], wallMounted: false });
+    const pendant = stored({ id: 'p', category: 'lamp', shape: 'lamp-ceiling', dimMM: [350, 350, 400], wallMounted: false });
     // And the mirror, which is the half a one-directional fix would miss: a sofa that a
     // hand-edited or older snapshot claims is mounted.
     const sofa = stored({ id: 's', category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], wallMounted: true });

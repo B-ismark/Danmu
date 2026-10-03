@@ -54,7 +54,7 @@ const ANCHOR_BY_SHAPE: Partial<Record<Shape, Anchor>> = {
   // Sharing a category is how a shape inherits behaviour, which is a feature right up
   // to the moment two shapes in one category belong in different places.
   'fan-standing': 'floor',
-  'lamp-pendant': 'ceiling',
+  'lamp-ceiling': 'ceiling',
   curtain: 'wall-high',
   tv: 'wall-mid',
   mirror: 'wall-mid',
@@ -81,7 +81,7 @@ export function groundY(
     case 'floor':
       return 0;
     case 'ceiling':
-      // The mesh-CENTRE model (fan, pendant), hung so that its own top meets the slab.
+      // The mesh-CENTRE model (fan, ceiling light), hung so that its own top meets the slab.
       //
       // `roomHeight - MOUNT_PAD` is this app's single answer to "how close to the ceiling
       // may a hung fixture's top get", and three places already give it: `settleHeights`'
@@ -90,15 +90,15 @@ export function groundY(
       // MOUNT_PAD - h / 2)`, whose arms cross at h = 260 mm, so for anything shallower the
       // flat 150 mm nominal drop bound and left the fixture hanging on nothing: the 200 mm
       // ceiling fan the Library ships ended its downrod **50 mm below the slab**, and the
-      // smallest legal fan or pendant 75 mm below it (`what-is-still-open.md` § 35).
+      // smallest legal fan or (then) pendant 75 mm below it (`what-is-still-open.md` § 35).
       //
       // **The two arms were answering different questions and `min` does not decide
       // between them — it takes whichever hangs lower.** `roomHeight - 0.15` says a fan
       // hangs 150 mm under the slab on a rod that is not part of it; `roomHeight -
       // MOUNT_PAD - h / 2` says the declared height is everything and its top goes at the
-      // ceiling. The second is the one the rest of the app means: `fanColumn` and
-      // `pendantDrop` (`lib/scene-spec.ts`) draw the downrod and the cord INSIDE
-      // `dimMM[2]`, and `verticalExtent`, `clearance.ts` rule 2b, `settleHeights` and
+      // ceiling. The second is the one the rest of the app means: `fanColumn` draws the
+      // downrod INSIDE `dimMM[2]` and `ceilingLight` (`lib/scene-spec.ts`) the whole
+      // disc, and `verticalExtent`, `clearance.ts` rule 2b, `settleHeights` and
       // `heightForNewCeiling` all read that height as the whole extent. So the flat arm
       // was not a second policy, it was the last reader of a meaning nothing else held.
       //
@@ -175,7 +175,7 @@ export const MOUNT_PAD = 0.02;
  *
  *  Which pieces follow is read off the anchor's own name rather than a list:
  *    • `ceiling` and `wall-high` are measured DOWN from the ceiling — a fan, a
- *      pendant, a curtain rod, an AC unit — so they travel with it and keep
+ *      ceiling light, a curtain rod, an AC unit — so they travel with it and keep
  *      whatever offset below it they had.
  *    • `wall-mid` and `wall-low` are eye level and skirting level, measured UP from
  *      the floor, so raising a ceiling leaves a picture exactly where it hangs.
@@ -237,7 +237,7 @@ export function isFloorStanding(category: Category, shape: Shape): boolean {
  *
  *  The predicate is the ANCHOR, not the stored `wallMounted` flag, and the
  *  difference is not academic: `isWallMountedPart` is `anchorFor(...) !== 'floor'`
- *  and answers **yes for a ceiling fan and a pendant**, which `ridesWall` and the
+ *  and answers **yes for a ceiling fan and a ceiling light**, which `ridesWall` and the
  *  `wallMounted` flag both answer no for. A fan is centred on its origin like a
  *  television, carries no flag, and was therefore mis-measured by `h / 2` with no
  *  skip in front of it to hide the fact. */
@@ -272,7 +272,7 @@ export function wallStandoff(shape: Shape): number {
 
 /** True when a part belongs flat against a wall — the wall-* anchors, and only
  *  those. `isWallMountedPart` is the wider question ("is its geometry centred on
- *  the origin"), and answers yes for a ceiling fan and a pendant, which do NOT
+ *  the origin"), and answers yes for a ceiling fan and a ceiling light, which do NOT
  *  want to be slid onto the nearest wall. */
 export function ridesWall(category: Category, shape: Shape): boolean {
   return anchorFor(category, shape).startsWith('wall-');
@@ -475,7 +475,7 @@ export const SUPPORT_Y_EPS = 0.05;
  *  without the id, had no caller outside the tests, and is gone.)
  *
  *  **`shape` is required and `wallMounted` is absent.** `anchorFor` is keyed by SHAPE
- *  first — `fan`, `lamp-pendant`, `door`, `curtain`, `tv`, `mirror`, `painting`,
+ *  first — `fan`, `lamp-ceiling`, `door`, `curtain`, `tv`, `mirror`, `painting`,
  *  `ac-unit` and `window` all take their anchor that way rather than from their
  *  category — so a candidate without a shape can only be judged by the stored flag,
  *  and the flag is a copy of an answer these functions can compute exactly. Dropping

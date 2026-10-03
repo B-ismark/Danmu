@@ -138,7 +138,7 @@ describe('§ 32 · which shapes are round is a decision, and it is pinned', () =
     // wanting to join: it is oval on the WALL and a thin rectangle in plan.
     const round = CATALOG_SHAPES_ORDERED.filter(isRoundPart);
     expect([...round].sort()).toEqual(
-      ['fan', 'fan-standing', 'lamp-floor', 'lamp-pendant', 'lamp-table', 'plant', 'stool'].sort(),
+      ['fan', 'fan-standing', 'lamp-floor', 'lamp-ceiling', 'lamp-table', 'plant', 'stool'].sort(),
     );
     for (const s of ['mirror-oval', 'side-table', 'ottoman', 'coffee-table'] as Shape[]) {
       expect(isRoundPart(s), `${s} is deliberately NOT round — see the ROUND_SHAPES note`).toBe(false);

@@ -125,7 +125,7 @@ describe('findRepeats — what counts as the same piece', () => {
     // Same category, same spot in plan; one is measured on the ceiling.
     const dets = [
       row({ category: 'lamp', shape: 'lamp-floor', dimMM: [400, 400, 1600] }),
-      row({ category: 'lamp', shape: 'lamp-pendant', slot: 'e', position: { x: 0, y: 2.7, z: 0 }, dimMM: [400, 400, 300] }),
+      row({ category: 'lamp', shape: 'lamp-ceiling', slot: 'e', position: { x: 0, y: 2.7, z: 0 }, dimMM: [400, 400, 300] }),
     ];
     expect(repeats(dets)).toEqual([null, null]);
   });
@@ -171,7 +171,7 @@ describe('findRepeats — what counts as the same piece', () => {
     // either way — the split `geoRefine` measures it by — so the two are one piece.
     const curtain = (shape: string, slot: CaptureSlot): Detection =>
       row({ category: 'curtain', shape, slot, position: { x: 0, y: 1.4, z: -2.9 }, dimMM: [1400, 100, 2400] });
-    expect(repeats([curtain('curtain', 'n'), curtain('lamp-pendant', 'e')])).toEqual([null, 0]);
+    expect(repeats([curtain('curtain', 'n'), curtain('lamp-ceiling', 'e')])).toEqual([null, 0]);
   });
 
   it('reads "something else" by its word, because the category is a bucket', () => {
@@ -394,7 +394,7 @@ describe('the known room', () => {
     // instead, each sighting was a floor piece above the horizon, refused, and then
     // hung by the wall of whichever photo saw it — one light per photo.
     const light: Truth = {
-      name: 'light', label: 'ceiling light', category: 'lamp', shape: 'lamp-pendant',
+      name: 'light', label: 'ceiling light', category: 'lamp', shape: 'lamp-ceiling',
       x: 1.5, z: -1.5, dimMM: [500, 500, 300], slots: ['n', 'e'],
     };
     // The east photo read only by the second model, under the second word, so no rule
@@ -572,7 +572,7 @@ describe('findRepeats — a lens nobody measured', () => {
     [piece('painting', 'painting', 'painting', 2.5, -3.0, [700, 40, 500], 1.5), 'picture'],
     [piece('mirror', 'mirror', 'mirror', 2.8, -3.0, [600, 30, 1400], 1.2), 'wall mirror'],
     [piece('curtain', 'curtain', 'curtain', 2.2, -3.0, [1400, 80, 2300], 1.45), 'drapes'],
-    [piece('pendant', 'lamp', 'lamp-pendant', 1.5, -1.5, [500, 500, 300]), 'ceiling light'],
+    [piece('pendant', 'lamp', 'lamp-ceiling', 1.5, -1.5, [500, 500, 300]), 'ceiling light'],
     [piece('fan', 'fan', 'fan', 1.5, -1.5, [1000, 1000, 200]), 'ceiling fan'],
   ];
 
@@ -616,7 +616,7 @@ describe('findRepeats — a lens nobody measured', () => {
     // ceiling placer refuses — so at those lenses the sweep must have no place for it.
     // A sweep that re-asked from the refined row rather than from its box would be
     // handed the 66° answer back by every refusal and compare that instead.
-    const pendant = piece('pendant', 'lamp', 'lamp-pendant', 1.5, -1.5, [500, 500, 300]);
+    const pendant = piece('pendant', 'lamp', 'lamp-ceiling', 1.5, -1.5, [500, 500, 300]);
     const cals = every(lens(66, 'assumed'));
     const [placed] = refineDetections([seen(pendant, 'n', CAL)], cals, ROOM);
     expect(placed.position).toBeDefined();

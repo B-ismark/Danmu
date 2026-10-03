@@ -349,7 +349,7 @@ describe('settleHeights · a rider whose support has moved', () => {
   it('measures a mounted piece by its CENTRE, so the ceiling clamp is not off by h/2', () => {
     // `pos[1]` is a bottom for a floor anchor and the mesh CENTRE for every other one.
     // This clamp used to read `p.wallMounted || p.shape === 'fan' || p.shape ===
-    // 'lamp-pendant'` — a list that had already needed two shapes appended — and a
+    // 'lamp-ceiling'` — a list that had already needed two shapes appended — and a
     // DOOR is neither of those shapes, so a door with its flag unset was measured as
     // `pos[1] + h`: 1.05 + 2.1 = 3.15 in a 2.8 m room, over a cap it is nowhere near.
     //

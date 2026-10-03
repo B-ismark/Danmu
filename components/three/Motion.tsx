@@ -1,6 +1,6 @@
 'use client';
 
-// Subtle idle motion helpers — the fan blades, plant sway and pendant swing are
+// Subtle idle motion helpers — the fan blades, and the plant's sway are
 // the ONLY things in this scene that move without the user touching anything.
 //
 // The canvas runs frameloop="demand" (see Room.tsx): a frame is rendered only
@@ -68,7 +68,7 @@ const MOTION_HZ = 60;
  *  Keyed on the canvas's own `invalidate`, which is stable for the lifetime of a
  *  root, so every `Spin` and `Sway` in one scene shares a single interval and a
  *  single refcount. Per-instance timers would work — they all call the same
- *  function — but a room with a fan, a pendant and three plants would then run
+ *  function — but a room with a fan and three plants would then run
  *  five timers to schedule one frame, and the first person to read that would
  *  reasonably assume it was five times the work. */
 const tickers = new Map<() => void, { n: number; id: number }>();
@@ -108,7 +108,7 @@ export function Spin({ speed = 1, children }: { speed?: number; children: ReactN
   return <group ref={ref}>{children}</group>;
 }
 
-/** Gentle oscillation about an axis (plant sway, pendant swing). Phase is
+/** Gentle oscillation about an axis (plant sway). Phase is
  *  seeded so multiple instances don't move in lockstep. */
 export function Sway({
   amp = 0.04,
