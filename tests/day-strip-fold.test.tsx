@@ -15,6 +15,7 @@ vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigat
 
 const { DayStrip } = await import('@/components/studio/DayStrip');
 const { useStudio } = await import('@/lib/store');
+const { glyphAt } = await import('@/lib/day-strip');
 
 const WIDTH = 600;
 let rect: ReturnType<typeof vi.spyOn>;
@@ -199,17 +200,25 @@ describe('the day strip, open', () => {
     const { handle, hit } = grabbed();
     let writes = 0;
     const off = useStudio.subscribe((s, p) => { if (s.hour !== p.hour) writes++; });
+    const raf = vi.spyOn(window, 'requestAnimationFrame');
+    // The last point is 0.6 px past 16:00 — about two minutes, which the five-minute
+    // scrub step rounds away — so "where the pointer is" and "where the hour is" differ.
+    const last = xAt(16) + 0.6;
     fireEvent.pointerDown(hit, { pointerType: 'mouse', button: 0, pointerId: 1, clientX: xAt(14) });
-    for (const h of [14.5, 15, 15.5, 16]) fireEvent.pointerMove(hit, { pointerType: 'mouse', pointerId: 1, clientX: xAt(h) });
+    for (const px of [xAt(14.5), xAt(15), xAt(15.5), last]) fireEvent.pointerMove(hit, { pointerType: 'mouse', pointerId: 1, clientX: px });
     // The pill is already where the pointer is; the store has not been written yet.
-    expect(x(handle)).toBeCloseTo(xAt(16), 5);
+    expect(x(handle)).toBeCloseTo(last, 5);
     expect(writes).toBe(0);
     expect(useStudio.getState().hour).toBe(9);
+    // One frame asked for, not one per event.
+    expect(raf).toHaveBeenCalledTimes(1);
     frame();
     // Five pointer events, one write, of the last of them.
     expect(writes).toBe(1);
-    expect(useStudio.getState().hour).toBeCloseTo(16, 1);
-    expect(x(handle)).toBeCloseTo(xAt(16), 5);
+    expect(useStudio.getState().hour).toBeCloseTo(16, 5);
+    // The render the write causes keeps the pill under the hand, not on the snapped hour.
+    expect(x(handle)).toBeCloseTo(last, 5);
+    raf.mockRestore();
     off();
   });
 
@@ -217,6 +226,7 @@ describe('the day strip, open', () => {
     const { hit } = grabbed();
     fireEvent.pointerDown(hit, { pointerType: 'mouse', button: 0, pointerId: 1, clientX: xAt(14) });
     frame();
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
     fireEvent.pointerMove(hit, { pointerType: 'mouse', pointerId: 1, clientX: xAt(20) });
     // Released inside the same frame: the hour the hand let go at must not be lost, and
     // it must land while `draggingId` is still held, or the undo step closes without it.
@@ -225,7 +235,10 @@ describe('the day strip, open', () => {
     fireEvent.pointerUp(hit, { pointerType: 'mouse', pointerId: 1 });
     off();
     expect(hourAtRelease).toBeCloseTo(20, 1);
-    // …and no frame left behind to write it again.
+    // …and no frame left behind to write it again: the one in flight is cancelled,
+    // not left to wake up and find nothing to do.
+    expect(cancel).toHaveBeenCalledTimes(1);
+    cancel.mockRestore();
     const before = useStudio.getState().hour;
     act(() => useStudio.setState({ hour: 3 }));
     frame();
@@ -243,6 +256,19 @@ describe('the day strip, open', () => {
     frame();
     expect(useStudio.getState().hour).toBe(9);
     expect(useStudio.getState().draggingId).toBeNull();
+  });
+
+  it('hands the glyph how far the sun has risen', () => {
+    const { container } = grabbed();
+    const lift = (h: number) => {
+      act(() => useStudio.setState({ hour: h }));
+      return container.querySelector<SVGElement>('.celestial')!.style.getPropertyValue('--lift');
+    };
+    // The paint reads `--lift`; a glyph without it would sit on its horizon all day.
+    expect(lift(7)).toBe(String(glyphAt(7).lift));
+    expect(lift(18.5)).toBe(String(glyphAt(18.5).lift));
+    expect(Number(lift(7))).toBeLessThan(1);
+    expect(lift(12)).toBe('1');
   });
 
   it('names the picture in the value text', () => {
