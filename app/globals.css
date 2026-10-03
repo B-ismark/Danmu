@@ -43,6 +43,22 @@
   --locked: #7A4B63;        /* 6.63:1 on --paper */
   --locked-tint: rgba(122, 75, 99, 0.14);
 
+  /* One colour per found piece on the scan review, so a box on the photo and its row
+     in the list are the same object at a glance. Eight muted hues, each at least 4.5:1
+     with --on-accent because the box's label is set on it as a fill. Not the state
+     colours: kept vs not kept is solid vs dashed, never hue. The halos are what keep
+     an outline readable on a photo that is dark or light where it falls. */
+  --piece-1: #A64B2A;  /* terracotta, 5.74:1 */
+  --piece-2: #5F7A2E;  /* olive, 4.87:1 */
+  --piece-3: #2F7478;  /* teal, 5.40:1 */
+  --piece-4: #4A67A1;  /* dusty blue, 5.61:1 */
+  --piece-5: #6D5399;  /* violet, 6.27:1 */
+  --piece-6: #8F6A12;  /* ochre, 4.95:1 */
+  --piece-7: #A4455F;  /* rose, 5.84:1 */
+  --piece-8: #7A5A43;  /* cocoa, 6.23:1 */
+  --piece-halo-dark: rgba(0, 0, 0, 0.5);
+  --piece-halo-light: rgba(255, 255, 255, 0.7);
+
   /* Alignment guides while a piece is being dragged: "this edge is level with
      that one". Neither selection (moss) nor hover (amber) nor invalid (red), so a
      brighter green that is none of them. The 2D plan draws them; the 3D view does not —
@@ -277,8 +293,20 @@
   --dur-base: 160ms;
   --dur-slow: 300ms;
   --dur-breathe: 1100ms; /* one half-cycle of a placeholder's breathing */
+  --dur-loop: 9s;          /* one pass of a waiting illustration (FindingFurniture) */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoots a little, then settles — a thing arriving with some play in it */
+
+  /* The sky the day strip is painted with (lib/day-strip.ts `skyGradient`): muted and
+     warm so it sits beside --paper rather than shouting over it. Fixed in both themes,
+     because a sky is not a surface. */
+  --sky-night: #3b3f5e;    /* deep, soft indigo */
+  --sky-twilight: #7a6f94; /* the lilac either side of a horizon */
+  --sky-dawn: #e0ac92;     /* dusty peach */
+  --sky-dusk: #cc8f9b;     /* muted rose */
+  --sky-haze: #efe3cd;     /* soft warm haze between horizon and noon */
+  --sky-noon: #f5eedf;
 
   --shadow-soft: 0 1px 2px rgba(38, 42, 32, 0.04), 0 6px 16px rgba(38, 42, 32, 0.06);
   --shadow-lift: 0 2px 4px rgba(38, 42, 32, 0.06), 0 12px 28px rgba(38, 42, 32, 0.10);
@@ -1258,18 +1286,16 @@ textarea.field { border-radius: var(--r-2); }
 
 
 /* Scrollbars. The default is an OS widget — grey, square, and (on Windows) 17px
-   of chrome inside every panel. Thin + tokenised keeps long lists, the part rail
-   and the Select popup looking like one product. Firefox takes the standard
-   properties; WebKit/Blink need the pseudo-elements. */
-* { scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: var(--hairline-strong); border-radius: 999px;
-  border: 3px solid transparent; background-clip: content-box;
-}
-::-webkit-scrollbar-thumb:hover { background: var(--ink-3); background-clip: content-box; }
-::-webkit-scrollbar-corner { background: transparent; }
+   of chrome with arrow buttons inside every panel. `scrollbar-width: thin` drops the
+   arrows and slims the track, and the thumb is transparent until the scrolling
+   element is hovered or holds focus, so a section only shows a bar while you are
+   in it. The STANDARD properties on purpose: Chrome ignores `::-webkit-scrollbar`
+   the moment `scrollbar-color` is set, so the pseudo-element rules that used to be
+   here would have been dead beside it. The colour is restated on every element
+   rather than inherited, which is what keeps a hovered panel's bar from lighting
+   its scrolling children's. */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover, *:focus-within { scrollbar-color: var(--hairline-strong) transparent; }
 
 .list { padding: 6px; display: flex; flex-direction: column; gap: 2px; overflow: auto; flex: 1; }
 .list-row {
@@ -1683,6 +1709,45 @@ textarea.field { border-radius: var(--r-2); }
    on row one. */
 .chrome-bar__end { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
 
+/* The studio's bar with its view switch in the middle. Three columns, `1fr auto 1fr`,
+   so the switch sits on the bar's own centre rather than the centre of whatever
+   the left side left over; the two flexible columns are equal by construction.
+   Where the three do not fit it wraps to rows of its own (`.studio-bar__mid` takes
+   a full row, centred) instead of overlapping the room name or the end buttons. */
+.studio-bar {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center; column-gap: 14px; row-gap: 8px;
+  min-height: 48px; padding: 6px 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper);
+}
+.studio-bar__start { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.studio-bar__mid { display: flex; justify-content: center; }
+.studio-bar__end { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; flex-wrap: wrap; }
+@media (max-width: 859px) {
+  .studio-bar { grid-template-columns: minmax(0, 1fr) auto; }
+  .studio-bar__mid { grid-column: 1 / -1; grid-row: 2; }
+  .studio-bar__end { grid-column: 2; grid-row: 1; }
+}
+
+/* Add / Close: one control that turns into its own undo. The plus is a cross
+   already — turned 45° it IS the × — so the glyph rotates rather than being swapped,
+   and the two words stack in one cell and cross-fade. Both triggers (the canvas
+   pill and the rail footer) carry `aria-expanded` from the same `catalogOpen`, so
+   they always agree. Opacity and rotation only; the global reduced-motion block
+   already drops `transform` from transitions, so the fade stays (it carries the
+   state) and the turn is instant, the glyph still saying ×. */
+.add-morph { display: inline-flex; flex-shrink: 0; transition: transform var(--dur-base) var(--ease-out); }
+[aria-expanded="true"] > .add-morph { transform: rotate(45deg); }
+.add-morph-label { display: inline-grid; min-width: 0; }
+.add-morph-label > span {
+  grid-area: 1 / 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.add-morph-label > span + span { opacity: 0; }
+[aria-expanded="true"] > .add-morph-label > span:first-child { opacity: 0; }
+[aria-expanded="true"] > .add-morph-label > span + span { opacity: 1; }
+
 /* Two-column work surface: fixed rail(s) + fluid content. The `--stack` modifier
    that turns those columns into rows lives in the 720px block below. */
 .split { display: grid; min-height: 0; }
@@ -1705,6 +1770,13 @@ textarea.field { border-radius: var(--r-2); }
 
    `svh`, not `dvh`: the dynamic unit changes as a phone's address bar slides away on
    the first scroll, which would resize the pinned photo while the list moves. */
+/* The two columns, sized to the photo (`--scan-photo-w`, published by the page) so the list
+   sits against it; the pair is centred in what is left. Before the page has measured, 1fr.
+   Stacked, the 720px block below makes it one column. */
+.scan-split { grid-template-columns: var(--scan-photo-w, 1fr) 380px; justify-content: center; }
+/* As tall as the photo's cap and nothing else: the page reads its height to learn how wide
+   the photo will be drawn, which a percentage-wide frame cannot say of itself. */
+.scan-cap-probe { position: absolute; inset-inline-start: 0; inset-block-start: 0; inline-size: 0; block-size: var(--scan-photo-cap); visibility: hidden; pointer-events: none; }
 .scan-photo-pane {
   --scan-photo-cap: max(120px, calc(100svh - max(200px, var(--scan-photo-room, 200px))));
   position: sticky; top: 0; align-self: start; max-height: 100svh;
@@ -1800,25 +1872,83 @@ textarea.field { border-radius: var(--r-2); }
 
 /* The More menu: rows a thumb can hit — 48px, Material's target — under the bar's
    trailing edge, never wider than the screen. */
-/* The help card scrolls past this. On a laptop 420px sits beside the room; on a
-   phone the card hangs from the app bar over a room nobody is using while they
-   read, so it may reach down to just above the toolbar and show its whole touch
-   card rather than stop mid-sentence at 420. */
-/* Width is capped against the window as well as stated: none of the slots that
-   render the card can promise it 320px. */
-.help-card { max-height: min(420px, 60vh); width: min(320px, calc(100vw - 32px)); }
-/* Help hangs under the "?" it opens from, right edges aligned, so it grows left. */
-.help-pop {
-  position: absolute; top: calc(100% + 8px); right: 0;
-  z-index: var(--z-popover); text-align: left;
+/* ── How this works (components/studio/HelpCard.tsx) ─────────────────────────
+   A dialog, not a popover: a list of topics on the left, the reading pane beside it,
+   every section in the pane in order. A phone gets a full-height sheet with no list,
+   the sections stacked. */
+.help-dlg {
+  display: grid;
+  grid-template: "head head" auto "nav body" minmax(0, 1fr) / 188px minmax(0, 1fr);
+  height: min(620px, calc(100dvh - 80px));
 }
+.help-dlg__head {
+  grid-area: head;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px 12px 20px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--accent-text);
+}
+.help-dlg__title { flex: 1; margin: 0; font-family: var(--font-display); font-size: var(--fs-lead); font-weight: 600; color: var(--ink); }
+.help-dlg__nav {
+  grid-area: nav;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 10px; overflow-y: auto;
+  background: var(--paper-2);
+  border-right: 1px solid var(--hairline);
+}
+.help-dlg__navbtn {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 36px; padding: 0 10px;
+  border: 0; border-radius: var(--r-2); background: transparent;
+  font: inherit; font-size: var(--fs-small); font-weight: 600; color: var(--ink-2);
+  text-align: left; cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.help-dlg__navbtn:hover { background: var(--paper-3); color: var(--ink); }
+.help-dlg__navbtn[aria-current="true"] { background: var(--accent-tint); color: var(--accent-text); }
+.help-dlg__body {
+  grid-area: body; position: relative;
+  overflow-y: auto; padding: 6px 24px 28px;
+  scroll-behavior: auto;
+}
+.help-sec { padding: 16px 0 18px; border-bottom: 1px solid var(--hairline-soft); }
+.help-sec:last-child { border-bottom: 0; }
+.help-sec__title {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 10px; font-size: var(--fs-body); font-weight: 700; color: var(--ink);
+}
+.help-sec__icon {
+  display: inline-grid; place-items: center; width: 28px; height: 28px;
+  border-radius: var(--r-full); background: var(--accent-tint); color: var(--accent-text);
+}
+.help-sec__lines { display: flex; flex-direction: column; gap: 8px; }
+.help-sec__note { margin-top: 10px; line-height: 1.45; }
+.help-line { margin: 0; font-size: var(--fs-small); line-height: 1.55; color: var(--ink-2); }
+.help-line b { color: var(--ink); }
+.help-keys { display: grid; border: 1px solid var(--hairline); border-radius: var(--r-2); overflow: hidden; }
+.help-keys__row {
+  display: grid; grid-template-columns: minmax(104px, 34%) minmax(0, 1fr); align-items: center; gap: 12px;
+  padding: 7px 12px; font-size: var(--fs-small); color: var(--ink-2);
+}
+.help-keys__row:nth-child(even) { background: var(--paper-2); }
+.help-keys__caps { display: flex; flex-wrap: wrap; gap: 4px; }
+.help-kb {
+  font-family: var(--font-sans); font-size: var(--fs-micro); font-weight: 700; color: var(--ink);
+  padding: 1px 6px; min-width: 22px; text-align: center;
+  background: var(--paper-2); border: 1px solid var(--hairline-strong); border-bottom-width: 2px;
+  border-radius: var(--r-1); white-space: nowrap;
+}
+.help-keys__row:nth-child(even) .help-kb { background: var(--paper); }
+.help-line .help-kb { margin: 0 1px; }
+/* The sheet a phone gets for any Modal that asks for one: the whole screen, no scrim
+   showing round it, the list of topics dropped so the sections simply stack. */
 @media (max-width: 599px) {
-  .help-card { max-height: calc(100dvh - 160px); }
-  /* A phone opens help from More, at the bar's far edge, and a card anchored there
-     sat 6px from one side of the screen and 34–64px from the other. It takes the
-     screen's 16px margins instead, just under the 56px bar. */
-  .app-bar .help-pop { position: fixed; top: 64px; left: 16px; right: 16px; }
-  .app-bar .help-pop .help-card { width: auto; }
+  .modal-scrim--sheet { padding: 0 !important; place-items: stretch !important; }
+  .modal-card--sheet { width: 100vw !important; height: 100dvh; border-radius: 0 !important; border: 0 !important; }
+  .modal-card--sheet .help-dlg { height: 100dvh; grid-template: "head" auto "body" minmax(0, 1fr) / minmax(0, 1fr); }
+  .help-dlg__nav { display: none; }
+  .help-dlg__body { padding: 4px 16px 28px; }
+  .help-keys__row { grid-template-columns: minmax(96px, 40%) minmax(0, 1fr); }
 }
 .more-menu {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: var(--z-popover);
@@ -2053,11 +2183,19 @@ textarea.field { border-radius: var(--r-2); }
 }
 .capture-head { grid-area: head; }
 .capture-photos { grid-area: photos; display: flex; flex-direction: column; gap: 12px; min-inline-size: 0; }
+/* No photos yet: the one "Add photos" tile is the whole call to action, so it sits in
+   the middle of the space beside the guide rather than hanging from the top of it.
+   Stretched to the guide's height (the layout aligns to `start`); in the one-column
+   layouts the row is as tall as the tile and this is a no-op, so it stays in flow. */
+.capture-photos--empty { align-self: stretch; justify-content: center; }
+/* The plan's reverse link: a wall's edge pointed at lifts and rings its photo. */
+.capture-photo { transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
+.capture-photo[data-plan-hover] { transform: translateY(-3px); box-shadow: 0 0 0 3px var(--accent), var(--shadow-lift); }
 .capture-guide { grid-area: guide; }
 @media (max-width: 859px) {
   .capture-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "head" "photos" "guide"; gap: 20px; }
 }
-@media (max-width: 1099px) {
+@media (max-width: 859px) {
   .capture-layout--camera { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "head" "photos" "guide"; gap: 20px; }
 }
 .capture-guide { display: flex; flex-direction: column; gap: 16px; min-inline-size: 0; }
@@ -2089,17 +2227,37 @@ textarea.field { border-radius: var(--r-2); }
 .capture-plan__wall[data-state="next"] line { stroke: var(--accent); stroke-width: 5; }
 .capture-plan__wall[data-state="next"] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
 .capture-plan__wall[data-state="next"] text { fill: var(--on-accent); }
-/* The wall's name was hovered or focused on a card (page.tsx `shimmer`): that wall's
-   line glows in moss and a paper highlight marches along it. One loop is four
-   `--dur-slow`s, so the speed is a token and not a number. */
+/* What a card is saying about a wall (page.tsx `wallStatesOf`), three states on
+   `data-wall-state` and no others:
+   · hover   a card is pointed at or focused: its wall glows in moss and a paper
+             highlight marches along it. One loop is four `--dur-slow`s, so the speed
+             is a token and not a number.
+   · current a card's Wall list is open: the wall the photo is ON — solid moss, thick,
+             and STILL, so it reads as "where it is" next to a moving "where it would go".
+   · preview the list is highlighting another wall: the same shimmer in amber, with a
+             dashed arrow from the current wall's number (`.capture-plan__arrow`). */
 .capture-plan__wall line.capture-plan__shine { display: none; fill: none; pointer-events: none; }
-.capture-plan__wall[data-shimmer] line:not(.capture-plan__shine) { stroke: var(--accent); stroke-width: 6; animation: capture-wall-pulse calc(var(--dur-slow) * 4) var(--ease-in-out) infinite; }
-.capture-plan__wall[data-shimmer] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
-.capture-plan__wall[data-shimmer] text { fill: var(--on-accent); }
-.capture-plan__wall[data-shimmer] line.capture-plan__shine {
+/* The invisible target around a wall's line: stroked wide, never painted. The reverse
+   link (hover a wall, its card lifts) is only usable if a 3px line is easy to find. */
+.capture-plan__wall line.capture-plan__hit { stroke: transparent; stroke-width: 22; pointer-events: stroke; fill: none; }
+.capture-plan__wall:hover line:not(.capture-plan__shine):not(.capture-plan__hit) { stroke: var(--accent); }
+.capture-plan__wall[data-wall-state="hover"] line:not(.capture-plan__shine):not(.capture-plan__hit),
+.capture-plan__wall[data-wall-state="preview"] line:not(.capture-plan__shine):not(.capture-plan__hit) { stroke: var(--accent); stroke-width: 6; animation: capture-wall-pulse calc(var(--dur-slow) * 4) var(--ease-in-out) infinite; }
+.capture-plan__wall[data-wall-state="hover"] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
+.capture-plan__wall[data-wall-state="hover"] text { fill: var(--on-accent); }
+.capture-plan__wall[data-wall-state="hover"] line.capture-plan__shine,
+.capture-plan__wall[data-wall-state="preview"] line.capture-plan__shine {
   display: inline; stroke: var(--paper); stroke-width: 3; stroke-dasharray: 10 30;
   animation: capture-wall-march calc(var(--dur-slow) * 4) linear infinite;
 }
+.capture-plan__wall[data-wall-state="current"] line:not(.capture-plan__shine):not(.capture-plan__hit) { stroke: var(--accent); stroke-width: 7; }
+.capture-plan__wall[data-wall-state="current"] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
+.capture-plan__wall[data-wall-state="current"] text { fill: var(--on-accent); }
+/* Amber is a fill here, never type (see --accent-2); the number keeps --ink on it. */
+.capture-plan__wall[data-wall-state="preview"] line:not(.capture-plan__shine):not(.capture-plan__hit) { stroke: var(--accent-2); }
+.capture-plan__wall[data-wall-state="preview"] circle { fill: var(--accent-2); stroke: var(--accent-2); }
+.capture-plan__wall[data-wall-state="preview"] text { fill: var(--ink); }
+.capture-plan__arrow { stroke: var(--accent-2); stroke-width: 2; stroke-dasharray: 4 5; stroke-linecap: round; fill: none; opacity: 0.8; pointer-events: none; }
 @keyframes capture-wall-pulse { 50% { stroke-width: 8; } }
 @keyframes capture-wall-march { to { stroke-dashoffset: -40; } }
 /* Reduced motion (the block near the end of this file): the wall stays lit, still. */
@@ -2169,6 +2327,106 @@ textarea.field { border-radius: var(--r-2); }
 .scan-hand {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex-shrink: 0;
   margin: 0 16px 12px; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
+}
+
+/* ── Found pieces on the scan review (PhotoEditor boxes, DetectionRow rows) ───
+   One `--piece` per piece (`lib/piece-colors.ts`) shared by its box, its label and its
+   row, and one hovered piece for the whole screen: raise it here and the other side
+   raises it there. Rest is a thin outline over a faint tint with a hairline halo either
+   side so it reads on a dark or a light patch of photo; hover is a thicker ring, a
+   stronger tint and a lifted label, and the other pieces step back. Kept is solid and
+   not kept is dashed (the box's own border-style), never a different hue. */
+.piece-box {
+  background: color-mix(in srgb, var(--piece) 8%, transparent);
+  box-shadow: 0 0 0 1px var(--piece-halo-light), inset 0 0 0 1px var(--piece-halo-dark);
+  transition: background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), opacity var(--dur-quick) var(--ease-out);
+}
+.piece-box[data-piece-state="hover"] {
+  background: color-mix(in srgb, var(--piece) 30%, transparent);
+  box-shadow: 0 0 0 2px var(--piece), 0 0 0 3px var(--piece-halo-light), inset 0 0 0 1px var(--piece-halo-dark);
+}
+.piece-box[data-piece-state="dim"] { opacity: 0.45; }
+.piece-tag {
+  opacity: 0.94;
+  box-shadow: 0 0 0 1px var(--piece-halo-light);
+  transition: transform var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), opacity var(--dur-quick) var(--ease-out);
+}
+.piece-tag[data-piece-state="hover"] {
+  opacity: 1;
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 2px var(--piece-halo-light), 0 3px 8px var(--piece-halo-dark);
+}
+.piece-tag[data-piece-state="dim"] { opacity: 0.55; }
+
+.piece-row {
+  position: relative;
+  border: 1px solid var(--hairline); border-radius: var(--r-2); background: var(--paper);
+  /* The swatch: the piece's own colour down the row's left edge. */
+  box-shadow: inset 4px 0 0 var(--piece);
+  transition: background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out);
+}
+.piece-row[data-kept="true"] { border-color: var(--locked); background: var(--locked-tint); }
+.piece-row[data-hovered="true"] {
+  background: color-mix(in srgb, var(--piece) 14%, var(--paper));
+  box-shadow: inset 6px 0 0 var(--piece), inset 0 0 0 2px var(--piece);
+}
+
+/* ── Finding your furniture (components/ui/FindingFurniture.tsx) ──────────────
+   The waiting picture on the scan card. One cycle is `--dur-loop` and has six beats, one
+   per piece drawn and a last for measuring; every piece, the magnifier and the status
+   lines run on that same duration and are staggered by `--i` beats, so they cannot drift
+   apart. Reduced motion shows the finished drawing and the last line, and nothing moves
+   (the block after this one). */
+.ff { --ff-beat: calc(var(--dur-loop) / 6); display: grid; justify-items: center; gap: 8px; margin: 0 0 14px; }
+.ff__art { inline-size: 100%; max-inline-size: 380px; block-size: auto; overflow: visible; }
+.ff__floor { stroke: var(--hairline-strong); stroke-width: 2; stroke-linecap: round; }
+.ff__ruler {
+  stroke: var(--accent-text); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0;
+  animation: ff-ruler var(--dur-loop) var(--ease-in-out) infinite;
+}
+.ff__piece { animation: ff-piece var(--dur-loop) linear calc(var(--i) * var(--ff-beat)) infinite; }
+.ff__line {
+  fill: none; stroke: var(--piece); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: ff-draw var(--dur-loop) var(--ease-out) calc(var(--i) * var(--ff-beat)) infinite;
+}
+.ff__fill {
+  fill: var(--piece); stroke: none; opacity: 0;
+  animation: ff-tint var(--dur-loop) var(--ease-out) calc(var(--i) * var(--ff-beat)) infinite;
+}
+.ff__box {
+  fill: none; stroke: var(--piece); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0;
+  animation: ff-box var(--dur-loop) var(--ease-out) calc(var(--i) * var(--ff-beat)) infinite;
+}
+.ff__lens { animation: ff-lens var(--dur-loop) var(--ease-in-out) infinite; transform: translate(66px, 128px); }
+.ff__lens circle { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--ink-2); stroke-width: 2.5; }
+.ff__lens line { stroke: var(--ink-2); stroke-width: 4; stroke-linecap: round; }
+.ff__says { display: grid; justify-items: center; min-block-size: 1.6em; }
+.ff__say {
+  grid-area: 1 / 1; opacity: 0; text-align: center;
+  font-size: var(--fs-small); font-weight: 600; color: var(--ink-2);
+  animation: ff-say var(--dur-loop) var(--ease-out) calc(var(--i) * var(--ff-beat)) infinite;
+}
+.ff__meta { margin: 0; }
+@keyframes ff-piece { 0%, 90% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes ff-draw { 0% { stroke-dashoffset: 1; } 11% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 0; } }
+@keyframes ff-tint { 0%, 8% { opacity: 0; } 14% { opacity: 0.5; } 30%, 100% { opacity: 0.16; } }
+@keyframes ff-box { 0%, 11% { opacity: 0; } 16%, 100% { opacity: 0.75; } }
+@keyframes ff-say { 0% { opacity: 0; } 2.5% { opacity: 1; } 15% { opacity: 1; } 17.5%, 100% { opacity: 0; } }
+@keyframes ff-ruler {
+  0%, 80% { stroke-dashoffset: 1; opacity: 1; }
+  96% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes ff-lens {
+  0%, 10% { transform: translate(66px, 128px); }
+  13.5%, 27% { transform: translate(150px, 140px); }
+  30%, 43% { transform: translate(200px, 130px); }
+  46.5%, 60% { transform: translate(252px, 112px); }
+  63%, 76% { transform: translate(296px, 134px); }
+  80% { transform: translate(30px, 180px); }
+  96% { transform: translate(300px, 180px); }
+  100% { transform: translate(66px, 128px); }
 }
 
 /* ── Building your room (components/ui/BuildingRoom.tsx) ──────────────────────
@@ -2309,7 +2567,7 @@ textarea.field { border-radius: var(--r-2); }
   animation: rough-callout-in var(--dur-slow) var(--ease-out) both;
 }
 .rough-callout--phone {
-  /* Below the 56px app bar, where `.help-pop` sits too: the room name and the tabs
+  /* Below the 56px app bar, where the help sheet starts too: the room name and the tabs
      stay pressable while it shows. */
   left: 16px; right: 16px; top: 64px; width: auto; transform: none;
   animation-name: rough-callout-in-top;
@@ -2461,8 +2719,19 @@ textarea.field { border-radius: var(--r-2); }
      pieces wait their turn invisibly, on a screen that is up only as long as the save. */
   .iso-room__piece { animation-delay: 0s !important; }
   /* The capture plan's wall shimmer: lit and still, no pulse and no marching dashes. */
-  .capture-plan__wall[data-shimmer] line:not(.capture-plan__shine) { animation: none; stroke-width: 7; }
-  .capture-plan__wall[data-shimmer] line.capture-plan__shine { display: none; animation: none; }
+  .capture-plan__wall[data-wall-state="hover"] line:not(.capture-plan__shine):not(.capture-plan__hit),
+  .capture-plan__wall[data-wall-state="preview"] line:not(.capture-plan__shine):not(.capture-plan__hit) { animation: none; stroke-width: 7; }
+  .capture-plan__wall[data-wall-state="hover"] line.capture-plan__shine,
+  .capture-plan__wall[data-wall-state="preview"] line.capture-plan__shine { display: none; animation: none; }
+  .capture-photo[data-plan-hover] { transform: none !important; }
+  /* The scan card's drawing (FindingFurniture): the finished picture and its last line, still. */
+  .ff__ruler, .ff__piece, .ff__line, .ff__fill, .ff__box, .ff__lens, .ff__say { animation: none !important; }
+  .ff__line { stroke-dashoffset: 0; }
+  .ff__fill { opacity: 0.16; }
+  .ff__box { opacity: 0; }
+  .ff__ruler { stroke-dashoffset: 0; opacity: 0.8; }
+  .ff__lens { display: none; }
+  .ff__say:last-child { opacity: 1; }
 }
 
 
@@ -2487,7 +2756,8 @@ textarea.field { border-radius: var(--r-2); }
   border-radius: var(--r-full);
   box-shadow: inset 0 0 0 1px var(--edge), var(--shadow-float);
   opacity: 1;
-  transition: clip-path var(--dur-slow) var(--ease-out), opacity var(--dur-base) var(--ease-out), filter var(--dur-base) var(--ease-out);
+  /* The strip grows out of the pill on a spring: it overshoots its ends a hair and settles. */
+  transition: clip-path calc(var(--dur-slow) * 1.5) var(--ease-spring), opacity var(--dur-base) var(--ease-out), filter var(--dur-base) var(--ease-out);
 }
 .day-strip--folded .day-strip__sky { opacity: 0; }
 .day-strip--muted .day-strip__sky { filter: saturate(0.25); }
@@ -2510,10 +2780,10 @@ textarea.field { border-radius: var(--r-2); }
   color: var(--ink);
   background: var(--paper);
   border: 1px solid var(--edge);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-2) 24%, transparent), var(--shadow-float);
+  box-shadow: var(--shadow-float);
   outline-offset: 3px;
   transition:
-    transform var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-spring),
     background-color var(--dur-slow) var(--ease-out),
     color var(--dur-slow) var(--ease-out),
     box-shadow var(--dur-slow) var(--ease-out);
@@ -2521,6 +2791,16 @@ textarea.field { border-radius: var(--r-2); }
 /* Under a drag the pill follows the hand exactly: a lagging handle reads as a sticky one. */
 .day-strip--carrying .day-strip__handle { transition: background-color var(--dur-slow) var(--ease-out), color var(--dur-slow) var(--ease-out), box-shadow var(--dur-slow) var(--ease-out); }
 .day-strip__handle:active { cursor: grabbing; }
+/* Only a keyboard sees a ring; the pill at rest is as calm as the other chrome pills. */
+.day-strip__handle:focus-visible { outline: 2px solid var(--accent-text); }
+/* Opening plays the sun's little hello: a tilt up, a lean back, home. */
+.day-strip--open .day-strip__glyph { animation: day-glyph-hello calc(var(--dur-slow) * 2) var(--ease-spring) both; }
+@keyframes day-glyph-hello {
+  0% { transform: rotate(-24deg) scale(0.8); }
+  40% { transform: rotate(14deg) translateY(-3px) scale(1.18); }
+  70% { transform: rotate(-6deg) scale(0.97); }
+  100% { transform: rotate(0) scale(1); }
+}
 .day-strip__glyph { display: inline-flex; color: var(--accent-text); transition: color var(--dur-slow) var(--ease-out); }
 .day-strip__time {
   font-size: var(--fs-small); font-weight: 700;
@@ -2532,11 +2812,10 @@ textarea.field { border-radius: var(--r-2); }
   color: var(--on-ink);
   background: var(--ink);
   border-color: var(--ink);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--paper) 16%, transparent), var(--shadow-float);
+  box-shadow: var(--shadow-float);
 }
 .day-strip--night .day-strip__glyph { color: var(--on-ink); }
 .day-strip--muted .day-strip__glyph { color: var(--ink-3); }
-.day-strip--muted .day-strip__handle { box-shadow: var(--shadow-float); }
 .day-strip--on-dark:not(.day-strip--night) .day-strip__handle { border-color: var(--paper); }
 /* Giving way to the furniture (the contract in DayStrip.tsx). Quiet while a piece is
    selected — still there, still grabbable, not competing with it — and away while
@@ -2560,8 +2839,11 @@ textarea.field { border-radius: var(--r-2); }
 .celestial--night .celestial__disc { transform: scale(1.55); }
 .celestial--night .celestial__bite { transform: translate(0, 0); }
 @media (prefers-reduced-motion: reduce) {
-  .day-strip, .day-strip__sky, .day-strip__handle, .day-strip__glyph,
+  .day-strip, .day-strip__handle, .day-strip__glyph,
   .celestial__rays, .celestial__disc, .celestial__bite { transition: none; }
+  /* No overshoot, no hello: the strip simply fades in. */
+  .day-strip__sky { transition: opacity var(--dur-base) var(--ease-out); }
+  .day-strip--open .day-strip__glyph { animation: none; }
 }
 
 /* ── The day as a track (components/studio/LightingPicker.tsx) ────────────────

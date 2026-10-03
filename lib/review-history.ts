@@ -117,3 +117,12 @@ export function snapshotConfirmed(confirmed: ReadonlySet<number>): number[] {
 export function restoreConfirmed(confirmed: readonly number[]): Set<number> {
   return new Set(confirmed);
 }
+
+/** The kept set after the person picked a model for row `i` from what they typed: the
+ *  piece is in it, and the same set comes back when it already was. A pick is the
+ *  person saying what the piece IS, so it is one they want; ticking it is not a
+ *  decision made for them, and it stays one tap to undo. Later removing the tick is
+ *  not this function's business — nothing calls it again. */
+export function keptAfterPick(confirmed: ReadonlySet<number>, i: number): Set<number> {
+  return confirmed.has(i) ? (confirmed as Set<number>) : new Set(confirmed).add(i);
+}

@@ -74,7 +74,9 @@ without any key: pick a footprint and start decorating.
 - **Dimensions come from code, not AI.** All sizes pass through `clampDims`
   ([`lib/dimension-ranges.ts`](lib/dimension-ranges.ts)); a deterministic geometry
   engine owns sizing, placement, overlap and clearance. AI is a hint only — and so
-  is a scene file, which is validated and clamped the same way.
+  is a scene file, which is validated and clamped the same way. **A piece built from
+  a scan is approximate**: it gets its model's catalogue size (the photo may nudge only
+  the width, a little) and its default colour, and you adjust it in the studio.
 - **BYO key, no backend.** Browser → provider directly (optional Gemini
   detection). Scope the key with an HTTP-referrer + API restriction. AI is
   detection-only, never a dependency.

@@ -2393,6 +2393,47 @@ export function defaultDepthFor(category: Category, shape: Shape): number {
   return defaultAxisFor(category, shape, 1);
 }
 
+/** How far a photo's width estimate may move a scanned piece off its catalogue width. */
+export const APPROX_WIDTH_BAND = 0.25;
+
+/** The shapes whose width a photo may only ever WIDEN: an opening or a hanging that
+ *  reads small is a framing artefact (a window cut by the frame, a curtain pulled to
+ *  its rail), never a reason to draw a 400 mm window or a hand's-width curtain. */
+const WIDEN_ONLY: ReadonlySet<Shape> = new Set<Shape>(['window', 'door', 'curtain']);
+
+/** The size a scanned piece is BUILT at: an approximate, catalogue-standard one.
+ *
+ *  Photo-derived sizes were wrong often enough (a window with a protruding depth, a
+ *  curtain a hand wide) that the scan no longer measures anything. The piece starts at
+ *  the Library's own size for its shape (`PART_LIBRARY`, else the category's
+ *  `CATEGORY_DEFAULTS`), and the hint may nudge the WIDTH only, within +-25% of that or
+ *  the shape's legal range, whichever is tighter. Depth and height are always the
+ *  catalogue's, so a wall opening is as thin as one added from the Library and a
+ *  curtain keeps its drop. A window, door or curtain is never narrower than its default.
+ *  A round piece whose default is as deep as it is wide stays round when nudged.
+ *
+ *  A generic primitive (`box` and friends, what an unrecognised object becomes) has no
+ *  catalogue size to approximate, so it keeps its hint clamped into the category's
+ *  range - the one place a photo estimate still sizes a piece. No hint, or one with an
+ *  unusable width, gives the default. */
+export function approximateDims(category: Category, shape: Shape, hint?: readonly number[]): [number, number, number] {
+  const row =
+    PART_LIBRARY.find((r) => r.shape === shape && r.category === category) ?? PART_LIBRARY.find((r) => r.shape === shape);
+  const cfg = CATEGORY_DEFAULTS[category] ?? CATEGORY_DEFAULTS.other;
+  const base = row ? row.dimMM : cfg.dim;
+  const def = clampDims(category, shape, [base[0], base[1], base[2]]);
+  const usable = !!hint && hint.length >= 3 && hint.every((n) => Number.isFinite(n) && n > 0);
+  if (shape === 'box' || shape === 'cylinder' || shape === 'plane') {
+    return usable ? clampDims(category, shape, [hint![0], hint![1], hint![2]]) : def;
+  }
+  if (!usable) return def;
+  const range = dimRangeFor(category, shape);
+  const lo = Math.max(range.min[0], WIDEN_ONLY.has(shape) ? def[0] : def[0] * (1 - APPROX_WIDTH_BAND));
+  const hi = Math.min(range.max[0], def[0] * (1 + APPROX_WIDTH_BAND));
+  const w = Math.round(Math.min(hi, Math.max(lo, hint![0])));
+  return [w, def[0] === def[1] ? w : def[1], def[2]];
+}
+
 /** The shapes a detector — cloud or on-device — is allowed to name, in the order
  *  the detection prompt lists them.
  *
@@ -2660,7 +2701,6 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     const cleanLabel = splitSlotSuffix(d.label as string).name;
     const realSlot = placedSlot(d.label as string);
     const cat = ((d as { category?: Category }).category ?? 'other') as Category;
-    const cfg = CATEGORY_DEFAULTS[cat] ?? CATEGORY_DEFAULTS.other;
     // Prefer the detection's own stable key. The positional `${cat}-${n}` is an
     // ordinal, not an identity, and every per-part user edit — positions,
     // rotations, dims, hidden — is stored in a map keyed by this string. So
@@ -2694,15 +2734,10 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // empty. The copy is deleted rather than corrected: a second answer to a question
     // with one right answer drifts in the direction nobody notices.
     const mounted = isWallMountedPart(cat, refined);
-    // AI-estimated dims are a HINT, never the source of truth — clamp them into
-    // the shape's real-world range (lib/dimension-ranges). A wild estimate
-    // (3.5 m sofa, 80 mm fridge) collapses to the nearest credible size.
-    const aiDim = (d as { dimMM?: [number, number, number] }).dimMM;
-    const dim = clampDims(
-      cat,
-      refined,
-      aiDim && aiDim.every((n) => Number.isFinite(n) && n > 0) ? (aiDim as [number, number, number]) : cfg.dim,
-    );
+    // A scanned piece is built at an APPROXIMATE, catalogue-standard size: the photo's
+    // estimate may only nudge the width within a narrow band (`approximateDims`), and
+    // depth and height come from the catalogue. The user adjusts it in the studio.
+    const dim = approximateDims(cat, refined, (d as { dimMM?: [number, number, number] }).dimMM);
     // Prefer the estimated position/yaw when present and in-room; otherwise snap
     // to wall (`startingSpot`). "Estimated" is either measured (lib/detect-refine.ts
     // wrote it from the calibrated camera) or the model's own guess on an
@@ -2799,7 +2834,6 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       circle: isRoundPart(refined) || undefined,
       wallMounted: mounted || undefined,
       fromDetection: { slot: realSlot, bbox: d.box, conf: d.conf },
-      color: (d as { color?: string }).color,
     });
   }
 

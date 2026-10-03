@@ -26,9 +26,7 @@ import { geoMeasure, measuredPlane, type CalMap, type RoomDims } from './detect-
 import { cutAxes, type ReadBounds } from './photo-geometry';
 import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
-import { formatDim, formatDimDown } from './units';
 import { classSize } from './shape-search';
-import type { DimUnit } from './store';
 
 /** The axis names this module reasons about. Never depth — see `sizeFitsLabel`. */
 export type SizeAxis = 'width' | 'height';
@@ -437,52 +435,6 @@ export function candidatesFor(
   // Signed margin, so a candidate that does not fit its own band sorts below every
   // one that does, without needing to be flagged.
   return out.sort(byFit);
-}
-
-/** The row accepting `cand` leaves in place of `row`, called `label`: the candidate's
- *  category, model and measurement, with the row's own colour.
- *
- *  Not simply `cand.detection`. A candidate is measured from the row as it was when
- *  the verdicts were worked out, and the scan screen works them out from a copy that
- *  deliberately ignores colour, so the photo's sampled colour landing does not
- *  re-run the checks. So a candidate can predate the colour, and accepting it wrote
- *  a colourless row over a coloured one — the piece went grey until the next sample
- *  painted it back. Colour is the one thing a candidate knows nothing new about: it
- *  is read off the photograph, not the word. */
-export function acceptCandidate(row: Detection, cand: LabelCandidate, label: string): Detection {
-  // The row's colour or none, never the candidate's: the candidate's is the same
-  // row's from earlier, so the row's own is always the newer answer.
-  const { color: _stale, ...measured } = cand.detection;
-  return { ...measured, label, ...(row.color === undefined ? {} : { color: row.color }) };
-}
-
-/** What the camera measured, as the words after "Measured": "1.20 × 0.45 m", and
- *  "about 2.00 × 0.33 m" once either axis is `bounded` — read at a distance the photo did
- *  not show, so an estimate, and judged as one (D8). One axis names itself, "2.67 m
- *  tall", since a lone number after "Measured" could be either. Here rather than in the
- *  page, because it is a displayed measurement's arithmetic, and the page is where no
- *  test can reach it.
- *
- *  An axis in `atLeast` is the part of a cut piece the photo saw, so it says so: "at
- *  least 2.10 m wide", or "at least 1.00 × 1.78 m" when both are. Beside a size it
- *  names each axis — "1.20 m wide and at least 2.10 m tall" — because "at least"
- *  before a "×" would claim the other axis too. Never beside "about": `atLeast` and
- *  `bounded` are never on one verdict (`readAxes`). */
-export function measuredPhrase(v: Extract<LabelVerdict, { status: 'suspect' }>, unit: DimUnit): string {
-  const read = (['width', 'height'] as const).flatMap((a) => {
-    const n = v.measured[a];
-    return n === undefined ? [] : [{ a, n }];
-  });
-  const low = v.atLeast ?? [];
-  // A lower bound rounds down, or the number printed after "at least" is more than was seen.
-  const num = ({ a, n }: (typeof read)[number]) => (low.includes(a) ? formatDimDown : formatDim)(n, unit);
-  const named = (r: (typeof read)[number]) => `${num(r)} ${unit} ${r.a === 'width' ? 'wide' : 'tall'}`;
-  if (low.length > 0 && low.length < read.length) {
-    return read.map((r) => `${low.includes(r.a) ? 'at least ' : ''}${named(r)}`).join(' and ');
-  }
-  const lead = low.length > 0 ? 'at least ' : v.bounded?.length ? 'about ' : '';
-  if (read.length === 1) return `${lead}${named(read[0])}`;
-  return `${lead}${read.map(num).join(' × ')} ${unit}`;
 }
 
 /** Judge the word a detector used against the size the camera measured.

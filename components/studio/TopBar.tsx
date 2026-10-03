@@ -110,7 +110,8 @@ export function TopBar({
     // anything under about a 950px window it simply overflowed sideways. Nothing
     // in it could shrink either: flex items default to `min-width: auto`, so the
     // `flex: 1` spacer collapsed to nothing and then the row spilled.
-    <div className="chrome-bar chrome-bar--tight">
+    <div className="studio-bar">
+      <div className="studio-bar__start">
       <Link href="/" aria-label="Danmu: back to your rooms" style={{ display: 'flex' }}>
         <DanmuMark size={12} />
       </Link>
@@ -170,12 +171,12 @@ export function TopBar({
         )}
       </span>
       {savedStatus}
-      {centerSlot}
-      {/* `margin-left: auto`, not a `flex: 1` spacer. A spacer stays on row one
-          when the bar wraps, which left these three hanging off the left edge of
-          row two; this keeps them together and against the trailing edge on
-          whichever row they land on. */}
-      {right != null && <div className="chrome-bar__end">{right}</div>}
+      </div>
+      {/* The view switch has a column of its own, `auto` between two equal `1fr`
+          ones, so it is centred on the bar and not on the room left over after the
+          name. `.studio-bar` gives it a row to itself where the three do not fit. */}
+      <div className="studio-bar__mid">{centerSlot}</div>
+      {right != null && <div className="studio-bar__end">{right}</div>}
     </div>
   );
 }

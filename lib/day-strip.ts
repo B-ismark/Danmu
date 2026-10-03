@@ -10,7 +10,7 @@
 //
 // The strip makes the horizon VISIBLE, which is what lets it be one track. It is the
 // whole clock, midnight to midnight, painted as the sky it scrubs — night at both ends,
-// gold at sunrise and sunset, paper at noon — so the place the sun turns into the moon
+// peach at sunrise, rose at sunset, haze at noon — so the place the sun turns into the moon
 // is a place you can see before your hand gets there. The value is read off x alone,
 // the way a slider's is.
 
@@ -68,7 +68,7 @@ export function scrubHour(t: number): number {
 
 /** The strip's paint, as a CSS gradient over the theme's tokens. The two horizons are
  *  placed from `SUNRISE_H` and `SUNSET_H` rather than typed as percentages, so the
- *  gold on the strip is exactly where the handle turns from moon to sun: a sky whose
+ *  warm band on the strip is exactly where the handle turns from moon to sun: a sky whose
  *  dawn sat a few px off the clock's would be the invisible-horizon problem again,
  *  merely smaller. */
 export function skyGradient(): string {
@@ -76,21 +76,21 @@ export function skyGradient(): string {
   const rise = SUNRISE_H;
   const set = SUNSET_H;
   const noon = (rise + set) / 2;
-  // Twilight either side of each horizon: an hour of deepening blue before, and the
-  // gold giving way to the day's paper over the two hours after.
+  // Twilight either side of each horizon: an hour of lilac before dawn, and the
+  // peach (dusk: rose) giving way to the day's haze over the two hours after.
   return `linear-gradient(90deg, ${[
-    `var(--ink) 0%`,
-    `var(--ink-2) ${pct(rise - 1)}`,
-    `var(--accent-2) ${pct(rise)}`,
-    `var(--paper-3) ${pct(rise + 2)}`,
-    `var(--paper) ${pct(noon)}`,
-    `var(--paper-3) ${pct(set - 2)}`,
-    `var(--accent-2) ${pct(set)}`,
-    `var(--ink-2) ${pct(set + 1)}`,
-    `var(--ink) 100%`,
+    `var(--sky-night) 0%`,
+    `var(--sky-twilight) ${pct(rise - 1)}`,
+    `var(--sky-dawn) ${pct(rise)}`,
+    `var(--sky-haze) ${pct(rise + 2)}`,
+    `var(--sky-noon) ${pct(noon)}`,
+    `var(--sky-haze) ${pct(set - 2)}`,
+    `var(--sky-dusk) ${pct(set)}`,
+    `var(--sky-twilight) ${pct(set + 1)}`,
+    `var(--sky-night) 100%`,
   ].join(', ')})`;
 }
 
-/** The two horizons, 0–1 along the strip: where the paint turns gold and the handle
+/** The two horizons, 0–1 along the strip: where the paint turns peach or rose and the handle
  *  turns between sun and moon. */
 export const HORIZONS: readonly [number, number] = [SUNRISE_H / 24, SUNSET_H / 24];

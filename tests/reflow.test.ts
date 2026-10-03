@@ -237,22 +237,13 @@ describe('a floating card is capped against the window, not just stated', () => 
     expect(readFileSync(root(...file.split('/')), 'utf8')).toMatch(pattern);
   });
 
-  // The help card keeps its width in the stylesheet, because a
-  // phone replaces it with its own margins (`.app-bar .help-pop`). So the cap is
-  // asserted where it lives, and the components are held to the classes carrying it —
-  // a class the component stopped using would leave the rule capping nothing.
-  it.each([
-    ['components/studio/HelpCard.tsx', 'help-card'],
-  ])('%s caps its width through .%s', (file, cls) => {
-    expect(readFileSync(root(...file.split('/')), 'utf8')).toContain(cls);
+  // The help dialog is a `Modal` that takes the screen on a phone: width is the Modal's
+  // own `min(Npx, 92vw)`, and the sheet rule lifts it to the whole screen below 600px.
+  it('help is a Modal, and a phone gets it as a full-height sheet', () => {
+    expect(readFileSync(root('components', 'studio', 'HelpCard.tsx'), 'utf8')).toMatch(/<Modal[^>]*\bsheet\b/);
     const css = readFileSync(root('app', 'globals.css'), 'utf8');
-    const rule = new RegExp(`\\n\\.${cls} \\{[^}]*width: min\\(\\d+px, calc\\(100vw`);
-    expect(css).toMatch(rule);
-  });
-
-  it('a phone gives help the screen margins, not the edge of the More button', () => {
-    const css = readFileSync(root('app', 'globals.css'), 'utf8');
-    expect(css).toMatch(/\.app-bar \.help-pop \{[^}]*position: fixed;[^}]*left: 16px; right: 16px;/);
+    expect(css).toMatch(/\.modal-card--sheet \{[^}]*width: 100vw[^}]*height: 100dvh/);
+    expect(css).toMatch(/\.help-dlg__nav \{ display: none; \}/);
   });
 
   // A third guard stood here: the sun graph's `<svg>` had a 272-wide viewBox left
@@ -595,7 +586,10 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     expect(rule('.ds-btn')).toContain('white-space: nowrap');
     expect(CODE).toContain('<span style={LABEL}>Delete</span>');
     expect(CODE).toContain('<span style={LABEL}>Done</span>');
-    expect(CATCODE).toMatch(/<span style=\{\{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 \}\}>/);
+    // Add's label is two stacked words (`AddMorph`), so the ellipsis lives on the
+    // class that holds them.
+    expect(CATCODE).toContain('className="add-morph-label"');
+    expect(rule('.add-morph-label > span')).toMatch(/overflow: hidden; text-overflow: ellipsis/);
   });
 
   /** The row's fixed demand against the narrowest rail it can be given.
@@ -624,7 +618,7 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     const btnPadX = Number(/padding: 0 (\d+)px/.exec(btn)![1]);
     const btnGap = Number(/gap: (\d+)px/.exec(btn)![1]);
     const trash = Number(/name="trash" size=\{(\d+)\}/.exec(CODE)![1]);
-    const plus = Number(/name=\{open \? 'x' : 'plus'\} size=\{(\d+)\}/.exec(CATCODE)![1]);
+    const plus = Number(/name="plus" size=\{(\d+)\}/.exec(CATCODE)![1]);
 
     // `fixed` below ENUMERATES the row — two labelled buttons, one square, two gaps
     // — so it is wrong rather than red if the row grows a control, and that is the
@@ -678,7 +672,9 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     // you are NOT looking at while the row is at its widest.
     const slot = [...CODE.matchAll(/<span style=\{LABEL\}>([^<]+)<\/span>/g)].map((m) => m[1]);
     expect(slot.length, 'the selection slot lost a branch').toBe(2);
-    const add = /textOverflow: 'ellipsis'[^>]*>\s*\{open \? '([^']+)' : '([^']+)'\}/.exec(CATCODE)!;
+    // Both words now sit stacked in one grid cell (`AddMorph`), so the cell is as
+    // wide as the longer of them whichever is showing.
+    const add = /<span>([^<]+)<\/span>\s*<span>([^<]+)<\/span>\s*<\/span>/.exec(CATCODE)!;
     const addChars = Math.max(add[1].length, add[2].length);
     const deleteChars = Math.max(...slot.map((l) => l.length));
 
@@ -1397,5 +1393,30 @@ describe('the canvas is not a query container', () => {
     const rules = codeOnly(CSS).match(/#studio-canvas[^{]*\{[^}]*\}/g) ?? [];
     expect(rules.length).toBeGreaterThan(0);
     for (const r of rules) expect(r).not.toMatch(/container(-type)?\s*:/);
+  });
+});
+
+describe('scrollbars show only where the pointer is', () => {
+  it('is thin and transparent at rest, and takes a token colour on hover or focus-within', () => {
+    // The standard properties, because Chrome ignores `::-webkit-scrollbar` once
+    // `scrollbar-color` is set; a pseudo-element rule here would be dead.
+    const code = codeOnly(CSS);
+    expect(code).toMatch(/\n\* \{ scrollbar-width: thin; scrollbar-color: transparent transparent; \}/);
+    expect(code).toMatch(/\n\*:hover, \*:focus-within \{ scrollbar-color: var\(--hairline-strong\) transparent; \}/);
+    expect(code).not.toMatch(/::-webkit-scrollbar/);
+  });
+});
+
+describe('the studio bar centres its view switch', () => {
+  it('is a three-column grid whose outer columns are equal', () => {
+    expect(rule('.studio-bar')).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\) auto minmax\(0,\s*1fr\)/);
+  });
+});
+
+describe('Add and Close are one morphing control', () => {
+  it('turns the plus 45° and cross-fades the words off aria-expanded, with a tokenised transition', () => {
+    expect(CSS).toMatch(/\[aria-expanded="true"\] > \.add-morph\s*\{\s*transform:\s*rotate\(45deg\)/);
+    expect(rule('.add-morph')).toMatch(/transition:\s*transform var\(--dur-base\) var\(--ease-out\)/);
+    expect(CSS).toMatch(/\[aria-expanded="true"\] > \.add-morph-label > span\s*\+\s*span\s*\{\s*opacity:\s*1/);
   });
 });

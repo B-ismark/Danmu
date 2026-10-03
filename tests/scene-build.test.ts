@@ -89,15 +89,16 @@ describe('one ceiling clearance, not one per path', () => {
     // agree by construction — which is a reason to keep this test rather than to
     // retire it: agreement that holds by construction is exactly the kind that stops
     // holding silently when one side is edited.
-    const expected = heightForNewCeiling('fan', 'fan', [1200, 1200, FAN_H_MM], 99, 2.0, H);
-    expect(expected).toBeCloseTo(H - MOUNT_PAD - FAN_H_MM / 2000, 9);
+    const fanH = fan.dimMM[2];
+    const expected = heightForNewCeiling('fan', 'fan', fan.dimMM, 99, 2.0, H);
+    expect(expected).toBeCloseTo(H - MOUNT_PAD - fanH / 2000, 9);
     expect(fan.pos[1]).toBeCloseTo(expected, 9);
   });
 
   it('agrees at a different ceiling too, so neither side can be a coincidence', () => {
     const H = 2.4;
     expect(ceilingFan(H).pos[1]).toBeCloseTo(
-      heightForNewCeiling('fan', 'fan', [1200, 1200, FAN_H_MM], 99, 2.0, H),
+      heightForNewCeiling('fan', 'fan', ceilingFan(H).dimMM, 99, 2.0, H),
       9,
     );
   });
@@ -261,22 +262,24 @@ describe('buildSceneFromRoom', () => {
   });
 
   it('does NOT shrink a part that is genuinely taller than the room', () => {
-    // A 2.6 m wardrobe does not fit under a 2.4 m ceiling, and quietly resizing it
-    // to fit would be exactly the dimension lie this codebase exists to avoid. It
-    // keeps its real height, sits on the floor, and lib/clearance reports it.
+    // The catalogue wardrobe is 2.2 m tall and does not fit under a 2.0 m ceiling, and
+    // quietly resizing it to fit would be exactly the dimension lie this codebase
+    // exists to avoid. It keeps its catalogue height, sits on the floor, and
+    // lib/clearance reports it.
     const parts = buildSceneFromRoom(
       room([saved(0, { category: 'wardrobe', label: 'wardrobe__slot:n', dimMM: [2000, 600, 2600] })], {
-        height: 2.4,
+        height: 2.0,
       }),
     );
-    expect(parts[0].dimMM[2]).toBe(2600);
+    expect(parts[0].dimMM[2]).toBe(2200);
     expect(parts[0].pos[1]).toBe(0);
   });
 
-  it('marks a kept piece as from your photo, and carries its colour through', () => {
-    const parts = buildSceneFromRoom(room([saved(0, { locked: true, color: '#123456' })]));
+  it('marks a kept piece as from your photo, and ignores a colour an old record carries', () => {
+    const old = { ...saved(0, { locked: true }), color: '#123456' };
+    const parts = buildSceneFromRoom(room([old]));
     expect(parts[0].locked).toBe(true);
-    expect(parts[0].color).toBe('#123456');
+    expect(parts[0].color).toBeUndefined();
   });
 });
 

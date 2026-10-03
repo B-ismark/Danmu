@@ -227,18 +227,22 @@ describe('applyListEdits', () => {
       expect(part?.light).toBeUndefined();
     });
 
-    // The build copies a row's photo colour onto its piece, so a piece still wearing
-    // its row's colour was never recoloured, and follows the row.
-    it('a colour nobody chose follows the row', () => {
+    // A photo no longer colours its piece, so a colour on a piece is the studio's, and
+    // a row that carries an old sampled one (a record from before) builds without it.
+    it('an old row colour is not built, and a studio colour survives a rebuild', () => {
       const photo = [{ ...LIST[0], color: '#aa0000' }, LIST[1], LIST[2]];
       const r = room({ detectedObjects: photo });
       const [bed] = buildSceneFromRoom(r);
-      expect(bed.color, 'fixture: the build copies the photo colour').toBe('#aa0000');
-      const edit = applyListEdits([bed], r, [{ ...photo[0], yaw: 1.2, color: '#00aa00' }, LIST[1], LIST[2]]);
+      expect(bed.color, 'a saved detection colour is ignored').toBeUndefined();
+      const chosen = { ...bed, color: '#00aa00' };
+      const edit = applyListEdits([chosen], r, [{ ...photo[0], yaw: 1.2 }, LIST[1], LIST[2]]);
       expect(edit?.parts[0].color).toBe('#00aa00');
-      // …and a colour the studio RESET is a choice too: back to the model's own.
-      const reset = applyListEdits([{ ...bed, color: undefined }], r, [{ ...photo[0], yaw: 1.2 }, LIST[1], LIST[2]]);
+      const reset = applyListEdits([bed], r, [{ ...photo[0], yaw: 1.2 }, LIST[1], LIST[2]]);
       expect(reset?.parts[0].color).toBeUndefined();
+      // A scene saved before the change: the build had copied the row's sampled colour
+      // onto the piece. That colour is the photo's, not a choice, so it does not carry.
+      const legacy = applyListEdits([{ ...bed, color: '#aa0000' }], r, [{ ...photo[0], yaw: 1.2 }, LIST[1], LIST[2]]);
+      expect(legacy?.parts[0].color, 'an old sampled colour is not carried').toBeUndefined();
     });
   });
 
@@ -257,8 +261,8 @@ describe('applyListEdits', () => {
     expect(edit).toMatchObject({ removed: 0, added: 0, updated: 1 });
   });
 
-  // How a row was found, where it sits in the list, and the colour the screen samples
-  // for any row without one are not edits. Counting them would rebuild the recoloured
+  // How a row was found, where it sits in the list, and a stale colour on an old record
+  // are not edits. Counting them would rebuild the recoloured
   // bed every time someone opened the list to look at it.
   it('a list that is only looked at changes nothing', () => {
     const looked = LIST.map((r, i) => ({ ...r, id: i + 7, conf: 0.5, source: 'cloud', color: '#abcdef' }));

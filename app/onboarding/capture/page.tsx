@@ -127,10 +127,15 @@ export default function CapturePage() {
     roughSize: boolean;
   } | null>(null);
   const [draggingFrom, setDraggingFrom] = useState<CaptureSlot | null>(null);
-  /** The wall whose name is being pointed at or focused, on a card or in its Wall
-   *  list. The plan shimmers that wall, so a name on a card and a line on the room
-   *  are the same thing to the eye. */
-  const [shimmer, setShimmer] = useState<CaptureSlot | null>(null);
+  // What the plan lights, as THREE facts rather than one slot, because one slot cannot
+  // say "this is the card's wall" and "this is the wall the list is pointing at" at
+  // once. `hover`: a card is pointed at or focused. `list`: a card's Wall list is open,
+  // with the option it highlights. `planHover`: a wall's edge on the plan is pointed at,
+  // which gives that wall's card its lift (the reverse of the first two).
+  const [hover, setHover] = useState<CaptureSlot | null>(null);
+  const [list, setList] = useState<{ owner: CaptureSlot; option: CaptureSlot } | null>(null);
+  const [planHover, setPlanHover] = useState<CaptureSlot | null>(null);
+  const wallStates = wallStatesOf(hover, list);
   const takesDrop = (e: React.DragEvent) => draggingFrom !== null || carriesFiles(e);
   /** single polite live region for everything that happens without a page change */
   const [announce, setAnnounce] = useState('');
@@ -507,7 +512,7 @@ export default function CapturePage() {
       </ol>
       {room && (
         <figure className="capture-card">
-          <WallPlan footprint={roomFootprint(room)} filled={photos} next={nextSlot} shimmer={shimmer} />
+          <WallPlan footprint={roomFootprint(room)} filled={photos} next={nextSlot} wallStates={wallStates} previewFrom={list && list.option !== list.owner ? list.owner : null} onWallHover={setPlanHover} />
           <figcaption className="t-small">
             {nextSlot ? (
               <>
@@ -565,7 +570,11 @@ export default function CapturePage() {
           onReplace={(list) => replacePhoto(slot, list)}
           onRemove={() => removePhoto(slot)}
           onMoveTo={(to) => movePhoto(slot, to)}
-          onShimmer={setShimmer}
+          onHover={(on) => setHover((h) => (on ? slot : h === slot ? null : h))}
+          onPreview={(option) =>
+            setList((l) => (option ? { owner: slot, option } : l?.owner === slot ? null : l))
+          }
+          planHovered={planHover === slot}
           draggingFrom={draggingFrom}
           setDraggingFrom={setDraggingFrom}
           onDropFrom={(from) => movePhoto(from, slot)}
@@ -688,8 +697,9 @@ export default function CapturePage() {
               <FlowStepper current="Photos" />
               <div className={`capture-layout${source === 'camera' ? ' capture-layout--camera' : ''}`}>
                 {guideHead}
-                <div className="capture-photos">
+                <div className={`capture-photos${anyCaptured ? '' : ' capture-photos--empty'}`}>
                   <div
+                    className="capture-photos__grid"
                     style={{
                       display: 'grid',
                       // auto-fill, not two fixed columns: the gallery now holds one to
@@ -784,6 +794,22 @@ function photoChrome(tier: ChromeTier = 'fact'): CSSProperties {
   };
 }
 
+/** What a wall of the plan is being told, if anything.
+ *  - `hover`   a card is pointed at or focused: its own wall shimmers, in moss.
+ *  - `current` a card's Wall list is open: the wall the photo is ON, steady.
+ *  - `preview` the same list is highlighting another wall: where it WOULD go, in
+ *              amber, shimmering. Never the same wall as `current`: the option the
+ *              photo is already on previews nothing. */
+type WallState = 'hover' | 'current' | 'preview';
+type WallStates = Partial<Record<CaptureSlot, WallState>>;
+
+function wallStatesOf(hover: CaptureSlot | null, list: { owner: CaptureSlot; option: CaptureSlot } | null): WallStates {
+  if (list) {
+    return list.option === list.owner ? { [list.owner]: 'current' } : { [list.owner]: 'current', [list.option]: 'preview' };
+  }
+  return hover ? { [hover]: 'hover' } : {};
+}
+
 /** The room's outline with each photo's wall marked: the next one to shoot lit in
  *  moss and numbered, the ones already photographed inked with a tick, the rest
  *  quiet. A dot at the middle is where to stand — the origin the geometry assumes
@@ -792,13 +818,20 @@ function WallPlan({
   footprint,
   filled,
   next,
-  shimmer,
+  wallStates,
+  previewFrom,
+  onWallHover,
 }: {
   footprint: [number, number][];
   filled: PhotoMap;
   next: CaptureSlot | null;
-  /** The wall to play the shimmer on — see `.capture-plan__wall[data-shimmer]`. */
-  shimmer: CaptureSlot | null;
+  /** Which walls a card is talking about — see `.capture-plan__wall[data-wall-state]`. */
+  wallStates: WallStates;
+  /** The card whose Wall list is previewing ANOTHER wall: a dashed arrow runs from this
+   *  wall's number to the previewed one's. */
+  previewFrom: CaptureSlot | null;
+  /** A wall's edge is pointed at (or not): its card answers. */
+  onWallHover: (wall: CaptureSlot | null) => void;
 }) {
   const xs = footprint.map((p) => p[0]);
   const zs = footprint.map((p) => p[1]);
@@ -809,6 +842,16 @@ function WallPlan({
   const h = Math.max(...zs) - minZ + pad;
   const walls = SLOT_ORDER.map((slot) => ({ slot, seg: framedWall(slot, footprint) }));
   const r = Math.max(w, h) * 0.055;
+  // Where each wall's number sits, so the preview arrow can join two of them.
+  const badgeAt = (seg: [[number, number], [number, number]]): [number, number] => {
+    const mx = (seg[0][0] + seg[1][0]) / 2;
+    const mz = (seg[0][1] + seg[1][1]) / 2;
+    const len = Math.hypot(mx, mz) || 1;
+    return [mx - (mx / len) * r * 1.8, mz - (mz / len) * r * 1.8];
+  };
+  const previewTo = (Object.keys(wallStates) as CaptureSlot[]).find((s) => wallStates[s] === 'preview') ?? null;
+  const fromSeg = previewFrom ? framedWall(previewFrom, footprint) : null;
+  const toSeg = previewTo ? framedWall(previewTo, footprint) : null;
   return (
     <svg
       className="capture-plan"
@@ -828,9 +871,18 @@ function WallPlan({
         const cx = mx - (mx / len) * r * 1.8;
         const cz = mz - (mz / len) * r * 1.8;
         return (
-          <g key={slot} data-state={state} data-shimmer={shimmer === slot ? 'on' : undefined} className="capture-plan__wall">
+          <g
+            key={slot}
+            data-state={state}
+            data-wall-state={wallStates[slot]}
+            className="capture-plan__wall"
+            onMouseEnter={() => onWallHover(slot)}
+            onMouseLeave={() => onWallHover(null)}
+          >
+            {/* A wall is a thin line; this is the generous, invisible target around it. */}
+            <line className="capture-plan__hit" x1={ax} y1={az} x2={bx} y2={bz} vectorEffect="non-scaling-stroke" aria-hidden="true" />
             <line x1={ax} y1={az} x2={bx} y2={bz} vectorEffect="non-scaling-stroke" />
-            {/* The moving highlight. Present always, drawn only under data-shimmer. */}
+            {/* The moving highlight. Present always, drawn only under data-wall-state. */}
             <line className="capture-plan__shine" x1={ax} y1={az} x2={bx} y2={bz} vectorEffect="non-scaling-stroke" aria-hidden="true" />
             <circle cx={cx} cy={cz} r={r} />
             <text x={cx} y={cz} fontSize={r * 1.15} textAnchor="middle" dominantBaseline="central">
@@ -839,6 +891,11 @@ function WallPlan({
           </g>
         );
       })}
+      {fromSeg && toSeg && (() => {
+        const [x1, z1] = badgeAt(fromSeg);
+        const [x2, z2] = badgeAt(toSeg);
+        return <line className="capture-plan__arrow" x1={x1} y1={z1} x2={x2} y2={z2} vectorEffect="non-scaling-stroke" aria-hidden="true" />;
+      })()}
       <circle cx={0} cy={0} r={r * 0.45} fill="var(--ink)" />
     </svg>
   );
@@ -972,6 +1029,9 @@ function wallOptions(slot: CaptureSlot, filled: PhotoMap): SelectOption<CaptureS
   return SLOT_ORDER.map((o) => ({
     value: o,
     label: o !== slot && filled[o] ? `${labelOf(o)} (swap)` : labelOf(o),
+    // The check says what is set; this says it in words, beside the row the
+    // pointer is on, which is a different fact and washes a different row.
+    hint: o === slot ? 'Current' : undefined,
     short: labelOf(o),
   }));
 }
@@ -985,7 +1045,9 @@ function PhotoCard({
   onReplace,
   onRemove,
   onMoveTo,
-  onShimmer,
+  onHover,
+  onPreview,
+  planHovered,
   draggingFrom,
   setDraggingFrom,
   onDropFrom,
@@ -998,8 +1060,12 @@ function PhotoCard({
   onReplace: (list: FileList | File[] | null) => void;
   onRemove: () => void;
   onMoveTo: (to: CaptureSlot) => void;
-  /** Which wall's name is being pointed at or focused, or null. */
-  onShimmer: (wall: CaptureSlot | null) => void;
+  /** The pointer is on, or focus is in, this card (anywhere on it). */
+  onHover: (on: boolean) => void;
+  /** This card's Wall list is highlighting that wall; null once it closes. */
+  onPreview: (option: CaptureSlot | null) => void;
+  /** This card's wall edge is being pointed at on the plan. */
+  planHovered: boolean;
   draggingFrom: CaptureSlot | null;
   setDraggingFrom: (s: CaptureSlot | null) => void;
   onDropFrom: (from: CaptureSlot) => void;
@@ -1007,33 +1073,37 @@ function PhotoCard({
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const label = labelOf(slot);
-  // Whether the pointer or focus is on this card's own Wall control, so a list that
-  // closes hands the shimmer back to this card's wall rather than switching it off.
-  const onControl = useRef(false);
-  const settle = () => onShimmer(onControl.current ? slot : null);
+  // Pointer and focus are two ways to be "on" the card, and the wall stays lit while
+  // either holds it.
+  const holds = useRef({ pointer: false, focus: false });
+  const hoverRef = useRef(onHover);
+  hoverRef.current = onHover;
+  const hold = (kind: 'pointer' | 'focus', on: boolean) => {
+    holds.current[kind] = on;
+    onHover(holds.current.pointer || holds.current.focus);
+  };
   // A photo moved to an EMPTY wall takes its card with it (cards are keyed by wall),
-  // with the pointer still on this control — so no leave or blur ever arrives, and
-  // the list's close has just handed the shimmer back to the wall it left. A card
-  // that goes while it holds the shimmer switches it off.
-  const shimmerRef = useRef(onShimmer);
-  shimmerRef.current = onShimmer;
+  // with the pointer still on it, so no leave or blur ever arrives. A card that goes
+  // switches off what it was lighting (its open list reports its own close).
   useEffect(
     () => () => {
-      if (onControl.current) shimmerRef.current(null);
+      hoverRef.current(false);
     },
     [],
   );
-  // The Wall list is portalled to <body>, and React still delivers its pointer and
-  // focus events to this wrapper: only what happens on the wrapper's own DOM counts,
-  // or a pointer resting on a list that has just closed would keep the wall lit.
-  const control = (e: React.SyntheticEvent<HTMLElement>, on: boolean) => {
-    if (!e.currentTarget.contains(e.target as Node)) return;
-    onControl.current = on;
-    onShimmer(on ? slot : null);
-  };
 
   return (
     <div
+      className="capture-photo"
+      data-photo-card={slot}
+      data-plan-hover={planHovered ? 'on' : undefined}
+      // Anywhere on the card, not only its wall name. The Wall list is portalled to
+      // <body> and React still routes its events here; one that is not on this card's
+      // own DOM is the list's, and the list reports for itself.
+      onMouseEnter={(e) => e.currentTarget.contains(e.target as Node) && hold('pointer', true)}
+      onMouseLeave={() => hold('pointer', false)}
+      onFocus={(e) => e.currentTarget.contains(e.target as Node) && hold('focus', true)}
+      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && hold('focus', false)}
       onDragOver={(e) => {
         e.preventDefault();
         setOver(true);
@@ -1111,8 +1181,6 @@ function PhotoCard({
           <span
             data-wall-badge={slot}
             style={{ ...photoChrome(), pointerEvents: 'auto' }}
-            onMouseEnter={() => onShimmer(slot)}
-            onMouseLeave={() => onShimmer(null)}
           >
             {label}
             {/* Derived from the room's own footprint — never a number typed in beside
@@ -1203,16 +1271,12 @@ function PhotoCard({
           <div className="capture-foot__wall">
             <div
               style={{ flex: '0 1 140px', minWidth: 0 }}
-              onMouseEnter={(e) => control(e, true)}
-              onMouseLeave={(e) => control(e, false)}
-              onFocus={(e) => control(e, true)}
-              onBlur={(e) => control(e, false)}
             >
               <Select
                 options={wallOptions(slot, filled)}
                 value={slot}
                 onChange={(to) => onMoveTo(to)}
-                onActiveChange={(to) => (to ? onShimmer(to) : settle())}
+                onActiveChange={onPreview}
                 ariaLabel={`Wall for the ${label} photo`}
                 height={32}
                 fontSize="var(--fs-small)"

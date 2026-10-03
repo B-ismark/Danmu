@@ -63,12 +63,14 @@ function openHelp(pathname: string = PLAN) {
   fireEvent.click(screen.getByRole('button', { name: 'How this works' }));
 }
 
-/** The card's group headings, in document order. `HelpGroup` renders its title as the
- *  `.ds-label` and nothing else in the card uses that class, so this is the rendered
- *  order rather than a reading of the source. */
+/** The dialog, found by its accessible name. */
+const card = () => screen.getByRole('dialog', { name: 'How this works' });
+
+/** The sections' headings, in document order. `HelpDialog` renders each title as a
+ *  `.help-sec__title` and nothing else uses that class, so this is the rendered order
+ *  rather than a reading of the source. */
 function groupTitles(): string[] {
-  const card = screen.getByRole('note');
-  return [...card.querySelectorAll('.ds-label')].map((n) => n.textContent ?? '');
+  return [...card().querySelectorAll('.help-sec__title')].map((n) => n.textContent ?? '');
 }
 
 afterEach(() => {
@@ -199,11 +201,13 @@ describe('help on the 2D plan says what the two lists are', () => {
   // legal tab stop and whether it says what it is on arrival.
   it('is a card a keyboard user can land on, and it says what it is when they do', () => {
     openHelp();
-    const card = screen.getByRole('note');
-    expect(card.tabIndex, 'a scroll box Chrome will not focus cannot be scrolled by keyboard').toBe(0);
-    // The accessible name, not the visible heading — a tab stop announced as "note" and
-    // nothing else is what `tabIndex` alone produces.
-    expect(screen.getByRole('note', { name: 'How this works' })).toBe(card);
+    // The scroll pane is the tab stop: a scroll box Chrome will not focus cannot be
+    // scrolled by keyboard.
+    const pane = screen.getByRole('region', { name: 'Help sections' });
+    expect(pane.tabIndex).toBe(0);
+    // The dialog's accessible name is its heading — a tab stop announced as "dialog" and
+    // nothing else is what a missing `aria-labelledby` produces.
+    expect(card().contains(pane)).toBe(true);
   });
 
   // A word and a keycap, with the space between them. JSX strips the trailing newline and
@@ -245,12 +249,12 @@ describe('help on a touch screen', () => {
         const restore = viewportAt(width, { touch: true });
         try {
           openHelp(path);
-          const card = screen.getByRole('note');
-          const text = card.textContent ?? '';
+          const dlg = card();
+          const text = dlg.textContent ?? '';
           expect(text).toMatch(/Tap a wall/);
           expect(text).toMatch(/Two fingers pinch to zoom/);
           expect(text, 'a mouse or keyboard gesture reached a touch card').not.toMatch(MOUSE_ONLY);
-          expect(card.querySelectorAll('kbd'), 'a keycap on a touch card').toHaveLength(0);
+          expect(dlg.querySelectorAll('kbd'), 'a keycap on a touch card').toHaveLength(0);
           // The two lists are still there: where they are matters most on a phone.
           expect(groupTitles()).toContain('The two lists');
           expect(text).toContain('Tap a piece in the Library');
@@ -268,7 +272,7 @@ describe('help on a touch screen', () => {
     const restore = viewportAt(390, { touch: false });
     try {
       openHelp(PLAN);
-      expect(screen.getByRole('note').textContent).toMatch(/Right-click a piece/);
+      expect(card().textContent).toMatch(/Right-click a piece/);
     } finally {
       restore();
     }

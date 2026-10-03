@@ -280,11 +280,16 @@ good", warn for a flag or a clash, "Checking this photo…" while unscored, all 
 `flagTone` / `flagLabel` / `flagHelp`), then the **Wall** dropdown (`Select`; a wall that
 already holds a photo reads "Wall 3 (swap)" because `movePhoto` swaps) beside the rung that
 placed it in quiet text — `REASON`: "Placed by compass", "Placed by shutter time", "Placed
-by order added", "Placed by you". Pointing at or focusing a wall's name — the badge, the
-Wall control, or an option highlighted in its open list (`Select`'s optional
-`onActiveChange`) — sets `data-shimmer` on that wall's `<g>` in the plan beside the how-to,
-where a CSS pulse and marching highlight run for `calc(var(--dur-slow) * 4)` a loop (still
-and lit under reduced motion). The filmstrip under the live camera is photo + Remove only.
+by order added", "Placed by you". Pointing at or focusing anywhere on a card sets `data-wall-state="hover"` on its wall's `<g>` in
+the plan beside the how-to: a moss CSS pulse and marching highlight, `calc(var(--dur-slow) * 4)` a loop
+(still and lit under reduced motion). With the card's Wall list open (`Select`'s optional
+`onActiveChange`) the picture is two states, not one: the card's own wall is `current` (steady, thick moss) and
+the option highlighted is `preview` (the same shimmer in amber, a dashed arrow between the two numbers,
+and "Current" beside the card's own option in the list); highlighting the card's own wall previews
+nothing. The reverse link: a wall's edge on the plan (given an invisible `.capture-plan__hit` stroke to
+hover) sets `data-plan-hover` on that wall's card, which lifts and takes an accent ring; a wall with no
+photo does nothing. With no photos the Add tile centres in the space beside the guide
+(`.capture-photos--empty`). The filmstrip under the live camera is photo + Remove only.
 `tests/capture-card.test.tsx` mounts the page to hold it.
 
 That works because the slot ids are a **cyclic order, not compass directions**.
@@ -303,6 +308,19 @@ EXIF parser and deliberately **not** carried into the decision for that reason.
 > one is happening at the moment it happens — a privacy promise displayed
 > during an upload is the one bug class this section exists to prevent.
 >
+
+> **The scan screen's review is one linked surface.** Each piece has a colour from
+> `--piece-1..8` (`lib/piece-colors.ts`, cycling), used on its box, label and row
+> swatch; the page holds ONE hovered state `{index, from}` handed to `PhotoEditor`
+> and every `DetectionRow` (now `components/studio/DetectionRow.tsx`), so hovering
+> either side raises the other. Only a hover that began on the photo scrolls the
+> list (`scrollIntoView({block:'nearest'})`, no focus move). Picking a suggested model
+> from the name field keeps the piece (`keptAfterPick`); unticking is still the
+> person's. The photo column is sized by `--scan-photo-w`, published by the page's
+> `ResizeObserver` from the pinned photo's height and aspect, so the rail sits beside
+> the photo rather than a screen away. While it runs the card shows
+> `components/ui/FindingFurniture.tsx`, decoration only: aria-hidden, a photo count and
+> steps the code really takes, static under reduced motion.
 > What leaves is **pixels only**. `normalizePhoto` strips EXIF / XMP / IPTC
 > before a photo is stored or sent (`lib/jpeg-strip.ts`), because a phone writes
 > `GPSLatitude` / `GPSLongitude` into a photo taken at home and the promise above
@@ -491,8 +509,10 @@ Furniture detection runs through a fallback chain, best-effort:
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
    detector is available.
 
-Detection returns labels + boxes only. The **geometry engine derives real sizes and
-positions**, and then checks the label against the size it measured — see §4's
+Detection returns labels + boxes only. The **geometry engine derives positions** (and a
+rough size reading), and a scanned piece is then **built at an approximate catalogue size**
+(see *Scanned pieces are approximate*, below) with its model's default colour. The engine
+used to check the label against the size it measured — see §4's
 pipeline, which also covers what each source's `conf` is actually worth.
 
 > Note: `@huggingface/inference` and `clsx` were removed in the cleanup — both
@@ -1549,6 +1569,36 @@ pair and they are **one row**, and the measured one survives in either photo ord
   it and was removed in review because it changed nothing a person could see. A
   room saved with one still loads; the value is ignored, and a room file does not
   write it out.
+
+### Scanned pieces are approximate — decided 2026-10-03
+
+The product owner overrode the earlier promise that a scanned piece is *measured*.
+Photo-derived sizes were often wrong — windows with a protruding depth, curtains
+tiny — and a measurement the user cannot trust is worse than an honest typical size.
+
+- **Size** — `approximateDims(category, shape, hint?)` in `lib/scene-spec.ts`, called by
+  `buildSceneFromRoom` and nowhere else. Start at the Library's size for the shape
+  (`PART_LIBRARY`, else `CATEGORY_DEFAULTS`). The hint (`Detection.dimMM`, whether from
+  `geoRefine` or a cloud detector) may move the **width only**, within ±25% of that
+  or the shape's legal range (`dimension-ranges.ts`), whichever is tighter. **Depth and
+  height are always the catalogue's.** Window, door and curtain widths may only widen,
+  never go below the default. A round piece whose default is as deep as wide stays round.
+  A generic `box` / `cylinder` / `plane` — what an unrecognised object becomes — has no
+  catalogue size, so it keeps its hint clamped into its category's range. Examples: a
+  wild 3.5 m sofa estimate builds at the Library sofa's width plus at most a quarter,
+  at its 0.85 m depth; a 190 mm-deep window reading builds 60 mm deep; a 350 mm curtain
+  builds 1600 × 80 × 2200; no hint builds the Library size.
+- **Position** is unchanged: `lib/photo-geometry.ts` / `lib/detect-refine.ts` still place
+  pieces, and `geoRefine` still writes a `dimMM` — it now only feeds the width nudge.
+- **Colour** — photo colour reuse was **removed**: `lib/color-sample.ts`,
+  `lib/color-reduce.ts`, the detect screen's fill, `Detection.color`, the cloud prompt's
+  `color` field and `sameButColor`/`acceptCandidate` (which existed only to carry it). A
+  scanned piece takes `defaultBodyColor(category, shape)` like one added from the Library.
+  A saved detection or scene file that still carries a `color` is read and ignored. A
+  colour the user sets in the studio lives on the part / override map and wins.
+- **Screen** — the detect screen says "typical size" and no longer shows the "Measured X.
+  Category range is Y" accusation, the "runs past the edge" size note or `measuredPhrase`
+  (deleted); `judgeLabels` still feeds auto-keep and repeat detection.
 
 ### Wall colours read out of the photos — removed 2026-10-02
 
@@ -3199,7 +3249,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
 | `lib/light-units.ts` | Lumens → candela (isotropic and in-cone), and kelvin → sRGB via the Planckian locus. Pure and tested — the interface between how a lamp is described and how three renders it. |
 | `lib/themes.ts` | One-tap restyle palettes — four, each a different room. |
-| `lib/capture.ts` / `lib/image-quality.ts` / `lib/color-sample.ts` | Photo capture + quality + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. `readCaptureFacts` is the one EXIF read, returning two things with two lifetimes: the `pose` persisted onto the `Capture` for as long as the room exists, and the transient facts that decide which wall this is and are then dropped. It MUST run on the original file — the strip destroys exactly what it reads, which is the point of the strip. |
+| `lib/capture.ts` / `lib/image-quality.ts` | Photo capture + quality (the colour-sampling module is deleted — scanned pieces take default colours). `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. `readCaptureFacts` is the one EXIF read, returning two things with two lifetimes: the `pose` persisted onto the `Capture` for as long as the room exists, and the transient facts that decide which wall this is and are then dropped. It MUST run on the original file — the strip destroys exactly what it reads, which is the point of the strip. |
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
 | `lib/color.ts` | Colour arithmetic: WCAG contrast, and OKLab as a space where "same colour" means something. `globals.css` states a ratio next to almost every token and `CLAUDE.md` turns those into a rule, but nothing checked any of it — a comment claiming a ratio is a comment. It also lets `scene-palette.ts`' hand-copied duplicates be compared perceptually rather than by string equality, which is brittle one way and blind the other. |
 | `lib/drag-live.ts` | The high-frequency drag channel, deliberately **outside** `useStudio` — see §5. |

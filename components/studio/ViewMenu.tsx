@@ -27,6 +27,7 @@ import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { ViewOptions } from './ViewOptions';
 import { usePopoverDismiss } from './usePopoverDismiss';
 import { settingsHref } from '@/lib/settings-return';
@@ -44,17 +45,18 @@ export function ViewMenu() {
           two are the same kind of control: one you open, read, and close. No
           aria-haspopup, for ExportMenu's reason: this is a group of controls, not a
           menu with roving focus. */}
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label="View settings"
-        title="View settings"
-        className="icon-btn icon-btn--round"
-      >
-        <Icon name="eye" size={14} />
-      </button>
+      <Tooltip label="View settings" placement="bottom">
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label="View settings"
+          className="icon-btn icon-btn--round"
+        >
+          <Icon name="eye" size={14} />
+        </button>
+      </Tooltip>
 
       {open && (
         <div role="group" aria-label="View settings" className="popover view-menu">

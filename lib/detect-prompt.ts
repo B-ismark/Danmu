@@ -131,7 +131,6 @@ For each unique object return JSON with these fields:
   - Items in MIDDLE of room (rugs, coffee tables, dining table) MUST have small |x| and |z| — do NOT snap to walls.
   - Items against walls have one of x/z near ±${hw}/±${hd} minus their depth/2.
 - yaw: rotation in radians around vertical axis. 0 = facing +Z (south). π = facing -Z (north). -π/2 = +X (east). +π/2 = -X (west). Most furniture faces room interior.
-- color: the object's DOMINANT colour as a #rrggbb hex (the main body/upholstery colour, ignoring small accents, highlights and shadows). Best-effort.
 - shape: pick ONE from our 3D catalog so we render a visually-faithful primitive. Never invent new ones. Catalog:
   ${CATALOG_SHAPES_ORDERED.join(', ')},
   box (LAST RESORT only — use a real shape whenever possible).

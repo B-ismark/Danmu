@@ -8,6 +8,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { roomStore, type RoomSummary } from '@/lib/storage';
 import { useRoom } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 
 export function RoomSwitcher() {
@@ -62,18 +63,19 @@ export function RoomSwitcher() {
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
-      <button
-        ref={btnRef}
-        onClick={() => setOpen((v) => !v)}
-        aria-label="Switch room"
-        aria-expanded={open}
-        title="Switch room"
-        className="ds-btn ds-btn--xs"
-        style={{ padding: '0 8px', fontSize: 'var(--fs-small)' }}
-      >
-        <Icon name="layers" size={12} />
-        <Icon name="chevron-down" size={11} />
-      </button>
+      <Tooltip label="Switch room" placement="bottom">
+        <button
+          ref={btnRef}
+          onClick={() => setOpen((v) => !v)}
+          aria-label="Switch room"
+          aria-expanded={open}
+          className="ds-btn ds-btn--xs"
+          style={{ padding: '0 8px', fontSize: 'var(--fs-small)' }}
+        >
+          <Icon name="layers" size={12} />
+          <Icon name="chevron-down" size={11} />
+        </button>
+      </Tooltip>
       {open && (
         <div
           className="popover"

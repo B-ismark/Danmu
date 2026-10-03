@@ -39,7 +39,7 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
         // flexShrink: 0 — the bar wraps rather than squeezes, and these two are
         // the studio's whole navigation; they move to a second row intact before
         // they give up a pixel of label.
-        centerSlot={<div style={{ marginLeft: 2, flexShrink: 0 }}><StudioTabs /></div>}
+        centerSlot={<StudioTabs />}
         // Five controls became three, and none of them claims to be the primary
         // action any more. Undo/redo moved to the canvas's top-right with the view
         // controls (where Drafted groups it); Rescan moved into the rail's Room
