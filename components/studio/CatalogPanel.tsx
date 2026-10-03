@@ -31,7 +31,7 @@ import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { LibraryPicker } from './LibraryPicker';
-import { isTypingOrDialog } from './KeyboardShortcuts';
+import { focusStudioSurface, isTypingOrDialog } from './KeyboardShortcuts';
 import { announce } from '@/lib/announce';
 import { usePhoneStudio } from './NarrowViewportBanner';
 import { DAY_ROW_BOTTOM } from './CanvasChrome';
@@ -209,6 +209,9 @@ function spawnMany(items: LibraryItem[]) {
 export function CatalogPanel({
   /** false on the 2D plan, which has no drop handler — see LibraryPicker. */
   canDrag = false,
+  /** The tab draws a ghost of a dragged piece (the 3D room), so the row's own drag
+   *  picture is hidden — see `LibraryPicker`'s `ghostedDrag`. */
+  ghostDrag = false,
   /** How far to stop short of the bottom edge.
    *
    *  The reason this used to give was the help button in the bottom-LEFT corner.
@@ -224,6 +227,7 @@ export function CatalogPanel({
   belowDay = false,
 }: {
   canDrag?: boolean;
+  ghostDrag?: boolean;
   bottomGap?: number;
   /** The 3D tab has the day strip across the top-centre, which a card this wide would
    *  sit on; dock beneath it instead, so opening the Library moves nothing. */
@@ -307,7 +311,7 @@ export function CatalogPanel({
         <IconButton icon="x" label="Close the Library" onClick={() => setOpen(false)} size={24} iconSize={12} />
       </div>
 
-      <LibraryBody canDrag={canDrag} />
+      <LibraryBody canDrag={canDrag} ghostDrag={ghostDrag} />
     </div>
   );
 }
@@ -315,19 +319,43 @@ export function CatalogPanel({
 /** The Library's list and its one line of instruction, without the floating card
  *  around it — so a phone can show the same list in its sheet (`SheetShell`) rather
  *  than a 268px card over a 360px room. */
-export function LibraryBody({ canDrag = false, touch = false }: { canDrag?: boolean; touch?: boolean }) {
+export function LibraryBody({
+  canDrag = false,
+  ghostDrag = false,
+  touch = false,
+}: {
+  canDrag?: boolean;
+  ghostDrag?: boolean;
+  touch?: boolean;
+}) {
   // `item.dimMM` is already the size the search words asked for, clamped per
   // piece — `LibraryPicker` resolves it before handing the item over, so this path
   // and the drag path cannot disagree about what a query meant.
-  function addItem(item: LibraryItem, how?: { ownSize?: boolean }) {
-    spawn(item, { ownSize: how?.ownSize });
+  //
+  // A piece that arrived by pointer takes the keyboard with it: the press focused the
+  // row, and Delete is armed only in the room (`focusStudioSurface`). By click or by
+  // drag alike — `onDragDone` says `dropped` for a drop either tab took, refused or
+  // not, and a refused one leaves the room focused with nothing new selected, which
+  // costs nothing.
+  function addItem(item: LibraryItem, how?: { ownSize?: boolean; byPointer?: boolean }) {
+    if (spawn(item, { ownSize: how?.ownSize }) && how?.byPointer) focusStudioSurface();
   }
   return (
     <div
       className={touch ? 'catalog-touch' : undefined}
       style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: touch ? '4px 16px 12px' : '0 12px 12px' }}
     >
-      <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag && !touch} maxHeight={null} />
+      <LibraryPicker
+        onPick={addItem}
+        onPickMany={spawnMany}
+        columns={1}
+        draggable={canDrag && !touch}
+        ghostedDrag={ghostDrag}
+        onDragDone={(dropped) => {
+          if (dropped) focusStudioSurface();
+        }}
+        maxHeight={null}
+      />
     </div>
   );
 }

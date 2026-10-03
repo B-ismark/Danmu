@@ -3208,9 +3208,11 @@ and back.
 **What wrong looks like:** the ghost somewhere other than where the piece lands on
 release; a ghost that lags well behind the pointer or stutters; a ghost casting a shadow
 or lighting the room (a lamp); a ghost left standing after Esc, a drop, or leaving the
-room; the real sofa going see-through. A drop that would be refused should show red with
-the reason beside the pointer — reaching one by hand needs a room too small for the
-piece, which the unit test reaches and nobody has yet seen.
+room; the real sofa going see-through. The ghost should stand on the same terracotta
+base, under the same W × D tag, as a piece dragged in the room. A drop that would be
+refused should turn that base red and the tag to "blocked", with the reason beside the
+pointer — reaching one by hand needs a room too small for the piece, which the unit
+test reaches and nobody has yet seen.
 
 **Why eyes:** pose agreement is swept over the whole Library in a test; whether the
 ghost reads as a preview (and not as a piece already there) and stays smooth on a real
@@ -3276,5 +3278,29 @@ production build was walked in headless Chromium at 1440 and 390 px in both Syst
 and pinned-Dark, but "warm dark, not black" and whether the plan's amber is too heavy
 are judgements, and Safari's handling of a re-pointed `theme-color` and of
 `color-scheme` on form controls has not been seen.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## The Library drag in 3D: solid ghost, no row riding the cursor, Delete right after
+
+**Where:** the 3D room with the Library open, on a real GPU, mouse. Drag a Stool slowly
+then fast across open floor; drag a sofa along a wall. Drop one and press Delete
+straight away without clicking anything; then click a Library row (no drag) and press
+Backspace. Type in the Library search and press Backspace there. Repeat the drag on the
+2D Plan tab.
+
+**What wrong looks like:** the ghost trailing the pointer by a visible gap or settling a
+beat after the pointer stops; the ghost flickering between two positions; a copy of the
+Library row's name still riding the cursor in 3D (it should be the ghost alone, with
+the copy cursor); NO drag picture at all on the Plan tab, which has no ghost and should
+keep the browser's own; Delete or Backspace after a drop or a click-add doing nothing,
+or deleting something other than the piece just added; Backspace in the search
+deleting a piece; Enter on a Library row moving focus off the list.
+
+**Why eyes:** lag was measured here only under software WebGL at roughly a frame a
+second, where every simulated pointer move waits about a frame and so hides most of a
+one-frame deferral — the gain on a real GPU at 60 Hz is reasoned from the code, not
+measured. The blank drag picture is a browser surface no headless screenshot captures,
+and the focus hand-off is tested in jsdom, not in a browser's own drag-and-drop.
 
 **Rides:** branch `claude/elegant-volta-q7yy89`.

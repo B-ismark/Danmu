@@ -17,7 +17,7 @@
 // size. Both are on THIS box now, so there is one field instead of two tabs
 // claiming two features, and `rankLibrary` is what the search reads.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PART_LIBRARY, DND_MIME, type LibraryItem } from '@/lib/scene-spec';
 import { dropCarry } from '@/lib/drop-carry';
 import { rankLibrary, sizeFromQuery, queryNamesSize, resolveQuerySize, describeOverruled } from '@/lib/shape-search';
@@ -25,6 +25,22 @@ import { Icon } from '@/components/ui/Icon';
 import { ShapeIcon } from '@/components/ui/ShapeIcon';
 
 const ALL_ITEMS: LibraryItem[] = PART_LIBRARY;
+
+/** A transparent 1×1 picture for a drag whose target draws its own (`ghostedDrag`).
+ *  An `<img>` rather than a canvas: `setDragImage` takes an image's pixels as they
+ *  are, while any other element is snapshotted from where it is RENDERED, and one
+ *  outside the document renders nowhere. Made once, on the first ghosted picker's
+ *  mount, so it has decoded before the first drag asks for it — an image that has not
+ *  is ignored and the browser falls back to the row's own picture. */
+let blank: HTMLImageElement | null = null;
+function blankDragImage(): HTMLImageElement {
+  if (!blank) {
+    blank = new Image(1, 1);
+    blank.alt = '';
+    blank.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  }
+  return blank;
+}
 
 export function LibraryPicker({
   onPick,
@@ -36,6 +52,14 @@ export function LibraryPicker({
    *  where nothing can catch it (the swap modal), because a drag that cannot land
    *  is a worse affordance than no drag at all. */
   draggable = false,
+  /** The surface this drag is aimed at draws a ghost of the piece itself (the 3D
+   *  room, `DropGhost`), so the browser's own drag picture — a snapshot of the row,
+   *  its name following the cursor beside the ghost — is replaced by nothing. Off for
+   *  the 2D plan, which draws no ghost and needs the row's picture to show anything
+   *  is being carried at all. */
+  ghostedDrag = false,
+  /** A drag from a row has ended; `dropped` is whether something took it. */
+  onDragDone,
   /** A NUMBER caps the scroller (the modal, which sits in a page-sized dialog).
    *  `null` makes it fill its flex parent instead — which is what a docked panel
    *  needs, and why this is not just `maxHeight: '100%'`: a percentage max-height
@@ -49,7 +73,7 @@ export function LibraryPicker({
    *  so the host can treat it as the user's own measurement rather than a preset's
    *  (the catalog panel seats it where it really fits, or says why it cannot). The
    *  size itself is already on `item.dimMM`; this is only whose size it is. */
-  onPick: (item: LibraryItem, how?: { ownSize: boolean }) => void;
+  onPick: (item: LibraryItem, how?: { ownSize: boolean; byPointer: boolean }) => void;
   /** Add several at once. Passing it turns on Shift-click range marking — the
    *  swap flow leaves it out, because swapping one piece for a SET is not a
    *  thing, and a list that could mark rows there would offer a gesture with
@@ -57,6 +81,8 @@ export function LibraryPicker({
   onPickMany?: (items: LibraryItem[]) => void;
   columns?: 1 | 2;
   draggable?: boolean;
+  ghostedDrag?: boolean;
+  onDragDone?: (dropped: boolean) => void;
   maxHeight?: number | null;
   autoFocus?: boolean;
   /** What the box starts with. The swap flow seeds it with the piece's own name, so
@@ -68,6 +94,10 @@ export function LibraryPicker({
   initialQuery?: string;
 }) {
   const [q, setQ] = useState(initialQuery);
+  // Decoded ahead of the first drag — see `blankDragImage`.
+  useEffect(() => {
+    if (ghostedDrag) blankDragImage();
+  }, [ghostedDrag]);
   // Marked as RESOLVED items, not as labels.
   //
   // Labels were the obvious choice — the catalogue is fixed, so a label identifies
@@ -147,7 +177,10 @@ export function LibraryPicker({
     }
     anchorRef.current = item.label;
     setMarked([]);
-    onPick(item, { ownSize: sized });
+    // `detail` counts the clicks of a pointer press and is 0 for a button activated
+    // from the keyboard — the one thing the host needs to know to decide where focus
+    // goes next (see `focusStudioSurface`).
+    onPick(item, { ownSize: sized, byPointer: e.detail > 0 });
   }
 
   return (
@@ -231,14 +264,26 @@ export function LibraryPicker({
                               dimMM: added.dimMM,
                             }),
                           );
+                          // `copy` is what puts the plus on the cursor, and it stays
+                          // with or without the picture below.
                           e.dataTransfer.effectAllowed = 'copy';
+                          if (ghostedDrag) e.dataTransfer.setDragImage(blankDragImage(), 0, 0);
                           // The room cannot read the payload until the drop, so the
                           // ghost it draws on the way reads it from here.
                           dropCarry.start({ label: added.label, category: added.category, shape: added.shape, dimMM: added.dimMM });
                         }
                       : undefined
                   }
-                  onDragEnd={draggable ? () => dropCarry.end() : undefined}
+                  onDragEnd={
+                    draggable
+                      ? (e) => {
+                          dropCarry.end();
+                          // `none` is a drag that nothing took: cancelled with Esc, or let
+                          // go somewhere that is not a drop target.
+                          onDragDone?.(e.dataTransfer?.dropEffect !== 'none');
+                        }
+                      : undefined
+                  }
                   onClick={(e) => press(e, added)}
                   aria-pressed={marked.some((m) => m.label === item.label) || undefined}
                   className="ds-btn ds-btn--sm pick-row"

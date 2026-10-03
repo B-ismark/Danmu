@@ -22,6 +22,7 @@ import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { snapshotFileName } from '@/lib/exports';
 import { addPieceToRoom, planPiece } from '@/lib/add-piece';
 import { dropCarry } from '@/lib/drop-carry';
+import { frameGate } from '@/lib/frame-gate';
 import { sayAdded } from '@/components/studio/say-added';
 import { toast } from '@/components/ui/StorageToast';
 import { pickIdsFrom } from '@/lib/pick-through';
@@ -201,7 +202,7 @@ export function Room({
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
-    cancelAnimationFrame(ghostFrame.current);
+    ghostGate.cancel();
     dropCarry.show(null);
     const raw = e.dataTransfer.getData(DND_MIME);
     if (!raw) return;
@@ -230,17 +231,21 @@ export function Room({
   // not, and `planPiece` is the full placement — support search, space bound, nearest
   // clear spot — so it runs at most once a frame, and not at all while the aim has
   // stayed within a centimetre of the last one it answered.
-  const ghostFrame = useRef(0);
+  //
+  // At most once a frame, but not a frame LATE. Every event used to wait for the next
+  // `requestAnimationFrame`, and the ghost then asked for the frame after that, so it
+  // trailed the pointer — the lag the user reported. `frameGate` runs the first event
+  // of a frame at once and lets only a second one in the same frame wait, with the
+  // newest position. Running it inline is affordable: measured over the whole Library
+  // in a furnished ten-piece room, `planPiece` costs ~0.5 ms on average and ~2.5 ms at
+  // worst.
+  //
+  // Made once (a `useState` initialiser, not a memo with dependencies): `aimAt` reads
+  // only `dropApi` and the stores, so the first render's copy answers like any later
+  // one, and a gate rebuilt per render would forget the frame it is gating.
   const lastAim = useRef<{ x: number; z: number; item: DropItem } | null>(null);
-  function onDragOver(e: React.DragEvent) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    const item = dropCarry.carried();
-    if (!item) return;
-    const { clientX, clientY } = e;
-    const box = e.currentTarget.getBoundingClientRect();
-    cancelAnimationFrame(ghostFrame.current);
-    ghostFrame.current = requestAnimationFrame(() => {
+  const [ghostGate] = useState(() =>
+    frameGate((clientX: number, clientY: number, box: DOMRect, item: DropItem) => {
       const aim = aimAt(clientX, clientY, item);
       if (!aim) return dropCarry.show(null);
       const at = { x: clientX - box.left, y: clientY - box.top };
@@ -252,13 +257,20 @@ export function Room({
       }
       lastAim.current = { x: aim[0], z: aim[1], item };
       dropCarry.show({ item, plan: planPiece(item, aim), at });
-    });
+    }),
+  );
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    const item = dropCarry.carried();
+    if (!item) return;
+    ghostGate.call(e.clientX, e.clientY, e.currentTarget.getBoundingClientRect(), item);
   }
   function onDragLeave(e: React.DragEvent) {
     // `dragleave` fires on every child boundary; only leaving the room itself counts.
     const to = e.relatedTarget as Node | null;
     if (to && e.currentTarget.contains(to)) return;
-    cancelAnimationFrame(ghostFrame.current);
+    ghostGate.cancel();
     lastAim.current = null;
     dropCarry.show(null);
   }

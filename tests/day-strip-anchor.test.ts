@@ -25,7 +25,7 @@ describe('the day strip does not react to the Library panel', () => {
   });
   it('and the Library docks beneath the strip rather than over it', () => {
     expect(CATALOG).toMatch(/belowDay \? `calc\(\$\{DAY_ROW_BOTTOM\} \+ 8px\)`/);
-    expect(read('app/room/[roomId]/model/page.tsx')).toMatch(/<CatalogPanel canDrag belowDay \/>/);
+    expect(read('app/room/[roomId]/model/page.tsx')).toMatch(/<CatalogPanel\b[^>]*\sbelowDay\b[^>]*\/>/);
   });
   it('and nothing publishes the panel width any more', () => {
     expect(CHROME + CATALOG).not.toMatch(/canvas-panel-width/);
