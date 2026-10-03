@@ -1011,6 +1011,18 @@ function PhotoCard({
   // closes hands the shimmer back to this card's wall rather than switching it off.
   const onControl = useRef(false);
   const settle = () => onShimmer(onControl.current ? slot : null);
+  // A photo moved to an EMPTY wall takes its card with it (cards are keyed by wall),
+  // with the pointer still on this control — so no leave or blur ever arrives, and
+  // the list's close has just handed the shimmer back to the wall it left. A card
+  // that goes while it holds the shimmer switches it off.
+  const shimmerRef = useRef(onShimmer);
+  shimmerRef.current = onShimmer;
+  useEffect(
+    () => () => {
+      if (onControl.current) shimmerRef.current(null);
+    },
+    [],
+  );
   // The Wall list is portalled to <body>, and React still delivers its pointer and
   // focus events to this wrapper: only what happens on the wrapper's own DOM counts,
   // or a pointer resting on a list that has just closed would keep the wall lit.

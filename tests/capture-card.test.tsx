@@ -168,6 +168,23 @@ describe('the plan shimmers the wall whose name is pointed at', () => {
   });
 });
 
+describe('a photo moved to an empty wall', () => {
+  it('leaves no wall lit behind it', async () => {
+    // Its card unmounts (cards are keyed by wall) with the pointer still on its
+    // Wall control, so neither a leave nor a blur ever arrives — and the list's
+    // close had just handed the shimmer back to the wall the photo left.
+    const { container } = await mounted();
+    const trigger = screen.getByRole('combobox', { name: 'Wall for the Wall 1 photo' });
+    fireEvent.focus(trigger);
+    fireEvent.click(trigger);
+    fireEvent.mouseEnter(screen.getByRole('option', { name: 'Wall 3' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Wall 3' }));
+    await waitFor(() => expect(screen.queryByAltText('Your photo of Wall 1')).toBeNull());
+    // Passive unmount effects run after the commit that removed the card, so wait.
+    await waitFor(() => expect(container.querySelectorAll('[data-shimmer]')).toHaveLength(0));
+  });
+});
+
 describe('why a photo is on its wall', () => {
   it('says so in quiet text, in a "Placed by" phrase', async () => {
     await mounted();

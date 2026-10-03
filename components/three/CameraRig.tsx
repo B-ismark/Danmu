@@ -33,6 +33,8 @@ export function CameraRig() {
   const animatingUntil = useRef(0);
   /** A pointer or wheel gesture of the user's own is on the controls. */
   const handOn = useRef(false);
+  /** The tween is calling `update()` itself, so the change it reports is ours. */
+  const tweening = useRef(false);
   // Only the F key (which bumps frameSelectedToken) should frame a part. Track
   // the last handled token so merely *selecting* a different part never moves
   // the camera — previously `selectedId` was an effect dep, so once the token
@@ -40,7 +42,7 @@ export function CameraRig() {
   const lastFrameToken = useRef(0);
 
   useEffect(() => {
-    // 'free' means the user's own hand is on the camera (set by onStart below): there
+    // 'free' means the user's own hand is on the camera (set by `takeCamera` below): there
     // is nothing to fly to, and flying to PRESETS.free would snap away from where they are.
     if (view === 'free') return;
     const p = PRESETS[view];
@@ -71,6 +73,12 @@ export function CameraRig() {
     invalidate();
   }, [frameToken, partsRef, invalidate]);
 
+  /** The camera is the user's now: stop flying to a preset and press none of them. */
+  const takeCamera = () => {
+    animatingUntil.current = 0;
+    if (useStudio.getState().viewPreset !== 'free') useStudio.getState().setView('free');
+  };
+
   return (
     <>
       <OrbitControls
@@ -93,7 +101,9 @@ export function CameraRig() {
         // Orbiting, panning or zooming makes the camera the user's: none of the three
         // view buttons is true any more, so none shows pressed (ViewGizmo). On the first
         // CHANGE of a gesture, not on its start — OrbitControls starts on every press,
-        // and a click on the floor to deselect has not moved the camera anywhere.
+        // and a click on the floor to deselect has not moved the camera anywhere. Nor
+        // has a click made while a preset is still flying in: that change is the
+        // tween's own `update()`, which `tweening` marks, so it is not the user's.
         onStart={() => {
           handOn.current = true;
         }}
@@ -102,9 +112,8 @@ export function CameraRig() {
         }}
         onChange={() => {
           invalidate();
-          if (!handOn.current) return;
-          animatingUntil.current = 0;
-          if (useStudio.getState().viewPreset !== 'free') useStudio.getState().setView('free');
+          if (!handOn.current || tweening.current) return;
+          takeCamera();
         }}
       />
       <CameraTween
@@ -112,8 +121,9 @@ export function CameraRig() {
         lookRef={targetLook}
         ctrlRef={ctrlRef}
         animatingUntil={animatingUntil}
+        tweening={tweening}
       />
-      <KeyboardNav ctrlRef={ctrlRef} enabled={!dragging} />
+      <KeyboardNav ctrlRef={ctrlRef} enabled={!dragging} onMove={takeCamera} />
     </>
   );
 }
@@ -123,11 +133,13 @@ function CameraTween({
   lookRef,
   ctrlRef,
   animatingUntil,
+  tweening,
 }: {
   camRef: MutableRefObject<Vector3>;
   lookRef: MutableRefObject<Vector3>;
   ctrlRef: MutableRefObject<OrbitControlsImpl | null>;
   animatingUntil: MutableRefObject<number>;
+  tweening: MutableRefObject<boolean>;
 }) {
   const { camera, invalidate } = useThree();
   useFrame(() => {
@@ -136,7 +148,12 @@ function CameraTween({
     camera.position.lerp(camRef.current, k);
     if (ctrlRef.current) {
       ctrlRef.current.target.lerp(lookRef.current, k);
-      ctrlRef.current.update();
+      tweening.current = true;
+      try {
+        ctrlRef.current.update();
+      } finally {
+        tweening.current = false;
+      }
     }
     invalidate();
   });
@@ -161,9 +178,12 @@ const UP = new Vector3(0, 1, 0);
 function KeyboardNav({
   ctrlRef,
   enabled,
+  onMove,
 }: {
   ctrlRef: MutableRefObject<OrbitControlsImpl | null>;
   enabled: boolean;
+  /** The keys moved the camera: it is the user's, as after an orbit. */
+  onMove: () => void;
 }) {
   const { camera, invalidate } = useThree();
   const keys = useRef<Set<string>>(new Set());
@@ -236,6 +256,7 @@ function KeyboardNav({
       camera.position.copy(ctrl.target).add(off);
     }
 
+    if (move.lengthSq() > 0 || ang !== 0) onMove();
     ctrl.update();
     invalidate();
   });

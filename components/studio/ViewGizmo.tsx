@@ -3,9 +3,11 @@
 // The 3D tab's one canvas widget — where you are standing, in the corner every
 // 3D tool puts that control.
 //
-// Three words in one pill: Corner, Front, Top. On a phone, or wherever the canvas is too
-// narrow to hold them, the same three buttons fall back to their glyphs at 40px (the
-// `.gizmo` container query). 'free' is not a button: it is the state the camera enters
+// Three words in one pill: Corner, Front, Top. On a phone the same three buttons fall
+// back to their glyphs at 40px (`.gizmo--glyphs`). Only the phone: outside it the canvas
+// never gets narrower than ~450px, and the container query that once covered the rest
+// made `#studio-canvas` the containing block for every `position: fixed` child, which
+// put the hover card a rail's width off its piece. 'free' is not a button: it is the state the camera enters
 // when the user orbits it (`CameraRig`), and in it none of the three is pressed.
 //
 // The destinations are still exactly `CameraRig`'s PRESETS, addressed through

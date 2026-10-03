@@ -1386,3 +1386,16 @@ describe('nothing spreads wide because the window did', () => {
     expect(rule('.shape-options')).toMatch(/repeat\(auto-fit, /);
   });
 });
+
+describe('the canvas is not a query container', () => {
+  it('leaves #studio-canvas without container-type, so fixed children place by the screen', () => {
+    // `container-type` applies layout containment, which makes the element the
+    // containing block for every `position: fixed` descendant. The view pill's narrow-
+    // canvas fallback put it on `#studio-canvas` for one commit, and the piece hover
+    // card — fixed, placed by client coordinates — landed a rail's width and an app
+    // bar's height off the piece it described.
+    const rules = codeOnly(CSS).match(/#studio-canvas[^{]*\{[^}]*\}/g) ?? [];
+    expect(rules.length).toBeGreaterThan(0);
+    for (const r of rules) expect(r).not.toMatch(/container(-type)?\s*:/);
+  });
+});

@@ -1489,14 +1489,6 @@ textarea.field { border-radius: var(--r-2); }
 .gizmo--glyphs .gizmo__btn[data-on] { color: var(--accent-text); }
 .gizmo--glyphs .gizmo__word { display: none; }
 .gizmo--glyphs .gizmo__glyph { display: grid; }
-/* Not a phone, but a canvas too narrow for three words: same glyph fallback. */
-#studio-canvas { container-type: inline-size; container-name: studio-canvas; }
-@container studio-canvas (max-width: 359px) {
-  .gizmo:not(.gizmo--glyphs) .gizmo__btn { width: 40px; min-height: 40px; padding: 0; color: var(--ink-2); }
-  .gizmo:not(.gizmo--glyphs) .gizmo__btn[data-on] { color: var(--accent-text); }
-  .gizmo:not(.gizmo--glyphs) .gizmo__word { display: none; }
-  .gizmo:not(.gizmo--glyphs) .gizmo__glyph { display: grid; }
-}
 
 /* ── Floating chrome: one capsule per group ────────────────────────────────────
    Everything that floats over the room (undo/redo, the plan's zoom and turn, the
