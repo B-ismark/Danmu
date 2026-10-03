@@ -250,7 +250,7 @@ export function furnishedRoom(seed: number): Placed[] {
       out.push(
         fan
           ? { label: 'ceiling fan', category: 'fan', shape: 'fan', dim: [1000, 1000, 200], kind: 'ceiling', x, z, y: ROOM.height, alongX: true }
-          : { label: 'pendant light', category: 'lamp', shape: 'lamp-pendant', dim: [500, 500, 300], kind: 'ceiling', x, z, y: ROOM.height, alongX: true },
+          : { label: 'pendant light', category: 'lamp', shape: 'lamp-ceiling', dim: [500, 500, 300], kind: 'ceiling', x, z, y: ROOM.height, alongX: true },
       );
     }
   }

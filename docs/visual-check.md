@@ -111,7 +111,7 @@ table.
 The user's 2026-10-01 report: a seeded bedroom said **Queen bed** while the Library sells one
 **Bed**, and the Inspector spent three rows on a bed — its name, *Bed · Bed double*, and an
 *On floor* card. A starter room now uses the Library's own pieces and names (Bed, Rug,
-Curtain, Painting, Pendant lamp, Table lamp, TV · 65″). The Inspector's first row is the
+Curtain, Painting, Ceiling light, Table lamp, TV · 65″). The Inspector's first row is the
 name with its Library shelf beside it (a bed reads **Bed**, then a quiet **Bedroom**);
 the second line is gone. A door and a window sit on a new **Openings** shelf (the word `lib/room-openings.ts` already uses), in the
 Library too, because the shelf now reads as what the piece is and a door is not an
@@ -124,7 +124,7 @@ nightstand, the lamp on it, the curtain and the TV. Hover a few pieces in the 3D
 
 **What right looks like.** Every name in the room is one you can find in the Library. One
 header row: the name, then the shelf in grey. No card for the bed on the floor, the TV on
-the wall or the pendant on the ceiling. The lamp still says **On Nightstand**. A piece
+the wall or the ceiling light on the ceiling. The lamp still says **On Nightstand**. A piece
 pushed into a walkway still gets its amber or red card.
 
 **What wrong looks like.** *Queen bed*, *Area rug* or *Bedside lamp* anywhere. A short name
@@ -158,23 +158,56 @@ difference reads as a bug to a user. Changing the ceiling height by 1 cm and bac
 both bands and seven ceiling heights. It cannot see the old-room case, because no test loads
 a room saved by an older build.
 
-### A room saved BEFORE § 34 draws its pendant half the size
+### The pendant is gone: a flush ceiling light replaces it, in new rooms and old ones
 
-**Where to click.** A room already in this browser holding a pendant or a ceiling fan —
-not a fresh one. The § 34 look was on a seeded room, which is a different program.
+The user asked for the ceiling light found in Ghanaian homes: a round, flush-mount white disc
+fixed flat to the ceiling, often an LED panel, sometimes with a thin trim ring, with no cord
+and no drop. The Library's **Pendant lamp** is now **Ceiling light** (`lamp-ceiling`). It is
+350 mm across and 80 mm deep. It has a white housing against the slab, a thin steel ring and
+an opal diffuser that glows in the colour of its own light (4000 K, a wide cone). Its top
+sits 20 mm under the ceiling: `MOUNT_PAD`, the same gap every ceiling fixture keeps.
 
-**What wrong looks like.** Nothing moves, resizes or re-settles — that was derived, and
-every load-path consumer reads `dimMM` rather than the renderer. What changes is the
-picture: a catalogue pendant drawn 800 mm now draws 400, a 150 mm one shrinks 5.3x, and
-the shade's width goes from a constant 300 mm to whatever the piece declares.
+The old `lamp-pendant` id is mapped on every read, never dropped:
 
-**The case worth looking for.** Someone who sized a pendant *by eye* under the old
-renderer — dragging the scale gizmo until it looked right — wrote a stored dim of about
-half what they were seeing, because `renderBaseDim` returns `p.dimMM` while the drawing
-ignored it. That room now opens with the pendant at half again.
+- a saved scene, a saved layout and an imported scene file come back with a ceiling light;
+- a scanned room's shape hint is mapped too;
+- a pendant's size or position override is lifted, so the disc sits flush rather than a
+  hand-span below the ceiling.
 
-**Gates.** None possible: the old and new drawings are both self-consistent, and no test
-in this repo renders geometry.
+This item replaces the § 34 one ("A room saved BEFORE § 34 draws its pendant half the
+size"), because the drawing it asked about no longer exists.
+
+**Where to click.**
+- **Library → Lighting → Ceiling light.** Add one. Look at it in **3D** from below and from
+  the side. Then look at it in the **2D Plan**: a circle with the round-light icon.
+- **A starter room.** Create a T-Shape or Open Plan room. The light should be centred over
+  the dining table, flush with the ceiling.
+- **A room saved before this change that holds a pendant.** A T-Shape or Open Plan room
+  made earlier in this browser will do. Check three variants:
+  - one you never edited;
+  - one where you moved or resized the pendant;
+  - one with a saved layout (Ideas / Layouts).
+
+  Open each and switch to the saved layout.
+
+**What wrong looks like.**
+- The old room's light is missing, or a cone shade on a cord still shows.
+- The disc hangs visibly below the ceiling, or pokes through it.
+- A moved light jumps back to the table.
+- The diffuser is dark while the light is on, or lit after the light is removed.
+- The plan draws a square, or a circle of a different size than the 3D disc.
+- The Library tile still says "Pendant lamp".
+
+**Known gap.** Renaming an old room from the rooms list *before* opening it stamps the new
+schema version. If that room was never edited (it has no saved scene) and its starter light
+had been moved, the move is then not lifted. The disc hangs about 160 mm low until it is
+nudged or the ceiling height is changed.
+
+**Gates.** `tests/retired-shapes.test.ts` covers the migration. `tests/ceiling-fixtures.test.ts`
+and `tests/parametric-caps.test.ts` cover the geometry. No test renders geometry, so the look
+itself is for eyes only.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
 
 ## Drag and selection
 

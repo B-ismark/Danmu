@@ -176,12 +176,12 @@ describe('a shape lands somewhere the room can hold it', () => {
     // the scar returns in silence. A bound asserted from one side is not a bound.
     expect(HEAD_CLEARANCE_M, 'a decision, not a threshold that drifted to fit').toBe(2.0);
     // The floor under it is DERIVED, not typed: where does a pedestal fan come to rest
-    // if it loses its anchor row again? `lamp-pendant` is ceiling-anchored, so asking
+    // if it loses its anchor row again? `lamp-ceiling` is ceiling-anchored, so asking
     // `groundY` for it at the fan's own height runs the real ceiling rule without
     // restating it here.
     const fan = PART_LIBRARY.find((i) => i.shape === 'fan-standing');
     expect(fan, 'the fan this clause exists for is not in the catalogue').toBeDefined();
-    const asIfHung = groundY('lamp', 'lamp-pendant', fan!.dimMM, ROOM.height) - fan!.dimMM[2] / 2000;
+    const asIfHung = groundY('lamp', 'lamp-ceiling', fan!.dimMM, ROOM.height) - fan!.dimMM[2] / 2000;
     expect(
       HEAD_CLEARANCE_M,
       `a fan that lost its anchor hangs at ${asIfHung.toFixed(2)} m and must be rejected`,

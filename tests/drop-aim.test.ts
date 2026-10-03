@@ -29,7 +29,7 @@ import { groundY } from '@/lib/physics';
 
 const CEILING = 2.5;
 const FAN: [Category, Shape, [number, number, number]] = ['fan', 'fan', [1000, 1000, 200]];
-const PENDANT: [Category, Shape, [number, number, number]] = ['lamp', 'lamp-pendant', [350, 350, 400]];
+const LIGHT: [Category, Shape, [number, number, number]] = ['lamp', 'lamp-ceiling', [350, 350, 80]];
 const BED: [Category, Shape, [number, number, number]] = ['bed', 'bed-double', [1600, 2000, 500]];
 const TV: [Category, Shape, [number, number, number]] = ['tv', 'tv', [1200, 100, 700]];
 
@@ -68,7 +68,7 @@ describe('dropPlaneY names the height a drop is aimed at', () => {
     // is the point: a literal here would go stale the day `groundY` changes and would say
     // nothing about whether the two still match.
     expect(dropPlaneY(...FAN, CEILING)).toBeCloseTo(mountedY(...FAN, CEILING), 12);
-    expect(dropPlaneY(...PENDANT, CEILING)).toBeCloseTo(mountedY(...PENDANT, CEILING), 12);
+    expect(dropPlaneY(...LIGHT, CEILING)).toBeCloseTo(mountedY(...LIGHT, CEILING), 12);
     // …and the literal too, because an agreement between two functions that both went
     // wrong together is still an agreement. 2.38 is the § 35 answer for a 200 mm fan
     // under a 2.5 m slab.

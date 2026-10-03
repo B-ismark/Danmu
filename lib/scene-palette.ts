@@ -90,6 +90,9 @@ export const DETAIL = {
   /** A lit bulb's glass and the warm light it gives off — every lamp in the catalogue. */
   bulb: '#FFE4A0',
   bulbGlow: '#FFD060',
+  /** A flush ceiling light's opal diffuser — milky white plastic. It glows in the colour
+   *  of the fitting's own light (`hexFromKelvin`), so it carries no glow colour here. */
+  opal: '#FBFAF6',
   /** A table lamp's glazed body: a soft sage, the accent family's quiet end, so a
    *  linen shade over it reads as two materials rather than one painted object. */
   ceramicGlaze: '#AEB9A4',
@@ -194,7 +197,7 @@ const BY_SHAPE: Record<Shape, string> = {
   // lighting
   'lamp-floor': '#E8E0CB',
   'lamp-table': '#E8E0CB',
-  'lamp-pendant': '#E8B833',
+  'lamp-ceiling': '#F2F1EB',
   // wall-hung
   mirror: '#5D3820',
   'mirror-oval': '#5D3820',

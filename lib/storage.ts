@@ -11,7 +11,14 @@ import {
   update as idbUpdate,
 } from 'idb-keyval';
 import { v4 as uuid } from 'uuid';
-import { partsOnOpen, type ScenePart } from './scene-spec';
+import {
+  migrateRetiredOverrides,
+  migrateRetiredPart,
+  partsOnOpen,
+  retiredOverridesFor,
+  retiredShapeFor,
+  type ScenePart,
+} from './scene-spec';
 import { pruneNudges } from './backup-nudge';
 import { clearLeaveNote, dropLeaveNote, leaveNoteRooms, noteOwed, readLeaveNote, stillOwed, type SavePart } from './leave-note';
 
@@ -122,8 +129,17 @@ export type Capture = {
  *  (`buildSceneFromRoom`). Read an old record under the new rule and every piece
  *  someone never ticked would vanish from a room they already made, so
  *  `migrateRoom` marks every row of a pre-2 record kept — which is exactly what
- *  it was. */
-export const ROOM_SCHEMA_VERSION = 2;
+ *  it was.
+ *
+ *  **3 retires a shape: `lamp-pendant` became `lamp-ceiling`**, the flush-mount
+ *  ceiling light. A part's own shape migrates on every read (`migrateRetiredPart`,
+ *  inside `normalizeStoredParts`), so no version is needed for that. What needs one is
+ *  a room with NO saved scene: it is rebuilt from its record, so its light is built as
+ *  `lamp-ceiling` already, and the only evidence that a position override was written
+ *  for a 400 mm pendant rather than an 80 mm disc is that the record is older than 3
+ *  (`retiredOverridesFor`). `RoomSync` migrates those overrides on open and writes them
+ *  back with the stamp, in one transaction. */
+export const ROOM_SCHEMA_VERSION = 3;
 
 /** Bring a stored room record up to the current schema. Pure, and the ONLY way a
  *  stored meta record is read back into the app — `loadRoom` and `renameRoom` both
@@ -149,6 +165,19 @@ export function migrateRoom(rec: RoomData): RoomData {
   if (out.site) out = { ...out, site: { bearingDeg: out.site.bearingDeg } };
   if ((out.version ?? 0) < 2 && out.detectedObjects?.length) {
     out = { ...out, detectedObjects: out.detectedObjects.map((d) => ({ ...d, locked: true })) };
+  }
+  // A detection's shape HINT naming a retired shape (schema 3). Unconditional rather than
+  // version-gated, because it is a vocabulary fix, not a change of meaning: a record that
+  // still says `lamp-pendant` says it whatever its version, and the builder would refuse
+  // the hint and fall back to the label rather than keep the light it was.
+  if (out.detectedObjects?.some((d) => retiredShapeFor(d.shape))) {
+    out = {
+      ...out,
+      detectedObjects: out.detectedObjects.map((d) => {
+        const to = retiredShapeFor(d.shape);
+        return to ? { ...d, shape: to } : d;
+      }),
+    };
   }
   return out;
 }
@@ -354,6 +383,20 @@ export type LayoutVariant = {
   favourite?: boolean;
 };
 
+/** A saved layout with any retired shape brought up to date (schema 3). A layout is a
+ *  scene snapshot plus its overrides, so it is migrated the way a room's own pair is: the
+ *  raw parts are the evidence for which overrides were written for a pendant, read
+ *  BEFORE the parts are mapped. No room height here, so the override keeps its top
+ *  rather than being capped — which is flush for a pendant that hung from the ceiling. */
+export function migrateLayout(v: LayoutVariant): LayoutVariant {
+  if (!Array.isArray(v.parts)) return v;
+  const retired = retiredOverridesFor(v.parts, [], undefined);
+  if (retired.length === 0) return v;
+  const parts = (v.parts as ScenePart[]).map((p) => (p && typeof p === 'object' ? migrateRetiredPart(p) : p));
+  const transforms = v.transforms ? migrateRetiredOverrides(v.transforms, retired) : v.transforms;
+  return { ...v, parts, transforms };
+}
+
 /** A saved layout, made the one way every saver makes it: "Save current" in the
  *  Layouts tab, the ideas gallery's heart, and a re-scan's "Before re-scan". Three
  *  hand-built copies of this record were three places for a field to go missing.
@@ -547,6 +590,7 @@ export const roomStore = {
     const values = await Promise.all(matching.map((key) => get<LayoutVariant>(key)));
     return values
       .filter((v): v is LayoutVariant => !!v)
+      .map(migrateLayout)
       .sort((a, b) => a.createdAt - b.createdAt);
   },
   async saveTransforms(roomId: string, t: Transforms) {

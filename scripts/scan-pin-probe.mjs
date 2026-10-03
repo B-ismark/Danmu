@@ -90,7 +90,7 @@ const PIECES = [
   ['Rug', 'rug', 'rug', [0.15, 0.82, 0.6, 0.15], 'n'],
   ['Side table', 'table', 'side-table', [0.56, 0.68, 0.07, 0.14], 'n'],
   ['Curtain', 'curtain', 'curtain', [0.9, 0.02, 0.09, 0.9], 'n'],
-  ['Pendant light', 'lamp', 'lamp-pendant', [0.4, 0, 0.1, 0.12], 'n'],
+  ['Pendant light', 'lamp', 'lamp-ceiling', [0.4, 0, 0.1, 0.12], 'n'],
   ['Bookshelf', 'shelf', 'bookshelf', [0.1, 0.2, 0.3, 0.7], 'e'],
   ['Desk', 'desk', 'desk-standard', [0.45, 0.55, 0.45, 0.25], 'e'],
   ['Desk chair', 'chair', 'chair-office', [0.55, 0.6, 0.2, 0.3], 's'],

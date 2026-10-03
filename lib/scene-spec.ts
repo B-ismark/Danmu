@@ -25,7 +25,7 @@ import {
   seeksSurface,
   verticalExtent,
 } from './physics';
-import type { CaptureSlot, RoomData } from './storage';
+import type { CaptureSlot, RoomData, Transforms } from './storage';
 import { detectionPartIds, placedSlot, splitSlotSuffix } from './detection-record';
 import { clampDims, dimRangeFor } from './dimension-ranges';
 import {
@@ -98,7 +98,7 @@ export const SHAPES = [
   // tables / desks
   'desk-standard', 'desk-l', 'coffee-table', 'side-table', 'nightstand',
   // lamps
-  'lamp-floor', 'lamp-table', 'lamp-pendant',
+  'lamp-floor', 'lamp-table', 'lamp-ceiling',
   // wall-hung
   'mirror', 'mirror-oval', 'painting', 'ac-unit', 'window',
   // others
@@ -126,7 +126,7 @@ export type DecorItem = { id: string; kind: DecorKind; x: number; z: number };
 // Units are real (see lib/light-units.ts) so two lamps relate correctly to each
 // other. Where the bulb physically sits inside each shape belongs with that
 // shape's geometry, not here — see `lightAnchor` below, which reads the function each
-// lamp's mesh is drawn from (`pendantDrop().bulbY`, `lampForm().bulb`) rather than a
+// lamp's mesh is drawn from (`ceilingLight().glowY`, `lampForm().bulb`) rather than a
 // copy of last year's answer to it.
 
 export type PartLight = {
@@ -144,8 +144,14 @@ export type PartLight = {
 const LIGHT_BY_SHAPE: Partial<Record<Shape, PartLight>> = {
   'lamp-table': { lumens: 400, kelvin: 2700 },
   'lamp-floor': { lumens: 800, kelvin: 2700 },
-  // A pendant's shade aims the light down rather than making more of it.
-  'lamp-pendant': { lumens: 900, kelvin: 3000, coneDeg: 110 },
+  // A flush-mount ceiling light: the round opal-diffuser fitting, very often an LED
+  // surface panel, that is the everyday room light in Ghanaian homes (it replaced the
+  // pendant this row used to describe). An 18-20 W LED fitting puts out roughly
+  // 1600 lm, at the neutral 4000 K those panels are usually sold in, and the diffuser
+  // throws it into a wide cone rather than a shade's 110 degrees — which is also why
+  // its on-axis brightness is close to the old pendant's (308 cd against 336) while
+  // the floor it lights is much wider.
+  'lamp-ceiling': { lumens: 1600, kelvin: 4000, coneDeg: 160 },
 };
 
 /** The light a part emits: the user's override, else the shape's default, else
@@ -277,55 +283,68 @@ export function fanColumn(heightMM: number): {
   };
 }
 
-/** The pendant lamp's whole geometry, both axes, for the same reason again — and
- *  this one ignored `dimMM` completely.
+/** How thick the ceiling light's decorative ring is at most, in metres. A trim band is
+ *  a few millimetres of metal whatever the fitting's size — the one ABSOLUTE in
+ *  `ceilingLight`, and the reason `lamp-ceiling` is in `PARAMETRIC_SHAPES`. */
+export const CEILING_RING_H = 0.008;
+
+/** The flush-mount ceiling light's whole geometry, both axes — the round fitting with
+ *  an opal diffuser, usually an LED surface panel, that is the everyday room light in
+ *  Ghanaian homes. It replaced the pendant (`lamp-pendant`, retired; see
+ *  `migrateRetiredPart`).
  *
- *  `PendantLampGeo` drew a 600 mm cord at y = +0.3 and a 200 mm shade reaching
- *  y = -0.2: **800 mm for a declared 400 mm**, asymmetric about its own origin, and
- *  a 300 mm-wide shade for a declared 350 mm width. Every literal, on every axis.
+ *  Pulled out of the renderer for the reason `fanBlade` and the pendant's own helper
+ *  were: arithmetic that lives only in a TSX file is arithmetic no test can reach, and
+ *  every ceiling fixture before this one drew a size it did not declare.
  *
- *  **What the declared height means is the DROP — cord plus shade — and that is not
- *  a taste call.** `lamp-pendant` is `wallMounted`, is not soft furnishing and is
- *  neither door nor window, so `isMountedObstruction` admits it and `clearance.ts`
- *  rule 2b reports a pendant intersecting a wardrobe out of
- *  `verticalExtent(dimMM[2])`. Under the other reading — the shade alone — the app
- *  would under-report the pendant's reach by the entire cord and stay silent about a
- *  clash the user can see. `groundY`, `settleHeights` and `verticalExtent` all read
- *  it the same way. Six consumers agree; the renderer was the lone dissenter.
+ *  **What the declared height means is the whole fitting, ceiling face to the bottom of
+ *  the diffuser.** There is no cord and no drop: the housing's top IS the part's top,
+ *  which `groundY` puts `MOUNT_PAD` under the slab, so the fitting sits flush. The
+ *  housing takes the top 40% and the diffuser the rest; the diffuser is a shallow
+ *  drum hanging from the housing's underside, narrower than the housing so the white
+ *  rim and its trim ring read from below. The ring is the widest element and is
+ *  exactly `widthMM` across, which is what the plan's circle draws.
  *
- *  The shade is capped against its own width so a long drop does not turn into a
- *  cone as tall as it is wide, and the bulb is sized off the shade so it stays
- *  inside it at every point of the band.
+ *  `glowY` is where the light comes from — the middle of the diffuser — and
+ *  `lightAnchor` reads it, so the emitter and the glowing disc are one number.
  *
- *  Returns metres, centred on the part's origin. */
-export function pendantDrop(widthMM: number, heightMM: number): {
-  cordH: number;
-  cordY: number;
-  domeH: number;
-  domeY: number;
-  domeR: number;
-  bulbR: number;
-  bulbY: number;
+ *  Returns metres, centred on the part's origin. `top`/`bottom` are the invariant worth
+ *  testing — they must equal `verticalExtent`'s answer for the same `dimMM`. */
+export function ceilingLight(widthMM: number, heightMM: number): {
+  /** The housing against the ceiling: radius, thickness, centre height. */
+  baseR: number;
+  baseH: number;
+  baseY: number;
+  /** The decorative trim ring round the housing's lower edge. */
+  ringR: number;
+  ringH: number;
+  ringY: number;
+  /** The opal diffuser: radius, depth, and the height of its flat top face. */
+  diffR: number;
+  diffH: number;
+  diffTopY: number;
+  glowY: number;
   bottom: number;
   top: number;
 } {
   const h = heightMM / 1000;
   const r = widthMM / 2000;
-  const domeH = Math.min(h * 0.4, r * 1.2);
-  const cordH = h - domeH;
-  // Both arms bind somewhere inside the catalogue band, so a sweep cannot hold
-  // either: it passes wherever the answer is small enough. Measured -
-  // `Math.min(domeH * 0.35, r * 0.3)` -> `domeH * 0` survived a sweep of three
-  // upper bounds, and a pendant rendered with no bulb at all.
-  const bulbR = Math.min(domeH * 0.35, r * 0.3);
+  const baseH = h * 0.4;
+  const diffH = h - baseH;
+  const ringH = Math.min(CEILING_RING_H, baseH * 0.3);
+  const diffTopY = h / 2 - baseH;
   return {
-    cordH,
-    cordY: h / 2 - cordH / 2,
-    domeH,
-    domeY: -h / 2 + domeH / 2,
-    domeR: r,
-    bulbR,
-    bulbY: -h / 2 + domeH * 0.55,
+    // A hair inside the ring, so the two side walls are not coplanar and do not fight.
+    baseR: r * 0.97,
+    baseH,
+    baseY: h / 2 - baseH / 2,
+    ringR: r,
+    ringH,
+    ringY: diffTopY + ringH / 2,
+    diffR: r * 0.88,
+    diffH,
+    diffTopY,
+    glowY: diffTopY - diffH / 2,
     bottom: -h / 2,
     top: h / 2,
   };
@@ -414,11 +433,12 @@ export {
  *  remembering. A light at the origin would sit on the floor and illuminate the inside
  *  of its own shade, which is what anything that is not a lamp gets — none of it emits.
  *
- *  `lamp-pendant` reads `pendantDrop`. Its row in the old `LIGHT_ANCHORS` table read
- *  `[0, -0.05, 0]`, a hand-typed copy of the `sphereGeometry` position in
- *  `PendantLampGeo`: correct while that position was a literal, and silently wrong the
- *  moment it became a function of `dimMM`. At 350x900 the emitter sat 285 mm above its
- *  own glowing sphere and **190 mm above the shade's own rim** (§ 34).
+ *  `lamp-ceiling` reads `ceilingLight().glowY`, the middle of its diffuser. The pendant
+ *  it replaced is why this is a branch and not a row: that fixture's row in the old
+ *  `LIGHT_ANCHORS` table read `[0, -0.05, 0]`, a hand-typed copy of the `sphereGeometry`
+ *  position in its renderer — correct while that position was a literal, and silently
+ *  wrong the moment it became a function of `dimMM`. At 350x900 the emitter sat 285 mm
+ *  above its own glowing sphere and **190 mm above the shade's own rim** (§ 34).
  *
  *  The floor and table lamps are the same defect, and were kept in that table on a claim
  *  that was false: that they "draw their bulbs at literals". Their geometry was literals
@@ -430,7 +450,7 @@ export function lightAnchor(
   shape: Shape,
   dimMM: [number, number, number],
 ): [number, number, number] {
-  if (shape === 'lamp-pendant') return [0, pendantDrop(dimMM[0], dimMM[2]).bulbY, 0];
+  if (shape === 'lamp-ceiling') return [0, ceilingLight(dimMM[0], dimMM[2]).glowY, 0];
   return lampForm(shape, dimMM)?.bulb ?? [0, 0, 0];
 }
 
@@ -1612,7 +1632,7 @@ function enumeratePlans(layoutId: LayoutId, bays: Bay[], poly: Footprint): SeedP
 //
 //   · a picture goes over the sofa or the bed, centred on it, at gallery height;
 //   · every window gets curtains;
-//   · a pendant hangs over the dining table;
+//   · a ceiling light sits flush over the dining table;
 //   · a lamp stands on each nightstand.
 //
 // Nothing here is placed unless the thing it belongs to exists, so a room with no bed
@@ -1670,7 +1690,8 @@ function dress(
       // Measured by danmu-bc across `rect`/`l`/`t`/`u`/`open` at five sizes: 8 of 323
       // parts had a stored flag disagreeing with the derived one, and every one of
       // them was that pendant. `tests/scene-build.test.ts` sweeps the same ground as
-      // an assertion now, so the pendant's `add` in `dress` below cannot grow a sibling.
+      // an assertion now, so the ceiling light's `add` in `dress` below (the pendant's
+      // successor) cannot grow a sibling.
       // (This named a line number, `:1429`, and this commit's own additions to `dress`
       // moved it to 1449 - where 1429 lands inside the painting block instead.)
       //
@@ -1702,7 +1723,7 @@ function dress(
     // anchored — writing 0 here left every pair of curtains lying on the floor.
     // Floor to just under the ceiling, and positioned at its MESH CENTRE — which is
     // what `placementForSlot` does for a curtain and what `groundY` does not: its
-    // `ceiling` branch is for a pendant or a fan, and using it put a 2.6 m curtain's
+    // `ceiling` branch is for a ceiling light or a fan, and using it put a 2.6 m curtain's
     // centre at 2.65 m, i.e. most of it through the ceiling.
     //
     // **That number is history, and the reason is not.** § 35 replaced the flat drop
@@ -1744,14 +1765,19 @@ function dress(
     );
   }
 
-  // ── A pendant over the dining table ──────────────────────────────────────
+  // ── A ceiling light over the dining table ────────────────────────────────
+  //
+  // The flush-mount disc the Library sells as "Ceiling light" (it was a pendant): centred
+  // on the table in plan, its top against the slab. Ceiling-anchored, so `groundY` decides
+  // the height rather than a number here. Its size is the Library row's, read rather than
+  // re-typed, so the seeded light and the one a person adds are the same fitting.
   const table = parts.findIndex((_, k) => roles[k] === 'dining-table');
   if (table >= 0) {
     const t = at(table);
-    // Ceiling-anchored, so `groundY` decides the height rather than a number here.
-    add('lamp', 'Pendant lamp', 'lamp-pendant', [350, 350, 400], [t.pos[0], 0, t.pos[2]], t.rot);
+    const light = ceilingLightRow();
+    add('lamp', light.label, 'lamp-ceiling', [...light.dimMM], [t.pos[0], 0, t.pos[2]], t.rot);
     const last = parts[parts.length - 1];
-    last.pos[1] = groundY('lamp', 'lamp-pendant', last.dimMM, height);
+    last.pos[1] = groundY('lamp', 'lamp-ceiling', last.dimMM, height);
   }
 
   // ── A lamp on each nightstand ────────────────────────────────────────────
@@ -1866,15 +1892,16 @@ export const DND_MIME = 'application/x-danmu-item';
 // add MODULES as they grow — pleats, shelves, bays, seats — and each has a
 // `MODULE_RANGE` row; `tests/module-tiling.test.ts` holds that direction.
 //
-// `fan` and `lamp-pendant` are here for the second reason (§ 36): their geometry
+// `fan` and `lamp-ceiling` are here for the second reason (§ 36): their geometry
 // contains a CAP against an absolute, and a cap is not a proportion, so a group scale
 // walks straight through it. `fanColumn`'s `min(FAN_HUB_H, h * 0.4)` is a motor
-// housing, which is a real object with a real thickness; `pendantDrop`'s
-// `min(h * 0.4, r * 1.2)` is what stops a shade becoming a funnel. Both are chosen at
-// the AUTHORED size and never see the scale, so the catalogue fan resized to 450 mm
-// drew a 180 mm motor where its own helper says 80, and the catalogue pendant resized
-// to 150 x 900 drew a 360 mm shade where the cap asks for 90 — four times over, and
-// exactly the outcome `pendantDrop`'s header says it prevents.
+// housing, which is a real object with a real thickness. Both are chosen at the
+// AUTHORED size and never see the scale, so the catalogue fan resized to 450 mm drew a
+// 180 mm motor where its own helper says 80 — and the pendant this catalogue used to
+// sell, resized to 150 x 900, drew a 360 mm shade where its cap asked for 90. The
+// ceiling light that replaced it keeps the membership for the same reason:
+// `ceilingLight`'s trim ring is `min(CEILING_RING_H, baseH * 0.3)`, a few millimetres of
+// metal that a group scale would turn into a 25 mm band on a 200 mm-deep fitting.
 //
 // Neither tiles, so neither has a `MODULE_RANGE` row, and that is legal:
 // `moduleRangeFor` returns `null` rather than `undefined` precisely so a member with
@@ -1884,7 +1911,7 @@ export const DND_MIME = 'application/x-danmu-item';
 // disagrees with drawing at the stored size, the shape belongs here.
 const PARAMETRIC_SHAPES = new Set<Shape>([
   'sofa', 'curtain', 'wardrobe', 'closet', 'bookshelf', 'shoe-rack',
-  'fan', 'lamp-pendant',
+  'fan', 'lamp-ceiling',
   // `railPipe`: a pipe is plumbing, and a wider rail is not thicker plumbing.
   'clothes-rack',
   // …and the rest of § 36's class: `consoleSlabs`, `stoolSeat`, `drawerSlide` and
@@ -2254,7 +2281,8 @@ export const PART_LIBRARY: LibraryItem[] = [
   // Lighting
   { label: 'Floor lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-floor', dimMM: [300, 300, 1700] },
   { label: 'Table lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500] },
-  { label: 'Pendant lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-pendant', dimMM: [350, 350, 400] },
+  // The flush-mount disc: 350 mm across and 80 deep is the common LED surface fitting.
+  { label: 'Ceiling light', group: 'Lighting', category: 'lamp', shape: 'lamp-ceiling', dimMM: [350, 350, 80] },
   // Decor
   { label: 'Rug', group: 'Decor', category: 'rug', shape: 'rug', dimMM: [2400, 1600, 5] },
   { label: 'Plant', group: 'Decor', category: 'plant', shape: 'plant', dimMM: [400, 400, 1600] },
@@ -2310,6 +2338,15 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Door', group: 'Openings', category: 'door', shape: 'door', dimMM: [900, 50, 2100] },
   { label: 'Window', group: 'Openings', category: 'other', shape: 'window', dimMM: [1200, 60, 1200] },
 ];
+
+/** The Library's ceiling light, which the starter dressing seeds and `migrateRetiredPart`
+ *  sizes an old pendant from — one row, so the three never disagree about the fitting.
+ *  A function because `dress` is declared above the table it reads. */
+function ceilingLightRow(): LibraryItem {
+  const row = PART_LIBRARY.find((r) => r.shape === 'lamp-ceiling');
+  if (!row) throw new Error('PART_LIBRARY sells no ceiling light');
+  return row;
+}
 
 /** The Library shelf a shape sits on — "Appliances" for a radiator — shown beside a
  *  piece's name in the Inspector and the hover card. Never `category`, which is an
@@ -2454,7 +2491,7 @@ export const CATALOG_SHAPES_ORDERED: readonly Shape[] = [
   'chair-dining', 'chair-office', 'chair-armchair', 'ottoman',
   'bed-single', 'bed-double',
   'desk-standard', 'desk-l', 'coffee-table', 'side-table', 'nightstand',
-  'lamp-floor', 'lamp-table', 'lamp-pendant',
+  'lamp-floor', 'lamp-table', 'lamp-ceiling',
   'mirror', 'mirror-oval', 'painting', 'ac-unit', 'window',
   'monitor', 'laptop', 'fan', 'fridge', 'curtain',
   'bookshelf', 'shoe-rack', 'clothes-rack', 'door',
@@ -2504,7 +2541,9 @@ export function refineShape(category: Category, label: string): Shape {
       if (/l-shape|corner/.test(l)) return 'desk-l';
       return 'desk-standard';
     case 'lamp':
-      if (/pendant|ceiling|chandelier|bulb|hanging/.test(l)) return 'lamp-pendant';
+      // Every overhead light is the flush-mount ceiling light — the Library sells no other
+      // (the pendant was retired into it), so "pendant" and "chandelier" still land here.
+      if (/pendant|ceiling|chandelier|bulb|hanging|flush|downlight|light panel|panel light/.test(l)) return 'lamp-ceiling';
       if (/table|desk|bedside|nightstand/.test(l)) return 'lamp-table';
       return 'lamp-floor';
     case 'shelf':
@@ -2940,7 +2979,7 @@ export function selectionForPick(parts: ScenePart[], id: string, current: readon
  *  come in both shapes in life. Guessing at those is how this table starts drifting from
  *  what is drawn. */
 const ROUND_SHAPES = new Set<Shape>([
-  'fan', 'fan-standing', 'lamp-floor', 'lamp-table', 'lamp-pendant',
+  'fan', 'fan-standing', 'lamp-floor', 'lamp-table', 'lamp-ceiling',
   'plant', 'stool', 'cylinder',
 ]);
 
@@ -2980,7 +3019,7 @@ export function isWallMountedPart(cat: Category, shape: Shape): boolean {
  *  **Since verified in a browser, which is the only place it can be.** A room record was
  *  written straight into IndexedDB with no `version` field (a pre-stamp record, which
  *  `storage.ts` says to treat as 0) and two parts whose stored flag disagreed with their
- *  own anchor — a `lamp-pendant` at `false`, a `sofa` at `true` — then loaded from a
+ *  own anchor — a `lamp-ceiling` at `false`, a `sofa` at `true` — then loaded from a
  *  production build. The tell needs no instrumentation, because `Inspector.tsx` branches
  *  on this flag into two MUTUALLY EXCLUSIVE rows: `{!part.wallMounted && …}` renders the
  *  placement buttons, `{part.wallMounted && …}` renders "Height off the floor". The
@@ -3003,7 +3042,7 @@ export function isWallMountedPart(cat: Category, shape: Shape): boolean {
  *  belongs here rather than at a call site — there are three call sites and they are the
  *  reason this function exists at all. */
 export function normalizeStoredParts(parts: ScenePart[]): ScenePart[] {
-  return parts.map((p) => {
+  return parts.map(migrateRetiredPart).map((p) => {
     const derived = isWallMountedPart(p.category, p.shape);
     const round = isRoundPart(p.shape);
     // `circle` is re-derived for the same reason and with the same `|| undefined`: a
@@ -3023,6 +3062,133 @@ export function normalizeStoredParts(parts: ScenePart[]): ScenePart[] {
     // answer everywhere that reads it.
     return { ...p, name, wallMounted: derived || undefined, circle: round || undefined };
   });
+}
+
+/** Shapes this app no longer draws, and what each one comes back as.
+ *
+ *  `lamp-pendant` — a cone shade on a cord — was replaced by `lamp-ceiling`, the round
+ *  flush-mount disc that is the everyday ceiling light in a Ghanaian home. A shape is
+ *  RETIRED here rather than kept in the vocabulary, and mapped rather than forgotten,
+ *  because rooms and scene files written before the change still say `lamp-pendant` and
+ *  the vocabulary check (`lib/scene-file.ts`) drops a part whose shape it does not know:
+ *  forgetting the id would delete every old room's light on its next open. The old id is
+ *  in no table the app draws from — only here, as a key a reader maps away. */
+const RETIRED_SHAPES: Readonly<Record<string, Shape>> = { 'lamp-pendant': 'lamp-ceiling' };
+
+/** The Library size the pendant shipped at. The only evidence of an old part's size when
+ *  the part itself was never saved — a starter light in a room the user moved things in
+ *  but never edited, whose override still holds the pendant's centre height. */
+const LEGACY_PENDANT_DIM: readonly [number, number, number] = [350, 350, 400];
+
+/** Default names that named the retired shape. A name the user typed is theirs and stays. */
+const RETIRED_NAMES: Readonly<Record<string, string>> = { 'Pendant lamp': 'Ceiling light', Pendant: 'Ceiling light' };
+
+/** What a retired shape id comes back as, or null for anything that is not one. */
+export function retiredShapeFor(shape: unknown): Shape | null {
+  return typeof shape === 'string' && Object.prototype.hasOwnProperty.call(RETIRED_SHAPES, shape)
+    ? RETIRED_SHAPES[shape]
+    : null;
+}
+
+/** A pendant's size as a ceiling light: its WIDTH is kept (the one axis a user would
+ *  recognise — how big the fitting looks from below), the footprint goes round, and the
+ *  height is the Library's disc depth, because a pendant's 400 mm was cord and shade and
+ *  says nothing about a flush disc. */
+function ceilingDimsFromPendant(dim: readonly number[]): [number, number, number] {
+  const row = PART_LIBRARY.find((r) => r.shape === 'lamp-ceiling');
+  const h = row ? row.dimMM[2] : 80;
+  const w = Number.isFinite(dim[0]) ? dim[0] : LEGACY_PENDANT_DIM[0];
+  return clampDims('lamp', 'lamp-ceiling', [w, w, h]);
+}
+
+/** One stored part, with a retired shape mapped to its replacement. Anything else comes
+ *  back as the same object.
+ *
+ *  The TOP stays where it was. A pendant hung from the slab with its top `MOUNT_PAD`
+ *  under it; keeping the top keeps the new disc flush in the same room without needing
+ *  to know the room's height. Idempotent: the result's shape is not retired. */
+export function migrateRetiredPart<T extends Pick<ScenePart, 'shape' | 'name' | 'dimMM' | 'pos'>>(p: T): T {
+  const to = retiredShapeFor(p.shape);
+  if (!to) return p;
+  const oldDim: readonly number[] = Array.isArray(p.dimMM) ? p.dimMM : LEGACY_PENDANT_DIM;
+  const dimMM = ceilingDimsFromPendant(oldDim);
+  const oldH = (Number.isFinite(oldDim[2]) ? oldDim[2] : LEGACY_PENDANT_DIM[2]) / 1000;
+  const pos = Array.isArray(p.pos)
+    ? ([p.pos[0], p.pos[1] + oldH / 2 - dimMM[2] / 2000, p.pos[2]] as [number, number, number])
+    : p.pos;
+  const name = typeof p.name === 'string' && Object.prototype.hasOwnProperty.call(RETIRED_NAMES, p.name)
+    ? RETIRED_NAMES[p.name]
+    : p.name;
+  return { ...p, shape: to, name, dimMM, pos };
+}
+
+/** A part that was a retired shape when its overrides were written: its id, the size its
+ *  position override was measured for, and the size it has now. */
+export type RetiredOverride = { id: string; oldDim: readonly number[]; newDim: [number, number, number] };
+
+/** Which of a room's parts were a retired shape when its transforms were last written.
+ *
+ *  The evidence is exact where there is a saved scene: the raw parts still carry the old
+ *  shape and size. A room with NO saved scene is rebuilt from its record on every open, so
+ *  its parts are built as `lamp-ceiling` already; there the evidence is the record's
+ *  schema version — before 3 this app could only have built a pendant, so every built
+ *  ceiling light in such a room was one, at the Library size it shipped at. */
+export function retiredOverridesFor(
+  savedScene: readonly unknown[] | undefined,
+  built: readonly ScenePart[],
+  schemaVersion: number | undefined,
+): RetiredOverride[] {
+  if (Array.isArray(savedScene)) {
+    const out: RetiredOverride[] = [];
+    for (const raw of savedScene) {
+      if (!raw || typeof raw !== 'object') continue;
+      const r = raw as Partial<ScenePart>;
+      if (typeof r.id !== 'string' || !retiredShapeFor(r.shape)) continue;
+      const oldDim: readonly number[] = Array.isArray(r.dimMM) ? r.dimMM : LEGACY_PENDANT_DIM;
+      out.push({ id: r.id, oldDim, newDim: ceilingDimsFromPendant(oldDim) });
+    }
+    return out;
+  }
+  if ((schemaVersion ?? 1) >= 3) return [];
+  return built
+    .filter((p) => p.shape === 'lamp-ceiling')
+    .map((p) => ({ id: p.id, oldDim: LEGACY_PENDANT_DIM, newDim: p.dimMM }));
+}
+
+/** A room's user overrides, brought along with a retired part.
+ *
+ *  A dims override is the pendant's size and is migrated the way the part is. A position
+ *  override holds the pendant's CENTRE — 200 mm under the slab for the default pendant —
+ *  so left alone it would hang the new disc a hand-span below the ceiling. The top is kept
+ *  instead, capped at the ceiling when the room height is known, which also makes a second
+ *  pass a no-op. Returns the SAME object when nothing changed, so a caller can tell whether
+ *  there is anything to write back. */
+export function migrateRetiredOverrides(
+  t: Transforms,
+  retired: readonly RetiredOverride[],
+  roomHeight?: number,
+): Transforms {
+  if (retired.length === 0) return t;
+  let positions = t.positions;
+  let dims = t.dims;
+  for (const r of retired) {
+    const userDim = dims?.[r.id];
+    const fromDim: readonly number[] = userDim ?? r.oldDim;
+    const toDim = userDim ? ceilingDimsFromPendant(userDim) : r.newDim;
+    if (userDim && (userDim[0] !== toDim[0] || userDim[1] !== toDim[1] || userDim[2] !== toDim[2])) {
+      dims = { ...dims, [r.id]: toDim };
+    }
+    const at = positions?.[r.id];
+    if (!at) continue;
+    const oldH = (Number.isFinite(fromDim[2]) ? fromDim[2] : LEGACY_PENDANT_DIM[2]) / 1000;
+    const newH = toDim[2] / 1000;
+    let y = at[1] + oldH / 2 - newH / 2;
+    // The flush height `groundY` gives a fresh one — the same answer every ceiling clamp
+    // in the app agrees on, rather than a fifth copy of it.
+    if (roomHeight !== undefined && Number.isFinite(roomHeight)) y = Math.min(y, groundY('lamp', 'lamp-ceiling', toDim, roomHeight));
+    if (Math.abs(y - at[1]) > 1e-9) positions = { ...positions, [r.id]: [at[0], y, at[2]] };
+  }
+  return positions === t.positions && dims === t.dims ? t : { ...t, positions, dims };
 }
 
 /** The pieces a room OPENS with: its saved scene when it has one, and otherwise the room
@@ -3285,7 +3451,7 @@ export function placeNewPart(
     // centre only meant the piece jumped the moment it was touched; for a DOOR
     // it was worse than cosmetic, since `wallApertures` cuts its hole in
     // whichever wall is nearest and a door at the centre cut one in a wall it
-    // was nowhere near. Ceiling parts (fan, pendant) are wall-mounted by the
+    // was nowhere near. Ceiling parts (fan, ceiling light) are wall-mounted by the
     // centred-geometry test but do not ride a wall — hence `ridesWall`.
     if (room.footprint && ridesWall(cat, shape)) {
       const snapped = snapToWall([ax, 0, az], dimMM, room.footprint, wallStandoff(shape));

@@ -70,7 +70,7 @@ const BY_SHAPE: Partial<Record<Shape, DimRange>> = {
   'bed-double': R('standard', [800, 1700, 300], [2000, 2300, 1400], [1400, 2000, 600]),
   'lamp-floor': R('standard', [200, 200, 1200], [600, 600, 2000]),
   'lamp-table': R('standard', [120, 120, 250], [450, 450, 800]),
-  'lamp-pendant': R('standard', [150, 150, 150], [800, 800, 900]),
+  'lamp-ceiling': R('standard', [200, 200, 40], [800, 800, 200]),
   mirror: R('standard', [300, 15, 400], [1200, 60, 2000]),
   'mirror-oval': R('standard', [300, 15, 450], [900, 60, 1800]),
   window: R('standard', [400, 40, 400], [3200, 200, 2400]),

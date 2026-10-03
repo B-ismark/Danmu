@@ -149,7 +149,7 @@ const ROLE_BY_SHAPE: Partial<Record<Shape, Role>> = {
   laptop: 'other',
   'lamp-floor': 'floor-lamp',
   'lamp-table': 'table-lamp',
-  'lamp-pendant': 'other',
+  'lamp-ceiling': 'other',
   rug: 'rug',
   plant: 'plant',
   door: 'door',

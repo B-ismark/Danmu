@@ -124,12 +124,14 @@ describe('the high side of a cut axis, across furnished rooms (§ 49.5)', () => 
     // is not traced. When the Library's four beds became one `bed-double` resized down to
     // a single (its band floor 1350 → 800), only the ranking moved, on two readings: the
     // right word first on 2 fewer tipped 5° down, and on 12 more and shown on 37 more
-    // tipped 10° up and read level. Nothing caught or flagged moved.
+    // tipped 10° up and read level. Nothing caught or flagged moved. When the pendant
+    // became the flush ceiling light (its band 150–900 mm tall → 40–200), one more row
+    // put the right word first on the fourth reading; nothing else moved.
     expect(out).toEqual([
       [97, 0, 19748, 15026, 1037, 7693, 9266],
       [339, 1, 21359, 15388, 925, 3820, 4995],
       [485, 5, 25004, 18259, 830, 3790, 5060],
-      [132, 0, 21435, 17088, 359, 7381, 9393],
+      [132, 0, 21435, 17088, 359, 7382, 9393],
       [107, 0, 20604, 15791, 853, 7756, 9436],
       [264, 0, 17837, 13179, 1260, 2488, 6638],
       [327, 10, 20361, 15743, 851, 5979, 7318],

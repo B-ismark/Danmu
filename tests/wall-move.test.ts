@@ -187,7 +187,7 @@ describe('the ceiling family belongs to the room, not to an edge of it', () => {
   const pendant = part({
     id: 'pendant',
     category: 'lamp',
-    shape: 'lamp-pendant',
+    shape: 'lamp-ceiling',
     wallMounted: true,
     pos: [0, 2.45, -0.5],
     dimMM: [350, 350, 400],

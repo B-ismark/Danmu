@@ -988,18 +988,20 @@ describe('judgeLabel — on the plane its placer read it on', () => {
     // and silent on the height it had grown.
     const box = seen(clip(bboxOfWallSolid('n', 'n', 0.2, 1.75, wallD('n', ROOM), 1.4, 1.9, 0.08, CAL)));
     expect(frameCuts(box)).toEqual({ left: false, right: false, top: true, bottom: false });
-    const d = det({ label: 'curtain', category: 'curtain', shape: 'lamp-pendant', slot: 'n', box });
-    expect(sceneShapeFor('curtain', d.label, d.shape)).toBe('lamp-pendant');
+    const d = det({ label: 'curtain', category: 'curtain', shape: 'lamp-ceiling', slot: 'n', box });
+    expect(sceneShapeFor('curtain', d.label, d.shape)).toBe('lamp-ceiling');
     const v = judgeLabel(d, { n: CAL }, ROOM);
     expect(v.status).toBe('suspect');
     if (v.status !== 'suspect') return;
     expect(v.cut).toEqual(['height']);
-    // The height the top cut is a lower bound, and the 1.51 m of cloth the photo saw is
-    // already past a pendant's 900 mm top, so it accuses the word too (§ 49.5) — as what
-    // was seen, "at least", not as the height the placer grew.
+    // The height the top cut is a lower bound, and the 1.47 m of cloth the photo saw is
+    // already far past a ceiling light's 200 mm top, so it accuses the word too (§ 49.5)
+    // — as what was seen, "at least", not as the height the placer grew. (It read 1349 ×
+    // 1507 against the pendant; the wall placer takes the shape band's depth, and the
+    // ceiling light's floor of 200 mm is deeper than the pendant's 150.)
     expect(v.failed).toEqual(['width', 'height']);
     expect(v.atLeast).toEqual(['height']);
-    expect(v.measured).toEqual({ width: 1349, height: 1507 });
+    expect(v.measured).toEqual({ width: 1312, height: 1466 });
   });
 });
 
@@ -1144,39 +1146,39 @@ describe('a repair is built as the shape it was measured as', () => {
     });
   };
 
-  it('offers the light as the pendant its words make it, and builds a pendant', () => {
+  it('offers the light as the ceiling light its words make it, and builds one', () => {
     const [lamp] = candidatesFor(fan, ['lamp'], WIDE_CALS, ROOM);
     expect(lamp).toBeDefined();
-    // Measured on the ceiling, width alone — the pendant's plane — and called one.
-    expect(lamp.detection.shape).toBe('lamp-pendant');
-    expect(lamp.name).toBe('Pendant lamp');
+    // Measured on the ceiling, width alone — the ceiling light's plane — and called one.
+    expect(lamp.detection.shape).toBe('lamp-ceiling');
+    expect(lamp.name).toBe('Ceiling light');
     const parts = accept(lamp, 'Lamp');
     expect(parts).toHaveLength(1);
-    expect(accept(lamp, lamp.name!)[0].shape).toBe('lamp-pendant');
+    expect(accept(lamp, lamp.name!)[0].shape).toBe('lamp-ceiling');
     // The defect: a blank shape resolved from "Lamp" at build time is a floor lamp,
-    // so a piece measured on the ceiling stood on the floor at a pendant's width.
-    expect(parts[0].shape).toBe('lamp-pendant');
+    // so a piece measured on the ceiling stood on the floor at a ceiling light's width.
+    expect(parts[0].shape).toBe('lamp-ceiling');
   });
 
   it('judges it against the band of the shape it carries', () => {
     const [lamp] = candidatesFor(fan, ['lamp'], WIDE_CALS, ROOM, { requireFit: false });
-    const pendant = dimRangeFor('lamp', 'lamp-pendant');
+    const ceiling = dimRangeFor('lamp', 'lamp-ceiling');
     const w = lamp.detection.dimMM![0];
     // Width alone, as a ceiling piece is measured — the height in dimMM is the
-    // catalogue's, not a measurement — and inside the PENDANT's band, whose floor is
-    // not a plain lamp's.
-    expect(pendant.min[0]).not.toBe(dimRangeFor('lamp', 'box').min[0]); // premise
-    expect(lamp.margin).toBeCloseTo(Math.min(w - pendant.min[0], pendant.max[0] - w) / (pendant.max[0] - pendant.min[0]), 9);
+    // catalogue's, not a measurement — and inside the CEILING LIGHT's band, whose floor
+    // is not a plain lamp's.
+    expect(ceiling.min[0]).not.toBe(dimRangeFor('lamp', 'box').min[0]); // premise
+    expect(lamp.margin).toBeCloseTo(Math.min(w - ceiling.min[0], ceiling.max[0] - w) / (ceiling.max[0] - ceiling.min[0]), 9);
   });
 
-  // 134 mm across: inside a plain lamp's band (from 120) and under any pendant's (from
-  // 150). Judged as the shape it would be built as, it is not a pendant, so it is not
-  // offered as a repair; the looser band would have offered it.
-  it('does not offer a light narrower than any pendant as one', () => {
+  // 134 mm across: inside a plain lamp's band (from 120) and under any ceiling light's
+  // (from 200). Judged as the shape it would be built as, it is not a ceiling light, so
+  // it is not offered as a repair; the looser band would have offered it.
+  it('does not offer a light narrower than any ceiling light as one', () => {
     const thin = { ...fan, box: [0.47, 0.03, 0.031, 0.14] as Detection['box'] };
     const [measured] = candidatesFor(thin, ['lamp'], WIDE_CALS, ROOM, { requireFit: false });
     expect(measured.detection.dimMM![0]).toBeGreaterThan(dimRangeFor('lamp', 'box').min[0]); // premise
-    expect(measured.detection.dimMM![0]).toBeLessThan(dimRangeFor('lamp', 'lamp-pendant').min[0]); // premise
+    expect(measured.detection.dimMM![0]).toBeLessThan(dimRangeFor('lamp', 'lamp-ceiling').min[0]); // premise
     expect(candidatesFor(thin, ['lamp'], WIDE_CALS, ROOM)).toEqual([]);
   });
 

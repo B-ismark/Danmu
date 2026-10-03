@@ -423,7 +423,7 @@ describe('§ G.1 · what the seeder does with a wall-moved footprint', () => {
   it('turns a floor lamp into a ceiling pendant, under the same id, one arrow press away', () => {
     // The sharpest single instance of the churn, and `changed` counts it as one
     // alongside a TV moving a size rung. `lamp-1` is `lamp-floor` at y = 0 before and
-    // `lamp-pendant` at y = 2.58 after, so a saved position the user chose for a floor
+    // `lamp-ceiling` at y = 2.58 after, so a saved position the user chose for a floor
     // lamp is applied to something hanging from the ceiling.
     //
     // **Not an offered size, and that is stated rather than smuggled.** The picker's

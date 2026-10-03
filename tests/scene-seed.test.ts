@@ -120,9 +120,9 @@ function clashes(parts: ReturnType<typeof defaultScene>): string[] {
 const CEILING_TOPS: Record<string, string[]> = {
   rect: [],
   l: [],
-  t: ['Pendant lamp=2.780'],
+  t: ['Ceiling light=2.780'],
   u: [],
-  open: ['Pendant lamp=2.780'],
+  open: ['Ceiling light=2.780'],
 };
 
 // A `describe.each` over a PARSED list can narrow silently where the hand-typed one

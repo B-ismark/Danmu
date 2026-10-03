@@ -174,7 +174,7 @@ describe('ridingParents — who is standing on what', () => {
   // exactly and the anchor is the only thing that says no.
   it('never makes a hanging pendant the rider of what is under it', () => {
     const pendant = part({
-      id: 'pend', category: 'lamp', shape: 'lamp-pendant', dimMM: [300, 300, 400], pos: [0, 0.55, 0],
+      id: 'pend', category: 'lamp', shape: 'lamp-ceiling', dimMM: [300, 300, 400], pos: [0, 0.55, 0],
     });
     // The fixture has to be able to fail on every other clause.
     expect(footIntersectionArea(foot(pendant), foot(stand)) / footArea(foot(pendant))).toBeGreaterThan(
