@@ -1879,7 +1879,7 @@ first wall's bed. Look at **All walls**, then **Continue**.
 - Unticking or deleting the Wall 1 bed and the bed leaving the room: the Wall 2 bed
   should tick itself and stop saying *"Same bed as on Wall 1"*. Unticking that one too
   should leave no bed, not hand it back to Wall 1.
-- **Not yet merged, on branch `ccr-02d40e8d-fzmw33`:** the linked Wall 2 bed should
+- **Merged to `main` in `7c33c43` (PR #263):** the linked Wall 2 bed should
   show a tick, a solid tag on its photo and *"Same bed as on Wall 1 · kept"* while the
   Wall 1 bed is kept. Pressing its tick should take the bed out on **both** walls
   (*"· left out"*, no *"Built once"*), and ticking either bed should bring it back on
