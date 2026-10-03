@@ -164,9 +164,12 @@ export function DetectionRow({
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        padding: '8px 10px 8px 14px',
+        padding: '8px 10px',
       } as CSSProperties}
     >
+      {/* The row's colour, quietly: a round dot in the piece's own colour, the same one its
+          box and tag wear on the photo. Decoration, so hidden from assistive tech. */}
+      <span className="piece-row__dot" aria-hidden="true" />
       {/* Was the whole row as a `div onClick`: unreachable by keyboard and with
           no state announced. Now a real toggle with aria-pressed. */}
       <IconButton

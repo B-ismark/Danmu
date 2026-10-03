@@ -56,4 +56,17 @@ describe('BuildingRoom', () => {
     expect(screen.getByRole('status').textContent).toBe('Building your room');
     expect(document.querySelector('dl')).toBeNull();
   });
+
+  it('says pieces come in at typical sizes, and keeps the never-squeezed promise', () => {
+    render(<BuildingRoom dimUnit="m" facts={null} />);
+    const note = document.querySelector('.build-screen__note')!.textContent!;
+    expect(note).toMatch(/typical sizes/);
+    expect(note).toMatch(/flagged, never squeezed/);
+    expect(note).not.toMatch(/real furniture ranges/);
+  });
+
+  it('draws a progress cue that assistive tech does not hear', () => {
+    render(<BuildingRoom dimUnit="m" facts={null} />);
+    expect(document.querySelector('.build-screen__bar')?.getAttribute('aria-hidden')).toBe('true');
+  });
 });
