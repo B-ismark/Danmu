@@ -83,11 +83,11 @@ type StudioState = {
   /** scene lighting kind */
   lighting: Lighting;
   /** The time of day the daylight is drawn at, in hours [0, 24). Ignored while
-   *  `lighting` is `overcast`. It opens at the person's own clock (`hourNow`) — here,
-   *  and again on every room open (`RoomSync`) — and is NOT a remembered preference: a room opened in the evening is lit for the
-   *  evening, whatever hour it was scrubbed to yesterday. In history beside the
-   *  lighting kind all the same — a theme sets both in one gesture, so undoing the
-   *  theme has to put both back. */
+   *  `lighting` is `overcast`. It opens at the person's own clock (`hourNow`) —
+   *  here, and again on every room open (`RoomSync`) — and is NOT a remembered
+   *  preference: a room opened in the evening is lit for the evening, whatever hour
+   *  it was scrubbed to yesterday. In history beside the lighting kind all the same
+   *  — a theme sets both in one gesture, so undoing the theme has to put both back. */
   hour: number;
   /** render quality (soft shadows + AO + material maps on 'high') */
   quality: Quality;
