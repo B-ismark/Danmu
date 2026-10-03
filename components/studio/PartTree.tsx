@@ -128,10 +128,12 @@ export function PartTree() {
   // both controls are in one section, which is why they were brought together);
   // the second was never anything but wrong.
   const activeTheme = useMemo(() => {
-    const restyled = parts.filter((p) => !p.locked);
-    if (restyled.length === 0) return null;
+    // Every piece, the ones from a photo too: they used to wear the photo's colours and
+    // were skipped, but a photo no longer colours a piece, so they wear the same model
+    // colours as any other and a theme is for them as much as for the rest.
+    if (parts.length === 0) return null;
     return (
-      THEMES.find((t) => restyled.every((p) => p.color === themeColorFor(p.category, t)))?.id ?? null
+      THEMES.find((t) => parts.every((p) => p.color === themeColorFor(p.category, t)))?.id ?? null
     );
   }, [parts]);
 
@@ -140,13 +142,13 @@ export function PartTree() {
     // N notifications (N re-renders, N subscription hits) that all collapsed
     // into the same single debounced snapshot anyway.
     useScene.setState((s) => ({
-      parts: s.parts.map((p) => (p.locked ? p : { ...p, color: themeColorFor(p.category, theme) })),
+      parts: s.parts.map((p) => ({ ...p, color: themeColorFor(p.category, theme) })),
     }));
     setLighting(theme.lighting);
     if (theme.hour !== undefined) useStudio.getState().setHour(theme.hour);
     toast({
       title: `${theme.label} applied`,
-      message: 'Recoloured everything except the pieces from your photo, and set the light to match.',
+      message: 'Recoloured every piece and set the light to match.',
       ttl: 5000,
     });
   }

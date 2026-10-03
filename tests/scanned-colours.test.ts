@@ -51,4 +51,13 @@ describe('scanned rooms are coloured like preset rooms', () => {
     expect(call).not.toMatch(/part\.locked/);
     expect(call).toMatch(/locked=\{false\}/);
   });
+
+  it('lets a Style theme recolour the pieces from a photo like any other', () => {
+    const src = stripComments(readFileSync(join(__dirname, '../components/studio/PartTree.tsx'), 'utf8'));
+    const apply = src.slice(src.indexOf('function applyTheme'), src.indexOf('setLighting(theme.lighting)'));
+    expect(apply, 'applyTheme must exist').toMatch(/themeColorFor/);
+    expect(apply).not.toMatch(/locked/);
+    const active = src.slice(src.indexOf('const activeTheme'), src.indexOf('function applyTheme'));
+    expect(active).not.toMatch(/locked/);
+  });
 });
