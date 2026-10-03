@@ -3182,4 +3182,4 @@ piece, which the unit test reaches and nobody has yet seen.
 ghost reads as a preview (and not as a piece already there) and stays smooth on a real
 GPU is a judgement.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `61e4324` (B-ismark/Danmu#258), not yet looked at.
