@@ -16,6 +16,24 @@ import type { NewPiece, PiecePlan } from './add-piece';
 
 export type Ghost = { item: NewPiece; plan: PiecePlan; at: { x: number; y: number } };
 
+/** What a ghost SHOWS, as opposed to where it stands: which piece, and whether the drop
+ *  would be refused. The 3D ghost re-renders only when this changes and writes every
+ *  other move straight onto its transform — see `components/three/DropGhost.tsx`.
+ *  Null when there is nothing to stand anywhere: no ghost, or a refusal with no pose. */
+export type GhostLook = { item: NewPiece; refused: boolean };
+
+export function ghostLook(g: Ghost | null): GhostLook | null {
+  if (!g || !g.plan.pose) return null;
+  return { item: g.item, refused: 'refused' in g.plan };
+}
+
+/** Whether two looks would draw the same thing. A pose-only move must answer true, or
+ *  the ghost goes back to re-rendering its whole geometry on every pointer move. */
+export function sameLook(a: GhostLook | null, b: GhostLook | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.item === b.item && a.refused === b.refused;
+}
+
 let carried: NewPiece | null = null;
 let ghost: Ghost | null = null;
 const listeners = new Set<() => void>();
