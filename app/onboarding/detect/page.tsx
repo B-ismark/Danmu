@@ -669,8 +669,18 @@ export default function DetectPage() {
     // In place, never a filter or a re-sort: `confirmed` is a Set of array
     // INDICES, so reordering here would silently move every confirmation onto a
     // different piece of furniture.
+    // A pick ticks the row, and a kept row cannot also be another's sighting — it would
+    // be built AND averaged into the piece it repeats — so a pick ends the link, as a
+    // tick does in `toggleConfirm`.
     setDetections((arr) =>
-      arr.map((x, idx) => (idx === i ? { ...cand.detection, label: candidateLabel(cand) } : x)),
+      arr.map((x, idx) => {
+        if (idx !== i) return x;
+        const picked = { ...cand.detection, label: candidateLabel(cand) };
+        if (!keep) return picked;
+        const { sameAs: _drop, ...rest } = picked;
+        void _drop;
+        return rest;
+      }),
     );
   }
 
@@ -702,9 +712,15 @@ export default function DetectPage() {
     if (next === detections) return;
     remember();
     setDetections(next as Detection[]);
+    // The row it now repeats is the one the room builds, so it is kept. The picker
+    // only offers kept rows; "Yes, same one" answers the automatic guess, whose target
+    // is ranked by confidence rather than by the ticks and may be unticked — linking to
+    // it as it stood would leave both rows out and the piece out of the room.
+    const root = linkedTo(next, i);
     setConfirmed((prev) => {
       const out = new Set(prev);
       out.delete(i);
+      if (root !== null) out.add(root);
       return out;
     });
   }
