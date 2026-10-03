@@ -1,7 +1,5 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import { useCallback, useState } from 'react';
 import { useStudio } from '@/lib/store';
 import { CatalogPanel, CatalogToggle, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { usePhoneStudio } from '@/components/studio/NarrowViewportBanner';
@@ -15,18 +13,18 @@ import { ViewGizmo } from '@/components/studio/ViewGizmo';
 import { UndoRedo } from '@/components/studio/UndoRedo';
 import { CanvasTools, CanvasView, CanvasAide, CanvasDay } from '@/components/studio/CanvasChrome';
 import { DayStrip } from '@/components/studio/DayStrip';
-
-// No `loading` fallback of its own: `CanvasVeil` covers the canvas until the 3D
-// view has drawn its first frame, which includes the wait for this chunk.
-const Room = dynamic(() => import('@/components/three/Room').then((m) => m.Room), { ssr: false, loading: () => null });
+import { RoomSlot, useRoomHost } from '@/components/three/RoomHost';
 
 export default function ModelPage() {
   // In the store, not in this page: the rail's catalog button opens the same
   // panel from the other side of the studio, and on the 2D tab as well.
   const catalogOpen = useStudio((s) => s.catalogOpen);
   const phone = usePhoneStudio();
-  const [drawn, setDrawn] = useState(false);
-  const onFirstFrame = useCallback(() => setDrawn(true), []);
+  // The canvas itself is the layout's (lib/room-host.ts), so returning from the plan
+  // shows the room that was already built; `drawn` is true again at once and the veil
+  // never comes back. Its chunk and first frame are still what the veil waits on the
+  // first time.
+  const { drawn } = useRoomHost();
 
   const canvas = (
     <main
@@ -37,7 +35,7 @@ export default function ModelPage() {
       {/* The room is the page. Its heading is for the document outline and for
           screen readers — putting it on screen would just repeat the top bar. */}
       <h1 className="sr-only">Your room in 3D</h1>
-      <Room onFirstFrame={onFirstFrame} />
+      <RoomSlot />
       <CanvasVeil building={!drawn} />
 
       {/* ONE tool cluster, top-centre. This tab had four occupied corners plus the

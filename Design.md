@@ -247,6 +247,20 @@ just cleared.
 
 There are **only two studio tabs**: `3D Model` and `2D Plan` (`StudioTabs.tsx`).
 
+**The 3D canvas is not owned by the 3D tab.** `/model` used to mount `Room` and
+leaving destroyed it, so every 2D to 3D switch rebuilt the WebGL context, geometry,
+materials, shaders and shadow maps (measured on a production build under software GL:
+14-17 s per switch, against 0.03-0.13 s to a visible room now). `RoomHostProvider`
+(`components/three/RoomHost.tsx`, mounted by `app/room/[roomId]/layout.tsx`) mounts
+`Room` once, after the 3D tab is first opened, into a DOM node owned by
+`lib/room-host.ts`. `/model` renders a `RoomSlot` that attaches that node into its
+canvas area; leaving parks it off-screen at its last size (`visibility: hidden`,
+`inert`, `aria-hidden`) and `Room` gets `paused`, i.e. `frameloop="never"`. Coming
+back is a re-attach plus one `invalidate()`. Anything on the canvas that listens on
+`window` must check `roomHost.get().attached` (`CameraRig`'s arrow/Q/E handler does),
+or it answers keys meant for the plan. Landing on the plan first still builds the 3D
+view on the first switch (only its chunk is warmed). `tests/room-host.test.ts`.
+
 Capture is **four wall photos**, not six — `CAPTURE_SLOTS` in `lib/capture.ts` is
 the four walls in clockwise order; floor and ceiling were dropped. The slots are
 labelled relationally ("Wall 1", "Wall 2") while keeping `n`/`e`/`s`/`w` as the

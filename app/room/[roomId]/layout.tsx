@@ -18,6 +18,7 @@ import { ExportMenu } from '@/components/studio/ExportMenu';
 import { StudioMoreMenu } from '@/components/studio/StudioMoreMenu';
 import { NarrowViewportBanner } from '@/components/studio/NarrowViewportBanner';
 import { DemoBanner } from '@/components/studio/DemoBanner';
+import { RoomHostProvider } from '@/components/three/RoomHost';
 
 export default function StudioLayout({ children }: { children: ReactNode }) {
   const surface = studioSurfaceProps();
@@ -71,6 +72,8 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
       <div {...surface} style={{ ...surface.style, flex: 1, minHeight: 0 }}>
         {children}
       </div>
+      {/* The 3D canvas, mounted once for both tabs: see lib/room-host.ts. */}
+      <RoomHostProvider />
       <RoomSync />
       <KeyboardShortcuts />
       <SoundCues />

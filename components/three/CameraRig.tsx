@@ -6,6 +6,7 @@ import { OrbitControls } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { MOUSE, Vector3 } from 'three';
 import { useStudio } from '@/lib/store';
+import { roomHost } from '@/lib/room-host';
 import { useScene } from '@/lib/scene-store';
 
 const PRESETS = {
@@ -194,6 +195,9 @@ function KeyboardNav({
       return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
     }
     function down(e: KeyboardEvent) {
+      // The canvas outlives the 3D tab (lib/room-host.ts); the arrows belong to the
+      // plan while it is parked, and preventDefault here would eat them.
+      if (!roomHost.get().attached) return;
       if (isTyping(e.target)) return;
       // A slider owns its arrows — the sun's handle, the rail's day track. Without
       // this, stepping the clock from the keyboard also slid the camera sideways. So
