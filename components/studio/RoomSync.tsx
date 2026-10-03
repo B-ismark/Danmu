@@ -179,7 +179,10 @@ export function RoomSync() {
       // now.)
       if (p) {
         shell = p.room;
-        w.room = { edit: (stored) => withShell(stored, p.room), pin: wasReshaped ? p.parts : undefined };
+        // `migrated`: this room is open, so its overrides were brought up to date when it
+        // loaded — a save of it may stamp the record current. That keeps the stamp from
+        // resting on the open's one fire-and-forget write.
+        w.room = { edit: (stored) => withShell(stored, p.room), pin: wasReshaped ? p.parts : undefined, migrated: true };
       }
     }
     if (!w.transforms && w.parts === undefined && !w.room) return;
