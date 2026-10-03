@@ -127,15 +127,15 @@ describe('the Library opens when a signpost is pressed', () => {
 describe('the third signpost is not a control, and that is worth writing down', () => {
   it('the sun note names the Library in prose with nothing to press', () => {
     // `docs/visual-check.md` says "press each of the three". Only two of the three are
-    // pressable: `PartTree`'s sun note is a `<p>`, so the honest form of the item is two
+    // pressable: `DayStrip`'s sun note is a `<p>`, so the honest form of the item is two
     // presses and one read. Asserted rather than left as a comment, because the next
     // person to widen this file will otherwise go looking for a button that has never
     // existed.
-    const src = readFileSync(join(ROOT, 'components/studio/PartTree.tsx'), 'utf8');
+    const src = readFileSync(join(ROOT, 'components/studio/DayStrip.tsx'), 'utf8');
     const i = src.indexOf('from the Library');
     expect(i).toBeGreaterThan(-1);
-    // The 400 characters around it hold the element that carries the sentence.
-    const around = src.slice(Math.max(0, i - 400), i + 200);
+    // The characters around it hold the element that carries the sentence.
+    const around = src.slice(Math.max(0, i - 120), i + 60);
     expect(around).toContain('<p');
     expect(around).not.toContain('<button');
     expect(around).not.toContain('onClick');

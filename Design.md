@@ -2040,10 +2040,13 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     step — and the rail's day track claims the same id for its own pull, so
     both are one step. The sky and exposure live in `Daylight` inside
     `Room.tsx`, so scrubbing re-renders the lights and not the furniture.
-  - **The rail keeps the names** (`LightingPicker.tsx`, rail **Style → Light**):
-    the four stops and Overcast as five 32px glyphs with tooltips and full
-    `aria-label`s, a native 24-hour range for keyboard and screen readers, and
-    **Plan top faces** — the room's bearing, one compass point a press.
+  - **The strip carries the rest** (no rail control any more — `LightingPicker`
+    and the Style → Light section are deleted): while it is open, an extras row
+    under it holds the **Overcast** toggle, **Plan top faces** — the room's bearing,
+    one compass point a press (`turnedBearing`, `lib/lighting-moods.ts`) — and the
+    "no window or door, so no sunlight gets in" hint. The strip's span is the
+    canvas's own: it does **not** back off for the Library card, so opening the
+    Library never moves it. The sun glyph is `--sun` (golden), the moon stays paper.
   - **`Site.bearingDeg` still turns the whole day** with the room, so which wall
     the morning comes through is the user's answer. It was the Sun direction dial
     (`NorthDial.tsx`, deleted); the arc now shows the answer and the rail keeps the
@@ -3223,7 +3226,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 ### State stores
 | Store | File | Holds |
 |---|---|---|
-| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
+| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`; `dressed` — auto set-dressing — is **off by default**, and `STUDIO_PREFS_VERSION` 1 resets the old `true` default once). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
 | `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache. Persisted to localStorage (`danmu-settings`). |
 | `useRoom` | `lib/store.ts` | active room id. Persisted (`danmu-room`). |
 | `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup + room. |

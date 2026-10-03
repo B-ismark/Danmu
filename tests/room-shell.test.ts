@@ -208,7 +208,7 @@ describe('the per-piece shadow gate is gone, not merely unused', () => {
     // And the wall-cutting path goes through it, rather than testing the Set again
     // beside it.
     expect(ap).toContain('if (!isAperture(p)) continue;');
-    expect(readSrc('components', 'studio', 'PartTree.tsx')).toContain('isAperture');
+    expect(readSrc('components', 'studio', 'DayStrip.tsx')).toContain('isAperture');
   });
 
   it('re-casts shadows when a model change replaces the meshes', () => {
