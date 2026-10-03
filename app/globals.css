@@ -1873,45 +1873,102 @@ textarea.field { border-radius: var(--r-2); }
   display: grid; gap: 8px;
   grid-template-columns: repeat(auto-fit, minmax(min(var(--field-min, 64px), 100%), 1fr));
 }
-/* The shape picker's options (app/onboarding/layout-pick): five in one row on a
-   laptop, so the page fits a screen; fewer across as the column narrows. `auto-fit`,
-   not `auto-fill`: a fixed five in an 1100px column would otherwise keep an empty
-   sixth track and stop short of the drawing's right edge below. */
-.shape-options {
-  display: grid; gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+/* The steps of the photo route (`FlowStepper`): Shape, Photos, Furniture, Room.
+   Numbered dots joined by short rules, centred over the page; the step you are on
+   is inked, the ones behind you moss with a tick. Wraps rather than clipping. */
+.flow-stepper {
+  display: flex; justify-content: center; align-items: center; flex-wrap: wrap;
+  gap: 8px 10px; list-style: none; margin: 0 auto 28px; padding: 0;
 }
+.flow-stepper__step {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--fs-body); font-weight: 600; color: var(--ink-3);
+}
+.flow-stepper__step[data-state="on"], .flow-stepper__step[data-state="done"] { color: var(--ink); }
+.flow-stepper__dot {
+  inline-size: 24px; block-size: 24px; flex: none; border-radius: var(--r-full);
+  display: grid; place-items: center; font-size: var(--fs-caption);
+  border: 1.5px solid var(--edge);
+}
+.flow-stepper__step[data-state="on"] .flow-stepper__dot { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.flow-stepper__step[data-state="done"] .flow-stepper__dot { background: var(--accent-ink); border-color: var(--accent-ink); color: var(--on-accent); }
+.flow-stepper__rule { inline-size: 30px; block-size: 1.5px; background: var(--hairline-strong); }
+/* On a phone the four names do not fit one line, so only the current one is
+   shown; the others stay in the accessible name (clipped, not removed). */
+@media (max-width: 479px) {
+  .flow-stepper__rule { inline-size: 16px; }
+  .flow-stepper__step:not([data-state="on"]) .flow-stepper__label {
+    position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}
+
+/* The New room page (app/onboarding/layout-pick): the shapes on the left, and one
+   card on the right for the chosen shape — its drawing, its size and the two ways
+   on — kept in view while the shapes scroll. One column below 900px, where the
+   card follows the shapes. */
+.pick {
+  display: grid; gap: 36px; align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+}
+@media (max-width: 899px) { .pick { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+.pick__title { font-size: var(--fs-hero); font-weight: 300; line-height: 1.05; letter-spacing: -0.02em; }
+.pick__lede { margin: 8px 0 22px; color: var(--ink-3); font-size: var(--fs-lead); }
+.pick-side {
+  display: flex; flex-direction: column; gap: 16px; padding: 20px;
+  background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft);
+  position: sticky; top: 16px;
+}
+@media (max-width: 899px) { .pick-side { position: static; } }
+.pick-side figure { margin: 0; }
+.pick-side__plan { aspect-ratio: 4 / 3; background: var(--paper-2); border-radius: var(--r-2); overflow: hidden; }
+.pick-side__caption { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; font-variant-numeric: tabular-nums; }
+.pick-side__name { font-family: var(--font-display); font-size: var(--fs-title); line-height: 1.15; color: var(--ink); }
+/* A stack in the card at every width: two 360px-wide buttons side by side do not
+   fit a 320px column, and the row would wrap into an uneven pair. */
+.pick-side__actions { display: grid; margin-top: 16px; }
+
+/* The shape picker's options: as many across as the column takes at ~170px, so
+   three in the laptop's left column and two on a phone. `auto-fit`, not
+   `auto-fill`: an empty extra track would stop the row short of the column's
+   right edge. */
+.shape-options {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+}
+/* Two across on a phone, rather than five full-width cards running the page long. */
+@media (max-width: 599px) { .shape-options { grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr)); gap: 10px; } }
 .shape-option {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 10px 12px; text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 10px 14px; text-align: left; cursor: pointer; color: var(--ink);
   border: 1px solid var(--edge); border-radius: var(--r-3); background: var(--paper);
   transition: border-color var(--dur-quick) var(--ease-out), background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
 }
-.shape-option:hover { background: var(--paper-2); }
+.shape-option:hover { background: var(--paper-0); }
 /* Its own ring rather than the shared one, which also sets a small radius and would
    square the tile's corners off while it has focus. */
 .shape-option:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 /* The chosen one reads 2px through an inset ring, so picking does not nudge the
    tile's contents by the extra pixel of border. */
 .shape-option[data-active] {
-  border-color: var(--accent); background: var(--accent-tint);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent);
 }
-/* A shape option's name and floor area. Wraps rather than squeezing: at a phone's
-   two ~150px columns an area in square feet ("241.1 ft²") and "Open Plan" do not
-   share a line, and a baseline row that cannot wrap prints one over the other. */
-.shape-option__row {
-  display: flex; justify-content: space-between; align-items: baseline;
-  gap: 2px 8px; flex-wrap: wrap;
+.shape-option__thumb {
+  display: grid; place-items: center; aspect-ratio: 16 / 9; margin-bottom: 8px;
+  background: var(--paper-2); border-radius: var(--r-2);
 }
+.shape-option__thumb > svg { block-size: 80%; inline-size: auto; max-inline-size: 90%; display: block; }
+.shape-option__name { font-size: var(--fs-lead); font-weight: 700; }
+.shape-option[data-active] .shape-option__name { color: var(--accent-text); }
+.shape-option__size { font-size: var(--fs-caption); color: var(--ink-3); font-variant-numeric: tabular-nums; }
 /* The shape picker's room size (app/onboarding/layout-pick): optional, so it
    reads as a quiet form beside the drawing rather than a step of its own. */
 .size-entry__head {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
 }
-.size-entry__title { margin: 0; font-size: var(--fs-body); font-weight: 700; color: var(--ink); }
-.size-entry__title .t-hint { font-weight: 600; }
+.size-entry__title { margin: 0; font-family: var(--font-sans); font-size: var(--fs-caption); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.size-entry__title .t-hint { font-weight: 600; letter-spacing: 0; text-transform: none; }
 .size-entry__field { display: flex; flex-direction: column; gap: 4px; }
 .size-entry__field > .t-note { font-weight: 600; }
 /* Always in the tree (it is the live region), so it takes space only when it speaks. */

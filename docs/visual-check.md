@@ -2573,7 +2573,7 @@ visible on every card without hovering.
 the New room tile are browser behaviour, not logic a test here can reach. A Playwright walk
 at 1280 and 1020 px passed all of the above once, on a dev build.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `e12c0bb` (B-ismark/Danmu#241), not yet looked at.
 Also on the bar: scroll a long list until a card's corner tick passes under it. The tick
 must go under the bar, never over it. Cards are `isolation: isolate` for exactly that; the
 same walk in Chromium showed the bar on top with and without it, so a second engine is the
@@ -2595,7 +2595,7 @@ Inspector card for a riding piece showing an empty grey second line under *"On T
 **Why eyes:** copy is a judgement, and the user vetoes lines. Each screen was looked at once
 in Chromium at 1366 px.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `e12c0bb` (B-ismark/Danmu#241), not yet looked at.
 
 ## Rename offers on the scan review screen
 
@@ -2607,7 +2607,7 @@ colour with a *"?"* for a model offered at its standard size (its tooltip should
 
 **Why eyes:** no test renders this chip row.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `e12c0bb` (B-ismark/Danmu#241), not yet looked at.
 
 ## A tapped rename suggestion clicks nothing else
 
@@ -2641,7 +2641,7 @@ not Figtree (rounder, Nunito-like letters); a word cut off in a button that used
 like one palette is not something a test can see. "Fixing…" was measured (43.7px against a
 43px slot, so that row wraps by design); no other label was.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `e12c0bb` (B-ismark/Danmu#241), not yet looked at.
 
 ## The Rooms page in the Flow design
 
@@ -2660,15 +2660,31 @@ furnished, because the starter is rebuilt on open, not saved. Queued as its own 
 **Why eyes:** no test renders this page; it was walked once in headless Chromium at 1280
 and 375 wide.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `e12c0bb` (B-ismark/Danmu#241), not yet looked at.
 
 ## "Photograph your room" leads with the photo button
 
 **Where:** the empty Rooms page → *Photograph your room*. The New room page should open with
-*Photograph my real room first* as the first, green button and *Start decorating* second.
+*Continue to photos* as the first, green button and *Skip photos and start decorating* second.
 Arriving from anywhere else, *Start decorating* leads.
 
 **What wrong looks like:** the order the same both ways; Tab reaching the buttons in a
 different order from how they read.
+
+**Merged:** `e12c0bb` (B-ismark/Danmu#241), not yet looked at.
+
+## The New room page in the Flow design
+
+**Where:** Rooms → *New room*, at a laptop width and on a phone; then again from the empty
+Rooms page's *Photograph your room*. Shapes on the left, three across, with a card on the
+right holding the drawing, the size and the two buttons, which stays put while the page
+scrolls. From *Photograph your room*, four steps sit over the page — Shape, Photos,
+Furniture, Room — with Shape current; arriving any other way there are none.
+
+**What wrong looks like:** the card sliding under the bar when sticky; the buttons below
+the fold at 1280 × 800; on a phone the shapes one per row, the step names running off the
+edge, or the card not following the shapes. The *ROOM SIZE* label in the serif.
+
+**Why eyes:** walked once in headless Chromium at 1280, 1024 and 375 wide.
 
 **Rides:** branch `claude/elegant-volta-q7yy89`.
