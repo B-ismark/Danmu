@@ -163,13 +163,13 @@ export function RailFooter() {
             </Tooltip>
           </div>
         ) : null}
-        {/* Each button as wide as its label, the way a dialog's actions sit: the
-            destructive one leading, the one that adds trailing. Stretched halves read
-            as a segmented control, and a lone "Add" spanning a 320px rail is a bar,
-            not a button. */}
+        {/* Two equal columns (`.rail-footer__row` is a 1fr 1fr grid): the selection's
+            verb leading, Add trailing, each button filling its cell. A lone button
+            takes the whole row. The old "hug the label, push Add right with an auto
+            margin" left a dead gap between them in the narrowest column on screen. */}
         {/* A phone's Add is its toolbar's primary action, one row below this. */}
         {!phone && (
-          <div style={{ minWidth: 0, marginLeft: 'auto' }}>
+          <div style={{ minWidth: 0 }}>
             <AddPiecesButton />
           </div>
         )}

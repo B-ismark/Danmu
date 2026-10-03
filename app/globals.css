@@ -1163,8 +1163,20 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   padding: 12px 16px; flex-shrink: 0;
   background: var(--paper-2);
 }
-.rail-footer__row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.rail-footer .ds-btn { max-width: 100%; }
+.rail-footer__row { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 8px; min-width: 0; }
+/* One button alone in the row (Add hidden on a phone) fills it rather than
+   sitting in half a row beside an empty cell. */
+.rail-footer__row > :only-child { grid-column: 1 / -1; }
+/* Every rail action fills the cell it is given and stands the same height, so the
+   footer and the empty panel read as one tidy stack. Add is the loud one. */
+.rail-footer .ds-btn { width: 100%; max-width: 100%; height: 44px; justify-content: center; }
+.empty-inspector__actions .ds-btn { width: 100%; max-width: 100%; height: 44px; justify-content: center; }
+.rail-footer .rail-cta { font-weight: 800; box-shadow: var(--shadow-soft); }
+.rail-footer .rail-cta:hover { box-shadow: var(--shadow-lift); }
+.rail-footer .rail-cta:active { box-shadow: var(--shadow-soft); }
+.empty-inspector__actions .rail-cta { font-weight: 800; box-shadow: var(--shadow-soft); }
+.empty-inspector__actions .rail-cta:hover { box-shadow: var(--shadow-lift); }
+.empty-inspector__actions .rail-cta:active { box-shadow: var(--shadow-soft); }
 .section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
 .section-title {
   font-family: var(--font-sans); font-size: var(--fs-caption); font-weight: 700;
@@ -1721,6 +1733,11 @@ textarea.field { border-radius: var(--r-2); }
 .split--glass .rail .ds-btn:not(.ds-btn--ghost):not(.pick-row) { box-shadow: var(--clay-raise); }
 .split--glass .rail .ds-btn:not(.ds-btn--ghost):not(.pick-row):hover { box-shadow: var(--clay-raise-hover); }
 .split--glass .rail .ds-btn:not(.ds-btn--ghost):not(.pick-row):active { box-shadow: var(--clay-well); }
+/* The primary Add keeps its raised shadow; the clay finish's white inset rim reads
+   as a stray highlight on solid moss. */
+.split--glass .rail .ds-btn.rail-cta:not(.ds-btn--ghost):not(.pick-row) { box-shadow: var(--shadow-soft); }
+.split--glass .rail .ds-btn.rail-cta:not(.ds-btn--ghost):not(.pick-row):hover { box-shadow: var(--shadow-lift); }
+.split--glass .rail .ds-btn.rail-cta:not(.ds-btn--ghost):not(.pick-row):active { box-shadow: var(--shadow-soft); }
 .split--glass .rail .toolbar,
 .split--glass .rail .field { box-shadow: var(--clay-well); }
 .split--glass .rail .field:focus,
