@@ -163,11 +163,12 @@ function candidateLabel(cand: LabelCandidate): string {
   return cand.name ?? categoryLabel(cand.category);
 }
 
-/** Measured, and the measurement is not this word's size. A model offered with no
- *  size at all (`label-suggest`'s standard-size offer) carries `margin: -Infinity`,
- *  which is "nothing was measured", not "it does not fit". */
+/** Measured, and the measurement is not this word's size. Neither kind of
+ *  `unmeasured` offer is a misfit, though both carry `margin: -Infinity`: one has no
+ *  size at all (`label-suggest`'s standard-size offer), the other runs past the edge
+ *  of the photo and its size is an estimate. Both mean "the camera could not say". */
 function misfit(cand: LabelCandidate): boolean {
-  return !!cand.detection.dimMM && cand.margin < 0;
+  return !cand.unmeasured && cand.margin < 0;
 }
 
 // Per-photo camera calibration: read what each photo can tell, and let
