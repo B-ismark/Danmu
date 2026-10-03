@@ -196,8 +196,10 @@ function KeyboardNav({
     function down(e: KeyboardEvent) {
       if (isTyping(e.target)) return;
       // A slider owns its arrows — the sun's handle, the rail's day track. Without
-      // this, stepping the clock from the keyboard also slid the camera sideways.
-      if ((e.target as Element | null)?.closest?.('[role="slider"], input[type="range"]')) return;
+      // this, stepping the clock from the keyboard also slid the camera sideways. So
+      // does a list or a menu walked with them (a Select, the scene's context menu):
+      // stepping through Units panned the room and let go of the view button.
+      if ((e.target as Element | null)?.closest?.('[role="slider"], input[type="range"], [role="combobox"], [role="listbox"], [role="menu"]')) return;
       const k = e.key.toLowerCase();
       if (!NAV_KEYS.has(k)) return;
       e.preventDefault(); // stop arrow-key page scroll
