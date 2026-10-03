@@ -3342,3 +3342,23 @@ measured. The blank drag picture is a browser surface no headless screenshot cap
 and the focus hand-off is tested in jsdom, not in a browser's own drag-and-drop.
 
 **Merged:** `e4e3f4e` (B-ismark/Danmu#261), not yet looked at.
+
+## A ceiling light lights the room from its own disc
+
+**Where:** the 3D room on **High** quality (View settings), on a real GPU, at night (the
+day strip at 22:00). Use a room with a ceiling light, such as the T-Shape preset. Select the
+light, raise Brightness to 8000 lm, then step it back down through 1600 lm. Repeat on Low.
+
+**What wrong looks like:** the room staying dark under the fitting while light gathers
+along the tops of the walls, around the fan, on the curtain rod or round the windows;
+the table under the light unlit; a pool of light that does not start at the disc. On
+Low, the room should look roughly the same as on High, minus the shadows.
+
+**Why eyes:** three's `SpotLight` starts one metre up, and the ceiling light's spot had
+no position of its own, so it emitted from about 0.9 m above the slab. On High the
+shadow-only ceiling hid it and light leaked in at the seams. `tests/part-light.test.ts`
+pins where the spot ends up. Under software WebGL, at 8000 lm on High, the light now
+pools on the table and floor with chair shadows. A real GPU's shadow-map precision at
+the wall seams is the part a headless run cannot vouch for.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

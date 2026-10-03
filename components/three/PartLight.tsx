@@ -24,7 +24,7 @@ import { useLayoutEffect, useRef } from 'react';
 import type { Object3D, SpotLight as ThreeSpotLight } from 'three';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
-import { lightAnchor, lightFor, type ScenePart } from '@/lib/scene-spec';
+import { lightAnchor, lightFor, type PartLight as LightSpec, type ScenePart } from '@/lib/scene-spec';
 import { candelaFromLumens, candelaFromLumensInCone, hexFromKelvin } from '@/lib/light-units';
 
 /**
@@ -68,6 +68,35 @@ function useCastsShadow(id: string): boolean {
   });
 }
 
+/** The props a shaded fixture's `<spotLight>` is built with — everything but the ref.
+ *
+ *  **`position` is here on purpose, and is the reason this is a function.** three's
+ *  `SpotLight` (like `DirectionalLight`) constructs itself at `Object3D.DEFAULT_UP`,
+ *  ONE METRE UP, so a spot with no position prop emits a metre above whatever group it
+ *  sits in. The ceiling light's did: its emitter hung ~0.9 m above the slab, the
+ *  shadow-only ceiling (`RoomShell`) occluded it, and on High the room stayed dark
+ *  under it while light leaked through the seams at the tops of the walls — brighter
+ *  the higher its lumens. On Low, with no shadow pass, it lit the room from above the
+ *  ceiling and looked roughly right, which is how it hid. `tests/part-light.test.ts`
+ *  applies these props to a real `SpotLight` and asserts where it ends up. */
+export function spotLightProps(spec: LightSpec & { coneDeg: number }, castShadow: boolean) {
+  return {
+    position: [0, 0, 0] as [number, number, number],
+    intensity: candelaFromLumensInCone(spec.lumens, spec.coneDeg) * LIGHT_SCALE,
+    color: hexFromKelvin(spec.kelvin),
+    angle: (Math.min(179, spec.coneDeg) / 2) * (Math.PI / 180),
+    penumbra: 0.6,
+    decay: 2,
+    castShadow,
+    'shadow-mapSize-width': 1024,
+    'shadow-mapSize-height': 1024,
+    'shadow-bias': -0.0005,
+    'shadow-normalBias': 0.02,
+    'shadow-camera-near': 0.1,
+    'shadow-camera-far': 12,
+  };
+}
+
 export function PartLight({ part }: { part: ScenePart }) {
   const quality = useStudio((s) => s.quality);
   const casts = useCastsShadow(part.id);
@@ -90,24 +119,9 @@ export function PartLight({ part }: { part: ScenePart }) {
   const hi = quality === 'high';
 
   if (spec.coneDeg !== undefined) {
-    const intensity = candelaFromLumensInCone(spec.lumens, spec.coneDeg) * LIGHT_SCALE;
     return (
       <group position={at}>
-        <spotLight
-          ref={spot}
-          intensity={intensity}
-          color={color}
-          angle={(Math.min(179, spec.coneDeg) / 2) * (Math.PI / 180)}
-          penumbra={0.6}
-          decay={2}
-          castShadow={hi && casts}
-          shadow-mapSize-width={1024}
-          shadow-mapSize-height={1024}
-          shadow-bias={-0.0005}
-          shadow-normalBias={0.02}
-          shadow-camera-near={0.1}
-          shadow-camera-far={12}
-        />
+        <spotLight ref={spot} {...spotLightProps({ ...spec, coneDeg: spec.coneDeg }, hi && casts)} />
         {/* Straight down. Never rendered — it exists to be aimed at. */}
         <object3D ref={target} position={[0, -3, 0]} />
       </group>
