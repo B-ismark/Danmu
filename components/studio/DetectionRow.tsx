@@ -114,6 +114,8 @@ export function DetectionRow({
   onConfirmRepeat,
 }: {
   d: Detection;
+  /** Whether this row's PIECE is in the room. For a linked row that is the tick of the
+   *  row it is linked to (`pieceRow`), not its own, which is always off. */
   confirmed: boolean;
   /** The row this one is probably a second sighting of — see
    *  lib/repeat-sightings.ts. Null for a piece in its own right. */
@@ -171,7 +173,19 @@ export function DetectionRow({
   // the Library names it. It said the category, so a row renamed "Shoe rack" still
   // read "Shelf" while the studio was in fact going to build the shoe rack, and a
   // rename looked like it changed nothing but the word.
-  const modelName = PART_LIBRARY.find((r) => r.shape === sceneShapeFor(d.category, label, d.shape))?.label ?? categoryLabel(d.category);
+  // A linked row is never built, so the model it names is the one its piece is built
+  // as: the row it is linked to. Naming its own would show a model the room never gets.
+  const piece = sameAs ?? d;
+  const modelName =
+    PART_LIBRARY.find((r) => r.shape === sceneShapeFor(piece.category, cleanLabelOf(piece), piece.shape))?.label ??
+    categoryLabel(piece.category);
+  const keepTitle = sameAs
+    ? confirmed
+      ? `Kept: built once, as the ${inSentence(cleanLabelOf(sameAs))} on ${slotLabel(sameAs.slot)}. Press to leave it out`
+      : `Left out, with the ${inSentence(cleanLabelOf(sameAs))} on ${slotLabel(sameAs.slot)}. Press to put it back`
+    : confirmed
+      ? 'Kept: this piece goes into your room at a typical size'
+      : 'Not kept: it stays on this list and out of your room';
   return (
     // Hover AND focus drive the same highlight, so a keyboard user gets the
     // row↔photo link too. onFocus/onBlur bubble from the child buttons.
@@ -201,11 +215,7 @@ export function DetectionRow({
       <IconButton
         icon={confirmed ? 'check' : 'plus'}
         label={`Keep ${label}`}
-        title={
-          confirmed
-            ? 'Kept: this piece goes into your room at a typical size'
-            : 'Not kept: it stays on this list and out of your room'
-        }
+        title={keepTitle}
         active={confirmed}
         onClick={onToggle}
         variant="outline"
@@ -256,12 +266,15 @@ export function DetectionRow({
             piece that never appears is worse than a duplicate. Wraps rather than
             clips: the sentence is as long as two piece names make it. */}
         {/* Settled by the person: this row is another view of a piece already on
-            the list, so it is not built. Unlink makes it its own piece again. */}
+            the list, so it is not built. Its tick is that piece's tick, and the line says
+            so too, so the state is readable without going back to the other wall.
+            Unlink makes it its own piece again. */}
         {sameAs && (
           <div className="t-hint" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 3, lineHeight: 1.45 }}>
             <Icon name="link" size={11} style={{ flex: '0 0 auto' }} />
             <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
               Same {inSentence(cleanLabelOf(sameAs))} as on {slotLabel(sameAs.slot)}
+              {confirmed ? ' · kept' : ' · left out'}
             </span>
             <button
               onClick={onUnlink}
@@ -301,7 +314,7 @@ export function DetectionRow({
         )}
         {alsoSeenOn.length > 0 && (
           <RowNote icon="link">
-            Also seen on {wallList(alsoSeenOn)}. Built once
+            Also seen on {wallList(alsoSeenOn)}{confirmed ? '. Built once' : ''}
           </RowNote>
         )}
         {!sameAs && linkOptions.length > 0 && (
