@@ -2987,6 +2987,22 @@ export function normalizeStoredParts(parts: ScenePart[]): ScenePart[] {
   });
 }
 
+/** The pieces a room OPENS with: its saved scene when it has one, and otherwise the room
+ *  built from its record — the starter arrangement, or its detections — which is what
+ *  `RoomSync` puts on screen (`loadFromRoom`, then the saved scene over it).
+ *
+ *  The rooms list reads this too. It counted the saved scene alone, and a room nobody
+ *  has edited has none — the starter is rebuilt on every open, never written
+ *  (`lib/room-start.ts`) — so a card read "0 pieces" over an empty drawing for a room
+ *  that opened with twelve. Writing the build on first open would have closed it the
+ *  other way and taken *Re-scan* away from every photographed room for good, because a
+ *  saved scene is preferred over the detections forever (`RoomSync`'s pin note).
+ *
+ *  An empty array is a room the user emptied on purpose and stays empty. */
+export function partsOnOpen(room: RoomData, saved: ScenePart[] | undefined): ScenePart[] {
+  return Array.isArray(saved) ? normalizeStoredParts(saved) : buildSceneFromRoom(room);
+}
+
 /** How high a wall- or ceiling-mounted piece hangs in a room of this height.
  *
  *  `groundY` owns the canonical height for the shape; this adds the room's own say —

@@ -2782,3 +2782,34 @@ gets its own one and paints only in the row's colour, not that it reads as that 
 at 18 px. Walked once in headless Chromium at 1280 and 1100.
 
 **Merged:** `d70b1cc` (B-ismark/Danmu#244), not yet looked at.
+
+## The day folds to a sun until you reach for it
+
+**Where:** any room's 3D Model tab, the sun under the tool row. Rest the pointer
+elsewhere, then bring it towards the sun; drag it along the arc; move off. Tab to it and
+use the arrows. On a phone: tap it, drag, tap the room.
+
+**What wrong looks like:** the arc flickering open and shut as the pointer crosses the
+gap between the disc and the arc; a drag whose handle trails the finger (the glide is
+meant for opening, not for scrubbing); the arc folding while the arrows are still moving
+the clock; a press on the sky just under the open arc's top moving the clock instead of
+the camera; on a phone, the first tap jumping the day to noon.
+
+**Why eyes:** the fold's timing and the glide are a feel; the rules are tested in jsdom
+with every element measuring the same box. Walked once in headless Chromium at 1280.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## A room card counts the furniture the room opens with
+
+**Where:** **New room** → pick a footprint → **Start decorating**, then back to **Rooms**.
+Also an L and a U, and a room from a photo that has not been edited.
+
+**What wrong looks like:** "0 pieces" or *Empty room* on a card whose room opens
+furnished; a count that differs from the Catalog's rows; a drawing whose furniture sits
+outside the walls; the grid arriving noticeably later with many rooms.
+
+**Why eyes:** the count is tested against what the studio builds; what a dozen built
+rooms costs the list's first paint is the browser's. Walked once in headless Chromium.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
