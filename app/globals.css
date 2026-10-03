@@ -1873,45 +1873,234 @@ textarea.field { border-radius: var(--r-2); }
   display: grid; gap: 8px;
   grid-template-columns: repeat(auto-fit, minmax(min(var(--field-min, 64px), 100%), 1fr));
 }
-/* The shape picker's options (app/onboarding/layout-pick): five in one row on a
-   laptop, so the page fits a screen; fewer across as the column narrows. `auto-fit`,
-   not `auto-fill`: a fixed five in an 1100px column would otherwise keep an empty
-   sixth track and stop short of the drawing's right edge below. */
-.shape-options {
-  display: grid; gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+/* The steps of the photo route (`FlowStepper`): Shape, Photos, Furniture, Room.
+   Numbered dots joined by short rules, centred over the page; the step you are on
+   is inked, the ones behind you moss with a tick. Wraps rather than clipping. */
+.flow-stepper {
+  display: flex; justify-content: center; align-items: center; flex-wrap: wrap;
+  gap: 8px 10px; list-style: none; margin: 0 auto 28px; padding: 0;
 }
+.flow-stepper__step {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--fs-body); font-weight: 600; color: var(--ink-3);
+}
+.flow-stepper__step[data-state="on"], .flow-stepper__step[data-state="done"] { color: var(--ink); }
+.flow-stepper__dot {
+  inline-size: 24px; block-size: 24px; flex: none; border-radius: var(--r-full);
+  display: grid; place-items: center; font-size: var(--fs-caption);
+  border: 1.5px solid var(--edge);
+}
+.flow-stepper__step[data-state="on"] .flow-stepper__dot { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.flow-stepper__step[data-state="done"] .flow-stepper__dot { background: var(--accent-ink); border-color: var(--accent-ink); color: var(--on-accent); }
+.flow-stepper__rule { inline-size: 30px; block-size: 1.5px; background: var(--hairline-strong); }
+/* On a phone the four names do not fit one line, so only the current one is
+   shown; the others stay in the accessible name (clipped, not removed). */
+@media (max-width: 479px) {
+  .flow-stepper__rule { inline-size: 16px; }
+  .flow-stepper__step:not([data-state="on"]) .flow-stepper__label {
+    position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}
+
+/* The New room page (app/onboarding/layout-pick): the shapes on the left, and one
+   card on the right for the chosen shape — its drawing, its size and the two ways
+   on — kept in view while the shapes scroll. One column below 900px, where the
+   card follows the shapes. */
+.pick {
+  display: grid; gap: 36px; align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+}
+@media (max-width: 899px) { .pick { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+.pick__title { font-size: var(--fs-hero); font-weight: 300; line-height: 1.05; letter-spacing: -0.02em; }
+.pick__lede { margin: 8px 0 22px; color: var(--ink-3); font-size: var(--fs-lead); }
+.pick-side {
+  display: flex; flex-direction: column; gap: 16px; padding: 20px;
+  background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft);
+  position: sticky; top: 16px;
+}
+@media (max-width: 899px) { .pick-side { position: static; } }
+.pick-side figure { margin: 0; }
+.pick-side__plan { aspect-ratio: 4 / 3; background: var(--paper-2); border-radius: var(--r-2); overflow: hidden; }
+.pick-side__caption { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; font-variant-numeric: tabular-nums; }
+.pick-side__name { font-family: var(--font-display); font-size: var(--fs-title); line-height: 1.15; color: var(--ink); }
+/* A stack in the card at every width: two 360px-wide buttons side by side do not
+   fit a 320px column, and the row would wrap into an uneven pair. */
+.pick-side__actions { display: grid; margin-top: 16px; }
+
+/* The capture screen (app/onboarding/capture): the step tracker over a guide
+   column — the how-to, the room's plan with the next wall lit, the phone height —
+   beside the photos. One column under 860px, and under 1100px while the camera
+   rail takes its 360px on the right. */
+.capture-page { inline-size: 100%; max-inline-size: var(--measure-page); margin-inline: auto; padding: 24px 16px 32px; }
+.capture-layout {
+  display: grid; gap: 16px 32px; align-items: start;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas: "head photos" "guide photos";
+}
+.capture-head { grid-area: head; }
+.capture-photos { grid-area: photos; display: flex; flex-direction: column; gap: 12px; min-inline-size: 0; }
+.capture-guide { grid-area: guide; }
+@media (max-width: 859px) {
+  .capture-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "head" "photos" "guide"; gap: 20px; }
+}
+@media (max-width: 1099px) {
+  .capture-layout--camera { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "head" "photos" "guide"; gap: 20px; }
+}
+.capture-guide { display: flex; flex-direction: column; gap: 16px; min-inline-size: 0; }
+.capture-guide__title { font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
+.capture-guide__lede { margin: 6px 0 0; color: var(--ink-3); font-size: var(--fs-body); line-height: 1.5; }
+.capture-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: capture-step; }
+.capture-steps > li {
+  display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start;
+  font-size: var(--fs-body); line-height: 1.45; color: var(--ink); counter-increment: capture-step;
+}
+.capture-steps > li::before {
+  content: counter(capture-step); inline-size: 24px; block-size: 24px; border-radius: var(--r-full);
+  display: grid; place-items: center; font-size: var(--fs-caption); font-weight: 700;
+  background: var(--paper-2); color: var(--ink-2);
+}
+.capture-card {
+  margin: 0; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-3);
+}
+.capture-plan { display: block; inline-size: 100%; block-size: auto; max-block-size: 200px; background: var(--paper-2); border-radius: var(--r-2); }
+/* Walls still to shoot in --ink-3, not the outline's --ink-4: a mark a person reads
+   needs 3:1 against the plan, and the outline is decoration. */
+.capture-plan__wall line { stroke: var(--ink-3); stroke-width: 3; stroke-linecap: round; }
+.capture-plan__wall circle { fill: var(--paper); stroke: var(--ink-3); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.capture-plan__wall text { fill: var(--ink-3); font-family: var(--font-sans); font-weight: 700; }
+.capture-plan__wall[data-state="done"] line { stroke: var(--ink-2); }
+.capture-plan__wall[data-state="done"] circle { fill: var(--ink); stroke: var(--ink); }
+.capture-plan__wall[data-state="done"] text { fill: var(--on-ink); }
+.capture-plan__wall[data-state="next"] line { stroke: var(--accent); stroke-width: 5; }
+.capture-plan__wall[data-state="next"] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
+.capture-plan__wall[data-state="next"] text { fill: var(--on-accent); }
+.capture-height { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+.capture-height__text { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; font-size: var(--fs-body); }
+.capture-height__field { display: flex; align-items: center; gap: 6px; }
+
+/* ── Check furniture, in the Flow design ───────────────────────────────────────
+   The steps and a serif title over the review, as on the photo screen before it;
+   the wall photos as tabs; the privacy line as a quiet pill. The pinned photo and
+   the list's split below are unchanged (`.scan-photo-pane`, `.scan-split`). */
+.scan-head { padding: 20px 16px 12px; display: flex; flex-direction: column; gap: 12px; }
+.scan-head .flow-stepper { margin-bottom: 8px; }
+.scan-head__text { max-inline-size: 68ch; }
+.scan-head__title { font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
+.scan-head__lede { margin: 6px 0 0; color: var(--ink-3); font-size: var(--fs-body); line-height: 1.5; }
+.scan-download {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start;
+  padding: 14px 16px; max-inline-size: 68ch; border-radius: var(--r-3);
+}
+.scan-download__icon {
+  display: grid; place-items: center; inline-size: 36px; block-size: 36px; border-radius: var(--r-full);
+  background: var(--accent-tint); color: var(--accent-text);
+}
+.scan-download__body { display: flex; flex-direction: column; gap: 10px; min-inline-size: 0; }
+.scan-download__title { margin: 0; font-family: var(--font-sans); font-size: var(--fs-lead); font-weight: 700; }
+.scan-download__body > p { margin: 0; font-size: var(--fs-small); line-height: 1.5; color: var(--ink-2); }
+.scan-privacy {
+  display: inline-flex; align-items: flex-start; gap: 8px; align-self: flex-start;
+  margin: 0; max-inline-size: 68ch; padding: 7px 14px; border-radius: var(--r-full);
+  background: var(--accent-tint); color: var(--accent-text); font-size: var(--fs-small); line-height: 1.5;
+}
+.scan-privacy svg { flex: none; margin-block-start: 3px; }
+.scan-privacy[data-sends] { background: var(--paper-2); color: var(--ink-2); border-radius: var(--r-2); }
+.scan-walls { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px 0; flex-shrink: 0; }
+.scan-walls__tab {
+  /* Share the row, up to a button's width: two walls at 1920 were 751px each for
+     six characters. */
+  flex: 1 1 130px; max-inline-size: 240px; min-block-size: 36px;
+  display: inline-flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px;
+  padding: 6px 14px; border: 1px solid var(--edge); border-radius: var(--r-full);
+  background: var(--paper); color: var(--ink-2); font: inherit; font-size: var(--fs-small); font-weight: 700;
+  cursor: pointer; transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.scan-walls__tab:hover { background: var(--paper-2); }
+/* The app's focus ring, in a rule of its own: the shared list squares the corners. */
+.scan-walls__tab:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.scan-walls__tab[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.scan-walls__count {
+  min-inline-size: 20px; padding: 0 6px; border-radius: var(--r-full); text-align: center;
+  background: var(--paper-3); color: var(--ink); font-size: var(--fs-caption); font-weight: 700; line-height: 18px;
+}
+/* --accent-ink, not --accent: the count is type, and white on --accent is 3.91:1. */
+.scan-walls__tab[aria-pressed="true"] .scan-walls__count { background: var(--accent-ink); color: var(--on-accent); }
+.scan-hand {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex-shrink: 0;
+  margin: 0 16px 12px; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
+}
+
+/* ── Building your room (components/ui/BuildingRoom.tsx) ──────────────────────
+   The photo route's last screen, up while the review is written into the room. The
+   illustrated room fills piece by piece; under reduced motion every piece is there
+   at once (the global reduced-motion block zeroes the stagger too). */
+.build-screen { min-block-size: 100dvh; padding: 24px 16px 32px; background: var(--paper); }
+.build-screen__layout {
+  display: grid; gap: 24px 40px; align-items: center; margin-inline: auto;
+  max-inline-size: var(--measure-page); grid-template-columns: minmax(0, 1.2fr) minmax(260px, 1fr);
+}
+@media (max-width: 799px) { .build-screen__layout { grid-template-columns: minmax(0, 1fr); } }
+.build-screen__art { aspect-ratio: 4 / 3; max-inline-size: 640px; inline-size: 100%; justify-self: center; }
+.build-screen__side { display: flex; flex-direction: column; gap: 14px; max-inline-size: 44ch; }
+.build-screen__title { font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
+.build-screen__lede { margin: 0; font-size: var(--fs-lead); color: var(--ink-2); }
+.build-screen__stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; }
+.build-screen__stats > div {
+  flex: 1 1 90px; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
+}
+.build-screen__stats dt { font-size: var(--fs-caption); font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.build-screen__stats dd { margin: 2px 0 0; font-size: var(--fs-lead); font-weight: 700; color: var(--ink); }
+.build-screen__note { margin: 0; font-size: var(--fs-small); color: var(--ink-3); line-height: 1.5; }
+.iso-room__piece {
+  animation: iso-settle var(--dur-slow) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--dur-base));
+}
+@keyframes iso-settle { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+
+/* The shape picker's options: as many across as the column takes at ~170px, so
+   three in the laptop's left column and two on a phone. `auto-fit`, not
+   `auto-fill`: an empty extra track would stop the row short of the column's
+   right edge. */
+.shape-options {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+}
+/* Two across on a phone, rather than five full-width cards running the page long. */
+@media (max-width: 599px) { .shape-options { grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr)); gap: 10px; } }
 .shape-option {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 10px 12px; text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 10px 14px; text-align: left; cursor: pointer; color: var(--ink);
   border: 1px solid var(--edge); border-radius: var(--r-3); background: var(--paper);
   transition: border-color var(--dur-quick) var(--ease-out), background var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
 }
-.shape-option:hover { background: var(--paper-2); }
+.shape-option:hover { background: var(--paper-0); }
 /* Its own ring rather than the shared one, which also sets a small radius and would
    square the tile's corners off while it has focus. */
 .shape-option:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 /* The chosen one reads 2px through an inset ring, so picking does not nudge the
    tile's contents by the extra pixel of border. */
 .shape-option[data-active] {
-  border-color: var(--accent); background: var(--accent-tint);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent);
 }
-/* A shape option's name and floor area. Wraps rather than squeezing: at a phone's
-   two ~150px columns an area in square feet ("241.1 ft²") and "Open Plan" do not
-   share a line, and a baseline row that cannot wrap prints one over the other. */
-.shape-option__row {
-  display: flex; justify-content: space-between; align-items: baseline;
-  gap: 2px 8px; flex-wrap: wrap;
+.shape-option__thumb {
+  display: grid; place-items: center; aspect-ratio: 16 / 9; margin-bottom: 8px;
+  background: var(--paper-2); border-radius: var(--r-2);
 }
+.shape-option__thumb > svg { block-size: 80%; inline-size: auto; max-inline-size: 90%; display: block; }
+.shape-option__name { font-size: var(--fs-lead); font-weight: 700; }
+.shape-option[data-active] .shape-option__name { color: var(--accent-text); }
+.shape-option__size { font-size: var(--fs-caption); color: var(--ink-3); font-variant-numeric: tabular-nums; }
 /* The shape picker's room size (app/onboarding/layout-pick): optional, so it
    reads as a quiet form beside the drawing rather than a step of its own. */
 .size-entry__head {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
 }
-.size-entry__title { margin: 0; font-size: var(--fs-body); font-weight: 700; color: var(--ink); }
-.size-entry__title .t-hint { font-weight: 600; }
+.size-entry__title { margin: 0; font-family: var(--font-sans); font-size: var(--fs-caption); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.size-entry__title .t-hint { font-weight: 600; letter-spacing: 0; text-transform: none; }
 .size-entry__field { display: flex; flex-direction: column; gap: 4px; }
 .size-entry__field > .t-note { font-weight: 600; }
 /* Always in the tree (it is the live region), so it takes space only when it speaks. */
@@ -2066,6 +2255,9 @@ textarea.field { border-radius: var(--r-2); }
     scroll-behavior: auto !important;
   }
   .ds-btn:hover, .ds-btn:active, .ds-card:hover, .start-card:hover { transform: none !important; }
+  /* The duration above is cut, the stagger is not: without this the Building screen's
+     pieces wait their turn invisibly, on a screen that is up only as long as the save. */
+  .iso-room__piece { animation-delay: 0s !important; }
 }
 
 

@@ -21,7 +21,7 @@ import {
 import { Icon } from '@/components/ui/Icon';
 import { NumberField, fieldMinWidth } from '@/components/ui/NumberField';
 import { Select } from '@/components/ui/Select';
-import { StepHeader } from '@/components/ui/primitives';
+import { FlowStepper } from '@/components/ui/FlowStepper';
 import { BackButton, DocShell } from '@/components/ui/DocShell';
 import { ROOM_PRESETS as PRESETS, createPresetRoom, typicalOf } from '@/lib/room-presets';
 
@@ -207,7 +207,9 @@ export default function LayoutPickPage() {
       disabled={saving !== null}
       className={`ds-btn ds-btn--lg ds-btn--block-compact${photoFirst ? '' : ' ds-btn--accent'}`}
     >
-      {saving === 'model' ? 'Creating your room…' : (<>Start decorating<Icon name="arrow-right" size={14} color={photoFirst ? undefined : 'var(--on-accent)'} /></>)}
+      {/* Named for the detour it skips when the page arrived for photos, so the
+          second button does not read as a second way to do the same thing. */}
+      {saving === 'model' ? 'Creating your room…' : photoFirst ? 'Skip photos and start decorating' : (<>Start decorating<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
     </button>
   );
   const photoButton = (
@@ -217,7 +219,7 @@ export default function LayoutPickPage() {
       className={`ds-btn ds-btn--lg ds-btn--block-compact${photoFirst ? ' ds-btn--accent' : ''}`}
     >
       <Icon name="camera" size={14} color={photoFirst ? 'var(--on-accent)' : undefined} />
-      {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first'}
+      {saving === 'capture' ? 'Creating your room…' : photoFirst ? 'Continue to photos' : 'Photograph my real room first'}
     </button>
   );
 
@@ -235,12 +237,15 @@ export default function LayoutPickPage() {
     >
       {/* No `page-pad` here: DocShell's hero variant already applies it AND
           already centres its measured column. */}
-      {/* One screen, no scroll on a laptop: the shapes in a row across the top, then
-          the drawing beside the size and the two ways on. The shapes used to be a
-          two-column stack beside the drawing, which ran the page to ~900px with the
-          buttons under the fold and the drawing's column half empty. */}
-      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <StepHeader title="Which footprint is closest to your room?" />
+      {photoFirst && <FlowStepper current="Shape" />}
+      {/* Two columns: the shapes to choose from on the left, and on the right one
+          card holding everything about the chosen one — its drawing, its size and
+          the two ways on — so the buttons sit beside the choice they act on rather
+          than under the fold. Stacks to one column on a narrow window. */}
+      <div className="pick">
+        <div className="pick__main">
+          <h1 className="pick__title">Which footprint is closest to your room?</h1>
+          <p className="pick__lede">You can drag the walls to the exact size later.</p>
         <div role="radiogroup" aria-label="Room footprint" className="shape-options">
           {layouts.map((l, i) => {
             const active = sel === l.id;
@@ -267,33 +272,31 @@ export default function LayoutPickPage() {
                 className="shape-option"
                 data-active={active || undefined}
               >
-                <svg viewBox="0 0 240 180" style={{ width: '100%', height: 44 }} aria-hidden="true">
-                  <path
-                    d={l.path}
-                    fill={active ? 'var(--accent)' : 'var(--ink-4)'}
-                    fillOpacity={active ? 0.25 : 0.4}
-                    stroke={active ? 'var(--accent)' : 'var(--ink-2)'}
-                    strokeWidth="2"
-                  />
-                </svg>
-                <div className="shape-option__row">
-                  <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: active ? 'var(--accent-text)' : 'var(--ink)' }}>{l.name}</span>
-                  <span className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>{l.areaText}</span>
-                </div>
-                <div className="t-small">{l.starter}</div>
+                <span className="shape-option__thumb" aria-hidden="true">
+                  <svg viewBox="0 0 240 180">
+                    <path
+                      d={l.path}
+                      fill={active ? 'var(--accent-tint)' : 'var(--paper)'}
+                      stroke={active ? 'var(--accent)' : 'var(--ink-2)'}
+                      strokeWidth="2"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </svg>
+                </span>
+                <span className="shape-option__name">{l.name}</span>
+                <span className="t-small">{l.starter}</span>
+                <span className="shape-option__size">
+                  {formatLength(l.size.width * 1000, dimUnit)} × {formatLength(l.size.depth * 1000, dimUnit)} · {l.areaText}
+                </span>
               </button>
             );
           })}
         </div>
+        </div>
 
-        {/* .auto-grid--wide collapses to one column on a phone. */}
-        <div className="auto-grid auto-grid--wide" style={{ gap: 28, alignItems: 'start' }}>
-          {/* PREVIEW */}
+        <section className="pick-side" aria-label={`${layout.name}, the chosen footprint`}>
           <figure>
-            <div
-              className="ds-crosshair-bg"
-              style={{ aspectRatio: '16/10', position: 'relative', borderRadius: 'var(--r-3)', overflow: 'hidden', border: '1px solid var(--hairline)' }}
-            >
+            <div className="pick-side__plan">
               <svg ref={planRef} viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} footprint, ${wText} by ${dText}, ${layout.areaText} of floor`}>
                 <path
                   d={layout.path}
@@ -305,9 +308,12 @@ export default function LayoutPickPage() {
                 {screen && <PlanDimensions box={layout.box} width={wText} depth={dText} screen={screen} />}
               </svg>
             </div>
-            <figcaption className="t-small" style={{ marginTop: 8 }}>
-              {layout.name} · <span className="mono" style={{ whiteSpace: 'nowrap' }}>{wText} × {dText}</span> ·{' '}
-              <span className="mono" style={{ whiteSpace: 'nowrap' }}>{layout.areaText}</span>
+            <figcaption className="pick-side__caption">
+              <span className="pick-side__name">{layout.name}</span>
+              <span className="t-small">
+                <span style={{ whiteSpace: 'nowrap' }}>{wText} × {dText}</span> · floor area{' '}
+                <span style={{ whiteSpace: 'nowrap' }}>{layout.areaText}</span>
+              </span>
             </figcaption>
           </figure>
 
@@ -370,7 +376,9 @@ export default function LayoutPickPage() {
               </div>
               <div className="size-entry__foot">
                 <p className="t-note">
-                  {entry ? 'Wall to wall, at the widest point.' : null}
+                  {/* What leaving the boxes alone means, said before anyone asks —
+                      the studio marks such a room rough (≈) until a size is given. */}
+                  {entry ? 'Wall to wall, at the widest point.' : 'Left as is, the room is marked rough (≈) until you confirm its size.'}
                 </p>
                 {entry && (
                   <button type="button" onClick={resetSize} className="ds-btn ds-btn--sm ds-btn--ghost size-entry__reset">
@@ -401,7 +409,7 @@ export default function LayoutPickPage() {
 
             {/* The order is the DOM's, not a CSS reversal, so Tab walks them in the
                 order they read — and a phone's stacked grid gets the same lead. */}
-            <div className="action-row" style={{ marginTop: 20 }}>
+            <div className="action-row pick-side__actions">
               {photoFirst ? (
                 <>
                   {photoButton}
@@ -415,7 +423,7 @@ export default function LayoutPickPage() {
               )}
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </DocShell>
   );

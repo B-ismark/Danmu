@@ -6,6 +6,8 @@
 // is a brightness filter on the two side faces rather than a second colour per
 // piece, which is what keeps it to one token each.
 
+import type { CSSProperties } from 'react';
+
 export type IsoPiece = {
   /** Footprint in the room's own units, from the far corner. */
   x: number;
@@ -25,7 +27,9 @@ const VH = 420;
 const MARGIN = 26;
 const COS30 = 0.866;
 
-export function IsoRoom({ room, pieces }: { room: IsoRoomSize; pieces: IsoPiece[] }) {
+/** `settle`: each piece drops into place in turn (`.iso-room__piece` in globals.css),
+ *  for the screen that shows while a room is being built. */
+export function IsoRoom({ room, pieces, settle = false }: { room: IsoRoomSize; pieces: IsoPiece[]; settle?: boolean }) {
   const { w: W, d: D, h: H } = room;
   const k = Math.min((VW - 2 * MARGIN) / ((W + D) * COS30), (VH - 2 * MARGIN) / ((W + D) * 0.5 + H));
   const ox = MARGIN + D * COS30 * k + (VW - 2 * MARGIN - (W + D) * COS30 * k) / 2;
@@ -48,7 +52,7 @@ export function IsoRoom({ room, pieces }: { room: IsoRoomSize; pieces: IsoPiece[
         const y2 = p.y + p.d;
         const fill = `var(--art-${p.tone})`;
         return (
-          <g key={i}>
+          <g key={i} className={settle ? 'iso-room__piece' : undefined} style={settle ? ({ '--i': i } as CSSProperties) : undefined}>
             <polygon points={pts(P(p.x, p.y, z1), P(x2, p.y, z1), P(x2, y2, z1), P(p.x, y2, z1))} fill={fill} />
             {!p.flat && (
               <>

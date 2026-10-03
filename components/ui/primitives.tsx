@@ -340,43 +340,6 @@ export function Spinner({ size = 12, style }: { size?: number; style?: CSSProper
   return <span className="ds-spinner" aria-hidden="true" style={{ width: size, height: size, ...style }} />;
 }
 
-// The title is a real <h1>: these are separate routes, and without a heading
-// element the page has no document outline *and* the display-serif rule in
-// globals.css never fires — which is why Fraunces was absent from onboarding.
-// `kicker` is free text rather than a zero-padded "Step 01 / 04": the mono
-// tabular counter read as a drafting form, and it over-promised a fixed
-// four-step sequence the primary path skips.
-export function StepHeader({
-  kicker,
-  title,
-  subtitle,
-}: {
-  kicker?: string;
-  title: string;
-  subtitle?: string;
-}) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {kicker && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="ds-label" style={{ color: 'var(--accent-text)' }}>
-            {kicker}
-          </span>
-          <div style={{ flex: 1, height: 1, background: 'var(--hairline)' }} />
-        </div>
-      )}
-      <h1 style={{ fontSize: 'var(--fs-title)', lineHeight: 1.15, color: 'var(--ink)' }}>{title}</h1>
-      {subtitle && (
-        // A <p>, so the prose measure applies (`p, li` in globals.css): as a <div> it
-        // ran one 952px line at 1920. Nothing inline here, which would override it.
-        <p className="t-body" style={{ lineHeight: 1.45 }}>
-          {subtitle}
-        </p>
-      )}
-    </div>
-  );
-}
-
 export function Toggle({ on, onClick, label }: { on: boolean; onClick?: () => void; label?: string }) {
   return (
     <button

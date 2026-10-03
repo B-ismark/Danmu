@@ -71,10 +71,13 @@ describe('the footprint page', () => {
     window.history.replaceState(null, '', '/onboarding/layout-pick?then=photos');
     try {
       render(<LayoutPickPage />);
-      const photo = await screen.findByRole('button', { name: /^Photograph my real room first/ });
-      await waitFor(() => expect(photo.className).toContain('ds-btn--accent'));
-      const start = screen.getByRole('button', { name: /^Start decorating/ });
+      const photo = await screen.findByRole('button', { name: /^Continue to photos/ });
+      expect(photo.className).toContain('ds-btn--accent');
+      const start = screen.getByRole('button', { name: /^Skip photos and start decorating/ });
       expect(start.className).not.toContain('ds-btn--accent');
+      // The route has its steps above it, and only this route.
+      expect(screen.getByRole('list', { name: 'Steps to your room' })).toBeTruthy();
+      expect(document.querySelector('[aria-current="step"]')?.textContent).toMatch(/Shape/);
       // First in the DOM, so Tab and a screen reader meet it first too — not a
       // visual reorder over an unchanged source order.
       expect(photo.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -92,6 +95,8 @@ describe('the footprint page', () => {
     const start = screen.getByRole('button', { name: /^Start decorating/ });
     expect(start.className).toContain('ds-btn--accent');
     expect(start.compareDocumentPosition(photo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Most people who pick a shape go straight to the studio: no four-step promise.
+    expect(screen.queryByRole('list', { name: 'Steps to your room' })).toBeNull();
   });
 
   it('says double-click to a mouse, and not to a finger', () => {
