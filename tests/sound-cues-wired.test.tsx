@@ -81,7 +81,12 @@ describe('SoundCues', () => {
   });
 
   it('glides for a scrubbed sun, and not for a room opening at the clock', async () => {
-    useStudio.setState({ lighting: 'daylight', hour: 15 });
+    // The store opens on the wall clock, so setting 15:00 is itself a glide when the
+    // suite runs within an hour and a half of it. Count from the scrub only.
+    await act(async () => {
+      useStudio.setState({ lighting: 'daylight', hour: 15 });
+    });
+    glides = 0;
     await act(async () => {
       useStudio.getState().setHour(15.5);
     });
