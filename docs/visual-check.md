@@ -2798,7 +2798,7 @@ the camera; on a phone, the first tap jumping the day to noon.
 **Why eyes:** the fold's timing and the glide are a feel; the rules are tested in jsdom
 with every element measuring the same box. Walked once in headless Chromium at 1280.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `513f1e5` (B-ismark/Danmu#246), not yet looked at.
 
 ## A room card counts the furniture the room opens with
 
@@ -2812,4 +2812,4 @@ outside the walls; the grid arriving noticeably later with many rooms.
 **Why eyes:** the count is tested against what the studio builds; what a dozen built
 rooms costs the list's first paint is the browser's. Walked once in headless Chromium.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `513f1e5` (B-ismark/Danmu#246), not yet looked at.
