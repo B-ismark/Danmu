@@ -31,7 +31,6 @@
 // suite (`tests/repeat-sightings.test.ts`). Here it would only blur which assumption
 // an error came from.
 
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { toRecord } from '@/lib/detection-record';
@@ -39,6 +38,7 @@ import { buildSceneFromRoom, defaultDepthFor, type Category, type Shape } from '
 import { anchorFor, CURTAIN_STANDOFF } from '@/lib/physics';
 import { calForPhoto, calFromHfov, wallFrame, wallRowAtHeight, type CameraCal } from '@/lib/photo-geometry';
 import { footprintForLayout } from '@/lib/footprint';
+import { PRESET_HEIGHT, presetById } from '@/lib/room-presets';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot, RoomData } from '@/lib/storage';
 import { ALONG, bboxOfWallSolid, extent, floorBoxCorners, framedExtent, project, type Box } from './helpers/project';
@@ -58,17 +58,14 @@ const trueCal = (slot: CaptureSlot): CameraCal =>
 
 // ── The room the app assumes when the size step is skipped ──────────────────
 //
-// Read out of the page rather than typed again here, so a change to what the skip
-// assumes moves this measurement with it.
-const layoutPick = readFileSync('app/onboarding/layout-pick/page.tsx', 'utf8');
-const rectPreset = layoutPick.match(/id: 'rect' as const,[^}]*width: ([\d.]+), depth: ([\d.]+)/);
-const presetHeight = layoutPick.match(/const HEIGHT = ([\d.]+);/);
-if (!rectPreset || !presetHeight) throw new Error('layout-pick no longer declares the rect preset this reads');
+// Read from the presets module rather than typed again here, so a change to what
+// the skip assumes moves this measurement with it.
+const rectPreset = presetById('rect');
 const SKIPPED_ROOM: RoomDims = {
-  width: Number(rectPreset[1]),
-  depth: Number(rectPreset[2]),
-  height: Number(presetHeight[1]),
-  footprint: footprintForLayout('rect', Number(rectPreset[1]), Number(rectPreset[2])),
+  width: rectPreset.width,
+  depth: rectPreset.depth,
+  height: PRESET_HEIGHT,
+  footprint: footprintForLayout('rect', rectPreset.width, rectPreset.depth),
 };
 
 // ── The pieces ──────────────────────────────────────────────────────────────

@@ -54,6 +54,60 @@ describe('EditableText suggestions', () => {
   });
 });
 
+describe('a touch pick does not click what slides under the finger', () => {
+  // The list is in the flow, so picking from it (on pointerdown) closes it and the
+  // next row moves up into the finger's spot before the pointerup's click arrives.
+  function setupWithNeighbour() {
+    const onPick = vi.fn();
+    const onKeep = vi.fn();
+    render(
+      <div>
+        <EditableText value="Bed" label="Piece name" onCommit={vi.fn()} suggest={() => MODELS} onPick={onPick} />
+        <button onClick={onKeep}>Keep</button>
+      </div>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Piece name|Bed/ }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Fri' } });
+    return { onPick, onKeep, keep: screen.getByRole('button', { name: 'Keep' }) };
+  }
+
+  it('picks once on touch, and the click that follows reaches nothing below', () => {
+    const { onPick, onKeep, keep } = setupWithNeighbour();
+    const option = screen.getAllByRole('option')[0];
+    fireEvent.pointerDown(option, { pointerType: 'touch' });
+    fireEvent.mouseDown(option); // the compatibility mousedown, if the option is still there
+    fireEvent.pointerUp(keep, { pointerType: 'touch' });
+    fireEvent.click(keep); // the list is gone; this is where the click lands
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick).toHaveBeenCalledWith('fridge');
+    expect(onKeep).not.toHaveBeenCalled();
+    // One click only: the next real tap works.
+    fireEvent.click(keep);
+    expect(onKeep).toHaveBeenCalledTimes(1);
+  });
+
+  it('a mouse pick swallows nothing', () => {
+    const { onPick, onKeep, keep } = setupWithNeighbour();
+    fireEvent.mouseDown(screen.getAllByRole('option')[0]);
+    fireEvent.click(keep);
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onKeep).toHaveBeenCalledTimes(1);
+  });
+
+  it('a touch that sends no click leaves nothing armed', () => {
+    vi.useFakeTimers();
+    try {
+      const { onKeep, keep } = setupWithNeighbour();
+      fireEvent.pointerDown(screen.getAllByRole('option')[0], { pointerType: 'touch' });
+      vi.advanceTimersByTime(1000);
+      fireEvent.click(keep);
+      expect(onKeep).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('EditableText suggestions keep the field', () => {
   it('does not swap the input out when the list appears, so focus stays mid-word', () => {
     const { input } = setup();

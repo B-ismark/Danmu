@@ -2608,3 +2608,67 @@ colour with a *"?"* for a model offered at its standard size (its tooltip should
 **Why eyes:** no test renders this chip row.
 
 **Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## A tapped rename suggestion clicks nothing else
+
+**Where:** a real phone, the scan review screen. Rename a detected piece so the list of
+matching models opens under the field, then tap a model in that list. Do it on a row whose
+next row, or whose own offer chips (*"Use X"*), sit right below the list.
+
+**What wrong looks like:** after the pick, the next row's Keep toggling, an offer chip
+being applied, or anything else changing that you did not tap. The pick itself should
+happen once.
+
+**Why eyes:** the pick happens on the finger going down, the list closes and the rows
+below slide up, and the browser's own click arrives on the finger lifting. The swallowing
+of that click is tested in jsdom (`tests/rename-suggest.test.tsx`), which fires the events
+by hand; the real ordering is a browser's on a touch screen.
+
+**Rides:** branch `claude/elegant-volta-q7yy89` (after PR #240).
+
+## The Moss Ink palette and Figtree, everywhere
+
+**Where:** every screen, on a real screen rather than a headless one. The paper is cream,
+the ink a deep olive-black, buttons a moss green, the 3D hover amber. Look hardest at the
+3D studio (selection outline, hover, the invalid red), the 2D plan, the app icon on a home
+screen, and the error page.
+
+**What wrong looks like:** a terracotta or warm-red surface left over from the old palette;
+a 3D or plan colour that does not match the panel beside it; body text in a font that is
+not Figtree (rounder, Nunito-like letters); a word cut off in a button that used to fit.
+
+**Why eyes:** the token copies are tested against each other, but whether the result looks
+like one palette is not something a test can see. "Fixing…" was measured (43.7px against a
+43px slot, so that row wraps by design); no other label was.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## The Rooms page in the Flow design
+
+**Where:** `/` with no rooms (a fresh private window), then with a few. Then press
+**Select**, pick one, and press Esc. Then the same at phone width.
+
+**What wrong looks like:** empty — the drawing squashed or cut at the edge, the three
+"ways in" cards of unequal height in a row, *Try the starter room* doing nothing or opening
+an unfurnished room. Full — the trash on a card's drawing showing while the card is idle on
+a mouse, or hidden on a touch screen; Open buttons at different heights across a row; the
+filter's "/" hint not focusing the field. Phone — anything running off the right edge.
+
+**Known, not this change:** a new room's card reads *Empty room · 0 pieces* though it opens
+furnished, because the starter is rebuilt on open, not saved. Queued as its own task.
+
+**Why eyes:** no test renders this page; it was walked once in headless Chromium at 1280
+and 375 wide.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## "Photograph your room" leads with the photo button
+
+**Where:** the empty Rooms page → *Photograph your room*. The New room page should open with
+*Photograph my real room first* as the first, green button and *Start decorating* second.
+Arriving from anywhere else, *Start decorating* leads.
+
+**What wrong looks like:** the order the same both ways; Tab reaching the buttons in a
+different order from how they read.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

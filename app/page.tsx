@@ -19,6 +19,8 @@ import { useConfirmDeleteRooms } from '@/components/ui/Confirm';
 import { DocShell } from '@/components/ui/DocShell';
 import { toast } from '@/components/ui/StorageToast';
 import { PlanThumb } from '@/components/studio/PlanThumb';
+import { IsoRoom, HERO_PIECES, HERO_ROOM } from '@/components/ui/IsoRoom';
+import { createPresetRoom } from '@/lib/room-presets';
 import { ImportSceneButton } from '@/components/studio/SceneFile';
 
 // Recency grouping and the "Edited …" label live in lib/dates, alongside the
@@ -225,44 +227,36 @@ export default function RoomsPage() {
             <EmptyState unreadable={unreadable} />
           ) : (
             <>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-end',
-                  justifyContent: 'space-between',
-                  gap: 16,
-                  flexWrap: 'wrap',
-                  marginBottom: 18,
-                }}
-              >
+              <div className="rooms-head">
                 <div>
                   {/* The route had no heading element, so it had no document
                       outline and the display serif never rendered on it. */}
-                  <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginBottom: 4 }}>Your rooms</h1>
-                  <div className="t-small">
-                    <span className="mono">{rooms.length}</span> room{rooms.length === 1 ? '' : 's'}
-                  </div>
+                  <h1>Your rooms</h1>
+                  <p className="rooms-head__sub">
+                    <span className="mono">{rooms.length}</span> room{rooms.length === 1 ? '' : 's'}, newest edit first
+                  </p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 1 360px', minWidth: 0, flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-                    <label htmlFor="room-filter" className="sr-only">
-                      Filter rooms by name
-                    </label>
+                <div className="rooms-head__tools">
+                  {/* The pill is the field: a label wrapping the input, so a press
+                      anywhere on it — the glyph, the key hint — lands in the text. */}
+                  <label className="room-filter">
+                    <Icon name="search" size={15} />
+                    <span className="sr-only">Filter rooms by name</span>
                     <input
                       id="room-filter"
                       ref={filterRef}
-                      className="field"
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Escape') setQuery('');
                       }}
-                      placeholder="Filter rooms (press /)"
+                      placeholder="Filter rooms"
                       autoComplete="off"
                     />
-                  </div>
+                    <kbd aria-hidden="true">/</kbd>
+                  </label>
                   {!selecting && (
-                    <button onClick={() => setSelecting(true)} className="ds-btn ds-btn--sm">
+                    <button onClick={() => setSelecting(true)} className="ds-btn">
                       Select
                     </button>
                   )}
@@ -342,8 +336,8 @@ export default function RoomsPage() {
               ) : (
                 grouped.map((g, gi) => (
                   <section key={g.id} style={{ marginBottom: 26 }}>
-                    <h2 className="ds-label" style={{ marginBottom: 10 }}>
-                      {g.label} · <span className="mono">{g.rooms.length}</span>
+                    <h2 className="room-group-head">
+                      {g.label} <span className="mono">{g.rooms.length}</span>
                     </h2>
                     <div className="auto-grid auto-grid--cards">
                       {/* Making a room is the thing this page exists for, and the
@@ -436,15 +430,16 @@ function NewRoomCard({ receded }: { receded: boolean }) {
         style={{
           display: 'grid',
           placeItems: 'center',
-          width: 38,
-          height: 38,
-          borderRadius: '50%',
-          border: '1.5px dashed currentColor',
+          width: 44,
+          height: 44,
+          borderRadius: 'var(--r-full)',
+          background: 'var(--ink)',
+          color: 'var(--on-ink)',
         }}
       >
-        <Icon name="plus" size={16} />
+        <Icon name="plus" size={18} />
       </span>
-      <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600, letterSpacing: '-0.01em' }}>New room</span>
+      <span style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--fs-title)', lineHeight: 1.15, color: 'var(--ink)' }}>New room</span>
       <span style={{ fontSize: 'var(--fs-caption)', color: hover ? 'var(--accent-text)' : 'var(--ink-3)' }}>
         Pick a footprint to start
       </span>
@@ -534,6 +529,28 @@ function RoomCard({
       >
         <Icon name="check" size={14} />
       </button>
+      {/* Hidden in select mode: the bar's Delete acts on the selection, and a
+          second delete per card beside it would be two answers to one question. */}
+      {!selecting && (
+        <IconButton
+          icon="trash"
+          label={`Delete ${room.name}`}
+          tone="danger"
+          onClick={onDelete}
+          size={30}
+          iconSize={14}
+          variant="outline"
+          className="room-trash"
+          style={{
+            opacity: revealed ? 1 : 0,
+            // A transparent destructive button must not be clickable. Keyboard
+            // focus is unaffected by pointer-events, and landing on it flips
+            // `revealed` anyway.
+            pointerEvents: revealed ? 'auto' : 'none',
+            transition: 'opacity var(--dur-base) var(--ease-out)',
+          }}
+        />
+      )}
       {selecting ? (
         // Picking, not opening: in select mode the drawing is the biggest target on
         // the card, and opening a room out from under a half-made selection would
@@ -563,56 +580,34 @@ function RoomCard({
         </Link>
       )}
 
-      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-          <EditableText
-            value={room.name}
-            onCommit={onRename}
-            label="Room name"
-            // A pasted 400-character name had nothing stopping it.
-            maxLength={60}
-            style={{ fontSize: 'var(--fs-lead)', fontWeight: 600, letterSpacing: '-0.01em', flex: 1, minWidth: 0 }}
-            inputStyle={{ fontSize: 'var(--fs-body)', fontWeight: 600, flex: 1, minWidth: 0 }}
-          />
-          <div
-            style={{
-              display: 'flex',
-              gap: 2,
-              opacity: revealed ? 1 : 0,
-              // A transparent destructive button must not be clickable. Keyboard
-              // focus is unaffected by pointer-events, and landing on it flips
-              // `revealed` anyway.
-              pointerEvents: revealed ? 'auto' : 'none',
-              transition: 'opacity var(--dur-base) var(--ease-out)',
-            }}
-          >
-            {/* Hidden in select mode: the bar's Delete acts on the selection, and a
-                second delete per card beside it would be two answers to one question. */}
-            {!selecting && <IconButton
-              icon="trash"
-              label={`Delete ${room.name}`}
-              tone="danger"
-              onClick={onDelete}
-              size={30}
-              iconSize={14}
-            />}
-          </div>
-        </div>
+      <div style={{ padding: '14px 16px 16px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+        <EditableText
+          value={room.name}
+          onCommit={onRename}
+          label="Room name"
+          // A pasted 400-character name had nothing stopping it.
+          maxLength={60}
+          style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--fs-title)', fontWeight: 400, lineHeight: 1.15, minWidth: 0 }}
+          inputStyle={{ fontSize: 'var(--fs-body)', fontWeight: 600, flex: 1, minWidth: 0 }}
+        />
 
         <div className="t-hint">
           {editedLabel(room.updatedAt, today)} · <span className="mono">{room.itemCount}</span>{' '}
           {room.itemCount === 1 ? 'piece' : 'pieces'}
         </div>
 
-        {!room.detected && room.captureCount > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {/* These used to be readouts, which left a half-captured room with no way
-                back to the screen they name: the card's one link goes to the studio,
-                and nothing else on this page points at /onboarding/*. They are links
-                now, and they carry `onOpen` for the same reason the card body does —
-                both onboarding screens read the room from `useRoom`, not from the
-                URL, so an href alone lands on "Pick a room shape first". */}
-            {room.captureCount < 4 ? (
+        {/* The last row sits at the card's foot whatever the name's length, so a
+            grid of cards keeps its Open buttons on one line. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 'auto', paddingTop: 6 }}>
+          {/* These used to be readouts, which left a half-captured room with no way
+              back to the screen they name: the card's one link goes to the studio,
+              and nothing else on this page points at /onboarding/*. They are links
+              now, and they carry `onOpen` for the same reason the card body does —
+              both onboarding screens read the room from `useRoom`, not from the
+              URL, so an href alone lands on "Pick a room shape first". */}
+          {!room.detected &&
+            room.captureCount > 0 &&
+            (room.captureCount < 4 ? (
               <Link
                 href="/onboarding/capture"
                 onClick={onOpen}
@@ -632,27 +627,24 @@ function RoomCard({
               >
                 <Pill tone="accent">Detect furniture</Pill>
               </Link>
-            )}
-          </div>
-        )}
-
-        {/* Plain: this repeats once per card, and the page's primary is the one
-            "New Room" in the bar. The thumbnail above is the other open target. */}
-        <Link
-          href={href}
-          onClick={onOpen}
-          className="ds-btn ds-btn--sm"
-          style={{ justifyContent: 'center' }}
-        >
-          <Icon name="cube" size={11} />
-          Open
-        </Link>
+            ))}
+          <div style={{ flex: 1 }} />
+          {/* Plain: this repeats once per card, and the page's primary is the one
+              "New Room" in the bar. The thumbnail above is the other open target. */}
+          <Link href={href} onClick={onOpen} className="ds-btn ds-btn--sm">
+            Open
+            <Icon name="arrow-right" size={12} />
+          </Link>
+        </div>
       </div>
     </div>
   );
 }
 
 function EmptyState({ unreadable }: { unreadable: boolean }) {
+  const router = useRouter();
+  const setRoomId = useRoom((st) => st.setRoomId);
+  const [starting, setStarting] = useState(false);
   // A list that could not be read is not an empty one. "No rooms yet" over it
   // would be a false empty state, and "Create your first room" a dead end: a
   // browser that will not open its storage will not save a new room either.
@@ -680,25 +672,99 @@ function EmptyState({ unreadable }: { unreadable: boolean }) {
       </div>
     );
   }
+  // The quickest way in: the rectangle at its typical size, furnished by the same
+  // starter the New room page would give it, and straight into the studio.
+  async function openStarter() {
+    if (starting) return;
+    setStarting(true);
+    try {
+      const id = await createPresetRoom('rect');
+      setRoomId(id);
+      router.push(`/room/${id}/model`);
+    } catch (e) {
+      setStarting(false);
+      toast({
+        tone: 'danger',
+        title: "Couldn't save the starter room",
+        message: 'This browser refused to store it. A private window can do this.',
+        detail: String(e),
+      });
+    }
+  }
+
   return (
-    <div style={{ textAlign: 'center', padding: '80px 8px', maxWidth: 'var(--measure-text)', marginInline: 'auto' }}>
-      <div className="ds-kicker" style={{ marginBottom: 12 }}>
-        No rooms yet
+    <div>
+      <div className="rooms-welcome">
+        <div>
+          <div className="ds-kicker">Welcome to Danmu</div>
+          <h1>Decorate your first room</h1>
+          <p>
+            Start from a floor shape, or photograph the room you have. Then move things around in 3D and see what
+            works. Everything stays on this device.
+          </p>
+        </div>
+        <div className="rooms-welcome__art">
+          <IsoRoom room={HERO_ROOM} pieces={HERO_PIECES} />
+        </div>
       </div>
-      <h1 style={{ fontSize: 'var(--fs-hero)', letterSpacing: '-0.02em', marginBottom: 28 }}>Decorate your first room.</h1>
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-        {/* --primary, not --accent. This is the page you are reading, not a step in
-            the onboarding flow, and the bar hides its own "New Room" in this state,
-            so there is exactly one. The pairing this replaces — an ink "New Room" in
-            the bar beside a terracotta "Create your first room" here, both pointing
-            at /onboarding/layout-pick — is the case the rule in globals.css cites. */}
-        <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--lg ds-btn--primary" style={{ padding: '0 20px' }}>
-          <Icon name="plus" size={13} />
-          Create your first room
+
+      {/* Three ways in, the recommended one inked. The bar hides its own "New
+          Room" in this state, so these are the page's only calls to action. */}
+      <div className="start-cards">
+        <Link href="/onboarding/layout-pick?then=photos" className="start-card start-card--lead">
+          <span className="start-card__icon">
+            <Icon name="camera" size={20} />
+          </span>
+          <span className="start-card__title">Photograph your room</span>
+          <span className="start-card__desc">
+            Four photos, one per wall. Danmu finds the furniture and rebuilds the room to scale.
+          </span>
+          <span className="start-card__go">
+            Start with photos <Icon name="arrow-right" size={14} />
+          </span>
         </Link>
+        <Link href="/onboarding/layout-pick" className="start-card">
+          <span className="start-card__icon">
+            <Icon name="footprint" size={20} />
+          </span>
+          <span className="start-card__title">Pick a footprint</span>
+          <span className="start-card__desc">
+            Rectangle, L, T, U or open plan. Add furniture from the Library and size it exactly.
+          </span>
+          <span className="start-card__go">
+            Choose a shape <Icon name="arrow-right" size={14} />
+          </span>
+        </Link>
+        <button type="button" onClick={openStarter} disabled={starting} aria-busy={starting} className="start-card">
+          <span className="start-card__icon">
+            <Icon name="home" size={20} />
+          </span>
+          <span className="start-card__title">Try the starter room</span>
+          <span className="start-card__desc">
+            A furnished living room to rearrange while you look around. Nothing to set up.
+          </span>
+          <span className="start-card__go">
+            {starting ? (
+              <>
+                <Spinner size={14} /> Opening…
+              </>
+            ) : (
+              <>
+                Open it <Icon name="arrow-right" size={14} />
+              </>
+            )}
+          </span>
+        </button>
+      </div>
+
+      <div className="rooms-foot">
+        <span className="rooms-foot__note">
+          <Icon name="lock" size={14} />
+          Rooms live in this browser. No account, nothing uploaded.
+        </span>
         {/* Someone arriving from a shared file has no room to resume, so the empty
             state is exactly where they need this. */}
-        <ImportSceneButton size="large" />
+        <ImportSceneButton />
       </div>
     </div>
   );

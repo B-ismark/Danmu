@@ -15,7 +15,7 @@ import { MARK_COLORS, markDataUri } from '@/lib/brand-mark';
 // Three things worth knowing before editing it:
 //
 // · **No fonts are loaded.** `ImageResponse` takes a `fonts` array and this passes
-//   none, so it renders with the renderer's own default face. Fraunces and Nunito
+//   none, so it renders with the renderer's own default face. Fraunces and Figtree
 //   arrive through `next/font/google`, which caches them inside `.next` under
 //   content-hashed names — there is no stable path to hand a rasteriser, and
 //   fetching them from fonts.gstatic.com would put a network call in the build of
@@ -53,7 +53,7 @@ export default function OpenGraphImage() {
           justifyContent: 'space-between',
           // --paper-0, the page wash the app itself paints. A share card in a
           // different cream from the site it opens reads as someone else's link.
-          background: '#EEE9E4',
+          background: '#F4EFE4',
           padding: '76px 88px',
         }}
       >
@@ -62,7 +62,7 @@ export default function OpenGraphImage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
           <img src={markDataUri({ size: 132 })} width={132} height={132} alt="" />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: 86, fontWeight: 700, color: '#1D1816', letterSpacing: '-0.03em' }}>Danmu</div>
+            <div style={{ fontSize: 86, fontWeight: 700, color: '#262A20', letterSpacing: '-0.03em' }}>Danmu</div>
             <div style={{ fontSize: 30, fontWeight: 600, color: MARK_COLORS.accent, letterSpacing: '-0.01em' }}>
               interior decoration, in your browser
             </div>
@@ -72,7 +72,7 @@ export default function OpenGraphImage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
           {/* The sentence someone should be able to read and know whether they
               want this. `--ink` at a size that survives a phone-sized preview. */}
-          <div style={{ fontSize: 46, fontWeight: 600, color: '#1D1816', lineHeight: 1.24, maxWidth: 900 }}>
+          <div style={{ fontSize: 46, fontWeight: 600, color: '#262A20', lineHeight: 1.24, maxWidth: 900 }}>
             Pick a footprint, get a scaled 3D room, and redecorate it.
           </div>
 
@@ -86,12 +86,12 @@ export default function OpenGraphImage() {
                   gap: 12,
                   // --paper and --edge. A chip, the same shape the app uses.
                   background: MARK_COLORS.tile,
-                  border: '2px solid rgba(29, 24, 22, 0.5)',
+                  border: '2px solid rgba(38, 42, 32, 0.52)',
                   borderRadius: 999,
                   padding: '14px 26px',
                   fontSize: 27,
                   fontWeight: 700,
-                  color: '#544D47',
+                  color: '#4E4D3F',
                 }}
               >
                 <div

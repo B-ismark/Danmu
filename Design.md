@@ -166,8 +166,8 @@ owned by a deterministic geometry engine, not by a model.
    before the release, so the click missed both. `scripts/row-hover-probe.mjs`
    hovers every row, clicks Hide, walks Tab both ways, and measures what of each
    name still reads.
-6. **Warm & playful visual direction.** Cream paper, terracotta (`--accent`) +
-   sage (`--accent-2`) accents, Nunito (sans) / Fraunces (display) type, generous
+6. **Warm & playful visual direction.** "Moss Ink": linen paper, an olive near-black for type, moss (`--accent`) +
+   amber (`--accent-2`) accents, Figtree (sans) / Fraunces (display) type, generous
    rounding. Matches the soft procedural 3D models.
 
 ---
@@ -1390,8 +1390,8 @@ pair and they are **one row**, and the measured one survives in either photo ord
   one against the slab for a ceiling piece — each `BASE_LIFT` (2 mm) off its surface
   and, behind a wall or ceiling piece, never thicker than the piece, so no face of
   it shares a plane with the piece's back or shows through its front (a base ON the
-  plaster striped a selected TV seen through its cut-away wall). Frosted paper with a sage rim on hover
-  and a terracotta rim when selected or carried; **light red** (`SCENE.invalid`)
+  plaster striped a selected TV seen through its cut-away wall). Frosted paper with an amber rim on hover
+  and a moss rim when selected or carried; **light red** (`SCENE.invalid`)
   when the spot it is being carried to will not take it — the one state that tints
   the slab, because `--danger` sits a step from `--accent` and a terracotta slab
   turning red was a change of shade nobody read as "no". Depth-tested, so it never
@@ -3121,7 +3121,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
   fallback so no button renders empty
 - **No native form controls.** Anything the OS draws its own way is replaced by a
   design-system component, because a platform widget in the middle of a warm,
-  rounded, Nunito panel reads as a different product: `ui/Select.tsx` for
+  rounded, Figtree panel reads as a different product: `ui/Select.tsx` for
   `<select>`, `ui/NumberField.tsx` for the number spinner, `ui/ColorPicker.tsx`
   for `<input type="color">`, `ui/Confirm.tsx` for `window.confirm()`, and
   tokenised scrollbars in `globals.css`. `<input type="file">` stays, kept

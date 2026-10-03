@@ -2240,7 +2240,7 @@ function comfortBands(part: ScenePart): React.ReactNode[] | null {
 
 /** As much of a name as a footprint can hold, with an ellipsis when it is cut.
  *  SVG text has no `text-overflow`, so the budget is estimated from the font size —
- *  0.55em is a fair average for Nunito's lowercase, and erring narrow costs a
+ *  0.55em is a fair average for Figtree's lowercase, and erring narrow costs a
  *  character rather than spilling over the furniture. */
 function fitLabel(name: string, widthPx: number, fontSize: number): string {
   const budget = Math.floor(widthPx / (fontSize * 0.55));

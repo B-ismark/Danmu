@@ -10,11 +10,11 @@
 // once (#FAFAF7 / #6B6358 / #C02618 were from an earlier palette).
 import { useEffect } from 'react';
 
-const PAPER = '#FBF9F6'; // --paper
-const INK = '#1D1816'; // --ink
-const INK_2 = '#544D47'; // --ink-2
-const DANGER = '#C8472A'; // --danger
-const ACCENT_INK = '#C24A22'; // --accent-ink — 4.73:1 with white
+const PAPER = '#FFFCF5'; // --paper
+const INK = '#262A20'; // --ink
+const INK_2 = '#4E4D3F'; // --ink-2
+const DANGER = '#B4432F'; // --danger
+const ACCENT_INK = '#4A7340'; // --accent-ink — 5.50:1 with white
 
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   // Same rule as the route-level boundary: the stack goes to the console, the
@@ -35,7 +35,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
             </p>
             <button
               onClick={() => reset()}
-              style={{ padding: '12px 22px', borderRadius: 16, border: 'none', background: ACCENT_INK, color: '#FFFFFF', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+              style={{ padding: '12px 22px', borderRadius: 16, border: 'none', background: ACCENT_INK, color: PAPER, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
             >
               Reload Danmu
             </button>

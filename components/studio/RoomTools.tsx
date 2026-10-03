@@ -436,11 +436,11 @@ export function RoomTools() {
           `--rail-left-tight` is 208px and this row sits inside `PartTree`'s
           `12px 16px`, so the content box is 176px; a `1fr` column is (176 − 6) / 2 =
           85px; `.ds-btn--sm` spends `0 12px` of padding plus a 12px icon plus a 6px
-          gap = 42px of chrome, leaving **43px** for the word. "Fixing…" wants ~41px
-          at 11px Nunito — two pixels on an estimate, which is no margin — and the
-          busy string is the tell that has to survive `prefers-reduced-motion`, where
-          the ring does not turn. (With Shuffle's "Shuffling…", ~59px, it did not fit
-          at all.)
+          gap = 42px of chrome, leaving **43px** for the word. "Fixing…" measures
+          43.7px in the button's 12.5px bold Figtree (Chromium, measured, not
+          estimated) — it does not fit — and the busy string is the tell that has to
+          survive `prefers-reduced-motion`, where the ring does not turn. (Shuffle's
+          "Shuffling…" measures 61.5px.)
 
           `flex: 1 0 auto` gets the alignment the grid was after without the cost:
           the buttons GROW to fill a line they fit on, and because they may not

@@ -1174,7 +1174,7 @@ describe('a piece row keeps enough width to read the piece name', () => {
     const content = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]) - 32;
     const nameWidth = content - padX * 2 - glyph - gap - marks * (markPx + gap);
 
-    // ~8 characters of 13px Nunito. Chosen, not derived — a derived floor would
+    // ~8 characters of 13px Figtree. Chosen, not derived — a derived floor would
     // move with the thing it is supposed to constrain and could never go red.
     expect(nameWidth, `a piece name gets ${nameWidth}px at --rail-left-tight`).toBeGreaterThanOrEqual(56);
   });

@@ -101,6 +101,24 @@ export function FlowBarLead({
   );
 }
 
+/** Eat the next click anywhere on the page, if it arrives within `ms`. For a touch
+ *  that has already done its job on pointerdown: the click the browser still sends
+ *  at pointerup lands on whatever is under the finger THEN, which is not what was
+ *  pressed if the press changed the layout. Capture phase on the document, so it
+ *  runs before React's root listener and before any element's own. */
+function swallowNextClick(ms = 600) {
+  const until = Date.now() + ms;
+  const eat = (e: Event) => {
+    document.removeEventListener('click', eat, true);
+    if (Date.now() > until) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  document.addEventListener('click', eat, true);
+  // A touch that ends in a scroll or a cancel sends no click; never leave it armed.
+  window.setTimeout(() => document.removeEventListener('click', eat, true), ms);
+}
+
 // Rename-in-place. A real button that swaps to an input, so renaming is
 // reachable by keyboard and announced — it replaces four separate
 // `<div onClick>` affordances (room card, room name in the studio top bar, part
@@ -249,10 +267,14 @@ export function EditableText({
               }}
               // A touch can blur the field before any mouse event is synthesised, so
               // the pick happens on the first contact too; `picked` makes the second
-              // arrival a no-op.
+              // arrival a no-op. The pick closes this list, which is in the flow, so
+              // what was below it slides up under the finger — and `preventDefault`
+              // on pointerdown does not cancel the click the browser sends at
+              // pointerup. That click is swallowed, or it lands on whatever moved in.
               onPointerDown={(e) => {
                 if (e.pointerType === 'mouse') return;
                 e.preventDefault();
+                swallowNextClick();
                 pick(o.key);
               }}
             >

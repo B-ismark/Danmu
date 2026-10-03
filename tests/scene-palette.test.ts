@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SCENE, PLAN, DETAIL, DECOR, defaultBodyColor, wallColor } from '../lib/scene-palette';
 import type { Category, Shape } from '../lib/scene-spec';
 
@@ -64,9 +66,13 @@ describe('plan export palette', () => {
   });
 
   it('stays in sync with the CSS tokens it duplicates', () => {
-    expect(PLAN.paper).toBe('#FBF9F6'); // --paper
-    expect(PLAN.ink).toBe('#1D1816'); // --ink
-    expect(PLAN.ink2).toBe('#544D47'); // --ink-2
+    // Read from the stylesheet, not pasted beside it: a literal against a literal
+    // stayed green through a palette change that left the export behind.
+    const css = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8');
+    const token = (name: string) => new RegExp(`--${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(css)?.[1]?.toUpperCase();
+    expect(PLAN.paper).toBe(token('paper'));
+    expect(PLAN.ink).toBe(token('ink'));
+    expect(PLAN.ink2).toBe(token('ink-2'));
     expect(PLAN.accent).toBe(SCENE.accent);
   });
 
