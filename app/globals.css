@@ -1460,15 +1460,38 @@ textarea.field { border-radius: var(--r-2); }
   background: var(--paper); border: 1px solid var(--edge);
   border-radius: var(--r-2); box-shadow: var(--shadow-lift);
 }
-/* The four camera views, a 2×2 in the canvas's bottom-right corner (ViewGizmo).
-   Same family as `.chrome-pill` below: a container with a quiet rim and quiet cells. */
+/* The three camera views (Corner / Front / Top) as one segmented pill in the canvas's
+   bottom-right corner (ViewGizmo). Same family as `.chrome-pill` below: a container with a
+   quiet rim and quiet cells. Words by default; glyphs (40px cells) on a phone via
+   `.gizmo--glyphs`, and also whenever the canvas itself is too narrow for three words. */
 .gizmo {
-  display: grid; gap: 2px; padding: 3px;
+  display: inline-flex; gap: 2px; padding: 3px; max-width: 100%;
   background: var(--paper); border: 1px solid var(--hairline-strong);
-  border-radius: var(--r-3); box-shadow: var(--shadow-float);
+  border-radius: var(--r-full); box-shadow: var(--shadow-float);
 }
-.gizmo > button { border-radius: var(--r-2); transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out); }
-.gizmo > button:hover:not([aria-pressed="true"]) { background: var(--paper-2); color: var(--ink); }
+.gizmo__btn {
+  display: inline-grid; place-items: center; min-height: 28px; padding: 0 12px;
+  border: 0; border-radius: var(--r-full); cursor: pointer; background: transparent;
+  font: inherit; font-size: var(--fs-small); font-weight: 500; line-height: 1; white-space: nowrap;
+  color: var(--ink);
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.gizmo__btn[data-on] { background: var(--accent-tint); color: var(--accent-text); }
+.gizmo__btn:hover:not([aria-pressed="true"]) { background: var(--paper-2); }
+.gizmo__glyph { display: none; }
+.gizmo--glyphs { padding: 3px; }
+.gizmo--glyphs .gizmo__btn { width: 40px; min-height: 40px; padding: 0; color: var(--ink-2); }
+.gizmo--glyphs .gizmo__btn[data-on] { color: var(--accent-text); }
+.gizmo--glyphs .gizmo__word { display: none; }
+.gizmo--glyphs .gizmo__glyph { display: grid; }
+/* Not a phone, but a canvas too narrow for three words: same glyph fallback. */
+#studio-canvas { container-type: inline-size; container-name: studio-canvas; }
+@container studio-canvas (max-width: 359px) {
+  .gizmo:not(.gizmo--glyphs) .gizmo__btn { width: 40px; min-height: 40px; padding: 0; color: var(--ink-2); }
+  .gizmo:not(.gizmo--glyphs) .gizmo__btn[data-on] { color: var(--accent-text); }
+  .gizmo:not(.gizmo--glyphs) .gizmo__word { display: none; }
+  .gizmo:not(.gizmo--glyphs) .gizmo__glyph { display: grid; }
+}
 
 /* ── Floating chrome: one capsule per group ────────────────────────────────────
    Everything that floats over the room (undo/redo, the plan's zoom and turn, the

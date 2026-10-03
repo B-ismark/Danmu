@@ -2474,7 +2474,7 @@ the room is never under them.
 
 Everything that floats over the room on either tab is a `.chrome-pill`: undo/redo,
 the plan's **Zoom** and **Turn and fit**, the 3D tab's Move / Scale / Rotate (a
-segmented pill, `.chrome-seg`), Snap, Add and Comfort zones. The camera gizmo and
+segmented pill, `.chrome-seg`), Snap, Add and Comfort zones. The camera switcher (`ViewGizmo`: **Corner / Front / Top** as words in one segmented pill, glyph-only 40px cells on a phone or a canvas under 360px; `free` is not a button, it is what orbiting sets and leaves all three unpressed) and
 the comfort legend wear the same rim and lift at card corners. It replaced an
 outlined box around outlined buttons, which put two boundaries on every control.
 

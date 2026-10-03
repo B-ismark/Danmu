@@ -3,46 +3,24 @@
 // The 3D tab's one canvas widget — where you are standing, in the corner every
 // 3D tool puts that control.
 //
-// It replaces a four-chip segmented row (Front / Top / Iso / Free) that spelled
-// the presets out in text inside the bottom-right dock. The dock is gone; a
-// compact 2×2 of glyphs says the same thing in a quarter of the width and reads
-// as native to a 3D tool rather than as a row of tabs that wandered onto the
-// canvas.
+// Three words in one pill: Corner, Front, Top. On a phone, or wherever the canvas is too
+// narrow to hold them, the same three buttons fall back to their glyphs at 40px (the
+// `.gizmo` container query). 'free' is not a button: it is the state the camera enters
+// when the user orbits it (`CameraRig`), and in it none of the three is pressed.
 //
-// The four destinations are unchanged — they are still exactly `CameraRig`'s
-// PRESETS, addressed through `useStudio.viewPreset`, so this is a new control
-// over old behaviour and nothing about the camera moved.
+// The destinations are still exactly `CameraRig`'s PRESETS, addressed through
+// `useStudio.viewPreset`.
 
 import type { ReactNode } from 'react';
 import { useStudio } from '@/lib/store';
 import { usePhoneStudio } from './NarrowViewportBanner';
 
-type Preset = 'front' | 'top' | 'iso' | 'free';
+type Preset = 'front' | 'top' | 'iso';
 
-const CELLS: Array<{ value: Preset; label: string; glyph: ReactNode }> = [
-  {
-    value: 'top',
-    label: 'Look down from above',
-    // A plan square: the room seen from directly overhead.
-    glyph: (
-      <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-        <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      </svg>
-    ),
-  },
-  {
-    value: 'front',
-    // An elevation: one wall, straight on.
-    label: 'Look straight at the front wall',
-    glyph: (
-      <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-        <rect x="3.5" y="5" width="9" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-        <line x1="3.5" y1="12" x2="12.5" y2="12" stroke="currentColor" strokeWidth="1.8" />
-      </svg>
-    ),
-  },
+const CELLS: Array<{ value: Preset; word: string; label: string; glyph: ReactNode }> = [
   {
     value: 'iso',
+    word: 'Corner',
     // A corner-on box: two faces and a top.
     label: 'Look from the corner',
     glyph: (
@@ -53,13 +31,25 @@ const CELLS: Array<{ value: Preset; label: string; glyph: ReactNode }> = [
     ),
   },
   {
-    value: 'free',
-    // An orbit ring: the camera is yours again.
-    label: 'Move the camera yourself',
+    value: 'front',
+    word: 'Front',
+    // An elevation: one wall, straight on.
+    label: 'Look straight at the front wall',
     glyph: (
       <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-        <circle cx="8" cy="8" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-        <ellipse cx="8" cy="8" rx="4.6" ry="1.9" fill="none" stroke="currentColor" strokeWidth="1.1" />
+        <rect x="3.5" y="5" width="9" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        <line x1="3.5" y1="12" x2="12.5" y2="12" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    ),
+  },
+  {
+    value: 'top',
+    word: 'Top',
+    label: 'Look down from above',
+    // A plan square: the room seen from directly overhead.
+    glyph: (
+      <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+        <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
       </svg>
     ),
   },
@@ -68,17 +58,15 @@ const CELLS: Array<{ value: Preset; label: string; glyph: ReactNode }> = [
 export function ViewGizmo() {
   const view = useStudio((s) => s.viewPreset);
   const setView = useStudio((s) => s.setView);
-  // 40px cells under a thumb: the 2×2 stays a small square in the corner, and each
-  // view is a target a finger can hit without landing on its neighbour.
-  const cell = usePhoneStudio() ? 40 : 28;
+  // Under a thumb the cells are 40px glyphs; on a laptop they are words.
+  const phone = usePhoneStudio();
 
   return (
     <div
       role="group"
       aria-label="Camera"
       // Surface in globals.css (`.gizmo`), so the laptop's glass can replace it.
-      className="gizmo"
-      style={{ gridTemplateColumns: `repeat(2, ${cell}px)` }}
+      className={phone ? 'gizmo gizmo--glyphs' : 'gizmo'}
     >
       {CELLS.map((c) => {
         const on = view === c.value;
@@ -90,20 +78,11 @@ export function ViewGizmo() {
             aria-pressed={on}
             aria-label={c.label}
             title={c.label}
-            style={{
-              width: cell,
-              height: cell,
-              display: 'grid',
-              placeItems: 'center',
-              cursor: 'pointer',
-              border: 0,
-              // Radius and hover are the class's (`.gizmo > button`); an inline
-              // `transparent` here would beat the hover fill.
-              background: on ? 'var(--accent-tint)' : undefined,
-              color: on ? 'var(--accent-text)' : 'var(--ink-2)',
-            }}
+            className="gizmo__btn"
+            data-on={on ? '' : undefined}
           >
-            {c.glyph}
+            <span className="gizmo__word">{c.word}</span>
+            <span className="gizmo__glyph">{c.glyph}</span>
           </button>
         );
       })}

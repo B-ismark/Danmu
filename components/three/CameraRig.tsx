@@ -38,6 +38,9 @@ export function CameraRig() {
   const lastFrameToken = useRef(0);
 
   useEffect(() => {
+    // 'free' means the user's own hand is on the camera (set by onStart below): there
+    // is nothing to fly to, and flying to PRESETS.free would snap away from where they are.
+    if (view === 'free') return;
     const p = PRESETS[view];
     targetCam.current.set(p.pos[0], p.pos[1], p.pos[2]);
     targetLook.current.set(p.target[0], p.target[1], p.target[2]);
@@ -86,6 +89,12 @@ export function CameraRig() {
         maxPolarAngle={Math.PI - 0.15}
         target={[0, 1.0, 0]}
         onChange={() => invalidate()}
+        // Orbiting, panning or zooming makes the camera the user's: none of the three
+        // view buttons is true any more, so none shows pressed (ViewGizmo).
+        onStart={() => {
+          animatingUntil.current = 0;
+          if (useStudio.getState().viewPreset !== 'free') useStudio.getState().setView('free');
+        }}
       />
       <CameraTween
         camRef={targetCam}
