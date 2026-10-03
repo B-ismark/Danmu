@@ -2813,3 +2813,57 @@ outside the walls; the grid arriving noticeably later with many rooms.
 rooms costs the list's first paint is the browser's. Walked once in headless Chromium.
 
 **Merged:** `513f1e5` (B-ismark/Danmu#246), not yet looked at.
+
+## The empty Details panel carries Add and Start over
+
+**Where:** the 3D studio with nothing selected, then with a piece selected. Move one piece
+so Start over has something to undo, and look again both ways.
+
+**What wrong looks like:** with nothing selected, Add (solid moss) not directly under
+*"Click a piece to style it"*, a footer still pinned at the bottom, or Start over showing
+on a room nobody has touched. With a selection, Delete and Add not sharing one row, Start
+over not full width beneath them, or either verb appearing twice across the rail.
+
+**Why eyes:** the jsdom tests count the buttons; where they sit, and whether the moss reads
+as the primary verb, is a judgement.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Paint dabs in two rows, and the mixer
+
+**Where:** select a sofa, open Colour. Then the rail at its narrowest (1024 px wide window).
+
+**What wrong looks like:** a third row; dabs that read as flat squares or as buttons rather
+than paint; the dashed *"+"* cell not lining up with the dabs; the custom colour popover
+covering the dabs it opened from. Mix a colour: the *"+"* cell should fill with it and the
+reset should read *"Default colour"*.
+
+**Why eyes:** the count is tested; the paint highlight is a gradient no test can see.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Library rows without outlines, one TV, an outline window
+
+**Where:** press Add and scroll the Library; then the Catalog list in a room with a window.
+
+**What wrong looks like:** a row with a border or a raised shadow at rest; a hover that lifts
+the row; more than one row called *"TV"* (*"TV console"* is a different piece); a window icon
+drawn as a solid black block.
+
+**Why eyes:** the glyph's fill is tested; how the rows sit on the glass rail is not.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Settled states in sage, menu states in ink
+
+**Where:** the left rail's *"Room checks out"* pill and its health dot; the scan review
+screen's calm notice; any dropdown (the Inspector's Units) with the keyboard moving through it.
+
+**What wrong looks like:** amber where the room is fine (amber is the brand's piece and the
+3D hover, not "all good"); a selected menu option in a moss wash with a ring; a hovered
+option the same colour as the selected one.
+
+**Why eyes:** the tokens clear contrast on paper; whether sage and amber now read as two
+meanings is a judgement.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

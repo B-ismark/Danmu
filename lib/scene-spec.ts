@@ -591,20 +591,24 @@ const RUGS: Array<[number, number, number]> = [
 ];
 
 
-/** Real panel sizes, largest first — the same entries the Add-model picker offers.
+/** Real panel sizes, largest first. The starter scene picks between them; the Library
+ *  offers ONE row, the middle size, because a TV is a TV at any diagonal and the size
+ *  is what the inspector is for — three rows of the same drawing read as three
+ *  products. All three are named "TV" for the same reason, and because a starter piece
+ *  is named as the Library row it is (`tests/seed-library-names.test.ts`).
  *
  *  A shallow room gets a SMALLER SET, never a shrunken one. `layout-rules` puts
  *  comfortable viewing at 1.2–2.5 × the diagonal, which is a property of the screen,
  *  so the honest way to satisfy it in a 2.1 m-deep bay is to choose a screen whose
  *  diagonal suits 2.1 m. Scaling the 65″ down would make the room *look* right and
  *  every measurement in it a lie. */
-const SCREENS: Array<{ name: string; dimMM: [number, number, number] }> = [
-  { name: 'TV · 65″', dimMM: [1450, 60, 820] },
-  { name: 'TV · 55″', dimMM: [1230, 60, 710] },
-  { name: 'TV · 43″', dimMM: [970, 60, 570] },
+export const SCREENS: ReadonlyArray<{ name: string; dimMM: [number, number, number] }> = [
+  { name: 'TV', dimMM: [1450, 60, 820] }, // 65″
+  { name: 'TV', dimMM: [1230, 60, 710] }, // 55″
+  { name: 'TV', dimMM: [970, 60, 570] }, // 43″
 ];
-// `PART_LIBRARY`'s TV rows are built FROM this list rather than typed out again
-// beside it, so the starter room's screen and the Library's are one name and one size.
+// `PART_LIBRARY`'s TV row is built FROM this list rather than typed out again beside
+// it, so the starter room's screen and the Library's are one name and a real size.
 
 /** The furthest a sofa is worth putting from the biggest screen there is — the top of
  *  `layout-rules`' 1.2–2.5 × diagonal band, resolved for `SCREENS[0]` rather than
@@ -2258,9 +2262,9 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Oval mirror', group: 'Decor', category: 'mirror', shape: 'mirror-oval', dimMM: [600, 30, 1100] },
   { label: 'Painting', group: 'Decor', category: 'painting', shape: 'painting', dimMM: [800, 30, 600] },
   { label: 'Curtain', group: 'Decor', category: 'curtain', shape: 'curtain', dimMM: [1600, 80, 2200] },
-  // Tech — three real panel sizes, because a small room needs a smaller SET and
-  // never a scaled one. `SCREENS` (above) picks between these for the starter scene.
-  ...SCREENS.map((s): LibraryItem => ({ label: s.name, group: 'Tech', category: 'tv', shape: 'tv', dimMM: s.dimMM })),
+  // Tech — one TV, at the middle of `SCREENS`' real sizes; the starter scene still
+  // picks a smaller SET for a small room rather than a scaled one.
+  { label: SCREENS[1].name, group: 'Tech', category: 'tv', shape: 'tv', dimMM: SCREENS[1].dimMM },
   { label: 'Monitor', group: 'Tech', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 400] },
   { label: 'Laptop', group: 'Tech', category: 'monitor', shape: 'laptop', dimMM: [340, 240, 220] },
   // Appliances

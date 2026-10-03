@@ -616,7 +616,6 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     // widest fixed item in the row by 20px. Anchoring is not enough on its own,
     // either — `[\s\S]*?` crosses comments, so a docblock between the two that
     // mentions any `size={n}` would be read as the square's. Hence CODE.
-    const square = Number(/icon="rotate-ccw"[\s\S]*?size=\{(\d+)\}/.exec(CODE)![1]);
 
     const btn = rule('.ds-btn');
     const btnPadX = Number(/padding: 0 (\d+)px/.exec(btn)![1]);
@@ -642,22 +641,28 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     // a row it no longer describes, and it names what to do.
     const labelled = (CODE.match(/<button/g) ?? []).length;
     const squares = (CODE.match(/<IconButton/g) ?? []).length;
+    // Start over left this row for one of its own (full width, labelled), so it is
+    // no term here — pinned as BELOW the row's closing tag, because moving it back
+    // in without a term is exactly the uncounted fourth control described above.
+    const row = /<div className="rail-footer__row">([\s\S]*?)\n {6}<\/div>\n {6}\{canStartOver && <StartOverButton \/>\}/.exec(CODE);
+    expect(row, 'Start over is the footer\'s second row, after the first closes').not.toBeNull();
+    expect(row![1]).not.toContain('StartOverButton');
     expect(
       labelled,
       'the selection slot gained or lost a branch — `fixed` below counts exactly two labelled buttons',
     ).toBe(2);
     expect(
       squares,
-      'a second icon square in this row — `fixed` below needs another term for it, in this commit',
-    ).toBe(1);
+      'an icon square in this row — `fixed` below needs a term for it, in this commit',
+    ).toBe(0);
     // And the trigger the row borrows from CatalogPanel, which is the other
     // labelled button `fixed` accounts for.
     expect((CODE.match(/<AddPiecesButton/g) ?? []).length).toBe(1);
 
-    // Two labelled buttons, one 32px square, two gaps between the three, and the
-    // footer's own padding at both ends.
+    // Two labelled buttons, the gap between them, and the footer's own padding at
+    // both ends.
     const fixed =
-      2 * padX + 2 * gap + square +
+      2 * padX + gap +
       (2 * btnPadX + btnGap + trash) +
       (2 * btnPadX + btnGap + plus);
     const floor = railFloor('rail-right');
@@ -696,16 +701,17 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     expect(insp, 'Delete belongs to the rail footer now').not.toContain('removeParts');
   });
 
-  it('gives the revert a real target and does not reuse the Re-scan glyph', () => {
-    // Once a control loses its words the glyph IS the name, so two different verbs
-    // may not share one. `refresh` is Re-scan’s, in the left rail’s Room header,
-    // and it is also CATEGORY_ICON.fan.
-    expect(CODE).toContain('icon="rotate-ccw"');
-    expect(CODE, 'refresh is the Re-scan glyph now').not.toContain('icon="refresh"');
-    // IconButton floors at 24px so nothing falls under WCAG 2.5.8. 32 is the app’s
-    // icon-target size, and the size LightingPicker’s own rail budget is derived
-    // from two describes above.
-    expect(SRC).toContain('size={32}');
+  it('gives the revert its words and its own glyph, not the Re-scan one', () => {
+    // It was a 32px square sharing the first row, so the glyph WAS its name, and two
+    // verbs may not share a glyph: `refresh` is Re-scan's, in the left rail's Room
+    // header, and it is also CATEGORY_ICON.fan. It has a full-width row of its own
+    // now and says "Start over" — and the glyph rule still holds beside the words.
+    const btn = codeOnly(readSrc('components', 'studio', 'StartOverButton.tsx'));
+    expect(btn).toContain('name="rotate-ccw"');
+    expect(btn, 'refresh is the Re-scan glyph').not.toContain('name="refresh"');
+    expect(btn).toContain('>Start over</span>');
+    expect(btn).toMatch(/className="ds-btn ds-btn--sm rail-wide"/);
+    expect(rule('.rail-wide')).toContain('width: 100%');
   });
 
   it('no longer leaves the Add button in the left rail', () => {
@@ -863,7 +869,8 @@ describe('the rail asks about itself', () => {
     expect(blocks.length, 'a container with no queries is a declaration, not a behaviour').toBeGreaterThan(0);
     // Inline `grid-template-columns` outranks any author rule, query or not —
     // same reason `.row-grid` carries one.
-    expect(CSS).toMatch(/\.rail-swatches \{ grid-template-columns: repeat\(6, 1fr\) !important; \}/);
+    // The palette is two rows of seven by design, so the fold gives up gap, not columns.
+    expect(CSS).toMatch(/\.rail-swatches \{ gap: 3px !important; \}/);
   });
 
   it('has a hook in the rail to reflow', () => {

@@ -40,6 +40,24 @@ vi.mock('@/components/studio/CatalogPanel', () => ({ AddPiecesButton: () => null
 
 const { removeParts } = await import('@/components/studio/KeyboardShortcuts');
 const { RailFooter, startOver } = await import('@/components/studio/RailFooter');
+const { EmptyInspector } = await import('@/components/studio/EmptyInspector');
+
+// Start over lives in two places now — under the empty panel's prompt with nothing
+// selected, and in the footer with something selected — so the rail is rendered as
+// the rail renders it: both, and only one of them ever offers the button.
+// The empty panel shows on the Inspector's own condition: no wall, and no piece the
+// selected id still names.
+function Rail() {
+  const id = useStudio((s) => s.selectedPartId);
+  const wall = useStudio((s) => s.selectedWall);
+  const named = useScene((s) => s.parts.some((p) => p.id === id));
+  return (
+    <>
+      {wall === null && !named && <EmptyInspector />}
+      <RailFooter />
+    </>
+  );
+}
 
 const lastUndo = () => {
   const action = toasts[toasts.length - 1]?.action;
@@ -62,14 +80,14 @@ beforeEach(() => {
 
 describe('the footer offers Start over only when something was changed', () => {
   it('not on a room as it opened', () => {
-    render(<RailFooter />);
+    render(<Rail />);
     expect(startOverButton()).toBeNull();
   });
 
   it('after a wall is moved — the walls are part of the start', () => {
     // A wall drag carries the furniture with it, so this is never only the walls.
     useScene.getState().moveWall(0, 0.3);
-    render(<RailFooter />);
+    render(<Rail />);
     expect(startOverButton()).not.toBeNull();
   });
 
@@ -85,17 +103,17 @@ describe('the footer offers Start over only when something was changed', () => {
       depth: 4.4,
       height: 2.7,
     } as RoomData);
-    const { unmount } = render(<RailFooter />);
+    const { unmount } = render(<Rail />);
     expect(startOverButton()).toBeNull();
     unmount();
     useScene.getState().moveWall(1, -0.25);
-    render(<RailFooter />);
+    render(<Rail />);
     expect(startOverButton()).not.toBeNull();
   });
 
   it('asks with the put-it-back glyph, not the bin, and then does it', async () => {
     useScene.getState().moveWall(0, 0.3);
-    render(<RailFooter />);
+    render(<Rail />);
     await act(async () => {
       fireEvent.click(startOverButton()!);
     });
@@ -106,25 +124,25 @@ describe('the footer offers Start over only when something was changed', () => {
   it('after the ceiling height alone is changed', () => {
     const { width, depth } = useScene.getState().room;
     useScene.getState().setRoom({ width, depth, height: 3.0 });
-    render(<RailFooter />);
+    render(<Rail />);
     expect(startOverButton()).not.toBeNull();
   });
 
   it('not after a wall is painted — the paint is not part of the start', () => {
     useScene.getState().setWallColor(0, '#123456');
-    render(<RailFooter />);
+    render(<Rail />);
     expect(startOverButton()).toBeNull();
   });
 
   it('after a piece is moved, and after one is deleted', () => {
     const id = useScene.getState().parts[0].id;
     useStudio.getState().setPosition(id, [0.1, 0, 0.1]);
-    const { unmount } = render(<RailFooter />);
+    const { unmount } = render(<Rail />);
     expect(startOverButton()).not.toBeNull();
     unmount();
     useStudio.getState().resetTransforms();
     useScene.getState().deletePart(id);
-    render(<RailFooter />);
+    render(<Rail />);
     expect(startOverButton()).not.toBeNull();
   });
 });
@@ -211,11 +229,11 @@ describe('startOver', () => {
     editTheRoom();
     useScene.getState().moveWall(0, 0.5);
     startOver();
-    const { unmount } = render(<RailFooter />);
+    const { unmount } = render(<Rail />);
     expect(startOverButton()).toBeNull();
     unmount();
     lastUndo()();
-    render(<RailFooter />);
+    render(<Rail />);
     expect(startOverButton()).not.toBeNull();
   });
 

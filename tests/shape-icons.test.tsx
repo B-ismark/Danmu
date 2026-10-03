@@ -32,6 +32,24 @@ describe('the shape drawings', () => {
     }
   });
 
+  // The clause above reads the paints a body NAMES, so a body could pass it on a
+  // transparent spacer while every line that draws fell back to SVG's default fill:
+  // solid black. The window did, and showed as a blot in a list of outlines. Here
+  // every mark is followed up its own tree to the paint it actually inherits.
+  it('leave no mark to the default black fill', () => {
+    const marks = 'path, rect, circle, ellipse, line, polyline, polygon';
+    for (const [shape, g] of entries) {
+      const box = document.createElement('div');
+      box.innerHTML = `<svg>${g.body}</svg>`;
+      const svg = box.firstElementChild!;
+      for (const el of svg.querySelectorAll(marks)) {
+        let fill: string | null = null;
+        for (let n: Element | null = el; n && n !== svg && fill === null; n = n.parentElement) fill = n.getAttribute('fill');
+        expect(fill, `${shape} has a mark with no fill of its own`).not.toBeNull();
+      }
+    }
+  });
+
   it('are lines and shapes only', () => {
     const allowed = new Set(['g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon']);
     for (const [shape, g] of entries) {

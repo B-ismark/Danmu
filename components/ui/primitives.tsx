@@ -448,7 +448,7 @@ export function IconButton({
 const PILL_TONES: Record<string, [string, string]> = {
   locked: ['--locked-tint', '--locked'],
   accent: ['--accent-tint', '--accent-text'],
-  sage: ['--accent-2-tint', '--success-text'],
+  sage: ['--success-tint', '--success-text'],
   danger: ['--danger-tint', '--danger-text'],
   warn: ['--paper-3', '--warn-text'],
   neutral: ['--paper-2', '--ink-2'],

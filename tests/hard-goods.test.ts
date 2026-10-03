@@ -50,7 +50,7 @@ import {
 import { floorLampForm, tableLampForm, type LampForm } from '../lib/lamp-form';
 import { armchairForm, diningChairForm, officeChairForm, ottomanForm } from '../lib/chair-form';
 import type { SoftItem } from '../lib/soft-goods';
-import { consoleSlabs, doorHandleY, drawerSlide, isParametric, PART_LIBRARY, radiatorFins, stoolSeat, windowPanes, type Category, type Shape } from '../lib/scene-spec';
+import { consoleSlabs, doorHandleY, drawerSlide, isParametric, PART_LIBRARY, radiatorFins, SCREENS, stoolSeat, windowPanes, type Category, type Shape } from '../lib/scene-spec';
 import { dimRangeFor } from '../lib/dimension-ranges';
 import { COFFEE_SHELF, DESK_TOP, DINING_LEG, DINING_TOP, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from '../lib/foot-cells';
 
@@ -516,10 +516,12 @@ describe('the door', () => {
 });
 
 describe('the television', () => {
-  const tvs = PART_LIBRARY.filter((p) => p.shape === 'tv').map((p) => p.dimMM.slice());
+  // Every real panel the app draws: the Library's one row and the starter's sizes.
+  const tvs = SCREENS.map((s) => s.dimMM.slice());
 
   it('is a frame round a recessed screen, the panel tiling the face exactly', () => {
     expect(tvs.length).toBe(3);
+    expect(PART_LIBRARY.filter((p) => p.shape === 'tv').map((p) => p.dimMM.join())).toEqual([SCREENS[1].dimMM.join()]);
     for (const dimMM of tvs) {
       const [w, d, h] = dimMM.map((v) => v / 1000);
       const parts = tvForm(dimMM);

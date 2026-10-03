@@ -214,7 +214,7 @@ describe('a shape lands somewhere the room can hold it', () => {
       wallRiders++;
       expect(wallAffinity(i.category, i.shape), `"${i.label}"`).toBe('must-wall');
     }
-    expect(wallRiders, 'the catalogue ships wall-mounted pieces and this found none').toBe(11);
+    expect(wallRiders, 'the catalogue ships wall-mounted pieces and this found none').toBe(9);
     // The named case: `other` is `free`, and the window overrules it by anchor alone.
     expect(wallAffinity('other', 'window')).toBe('must-wall');
     expect(wallAffinity('other', 'box')).toBe('free');

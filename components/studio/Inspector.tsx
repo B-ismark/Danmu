@@ -1069,47 +1069,37 @@ function DimensionEditor({
   );
 }
 
-// Curated palette — named, and ORDERED in three runs of eight: neutrals, then
-// woods & metals, then colours.
+// Curated palette — thirteen dabs and the mixer, two rows of seven.
 //
-// Three runs, not three labelled groups. The labels cost a caption and a gap each
-// and told nobody anything a swatch does not — neutrals look neutral — while the
-// run length is 8 and the grid is 8 or 6 wide, so each run is exactly one row and
-// the grouping draws itself. At 6 the merged block still tiles (24 = 6 × 4); it was
-// the SEPARATED version that went ragged there, three groups of 6 + 2.
+// Two rows is the brief, and the cut is what makes it a palette rather than a chart:
+// the first row is the room's quiet half — whites, a stone, the woods and a near-black,
+// light to dark — and the second the colour you choose a piece FOR. Where the old 24
+// had two near-identical charcoals and two oaks a shade apart, each dab here is one a
+// person can tell from its neighbour at a glance. Anything else is the mixer, which is
+// the fourteenth cell rather than a row of its own.
 //
 // The names are what a screen reader announces and what the tooltip shows: "#E8E5DB"
-// told nobody anything. 8 columns keeps every target ≥ 32px in a 320px rail.
+// told nobody anything.
 type Swatch = { hex: string; name: string };
 const SWATCHES: Swatch[] = [
-  // Neutrals
+  // The quiet row
   { hex: '#E8E5DB', name: 'Chalk' },
   { hex: '#EDE6D6', name: 'Cream' },
   { hex: '#D6C7AE', name: 'Linen' },
-  { hex: '#DCE4E2', name: 'Mist' },
-  { hex: '#D8C7A8', name: 'Oat' },
-  { hex: '#3A3733', name: 'Charcoal' },
-  { hex: '#3A3A3A', name: 'Graphite' },
-  { hex: '#131311', name: 'Ink' },
-  // Woods & metals
-  { hex: '#C9A98E', name: 'Pale oak' },
   { hex: '#C9A87C', name: 'Warm oak' },
   { hex: '#9A6A48', name: 'Teak' },
-  { hex: '#6F4A2F', name: 'Walnut' },
   { hex: '#5D3820', name: 'Espresso' },
-  { hex: '#A86E5A', name: 'Clay' },
-  { hex: '#B08D4F', name: 'Brass' },
-  { hex: '#D8C36A', name: 'Ochre' },
-  // Colours
+  { hex: '#3A3733', name: 'Charcoal' },
+  // The colour row, ending in the mixer
   { hex: '#8FA98C', name: 'Sage' },
-  { hex: '#5D8A5D', name: 'Fern' },
   { hex: '#A9C4C0', name: 'Eucalyptus' },
-  { hex: '#6E94C8', name: 'Cornflower' },
   { hex: '#4F6D8C', name: 'Denim' },
-  { hex: '#3F5670', name: 'Navy' },
   { hex: '#C57B53', name: 'Terracotta' },
   { hex: '#C44A3A', name: 'Paprika' },
+  { hex: '#D8C36A', name: 'Ochre' },
 ];
+/** Seven a row, and the mixer takes the last cell of the second. */
+const SWATCH_COLUMNS = 7;
 
 const SWATCH_NAME = new Map(SWATCHES.map((s) => [s.hex.toLowerCase(), s.name] as const));
 
@@ -1118,7 +1108,7 @@ const SWATCH_NAME = new Map(SWATCHES.map((s) => [s.hex.toLowerCase(), s.name] as
 //
 // The palette is a decision to make, not a state to watch, so it lives behind
 // the rail's standard disclosure. Collapsed, the row is one glanceable summary
-// — swatch and colour name — and the 24 swatches and the custom mixer are one
+// — swatch and colour name — and the thirteen dabs and the custom mixer are one
 // click away instead of permanently on screen. The
 // summary is RailSection's `meta`, derived here so no call site types it.
 function PaintPicker({
@@ -1173,70 +1163,68 @@ function PaintPicker({
         </span>
       }
     >
-      {/* ONE grid, not three captioned ones. Eight columns, and the elastic rail's
-          container query is what drops it to six — an `auto-fit` here would also
-          have changed the count on a WIDE rail (nine or ten per row), which is a
-          redesign of a shipping panel rather than a reflow of a cramped one.
+      {/* ONE grid of dabs, two rows, the mixer last. The count is fixed at seven on
+          every rail: what gives in a narrow one is the gap (the container query in
+          globals.css), never the column count, because two rows IS the design.
 
-          Either count divides 24, so the three runs of the palette still land as
-          whole rows and the grouping reads without three labels and three gaps
-          paying for it. `role="group"` + the section's own title is what a screen
-          reader gets instead; each swatch already announces its name. */}
-      <div
-        role="group"
-        aria-label={`${label} swatches`}
-        className="rail-swatches"
-        style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4, paddingTop: 2 }}
-      >
-        {SWATCHES.map((s) => {
-          const on = value?.toLowerCase() === s.hex.toLowerCase();
-          return (
-            <button
-              key={s.hex}
-              onClick={() => onChange(s.hex)}
-              title={s.name}
-              aria-label={s.name}
-              aria-pressed={on}
-              className={`swatch${on ? ' is-selected' : ''}`}
-              style={{ background: s.hex }}
-            />
-          );
-        })}
-      </div>
-
-      {/* The two rare paths — a bespoke colour, and the way back — share the last
-          row of the open panel. The mixer used to hide behind the swatch itself,
-          which read as "this swatch does something" with no hint of what. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, position: 'relative' }}>
-        <button
-          onClick={() => setMixing((o) => !o)}
-          aria-expanded={mixing}
-          title="Mix a custom colour"
-          className="ds-btn ds-btn--xs"
-          style={{ flex: 1, justifyContent: 'center', gap: 6, minWidth: 0 }}
+          `role="group"` + the section's own title is what a screen reader gets; each
+          dab announces its name. A colour mixed by hand shows in the mixer's own cell,
+          ringed, so the chosen colour is always one of the fourteen on screen. */}
+      <div style={{ position: 'relative', paddingTop: 2 }}>
+        <div
+          role="group"
+          aria-label={`${label} swatches`}
+          className="rail-swatches"
+          style={{ display: 'grid', gridTemplateColumns: `repeat(${SWATCH_COLUMNS}, 1fr)`, gap: 6, justifyItems: 'center' }}
         >
-          <Icon name="edit" size={11} /> Mix a custom colour
-        </button>
-        {value && (
+          {SWATCHES.map((s) => {
+            const on = value?.toLowerCase() === s.hex.toLowerCase();
+            return (
+              <button
+                key={s.hex}
+                onClick={() => onChange(s.hex)}
+                title={s.name}
+                aria-label={s.name}
+                aria-pressed={on}
+                className={`swatch${on ? ' is-selected' : ''}`}
+                style={{ backgroundColor: s.hex }}
+              />
+            );
+          })}
           <button
-            onClick={onReset}
-            className="ds-btn ds-btn--xs"
-            title="Back to the default colour"
-            style={{ padding: '0 10px', fontWeight: 600, color: 'var(--accent-text)', gap: 4, flexShrink: 0 }}
+            onClick={() => setMixing((o) => !o)}
+            aria-expanded={mixing}
+            aria-label={value && !named ? `Custom colour ${value.toUpperCase()} — mix another` : 'Mix a custom colour'}
+            title={value && !named ? `Custom · ${value.toUpperCase()}` : 'Mix a custom colour'}
+            className={`swatch swatch--mix${value && !named ? ' is-selected is-custom' : ''}`}
+            style={value && !named ? { backgroundColor: value } : undefined}
           >
-            <Icon name="refresh" size={11} /> Default
+            <Icon name="plus" size={14} />
           </button>
-        )}
+        </div>
         {/* Brand-styled mixer (replaces the unthemeable native <input type=color>). */}
         {mixing && (
           <>
             <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-popover)' }} onClick={() => setMixing(false)} />
-            <div className="popover" style={{ position: 'absolute', top: 36, left: 0, right: 0, zIndex: 'var(--z-popover)', padding: 12 }}>
+            <div className="popover" style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 'var(--z-popover)', padding: 12 }}>
               <ColorPicker value={current} onChange={onChange} />
             </div>
           </>
         )}
       </div>
+
+      {/* The way back is the one rare path left outside the grid, and only when there
+          is somewhere to go back from. */}
+      {value && (
+        <button
+          onClick={onReset}
+          className="ds-btn ds-btn--xs ds-btn--ghost"
+          title="Back to the default colour"
+          style={{ marginTop: 10, padding: '0 8px', fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}
+        >
+          <Icon name="refresh" size={11} /> Default colour
+        </button>
+      )}
 
       {footer && <div style={{ marginTop: 10 }}>{footer}</div>}
     </RailSection>

@@ -236,7 +236,7 @@ export function LibraryPicker({
                   }
                   onClick={(e) => press(e, added)}
                   aria-pressed={marked.some((m) => m.label === item.label) || undefined}
-                  className="ds-btn ds-btn--sm"
+                  className="ds-btn ds-btn--sm pick-row"
                   title={
                     `${added.dimMM[0]} × ${added.dimMM[1]} × ${added.dimMM[2]} mm` + (refused ? ` · ${refused}` : '')
                   }

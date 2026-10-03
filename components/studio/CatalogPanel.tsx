@@ -41,9 +41,14 @@ import { usePublishedBox } from './CanvasChrome';
  *  room. Without it, pressing Add on a narrow window opens a panel off-screen. */
 export const STUDIO_CANVAS_ID = 'studio-canvas';
 
-/** Rail trigger — the labelled one, in the right rail's pinned footer
- *  (`RailFooter`), beside Delete and the revert. */
-export function AddPiecesButton() {
+/** Rail trigger — the labelled one: in the right rail's pinned footer
+ *  (`RailFooter`) beside Delete while something is selected, and full width under
+ *  the empty panel's prompt (`EmptyInspector`, `wide`) while nothing is.
+ *
+ *  Solid moss, because it is the rail's one primary action. It was a tint with a moss
+ *  rim and moss type, which in a row beside an outlined Delete read as a second
+ *  outlined button that happened to be green — the eye had nothing to land on. */
+export function AddPiecesButton({ wide = false }: { wide?: boolean } = {}) {
   const open = useStudio((s) => s.catalogOpen);
   const setOpen = useStudio((s) => s.setCatalogOpen);
   // The house bubble, and it names what pressing does NOW. It was a native `title`
@@ -66,14 +71,7 @@ export function AddPiecesButton() {
         }}
         aria-expanded={open}
         aria-label={tip}
-        className="ds-btn ds-btn--sm"
-        style={{
-          background: 'var(--accent-tint)',
-          // --accent as type on --accent-tint measures 2.89:1; --accent-text is
-          // the accent-coloured ink that clears 4.5:1 on the same tint.
-          borderColor: 'var(--accent-text)',
-          color: 'var(--accent-text)',
-        }}
+        className={`ds-btn ds-btn--sm ds-btn--accent${wide ? ' rail-wide' : ''}`}
       >
         {/* The label says the action, not the state: a button that reads "Library is
             open" is a status line you can press.

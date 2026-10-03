@@ -31,10 +31,11 @@ describe('followsPointerUp', () => {
         lifted.push(e.shape);
       }
     }
-    // Literals, not floors: eleven catalogue rows ride a wall and ten of them lift
-    // (three TVs). A new wall piece changes these and has to say which it is.
-    expect(riders).toBe(11);
-    expect(lifted.length).toBe(10);
+    // Literals, not floors: nine catalogue rows ride a wall and eight of them lift
+    // (one TV since the Library stopped selling three sizes of the same drawing). A
+    // new wall piece changes these and has to say which it is.
+    expect(riders).toBe(9);
+    expect(lifted.length).toBe(8);
     expect(lifted).not.toContain('door');
   });
 });
