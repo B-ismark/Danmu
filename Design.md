@@ -360,9 +360,16 @@ EXIF parser and deliberately **not** carried into the decision for that reason.
 > swatch; the page holds ONE hovered state `{index, from}` handed to `PhotoEditor`
 > and every `DetectionRow` (now `components/studio/DetectionRow.tsx`), so hovering
 > either side raises the other. Only a hover that began on the photo scrolls the
-> list (`scrollIntoView({block:'nearest'})`, no focus move). Picking a suggested model
-> from the name field keeps the piece (`keptAfterPick`); unticking is still the
-> person's. The photo column is sized by `--scan-photo-w`, published by the page's
+> list (`scrollIntoView({block:'nearest'})`, no focus move). Typing a new name in a
+> row's name field lists the Library models the word matches (`suggestFromLabel`, the
+> matcher the repair chips use, in the search's order, re-measured where the photo
+> allows and at the standard size where it does not); picking one changes the model the
+> piece is built as (the row's subtitle names it, `sceneShapeFor`) and keeps the piece
+> (`keptAfterPick`), and Enter on the typed text alone is a plain rename. Unticking is
+> still the person's. A row that starts unticked says why, in a note under it: a
+> doubted outline reads "Left out: its outline does not look like a …" (and no size),
+> a probable repeat asks "Same … as on …?" with *Yes, same one* / *No, it's another*.
+> The photo column is sized by `--scan-photo-w`, published by the page's
 > `ResizeObserver` from the pinned photo's height and aspect, so the rail sits beside
 > the photo rather than a screen away. While it runs the card shows
 > `components/ui/FindingFurniture.tsx`, decoration only: aria-hidden, a photo count and
@@ -378,14 +385,34 @@ EXIF parser and deliberately **not** carried into the decision for that reason.
 Furniture detection runs through a fallback chain, best-effort:
 
 1. **Local detector** — `lib/local-detect.ts`, via `onnxruntime-web`. No key, no
-   quota, no network after the first model download. The models (~64 MB total)
-   are **not bundled** and are git-ignored; `resolveBase()` HEAD-probes two
+   quota, no network after the first model download. The models (~65 MB total)
+   are **not bundled** and are git-ignored; `resolveFile()` HEAD-probes two
    sources in order:
    `public/models/` (produced by `python scripts/export-detector.py`, needs
    `pip install ultralytics`) then the Hugging Face mirror
    [`DearthAI/danmu-detector`](https://huggingface.co/DearthAI/danmu-detector),
    so a fresh clone works without a Python + torch toolchain. Both are static
    GETs of a public file — no user data leaves the device.
+
+   **The download is asked about, and then kept.** The mirror serves both files
+   `no-store`, so the browser kept nothing and every scan in a new page fetched ~65 MB
+   again. The verified bytes now go into Cache Storage (`lib/model-cache.ts`, cache
+   `danmu-detector-v1`), re-verified against `MODEL_DIGESTS` on every read, and
+   `public/sw.js` keeps that cache across deployments. A file served from this origin
+   (the local export) owes nothing. When a scan would have to download, the scan screen
+   asks first (`detectorStatus`): a card with the size **read off the mirror's HEAD
+   response**, a mobile-data hint, **Download** (or **Update**) and **Skip for now**.
+   Skipping with no key set arms by-hand boxes and says *Look again* brings the scan
+   back on Wi-Fi; with a key, the cloud path runs instead. The count while it runs is
+   against the whole download from the first byte (`DetectorStatus.owed`, handed to
+   `onDetectorDownload`). **Basic or Full** is one picker (`DetectorPackPicker`,
+   `settings.detectorPack`, default Full): Basic is the OIV7 model alone (~14 MB, about
+   half the finds), Full is the ensemble below (`packFiles`). A kept copy records the
+   digest it was verified against, so one an app update no longer pins reads as an
+   *update* and is asked about the same way, never downloaded unasked.
+   **Settings → Downloads** shows what is kept with *Download now* / *Update* /
+   *Remove from this device*; an unreachable mirror says so rather than reading as
+   nothing owed.
 
    Each photo is run **five times** — whole frame plus 2×2 tiles at 15% overlap
    — and merged with a single NMS in normalized whole-image space. Letterboxing
@@ -499,7 +526,8 @@ Furniture detection runs through a fallback chain, best-effort:
    | both tiled (current) | 10 | 13/19 |
 
    The OIV7 model earns exactly one object for double the passes and +14 MB.
-   Dropping it is the obvious lever if detection ever feels too slow.
+   Dropping the OIV7 model is the lever if detection ever feels too slow (note the
+   Basic pack is the opposite cut: it keeps OIV7 and drops the world model, for size).
 
    **Licence boundary:** the weights are AGPL-3.0 (Ultralytics) and Danmu is
    MIT. AGPL is copyleft, so the two cannot be mixed — the weights therefore
@@ -553,11 +581,27 @@ Furniture detection runs through a fallback chain, best-effort:
    notice (`lib/set-aside.ts`), so a scan that kept 6 of 9 pieces no longer looks
    like one that found 6 (§ 49.19).
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
-   detector is available.
+   detector is available, or when the download was skipped.
+
+**One piece, several walls.** A big piece is in two or three of the four photos.
+`lib/repeat-sightings.ts` is the app's *guess* (shared footprint on the floor; boxes in
+one photo that do not touch are two things): a probable repeat starts unticked and asks
+which row it repeats. `lib/sighting-links.ts` is the person's *answer*: a row's
+**Seen this already?** picker (`linkCandidates`: same kind first, other walls first)
+stores `sameAs` (the earlier row's `uid`, never an index) on the later row and unticks
+it, so the room builder, which builds kept rows only, builds one piece. Unlinking puts
+it back. Removing or unticking the piece hands it to its next sighting (`handOver`,
+`withoutRow`) rather than orphaning the links; picking a model on a linked row ends the
+link. A link adds **placement only**, never size: a floor piece's combined spot
+(`combinedFloorSpot`, written as `seenAt` beside `position` by `withSeenAt`) averages
+sightings only where that was measured to help — all of them on an assumed lens, only
+uncut ones on a measured lens.
 
 Detection returns labels + boxes only. The **geometry engine derives positions** (and a
 rough size reading), and a scanned piece is then **built at an approximate catalogue size**
-(see *Scanned pieces are approximate*, below) with its model's default colour. The engine
+(§4, *Scanned pieces are approximate*: `approximateDims` starts from the shape's Library
+size and lets the estimate nudge the width only) with its model's default colour — photo
+colour reuse was deleted, so neither detector path reads or returns a colour. The engine
 used to check the label against the size it measured — see §4's
 pipeline, which also covers what each source's `conf` is actually worth.
 
