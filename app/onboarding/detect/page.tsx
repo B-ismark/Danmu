@@ -46,7 +46,7 @@ import {
 } from '@/lib/review-history';
 import { shouldAutoConfirm } from '@/lib/detect-confidence';
 import { findRepeats, keptAtFirst } from '@/lib/repeat-sightings';
-import { linkCandidates, linkSighting, linkedTo, sightingsOf, unlinkSighting, withSeenAt, withoutRow } from '@/lib/sighting-links';
+import { handOver, linkCandidates, linkSighting, linkedTo, sightingsOf, unlinkSighting, withSeenAt, withoutRow } from '@/lib/sighting-links';
 import { cleanLabelOf } from '@/lib/detection-record';
 import { fromRecords, toRecord } from '@/lib/detection-record';
 import { adoptEditedList, adoptFreshScan, listEditSentence } from '@/lib/rescan';
@@ -556,10 +556,15 @@ export default function DetectPage() {
     // Ticking a linked row means it is its own piece after all: a row both kept and
     // linked would be built AND counted as another's sighting.
     if (detections[i]?.sameAs && !confirmed.has(i)) setDetections((d) => unlinkSighting(d, i) as Detection[]);
+    // Unticking a piece seen on other walls hands it to the next sighting, which is
+    // kept in its place (`handOver`); unticking that one hands it on again.
+    const handed = confirmed.has(i) ? handOver(detections, i) : { dets: detections, heir: null };
+    if (handed.heir !== null) setDetections(handed.dets as Detection[]);
     setConfirmed((prev) => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i);
       else next.add(i);
+      if (handed.heir !== null) next.add(handed.heir);
       return next;
     });
   }
@@ -691,9 +696,10 @@ export default function DetectPage() {
     // seconds ago, and one that survives a delete would point at whichever piece
     // slid into that slot.
     setOffer(null);
-    // `withoutRow` rather than a filter: a row linked to this one would otherwise
-    // keep a link to nothing.
-    setDetections((d) => withoutRow(d, i));
+    // `withoutRow` rather than a filter: when this row was a piece seen on other
+    // walls, the next sighting becomes the piece and is kept.
+    const { dets: rest, heir } = withoutRow(detections, i);
+    setDetections(rest);
     setHover(null);
     setConfirmed((prev) => {
       const next = new Set<number>();
@@ -701,6 +707,7 @@ export default function DetectPage() {
         if (x < i) next.add(x);
         else if (x > i) next.add(x - 1);
       });
+      if (heir !== null) next.add(heir);
       return next;
     });
   }

@@ -90,21 +90,39 @@ export function unlinkSighting(dets: readonly Detection[], i: number): readonly 
   });
 }
 
-/** The list after row `i` is deleted, with any link to it cleared rather than left
- *  pointing at nothing. A link that names no row reads as no link (`linkedTo`), so
- *  this is tidiness, not correctness — but a dangling uid in a saved record is a fact
- *  about a row that no longer exists, and records are read by more than this screen. */
-export function withoutRow(dets: readonly Detection[], i: number): Detection[] {
+/** Row `i` stops being the piece — unticked or deleted — and its first sighting takes
+ *  over: that row loses its link (the caller ticks it) and every other sighting is
+ *  re-pointed at it. `heir` is the row that took over, or null when `i` had none.
+ *
+ *  Why the piece survives its first row: a link says "these rows are one bed", and
+ *  removing one row of a bed seen from three walls is most often removing the worst
+ *  photo of it, not the bed. A person who wants no bed removes the heir too, and the
+ *  hand-over runs out with the sightings. Row `i` itself is NOT linked to the heir:
+ *  a removed row that pointed at the heir would be handed the piece back the moment
+ *  the heir was removed, and the bed could never be taken out. */
+export function handOver(dets: readonly Detection[], i: number): { dets: readonly Detection[]; heir: number | null } {
   const uid = dets[i]?.uid;
-  return dets.flatMap((d, j) => {
-    if (j === i) return [];
-    if (uid && d.sameAs === uid) {
+  const [heir] = sightingsOf(dets, i);
+  const heirUid = heir === undefined ? undefined : dets[heir].uid;
+  if (!uid || heir === undefined || !heirUid) return { dets, heir: null };
+  const out = dets.map((d, j) => {
+    if (j === heir) {
       const { sameAs: _drop, ...rest } = d;
       void _drop;
-      return [rest];
+      return rest;
     }
-    return [d];
+    return d.sameAs === uid ? { ...d, sameAs: heirUid } : d;
   });
+  return { dets: out, heir };
+}
+
+/** The list after row `i` is deleted, with its sightings handed to the first of them
+ *  (`handOver`) rather than left pointing at nothing. `heir` is that row's index in the
+ *  NEW list, for the caller to tick, or null. */
+export function withoutRow(dets: readonly Detection[], i: number): { dets: Detection[]; heir: number | null } {
+  const handed = handOver(dets, i);
+  const heir = handed.heir === null ? null : handed.heir > i ? handed.heir - 1 : handed.heir;
+  return { dets: handed.dets.filter((_, j) => j !== i), heir };
 }
 
 /** Which rows row `i` could be linked to, best first: kept rows that are pieces in

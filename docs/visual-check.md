@@ -1876,6 +1876,9 @@ first wall's bed. Look at **All walls**, then **Continue**.
 - **Seen this already?** clipped or pushing the row wider than the rail at 360 px — only
   1280 was probed.
 - A row the automatic guess unticked whose **Yes, same one** leaves it unlinked.
+- Unticking or deleting the Wall 1 bed and the bed leaving the room: the Wall 2 bed
+  should tick itself and stop saying *"Same bed as on Wall 1"*. Unticking that one too
+  should leave no bed, not hand it back to Wall 1.
 
 ### The room's size on the shape picker, and the rough mark when it is skipped — `fdd1f20` on `main` (PR #160), SWEPT and PROBED
 

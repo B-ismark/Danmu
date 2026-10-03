@@ -18,6 +18,7 @@ import {
   unlinkSighting,
   withSeenAt,
   withoutRow,
+  handOver,
 } from '@/lib/sighting-links';
 import { refineDetections, type CalMap } from '@/lib/detect-refine';
 import { keptAtFirst } from '@/lib/repeat-sightings';
@@ -91,11 +92,29 @@ describe('linking', () => {
     expect(out[2].sameAs).toBe('bed-n');
   });
 
-  it('clears the links to a deleted row instead of leaving them pointing at nothing', () => {
-    const linked = linkSighting([bedN, bedE, lampE], 1, 0);
-    const out = withoutRow(linked, 0);
-    expect(out.map((d) => d.uid)).toEqual(['bed-e', 'lamp-e']);
-    expect('sameAs' in out[0]).toBe(false);
+  it('hands a deleted piece to its next sighting instead of leaving links to nothing', () => {
+    const linked = linkSighting(linkSighting([bedN, lampE, bedE, bedS], 2, 0), 3, 0);
+    const { dets: out, heir } = withoutRow(linked, 0);
+    expect(out.map((d) => d.uid)).toEqual(['lamp-e', 'bed-e', 'bed-s']);
+    expect(heir).toBe(1);
+    expect('sameAs' in out[1]).toBe(false);
+    expect(out[2].sameAs).toBe('bed-e');
+    expect(withoutRow(linked, 1).heir).toBeNull();
+  });
+
+  it('hands an unticked piece on, and leaves the removed row unlinked so it cannot be handed back', () => {
+    const linked = linkSighting(linkSighting([bedN, bedE, bedS], 1, 0), 2, 0);
+    const first = handOver(linked, 0);
+    expect(first.heir).toBe(1);
+    expect('sameAs' in first.dets[0]).toBe(false);
+    expect('sameAs' in first.dets[1]).toBe(false);
+    expect(first.dets[2].sameAs).toBe('bed-e');
+    // Removing the heir hands on to the last sighting, never back to the first row.
+    const second = handOver(first.dets, 1);
+    expect(second.heir).toBe(2);
+    expect('sameAs' in second.dets[2]).toBe(false);
+    // And the last one has nothing to hand on: the bed can be taken out.
+    expect(handOver(second.dets, 2).heir).toBeNull();
   });
 
   it('reads a link to a row that is gone as no link', () => {

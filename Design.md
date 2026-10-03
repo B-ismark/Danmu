@@ -702,7 +702,11 @@ pick of kept pieces (same kind first, other walls first). A link is the later ro
 `sameAs`, the uid of the row it repeats (never an index: a delete re-numbers indices),
 kept one level deep so a bed on three walls is one row with two linked to it. A linked
 row is unticked, so `buildSceneFromRoom` never builds it; unlinking ticks it back, and
-undo covers both because the review history snapshots the rows.
+undo covers both because the review history snapshots the rows. Removing the piece's
+own row — unticking or deleting it — **hands the piece to its next sighting**
+(`handOver`), which is kept in its place; the removed row is left unlinked rather than
+pointed at the heir, so removing every sighting in turn takes the piece out instead of
+handing it back.
 
 A link adds **placement and nothing else** — the size stays the catalogue's (rule 2).
 At Continue, `withSeenAt` writes each kept floor piece's combined spot as `seenAt`,
