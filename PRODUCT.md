@@ -51,8 +51,8 @@ dimensionally real *and* private-by-construction at the same time.
   the optional API key to localStorage. The only network call is one optional,
   direct Gemini request (user's own key) during photo detection.
 - Two ways in: **quick start** (pick a footprint, land straight in the studio
-  with a contextual starter scene) or **capture** (footprint → 4-wall guided
-  room capture → furniture detection → studio).
+  with a contextual starter scene) or **capture** (footprint → wall photos →
+  check the detected furniture → studio).
 - Two studio surfaces only: **3D Model** and **2D Plan**.
 - If detection is unavailable, the studio still fully works — pick a footprint
   and decorate.
@@ -99,12 +99,12 @@ cannot.
   deliberately **not** a technical / professional CAD tool. Future work may
   evolve the look, but must not drift the product into cold, CAD-like territory.
 
-*(Palette, typography, and other visual specifics are owned by DESIGN.md, not
+*(Palette, typography, and other visual specifics live in `app/globals.css` and Design.md, not
 this record.)*
 
 ## Evidence on Hand
 
-- Real project artifacts: `DESIGN.md` (canonical design + architecture),
+- Real project artifacts: `Design.md` (canonical design + architecture),
   `CLAUDE.md`, `README.md`, and the running codebase on `main`.
 - Licence: **MIT**. Open source. (Optional local YOLOv8 detector weights the
   user may export are AGPL-3.0 and are not committed.)
