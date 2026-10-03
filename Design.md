@@ -682,8 +682,8 @@ Every wall of a four-photo capture sees a big piece, so a bedroom came back with
 five beds, all ticked. `lib/repeat-sightings.ts` is the **soft** half of the same
 decision and deletes nothing. It asks what a person looking at the list asks —
 *could these two rows be standing in the same spot?* — and answers with the index of
-the row a sighting probably repeats. The review leaves that row unticked with the
-caption *Probably the bed from Wall 1 again*; ticking it back is one tap, which is
+the row a sighting probably repeats. The review leaves that row unticked and asks
+*Same bed as on Wall 1?* — **Yes** links it (below), **No** ticks it back — one tap, which is
 the asymmetry the merge argues for: a real piece that never appears is worse than a
 duplicate, so the duplicate is paid for once on the list rather than in the studio.
 The rule is two facts about rooms, not about detectors:
@@ -708,6 +708,32 @@ was an unconfident one would end with every sighting unticked. The pass is greed
 with no chaining, so a bed in four photos is one bed and three repeats. `keptAtFirst`
 is the one place the seeding decision is made, so the screen and the tests cannot
 disagree about it.
+
+**The person can link what the guess missed** (`lib/sighting-links.ts`). The review
+list follows the wall tab — one wall's pieces beside that wall's photo, with **All
+walls** for the check before Continue — and every row offers *Seen this already?*, a
+pick of kept pieces (same kind first, other walls first). A link is the later row's
+`sameAs`, the uid of the row it repeats (never an index: a delete re-numbers indices),
+kept one level deep so a bed on three walls is one row with two linked to it. A linked
+row is unticked, so `buildSceneFromRoom` never builds it; unlinking ticks it back, and
+undo covers both because the review history snapshots the rows. Removing the piece's
+own row — unticking or deleting it — **hands the piece to its next sighting**
+(`handOver`), which is kept in its place; the removed row is left unlinked rather than
+pointed at the heir, so removing every sighting in turn takes the piece out instead of
+handing it back.
+
+A link adds **placement and nothing else** — the size stays the catalogue's (rule 2).
+At Continue, `withSeenAt` writes each kept floor piece's combined spot as `seenAt`,
+beside its own `position` rather than over it, so the readings survive and a second
+Continue recombines the same numbers. `combinedFloorSpot` decides from a measurement
+over 150 furnished rooms (printed by `tests/sighting-links.test.ts`): when any
+sighting rode an **assumed** lens the mean of every sighting wins (1.2 m off → 0.8 m
+at an ultrawide read as 66°); on **measured** lenses the first sighting is already
+good and averaging in a frame-cut one made it worse (0.318 → 0.382 m at 106°), so
+only uncut sightings count and fewer than two means no move. Floor pieces only: a
+wall piece's place is read on an assumed plane and nothing measured that averaging
+helps. `rescan.ts` includes `seenAt` in a row's `buildsAs`, so an arranged room
+rebuilds the piece a new link moved.
 
 **It is for every kind, not beds**, and three things stood between it and the rest of
 a room, each measured over 150 generated furnished rooms (`tests/helpers/furnished-rooms.ts`,

@@ -249,6 +249,12 @@ export type RoomData = {
     position?: { x: number; y: number; z: number };
     yaw?: number;
     shape?: string;
+    /** The uid of the row this one repeats — see `Detection.sameAs`. */
+    sameAs?: string;
+    /** A kept floor piece's spot combined from every sighting linked to it, in
+     *  metres, written on Continue (`withSeenAt`). Beside `position`, never over it,
+     *  so the row keeps its own measurement. The room builder prefers it. */
+    seenAt?: { x: number; z: number };
   }>;
 };
 

@@ -10,6 +10,7 @@ import type { CaptureSlot } from '@/lib/storage';
 import type { Detection } from '@/lib/detection';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { EditableText, IconButton } from '@/components/ui/primitives';
+import { Select } from '@/components/ui/Select';
 import { PART_LIBRARY, sceneShapeFor } from '@/lib/scene-spec';
 import { sourceLabel, sourceOf } from '@/lib/detect-confidence';
 import { cleanLabelOf } from '@/lib/detection-record';
@@ -52,6 +53,12 @@ export const MANUAL_CATEGORIES: { value: Detection['category']; label: string }[
 // about what the user photographed. The n/e/s/w ids stay; only labels are human.
 export function slotLabel(slot: CaptureSlot): string {
   return CAPTURE_SLOTS.find((c) => c.id === slot)?.label ?? slot.toUpperCase();
+}
+
+/** "Wall 2", "Wall 2 and Wall 3", "Wall 2, Wall 3 and Wall 4". */
+function wallList(slots: readonly CaptureSlot[]): string {
+  const names = slots.map(slotLabel);
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
 /** A piece's name mid-sentence: "the bed", but "the TV". */
@@ -99,6 +106,12 @@ export function DetectionRow({
   onDelete,
   onLink,
   onShow,
+  sameAs,
+  alsoSeenOn,
+  linkOptions,
+  onLinkTo,
+  onUnlink,
+  onConfirmRepeat,
 }: {
   d: Detection;
   confirmed: boolean;
@@ -130,6 +143,19 @@ export function DetectionRow({
   onDelete: () => void;
   onLink: (on: boolean) => void;
   onShow: () => void;
+  /** The row the PERSON said this one repeats (`lib/sighting-links.ts`). Unlike
+   *  `repeatOf`, which is the app's guess, this is settled: the row is not built. */
+  sameAs: Detection | null;
+  /** The walls of the rows linked to this one, so the kept piece says it was seen
+   *  more than once. Empty for most rows. */
+  alsoSeenOn: readonly CaptureSlot[];
+  /** Rows this one could be linked to, best first (`linkCandidates`), already named.
+   *  Empty hides the control. */
+  linkOptions: readonly { index: number; label: string }[];
+  onLinkTo: (index: number) => void;
+  onUnlink: () => void;
+  /** "Yes, same one" on the guessed repeat: link this row to `repeatOf`. */
+  onConfirmRepeat: () => void;
 }) {
   const label = cleanLabelOf(d);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -229,12 +255,70 @@ export function DetectionRow({
             acted on — it is still on the list, one tap from kept, because a real
             piece that never appears is worse than a duplicate. Wraps rather than
             clips: the sentence is as long as two piece names make it. */}
-        {repeatOf && (
-          <RowNote icon="copy">
-            Probably the {inSentence(cleanLabelOf(repeatOf))} from {slotLabel(repeatOf.slot)} again
+        {/* Settled by the person: this row is another view of a piece already on
+            the list, so it is not built. Unlink makes it its own piece again. */}
+        {sameAs && (
+          <div className="t-hint" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 3, lineHeight: 1.45 }}>
+            <Icon name="link" size={11} style={{ flex: '0 0 auto' }} />
+            <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
+              Same {inSentence(cleanLabelOf(sameAs))} as on {slotLabel(sameAs.slot)}
+            </span>
+            <button
+              onClick={onUnlink}
+              className="ds-chip"
+              title="Make this its own piece again, kept"
+              style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px', flex: '0 0 auto', gap: 4 }}
+            >
+              <Icon name="unlink" size={11} />
+              Unlink
+            </button>
+          </div>
+        )}
+        {/* The app's guess that this is a repeat, ASKED rather than acted on in
+            silence. It still starts unticked — a guess that is right most of the
+            time should cost nothing when it is — but the person settles it: yes
+            links it, no keeps it as its own piece. Once ticked the question is
+            answered and goes. */}
+        {repeatOf && !sameAs && !confirmed && (
+          <div className="t-hint" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 3, lineHeight: 1.45 }}>
+            <Icon name="copy" size={11} style={{ flex: '0 0 auto' }} />
+            <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
+              Same {inSentence(cleanLabelOf(repeatOf))} as on {slotLabel(repeatOf.slot)}?
+            </span>
+            <span style={{ display: 'inline-flex', gap: 4, flex: '0 0 auto' }}>
+              <button
+                onClick={onConfirmRepeat}
+                className="ds-chip"
+                style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px' }}
+              >
+                Yes, same one
+              </button>
+              <button onClick={onToggle} className="ds-chip" style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px' }}>
+                No, it’s another
+              </button>
+            </span>
+          </div>
+        )}
+        {alsoSeenOn.length > 0 && (
+          <RowNote icon="link">
+            Also seen on {wallList(alsoSeenOn)}. Built once
           </RowNote>
         )}
-        {doubted && !repeatOf && !confirmed && (
+        {!sameAs && linkOptions.length > 0 && (
+          <div style={{ marginTop: 5, maxWidth: 220 }}>
+            <Select
+              value=""
+              onChange={(v) => onLinkTo(Number(v))}
+              options={linkOptions.map((o) => ({ value: String(o.index), label: o.label }))}
+              placeholder="Seen this already?"
+              ariaLabel={`${label} is the same piece as…`}
+              title="Already on your list from another wall? Pick it, and this is built once"
+              height={26}
+              fontSize="var(--fs-caption)"
+            />
+          </div>
+        )}
+        {doubted && !repeatOf && !sameAs && !confirmed && (
           <RowNote icon="info">
             Left out: its outline does not look like a {inSentence(modelName)}. Tick it if it is one
           </RowNote>

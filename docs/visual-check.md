@@ -1826,8 +1826,10 @@ Rooms saved before this open exactly as they did (every row is marked kept on lo
 
 **Where to click.** Any preset → *"Photograph my real room first"* → photograph the walls
 so the bed is in two of them (the foot wall and a side wall) → the detect screen. One bed
-row is ticked; the other starts at + and reads *"Probably the bed from Wall 1 again"*
-under its name. Tick it back and **Continue with N pieces** counts it.
+row is ticked; the other starts at + and asks *"Same bed as on Wall 1?"* under its
+name, with **Yes, same one** and **No, it’s another** (the caption was *"Probably the bed
+from Wall 1 again"* until the item below turned it into that question). **No** ticks it
+back and **Continue with N pieces** counts it.
 
 The hard merge only folds pairs it is sure of, so a bed seen from its foot and its side
 came back as two ticked beds. Now a row that shares a quarter of its floor with a kept row
@@ -1844,9 +1846,39 @@ right looks like, so seeing it is no reason to delete this item.
 - The caption naming a wall the photo was not taken of, or a row that does not exist.
 - The caption clipped, ellipsised or running under the + at 360 px, or pushing the row
   taller than its photo.
-- *"Probably the the bed…"*, or a capital mid-sentence — the first letter is lower-cased
-  unless the word reads as an acronym (*the TV*), and a detector's own wording is the
+- *"Same the bed…"*, or a capital mid-sentence — the first letter is lower-cased
+  unless the word reads as an acronym (*TV*), and a detector's own wording is the
   untested half.
+
+### One piece on two walls, linked by hand on the review list — branch `ccr-02d40e8d-fzmw33`, PROBED at 1280
+
+The automatic guess above misses a bed it cannot match — a different word on each wall,
+or two readings too far apart — and the room came back with two beds. Now the review
+list follows the wall tab (with **All walls** beside it for a last look before Continue),
+and every row offers **Seen this already?**: pick the earlier piece and the row reads
+*"Same bed as on Wall 1"* with **Unlink**, the earlier one reads *"Also seen on Wall 2.
+Built once"*, and the room gets one bed. Where it stands is the average of its sightings
+when any photo's lens was assumed (most phones), and its first sighting otherwise; its
+size is the catalogue's either way. Probed headless on a seeded room with a *Bed* on
+Wall 1 and a *Double bed* on Wall 2: lists split by wall, the picker offers *Bed · Wall 1*,
+Ctrl+Z and redo take the link off and put it back, the saved record holds the link and
+the averaged spot, and the studio shows one bed.
+
+**Where to click.** Scan a bedroom so the bed is in two photos. On the detect screen,
+open the second wall's tab, find its bed row, open **Seen this already?** and pick the
+first wall's bed. Look at **All walls**, then **Continue**.
+
+**What wrong looks like.**
+- Two beds in the studio after linking, or the bed missing entirely.
+- The linked bed standing somewhere neither photo shows it, or out through a wall.
+- The picker offering a piece that is itself linked, or the row's own piece.
+- The wall tab's list showing another wall's pieces, or an empty wall with no message.
+- **Seen this already?** clipped or pushing the row wider than the rail at 360 px — only
+  1280 was probed.
+- A row the automatic guess unticked whose **Yes, same one** leaves it unlinked.
+- Unticking or deleting the Wall 1 bed and the bed leaving the room: the Wall 2 bed
+  should tick itself and stop saying *"Same bed as on Wall 1"*. Unticking that one too
+  should leave no bed, not hand it back to Wall 1.
 
 ### The room's size on the shape picker, and the rough mark when it is skipped — `fdd1f20` on `main` (PR #160), SWEPT and PROBED
 

@@ -2743,7 +2743,16 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // wrote it from the calibrated camera) or the model's own guess on an
     // uncalibrated slot; this cannot tell them apart and does not need to, because
     // the only axes it reads are the two a photo can actually locate.
-    const aiPos = (d as { position?: { x: number; y: number; z: number } }).position;
+    const ownPos = (d as { position?: { x: number; y: number; z: number } }).position;
+    // A floor piece the person linked to other sightings of it stands where those
+    // sightings put it together (`lib/sighting-links.ts`, written on Continue). Its
+    // own `position` is kept on the record so the next Continue combines the same
+    // readings again; only the floor axes are replaced, which is all it carries.
+    const seen = (d as { seenAt?: { x: number; z: number } }).seenAt;
+    const aiPos =
+      seen && Number.isFinite(seen.x) && Number.isFinite(seen.z)
+        ? { x: seen.x, y: ownPos?.y ?? 0, z: seen.z }
+        : ownPos;
     const aiYaw = (d as { yaw?: number }).yaw;
     /** Does the model's own yaw survive a wall snap?
      *

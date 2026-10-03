@@ -9,7 +9,7 @@ import { roomStore, blobToObjectUrl, type Capture, type CaptureSlot } from '@/li
 import { detectAcrossImages, DetectError, type Detection } from '@/lib/detection';
 import { setAsideSentence, setAsideTitle } from '@/lib/set-aside';
 import { Icon } from '@/components/ui/Icon';
-import { FlowBarLead, IconButton } from '@/components/ui/primitives';
+import { FlowBarLead, IconButton, Segmented } from '@/components/ui/primitives';
 import { DetectionRow, EMPTY_OFFER, MANUAL_CATEGORIES, categoryLabel, candidateLabel, slotLabel } from '@/components/studio/DetectionRow';
 import { FindingFurniture } from '@/components/ui/FindingFurniture';
 import { FlowStepper } from '@/components/ui/FlowStepper';
@@ -46,6 +46,8 @@ import {
 } from '@/lib/review-history';
 import { shouldAutoConfirm } from '@/lib/detect-confidence';
 import { findRepeats, keptAtFirst } from '@/lib/repeat-sightings';
+import { handOver, linkCandidates, linkSighting, linkedTo, sightingsOf, unlinkSighting, withSeenAt, withoutRow } from '@/lib/sighting-links';
+import { cleanLabelOf } from '@/lib/detection-record';
 import { fromRecords, toRecord } from '@/lib/detection-record';
 import { adoptEditedList, adoptFreshScan, listEditSentence } from '@/lib/rescan';
 import { toast } from '@/components/ui/StorageToast';
@@ -248,6 +250,10 @@ export default function DetectPage() {
   // list, so a wrong guess or a second sighting costs one tap to bring back.
   const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
   const [activeSlot, setActiveSlot] = useState<CaptureSlot>('n');
+  // The list follows the wall being looked at, so the review is a walk round the room
+  // one wall at a time; "All walls" is the check before Continue that the room holds
+  // one bed. Where the person is LOOKING, so it is not in the undo history.
+  const [listScope, setListScope] = useState<'wall' | 'all'>('wall');
   const [notice, setNotice] = useState<Notice | null>(null);
   const [adding, setAdding] = useState(false);
   const [manualCat, setManualCat] = useState<Detection['category']>('sofa');
@@ -547,10 +553,18 @@ export default function DetectPage() {
 
   function toggleConfirm(i: number) {
     remember();
+    // Ticking a linked row means it is its own piece after all: a row both kept and
+    // linked would be built AND counted as another's sighting.
+    if (detections[i]?.sameAs && !confirmed.has(i)) setDetections((d) => unlinkSighting(d, i) as Detection[]);
+    // Unticking a piece seen on other walls hands it to the next sighting, which is
+    // kept in its place (`handOver`); unticking that one hands it on again.
+    const handed = confirmed.has(i) ? handOver(detections, i) : { dets: detections, heir: null };
+    if (handed.heir !== null) setDetections(handed.dets as Detection[]);
     setConfirmed((prev) => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i);
       else next.add(i);
+      if (handed.heir !== null) next.add(handed.heir);
       return next;
     });
   }
@@ -660,8 +674,18 @@ export default function DetectPage() {
     // In place, never a filter or a re-sort: `confirmed` is a Set of array
     // INDICES, so reordering here would silently move every confirmation onto a
     // different piece of furniture.
+    // A pick ticks the row, and a kept row cannot also be another's sighting — it would
+    // be built AND averaged into the piece it repeats — so a pick ends the link, as a
+    // tick does in `toggleConfirm`.
     setDetections((arr) =>
-      arr.map((x, idx) => (idx === i ? { ...cand.detection, label: candidateLabel(cand) } : x)),
+      arr.map((x, idx) => {
+        if (idx !== i) return x;
+        const picked = { ...cand.detection, label: candidateLabel(cand) };
+        if (!keep) return picked;
+        const { sameAs: _drop, ...rest } = picked;
+        void _drop;
+        return rest;
+      }),
     );
   }
 
@@ -672,7 +696,10 @@ export default function DetectPage() {
     // seconds ago, and one that survives a delete would point at whichever piece
     // slid into that slot.
     setOffer(null);
-    setDetections((d) => d.filter((_, idx) => idx !== i));
+    // `withoutRow` rather than a filter: when this row was a piece seen on other
+    // walls, the next sighting becomes the piece and is kept.
+    const { dets: rest, heir } = withoutRow(detections, i);
+    setDetections(rest);
     setHover(null);
     setConfirmed((prev) => {
       const next = new Set<number>();
@@ -680,8 +707,37 @@ export default function DetectPage() {
         if (x < i) next.add(x);
         else if (x > i) next.add(x - 1);
       });
+      if (heir !== null) next.add(heir);
       return next;
     });
+  }
+
+  /** "This is the same piece as row `j`": the row is linked and unticked, so the room
+   *  builds the piece once (`lib/sighting-links.ts`). One step, so one undo. */
+  function linkRow(i: number, j: number) {
+    const next = linkSighting(detections, i, j);
+    if (next === detections) return;
+    remember();
+    setDetections(next as Detection[]);
+    // The row it now repeats is the one the room builds, so it is kept. The picker
+    // only offers kept rows; "Yes, same one" answers the automatic guess, whose target
+    // is ranked by confidence rather than by the ticks and may be unticked — linking to
+    // it as it stood would leave both rows out and the piece out of the room.
+    const root = linkedTo(next, i);
+    setConfirmed((prev) => {
+      const out = new Set(prev);
+      out.delete(i);
+      if (root !== null) out.add(root);
+      return out;
+    });
+  }
+
+  /** Undo a link: the row is its own piece again, and kept — unlinking says "this is
+   *  another one", and another one is a piece the person wants. */
+  function unlinkRow(i: number) {
+    remember();
+    setDetections((d) => unlinkSighting(d, i) as Detection[]);
+    setConfirmed((prev) => new Set(prev).add(i));
   }
 
   function renameDetection(i: number, label: string) {
@@ -798,7 +854,14 @@ export default function DetectPage() {
     try {
       const room = await roomStore.loadRoom(roomId);
       if (!room) return;
-      const flat = detections.map((d, i) => toRecord(d, i, confirmed.has(i), uuid));
+      // Each kept floor piece seen on more than one wall stands where its linked
+      // sightings put it together — derived here because only this screen has the
+      // lenses (`withSeenAt`).
+      const flat = withSeenAt(
+        detections.map((d, i) => toRecord(d, i, confirmed.has(i), uuid)),
+        detections,
+        cals,
+      );
       if (detections.some((d) => d.uid && runUids.current.has(d.uid))) {
         const kept = await adoptFreshScan(room, flat);
         if (kept)
@@ -832,6 +895,11 @@ export default function DetectPage() {
     .map((d, i) => ({ d, i }))
     .filter((x) => x.d.slot === activeSlot);
   const total = detections.length;
+  // The rows the list shows: the wall being looked at, or every wall. With one photo
+  // there is nothing to choose between, and the list is all of it.
+  const listed = detections
+    .map((d, i) => ({ d, i }))
+    .filter((x) => listScope === 'all' || slots.length <= 1 || x.d.slot === activeSlot);
   const keptCount = confirmed.size;
   const photoCount = slots.length;
 
@@ -1242,6 +1310,21 @@ export default function DetectPage() {
               <h2 className="section-title">Your pieces</h2>
               {total > 0 && <span className="section-meta">{keptCount} of {total} kept</span>}
             </div>
+            {hasWallButtons && total > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <Segmented
+                  ariaLabel="Which pieces to list"
+                  value={listScope}
+                  onChange={setListScope}
+                  options={[
+                    { value: 'wall', label: `${slotLabel(activeSlot)} only` },
+                    { value: 'all', label: 'All walls' },
+                  ]}
+                  stretch
+                  size={28}
+                />
+              </div>
+            )}
           </div>
 
           <div className="list" style={{ padding: 10, gap: 4 }}>
@@ -1257,7 +1340,13 @@ export default function DetectPage() {
                 Your room will open empty.
               </div>
             )}
-            {detections.map((d, i) => (
+            {total > 0 && listed.length === 0 && !running && (
+              <div className="t-small" style={{ padding: '4px 12px 10px', lineHeight: 1.5 }}>
+                <b style={{ display: 'block', marginBottom: 4, color: 'var(--ink)' }}>Nothing found on {slotLabel(activeSlot)}</b>
+                Draw a box around anything Danmu missed, or look at another wall.
+              </div>
+            )}
+            {listed.map(({ d, i }) => (
               <DetectionRow
                 key={d.uid ?? `row-${i}`}
                 d={d}
@@ -1277,6 +1366,21 @@ export default function DetectPage() {
                 onDelete={() => deleteDetection(i)}
                 onLink={(on) => setHover(on ? { index: i, from: 'row' } : null)}
                 onShow={() => setActiveSlot(d.slot)}
+                sameAs={(() => {
+                  const j = linkedTo(detections, i);
+                  return j === null ? null : detections[j];
+                })()}
+                alsoSeenOn={sightingsOf(detections, i).map((j) => detections[j].slot)}
+                linkOptions={linkCandidates(detections, confirmed, i).map((j) => ({
+                  index: j,
+                  label: `${cleanLabelOf(detections[j])} · ${slotLabel(detections[j].slot)}`,
+                }))}
+                onLinkTo={(j) => linkRow(i, j)}
+                onUnlink={() => unlinkRow(i)}
+                onConfirmRepeat={() => {
+                  const j = repeats[i];
+                  if (j != null) linkRow(i, j);
+                }}
               />
             ))}
           </div>

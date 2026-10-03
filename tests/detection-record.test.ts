@@ -28,6 +28,7 @@ const full: Detection = {
   position: { x: 1.1, y: 0.2, z: -0.4 },
   yaw: 1.5708,
   shape: 'bed-double',
+  sameAs: 'kept-bed-key',
 };
 
 describe('toRecord / fromRecord', () => {
