@@ -134,6 +134,26 @@ describe('the day over the canvas, folded', () => {
     act(() => vi.advanceTimersByTime(1000));
     expect(folded()).toBe(false);
   });
+
+  it('lets the keyboard Tab from the clock into Overcast and the turn buttons, and folds once it leaves the strip', () => {
+    const { root, handle, folded } = mount();
+    act(() => handle.focus());
+    const overcast = () => Array.from(root.querySelectorAll('button')).find((b) => b.textContent === 'Overcast');
+    const turn = () => root.querySelector<HTMLButtonElement>('[aria-label="Turn the room clockwise"]');
+    // A browser's Tab picks the next stop FIRST, then blurs the clock (naming that stop
+    // as relatedTarget), and React re-renders inside the blur. If the blur folds the
+    // strip the row is gone before focus can land in it and focus falls to the page.
+    // So: the blur alone, aimed at the row, must leave the row standing.
+    fireEvent.blur(handle, { relatedTarget: overcast()! });
+    expect(overcast(), 'the row survives the Tab out of the clock').toBeDefined();
+    expect(folded()).toBe(false);
+    fireEvent.focus(overcast()!);
+    fireEvent.blur(overcast()!, { relatedTarget: turn()! });
+    expect(turn(), 'and a Tab between its own buttons').not.toBeNull();
+    // Leaving the strip altogether folds it.
+    fireEvent.blur(turn()!, { relatedTarget: document.body });
+    expect(folded()).toBe(true);
+  });
 });
 
 describe('the day strip, open', () => {

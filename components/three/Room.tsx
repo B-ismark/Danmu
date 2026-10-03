@@ -51,6 +51,16 @@ import { SeeStrokes } from './strokes';
  *  siblings of the canvas inside that div, so a wrapper-level `pointerleave` would
  *  not fire for the most common case of all — moving from a chair to the panel
  *  describing it. */
+// Under frameloop="demand" nothing draws until something asks, and edits made while
+// the canvas was parked asked a loop that was not running: ask once on return.
+function ResumeFrame({ paused }: { paused: boolean }) {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    if (!paused) invalidate();
+  }, [paused, invalidate]);
+  return null;
+}
+
 function HoverReset() {
   const gl = useThree((s) => s.gl);
   useEffect(() => {
@@ -102,7 +112,14 @@ function FirstFrame({ onFrame }: { onFrame?: () => void }) {
   return null;
 }
 
-export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
+export function Room({
+  onFirstFrame,
+  paused = false,
+}: {
+  onFirstFrame?: () => void;
+  /** The 3D tab is not on screen (see `lib/room-host.ts`): draw nothing, keep everything built. */
+  paused?: boolean;
+} = {}) {
   const hidden = useStudio((s) => s.hidden);
   const quality = useStudio((s) => s.quality);
   const dressed = useStudio((s) => s.dressed);
@@ -253,7 +270,7 @@ export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
       // Previously this was "always", so an untouched room paid a full render +
       // SSAO + SMAA + a 1024² depth pass + two blur passes ~60×/second while
       // sitting still — and every invalidate() in the tree was a no-op.
-      frameloop="demand"
+      frameloop={paused ? 'never' : 'demand'}
       onPointerMissed={() => {
         // A pan that ends over bare floor is not a click on nothing.
         if (useStudio.getState().panKeyHeld) return;
@@ -273,12 +290,18 @@ export function Room({ onFirstFrame }: { onFirstFrame?: () => void } = {}) {
       <Daylight hi={hi} quality={quality} />
 
       <HoverReset />
+      <ResumeFrame paused={paused} />
       <Suspense fallback={null}>
         <RoomShell />
         <WallHandles />
         {parts.map((part) => (
           <Draggable key={part.id} partId={part.id}>
-            <PartGeometry part={part} locked={part.locked} />
+            {/* `locked` is "came out of your photo" (ScenePart.locked), and it is NOT
+                handed to the geometry: a scanned piece takes its model's own
+                colour (`defaultBodyColor`), exactly like a preset room's. Passing
+                it painted every scanned piece the one "from photo" aubergine tint.
+                The From-photo badge and plan outline still say where it came from. */}
+            <PartGeometry part={part} locked={false} />
           </Draggable>
         ))}
         {dressed && parts.map((part) => <Dressing key={`dress-${part.id}`} part={part} />)}

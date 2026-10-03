@@ -17,10 +17,6 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { TIME_STOPS } from '@/lib/lighting-moods';
-
-/** The picker's glyph row: the four named times, and Overcast. */
-const GLYPHS = TIME_STOPS.length + 1;
 
 const root = (...p: string[]) => join(process.cwd(), ...p);
 
@@ -187,8 +183,8 @@ describe('Segmented can lay its options out on more than one row', () => {
     // `wrap` and `minItem` are currently used by NOTHING. The lighting set was
     // their last consumer, and it is icon-only now — five glyphs on a plain
     // `flex-wrap` row, with the name on hover and on focus instead of beside the
-    // icon (`components/studio/LightingPicker.tsx`). Every remaining `Segmented`
-    // in the app passes `stretch` or nothing.
+    // icon (the picker has since been deleted; the day strip replaced it). Every
+    // remaining `Segmented` in the app passes `stretch` or nothing.
     //
     // They are kept anyway, and this test is the record of why so the next
     // dead-code sweep does not have to guess: `wrap` is the answer to a bug class
@@ -205,25 +201,6 @@ describe('Segmented can lay its options out on more than one row', () => {
       .filter((f) => /\.tsx$/.test(f) && !f.endsWith('primitives.tsx'))
       .filter((f) => /^\s+(wrap|minItem=)/m.test(codeOnly(readFileSync(f, 'utf8'))));
     expect(callers, 'a Segmented now passes wrap/minItem — re-derive the rail floors below').toEqual([]);
-  });
-
-  it('keeps the lighting set inside the narrowest rail', () => {
-    // Re-derived from the control that replaced the segmented one. It is five
-    // 32px targets with 4px gaps — 5×32 + 4×4 = 176px — and the tight rail is
-    // 208px with `.section`'s 16px of padding each side, so 176px of content.
-    // Exactly fits, which is the point: the icon row was sized to the rail rather
-    // than the rail widened for it.
-    //
-    // Read out of the source rather than restated, because a hand-typed 176 here
-    // would be the "displayed measurement that is not derived" this repo keeps
-    // finding. If someone bumps the buttons to 34px this fails, which is correct
-    // — that is the change that would start clipping.
-    const picker = readSrc('components', 'studio', 'LightingPicker.tsx');
-    const size = Number(/\n\s+width: (\d+),\n\s+height: \1,/.exec(picker)![1]);
-    const gap = Number(/flexWrap: 'wrap', gap: (\d+)/.exec(picker)![1]);
-    const count = GLYPHS;
-    const needed = count * size + (count - 1) * gap;
-    expect(railFloor('rail-left') - 32).toBeGreaterThanOrEqual(needed);
   });
 });
 
@@ -1055,21 +1032,6 @@ describe('the rail asks about itself', () => {
       const floor = railFloor(`rail-${side}`);
       expect(tight).toBeLessThan(floor);
     }
-    // And the TIGHT left one still has to hold the lighting row on one line —
-    // the same derivation the ordinary floor answers to above, against the
-    // narrower token. This is the assertion `--rail-left-tight` exists for: it is
-    // what `DockedShell` renders for the whole `compact` step, through a template
-    // string that a grep for the literal token name cannot see — which is why three
-    // comments in this repo, this one included, used to call it applied to nothing.
-    //
-    // 208px − 32px of `.section` padding = 176px, and the row needs exactly 176.
-    // Zero slack is deliberate and is why this is measured rather than eyeballed.
-    const picker = readSrc('components', 'studio', 'LightingPicker.tsx');
-    const size = Number(/\n\s+width: (\d+),\n\s+height: \1,/.exec(picker)![1]);
-    const gap = Number(/flexWrap: 'wrap', gap: (\d+)/.exec(picker)![1]);
-    const needed = GLYPHS * size + (GLYPHS - 1) * gap;
-    const tightLeft = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]);
-    expect(tightLeft - 32).toBeGreaterThanOrEqual(needed);
   });
 });
 

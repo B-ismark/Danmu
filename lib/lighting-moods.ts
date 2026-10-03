@@ -3,8 +3,8 @@ import { daylightKelvin, sunDirection } from './solar';
 import { hexFromKelvin } from './light-units';
 
 // What the room's light looks like at a given moment. Read by the 3D scene
-// (`Room`), by the day strip over the canvas (`DayStrip`), by the rail's daylight
-// control (`LightingPicker`), and by `tests/lighting-moods.test.ts`.
+// (`Room`), by the day strip over the canvas (`DayStrip`), by the day strip's own
+// controls, and by `tests/lighting-moods.test.ts`.
 //
 // ── A clock, not a set of moods ──────────────────────────────────────────────
 //
@@ -413,4 +413,19 @@ export function legacyLighting(id: unknown): { lighting: Lighting; hour?: number
     default:
       return null;
   }
+}
+
+/** Eight points, because sixteen would be precision the sentence around it does
+ *  not have. Takes a TRUE bearing, clockwise from north. */
+const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+export function compassName(deg: number): string {
+  return COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+
+/** The bearing one eighth-turn from `deg`. Snaps to the nearest compass point
+ *  first, so a bearing a photo supplied (213 deg) steps to 225 and then by whole points. */
+export function turnedBearing(deg: number, dir: 1 | -1): number {
+  const onPoint = deg % 45 === 0;
+  const next = onPoint ? deg + 45 * dir : (dir > 0 ? Math.ceil(deg / 45) : Math.floor(deg / 45)) * 45;
+  return ((next % 360) + 360) % 360;
 }

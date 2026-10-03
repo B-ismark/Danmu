@@ -155,7 +155,7 @@ export function Tooltip({
   placement = 'top',
 }: {
   /** The visible name. Usually a PREFIX of the trigger's `aria-label` rather than
-   *  the whole of it: `LightingPicker` shows "Sunrise" here while its accessible
+   *  the whole of it: a glyph button can show "Sunrise" here while its accessible
    *  name is "Sunrise — Low sun from the east", because the bubble is a name and
    *  the extra clause is orientation a screen-reader user cannot get from the
    *  glyph. Keep this the short one; it is read at a glance, next to four others. */

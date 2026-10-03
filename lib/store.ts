@@ -225,6 +225,10 @@ const STUDIO_PREFS = [
   'railRightW',
 ] as const;
 
+/** Bump when a stored preference must be rewritten once. v1: `dressed` became
+ *  off by default, and every existing record carried the old default `true`. */
+export const STUDIO_PREFS_VERSION = 1;
+
 /** `map` without `ids`, for `forgetOverrides`. When what is left matches `before` entry
  *  for entry, `before` itself: the live writes replaced every entry they touched with a
  *  copy, so a map back to its old contents is still a new object. */
@@ -271,7 +275,10 @@ export const useStudio = create<StudioState>()(
   // The browser's clock; a server has no idea what time it is where the room is.
   hour: typeof window === 'undefined' ? DEFAULT_HOUR : hourNow(),
   quality: 'high',
-  dressed: true,
+  // Off until asked for: auto set-dressing (books on shelves, a vase on a table)
+  // adds pieces nobody placed. Bumping `STUDIO_PREFS_VERSION` migrates the `true`
+  // an older build wrote as the default, which the user never chose.
+  dressed: false,
   catalogOpen: false,
   swapPartId: null,
   frameSelectedToken: 0,
@@ -406,6 +413,13 @@ export const useStudio = create<StudioState>()(
     }),
     {
       name: 'danmu-studio-prefs',
+      version: STUDIO_PREFS_VERSION,
+      // Runs only for a record written at an older version (an unversioned one is 0).
+      // Other prefs are kept; only the stale default is reset, once.
+      migrate: (persisted, version) => {
+        const p = (persisted ?? {}) as Partial<StudioState>;
+        return (version < 1 ? { ...p, dressed: false } : p) as StudioState;
+      },
       storage: createJSONStorage(() => localStorage),
       partialize: (s) =>
         Object.fromEntries(STUDIO_PREFS.map((key) => [key, s[key]])) as Partial<StudioState>,
