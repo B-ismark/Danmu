@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 //
 // The capture screen's photo cards, mounted: the dark wall badge, the two round
-// buttons, the Wall dropdown that moves or swaps, and the plan wall that shimmers when
-// a wall's name is pointed at.
+// buttons, the Wall dropdown that moves or swaps, and the plan wall that lights when a card is
+// pointed at, and the card that lifts when its wall is.
 import 'fake-indexeddb/auto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
@@ -134,54 +136,136 @@ describe('a filled photo card', () => {
   });
 });
 
-describe('the plan shimmers the wall whose name is pointed at', () => {
-  it('on the badge', async () => {
+const lit = (c: HTMLElement) => c.querySelectorAll('[data-wall-state]');
+const stateOf = (c: HTMLElement, n: number) => planWall(c, n).getAttribute('data-wall-state');
+
+describe('the plan lights the wall of the card that is pointed at', () => {
+  it('anywhere on the card, not only the badge', async () => {
     const { container } = await mounted();
-    expect(container.querySelectorAll('[data-shimmer]')).toHaveLength(0);
-    const badge = cardOf('Your photo of Wall 2').querySelector('[data-wall-badge="e"]')!;
-    fireEvent.mouseEnter(badge);
-    expect(planWall(container, 2).getAttribute('data-shimmer')).toBe('on');
-    expect(container.querySelectorAll('[data-shimmer]')).toHaveLength(1);
-    fireEvent.mouseLeave(badge);
-    expect(container.querySelectorAll('[data-shimmer]')).toHaveLength(0);
+    expect(lit(container)).toHaveLength(0);
+    const card = cardOf('Your photo of Wall 2');
+    for (const part of [card, screen.getByAltText('Your photo of Wall 2'), card.querySelector('[data-wall-badge="e"]')!]) {
+      fireEvent.mouseEnter(part);
+      expect(stateOf(container, 2)).toBe('hover');
+      expect(lit(container)).toHaveLength(1);
+      fireEvent.mouseLeave(card);
+      expect(lit(container)).toHaveLength(0);
+    }
   });
 
-  it('on the Wall control, and on the option the open list highlights', async () => {
+  it('with the keyboard: focus in the card lights it, focus leaving the card clears it', async () => {
     const { container } = await mounted();
     const trigger = screen.getByRole('combobox', { name: 'Wall for the Wall 1 photo' });
     fireEvent.focus(trigger);
-    expect(planWall(container, 1).getAttribute('data-shimmer')).toBe('on');
-    fireEvent.click(trigger);
-    fireEvent.mouseEnter(screen.getByRole('option', { name: 'Wall 4' }));
-    expect(planWall(container, 4).getAttribute('data-shimmer')).toBe('on');
-    expect(container.querySelectorAll('[data-shimmer]')).toHaveLength(1);
-    // Closing hands it back to the card's own wall while focus is still there.
-    fireEvent.keyDown(trigger, { key: 'Escape' });
-    expect(planWall(container, 1).getAttribute('data-shimmer')).toBe('on');
+    expect(stateOf(container, 1)).toBe('hover');
+    // The pointer leaving does not drop it while focus is still inside.
+    fireEvent.mouseEnter(cardOf('Your photo of Wall 1'));
+    fireEvent.mouseLeave(cardOf('Your photo of Wall 1'));
+    expect(stateOf(container, 1)).toBe('hover');
     fireEvent.blur(trigger);
-    expect(container.querySelectorAll('[data-shimmer]')).toHaveLength(0);
-    // With focus gone, a list opened and closed again leaves nothing lit.
+    expect(lit(container)).toHaveLength(0);
+  });
+});
+
+describe('an open Wall list: the current wall and the previewed one are two states', () => {
+  it('shows both at once, distinct, and clears both afterwards', async () => {
+    const { container } = await mounted();
+    const trigger = screen.getByRole('combobox', { name: 'Wall for the Wall 1 photo' });
+    fireEvent.mouseEnter(cardOf('Your photo of Wall 1'));
+    fireEvent.focus(trigger);
+    fireEvent.click(trigger);
+    fireEvent.mouseEnter(screen.getByRole('option', { name: 'Wall 3' }));
+    expect(stateOf(container, 1)).toBe('current');
+    expect(stateOf(container, 3)).toBe('preview');
+    expect(lit(container)).toHaveLength(2);
+    // The dashed arrow joins them, and only while a DIFFERENT wall is previewed.
+    expect(container.querySelectorAll('.capture-plan__arrow')).toHaveLength(1);
+    // Highlighting the card's own wall previews nothing: it is simply current.
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /Wall 1/ }));
+    expect(stateOf(container, 1)).toBe('current');
+    expect(lit(container)).toHaveLength(1);
+    expect(container.querySelectorAll('.capture-plan__arrow')).toHaveLength(0);
+    fireEvent.mouseEnter(screen.getByRole('option', { name: 'Wall 4' }));
+    expect(stateOf(container, 4)).toBe('preview');
+    expect(stateOf(container, 3)).toBeNull();
+    // Closing drops the preview and the current mark; the focused card still glows.
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+    expect(stateOf(container, 1)).toBe('hover');
+    expect(lit(container)).toHaveLength(1);
+    fireEvent.blur(trigger);
+    fireEvent.mouseLeave(cardOf('Your photo of Wall 1'));
+    expect(lit(container)).toHaveLength(0);
+    expect(container.querySelectorAll('.capture-plan__arrow')).toHaveLength(0);
+  });
+
+  it('with nothing holding the card, a list opened and closed leaves nothing lit', async () => {
+    const { container } = await mounted();
+    const trigger = screen.getByRole('combobox', { name: 'Wall for the Wall 1 photo' });
     fireEvent.click(trigger);
     fireEvent.mouseEnter(screen.getByRole('option', { name: 'Wall 4' }));
+    expect(lit(container)).toHaveLength(2);
     fireEvent.keyDown(trigger, { key: 'Escape' });
-    expect(container.querySelectorAll('[data-shimmer]')).toHaveLength(0);
+    expect(lit(container)).toHaveLength(0);
+  });
+
+  it("marks the card's own wall in the list in words, not only with the highlight", async () => {
+    await mounted();
+    fireEvent.click(screen.getByRole('combobox', { name: 'Wall for the Wall 1 photo' }));
+    fireEvent.mouseEnter(screen.getByRole('option', { name: 'Wall 3' }));
+    expect(screen.getByRole('option', { name: /Wall 1/ }).textContent).toContain('Current');
+    expect(screen.getByRole('option', { name: 'Wall 3' }).textContent).not.toContain('Current');
+    expect(screen.getByRole('option', { name: /Wall 2/ }).textContent).not.toContain('Current');
   });
 });
 
 describe('a photo moved to an empty wall', () => {
   it('leaves no wall lit behind it', async () => {
-    // Its card unmounts (cards are keyed by wall) with the pointer still on its
-    // Wall control, so neither a leave nor a blur ever arrives — and the list's
-    // close had just handed the shimmer back to the wall the photo left.
+    // Its card unmounts (cards are keyed by wall) with the pointer still on it, so
+    // neither a leave nor a blur ever arrives.
     const { container } = await mounted();
     const trigger = screen.getByRole('combobox', { name: 'Wall for the Wall 1 photo' });
+    fireEvent.mouseEnter(cardOf('Your photo of Wall 1'));
     fireEvent.focus(trigger);
     fireEvent.click(trigger);
     fireEvent.mouseEnter(screen.getByRole('option', { name: 'Wall 3' }));
     fireEvent.click(screen.getByRole('option', { name: 'Wall 3' }));
     await waitFor(() => expect(screen.queryByAltText('Your photo of Wall 1')).toBeNull());
     // Passive unmount effects run after the commit that removed the card, so wait.
-    await waitFor(() => expect(container.querySelectorAll('[data-shimmer]')).toHaveLength(0));
+    await waitFor(() => expect(lit(container)).toHaveLength(0));
+  });
+});
+
+describe('the plan answers back: a wall pointed at lifts its card', () => {
+  it('rings the card whose wall it is, and only that one, and lets go', async () => {
+    const { container } = await mounted();
+    const hitOf = (n: number) => planWall(container, n).querySelector('.capture-plan__hit')!;
+    const ringed = () => container.querySelectorAll('[data-photo-card][data-plan-hover="on"]');
+    expect(ringed()).toHaveLength(0);
+    fireEvent.mouseEnter(hitOf(2));
+    expect(ringed()).toHaveLength(1);
+    expect(cardOf('Your photo of Wall 2').getAttribute('data-plan-hover')).toBe('on');
+    expect(cardOf('Your photo of Wall 1').getAttribute('data-plan-hover')).toBeNull();
+    fireEvent.mouseLeave(planWall(container, 2));
+    expect(ringed()).toHaveLength(0);
+  });
+
+  it('does nothing for a wall with no photo, and every wall has a generous hit line', async () => {
+    const { container } = await mounted();
+    fireEvent.mouseEnter(planWall(container, 3));
+    expect(container.querySelectorAll('[data-plan-hover]')).toHaveLength(0);
+    expect(container.querySelectorAll('.capture-plan__hit')).toHaveLength(4);
+  });
+
+  it('is only a style: the lift is tokenised and switched off for reduced motion', () => {
+    const css = readFileSync(join(process.cwd(), 'app/globals.css'), 'utf8');
+    const rule = css.match(/\.capture-photo\s*\{[^}]*\}/)![0];
+    expect(rule).toMatch(/var\(--dur-base\)/);
+    expect(rule).toMatch(/var\(--ease-out\)/);
+    const at = css.indexOf('.capture-photo[data-plan-hover] { transform: none');
+    expect(css.lastIndexOf('@media', at)).toBeGreaterThan(css.indexOf('.capture-photo {'));
+    const reduced = css.slice(css.lastIndexOf('@media', at), at + 80);
+    expect(reduced).toMatch(/prefers-reduced-motion/);
+    expect(reduced).toMatch(/\.capture-photo\[data-plan-hover\]\s*\{\s*transform:\s*none/);
   });
 });
 

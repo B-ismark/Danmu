@@ -2053,6 +2053,14 @@ textarea.field { border-radius: var(--r-2); }
 }
 .capture-head { grid-area: head; }
 .capture-photos { grid-area: photos; display: flex; flex-direction: column; gap: 12px; min-inline-size: 0; }
+/* No photos yet: the one "Add photos" tile is the whole call to action, so it sits in
+   the middle of the space beside the guide rather than hanging from the top of it.
+   Stretched to the guide's height (the layout aligns to `start`); in the one-column
+   layouts the row is as tall as the tile and this is a no-op, so it stays in flow. */
+.capture-photos--empty { align-self: stretch; justify-content: center; }
+/* The plan's reverse link: a wall's edge pointed at lifts and rings its photo. */
+.capture-photo { transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
+.capture-photo[data-plan-hover] { transform: translateY(-3px); box-shadow: 0 0 0 3px var(--accent), var(--shadow-lift); }
 .capture-guide { grid-area: guide; }
 @media (max-width: 859px) {
   .capture-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "head" "photos" "guide"; gap: 20px; }
@@ -2089,17 +2097,37 @@ textarea.field { border-radius: var(--r-2); }
 .capture-plan__wall[data-state="next"] line { stroke: var(--accent); stroke-width: 5; }
 .capture-plan__wall[data-state="next"] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
 .capture-plan__wall[data-state="next"] text { fill: var(--on-accent); }
-/* The wall's name was hovered or focused on a card (page.tsx `shimmer`): that wall's
-   line glows in moss and a paper highlight marches along it. One loop is four
-   `--dur-slow`s, so the speed is a token and not a number. */
+/* What a card is saying about a wall (page.tsx `wallStatesOf`), three states on
+   `data-wall-state` and no others:
+   · hover   a card is pointed at or focused: its wall glows in moss and a paper
+             highlight marches along it. One loop is four `--dur-slow`s, so the speed
+             is a token and not a number.
+   · current a card's Wall list is open: the wall the photo is ON — solid moss, thick,
+             and STILL, so it reads as "where it is" next to a moving "where it would go".
+   · preview the list is highlighting another wall: the same shimmer in amber, with a
+             dashed arrow from the current wall's number (`.capture-plan__arrow`). */
 .capture-plan__wall line.capture-plan__shine { display: none; fill: none; pointer-events: none; }
-.capture-plan__wall[data-shimmer] line:not(.capture-plan__shine) { stroke: var(--accent); stroke-width: 6; animation: capture-wall-pulse calc(var(--dur-slow) * 4) var(--ease-in-out) infinite; }
-.capture-plan__wall[data-shimmer] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
-.capture-plan__wall[data-shimmer] text { fill: var(--on-accent); }
-.capture-plan__wall[data-shimmer] line.capture-plan__shine {
+/* The invisible target around a wall's line: stroked wide, never painted. The reverse
+   link (hover a wall, its card lifts) is only usable if a 3px line is easy to find. */
+.capture-plan__wall line.capture-plan__hit { stroke: transparent; stroke-width: 22; pointer-events: stroke; fill: none; }
+.capture-plan__wall:hover line:not(.capture-plan__shine):not(.capture-plan__hit) { stroke: var(--accent); }
+.capture-plan__wall[data-wall-state="hover"] line:not(.capture-plan__shine):not(.capture-plan__hit),
+.capture-plan__wall[data-wall-state="preview"] line:not(.capture-plan__shine):not(.capture-plan__hit) { stroke: var(--accent); stroke-width: 6; animation: capture-wall-pulse calc(var(--dur-slow) * 4) var(--ease-in-out) infinite; }
+.capture-plan__wall[data-wall-state="hover"] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
+.capture-plan__wall[data-wall-state="hover"] text { fill: var(--on-accent); }
+.capture-plan__wall[data-wall-state="hover"] line.capture-plan__shine,
+.capture-plan__wall[data-wall-state="preview"] line.capture-plan__shine {
   display: inline; stroke: var(--paper); stroke-width: 3; stroke-dasharray: 10 30;
   animation: capture-wall-march calc(var(--dur-slow) * 4) linear infinite;
 }
+.capture-plan__wall[data-wall-state="current"] line:not(.capture-plan__shine):not(.capture-plan__hit) { stroke: var(--accent); stroke-width: 7; }
+.capture-plan__wall[data-wall-state="current"] circle { fill: var(--accent-ink); stroke: var(--accent-ink); }
+.capture-plan__wall[data-wall-state="current"] text { fill: var(--on-accent); }
+/* Amber is a fill here, never type (see --accent-2); the number keeps --ink on it. */
+.capture-plan__wall[data-wall-state="preview"] line:not(.capture-plan__shine):not(.capture-plan__hit) { stroke: var(--accent-2); }
+.capture-plan__wall[data-wall-state="preview"] circle { fill: var(--accent-2); stroke: var(--accent-2); }
+.capture-plan__wall[data-wall-state="preview"] text { fill: var(--ink); }
+.capture-plan__arrow { stroke: var(--accent-2); stroke-width: 2; stroke-dasharray: 4 5; stroke-linecap: round; fill: none; opacity: 0.8; pointer-events: none; }
 @keyframes capture-wall-pulse { 50% { stroke-width: 8; } }
 @keyframes capture-wall-march { to { stroke-dashoffset: -40; } }
 /* Reduced motion (the block near the end of this file): the wall stays lit, still. */
@@ -2461,8 +2489,11 @@ textarea.field { border-radius: var(--r-2); }
      pieces wait their turn invisibly, on a screen that is up only as long as the save. */
   .iso-room__piece { animation-delay: 0s !important; }
   /* The capture plan's wall shimmer: lit and still, no pulse and no marching dashes. */
-  .capture-plan__wall[data-shimmer] line:not(.capture-plan__shine) { animation: none; stroke-width: 7; }
-  .capture-plan__wall[data-shimmer] line.capture-plan__shine { display: none; animation: none; }
+  .capture-plan__wall[data-wall-state="hover"] line:not(.capture-plan__shine):not(.capture-plan__hit),
+  .capture-plan__wall[data-wall-state="preview"] line:not(.capture-plan__shine):not(.capture-plan__hit) { animation: none; stroke-width: 7; }
+  .capture-plan__wall[data-wall-state="hover"] line.capture-plan__shine,
+  .capture-plan__wall[data-wall-state="preview"] line.capture-plan__shine { display: none; animation: none; }
+  .capture-photo[data-plan-hover] { transform: none !important; }
 }
 
 
