@@ -31,9 +31,8 @@ const rowProps = (i: number) => ({
   d: DETS[i],
   index: i,
   confirmed: false,
-  verdict: { status: 'unmeasured' as const },
   repeatOf: null,
-  dimUnit: 'cm' as const,
+  doubted: false,
   onThisPhoto: true,
   onToggle: () => {},
   onRename: () => {},
@@ -202,5 +201,25 @@ describe('choosing a model from what was typed', () => {
     const after = new Set(kept);
     after.delete(2);
     expect([...after]).toEqual([0]);
+  });
+});
+
+describe('a row the outline doubts', () => {
+  const row = (over: Partial<ReturnType<typeof rowProps>>) =>
+    render(<DetectionRow {...rowProps(0)} {...over} highlighted={false} scrollWhenHovered={false} onLink={() => {}} />);
+
+  it('says why it was left out, without a size', () => {
+    row({ doubted: true });
+    const note = screen.getByText(/^Left out: its outline does not look like/);
+    expect(note.textContent).toMatch(/Tick it if it is one$/);
+    expect(note.textContent).not.toMatch(/\d/);
+  });
+
+  it('goes quiet once the piece is kept, and is not said for a trusted row', () => {
+    row({ doubted: true, confirmed: true });
+    expect(screen.queryByText(/^Left out/)).toBeNull();
+    cleanup();
+    row({ doubted: false });
+    expect(screen.queryByText(/^Left out/)).toBeNull();
   });
 });

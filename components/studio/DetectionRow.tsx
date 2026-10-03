@@ -85,6 +85,7 @@ export function DetectionRow({
   d,
   confirmed,
   repeatOf,
+  doubted,
   highlighted,
   scrollWhenHovered,
   index,
@@ -104,6 +105,9 @@ export function DetectionRow({
   /** The row this one is probably a second sighting of — see
    *  lib/repeat-sightings.ts. Null for a piece in its own right. */
   repeatOf: Detection | null;
+  /** The photo's outline of the piece does not look like what it is called
+   *  (`judgeLabels` said suspect), which is why it started unticked. */
+  doubted: boolean;
   /** This row is the screen's one hovered piece (from the row or from its box). */
   highlighted: boolean;
   /** The hover started on the photo, so the row is brought into view; one the pointer
@@ -225,6 +229,11 @@ export function DetectionRow({
         {repeatOf && (
           <RowNote icon="copy">
             Probably the {inSentence(cleanLabelOf(repeatOf))} from {slotLabel(repeatOf.slot)} again
+          </RowNote>
+        )}
+        {doubted && !repeatOf && !confirmed && (
+          <RowNote icon="info">
+            Left out: its outline does not look like a {inSentence(modelName)}. Tick it if it is one
           </RowNote>
         )}
         {/* A model offered because of the WORD: the user has typed something the

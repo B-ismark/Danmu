@@ -1263,6 +1263,7 @@ export default function DetectPage() {
                 d={d}
                 confirmed={confirmed.has(i)}
                 repeatOf={repeats[i] == null ? null : (detections[repeats[i]] ?? null)}
+                doubted={verdicts[i]?.status === 'suspect'}
                 index={i}
                 onRepair={(cand, keep) => applyRepair(i, cand, keep)}
                 offer={offer?.index === i ? offer.candidates : EMPTY_OFFER}
