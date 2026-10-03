@@ -2553,7 +2553,7 @@ real touch, can show it holds. The two costs this fix accepted were closed after
 (`docs/what-is-still-open.md` § 55): also check that "Floor lamp" → "Tall lamp" offers no
 other lamp, and that a floor piece renamed "Painting" hangs on the wall in its photo.
 
-**Rides:** `main` at `5dbcab0`; the § 55 follow-up rides branch `claude/elegant-volta-q7yy89`.
+**Rides:** `main` at `5dbcab0`; the § 55 follow-up **merged:** `1c7644b` (B-ismark/Danmu#240), not yet looked at.
 
 ## The rooms page's select mode
 
@@ -2624,7 +2624,7 @@ below slide up, and the browser's own click arrives on the finger lifting. The s
 of that click is tested in jsdom (`tests/rename-suggest.test.tsx`), which fires the events
 by hand; the real ordering is a browser's on a touch screen.
 
-**Rides:** branch `claude/elegant-volta-q7yy89` (after PR #240).
+**Merged:** `e12c0bb` (B-ismark/Danmu#241), not yet looked at.
 
 ## The Moss Ink palette and Figtree, everywhere
 
@@ -2687,7 +2687,7 @@ edge, or the card not following the shapes. The *ROOM SIZE* label in the serif.
 
 **Why eyes:** walked once in headless Chromium at 1280, 1024 and 375 wide.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `5bac78c` (B-ismark/Danmu#242), not yet looked at.
 
 ## The photo screen in the Flow design
 
@@ -2706,7 +2706,7 @@ sideways scroll. Camera mode at a laptop width keeps the guide beside the viewfi
 **Why eyes:** walked once in headless Chromium at 1280 and 375 wide, empty and with two
 photos; camera mode at 1280 and 1440.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `5bac78c` (B-ismark/Danmu#242), not yet looked at.
 
 ## Check furniture in the Flow design
 
@@ -2725,7 +2725,7 @@ edge; the pinned photo sliding under the steps as the list scrolls.
 **Why eyes:** walked once in headless Chromium at 1280 and 375 with no detector (so no
 scan, no privacy line, and no download card in that walk).
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `5bac78c` (B-ismark/Danmu#242), not yet looked at.
 
 ## The Building screen
 
@@ -2741,5 +2741,25 @@ never sized showing figures without ≈; the tiles running off a phone's edge.
 
 **Why eyes:** walked once in headless Chromium at 1280 and 375 on an L-Shape and a
 Rectangle; the studio opened both times.
+
+**Merged:** `5bac78c` (B-ismark/Danmu#242), not yet looked at.
+
+## Settings in the Flow design
+
+**Where:** Rooms → Settings, at a laptop width, at about 1000 px, and on a phone. On a
+laptop an index of the four cards sits on the left and stays in view as the page scrolls;
+the card being read is marked in green. Under 900 px the index becomes a row of chips
+under the title. *Where your key goes* is three tiles: this browser, Google, Danmu.
+
+**What wrong looks like:** pressing *Downloads* in the index and seeing *Your rooms*
+marked; Back after two presses leaving the wrong card marked; the index sliding away
+when sticky, or covering a card; at about 1000 px the key field and its Test and Remove
+buttons crowding into each other, or the three tiles squeezed to a word a line; on a
+phone the chips running off the edge or the tiles not stacking; any sideways scroll.
+
+**Why eyes:** sticky placement, the scroll position and the narrow widths are the
+browser's; the marking rules are tested in jsdom with the positions faked. Walked once in
+headless Chromium at 1280 and 375, including a press on *Downloads* and a wheel scroll
+after it.
 
 **Rides:** branch `claude/elegant-volta-q7yy89`.

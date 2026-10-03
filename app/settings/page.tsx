@@ -16,6 +16,7 @@ import { toast } from '@/components/ui/StorageToast';
 import { DetectorPackPicker } from '@/components/ui/DetectorPackPicker';
 import { detectorStatus, downloadDetector, onDetectorDownload, removeDetector, type DetectorStatus, type DownloadProgress } from '@/lib/local-detect';
 import { megabytes } from '@/lib/model-cache';
+import { MAX_EDGE } from '@/lib/capture';
 import type { DetectorPack } from '@/lib/model-verify';
 
 // Authored copy per failure code. The old screen printed the raw exception,
@@ -222,14 +223,11 @@ export default function SettingsPage() {
     // "Close" is gone: the breadcrumb's "Rooms" is the fixed way out, and Back is
     // the way to carry on where you were. Without it, adding a key mid-scan or
     // switching units mid-arrangement dropped you on the room list.
-    <DocShell trail={[{ label: 'Rooms', href: '/' }, { label: 'Settings' }]} measure="prose">
-      {/* Three cards in the same dress as the room cards, each with its own tile —
-          the page used to be three loose headings over hairline rows, which read
-          as a form left unstyled beside every other screen's cards. */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <DocShell trail={[{ label: 'Rooms', href: '/' }, { label: 'Settings' }]}>
+      <div className="settings">
         <div
+          className="settings__head"
           style={{
-            marginBottom: 6,
             display: 'flex',
             alignItems: 'flex-start',
             justifyContent: 'space-between',
@@ -255,240 +253,341 @@ export default function SettingsPage() {
             style={{ marginTop: 6, marginInlineStart: 'auto', visibility: returnTo === undefined ? 'hidden' : undefined }}
           />
         </div>
+        <SettingsIndex />
+        {/* Three cards in the same dress as the room cards, each with its own tile —
+            the page used to be three loose headings over hairline rows, which read
+            as a form left unstyled beside every other screen's cards. */}
+        <div className="settings__cards">
+          <Section
+            icon="sparkles"
+            tint="var(--accent-tint)"
+            color="var(--accent)"
+            id="detection"
+            title="Furniture detection"
+            tag={<Pill>Optional</Pill>}
+          >
+            <Row label="Access key" controlId={KEY_INPUT_ID}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div
+                  // The field is this wrapper, not the input inside it, so this is what
+                  // grows to 44px under a finger; the input stretches to fill it.
+                  className="key-field"
+                  style={{
+                    flex: '1 1 220px',
+                    minWidth: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    // --edge, not a 1.48:1 hairline: this is the boundary of the
+                    // most consequential input on the screen. The focus ring lives
+                    // on this wrapper because the input's own outline is suppressed
+                    // (the ring has to surround the eye button too).
+                    border: `1px solid ${keyFocus ? 'var(--accent-text)' : 'var(--edge)'}`,
+                    boxShadow: keyFocus ? '0 0 0 4px var(--accent-tint)' : 'none',
+                    borderRadius: 'var(--r-2)',
+                    background: 'var(--paper)',
+                    transition: 'border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out)',
+                  }}
+                >
+                  <input
+                    id={KEY_INPUT_ID}
+                    type={show ? 'text' : 'password'}
+                    value={s.apiKey}
+                    onChange={(e) => s.setApiKey(e.target.value)}
+                    onFocus={() => setKeyFocus(true)}
+                    onBlur={autoValidate}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="Paste your key (starts with AIza)"
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      border: 'none',
+                      outline: 'none',
+                      alignSelf: 'stretch',
+                      padding: '0 10px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 'var(--fs-small)',
+                      background: 'transparent',
+                      color: 'var(--ink)',
+                    }}
+                  />
+                  <IconButton
+                    icon={show ? 'eye-off' : 'eye'}
+                    label={show ? 'Hide key' : 'Show key'}
+                    onClick={() => setShow(!show)}
+                    active={show}
+                    size={36}
+                    iconSize={13}
+                  />
+                </div>
+                <button onClick={test} disabled={testing || !s.apiKey} className="ds-btn" style={{ fontSize: 'var(--fs-small)' }}>
+                  <Icon name={testing ? 'refresh' : 'check'} size={12} />
+                  {testing ? 'Testing…' : 'Test'}
+                </button>
+                <button
+                  onClick={removeKey}
+                  disabled={!s.apiKey || testing}
+                  className="ds-btn"
+                  style={{ fontSize: 'var(--fs-small)', color: 'var(--danger-text)', borderColor: 'var(--edge)' }}
+                >
+                  <Icon name="trash" size={12} />
+                  Remove
+                </button>
+              </div>
+              {/* Where a key comes from. This lived on the welcome page and went with it,
+                  which left "Set up a key in Settings" pointing at an empty field
+                  with nothing to say what goes in it. */}
+              <div className="t-hint" style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 4 }}>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--accent-text)', fontWeight: 600 }}
+                >
+                  Get a key
+                  {/* target=_blank has to be visible, not a surprise. */}
+                  <Icon name="external" size={11} />
+                  <span className="sr-only">(opens in a new tab)</span>
+                </a>
+              </div>
 
-        <Section
-          icon="sparkles"
-          tint="var(--accent-tint)"
-          color="var(--accent)"
-          title="Furniture detection"
-          tag={<Pill>Optional</Pill>}
-        >
-          <Row label="Access key" controlId={KEY_INPUT_ID}>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <div
-                // The field is this wrapper, not the input inside it, so this is what
-                // grows to 44px under a finger; the input stretches to fill it.
-                className="key-field"
+              {/* Three states, all real: tested-good, tested-bad (with the reason and
+                  what to do), and never-tested. */}
+              {testing && (
+                <div style={{ marginTop: 10 }}>
+                  <span className="ds-chip" style={{ borderColor: 'var(--edge)', color: 'var(--ink-2)' }}>
+                    <Dot color="var(--ink-3)" size={5} /> Checking with the service…
+                  </span>
+                </div>
+              )}
+              {!testing && s.keyValid === true && (
+                <div style={{ marginTop: 10 }}>
+                  <span className="ds-chip" style={{ borderColor: 'var(--success)', color: 'var(--success-text)' }}>
+                    <Dot color="var(--success)" size={5} /> Working
+                  </span>
+                </div>
+              )}
+              {!testing && s.keyValid === false && (
+                <div style={{ marginTop: 10 }}>
+                  <span className="ds-chip" style={{ borderColor: 'var(--danger)', color: 'var(--danger-text)' }}>
+                    <Dot color="var(--danger)" size={5} /> {failure.lead}
+                  </span>
+                  <p className="t-small" style={{ lineHeight: 1.5, margin: '8px 0 0', maxWidth: 'var(--measure-text-sm)' }}>
+                    {failure.help}
+                  </p>
+                </div>
+              )}
+              {!testing && s.keyValid === null && s.apiKey && (
+                <div style={{ marginTop: 10 }}>
+                  <span className="ds-chip" style={{ borderColor: 'var(--edge)', color: 'var(--ink-2)' }}>
+                    <Dot color="var(--ink-3)" size={5} /> Not tested yet
+                  </span>
+                </div>
+              )}
+
+              {/* The old copy — "stored on this device only, never uploaded" — sat
+                  30px from a button that transmits the key. Both facts, plainly. */}
+              <div className="key-journey">
+                <h3 className="key-journey__title">Where your key goes</h3>
+                <ol className="key-journey__steps">
+                  <li>
+                    <b>This browser</b>
+                    <span>Keeps your key.</span>
+                  </li>
+                  <li>
+                    <b>Google</b>
+                    {/* The limit is the one every photo is re-encoded to on the way in, read
+                        rather than restated, so this sentence moves with it. */}
+                    <span>Gets it on Test, and with your photos — no larger than {MAX_EDGE} px — when detection runs.</span>
+                  </li>
+                  <li>
+                    <b>Danmu</b>
+                    <span>Has no server, so nothing passes through it.</span>
+                  </li>
+                </ol>
+                <p className="t-note">You can restrict the key to this site in Google&apos;s console.</p>
+              </div>
+            </Row>
+          </Section>
+
+          <Section
+            icon="ruler"
+            tint="var(--accent-2-tint)"
+            color="var(--accent-2)"
+            id="units"
+            title="Units"
+          >
+            {/* The hint is the setting's own preview, formatted by the same function
+                every size on screen goes through, so it cannot describe a different
+                rounding from the one the studio shows. */}
+            <Row label="Dimension units" hint={`A ${SOFA_MM} mm sofa reads ${formatLength(SOFA_MM, dimUnit)}; a ${CEILING_MM / 1000} m ceiling, ${formatLength(CEILING_MM, dimUnit)}.`}>
+              {/* This replaced a Metric/Imperial switch that was wired to a store
+                  field nothing read — a units control that changed nothing, on a
+                  product whose promise is that its dimensions are trustworthy. */}
+              <Segmented
+                ariaLabel="Dimension units"
+                value={dimUnit}
+                onChange={(u) => s.setDimUnit(u)}
+                options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.id }))}
+              />
+            </Row>
+          </Section>
+
+          <DownloadsSection />
+
+          <Section
+            icon="layers"
+            tint="var(--paper-3)"
+            color="var(--ink-2)"
+            id="rooms"
+            title="Your rooms"
+            desc="Saved only in this browser. Clearing this site's data in your browser deletes them."
+          >
+            <Row label="Saved here">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600 }}>
+                  {roomCount === undefined ? (
+                    'Counting…'
+                  ) : roomCount === null ? (
+                    'Your rooms could not be read.'
+                  ) : (
+                    <>
+                      <span className="mono">{roomCount}</span> room{roomCount === 1 ? '' : 's'}
+                    </>
+                  )}
+                </span>
+                <Link href="/" className="ds-btn ds-btn--sm">
+                  Manage rooms
+                  <Icon name="arrow-right" size={12} />
+                </Link>
+              </div>
+            </Row>
+            <Row
+              label={room ? 'Delete this room' : 'Delete a room'}
+              hint={
+                room
+                  ? 'Recoverable for 30 days.'
+                  : room === undefined
+                    ? 'Finding the open room…'
+                    : unreadable
+                      ? 'The open room could not be read.'
+                      : 'No room is open.'
+              }
+            >
+              <button
+                onClick={deleteRoomData}
+                disabled={!room}
+                className="ds-btn ds-btn--sm"
                 style={{
-                  flex: '1 1 220px',
-                  minWidth: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  // --edge, not a 1.48:1 hairline: this is the boundary of the
-                  // most consequential input on the screen. The focus ring lives
-                  // on this wrapper because the input's own outline is suppressed
-                  // (the ring has to surround the eye button too).
-                  border: `1px solid ${keyFocus ? 'var(--accent-text)' : 'var(--edge)'}`,
-                  boxShadow: keyFocus ? '0 0 0 4px var(--accent-tint)' : 'none',
-                  borderRadius: 'var(--r-2)',
-                  background: 'var(--paper)',
-                  transition: 'border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out)',
+                  color: 'var(--danger-text)',
+                  borderColor: 'var(--danger)',
                 }}
               >
-                <input
-                  id={KEY_INPUT_ID}
-                  type={show ? 'text' : 'password'}
-                  value={s.apiKey}
-                  onChange={(e) => s.setApiKey(e.target.value)}
-                  onFocus={() => setKeyFocus(true)}
-                  onBlur={autoValidate}
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="Paste your key (starts with AIza)"
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    border: 'none',
-                    outline: 'none',
-                    alignSelf: 'stretch',
-                    padding: '0 10px',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 'var(--fs-small)',
-                    background: 'transparent',
-                    color: 'var(--ink)',
-                  }}
-                />
-                <IconButton
-                  icon={show ? 'eye-off' : 'eye'}
-                  label={show ? 'Hide key' : 'Show key'}
-                  onClick={() => setShow(!show)}
-                  active={show}
-                  size={36}
-                  iconSize={13}
-                />
-              </div>
-              <button onClick={test} disabled={testing || !s.apiKey} className="ds-btn" style={{ fontSize: 'var(--fs-small)' }}>
-                <Icon name={testing ? 'refresh' : 'check'} size={12} />
-                {testing ? 'Testing…' : 'Test'}
-              </button>
-              <button
-                onClick={removeKey}
-                disabled={!s.apiKey || testing}
-                className="ds-btn"
-                style={{ fontSize: 'var(--fs-small)', color: 'var(--danger-text)', borderColor: 'var(--edge)' }}
-              >
                 <Icon name="trash" size={12} />
-                Remove
+                {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
               </button>
-            </div>
-            {/* Where a key comes from. This lived on the welcome page and went with it,
-                which left "Set up a key in Settings" pointing at an empty field
-                with nothing to say what goes in it. */}
-            <div className="t-hint" style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 4 }}>
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noreferrer"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--accent-text)', fontWeight: 600 }}
-              >
-                Get a key
-                {/* target=_blank has to be visible, not a surprise. */}
-                <Icon name="external" size={11} />
-                <span className="sr-only">(opens in a new tab)</span>
+            </Row>
+            <Row label="Send feedback">
+              {/* A plain link the person follows, never a form that posts from here:
+                  rule 5 allows no egress but the optional detection call. */}
+              <a href={FEEDBACK_URL} className="ds-btn ds-btn--sm">
+                <Icon name="mail" size={12} />
+                Send feedback
               </a>
-            </div>
-
-            {/* Three states, all real: tested-good, tested-bad (with the reason and
-                what to do), and never-tested. */}
-            {testing && (
-              <div style={{ marginTop: 10 }}>
-                <span className="ds-chip" style={{ borderColor: 'var(--edge)', color: 'var(--ink-2)' }}>
-                  <Dot color="var(--ink-3)" size={5} /> Checking with the service…
-                </span>
-              </div>
-            )}
-            {!testing && s.keyValid === true && (
-              <div style={{ marginTop: 10 }}>
-                <span className="ds-chip" style={{ borderColor: 'var(--success)', color: 'var(--success-text)' }}>
-                  <Dot color="var(--success)" size={5} /> Working
-                </span>
-              </div>
-            )}
-            {!testing && s.keyValid === false && (
-              <div style={{ marginTop: 10 }}>
-                <span className="ds-chip" style={{ borderColor: 'var(--danger)', color: 'var(--danger-text)' }}>
-                  <Dot color="var(--danger)" size={5} /> {failure.lead}
-                </span>
-                <p className="t-small" style={{ lineHeight: 1.5, margin: '8px 0 0', maxWidth: 'var(--measure-text-sm)' }}>
-                  {failure.help}
-                </p>
-              </div>
-            )}
-            {!testing && s.keyValid === null && s.apiKey && (
-              <div style={{ marginTop: 10 }}>
-                <span className="ds-chip" style={{ borderColor: 'var(--edge)', color: 'var(--ink-2)' }}>
-                  <Dot color="var(--ink-3)" size={5} /> Not tested yet
-                </span>
-              </div>
-            )}
-
-            {/* The old copy — "stored on this device only, never uploaded" — sat
-                30px from a button that transmits the key. Both facts, plainly. */}
-            <div
-              style={{
-                marginTop: 14,
-                padding: '10px 12px',
-                background: 'var(--paper-2)',
-                border: '1px solid var(--hairline)',
-                borderRadius: 'var(--r-2)',
-                maxWidth: 'var(--measure-text-sm)',
-              }}
-            >
-              <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, marginBottom: 4 }}>Where your key goes</div>
-              <p className="t-note" style={{ lineHeight: 1.55, margin: 0 }}>
-                Kept in this browser. Sent only to Google: on Test, and with your photos when detection runs.
-                You can restrict the key to this site in Google&apos;s console.
-              </p>
-            </div>
-          </Row>
-        </Section>
-
-        <Section
-          icon="ruler"
-          tint="var(--accent-2-tint)"
-          color="var(--accent-2)"
-          title="Units"
-        >
-          {/* The hint is the setting's own preview, formatted by the same function
-              every size on screen goes through, so it cannot describe a different
-              rounding from the one the studio shows. */}
-          <Row label="Dimension units" hint={`Example: ${formatLength(1850, dimUnit)}`}>
-            {/* This replaced a Metric/Imperial switch that was wired to a store
-                field nothing read — a units control that changed nothing, on a
-                product whose promise is that its dimensions are trustworthy. */}
-            <Segmented
-              ariaLabel="Dimension units"
-              value={dimUnit}
-              onChange={(u) => s.setDimUnit(u)}
-              options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.id }))}
-            />
-          </Row>
-        </Section>
-
-        <DownloadsSection />
-
-        <Section
-          icon="layers"
-          tint="var(--paper-3)"
-          color="var(--ink-2)"
-          title="Your rooms"
-          desc="Saved only in this browser. Clearing this site's data in your browser deletes them."
-        >
-          <Row label="Saved here">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600 }}>
-                {roomCount === undefined ? (
-                  'Counting…'
-                ) : roomCount === null ? (
-                  'Your rooms could not be read.'
-                ) : (
-                  <>
-                    <span className="mono">{roomCount}</span> room{roomCount === 1 ? '' : 's'}
-                  </>
-                )}
-              </span>
-              <Link href="/" className="ds-btn ds-btn--sm">
-                Manage rooms
-                <Icon name="arrow-right" size={12} />
-              </Link>
-            </div>
-          </Row>
-          <Row
-            label={room ? 'Delete this room' : 'Delete a room'}
-            hint={
-              room
-                ? 'Recoverable for 30 days.'
-                : room === undefined
-                  ? 'Finding the open room…'
-                  : unreadable
-                    ? 'The open room could not be read.'
-                    : 'No room is open.'
-            }
-          >
-            <button
-              onClick={deleteRoomData}
-              disabled={!room}
-              className="ds-btn ds-btn--sm"
-              style={{
-                color: 'var(--danger-text)',
-                borderColor: 'var(--danger)',
-              }}
-            >
-              <Icon name="trash" size={12} />
-              {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
-            </button>
-          </Row>
-          <Row label="Send feedback">
-            {/* A plain link the person follows, never a form that posts from here:
-                rule 5 allows no egress but the optional detection call. */}
-            <a href={FEEDBACK_URL} className="ds-btn ds-btn--sm">
-              <Icon name="mail" size={12} />
-              Send feedback
-            </a>
-          </Row>
-        </Section>
+            </Row>
+          </Section>
+        </div>
       </div>
     </DocShell>
+  );
+}
+
+/** The units hint's two examples: each is written once and formatted from that. */
+const SOFA_MM = 1850;
+const CEILING_MM = 2800;
+
+/** The page's sections, in order, for the index beside them. */
+const SETTINGS_SECTIONS = [
+  { id: 'detection', label: 'Furniture detection' },
+  { id: 'units', label: 'Units' },
+  { id: 'downloads', label: 'Downloads' },
+  { id: 'rooms', label: 'Your rooms' },
+] as const;
+type SectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
+
+/** Plain anchors to the cards, so it works with no script and keeps the browser's
+ *  own history; beside the cards on a wide screen and a row of chips above them on a
+ *  narrow one. Marks the section being read: the last whose top has passed the upper
+ *  third of the window. A card someone has just chosen — a press here, or an address
+ *  ending in its #id — stays marked until they scroll for themselves: a short card
+ *  near the end cannot be scrolled to the top, so the jump ends at the foot of the
+ *  page, and reading the position would mark the card after it. */
+function SettingsIndex() {
+  const [current, setCurrent] = useState<SectionId>(SETTINGS_SECTIONS[0].id);
+  const chosen = useRef(false);
+  useEffect(() => {
+    const named = () => SETTINGS_SECTIONS.find(({ id }) => `#${id}` === window.location.hash);
+    const fromHash = named();
+    // Back and Forward move between cards this index jumped to; they choose the card
+    // the address now names, as a press does.
+    const onHash = () => {
+      const to = named();
+      chosen.current = Boolean(to);
+      if (to) setCurrent(to.id);
+      else pick();
+    };
+    const pick = () => {
+      if (chosen.current) return;
+      let at: SectionId = SETTINGS_SECTIONS[0].id;
+      // At the top of the page the first card is the one being read, however short
+      // it is and however tall the window: a second card's top inside the line does
+      // not mean anyone has moved past the first.
+      if (window.scrollY > 0) for (const { id } of SETTINGS_SECTIONS) {
+        const top = document.getElementById(id)?.getBoundingClientRect().top;
+        if (top !== undefined && top < window.innerHeight / 3) at = id;
+      }
+      // The last card may be too short to ever reach that line; at the foot of the
+      // page it is the one being read.
+      const el = document.documentElement;
+      if (window.scrollY > 0 && window.scrollY + window.innerHeight >= el.scrollHeight - 2) at = SETTINGS_SECTIONS[SETTINGS_SECTIONS.length - 1].id;
+      setCurrent(at);
+    };
+    // Anything a person does to scroll the page themselves hands the mark back.
+    const release = () => {
+      chosen.current = false;
+    };
+    const own = ['wheel', 'touchmove', 'keydown', 'pointerdown'] as const;
+    if (fromHash) {
+      chosen.current = true;
+      setCurrent(fromHash.id);
+    } else pick();
+    window.addEventListener('scroll', pick, { passive: true });
+    window.addEventListener('resize', pick);
+    window.addEventListener('hashchange', onHash);
+    for (const type of own) window.addEventListener(type, release, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', pick);
+      window.removeEventListener('resize', pick);
+      window.removeEventListener('hashchange', onHash);
+      for (const type of own) window.removeEventListener(type, release);
+    };
+  }, []);
+  return (
+    <nav className="settings-index" aria-label="Settings sections">
+      <ol>
+        {SETTINGS_SECTIONS.map(({ id, label }) => (
+          <li key={id}>
+            <a href={`#${id}`} aria-current={current === id ? 'location' : undefined} onClick={() => {
+                chosen.current = true;
+                setCurrent(id);
+              }}
+            >
+              {label}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 
@@ -562,6 +661,7 @@ function DownloadsSection() {
       icon="download"
       tint="var(--locked-tint)"
       color="var(--locked)"
+      id="downloads"
       title="Downloads"
     >
       <Row label="Furniture finder" hint={hint}>
@@ -630,6 +730,7 @@ function truncate(v: string, max: number) {
  *  tinted tile, so the three groups are told apart at a glance rather than by
  *  reading three headings. */
 function Section({
+  id,
   icon,
   tint,
   color,
@@ -638,6 +739,8 @@ function Section({
   tag,
   children,
 }: {
+  /** The anchor the page's index links to (`SETTINGS_SECTIONS`). */
+  id: SectionId;
   icon: IconName;
   tint: string;
   color: string;
@@ -649,7 +752,7 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="ds-card" style={{ padding: '20px 22px 6px' }}>
+    <section id={id} aria-labelledby={`${id}-title`} className="ds-card settings-section">
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 6 }}>
         <span
           aria-hidden="true"
@@ -669,7 +772,7 @@ function Section({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {/* h2, so the cards are a real outline under the page h1. `.sans`, as
                 on the room cards: the display serif is for the page title. */}
-            <h2 className="sans" style={{ fontSize: 'var(--fs-lead)', fontWeight: 700, letterSpacing: 0, lineHeight: 1.3 }}>
+            <h2 id={`${id}-title`} className="sans" style={{ fontSize: 'var(--fs-lead)', fontWeight: 700, letterSpacing: 0, lineHeight: 1.3 }}>
               {title}
             </h2>
             {tag}

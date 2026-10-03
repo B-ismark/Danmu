@@ -2060,6 +2060,46 @@ textarea.field { border-radius: var(--r-2); }
 }
 @keyframes iso-settle { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
 
+/* ── Settings, in the Flow design (app/settings/page.tsx) ──────────────────────
+   An index of the cards beside them on a wide screen, a row of chips over them on a
+   narrow one; the key's journey as three tiles in order. */
+.settings {
+  display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 10px 32px; align-items: start;
+  grid-template-areas: ". head" "index cards";
+}
+.settings__head { grid-area: head; max-inline-size: var(--measure-page-prose); }
+.settings-index { grid-area: index; }
+.settings__cards { grid-area: cards; }
+.settings__cards { display: flex; flex-direction: column; gap: 16px; min-inline-size: 0; max-inline-size: var(--measure-page-prose); }
+.settings-index { position: sticky; top: 24px; }
+.settings-index ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.settings-index a {
+  display: block; padding: 8px 12px; border-radius: var(--r-2); text-decoration: none;
+  color: var(--ink-3); font-size: var(--fs-body); font-weight: 600;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.settings-index a:hover { background: var(--paper-2); color: var(--ink); }
+.settings-index a[aria-current] { background: var(--accent-tint); color: var(--accent-text); }
+.settings-section { padding: 20px 22px 6px; scroll-margin-top: 16px; }
+@media (max-width: 899px) {
+  .settings { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "index" "cards"; gap: 12px; }
+  .settings-index { position: static; }
+  .settings-index ol { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .settings-index a { padding: 6px 12px; border: 1px solid var(--edge); border-radius: var(--r-full); font-size: var(--fs-small); }
+}
+.key-journey { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.key-journey__title { margin: 0; font-family: var(--font-sans); font-size: var(--fs-caption); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); }
+.key-journey__steps {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+}
+.key-journey__steps > li {
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
+  background: var(--paper-2); border-radius: var(--r-2); font-size: var(--fs-small); line-height: 1.45; color: var(--ink-2);
+}
+.key-journey__steps b { color: var(--ink); font-size: var(--fs-body); }
+.key-journey .t-note { margin: 0; line-height: 1.55; }
+
 /* The shape picker's options: as many across as the column takes at ~170px, so
    three in the laptop's left column and two on a phone. `auto-fit`, not
    `auto-fill`: an empty extra track would stop the row short of the column's
