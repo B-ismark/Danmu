@@ -539,7 +539,7 @@ describe('the live-measure tags are checked in the COMPONENT, not only in the to
   it('puts the refusal on the themed --danger, not the fixed scene red', () => {
     // The pair the token test above measures is only the pair on screen if the
     // component paints it. `SCENE.invalid` as a background is the night-mode bug.
-    expect(SRC).toMatch(/background:\s*live\.valid\s*\?\s*'var\(--paper-0\)'\s*:\s*'var\(--danger\)'/);
+    expect(SRC).toMatch(/background:\s*valid\s*\?\s*'var\(--paper-0\)'\s*:\s*'var\(--danger\)'/);
     expect(SRC).not.toMatch(/background:[^,\n]*SCENE\.invalid/);
   });
 });
