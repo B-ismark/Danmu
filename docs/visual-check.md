@@ -3183,3 +3183,28 @@ ghost reads as a preview (and not as a piece already there) and stays smooth on 
 GPU is a judgement.
 
 **Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## The day strip's sun rises and sets in the pill, and a scrub keeps up with the hand
+
+**Where:** the 3D room; hover the day strip at the top of the canvas to open it. Drag
+the pill slowly from 05:00 to 22:00 and back. Then drag fast, back and forth across
+06:00 and 19:30. Repeat with the OS set to reduce motion, once with Overcast on, and
+once on a phone.
+
+**What wrong looks like:** the glyph jumping between pictures inside the day rather
+than morphing (it should only swap at 06:00 and 19:30, sun for moon); a sun that
+stays on its horizon line at 10:00 or sits on it at noon; a line or a half-disc below
+the line still showing at noon; morning and evening the same colour, or a colour
+that does not read against the paper pill; the pill trailing the pointer, or a
+hitch as the hour crosses a horizon or a half hour; the room's light lagging well
+behind the pill and not catching up on release; the hour after release, or after
+Undo, not the one the hand let go at. Under reduced motion, anything that animates.
+
+**Why eyes:** the bands, the lift, the paint and the coalescing are tested, and a
+headless build under software rendering showed the colours and the horizon right at
+05:00, 06:30, 07:00, 09:00, 12:00, 16:30, 18:30, 19:15 and 22:00; it also cut the
+scene renders during a 2 s scrub by roughly a factor of 3–14 with no long tasks at
+default quality. Whether that feels like the pill is in the hand on a real GPU, and
+whether the 4.5 px rise reads at phone size, is a judgement.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

@@ -160,38 +160,103 @@ describe('the day strip, open', () => {
   // The strip is capped at 520 px with a 43 px inset each end, so x maps to the clock
   // as hour = (x − 43) / 434 × 24.
   const xAt = (hour: number) => 43 + (hour / 24) * 434;
-  const glyphIsMoon = (c: ParentNode) => c.querySelector('.celestial')!.classList.contains('celestial--night');
-
-  it('scrubs across the horizon, and the sun turns into the moon under the hand', () => {
+  const phase = (c: ParentNode) => /celestial--(\w+)/.exec(c.querySelector('.celestial')!.getAttribute('class')!)![1];
+  /** One animation frame: the scrub hands its hour to the store at most once a frame. */
+  const frame = () => act(() => vi.advanceTimersByTime(20));
+  function grabbed() {
     const { container } = render(<DayStrip />);
     const handle = container.querySelector<HTMLElement>('[role="slider"]')!;
     const hit = container.querySelector<HTMLElement>('.day-strip__hit')!;
     fireEvent.pointerEnter(handle, { pointerType: 'mouse' });
-    expect(glyphIsMoon(container)).toBe(false);
+    return { container, handle, hit };
+  }
+
+  it('scrubs across the horizon, and the glyph goes evening, moon, morning under the hand', () => {
+    const { container, hit } = grabbed();
+    expect(phase(container)).toBe('morning'); // 09:00
     fireEvent.pointerDown(hit, { pointerType: 'mouse', button: 0, pointerId: 1, clientX: xAt(18) });
     expect(useStudio.getState().draggingId).not.toBeNull();
+    frame();
     expect(useStudio.getState().hour).toBeCloseTo(18, 1);
+    expect(phase(container)).toBe('evening');
     fireEvent.pointerMove(hit, { pointerType: 'mouse', pointerId: 1, clientX: xAt(21) });
+    frame();
     // One track: the drag is not held to the half of the clock it started in.
     expect(useStudio.getState().hour).toBeCloseTo(21, 1);
-    expect(glyphIsMoon(container)).toBe(true);
+    expect(phase(container)).toBe('night');
     expect(container.querySelector('.day-strip')!.classList.contains('day-strip--night')).toBe(true);
-    fireEvent.pointerMove(hit, { pointerType: 'mouse', pointerId: 1, clientX: xAt(10) });
-    expect(glyphIsMoon(container)).toBe(false);
+    fireEvent.pointerMove(hit, { pointerType: 'mouse', pointerId: 1, clientX: xAt(12) });
+    frame();
+    expect(phase(container)).toBe('day');
+    fireEvent.pointerMove(hit, { pointerType: 'mouse', pointerId: 1, clientX: xAt(7) });
+    frame();
+    expect(phase(container)).toBe('morning');
     fireEvent.pointerUp(hit, { pointerType: 'mouse', pointerId: 1 });
     expect(useStudio.getState().draggingId).toBeNull();
   });
 
-  it('puts the hour back on Esc mid-drag', () => {
-    const { container } = render(<DayStrip />);
-    const handle = container.querySelector<HTMLElement>('[role="slider"]')!;
-    const hit = container.querySelector<HTMLElement>('.day-strip__hit')!;
-    fireEvent.pointerEnter(handle, { pointerType: 'mouse' });
+  it('moves the pill with the pointer at once, and the hour at most once a frame', () => {
+    const { handle, hit } = grabbed();
+    let writes = 0;
+    const off = useStudio.subscribe((s, p) => { if (s.hour !== p.hour) writes++; });
+    fireEvent.pointerDown(hit, { pointerType: 'mouse', button: 0, pointerId: 1, clientX: xAt(14) });
+    for (const h of [14.5, 15, 15.5, 16]) fireEvent.pointerMove(hit, { pointerType: 'mouse', pointerId: 1, clientX: xAt(h) });
+    // The pill is already where the pointer is; the store has not been written yet.
+    expect(x(handle)).toBeCloseTo(xAt(16), 5);
+    expect(writes).toBe(0);
+    expect(useStudio.getState().hour).toBe(9);
+    frame();
+    // Five pointer events, one write, of the last of them.
+    expect(writes).toBe(1);
+    expect(useStudio.getState().hour).toBeCloseTo(16, 1);
+    expect(x(handle)).toBeCloseTo(xAt(16), 5);
+    off();
+  });
+
+  it('commits the last hour on release, before it lets go of the gesture', () => {
+    const { hit } = grabbed();
+    fireEvent.pointerDown(hit, { pointerType: 'mouse', button: 0, pointerId: 1, clientX: xAt(14) });
+    frame();
+    fireEvent.pointerMove(hit, { pointerType: 'mouse', pointerId: 1, clientX: xAt(20) });
+    // Released inside the same frame: the hour the hand let go at must not be lost, and
+    // it must land while `draggingId` is still held, or the undo step closes without it.
+    let hourAtRelease: number | null = null;
+    const off = useStudio.subscribe((s, p) => { if (p.draggingId && !s.draggingId) hourAtRelease = s.hour; });
+    fireEvent.pointerUp(hit, { pointerType: 'mouse', pointerId: 1 });
+    off();
+    expect(hourAtRelease).toBeCloseTo(20, 1);
+    // …and no frame left behind to write it again.
+    const before = useStudio.getState().hour;
+    act(() => useStudio.setState({ hour: 3 }));
+    frame();
+    expect(useStudio.getState().hour).toBe(3);
+    expect(before).toBeCloseTo(20, 1);
+  });
+
+  it('puts the hour back on Esc mid-drag, dropping the hour still in flight', () => {
+    const { hit } = grabbed();
     fireEvent.pointerDown(hit, { pointerType: 'mouse', button: 0, pointerId: 1, clientX: xAt(22) });
+    frame();
     expect(useStudio.getState().hour).toBeCloseTo(22, 1);
+    fireEvent.pointerMove(hit, { pointerType: 'mouse', pointerId: 1, clientX: xAt(4) });
     fireEvent.keyDown(window, { key: 'Escape' });
+    frame();
     expect(useStudio.getState().hour).toBe(9);
     expect(useStudio.getState().draggingId).toBeNull();
+  });
+
+  it('names the picture in the value text', () => {
+    const { handle } = grabbed();
+    const said = (h: number) => {
+      act(() => useStudio.setState({ hour: h }));
+      return handle.getAttribute('aria-valuetext');
+    };
+    expect(said(7)).toBe('07:00, morning');
+    expect(said(12)).toBe('12:00');
+    expect(said(18.5)).toBe('18:30, evening');
+    expect(said(22)).toBe('22:00, night');
+    act(() => useStudio.setState({ lighting: 'overcast' }));
+    expect(handle.getAttribute('aria-valuetext')).toBe('22:00, overcast');
   });
 
   it('shows the time beside the glyph, folded and open', () => {

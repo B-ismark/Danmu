@@ -2033,7 +2033,20 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     `SUNSET_H` so the gold is exactly where the light turns). A pill rides it with
     the sun or moon **in line with the time**, and the glyph *morphs* rather than
     swaps: the rays draw in, the disc swells and a shadow slides across to carve the
-    crescent (`Celestial`, `.celestial` in `globals.css`); crossing a horizon plays
+    crescent (`Celestial`, `.celestial` in `globals.css`). It is **four pictures on
+    one continuous morph** (`glyphAt`, `lib/day-strip.ts`): night (the moon, exactly
+    while `isDaytime` is false), **morning** (sunrise to halfway from the Morning stop
+    to Midday — 10:12), day, and **evening** (halfway from Midday to Evening — 15:39 —
+    to sunset). The bands are read off `TIME_STOPS`, so moving a stop moves its band.
+    In morning and evening the sun stands on a horizon line, and `lift` — its real
+    elevation scaled to 1 at the band's far edge — slides the disc up out of the line
+    (or down into it), fades the line and the half below it, and mixes the colour from
+    `--sun` toward `--sun-rise` (amber) or `--sun-set` (red-orange) through a `--lift`
+    custom property; a scrub moves `lift` continuously, so the sun rises in the pill as
+    the hour does. Only the moon/sun change at a horizon is a transition, and under
+    reduced motion there are none. The value text names the picture
+    (`07:00, morning`, `18:30, evening`, `22:00, night`; noon is the clock alone;
+    `, overcast` when the cloud glyph stands in). Crossing a horizon plays
     the dawn or dusk phrase (`lib/sound.ts`) through `SoundCues`, from any source.
     It is **screen chrome, not a thing in the room**: the TOOLS slot's second row
     (`CanvasDay` in `CanvasChrome.tsx`), centred between the rails, so it is in the
@@ -2054,13 +2067,28 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     step — and the rail's day track claims the same id for its own pull, so
     both are one step. The sky and exposure live in `Daylight` inside
     `Room.tsx`, so scrubbing re-renders the lights and not the furniture.
+    **A scrub is cheap by construction, and each piece of that has a scar.** The
+    pill is moved by a direct `transform` write in the pointer handler, so it is
+    under the hand whatever the scene costs; the hour reaches the store at most
+    once per animation frame, and the last one is committed on release before
+    `draggingId` clears, so the undo step holds the hour the hand let go at.
+    The key light is **always mounted** and goes dark below the horizon rather
+    than unmounting — three keys every material's program on the number of
+    directional lights, so a key that came and went recompiled the whole room at
+    each sunrise and sunset (~1.5 s, twice, on the first crossing). The
+    `Environment` is keyed on quality alone and re-bakes into the same cube
+    target (an hour in its key remounted it — new target, new PMREM — every half
+    hour of a scrub), re-bakes on a two-hour step while scrubbing, and its
+    brightness is `scene.environmentIntensity`, a uniform, not a bake.
+    `tests/render-churn.test.ts` holds all three.
   - **The strip carries the rest** (no rail control any more — `LightingPicker`
     and the Style → Light section are deleted): while it is open, an extras row
     under it holds the **Overcast** toggle, **Plan top faces** — the room's bearing,
     one compass point a press (`turnedBearing`, `lib/lighting-moods.ts`) — and the
     "no window or door, so no sunlight gets in" hint. The strip's span is the
     canvas's own: it does **not** back off for the Library card, so opening the
-    Library never moves it. The sun glyph is `--sun` (golden), the moon stays paper.
+    Library never moves it. The sun glyph is `--sun` (golden) by day, warming to `--sun-rise` / `--sun-set`
+    at its horizon; the moon stays paper.
   - **`Site.bearingDeg` still turns the whole day** with the room, so which wall
     the morning comes through is the user's answer. It was the Sun direction dial
     (`NorthDial.tsx`, deleted); the arc now shows the answer and the rail keeps the
