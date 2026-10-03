@@ -246,6 +246,27 @@ describe('the day strip, open', () => {
     expect(before).toBeCloseTo(20, 1);
   });
 
+  it('puts the pill back on its hour after a drag too short to change it, and after an early Esc', () => {
+    // A press on the PILL (not the strip) renders it where the hour is; `move` then
+    // writes the pointer's place straight onto it, and React only rewrites a style it
+    // sees change. A drag shorter than half a step leaves the hour — and so the rendered
+    // place — exactly as it was, and the pill stayed where the pointer let go.
+    const { handle } = grabbed();
+    fireEvent.pointerDown(handle, { pointerType: 'mouse', button: 0, pointerId: 1, clientX: xAt(9) });
+    fireEvent.pointerMove(handle, { pointerType: 'mouse', pointerId: 1, clientX: xAt(9 + 1 / 60) });
+    expect(x(handle)).toBeCloseTo(xAt(9 + 1 / 60), 5);
+    frame();
+    fireEvent.pointerUp(handle, { pointerType: 'mouse', pointerId: 1 });
+    expect(useStudio.getState().hour).toBe(9);
+    expect(x(handle)).toBeCloseTo(xAt(9), 5);
+    // Esc inside the first frame: nothing reached the store, so nothing re-rendered.
+    fireEvent.pointerDown(handle, { pointerType: 'mouse', button: 0, pointerId: 2, clientX: xAt(9) });
+    fireEvent.pointerMove(handle, { pointerType: 'mouse', pointerId: 2, clientX: xAt(4) });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(useStudio.getState().hour).toBe(9);
+    expect(x(handle)).toBeCloseTo(xAt(9), 5);
+  });
+
   it('puts the hour back on Esc mid-drag, dropping the hour still in flight', () => {
     const { hit } = grabbed();
     fireEvent.pointerDown(hit, { pointerType: 'mouse', button: 0, pointerId: 1, clientX: xAt(22) });

@@ -36,7 +36,7 @@
 //     arrows would move a clock nobody can see. A finger lifting off the glass is not
 //     leaving, so a touch drag does not fold it under the thumb.
 
-import { useEffect, useId, useRef, useState, type CSSProperties, type FocusEvent, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type MouseEvent, type PointerEvent } from 'react';
 import { SUN_DRAG_ID, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { DEFAULT_BEARING_DEG, compassName, formatClock, isDaytime, lightingAt, sunAt, turnedBearing } from '@/lib/lighting-moods';
@@ -230,6 +230,14 @@ export function DayStrip() {
   // POINTER put it (`move` below), not wherever the stored hour says.
   const dragX = carrying ? gesture.current?.x ?? null : null;
   const px = dragX ?? (open ? stripX(strip, hourT(hour)) : strip.width / 2);
+  // The pill's place, put back on the element when a gesture ends. `move` writes the
+  // pointer's place straight onto it, and React only rewrites a style it sees CHANGE —
+  // so a drag shorter than half a step (the hour never moved) or an Esc in the first
+  // frame left the pill wherever the pointer let go, off its own hour.
+  useLayoutEffect(() => {
+    const el = handleRef.current;
+    if (el && !carrying) el.style.transform = `translateX(${px - PILL_W / 2}px)`;
+  }, [carrying, px]);
   const light = lightingAt(lighting, hour, bearingDeg);
   const dark = isDark(light.bg);
 

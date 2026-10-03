@@ -368,7 +368,14 @@ export type Transforms = {
 export type PendingWrite = {
   transforms?: Transforms;
   parts?: unknown;
-  room?: { edit: (room: RoomData) => RoomData; pin?: unknown };
+  /** `migrated`: this write carries the open's schema-3 migration (`RoomSync`), so it may
+   *  stamp the record current. Any other write stamps at most `RECORD_ONLY_SCHEMA` on an
+   *  older record — a leave note replayed before the room loads must not tell the open
+   *  that the overrides were already moved. */
+  room?: { edit: (room: RoomData) => RoomData; pin?: unknown; migrated?: true };
+  /** Leave the room's place in the rooms list alone: a write nobody made by hand (the
+   *  open's schema stamp) should not move it to the top. */
+  untouched?: true;
   /** When its data was taken, and what each part it writes is stamped with. `saveTime()`
    *  when absent. */
   at?: number;
@@ -685,7 +692,7 @@ export const roomStore = {
             store.put(scene, k(roomId, 'scene'));
             store.put(at, wrote(roomId, 'scene'));
           }
-          store.put(Date.now(), k(roomId, 'touched'));
+          if (!v.untouched) store.put(Date.now(), k(roomId, 'touched'));
           tx.commit?.();
         };
         const write = (v: PendingWrite) => {
@@ -695,7 +702,7 @@ export const roomStore = {
           read.onsuccess = step(() => {
             const old = read.result as RoomData | undefined;
             if (!old) return rest(v, v.parts);
-            const written = rewritten(old, room.edit);
+            const written = rewritten(old, room.edit, room.migrated ? ROOM_SCHEMA_VERSION : recordOnlyStamp(old));
             store.put(written, k(roomId, 'meta'));
             store.put(at, wrote(roomId, 'room'));
             // A newer part list than the pin is already on its way, and a detected room is

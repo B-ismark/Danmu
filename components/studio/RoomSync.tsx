@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { markRoughSize, roomStore, saveTime, type PendingWrite, type RoomData, type Transforms } from '@/lib/storage';
+import { markRoughSize, ROOM_SCHEMA_VERSION, roomStore, saveTime, type PendingWrite, type RoomData, type Transforms } from '@/lib/storage';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { livingParents } from '@/lib/rigid-parent';
@@ -315,14 +315,20 @@ export function RoomSync() {
       setParentIds(livingParents(tx?.parentIds, useScene.getState().parts));
       ready.current = true;
       // …and written back with the version stamp, in one transaction, so the migration
-      // happens once. Only when it changed something: stamping every old room on open
-      // would mark it touched, and reorder the rooms list, for an edit nobody made.
-      if (room && retired.length > 0 && (migrated !== stored || savedScene)) {
+      // happens once. EVERY older room is stamped, whether or not this open changed
+      // anything: a room whose light had no overrides yet would otherwise stay below 3,
+      // and the next open would read the size or position the user has since given the
+      // NEW light as a pendant's and squash it back (`retiredOverridesFor`'s version
+      // evidence). Stamped `untouched` when nothing moved, so an open nobody edited does
+      // not reorder the rooms list.
+      if (room && (room.version ?? 0) < ROOM_SCHEMA_VERSION) {
+        const moved = migrated !== stored;
         roomStore
           .savePending(roomId, {
-            transforms: migrated !== stored ? migrated : undefined,
-            parts: savedScene ? useScene.getState().parts : undefined,
-            room: { edit: (r) => r },
+            transforms: moved ? migrated : undefined,
+            parts: savedScene && retired.length > 0 ? useScene.getState().parts : undefined,
+            room: { edit: (r) => r, migrated: true },
+            untouched: moved || (savedScene && retired.length > 0) ? undefined : true,
           })
           .catch((err) => console.error('[room] could not save the migrated ceiling light', err));
       }
