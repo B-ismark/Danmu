@@ -2781,4 +2781,4 @@ missing from the end of its row.
 gets its own one and paints only in the row's colour, not that it reads as that piece
 at 18 px. Walked once in headless Chromium at 1280 and 1100.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `d70b1cc` (B-ismark/Danmu#244), not yet looked at.
