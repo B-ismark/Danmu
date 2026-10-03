@@ -2428,7 +2428,6 @@ textarea.field { border-radius: var(--r-2); }
   96% { transform: translate(300px, 180px); }
   100% { transform: translate(66px, 128px); }
 }
-}
 
 /* ── Building your room (components/ui/BuildingRoom.tsx) ──────────────────────
    The photo route's last screen, up while the review is written into the room. The

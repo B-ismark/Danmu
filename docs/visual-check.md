@@ -2955,3 +2955,129 @@ On one* pair still under the photos.
 visible enough to connect the name to the wall is a judgement.
 
 **Merged:** `9ac44bf` (B-ismark/Danmu#252), not yet looked at.
+
+## A piece's hover card says only its name
+
+**Where:** the 3D tab; rest the pointer on the sofa, the lamp, a window.
+
+**What wrong looks like:** anything beyond the name (size, category, hints); the bubble
+clipped at the canvas edge; it lingering after the pointer leaves.
+
+**Why eyes:** the content is tested; where the bubble lands on a busy room is not.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Scrollbars only while you are in the list
+
+**Where:** the Catalog, the Library, the scan review's *Your pieces*, Settings. Point at
+each list, then leave; tab into one with the keyboard.
+
+**What wrong looks like:** a bar showing at rest; no bar while hovering a long list; the
+list jumping sideways as the bar appears (the gutter should already be there); on Safari,
+the old thick grey bar.
+
+**Why eyes:** Chromium walked; the webkit rules were removed in favour of the standard
+`scrollbar-color`, so Safari before 18.2 is the one to check.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Add turns into Close while the Library is open
+
+**Where:** press the toolbar's *Add*, then the Details panel's *Add*; close each with its
+own button and with Esc.
+
+**What wrong looks like:** one button morphing and the other not; the plus and the cross
+crossing over clumsily; the word changing width so the toolbar jumps; a screen reader
+hearing "Add" on the button that closes.
+
+**Why eyes:** both labels are tested; whether the turn feels like one gesture is not.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## View settings, How this works and Switch room wear the app's tooltip
+
+**Where:** the app bar's eye, question mark and stack icons; point, then tab to them.
+
+**What wrong looks like:** the browser's plain yellow title box, or two tips at once.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## 2D Plan / 3D Model sits in the middle of the bar
+
+**Where:** both tabs at 1366, 1024 and 390 px; rename the room to something very long.
+
+**What wrong looks like:** the switch drifting off-centre; a long room name running under
+it; below 860 px the switch not taking its own row.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## The day strip: quiet at rest, springs out, muted sky — and no more sticking
+
+**Where:** the sun pill over the 3D room. Look at it untouched; point at it; drag the sun
+across; let go off the strip; on a phone, tap it, drag, then tap elsewhere. Arrow keys from
+23:30 and from 00:00.
+
+**What wrong looks like:** a glowing ring around the pill at rest; the strip sliding out
+stiffly or overshooting so far it looks broken; colours that shout; the strip stuck open or
+the sun following the pointer after you let go; a time past 23:59 or below 00:00.
+
+**Why eyes:** each glitch has a test; whether the spring reads as playful rather than
+wobbly is a judgement, and the tune at the horizon still wants ears.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## How this works as a dialog with topics
+
+**Where:** the app bar's question mark. Click each topic on the left; scroll the right;
+Esc; then a phone, where it should be a sheet from the bottom.
+
+**What wrong looks like:** the topic list not following the scroll or not jumping; a key cap
+breaking across lines; the sheet hiding its close button under the phone's bar.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Photo screen: Add photos centred, current vs previewed wall, and a plan wall that answers
+
+**Where:** *Photograph my room* before any photo; then three photos. Point at a card; open
+card 1's Wall list and point at Wall 3; point at each wall line in the small plan.
+
+**What wrong looks like:** the empty Add tile stuck to the top; a card hover not shimmering
+its wall; with the list open, not being able to tell which wall is the photo's own and
+which is the one under the pointer (the arrow should run from current to preview); a plan
+wall hover not lifting its card, or lifting the wrong one.
+
+**Why eyes:** the states are tested; whether two shimmers read as two different things is
+not.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Check furniture: the finding animation, piece colours, and both-way hover
+
+**Where:** run a scan. Watch the waiting screen; then on the review, point at a box on the
+photo and at a row in *Your pieces*. Rename a piece, pick a suggested model; look at a row
+the outline doubted.
+
+**What wrong looks like:** the loader looping visibly or stuttering; with reduced motion,
+anything moving; a wide gap between the photo and *Your pieces*; two neighbouring pieces in
+colours you cannot tell apart; a hovered piece hard to tell from a resting one; hovering a
+box not lighting its row (and scrolling it into view), or the reverse; a picked model
+leaving the piece unticked; the *Left out* note on a piece you ticked.
+
+**Why eyes:** the link, the colours and the auto-tick are tested; the animation's pace and
+whether eight colours are distinct enough on a real photo are not.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## A scanned room uses catalogue colours and typical sizes
+
+**Where:** scan a room with a pink or patterned piece (cushions, shoes, a dress on a rail),
+a window and curtains; build the room.
+
+**What wrong looks like:** any piece wearing a photo colour; a window standing proud of the
+wall; curtains smaller than the window; a sofa wildly off the size of the one in the photo
+(a width within about a quarter of it is the promise now, nothing tighter).
+
+**Why eyes:** the sizes are swept against the catalogue; what a real scan looks like built
+is not.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
