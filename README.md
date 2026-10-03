@@ -87,6 +87,10 @@ without any key: pick a footprint and start decorating.
   nowhere clear to go, it is not added, and you are told why. Nothing is ever made
   wider than its wall or the room: that is refused and said, never resized
   ([`lib/space-bound.ts`](lib/space-bound.ts)).
+- **Night mode.** System (default), Light or Dark — in Settings → Appearance and in
+  the studio's View settings. A warm dark palette for the whole app, applied before
+  first paint so there is no flash; the 3D room keeps its own colours and light, and
+  the floor-plan PNG stays on light paper. See *Night mode* in [Design.md](Design.md).
 - **Rooms travel as files, not through a server.** `Save file` in the studio writes
   a readable `.danmu.json` ([`lib/scene-file.ts`](lib/scene-file.ts)); `Open a file`
   on the rooms page lands one as a new room. It carries the room and its furniture and

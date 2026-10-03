@@ -34,7 +34,7 @@ describe('the Settings index', () => {
 
   it('follows the card whose top has crossed the upper third once scrolled', () => {
     render(<SettingsPage />);
-    const tops: Record<string, number> = { detection: -900, units: -300, downloads: 100, rooms: 700 };
+    const tops: Record<string, number> = { detection: -900, units: -300, appearance: -100, downloads: 100, rooms: 700 };
     for (const [id, top] of Object.entries(tops)) {
       document.getElementById(id)!.getBoundingClientRect = () => ({ top }) as DOMRect;
     }

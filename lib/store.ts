@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { DEFAULT_HOUR, hourNow, legacyLighting, wrapHour } from './lighting-moods';
 import { landedLinks, landedLinksAll, type Landing } from './rigid-parent';
+import { DEFAULT_APPEARANCE, SETTINGS_STORAGE_KEY, parseAppearance, type Appearance } from './appearance';
 
 // Studio view + interaction state. Mostly session-scoped: only the handful of
 // fields in STUDIO_PREFS below survive a reload (see the persist config at the
@@ -512,6 +513,10 @@ type SettingsState = {
    *  models, ~65 MB, and finds the most; `basic` is the smaller one alone, ~14 MB. A
    *  property of the device and its data plan, so it lives here. */
   detectorPack: DetectorPack;
+  /** Night mode: `system` follows the device, `light` / `dark` pin it
+   *  (`lib/appearance.ts`). A property of the person and the room they are sitting
+   *  in, not of the room being decorated, so it lives here. */
+  appearance: Appearance;
   setApiKey: (k: string) => void;
   setDimUnit: (u: DimUnit) => void;
   setKeyValid: (v: boolean | null, reason?: string | null) => void;
@@ -519,6 +524,7 @@ type SettingsState = {
   setStepFree: (on: boolean) => void;
   setSound: (on: boolean) => void;
   setDetectorPack: (p: DetectorPack) => void;
+  setAppearance: (a: Appearance) => void;
 };
 
 /** Bounds on the remembered camera height. Outside these it is a typo, and a
@@ -538,6 +544,7 @@ export const useSettings = create<SettingsState>()(
       stepFree: false,
       sound: true,
       detectorPack: 'full',
+      appearance: DEFAULT_APPEARANCE,
       // Setting a new key invalidates the cached test result.
       setApiKey: (k) => set({ apiKey: k, keyValid: null, keyValidReason: null }),
       setDimUnit: (u) => set({ dimUnit: u }),
@@ -550,11 +557,26 @@ export const useSettings = create<SettingsState>()(
       setStepFree: (on) => set({ stepFree: on }),
       setSound: (on) => set({ sound: on }),
       setDetectorPack: (p) => set({ detectorPack: p }),
+      setAppearance: (a) => set({ appearance: parseAppearance(a) }),
     }),
     {
-      name: 'danmu-settings',
+      // The inline boot script in app/layout.tsx reads this same record before
+      // first paint, so the key is named once, in lib/appearance.ts.
+      name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
       // never persist apiKey to anywhere except device localStorage — it already is
+      //
+      // No `version` bump for `appearance`: it is an ADDITIVE field, and a record
+      // written before it existed simply lacks it — which this merge reads as the
+      // default. A version is for the first change that has to rewrite an old value
+      // (`useStudio`'s `dressed` reset is the example). What a merge is for is the
+      // boundary: localStorage holds whatever the app wrote last, or whatever
+      // someone typed into devtools, and the whole UI's palette hangs off this one
+      // string, so it is checked against the vocabulary rather than trusted.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<SettingsState>;
+        return { ...current, ...p, appearance: parseAppearance(p.appearance) };
+      },
     },
   ),
 );
@@ -571,6 +593,19 @@ export function useDimUnit(): DimUnit {
     useSettings.subscribe,
     () => useSettings.getState().dimUnit,
     () => useSettings.getInitialState().dimUnit,
+  );
+}
+
+/** The appearance as the server rendered it (System) until the page has
+ *  hydrated, then the one the user chose — `useDimUnit`'s reason: Settings is
+ *  prerendered, and a Segmented reading "Dark" on the first client render against
+ *  the server's "System" is a hydration mismatch. The PAGE is already right before
+ *  this resolves; the boot script in `app/layout.tsx` saw to that. */
+export function useAppearance(): Appearance {
+  return useSyncExternalStore(
+    useSettings.subscribe,
+    () => useSettings.getState().appearance,
+    () => useSettings.getInitialState().appearance,
   );
 }
 

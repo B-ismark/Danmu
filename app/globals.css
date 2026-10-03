@@ -346,7 +346,232 @@
      the drag too (`lib/sheet-detents.ts`), so a released sheet settles on the same
      height the stylesheet draws. */
   --sheet-half: 55%;
+
+  /* A light rim for a paper control standing on a DARK backdrop — the day strip's
+     pill over a night sky in the 3D view. In this theme the pill IS paper, so its
+     own ground is the light silhouette; in night mode paper is dark and the rim has
+     to come from somewhere else, which is why this is a token and not `--paper`. */
+  --rim-on-dark: var(--paper);
+
+  /* Native controls, scrollbars and form fields follow the theme. */
+  color-scheme: light;
 }
+
+/* ─── Night mode ──────────────────────────────────────────────────────────────
+   A warm dark, not an inverted one: the paper is a deep olive-brown charcoal (never
+   black), the ink is the light theme's cream, the moss accent is lifted so it still
+   reads as moss on a dark ground, and the amber stays warm. Every token that is a
+   COLOUR is restated here; everything else (type, radii, motion, measures, the
+   z-scale, the sky) is shared and stays in the block above.
+
+   Three ways in, one palette. The preference lives in `useSettings.appearance`
+   (`lib/appearance.ts`): System (the default) follows `prefers-color-scheme`, Light
+   and Dark pin it. An explicit choice is written to `<html data-theme>` before
+   first paint by the inline script in `app/layout.tsx`; System leaves the attribute
+   off and lets the media query below decide, so a system switch while the app is
+   open needs no script at all.
+
+   CSS cannot OR a media query with an attribute selector, so the palette is written
+   twice: here under `[data-theme="dark"]`, and again under the media query at the
+   end of this section. The second copy carries no comments on purpose — it is a
+   mirror, and `tests/color-tokens.test.ts` fails if the two blocks declare anything
+   different. Edit this one, then run `node scripts/sync-dark-palette.mjs` to
+   rewrite the mirror (`--check` reports a stale one without writing).
+
+   Contrast claims below are on the DARK papers and are checked by the same harvester
+   as the light ones, against this palette. Aliases from the light block
+   (`--on-accent: var(--paper)`, `--on-ink-2: var(--ink-4)`, `--studio-wash`'s
+   stops) resolve against these values automatically: a custom property is
+   substituted on the element where it is used, after the cascade has picked the
+   dark `--paper`.
+
+   What does NOT theme, deliberately: the 3D room (walls, floor, furniture, and the
+   lighting mood's sky behind it — `lib/scene-palette.ts`, `lib/lighting-moods.ts`),
+   because those are the user's room and its light rather than the app's paper; the
+   sky tokens above; the piece halos, which are built for a PHOTO; and the plan PNG
+   export (`lib/plan-export.ts`), which is a document someone saves and sends, and
+   stays on light paper whatever the screen was showing. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --paper-0: #17150F;       /* page wash — the darkest step; cards stand up out of it */
+  --paper: #211E18;         /* cards and panels */
+  --paper-2: #2B2820;       /* wells, hovers — a step LIGHTER here, the way elevation reads in the dark */
+  --paper-3: #35312A;
+  --ink: #F0E9D9;           /* the light theme's cream, as type. 13.74:1 on --paper */
+  --ink-2: #D3CBB8;         /* 10.29:1 on --paper */
+  --ink-3: #ADA48F;         /* 6.71:1 on --paper, 5.22:1 on --paper-3 */
+  --ink-4: #5C5748;         /* decorative fills only (2.30:1) */
+  --ink-hover: #FFF9EC;     /* the primary button is cream here, so its hover is a step brighter */
+
+  --hairline: rgba(240, 233, 217, 0.12);
+  --hairline-soft: rgba(240, 233, 217, 0.06);
+  --hairline-strong: rgba(240, 233, 217, 0.20);
+  --edge: rgba(240, 233, 217, 0.46);          /* 3.97:1 on --paper — boundary of anything interactive */
+
+  --accent: #628E55;        /* moss, lifted a touch — fills only, still NOT text (4.37:1) */
+  --accent-tint: rgba(98, 142, 85, 0.18);
+  --accent-tint-strong: rgba(98, 142, 85, 0.32);
+  --accent-ink: #9DC58E;      /* 8.56:1 with --paper — the accent-button surface, carrying dark type */
+  --accent-ink-hover: #B2D4A5;/* 10.17:1 with --paper */
+  --accent-text: #A3C994;     /* 8.97:1 on --paper, 7.12:1 on --accent-tint */
+  --accent-2: #E0A23A;
+  --accent-2-tint: rgba(224, 162, 58, 0.18);
+  --sun: #E0A21C;           /* 7.40:1 on --paper — a graphic */
+
+  --locked: #CFA0BA;        /* 7.43:1 on --paper */
+  --locked-tint: rgba(207, 160, 186, 0.16);
+
+  /* The scan review's eight piece colours carry a label in --on-accent, which is dark
+     here, so they are the same eight hues raised to a pastel. */
+  --piece-1: #E79A7C;  /* 7.37:1 on --paper */
+  --piece-2: #AFC67C;  /* 8.86:1 on --paper */
+  --piece-3: #7FC2C6;  /* 8.26:1 on --paper */
+  --piece-4: #9DB3E6;  /* 7.93:1 on --paper */
+  --piece-5: #BCA6E6;  /* 7.70:1 on --paper */
+  --piece-6: #D9B35A;  /* 8.35:1 on --paper */
+  --piece-7: #E89AAE;  /* 7.65:1 on --paper */
+  --piece-8: #CDAE95;  /* 7.98:1 on --paper */
+
+  --snap-edge: #3FBF72;
+  --snap-center: #46C08A;
+
+  /* The isometric room is a lit room, so it stays warm — a shade down, so the hero
+     does not glare off a dark page. */
+  --art-floor: #B89E76;
+  --art-wall-n: #D3C8AF;
+  --art-wall-w: #BFB194;
+  --art-1: #C26F54;
+  --art-2: #8A6947;
+  --art-3: #86A682;
+  --art-4: #DBA63C;
+  --art-5: #5F8A4A;
+
+  --danger: #E88670;        /* 6.39:1 on --paper */
+  --danger-tint: rgba(232, 134, 112, 0.14);
+  --danger-text: #F2A592;   /* 6.64:1 on --danger-tint */
+  --warn: #E3A65A;          /* 7.81:1 on --paper */
+  --warn-text: #E9B26C;     /* 7.74:1 on --paper-2 */
+  --warn-tint: rgba(227, 166, 90, 0.16);
+  --success: #5F8C55;       /* fills only (4.25:1) */
+  --success-tint: rgba(95, 140, 85, 0.18);
+  --success-text: #A8CB98;  /* 9.23:1 on --paper */
+
+  /* Type on an --ink chip. --ink is cream here, so these are the warn and success
+     hues brought DOWN to a shared lightness rather than up. */
+  --on-ink-warn: #86500C;    /* 5.48:1 on --ink */
+  --on-ink-success: #3E6534; /* 5.57:1 on --ink */
+  --edge-on-ink: rgba(23, 21, 15, 0.90);
+  --scrim: rgba(0, 0, 0, 0.62);
+
+  --grid-line: rgba(240, 233, 217, 0.035);
+  --grid-line-major: rgba(240, 233, 217, 0.06);
+
+  /* Shadows are black in the dark — a warm-brown shadow on a near-black ground is
+     invisible — and heavier, because a dark surface casts less contrast. */
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.30), 0 6px 16px rgba(0, 0, 0, 0.28);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.32), 0 12px 28px rgba(0, 0, 0, 0.40);
+  /* The wash glows from the top instead of deepening toward the edges, and ends on
+     --paper-0, which every text token above is measured on as well. */
+  --studio-wash: radial-gradient(120% 90% at 70% 0%, var(--paper-2) 0%, var(--paper) 45%, var(--paper-0) 100%);
+  --glass-fill: rgba(33, 30, 24, 0.74);        /* --paper at 74% */
+  --glass-fill-strong: rgba(33, 30, 24, 0.84);
+  --glass-tone: rgba(240, 233, 217, 0.04);
+  --glass-rim: rgba(255, 248, 232, 0.07);
+  --shadow-float: 0 1px 2px rgba(0, 0, 0, 0.30), 0 10px 30px rgba(0, 0, 0, 0.38);
+  --clay-raise: inset 0 1px 0 rgba(255, 248, 232, 0.07), 0 1px 2px rgba(0, 0, 0, 0.30), 0 3px 8px rgba(0, 0, 0, 0.26);
+  --clay-raise-hover: inset 0 1px 0 rgba(255, 248, 232, 0.09), 0 2px 4px rgba(0, 0, 0, 0.32), 0 8px 18px rgba(0, 0, 0, 0.34);
+  --clay-well: inset 0 1px 2px rgba(0, 0, 0, 0.40), inset 0 -1px 0 rgba(255, 248, 232, 0.05);
+  --shadow-sheet: 0 -1px 3px rgba(0, 0, 0, 0.30), 0 -12px 28px rgba(0, 0, 0, 0.38);
+
+  --rim-on-dark: var(--edge);
+}
+
+/* The same palette for System on a dark device. A mirror of the block above with
+   its comments stripped — do not edit it by hand; see the note there. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper-0: #17150F;
+    --paper: #211E18;
+    --paper-2: #2B2820;
+    --paper-3: #35312A;
+    --ink: #F0E9D9;
+    --ink-2: #D3CBB8;
+    --ink-3: #ADA48F;
+    --ink-4: #5C5748;
+    --ink-hover: #FFF9EC;
+    --hairline: rgba(240, 233, 217, 0.12);
+    --hairline-soft: rgba(240, 233, 217, 0.06);
+    --hairline-strong: rgba(240, 233, 217, 0.20);
+    --edge: rgba(240, 233, 217, 0.46);
+    --accent: #628E55;
+    --accent-tint: rgba(98, 142, 85, 0.18);
+    --accent-tint-strong: rgba(98, 142, 85, 0.32);
+    --accent-ink: #9DC58E;
+    --accent-ink-hover: #B2D4A5;
+    --accent-text: #A3C994;
+    --accent-2: #E0A23A;
+    --accent-2-tint: rgba(224, 162, 58, 0.18);
+    --sun: #E0A21C;
+    --locked: #CFA0BA;
+    --locked-tint: rgba(207, 160, 186, 0.16);
+    --piece-1: #E79A7C;
+    --piece-2: #AFC67C;
+    --piece-3: #7FC2C6;
+    --piece-4: #9DB3E6;
+    --piece-5: #BCA6E6;
+    --piece-6: #D9B35A;
+    --piece-7: #E89AAE;
+    --piece-8: #CDAE95;
+    --snap-edge: #3FBF72;
+    --snap-center: #46C08A;
+    --art-floor: #B89E76;
+    --art-wall-n: #D3C8AF;
+    --art-wall-w: #BFB194;
+    --art-1: #C26F54;
+    --art-2: #8A6947;
+    --art-3: #86A682;
+    --art-4: #DBA63C;
+    --art-5: #5F8A4A;
+    --danger: #E88670;
+    --danger-tint: rgba(232, 134, 112, 0.14);
+    --danger-text: #F2A592;
+    --warn: #E3A65A;
+    --warn-text: #E9B26C;
+    --warn-tint: rgba(227, 166, 90, 0.16);
+    --success: #5F8C55;
+    --success-tint: rgba(95, 140, 85, 0.18);
+    --success-text: #A8CB98;
+    --on-ink-warn: #86500C;
+    --on-ink-success: #3E6534;
+    --edge-on-ink: rgba(23, 21, 15, 0.90);
+    --scrim: rgba(0, 0, 0, 0.62);
+    --grid-line: rgba(240, 233, 217, 0.035);
+    --grid-line-major: rgba(240, 233, 217, 0.06);
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.30), 0 6px 16px rgba(0, 0, 0, 0.28);
+    --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.32), 0 12px 28px rgba(0, 0, 0, 0.40);
+    --studio-wash: radial-gradient(120% 90% at 70% 0%, var(--paper-2) 0%, var(--paper) 45%, var(--paper-0) 100%);
+    --glass-fill: rgba(33, 30, 24, 0.74);
+    --glass-fill-strong: rgba(33, 30, 24, 0.84);
+    --glass-tone: rgba(240, 233, 217, 0.04);
+    --glass-rim: rgba(255, 248, 232, 0.07);
+    --shadow-float: 0 1px 2px rgba(0, 0, 0, 0.30), 0 10px 30px rgba(0, 0, 0, 0.38);
+    --clay-raise: inset 0 1px 0 rgba(255, 248, 232, 0.07), 0 1px 2px rgba(0, 0, 0, 0.30), 0 3px 8px rgba(0, 0, 0, 0.26);
+    --clay-raise-hover: inset 0 1px 0 rgba(255, 248, 232, 0.09), 0 2px 4px rgba(0, 0, 0, 0.32), 0 8px 18px rgba(0, 0, 0, 0.34);
+    --clay-well: inset 0 1px 2px rgba(0, 0, 0, 0.40), inset 0 -1px 0 rgba(255, 248, 232, 0.05);
+    --shadow-sheet: 0 -1px 3px rgba(0, 0, 0, 0.30), 0 -12px 28px rgba(0, 0, 0, 0.38);
+    --rim-on-dark: var(--edge);
+  }
+}
+
+/* Switching theme must not animate every surface in the app at once: anything
+   with a colour transition would fade over 120-300ms, out of step with everything
+   that has none. `lib/appearance.ts` sets this attribute for one frame around a
+   switch (a press, or the system flipping while the app is open). */
+:root[data-theme-switching] *,
+:root[data-theme-switching] *::before,
+:root[data-theme-switching] *::after { transition: none !important; }
 
 html, body {
   margin: 0;
@@ -2863,7 +3088,7 @@ textarea.field { border-radius: var(--r-2); }
 }
 .day-strip--night .day-strip__glyph { color: var(--on-ink); }
 .day-strip--muted .day-strip__glyph { color: var(--ink-3); }
-.day-strip--on-dark:not(.day-strip--night) .day-strip__handle { border-color: var(--paper); }
+.day-strip--on-dark:not(.day-strip--night) .day-strip__handle { border-color: var(--rim-on-dark); }
 /* Giving way to the furniture (the contract in DayStrip.tsx). Quiet while a piece is
    selected — still there, still grabbable, not competing with it — and away while
    anything else is carried, where it must not catch the pointer. */

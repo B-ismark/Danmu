@@ -4,6 +4,9 @@
 // stroke, numbered furniture rectangles, room dimension lines, a 1 m scale
 // bar, and a legend listing every numbered piece with its real dimensions.
 // A printable move-day handout, generated entirely on-device.
+//
+// Always light, in night mode too: it is a sheet to print or send, not a view of
+// the screen. `PLAN` (lib/scene-palette.ts) says why.
 
 import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
