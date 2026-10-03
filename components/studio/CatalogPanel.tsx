@@ -41,6 +41,23 @@ import { usePublishedBox } from './CanvasChrome';
  *  room. Without it, pressing Add on a narrow window opens a panel off-screen. */
 export const STUDIO_CANVAS_ID = 'studio-canvas';
 
+/** The glyph and word of both Add triggers. A plus that turns 45° into an × and an
+ *  Add that cross-fades into Close, both driven by the parent's `aria-expanded`
+ *  (`.add-morph`, globals.css), so the two triggers read one flag and one motion.
+ *  Both words are in the DOM and the button's `aria-label` carries the name, so
+ *  they are `aria-hidden` rather than announced twice. */
+function AddMorph() {
+  return (
+    <>
+      <span className="add-morph" aria-hidden="true"><Icon name="plus" size={12} /></span>
+      <span className="add-morph-label" aria-hidden="true">
+        <span>Add</span>
+        <span>Close</span>
+      </span>
+    </>
+  );
+}
+
 /** Rail trigger — the labelled one: in the right rail's pinned footer
  *  (`RailFooter`) beside Delete while something is selected, and full width under
  *  the empty panel's prompt (`EmptyInspector`, `wide`) while nothing is.
@@ -95,10 +112,7 @@ export function AddPiecesButton({ wide = false }: { wide?: boolean } = {}) {
             `white-space: nowrap` and a bare text node beside an icon is an anonymous
             flex item that no per-site rule can reach, which sends the overflow out
             through the border instead. `globals.css` names this opt-out. */}
-        <Icon name={open ? 'x' : 'plus'} size={12} />
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
-          {open ? 'Close' : 'Add'}
-        </span>
+        <AddMorph />
       </button>
     </Tooltip>
   );
@@ -120,12 +134,12 @@ export function CatalogToggle() {
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         className="chrome-pill__text"
-        title="Add a piece"
         // The rail's Add says "Add a piece to the room" to a screen reader; this one
-        // said only its visible "Add", so the two read as one control twice.
+        // said only its visible "Add", so the two read as one control twice. It names
+        // what a press does NOW, like the rail's.
         aria-label={open ? 'Close the Library' : 'Add a piece'}
       >
-        <Icon name="plus" size={12} /> Add
+        <AddMorph />
       </button>
     </div>
   );

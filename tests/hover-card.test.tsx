@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-// The hover card names a piece the way the Inspector does: its name, and beside it the
-// Library shelf (§ 41) — never `category`, the internal key that calls a radiator
-// "Fridge".
+// The hover card is a name bubble and nothing else: no shelf, no size, no pills. It
+// never prints `category`, the internal key that calls a radiator "Fridge".
 
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -16,12 +15,14 @@ const radiator = {
 } as ScenePart;
 
 describe('the hover card', () => {
-  it('shows the name and its Library shelf, and not the internal category', () => {
+  it('shows only the name — no shelf, size, pill or internal category', () => {
     useScene.setState({ parts: [radiator] });
     useStudio.setState({ positions: {}, rotations: {}, dims: {}, hoveredPartId: 'radiator', selectedPartId: null });
     render(<HoverCard />);
     expect(screen.getByText('Radiator')).toBeTruthy();
-    expect(screen.getByText('Appliances')).toBeTruthy();
+    expect(screen.queryByText('Appliances')).toBeNull();
+    expect(screen.queryByText('Size')).toBeNull();
+    expect(screen.queryByText(/580|800/)).toBeNull();
     expect(screen.queryByText(/fridge/i)).toBeNull();
   });
 });
