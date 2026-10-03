@@ -166,8 +166,11 @@ export function applyListEdits(parts: ScenePart[], room: RoomData, next: SavedDe
  *  and the studio decides how it looks and what it belongs to, so those carry:
  *
  *  · **Colour**, when the studio set one. A scanned piece is built in its model's own
- *    default colour (a photo no longer colours it), so any colour on the old piece is
- *    somebody's choice, and stands.
+ *    default colour (a photo no longer colours it), so a colour on the old piece is
+ *    somebody's choice and stands — unless it is the row's own: a scene saved before
+ *    that change copied the photo's sampled colour onto every piece, and an old record
+ *    still carries it, so a piece wearing exactly that colour has nobody's choice in
+ *    it and is dropped.
  *  · **Merged set**, always: it is not something a row has an opinion on.
  *  · **Decor, light and name**, only while it is the same model. What sits on a
  *    desk and a lamp's brightness belong to that model, and a studio name survives a
@@ -182,7 +185,10 @@ function carryStudioEdits(
   now: SavedDetection | undefined,
 ): ScenePart {
   const out: ScenePart = { ...fresh };
-  if (old.color !== undefined) out.color = old.color;
+  // `color` left the record's type with the photo sampling; an old record can still
+  // hold one at runtime, which is the whole point of reading it here.
+  const sampled = (was as { color?: unknown } | undefined)?.color;
+  if (old.color !== undefined && old.color !== sampled) out.color = old.color;
   if (old.groupId !== undefined) out.groupId = old.groupId;
   if (old.shape === fresh.shape) {
     if (old.decor !== undefined) out.decor = old.decor;

@@ -50,7 +50,7 @@ export function HelpDialog({ title, sections, onClose }: { title: string; sectio
       else {
         for (const s of sections) {
           const node = el.querySelector<HTMLElement>(`[data-help-sec="${s.id}"]`);
-          if (node && node.offsetTop - el.offsetTop <= el.scrollTop + 24) cur = s.id;
+          if (node && node.offsetTop <= el.scrollTop + 24) cur = s.id;
         }
       }
       setActive(cur);
@@ -65,7 +65,7 @@ export function HelpDialog({ title, sections, onClose }: { title: string; sectio
     if (!el || !node) return;
     setActive(id);
     const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    el.scrollTo?.({ top: node.offsetTop - el.offsetTop, behavior: reduce ? 'auto' : 'smooth' });
+    el.scrollTo?.({ top: node.offsetTop, behavior: reduce ? 'auto' : 'smooth' });
   };
 
   return (

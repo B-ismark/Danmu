@@ -239,6 +239,10 @@ describe('applyListEdits', () => {
       expect(edit?.parts[0].color).toBe('#00aa00');
       const reset = applyListEdits([bed], r, [{ ...photo[0], yaw: 1.2 }, LIST[1], LIST[2]]);
       expect(reset?.parts[0].color).toBeUndefined();
+      // A scene saved before the change: the build had copied the row's sampled colour
+      // onto the piece. That colour is the photo's, not a choice, so it does not carry.
+      const legacy = applyListEdits([{ ...bed, color: '#aa0000' }], r, [{ ...photo[0], yaw: 1.2 }, LIST[1], LIST[2]]);
+      expect(legacy?.parts[0].color, 'an old sampled colour is not carried').toBeUndefined();
     });
   });
 
