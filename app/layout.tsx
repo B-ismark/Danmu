@@ -5,6 +5,9 @@ import { Providers } from './providers';
 import { ConfirmHost } from '@/components/ui/Confirm';
 import { StorageToast } from '@/components/ui/StorageToast';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
+import { AppearanceSync } from '@/components/AppearanceSync';
+import { APPEARANCE_BOOT } from '@/lib/appearance';
+import { PAPER_0, PAPER_0_DARK } from './manifest';
 import { SITE_URL } from '@/lib/site-url';
 import './globals.css';
 
@@ -76,19 +79,37 @@ export const viewport: Viewport = {
   // and the studio's toolbar floats a band above the bottom edge.
   viewportFit: 'cover',
   // Matches --paper-0, the actual page wash, so mobile browser chrome blends
-  // with the app instead of introducing a fourth unrelated cream.
-  themeColor: '#F4EFE4',
+  // with the app instead of introducing a fourth unrelated cream — once per
+  // scheme, since night mode has its own wash. Next emits one
+  // `<meta name="theme-color" media=…>` per entry, which follows the DEVICE; a
+  // pinned Light or Dark re-points them (`applyThemeColor`, lib/appearance.ts).
+  // Both values are the manifest's exports, and `tests/color-tokens.test.ts` holds
+  // them to the two `--paper-0` declarations in globals.css.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: PAPER_0 },
+    { media: '(prefers-color-scheme: dark)', color: PAPER_0_DARK },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${figtree.variable} ${GeistMono.variable} ${fraunces.variable}`}>
+    // `suppressHydrationWarning`: the boot script below writes `data-theme` onto this
+    // element before React hydrates it, so the server's `<html>` and the client's
+    // differ by exactly that attribute, on purpose. It silences this element only.
+    <html lang="en" className={`${figtree.variable} ${GeistMono.variable} ${fraunces.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Night mode before first paint — see APPEARANCE_BOOT. Inline because it
+            has to run before the stylesheet's first paint and before any bundle;
+            allowed by the CSP's existing `'unsafe-inline'` (next.config.mjs). */}
+        <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT }} />
+      </head>
       <body>
         <Providers>
           {children}
           <ConfirmHost />
           <StorageToast />
           <ServiceWorkerRegistrar />
+          <AppearanceSync />
         </Providers>
       </body>
     </html>

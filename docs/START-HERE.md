@@ -34,8 +34,9 @@ backend and no account. The 3D studio *is* the product.
    `lib/room-scene.ts`; a test fails on a hand-written fallback.
 7. **No hard-coded design values.** Colours, spacing, type, radii, motion and
    z-index are tokens in `app/globals.css`. The 3D scene and canvas read
-   `lib/scene-palette.ts`. A control that does not fit must **reflow, not spill or
-   vanish.**
+   `lib/scene-palette.ts`. Every colour token has a **night-mode value** too: edit
+   the `[data-theme="dark"]` block, then run `node scripts/sync-dark-palette.mjs`.
+   A control that does not fit must **reflow, not spill or vanish.**
 8. **Local-first.** Rooms stay in IndexedDB, settings in localStorage. The only
    data that leaves the device is the optional Gemini detection call, with the
    user's own key. A shared room is a file the user saves, and it carries **no

@@ -3183,3 +3183,31 @@ ghost reads as a preview (and not as a piece already there) and stays smooth on 
 GPU is a judgement.
 
 **Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Night mode, on a real screen and a real phone
+
+**Where:** Settings → Appearance → Night mode, and the same row at the foot of the
+studio's View settings (the gear on a laptop, the View sheet on a phone). Try Dark on a
+light device, Light on a dark device, and System while flipping the device's own
+setting with the app open. Then walk the rooms page, layout pick, the capture screen
+(with a photo in it — the piece tags and the clash / quality chips), the studio's both
+tabs with a piece selected, the Library, Room check, a toast, the help dialog, and Esc
+out of a drag that was refused (the red tag).
+
+**What wrong looks like:** a frame of cream before the dark page on a reload or a cold
+open (or of dark before a pinned Light); colours fading one by one when the switch is
+pressed; a cream patch anywhere in Dark (a card, a popover, a menu, a toggle thumb); type
+that has to be squinted at, above all the quiet `--ink-3` captions on `--paper-3`; the
+phone's status bar staying cream over a pinned Dark after moving between pages (this was
+caught once in the browser and fixed — Next rewrites the theme-color tags on every
+client navigation); the 3D room's walls, furniture or sky changing with the theme (they
+must not); the floor plan's comfort-zone amber reading as a brown slab rather than a
+tint over the floor; a downloaded floor-plan PNG coming out dark (it stays light).
+
+**Why eyes:** every token pair is asserted at WCAG contrast in both themes and a
+production build was walked in headless Chromium at 1440 and 390 px in both System-dark
+and pinned-Dark, but "warm dark, not black" and whether the plan's amber is too heavy
+are judgements, and Safari's handling of a re-pointed `theme-color` and of
+`color-scheme` on form controls has not been seen.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

@@ -50,8 +50,13 @@ export function DragTag() {
             // lines up), so rule 4's "no hard-coded design values" applies in full
             // and the `lib/scene-palette.ts` exemption for the WebGL layer does not.
             // A hex here simply did not follow the theme, and no test can see it.
+            //
+            // The refusal ground is `--danger`, not `SCENE.invalid`: the two are the
+            // same red in the light theme, but only the token follows night mode,
+            // where `--on-accent` is DARK and would sit on the light theme's red at
+            // about 3:1. The rim stays `SCENE.invalid`, the colour of the 3D slab.
             color: live.valid ? 'var(--ink)' : 'var(--on-accent)',
-            background: live.valid ? 'var(--paper-0)' : SCENE.invalid,
+            background: live.valid ? 'var(--paper-0)' : 'var(--danger)',
             border: `1px solid ${color}`,
             padding: '2px 7px',
             borderRadius: 'var(--r-1)',

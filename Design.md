@@ -3253,7 +3253,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | Store | File | Holds |
 |---|---|---|
 | `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`; `dressed` — auto set-dressing — is **off by default**, and `STUDIO_PREFS_VERSION` 1 resets the old `true` default once). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
-| `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache. Persisted to localStorage (`danmu-settings`). |
+| `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache, `appearance` (night mode: `system` / `light` / `dark`, checked against the vocabulary on read — see "Night mode" below). Persisted to localStorage (`danmu-settings`, a key named once in `lib/appearance.ts` because the inline boot script reads it too). |
 | `useRoom` | `lib/store.ts` | active room id. Persisted (`danmu-room`). |
 | `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup + room. |
 
@@ -3283,12 +3283,77 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | `lib/capture.ts` / `lib/image-quality.ts` | Photo capture + quality (the colour-sampling module is deleted — scanned pieces take default colours). `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. `readCaptureFacts` is the one EXIF read, returning two things with two lifetimes: the `pose` persisted onto the `Capture` for as long as the room exists, and the transient facts that decide which wall this is and are then dropped. It MUST run on the original file — the strip destroys exactly what it reads, which is the point of the strip. |
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
 | `lib/color.ts` | Colour arithmetic: WCAG contrast, and OKLab as a space where "same colour" means something. `globals.css` states a ratio next to almost every token and `CLAUDE.md` turns those into a rule, but nothing checked any of it — a comment claiming a ratio is a comment. It also lets `scene-palette.ts`' hand-copied duplicates be compared perceptually rather than by string equality, which is brittle one way and blind the other. |
+| `lib/appearance.ts` | Night mode's vocabulary and plumbing: `APPEARANCES`, the inline `APPEARANCE_BOOT` script that sets `<html data-theme>` before first paint, `applyAppearance` (with the one-frame transition blackout) and `applyThemeColor`. Applied after hydration by `components/AppearanceSync.tsx`. See "Night mode" in §6. |
 | `lib/drag-live.ts` | The high-frequency drag channel, deliberately **outside** `useStudio` — see §5. |
 | `lib/scene-file.ts` | The `.danmu.json` scene file — build, serialise, and defensively parse. The app's only import path and so its only untrusted input; see §6a. `buildSceneFile` bakes the studio's transform overrides so the file holds one truth per piece, and `parseSceneFile` never throws: it returns a reason, or a file plus the list of what it dropped. Its filename comes from `exports.ts`' `fileSlug`. |
 | `lib/exports.ts` | **What to call a file the user is taking away** — `fileSlug` and `snapshotFileName`. The three downloads each named themselves: the scene file slugged the room's name with a length cap, the export menu slugged it without one, the floor plan did not slug at all — it was `floor-plan.png` every time — and the 3D view was the last holdout, a fixed `room-snapshot.png` that was the same for every room, so exporting three rooms left three files the browser silently numbered `(1)` and `(2)`. The cap earns its place too: a 300-character room name produces a filename the OS may refuse to write, which surfaces as a download that did nothing. Two things are deliberately NOT here — the furniture CSV (retired; see the top bar above) and the transform merge (that is `lib/transforms.ts`, enforced by `tests/room-scene.test.ts`). Tested in `tests/exports.test.ts`. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
 | `lib/dates.ts` | Timestamp formatting — the counterpart to `units.ts`. Relative `editedLabel`, absolute `savedLabel`, and the workspace's recency buckets. |
 | `lib/use-media-query.ts` | The one `matchMedia` hook. `useMediaQueryState` also returns `ready`, for callers that pick a whole layout and must not paint the wrong one first. |
+
+### Night mode — `lib/appearance.ts`
+
+**One setting, three answers.** `useSettings.appearance` is `system` (the default),
+`light` or `dark`. It has two controls and only two: a **Night mode** segmented row in
+Settings → Appearance, and the same row at the foot of the studio's View settings (the
+laptop's gear, the phone's View sheet), because it is the one app setting someone
+reaches for mid-session when the lights go down. Both read `APPEARANCE_OPTIONS`, so
+the two cannot name a choice differently. No new canvas corner.
+
+**How it reaches the page.** A pinned choice is written to `<html data-theme>`;
+System writes nothing and lets `@media (prefers-color-scheme: dark)` decide, so a
+device that flips at sunset takes the app with it and no script has to notice.
+`[data-theme="light"]` is what lets Light win on a dark device.
+
+**No flash.** React runs after first paint, so it cannot set the attribute in time.
+`APPEARANCE_BOOT` is a few lines of ES5 inlined in `<head>` by `app/layout.tsx`: it
+reads the same `danmu-settings` record the store persists, through the same
+vocabulary, and sets the attribute before the stylesheet paints. It never throws
+(blocked storage is simply System). The CSP needed nothing: `script-src` already
+carries `'unsafe-inline'` for Next's bootstrap — if that ever tightens to a hash, this
+string is the thing to hash. `<html>` carries `suppressHydrationWarning` for exactly
+that one attribute. After hydration `components/AppearanceSync.tsx` keeps the
+attribute in step, re-points the two `theme-color` metas (`viewport.themeColor` emits
+one per scheme, which follows the DEVICE, so a pinned choice sets the matching one to
+`all`) — and again whenever Next rewrites those tags, which it does on every
+client-side navigation (a MutationObserver; found in the browser walk, where a pinned
+Dark lost its status-bar colour on the way into the studio) — and re-reads the record
+when another tab changes it.
+
+**No transition storm.** Every control with a colour transition would fade on its own
+clock. `applyAppearance` sets `data-theme-switching` for the frame the colours change
+in, and `globals.css` turns every transition off under it; the attribute comes off two
+frames later. A System flip while the app is open gets the same treatment.
+
+**The palette.** `globals.css`' `:root[data-theme="dark"]` restates every COLOUR
+token — a warm dark, never black: the papers keep the light paper's hue and step
+LIGHTER with elevation, the ink is the light theme's cream, moss is lifted
+(`--accent` still a fill, under 4.5:1 on purpose), amber stays warm, shadows go black
+and heavier. Ink surfaces invert with the rest: `--ink` is cream and `--on-ink` /
+`--on-accent` (aliases of `--paper`) are dark, so the primary button and the photo
+chips are cream with dark type, and their warn/success type is brought DOWN to a
+shared lightness. CSS cannot OR a media query with an attribute selector, so the
+palette is written twice; the second copy, under the media query, is generated by
+`node scripts/sync-dark-palette.mjs` (`--check` to verify).
+
+**What does not theme, deliberately:** the 3D room — walls, floor, furniture, and the
+lighting mood's sky behind it — is the user's room under its own light, not the app's
+paper (`SCENE` and `lib/lighting-moods.ts` stay single-valued); the sky tokens; the
+piece halos and `--scrim-photo`, which stand on a photograph; the floor-plan PNG
+(`PLAN`), which is a document to print or send and stays on light paper; and the
+rasters and `app/global-error.tsx`, which render without the stylesheet. The 2D plan
+on screen is drawn with tokens and themes with everything else.
+
+**Held by tests.** `tests/color-tokens.test.ts` reads the light and dark blocks
+separately (the dark one layered over the light, as the cascade does), checks every
+contrast claim in each against its own palette, asserts the body-type tokens clear
+4.5:1 on all four papers and `--edge` 3:1 on the grounds controls stand on, that the
+mirror equals the dark block, that every light colour token has a dark value, that the
+dark papers are warm and not black, the photo-chip silhouette in both themes, and
+that `viewport.themeColor` is the manifest's `PAPER_0` / `PAPER_0_DARK`.
+`tests/appearance.test.tsx` runs the boot script itself against stored records,
+corrupt ones and a throwing storage, and drives the View menu's switch through to the
+attribute.
 
 ### Two shells, and what each route stands in
 

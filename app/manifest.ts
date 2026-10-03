@@ -16,10 +16,17 @@ import type { MetadataRoute } from 'next';
 // the browser chrome disagreeing about which cream the app is would be worse than
 // either choice on its own.
 //
-// One export, not two: an `--ink` constant lived here briefly with nothing in the
-// manifest using it — a value that exists only for its own test, which is the thing
-// `tests/helpers/` exists to keep out of shipped code.
+// An `--ink` constant lived here briefly with nothing in the manifest using it — a
+// value that exists only for its own test, which is the thing `tests/helpers/`
+// exists to keep out of shipped code. `PAPER_0_DARK` below is not that: the root
+// layout's dark theme-color reads it.
 export const PAPER_0 = '#F4EFE4';
+/** Night mode's `--paper-0`. Not used by the manifest itself — `theme_color` takes
+ *  one colour, no media query, and an installed app's splash is drawn before any
+ *  page script could choose — but `viewport.themeColor` in app/layout.tsx gives the
+ *  browser chrome one colour per scheme, and the pair is kept here together so the
+ *  test that pins them to globals.css reads one file. */
+export const PAPER_0_DARK = '#17150F';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {

@@ -136,6 +136,12 @@ export const DECOR = {
 // either — so it reads these rather than carrying its own hex set. It used to
 // carry sixteen literals including #3E8FD8, the cold CAD blue this file records
 // as deliberately removed from the brand.
+//
+// LIGHT ONLY, on purpose, and night mode does not reach it. The on-screen plan
+// (`components/studio/PlanView.tsx`) is drawn with CSS tokens and themes with the
+// app; the PNG is a document — saved, printed, sent to someone whose screen is in a
+// different mode — and a sheet of dark paper prints as a block of toner. So it is
+// always on light paper, whatever the studio looked like when Export was pressed.
 export const PLAN = {
   /** page — matches --paper */
   paper: '#FFFCF5',
