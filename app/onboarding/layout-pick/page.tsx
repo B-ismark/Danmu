@@ -258,8 +258,9 @@ export default function LayoutPickPage() {
                 tabIndex={active ? 0 : -1}
                 onKeyDown={(e) => onOptionKeyDown(e, i)}
                 onClick={() => setSel(l.id)}
-                // The first click of the two has already picked it; this opens it.
-                onDoubleClick={() => createRoom('model', l.id)}
+                // The first click of the two has already picked it; this opens it, on
+                // whichever route the page is leading with.
+                onDoubleClick={() => createRoom(photoFirst ? 'capture' : 'model', l.id)}
                 // The shortcut is said where it works, on the card and to a mouse
                 // only, rather than in a standing sentence over the whole row.
                 title={touch ? undefined : 'Double-click to start with this shape'}

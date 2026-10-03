@@ -66,6 +66,34 @@ describe('the footprint page', () => {
     expect(start.parentElement?.classList.contains('action-row')).toBe(true);
   });
 
+  it('arriving for photos, leads with the photo way in, and a double click follows it', async () => {
+    // The empty Rooms page's "Photograph your room" lands here with ?then=photos.
+    window.history.replaceState(null, '', '/onboarding/layout-pick?then=photos');
+    try {
+      render(<LayoutPickPage />);
+      const photo = await screen.findByRole('button', { name: /^Photograph my real room first/ });
+      await waitFor(() => expect(photo.className).toContain('ds-btn--accent'));
+      const start = screen.getByRole('button', { name: /^Start decorating/ });
+      expect(start.className).not.toContain('ds-btn--accent');
+      // First in the DOM, so Tab and a screen reader meet it first too — not a
+      // visual reorder over an unchanged source order.
+      expect(photo.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      fireEvent.doubleClick(screen.getByRole('radio', { name: /^L-Shape/ }));
+      await waitFor(() => expect(router.push).toHaveBeenCalledTimes(1));
+      expect(router.push.mock.calls[0][0]).toBe('/onboarding/capture');
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
+  it('arriving any other way, Start decorating leads', () => {
+    render(<LayoutPickPage />);
+    const photo = screen.getByRole('button', { name: /^Photograph my real room first/ });
+    const start = screen.getByRole('button', { name: /^Start decorating/ });
+    expect(start.className).toContain('ds-btn--accent');
+    expect(start.compareDocumentPosition(photo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('says double-click to a mouse, and not to a finger', () => {
     // Said on the shape card itself, as its tooltip, rather than in a standing
     // sentence over the row: the shortcut is told where it works.
