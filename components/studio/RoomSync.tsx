@@ -11,6 +11,7 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { livingParents } from '@/lib/rigid-parent';
 import { seedHistory } from '@/lib/history';
+import { hourNow } from '@/lib/lighting-moods';
 import type { ScenePart } from '@/lib/scene-spec';
 import { normalizeStoredParts } from '@/lib/scene-spec';
 import { toast } from '@/components/ui/StorageToast';
@@ -249,6 +250,7 @@ export function RoomSync() {
         console.error('[room] could not read the room', err);
         if (!live) return;
         loadFromRoom(undefined);
+        useStudio.getState().setHour(hourNow());
         useScene.getState().setHydrated(roomId);
         toast({
           tone: 'danger',
@@ -261,6 +263,11 @@ export function RoomSync() {
       if (unfinished !== undefined) clearLeaveNote(roomId, unfinished);
       const [room, savedScene, t] = loaded;
       loadFromRoom(room);
+      // The light opens at the clock on every room open, not once per page: the store
+      // outlives the navigation, so a tab left on the rooms list since the morning
+      // would otherwise light an evening visit for the morning. Before `seedHistory`,
+      // so it is the baseline rather than an undo step.
+      useStudio.getState().setHour(hourNow());
       // If user previously edited / deleted parts, prefer that snapshot over rebuild from detections.
       // An empty array is a room the user emptied on purpose, NOT a missing
       // snapshot — `loadSceneParts` returns undefined for that. Treating [] as

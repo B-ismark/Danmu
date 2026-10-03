@@ -2867,3 +2867,17 @@ option the same colour as the selected one.
 meanings is a judgement.
 
 **Merged:** `d603126` (B-ismark/Danmu#248), not yet looked at.
+
+## The light opens at your own time of day
+
+**Where:** open any room at a few different times — a morning, around 19:30 (sunset), and
+after dark. Scrub the sun somewhere else, reload, and look again.
+
+**What wrong looks like:** the room opening at midday, or at the hour you scrubbed to before
+the reload; a flash of the midday light before the real hour arrives; a chime or tick on
+opening. Overcast, once chosen, should still be overcast after a reload.
+
+**Why eyes:** the clock read and the forgetting are tested in jsdom, and walked in Chromium
+in two time zones; a flash on first paint is not something a test sees.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

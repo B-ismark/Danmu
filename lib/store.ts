@@ -4,7 +4,7 @@ import type { DetectorPack } from './model-verify';
 import { useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { DEFAULT_HOUR, legacyLighting, wrapHour } from './lighting-moods';
+import { DEFAULT_HOUR, hourNow, legacyLighting, wrapHour } from './lighting-moods';
 import { landedLinks, landedLinksAll, type Landing } from './rigid-parent';
 
 // Studio view + interaction state. Mostly session-scoped: only the handful of
@@ -83,9 +83,11 @@ type StudioState = {
   /** scene lighting kind */
   lighting: Lighting;
   /** The time of day the daylight is drawn at, in hours [0, 24). Ignored while
-   *  `lighting` is `overcast`. A preference like the lighting kind, and in history
-   *  beside it: a theme sets both in one gesture, so undoing the theme has to put
-   *  both back. */
+   *  `lighting` is `overcast`. It opens at the person's own clock (`hourNow`) —
+   *  here, and again on every room open (`RoomSync`) — and is NOT a remembered
+   *  preference: a room opened in the evening is lit for the evening, whatever hour
+   *  it was scrubbed to yesterday. In history beside the lighting kind all the same
+   *  — a theme sets both in one gesture, so undoing the theme has to put both back. */
   hour: number;
   /** render quality (soft shadows + AO + material maps on 'high') */
   quality: Quality;
@@ -213,7 +215,6 @@ type StudioState = {
  *  the last is per-room, owned by RoomSync. */
 const STUDIO_PREFS = [
   'lighting',
-  'hour',
   'quality',
   'dressed',
   'snapMode',
@@ -267,7 +268,8 @@ export const useStudio = create<StudioState>()(
   railLeftW: null,
   railRightW: null,
   lighting: 'daylight',
-  hour: DEFAULT_HOUR,
+  // The browser's clock; a server has no idea what time it is where the room is.
+  hour: typeof window === 'undefined' ? DEFAULT_HOUR : hourNow(),
   quality: 'high',
   dressed: true,
   catalogOpen: false,
@@ -414,14 +416,16 @@ export const useStudio = create<StudioState>()(
       // (the old Sunrise is a morning hour, the old Cool is overcast), and anything
       // it does not know falls back to the default rather than being guessed at.
       merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<StudioState> & { lighting?: unknown; hour?: unknown };
+        // An `hour` written before the light opened at the clock is dropped here, not
+        // honoured: it is yesterday's scrub. A retired mood's hour still wins until
+        // the next write stores it as plain daylight: it was a deliberate pick.
+        const { hour: _stale, ...p } = (persisted ?? {}) as Partial<StudioState> & { lighting?: unknown; hour?: unknown };
         const legacy = legacyLighting(p.lighting);
-        const storedHour = typeof p.hour === 'number' && Number.isFinite(p.hour) ? wrapHour(p.hour) : undefined;
         return {
           ...current,
           ...p,
           lighting: legacy?.lighting ?? current.lighting,
-          hour: legacy?.hour ?? storedHour ?? current.hour,
+          hour: legacy?.hour ?? current.hour,
         };
       },
     },
