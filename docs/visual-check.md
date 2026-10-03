@@ -3361,4 +3361,4 @@ pins where the spot ends up. Under software WebGL, at 8000 lm on High, the light
 pools on the table and floor with chair shadows. A real GPU's shadow-map precision at
 the wall seams is the part a headless run cannot vouch for.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `7b4bea8` (B-ismark/Danmu#266), not yet looked at.
