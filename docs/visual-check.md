@@ -2965,7 +2965,7 @@ clipped at the canvas edge; it lingering after the pointer leaves.
 
 **Why eyes:** the content is tested; where the bubble lands on a busy room is not.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
 
 ## Scrollbars only while you are in the list
 
@@ -2979,7 +2979,7 @@ the old thick grey bar.
 **Why eyes:** Chromium walked; the webkit rules were removed in favour of the standard
 `scrollbar-color`, so Safari before 18.2 is the one to check.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
 
 ## Add turns into Close while the Library is open
 
@@ -2992,7 +2992,7 @@ hearing "Add" on the button that closes.
 
 **Why eyes:** both labels are tested; whether the turn feels like one gesture is not.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
 
 ## View settings, How this works and Switch room wear the app's tooltip
 
@@ -3000,7 +3000,7 @@ hearing "Add" on the button that closes.
 
 **What wrong looks like:** the browser's plain yellow title box, or two tips at once.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
 
 ## 2D Plan / 3D Model sits in the middle of the bar
 
@@ -3009,7 +3009,7 @@ hearing "Add" on the button that closes.
 **What wrong looks like:** the switch drifting off-centre; a long room name running under
 it; below 860 px the switch not taking its own row.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
 
 ## The day strip: quiet at rest, springs out, muted sky — and no more sticking
 
@@ -3024,7 +3024,7 @@ the sun following the pointer after you let go; a time past 23:59 or below 00:00
 **Why eyes:** each glitch has a test; whether the spring reads as playful rather than
 wobbly is a judgement, and the tune at the horizon still wants ears.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
 
 ## How this works as a dialog with topics
 
@@ -3034,7 +3034,7 @@ Esc; then a phone, where it should be a sheet from the bottom.
 **What wrong looks like:** the topic list not following the scroll or not jumping; a key cap
 breaking across lines; the sheet hiding its close button under the phone's bar.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
 
 ## Photo screen: Add photos centred, current vs previewed wall, and a plan wall that answers
 
@@ -3049,7 +3049,7 @@ wall hover not lifting its card, or lifting the wrong one.
 **Why eyes:** the states are tested; whether two shimmers read as two different things is
 not.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
 
 ## Check furniture: the finding animation, piece colours, and both-way hover
 
@@ -3066,7 +3066,7 @@ leaving the piece unticked; the *Left out* note on a piece you ticked.
 **Why eyes:** the link, the colours and the auto-tick are tested; the animation's pace and
 whether eight colours are distinct enough on a real photo are not.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
 
 ## A scanned room uses catalogue colours and typical sizes
 
@@ -3080,4 +3080,4 @@ wall; curtains smaller than the window; a sofa wildly off the size of the one in
 **Why eyes:** the sizes are swept against the catalogue; what a real scan looks like built
 is not.
 
-**Rides:** branch `claude/elegant-volta-q7yy89`.
+**Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
