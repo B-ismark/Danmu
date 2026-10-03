@@ -58,7 +58,7 @@ export default function ModelPage() {
       </CanvasView>
 
       {/* Drag lands here and only here: Room's onDrop raycasts the drop point. */}
-      {catalogOpen && <CatalogPanel canDrag belowDay />}
+      {catalogOpen && <CatalogPanel canDrag ghostDrag belowDay />}
 
       <HoverCard />
 

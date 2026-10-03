@@ -2753,12 +2753,34 @@ outlined box around outlined buttons, which put two boundaries on every control.
   clears it on `dragend`. The ghost's pose is `planPiece` (`lib/add-piece.ts`) — the
   drop's own computation with the write taken out, so `addPieceToRoom` is literally
   `planPiece` plus the write and a lamp over a desk previews ON the desk, a sofa aimed
-  at a taken spot previews at the clear spot it will move to. A drop that would be
-  refused previews in `SCENE.invalid` with the reason beside the pointer.
+  at a taken spot previews at the clear spot it will move to.
   `tests/drop-ghost.test.ts` holds plan and drop to each other over every Library
-  piece at five aims. It runs at most once a frame and not at all while the aim stays
-  within a centimetre; the body is the real `PartGeometry` with cloned, faded
-  materials, no shadows, no lights and no raycast. Mouse only, as the drag is.
+  piece at five aims. **It wears what a carried piece wears, by the same
+  components:** the body at `GHOST_OPACITY` (0.78 — 0.45 read as "too ghostly"),
+  standing on `Highlight`'s base under `SizeTag`'s W × D reading (`DragTag.tsx`
+  exports both the tag and its lift, so a drag and a ghost cannot hold the tag at two
+  heights). A drop that would be refused turns the base red and the tag to
+  `blocked`, exactly as a refused drag does, with the reason beside the pointer
+  (`DropGhostSay`); the body itself is not tinted. **It moves without React:**
+  `dropCarry`'s listener writes the pose onto the group and invalidates, and React
+  renders only when what is SHOWN changes (`ghostLook` / `sameLook` — another piece,
+  refused or not). The aim is planned through `lib/frame-gate.ts`, a LEADING
+  once-a-frame gate: the first `dragover` of a frame plans at once and later ones
+  collapse into one run with the newest pointer, where the trailing rAF it replaced
+  put every plan a frame late and the draw a frame after that. Not at all while the
+  aim stays within a centimetre. The body is the real `PartGeometry` with cloned,
+  faded materials (walked once per piece, not per move), no shadows, no lights and no
+  raycast. In 3D the browser's own drag picture — a copy of the Library row riding
+  the cursor — is blanked (`LibraryPicker`'s `ghostedDrag`, a 1 × 1 transparent
+  image), because the ghost IS the picture there; the plan keeps the default, having
+  no ghost. **A pointer add hands the keyboard to the room:** after a drop or a
+  click-add, focus moves to the studio surface (`focusStudioSurface`), so Delete /
+  Backspace act on the new, selected piece instead of landing on the Library row,
+  which the single-key gate (`studioSurfaceFocused`) rightly ignores. A keyboard add
+  (Enter on a row, `detail === 0`) leaves focus where the user is, and a drag nothing
+  took (`dropEffect: 'none'`) moves nothing. `tests/library-keyboard-after-add.test.tsx`
+  holds all of it, including Backspace in the Library search still editing the search.
+  Mouse only, as the drag is.
 - **Changing which model a piece uses is ONE surface** (`RegenerateModal.tsx`),
   reusing the same `LibraryPicker` as the Add flow and seeding its search with the
   piece's own name through `initialQuery`, so opening it on something called "office
