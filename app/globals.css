@@ -1298,6 +1298,23 @@ textarea.field { border-radius: var(--r-2); }
 /* A state mark — locked, hidden — after the name: small, quiet, always there. */
 .row-mark { display: inline-flex; flex-shrink: 0; color: var(--ink-3); }
 
+/* A piece's drawing at the start of its row (`ShapeIcon`): the room's Catalog, the
+   Library and the room's furniture list. A paper chip so the line drawing has a
+   ground of its own on a hovered or picked row, in the ink of the name beside it. */
+.shape-chip {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: var(--r-1);
+  background: var(--paper-2); color: var(--ink-2);
+}
+.shape-chip svg { display: block; }
+/* Both kinds of row turn --paper-2 under the pointer, the chip's own ground, so the
+   chip steps up to --paper there or it melts into the row. */
+.list-row:hover .shape-chip,
+.ds-btn:hover .shape-chip { background: var(--paper); }
+.tree-row.is-selected .shape-chip,
+.tree-row.is-implied .shape-chip { background: var(--paper); color: var(--accent-text); }
+.tree-row.is-hidden .shape-chip { color: var(--ink-3); }
+
 /* ─── The piece list as a tree ─────────────────────────────────────────────
    `PartTree`'s rows (`.tree-row`, on top of `.list-row`, which the context menu and
    the export menu share and which stays as it was). A merged set is a header with

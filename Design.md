@@ -1773,7 +1773,12 @@ beside a hand-kept `Set`. Then `CATALOG_SHAPES_ORDERED` if a person may add it;
 `case` in `ShapeDispatch`.
 
 Exactly **one** of those five fails to build if you miss it: `scene-palette`'s `BY_SHAPE`
-is the only exhaustive `Record<Shape, …>` in the tree. `CATALOG_SHAPES_ORDERED` is a
+is an exhaustive `Record<Shape, …>`. (So is `SHAPE_GLYPHS` in
+`components/ui/shape-glyphs.ts` — the drawing at the start of every row that names a
+piece — which makes the build ask for a sixth thing, and one it can actually hold you
+to: a drawing, in `currentColor` and its own paint, that is not another shape's.
+`tests/shape-icons.test.tsx` holds the half the compiler cannot. A legacy alias may
+share its target's drawing, as `closet` shares `wardrobe`'s.) `CATALOG_SHAPES_ORDERED` is a
 `readonly Shape[]` and `PART_LIBRARY` a `LibraryItem[]` — both non-exhaustive, so omitting
 a shape from either compiles cleanly and simply means nobody can add the thing. And
 missing the renderer case is quietest of all: it **builds**, drawing a plain box at the

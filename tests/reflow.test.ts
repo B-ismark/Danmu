@@ -1161,11 +1161,13 @@ describe('a piece row keeps enough width to read the piece name', () => {
     const row = rule('.list-row');
     const gap = Number(/gap:\s*(\d+)px/.exec(row)![1]);
     const padX = Number(/padding:\s*\d+px (\d+)px/.exec(row)![1]);
-    const glyph = Number(/justifyContent: 'center', width: (\d+), flexShrink: 0/.exec(partRow)![1]);
-    // What stays in the flow beside the name: the status glyph, and at worst both
-    // state marks (locked AND hidden), each an 11px icon plus a gap.
+    // The shape chip that leads every row, at the width its own rule gives it.
+    expect(partRow).toMatch(/<ShapeIcon shape=\{shape\} \/>/);
+    const glyph = Number(/width:\s*(\d+)px/.exec(rule('.shape-chip'))![1]);
+    // What stays in the flow beside the name: the shape chip, and at worst all three
+    // marks (from your photo, pinned AND hidden), each an 11px icon plus a gap.
     const marks = [...partRow.matchAll(/className="row-mark"/g)].length;
-    expect(marks).toBe(2);
+    expect(marks).toBe(3);
     const markPx = Number(/<Icon name="lock" size=\{(\d+)\}/.exec(partRow)![1]);
 
     // 32px of `.section` padding, the same figure the rail assertions above use.

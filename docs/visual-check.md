@@ -2762,4 +2762,23 @@ browser's; the marking rules are tested in jsdom with the positions faked. Walke
 headless Chromium at 1280 and 375, including a press on *Downloads* and a wheel scroll
 after it.
 
+**Merged:** `2b7e446` (B-ismark/Danmu#243), not yet looked at.
+
+## A drawing per piece in the Studio's lists
+
+**Where:** any room's 3D Model tab. The left rail's **Catalog**, the **Add** → Library
+list, and **Room checks out** → **List**. Then the same three at about 1100 px wide (the
+tight rail) and on a phone.
+
+**What wrong looks like:** a row whose drawing is some other piece's (a floor lamp
+drawn as a table lamp, a nightstand as a dresser); a drawing that sits black or solid
+instead of in the row's ink; a chip out of line with the name beside it, or crowding a
+name to a couple of letters at the tight rail; the selected row's chip not turning moss;
+a hidden piece's chip still at full ink; the camera mark for a piece from your photo
+missing from the end of its row.
+
+**Why eyes:** the drawings themselves are a judgement — the tests hold that each shape
+gets its own one and paints only in the row's colour, not that it reads as that piece
+at 18 px. Walked once in headless Chromium at 1280 and 1100.
+
 **Rides:** branch `claude/elegant-volta-q7yy89`.

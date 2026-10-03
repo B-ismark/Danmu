@@ -5,7 +5,8 @@ import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { bestMatch, type LocalMatch } from '@/lib/shape-search';
 import { Icon } from '@/components/ui/Icon';
-import { Dot, IconButton } from '@/components/ui/primitives';
+import { IconButton } from '@/components/ui/primitives';
+import { ShapeIcon } from '@/components/ui/ShapeIcon';
 import { toast } from '@/components/ui/StorageToast';
 import { Tooltip } from '@/components/ui/Tooltip';
 import Link from 'next/link';
@@ -17,7 +18,7 @@ import { duplicateSelection, removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
 import { isAperture } from '@/lib/apertures';
 import { groupRows, type TreeRow } from '@/lib/part-rows';
-import type { ScenePart } from '@/lib/scene-spec';
+import type { ScenePart, Shape } from '@/lib/scene-spec';
 import { useRailIntent, type LeftSection } from '@/lib/rail-intent';
 
 // This rail is the accessible twin of the 3D canvas. A WebGL canvas exposes
@@ -669,6 +670,7 @@ export function PartTree() {
               partId={row.part.id}
               name={row.part.name}
               category={row.part.category}
+              shape={row.part.shape}
               locked={row.part.locked}
               inGroup={!!row.gid}
               lastOfGroup={!!row.lastOfGroup}
@@ -707,6 +709,7 @@ function PartRow({
   partId,
   name,
   category,
+  shape,
   locked,
   inGroup,
   lastOfGroup,
@@ -725,6 +728,7 @@ function PartRow({
   partId: string;
   name: string;
   category: string;
+  shape: Shape;
   locked: boolean;
   /** a member of a merged set — indented under its group header */
   inGroup: boolean;
@@ -820,12 +824,7 @@ function PartRow({
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
-      {/* Status glyph. Shape, not just hue: a camera reads as "came out of your
-          photo" even where the aubergine and the clay look the same. A padlock sat
-          here and said the wrong thing — see ScenePart.locked. */}
-      <span aria-hidden="true" style={{ display: 'inline-flex', justifyContent: 'center', width: 12, flexShrink: 0 }}>
-        {locked ? <Icon name="camera" size={11} color="var(--locked)" /> : <Dot size={7} />}
-      </span>
+      <ShapeIcon shape={shape} />
       <span
         // Colour, weight and the hidden strike-through are `.tree-row` rules, not
         // inline: the selected look has to be able to change the name's colour, and
@@ -838,6 +837,14 @@ function PartRow({
           see across the whole list, not one row at a time. Marks, not buttons: the
           buttons that change them are in `.row-actions` below, and the row's
           `aria-label` already speaks both states. */}
+      {/* From your photo. Shape, not just hue: a camera reads as "came out of your
+          photo" even where the aubergine and the clay look the same. A padlock once
+          stood for this and said the wrong thing — see ScenePart.locked. */}
+      {locked && (
+        <span className="row-mark" aria-hidden="true">
+          <Icon name="camera" size={11} color="var(--locked)" />
+        </span>
+      )}
       {isPinned && (
         <span className="row-mark" aria-hidden="true">
           <Icon name="lock" size={11} />
