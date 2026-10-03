@@ -14,6 +14,7 @@ export function Modal({
   blur = false,
   closeOnBackdrop = true,
   bodyPadding = '20px 24px',
+  sheet = false,
   footer,
   children,
 }: {
@@ -26,6 +27,8 @@ export function Modal({
   blur?: boolean;
   closeOnBackdrop?: boolean;
   bodyPadding?: string;
+  /** a phone gets it as a full-height sheet instead of a centred card (`.modal--sheet`) */
+  sheet?: boolean;
   /** optional actions rendered in the tinted footer bar */
   footer?: ReactNode;
   children: ReactNode;
@@ -87,6 +90,7 @@ export function Modal({
 
   return (
     <div
+      className={sheet ? 'modal-scrim modal-scrim--sheet' : 'modal-scrim'}
       onClick={closeOnBackdrop ? onClose : undefined}
       style={{
         position: 'fixed',
@@ -101,6 +105,7 @@ export function Modal({
     >
       <div
         ref={cardRef}
+        className={sheet ? 'modal-card modal-card--sheet' : 'modal-card'}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         role="dialog"

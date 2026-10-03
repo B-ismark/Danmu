@@ -66,6 +66,7 @@ describe('every Tooltip call site', () => {
       'RailFooter.tsx',
       'RailFooter.tsx',
       'RoomSwitcher.tsx',
+      'StudioHelp.tsx',
       'ViewMenu.tsx',
       'shell-parts.tsx',
     ]);

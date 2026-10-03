@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { HORIZONS, MAX_WIDTH, hourT, scrubHour, skyGradient, stripFor, stripX, tAtX } from '@/lib/day-strip';
 import { SUNRISE_H, SUNSET_H, isDaytime } from '@/lib/lighting-moods';
@@ -82,14 +84,14 @@ describe('the sky it is painted with', () => {
   const stop = (token: string) =>
     [...g.matchAll(new RegExp(`var\\(${token}\\) ([\\d.]+)%`, 'g'))].map((m) => Number(m[1]));
 
-  it('puts the gold exactly on the clock\'s sunrise and sunset', () => {
-    expect(stop('--accent-2')).toEqual([(SUNRISE_H / 24) * 100, (SUNSET_H / 24) * 100].map((n) => Number(n.toFixed(3))));
+  it('puts the dawn and the dusk exactly on the clock\'s sunrise and sunset', () => {
+    expect([...stop('--sky-dawn'), ...stop('--sky-dusk')]).toEqual([(SUNRISE_H / 24) * 100, (SUNSET_H / 24) * 100].map((n) => Number(n.toFixed(3))));
     expect(HORIZONS).toEqual([SUNRISE_H / 24, SUNSET_H / 24]);
   });
 
-  it('is night at both ends and paper at the middle of the day', () => {
-    expect(stop('--ink')).toEqual([0, 100]);
-    expect(stop('--paper')).toEqual([Number((((SUNRISE_H + SUNSET_H) / 2 / 24) * 100).toFixed(3))]);
+  it('is night at both ends and noon at the middle of the day', () => {
+    expect(stop('--sky-night')).toEqual([0, 100]);
+    expect(stop('--sky-noon')).toEqual([Number((((SUNRISE_H + SUNSET_H) / 2 / 24) * 100).toFixed(3))]);
   });
 
   it('runs left to right without a stop going backwards, in tokens only', () => {
@@ -97,5 +99,27 @@ describe('the sky it is painted with', () => {
     expect(at.length).toBe(9);
     for (let i = 1; i < at.length; i++) expect(at[i]).toBeGreaterThan(at[i - 1]);
     expect(g).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+  });
+});
+
+describe('the pill\'s paint, read from the stylesheet', () => {
+  const css = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8');
+  const rule = (sel: string) => css.match(new RegExp(`\\n${sel.replace(/[.\-_]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+
+  it('has no halo ring at rest, in either theme of the pill', () => {
+    expect(rule('.day-strip__handle')).not.toMatch(/0 0 0 \dpx/);
+    expect(rule('.day-strip--night .day-strip__handle')).not.toMatch(/0 0 0 \dpx/);
+  });
+
+  it('shows a ring to the keyboard only', () => {
+    expect(css).toMatch(/\.day-strip__handle:focus-visible \{ outline: 2px solid/);
+  });
+
+  it('grows out on the spring token, and under reduced motion fades instead', () => {
+    expect(css).toMatch(/--ease-spring: cubic-bezier\(/);
+    expect(rule('.day-strip__sky')).toContain('clip-path calc(var(--dur-slow) * 1.5) var(--ease-spring)');
+    const reduced = css.slice(css.indexOf('.day-strip, .day-strip__handle'));
+    expect(reduced).toMatch(/\.day-strip__sky \{ transition: opacity/);
+    expect(reduced).toMatch(/\.day-strip--open \.day-strip__glyph \{ animation: none; \}/);
   });
 });
