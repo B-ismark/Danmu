@@ -1,6 +1,6 @@
 # Danmu — Design & Architecture
 
-> Last updated: 2026-08-23 · reflects the codebase on `main`.
+> Last updated: 2026-10-03 · reflects the codebase on `main`.
 > Canonical design doc. Point-in-time studies that fed it — the platform audit,
 > the engine research, the remediation plan — are kept under `docs/history/`.
 
@@ -175,15 +175,15 @@ owned by a deterministic geometry engine, not by a model.
 ## 2. User journey
 
 ```
-/                         rooms list — the first screen; create / resume / delete
+/                         rooms list — the first screen; create / open / select & delete / open a file
 └─ /onboarding
    ├─ /layout-pick        pick footprint preset + (optionally) its size → starter scene
    ├─ /capture            add up to 4 wall photos (upload or getUserMedia)
-   └─ /detect             furniture detection on captured photos
+   └─ /detect             check furniture on the photos, then the Building screen → studio
 /room/[roomId]
    ├─ /model              ★ 3D decoration studio (default landing)
    └─ /plan               2D top-down floor plan
-/settings                 API key, display unit, your rooms
+/settings                 detection key, display unit, Downloads (the detector), your rooms, feedback
 ```
 
 **The rooms page is the first screen.** There used to be a welcome page at `/` in
@@ -208,15 +208,31 @@ breadcrumb's *Rooms* stays, because it is a fixed destination and Back is histor
 `from` is typed into the address bar as easily as clicked, so only a same-app path
 is honoured, and "same-app" is decided the way the router will decide it: resolved
 as a URL and compared by origin, since `/<tab>/host` passes any character test and
-arrives as `//host`. Settings' key row carries the "Get a free key" link and the
+arrives as `//host`. Settings' key row carries the "Get a key" link and the
 "AIza" hint the welcome page used to.
+
+**The rooms page** is a grid of room cards grouped by recency (*Today*, *Earlier this week*, *Earlier this month*, *Older*)
+with a name filter (`/` focuses it) and a **Select** mode: it opens a pinned bar with
+select-all, a count, *Done* and *Delete*, and a delete is soft (recoverable for 30
+days, with an Undo toast). The first tile of the grid is *New room*; **Open a file**
+(`ImportSceneButton`) lands a saved room file as a new room, and each card says how
+many pieces are in it. A card for a room whose photos were never finished offers to add
+the remaining walls or to find the furniture. With no rooms at all the page is three
+cards instead — **Photograph your room** (`/onboarding/layout-pick?then=photos`),
+**Pick a footprint**, and **Try the starter room** — and the bar carries navigation only.
 
 Two ways in:
 
 1. **Quick start** — pick a footprint, skip capture, land straight in the studio
-   with a contextual starter scene. Zero credentials. A double-click on a shape
-   starts that shape; a single click picks it and shows it beside the size fields.
-2. **Capture flow** — footprint → photograph room → detect furniture → studio.
+   with a contextual starter scene (*Start decorating*). Zero credentials. A
+   double-click on a shape starts that shape; a single click picks it and shows it
+   beside the size fields.
+2. **Capture flow** — footprint → photograph room → check furniture → studio. Arriving
+   with `?then=photos` the same footprint page leads with *Continue to photos* (the
+   other way on becomes *Skip photos and start decorating*) and every screen on the route
+   carries a four-step tracker (`FlowStepper`: Shape · Photos · Furniture · Room). It is
+   shown only on this route and its steps are marked done, never linked: the shape page
+   MAKES a room, so a link back to it would start a second one.
 
 **The size is asked for on the shape picker, and skipping it is allowed** (D7). Three
 boxes under the outlines — width, depth, ceiling, in the user's unit — start at the
@@ -268,7 +284,7 @@ internal ids the geometry and storage depend on — compass bearings asked the u
 a question they cannot answer in their own living room, and the engine only needs
 four *consecutive* walls.
 
-**Which of the four a photo is, the app now works out** (`lib/capture-slots.ts`).
+**Which of the four a photo is, the app works out** (`lib/capture-slots.ts`).
 The screen is "add photos", not four labelled bays: drop or pick any number in
 any order, and each one is filed by the strongest signal available — its own EXIF
 compass bearing measured against an anchor derived from the photos already
@@ -278,8 +294,9 @@ turning right as instructed. Every card says which rung answered, because a wron
 wall is a wrong room: the framed wall's distance runs n/s across the depth and e/w
 across the width,
 so a photo of the long wall filed under a short one is measured from the wrong
-distance. A set can only ever be wrong by a whole number of quarter-turns, so one
-"turn the set round" control fixes every case of it, and each card carries the
+distance. A set can only ever be wrong by a whole number of quarter-turns (the cyclic
+order is what makes that so), and each card's **Wall** dropdown, which swaps with a
+wall already holding a photo, is how the person corrects it. Each card carries the
 length its wall ought to be (`wallFrame`'s own two ends — the wall's real length, not a
 bounding-box side; `wallSpan` was that side and is deleted, because a span is the one
 quantity the two conventions agree on for a RECTANGLE and for nothing else) as the
@@ -304,7 +321,22 @@ nothing. The reverse link: a wall's edge on the plan (given an invisible `.captu
 hover) sets `data-plan-hover` on that wall's card, which lifts and takes an accent ring; a wall with no
 photo does nothing. With no photos the Add tile centres in the space beside the guide
 (`.capture-photos--empty`). The filmstrip under the live camera is photo + Remove only.
-`tests/capture-card.test.tsx` mounts the page to hold it.
+`tests/capture-card.test.tsx` mounts the page to hold it. The tile that adds more is
+**Add photos** while the gallery is empty and **Add another** after.
+
+**Check furniture** (`/detect`) is a review list, one row per piece, following the
+wall tab being looked at. A piece the guess in `lib/repeat-sightings.ts` took for the
+same one seen twice is folded, and every row can say it by hand with **Seen this
+already?** (`lib/sighting-links.ts`): link it to an earlier row and the later row stops
+being built, so one bed seen from three walls is one bed, and unticking a piece hands it to
+its next sighting. A scanned piece is built at its model's typical size and default colour (rule 2 in
+CLAUDE.md), so the screen says "typical size", never "measured". The local detector is
+a one-time download of **Basic** (smaller, finds about half as much) or **Full** (finds the
+most), asked about before it starts and kept afterwards; Settings' **Downloads** section
+holds the same choice, its size and a remove. When the review is confirmed, the **Building
+your room** screen (`components/ui/BuildingRoom.tsx`) shows the room's real size, floor
+area, the pieces kept and the photos used while the list is written and the studio opens.
+
 
 That works because the slot ids are a **cyclic order, not compass directions**.
 Nothing outside `capture-slots`' own arithmetic cares where north is — the room's
@@ -328,9 +360,16 @@ EXIF parser and deliberately **not** carried into the decision for that reason.
 > swatch; the page holds ONE hovered state `{index, from}` handed to `PhotoEditor`
 > and every `DetectionRow` (now `components/studio/DetectionRow.tsx`), so hovering
 > either side raises the other. Only a hover that began on the photo scrolls the
-> list (`scrollIntoView({block:'nearest'})`, no focus move). Picking a suggested model
-> from the name field keeps the piece (`keptAfterPick`); unticking is still the
-> person's. The photo column is sized by `--scan-photo-w`, published by the page's
+> list (`scrollIntoView({block:'nearest'})`, no focus move). Typing a new name in a
+> row's name field lists the Library models the word matches (`suggestFromLabel`, the
+> matcher the repair chips use, in the search's order, re-measured where the photo
+> allows and at the standard size where it does not); picking one changes the model the
+> piece is built as (the row's subtitle names it, `sceneShapeFor`) and keeps the piece
+> (`keptAfterPick`), and Enter on the typed text alone is a plain rename. Unticking is
+> still the person's. A row that starts unticked says why, in a note under it: a
+> doubted outline reads "Left out: its outline does not look like a …" (and no size),
+> a probable repeat asks "Same … as on …?" with *Yes, same one* / *No, it's another*.
+> The photo column is sized by `--scan-photo-w`, published by the page's
 > `ResizeObserver` from the pinned photo's height and aspect, so the rail sits beside
 > the photo rather than a screen away. While it runs the card shows
 > `components/ui/FindingFurniture.tsx`, decoration only: aria-hidden, a photo count and
@@ -346,14 +385,34 @@ EXIF parser and deliberately **not** carried into the decision for that reason.
 Furniture detection runs through a fallback chain, best-effort:
 
 1. **Local detector** — `lib/local-detect.ts`, via `onnxruntime-web`. No key, no
-   quota, no network after the first model download. The models (~64 MB total)
-   are **not bundled** and are git-ignored; `resolveBase()` HEAD-probes two
+   quota, no network after the first model download. The models (~65 MB total)
+   are **not bundled** and are git-ignored; `resolveFile()` HEAD-probes two
    sources in order:
    `public/models/` (produced by `python scripts/export-detector.py`, needs
    `pip install ultralytics`) then the Hugging Face mirror
    [`DearthAI/danmu-detector`](https://huggingface.co/DearthAI/danmu-detector),
    so a fresh clone works without a Python + torch toolchain. Both are static
    GETs of a public file — no user data leaves the device.
+
+   **The download is asked about, and then kept.** The mirror serves both files
+   `no-store`, so the browser kept nothing and every scan in a new page fetched ~65 MB
+   again. The verified bytes now go into Cache Storage (`lib/model-cache.ts`, cache
+   `danmu-detector-v1`), re-verified against `MODEL_DIGESTS` on every read, and
+   `public/sw.js` keeps that cache across deployments. A file served from this origin
+   (the local export) owes nothing. When a scan would have to download, the scan screen
+   asks first (`detectorStatus`): a card with the size **read off the mirror's HEAD
+   response**, a mobile-data hint, **Download** (or **Update**) and **Skip for now**.
+   Skipping with no key set arms by-hand boxes and says *Look again* brings the scan
+   back on Wi-Fi; with a key, the cloud path runs instead. The count while it runs is
+   against the whole download from the first byte (`DetectorStatus.owed`, handed to
+   `onDetectorDownload`). **Basic or Full** is one picker (`DetectorPackPicker`,
+   `settings.detectorPack`, default Full): Basic is the OIV7 model alone (~14 MB, about
+   half the finds), Full is the ensemble below (`packFiles`). A kept copy records the
+   digest it was verified against, so one an app update no longer pins reads as an
+   *update* and is asked about the same way, never downloaded unasked.
+   **Settings → Downloads** shows what is kept with *Download now* / *Update* /
+   *Remove from this device*; an unreachable mirror says so rather than reading as
+   nothing owed.
 
    Each photo is run **five times** — whole frame plus 2×2 tiles at 15% overlap
    — and merged with a single NMS in normalized whole-image space. Letterboxing
@@ -467,7 +526,8 @@ Furniture detection runs through a fallback chain, best-effort:
    | both tiled (current) | 10 | 13/19 |
 
    The OIV7 model earns exactly one object for double the passes and +14 MB.
-   Dropping it is the obvious lever if detection ever feels too slow.
+   Dropping the OIV7 model is the lever if detection ever feels too slow (note the
+   Basic pack is the opposite cut: it keeps OIV7 and drops the world model, for size).
 
    **Licence boundary:** the weights are AGPL-3.0 (Ultralytics) and Danmu is
    MIT. AGPL is copyleft, so the two cannot be mixed — the weights therefore
@@ -521,11 +581,21 @@ Furniture detection runs through a fallback chain, best-effort:
    notice (`lib/set-aside.ts`), so a scan that kept 6 of 9 pieces no longer looks
    like one that found 6 (§ 49.19).
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
-   detector is available.
+   detector is available, or when the download was skipped.
+
+**One piece, several walls.** A big piece is in two or three of the four photos.
+`lib/repeat-sightings.ts` is the app's *guess* (shared footprint on the floor; boxes in
+one photo that do not touch are two things): a probable repeat starts unticked and asks
+which row it repeats. `lib/sighting-links.ts` is the person's *answer* — a
+**Seen this already?** link on any row, and the hand-over when the kept row goes — set
+out under **The person can link what the guess missed** in §4. A link adds placement
+only, never size.
 
 Detection returns labels + boxes only. The **geometry engine derives positions** (and a
 rough size reading), and a scanned piece is then **built at an approximate catalogue size**
-(see *Scanned pieces are approximate*, below) with its model's default colour. The engine
+(§4, *Scanned pieces are approximate*: `approximateDims` starts from the shape's Library
+size and lets the estimate nudge the width only) with its model's default colour — photo
+colour reuse was deleted, so neither detector path reads or returns a colour. The engine
 used to check the label against the size it measured — see §4's
 pipeline, which also covers what each source's `conf` is actually worth.
 
@@ -570,6 +640,8 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/room-openings.ts` | **Where a room is entered, and where its light comes from.** Two rules over the footprint's own edges, and no per-preset constants: the door goes on the shortest **outer** wall that can hold one, set against a corner so the wall keeps one long usable run; the window faces the door, and a room over 18 m² gets a second on the *shorter* side wall, because the longest wall is the room's best furniture wall and glazing it costs the room its focal wall. Until this existed no preset had either, and the consequences were not cosmetic: `roomProfile.apertures` was empty, so `navigabilityCost` returned 0 by its own no-door guard and the solver's reachability pass was inert on every new room; `entranceComponents` returned null, so the report's `reach`, `cut-off`, `door` and `entry` rules never fired; the `desk ← window` relation was unreachable; and — the reason anyone noticed — **with no door, no wall had a reason to be the back wall**, so the seeder chose by arithmetic and the result read as arbitrary. |
 | `lib/room-bays.ts` | **Where in the room there is actually room.** The footprint's maximal axis-aligned rectangles of real floor, largest first, plus each bay's sides (which of them are real walls, how deep the bay runs from each) and `splitBay` for putting two groups in one rectangle. Exact for rectilinear rooms — the candidate grid is the polygon's own vertex coordinates — and conservative for anything with a diagonal wall, since a candidate is only returned once it has been proved inside. This exists because arranging furniture against the polygon's *bounding box* furnished the quadrant an L / T / U cuts away: the starter scene put five of the L-shape's nine pieces outside the house. |
 | `lib/layout-settle.ts` | The guarantee both scene paths end on: nothing outside the room, nothing inside anything else. Containment pushes a piece in by its own half-extent along the wall it overhangs (clamping the *centre* leaves a 2.2 m sofa half in the garden), then clashing pairs are separated smaller-piece-first using the room report's own clash bar, `tucksUnder` and rug exemptions. Cheap and deterministic on purpose — it runs on every room open, where the annealer has no business. It never resizes, never moves a wall-mounted piece, and when a room is genuinely too full it leaves the piece where it was for `clearance.ts` to report. |
+| `lib/scene-spec.ts` — `approximateDims` | **What size a scanned piece is built at.** The shape's Library size, with the photo's width estimate allowed to nudge the width only (±25%, `APPROX_WIDTH_BAND`, or the shape's legal range if tighter); depth and height are the catalogue's, and a window, door or curtain is never narrower than its default. A generic box alone keeps its hint, clamped. The single place `buildSceneFromRoom` sizes a detection — see step 4 below and `CLAUDE.md` rule 2. |
+| `lib/sighting-links.ts` | **One piece seen on two walls.** A link is the later row's `sameAs` (a uid, never an index); `handOver` gives a removed piece to its next sighting; `withSeenAt` writes `combinedFloorSpot` — the placement combined from the linked floor sightings — as `seenAt` beside `position`. Placement only, never a size. Described under *A second sighting starts unticked* below. |
 
 ### The detection pipeline, in order
 
@@ -579,7 +651,8 @@ decision it makes.
 
 1. **Measure** — `geoRefine` runs the geometry engine over every detection and every
    manual box, replacing the AI's guessed position and size with values computed
-   from the calibrated camera. What comes back measured depends on the piece's own
+   from the calibrated camera. (The *size* is a reading for placement, the judge and
+   the merge below; the piece is no longer built at it — see step 4.) What comes back measured depends on the piece's own
    anchor: a floor or wall piece gets position, W and H; a **ceiling** piece gets
    **width only** (a fan seen from below projects as a disc, so its bbox holds a
    foreshortened diameter and no thickness); an uncalibrated slot gets nothing at
@@ -628,13 +701,22 @@ decision it makes.
    a reason: a duplicate the user unticks in one tap beats a real piece that never
    appears. Two rows of one photo it keeps apart stay two ticked rows, since that pass
    never compares them.
-4. **Build** — `buildSceneFromRoom` clamps, snaps and settles. It reads only the two
+4. **Build** — `buildSceneFromRoom` clamps, snaps and settles. **A scanned piece is built
+   at an APPROXIMATE size** (rule 2's decision of 2026-10-03): `approximateDims`
+   (`lib/scene-spec.ts`) starts from the shape's Library size, lets the photo's width
+   estimate nudge the WIDTH only (`APPROX_WIDTH_BAND`, ±25% of that, or the shape's legal
+   range if tighter), and takes depth and height from the catalogue; a window, door or
+   curtain is never narrower than its default. A generic box has no standard, so it alone
+   keeps its hint, clamped. Scanned pieces take their model's default colour — photo
+   colour reuse (`color-sample`, `color-reduce`, `Detection.color`) was deleted — and a
+   colour the user chose in the studio still wins. The measured placement above is what
+   survives: position, wall and yaw. It reads only the two
    axes a photograph can locate: `groundY` owns Y outright, and the placement gate
    used to test Y as well, so a fan the model put 3.2 m up in a 2.8 m room lost its
    perfectly good floor position too.
 
-The AI's remaining contribution is a label, a category, a shape and a depth hint —
-and the label is no longer taken on trust either.
+The AI's remaining contribution is a label, a category, a shape and, at most, a width
+nudge — and the label is no longer taken on trust either.
 
 **Whose answer is this, and is it worth ticking?** `lib/detect-confidence.ts`.
 `Detection.conf` carries three unrelated scales — a class score off the ONNX head, a
@@ -685,8 +767,8 @@ Every wall of a four-photo capture sees a big piece, so a bedroom came back with
 five beds, all ticked. `lib/repeat-sightings.ts` is the **soft** half of the same
 decision and deletes nothing. It asks what a person looking at the list asks —
 *could these two rows be standing in the same spot?* — and answers with the index of
-the row a sighting probably repeats. The review leaves that row unticked with the
-caption *Probably the bed from Wall 1 again*; ticking it back is one tap, which is
+the row a sighting probably repeats. The review leaves that row unticked and asks
+*Same bed as on Wall 1?* — **Yes, same one** links it (below), **No, it’s another** ticks it back — one tap, which is
 the asymmetry the merge argues for: a real piece that never appears is worse than a
 duplicate, so the duplicate is paid for once on the list rather than in the studio.
 The rule is two facts about rooms, not about detectors:
@@ -711,6 +793,40 @@ was an unconfident one would end with every sighting unticked. The pass is greed
 with no chaining, so a bed in four photos is one bed and three repeats. `keptAtFirst`
 is the one place the seeding decision is made, so the screen and the tests cannot
 disagree about it.
+
+**The person can link what the guess missed** (`lib/sighting-links.ts`). The review
+list follows the wall tab — one wall's pieces beside that wall's photo, with **All
+walls** for the check before Continue — and every row offers *Seen this already?*, a
+pick of kept pieces (same kind first, other walls first). A link is the later row's
+`sameAs`, the uid of the row it repeats (never an index: a delete re-numbers indices),
+kept one level deep so a bed on three walls is one row with two linked to it. A linked
+row is unticked, so `buildSceneFromRoom` never builds it; unlinking ticks it back, and
+undo covers both because the review history snapshots the rows. Removing the piece's
+own row — unticking or deleting it — **hands the piece to its next sighting**
+(`handOver`), which is kept in its place; the removed row is left unlinked rather than
+pointed at the heir, so removing every sighting in turn takes the piece out instead of
+handing it back.
+**A linked row wears its piece's tick** (`pieceRow`): its own is always off, which read
+as "this bed is not in your room" on every wall but the first, so the row, its tag on
+the photo and its line (*"Same bed as on Wall 1 · kept"* / *"· left out"*) all show the
+tick of the row it is linked to, and its model line names the model that row is built
+as. Pressing that tick from the linked row switches the **piece** on or off, with no
+hand-over — unticking the bed from another view of it means "no bed" — and the link
+stays, so ticking any of its rows brings the same piece back. Deleting a row whose
+piece is already left out hands its links on without ticking the heir.
+
+A link adds **placement and nothing else** — the size stays the catalogue's (rule 2).
+At Continue, `withSeenAt` writes each kept floor piece's combined spot as `seenAt`,
+beside its own `position` rather than over it, so the readings survive and a second
+Continue recombines the same numbers. `combinedFloorSpot` decides from a measurement
+over 150 furnished rooms (printed by `tests/sighting-links.test.ts`): when any
+sighting rode an **assumed** lens the mean of every sighting wins (1.2 m off → 0.8 m
+at an ultrawide read as 66°); on **measured** lenses the first sighting is already
+good and averaging in a frame-cut one made it worse (0.318 → 0.382 m at 106°), so
+only uncut sightings count and fewer than two means no move. Floor pieces only: a
+wall piece's place is read on an assumed plane and nothing measured that averaging
+helps. `rescan.ts` includes `seenAt` in a row's `buildsAs`, so an arranged room
+rebuilds the piece a new link moved.
 
 **It is for every kind, not beds**, and three things stood between it and the rest of
 a room, each measured over 150 generated furnished rooms (`tests/helpers/furnished-rooms.ts`,
@@ -801,8 +917,8 @@ on a cut axis both ways — grown to a typical size, it would pass every word th
 judging the catalogue — and reports the axes it skipped as `cut`. It judges one on its HIGH
 side alone (§ 49.5): the typical size a cut axis grows to is inside the band, so a reading
 past a word's top can only be the part the photo saw, and a piece is at least that big. That
-reading accuses the word and is printed as one — *at least 1.96 m wide* — and it is the
-verdict's `atLeast`. Not a ceiling piece's width, below, and not on a piece its placer
+reading accuses the word and is the verdict's `atLeast`. The scan screen no longer
+prints it as a size (see below). Not a ceiling piece's width, below, and not on a piece its placer
 read at a distance the photo did not show — a floor piece cut at its foot, asked of the
 placer's own `ReadBounds` rather than of the box — whose whole axes are judged both ways at
 that reading (D8) and whose cut ones not at all, since what the photo saw from an assumed
@@ -815,13 +931,14 @@ TOP, the usual one, is now read from the three edges the photo saw instead and c
 (§ 49.13), but it falls back on the centre row wherever no disc draws the box, and the verdict
 cannot tell which it got, so it is still not judged; a row cut on every axis it
 could judge is `unmeasured`, so it starts unticked. A rename still offers the word the person
-typed when the photo measured nothing of it — flagged `unmeasured`, ranked last, and titled
-*its size is an estimate* — because refusing it would hide the one word they asked for, while
-the judge's own strict repairs never reach it. And the scan screen says so on the row:
-*Runs past the edge of the photo, so its width is an estimate.* An estimate the person can
-see is an estimate. Not "a typical one", which it said first and which was true of one case
-in three: a piece whose visible part is already bigger than typical keeps what was seen, and
-one stopped by the wall's end is neither. A piece cut only at its FOOT was seen whole across
+typed when the photo measured nothing of it — flagged `unmeasured`, ranked last — because refusing it would hide the one word they asked for, while
+the judge's own strict repairs never reach it. The scan screen used to say so on the row, with *Runs past the edge of the photo, so its
+width is an estimate* and a *Measured about 1.27 × 0.27 m* sentence. Both are gone: a
+scanned piece is built at an approximate catalogue size (`approximateDims`, rule 2's
+decision of 2026-10-03), so the screen says "typical size" and prints no measurement to
+qualify. A row the judge doubts starts unticked with *Left out: its outline does not look
+like a …. Tick it if it is one* and no size in it. The cut and bounded reasoning below still
+decides the placement and the verdict. A piece cut only at its FOOT was seen whole across
 and to its top, but its distance is the wall's rather than its own: it is read at the far end
 of where it could stand, its back on the plaster at its kind's typical depth. **It is judged at
 that reading, and that is the user's call (D8, § 49.10).** Its back on the wall is the
@@ -836,18 +953,14 @@ for 12 of 28 flagged, because a round piece's far end is its own diameter off th
 standing fan's typical size sits on its band's edges. The placer still says which way each
 axis could be wrong (`GeoPlacement.bounds`, `lib/photo-geometry.ts`, which `geoMeasure`
 carries out beside the row), and the verdict names the axes it read at an assumed distance
-(`bounded`). **And the row says so**, because an estimate printed as a measurement is an
-estimate passed off as a size: the sentence reads *Measured about 1.27 × 0.27 m*, and the row
-gets the *Runs past the edge of the photo, so its … is an estimate* note a side cut gets,
-naming its size where a side cut names its width. To the person they are one fact, that this
-number is not the camera's measurement of the piece. A round piece read with the lens tipped
+(`bounded`). A round piece read with the lens tipped
 DOWN claims no limit at all. Its solve read each side on the box's top row, and its residual
 crossed the bound, by 35 mm at 20°; a limit the truth falls outside is worse than none. Each
 side is read at the end where its column is extreme in the photo now, and not one row of that
 fixture crosses, but the exception stays until a measurement of its own retires it (§ 49.9).
-So it is judged like the rest, and says it was read at an assumed distance
-(`AT_ASSUMED_DISTANCE`), so its row has the "about" and the note too. It went without them for
-a commit, handed the bounds of a piece seen whole.
+So it is judged like the rest, and its verdict names the axis it read at an assumed distance
+(`bounded`, from `AT_ASSUMED_DISTANCE`). It went without that for a commit, handed the
+bounds of a piece seen whole.
 
 **Measured by `tests/scan-tilted-room.test.ts`**, a scan shaped like the one that was
 reported — four landscape photos from the middle of a 5.0 × 4.6 m bedroom, tilted up 8–20°,
@@ -1144,7 +1257,9 @@ shape)` — code-owned, narrowed to the shape's own range. `depthM` moves the de
 rule 2 exists to prevent. `geoRefine` writes the same number into `dimMM[1]`, so a floor
 piece is DRAWN with the depth it was placed by and its near face lands where the photograph
 put it; a hint kept for the render beside a default used for the maths would leave the two
-disagreeing by half their difference, on the one axis the photo did measure.
+disagreeing by half their difference, on the one axis the photo did measure. (A scanned
+piece's depth is the catalogue's at build time too, via `approximateDims`, so the two stay
+the same number.)
 
 ### …and so is a wall piece, which was the same fix one anchor over
 
@@ -1289,12 +1404,12 @@ a verdict rather than accusing. (For the print that verdict had been `ok`: `pain
 is 150–2400 × 150–1800, so a fabricated 893 × 803 fits it comfortably and was given a false
 clean bill. The row that was genuinely accused is the vent, at 386 mm against `fan`'s floor.)
 
-**What size it arrives at is NOT the catalogue's on the path that spends the user's quota**,
-and this section claimed otherwise. `buildSceneFromRoom` prefers the detector's own `dimMM`
-through `clampDims` and falls back to `cfg.dim` only when there is no hint at all — and the
-cloud prompt asks for `dimMM`. So a refused *cloud* detection is drawn at the AI's clamped
-guess; only an on-device one, which sends no size, reaches the catalogue. Whether a refusal
-should also discard that hint is a trust-boundary decision, filed in § 42.3, not taken here.
+**What size it arrives at** is the catalogue's, give or take a width nudge, on every path now.
+This section used to say a refused *cloud* detection was drawn at the AI's clamped `dimMM`
+(`buildSceneFromRoom` preferred the hint and reached `cfg.dim` only with no hint at all).
+That is gone: `approximateDims` takes depth and height from the catalogue and lets the hint
+move the width only, within ±25%, so a refusal no longer leaves a guessed size standing.
+The one exception is a generic box, which keeps its clamped hint.
 
 It tests the CENTRE, not the extent: the wholly-off-the-wall variant accepts a 1400 mm
 curtain on the return wall as **1815 × 942**.
@@ -1391,6 +1506,12 @@ pair and they are **one row**, and the measured one survives in either photo ord
     coarse pointer (44 px hit target). The stretch resolves with snap off, as a turn
     does, so the fixed face does not step; a pull into a wall rests at the last size
     that fitted rather than being refused.
+- **A Library piece dragged over the 3D room shows a ghost** (`DropGhost.tsx`): the real
+  geometry, translucent, standing where `planPiece` (`lib/add-piece.ts`, the drop's own
+  computation) would put it, and in the refusal colour with the reason beside the pointer
+  when the drop would be refused. The camera views are one pill — Corner, Front, Top
+  (`ViewGizmo.tsx`) — and the 3D canvas stays mounted across the 2D/3D tabs
+  (`RoomHost.tsx`, `lib/room-host.ts`) rather than rebuilding on each switch.
 - Snap: `off` / `fine` **1 cm · 15°** / `coarse` **5 cm · 45°** — `snapSteps` in
   `lib/drag-resolve.ts`, which is the only home for those four numbers. This line read
   "2.5°" and "7.5°" for both angles; nothing derives them and nothing checked.
@@ -1581,7 +1702,11 @@ pair and they are **one row**, and the measured one survives in either photo ord
   multi-piece drag looked impossible in one tab and self-undoing in the other.
 
 ### Recolour — `Inspector.tsx`
-- One **Colour** section (24-swatch palette + a custom mixer). There is no sheen
+- One **Colour** section (thirteen named swatches in two rows of seven, the mixer taking
+  the last cell, so a custom colour is the fourteenth; the names are what a screen
+  reader announces). A Style theme (`lib/themes.ts`) recolours the room's pieces in one
+  tap, and that now includes pieces built from a photo; a colour the user sets on a piece
+  still wins. There is no sheen
   control. A Finish row (Auto / Matte / Satin / Polished / Metal) used to sit inside
   it and was removed in review because it changed nothing a person could see. A
   room saved with one still loads; the value is ignored, and a room file does not
@@ -1971,6 +2096,9 @@ and re-pinning `MODEL_DIGESTS`. The cloud path has no such limit: its prompt
 interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
 
 ### Set-dressing & decor — `Dressing.tsx`
+- Decor is **off by default** (`useStudio.dressed` starts `false`; a stored `true` from
+  before the default changed is rewritten once, `STUDIO_PREFS_VERSION`). **Decor** is a
+  toggle in the top bar's View menu, beside the floor grid, sounds and Quality.
 - Surface-capable parts carry props (books, vase, plant, bowl, candle),
   auto-suggested via a **seeded** generator (stable per part id) or user-managed
   as a per-part `decor` collection. Decor renders as a **sibling** of the part
@@ -2009,8 +2137,9 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   the sun and the moon are all derived from, plus **Overcast**, which ignores it —
   so `Lighting` is `'daylight' | 'overcast'` and `useStudio.hour` is the rest. It
   replaced five fixed moods (Sunrise / Day / Sunset / Evening / Cool), and the four
-  named times in the rail — **Morning 07:36, Midday 12:48, Evening 18:30, Night
-  22:12** — are those pictures kept as stops, so `legacyLighting` maps every retired
+  named times — **Morning 07:36, Midday 12:48, Evening 18:30, Night 22:12**
+  (`TIME_STOPS`) — are those pictures kept as stops on the clock (no control lists
+  them any more; the strip below is how you reach them), so `legacyLighting` maps every retired
   id onto the stop that looks like it and a stored preference lands where it was.
   - **One typical day, not a place.** Sunrise 06:00, sunset 19:30, the sun on a
     tilted circle from 65° to 295° peaking 60° due south, the moon on the same
@@ -2080,8 +2209,7 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     the folded pill only opens it, and Esc mid-drag puts the hour back. Dragging it while overcast
     brings the sun back. `SUN_DRAG_ID` (`lib/store.ts`, beside `WALL_DRAG_ID`)
     is its `draggingId`, which blocks orbiting and makes the whole pull ONE undo
-    step — and the rail's day track claims the same id for its own pull, so
-    both are one step. The sky and exposure live in `Daylight` inside
+    step. The sky and exposure live in `Daylight` inside
     `Room.tsx`, so scrubbing re-renders the lights and not the furniture.
     **A scrub is cheap by construction, and each piece of that has a scar.** The
     pill is moved by a direct `transform` write in the pointer handler, so it is
@@ -2097,7 +2225,7 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     hour of a scrub), re-bakes on a two-hour step while scrubbing, and its
     brightness is `scene.environmentIntensity`, a uniform, not a bake.
     `tests/render-churn.test.ts` holds all three.
-  - **The strip carries the rest** (no rail control any more — `LightingPicker`
+  - **The strip carries the rest** (there is no rail Light section: `LightingPicker`
     and the Style → Light section are deleted): while it is open, an extras row
     under it holds the **Overcast** toggle, **Plan top faces** — the room's bearing,
     one compass point a press (`turnedBearing`, `lib/lighting-moods.ts`) — and the
@@ -2107,7 +2235,7 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     at its horizon; the moon stays paper.
   - **`Site.bearingDeg` still turns the whole day** with the room, so which wall
     the morning comes through is the user's answer. It was the Sun direction dial
-    (`NorthDial.tsx`, deleted); the arc now shows the answer and the rail keeps the
+    (`NorthDial.tsx`, deleted); the strip shows the answer and its extras row keeps the
     setting.
 - **Carried pieces sway** (`lib/wobble.ts`, `components/three/Wobble.tsx`). A floor
   piece being dragged lifts 14 mm and leans back against its travel, up to 7°, and
@@ -2190,8 +2318,8 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   masking is the real fix and is a change to how the scene is lit. And a sealed room
   is lit by sky, environment and lamps alone, so a **sun mood in a room with no
   opening does nothing** — which is the honest answer and is said out loud in the
-  rail's Style section, under the Lighting row, through the same `isAperture`
-  predicate that cuts the holes.
+  day strip's extras row ("No window or door, so no sunlight gets in"), through the
+  same `isAperture` predicate that cuts the holes.
 
 - **What the sun used to be, and why it is not that any more.** This was a single
   `Sun` mood that computed a real solar position: `lib/solar.ts` carried the full
@@ -2267,8 +2395,8 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   **Plan top faces** turner beside the light, with the light in the room drawing its answer.
 
   **What holds the shape.** `LIGHTINGS` in `lib/store.ts` is an `as const` array
-  with the `Lighting` union derived from it, and `TIME_STOPS` is keyed by id into
-  the picker's `Record<TimeStopId, …>`, so a stop with no glyph is a compile error.
+  with the `Lighting` union derived from it, and `TIME_STOPS` keeps the four stops by id
+  (`TimeStopId`) for `legacyLighting` and the test to land on.
   `tests/lighting-moods.test.ts` covers what the compiler cannot see: a seam in the
   sky anywhere in the day (walked minute by minute, midnight included), a sun up
   outside its day or a moon up beside it, a key light pointing below the floor or
@@ -2347,11 +2475,13 @@ choosing differently.
 
 | Slot | Holds | 3D tab | 2D tab |
 |---|---|---|---|
-| `CanvasTools` top-centre | What you do TO the room | `TransformToolbar` · `CatalogToggle` | Comfort-zones toggle |
+| `CanvasTools` top-centre | What you do TO the room | `TransformToolbar` · `CatalogToggle` (a phone's Add is its toolbar's, so no toggle) | Comfort-zones toggle |
+| `CanvasDay` under the tools | The one setting you scrub rather than press | `DayStrip`: the day painted as a sky, a sun that morphs into the moon (`lib/day-strip.ts`) | — |
 | `CanvasView` top-right | How you look at it, plus undo/redo | `UndoRedo` | `UndoRedo` · zoom / rotate / fit |
 | `CanvasAide` bottom-right | At most ONE thing | `ViewGizmo` | `ComfortLegend`, only while shading is on |
 
-Bottom-left and bottom-centre are **deliberately empty**. If you are reaching for
+`CanvasDay` is a second row of the tools slot, not a fourth slot, and the Library dock
+sits below it (`CatalogPanel belowDay`). Bottom-left and bottom-centre are **deliberately empty**. If you are reaching for
 a fourth slot, the answer is a rail.
 
 Three things left the canvas to make that true:
@@ -2399,13 +2529,16 @@ and closes when you are not using it.
   scroll box clips an absolute card, the same reason and the same fix as
   `ui/Select.tsx`'s portalled listbox. It opens to the *right* of the rail so the
   room a finding flies to stays visible.
-- **Sections**: Room (dimensions + Re-scan) · Style (themes) · Pieces (search +
-  the listbox, and it takes the leftover height). `RailSection.tsx` owns the
+- **Sections**: Room (dimensions; **Re-scan** is a refresh icon in the section's header,
+  so it survives the section being closed) · Style (themes) · **Catalog** (search +
+  the listbox, with the piece count as its meta, and it takes the leftover height).
+  Room and Catalog start open, Style closed. Above them, with the health chip, sit
+  **Fix** and **Ideas** (`RoomTools.tsx`). `RailSection.tsx` owns the
   header — a real `<button>` controlling a
   region, with the count in `.section-meta`. Open/closed is **local, not
   persisted**: which drawer you left open is not a preference worth carrying
   between rooms, and `partialize` should stay about how the room *looks*.
-  **View is behind the top bar's gear now** (`ViewMenu`), described under the top
+  **View is behind the top bar's View button now** (`ViewMenu`), described under the top
   bar below. For a while it was the right rail's last section.
   **A rail section's body is inline, never a popover.** `ViewOptions` shipped for
   a while as a "Look" button opening a 300px absolute card inside a 260px rail:
@@ -2414,10 +2547,11 @@ and closes when you are not using it.
   it goes `position: fixed` and measured, like the room report and
   `ui/Select.tsx` — but the first question is whether the section header is
   already the affordance.
-- **`+ Catalog` is pinned to the bottom edge** and never scrolls away. It
-  used to sit mid-column inside the Furniture section. It says *catalog*, not
-  *furniture*: the same panel holds doors, windows, curtains, appliances and
-  lighting, so the narrower word named about half of what is in there.
+- **The left rail no longer carries an Add button.** A `+ Catalog` button used to be
+  pinned to its bottom edge; Add is the right rail's now (the footer, or the empty
+  Inspector below), so the verb sits beside the piece you are editing instead of
+  diagonally across the window. The section says *Catalog*, not *furniture*: it lists
+  doors, windows, curtains, appliances and lighting too.
 - **Re-scan moved here** from the top bar: it changes what is *in* the room, not
   how the app is framed.
 
@@ -2428,15 +2562,19 @@ own for a while, and the paragraph describing it was filed under *The left rail*
 above, which is how the only canonical statement of one rail's composition came to
 sit under the other's name.
 
-- **With nothing selected, the Inspector is a mark and one line**
-  (`EmptyInspector.tsx`): *"Click a piece to style it"*, or *Tap* on a touch screen.
+- **With nothing selected, the Inspector is a mark, a line and the room's two verbs**
+  (`EmptyInspector.tsx`): a *Details* heading, *"Click a piece to style it"* (*Tap* on a
+  touch screen), a hint that Add brings something in from the Library, and then **Add**
+  and **Start over** (the latter only once there is something to start over from; on a
+  phone Add is the toolbar's, so only Start over can appear).
   It was once the words *"Nothing selected"* over 700px of blank column, then for a
   release a room-at-a-glance card plus two shortcuts into the left rail (Restyle,
   Resize). Those were cut in review because a panel seen before every pick should
   not read as instructions, and the left rail already holds both edits under their
-  own names. **No Add button here**, because Add is the pinned footer directly
-  below it.
-- **View left this rail for the top bar's gear.** It was the last section before the
+  own names. Add lives here because `RailFooter` renders nothing with no
+  selection: a second Add pinned under the same prompt would be the same verb twice.
+  With a selection the pinned footer holds Delete (or Done, for a wall), Add and Start over.
+- **View left this rail for the top bar's View button.** It was the last section before the
   footer, and it filled the no-selection state by standing in for an empty state the
   rail did not have. Three values set once and never touched again were sitting under
   the panel people actually came to edit. The reason once given for putting it on
@@ -2466,11 +2604,11 @@ covers the next one down, the one the pointer is moving to.
 
 ### The studio top bar — four controls, no primary
 
-`Rooms / <name>` as a breadcrumb, the tab switcher, then the **View gear** · `?` ·
-room switcher · **Export**. The gear (`ViewMenu.tsx`) holds how the room is drawn on
-this device (floor grid, decor, sounds, quality) and links to Settings for units,
+`Rooms / <name>` as a breadcrumb, the tab switcher, then **View** (an eye icon) · `?` ·
+room switcher · **Export**. View (`ViewMenu.tsx`) holds how the room is drawn on
+this device (floor grid, decor, sounds, and High / Fast quality; decor is off by default and the light is not here, it is the day strip) and links to Settings for units,
 detection and storage. Those are app settings, and a second copy of them here would
-be a second place to keep in step. The gear and Help sit together because they are
+be a second place to keep in step. View and Help sit together because they are
 the same kind of control: one you open, read and close. Every top-bar popover (View,
 Help, Export, and the phone's More) shares its dismissal (`usePopoverDismiss`): a
 press outside, or Escape, which returns focus to the trigger. So opening one closes
@@ -2478,7 +2616,7 @@ whichever was open, rather than stacking Help's card over View's. It was undo/re
 Snapshot styled as the primary action, which downloading a PNG is not. Undo/redo went
 to `CanvasView`, Rescan to the rail, and every "take this away with you" action
 collapsed into one `ExportMenu.tsx`: the 3D snapshot (3D tab only — it captures that
-view), the floor-plan PNG, and the room itself as a `.danmu.json`. Those were three
+view), the floor-plan PNG, and the room itself as a `.danmu.json` (rows *This 3D view*, *Floor plan*, *Room file*). Once a room has had real work put into it (`lib/backup-nudge.ts`), a one-time toast offers *Save a backup file*, because a room lives only in this browser and the file is the one copy that outlives it. Those were three
 actions in three places at three visual weights, which is how you end up not knowing
 the other two exist. The scene file is last in the menu and labelled as the one you
 can open again, since that is what separates it from the two pictures.
@@ -2520,7 +2658,7 @@ asks about width.
   toolbar.
 - **View is its own sheet.** The toolbar's View button used to open Details, where
   View's controls sat under an empty Inspector. With those controls behind the
-  laptop's gear, the phone gets a View sheet of its own rather than a row in More:
+  laptop's View button, the phone gets a View sheet of its own rather than a row in More:
   a sheet is how this layout shows controls, and More is for leaving (help, export).
 - **One primary action, and it is Add.** Apple: specify one primary action. Material:
   one FAB, for the primary or most common action.
@@ -2736,8 +2874,8 @@ outlined box around outlined buttons, which put two boundaries on every control.
 - **Adding pieces is ONE surface** (`CatalogPanel.tsx`) — a docked, non-blocking
   strip holding the searchable, grouped library: drag a row onto the 3D floor, or
   click to drop it at centre. Two triggers open it and both live in `useStudio`
-  (`catalogOpen`): `AddPiecesButton` in the right rail's footer and `CatalogToggle`
-  in the canvas toolbar. The panel docks on the **right**, the same side as both of
+  (`catalogOpen`): `AddPiecesButton` in the right rail (its footer, or the empty Inspector) and
+  `CatalogToggle` in the canvas toolbar. The panel docks on the **right**, the same side as both of
   them — pressing a control on one side to have a list appear on the other is a trip
   across the product.
   **There is no "Describe it" tab, and its worth was kept rather than deleted.**
@@ -2835,16 +2973,20 @@ outlined box around outlined buttons, which put two boundaries on every control.
   the second advertised an AI that does not exist here: matching is local token
   search (`lib/shape-search.ts`), instant and offline. The modal hands the swap
   back to the caller, because re-grounding the piece for its new dimensions and
-  mount type is physics the Inspector owns.
-- **One-tap themes** (`lib/themes.ts`) — recolour all unlocked parts + set a
-  matching lighting mood. **Four, not five**, and the chip reports the colours
+  mount type is physics the Inspector owns (`lib/swap-model.ts`). The swap **fits or
+  says so**: it checks the contained spot, tries a quarter turn when the new piece
+  would go through a wall (toast *"turned to fit"*), and refuses, leaving the old
+  piece as it was, when neither turn fits.
+- **One-tap themes** (`lib/themes.ts`) — recolour **every** piece (scanned ones too;
+  they used to be skipped as locked) and set a matching lighting mood, plus the hour
+  where the theme names one. **Four, not five**, and the chip reports the colours
   rather than the mood. Both halves answer one report: "some of the lighting and the
   style override each other". The override was real and mutual — `activeTheme`
   tested `t.lighting === lighting` alongside the colours, so moving the light
   UNTICKED the theme while the room stayed every colour that theme had painted it,
   and the section header stopped naming it. Pressing a swatch moving the light is the
-  feature (one tap, whole look) and is legible now that both controls sit in the same
-  section; the reverse never was. The merge took `Coastal` and `Studio Loft` — two
+  feature (one tap, whole look) and is the feature; the reverse never was (the light is
+  the canvas's day strip now, so the two controls no longer share a drawer). The merge took `Coastal` and `Studio Loft` — two
   of the five offering the same `cool` mood — into `Cool Neutral`, keeping Coastal's
   sage accent and Studio Loft's charcoal case goods.
   **One claim about that merge was wrong and the measurement is in
@@ -2861,7 +3003,7 @@ outlined box around outlined buttons, which put two boundaries on every control.
   room. A tuned threshold is a record of today's palette wearing a gate's clothes.
   The mood criterion is **not** fully satisfied by the surviving set: `Warm Minimal`
   and `Afro-Modern` both set `day`, at 0.266 — closer than the merged pair — so the
-  Lighting row still offers one mood twice. Left as-is because four swatches is the
+  two themes still set one mood. Left as-is because four swatches is the
   fit ceiling, and recorded because the rule the merge was made on would take that
   pair next.
 - **2D plan** (`PlanView.tsx`) synced with the 3D scene; export via
@@ -2881,10 +3023,10 @@ outlined box around outlined buttons, which put two boundaries on every control.
   modelling-tool convention; the word on the menu item, the tree's tooltip and both
   help cards is "Hide", and a mnemonic that matches the label beats one borrowed
   from software this app is not.)
-- **Snapshot** (`lib/snapshot.ts`) — PNG of the 3D view (replaces the deleted
-  photoreal render).
+- **Snapshot** (`lib/snapshot.ts`) — PNG of the 3D view, Export → *This 3D view*
+  (replaces the deleted photoreal render).
 - **The scene file** (`lib/scene-file.ts`, `components/studio/SceneFile.tsx`) —
-  `Save file` in the top bar writes the whole room as readable JSON
+  Export → *Room file* writes the whole room as readable JSON
   (`front-room.danmu.json`); `Open a file` on the rooms page lands one as a **new**
   room. See §6a — it is the app's only import path, and therefore its only
   untrusted input.
@@ -3316,13 +3458,27 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
   `lib/local-detect.ts`; move both together or the compiled types drift from the
   executed wasm.
 
+### Routes
+
+| Route | File | What it is |
+|---|---|---|
+| `/` | `app/page.tsx` | The rooms list, the first screen. `/workspace` and `/onboarding/welcome` redirect here. |
+| `/onboarding/layout-pick` | `app/onboarding/layout-pick/page.tsx` | **New room**: the preset shapes (`lib/room-presets.ts`), a size row, and the way on to photographing. |
+| `/onboarding/capture` | `app/onboarding/capture/page.tsx` | The wall photos (`FlowStepper` shows the step). |
+| `/onboarding/detect` | `app/onboarding/detect/page.tsx` | The review queue: what was found, kept or not, linked (`sameAs`), renamed. |
+| `/room/[roomId]` | `app/room/[roomId]/page.tsx` | A server redirect to `/room/[roomId]/model`. |
+| `/room/[roomId]/model` · `/plan` | `…/model/page.tsx`, `…/plan/page.tsx` | The two studio tabs, both inside `StudioShell`. |
+| `/settings` | `app/settings/page.tsx` | Key, units, detector pack. |
+
+`app/` also holds the file-convention routes `manifest.ts`, `icon.svg`, `apple-icon.tsx`, `opengraph-image.tsx`, `error.tsx`, `global-error.tsx` and `not-found.tsx`.
+
 ### State stores
 | Store | File | Holds |
 |---|---|---|
-| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`; `dressed` — auto set-dressing — is **off by default**, and `STUDIO_PREFS_VERSION` 1 resets the old `true` default once). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
-| `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache, `appearance` (night mode: `system` / `light` / `dark`, checked against the vocabulary on read — see "Night mode" below). Persisted to localStorage (`danmu-settings`, a key named once in `lib/appearance.ts` because the inline boot script reads it too). |
+| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, `parentIds` (rigid parenting), `hidden`, `pinned` (the user's **Lock**), lighting + `hour`, quality, dressed, snap, open state, grid, view preset, transform mode, the two rails' open state and width. **Only the view *preferences* persist** (`STUDIO_PREFS`: `lighting`, `quality`, `dressed`, `snapMode`, `showGrid`, `railLeftOpen`, `railRightOpen`, `railLeftW`, `railRightW` → `danmu-studio-prefs`, via `partialize`; `dressed` — auto set-dressing — is **off by default**, and `STUDIO_PREFS_VERSION` 1 resets the old `true` default once; an `hour` from an earlier visit is dropped on load, the light opens at the clock). Selection / camera / open drawers are ephemeral; transforms, `hidden`, `pinned` and `parentIds` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
+| `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache (`keyValid`, `keyValidReason`), `appearance` (night mode: `system` / `light` / `dark`, checked against the vocabulary on read — see "Night mode" below). Persisted to localStorage (`danmu-settings`, a key named once in `lib/appearance.ts` because the inline boot script reads it too). |
 | `useRoom` | `lib/store.ts` | active room id. Persisted (`danmu-room`). |
-| `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup + room. |
+| `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup, the room (`room`: size, footprint, wall colours, `site`), `moveWall`, and `hydratedRoomId` — set only by `RoomSync` once its reads are in, which is what lifts the `CanvasVeil`. |
 
 > There is no `useCompose` — it was deleted with the render pipeline.
 
@@ -3337,7 +3493,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | `lib/chair-form.ts` | **The dining chair, the office chair, the armchair and the ottoman.** A dining chair is four legs under a seat frame of rails set in from their faces, a low H-stretcher, an upholstered pad on the frame, and a back of a crest rail and a lower rail between the rear uprights with three slats in both; an office chair is five casters under a star with one spoke straight ahead, a hub, a gas lift in its dust cover, a mechanism and pan, T-arms on brackets and a back cushion on a shell carried by a spine; an armchair is four turned, tapered legs, rolled arms the depth of the chair, a back panel and three cushions; an ottoman (`ottomanForm`, `OTTOMAN`) is four turned legs in brass ferrules, a base piped round its top and a buttoned padded top. All three are hard-goods parts plus soft-goods cushions, NON-parametric (§ 36) and swept by `tests/hard-goods.test.ts` with the rest; the armchair's leaning scatter cushion is the one placement that mixes two axes, as it did before. It replaced `FitToDim`, the per-axis stretch of fixed metres whose last users these three were. **The half that is not cosmetic is `DINING_CHAIR` / `OFFICE_CHAIR`'s `seatTop` / `armTop` and `back`**: `tuckProfile` and `seatBackShare` (`lib/layout-rules.ts`) read them, so how high a chair reaches under a table and how much of its depth its back takes are the drawing's own numbers, not literals beside it — and they are the old drawings' values, so a chair tucks exactly as far as it did. `tests/chair-form.test.ts` holds the drawn seat top and back face to them at 46 sizes, and the joinery (slats in both rails, casters on the floor, a straight-ahead spoke, legs under the arms they carry). |
 | `lib/parts-catalog.ts` | Room defaults + catalog data. |
 | `lib/scene-store.ts` | Scene parts CRUD + grouping. |
-| `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`, `version`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. `reslotCaptures` moves the whole set of wall photos in one operation, for three reasons that each cost something: the WHOLE record travels (the pairwise swap it replaces re-wrote `{ slot, blob, takenAt }` and silently dropped `pose`, so reordering photos threw away the focal length, the tilt and the bearing — `pose` being optional is what let it typecheck); writes precede deletes (a vacated key that outlives its write is a duplicate the user can delete, a deleted key whose write never landed is a photograph that is gone); and a mapping that would land two photos on one wall is refused rather than absorbed. |
+| `lib/storage.ts` | IndexedDB room persistence. One room is a set of keys: `room:{id}:meta` (`RoomData`: name, `layoutId`, size, `roughSize`, `wallColors`, `site`, `footprint`, `detectedObjects`, `version` — `ROOM_SCHEMA_VERSION` is 2, the first non-additive change, where `locked` came to mean *kept*), `:scene` (the parts), `:transforms` (positions, rotations, dims, `hidden`, `pinned`, `parentIds`), `:cap:*` (photos, each with its `pose`), `:layout:*` (saved arrangements), `:touched` and `:wrote:{part}`. A `detectedObjects` row holds `uid`, `label`, `conf`, `source`, `locked`, `box`, `category`, `dimMM`, `position`, `yaw`, `shape` and the two a person's review adds: **`sameAs`** (the uid of an earlier row this one repeats, so it is not built) and **`seenAt`** (the spot combined from every sighting linked to a kept floor piece, written on Continue and preferred by the room builder; both from `lib/sighting-links.ts`, read and written by `lib/detection-record.ts`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. `reslotCaptures` moves the whole set of wall photos in one operation, for three reasons that each cost something: the WHOLE record travels (the pairwise swap it replaces re-wrote `{ slot, blob, takenAt }` and silently dropped `pose`, so reordering photos threw away the focal length, the tilt and the bearing — `pose` being optional is what let it typecheck); writes precede deletes (a vacated key that outlives its write is a duplicate the user can delete, a deleted key whose write never landed is a photograph that is gone); and a mapping that would land two photos on one wall is refused rather than absorbed. |
 | `lib/scene-palette.ts` | Scene-side semantic colours — the one home for values the 3D layer, the canvas exports and the panels that edit them must agree on, since neither Three.js materials nor a 2D canvas can read a CSS custom property. Exports `SCENE` (selection / hover / locked / shell), `PLAN` (the floor-plan PNG's palette) and `defaultBodyColor(category, shape)`. Kept in sync with `globals.css` by hand, guarded by a test. **`defaultBodyColor` takes BOTH arguments**: within one category the shapes do not match (a dining chair is walnut, an office chair charcoal), and the renderer and the Inspector's "Default for this piece" swatch must return the same value. The predecessor took a single loosely-typed `category` and was keyed on material-group names, so 18 of 22 categories fell through to one tan default. It also carries **`DETAIL`** (the outline every `Box` draws, dark walnut legs, near-black hardware) and **`DECOR`** (the book / pot / vase / pillow sets `Dressing` scatters) — not recolourable, so deliberately out of `defaultBodyColor`, but each was a literal repeated across renderers, which is several values pretending to be one. There were literally two book palettes, six spines in `Dressing` and eight in `BookshelfGeo`, so the books on a shelf did not match the books beside it. A test now scans `components/three/*.tsx` and fails on any hex this module owns, shorthand included. |
 | `lib/fit-check.ts` | **Will this actually fit?** `checkFit` seats one candidate with everything else locked and reports one of four answers with the room report's own reasons. Pure; asked from the Library's "Use my own size" through `addPieceToRoom`. See §5. |
 | `lib/space-bound.ts` | **How wide a piece may be made here.** A wall piece's limit is its own wall (found by heading, not nearest point); anything else's is the room's reach at its angle, the drag's `roomIsWideEnough` solved for one side. Measures only; the Inspector's size fields and `addPieceToRoom` refuse and say `describeSpaceRefusal`'s sentence. Only a growing axis is refused; height never. |
@@ -3349,14 +3505,20 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | `lib/themes.ts` | One-tap restyle palettes — four, each a different room. |
 | `lib/capture.ts` / `lib/image-quality.ts` | Photo capture + quality (the colour-sampling module is deleted — scanned pieces take default colours). `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. `readCaptureFacts` is the one EXIF read, returning two things with two lifetimes: the `pose` persisted onto the `Capture` for as long as the room exists, and the transient facts that decide which wall this is and are then dropped. It MUST run on the original file — the strip destroys exactly what it reads, which is the point of the strip. |
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
-| `lib/color.ts` | Colour arithmetic: WCAG contrast, and OKLab as a space where "same colour" means something. `globals.css` states a ratio next to almost every token and `CLAUDE.md` turns those into a rule, but nothing checked any of it — a comment claiming a ratio is a comment. It also lets `scene-palette.ts`' hand-copied duplicates be compared perceptually rather than by string equality, which is brittle one way and blind the other. |
 | `lib/appearance.ts` | Night mode's vocabulary and plumbing: `APPEARANCES`, the inline `APPEARANCE_BOOT` script that sets `<html data-theme>` before first paint, `applyAppearance` (with the one-frame transition blackout) and `applyThemeColor`. Applied after hydration by `components/AppearanceSync.tsx`. See "Night mode" in §6. |
 | `lib/drag-live.ts` | The high-frequency drag channel, deliberately **outside** `useStudio` — see §5. |
 | `lib/scene-file.ts` | The `.danmu.json` scene file — build, serialise, and defensively parse. The app's only import path and so its only untrusted input; see §6a. `buildSceneFile` bakes the studio's transform overrides so the file holds one truth per piece, and `parseSceneFile` never throws: it returns a reason, or a file plus the list of what it dropped. Its filename comes from `exports.ts`' `fileSlug`. |
-| `lib/exports.ts` | **What to call a file the user is taking away** — `fileSlug` and `snapshotFileName`. The three downloads each named themselves: the scene file slugged the room's name with a length cap, the export menu slugged it without one, the floor plan did not slug at all — it was `floor-plan.png` every time — and the 3D view was the last holdout, a fixed `room-snapshot.png` that was the same for every room, so exporting three rooms left three files the browser silently numbered `(1)` and `(2)`. The cap earns its place too: a 300-character room name produces a filename the OS may refuse to write, which surfaces as a download that did nothing. Two things are deliberately NOT here — the furniture CSV (retired; see the top bar above) and the transform merge (that is `lib/transforms.ts`, enforced by `tests/room-scene.test.ts`). Tested in `tests/exports.test.ts`. |
+| `lib/exports.ts` | **What to call a file the user is taking away** — `fileSlug` and `snapshotFileName`. The three downloads each named themselves: the scene file slugged the room's name with a length cap, the export menu slugged it without one, the floor plan did not slug at all — it was `floor-plan.png` every time — and the 3D view was the last holdout, a fixed `room-snapshot.png` that was the same for every room, so exporting three rooms left three files the browser silently numbered `(1)` and `(2)`. The cap earns its place too: a 300-character room name produces a filename the OS may refuse to write, which surfaces as a download that did nothing. Two things are deliberately NOT here — the furniture CSV (retired; see §5's top bar) and the transform merge (that is `lib/transforms.ts`, enforced by `tests/room-scene.test.ts`). Tested in `tests/exports.test.ts`. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
 | `lib/dates.ts` | Timestamp formatting — the counterpart to `units.ts`. Relative `editedLabel`, absolute `savedLabel`, and the workspace's recency buckets. |
 | `lib/use-media-query.ts` | The one `matchMedia` hook. `useMediaQueryState` also returns `ready`, for callers that pick a whole layout and must not paint the wrong one first. |
+| `lib/detection-record.ts` · `lib/sighting-links.ts` · `lib/repeat-sightings.ts` · `lib/slot-names.ts` · `lib/review-history.ts` | **Detection records and the review's answers.** `detection-record` is the one codec between a `Detection` and the stored `detectedObjects` row (both directions, so a field cannot be written and not read). `repeat-sightings` is the app's *guess* that two rows are one piece seen twice; `sighting-links` is the person's answer — `sameAs` on the later row — plus the combined floor spot (`seenAt`). `slot-names` holds the words a wall goes by and the one reader of them. `review-history` is undo / redo for the review, which lives in component state until `finish()`. |
+| `lib/room-presets.ts` · `lib/room-start.ts` | The room shapes a new room starts from and the one way a room is made from one (the New room page and the empty rooms page's starter share it); `room-start` is the room as it first arrived, which **Start over** puts back. |
+| `lib/rigid-parent.ts` · `lib/orphan-drop.ts` · `lib/to-wall.ts` · `lib/duplicate-place.ts` · `lib/press-selection.ts` | Gestures' company and edges: `cascadeTransform` carries what rests on a piece; `orphan-drop` says what happens to pieces standing on something deleted; `to-wall` is the Inspector's **Wall** button as a convoy gesture; `duplicate-place` puts a copy beside its original, never inside it; `press-selection` is what was selected when a press landed. |
+| `lib/plan-annotations.ts` · `lib/plan-view-transform.ts` · `lib/plan-export.ts` · `lib/plan-hit.ts` | The 2D plan's arithmetic: where the outside-the-room annotations sit, client pixels to viewBox, the PNG export, and what is under the pointer. |
+| `lib/model-cache.ts` · `lib/backup-nudge.ts` · `lib/leave-note.ts` · `lib/page-leave.ts` | Local persistence beyond rooms: the detector's verified weights kept in Cache Storage after the first download (written by the page, not the service worker); the nudge to keep rooms from vanishing with site data; the synchronous leave note; the save-on-leave hooks. |
+| `lib/label-suggest.ts` · `lib/photo-drop.ts` · `lib/photo-tag.ts` | The review and capture screens' small decisions: what to offer when a detected piece is renamed; what a drop onto a photo tile means (replace vs reorder); where a piece's name tag sits on the photo. |
+| `lib/after-paint.ts` · `lib/brand-mark.ts` · `lib/site-url.ts` | Let a busy state paint before blocking work; the Danmu mark drawn once for the places that cannot share a renderer; the absolute site URL Open Graph tags need. |
 
 ### Night mode — `lib/appearance.ts`
 
@@ -3499,6 +3661,8 @@ target in a way an explicit Back button is not. Do not "fix" detect's to match.
 | `NumberField.tsx` | Measurement input with our own two-chevron stepper (the native spinner is suppressed app-wide). Hold-to-repeat reads the clock and pays at most 3 steps per tick — a plain interval drifts badly when every step re-renders an inspector and a 3D scene, and pure clock catch-up turns one starved tick into a huge leap. It calls `onChange` through a ref, since callers rebuild that closure each render over their own local state. Chevrons are `aria-hidden` + `tabIndex -1`: the input is already a spinbutton and Up/Down step it. |
 | `StorageToast.tsx` | One live region for the whole app, plus the imperative `toast()`. Lifted clear of the studio's bottom-right control cluster on `/room/` routes — the card takes pointer events, so at the default offset it swallowed their clicks. |
 | `DocShell.tsx` | The document-route shell — see above. Takes `trail` (the breadcrumb), `actions`, `back`, `measure` (`page` \| `prose`) and `variant` (`plain` \| `hero`). |
+| `FlowStepper.tsx` · `BuildingRoom.tsx` · `FindingFurniture.tsx` · `LoadingOverlay.tsx` · `DetectorPackPicker.tsx` | The photo route's furniture: where you are (Shape, Photos, Furniture, Room), the last step's "building" screen, the wait while the finder runs, a blocking progress overlay, and the Basic / Full detector choice shared by the scan screen and Settings. |
+| `IsoRoom.tsx` · `ShapeIcon.tsx` | The empty rooms page's isometric hero, and the chip that draws a piece's shape at the start of list rows. |
 | `Confirm.tsx` · `ColorPicker.tsx` | Promise-based confirm modal; HSV picker. Both exist to keep an OS widget out of the UI. |
 
 ### Waiting: what the app shows while it works
@@ -3709,9 +3873,8 @@ rather than a room that lists in the workspace and opens empty
 
 ## 8. Roadmap
 - **Group rotate / scale-as-one** to finish multi-select (translate done).
-- Bundle a curated **CC0 GLB library** for higher-fidelity pieces.
 - More parametric shapes + richer decor kinds.
-- Multi-room projects / rooms dashboard.
+- Grouping rooms into one project (the rooms page lists rooms; there is no parent above a room).
 - Export polish — the scene file and both PNG exports have shipped; what is left is
   a nicer share affordance around them.
 
@@ -3727,7 +3890,8 @@ rather than a room that lists in the workspace and opens empty
 pnpm install
 pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest run — pure logic, plus the jsdom files (storage*, history)
+pnpm test         # vitest run --disableConsoleIntercept — pure logic, plus the files that opt into jsdom
+pnpm test:watch   # the same, watching
 pnpm build        # next build
 pnpm lint         # eslint . --max-warnings 0 — `next lint` is gone in Next 16
                   # flat config; ESLint must stay >= 9 or `next build` lints nothing
@@ -3735,10 +3899,11 @@ pnpm audit        # dependency advisories; transitive fixes live in pnpm.overrid
 pnpm vendor:ort   # copy onnxruntime-web into public/ort/ so it loads same-origin
 pnpm hash:models  # print SHA-256 digests of public/models/ for MODEL_DIGESTS
 pnpm hash:models --verify   # …and check the mirror serves the same bytes (~62 MB)
+pnpm sweep:routes # minutes-long refusal-set sweep behind tests/suggest-tidiness.test.ts — a measurement, not a gate
 ```
 
-`.github/workflows/ci.yml` runs the first four on every push to `main` and every
-pull request. One job, `contents: read`, no secrets — a local-first app with no
+`.github/workflows/ci.yml` runs typecheck, lint, test and build on every push to `main` and every
+pull request, plus `pnpm audit` as an advisory step that cannot fail the job. One job, `contents: read`, no secrets — a local-first app with no
 backend has nothing to give a build. Node is 22 and pnpm comes from
 `packageManager`, so CI does not carry a second copy of either version.
 
@@ -3761,13 +3926,13 @@ geometry engine, the solver, the room report and IndexedDB keep working, because
 none of them fetch. What failed was a **reload**: the browser had nowhere to get
 the document from, so it showed its own error page for an app that needed no
 network. `public/sw.js` closes that, and `app/manifest.ts` makes the result
-installable.
+installable (`components/ServiceWorkerRegistrar.tsx` registers the worker, in production only).
 
 | Request | Strategy | Why |
 |---|---|---|
 | Cross-origin | **not intercepted** | Gemini, the ORT CDN, the weights. A cache is storage; storing those is not the worker's business. |
 | `/_next/static/*` | cache-first | Content-hashed, so a URL match is always the right bytes. |
-| Navigations | network-first, then this exact URL, then `/` | A reload of `/room/<id>/model` must come back as that room, not the home page. |
+| Navigations | network-first, then this exact URL, then the same page under another query (`/settings?from=…` is one document), then `/` | A reload of `/room/<id>/model` must come back as that room, not the home page. |
 | Other same-origin | network-first, cache fallback | The manifest, the icon, RSC payloads for client-side navigation. |
 
 Verified in a real browser rather than reasoned about: after an offline reload of
@@ -3775,7 +3940,7 @@ the studio, the room panel renders **identically** to online — same clear-floo
 percentage, same verdict — with no console errors. Non-GET and `Range` requests
 are passed through untouched.
 
-Two limits, both deliberate. **The first visit must be online**: there is no
+The worker precaches only the two routes with fixed URLs, `/` and `/settings` (its cache names carry a version, rotated when a route moves); everything else is cached on first use. Two limits, both deliberate. **The first visit must be online**: there is no
 build-time precache manifest, because a hand-written file in `public/` cannot know
 Next's content-hashed chunk names, and generating one means writing into `public/`
 after a build that the target hosts have already snapshotted — it would work

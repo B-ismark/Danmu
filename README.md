@@ -23,13 +23,13 @@ every current feature, architecture, geometry engine, and roadmap).
   under Next 15's App Router)
 - **Zustand** (client state)
 - **idb-keyval** for rooms, **localStorage** for settings + API key
-- **onnxruntime-web** — local, in-browser furniture detection (no key). Two
-  YOLOv8 models run as an ensemble: a fixed 601-class Open Images detector plus
+- **onnxruntime-web** — local, in-browser furniture detection (no key). The
+  **Full** pack runs two YOLOv8 models as an ensemble (**Basic** keeps just the small one): a fixed 601-class Open Images detector plus
   an open-vocabulary one prompted with Danmu's own furniture words, because they
   miss different things. The runtime is loaded at runtime, not bundled — from
   same-origin `public/ort/` after `pnpm vendor:ort`, with a CDN fallback — so
-  onnxruntime-web is a devDependency (types only). The ~64 MB of weights are not in the repo: they
-  are fetched on demand from
+  onnxruntime-web is a devDependency (types only). The weights (~64 MB for Full; Basic is smaller) are not in the repo: the first scan
+  asks before fetching them, once, from
   [DearthAI/danmu-detector](https://huggingface.co/DearthAI/danmu-detector), or
   built locally with `python scripts/export-detector.py`. Those weights are
   AGPL-3.0 (Ultralytics) and hosted separately for that reason — Danmu itself
@@ -55,13 +55,13 @@ without any key: pick a footprint and start decorating.
 
 | Path | Purpose |
 |---|---|
-| `/` | Rooms list, the first screen — create / resume / delete / **open a saved room file** |
+| `/` | Rooms list, the first screen — create / open / select & delete / **open a saved room file** |
 | `/onboarding/layout-pick` | Pick footprint preset (sets dims + starter scene) |
-| `/onboarding/capture` | 4-wall guided capture (`getUserMedia`) |
-| `/onboarding/detect` | Furniture detection (local ONNX → Gemini → manual) |
+| `/onboarding/capture` | Add up to four wall photos (upload or `getUserMedia`); each is filed to a wall you can change |
+| `/onboarding/detect` | Check furniture: review list (local ONNX → Gemini → manual), then the Building screen |
 | `/room/[id]/model` | **3D decoration studio (default)** |
 | `/room/[id]/plan` | 2D floor plan |
-| `/settings` | Key, display unit, danger zone |
+| `/settings` | Detection key, display unit, Downloads (the local detector, Basic or Full), your rooms, feedback |
 
 ## Architecture rules
 

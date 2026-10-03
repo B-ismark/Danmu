@@ -8,7 +8,7 @@ import {
   Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Mail, Pencil, Trash2, RefreshCw,
   Image, Play, ArrowRightLeft, Circle, Sun, Sunrise, Sunset, Moon, Cloud, Compass,
   RotateCcw, RotateCw, Maximize, Copy, Undo2, Redo2, type LucideIcon,
-  Ellipsis, List, SlidersHorizontal, Heart, Lightbulb, House, Search, SquareDashed, Ungroup,
+  Ellipsis, List, SlidersHorizontal, Heart, Lightbulb, House, Search, SquareDashed, Ungroup, Link2, Unlink2,
 } from 'lucide-react';
 
 // Single icon surface for the whole app. Backed by Lucide (MIT, free) — a
@@ -39,7 +39,8 @@ export type IconName =
   | 'swap' | 'ungroup' | 'snap-wall' | 'snap-floor'
   | 'more' | 'list' | 'sliders' | 'heart' | 'idea'
   | 'palette' | 'pointer'
-  | 'home' | 'search' | 'footprint';
+  | 'home' | 'search' | 'footprint'
+  | 'link' | 'unlink';
 
 const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, LucideIcon> = {
   'arrow-right': ArrowRight, 'arrow-left': ArrowLeft, 'arrow-up-right': ArrowUpRight,
@@ -63,6 +64,7 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, Lu
   more: Ellipsis, list: List, sliders: SlidersHorizontal, heart: Heart, idea: Lightbulb,
   palette: Palette, pointer: MousePointerClick,
   home: House, search: Search, footprint: SquareDashed,
+  link: Link2, unlink: Unlink2,
 };
 
 type Props = {

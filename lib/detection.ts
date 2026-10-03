@@ -42,6 +42,10 @@ export type Detection = {
   yaw?: number;
   /** AI-picked shape from our catalog. If missing or unknown, we fall back to refineShape() heuristic. */
   shape?: string;
+  /** The uid of the row this one is a second sighting of, when the person said so
+   *  on the review screen (`lib/sighting-links.ts`). A linked row is never kept, so
+   *  it is never built; it stays on the list so the link can be undone. */
+  sameAs?: string;
 };
 
 

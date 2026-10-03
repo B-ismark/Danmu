@@ -742,6 +742,8 @@ pnpm test         # vitest run --disableConsoleIntercept — pure-logic suite
 pnpm build        # next build
 pnpm lint         # eslint . --max-warnings 0 — flat config in eslint.config.mjs
 pnpm audit        # dependency advisories — see `pnpm.overrides` in package.json
+pnpm test:watch   # vitest in watch mode, same flag
+pnpm sweep:routes # minutes-long refusal-set sweep (a measurement, not a gate)
 pnpm vendor:ort   # copy onnxruntime-web → public/ort/ (loads same-origin, not CDN)
 pnpm hash:models  # SHA-256 digests of public/models/ for MODEL_DIGESTS
 pnpm hash:models --verify   # …and confirm the mirror serves those same bytes (~62 MB)
@@ -764,9 +766,9 @@ they fail faster.
 Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
 ranges / shape-search / item-snap / units / dates / scene-file / transforms /
-fit-check / capture-slots / detect-prompt / exif all have tests
-in
-`tests/`).
+fit-check / capture-slots / detect-prompt / exif / sighting-links /
+repeat-sightings / drag-convoy / drag-resolve / layout-rules / layout-score all
+have tests in `tests/`).
 
 **A dead-code sweep that does not read `tests/` is not a sweep.** Two kinds of
 false positive here, and each nearly cost something real. A class or token reached
@@ -857,13 +859,14 @@ the boundary honest in both directions: a module only tests import does not belo
 
 - `app/` — Next App Router. Routes: `/` (the rooms list — the first screen; `/workspace`
   and `/onboarding/welcome` redirect there), `/onboarding/{layout-pick,capture,detect}`,
-  `/room/[roomId]/{model,plan}`, `/settings`. Only two studio tabs
+  `/room/[roomId]/{model,plan}` (`/room/[roomId]` itself redirects to `model`), `/settings`. Only two studio tabs
   (`3D Model`, `2D Plan`).
 - `components/three/` — R3F scene (`Room`, `DynamicPart`, `Draggable`, `Pickable`,
   `RoomShell`, `WallHandles`, `Dressing`, `Motion`).
 - `components/studio/` — 2D UI (`Inspector`, `PartTree`, `CatalogPanel`,
   `ViewOptions`, `PlanView`, `SelectionHeader`, `LibraryPicker`, `TopBar`, …).
-  Layout lives in three shells — `StudioShell` (both room tabs),
+  Layout lives in three shells — `StudioShell` (both room tabs; it picks
+  `shells/DockedShell` from 1024px and `shells/SheetShell` below),
   `ui/DocShell` (rooms / settings / layout-pick) and `CanvasChrome`
   (the studio's three canvas slots). A new control joins an existing slot or
   a rail section; it does not start a fourth canvas corner.
