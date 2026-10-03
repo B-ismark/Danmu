@@ -2033,6 +2033,33 @@ textarea.field { border-radius: var(--r-2); }
   margin: 0 16px 12px; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
 }
 
+/* ── Building your room (components/ui/BuildingRoom.tsx) ──────────────────────
+   The photo route's last screen, up while the review is written into the room. The
+   illustrated room fills piece by piece; under reduced motion every piece is there
+   at once (the global reduced-motion block zeroes the stagger too). */
+.build-screen { min-block-size: 100dvh; padding: 24px 16px 32px; background: var(--paper); }
+.build-screen__layout {
+  display: grid; gap: 24px 40px; align-items: center; margin-inline: auto;
+  max-inline-size: var(--measure-page); grid-template-columns: minmax(0, 1.2fr) minmax(260px, 1fr);
+}
+@media (max-width: 799px) { .build-screen__layout { grid-template-columns: minmax(0, 1fr); } }
+.build-screen__art { aspect-ratio: 4 / 3; max-inline-size: 640px; inline-size: 100%; justify-self: center; }
+.build-screen__side { display: flex; flex-direction: column; gap: 14px; max-inline-size: 44ch; }
+.build-screen__title { font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
+.build-screen__lede { margin: 0; font-size: var(--fs-lead); color: var(--ink-2); }
+.build-screen__stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; }
+.build-screen__stats > div {
+  flex: 1 1 90px; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: var(--r-3); background: var(--paper);
+}
+.build-screen__stats dt { font-size: var(--fs-caption); font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.build-screen__stats dd { margin: 2px 0 0; font-size: var(--fs-lead); font-weight: 700; color: var(--ink); }
+.build-screen__note { margin: 0; font-size: var(--fs-small); color: var(--ink-3); line-height: 1.5; }
+.iso-room__piece {
+  animation: iso-settle var(--dur-slow) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--dur-base));
+}
+@keyframes iso-settle { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+
 /* The shape picker's options: as many across as the column takes at ~170px, so
    three in the laptop's left column and two on a phone. `auto-fit`, not
    `auto-fill`: an empty extra track would stop the row short of the column's
@@ -2228,6 +2255,9 @@ textarea.field { border-radius: var(--r-2); }
     scroll-behavior: auto !important;
   }
   .ds-btn:hover, .ds-btn:active, .ds-card:hover, .start-card:hover { transform: none !important; }
+  /* The duration above is cut, the stagger is not: without this the Building screen's
+     pieces wait their turn invisibly, on a screen that is up only as long as the save. */
+  .iso-room__piece { animation-delay: 0s !important; }
 }
 
 

@@ -12,6 +12,7 @@ import { CAPTURE_SLOTS } from '@/lib/capture';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { EditableText, FlowBarLead, IconButton } from '@/components/ui/primitives';
 import { FlowStepper } from '@/components/ui/FlowStepper';
+import { BuildingRoom } from '@/components/ui/BuildingRoom';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { Select } from '@/components/ui/Select';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
@@ -59,6 +60,10 @@ type Box = [number, number, number, number];
 /** One shared empty list, so a row with no offer is handed the same reference every
  *  render rather than a fresh `[]`. */
 const EMPTY_OFFER: LabelCandidate[] = [];
+
+// How long the Building screen stays up at the least, so it is read rather than
+// glimpsed. The save behind it usually takes a fraction of this.
+const BUILD_MIN_MS = 1200;
 
 /** How many colour samples decode at once. See the sampling effect below. */
 const COLOR_BATCH = 4;
@@ -297,6 +302,10 @@ export default function DetectPage() {
   const detectorPack = useSettings((s) => s.detectorPack);
   const [fetched, setFetched] = useState<DownloadProgress | null>(null);
   const [saving, setSaving] = useState(false);
+  // The Building screen, from Continue until the studio has taken over. Not `saving`:
+  // that clears in `finish`'s `finally` as soon as the push is issued, which would
+  // flash the review back up for the moment before the route changes.
+  const [building, setBuilding] = useState(false);
   const [slots, setSlots] = useState<SlotEntry[]>([]);
   const [detections, setDetections] = useState<Detection[]>([]);
   // Persisted as `locked` on RoomData.detectedObjects, and it means KEPT: only these
@@ -887,6 +896,9 @@ export default function DetectPage() {
   async function finish() {
     if (!roomId) return;
     setSaving(true);
+    setBuilding(true);
+    const shownAt = performance.now();
+    let opened = false;
     try {
       const room = await roomStore.loadRoom(roomId);
       if (!room) return;
@@ -906,9 +918,16 @@ export default function DetectPage() {
         const edit = await adoptEditedList(room, flat);
         if (edit) toast({ title: 'Your room now matches this list', message: listEditSentence(edit), ttl: 9000 });
       }
+      // Long enough to be read rather than flicker; not at all for someone who has
+      // asked for less motion, for whom the wait would be the only thing it added.
+      const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      const wait = still ? 0 : BUILD_MIN_MS - (performance.now() - shownAt);
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       router.push(`/room/${roomId}/model`);
+      opened = true;
     } finally {
       setSaving(false);
+      if (!opened) setBuilding(false);
     }
   }
 
@@ -991,6 +1010,14 @@ export default function DetectPage() {
       : keptCount === 0
         ? 'Continue with an empty room'
         : `Continue with ${keptCount} ${keptCount === 1 ? 'piece' : 'pieces'}`;
+
+  if (building)
+    return (
+      <BuildingRoom
+        dimUnit={dimUnit}
+        facts={roomDims && { ...roomDims, rough: roughSize, pieces: keptCount, photos: photoCount }}
+      />
+    );
 
   const linkedBox = linked !== null && detections[linked]?.slot === activeSlot ? detections[linked].box : null;
 

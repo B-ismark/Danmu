@@ -2726,3 +2726,20 @@ edge; the pinned photo sliding under the steps as the list scrolls.
 scan, no privacy line, and no download card in that walk).
 
 **Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## The Building screen
+
+**Where:** the photo route to the end — *Check your furniture* → *Continue*. For a
+moment (1.2 s at the least) the review gives way to the four steps with Room current,
+the illustrated room filling piece by piece, *Building your room*, the room's size, and
+three tiles: floor area, pieces kept from the photos, photos used. Then the studio opens. With reduced motion
+on, it shows only as long as the save takes and the pieces appear without moving.
+
+**What wrong looks like:** the review flashing back between this screen and the studio;
+an L-, T- or U-shaped room's floor reading as its bounding box (width × depth); a room
+never sized showing figures without ≈; the tiles running off a phone's edge.
+
+**Why eyes:** walked once in headless Chromium at 1280 and 375 on an L-Shape and a
+Rectangle; the studio opened both times.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
