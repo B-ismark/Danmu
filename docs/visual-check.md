@@ -3081,3 +3081,85 @@ wall; curtains smaller than the window; a sofa wildly off the size of the one in
 is not.
 
 **Merged:** `a2ec948` (B-ismark/Danmu#254), not yet looked at.
+
+## The day strip stays put when the Library opens, and the sun is golden
+
+**Where:** the 3D room at a laptop width and at about 900px. Open the day strip; then press
+*Add a piece* with the strip open and closed; then a phone. Look at the sun on the strip.
+Overcast and the room's turn buttons now live in the strip's extras row.
+
+**What wrong looks like:** the strip sliding sideways or re-centring as the Library opens;
+the Library card covering the strip's extras row; the strip too tight to drag on a phone or
+spilling past the canvas; a sun that reads green or brown rather than golden; Overcast or
+the turn buttons missing.
+
+**Why eyes:** the strip's position and the Library's dock are tested; whether the golden
+sun sits well on both the day sky and the night sky is a judgement.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## No Light section in Style, and a new room opens without decor
+
+**Where:** the Room rail's Style section; a brand-new room; then a room you had open before
+this change with decor turned on.
+
+**What wrong looks like:** a Light heading still under Style; a new room arriving with
+throws, books and plants scattered on it; decor not coming back from the view settings when
+you turn it on.
+
+**Why eyes:** the default and the reset are tested; whether an empty room now looks bare
+rather than calm is a judgement.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## The Add photos tile fills the photo column
+
+**Where:** *Photograph my room* before any photo, at a laptop width, at about 1024px and on
+a phone; then add one photo.
+
+**What wrong looks like:** a short squat tile with empty space under it, or a tall thin
+strip; the tile not shrinking back into the grid once a photo is in.
+
+**Why eyes:** sizes are measured (about 714×578 at 1366, 356×318 on a phone); whether that
+reads as well proportioned is a judgement.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Check furniture rows with a colour dot, and a centred Building screen
+
+**Where:** run a scan. Watch the Building screen; then the review's *Your pieces* list.
+
+**What wrong looks like:** a coloured stripe still down a row's left edge; a dot you cannot
+match to its box on the photo; the Building screen's words off-centre, the bar jumping, or
+anything moving with reduced motion.
+
+**Why eyes:** the markup is tested; the bar's pace is not.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Scanned pieces wear model colours, and a Style theme recolours them
+
+**Where:** build a room from photos; then pick each Style theme.
+
+**What wrong looks like:** every scanned piece one aubergine tint; a theme recolouring the
+pieces you added but leaving the scanned ones alone; the theme's tick not showing after you
+pick it.
+
+**Why eyes:** both halves are tested in source; a real scan built is not.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## 3D Model comes back instantly from 2D Plan
+
+**Where:** a room on a real machine; switch 3D → 2D → 3D a few times, with and without
+moving something in the plan; orbit in between; press keys in the plan.
+
+**What wrong looks like:** a loading veil on the way back; the camera jumping to a
+different view; a move made in the plan not showing in 3D; arrow keys in the plan also
+turning the 3D camera behind it; the laptop fan spinning while the plan is open (the 3D
+should be paused).
+
+**Why eyes:** in a production build under software rendering the switch measured about a
+tenth of a second; a real GPU, and a phone, have not been tried.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
