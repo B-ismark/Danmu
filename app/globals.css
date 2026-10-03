@@ -51,6 +51,20 @@
   --snap-edge: #1E9E54;
   --snap-center: #27A06A;
 
+  /* The isometric room drawing (`components/ui/IsoRoom.tsx`) — the empty Rooms
+     page's hero, and the room that assembles while a scan is being built. A
+     drawing, never type: decorative values, so no contrast is claimed. Floor and
+     two walls, then five furniture tones drawn from the same warm set as the
+     palette (clay, walnut, sage, mustard, moss). */
+  --art-floor: #D6B98C;
+  --art-wall-n: #EFE5CD;
+  --art-wall-w: #E0D3B3;
+  --art-1: #C8765A;
+  --art-2: #8D6B48;
+  --art-3: #8FAE8B;
+  --art-4: #E8B040;
+  --art-5: #55793F;
+
   --danger: #B4432F;        /* 5.42:1 on --paper */
   --danger-tint: rgba(180, 67, 47, 0.10);
   --danger-text: #963523;   /* 6.28:1 on --danger-tint — for text sitting in a danger banner */
@@ -575,6 +589,73 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 /* The picked card's drawing takes a wash of the accent, so a selection reads at a
    glance across a grid and not only on the ring. */
 .room-thumb-wash { position: absolute; inset: 0; background: var(--accent-tint); pointer-events: none; }
+/* The card's delete, on the drawing's other corner from the tick. A paper square
+   rather than a bare glyph, because it stands on a drawing of unknown tone. */
+.room-trash {
+  position: absolute; top: 10px; right: 10px; z-index: var(--z-sticky-local);
+  background: var(--paper); border-color: var(--edge);
+}
+
+/* The rooms page's heading row: the title and its count on the left, the filter
+   and Select on the right, wrapping under it when the row runs short. */
+.rooms-head { display: flex; align-items: flex-end; gap: 16px 24px; flex-wrap: wrap; margin-bottom: 28px; }
+.rooms-head h1 { font-size: var(--fs-hero); font-weight: 300; line-height: 1; letter-spacing: -0.02em; }
+.rooms-head__sub { margin: 8px 0 0; color: var(--ink-3); font-size: var(--fs-body); }
+.rooms-head__tools { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: 0 1 380px; min-width: 0; flex-wrap: wrap; }
+/* The filter as a pill with its key beside it. The input inside carries no box of
+   its own; the pill is the field, so the focus ring goes on the pill. */
+.room-filter {
+  display: flex; align-items: center; gap: 8px; flex: 1 1 200px; min-width: 0;
+  height: 40px; padding: 0 8px 0 14px;
+  border: 1px solid var(--edge); border-radius: var(--r-full); background: var(--paper);
+  color: var(--ink-3);
+}
+.room-filter:focus-within { border-color: var(--accent-text); box-shadow: 0 0 0 4px var(--accent-tint); }
+.room-filter input {
+  flex: 1; min-width: 0; height: 100%; border: 0; background: none; outline: none;
+  font: inherit; font-size: var(--field-fs); color: var(--ink);
+}
+.room-filter input::placeholder { color: var(--ink-3); }
+.room-filter kbd {
+  font-family: var(--font-sans); font-size: var(--fs-micro); font-weight: 700;
+  padding: 1px 6px; border-radius: var(--r-1); background: var(--paper-3); color: var(--ink);
+}
+/* A recency group's heading: label, count, and a hairline running out to the edge. */
+.room-group-head {
+  display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px;
+  font-family: var(--font-sans); font-size: var(--fs-caption); font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3);
+}
+.room-group-head::after { content: ''; flex: 1; height: 1px; background: var(--hairline); align-self: center; }
+.room-group-head .mono { color: var(--ink); letter-spacing: 0; }
+
+/* The empty Rooms page: a welcome beside a drawing, then three ways to start. */
+.rooms-welcome { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 30px; align-items: center; margin-bottom: 34px; }
+.rooms-welcome h1 { font-size: var(--fs-hero); font-weight: 300; line-height: 1; letter-spacing: -0.02em; margin: 10px 0 14px; }
+.rooms-welcome p { margin: 0; color: var(--ink-3); font-size: var(--fs-lead); line-height: 1.55; max-width: 44ch; }
+.rooms-welcome__art { background: var(--paper-2); border-radius: var(--r-card); padding: 10px 10px 0; aspect-ratio: 7 / 5; overflow: hidden; }
+@media (max-width: 759px) {
+  .rooms-welcome { grid-template-columns: minmax(0, 1fr); }
+}
+.start-cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+.start-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 20px; text-align: left;
+  font: inherit; color: var(--ink); text-decoration: none; cursor: pointer;
+  background: var(--paper); border: 1px solid var(--edge); border-radius: var(--r-card);
+  transition: border-color var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+.start-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+.start-card:disabled { cursor: progress; }
+.start-card__icon { width: 44px; height: 44px; border-radius: var(--r-3); background: var(--paper-2); display: grid; place-items: center; margin-bottom: 6px; }
+.start-card__title { font-family: var(--font-display); font-weight: 400; font-size: var(--fs-title); line-height: 1.15; }
+.start-card__desc { color: var(--ink-3); font-size: var(--fs-body); line-height: 1.45; flex: 1; }
+.start-card__go { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: var(--fs-body); margin-top: 6px; }
+/* The recommended way in: the one inked card, so the three are not three equal claims. */
+.start-card--lead { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+.start-card--lead .start-card__icon { background: color-mix(in srgb, var(--on-ink) 16%, transparent); }
+.start-card--lead .start-card__desc { color: var(--on-ink-2); }
+.rooms-foot { display: flex; align-items: center; gap: 8px 18px; margin-top: 26px; flex-wrap: wrap; color: var(--ink-3); font-size: var(--fs-small); }
+.rooms-foot__note { display: flex; align-items: center; gap: 7px; }
 
 /* What a top-bar popover hangs from: its trigger's wrapper, which the card is
    absolutely positioned against. */
@@ -1984,7 +2065,7 @@ textarea.field { border-radius: var(--r-2); }
     transition-duration: var(--dur-quick) !important;
     scroll-behavior: auto !important;
   }
-  .ds-btn:hover, .ds-btn:active, .ds-card:hover { transform: none !important; }
+  .ds-btn:hover, .ds-btn:active, .ds-card:hover, .start-card:hover { transform: none !important; }
 }
 
 

@@ -2,13 +2,11 @@
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
-import { v4 as uuid } from 'uuid';
 import { useDimUnit, useRoom, useSettings, type DimUnit } from '@/lib/store';
 import { useMediaQuery } from '@/lib/use-media-query';
-import { roomStore } from '@/lib/storage';
 import { footprintForLayout, type LayoutId } from '@/lib/footprint';
 import { polygonArea } from '@/lib/geometry';
-import { ROOM_AXES, type RoomAxis, type RoomDims } from '@/lib/dimension-ranges';
+import { ROOM_AXES, type RoomAxis } from '@/lib/dimension-ranges';
 import { formatArea, formatLength, stepFor, UNIT_OPTIONS } from '@/lib/units';
 import {
   axisBounds,
@@ -25,16 +23,8 @@ import { NumberField, fieldMinWidth } from '@/components/ui/NumberField';
 import { Select } from '@/components/ui/Select';
 import { StepHeader } from '@/components/ui/primitives';
 import { BackButton, DocShell } from '@/components/ui/DocShell';
-import { requestPersistentStorage } from '@/lib/backup-nudge';
+import { ROOM_PRESETS as PRESETS, createPresetRoom, typicalOf } from '@/lib/room-presets';
 
-const PRESETS = [
-  { id: 'rect' as const, name: 'Rectangle', width: 6.0, depth: 4.0, starter: 'Living room' },
-  { id: 'l' as const, name: 'L-Shape', width: 6.0, depth: 4.7, starter: 'Living + reading nook' },
-  { id: 't' as const, name: 'T-Shape', width: 5.5, depth: 4.7, starter: 'Living + dining' },
-  { id: 'u' as const, name: 'U-Shape', width: 6.0, depth: 5.0, starter: 'Bedroom' },
-  { id: 'open' as const, name: 'Open Plan', width: 7.5, depth: 5.6, starter: 'Living + dining loft' },
-];
-const HEIGHT = 2.8;
 
 // The drawing and the area label are both DERIVED from footprintForLayout — the
 // same function that builds the room. Hand-authored versions of each had drifted:
@@ -56,9 +46,6 @@ const HEIGHT = 2.8;
 // All of it is computed per render rather than once per preset, because the size
 // is no longer the preset's: a typed room draws every outline at the typed size.
 const VIEW = { w: 240, h: 180, pad: 20 };
-
-/** The shape's typical size — what the room is built at when nothing is typed. */
-const typicalOf = (p: (typeof PRESETS)[number]): RoomDims => ({ width: p.width, depth: p.depth, height: HEIGHT });
 
 /** Footprint polygon → SVG path in the fixed 240×180 viewBox, preserving aspect,
  *  plus the box it was drawn in (for the dimension lines) and its real floor area. */
@@ -122,6 +109,14 @@ export default function LayoutPickPage() {
   const [sel, setSel] = useState<(typeof PRESETS)[number]['id']>('rect');
   const [saving, setSaving] = useState<null | 'model' | 'capture'>(null);
   const [error, setError] = useState<string | null>(null);
+  // Arriving from the Rooms page's "Photograph your room" (`?then=photos`): the
+  // same two ways on, with the photo one leading. Read from the address after
+  // mount rather than through `useSearchParams`, which would make the whole page
+  // wait on a Suspense boundary for one boolean.
+  const [photoFirst, setPhotoFirst] = useState(false);
+  useEffect(() => {
+    setPhotoFirst(new URLSearchParams(window.location.search).get('then') === 'photos');
+  }, []);
   // Roving tabindex needs the DOM nodes: arrow keys move focus, not just state.
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -176,24 +171,11 @@ export default function LayoutPickPage() {
     }
     setSaving(dest);
     setError(null);
-    // The press that makes a room is the moment to ask the browser to keep rooms.
-    void requestPersistentStorage();
-    const id = uuid();
+    let id: string;
     try {
-      await roomStore.saveRoom({
-        id,
-        // Named after the preset it started from. Every room used to be called
-        // "My Room", which turned the workspace into a grid of identical cards.
-        name: shape.starter,
-        createdAt: Date.now(),
-        layoutId: shapeId,
-        width: dims.width,
-        depth: dims.depth,
-        height: dims.height,
-        // Untouched boxes are the shape's size, not theirs, and the studio says so
-        // until they set one. A typed size is theirs even where it equals the preset.
-        ...(entry ? {} : { roughSize: true as const }),
-      });
+      // Untouched boxes are the shape's size, not theirs, and the studio says so
+      // until they set one — which is what passing no size means.
+      id = await createPresetRoom(shapeId, entry ? dims : undefined);
     } catch {
       // Storage can genuinely refuse (private windows, full disk). Say so and
       // hand the button back rather than sitting in "Creating…" forever.
@@ -218,6 +200,26 @@ export default function LayoutPickPage() {
     setSel(PRESETS[next].id);
     optionRefs.current[next]?.focus();
   }
+
+  const decorateButton = (
+    <button
+      onClick={() => createRoom('model')}
+      disabled={saving !== null}
+      className={`ds-btn ds-btn--lg ds-btn--block-compact${photoFirst ? '' : ' ds-btn--accent'}`}
+    >
+      {saving === 'model' ? 'Creating your room…' : (<>Start decorating<Icon name="arrow-right" size={14} color={photoFirst ? undefined : 'var(--on-accent)'} /></>)}
+    </button>
+  );
+  const photoButton = (
+    <button
+      onClick={() => createRoom('capture')}
+      disabled={saving !== null}
+      className={`ds-btn ds-btn--lg ds-btn--block-compact${photoFirst ? ' ds-btn--accent' : ''}`}
+    >
+      <Icon name="camera" size={14} color={photoFirst ? 'var(--on-accent)' : undefined} />
+      {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first'}
+    </button>
+  );
 
   return (
     <DocShell
@@ -396,22 +398,20 @@ export default function LayoutPickPage() {
               </p>
             )}
 
+            {/* The order is the DOM's, not a CSS reversal, so Tab walks them in the
+                order they read — and a phone's stacked grid gets the same lead. */}
             <div className="action-row" style={{ marginTop: 20 }}>
-              <button
-                onClick={() => createRoom('model')}
-                disabled={saving !== null}
-                className="ds-btn ds-btn--lg ds-btn--accent ds-btn--block-compact"
-              >
-                {saving === 'model' ? 'Creating your room…' : (<>Start decorating<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
-              </button>
-              <button
-                onClick={() => createRoom('capture')}
-                disabled={saving !== null}
-                className="ds-btn ds-btn--lg ds-btn--block-compact"
-              >
-                <Icon name="camera" size={14} />
-                {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first'}
-              </button>
+              {photoFirst ? (
+                <>
+                  {photoButton}
+                  {decorateButton}
+                </>
+              ) : (
+                <>
+                  {decorateButton}
+                  {photoButton}
+                </>
+              )}
             </div>
           </div>
         </div>
