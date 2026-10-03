@@ -36,7 +36,7 @@
 //     arrows would move a clock nobody can see. A finger lifting off the glass is not
 //     leaving, so a touch drag does not fold it under the thumb.
 
-import { useEffect, useId, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FocusEvent, type MouseEvent, type PointerEvent } from 'react';
 import { SUN_DRAG_ID, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { DEFAULT_BEARING_DEG, compassName, formatClock, isDaytime, lightingAt, sunAt, turnedBearing } from '@/lib/lighting-moods';
@@ -177,6 +177,14 @@ export function DayStrip() {
   }, [available]);
 
   const open = carrying || near || focused;
+  // Focus moving from the slider into the extras row (or between its buttons) is still
+  // focus on the strip: folding on every blur removed the row before Tab could land in
+  // it, so the keyboard could never reach Overcast or the turn buttons.
+  const leave = (e: FocusEvent) => {
+    const to = e.relatedTarget as Node | null;
+    if (to && slotRef.current?.contains(to)) return;
+    setFocused(false);
+  };
   // Folded, the pill waits at the centre: the one place that is the same whatever the
   // hour, so the folded control never wanders.
   const px = open ? stripX(strip, hourT(hour)) : strip.width / 2;
@@ -382,7 +390,7 @@ export function DayStrip() {
             {...gestureHandlers}
             {...reach}
             onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            onBlur={leave}
             // Arrows move a quarter of an hour, Shift a whole one; Page a named
             // stop's worth. Home and End are the declared ends: the role is a
             // promise about the keys.
@@ -417,7 +425,7 @@ export function DayStrip() {
               className="day-strip__extras"
               onPointerEnter={(e) => { if (e.pointerType !== 'touch') holdOpen(); }}
               onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
+              onBlur={leave}
             >
               <div className="day-strip__tools">
                 <button

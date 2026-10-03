@@ -37,8 +37,3 @@ export function RoomSlot() {
   }, [host]);
   return <div ref={ref} style={{ position: 'absolute', inset: 0 }} />;
 }
-
-/** True when the 3D tab is the one on screen. Read by the canvas's own handlers. */
-export function useRoomVisible() {
-  return useRoomHost().attached;
-}
