@@ -3,7 +3,7 @@ import { daylightKelvin, sunDirection } from './solar';
 import { hexFromKelvin } from './light-units';
 
 // What the room's light looks like at a given moment. Read by the 3D scene
-// (`Room`), by the sun arc over the canvas (`SunArc`), by the rail's daylight
+// (`Room`), by the day strip over the canvas (`DayStrip`), by the rail's daylight
 // control (`LightingPicker`), and by `tests/lighting-moods.test.ts`.
 //
 // ── A clock, not a set of moods ──────────────────────────────────────────────
@@ -114,8 +114,8 @@ export type SkyAngle = { azimuthDeg: number; elevationDeg: number };
 
 /** Where a body stands on the day's arc at fraction `t` of its time up. The same
  *  path for the sun and the moon — the moon "comes round" the way the sun went —
- *  which is not astronomy and does not claim to be. It is what lets one dashed
- *  arc over the room carry both. */
+ *  which is not astronomy and does not claim to be. It is what lets one body
+ *  stand in for both. */
 function onArc(t: number, peakDeg: number): SkyAngle {
   // Off its own stretch of the clock a body is DOWN, whatever the sine says: the
   // sine is periodic, and left alone it raised the moon again at 16:35. Pinned to
@@ -139,18 +139,6 @@ export function sunAt(hour: number): SkyAngle {
 /** The moon at `hour`, on the same arc through the night. */
 export function moonAt(hour: number): SkyAngle {
   return onArc(nightFraction(hour), PEAK_MOON_DEG);
-}
-
-/** The hour the sun stands at point `t` (0–1) along its arc — the inverse the
- *  arc's drag handle needs. */
-export function hourOnDayArc(t: number): number {
-  return SUNRISE_H + Math.min(1, Math.max(0, t)) * (SUNSET_H - SUNRISE_H);
-}
-
-/** The hour the moon stands at point `t` along the same arc. */
-export function hourOnNightArc(t: number): number {
-  const night = 24 - (SUNSET_H - SUNRISE_H);
-  return wrapHour(SUNSET_H + Math.min(1, Math.max(0, t)) * night);
 }
 
 export function isDaytime(hour: number): boolean {
@@ -391,7 +379,7 @@ export const KEY_DIR: [number, number, number] = [
 ];
 
 /** Everything the scene needs to light the room, for one light kind, hour and
- *  bearing. The single derivation `Room` and `SunArc` both read, so the light and
+ *  bearing. The single derivation `Room` and `DayStrip` both read, so the light and
  *  the control over it cannot disagree about the sky. */
 export function lightingAt(lighting: Lighting, hour: number, northBearingDeg: number): LightState {
   if (lighting === 'overcast') {

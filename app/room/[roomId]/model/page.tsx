@@ -14,7 +14,7 @@ import { CanvasVeil } from '@/components/studio/CanvasVeil';
 import { ViewGizmo } from '@/components/studio/ViewGizmo';
 import { UndoRedo } from '@/components/studio/UndoRedo';
 import { CanvasTools, CanvasView, CanvasAide, CanvasDay } from '@/components/studio/CanvasChrome';
-import { SunArc } from '@/components/studio/SunArc';
+import { DayStrip } from '@/components/studio/DayStrip';
 
 // No `loading` fallback of its own: `CanvasVeil` covers the canvas until the 3D
 // view has drawn its first frame, which includes the wait for this chunk.
@@ -49,10 +49,10 @@ export default function ModelPage() {
         {!phone && <CatalogToggle />}
       </CanvasTools>
 
-      {/* The day, under the tools: an arc over the room on a wide canvas, a plain
-          slider on a narrow one, and still wherever the camera goes. */}
+      {/* The day, under the tools: a strip painted as the sky it scrubs, the sun
+          or moon riding it, and still wherever the camera goes. */}
       <CanvasDay>
-        <SunArc />
+        <DayStrip />
       </CanvasDay>
 
       <CanvasView>

@@ -2376,109 +2376,102 @@ textarea.field { border-radius: var(--r-2); }
 }
 
 
-/* ── The day over the canvas (components/studio/SunArc.tsx) ──────────────────
-   A rainbow of dashes under the tool row with the sun riding it, or on a narrow
-   canvas the same track lying flat as a slider. Screen-space, so it holds still
-   while the camera moves. Only the disc and the arc's stroke take the pointer —
-   the sky inside the rainbow is still the room's to orbit. */
-.sun-day {
+/* ── The day over the canvas (components/studio/DayStrip.tsx) ────────────────
+   A strip painted as the sky it scrubs (`skyGradient`, lib/day-strip.ts) with the
+   sun or moon riding it in a pill beside the time. Screen-space, so it holds still
+   while the camera moves. Folded, the strip is drawn in behind the pill; reaching for
+   it, the strip grows out of the pill and the pill glides to its hour. */
+.day-strip {
   flex: 1 1 auto; min-width: 0;
   display: flex; justify-content: center;
   pointer-events: none;
   transition: opacity var(--dur-base) var(--ease-out);
-  --sun-line: var(--ink);
-  --sun-lit: var(--accent);
 }
 /* Itself transparent to the pointer, like the slot round it — spelled against
    `.canvas-chrome > *`, which hands events back to every direct child. */
-.canvas-chrome > .sun-day { pointer-events: none; }
-.sun-day--on-dark { --sun-line: var(--paper); --sun-lit: var(--paper); }
-.sun-day__box { position: relative; flex: none; }
-.sun-day__svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-.sun-day__path {
-  fill: none; stroke: var(--sun-line); stroke-width: 1.5;
-  stroke-dasharray: 5 6; stroke-linecap: round;
-  opacity: 0.35;
-  transition: opacity var(--dur-base) var(--ease-out);
-}
-.sun-day__travelled {
-  fill: none; stroke: var(--sun-lit); stroke-width: 2.5; stroke-linecap: round;
-  opacity: 0.55;
-  transition: opacity var(--dur-base) var(--ease-out);
-}
-.sun-day--night .sun-day__travelled { opacity: 0.35; }
-.sun-day--muted .sun-day__travelled { opacity: 0; }
-.sun-day--engaged .sun-day__path { opacity: 0.6; }
-.sun-day--engaged .sun-day__travelled { opacity: 0.85; }
-.sun-day__hit {
-  fill: none; stroke: transparent; stroke-width: 28;
-  pointer-events: stroke; cursor: pointer; touch-action: none;
-}
-.sun-day__handle {
-  position: absolute; left: 0; top: 0;
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  width: 34px;
-  cursor: grab; touch-action: none; user-select: none;
-  pointer-events: auto;
+.canvas-chrome > .day-strip { pointer-events: none; }
+.day-strip__box { position: relative; flex: none; }
+.day-strip__sky {
+  position: absolute; left: 0; right: 0; top: 50%;
+  height: 12px; margin-top: -6px;
   border-radius: var(--r-full);
-  outline-offset: 3px;
+  box-shadow: inset 0 0 0 1px var(--edge), var(--shadow-float);
+  opacity: 1;
+  transition: clip-path var(--dur-slow) var(--ease-out), opacity var(--dur-base) var(--ease-out), filter var(--dur-base) var(--ease-out);
 }
-.sun-day__handle:active { cursor: grabbing; }
-.sun-day__body {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; flex: none;
-  border-radius: var(--r-full);
-  color: var(--accent-text);
-  background: var(--paper);
-  border: 1px solid var(--edge);
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent), var(--shadow-float);
-  transition: transform var(--dur-quick) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+.day-strip--folded .day-strip__sky { opacity: 0; }
+.day-strip--muted .day-strip__sky { filter: saturate(0.25); }
+.day-strip__hit {
+  position: absolute; inset: 0;
+  pointer-events: auto; cursor: pointer; touch-action: none;
 }
-.sun-day__handle:hover .sun-day__body,
-.sun-day__handle:focus-visible .sun-day__body { transform: scale(1.08); }
-.sun-day__handle:active .sun-day__body { transform: scale(0.96); }
-/* Under the disc, not beside it: beside, it ran off the canvas at sunset. And a
-   label, not a handle — a word-sized patch of wall nobody can click through. */
-.sun-day__time {
-  padding: 2px 8px;
-  font-size: var(--fs-caption); font-weight: 700;
-  color: var(--on-ink);
-  background: var(--ink);
-  border-radius: var(--r-full);
-  box-shadow: var(--shadow-float);
-  white-space: nowrap;
-  pointer-events: none;
-}
-.sun-day--night .sun-day__body {
-  color: var(--ink-2);
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--paper) 18%, transparent), var(--shadow-float);
-}
-.sun-day--muted .sun-day__body { color: var(--ink-3); box-shadow: var(--shadow-float); }
-/* Giving way to the furniture (the contract in SunArc.tsx). Quiet while a piece is
-   selected — still there, still grabbable, not competing with it — and away while
-   anything else is carried, where it must not catch the pointer. */
-.sun-day--quiet { opacity: 0.5; }
-.sun-day--away { opacity: 0; }
-.sun-day--away .sun-day__handle,
-.sun-day--away .sun-day__hit,
-.sun-day--away .sun-day__reach { pointer-events: none; }
-/* Folded (the contract in SunArc.tsx): the disc alone at the crown. The arc and the
-   clock fade rather than vanish, and the disc glides between the crown and its hour —
-   but not under a drag, where a lagging handle reads as a sticky one. */
-.sun-day__reach {
-  position: absolute; width: 64px; height: 64px;
+.day-strip--folded .day-strip__hit { pointer-events: none; }
+.day-strip__reach {
+  position: absolute;
   border-radius: var(--r-full);
   pointer-events: auto; touch-action: none;
 }
-.sun-day__svg, .sun-day__time { transition: opacity var(--dur-base) var(--ease-out); }
-.sun-day:not(.sun-day--carrying) .sun-day__handle { transition: transform var(--dur-base) var(--ease-out); }
-.sun-day--folded .sun-day__svg,
-.sun-day--folded .sun-day__time { opacity: 0; }
-.sun-day--folded .sun-day__hit { pointer-events: none; }
+.day-strip__handle {
+  position: absolute; left: 0; top: 0;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: grab; touch-action: none; user-select: none;
+  pointer-events: auto;
+  border-radius: var(--r-full);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--edge);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-2) 24%, transparent), var(--shadow-float);
+  outline-offset: 3px;
+  transition:
+    transform var(--dur-slow) var(--ease-out),
+    background-color var(--dur-slow) var(--ease-out),
+    color var(--dur-slow) var(--ease-out),
+    box-shadow var(--dur-slow) var(--ease-out);
+}
+/* Under a drag the pill follows the hand exactly: a lagging handle reads as a sticky one. */
+.day-strip--carrying .day-strip__handle { transition: background-color var(--dur-slow) var(--ease-out), color var(--dur-slow) var(--ease-out), box-shadow var(--dur-slow) var(--ease-out); }
+.day-strip__handle:active { cursor: grabbing; }
+.day-strip__glyph { display: inline-flex; color: var(--accent-text); transition: color var(--dur-slow) var(--ease-out); }
+.day-strip__time {
+  font-size: var(--fs-small); font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Night turns the whole pill: ink, with the moon in paper. */
+.day-strip--night .day-strip__handle {
+  color: var(--on-ink);
+  background: var(--ink);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--paper) 16%, transparent), var(--shadow-float);
+}
+.day-strip--night .day-strip__glyph { color: var(--on-ink); }
+.day-strip--muted .day-strip__glyph { color: var(--ink-3); }
+.day-strip--muted .day-strip__handle { box-shadow: var(--shadow-float); }
+.day-strip--on-dark:not(.day-strip--night) .day-strip__handle { border-color: var(--paper); }
+/* Giving way to the furniture (the contract in DayStrip.tsx). Quiet while a piece is
+   selected — still there, still grabbable, not competing with it — and away while
+   anything else is carried, where it must not catch the pointer. */
+.day-strip--quiet { opacity: 0.5; }
+.day-strip--away { opacity: 0; }
+.day-strip--away .day-strip__handle,
+.day-strip--away .day-strip__hit,
+.day-strip--away .day-strip__reach { pointer-events: none; }
+
+/* The sun that becomes the moon (`Celestial` in DayStrip.tsx). Every part is drawn
+   at every hour; night draws the rays in and turns them away, swells the disc, and
+   slides the shadow across it to carve the crescent. Dawn plays it backwards. */
+.celestial__rays, .celestial__disc, .celestial__bite {
+  transform-box: fill-box; transform-origin: center;
+  transition: transform var(--dur-slow) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+.celestial__rays { transform-box: view-box; transform-origin: 12px 12px; }
+.celestial__bite { transform: translate(10px, -10px); }
+.celestial--night .celestial__rays { transform: rotate(45deg) scale(0.4); opacity: 0; }
+.celestial--night .celestial__disc { transform: scale(1.55); }
+.celestial--night .celestial__bite { transform: translate(0, 0); }
 @media (prefers-reduced-motion: reduce) {
-  .sun-day, .sun-day__body, .sun-day__path, .sun-day__travelled,
-  .sun-day__svg, .sun-day__time,
-  .sun-day:not(.sun-day--carrying) .sun-day__handle { transition: none; }
+  .day-strip, .day-strip__sky, .day-strip__handle, .day-strip__glyph,
+  .celestial__rays, .celestial__disc, .celestial__bite { transition: none; }
 }
 
 /* ── The day as a track (components/studio/LightingPicker.tsx) ────────────────

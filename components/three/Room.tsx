@@ -347,7 +347,7 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
   const lighting = useStudio((s) => s.lighting);
   // The light, all of it, from one derivation: sky colours blended off the
   // clock, and the key light — sun, moon, or overcast's studio key — derived from
-  // the hour and the room's bearing. The sun over the canvas (`SunArc`) reads the
+  // the hour and the room's bearing. The sun over the canvas (`DayStrip`) reads the
   // same `lightingAt` for its sky, and the same hour, so the control and the light
   // in the room cannot disagree about what time it is. The bearing rotates the whole day's path, so which wall the light comes
   // through is still the user's answer.

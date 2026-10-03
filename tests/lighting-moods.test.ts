@@ -9,8 +9,6 @@ import {
   NOON_H,
   TIME_STOPS,
   formatClock,
-  hourOnDayArc,
-  hourOnNightArc,
   keyAt,
   legacyLighting,
   lightingAt,
@@ -89,15 +87,6 @@ describe('the day', () => {
     for (let m = 0; m < 24 * 60; m += 5) {
       const h = m / 60;
       expect(sunAt(h).elevationDeg > 0 && moonAt(h).elevationDeg > 0, formatClock(h)).toBe(false);
-    }
-  });
-
-  it('inverts the arc exactly, for the handle that drags along it', () => {
-    for (const t of [0, 0.13, 0.5, 0.87, 1]) {
-      const h = hourOnDayArc(t);
-      expect(sunAt(h).azimuthDeg).toBeCloseTo(65 + t * 230, 9);
-      const n = hourOnNightArc(t);
-      expect(moonAt(n).azimuthDeg).toBeCloseTo(65 + t * 230, 9);
     }
   });
 

@@ -1946,24 +1946,29 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     locus, strength from `sin(elevation)` faded in over the last 8° above the
     horizon, so it never switches on at full strength as the sun clears it. Below
     the horizon there is no sun light at all.
-  - **The day's track is the big control** (`components/studio/SunArc.tsx`),
-    after sael.net's interior study: a dashed track with the sun — or at night
-    the moon — riding it and a clock pill under it. It is **screen chrome, not a
-    thing in the room**: the TOOLS slot's second row (`CanvasDay` in
-    `CanvasChrome.tsx`), centred between the rails and clear of an open Library,
-    so it is in the same place whatever the camera does. On a wide canvas it is a
-    shallow **rainbow**; below 480 px it is a **flat slider**, because a curve on a
-    phone's width is a slider that looks broken (`lib/sun-arc.ts`, `trackFor`).
-    Either way the value is read off x, the way a slider's is (`tAtX`), so the arc
-    is a slider bent, not a dial. Press anywhere on the track and the sun jumps
-    there; it is also a `role="slider"` with arrow, Page and Home/End keys. The
-    scrub steps in five minutes and stays inside its own half — day never
-    reaches the horizon hour that belongs to night (`scrubHour`). Over a night
-    or dark mood the track and pill turn paper so they still read.
+  - **The day strip is the big control** (`components/studio/DayStrip.tsx`): the
+    whole clock, midnight to midnight, as a strip painted with the sky it scrubs —
+    night at both ends, gold at sunrise and sunset, paper at noon (`skyGradient`,
+    `lib/day-strip.ts`, whose horizon stops are placed from `SUNRISE_H` /
+    `SUNSET_H` so the gold is exactly where the light turns). A pill rides it with
+    the sun or moon **in line with the time**, and the glyph *morphs* rather than
+    swaps: the rays draw in, the disc swells and a shadow slides across to carve the
+    crescent (`Celestial`, `.celestial` in `globals.css`); crossing a horizon plays
+    the dawn or dusk phrase (`lib/sound.ts`) through `SoundCues`, from any source.
+    It is **screen chrome, not a thing in the room**: the TOOLS slot's second row
+    (`CanvasDay` in `CanvasChrome.tsx`), centred between the rails, so it is in the
+    same place whatever the camera does. **One track, not two halves:** the rainbow
+    it replaced split the clock into the sun's half and the moon's because its
+    horizon was invisible and a drag that flipped there could not be learned; the
+    strip paints the horizon, so a drag may cross it. At rest it is **folded** to the
+    pill alone, centred; reaching for it (pointer near, focus, a first tap) grows the
+    strip out of the pill and glides the pill to its hour. The value is read off x
+    (`tAtX`), the scrub steps in five minutes (`scrubHour`), and it is a
+    `role="slider"` with arrow, Page and Home/End keys.
     **It gives way.** Faint while a piece is selected, gone while one is
     carried, at full strength only when reached (hover, focus, grab); it never
-    starts a gesture from a right button, a second pointer, or a press on the
-    time pill, and Esc mid-drag puts the hour back. Dragging it while overcast
+    starts a gesture from a right button or a second pointer, a first press on
+    the folded pill only opens it, and Esc mid-drag puts the hour back. Dragging it while overcast
     brings the sun back. `SUN_DRAG_ID` (`lib/store.ts`, beside `WALL_DRAG_ID`)
     is its `draggingId`, which blocks orbiting and makes the whole pull ONE undo
     step — and the rail's day track claims the same id for its own pull, so
@@ -2132,7 +2137,7 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
   is gone. The bearing moved out of the lighting mood that consumed it and onto
   the room, where `lib/storage.ts` had always said it belonged: "a property of the
   room, not of the device" — first as a dial in the Room section, now as the
-  **Plan top faces** turner beside the light, with the sun arc drawing its answer.
+  **Plan top faces** turner beside the light, with the light in the room drawing its answer.
 
   **What holds the shape.** `LIGHTINGS` in `lib/store.ts` is an `as const` array
   with the `Lighting` union derived from it, and `TIME_STOPS` is keyed by id into

@@ -24,7 +24,7 @@
 //     sound from the button or key that asked for it, and the diff it causes is
 //     ignored (`restoring`).
 //   · **A drag's own writes.** A drag is heard as its pick-up, its glide and its
-//     set-down, which the gesture owns (`Draggable`, `PlanView`, `SunArc`). What a
+//     set-down, which the gesture owns (`Draggable`, `PlanView`, `DayStrip`). What a
 //     drag writes along the way — every frame's position, the commit at the end —
 //     would otherwise be heard a second time as a nudge.
 

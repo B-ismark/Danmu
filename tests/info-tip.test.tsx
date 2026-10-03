@@ -133,15 +133,15 @@ describe('InfoTip', () => {
 
 describe('the sun dial is gone, and its two jobs have new homes', () => {
   // The dial did two things: it SHOWED where the light came from and it SET which
-  // way the room faces. The arc over the canvas shows it now (components/studio/
-  // SunArc.tsx), and the rail's daylight control sets the bearing. Both have to be
+  // way the room faces. The strip over the canvas shows it now (components/studio/
+  // DayStrip.tsx), and the rail's daylight control sets the bearing. Both have to be
   // reachable without a pointer, or deleting the dial deleted a control.
-  const ARC = readFileSync('components/studio/SunArc.tsx', 'utf8');
+  const ARC = readFileSync('components/studio/DayStrip.tsx', 'utf8');
   const PICKER = readFileSync('components/studio/LightingPicker.tsx', 'utf8');
   it('leaves no dial behind', () => {
     expect(existsSync('components/studio/NorthDial.tsx')).toBe(false);
   });
-  it('makes the sun on its arc a keyboard slider for the time of day', () => {
+  it('makes the day strip a keyboard slider for the time of day', () => {
     expect(ARC).toMatch(/role="slider"[\s\S]{0,120}tabIndex=\{0\}[\s\S]{0,80}aria-label="Time of day"/);
     expect(ARC).toMatch(/onKeyDown=/);
   });
