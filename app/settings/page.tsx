@@ -241,7 +241,6 @@ export default function SettingsPage() {
             {/* The route had no heading element at all — no document outline, and the
                 display serif (which globals.css hangs off h1/h2/h3) never rendered. */}
             <h1 style={{ fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginBottom: 4 }}>Settings</h1>
-            <div className="t-small">Kept in this browser, like your rooms.</div>
           </div>
           {/* Back sits at the head of the cards, on the right, and is always there:
               above the heading on the left it was only shown with a `from`, so a
@@ -263,7 +262,6 @@ export default function SettingsPage() {
           color="var(--accent)"
           title="Furniture detection"
           tag={<Pill>Optional</Pill>}
-          desc="Finds the furniture in photos of your room. Everything else works without it."
         >
           <Row label="Access key" controlId={KEY_INPUT_ID}>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -296,7 +294,7 @@ export default function SettingsPage() {
                   onBlur={autoValidate}
                   autoComplete="off"
                   spellCheck={false}
-                  placeholder="Paste your key"
+                  placeholder="Paste your key (starts with AIza)"
                   style={{
                     flex: 1,
                     minWidth: 0,
@@ -337,7 +335,6 @@ export default function SettingsPage() {
                 which left "Set up a key in Settings" pointing at an empty field
                 with nothing to say what goes in it. */}
             <div className="t-hint" style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 4 }}>
-              <span>A Google AI Studio key. They start with “AIza”.</span>
               <a
                 href="https://aistudio.google.com/app/apikey"
                 target="_blank"
@@ -411,7 +408,6 @@ export default function SettingsPage() {
           tint="var(--accent-2-tint)"
           color="var(--accent-2)"
           title="Units"
-          desc="How every size reads, in the studio, on the plan and in a scan."
         >
           {/* The hint is the setting's own preview, formatted by the same function
               every size on screen goes through, so it cannot describe a different
@@ -482,7 +478,7 @@ export default function SettingsPage() {
               {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
             </button>
           </Row>
-          <Row label="Send feedback" hint="Opens your email app to tell us what works and what doesn't. Nothing is sent from the app.">
+          <Row label="Send feedback">
             {/* A plain link the person follows, never a form that posts from here:
                 rule 5 allows no egress but the optional detection call. */}
             <a href={FEEDBACK_URL} className="ds-btn ds-btn--sm">
@@ -528,7 +524,7 @@ function DownloadsSection() {
       : served
         ? 'Served by this copy of Danmu, so nothing needs downloading.'
         : st.owed === 0
-          ? `Kept on this device, ${megabytes(st.kept)}. Scans use no data.`
+          ? `Kept on this device, ${megabytes(st.kept)}.`
           : st.update
             ? `An improved version is ready, ${megabytes(st.owed)} to download.`
             : `Not downloaded yet. The first scan will ask before it downloads ${megabytes(st.owed)}.`;
@@ -567,7 +563,6 @@ function DownloadsSection() {
       tint="var(--locked-tint)"
       color="var(--locked)"
       title="Downloads"
-      desc="What Danmu keeps on this device so it never downloads it twice."
     >
       <Row label="Furniture finder" hint={hint}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -647,7 +642,9 @@ function Section({
   tint: string;
   color: string;
   title: string;
-  desc: string;
+  /** Only for a fact the reader needs before touching the section (a data-loss
+   *  warning), never a description of what the section is for. */
+  desc?: string;
   tag?: ReactNode;
   children: ReactNode;
 }) {
@@ -677,7 +674,7 @@ function Section({
             </h2>
             {tag}
           </div>
-          <p className="t-small" style={{ lineHeight: 1.55, margin: '2px 0 0' }}>{desc}</p>
+          {desc && <p className="t-small" style={{ lineHeight: 1.55, margin: '2px 0 0' }}>{desc}</p>}
         </div>
       </div>
       {children}

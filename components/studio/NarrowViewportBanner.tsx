@@ -151,7 +151,7 @@ export function NarrowViewportBanner() {
         screen.
       </p>
       <p className="t-meta" style={{ lineHeight: 1.5, margin: '10px 0 0' }}>
-        If you open it anyway, some panels will be cramped. This choice is remembered.
+        If you open it anyway, some panels will be cramped.
       </p>
     </Modal>
   );

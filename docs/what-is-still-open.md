@@ -10756,3 +10756,43 @@ storage screen that lists what is kept with a way to remove it.
 Seen in a browser: Settings › Downloads at 1280 and 390 px, with the mirror stubbed.
 NOT LOOKED AT: the scan card's choice and Update states, and a real download.
 
+
+## § 55 · Two costs the rename-suggestion fix left in place — FIXED 2026-10-02
+
+Merged in `5dbcab0` ([B-ismark/Danmu#238](https://github.com/B-ismark/Danmu/pull/238)).
+The list under a piece's name now offers every Library model the typed words reach, not one
+per category, and still offers a model the photo cannot measure. Both changes were made on
+purpose, and each costs something:
+
+1. **Suggestions can show up after small name tweaks.** Renaming "Sofa" to "Grey sofa" can
+   now bring up other sofa styles, where before it stayed quiet: the old list dropped the
+   piece's whole category, the new one drops only the model it already builds. The offer can
+   be closed, and offering too much was chosen over going silent, which was the complaint.
+   A fix, if it is wanted, is to keep a same-category model out of the list unless the typed
+   words name that model better than the current one (`lib/label-suggest.ts`).
+2. **A "standard size" pick stays where the original piece was.** When the photo cannot
+   measure a model, the pick keeps the row's spot from the scan and takes the catalog's
+   normal size. It is not moved to where that kind of piece usually sits, so a lamp renamed
+   "Ceiling fan" with no ceiling in frame keeps the lamp's place rather than going up on the
+   ceiling. The fix belongs in the unmeasured branch of `suggestFromLabel`, which could place
+   the piece by its new anchor's default rather than keep the old position.
+
+**Both fixed 2026-10-02**, in `lib/label-suggest.ts`, with `tests/label-suggest.test.ts`
+holding each half (every rule mutated, all four mutants killed):
+
+1. A model of the piece's own category is offered only when the typed words score it
+   **strictly above** the model it already builds, by the search's own scorer
+   (`libraryScore` in `lib/shape-search.ts`). "Floor lamp" → "Tall lamp" no longer offers
+   the table lamp and the pendant; "Table lamp" still reaches the table lamp, and other
+   categories are untouched. (The "Grey sofa" example above cannot be reproduced on the
+   current Library, which has one sofa; the lamps are the case that showed it.)
+2. A standard-size pick keeps the scan's spot only when the new model hangs from the **same
+   anchor**. Otherwise the position and yaw are dropped and the build places it on the
+   photographed wall by its new anchor (`startingSpot`'s fallback).
+   **The description above was wrong about what reached the user, and the fix is narrower
+   because of it.** Measured by building the room: a lamp renamed "Ceiling fan" was already
+   hung at the ceiling (`groundY` owns the height for every anchor), directly above the
+   lamp's floor spot. The real defect was that the spot itself was read for a floor piece,
+   so it said nothing about a ceiling or wall piece, and a wall piece snapped from it went
+   to the **nearest** wall: a lamp against the east wall in a photo of the north wall,
+   renamed "Painting", was hung on the east wall. The test asserts the north wall.

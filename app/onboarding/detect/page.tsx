@@ -163,6 +163,14 @@ function candidateLabel(cand: LabelCandidate): string {
   return cand.name ?? categoryLabel(cand.category);
 }
 
+/** Measured, and the measurement is not this word's size. Neither kind of
+ *  `unmeasured` offer is a misfit, though both carry `margin: -Infinity`: one has no
+ *  size at all (`label-suggest`'s standard-size offer), the other runs past the edge
+ *  of the photo and its size is an estimate. Both mean "the camera could not say". */
+function misfit(cand: LabelCandidate): boolean {
+  return !cand.unmeasured && cand.margin < 0;
+}
+
 // Per-photo camera calibration: read what each photo can tell, and let
 // `calForPhoto` decide. The ladder itself, and why it is shaped the way it is, lives
 // there, beside the equations it chooses between.
@@ -1028,7 +1036,7 @@ export default function DetectPage() {
         <StepHeader
           kicker="Last step"
           title="Check your furniture"
-          subtitle={roughSize ? 'Keep what’s yours. Sizes are rough until you set the room’s size.' : 'Keep what’s yours.'}
+          subtitle={roughSize ? 'Sizes are rough until you set the room’s size.' : undefined}
         />
         {download && (
           <section className="ds-card" aria-labelledby="dl-title" style={{ padding: '14px 16px', maxWidth: '68ch', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1039,9 +1047,7 @@ export default function DetectPage() {
               {download.update
                 ? 'This version of Danmu finds furniture better than the copy on this device. It is a one-time download, kept afterwards.'
                 : 'To spot your furniture on this device, Danmu needs a one-time download. It is kept afterwards, so later scans use no data.'}{' '}
-              {download.metered
-                ? 'You seem to be on mobile data, so you may want to wait for Wi-Fi.'
-                : 'On mobile data, you can skip this and draw a box around each piece instead.'}
+              {download.metered ? 'You seem to be on mobile data, so you may want to wait for Wi-Fi.' : null}
             </p>
             <DetectorPackPicker
               value={detectorPack}
@@ -1692,33 +1698,39 @@ function DetectionRow({
             </span>
             {offer.slice(0, 2).map((cand) => (
               <button
-                key={cand.category}
+                // Keyed on the MODEL, like the typed list above: a word can reach two
+                // models of one category (floor lamp, table lamp).
+                key={cand.detection.shape ?? cand.category}
                 onClick={() => onRepair(cand)}
                 className="ds-chip"
                 // A negative margin means the re-measurement does not fit this word's
                 // own size band. Said in the tooltip rather than hidden: the user
                 // typed it, so it is offered either way, but they should know the
-                // camera does not agree. `label-suggest` sorts these below the ones
-                // that do fit, so a caveated chip is never the first thing offered.
-                // An `unmeasured` one is caveated too, but not as a misfit: the
-                // camera never saw enough of it to disagree.
+                // camera does not agree. The order is the search's, best match for
+                // the words first, so a caveated chip can come first.
+                // The other two are not misfits, so they take no warn colour: one
+                // with no size at all is built at the catalog's standard size (no
+                // room yet, no lens, or its anchor out of frame), and an `unmeasured`
+                // one WITH a size runs past the edge of the photo.
                 title={
-                  cand.unmeasured
-                    ? `Use the ${candidateLabel(cand)} model. It runs past the edge of the photo, so its size is an estimate`
-                    : cand.margin < 0
-                      ? `Use the ${candidateLabel(cand)} model, though what the camera measured is not ${candidateLabel(cand).toLowerCase()}-sized`
-                      : `Use the ${candidateLabel(cand)} model and measure it again`
+                  !cand.detection.dimMM
+                    ? `Use the ${candidateLabel(cand)} model at its standard size`
+                    : cand.unmeasured
+                      ? `Use the ${candidateLabel(cand)} model. It runs past the edge of the photo, so its size is an estimate`
+                      : cand.margin < 0
+                        ? `Use the ${candidateLabel(cand)} model, though what the camera measured is not ${candidateLabel(cand).toLowerCase()}-sized`
+                        : `Use the ${candidateLabel(cand)} model and measure it again`
                 }
                 style={{
                   height: 22,
                   fontSize: 'var(--fs-caption)',
                   padding: '0 8px',
                   flex: '0 0 auto',
-                  ...(cand.margin < 0 ? { color: 'var(--warn-text)' } : null),
+                  ...(misfit(cand) ? { color: 'var(--warn-text)' } : null),
                 }}
               >
                 Use {candidateLabel(cand)}
-                {cand.margin < 0 ? '?' : ''}
+                {misfit(cand) ? '?' : ''}
               </button>
             ))}
             <IconButton

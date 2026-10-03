@@ -24,7 +24,8 @@
 import { candidatesFor, type LabelCandidate } from './label-repair';
 import type { CalMap, RoomDims } from './detect-refine';
 import type { Detection } from './detection';
-import { searchLibrary } from './shape-search';
+import { libraryScore, searchLibrary } from './shape-search';
+import { anchorFor } from './physics';
 import { sceneShapeFor, type Category, type Shape } from './scene-spec';
 
 /** How many catalog rows a typed word is allowed to reach through. Larger than the
@@ -39,6 +40,15 @@ const ROWS = 8;
  *  "Pendant" all stay inside their category, so they offered nothing, and the piece
  *  kept its old model under its new name. Only the model the row already builds is
  *  left out, so renaming "sofa" to "big sofa" still offers nothing.
+ *
+ *  **Another model of the piece's OWN category has to be named better than the one it
+ *  already builds** (`what-is-still-open.md` § 55, item 1). Without that, "Floor lamp"
+ *  → "Tall lamp" offered the table lamp and the pendant: "lamp" reaches every lamp,
+ *  and only the current model was left out. Describing a piece is not asking for a
+ *  different one, so a same-category model is offered only when the typed words score
+ *  it strictly above the current model, by the search's own scorer — "Table lamp"
+ *  still reaches the table lamp, and "Shoe rack" on a bookshelf still reaches the shoe
+ *  rack. Other categories are untouched: a word that reaches one names something else.
  *
  *  Each model is re-measured under its own anchor when the photo allows it. When it
  *  does not — no room yet, no lens for that photo, or the model's anchor is out of
@@ -57,9 +67,13 @@ export function suggestFromLabel(
   const current = sceneShapeFor((d.category ?? 'other') as Category, d.label, d.shape);
   const seen = new Set<Shape>([current]);
   const out: LabelCandidate[] = [];
+  const currentScore = libraryScore(label, current);
+  // The anchor the row's position was read under (floor, wall or ceiling).
+  const wasAnchor = anchorFor((d.category ?? 'other') as Category, current);
   for (const item of searchLibrary(label, ROWS)) {
     if (seen.has(item.shape)) continue;
     seen.add(item.shape);
+    if (item.category === d.category && libraryScore(label, item.shape) <= currentScore) continue;
     // Measured as exactly this model, named as the Library names it.
     const measured = room
       ? candidatesFor({ ...d, label: item.label }, [item.category], cals, room, { requireFit: false, shape: item.shape })[0]
@@ -70,8 +84,20 @@ export function suggestFromLabel(
         : {
             category: item.category,
             // No size: the catalog's, at build time. The position, if one was read,
-            // stays — it is where the piece is, whatever it is called.
-            detection: { ...d, label: item.label, category: item.category, shape: item.shape, dimMM: undefined },
+            // stays only while the new model hangs from the SAME anchor (§ 55, item 2).
+            // It was read under the old anchor — a floor piece's spot is where its box
+            // meets the floor — so it says nothing about where a ceiling or wall piece
+            // in the same box is, and a wall piece snapped from it could land on
+            // whichever wall was nearest rather than the one photographed. Dropped, the
+            // build places the piece by its new anchor on the photographed wall
+            // (`startingSpot`'s fallback), which is where that kind of piece sits.
+            detection: {
+              ...withoutSpot(d, anchorFor(item.category, item.shape) !== wasAnchor),
+              label: item.label,
+              category: item.category,
+              shape: item.shape,
+              dimMM: undefined,
+            },
             name: item.label,
             margin: -Infinity,
             unmeasured: true,
@@ -82,4 +108,11 @@ export function suggestFromLabel(
   // TYPED, so "fri" puts the fridge first even where a weaker match fits the box
   // better. Fit is said beside each option instead.
   return out;
+}
+
+/** `d` with its read position and yaw removed when `drop`, else `d` itself. */
+function withoutSpot(d: Detection, drop: boolean): Detection {
+  if (!drop) return d;
+  const { position: _position, yaw: _yaw, ...rest } = d;
+  return rest;
 }

@@ -2549,6 +2549,62 @@ is expected where the photo could not measure that model.
 
 **Why eyes:** the guard against a blur committing the half-typed word over a pick cannot
 be exercised in jsdom (a removed field never blurs there), so only a real browser, and a
-real touch, can show it holds.
+real touch, can show it holds. The two costs this fix accepted were closed afterwards
+(`docs/what-is-still-open.md` § 55): also check that "Floor lamp" → "Tall lamp" offers no
+other lamp, and that a floor piece renamed "Painting" hangs on the wall in its photo.
 
-**Rides:** branch `claude/keen-einstein-dbmwuw`.
+**Rides:** `main` at `5dbcab0`; the § 55 follow-up rides branch `claude/elegant-volta-q7yy89`.
+
+## The rooms page's select mode
+
+**Where:** the rooms page with a few rooms. Press **Select** beside the filter, pick two
+rooms by their tick and one by its drawing, then the select-all box; scroll with the bar
+open; press Esc; select one and Delete.
+
+**What wrong looks like:** the bar scrolling away instead of staying pinned near the top;
+the ring around a picked card missing an edge; a picked card's drawing without its wash;
+a click on a drawing opening the room while in select mode; the New room tile still
+clickable or focusable while picking; a per-card bin showing beside the bar's Delete; Esc
+leaving the bar on screen; the select-all box not showing a dash when only some rooms are
+picked, or not narrowing to the filtered rooms. On a touch device, check the ticks are
+visible on every card without hovering.
+
+**Why eyes:** sticky positioning, the outline drawn over the plan thumbnail and `inert` on
+the New room tile are browser behaviour, not logic a test here can reach. A Playwright walk
+at 1280 and 1020 px passed all of the above once, on a dev build.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+Also on the bar: scroll a long list until a card's corner tick passes under it. The tick
+must go under the bar, never over it. Cards are `isolation: isolate` for exactly that; the
+same walk in Chromium showed the bar on top with and without it, so a second engine is the
+check.
+
+## Standing helper text removed across the app
+
+**Where:** the rooms page empty state; **New room**; the capture screen; the scan review
+screen; Settings; in the studio, the Library's search field (the own-size example is now its
+placeholder, *"Search, or sofa 228x95x83cm"*), the Room check with nothing to report, the
+demo room's banner (only *"Want your own room? Photograph it"*), the narrow-window gate,
+and the Inspector on a lamp standing on a table.
+
+**What wrong looks like:** a screen that no longer says something a person needs in the
+moment (a consent line, a data-loss warning, a refusal), as against a sentence that only
+restated the screen. The Library placeholder cut off at the rail's narrowest width. The
+Inspector card for a riding piece showing an empty grey second line under *"On Table"*.
+
+**Why eyes:** copy is a judgement, and the user vetoes lines. Each screen was looked at once
+in Chromium at 1366 px.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.
+
+## Rename offers on the scan review screen
+
+**Where:** the scan review screen, before the room's size is set. Rename a sofa to *"lamp"*.
+
+**What wrong looks like:** one chip where the typed list shows two lamps; a chip in the warn
+colour with a *"?"* for a model offered at its standard size (its tooltip should say
+*standard size*); a chip for a piece cut off by the photo's edge in the warn colour.
+
+**Why eyes:** no test renders this chip row.
+
+**Rides:** branch `claude/elegant-volta-q7yy89`.

@@ -67,12 +67,15 @@ describe('the footprint page', () => {
   });
 
   it('says double-click to a mouse, and not to a finger', () => {
+    // Said on the shape card itself, as its tooltip, rather than in a standing
+    // sentence over the row: the shortcut is told where it works.
     render(<LayoutPickPage />);
-    expect(screen.getByText(/double-click it to start/)).toBeTruthy();
+    const cards = screen.getAllByRole('radio');
+    expect(cards.every((c) => /Double-click to start/.test(c.getAttribute('title') ?? ''))).toBe(true);
     cleanup();
     restore = viewportAt(390, { touch: true });
     render(<LayoutPickPage />);
-    expect(screen.queryByText(/double-click/)).toBeNull();
-    expect(screen.getByText('Pick one to see it below.')).toBeTruthy();
+    expect(screen.getAllByRole('radio').some((c) => c.hasAttribute('title'))).toBe(false);
+    expect(screen.queryByText(/double-click/i)).toBeNull();
   });
 });

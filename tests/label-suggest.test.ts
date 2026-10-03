@@ -11,7 +11,9 @@ import { candidatesFor } from '@/lib/label-repair';
 import { frameCuts, type CameraCal } from '@/lib/photo-geometry';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
-import { PART_LIBRARY, sceneShapeFor } from '@/lib/scene-spec';
+import { PART_LIBRARY, buildSceneFromRoom, sceneShapeFor } from '@/lib/scene-spec';
+import { toRecord } from '@/lib/detection-record';
+import type { RoomData } from '@/lib/storage';
 import { footprintForLayout } from '@/lib/footprint';
 import { bboxOfCeilingDiscInFrame } from './helpers/project';
 
@@ -179,5 +181,52 @@ describe('suggestFromLabel', () => {
     expect(out.map((c) => c.category)).toEqual(['painting', 'fan']);
     expect(out[0].unmeasured).toBeUndefined();
     expect(out[1].unmeasured).toBe(true);
+  });
+
+  it('does not offer the other models of its own kind for a describing word (§ 55, 1)', () => {
+    // "Floor lamp" → "Tall lamp" describes the lamp; it is not asking for a table lamp
+    // or a pendant, which "lamp" alone reaches. Before the rule both were offered.
+    const lamp = det({ category: 'lamp', slot: 'n', label: 'Floor lamp' });
+    expect(sceneShapeFor('lamp', 'Floor lamp', undefined)).toBe('lamp-floor');
+    expect(suggestFromLabel(lamp, 'Tall lamp', CALS, null).filter((c) => c.category === 'lamp')).toEqual([]);
+  });
+
+  it('still offers a model of its own kind that the words name better (§ 55, 1)', () => {
+    const lamp = det({ category: 'lamp', slot: 'n', label: 'Floor lamp' });
+    expect(suggestFromLabel(lamp, 'Table lamp', CALS, null).map((c) => c.detection.shape)).toContain('lamp-table');
+  });
+
+  describe('a standard-size pick and the spot the scan read (§ 55, 2)', () => {
+    // A lamp read standing against the EAST wall, in a photo of the NORTH wall.
+    const lamp: Detection = { label: 'Lamp', conf: 0.9, box: [0.4, 0.4, 0.1, 0.4], category: 'lamp', slot: 'n', position: { x: 1.8, y: 0, z: 0 }, yaw: 0.3 };
+    const pick = (word: string) => suggestFromLabel(lamp, word, {}, null)[0];
+
+    it('keeps the spot when the new model stands on the same anchor', () => {
+      const chair = pick('Armchair');
+      expect(chair.unmeasured).toBe(true);
+      expect(chair.detection.position).toEqual(lamp.position);
+      expect(chair.detection.yaw).toBe(0.3);
+    });
+
+    it('drops it when the anchor changes, since it was read for a floor piece', () => {
+      for (const word of ['Ceiling fan', 'Painting']) {
+        const c = pick(word);
+        expect(c.unmeasured, word).toBe(true);
+        expect(c.detection.position, word).toBeUndefined();
+        expect(c.detection.yaw, word).toBeUndefined();
+      }
+    });
+
+    it('builds a wall piece on the wall that was photographed, not the nearest one', () => {
+      // What reaches the user: with the floor spot kept, the painting snapped to the
+      // east wall beside where the lamp stood — a wall nobody photographed.
+      const room: RoomData = {
+        id: 'r', createdAt: 1, name: 'R', layoutId: 'rect', width: 4, depth: 4, height: 2.6,
+        detectedObjects: [toRecord(pick('Painting').detection, 0, true, () => 'k')],
+      };
+      const [part] = buildSceneFromRoom(room);
+      expect(part.pos[2]).toBeLessThan(-1.8); // on the north wall
+      expect(Math.abs(part.pos[0])).toBeLessThan(1.5); // not in the east corner
+    });
   });
 });
