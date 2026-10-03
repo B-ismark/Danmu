@@ -99,7 +99,7 @@ export default function OpenGraphImage() {
                     width: 12,
                     height: 12,
                     borderRadius: 999,
-                    // --accent-2, the sage the app uses for a settled state.
+                    // The brand mark's piece: --accent-2, amber.
                     background: MARK_COLORS.piece,
                   }}
                 />

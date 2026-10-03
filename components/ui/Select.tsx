@@ -286,11 +286,14 @@ export function Select<T extends string>({
                     borderRadius: 'var(--r-1)',
                     fontSize: 'var(--fs-small)',
                     fontWeight: isSel ? 700 : 500,
-                    color: isSel ? 'var(--accent-text)' : 'var(--ink)',
-                    // Hover/keyboard focus is a wash; the chosen one keeps the
-                    // accent tint, so "where I am" and "what is set" stay distinct.
-                    background: isSel ? 'var(--accent-tint)' : isActive ? 'var(--paper-2)' : 'transparent',
-                    boxShadow: isActive && !isSel ? 'inset 0 0 0 1px var(--hairline-strong)' : 'none',
+                    color: 'var(--ink)',
+                    // Two states, two tells that cannot be confused: "where I am" (the
+                    // pointer or the arrow keys) is the warm paper wash every other
+                    // hover here uses, and "what is set" is the weight and a moss
+                    // check. The chosen row used to wear a green tint as well, and
+                    // under the pointer that was a green slab beside a beige one,
+                    // with a hairline box round the beige — three looks for two facts.
+                    background: isActive ? 'var(--paper-2)' : 'transparent',
                     cursor: 'pointer',
                     userSelect: 'none',
                   }}
@@ -298,7 +301,11 @@ export function Select<T extends string>({
                   {o.icon && <Icon name={o.icon} size={13} />}
                   <span className="truncate" style={{ flex: 1 }}>{o.label}</span>
                   {o.hint && <span className="t-hint">{o.hint}</span>}
-                  {isSel && <Icon name="check" size={13} />}
+                  {isSel && (
+                    <span style={{ display: 'inline-flex', color: 'var(--accent-text)' }}>
+                      <Icon name="check" size={13} />
+                    </span>
+                  )}
                 </div>
               );
             })}

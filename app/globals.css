@@ -71,7 +71,13 @@
   --warn: #9A5E12;          /* 5.14:1 on --paper */
   --warn-text: #80500F;     /* 5.50:1 on --paper-2 — for warn text on a tinted chip */
   --warn-tint: rgba(154, 94, 18, 0.16); /* the plan's cut-off floor wash — a fill, never type */
-  --success: #6E9461;       /* fills only (3.38:1) */
+  --success: #6E9461;       /* fills only (3.38:1) — and the rim of a settled state, which as a UI boundary needs 3:1 */
+  /* The settled state's wash. Every "all good" surface — the room check, a calm
+     notice, the sage pill — was drawn with `--accent-2-tint` from when --accent-2 WAS
+     sage; Moss Ink made it amber and left those surfaces amber-rimmed around green
+     type. This is their own tint, in the success hue, so the rim, wash and words are
+     one colour. */
+  --success-tint: rgba(110, 148, 97, 0.16); /* --success-text on it over --paper: 5.27:1 */
   --success-text: #45683A;  /* 6.22:1 on --paper */
 
   /* Text/icons that sit on top of a filled surface. One knob, so a brand
@@ -877,16 +883,30 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 /* The right rail with nothing selected (EmptyInspector): a mark and one line,
    centred in the top of the column. */
 .empty-inspector {
-  display: flex; flex-direction: column; align-items: center; text-align: center;
-  gap: 12px; padding: 32px 16px 20px;
+  display: flex; flex-direction: column; gap: 16px; padding: 16px 16px 20px;
 }
+.empty-inspector__eyebrow {
+  margin: 0; font-family: var(--font-sans); font-size: var(--fs-caption); font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3);
+}
+.empty-inspector__body {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 6px; padding: 12px 0 4px;
+}
+/* One moss family, tint ground and moss ink, with the stronger tint as its rim —
+   the same pairing a selected row and an active tool wear, so the mark reads as
+   the app's colour rather than a beige disc holding a green glyph. */
 .empty-inspector__mark {
-  width: 52px; height: 52px; border-radius: var(--r-full);
+  width: 52px; height: 52px; border-radius: var(--r-full); margin-bottom: 6px;
   display: flex; align-items: center; justify-content: center;
   background: var(--accent-tint); color: var(--accent-text);
-  box-shadow: 0 0 0 6px var(--paper-2);
+  box-shadow: inset 0 0 0 1px var(--accent-tint-strong);
 }
-.empty-inspector__say { margin: 0; color: var(--ink-2); max-width: 34ch; }
+.empty-inspector__say { margin: 0; font-size: var(--fs-body); font-weight: 700; color: var(--ink); max-width: 30ch; }
+.empty-inspector__hint { margin: 0; color: var(--ink-3); max-width: 30ch; }
+.empty-inspector__actions { display: flex; flex-direction: column; gap: 8px; }
+/* A rail action given a row of its own: the row's width, label centred. */
+.rail-wide { width: 100%; justify-content: center; }
 
 /* The rail/room divider (RailSash). 10px of hit area straddling the rail's own
    border — VS Code ships 4px and has a standing complaint that it cannot be
@@ -1021,10 +1041,9 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    query box IS the box the section's padding is taken out of and the arithmetic has
    no third term: the grid gets `queryWidth − 32px`. 261 + 32 = 293 is where the number
    came from — the widest query box that could not hold the three-button row, and
-   `max-width` is inclusive. The swatches need 284 by the same subtraction, which is
-   what keeps 293 the right breakpoint now that they are the only tenant: folding them
-   from 293 rather than 284 costs two columns over a 9px band nobody can stop inside on
-   purpose.
+   `max-width` is inclusive. The swatches are its only tenant now, and since they
+   became two fixed rows of seven dabs the fold tightens their gap rather than dropping
+   columns — see the rule inside the block.
 
    This was 304px for one commit, and the 11px was not headroom: it was an omitted
    scrollbar. Deriving the number against `.rail` meant estimating a width that is
@@ -1039,11 +1058,13 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    clipping and no ellipsis to notice — the row keeps its width and hangs off the
    end of the rail. */
 @container rail (max-width: 293px) {
-  /* A swatch is `aspect-ratio: 1` with a 28px floor, so eight columns in a rail
-     this narrow draw eight tall rectangles rather than eight squares. Six keeps
-     them square. Deliberately NOT `auto-fit`: that would also re-count the row on
-     a wide rail, which is a redesign of a panel that is working. */
-  .rail-swatches { grid-template-columns: repeat(6, 1fr) !important; }
+  /* The palette is two rows of seven by design, so a narrow rail gives up GAP, never
+     a column: re-counting the row would push the mixer onto a third line. Seven 30px
+     dabs want 246px at the 6px gap and 228px at 3px, so below this query they keep
+     full size for longer and then shrink as discs (no floor, `aspect-ratio: 1`) —
+     never into ovals and never past the rail's edge, since `1fr` here holds an
+     element with no min-content of its own. */
+  .rail-swatches { gap: 3px !important; }
 }
 
 @container rail (max-width: 240px) {
@@ -1138,10 +1159,11 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    that is mistaken for a defect is not decoration, it is the defect. If this
    ever needs a harder edge, give the footer more tone, not a rule. */
 .rail-footer {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; flex-direction: column; gap: 8px;
   padding: 12px 16px; flex-shrink: 0;
   background: var(--paper-2);
 }
+.rail-footer__row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .rail-footer .ds-btn { max-width: 100%; }
 .section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
 .section-title {
@@ -1307,6 +1329,17 @@ textarea.field { border-radius: var(--r-2); }
   background: var(--paper-2); color: var(--ink-2);
 }
 .shape-chip svg { display: block; }
+/* A Library row is a LIST row that happens to be a button, so it wears the list's
+   look rather than the button's: no outline, no lift, a soft fill under the pointer —
+   the piece tree's rows already work this way, and thirty outlined pills stacked in a
+   panel read as thirty separate buttons fighting for the eye rather than one list to
+   scan. Keyboard focus keeps the house ring (`.ds-btn:focus-visible`), and a row
+   marked with Shift keeps the moss tint the tree's picked rows wear. */
+.pick-row { border-color: transparent; background: transparent; box-shadow: none; }
+.pick-row:hover { background: var(--paper-2); border-color: transparent; box-shadow: none; transform: none; }
+.pick-row:active { background: var(--accent-tint); box-shadow: none; }
+.pick-row[aria-pressed="true"] { background: var(--accent-tint-strong); color: var(--accent-text); }
+.pick-row[aria-pressed="true"] .shape-chip { background: var(--paper); color: var(--accent-text); }
 /* Both kinds of row turn --paper-2 under the pointer, the chip's own ground, so the
    chip steps up to --paper there or it melts into the row. */
 .list-row:hover .shape-chip,
@@ -1536,13 +1569,38 @@ textarea.field { border-radius: var(--r-2); }
 .canvas-chrome { pointer-events: none; }
 .canvas-chrome > * { pointer-events: auto; }
 
-/* Colour swatch — a real button with a perceivable boundary and selected ring. */
+/* Colour swatch — a dab of paint: a disc with a wet highlight up-left and the
+   weight of the paint pooled low-right, so the palette reads as colour you could put
+   on something rather than a grid of chips. Both lights are mixed from tokens, never a
+   literal white or black, so the dab stays honest on either theme. The `--edge` rim is
+   still the boundary (WCAG 1.4.11): chalk on paper is otherwise a disc you cannot see.
+
+   Capped at 30px and centred in its column, so a wide rail spaces seven dabs out
+   rather than inflating them into plates. */
 .swatch {
-  width: 100%; aspect-ratio: 1; min-height: 28px;
-  border-radius: var(--r-1); border: 1px solid var(--edge);
+  width: 100%; max-width: 30px; aspect-ratio: 1;
+  border-radius: 50%; border: 1px solid var(--edge);
+  background-image:
+    radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--paper) 55%, transparent) 0 14%, transparent 42%),
+    radial-gradient(circle at 70% 78%, color-mix(in srgb, var(--ink) 16%, transparent), transparent 62%);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 14%, transparent);
   cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
 }
+.swatch:hover { transform: translateY(-1px) scale(1.06); }
 .swatch.is-selected { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent-text); }
+.swatch:focus-visible { border-radius: 50%; }
+/* The mixer's own cell: an empty dab drawn in dashes, holding a plus — until a mixed
+   colour is chosen, when it wears that colour and keeps the plus as a quiet mark. */
+.swatch--mix {
+  background: var(--paper); background-image: none; box-shadow: none;
+  border-style: dashed; color: var(--ink-2);
+}
+.swatch--mix:hover { background: var(--accent-tint); color: var(--accent-text); border-color: var(--accent-text); }
+.swatch--mix[aria-expanded="true"] { border-style: solid; border-color: var(--accent-text); color: var(--accent-text); background: var(--accent-tint); }
+.swatch--mix.is-custom { border-style: solid; color: var(--on-ink); }
+.swatch--mix.is-custom svg { filter: drop-shadow(0 0 1px color-mix(in srgb, var(--ink) 70%, transparent)); }
 
 /* ─── Layout scaffolding ───────────────────────────────────────────────────
    The app styles almost everything with inline style objects, which cannot
@@ -1660,9 +1718,9 @@ textarea.field { border-radius: var(--r-2); }
 
 /* Clay, in the rails: buttons are raised, and segmented controls and fields are
    wells. `--edge` stays on all of them — the shadow is a finish, not a boundary. */
-.split--glass .rail .ds-btn:not(.ds-btn--ghost) { box-shadow: var(--clay-raise); }
-.split--glass .rail .ds-btn:not(.ds-btn--ghost):hover { box-shadow: var(--clay-raise-hover); }
-.split--glass .rail .ds-btn:not(.ds-btn--ghost):active { box-shadow: var(--clay-well); }
+.split--glass .rail .ds-btn:not(.ds-btn--ghost):not(.pick-row) { box-shadow: var(--clay-raise); }
+.split--glass .rail .ds-btn:not(.ds-btn--ghost):not(.pick-row):hover { box-shadow: var(--clay-raise-hover); }
+.split--glass .rail .ds-btn:not(.ds-btn--ghost):not(.pick-row):active { box-shadow: var(--clay-well); }
 .split--glass .rail .toolbar,
 .split--glass .rail .field { box-shadow: var(--clay-well); }
 .split--glass .rail .field:focus,
@@ -2311,7 +2369,7 @@ textarea.field { border-radius: var(--r-2); }
     transition-duration: var(--dur-quick) !important;
     scroll-behavior: auto !important;
   }
-  .ds-btn:hover, .ds-btn:active, .ds-card:hover, .start-card:hover { transform: none !important; }
+  .ds-btn:hover, .ds-btn:active, .ds-card:hover, .start-card:hover, .swatch:hover { transform: none !important; }
   /* The duration above is cut, the stagger is not: without this the Building screen's
      pieces wait their turn invisibly, on a screen that is up only as long as the save. */
   .iso-room__piece { animation-delay: 0s !important; }

@@ -204,7 +204,7 @@ export function transformsKey(t: Transform2 & { dims: Record<string, [number, nu
  *  same.
  *
  *  The target is named by its ROLE, not by the piece's own name: a name is typed by
- *  a person ("TV · 65″", "Window"), and "facing Window" is not a sentence, while
+ *  a person ("TV", "Window"), and "facing Window" is not a sentence, while
  *  lowercasing it would turn "TV" into "tv". A closed vocabulary is the one kind of
  *  word that splices safely (see `shuffleRefusal`'s note). The subject keeps its
  *  own name, because it starts the sentence. */

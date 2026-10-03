@@ -249,8 +249,8 @@ export function RoomHealthDot() {
         borderRadius: 'var(--r-full)',
         fontSize: 'var(--fs-micro)',
         fontWeight: 700,
-        border: `1px solid ${ok ? 'var(--accent-2)' : 'var(--danger)'}`,
-        background: ok ? 'var(--accent-2-tint)' : 'var(--danger-tint)',
+        border: `1px solid ${ok ? 'var(--success)' : 'var(--danger)'}`,
+        background: ok ? 'var(--success-tint)' : 'var(--danger-tint)',
         color: ok ? 'var(--success-text)' : 'var(--danger-text)',
       }}
     >
@@ -406,8 +406,8 @@ export function RoomTools() {
           width: '100%',
           justifyContent: 'flex-start',
           gap: 8,
-          background: problems > 0 ? 'var(--danger-tint)' : 'var(--accent-2-tint)',
-          borderColor: problems > 0 ? 'var(--danger)' : 'var(--accent-2)',
+          background: problems > 0 ? 'var(--danger-tint)' : 'var(--success-tint)',
+          borderColor: problems > 0 ? 'var(--danger)' : 'var(--success)',
           color: problems > 0 ? 'var(--danger-text)' : 'var(--success-text)',
         }}
       >

@@ -1395,7 +1395,7 @@ export default function DetectPage() {
 // optional feature" and "something broke" is a tone, not a different component
 // someone forgets to write.
 const NOTICE_TONES: Record<Notice['tone'], { border: string; bg: string; fg: string }> = {
-  calm: { border: 'var(--accent-2)', bg: 'var(--accent-2-tint)', fg: 'var(--success-text)' },
+  calm: { border: 'var(--success)', bg: 'var(--success-tint)', fg: 'var(--success-text)' },
   warn: { border: 'var(--warn)', bg: 'var(--paper-3)', fg: 'var(--warn-text)' },
   error: { border: 'var(--danger)', bg: 'var(--danger-tint)', fg: 'var(--danger-text)' },
 };

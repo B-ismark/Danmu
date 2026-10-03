@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultScene, PART_LIBRARY } from '../lib/scene-spec';
+import { defaultScene, SCREENS } from '../lib/scene-spec';
 import { footprintForLayout, offsetWall, pointInFootprint, type Footprint, type LayoutId } from '../lib/footprint';
 import { LAYOUT_IDS } from '../lib/storage';
 import { footFromPart, footInsidePoly, footIntersectionArea, footArea, distToBoundary, nearestEdge, obbGap } from '../lib/geometry';
@@ -401,7 +401,7 @@ describe('starter scene keeps the preset’s promise', () => {
     // Both are real products the catalog offers — the whole distinction between
     // choosing a smaller SET and drawing a big one small.
     for (const screen of [shallow, roomy]) {
-      expect(PART_LIBRARY.some((l) => l.shape === 'tv' && l.dimMM.join() === screen.dimMM.join())).toBe(true);
+      expect(SCREENS.some((s) => s.dimMM.join() === screen.dimMM.join())).toBe(true);
     }
   });
 
@@ -583,7 +583,7 @@ describe('starter scene in a room that is not a preset', () => {
       // dimensions of a catalog entry, to the millimetre.
       if (p.shape === 'plant') expect(p.dimMM).toEqual([400, 400, 1600]);
       if (p.shape === 'tv') {
-        expect(PART_LIBRARY.some((l) => l.shape === 'tv' && l.dimMM.join() === p.dimMM.join())).toBe(true);
+        expect(SCREENS.some((s) => s.dimMM.join() === p.dimMM.join())).toBe(true);
       }
     }
   });
