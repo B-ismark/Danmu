@@ -54,8 +54,7 @@ export async function startCamera(): Promise<MediaStream> {
 //
 // Every photo entering the app is re-encoded to at most MAX_EDGE on its long
 // side. Nothing downstream wants more: the local detector letterboxes to 640,
-// lib/photo-geometry works in normalized coordinates, and lib/color-sample
-// downsamples to a 24×24 grid.
+// and lib/photo-geometry works in normalized coordinates.
 //
 // Uploads used to be stored and transmitted at their original resolution, and a
 // photo straight off a phone is 3-5 MB. Four of those are 12-20 MB raw, which

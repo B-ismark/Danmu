@@ -34,6 +34,7 @@
 import { describe, expect, it } from 'vitest';
 import { refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { toRecord } from '@/lib/detection-record';
+import { clampDims } from '@/lib/dimension-ranges';
 import { buildSceneFromRoom, defaultDepthFor, type Category, type Shape } from '@/lib/scene-spec';
 import { anchorFor, CURTAIN_STANDOFF } from '@/lib/physics';
 import { calForPhoto, calFromHfov, wallFrame, wallRowAtHeight, type CameraCal } from '@/lib/photo-geometry';
@@ -262,12 +263,18 @@ function run(known: Known): Row[] {
     const part = i < 0 ? undefined : parts.find((p) => p.id === `uid-${i}`);
     if (!part) return { piece, missing: true as const };
     const c = truthCentre(piece);
+    // The size the GEOMETRY read, not the size the room is built at: a scanned piece is
+    // built at an approximate catalogue size now (`approximateDims`), so this harness
+    // reads the refined detection (size clamped as the build used to clamp it, and the
+    // position the camera gave, before the build snaps it by the catalogue's depth).
+    const at = refined[i].position ?? { x: part.pos[0], z: part.pos[2] };
+    const read = clampDims(piece.category, piece.shape, refined[i].dimMM ?? [piece.w, 1, piece.h]);
     return {
       piece,
       cut: cutEdges(piece),
-      widthErr: part.dimMM[0] / piece.w - 1,
-      heightErr: part.dimMM[2] / piece.h - 1,
-      posErrM: Math.hypot(part.pos[0] - c.x, part.pos[2] - c.z),
+      widthErr: read[0] / piece.w - 1,
+      heightErr: read[2] / piece.h - 1,
+      posErrM: Math.hypot(at.x - c.x, at.z - c.z),
     };
   });
 }
@@ -380,7 +387,7 @@ describe('a scan tilted up, cut at the edges, with the size skipped', () => {
     for (const r of rows) {
       expect(Math.abs(r.widthErr), r.piece.label).toBeLessThan(0.01);
       expect(Math.abs(r.heightErr), r.piece.label).toBeLessThan(0.01);
-      expect(r.posErrM, r.piece.label).toBeLessThan(0.05);
+      expect(r.posErrM, r.piece.label).toBeLessThan(0.12); // wall pieces differ by half the truth's depth less the catalogue's
     }
   });
 

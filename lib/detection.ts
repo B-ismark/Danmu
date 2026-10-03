@@ -42,9 +42,6 @@ export type Detection = {
   yaw?: number;
   /** AI-picked shape from our catalog. If missing or unknown, we fall back to refineShape() heuristic. */
   shape?: string;
-  /** Dominant colour as a #rrggbb hex. Used as a fallback when client-side pixel
-   *  sampling of the photo fails (occluded / tiny region). See lib/color-sample.ts. */
-  color?: string;
 };
 
 

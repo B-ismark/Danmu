@@ -70,9 +70,9 @@ export async function adoptFreshScan(
 }
 
 /** What in a row decides the piece it builds. Not `id` (its index, rewritten on every
- *  save), `conf` or `source` (how it was found, not what it is), and not `color`: the
- *  review screen samples one from the photo for any row that lacks it, so counting
- *  that would rebuild a piece the user had recoloured just for having been looked at.
+ *  save), `conf` or `source` (how it was found, not what it is), and not `color`:
+ *  a row carries none any more (a photo no longer colours its piece), so an old
+ *  record's stale one must not count as an edit.
  *
  *  Read through the codec rather than off the record, because the screen re-saves
  *  every row through `toRecord` and that is not the identity on an old one: a row
@@ -165,10 +165,9 @@ export function applyListEdits(parts: ScenePart[], room: RoomData, next: SavedDe
  *  The row decides what the piece IS — its model, its size, where the photo put it —
  *  and the studio decides how it looks and what it belongs to, so those carry:
  *
- *  · **Colour**, when the studio changed it. The build copies the row's photo colour
- *    onto the piece, so a piece whose colour is still the row's has nobody's choice
- *    in it, and follows the row. One that differs was recoloured, or reset, and that
- *    stands.
+ *  · **Colour**, when the studio set one. A scanned piece is built in its model's own
+ *    default colour (a photo no longer colours it), so any colour on the old piece is
+ *    somebody's choice, and stands.
  *  · **Merged set**, always: it is not something a row has an opinion on.
  *  · **Decor, light and name**, only while it is the same model. What sits on a
  *    desk and a lamp's brightness belong to that model, and a studio name survives a
@@ -183,7 +182,7 @@ function carryStudioEdits(
   now: SavedDetection | undefined,
 ): ScenePart {
   const out: ScenePart = { ...fresh };
-  if (old.color !== was?.color) out.color = old.color;
+  if (old.color !== undefined) out.color = old.color;
   if (old.groupId !== undefined) out.groupId = old.groupId;
   if (old.shape === fresh.shape) {
     if (old.decor !== undefined) out.decor = old.decor;

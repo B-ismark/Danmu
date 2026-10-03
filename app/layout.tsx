@@ -54,7 +54,7 @@ export const metadata: Metadata = {
     siteName: 'Danmu',
     title: 'Danmu · Decorate your room in 3D',
     description:
-      'Pick a footprint, get a scaled 3D room, and redecorate it. Real dimensions, computed on your device. No account.',
+      'Pick a footprint, get a scaled 3D room, and redecorate it. Computed on your device. No account.',
   },
   // Stated rather than left to be inferred: without a `twitter` block Next emits
   // no `twitter:card`, and a reader with no card type gets the small square
@@ -64,7 +64,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Danmu · Decorate your room in 3D',
     description:
-      'Pick a footprint, get a scaled 3D room, and redecorate it. Real dimensions, computed on your device. No account.',
+      'Pick a footprint, get a scaled 3D room, and redecorate it. Computed on your device. No account.',
   },
 };
 

@@ -717,7 +717,7 @@ function EmptyState({ unreadable }: { unreadable: boolean }) {
           </span>
           <span className="start-card__title">Photograph your room</span>
           <span className="start-card__desc">
-            Four photos, one per wall. Danmu finds the furniture and rebuilds the room to scale.
+            Four photos, one per wall. Danmu finds the furniture and rebuilds the room, with each piece at a typical size you can adjust.
           </span>
           <span className="start-card__go">
             Start with photos <Icon name="arrow-right" size={14} />

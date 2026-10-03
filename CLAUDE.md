@@ -26,7 +26,23 @@ backend, no account. The 3D studio *is* the product.
    plumbing wearing a deleted feature's names reads as this rule being broken**, and
    the next person to find it cannot tell the difference from code. Every piece is
    procedural; there is no mesh download path to restore.
-2. **Dimensions come from code, not AI.** Every size passes through `clampDims`
+2. **Dimensions come from code, not AI.**
+   **Decision of 2026-10-03, which overrides every promise of a *measured* scanned size
+   below:** a piece built from a scan is **approximate**. Photo-derived sizes were often
+   wrong (a window with a protruding depth, a curtain a hand wide), so
+   `approximateDims` (`lib/scene-spec.ts`, the one place `buildSceneFromRoom` sizes a
+   detection) starts from the shape's Library size, lets the photo/AI estimate nudge the
+   WIDTH only, within +-25% of that or the shape's legal range, and takes depth and height
+   from the catalogue; a window, door or curtain is never narrower than its default. A
+   generic box (an unrecognised object) has no standard, so it alone keeps its hint,
+   clamped. Scanned pieces also take their model's default colour: **photo colour reuse
+   was deleted** (`color-sample`, `color-reduce`, `Detection.color`, the cloud prompt's
+   colour field), because shoes and cushions came out a garish pink. A colour the user
+   chose in the studio still wins; an old record's `color` is ignored on build and on file
+   import. The geometry engine below still places pieces (position, wall, yaw) and the
+   detect screen still says "typical size", never "measured". What follows describes that
+   engine and its history; where it says a scanned size is measured or accurate, read it
+   as describing the engine's reading, which no longer sizes the piece. Every size passes through `clampDims`
    (`lib/dimension-ranges.ts`). The geometry engine (`lib/geometry.ts`,
    `lib/photo-geometry.ts`, `lib/physics.ts`, `lib/clearance.ts`,
    `lib/footprint.ts`) owns sizing, placement, overlap and clearance. AI gives a

@@ -495,25 +495,3 @@ export function keptAtFirst(
   });
   return out;
 }
-
-/** Whether two lists are the same rows but for a sampled colour — the one write the
- *  review screen makes that nothing measured reads. The colour fill lands a moment
- *  after every list does and writes each row once, and without this the screen ran
- *  `findRepeats` over every lens a phone could have a second time for it: 6 ms a room
- *  on a desktop, 33 at the worst of 150 generated rooms, and several times that on the
- *  phones this screen is for.
- *
- *  Shallow, and that is the contract rather than a shortcut: the fill spreads a row
- *  (`{ ...x, color }`) and keeps every other field's reference, while every edit that
- *  does matter — a rename, a repair, a re-placement — replaces the field it changes. */
-export function sameButColor(a: readonly Detection[], b: readonly Detection[]): boolean {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  return a.every((x, i) => {
-    const y = b[i];
-    if (x === y) return true;
-    const keys = new Set([...Object.keys(x), ...Object.keys(y)] as (keyof Detection)[]);
-    for (const k of keys) if (k !== 'color' && !Object.is(x[k], y[k])) return false;
-    return true;
-  });
-}
