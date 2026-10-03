@@ -249,8 +249,6 @@ export type RoomData = {
     position?: { x: number; y: number; z: number };
     yaw?: number;
     shape?: string;
-    /** Dominant colour (#rrggbb) — photo-sampled, Gemini hex fallback. */
-    color?: string;
   }>;
 };
 

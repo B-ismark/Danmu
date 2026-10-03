@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { acceptCandidate, candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, measuredPhrase, sizeFitsLabel, type LabelVerdict } from '@/lib/label-repair';
+import { candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel, type LabelVerdict } from '@/lib/label-repair';
 import { AS_READ, AT_ASSUMED_DISTANCE, CAM_HEIGHT, clipToFrame, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
 import {
   CATEGORIES,
@@ -660,20 +660,6 @@ describe('judgeLabel — a floor piece cut at its foot (§ 49.10)', () => {
     expect(failed(on(boxOf('wardrobe', 'wardrobe', 1200, 2000, 0.3, level), 'nightstand'))).toEqual(['width', 'height']);
   });
 
-  it('says "about" of a reading taken at a distance the photo did not show', () => {
-    // Arithmetic for the screen, so it lives where a test reaches it.
-    const v = (measured: { width?: number; height?: number }, bounded?: Array<'width' | 'height'>) =>
-      ({ status: 'suspect', failed: [], allowed: { width: [0, 0], height: [0, 0] }, measured, candidates: [], ...(bounded ? { bounded } : {}) }) as Extract<
-        LabelVerdict,
-        { status: 'suspect' }
-      >;
-    expect(measuredPhrase(v({ width: 1200, height: 450 }), 'm')).toBe('1.20 × 0.45 m');
-    expect(measuredPhrase(v({ width: 1273, height: 265 }, ['width', 'height']), 'm')).toBe('about 1.27 × 0.27 m');
-    // One axis names itself: after "Measured", a bare 2.67 m could be either.
-    expect(measuredPhrase(v({ height: 2667 }, ['height']), 'mm')).toBe('about 2667 mm tall');
-    expect(measuredPhrase(v({ width: 104 }), 'm')).toBe('0.10 m wide');
-  });
-
   it('hands over the reading it judged, and which axes are estimates', () => {
     // What the scan screen prints after "Measured": the number the word was judged
     // against, and `bounded` for the axes read at a distance the photo did not show.
@@ -979,8 +965,9 @@ describe('judgeLabel — a ceiling piece the edge of the photo cut', () => {
     const [top] = build(fan(0, -1.2));
     expect(top.shape).toBe('fan');
     expect(top.dimMM[0]).toBe(1200);
-    // A side cut is still read on the middle row, and goes in as read.
-    expect(build(fan(1.8, -2))[0].dimMM[0]).toBe(1402);
+    // A side cut is still read on the middle row (1402), but a scanned piece is built at
+    // an approximate size now: the Library fan's 1000 widened by at most a quarter.
+    expect(build(fan(1.8, -2))[0].dimMM[0]).toBe(1250);
   });
 
   it('gives no verdict on a fan cut at the bottom, from a phone pointed at the ceiling', () => {
@@ -1013,7 +1000,6 @@ describe('judgeLabel — on the plane its placer read it on', () => {
     expect(v.failed).toEqual(['width', 'height']);
     expect(v.atLeast).toEqual(['height']);
     expect(v.measured).toEqual({ width: 1349, height: 1507 });
-    expect(measuredPhrase(v, 'm')).toBe('1.35 m wide and at least 1.50 m tall');
   });
 });
 
@@ -1057,7 +1043,6 @@ describe('judgeLabel — the high side of a cut axis (§ 49.5)', () => {
       ['sofa', 'sofa'],
     ]);
     // Rounded down: 1955 mm was seen, and "at least 1.96 m" is five more.
-    expect(measuredPhrase(v, 'm')).toBe('at least 1.95 m wide and 0.91 m tall');
   });
 
   it('leaves the sofa its own word: what it saw is inside a sofa', () => {
@@ -1074,7 +1059,6 @@ describe('judgeLabel — the high side of a cut axis (§ 49.5)', () => {
     const tv = suspect(ask('tv'));
     expect([tv.failed, tv.atLeast, tv.measured]).toEqual([['height'], ['height'], { width: 915, height: 1960 }]);
     expect(tv.candidates[0].category).toBe('door');
-    expect(measuredPhrase(tv, 'm')).toBe('0.92 m wide and at least 1.96 m tall');
   });
 
   it('judges a row cut on every axis it had, once what it saw is too big', () => {
@@ -1085,7 +1069,6 @@ describe('judgeLabel — the high side of a cut axis (§ 49.5)', () => {
     expect(judgeLabel(det({ category: 'door', slot: 'n', box }), { n: up20 }, deep)).toEqual({ status: 'unmeasured', cut: ['width', 'height'] });
     const tv = suspect(judgeLabel(det({ category: 'tv', slot: 'n', box }), { n: up20 }, deep));
     expect([tv.failed, tv.atLeast, tv.measured, tv.cut]).toEqual([['height'], ['height'], { height: 1960 }, ['width', 'height']]);
-    expect(measuredPhrase(tv, 'm')).toBe('at least 1.96 m tall');
   });
 
   it('never reads a ceiling piece cut by the frame as "at least"', () => {
@@ -1137,46 +1120,6 @@ describe('judgeLabel — the high side of a cut axis (§ 49.5)', () => {
     expect(same.unmeasured).toBe(true);
   });
 
-  it('says "at least" of the part it saw, and names each axis beside a size', () => {
-    const v = (measured: { width?: number; height?: number }, atLeast: Array<'width' | 'height'>) =>
-      ({ status: 'suspect', failed: atLeast, allowed: { width: [0, 0], height: [0, 0] }, measured, candidates: [], atLeast }) as Extract<
-        LabelVerdict,
-        { status: 'suspect' }
-      >;
-    expect(measuredPhrase(v({ width: 2100 }, ['width']), 'm')).toBe('at least 2.10 m wide');
-    expect(measuredPhrase(v({ width: 1000, height: 1780 }, ['width', 'height']), 'm')).toBe('at least 1.00 × 1.78 m');
-    expect(measuredPhrase(v({ width: 1200, height: 2100 }, ['height']), 'm')).toBe('1.20 m wide and at least 2.10 m tall');
-    expect(measuredPhrase(v({ width: 1955, height: 450 }, ['width']), 'mm')).toBe('at least 1955 mm wide and 450 mm tall');
-  });
-});
-
-describe('accepting a repair', () => {
-  // The scan screen works its verdicts out from a copy of the rows that ignores
-  // colour, so the photo's sample landing does not re-run every check. A candidate can
-  // therefore be measured from the row as it was BEFORE its colour arrived.
-  const before = det({ label: 'Sofa', category: 'sofa', slot: 'n', box: [0.175, 0.75, 0.65, 0.1] });
-  const now: Detection = { ...before, color: '#7a5c3e' };
-  const [bed] = candidatesFor(before, ['bed'], CALS, ROOM);
-
-  it('keeps the colour the photo gave the row', () => {
-    expect(bed, 'fixture must offer a repair').toBeDefined();
-    expect(bed.detection.color, 'fixture must predate the colour').toBeUndefined();
-    const out = acceptCandidate(now, bed, 'Double bed');
-    expect(out.color).toBe('#7a5c3e');
-    // Everything the word decides comes from the candidate.
-    expect(out.category).toBe('bed');
-    expect(out.shape).toBe(bed.detection.shape);
-    expect(out.dimMM).toEqual(bed.detection.dimMM);
-    expect(out.label).toBe('Double bed');
-  });
-
-  it('writes no colour key for a row that has none yet', () => {
-    // So the next sample still sees a row "missing colour" and paints it.
-    expect('color' in acceptCandidate(before, bed, 'Bed')).toBe(false);
-    // And never the candidate's own: it is the same row's, from earlier.
-    const stale = { ...bed, detection: { ...bed.detection, color: '#111111' } };
-    expect('color' in acceptCandidate(before, stale, 'Bed')).toBe(false);
-  });
 });
 
 describe('a repair is built as the shape it was measured as', () => {

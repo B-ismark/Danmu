@@ -5,7 +5,8 @@ is said at length, with the history of why, in [`CLAUDE.md`](../CLAUDE.md). That
 file wins when the two disagree, and this page is then fixed to match it.
 
 **Danmu** is a browser-only interior decoration studio. Pick or photograph a
-room, it rebuilds the room in 3D at real scale, and you redecorate it. There is no
+room, it rebuilds the room in 3D to scale (scanned furniture at approximate, catalogue
+sizes), and you redecorate it. There is no
 backend and no account. The 3D studio *is* the product.
 
 ## The ten rules
@@ -15,7 +16,9 @@ backend and no account. The 3D studio *is* the product.
    or any AI model, cost or quota wording in the UI.
 2. **Sizes come from code, not AI.** Every size goes through `clampDims`
    (`lib/dimension-ranges.ts`). A detector's size is a hint. When something does
-   not fit, **say so; never quietly resize it to fit.**
+   not fit, **say so; never quietly resize it to fit.** A piece built from a scan is
+   *approximate by decision* (2026-10-03): catalogue size, default colour, never a
+   photo measurement or a photo-sampled colour (`approximateDims`).
 3. **One source of truth for furniture:** `lib/scene-spec.ts` (+
    `lib/parts-catalog.ts`). Adding a shape has a written contract in `Design.md`
    § Adding a shape, and `tests/shape-contract.test.ts` holds it. Clearance numbers

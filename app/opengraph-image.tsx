@@ -39,7 +39,7 @@ export const contentType = 'image/png';
 
 /** The three claims, in the order they answer a stranger's questions: what is it,
  *  is it real, what does it cost me. */
-const CLAIMS = ['Real dimensions', 'Works offline', 'No account'];
+const CLAIMS = ['Scaled 3D room', 'Works offline', 'No account'];
 
 export default function OpenGraphImage() {
   return new ImageResponse(

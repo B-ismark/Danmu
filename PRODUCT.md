@@ -21,7 +21,8 @@ No account, no onboarding gate, no credentials required to start.
 
 Danmu is a **local-first interior decoration simulation**. The user picks a
 footprint (or captures a real room with photos); Danmu rebuilds it as a scaled
-1:1 3D space; and the user redecorates freely — place, move, recolour, restyle,
+1:1 3D space (the room at the size you give it, scanned furniture at approximate,
+typical sizes); and the user redecorates freely — place, move, recolour, restyle,
 relight, and arrange furniture. The 3D studio *is* the product.
 
 Success is deliberately plural. A session is a win when the user achieves any of:
@@ -71,8 +72,11 @@ cannot.
 
 - **Dimensions are code, not AI.** Every size passes through the deterministic
   geometry engine and is clamped (`clampDims`); the AI's size guess is a *hint*
-  only. The geometry engine owns real-world sizing, placement, overlap, and
-  clearance.
+  only. The geometry engine owns sizing, placement, overlap, and clearance.
+  **A piece built from a photo is approximate** (decided 2026-10-03): photo-derived
+  sizes were often wrong, so a scanned piece takes its catalogue size and default
+  colour and the user adjusts it. The room's own dimensions and any size the user
+  types stay exact.
 - **AI is optional and detection-only.** Detection runs best-effort (local
   YOLOv8 ONNX, or the user's own Gemini key) and is never required to use the
   product.
