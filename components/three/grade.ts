@@ -1,7 +1,7 @@
-// The 'high' quality grading step: three's own tone curve (Neutral — see tone.ts
-// for why not ACES), applied as a
-// post-processing effect because the composer turns the renderer's tone mapping
-// off (it renders into a linear half-float target and leaves the curve to a pass).
+// The 'high' quality grading step: three's own tone curve (tone.ts says which,
+// and why), applied as a post-processing effect because the composer turns the
+// renderer's tone mapping off (it renders into a linear half-float target and
+// leaves the curve to a pass).
 //
 // Why not postprocessing's ToneMappingEffect, which does the same maths: it grades
 // EVERY pixel, and the backdrop is not part of the room. On 'fast' the renderer
@@ -18,12 +18,13 @@
 // program that has it, so each mood's `exposure` reaches this pass untouched.
 
 import { Effect, EffectAttribute } from 'postprocessing';
+import { TONE } from './tone';
 
 const fragmentShader = /* glsl */ `
 #include <tonemapping_pars_fragment>
 void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
   // A cleared pixel reads exactly 1.0; anything drawn is strictly nearer.
-  outputColor = depth < 1.0 ? vec4(NeutralToneMapping(inputColor.rgb), inputColor.a) : inputColor;
+  outputColor = depth < 1.0 ? vec4(${TONE.glsl}(inputColor.rgb), inputColor.a) : inputColor;
 }
 `;
 

@@ -43,7 +43,15 @@ describe('sheetScale', () => {
     // 2000 × 2400 at 4x is 76.8 MP; Safari's ceiling is 16,777,216.
     const k = sheetScale(2000, 2400);
     expect(k).toBeCloseTo(1.8698, 3);
-    expect(2000 * k * 2400 * k).toBeLessThanOrEqual(16_777_216 + 1);
+    // The canvas is FLOORED, and that is what must fit — rounding up went over.
+    expect(Math.floor(2000 * k) * Math.floor(2400 * k)).toBeLessThanOrEqual(16_777_216);
+  });
+
+  it('is floored, because rounding a side up can carry a capped sheet over', () => {
+    // 1100 × 1122: both sides round UP at the area-capped scale.
+    const k = sheetScale(1100, 1122);
+    expect(Math.round(1100 * k) * Math.round(1122 * k)).toBeGreaterThan(16_777_216);
+    expect(Math.floor(1100 * k) * Math.floor(1122 * k)).toBeLessThanOrEqual(16_777_216);
   });
 
   it('caps a long, thin sheet by its side', () => {

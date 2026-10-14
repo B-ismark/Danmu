@@ -96,8 +96,9 @@ export function exportPlanPng(
 
   const c = document.createElement('canvas');
   const k = sheetScale(W, H);
-  c.width = Math.round(W * k);
-  c.height = Math.round(H * k);
+  // Floored: rounding a side up can carry an area-capped sheet back over the cap.
+  c.width = Math.floor(W * k);
+  c.height = Math.floor(H * k);
   const ctx = c.getContext('2d')!;
   ctx.scale(k, k);
 

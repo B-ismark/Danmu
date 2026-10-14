@@ -19,7 +19,7 @@ import { lightingAt, KEY_DIR, DEFAULT_BEARING_DEG, type KeyLightSpec } from '@/l
 import { shadowFit } from '@/lib/shadow-fit';
 import { bounceIntensity, glazingArea } from '@/lib/bounce';
 import { useSnapshot, downloadBlob, snapshotPixelRatio } from '@/lib/snapshot';
-import { EXPOSURE_MATCH, TONE_MAPPING } from './tone';
+import { EXPOSURE_MATCH, TONE } from './tone';
 import { snapshotFileName } from '@/lib/exports';
 import { addPieceToRoom, planPiece } from '@/lib/add-piece';
 import { dropCarry } from '@/lib/drop-carry';
@@ -328,7 +328,7 @@ export function Room({
       // roll off instead of clipping to flat white. Which curve, and why, is
       // ./tone.ts.
       // preserveDrawingBuffer OFF; SceneCapture reads the canvas synchronously.
-      gl={{ antialias: true, alpha: true, toneMapping: TONE_MAPPING }}
+      gl={{ antialias: true, alpha: true, toneMapping: TONE.mapping }}
       // On-demand rendering: paint only when something actually changed. R3F
       // invalidates itself for every declarative change, drei's Orbit/Transform
       // controls invalidate on move, and the handful of things that mutate the
@@ -869,8 +869,8 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
     done.current = want;
     // The name is read HERE, with the token, and closed over — not inside the
     // `toBlob` callback below. `request` writes both in one `set`, so they are one
-    // fact; reading them at two instants un-pairs them. `toBlob` encodes a 2x-DPR
-    // buffer and can take tens of milliseconds, and a rename plus a second press
+    // fact; reading them at two instants un-pairs them. `toBlob` encodes a
+    // `SNAPSHOT_LONG_EDGE` buffer and can take a hundred milliseconds or more, and a rename plus a second press
     // inside that window gave the FIRST capture the SECOND name — the older image
     // downloading under the newer room's filename, and the newer one then numbered
     // `(1)` by the browser.
@@ -898,13 +898,33 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
     const fx = composer?.current;
     const ratioWas = gl.getPixelRatio();
     gl.getSize(_snapCss);
-    const ratio = snapshotPixelRatio(_snapCss.x, _snapCss.y, ratioWas, gl.capabilities.maxTextureSize);
+    // The drawing buffer is bounded by the renderbuffer and viewport limits as well
+    // as the texture limit, and on some GPUs those are the smaller ones.
+    const raw = gl.getContext();
+    const viewportMax = raw.getParameter(raw.MAX_VIEWPORT_DIMS) as ArrayLike<number> | null;
+    const maxSide = Math.min(
+      gl.capabilities.maxTextureSize,
+      (raw.getParameter(raw.MAX_RENDERBUFFER_SIZE) as number | null) ?? Infinity,
+      viewportMax?.[0] ?? Infinity,
+      viewportMax?.[1] ?? Infinity,
+    );
+    const ratio = snapshotPixelRatio(_snapCss.x, _snapCss.y, ratioWas, maxSide);
     const resize = (r: number) => {
       gl.setPixelRatio(r);
       fx?.setSize(_snapCss.x, _snapCss.y);
     };
     try {
-      if (ratio !== ratioWas) resize(ratio);
+      if (ratio !== ratioWas) {
+        resize(ratio);
+        // A browser short of memory clamps the drawing buffer below the size asked
+        // for, and says nothing. The composer would then render at a size the buffer
+        // does not have and the copy would come out cropped — so check, and fall
+        // back to the screen's own size: a smaller picture beats a wrong one.
+        if (raw.drawingBufferWidth !== gl.domElement.width || raw.drawingBufferHeight !== gl.domElement.height) {
+          console.warn('[export] the browser would not allocate a full-size picture; saving at screen size');
+          resize(ratioWas);
+        }
+      }
       // Render from the CURRENT camera to the WebGL buffer, then COPY it into a 2D
       // canvas synchronously (before the un-preserved buffer clears). toBlob runs
       // async off that copy.
