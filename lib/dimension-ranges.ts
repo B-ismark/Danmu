@@ -109,6 +109,22 @@ const BY_SHAPE: Partial<Record<Shape, DimRange>> = {
   rug: R('flexible', [600, 400, 3], [5000, 4000, 40]),
   curtain: R('flexible', [400, 40, 800], [5000, 200, 3200]),
   plant: R('flexible', [100, 100, 150], [1200, 1200, 2600]),
+  // ── building blocks — made to measure, each from its own real band ──────
+  // A worktop is the slab a person sizes to the wall: from a 400 mm shelf-desk to a 3 m run,
+  // and from a 300 mm console depth to a 1.2 m corner counter. Height spans a coffee-table
+  // height to a standing desk, so the same block is a bench, a desk or a counter.
+  worktop: R('flexible', [400, 300, 400], [3000, 1200, 1100], [1200, 600, 750]),
+  // A floor-standing partition: 20 mm of board to 60 mm of frame and a foot, a desk-top
+  // privacy screen (300 mm) to a full-height divider (1.8 m).
+  screen: R('flexible', [300, 20, 300], [2400, 60, 1800], [1200, 30, 1100]),
+  // A pedestal: the drawer unit that goes under a desk or beside it, 300-600 mm wide.
+  'drawer-unit': R('standard', [300, 400, 350], [600, 700, 750], [400, 500, 600]),
+  'open-shelf': R('flexible', [300, 200, 300], [2400, 600, 2400], [800, 350, 800]),
+  // Low cabinet to a counter-height run; taller storage is a wardrobe.
+  'door-cabinet': R('flexible', [300, 300, 300], [2400, 700, 1200], [800, 450, 850]),
+  'slat-panel': R('flexible', [200, 15, 300], [3000, 80, 2800], [1200, 40, 2000]),
+  // A seat cushion for a bench, a window seat or the top of a cabinet.
+  'seat-pad': R('flexible', [300, 300, 30], [3000, 700, 150], [1200, 450, 60]),
   painting: R('flexible', [150, 15, 150], [2400, 60, 1800]),
   // Generic primitives (low-confidence detections) — wide but bounded.
   box: R('flexible', [50, 50, 50], [4000, 4000, 2800]),

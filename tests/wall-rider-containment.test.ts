@@ -348,8 +348,12 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // 5 layout ids. 43 since the Library's beds became one and its "Dining / desk
     // table" a Desk and a Dining table, and the clothes rail joined: `bed/bed-single`
     // out, `table/desk-standard` and `wardrobe/clothes-rack` in.
-    expect(PAIRS.length).toBe(43);
-    expect(considered).toBe(67725);
+    //
+    // 43 → 50 with the seven building blocks (`worktop`, `screen`, `drawer-unit`,
+    // `open-shelf`, `door-cabinet`, `slat-panel`, `seat-pad`), each a pair of its own;
+    // 50 × 1575 = 78750 considered, re-derived by running it, not by multiplying.
+    expect(PAIRS.length).toBe(50);
+    expect(considered).toBe(78750);
 
     // …and the coverage that matters is named rather than counted, because the
     // number above is satisfiable by any five layout ids — five copies of the
@@ -467,9 +471,13 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // + 1189 `table/desk-standard`, + 1263 `wardrobe/clothes-rack`, − 1163 for the
     // retired `bed/bed-single`, + 14 `bed/bed-double`, whose band now starts at a
     // single's 800 (1092 → 1106). Both columns moving by the same number is the claim.
-    expect(acceptedBefore, 'the pre-fix column moved').toBe(56840);
+    //
+    // + 8727 in BOTH columns from the seven building blocks, none of them a rider: 56840 →
+    // 65567 before and 56322 → 65049 after. The difference between the columns stays 518
+    // (570 − 52), which is the claim — a floor piece the fix must leave alone.
+    expect(acceptedBefore, 'the pre-fix column moved').toBe(65567);
     // 54967 at the deletion, + 52 since from `WALL_FROM_POINTER`, + 1303 as above.
-    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(56322);
+    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(65049);
 
     // Arithmetic over the pins above, and deliberately not more than that: no source
     // mutation can reach it, because a wrong `AT_DELETION` fails its own loop first. What

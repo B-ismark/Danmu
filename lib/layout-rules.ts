@@ -75,7 +75,7 @@ import type { Category, Shape, ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { WALK_RADIUS } from './clearance-field';
 import { footFromPart, footOverlap, frontVector, localToWorld, obbGap, polygonArea, worldToLocal, type Foot, type OBB } from './geometry';
-import { COFFEE_SHELF, DESK_TOP, DINING_TOP, surfacePostsLocal, type LocalRect } from './foot-cells';
+import { COFFEE_SHELF, DESK_TOP, DINING_TOP, surfacePostsLocal, WORKTOP, type LocalRect } from './foot-cells';
 import { dimRangeFor } from './dimension-ranges';
 import { DINING_CHAIR, OFFICE_CHAIR } from './chair-form';
 
@@ -114,6 +114,13 @@ export type Role =
   | 'door'
   | 'window'
   | 'wall-art'
+  // The building blocks' two roles that no older piece answers. A `cabinet` is closed
+  // storage you stand in front of — drawers pull out, doors swing — and is neither a
+  // wardrobe (whose rule says so in its title) nor a bookshelf (open, read, not opened).
+  // A `partition` is a screen or slat panel: it stands in the room and blocks it, and
+  // nothing wants clear floor beside it, which is a description rather than a gap.
+  | 'cabinet'
+  | 'partition'
   | 'other';
 
 const ROLE_BY_SHAPE: Partial<Record<Shape, Role>> = {
@@ -172,6 +179,22 @@ const ROLE_BY_SHAPE: Partial<Record<Shape, Role>> = {
   // (`fridge`, `shelf`) already answer, and a row here that merely restates the
   // category is a second place for the same fact to drift from.
   'fan-standing': 'appliance',
+  // The building blocks. Each row is a decision, and the ones that restate a category say
+  // so: a worktop IS a desk (a chair pulls out at its front); an open shelf is a bookshelf
+  // (stand and look); a drawer unit and a door cabinet are `cabinet`, which their shared
+  // `shelf` category would have called a bookshelf; a screen and a slat panel are filed
+  // under `other` and would have read `other` — an obstacle with no role — so they are
+  // `partition`. The seat pad is `other` ON PURPOSE: it is a cushion laid on a bench or a
+  // cabinet, 30-150 mm thick, so it is no obstacle, and the `ottoman` role it would
+  // inherit from its category carries a rule that a footstool belongs in front of a sofa
+  // — which would have the solver drag a bench cushion across the room to one.
+  worktop: 'desk',
+  screen: 'partition',
+  'slat-panel': 'partition',
+  'drawer-unit': 'cabinet',
+  'door-cabinet': 'cabinet',
+  'open-shelf': 'bookshelf',
+  'seat-pad': 'other',
 };
 
 const ROLE_BY_CATEGORY: Partial<Record<Category, Role>> = {
@@ -418,7 +441,7 @@ export function routeWidth(footprint: Footprint): number {
  *  table is deliberately absent for the same reason a chair is: the gap between a
  *  table and its own chairs is the arrangement, and `belongTogether` would have to
  *  undo pair by pair what this settles once. */
-const ROUTE_FORMING = new Set<Role>(['sofa', 'bed', 'wardrobe', 'bookshelf', 'fridge', 'desk']);
+const ROUTE_FORMING = new Set<Role>(['sofa', 'bed', 'wardrobe', 'bookshelf', 'fridge', 'desk', 'cabinet', 'partition']);
 
 export function formsRoute(role: Role): boolean {
   return ROUTE_FORMING.has(role);
@@ -453,6 +476,7 @@ const AFFINITY_BY_ROLE: Partial<Record<Role, PlaceAffinity>> = {
   bed: 'prefers-wall',
   sofa: 'prefers-wall',
   wardrobe: 'prefers-wall',
+  cabinet: 'prefers-wall',
   bookshelf: 'prefers-wall',
   'shoe-rack': 'prefers-wall',
   'clothes-rack': 'prefers-wall',
@@ -628,6 +652,8 @@ const ACCESS_BY_ROLE: Partial<Record<Role, RuleSpec>> = {
   wardrobe: () => [zone('front', 'Wardrobe doors can’t open', ['front'], 0.6, 'to open the doors and reach inside', { span: 1 })],
   fridge: () => [zone('front', 'Fridge door can’t open', ['front'], 0.6, 'to open the door and reach inside', { span: 1 })],
   bookshelf: () => [zone('front', 'Can’t stand at the shelves', ['front'], 0.6, 'to stand and read the spines', { span: 1 })],
+  // Drawers pull out and doors swing, so it is the wardrobe's 600 mm without the wardrobe.
+  cabinet: () => [zone('front', 'Can’t open the cabinet', ['front'], 0.6, 'to pull the drawers out or swing the doors open', { span: 1 })],
   'shoe-rack': () => [zone('front', 'No room at the shoe rack', ['front'], 0.45, 'to stand there and put shoes on')],
   // Open, so no door to swing — but a hanger comes off the rail toward you, and you
   // stand back to see what is on it: the wardrobe's 600 mm without the door's reason.
@@ -923,6 +949,9 @@ function surfaceKneeMM(shape: Shape, role: Role, h: number): number {
       return role === 'dining-table' ? h - Math.round((DINING_TOP.top + DINING_TOP.ease + DINING_TOP.apron) * 1000) : h - Math.round(DESK_TOP.hang * 1000);
     case 'desk-l':
       return h - Math.round(DESK_TOP.hang * 1000);
+    // A bare slab: nothing hangs under it, so the knee room is its own underside.
+    case 'worktop':
+      return h - Math.round(WORKTOP.top * 1000);
     // The lower shelf's underside, at a quarter of the height.
     case 'coffee-table':
       return h * COFFEE_SHELF.lo;
@@ -1412,6 +1441,7 @@ export function rugTarget(
  *  closet is the nearest thing and is listed.) */
 const RUG_KEEPS_OFF: ReadonlySet<Role> = new Set<Role>([
   'wardrobe',
+  'cabinet',
   'bookshelf',
   'shoe-rack',
   'nightstand',

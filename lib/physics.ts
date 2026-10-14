@@ -55,6 +55,20 @@ const ANCHOR_BY_SHAPE: Partial<Record<Shape, Anchor>> = {
   // to the moment two shapes in one category belong in different places.
   'fan-standing': 'floor',
   'lamp-ceiling': 'ceiling',
+  // The building blocks stand on the floor, and each row is a decision rather than a
+  // restatement: `worktop` and `seat-pad` would inherit `floor` from `desk` / `ottoman`,
+  // but `screen` and `slat-panel` are filed under the `other` catch-all, and a future
+  // change to a category's anchor must not move a piece that was meant to stand. A slat
+  // panel is a floor piece that MAY stand against a wall (a headboard) — floor, not
+  // `wall-*`: it is not hung, it is not cut into the plaster, and a wall rider would be
+  // re-grounded to a height.
+  worktop: 'floor',
+  screen: 'floor',
+  'drawer-unit': 'floor',
+  'open-shelf': 'floor',
+  'door-cabinet': 'floor',
+  'slat-panel': 'floor',
+  'seat-pad': 'floor',
   curtain: 'wall-high',
   tv: 'wall-mid',
   mirror: 'wall-mid',

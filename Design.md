@@ -2095,6 +2095,27 @@ detector reporting a sofa as an armchair. Adding one means re-exporting the grap
 and re-pinning `MODEL_DIGESTS`. The cloud path has no such limit: its prompt
 interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
 
+**Building blocks — shapes a photograph never produces.** Seven Library pieces (group
+`Blocks`: worktop, screen, drawer unit, open shelf, door cabinet, slat panel, seat pad) are
+assembled by a person, not found by a detector. They are the contract's one sanctioned
+exemption from the detection half: they are in `BLOCK_SHAPES` (`lib/block-style.ts`) and in
+`ADD_PATH_SHAPES`, and **not** in `CATALOG_SHAPES_ORDERED`, which the cloud prompt
+interpolates and `refineShape` must land inside. Every add-path clause of
+`tests/shape-contract.test.ts` sweeps `ADD_PATH_SHAPES`; the detection clause asserts no
+block is nameable. Their geometry is `lib/block-forms.ts` (pure, swept in
+`tests/block-forms.test.ts`); six are parametric, four tile off `MODULE_RANGE` (rows
+satisfy `max >= 2 * min`, so the brief's round 0.15-0.25 became 0.13-0.27 for drawers).
+Options are the one optional `ScenePart.blockStyle` (`BlockStyle`), resolved by
+`blockStyleFor` (defaults live there only), carried by the scene file with per-key
+validation and a `dropped` report, and edited in the Inspector's **Style** section.
+Roles: `worktop` is a `desk`, `open-shelf` a `bookshelf`, drawer unit and door cabinet are
+the new `cabinet` (front access, route-forming), screen and slat panel the new `partition`
+(an obstacle with no access zone), and the seat pad is `other` on purpose (a cushion, not an
+obstacle; the `ottoman` role would drag it to a sofa). Known limits: the tuck rule knows a
+worktop's slab but not its legs or panels, and a `none`-ended worktop laid over drawer
+units is reported as a clash because nothing models one piece standing on another's
+footprint.
+
 ### Set-dressing & decor — `Dressing.tsx`
 - Decor is **off by default** (`useStudio.dressed` starts `false`; a stored `true` from
   before the default changed is rewritten once, `STUDIO_PREFS_VERSION`). **Decor** is a

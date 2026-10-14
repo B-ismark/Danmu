@@ -266,6 +266,9 @@ export const useScene = create<SceneState>((set, get) => ({
       parts: s.parts.map((p) => {
         if (p.id !== id) return p;
         const next = { ...p, ...patch };
+        // A new model has none of the old one's options (a screen's band means nothing to a
+        // worktop), so a swap clears them unless the same patch brings its own.
+        if (patch.shape !== undefined && patch.shape !== p.shape && !('blockStyle' in patch)) delete next.blockStyle;
         return patch.shape === undefined && patch.category === undefined ? next : normalizeStoredParts([next])[0];
       }),
     })),

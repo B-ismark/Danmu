@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { BLOCK_SHAPES } from '@/lib/block-style';
 import { candidatesFor, categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel, type LabelVerdict } from '@/lib/label-repair';
 import { AS_READ, AT_ASSUMED_DISTANCE, CAM_HEIGHT, clipToFrame, cutAxes, frameCuts, placeFloorObject, placeWallObject, wallFrame, type CameraCal, type ReadBounds } from '@/lib/photo-geometry';
 import {
@@ -1268,6 +1269,9 @@ describe('a repair is built as the shape it was measured as', () => {
       const cat = value as Category;
       for (const shape of new Set(PART_LIBRARY.filter((p) => p.category === cat).map((p) => p.shape))) {
         if (shape === 'box') continue;
+        // A building block is a Library piece no scan produces (`BLOCK_SHAPES`), so no
+        // accepted repair is ever built as one and the label has nothing to leave alone.
+        if ((BLOCK_SHAPES as readonly string[]).includes(shape)) continue;
         expect([cat, label, sceneShapeFor(cat, label, shape)]).toEqual([cat, label, shape]);
       }
     }

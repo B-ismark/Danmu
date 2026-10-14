@@ -142,7 +142,9 @@ describe('the fit test reads the furniture as it is drawn', () => {
     // the Library's "Dining / desk table" (a `desk` row) became a Desk and a Dining table:
     // the Dining table is a `desk-standard` row under `table`, a Library size the sweep
     // had not reached under that category before.
-    expect([rows.length, rows.filter((r) => r.kind === 'seat').length, rows.filter((r) => r.kind === 'surface').length]).toEqual([282, 208, 74]);
+    // 327 / 208 / 119 with the worktop, a surface (a `desk` role): its 45 rows are every
+    // seat-or-surface (shape, category, height) it reaches, all surfaces, seats unchanged.
+    expect([rows.length, rows.filter((r) => r.kind === 'seat').length, rows.filter((r) => r.kind === 'surface').length]).toEqual([327, 208, 119]);
     expect(rows.filter((r) => r.shape === 'stool').map((r) => r.role).every((r) => r === 'dining-chair')).toBe(true);
     expect(rows.filter((r) => r.shape === 'stool').length).toBe(45);
   });
@@ -247,7 +249,7 @@ describe('the catalogue pairings that leave room', () => {
     expect(tuckProfile(items.find((l) => l.label === 'Dining table')!).role).toBe('dining-table');
     expect(tuckProfile(items.find((l) => l.label === 'Desk')!).role).toBe('desk');
     expect(seats.map((l) => l.label)).toEqual(['Dining chair', 'Office chair', 'Ottoman', 'Stool']);
-    expect(surfaces.map((l) => l.label)).toEqual(['Coffee table', 'Dining table', 'Desk', 'L-shaped desk']);
+    expect(surfaces.map((l) => l.label)).toEqual(['Coffee table', 'Dining table', 'Desk', 'L-shaped desk', 'Worktop']);
   });
 
   it('at the sizes they are added at', () => {
@@ -258,16 +260,20 @@ describe('the catalogue pairings that leave room', () => {
       'Dining chair → Dining table: tucks',
       'Dining chair → Desk: tucks',
       'Dining chair → L-shaped desk: tucks',
+      'Dining chair → Worktop: tucks',
       'Office chair → Dining table: tucks',
       'Office chair → Desk: tucks',
       'Office chair → L-shaped desk: tucks',
+      'Office chair → Worktop: tucks',
       'Ottoman → Coffee table: no',
       'Ottoman → Dining table: tucks',
       'Ottoman → Desk: tucks',
       'Ottoman → L-shaped desk: tucks',
+      'Ottoman → Worktop: tucks',
       'Stool → Dining table: tucks',
       'Stool → Desk: tucks',
       'Stool → L-shaped desk: tucks',
+      'Stool → Worktop: tucks',
     ]);
   });
 
@@ -309,16 +315,20 @@ describe('the catalogue pairings that leave room', () => {
       'Dining chair → Dining table: 1113/1116',
       'Dining chair → Desk: 1116/1116',
       'Dining chair → L-shaped desk: 1116/1116',
+      'Dining chair → Worktop: 2377/2556',
       'Office chair → Dining table: 765/1581',
       'Office chair → Desk: 965/1581',
       'Office chair → L-shaped desk: 965/1581',
+      'Office chair → Worktop: 2244/3621',
       'Ottoman → Coffee table: 0/936',
       'Ottoman → Dining table: 778/806',
       'Ottoman → Desk: 800/806',
       'Ottoman → L-shaped desk: 800/806',
+      'Ottoman → Worktop: 1675/1846',
       'Stool → Dining table: 1018/1271',
       'Stool → Desk: 1100/1271',
       'Stool → L-shaped desk: 1100/1271',
+      'Stool → Worktop: 2350/2911',
     ]);
   });
 });

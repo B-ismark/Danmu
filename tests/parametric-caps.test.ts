@@ -24,6 +24,15 @@ import { dimRangeFor } from '@/lib/dimension-ranges';
 import { fridgeDoors } from '@/lib/scene-spec';
 import { surfacePostsLocal } from '@/lib/foot-cells';
 import { bedPillows } from '@/lib/layout-rules';
+import {
+  cabinetPlinth,
+  drawerPlinth,
+  screenFrame,
+  shelfBoard,
+  slatBacking,
+  slatRail,
+  worktopTop,
+} from '@/lib/block-forms';
 
 // § 36 — an absolute inside a non-parametric renderer cannot survive a group scale.
 //
@@ -133,6 +142,20 @@ const CAPS: CapRow[] = [
     },
     what: 'a desk leg',
   },
+  // The building blocks (`lib/block-forms.ts`) — each holds a real dimension. The two
+  // that do not tile (a worktop and a screen) are in `PARAMETRIC_SHAPES` for this reason
+  // alone, and `completeness` below is what would say so if a row went missing.
+  { shape: 'worktop', axis: 2, read: worktopTop, what: 'the 25 mm slab' },
+  { shape: 'screen', axis: 0, read: screenFrame, what: 'the aluminium edge' },
+  { shape: 'door-cabinet', axis: 2, read: cabinetPlinth, what: 'the toe-kick' },
+  { shape: 'drawer-unit', axis: 2, read: drawerPlinth, what: 'the plinth' },
+  {
+    shape: 'open-shelf', axis: 2,
+    read: (mm) => shelfBoard([authoredDim('open-shelf')[0], authoredDim('open-shelf')[1], mm]),
+    what: 'a shelf board',
+  },
+  { shape: 'slat-panel', axis: 2, read: slatRail, what: 'the head and foot rails' },
+  { shape: 'slat-panel', axis: 1, read: slatBacking, what: 'the backing board' },
 ];
 
 /** Worst disagreement between drawing at the stored size and drawing at the authored
@@ -217,6 +240,11 @@ describe('every absolute-bearing helper in the catalogue', () => {
     // that it has been emptied.
     expect(CAPS.length).toBeGreaterThanOrEqual(9);
     expect(new Set(CAPS.map((r) => r.shape)).size, 'distinct shapes covered').toBeGreaterThanOrEqual(8);
+    // …and the seven building blocks' absolutes are among them, by name: a sweep that asks
+    // only "is anything here" is exactly how six shapes join a set with no recorded reason.
+    for (const shape of ['worktop', 'screen', 'door-cabinet', 'drawer-unit', 'open-shelf', 'slat-panel'] as Shape[]) {
+      expect(CAPS.some((r) => r.shape === shape), `${shape} has no cap row`).toBe(true);
+    }
   });
 
   it('really is distorted by a group scale, at some legal size', () => {
