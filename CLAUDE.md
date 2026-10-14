@@ -767,7 +767,8 @@ Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
 ranges / shape-search / item-snap / units / dates / scene-file / transforms /
 fit-check / capture-slots / detect-prompt / exif / sighting-links /
-repeat-sightings / drag-convoy / drag-resolve / layout-rules / layout-score / block-forms / block-style all
+repeat-sightings / drag-convoy / drag-resolve / layout-rules / layout-score / block-forms / block-style /
+made-piece / made-actions all
 have tests in `tests/`).
 
 **A dead-code sweep that does not read `tests/` is not a sweep.** Two kinds of

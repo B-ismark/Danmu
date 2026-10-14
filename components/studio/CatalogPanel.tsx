@@ -361,6 +361,13 @@ export function LibraryBody({
       <LibraryPicker
         onPick={addItem}
         onPickMany={spawnMany}
+        onPickMine={(piece, byPointer) => {
+          const outcome = addPieceToRoom(
+            { label: piece.name, category: 'other', shape: 'made', dimMM: [...piece.made.sizeMM], made: piece.made },
+            undefined,
+          );
+          if (sayAdded(outcome, piece.name) && byPointer) focusStudioSurface();
+        }}
         columns={1}
         draggable={canDrag && !touch}
         ghostedDrag={ghostDrag}

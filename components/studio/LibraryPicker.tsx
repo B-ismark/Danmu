@@ -25,6 +25,8 @@ import { SIZE_EXAMPLES } from '@/lib/size-examples';
 import { rankLibrary, sizeFromQuery, queryNamesSize, resolveQuerySize, describeOverruled } from '@/lib/shape-search';
 import { Icon } from '@/components/ui/Icon';
 import { ShapeIcon } from '@/components/ui/ShapeIcon';
+import type { MyPiece } from '@/lib/storage';
+import { MyPiecesShelf, matchMyPieces, useMyPieces } from './MyPiecesShelf';
 
 const ALL_ITEMS: LibraryItem[] = PART_LIBRARY;
 
@@ -70,6 +72,7 @@ export function LibraryPicker({
   maxHeight = 320,
   autoFocus = true,
   initialQuery = '',
+  onPickMine,
 }: {
   /** `ownSize` is set when the search words named the size — "sofa 228x95x83cm" —
    *  so the host can treat it as the user's own measurement rather than a preset's
@@ -94,6 +97,9 @@ export function LibraryPicker({
    *  Initial only, not controlled: the field is the user's the moment they type in
    *  it, and a `value` prop here would fight them on every keystroke. */
   initialQuery?: string;
+  /** Offer the user's saved pieces ("My pieces") above the catalogue. Only the catalog
+   *  host passes it: swapping a piece for a saved build is not a thing yet. */
+  onPickMine?: (piece: MyPiece, byPointer: boolean) => void;
 }) {
   const [q, setQ] = useState(initialQuery);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -136,6 +142,7 @@ export function LibraryPicker({
   // walk: grouped, and only the entries the current search left behind.
   const ordered = Object.values(groups).flat();
   const canMark = !!onPickMany;
+  const mine = matchMyPieces(useMyPieces(!!onPickMine), query);
 
   /** Touch's Shift: a finger held on a row toggles its mark. The decision (touch only,
    *  moved > 8px cancels, the following click is swallowed once) is `lib/long-press`;
@@ -261,7 +268,7 @@ export function LibraryPicker({
         </div>
       )}
       <div role="status" aria-live="polite" className="sr-only">
-        {query ? `${items.length} match${items.length === 1 ? '' : 'es'}` : ''}
+        {query ? `${items.length + mine.length} match${items.length + mine.length === 1 ? '' : 'es'}` : ''}
       </div>
       <div
         style={{
@@ -274,7 +281,8 @@ export function LibraryPicker({
           minHeight: 0,
         }}
       >
-        {Object.keys(groups).length === 0 && (
+        {onPickMine && <MyPiecesShelf pieces={mine} onPick={onPickMine} />}
+        {Object.keys(groups).length === 0 && mine.length === 0 && (
           <div className="t-meta" style={{ padding: 16, textAlign: 'center', lineHeight: 1.5 }}>
             Nothing matches &quot;{q}&quot;.
           </div>
