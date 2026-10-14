@@ -1,0 +1,31 @@
+# Dependency updates. Grouped so a week's minor and patch bumps arrive as ONE pull
+# request per ecosystem rather than a dozen: each one still has to pass CI, and the
+# `main` ruleset will not merge it otherwise. Major versions come one per PR, since
+# those are the ones that need reading.
+#
+# Security updates are separate from this file: they are switched on in Settings →
+# Code security ("Dependabot security updates") and open as soon as an advisory lands.
+version: 2
+updates:
+  - package-ecosystem: npm # pnpm is detected from pnpm-lock.yaml
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Pinned exactly, and the same version is written into lib/local-detect.ts
+      # (ORT_VERSION, the CDN fallback) and tests/service-worker.test.ts. A bump here
+      # alone would install one runtime and fetch another. Move all three together,
+      # then run `pnpm vendor:ort`.
+      - dependency-name: onnxruntime-web
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
