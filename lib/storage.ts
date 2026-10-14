@@ -959,6 +959,9 @@ export type MyPiece = {
   name: string;
   made: MadeSpec;
   savedAt: number;
+  /** Blocks the stored record held that no longer read (a retired shape), left out.
+   *  Carried so the shelf can say so — lossy is allowed here, silent is not. */
+  dropped?: number;
 };
 
 /** Saved pieces, read the same defensive way as a room file's: a record that no longer
@@ -978,6 +981,7 @@ export const piecesStore = {
         name: r.name.slice(0, MAX_PIECE_NAME),
         made: read.spec,
         savedAt: typeof r.savedAt === 'number' ? r.savedAt : 0,
+        ...(read.dropped > 0 ? { dropped: read.dropped } : {}),
       });
     }
     return out.sort((a, b) => b.savedAt - a.savedAt);

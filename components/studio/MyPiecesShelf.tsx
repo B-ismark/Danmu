@@ -96,13 +96,22 @@ export function MyPiecesShelf({ pieces, onPick }: { pieces: readonly MyPiece[]; 
                 type="button"
                 className="ds-btn ds-btn--sm pick-row"
                 onClick={(e) => onPick(piece, e.detail > 0)}
-                title={`${w} × ${d} × ${h} mm · ${count} ${count === 1 ? 'block' : 'blocks'}${piece.made.modular ? ' · repeats when widened' : ''}`}
+                title={`${piece.name} · ${w} × ${d} × ${h} mm · ${count} ${count === 1 ? 'block' : 'blocks'}${piece.made.modular ? ' · repeats when widened' : ''}`}
                 style={{ flex: 1, minWidth: 0, justifyContent: 'flex-start', paddingLeft: 3, cursor: 'pointer' }}
               >
                 <ShapeIcon shape="made" />
                 <span className="truncate" style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                   {piece.name}
                 </span>
+                {!!piece.dropped && (
+                  <span
+                    title={`${piece.dropped} ${piece.dropped === 1 ? 'block' : 'blocks'} of this piece could not be read, and ${piece.dropped === 1 ? 'is' : 'are'} left out`}
+                    style={{ display: 'inline-flex', flexShrink: 0, color: 'var(--warn-text)' }}
+                  >
+                    <Icon name="info" size={11} />
+                    <span className="sr-only">, {piece.dropped} {piece.dropped === 1 ? 'block' : 'blocks'} left out</span>
+                  </span>
+                )}
                 {piece.made.modular && (
                   <span title="Repeats when widened" style={{ display: 'inline-flex', flexShrink: 0, color: 'var(--ink-3)' }}>
                     <Icon name="layers" size={11} />
