@@ -2616,10 +2616,10 @@ whichever was open, rather than stacking Help's card over View's. It was undo/re
 Snapshot styled as the primary action, which downloading a PNG is not. Undo/redo went
 to `CanvasView`, Rescan to the rail, and every "take this away with you" action
 collapsed into one `ExportMenu.tsx`: the 3D snapshot (3D tab only — it captures that
-view), the floor-plan PNG, and the room itself as a `.danmu.json` (rows *This 3D view*, *Floor plan*, *Room file*). Once a room has had real work put into it (`lib/backup-nudge.ts`), a one-time toast offers *Save a backup file*, because a room lives only in this browser and the file is the one copy that outlives it. Those were three
+view), the floor plan as a PNG and as an SVG, and the room itself as a `.danmu.json` (rows *This 3D view*, *Floor plan*, *Floor plan for print (SVG)*, *Room file*). Once a room has had real work put into it (`lib/backup-nudge.ts`), a one-time toast offers *Save a backup file*, because a room lives only in this browser and the file is the one copy that outlives it. Those were three
 actions in three places at three visual weights, which is how you end up not knowing
 the other two exist. The scene file is last in the menu and labelled as the one you
-can open again, since that is what separates it from the two pictures.
+can open again, since that is what separates it from the pictures.
 
 There is deliberately **no furniture CSV**. It existed, and was retired: a spreadsheet
 writer with formula-injection escaping is careful work aimed at the wrong target, and
@@ -3024,7 +3024,17 @@ outlined box around outlined buttons, which put two boundaries on every control.
   help cards is "Hide", and a mnemonic that matches the label beats one borrowed
   from software this app is not.)
 - **Snapshot** (`lib/snapshot.ts`) — PNG of the 3D view, Export → *This 3D view*
-  (replaces the deleted photoreal render).
+  (replaces the deleted photoreal render). Rendered at its own size
+  (`snapshotPixelRatio`, a 3200 px long edge) rather than copied off the screen's
+  buffer, so a laptop, a throttled GPU or a press mid-orbit does not save a soft
+  picture; the renderer is put back in the same frame.
+- **Floor-plan exports** (`lib/plan-export.ts`) — one drawing, two surfaces. The
+  sheet is drawn once against `SheetContext`: a canvas for the PNG (4x, `sheetScale`
+  shrinking it only past what Safari will encode) and `SvgSheet`
+  (`lib/svg-sheet.ts`) for the SVG, which takes the same canvas calls and writes
+  vectors. A second, hand-written SVG would have drifted from the PNG the first time
+  either changed. The SVG is sized in millimetres so it prints at **1:50** at 100%,
+  and its sheet says so where the PNG states its pixel scale.
 - **The scene file** (`lib/scene-file.ts`, `components/studio/SceneFile.tsx`) —
   Export → *Room file* writes the whole room as readable JSON
   (`front-room.danmu.json`); `Open a file` on the rooms page lands one as a **new**
@@ -3515,7 +3525,7 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 | `lib/detection-record.ts` · `lib/sighting-links.ts` · `lib/repeat-sightings.ts` · `lib/slot-names.ts` · `lib/review-history.ts` | **Detection records and the review's answers.** `detection-record` is the one codec between a `Detection` and the stored `detectedObjects` row (both directions, so a field cannot be written and not read). `repeat-sightings` is the app's *guess* that two rows are one piece seen twice; `sighting-links` is the person's answer — `sameAs` on the later row — plus the combined floor spot (`seenAt`). `slot-names` holds the words a wall goes by and the one reader of them. `review-history` is undo / redo for the review, which lives in component state until `finish()`. |
 | `lib/room-presets.ts` · `lib/room-start.ts` | The room shapes a new room starts from and the one way a room is made from one (the New room page and the empty rooms page's starter share it); `room-start` is the room as it first arrived, which **Start over** puts back. |
 | `lib/rigid-parent.ts` · `lib/orphan-drop.ts` · `lib/to-wall.ts` · `lib/duplicate-place.ts` · `lib/press-selection.ts` | Gestures' company and edges: `cascadeTransform` carries what rests on a piece; `orphan-drop` says what happens to pieces standing on something deleted; `to-wall` is the Inspector's **Wall** button as a convoy gesture; `duplicate-place` puts a copy beside its original, never inside it; `press-selection` is what was selected when a press landed. |
-| `lib/plan-annotations.ts` · `lib/plan-view-transform.ts` · `lib/plan-export.ts` · `lib/plan-hit.ts` | The 2D plan's arithmetic: where the outside-the-room annotations sit, client pixels to viewBox, the PNG export, and what is under the pointer. |
+| `lib/plan-annotations.ts` · `lib/plan-view-transform.ts` · `lib/plan-export.ts` · `lib/plan-hit.ts` | The 2D plan's arithmetic: where the outside-the-room annotations sit, client pixels to viewBox, the PNG and SVG exports (`lib/svg-sheet.ts` is the SVG surface), and what is under the pointer. |
 | `lib/model-cache.ts` · `lib/backup-nudge.ts` · `lib/leave-note.ts` · `lib/page-leave.ts` | Local persistence beyond rooms: the detector's verified weights kept in Cache Storage after the first download (written by the page, not the service worker); the nudge to keep rooms from vanishing with site data; the synchronous leave note; the save-on-leave hooks. |
 | `lib/label-suggest.ts` · `lib/photo-drop.ts` · `lib/photo-tag.ts` | The review and capture screens' small decisions: what to offer when a detected piece is renamed; what a drop onto a photo tile means (replace vs reorder); where a piece's name tag sits on the photo. |
 | `lib/after-paint.ts` · `lib/brand-mark.ts` · `lib/site-url.ts` | Let a busy state paint before blocking work; the Danmu mark drawn once for the places that cannot share a renderer; the absolute site URL Open Graph tags need. |
