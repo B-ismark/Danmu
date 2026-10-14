@@ -36,7 +36,7 @@ export function EmptyInspector() {
           <Icon name="cube" size={22} />
         </span>
         <p className="empty-inspector__say">{touch ? 'Tap' : 'Click'} a piece to style it</p>
-        <p className="t-small empty-inspector__hint">Or press Add to bring something in from the Library.</p>
+        <p className="t-small empty-inspector__hint">Or press A to bring something in from the Library.</p>
       </div>
       {(!phone || canStartOver) && (
         <div className="empty-inspector__actions">

@@ -46,6 +46,15 @@ export const STUDIO_CANVAS_ID = 'studio-canvas';
  *  (`.add-morph`, globals.css), so the two triggers read one flag and one motion.
  *  Both words are in the DOM and the button's `aria-label` carries the name, so
  *  they are `aria-hidden` rather than announced twice. */
+// The two triggers' one name, and the key beside it. The bubble shows the key ("(A)",
+// as `UndoRedo`'s "(Ctrl+Z)" does); the accessible name does not repeat it, because
+// `aria-keyshortcuts` is where a screen reader reads that from.
+export const ADD_TIP_KEY = 'A';
+export function addTriggerNames(open: boolean): { name: string; tip: string } {
+  const name = open ? 'Close the Library' : 'Add from the Library';
+  return { name, tip: `${name} (${ADD_TIP_KEY})` };
+}
+
 function AddMorph() {
   return (
     <>
@@ -72,9 +81,9 @@ export function AddPiecesButton({ wide = false }: { wide?: boolean } = {}) {
   // fixed at "Add a piece to the room", so on the open state it sat over a button
   // reading "Close" promising the opposite, in the browser's grey box rather than
   // the one every other control here uses.
-  const tip = open ? 'Close the Library' : 'Add a piece to the room';
+  const { name: tip, tip: bubble } = addTriggerNames(open);
   return (
-    <Tooltip label={tip}>
+    <Tooltip label={bubble}>
       <button
         onClick={() => {
           const next = !open;
@@ -88,6 +97,7 @@ export function AddPiecesButton({ wide = false }: { wide?: boolean } = {}) {
         }}
         aria-expanded={open}
         aria-label={tip}
+        aria-keyshortcuts={ADD_TIP_KEY}
         className={`ds-btn ds-btn--sm ds-btn--accent rail-cta${wide ? ' rail-wide' : ''}`}
       >
         {/* The label says the action, not the state: a button that reads "Library is
@@ -104,8 +114,8 @@ export function AddPiecesButton({ wide = false }: { wide?: boolean } = {}) {
             rather than brevity for its own sake: `RailFooter` puts it beside a
             labelled Delete and a 32px square inside a rail that floors at
             `--rail-right-min`, and the two longer labels together ask for more width
-            than that leaves. The object is not lost — the tooltip says "Add a piece
-            to the room", the panel it opens is headed "Library", and the canvas
+            than that leaves. The object is not lost — the tooltip says "Add from the
+            Library", the panel it opens is headed "Library", and the canvas
             trigger has read a bare "Add" all along, so the two triggers now agree.
 
             The label gets its own element so it can ellipsise: `.ds-btn` is
@@ -127,20 +137,23 @@ export function CatalogToggle() {
   // (`aria-expanded`, globals.css). It sits in `CanvasTools`, which wraps, and
   // pills hold their width there — so it goes to a row of its own rather than being
   // compressed to an icon and half a word.
+  // One name for both triggers (`addTriggerNames`), so the two read as one control
+  // that happens to live in two places, and the bubble carries the key.
+  const { name, tip } = addTriggerNames(open);
   return (
     <div className="chrome-pill">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        className="chrome-pill__text"
-        // The rail's Add says "Add a piece to the room" to a screen reader; this one
-        // said only its visible "Add", so the two read as one control twice. It names
-        // what a press does NOW, like the rail's.
-        aria-label={open ? 'Close the Library' : 'Add a piece'}
-      >
-        <AddMorph />
-      </button>
+      <Tooltip label={tip} placement="bottom">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          className="chrome-pill__text"
+          aria-label={name}
+          aria-keyshortcuts={ADD_TIP_KEY}
+        >
+          <AddMorph />
+        </button>
+      </Tooltip>
     </div>
   );
 }

@@ -17,9 +17,11 @@
 // size. Both are on THIS box now, so there is one field instead of two tabs
 // claiming two features, and `rankLibrary` is what the search reads.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PART_LIBRARY, DND_MIME, type LibraryItem } from '@/lib/scene-spec';
 import { dropCarry } from '@/lib/drop-carry';
+import { createLongPress } from '@/lib/long-press';
+import { SIZE_EXAMPLES } from '@/lib/size-examples';
 import { rankLibrary, sizeFromQuery, queryNamesSize, resolveQuerySize, describeOverruled } from '@/lib/shape-search';
 import { Icon } from '@/components/ui/Icon';
 import { ShapeIcon } from '@/components/ui/ShapeIcon';
@@ -94,6 +96,7 @@ export function LibraryPicker({
   initialQuery?: string;
 }) {
   const [q, setQ] = useState(initialQuery);
+  const inputRef = useRef<HTMLInputElement>(null);
   // Decoded ahead of the first drag — see `blankDragImage`.
   useEffect(() => {
     if (ghostedDrag) blankDragImage();
@@ -134,6 +137,33 @@ export function LibraryPicker({
   const ordered = Object.values(groups).flat();
   const canMark = !!onPickMany;
 
+  /** Touch's Shift: a finger held on a row toggles its mark. The decision (touch only,
+   *  moved > 8px cancels, the following click is swallowed once) is `lib/long-press`;
+   *  this only says what a hold DOES. Resolved at the time of the hold, like a
+   *  Shift-mark, so the size in the box then is the size the mark keeps. */
+  const holdRef = useRef<(item: LibraryItem) => void>(() => {});
+  holdRef.current = (item) => {
+    anchorRef.current = item.label;
+    setMarked((prev) =>
+      prev.some((m) => m.label === item.label) ? prev.filter((m) => m.label !== item.label) : [...prev, item],
+    );
+  };
+  const pending = useRef<LibraryItem | null>(null);
+  const lastType = useRef('');
+  const press$ = useMemo(
+    () =>
+      createLongPress(
+        () => {
+          if (pending.current) holdRef.current(pending.current);
+        },
+        { enabled: () => canMarkRef.current },
+      ),
+    [],
+  );
+  const canMarkRef = useRef(canMark);
+  canMarkRef.current = canMark;
+  useEffect(() => () => press$.cancel(), [press$]);
+
   /** The item as it would actually be ADDED: same label, same shape, but carrying
    *  any size the search words named, clamped into its own range.
    *
@@ -156,6 +186,8 @@ export function LibraryPicker({
    *   - Shift: mark a range, to add several in one go.
    */
   function press(e: React.MouseEvent, item: LibraryItem) {
+    // The click that ends a long-press already did its job (it marked the row).
+    if (press$.consumeClick()) return;
     if (canMark && e.shiftKey) {
       const from = ordered.findIndex((i) => i.label === anchorRef.current);
       const to = ordered.findIndex((i) => i.label === item.label);
@@ -189,6 +221,7 @@ export function LibraryPicker({
       <input
         className="field"
         aria-label="Search the Library"
+        ref={inputRef}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         // "Use my own size", which is what the Room panel's retired "Will it fit" tab
@@ -201,6 +234,32 @@ export function LibraryPicker({
         autoFocus={autoFocus}
         style={{ marginBottom: 10, flexShrink: 0 }}
       />
+      {/* What the box understands, as things to press. Only where a size means
+          something to the host (the catalog; the swap modal has no `onPickMany`) and
+          only while the box is empty, so it is never in the way of a search. Wraps:
+          three chips do not fit a 268px dock on one line in every unit and font. */}
+      {canMark && query === '' && (
+        <div
+          role="group"
+          aria-label="Try a size"
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10, minWidth: 0, flexShrink: 0 }}
+        >
+          {SIZE_EXAMPLES.map((ex) => (
+            <button
+              key={ex.text}
+              type="button"
+              className="ds-chip"
+              style={{ cursor: 'pointer', maxWidth: '100%', minWidth: 0 }}
+              onClick={() => {
+                setQ(ex.text);
+                inputRef.current?.focus();
+              }}
+            >
+              <span className="truncate">{ex.text}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div role="status" aria-live="polite" className="sr-only">
         {query ? `${items.length} match${items.length === 1 ? '' : 'es'}` : ''}
       </div>
@@ -285,6 +344,22 @@ export function LibraryPicker({
                       : undefined
                   }
                   onClick={(e) => press(e, added)}
+                  onPointerDown={
+                    canMark
+                      ? (e) => {
+                          pending.current = added;
+                          lastType.current = e.pointerType;
+                          press$.down(e.clientX, e.clientY, e.pointerType);
+                        }
+                      : undefined
+                  }
+                  onPointerMove={canMark ? (e) => press$.move(e.clientX, e.clientY) : undefined}
+                  onPointerUp={canMark ? () => press$.cancel() : undefined}
+                  onPointerCancel={canMark ? () => press$.cancel() : undefined}
+                  onPointerLeave={canMark ? () => press$.cancel() : undefined}
+                  // A long press on touch also raises the context menu; the hold has
+                  // its own meaning here.
+                  onContextMenu={canMark ? (e) => { if (lastType.current === 'touch') e.preventDefault(); } : undefined}
                   aria-pressed={marked.some((m) => m.label === item.label) || undefined}
                   className="ds-btn ds-btn--sm pick-row"
                   title={

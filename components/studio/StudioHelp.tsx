@@ -176,6 +176,7 @@ function modelSections(): HelpSectionSpec[] {
       note: 'Click the room first. Keys do nothing while you are in a panel.',
       body: (
         <HelpKeys>
+          <HelpKey keys={<Kb>A</Kb>}>open or close the Library</HelpKey>
           <HelpKey keys={<Kb>W</Kb>}>move</HelpKey>
           <HelpKey keys={<Kb>S</Kb>}>resize</HelpKey>
           <HelpKey keys={<Kb>R</Kb>}>spin</HelpKey>
@@ -264,7 +265,9 @@ function TwoLists() {
         <b>Catalog</b>, {catalogAt}, is what is in this room; <b>Library</b>, {libraryAt}, is what you can add.
       </HelpLine>
       {touch ? (
-        <HelpLine>Tap a piece in the Library to drop it into the first clear spot.</HelpLine>
+        <HelpLine>
+          Tap a piece in the Library to drop it into the first clear spot. Press and hold to pick several.
+        </HelpLine>
       ) : (
         <HelpLine>
           In either list, <Kb>Shift</Kb>-click picks a run of rows. <Kb>Ctrl</Kb>-click adds that piece to the
@@ -472,6 +475,7 @@ function planSections(): HelpSectionSpec[] {
           >
             hold Shift with the arrows to turn it
           </HelpKey>
+          <HelpKey keys={<Kb>A</Kb>}>opens or closes the Library</HelpKey>
           <HelpKey keys={<Kb>F</Kb>}>brings the selected piece to the middle</HelpKey>
           <HelpKey keys={<Kb>H</Kb>}>hides it</HelpKey>
           <HelpKey keys={<Kb>Tab</Kb>}>steps through the pieces and the walls</HelpKey>

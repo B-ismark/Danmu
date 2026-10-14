@@ -184,7 +184,7 @@ describe('everything floating over the room is one pill family', () => {
   it.each([
     ['components/studio/UndoRedo.tsx', /<div className="chrome-pill" role="group" aria-label="Edit history">/],
     ['components/studio/TransformToolbar.tsx', /<div className="chrome-pill chrome-seg" role="group"/],
-    ['components/studio/CatalogPanel.tsx', /<div className="chrome-pill">\s*<button[\s\S]*?className="chrome-pill__text"/],
+    ['components/studio/CatalogPanel.tsx', /<div className="chrome-pill">\s*(?:<Tooltip[^>]*>\s*)?<button[\s\S]*?className="chrome-pill__text"/],
     ['app/room/[roomId]/plan/page.tsx', /<div className="chrome-pill">\s*<button[\s\S]*?className="chrome-pill__text"/],
   ])('%s', (file, re) => {
     expect(src(file)).toMatch(re);
