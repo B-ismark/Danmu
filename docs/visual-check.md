@@ -3362,3 +3362,24 @@ pools on the table and floor with chair shadows. A real GPU's shadow-map precisi
 the wall seams is the part a headless run cannot vouch for.
 
 **Merged:** `7b4bea8` (B-ismark/Danmu#266), not yet looked at.
+
+## Saved pictures: their own size, and the Neutral tone curve
+
+**Where:** any room on **High** and then **Fast**. First, Export → This 3D view, at
+midday, then at evening (18:30) and night (22:00) on the day strip. Second, the same
+export on a real phone. Third, Export → Floor plan on the largest preset.
+
+**What wrong looks like:** an evening or night room that comes out muddier, darker or
+more orange than its mood intends. Neutral replaced ACES and `EXPOSURE_MATCH = 1.25`
+was chosen by eye from **daytime** exports only. A saved picture whose framing differs
+from the screen, or that is cropped or stretched. The live view going blank, or
+staying soft, after an export. A floor-plan export that never arrives.
+
+**Why eyes:** the 3D export now renders at a 3200 px long edge rather than copying the
+screen. On a phone that means a larger buffer for one frame. If the browser will not
+allocate it, the export falls back to screen size, but a lost WebGL context is not
+covered. Headless SwiftShader produced a correct 3200×3071 picture of the starter room.
+A real phone's GPU memory is the part it cannot vouch for. `tests/export-resolution.test.ts`
+and `tests/tone.test.ts` pin the sizes and keep both quality paths on one curve.
+
+**Rides:** `claude/pensive-hypatia-rvdovj` (B-ismark/Danmu#268), not yet looked at.
