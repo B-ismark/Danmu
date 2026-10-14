@@ -8,7 +8,7 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type M
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, N8AO, SMAA, wrapEffect } from '@react-three/postprocessing';
 import type { EffectComposer as Composer } from 'postprocessing';
-import { ACESFilmicToneMapping, Color, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Group, type Mesh, type MeshBasicMaterial, type Scene, type WebGLRenderTarget, type WebGLRenderer } from 'three';
+import { Color, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Group, type Mesh, type MeshBasicMaterial, type Scene, type WebGLRenderTarget, type WebGLRenderer } from 'three';
 import { SUN_DRAG_ID, useStudio, type Quality } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
@@ -19,6 +19,7 @@ import { lightingAt, KEY_DIR, DEFAULT_BEARING_DEG, type KeyLightSpec } from '@/l
 import { shadowFit } from '@/lib/shadow-fit';
 import { bounceIntensity, glazingArea } from '@/lib/bounce';
 import { useSnapshot, downloadBlob, snapshotPixelRatio } from '@/lib/snapshot';
+import { EXPOSURE_MATCH, TONE_MAPPING } from './tone';
 import { snapshotFileName } from '@/lib/exports';
 import { addPieceToRoom, planPiece } from '@/lib/add-piece';
 import { dropCarry } from '@/lib/drop-carry';
@@ -322,11 +323,12 @@ export function Room({
       // debounce from 50 to 0 and make the element-resize path worse than it was.
       // Same shape of trap as `gap` / `row-gap` in globals.css.
       resize={{ debounce: { scroll: 50, resize: 90 } }}
-      // ACES tone mapping + sRGB output = the single biggest realism win for
-      // zero runtime cost: it maps linear HDR lighting to a filmic curve so
-      // bright surfaces roll off instead of clipping to flat white.
+      // Tone mapping + sRGB output = the single biggest realism win for zero
+      // runtime cost: linear HDR lighting is mapped to a curve so bright surfaces
+      // roll off instead of clipping to flat white. Which curve, and why, is
+      // ./tone.ts.
       // preserveDrawingBuffer OFF; SceneCapture reads the canvas synchronously.
-      gl={{ antialias: true, alpha: true, toneMapping: ACESFilmicToneMapping }}
+      gl={{ antialias: true, alpha: true, toneMapping: TONE_MAPPING }}
       // On-demand rendering: paint only when something actually changed. R3F
       // invalidates itself for every declarative change, drei's Orbit/Transform
       // controls invalidate on move, and the handful of things that mutate the
@@ -385,9 +387,9 @@ export function Room({
       {/* The grading step is not optional here. The composer switches the
           renderer's own tone mapping OFF (it renders into a linear half-float
           buffer and expects a pass to finish the job), so without <Grade> the
-          ACES curve and every mood's `exposure` set on `gl` above silently stop
+          tone curve and every mood's `exposure` set on `gl` above silently stop
           applying — 'high' showed the room flatter and muddier than 'fast', the
-          reverse of what the toggle promises. It is three's own ACES curve reading
+          reverse of what the toggle promises. It is three's own curve (./tone.ts) reading
           `gl.toneMappingExposure`, so the two qualities share one curve and one
           exposure, and it leaves the backdrop alone as 'fast' does (see grade.ts).
           It sits after N8AO (occlusion is a linear-light operation) and before
@@ -501,7 +503,7 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
   const scene = useThree((s) => s.scene);
   const invalidate = useThree((s) => s.invalidate);
   useLayoutEffect(() => {
-    gl.toneMappingExposure = L.exposure;
+    gl.toneMappingExposure = L.exposure * EXPOSURE_MATCH;
     invalidate();
   }, [gl, invalidate, L.exposure]);
   // The environment's strength, live. `Environment` applies the same value on each

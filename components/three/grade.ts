@@ -1,4 +1,5 @@
-// The 'high' quality grading step: three's own ACES filmic curve, applied as a
+// The 'high' quality grading step: three's own tone curve (Neutral — see tone.ts
+// for why not ACES), applied as a
 // post-processing effect because the composer turns the renderer's tone mapping
 // off (it renders into a linear half-float target and leaves the curve to a pass).
 //
@@ -22,7 +23,7 @@ const fragmentShader = /* glsl */ `
 #include <tonemapping_pars_fragment>
 void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
   // A cleared pixel reads exactly 1.0; anything drawn is strictly nearer.
-  outputColor = depth < 1.0 ? vec4(ACESFilmicToneMapping(inputColor.rgb), inputColor.a) : inputColor;
+  outputColor = depth < 1.0 ? vec4(NeutralToneMapping(inputColor.rgb), inputColor.a) : inputColor;
 }
 `;
 
