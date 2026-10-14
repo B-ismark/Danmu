@@ -932,8 +932,17 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
       // skipped occlusion AND grading — the composer has turned the renderer's
       // tone mapping off — so the file someone saved to show a partner was a
       // flatter, greyer room than the one on their screen.
-      if (fx) fx.render();
-      else gl.render(scene, camera);
+      const paint = () => (fx ? fx.render() : gl.render(scene, camera));
+      paint();
+      // The check above covers the canvas's own buffer only. On 'high' the composer's
+      // half-float, N8AO and SMAA targets were resized too, and a GPU that could not
+      // allocate one of THOSE says so here, not by shrinking anything — the frame just
+      // comes out black. Same answer: back to the screen's size, and paint again.
+      if (gl.getPixelRatio() !== ratioWas && (raw.getError() === raw.OUT_OF_MEMORY || raw.isContextLost())) {
+        console.warn('[export] the GPU ran out of memory for a full-size picture; saving at screen size');
+        resize(ratioWas);
+        paint();
+      }
       const src = gl.domElement;
       const snap = document.createElement('canvas');
       snap.width = src.width;

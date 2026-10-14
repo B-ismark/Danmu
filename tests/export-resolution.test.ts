@@ -29,6 +29,14 @@ describe('snapshotPixelRatio', () => {
     expect(snapshotPixelRatio(1280, 800, 1, 2048)).toBe(1.6);
   });
 
+  it('goes below the screen ratio only for what a browser can encode', () => {
+    // A 3440 × 1440 ultrawide at 2x is 19.8 MP — past Safari's 16,777,216, where
+    // toBlob hands back null and every press would fail.
+    const r = snapshotPixelRatio(3440, 1440, 2, 16384);
+    expect(r).toBeCloseTo(1.8406, 3);
+    expect(Math.floor(3440 * r) * Math.floor(1440 * r)).toBeLessThanOrEqual(16_777_216);
+  });
+
   it('keeps the current ratio for a canvas with no size yet', () => {
     expect(snapshotPixelRatio(0, 0, 1.5, 16384)).toBe(1.5);
   });

@@ -62,7 +62,7 @@ type PlanRoom = { footprint: Footprint; width: number; depth: number; height: nu
 
 /** The sheet, measured and ready to draw on any surface — a canvas for the PNG, an
  *  `SvgSheet` for the SVG. ONE drawing for both, so the two files cannot disagree. */
-type PlanSheet = { W: number; H: number; draw: (ctx: SheetContext) => void };
+type PlanSheet = { W: number; H: number; draw: (ctx: SheetContext) => void; measure: MeasureText };
 
 export function exportPlanPng(
   parts: ScenePart[],
@@ -72,7 +72,9 @@ export function exportPlanPng(
    *  filename, and the default it used to carry was never passed by anybody. */
   title: string,
 ): Promise<void> {
-  const { W, H, draw } = planSheet(parts, room, dimUnit, title, `scale 1 m = ${PX_PER_M} px`);
+  // No pixel figure: the file is drawn at `sheetScale`, which varies with the room, so
+  // any px-per-metre typed here would be a measurement describing a different file.
+  const { W, H, draw } = planSheet(parts, room, dimUnit, title, 'to scale: see the 1 m bar');
   const c = document.createElement('canvas');
   const k = sheetScale(W, H);
   // Floored: rounding a side up can carry an area-capped sheet back over the cap.
@@ -105,8 +107,8 @@ export function exportPlanPng(
  *  any zoom and on any printer, and it opens in Illustrator, Figma or Inkscape for
  *  anyone who wants to mark it up. No size limit either: it is text, not pixels. */
 export function planSvg(parts: ScenePart[], room: PlanRoom, dimUnit: DimUnit, title: string): string {
-  const { W, H, draw } = planSheet(parts, room, dimUnit, title, `scale 1:${PRINT_SCALE} printed at 100%`);
-  const svg = new SvgSheet(W, H, canvasMeasure(), SVG_MM_PER_PX);
+  const { W, H, draw, measure } = planSheet(parts, room, dimUnit, title, `scale 1:${PRINT_SCALE} printed at 100%`);
+  const svg = new SvgSheet(W, H, measure, SVG_MM_PER_PX);
   draw(svg);
   return svg.toString();
 }
@@ -170,7 +172,7 @@ function planSheet(
   /** Right edge legend text must not cross. */
   const legendMaxW = W - MARGIN - (MARGIN + 24);
 
-  return { W, H, draw };
+  return { W, H, draw, measure };
 
   function draw(ctx: SheetContext) {
     ctx.fillStyle = PLAN.paper;

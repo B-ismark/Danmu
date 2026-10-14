@@ -74,11 +74,12 @@ function multiply(a: Matrix, b: Matrix): Matrix {
 /** Rounded so the file is readable and does not carry 1e-15 noise from a rotation. */
 const n = (v: number) => String(Math.round(v * 1000) / 1000);
 
-/** Escapes markup, and DROPS the control characters XML 1.0 forbids outright: a room
+/** Escapes markup, and DROPS the characters XML 1.0 forbids outright (C0 controls,
+ *  U+FFFE, U+FFFF): a room
  *  or piece name carrying one (pasted text, an imported room file) would otherwise
  *  make the whole document fail to open, where the PNG draws the same name fine. */
 function escapeXml(s: string): string {
-  return s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!);
+  return s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!);
 }
 
 /** `#RRGGBBAA` → a 6-digit colour plus an opacity. Browsers read the 8-digit form, but

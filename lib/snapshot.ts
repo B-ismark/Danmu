@@ -47,16 +47,23 @@ export function downloadBlob(blob: Blob, filename: string) {
  *  partner full-screen or prints wants its own size, chosen here, not the screen's. */
 export const SNAPSHOT_LONG_EDGE = 3200;
 
+/** The most pixels a saved picture may have. Safari refuses to encode a canvas over
+ *  16,777,216 pixels (`toBlob` hands back null), and the snapshot is copied into a 2D
+ *  canvas to be encoded — the same limit `sheetScale` respects for the floor plan. */
+export const SNAPSHOT_MAX_PIXELS = 16_777_216;
+
 /** The pixel ratio to render a snapshot at, for a canvas `cssW` × `cssH` CSS pixels
- *  whose renderer is currently at `current`. Never below `current` — a 4K screen
- *  already beats the target and keeps what it has — and never past what the GPU can
- *  allocate (`maxSide`, from `gl.capabilities.maxTextureSize`), since every buffer
- *  the composer owns is resized to match. Same framing either way: the CSS size,
- *  and so the camera's aspect, is untouched. */
+ *  whose renderer is currently at `current`. Normally never below `current` — a 4K
+ *  screen already beats the target and keeps what it has. Two hard limits outrank
+ *  that, and can take the ratio BELOW the screen's: what the GPU can allocate
+ *  (`maxSide`), and what a browser will encode (`SNAPSHOT_MAX_PIXELS`) — an ultrawide
+ *  at 2x is past the second, and saving a smaller picture beats saving none. Same
+ *  framing either way: the CSS size, and so the camera's aspect, is untouched. */
 export function snapshotPixelRatio(cssW: number, cssH: number, current: number, maxSide: number): number {
   const longCss = Math.max(cssW, cssH);
   if (!(longCss > 0) || !(current > 0)) return current > 0 ? current : 1;
-  const want = SNAPSHOT_LONG_EDGE / longCss;
-  const cap = maxSide / longCss;
-  return Math.min(Math.max(want, current), Math.max(cap, 0) || current);
+  const want = Math.max(SNAPSHOT_LONG_EDGE / longCss, current);
+  const bySide = maxSide > 0 ? maxSide / longCss : want;
+  const byArea = Math.sqrt(SNAPSHOT_MAX_PIXELS / (cssW * Math.max(cssH, 1)));
+  return Math.min(want, bySide, byArea);
 }

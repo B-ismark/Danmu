@@ -57,7 +57,7 @@ describe('SvgSheet', () => {
 
   it('drops the control characters XML forbids, so a stray one cannot break the file', () => {
     const s = new SvgSheet(10, 10, measure);
-    s.fillText('Den\u000B\u0007 2', 0, 0);
+    s.fillText('Den\u000B\u0007\uFFFF 2', 0, 0);
     expect(s.toString()).toContain('>Den 2</text>');
   });
 
