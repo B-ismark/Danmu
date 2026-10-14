@@ -3176,3 +3176,25 @@ textarea.field { border-radius: var(--r-2); }
   box-shadow: var(--shadow-float);
   pointer-events: none;
 }
+
+/* "Save as my piece" (components/studio/SavePieceDialog.tsx). Facts are a two-column
+   grid whose values wrap: a size in feet-and-decimals is the longest thing on the
+   card, and it gets a line of its own rather than sharing one with the block count. */
+.save-piece-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 14px 0;
+  font-size: var(--fs-body);
+}
+.save-piece-facts dt { color: var(--ink-3); }
+.save-piece-facts dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.save-piece-modular {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--r-2);
+  background: var(--paper-2);
+}
+.save-piece-modular > button { flex: none; }

@@ -20,6 +20,7 @@ import {
   type ScenePart,
 } from './scene-spec';
 import { pruneNudges } from './backup-nudge';
+import { MAX_PIECE_NAME, readMadeSpec, type MadeSpec } from './made-piece';
 import { clearLeaveNote, dropLeaveNote, leaveNoteRooms, noteOwed, readLeaveNote, stillOwed, type SavePart } from './leave-note';
 
 // Every call in this file goes through ONE connection, the one the room's own load opens.
@@ -942,3 +943,53 @@ export const roomStore = {
 export function blobToObjectUrl(blob: Blob): string {
   return URL.createObjectURL(blob);
 }
+
+// ─── My pieces ─────────────────────────────────────────────────────────────
+//
+// The one thing this app keeps that belongs to the PERSON rather than to a room: the
+// pieces they built from blocks and saved, offered in every room's Library. Kept under
+// `piece:<id>`, outside every `room:` key, so deleting or trashing a room never takes a
+// saved piece with it. Not carried by a room file — that is decision 4 of the
+// building-blocks work, recorded in `docs/what-is-still-open.md`.
+
+const PIECE = 'piece:';
+
+export type MyPiece = {
+  id: string;
+  name: string;
+  made: MadeSpec;
+  savedAt: number;
+};
+
+/** Saved pieces, read the same defensive way as a room file's: a record that no longer
+ *  reads (an old shape retired, a corrupt write) is skipped rather than fatal. */
+export const piecesStore = {
+  async list(): Promise<MyPiece[]> {
+    const all = (await keys()).filter((key): key is string => typeof key === 'string' && key.startsWith(PIECE));
+    const rows = await Promise.all(all.map((key) => get<unknown>(key)));
+    const out: MyPiece[] = [];
+    for (const raw of rows) {
+      const r = (raw ?? {}) as Record<string, unknown>;
+      if (typeof r.id !== 'string' || typeof r.name !== 'string') continue;
+      const read = readMadeSpec(r.made);
+      if (!read) continue;
+      out.push({
+        id: r.id,
+        name: r.name.slice(0, MAX_PIECE_NAME),
+        made: read.spec,
+        savedAt: typeof r.savedAt === 'number' ? r.savedAt : 0,
+      });
+    }
+    return out.sort((a, b) => b.savedAt - a.savedAt);
+  },
+  async save(name: string, made: MadeSpec, id: string = uuid()): Promise<MyPiece> {
+    const piece: MyPiece = { id, name: name.trim().slice(0, MAX_PIECE_NAME) || 'My piece', made, savedAt: Date.now() };
+    await set(`${PIECE}${id}`, piece);
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('danmu:pieces-changed'));
+    return piece;
+  },
+  async remove(id: string): Promise<void> {
+    await del(`${PIECE}${id}`);
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('danmu:pieces-changed'));
+  },
+};
