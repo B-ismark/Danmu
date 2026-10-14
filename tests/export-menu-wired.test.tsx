@@ -27,11 +27,14 @@ vi.mock('@/lib/plan-export', async () => {
   return {
     ...actual,
     exportPlanPng: () => (fail ? Promise.reject(new Error('could not be encoded')) : Promise.resolve()),
+    exportPlanSvg: () => {
+      if (fail) throw new Error('could not be drawn');
+    },
   };
 });
 
 const { useExportItems } = await import('@/components/studio/ExportMenu');
-const { planFileName } = await import('@/lib/plan-export');
+const { planFileName, planSvgFileName } = await import('@/lib/plan-export');
 const { roomStore } = await import('@/lib/storage');
 
 beforeEach(() => {
@@ -44,10 +47,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function pressFloorPlan() {
+async function pressFloorPlan(label = 'Floor plan') {
   await roomStore.saveRoom({ id: 'export-room', name: 'Front Room', createdAt: 1, version: 1, layoutId: 'rect', width: 6, depth: 4, height: 2.6 } as never);
   const { result } = renderHook(() => useExportItems());
-  const item = result.current.find((i) => i.label === 'Floor plan')!;
+  const item = result.current.find((i) => i.label === label)!;
   await act(async () => {
     item.onClick();
     await new Promise((r) => setTimeout(r, 20));
@@ -67,5 +70,20 @@ describe('the floor-plan export says how it went', () => {
     expect(toasts[0].title).toBe('Floor plan saved');
     // The file said is the file `planFileName` writes for this room's name.
     expect(toasts[0].message).toBe(planFileName('Front Room'));
+  });
+});
+
+describe('the SVG floor plan says how it went', () => {
+  const SVG = 'Floor plan for print (SVG)';
+
+  it('a failure is reported, not dropped', async () => {
+    fail = true;
+    await pressFloorPlan(SVG);
+    expect(toasts.map((t) => t.title)).toEqual(['Could not export the floor plan']);
+  });
+
+  it('a success names the .svg file it saved', async () => {
+    await pressFloorPlan(SVG);
+    expect(toasts.map((t) => t.message)).toEqual([planSvgFileName('Front Room')]);
   });
 });

@@ -137,18 +137,18 @@ describe('the snapshot filename wiring, not just the helper', () => {
     expect(snap, 'and the unreachable default with it').not.toContain('?? s.name');
   });
 
-  it('and both PNG items take the name from the one fresh read', () => {
+  it('and every picture item takes the name from the one fresh read', () => {
     // The plan was the stale one: it took the mount-loaded name for the filename
-    // AND the title drawn on the sheet. The count is the declaration plus TWO
-    // callers.
+    // AND the title drawn on the sheet. The count is the declaration plus THREE
+    // callers: the 3D view, the PNG plan and the SVG plan.
     //
     // Pinned WITH the item count, because on its own this number fails in only one
-    // direction — the direction where someone does the right thing. A fourth export
-    // item added WITHOUT a fresh read leaves this at 3 and ships the stale-name
-    // defect green, which is precisely what the assertion is for. Adding an item now
-    // reddens the pair and forces the decision.
-    expect(menu.match(/freshRoomName\(\)/g)?.length).toBe(3);
-    expect(menu.match(/\blabel: '/g)?.length, 'a new export item must decide about the fresh read').toBe(3);
+    // direction — the direction where someone does the right thing. An export item
+    // added WITHOUT a fresh read leaves this where it was and ships the stale-name
+    // defect green, which is precisely what the assertion is for. Adding an item
+    // reddens the pair and forces the decision — the SVG plan did, and reads fresh.
+    expect(menu.match(/freshRoomName\(\)/g)?.length).toBe(4);
+    expect(menu.match(/\blabel: '/g)?.length, 'a new export item must decide about the fresh read').toBe(4);
   });
 });
 

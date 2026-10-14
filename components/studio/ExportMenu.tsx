@@ -24,7 +24,7 @@ import { useScene } from '@/lib/scene-store';
 import { useSettings } from '@/lib/store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useSnapshot } from '@/lib/snapshot';
-import { exportPlanPng, planFileName } from '@/lib/plan-export';
+import { exportPlanPng, exportPlanSvg, planFileName, planSvgFileName } from '@/lib/plan-export';
 import { roomStore } from '@/lib/storage';
 import { saveSceneFile } from './SceneFile';
 import { toast } from '@/components/ui/StorageToast';
@@ -33,7 +33,7 @@ import { usePopoverDismiss } from './usePopoverDismiss';
 
 export type ExportItem = { icon: IconName; label: string; onClick: () => void };
 
-/** The three exports, as rows anything can render — the Export menu here, and the
+/** The exports, as rows anything can render — the Export menu here, and the
  *  phone app bar's More menu (`StudioMoreMenu`), which has no room for a second
  *  trigger. */
 export function useExportItems(): ExportItem[] {
@@ -104,6 +104,17 @@ export function useExportItems(): ExportItem[] {
     toast({ title: 'Floor plan saved', message: planFileName(name), ttl: 4000 });
   }
 
+  /** The same sheet as vectors. Read at click time for the same reason as `planPng`.
+   *  Synchronous once the name is in — there is no encode step to fail — so a throw
+   *  here is a drawing bug, and it is reported the same way. */
+  async function planSvg() {
+    const scene = currentRoomScene();
+    const room = useScene.getState().room;
+    const name = await freshRoomName();
+    exportPlanSvg(scene, room, dimUnit, name);
+    toast({ title: 'Floor plan saved', message: planSvgFileName(name), ttl: 4000 });
+  }
+
   const items: ExportItem[] = [
     ...(onModel
       ? [
@@ -131,9 +142,16 @@ export function useExportItems(): ExportItem[] {
       onClick: () => void planPng().catch(reportExportFailure('the floor plan')),
     },
     {
+      icon: 'ruler',
+      // Says what it is FOR, not just the format: the PNG is the one to send, this is
+      // the one to print large or open in a design tool.
+      label: 'Floor plan for print (SVG)',
+      onClick: () => void planSvg().catch(reportExportFailure('the floor plan')),
+    },
+    {
       icon: 'download',
       // The one download you can open again, so its name says it is a file rather
-      // than a picture like the two above it.
+      // than a picture like the ones above it.
       label: 'Room file',
       onClick: () => {
         // No `.catch`: `saveSceneFile` catches and toasts for itself, and its own
@@ -188,7 +206,7 @@ export function ExportMenu() {
       </button>
 
       {/* A group of buttons, not role="menu". A menu promises arrow-key roving
-          focus — the bar ui/Select.tsx sets — and these are three plain tabbable
+          focus — the bar ui/Select.tsx sets — and these are plain tabbable
           buttons. Claiming the role without the behaviour is worse for a screen
           reader than not claiming it. */}
       {open && (

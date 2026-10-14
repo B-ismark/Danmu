@@ -8,7 +8,7 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type M
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, N8AO, SMAA, wrapEffect } from '@react-three/postprocessing';
 import type { EffectComposer as Composer } from 'postprocessing';
-import { ACESFilmicToneMapping, Color, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Group, type Mesh, type MeshBasicMaterial, type Scene, type WebGLRenderTarget, type WebGLRenderer } from 'three';
+import { Color, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Group, type Mesh, type MeshBasicMaterial, type Scene, type WebGLRenderTarget, type WebGLRenderer } from 'three';
 import { SUN_DRAG_ID, useStudio, type Quality } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
@@ -18,7 +18,8 @@ import { footprintBounds } from '@/lib/footprint';
 import { lightingAt, KEY_DIR, DEFAULT_BEARING_DEG, type KeyLightSpec } from '@/lib/lighting-moods';
 import { shadowFit } from '@/lib/shadow-fit';
 import { bounceIntensity, glazingArea } from '@/lib/bounce';
-import { useSnapshot, downloadBlob } from '@/lib/snapshot';
+import { useSnapshot, downloadBlob, snapshotPixelRatio } from '@/lib/snapshot';
+import { EXPOSURE_MATCH, TONE } from './tone';
 import { snapshotFileName } from '@/lib/exports';
 import { addPieceToRoom, planPiece } from '@/lib/add-piece';
 import { dropCarry } from '@/lib/drop-carry';
@@ -97,6 +98,8 @@ const _raycaster = new Raycaster();
 const _ndc = new Vector2();
 const _hit = new Vector3();
 const _up = new Vector3(0, 1, 0);
+/** The canvas' CSS size, read once per snapshot. */
+const _snapCss = new Vector2();
 /** Reused across drops. `Plane` is `normal · x + constant = 0`, so a plane at `y = h`
  *  has constant `-h`; the floor is the `h = 0` case of that rather than a second rule. */
 const _dropPlane = new Plane(new Vector3(0, 1, 0), 0);
@@ -320,11 +323,12 @@ export function Room({
       // debounce from 50 to 0 and make the element-resize path worse than it was.
       // Same shape of trap as `gap` / `row-gap` in globals.css.
       resize={{ debounce: { scroll: 50, resize: 90 } }}
-      // ACES tone mapping + sRGB output = the single biggest realism win for
-      // zero runtime cost: it maps linear HDR lighting to a filmic curve so
-      // bright surfaces roll off instead of clipping to flat white.
+      // Tone mapping + sRGB output = the single biggest realism win for zero
+      // runtime cost: linear HDR lighting is mapped to a curve so bright surfaces
+      // roll off instead of clipping to flat white. Which curve, and why, is
+      // ./tone.ts.
       // preserveDrawingBuffer OFF; SceneCapture reads the canvas synchronously.
-      gl={{ antialias: true, alpha: true, toneMapping: ACESFilmicToneMapping }}
+      gl={{ antialias: true, alpha: true, toneMapping: TONE.mapping }}
       // On-demand rendering: paint only when something actually changed. R3F
       // invalidates itself for every declarative change, drei's Orbit/Transform
       // controls invalidate on move, and the handful of things that mutate the
@@ -383,9 +387,9 @@ export function Room({
       {/* The grading step is not optional here. The composer switches the
           renderer's own tone mapping OFF (it renders into a linear half-float
           buffer and expects a pass to finish the job), so without <Grade> the
-          ACES curve and every mood's `exposure` set on `gl` above silently stop
+          tone curve and every mood's `exposure` set on `gl` above silently stop
           applying — 'high' showed the room flatter and muddier than 'fast', the
-          reverse of what the toggle promises. It is three's own ACES curve reading
+          reverse of what the toggle promises. It is three's own curve (./tone.ts) reading
           `gl.toneMappingExposure`, so the two qualities share one curve and one
           exposure, and it leaves the backdrop alone as 'fast' does (see grade.ts).
           It sits after N8AO (occlusion is a linear-light operation) and before
@@ -499,7 +503,7 @@ function Daylight({ hi, quality }: { hi: boolean; quality: Quality }) {
   const scene = useThree((s) => s.scene);
   const invalidate = useThree((s) => s.invalidate);
   useLayoutEffect(() => {
-    gl.toneMappingExposure = L.exposure;
+    gl.toneMappingExposure = L.exposure * EXPOSURE_MATCH;
     invalidate();
   }, [gl, invalidate, L.exposure]);
   // The environment's strength, live. `Environment` applies the same value on each
@@ -865,8 +869,8 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
     done.current = want;
     // The name is read HERE, with the token, and closed over — not inside the
     // `toBlob` callback below. `request` writes both in one `set`, so they are one
-    // fact; reading them at two instants un-pairs them. `toBlob` encodes a 2x-DPR
-    // buffer and can take tens of milliseconds, and a rename plus a second press
+    // fact; reading them at two instants un-pairs them. `toBlob` encodes a
+    // `SNAPSHOT_LONG_EDGE` buffer and can take a hundred milliseconds or more, and a rename plus a second press
     // inside that window gave the FIRST capture the SECOND name — the older image
     // downloading under the newer room's filename, and the newer one then numbered
     // `(1)` by the browser.
@@ -884,7 +888,43 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
         (o as { visible: boolean }).visible = false;
       }
     });
+    // The picture is rendered at its OWN size (`snapshotPixelRatio`), not copied off
+    // the screen's buffer, and the renderer is put back in the same frame — before
+    // anything can paint at the borrowed ratio. Only the drawing buffer grows: the
+    // CSS size, and so the camera's aspect and the framing, stay exactly as seen.
+    // `fx.setSize` is handed the unchanged CSS size and re-reads the drawing buffer
+    // from the renderer, so every buffer the composer owns (N8AO's included) follows
+    // it there and back.
+    const fx = composer?.current;
+    const ratioWas = gl.getPixelRatio();
+    gl.getSize(_snapCss);
+    // The drawing buffer is bounded by the renderbuffer and viewport limits as well
+    // as the texture limit, and on some GPUs those are the smaller ones.
+    const raw = gl.getContext();
+    const viewportMax = raw.getParameter(raw.MAX_VIEWPORT_DIMS) as ArrayLike<number> | null;
+    const maxSide = Math.min(
+      gl.capabilities.maxTextureSize,
+      (raw.getParameter(raw.MAX_RENDERBUFFER_SIZE) as number | null) ?? Infinity,
+      viewportMax?.[0] ?? Infinity,
+      viewportMax?.[1] ?? Infinity,
+    );
+    const ratio = snapshotPixelRatio(_snapCss.x, _snapCss.y, ratioWas, maxSide);
+    const resize = (r: number) => {
+      gl.setPixelRatio(r);
+      fx?.setSize(_snapCss.x, _snapCss.y);
+    };
     try {
+      if (ratio !== ratioWas) {
+        resize(ratio);
+        // A browser short of memory clamps the drawing buffer below the size asked
+        // for, and says nothing. The composer would then render at a size the buffer
+        // does not have and the copy would come out cropped — so check, and fall
+        // back to the screen's own size: a smaller picture beats a wrong one.
+        if (raw.drawingBufferWidth !== gl.domElement.width || raw.drawingBufferHeight !== gl.domElement.height) {
+          console.warn('[export] the browser would not allocate a full-size picture; saving at screen size');
+          resize(ratioWas);
+        }
+      }
       // Render from the CURRENT camera to the WebGL buffer, then COPY it into a 2D
       // canvas synchronously (before the un-preserved buffer clears). toBlob runs
       // async off that copy.
@@ -892,9 +932,17 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
       // skipped occlusion AND grading — the composer has turned the renderer's
       // tone mapping off — so the file someone saved to show a partner was a
       // flatter, greyer room than the one on their screen.
-      const fx = composer?.current;
-      if (fx) fx.render();
-      else gl.render(scene, camera);
+      const paint = () => (fx ? fx.render() : gl.render(scene, camera));
+      paint();
+      // The check above covers the canvas's own buffer only. On 'high' the composer's
+      // half-float, N8AO and SMAA targets were resized too, and a GPU that could not
+      // allocate one of THOSE says so here, not by shrinking anything — the frame just
+      // comes out black. Same answer: back to the screen's size, and paint again.
+      if (gl.getPixelRatio() !== ratioWas && (raw.getError() === raw.OUT_OF_MEMORY || raw.isContextLost())) {
+        console.warn('[export] the GPU ran out of memory for a full-size picture; saving at screen size');
+        resize(ratioWas);
+        paint();
+      }
       const src = gl.domElement;
       const snap = document.createElement('canvas');
       snap.width = src.width;
@@ -917,6 +965,11 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
       snapshotFailed(e);
     } finally {
       hidden.forEach((h) => (h.obj.visible = true));
+      if (gl.getPixelRatio() !== ratioWas) {
+        resize(ratioWas);
+        // The screen's buffer was cleared by the resize; paint it again.
+        invalidate();
+      }
     }
   });
   return null;

@@ -17,13 +17,38 @@ import { downloadBlob } from './snapshot';
 import { PLAN } from './scene-palette';
 import { fileSlug } from './exports';
 import { ridesWall } from './physics';
+import { SvgSheet, type MeasureText, type SheetContext } from './svg-sheet';
 
 const PX_PER_M = 90; // plan scale on canvas
+/** The SVG prints at 1:50 at 100% — the usual scale for a room plan, so a ruler on the
+ *  printout reads true. At 90 sheet px per metre that is 20 mm of paper per 90 px. */
+const PRINT_SCALE = 50;
+const SVG_MM_PER_PX = 1000 / PRINT_SCALE / PX_PER_M;
 const MARGIN = 70;
 const LEGEND_LINE = 20;
 /** Narrowest sheet we will emit, so a small room's legend still has a column to
  *  sit in. A 2 m × 2 m room is only 180 px of plan; its legend rows are not. */
 const MIN_SHEET_W = 520;
+
+/** Device pixels per sheet pixel. It was 2, which leaves the 10–11 px legend and
+ *  dimension type soft the moment the sheet is printed or zoomed; 4 puts a 6 m room
+ *  at ~2,400 px across, about A4 at 300 dpi. */
+const SHEET_SCALE = 4;
+/** The largest canvas every engine will encode. Safari refuses one over 16,777,216
+ *  pixels (4096²) and `toBlob` then hands back `null`, so this is the binding cap. */
+const MAX_SHEET_AREA = 16_777_216;
+const MAX_SHEET_SIDE = 16_384;
+
+/** The scale a `W` × `H` sheet is drawn at: `SHEET_SCALE`, or less when that would
+ *  exceed what a browser can encode. Shrinks rather than fails — a large room is
+ *  still worth a slightly softer sheet, and the alternative is no sheet. Never below
+ *  1; past that the room is too large to draw at this plan scale at all. */
+export function sheetScale(W: number, H: number): number {
+  if (!(W > 0) || !(H > 0)) return SHEET_SCALE;
+  const byArea = Math.sqrt(MAX_SHEET_AREA / (W * H));
+  const bySide = MAX_SHEET_SIDE / Math.max(W, H);
+  return Math.max(1, Math.min(SHEET_SCALE, byArea, bySide));
+}
 
 const TITLE_FONT = '600 16px system-ui, sans-serif';
 const META_FONT = '11px monospace';
@@ -33,14 +58,91 @@ const LEGEND_FONT = '11px system-ui, sans-serif';
 const BADGE_FONT = '700 11px system-ui, sans-serif';
 const DIM_FONT = '10px monospace';
 
+type PlanRoom = { footprint: Footprint; width: number; depth: number; height: number };
+
+/** The sheet, measured and ready to draw on any surface — a canvas for the PNG, an
+ *  `SvgSheet` for the SVG. ONE drawing for both, so the two files cannot disagree. */
+type PlanSheet = { W: number; H: number; draw: (ctx: SheetContext) => void; measure: MeasureText };
+
 export function exportPlanPng(
   parts: ScenePart[],
-  room: { footprint: Footprint; width: number; depth: number; height: number },
+  room: PlanRoom,
   dimUnit: DimUnit,
   /** The room's name. Required: it is drawn on the sheet AND slugged into the
    *  filename, and the default it used to carry was never passed by anybody. */
   title: string,
 ): Promise<void> {
+  // No pixel figure: the file is drawn at `sheetScale`, which varies with the room, so
+  // any px-per-metre typed here would be a measurement describing a different file.
+  const { W, H, draw } = planSheet(parts, room, dimUnit, title, 'to scale: see the 1 m bar');
+  const c = document.createElement('canvas');
+  const k = sheetScale(W, H);
+  // Floored: rounding a side up can carry an area-capped sheet back over the cap.
+  c.width = Math.floor(W * k);
+  c.height = Math.floor(H * k);
+  const ctx = c.getContext('2d')!;
+  ctx.scale(k, k);
+  draw(ctx);
+
+  // Settles on the BLOB, not on the drawing. Everything above is synchronous and
+  // cannot fail in a way worth reporting; `toBlob` is where the file is written and
+  // where it goes wrong — it hands back `null` under memory pressure, and a big canvas
+  // over a large room with a long legend is exactly when that happens. Returning
+  // before that point meant the caller's error path was already out of scope: the
+  // menu closed, no PNG arrived, and nothing said so.
+  //
+  // The five callers in `tests/plan-export-order.test.ts` do not await it, which is
+  // fine and deliberate — they assert on the draw calls, which have all happened by
+  // the time this returns.
+  return new Promise<void>((resolve, reject) => {
+    c.toBlob((blob) => {
+      if (!blob) return reject(new Error('the floor plan could not be encoded'));
+      downloadBlob(blob, planFileName(title));
+      resolve();
+    }, 'image/png');
+  });
+}
+
+/** The same sheet as `exportPlanPng`, as an SVG document. Lines and type stay sharp at
+ *  any zoom and on any printer, and it opens in Illustrator, Figma or Inkscape for
+ *  anyone who wants to mark it up. No size limit either: it is text, not pixels. */
+export function planSvg(parts: ScenePart[], room: PlanRoom, dimUnit: DimUnit, title: string): string {
+  const { W, H, draw, measure } = planSheet(parts, room, dimUnit, title, `scale 1:${PRINT_SCALE} printed at 100%`);
+  const svg = new SvgSheet(W, H, measure, SVG_MM_PER_PX);
+  draw(svg);
+  return svg.toString();
+}
+
+export function exportPlanSvg(parts: ScenePart[], room: PlanRoom, dimUnit: DimUnit, title: string): void {
+  const text = planSvg(parts, room, dimUnit, title);
+  downloadBlob(new Blob([text], { type: 'image/svg+xml' }), planSvgFileName(title));
+}
+
+/** Text widths, from a canvas in the sheet's fonts — the one measurer both the layout
+ *  pass and the SVG's ellipsis use, so they cannot disagree. A design tool may resolve
+ *  `system-ui` to a slightly different face than the browser did; that is the limit of
+ *  naming fonts rather than embedding them. Without a canvas (a test under jsdom) it
+ *  falls back to an average glyph width: roughly right, never zero. */
+function canvasMeasure(): MeasureText {
+  const m = document.createElement('canvas').getContext('2d');
+  return (font, text) => {
+    if (m) {
+      m.font = font;
+      return m.measureText(text).width;
+    }
+    const px = Number(/([\d.]+)px/.exec(font)?.[1] ?? 11);
+    return text.length * px * 0.55;
+  };
+}
+
+function planSheet(
+  parts: ScenePart[],
+  room: PlanRoom,
+  dimUnit: DimUnit,
+  title: string,
+  /** How the sheet states its scale: in pixels for the PNG, as a print ratio for the SVG. */
+  scaleNote: string,
+): PlanSheet {
   const b = footprintBounds(room.footprint);
   const planW = b.width * PX_PER_M;
   const planH = b.depth * PX_PER_M;
@@ -58,15 +160,11 @@ export function exportPlanPng(
   // dimensions, and used to be drawn at whatever width they came out at — so a
   // long name ran straight off the right edge of a narrow plan. Measure them
   // first and let the sheet grow to fit, then ellipsise whatever still overruns.
-  const measure = document.createElement('canvas').getContext('2d');
+  const measure = canvasMeasure();
   const legendRows = floorParts.map((p) => legendText(p, dimUnit));
   let widestLegend = 0;
-  if (measure) {
-    measure.font = LEGEND_FONT;
-    for (const row of legendRows) widestLegend = Math.max(widestLegend, measure.measureText(row).width);
-    measure.font = META_FONT;
-    widestLegend = Math.max(widestLegend, measure.measureText(metaText(room, dimUnit)).width - 24);
-  }
+  for (const row of legendRows) widestLegend = Math.max(widestLegend, measure(LEGEND_FONT, row));
+  widestLegend = Math.max(widestLegend, measure(META_FONT, metaText(room, dimUnit, scaleNote)) - 24);
 
   const contentW = Math.max(planW, widestLegend + 24, MIN_SHEET_W - MARGIN * 2);
   const W = Math.ceil(contentW + MARGIN * 2);
@@ -74,161 +172,141 @@ export function exportPlanPng(
   /** Right edge legend text must not cross. */
   const legendMaxW = W - MARGIN - (MARGIN + 24);
 
-  const c = document.createElement('canvas');
-  c.width = W * 2; // 2× for crisp print
-  c.height = H * 2;
-  const ctx = c.getContext('2d')!;
-  ctx.scale(2, 2);
+  return { W, H, draw, measure };
 
-  ctx.fillStyle = PLAN.paper;
-  ctx.fillRect(0, 0, W, H);
+  function draw(ctx: SheetContext) {
+    ctx.fillStyle = PLAN.paper;
+    ctx.fillRect(0, 0, W, H);
 
-  const px = (x: number) => MARGIN + (x - b.minX) * PX_PER_M;
-  const pz = (z: number) => MARGIN + (z - b.minZ) * PX_PER_M;
+    const px = (x: number) => MARGIN + (x - b.minX) * PX_PER_M;
+    const pz = (z: number) => MARGIN + (z - b.minZ) * PX_PER_M;
 
-  // Title + room size.
-  ctx.fillStyle = PLAN.ink;
-  ctx.font = TITLE_FONT;
-  ctx.fillText(ellipsise(ctx, title, W - MARGIN * 2), MARGIN, 30);
-  ctx.font = META_FONT;
-  ctx.fillStyle = PLAN.ink2;
-  ctx.fillText(metaText(room, dimUnit), MARGIN, 46);
+    // Title + room size.
+    ctx.fillStyle = PLAN.ink;
+    ctx.font = TITLE_FONT;
+    ctx.fillText(ellipsise(ctx, title, W - MARGIN * 2), MARGIN, 30);
+    ctx.font = META_FONT;
+    ctx.fillStyle = PLAN.ink2;
+    ctx.fillText(metaText(room, dimUnit, scaleNote), MARGIN, 46);
 
-  // Footprint — floor fill + thick wall stroke.
-  ctx.beginPath();
-  room.footprint.forEach(([x, z], i) => {
-    if (i === 0) ctx.moveTo(px(x), pz(z));
-    else ctx.lineTo(px(x), pz(z));
-  });
-  ctx.closePath();
-  ctx.fillStyle = PLAN.floor;
-  ctx.fill();
-  ctx.strokeStyle = PLAN.ink;
-  ctx.lineWidth = 5;
-  ctx.stroke();
+    // Footprint — floor fill + thick wall stroke.
+    ctx.beginPath();
+    room.footprint.forEach(([x, z], i) => {
+      if (i === 0) ctx.moveTo(px(x), pz(z));
+      else ctx.lineTo(px(x), pz(z));
+    });
+    ctx.closePath();
+    ctx.fillStyle = PLAN.floor;
+    ctx.fill();
+    ctx.strokeStyle = PLAN.ink;
+    ctx.lineWidth = 5;
+    ctx.stroke();
 
-  // Furniture — numbered, rotated rectangles, in **two passes, and the split is not
-  // cosmetic.** This was one loop drawing each piece's footprint and then its badge, so
-  // piece `i + 1`'s fill and outline landed on top of piece `i`'s NUMBER — a fan under a
-  // sofa, a rug under a table. The legend below is keyed on that digit and has no other
-  // join to its row, so losing it does not degrade the sheet, it breaks it, and it does
-  // so precisely on the overlaps a floor plan is drawn to show. Footprints first, every
-  // badge after: a number can now only be crossed by another number.
-  //
-  // Seen in an exported PNG before it was understood here — a Ceiling fan's `1` was
-  // absent from the sheet while its legend row was present, which reads as the numbering
-  // being broken rather than as a draw order.
-  floorParts.forEach((p) => {
-    const cx = px(p.pos[0]);
-    const cy = pz(p.pos[2]);
-    const w = (p.dimMM[0] / 1000) * PX_PER_M;
-    const d = (p.dimMM[1] / 1000) * PX_PER_M;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(-p.rot);
-    ctx.fillStyle = `${p.color ?? PLAN.accent}40`;
-    ctx.strokeStyle = PLAN.outline;
-    ctx.lineWidth = 1.2;
-    // `circle`, because `PlanView` draws one — a round piece is tested against the
-    // ellipse it draws (`lib/plan-hit.ts`) and has to be DRAWN as one here too, or the
-    // exported sheet and the tab it was exported from disagree about the shape of a 1 m
-    // object. Latent for round floor pieces (a floor lamp, a plant) and reached the
-    // moment `ridesWall` moved the ceiling family into this loop: a 1000 mm ceiling fan
-    // was a wall tick before and would otherwise have become a square.
-    if (p.circle) {
-      ctx.beginPath();
-      ctx.ellipse(0, 0, w / 2, d / 2, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      ctx.fillRect(-w / 2, -d / 2, w, d);
-      ctx.strokeRect(-w / 2, -d / 2, w, d);
-    }
-    ctx.restore();
-  });
-
-  // Pass two: the number badges (unrotated, centred), after every footprint.
-  ctx.fillStyle = PLAN.ink;
-  ctx.font = BADGE_FONT;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  floorParts.forEach((p, i) => {
-    ctx.fillText(String(i + 1), px(p.pos[0]), pz(p.pos[2]));
-  });
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-
-  // Items that ride a wall, as ticks on the wall line (doors, windows, TV…). The
-  // ceiling family is deliberately not here — see `floorParts` above.
-  parts
-    .filter((p) => ridesWall(p.category, p.shape))
-    .forEach((p) => {
+    // Furniture — numbered, rotated rectangles, in **two passes, and the split is not
+    // cosmetic.** This was one loop drawing each piece's footprint and then its badge, so
+    // piece `i + 1`'s fill and outline landed on top of piece `i`'s NUMBER — a fan under a
+    // sofa, a rug under a table. The legend below is keyed on that digit and has no other
+    // join to its row, so losing it does not degrade the sheet, it breaks it, and it does
+    // so precisely on the overlaps a floor plan is drawn to show. Footprints first, every
+    // badge after: a number can now only be crossed by another number.
+    //
+    // Seen in an exported PNG before it was understood here — a Ceiling fan's `1` was
+    // absent from the sheet while its legend row was present, which reads as the numbering
+    // being broken rather than as a draw order.
+    floorParts.forEach((p) => {
       const cx = px(p.pos[0]);
       const cy = pz(p.pos[2]);
       const w = (p.dimMM[0] / 1000) * PX_PER_M;
+      const d = (p.dimMM[1] / 1000) * PX_PER_M;
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(-p.rot);
-      ctx.strokeStyle = PLAN.accent;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(-w / 2, 0);
-      ctx.lineTo(w / 2, 0);
-      ctx.stroke();
+      ctx.fillStyle = `${p.color ?? PLAN.accent}40`;
+      ctx.strokeStyle = PLAN.outline;
+      ctx.lineWidth = 1.2;
+      // `circle`, because `PlanView` draws one — a round piece is tested against the
+      // ellipse it draws (`lib/plan-hit.ts`) and has to be DRAWN as one here too, or the
+      // exported sheet and the tab it was exported from disagree about the shape of a 1 m
+      // object. Latent for round floor pieces (a floor lamp, a plant) and reached the
+      // moment `ridesWall` moved the ceiling family into this loop: a 1000 mm ceiling fan
+      // was a wall tick before and would otherwise have become a square.
+      if (p.circle) {
+        ctx.beginPath();
+        ctx.ellipse(0, 0, w / 2, d / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(-w / 2, -d / 2, w, d);
+        ctx.strokeRect(-w / 2, -d / 2, w, d);
+      }
       ctx.restore();
     });
 
-  // Dimension lines (overall width below, depth right).
-  const dimY = pz(b.maxZ) + 24;
-  drawDimLine(ctx, px(b.minX), dimY, px(b.maxX), dimY, `${formatDim(b.width * 1000, dimUnit)} ${dimUnit}`);
-  const dimX = px(b.maxX) + 24;
-  drawDimLine(ctx, dimX, pz(b.minZ), dimX, pz(b.maxZ), `${formatDim(b.depth * 1000, dimUnit)} ${dimUnit}`, true);
-
-  // Scale bar — 1 m.
-  const sbY = pz(b.maxZ) + 44;
-  ctx.strokeStyle = PLAN.ink;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(MARGIN, sbY);
-  ctx.lineTo(MARGIN + PX_PER_M, sbY);
-  ctx.stroke();
-  ctx.font = DIM_FONT;
-  ctx.fillStyle = PLAN.ink2;
-  ctx.fillText(`1 m`, MARGIN + PX_PER_M + 6, sbY + 3);
-
-  // Legend.
-  let ly = planH + MARGIN + 70;
-  ctx.font = LEGEND_HEAD_FONT;
-  ctx.fillStyle = PLAN.ink;
-  ctx.fillText('Pieces', MARGIN, ly);
-  ly += 8;
-  floorParts.forEach((_, i) => {
-    ly += LEGEND_LINE;
-    ctx.font = LEGEND_INDEX_FONT;
-    ctx.fillStyle = PLAN.accent;
-    ctx.fillText(String(i + 1).padStart(2, ' '), MARGIN, ly);
-    ctx.font = LEGEND_FONT;
+    // Pass two: the number badges (unrotated, centred), after every footprint.
     ctx.fillStyle = PLAN.ink;
-    ctx.fillText(ellipsise(ctx, legendRows[i], legendMaxW), MARGIN + 24, ly);
-  });
+    ctx.font = BADGE_FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    floorParts.forEach((p, i) => {
+      ctx.fillText(String(i + 1), px(p.pos[0]), pz(p.pos[2]));
+    });
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
 
-  // Settles on the BLOB, not on the drawing. Everything above is synchronous and
-  // cannot fail in a way worth reporting; `toBlob` is where the file is written and
-  // where it goes wrong — it hands back `null` under memory pressure, and a 2x canvas
-  // over a large room with a long legend is exactly when that happens. Returning
-  // before that point meant the caller's error path was already out of scope: the
-  // menu closed, no PNG arrived, and nothing said so.
-  //
-  // The five callers in `tests/plan-export-order.test.ts` do not await it, which is
-  // fine and deliberate — they assert on the draw calls, which have all happened by
-  // the time this returns.
-  return new Promise<void>((resolve, reject) => {
-    c.toBlob((blob) => {
-      if (!blob) return reject(new Error('the floor plan could not be encoded'));
-      downloadBlob(blob, planFileName(title));
-      resolve();
-    }, 'image/png');
-  });
+    // Items that ride a wall, as ticks on the wall line (doors, windows, TV…). The
+    // ceiling family is deliberately not here — see `floorParts` above.
+    parts
+      .filter((p) => ridesWall(p.category, p.shape))
+      .forEach((p) => {
+        const cx = px(p.pos[0]);
+        const cy = pz(p.pos[2]);
+        const w = (p.dimMM[0] / 1000) * PX_PER_M;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(-p.rot);
+        ctx.strokeStyle = PLAN.accent;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-w / 2, 0);
+        ctx.lineTo(w / 2, 0);
+        ctx.stroke();
+        ctx.restore();
+      });
+
+    // Dimension lines (overall width below, depth right).
+    const dimY = pz(b.maxZ) + 24;
+    drawDimLine(ctx, px(b.minX), dimY, px(b.maxX), dimY, `${formatDim(b.width * 1000, dimUnit)} ${dimUnit}`);
+    const dimX = px(b.maxX) + 24;
+    drawDimLine(ctx, dimX, pz(b.minZ), dimX, pz(b.maxZ), `${formatDim(b.depth * 1000, dimUnit)} ${dimUnit}`, true);
+
+    // Scale bar — 1 m.
+    const sbY = pz(b.maxZ) + 44;
+    ctx.strokeStyle = PLAN.ink;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(MARGIN, sbY);
+    ctx.lineTo(MARGIN + PX_PER_M, sbY);
+    ctx.stroke();
+    ctx.font = DIM_FONT;
+    ctx.fillStyle = PLAN.ink2;
+    ctx.fillText(`1 m`, MARGIN + PX_PER_M + 6, sbY + 3);
+
+    // Legend.
+    let ly = planH + MARGIN + 70;
+    ctx.font = LEGEND_HEAD_FONT;
+    ctx.fillStyle = PLAN.ink;
+    ctx.fillText('Pieces', MARGIN, ly);
+    ly += 8;
+    floorParts.forEach((_, i) => {
+      ly += LEGEND_LINE;
+      ctx.font = LEGEND_INDEX_FONT;
+      ctx.fillStyle = PLAN.accent;
+      ctx.fillText(String(i + 1).padStart(2, ' '), MARGIN, ly);
+      ctx.font = LEGEND_FONT;
+      ctx.fillStyle = PLAN.ink;
+      ctx.fillText(ellipsise(ctx, legendRows[i], legendMaxW), MARGIN + 24, ly);
+    });
+  }
 }
 
 /** `Front Room` → `front-room-floor-plan.png`.
@@ -251,11 +329,13 @@ export function planFileName(title: string): string {
   return `${fileSlug(title)}-floor-plan.png`;
 }
 
-function metaText(
-  room: { width: number; depth: number; height: number },
-  dimUnit: DimUnit,
-): string {
-  return `${formatDim(room.width * 1000, dimUnit)} × ${formatDim(room.depth * 1000, dimUnit)} ${dimUnit} · ceiling ${formatDim(room.height * 1000, dimUnit)} ${dimUnit} · scale 1 m = ${PX_PER_M} px`;
+/** `Front Room` → `front-room-floor-plan.svg`: the PNG's name, the SVG's extension. */
+export function planSvgFileName(title: string): string {
+  return `${fileSlug(title)}-floor-plan.svg`;
+}
+
+function metaText(room: { width: number; depth: number; height: number }, dimUnit: DimUnit, scaleNote: string): string {
+  return `${formatDim(room.width * 1000, dimUnit)} × ${formatDim(room.depth * 1000, dimUnit)} ${dimUnit} · ceiling ${formatDim(room.height * 1000, dimUnit)} ${dimUnit} · ${scaleNote}`;
 }
 
 function legendText(p: ScenePart, dimUnit: DimUnit): string {
@@ -264,7 +344,7 @@ function legendText(p: ScenePart, dimUnit: DimUnit): string {
 
 /** Trim to fit `maxW`, ending in an ellipsis. Assumes ctx.font is already set to
  *  the font the text will be drawn in. */
-function ellipsise(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
+function ellipsise(ctx: SheetContext, text: string, maxW: number): string {
   if (maxW <= 0 || ctx.measureText(text).width <= maxW) return text;
   let lo = 0;
   let hi = text.length;
@@ -277,7 +357,7 @@ function ellipsise(ctx: CanvasRenderingContext2D, text: string, maxW: number): s
 }
 
 function drawDimLine(
-  ctx: CanvasRenderingContext2D,
+  ctx: SheetContext,
   x1: number,
   y1: number,
   x2: number,
