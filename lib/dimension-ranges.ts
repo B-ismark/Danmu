@@ -125,6 +125,9 @@ const BY_SHAPE: Partial<Record<Shape, DimRange>> = {
   'slat-panel': R('flexible', [200, 15, 300], [3000, 80, 2800], [1200, 40, 2000]),
   // A seat cushion for a bench, a window seat or the top of a cabinet.
   'seat-pad': R('flexible', [300, 300, 30], [3000, 700, 150], [1200, 450, 60]),
+  // A made piece: from one small block to a long run of workstations. Its blocks keep
+  // their own bands when exploded; this only bounds the whole.
+  made: R('flexible', [100, 100, 30], [12000, 6000, 2800]),
   painting: R('flexible', [150, 15, 150], [2400, 60, 1800]),
   // Generic primitives (low-confidence detections) — wide but bounded.
   box: R('flexible', [50, 50, 50], [4000, 4000, 2800]),

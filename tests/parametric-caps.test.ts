@@ -298,8 +298,13 @@ describe('completeness — because a list cannot notice what is missing from it'
     // A member of `PARAMETRIC_SHAPES` is there for one of exactly two reasons. Anything
     // in neither is a shape somebody added without recording why, which is the state
     // that set was in before this file existed.
+    // …and a third, which is not a renderer's own absolute at all: a made piece draws
+    // OTHER shapes' renderers at sizes `layoutMade` computes, so every absolute inside it
+    // is a block's, and that block's own row here already covers it. A group scale would
+    // squash all of them at once, which is why it is parametric.
+    const COMPOSED = new Set<Shape>(['made']);
     const capped = new Set(CAPS.map((r) => r.shape));
-    const unexplained = SHAPES.filter((s) => isParametric(s) && !moduleRangeFor(s) && !capped.has(s));
+    const unexplained = SHAPES.filter((s) => isParametric(s) && !moduleRangeFor(s) && !capped.has(s) && !COMPOSED.has(s));
     expect(unexplained, 'parametric for no recorded reason').toEqual([]);
   });
 

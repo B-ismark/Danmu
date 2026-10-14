@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { explodeMade, fitMadeDims, layoutMade, MAX_MODULES, packMade, readMadeSpec, tileCount, type PackInput } from '../lib/made-piece';
+import { buildSceneFile, parseSceneFile, sceneFileJson } from '../lib/scene-file';
+import type { RoomData, Transforms } from '../lib/storage';
+import type { ScenePart } from '../lib/scene-spec';
+import { explodeMade, fitMadeDims, fitPartDims, layoutMade, MAX_MODULES, packMade, readMadeSpec, tileCount, type PackInput } from '../lib/made-piece';
 
 // A two-seat workstation bay: one 1400 mm worktop on two drawer pedestals.
 const bay = (rot = 0, at: [number, number] = [0, 0]): PackInput[] => {
@@ -77,6 +80,11 @@ describe('modular resize repeats the unit instead of stretching it', () => {
     expect(tops.map((b) => b.pos[0])).toEqual([-0.7, 0.7]);
   });
 
+  it('stores a modular piece at whole copies and leaves every other part alone', () => {
+    expect(fitPartDims({ made: spec }, [2600, 700, 730])).toEqual([2800, 700, 730]);
+    expect(fitPartDims({}, [2600, 700, 730])).toEqual([2600, 700, 730]);
+  });
+
   it('caps the module count', () => {
     expect(tileCount(100, 1e9)).toBe(MAX_MODULES);
     expect(tileCount(0, 500)).toBe(1);
@@ -149,5 +157,58 @@ describe('readMadeSpec — a saved piece is a hint with a filename', () => {
     expect(readMadeSpec(null)).toBeNull();
     expect(readMadeSpec({ blocks: 'x' })).toBeNull();
     expect(readMadeSpec({ blocks: [{ shape: 'nope' }] })).toBeNull();
+  });
+});
+
+describe('a room file carries a made piece', () => {
+  const ROOM: RoomData = {
+    id: 'room-1', createdAt: 1_700_000_000_000, name: 'Studio', layoutId: 'rect', width: 5, depth: 4, height: 2.6,
+  };
+  const NONE: Transforms = { positions: {}, rotations: {}, dims: {} };
+  // Real blocks, so every size is inside its own band and the read changes nothing.
+  const packed = packMade([
+    { shape: 'worktop', category: 'desk', pos: [0, 0, 0], rot: 0, dimMM: [1400, 700, 740], blockStyle: { ends: 'none' } },
+    { shape: 'drawer-unit', category: 'shelf', pos: [-0.45, 0, 0.05], rot: 0, dimMM: [400, 500, 600], color: '#aabbcc' },
+    { shape: 'drawer-unit', category: 'shelf', pos: [0.45, 0, 0.05], rot: 0, dimMM: [400, 500, 600] },
+  ])!;
+  const piece: ScenePart = {
+    id: 'bench', name: 'Bench', category: 'desk', shape: 'made', pos: packed.pos, rot: packed.rot,
+    dimMM: packed.spec.sizeMM, locked: false, made: packed.spec,
+  };
+  const raw = (parts: unknown[]) =>
+    JSON.stringify({
+      format: 'danmu.scene', version: 1, exportedAt: 1,
+      room: { name: 'R', layoutId: 'rect', width: 5, depth: 4, height: 2.6 },
+      parts,
+    });
+
+  it('writes the blocks and reads them back unchanged', () => {
+    const out = parseSceneFile(sceneFileJson(buildSceneFile(ROOM, [piece], NONE, 1)));
+    if (!out.ok) throw new Error(out.error);
+    expect(out.dropped).toEqual([]);
+    expect(out.file.parts[0].shape).toBe('made');
+    expect(out.file.parts[0].made).toEqual(packed.spec);
+  });
+
+  it('opens a made piece with no readable blocks as a plain box, and says so', () => {
+    const out = parseSceneFile(raw([{ ...piece, made: { blocks: [{ shape: 'nope' }] } }]));
+    if (!out.ok) throw new Error(out.error);
+    expect(out.file.parts[0].shape).toBe('box');
+    expect(out.file.parts[0].made).toBeUndefined();
+    expect(out.dropped.join(' ')).toMatch(/plain box/);
+  });
+
+  it('names how many blocks it left out', () => {
+    const blocks = [...packed.spec.blocks, { shape: 'teleporter', category: 'other', pos: [0, 0, 0], rot: 0, dimMM: [1, 1, 1] }];
+    const out = parseSceneFile(raw([{ ...piece, made: { ...packed.spec, blocks } }]));
+    if (!out.ok) throw new Error(out.error);
+    expect(out.file.parts[0].made?.blocks).toHaveLength(3);
+    expect(out.dropped.join(' ')).toMatch(/1 block /);
+  });
+
+  it('ignores a made field on any other shape', () => {
+    const out = parseSceneFile(raw([{ ...piece, shape: 'box', made: packed.spec }]));
+    if (!out.ok) throw new Error(out.error);
+    expect(out.file.parts[0].made).toBeUndefined();
   });
 });

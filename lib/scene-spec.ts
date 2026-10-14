@@ -2,7 +2,9 @@
 // Either default (hand-curated demo room) or built from AI detections across all 4 wall captures.
 
 import { ROOM } from './parts-catalog';
-import { BLOCK_SHAPES, type BlockStyle } from './block-style';
+import { BLOCK_SHAPES, blocksJoin, type BlockStyle } from './block-style';
+// Type only: `made-piece` imports this module's vocabularies at run time.
+import type { MadeSpec } from './made-piece';
 import {
   roomFootprint,
   footprintBounds,
@@ -110,6 +112,8 @@ export const SHAPES = [
   'fan-standing', 'chest-freezer', 'tv-console', 'stool',
   // building blocks — `BLOCK_SHAPES` in lib/block-style.ts; never produced by a photo
   'worktop', 'screen', 'drawer-unit', 'open-shelf', 'door-cabinet', 'slat-panel', 'seat-pad',
+  // a made piece — blocks a person saved as one (`lib/made-piece.ts`); never a photo, never the Library
+  'made',
   'box', 'cylinder', 'plane',
 ] as const;
 export type Shape = (typeof SHAPES)[number];
@@ -515,6 +519,10 @@ export type ScenePart = {
    *  which is what `blockStyleFor` resolves — so only a choice somebody made is stored,
    *  and a piece that is not a block never carries one. */
   blockStyle?: BlockStyle;
+  /** The blocks a made piece is built from (`shape: 'made'` only), in its own frame.
+   *  The piece moves, turns, collides and resizes as ONE part; the blocks are how it
+   *  is drawn. `lib/made-piece.ts` packs, lays out and explodes it. */
+  made?: MadeSpec;
   /** group id — parts sharing one move together (multi-select merge). */
   groupId?: string;
 };
@@ -1962,6 +1970,9 @@ const PARAMETRIC_SHAPES = new Set<Shape>([
   // proportion of its box and is group-scaled like the ottoman it is filed with.
   // `lib/block-forms.ts` has the arithmetic and `tests/block-forms.test.ts` the sweep.
   'worktop', 'screen', 'drawer-unit', 'open-shelf', 'door-cabinet', 'slat-panel',
+  // A made piece draws its blocks at the size asked (`layoutMade`): a group scale would
+  // squash every handle, slat and plinth in it, which is the thing blocks exist to avoid.
+  'made',
 ]);
 export function isParametric(shape: Shape): boolean {
   return PARAMETRIC_SHAPES.has(shape);
@@ -2094,6 +2105,7 @@ export function supportsDecor(category: Category, shape: Shape): boolean {
   if (shape === 'shoe-rack') return false; // angled tiers, no flat top
   if (shape === 'clothes-rack') return false; // a pipe, no top at all
   if (shape === 'seat-pad') return false; // a cushion on a bench or a cabinet, not a shelf
+  if (shape === 'made') return false; // its tops are its blocks', and the decor roll cannot see them
   return DECOR_CATEGORIES.has(category);
 }
 
@@ -3774,6 +3786,7 @@ export function canCollideWith(
   const [myBottom, myTop] = verticalExtent(mover.category, mover.shape, dimMM, y);
   return (o) => {
     if (isSoftFurnishing(o)) return false;
+    if (blocksJoin(mover, o)) return false;
     const [oyBottom, oyTop] = verticalExtent(o.category, o.shape, o.dimMM, o.pos[1]);
     // Vertical separation → no collision (stacking allowed).
     return !(myTop <= oyBottom + 0.005 || myBottom >= oyTop - 0.005);

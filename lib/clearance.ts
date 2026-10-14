@@ -17,6 +17,7 @@
 // "Everything fits" over an arrangement that plainly did not.
 
 import type { ScenePart } from './scene-spec';
+import { blocksJoin } from './block-style';
 // Type-only, so a pure module does not gain a runtime dependency on the store —
 // `lib/units.ts` takes `DimUnit` from there the same way.
 import type { DimUnit } from './store';
@@ -404,6 +405,9 @@ export function analyzeRoom(
     for (let j = i + 1; j < solid.length; j++) {
       const a = solid[i];
       const b = solid[j];
+      // Two building blocks are allowed inside each other (`blocksJoin`); the drag lets
+      // them through, so this does too.
+      if (blocksJoin(a, b)) continue;
       // Only when they also share vertical space — a monitor over a desk is a
       // stack, not a clash. (`solid` is already floor-level, but a part can sit
       // just under 0.05 m and still be short enough to pass under another.)

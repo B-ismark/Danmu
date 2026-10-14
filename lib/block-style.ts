@@ -84,6 +84,17 @@ export function blockStyleKeys(shape: Shape | string): readonly BlockStyleKey[] 
   return isBlockShape(shape) ? BLOCK_STYLE_KEYS[shape] : [];
 }
 
+/** Two building blocks may stand inside each other. That is what building with them IS —
+ *  a worktop's ends drop over the drawer units it rests on, a seat pad lies along a
+ *  cabinet, a screen clips to a worktop's back edge — and a builder who had to keep every
+ *  block a hair apart could not make a workstation at all. Only block against block: a
+ *  block still collides with a sofa, and a sofa with it. The drag (`canCollideWith`), the
+ *  room report's clash rule and the solver's overlap term all ask this one question, so a
+ *  pair the drag lets through is a pair Room check calls fine and Suggest does not price. */
+export function blocksJoin(a: { shape: Shape | string }, b: { shape: Shape | string }): boolean {
+  return isBlockShape(a.shape) && isBlockShape(b.shape);
+}
+
 /** One option's value, or `undefined` when `v` is not in that option's vocabulary. The
  *  single validator: the resolver below and the scene-file reader both ask it, so a value
  *  one accepts the other cannot refuse. */

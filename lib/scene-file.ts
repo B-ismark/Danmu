@@ -55,6 +55,7 @@ import {
   migrateRetiredPart,
   retiredShapeFor,
 } from './scene-spec';
+import { readMadeSpec } from './made-piece';
 import { BLOCK_BANDS, BLOCK_ENDS, blockStyleKeys, readBlockOption, type BlockStyle, type BlockStyleKey } from './block-style';
 import { clampDims, roomAxisRange, ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import { anchorFor, heightForNewCeiling } from './physics';
@@ -709,6 +710,25 @@ function readPart(
 
   const blockStyle = readBlockStyle(v.blockStyle, shape, part.name, dropped);
   if (blockStyle) part.blockStyle = blockStyle;
+
+  // A made piece's blocks are read like the parts around them — every block's shape,
+  // category, size and colour checked by `readMadeSpec` — and a field on any other
+  // shape is ignored. A made piece whose blocks are all unreadable is kept, as the plain
+  // box of its size, and said so: the room still has something where it stood.
+  if (shape === 'made') {
+    const made = readMadeSpec(v.made);
+    if (made) {
+      part.made = made.spec;
+      if (made.dropped > 0) {
+        dropped.push(
+          `“${part.name}” had ${made.dropped} ${made.dropped === 1 ? 'block' : 'blocks'} this app could not read, so ${made.dropped === 1 ? 'it was' : 'they were'} left out`,
+        );
+      }
+    } else {
+      part.shape = 'box';
+      dropped.push(`“${part.name}” had no blocks this app could read, so it opens as a plain box of its size`);
+    }
+  }
 
   return { part, originalId };
 }

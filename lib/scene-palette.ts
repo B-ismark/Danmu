@@ -244,6 +244,8 @@ const BY_SHAPE: Record<Shape, string> = {
   'door-cabinet': '#8A6B44',
   'slat-panel': '#A8825A',
   'seat-pad': '#8F9A82',
+  // A made piece's blocks carry their own tones; this is only the swatch it starts from.
+  made: '#B58B5A',
   // generic primitives — resolved by category instead (see defaultBodyColor)
   box: '#C9A98E',
   cylinder: '#C9A98E',

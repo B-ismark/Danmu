@@ -69,6 +69,16 @@ export function fitMadeDims(spec: MadeSpec, dimMM: readonly [number, number, num
   return [tileCount(spec.sizeMM[0], w) * spec.sizeMM[0], d, h];
 }
 
+/** The size to STORE for a part asked to be `dimMM`: a modular made piece snaps to whole
+ *  copies, everything else is untouched. Every place that writes a size goes through it,
+ *  so the number in the size fields is the width the room draws. */
+export function fitPartDims(
+  part: { made?: MadeSpec },
+  dimMM: [number, number, number],
+): [number, number, number] {
+  return part.made ? fitMadeDims(part.made, dimMM) : dimMM;
+}
+
 /** The blocks of a made piece as drawn at `dimMM`, in the piece's frame. Width either
  *  tiles (modular) or scales; depth and height scale. Scaling moves each block's
  *  position and its own `dimMM`, so a block's detailing (handles, slats, a plinth)

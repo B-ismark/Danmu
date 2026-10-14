@@ -69,6 +69,8 @@ const ANCHOR_BY_SHAPE: Partial<Record<Shape, Anchor>> = {
   'door-cabinet': 'floor',
   'slat-panel': 'floor',
   'seat-pad': 'floor',
+  // A made piece is packed from its lowest point (`packMade`), so it stands.
+  made: 'floor',
   curtain: 'wall-high',
   tv: 'wall-mid',
   mirror: 'wall-mid',

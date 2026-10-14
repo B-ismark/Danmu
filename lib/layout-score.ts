@@ -24,6 +24,7 @@
 // inside the trust boundary — a suggestion cannot change a measurement.
 
 import type { ScenePart } from './scene-spec';
+import { blocksJoin } from './block-style';
 import { verticalExtent } from './physics';
 import type { Footprint } from './footprint';
 import {
@@ -882,6 +883,9 @@ export function costBreakdown(
     for (let j = i + 1; j < feet.length; j++) {
       if (!obstacle[j]) continue;
       if (boxGap(i, j) > 0) continue; // cannot overlap
+      // Blocks built into each other are one piece in progress, not a crash — the same
+      // pair `lib/clearance.ts` and the drag exempt (`blocksJoin`).
+      if (blocksJoin(parts[i], parts[j])) continue;
       const shared = footIntersectionArea(feet[i], feet[j]);
       if (shared <= 0) continue;
       const share = shared / Math.min(area[i], area[j]);

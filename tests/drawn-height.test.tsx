@@ -68,7 +68,7 @@ describe('a floor piece is drawn to the height it declares', () => {
   it('the sweep has a fixed denominator', () => {
     // Every floor-anchored shape, none skipped, and the dining table. A shape that draws
     // nothing would throw on `Math.max()` of nothing rather than pass.
-    expect(rows.length).toBe(44); // 37 with the clothes rail, 44 with the seven building blocks, all floor pieces
+    expect(rows.length).toBe(45); // 37 with the clothes rail, 44 with the seven building blocks, 45 with a made piece — all floor pieces
   });
 
   it('the ottoman reaches its own height', () => {

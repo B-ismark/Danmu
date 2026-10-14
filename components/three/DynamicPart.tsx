@@ -26,6 +26,7 @@ import {
   type ScenePart,
 } from '@/lib/scene-spec';
 import { useStudio } from '@/lib/store';
+import { layoutMade } from '@/lib/made-piece';
 import { useScene } from '@/lib/scene-store';
 import { roleOf, bedPillows } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
@@ -329,6 +330,8 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
       return <SlatPanelGeo part={part} locked={locked} />;
     case 'seat-pad':
       return <SeatPadGeo part={part} locked={locked} />;
+    case 'made':
+      return <MadeGeo part={part} locked={locked} />;
     case 'box':
       return <BoxGeo part={part} locked={locked} />;
     case 'cylinder':
@@ -1563,6 +1566,38 @@ function StoolGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 // Category defaults come from lib/scene-palette (categoryColor) — the same
 // source the Inspector's swatch fallback reads, so an un-recoloured part looks
 // the same in the studio as it does in the panel that edits it.
+/** A made piece: each of its blocks drawn by its own renderer, at the size
+ *  `layoutMade` gives it for the piece's current size — a wider modular piece gets more
+ *  blocks, never stretched ones. A colour chosen for the whole piece wins over each
+ *  block's own, because that is the colour the person just picked. */
+function MadeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  if (!part.made) return <BoxGeo part={part} locked={locked} />;
+  const blocks = layoutMade(part.made, part.dimMM);
+  return (
+    <>
+      {blocks.map((b, i) => {
+        const block: ScenePart = {
+          id: `${part.id}~${i}`,
+          name: part.name,
+          shape: b.shape,
+          category: b.category,
+          pos: b.pos,
+          rot: b.rot,
+          dimMM: b.dimMM,
+          color: part.color ?? b.color,
+          blockStyle: b.blockStyle,
+          locked: false,
+        };
+        return (
+          <group key={block.id} position={b.pos} rotation-y={b.rot}>
+            <ShapeDispatch part={block} locked={locked} />
+          </group>
+        );
+      })}
+    </>
+  );
+}
+
 function BoxGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;

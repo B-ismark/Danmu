@@ -195,6 +195,8 @@ const ROLE_BY_SHAPE: Partial<Record<Shape, Role>> = {
   'door-cabinet': 'cabinet',
   'open-shelf': 'bookshelf',
   'seat-pad': 'other',
+  // A made piece is whatever its maker built; no single role's clearance fits all of them.
+  made: 'other',
 };
 
 const ROLE_BY_CATEGORY: Partial<Record<Category, Role>> = {

@@ -26,6 +26,7 @@ import { describeSpaceRefusal, refuseForSpace, spaceLimits } from '@/lib/space-b
 import { moveWallCarrying } from '@/lib/wall-actions';
 import { onPageLeave } from '@/lib/page-leave';
 import { announce } from '@/lib/announce';
+import { fitPartDims } from '@/lib/made-piece';
 
 // The right rail is a DECORATING panel, not a properties palette — and it now
 // practises the disclosure the left rail has always had. Every decorating
@@ -553,7 +554,7 @@ export function Inspector() {
         footprint={room.footprint}
         value={currentDim}
         defaultDim={defaultDim}
-        onChange={(d) => setDim(id, d)}
+        onChange={(d) => setDim(id, fitPartDims(part, d))}
       />
     </div>
   );
