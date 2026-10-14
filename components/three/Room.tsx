@@ -18,7 +18,7 @@ import { footprintBounds } from '@/lib/footprint';
 import { lightingAt, KEY_DIR, DEFAULT_BEARING_DEG, type KeyLightSpec } from '@/lib/lighting-moods';
 import { shadowFit } from '@/lib/shadow-fit';
 import { bounceIntensity, glazingArea } from '@/lib/bounce';
-import { useSnapshot, downloadBlob } from '@/lib/snapshot';
+import { useSnapshot, downloadBlob, snapshotPixelRatio } from '@/lib/snapshot';
 import { snapshotFileName } from '@/lib/exports';
 import { addPieceToRoom, planPiece } from '@/lib/add-piece';
 import { dropCarry } from '@/lib/drop-carry';
@@ -97,6 +97,8 @@ const _raycaster = new Raycaster();
 const _ndc = new Vector2();
 const _hit = new Vector3();
 const _up = new Vector3(0, 1, 0);
+/** The canvas' CSS size, read once per snapshot. */
+const _snapCss = new Vector2();
 /** Reused across drops. `Plane` is `normal · x + constant = 0`, so a plane at `y = h`
  *  has constant `-h`; the floor is the `h = 0` case of that rather than a second rule. */
 const _dropPlane = new Plane(new Vector3(0, 1, 0), 0);
@@ -884,7 +886,23 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
         (o as { visible: boolean }).visible = false;
       }
     });
+    // The picture is rendered at its OWN size (`snapshotPixelRatio`), not copied off
+    // the screen's buffer, and the renderer is put back in the same frame — before
+    // anything can paint at the borrowed ratio. Only the drawing buffer grows: the
+    // CSS size, and so the camera's aspect and the framing, stay exactly as seen.
+    // `fx.setSize` is handed the unchanged CSS size and re-reads the drawing buffer
+    // from the renderer, so every buffer the composer owns (N8AO's included) follows
+    // it there and back.
+    const fx = composer?.current;
+    const ratioWas = gl.getPixelRatio();
+    gl.getSize(_snapCss);
+    const ratio = snapshotPixelRatio(_snapCss.x, _snapCss.y, ratioWas, gl.capabilities.maxTextureSize);
+    const resize = (r: number) => {
+      gl.setPixelRatio(r);
+      fx?.setSize(_snapCss.x, _snapCss.y);
+    };
     try {
+      if (ratio !== ratioWas) resize(ratio);
       // Render from the CURRENT camera to the WebGL buffer, then COPY it into a 2D
       // canvas synchronously (before the un-preserved buffer clears). toBlob runs
       // async off that copy.
@@ -892,7 +910,6 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
       // skipped occlusion AND grading — the composer has turned the renderer's
       // tone mapping off — so the file someone saved to show a partner was a
       // flatter, greyer room than the one on their screen.
-      const fx = composer?.current;
       if (fx) fx.render();
       else gl.render(scene, camera);
       const src = gl.domElement;
@@ -917,6 +934,11 @@ function SceneCapture({ composer }: { composer: MutableRefObject<Composer | null
       snapshotFailed(e);
     } finally {
       hidden.forEach((h) => (h.obj.visible = true));
+      if (gl.getPixelRatio() !== ratioWas) {
+        resize(ratioWas);
+        // The screen's buffer was cleared by the resize; paint it again.
+        invalidate();
+      }
     }
   });
   return null;

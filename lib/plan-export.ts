@@ -25,6 +25,26 @@ const LEGEND_LINE = 20;
  *  sit in. A 2 m × 2 m room is only 180 px of plan; its legend rows are not. */
 const MIN_SHEET_W = 520;
 
+/** Device pixels per sheet pixel. It was 2, which leaves the 10–11 px legend and
+ *  dimension type soft the moment the sheet is printed or zoomed; 4 puts a 6 m room
+ *  at ~2,400 px across, about A4 at 300 dpi. */
+const SHEET_SCALE = 4;
+/** The largest canvas every engine will encode. Safari refuses one over 16,777,216
+ *  pixels (4096²) and `toBlob` then hands back `null`, so this is the binding cap. */
+const MAX_SHEET_AREA = 16_777_216;
+const MAX_SHEET_SIDE = 16_384;
+
+/** The scale a `W` × `H` sheet is drawn at: `SHEET_SCALE`, or less when that would
+ *  exceed what a browser can encode. Shrinks rather than fails — a large room is
+ *  still worth a slightly softer sheet, and the alternative is no sheet. Never below
+ *  1; past that the room is too large to draw at this plan scale at all. */
+export function sheetScale(W: number, H: number): number {
+  if (!(W > 0) || !(H > 0)) return SHEET_SCALE;
+  const byArea = Math.sqrt(MAX_SHEET_AREA / (W * H));
+  const bySide = MAX_SHEET_SIDE / Math.max(W, H);
+  return Math.max(1, Math.min(SHEET_SCALE, byArea, bySide));
+}
+
 const TITLE_FONT = '600 16px system-ui, sans-serif';
 const META_FONT = '11px monospace';
 const LEGEND_HEAD_FONT = '600 12px system-ui, sans-serif';
@@ -75,10 +95,11 @@ export function exportPlanPng(
   const legendMaxW = W - MARGIN - (MARGIN + 24);
 
   const c = document.createElement('canvas');
-  c.width = W * 2; // 2× for crisp print
-  c.height = H * 2;
+  const k = sheetScale(W, H);
+  c.width = Math.round(W * k);
+  c.height = Math.round(H * k);
   const ctx = c.getContext('2d')!;
-  ctx.scale(2, 2);
+  ctx.scale(k, k);
 
   ctx.fillStyle = PLAN.paper;
   ctx.fillRect(0, 0, W, H);
@@ -214,7 +235,7 @@ export function exportPlanPng(
 
   // Settles on the BLOB, not on the drawing. Everything above is synchronous and
   // cannot fail in a way worth reporting; `toBlob` is where the file is written and
-  // where it goes wrong — it hands back `null` under memory pressure, and a 2x canvas
+  // where it goes wrong — it hands back `null` under memory pressure, and a big canvas
   // over a large room with a long legend is exactly when that happens. Returning
   // before that point meant the caller's error path was already out of scope: the
   // menu closed, no PNG arrived, and nothing said so.
