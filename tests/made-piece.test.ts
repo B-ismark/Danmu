@@ -132,6 +132,19 @@ describe('readMadeSpec — a saved piece is a hint with a filename', () => {
     expect(got.spec.blocks[0].rot).toBeCloseTo(0.5);
   });
 
+  it('keeps a block style only where that block owns the option, and only in vocabulary', () => {
+    const got = readMadeSpec({
+      blocks: [
+        { shape: 'worktop', category: 'desk', pos: [0, 0, 0], rot: 0, dimMM: [1400, 700, 740], blockStyle: { ends: 'panel', band: 'glass' } },
+        { shape: 'screen', category: 'other', pos: [0, 0, 0.4], rot: 0, dimMM: [1400, 30, 1200], blockStyle: { band: 'neon' } },
+        { shape: 'box', category: 'other', pos: [0, 0, 0], rot: 0, dimMM: [400, 400, 400], blockStyle: { ends: 'legs' } },
+      ],
+    })!;
+    expect(got.spec.blocks[0].blockStyle).toEqual({ ends: 'panel' });
+    expect(got.spec.blocks[1].blockStyle).toBeUndefined();
+    expect(got.spec.blocks[2].blockStyle).toBeUndefined();
+  });
+
   it('refuses nothing usable', () => {
     expect(readMadeSpec(null)).toBeNull();
     expect(readMadeSpec({ blocks: 'x' })).toBeNull();

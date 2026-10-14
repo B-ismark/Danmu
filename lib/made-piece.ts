@@ -19,6 +19,7 @@ import { CATEGORIES, SHAPES, type Category, type ScenePart, type Shape } from '.
 import { localToWorld, worldToLocal } from './geometry';
 import { verticalExtent } from './physics';
 import { clampDims } from './dimension-ranges';
+import { blockStyleKeys, readBlockOption, type BlockStyle } from './block-style';
 
 /** One block inside a made piece, in the piece's own frame: metres from the piece's
  *  origin (footprint centre, at its lowest point), yaw relative to the piece. `pos.y`
@@ -31,14 +32,9 @@ export type MadeBlock = {
   rot: number;
   dimMM: [number, number, number];
   color?: string;
-  /** The block's style switches, carried opaquely so this module does not have to
-   *  know the vocabulary. Validated where bytes come in (`lib/scene-file.ts`). */
-  blockStyle?: BlockStyleLike;
+  /** The block's style switches (`lib/block-style.ts`). */
+  blockStyle?: BlockStyle;
 };
-
-/** A block's style switches as this module sees them: opaque. Narrowed to the real
- *  `BlockStyle` once the block shapes land. */
-export type BlockStyleLike = Record<string, unknown>;
 
 /** What makes a part a made piece. `sizeMM` is the size the blocks were packed at;
  *  the part's own `dimMM` may differ after a resize, and `layoutMade` reconciles the
@@ -115,7 +111,7 @@ function scaledDims(b: MadeBlock, sx: number, sz: number, sy: number): [number, 
 }
 
 /** The parts to pack: what `packMade` needs of each block part. */
-export type PackInput = Pick<ScenePart, 'shape' | 'category' | 'pos' | 'rot' | 'dimMM' | 'color'> & { blockStyle?: BlockStyleLike };
+export type PackInput = Pick<ScenePart, 'shape' | 'category' | 'pos' | 'rot' | 'dimMM' | 'color' | 'blockStyle'>;
 
 /** Pack block parts (world transforms) into a made piece. The piece's yaw is the
  *  largest block's, so a build assembled at an angle packs tight rather than inside
@@ -183,10 +179,10 @@ function halfExtents(dimMM: readonly [number, number, number], rot: number): [nu
 export function explodeMade(
   part: Pick<ScenePart, 'id' | 'name' | 'pos' | 'rot' | 'dimMM'>,
   spec: MadeSpec,
-): (ScenePart & { blockStyle?: BlockStyleLike })[] {
+): ScenePart[] {
   return layoutMade(spec, part.dimMM).map((b, i) => {
     const [dx, dz] = localToWorld(part.rot, b.pos[0], b.pos[2]);
-    const out: ScenePart & { blockStyle?: BlockStyleLike } = {
+    const out: ScenePart = {
       id: `${part.id}~${i}`,
       category: b.category,
       name: `${part.name} · block ${i + 1}`,
@@ -227,13 +223,9 @@ function finite3(v: unknown): v is [number, number, number] {
  *  or a room file. Same boundary as every other imported part: shape and category are
  *  checked against the runtime vocabularies, every block size goes through
  *  `clampDims`, and positions must be finite and inside a room's reach. Lossy on
- *  purpose and never silent: `dropped` counts the blocks left behind. `readStyle` is
- *  the block-style validator, passed in so this module does not own that vocabulary.
- *  A piece is not a made `made` block — nesting is refused rather than recursed. */
-export function readMadeSpec(
-  raw: unknown,
-  readStyle: (v: unknown) => BlockStyleLike | undefined = () => undefined,
-): { spec: MadeSpec; dropped: number } | null {
+ *  purpose and never silent: `dropped` counts the blocks left behind. Style options
+ *  go through `readBlockOption`, the one validator `lib/scene-file.ts` also asks. */
+export function readMadeSpec(raw: unknown): { spec: MadeSpec; dropped: number } | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   if (!Array.isArray(r.blocks)) return null;
@@ -261,7 +253,7 @@ export function readMadeSpec(
       dimMM: clampDims(category, shape, [...b.dimMM]),
     };
     if (typeof b.color === 'string' && HEX.test(b.color)) block.color = b.color.toLowerCase();
-    const style = b.blockStyle === undefined ? undefined : readStyle(b.blockStyle);
+    const style = readStyle(shape, b.blockStyle);
     if (style) block.blockStyle = style;
     blocks.push(block);
   }
@@ -278,3 +270,16 @@ export function readMadeSpec(
 /** The longest name a saved piece keeps — long enough for "Four-seat bench, oak",
  *  short enough that a Library row ellipsises rather than wraps to three lines. */
 export const MAX_PIECE_NAME = 40;
+
+/** The options a stored block carries that its shape has and that are legal values;
+ *  anything else is dropped, and an empty answer is no style at all. */
+function readStyle(shape: Shape, raw: unknown): BlockStyle | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const stored = raw as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of blockStyleKeys(shape)) {
+    const v = readBlockOption(key, stored[key]);
+    if (v !== undefined) out[key] = v;
+  }
+  return Object.keys(out).length ? (out as BlockStyle) : undefined;
+}
