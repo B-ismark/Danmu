@@ -33,13 +33,13 @@ jobs:
       # v5 rather than v4 on both: v4 targets the Node 20 action runtime, which
       # GitHub is deprecating — the runner already forces those steps onto Node 24
       # and warns, so v4 is a failure with a date on it, not a working pin.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Before setup-node, which needs pnpm on PATH to resolve its cache.
       - name: Enable Corepack
         run: corepack enable
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -94,7 +94,7 @@ jobs:
       # to save space.
       - name: Restore the Next build cache
         if: ${{ !cancelled() }}
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .next/cache
           key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('app/**', 'components/**', 'lib/**', 'next.config.mjs', 'tsconfig.json') }}
