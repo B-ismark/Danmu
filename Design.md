@@ -3033,7 +3033,8 @@ outlined box around outlined buttons, which put two boundaries on every control.
   shrinking it only past what Safari will encode) and `SvgSheet`
   (`lib/svg-sheet.ts`) for the SVG, which takes the same canvas calls and writes
   vectors. A second, hand-written SVG would have drifted from the PNG the first time
-  either changed.
+  either changed. The SVG is sized in millimetres so it prints at **1:50** at 100%,
+  and its sheet says so where the PNG states its pixel scale.
 - **The scene file** (`lib/scene-file.ts`, `components/studio/SceneFile.tsx`) —
   Export → *Room file* writes the whole room as readable JSON
   (`front-room.danmu.json`); `Open a file` on the rooms page lands one as a **new**

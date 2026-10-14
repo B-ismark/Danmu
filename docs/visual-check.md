@@ -3382,4 +3382,11 @@ covered. Headless SwiftShader produced a correct 3200×3071 picture of the start
 A real phone's GPU memory is the part it cannot vouch for. `tests/export-resolution.test.ts`
 and `tests/tone.test.ts` pin the sizes and keep both quality paths on one curve.
 
+**The SVG plan.** Export → Floor plan for print (SVG), then open the file in a
+browser, in Figma or Illustrator, and print it at 100%. Wrong looks like: a file that
+will not open; a number badge sitting off its piece; legend text running past the right
+edge in a design tool (fonts are named, not embedded, so a tool may substitute a wider
+face); a printed 1 m scale bar that does not measure 20 mm. The PNG and SVG beside each
+other should be the same drawing.
+
 **Rides:** `claude/pensive-hypatia-rvdovj` (B-ismark/Danmu#268), not yet looked at.

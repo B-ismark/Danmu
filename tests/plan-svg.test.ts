@@ -66,10 +66,25 @@ describe('the floor plan as SVG', () => {
     // A furniture outline is the only thing on the sheet stroked at 1.2; a badge is the
     // only text centred on its point.
     const outlines = [...text.matchAll(/stroke-width="1\.2"/g)].map((m) => m.index!);
-    const badges = [...text.matchAll(/dominant-baseline="central"[^>]*>\d+<\/text>/g)].map((m) => m.index!);
+    const badges = [...text.matchAll(/dy="0\.35em"[^>]*>\d+<\/text>/g)].map((m) => m.index!);
     expect(outlines).toHaveLength(2);
     expect(badges).toHaveLength(2);
     expect(Math.max(...outlines)).toBeLessThan(Math.min(...badges));
+  });
+
+  it('prints at 1:50 at 100%, and says so on the sheet', () => {
+    const doc = parse(planSvg(PARTS, ROOM, 'm', 'Front Room'));
+    const svg = doc.documentElement;
+    const [, , vw] = svg.getAttribute('viewBox')!.split(' ').map(Number);
+    // 90 sheet px per metre; at 1:50 a metre is 20 mm of paper.
+    expect(svg.getAttribute('width')).toBe(`${Math.round((vw * 20) / 90 * 1000) / 1000}mm`);
+    const texts = Array.from(doc.getElementsByTagName('text')).map((t) => t.textContent ?? '');
+    expect(texts.some((t) => t.endsWith('scale 1:50 printed at 100%'))).toBe(true);
+  });
+
+  it('survives a control character in a piece name', () => {
+    const doc = parse(planSvg([part({ id: 's', name: 'Sofa\u000B' })], ROOM, 'm', 'Den\u0007'));
+    expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
   });
 
   it('is named like the PNG, with its own extension', () => {

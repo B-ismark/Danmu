@@ -51,6 +51,18 @@ describe('SvgSheet', () => {
     s.textAlign = 'center';
     s.textBaseline = 'middle';
     s.fillText('7', 1, 2);
-    expect(s.toString()).toContain('text-anchor="middle" dominant-baseline="central"');
+    // A dy shift, not dominant-baseline, which older design tools ignore.
+    expect(s.toString()).toContain('text-anchor="middle" dy="0.35em"');
+  });
+
+  it('drops the control characters XML forbids, so a stray one cannot break the file', () => {
+    const s = new SvgSheet(10, 10, measure);
+    s.fillText('Den\u000B\u0007 2', 0, 0);
+    expect(s.toString()).toContain('>Den 2</text>');
+  });
+
+  it('sizes the document in millimetres when given a print scale', () => {
+    expect(new SvgSheet(90, 45, measure, 20 / 90).toString()).toContain('width="20mm" height="10mm" viewBox="0 0 90 45"');
+    expect(new SvgSheet(90, 45, measure).toString()).toContain('width="90" height="45"');
   });
 });

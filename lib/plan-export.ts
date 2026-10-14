@@ -17,9 +17,13 @@ import { downloadBlob } from './snapshot';
 import { PLAN } from './scene-palette';
 import { fileSlug } from './exports';
 import { ridesWall } from './physics';
-import { SvgSheet, type SheetContext } from './svg-sheet';
+import { SvgSheet, type MeasureText, type SheetContext } from './svg-sheet';
 
 const PX_PER_M = 90; // plan scale on canvas
+/** The SVG prints at 1:50 at 100% — the usual scale for a room plan, so a ruler on the
+ *  printout reads true. At 90 sheet px per metre that is 20 mm of paper per 90 px. */
+const PRINT_SCALE = 50;
+const SVG_MM_PER_PX = 1000 / PRINT_SCALE / PX_PER_M;
 const MARGIN = 70;
 const LEGEND_LINE = 20;
 /** Narrowest sheet we will emit, so a small room's legend still has a column to
@@ -68,7 +72,7 @@ export function exportPlanPng(
    *  filename, and the default it used to carry was never passed by anybody. */
   title: string,
 ): Promise<void> {
-  const { W, H, draw } = planSheet(parts, room, dimUnit, title);
+  const { W, H, draw } = planSheet(parts, room, dimUnit, title, `scale 1 m = ${PX_PER_M} px`);
   const c = document.createElement('canvas');
   const k = sheetScale(W, H);
   // Floored: rounding a side up can carry an area-capped sheet back over the cap.
@@ -101,8 +105,8 @@ export function exportPlanPng(
  *  any zoom and on any printer, and it opens in Illustrator, Figma or Inkscape for
  *  anyone who wants to mark it up. No size limit either: it is text, not pixels. */
 export function planSvg(parts: ScenePart[], room: PlanRoom, dimUnit: DimUnit, title: string): string {
-  const { W, H, draw } = planSheet(parts, room, dimUnit, title);
-  const svg = new SvgSheet(W, H, canvasMeasure());
+  const { W, H, draw } = planSheet(parts, room, dimUnit, title, `scale 1:${PRINT_SCALE} printed at 100%`);
+  const svg = new SvgSheet(W, H, canvasMeasure(), SVG_MM_PER_PX);
   draw(svg);
   return svg.toString();
 }
@@ -112,10 +116,12 @@ export function exportPlanSvg(parts: ScenePart[], room: PlanRoom, dimUnit: DimUn
   downloadBlob(new Blob([text], { type: 'image/svg+xml' }), planSvgFileName(title));
 }
 
-/** Text widths for the SVG come from a canvas in the same fonts, so its legend is laid
- *  out and ellipsised exactly as the PNG's is. Without a canvas (a test under jsdom)
- *  it falls back to an average glyph width: roughly right, never zero. */
-function canvasMeasure(): (font: string, text: string) => number {
+/** Text widths, from a canvas in the sheet's fonts — the one measurer both the layout
+ *  pass and the SVG's ellipsis use, so they cannot disagree. A design tool may resolve
+ *  `system-ui` to a slightly different face than the browser did; that is the limit of
+ *  naming fonts rather than embedding them. Without a canvas (a test under jsdom) it
+ *  falls back to an average glyph width: roughly right, never zero. */
+function canvasMeasure(): MeasureText {
   const m = document.createElement('canvas').getContext('2d');
   return (font, text) => {
     if (m) {
@@ -127,7 +133,14 @@ function canvasMeasure(): (font: string, text: string) => number {
   };
 }
 
-function planSheet(parts: ScenePart[], room: PlanRoom, dimUnit: DimUnit, title: string): PlanSheet {
+function planSheet(
+  parts: ScenePart[],
+  room: PlanRoom,
+  dimUnit: DimUnit,
+  title: string,
+  /** How the sheet states its scale: in pixels for the PNG, as a print ratio for the SVG. */
+  scaleNote: string,
+): PlanSheet {
   const b = footprintBounds(room.footprint);
   const planW = b.width * PX_PER_M;
   const planH = b.depth * PX_PER_M;
@@ -145,15 +158,11 @@ function planSheet(parts: ScenePart[], room: PlanRoom, dimUnit: DimUnit, title: 
   // dimensions, and used to be drawn at whatever width they came out at — so a
   // long name ran straight off the right edge of a narrow plan. Measure them
   // first and let the sheet grow to fit, then ellipsise whatever still overruns.
-  const measure = document.createElement('canvas').getContext('2d');
+  const measure = canvasMeasure();
   const legendRows = floorParts.map((p) => legendText(p, dimUnit));
   let widestLegend = 0;
-  if (measure) {
-    measure.font = LEGEND_FONT;
-    for (const row of legendRows) widestLegend = Math.max(widestLegend, measure.measureText(row).width);
-    measure.font = META_FONT;
-    widestLegend = Math.max(widestLegend, measure.measureText(metaText(room, dimUnit)).width - 24);
-  }
+  for (const row of legendRows) widestLegend = Math.max(widestLegend, measure(LEGEND_FONT, row));
+  widestLegend = Math.max(widestLegend, measure(META_FONT, metaText(room, dimUnit, scaleNote)) - 24);
 
   const contentW = Math.max(planW, widestLegend + 24, MIN_SHEET_W - MARGIN * 2);
   const W = Math.ceil(contentW + MARGIN * 2);
@@ -176,7 +185,7 @@ function planSheet(parts: ScenePart[], room: PlanRoom, dimUnit: DimUnit, title: 
     ctx.fillText(ellipsise(ctx, title, W - MARGIN * 2), MARGIN, 30);
     ctx.font = META_FONT;
     ctx.fillStyle = PLAN.ink2;
-    ctx.fillText(metaText(room, dimUnit), MARGIN, 46);
+    ctx.fillText(metaText(room, dimUnit, scaleNote), MARGIN, 46);
 
     // Footprint — floor fill + thick wall stroke.
     ctx.beginPath();
@@ -323,11 +332,8 @@ export function planSvgFileName(title: string): string {
   return `${fileSlug(title)}-floor-plan.svg`;
 }
 
-function metaText(
-  room: { width: number; depth: number; height: number },
-  dimUnit: DimUnit,
-): string {
-  return `${formatDim(room.width * 1000, dimUnit)} × ${formatDim(room.depth * 1000, dimUnit)} ${dimUnit} · ceiling ${formatDim(room.height * 1000, dimUnit)} ${dimUnit} · scale 1 m = ${PX_PER_M} px`;
+function metaText(room: { width: number; depth: number; height: number }, dimUnit: DimUnit, scaleNote: string): string {
+  return `${formatDim(room.width * 1000, dimUnit)} × ${formatDim(room.depth * 1000, dimUnit)} ${dimUnit} · ceiling ${formatDim(room.height * 1000, dimUnit)} ${dimUnit} · ${scaleNote}`;
 }
 
 function legendText(p: ScenePart, dimUnit: DimUnit): string {

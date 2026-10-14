@@ -24,7 +24,6 @@ export type SheetContext = Pick<
   | 'restore'
   | 'translate'
   | 'rotate'
-  | 'scale'
   | 'beginPath'
   | 'closePath'
   | 'moveTo'
@@ -75,8 +74,11 @@ function multiply(a: Matrix, b: Matrix): Matrix {
 /** Rounded so the file is readable and does not carry 1e-15 noise from a rotation. */
 const n = (v: number) => String(Math.round(v * 1000) / 1000);
 
+/** Escapes markup, and DROPS the control characters XML 1.0 forbids outright: a room
+ *  or piece name carrying one (pasted text, an imported room file) would otherwise
+ *  make the whole document fail to open, where the PNG draws the same name fine. */
 function escapeXml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!);
+  return s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!);
 }
 
 /** `#RRGGBBAA` → a 6-digit colour plus an opacity. Browsers read the 8-digit form, but
@@ -98,7 +100,10 @@ export function fontAttrs(font: string): string {
 }
 
 const ANCHOR: Partial<Record<CanvasTextAlign, string>> = { center: 'middle', right: 'end', end: 'end' };
-const BASELINE: Partial<Record<CanvasTextBaseline, string>> = { middle: 'central', top: 'hanging', hanging: 'hanging' };
+/** Vertical alignment as a `dy` shift rather than `dominant-baseline`, which older
+ *  Illustrator and some Inkscape versions ignore — and a number badge that drifts off
+ *  its piece can no longer be matched to its legend row. */
+const BASELINE_DY: Partial<Record<CanvasTextBaseline, string>> = { middle: '0.35em', top: '0.8em', hanging: '0.8em' };
 
 export class SvgSheet {
   private readonly out: string[] = [];
@@ -119,6 +124,9 @@ export class SvgSheet {
     private readonly width: number,
     private readonly height: number,
     private readonly measure: MeasureText,
+    /** Millimetres of paper per sheet unit. Given, the document's size is in mm, so it
+     *  prints at a true scale at 100%; omitted, it is in pixels. */
+    private readonly mmPerUnit?: number,
   ) {}
 
   get fillStyle(): string {
@@ -173,9 +181,6 @@ export class SvgSheet {
     const s = Math.sin(a);
     this.s.m = multiply(this.s.m, [c, s, -s, c, 0, 0]);
   }
-  scale(x: number, y: number) {
-    this.s.m = multiply(this.s.m, [x, 0, 0, y, 0, 0]);
-  }
 
   beginPath() {
     this.path = [];
@@ -219,10 +224,10 @@ export class SvgSheet {
   }
   fillText(text: string, x: number, y: number) {
     const anchor = ANCHOR[this.s.textAlign];
-    const baseline = BASELINE[this.s.textBaseline];
+    const dy = BASELINE_DY[this.s.textBaseline];
     this.out.push(
       `<text${this.transform(this.s.m)} x="${n(x)}" y="${n(y)}" ${fontAttrs(this.s.font)} ${paint(this.s.fillStyle, 'fill')}` +
-        `${anchor ? ` text-anchor="${anchor}"` : ''}${baseline ? ` dominant-baseline="${baseline}"` : ''}` +
+        `${anchor ? ` text-anchor="${anchor}"` : ''}${dy ? ` dy="${dy}"` : ''}` +
         // The legend pads its numbers with a leading space; keep it.
         ` xml:space="preserve">${escapeXml(text)}</text>`,
     );
@@ -235,12 +240,15 @@ export class SvgSheet {
   toString(): string {
     return (
       `<?xml version="1.0" encoding="UTF-8"?>\n` +
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${this.width}" height="${this.height}" viewBox="0 0 ${this.width} ${this.height}">\n` +
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${this.size(this.width)}" height="${this.size(this.height)}" viewBox="0 0 ${this.width} ${this.height}">\n` +
       this.out.join('\n') +
       `\n</svg>\n`
     );
   }
 
+  private size(v: number): string {
+    return this.mmPerUnit ? `${n(v * this.mmPerUnit)}mm` : String(v);
+  }
   private emitPath(paintAttrs: string) {
     this.out.push(`<path${this.transform(this.pathM)} d="${this.path.join(' ')}" ${paintAttrs}/>`);
   }
