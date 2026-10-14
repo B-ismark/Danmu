@@ -1,0 +1,46 @@
+# Dependency updates. Grouped so a week's minor and patch bumps arrive as ONE pull
+# request per ecosystem rather than a dozen: each one still has to pass CI, and the
+# `main` ruleset will not merge it otherwise. Major versions come one per PR, since
+# those are the ones that need reading — EXCEPT for packages that only work in step
+# with each other, which come together at every level (see the family groups).
+#
+# Security updates are switched on in Settings → Advanced Security ("Dependabot
+# security updates") and open as soon as an advisory lands. They follow the `ignore`
+# rules below, which is why the one ignore is limited to version updates.
+version: 2
+updates:
+  - package-ecosystem: npm # pnpm is detected from pnpm-lock.yaml
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # A package goes to the FIRST group it matches, so the families come before the
+      # catch-all. Each family split across PRs fails CI in every one of them: the
+      # React pair and its types (tests/react-3d-peers.test.ts), Next and its lint
+      # config, and three with the renderer, effects and types built against it
+      # (postprocessing declares an upper bound on three).
+      react:
+        patterns: ['react', 'react-dom', '@types/react', '@types/react-dom']
+      next:
+        patterns: ['next', 'eslint-config-next']
+      three:
+        patterns: ['three', '@types/three', 'postprocessing', '@react-three/*']
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Pinned exactly, and the same version is written into lib/local-detect.ts
+      # (ORT_VERSION, the CDN fallback) and tests/service-worker.test.ts. A bump here
+      # alone would install one runtime and fetch another. Move all three together,
+      # then run `pnpm vendor:ort`. Version updates only: a SECURITY update still
+      # opens, and fails CI on that mismatch loudly, which is the right failure.
+      - dependency-name: onnxruntime-web
+        update-types: ['version-update:semver-major', 'version-update:semver-minor', 'version-update:semver-patch']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

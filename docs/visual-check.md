@@ -3389,4 +3389,4 @@ edge in a design tool (fonts are named, not embedded, so a tool may substitute a
 face); a printed 1 m scale bar that does not measure 20 mm. The PNG and SVG beside each
 other should be the same drawing.
 
-**Rides:** `claude/pensive-hypatia-rvdovj` (B-ismark/Danmu#268), not yet looked at.
+**Merged:** `3172cc9` (B-ismark/Danmu#268), not yet looked at.
