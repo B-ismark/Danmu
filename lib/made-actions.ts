@@ -44,6 +44,13 @@ function openUp(p: ScenePart, spec: MadeSpec): ScenePart[] {
   return p.color ? blocks.map((b) => ({ ...b, color: p.color })) : blocks;
 }
 
+/** The piece a selection WOULD pack into, for the save dialog to describe before
+ *  anything changes. Null when it cannot (`packRefusal` says why). */
+export function packPreview(chosen: readonly ScenePart[]): MadeSpec | null {
+  if (packRefusal(chosen)) return null;
+  return packMade(blockInputs(chosen))?.spec ?? null;
+}
+
 export type SwapPlan = {
   /** Ids leaving the room. */
   remove: string[];
