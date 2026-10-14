@@ -12,7 +12,8 @@ import { Icon } from '@/components/ui/Icon';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { Select } from '@/components/ui/Select';
 import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
-import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
+import { EditableText, IconButton, Pill, Segmented, Toggle } from '@/components/ui/primitives';
+import { blockStyleFor, blockStyleKeys, type BlockStyle, type BlockStyleKey } from '@/lib/block-style';
 import { RailSection } from './RailSection';
 import { EmptyInspector } from './EmptyInspector';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
@@ -416,6 +417,10 @@ export function Inspector() {
         <LightControls part={part} onChange={(light) => updatePart(id!, { light })} />
       )}
 
+      {blockStyleKeys(part.shape).length > 0 && (
+        <BlockStyleControls part={part} onChange={(blockStyle) => updatePart(id!, { blockStyle })} />
+      )}
+
       {supportsDecor(part.category, part.shape) && (
         <DecorCollection part={part} onChange={(decor) => updatePart(id!, { decor })} />
       )}
@@ -633,6 +638,78 @@ function LightControls({
             >
               {w.label}
             </button>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+// The options a building block has, in plain words. The set of keys a shape has, the values
+// each may take and the defaults are `lib/block-style.ts`'s; this table is only what a
+// person reads beside them, so a new option cannot be added there without a label here
+// (the `Record` is exhaustive over the keys).
+const BLOCK_OPTION_UI: Record<
+  BlockStyleKey,
+  { label: string; choices?: ReadonlyArray<{ value: string; label: string }> }
+> = {
+  ends: {
+    label: 'Ends',
+    choices: [
+      { value: 'legs', label: 'Legs' },
+      { value: 'panel', label: 'Panels' },
+      { value: 'none', label: 'None' },
+    ],
+  },
+  band: {
+    label: 'Top band',
+    choices: [
+      { value: 'frosted', label: 'Frosted' },
+      { value: 'glass', label: 'Clear' },
+      { value: 'none', label: 'None' },
+    ],
+  },
+  lock: { label: 'Lock' },
+  back: { label: 'Back panel' },
+  plinth: { label: 'Plinth' },
+  backing: { label: 'Backing' },
+};
+
+/** The choices a building block carries: a segmented set per word option and a switch per
+ *  yes/no one. A write merges into what the part already stored, so changing one option
+ *  keeps the others, and goes through `updatePart` like a colour does, which is what puts it
+ *  in the undo history. */
+function BlockStyleControls({ part, onChange }: { part: ScenePart; onChange: (style: BlockStyle) => void }) {
+  const style = blockStyleFor(part.shape, part.blockStyle) as Record<string, string | boolean | undefined>;
+  const set = (key: BlockStyleKey, value: string | boolean) => onChange({ ...part.blockStyle, [key]: value });
+  return (
+    <Section label="Style">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {blockStyleKeys(part.shape).map((key) => {
+          const ui = BLOCK_OPTION_UI[key];
+          const value = style[key];
+          if (ui.choices) {
+            return (
+              <div key={key} style={{ minWidth: 0 }}>
+                <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>{ui.label}</span>
+                {/* `wrap`: three words in a 228px rail is a row that fits and in a narrower
+                    one is a row that clips, so it reflows to a pad instead. */}
+                <Segmented<string>
+                  ariaLabel={ui.label}
+                  options={ui.choices.map((c) => ({ value: c.value, label: c.label }))}
+                  value={String(value)}
+                  onChange={(v) => set(key, v)}
+                  wrap
+                  minItem={72}
+                />
+              </div>
+            );
+          }
+          return (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--fs-small)', fontWeight: 600, color: 'var(--ink)' }}>{ui.label}</span>
+              <Toggle on={value === true} onClick={() => set(key, value !== true)} label={ui.label} />
+            </div>
           );
         })}
       </div>

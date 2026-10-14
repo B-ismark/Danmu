@@ -21,7 +21,12 @@ const SYNONYM: Record<string, string> = {
   sectional: 'sofa',
   television: 'tv',
   telly: 'tv',
-  screen: 'tv',
+  // `screen` is not here any more: the Library sells a Screen — a floor-standing office
+  // partition — and a synonym folds BOTH the query and every haystack word, so it made the
+  // Screen row read "tv" and tied it with the television for the one word that is its name.
+  // The partition's own other names fold onto it instead.
+  partition: 'screen',
+  divider: 'screen',
   refrigerator: 'fridge',
   freezer: 'fridge',
   closet: 'wardrobe',
@@ -55,6 +60,18 @@ const SYNONYM: Record<string, string> = {
   recliner: 'armchair',
   workstation: 'desk',
   bedside: 'nightstand',
+  // The building blocks' other names. Each lands on a word of the row's own label, so the
+  // exact-label rule still puts the block first when its name is typed.
+  pedestal: 'drawer',
+  cupboard: 'cabinet',
+  sideboard: 'cabinet',
+  cubby: 'open',
+  counter: 'worktop',
+  countertop: 'worktop',
+  benchtop: 'worktop',
+  slats: 'slat',
+  slatted: 'slat',
+  cushion: 'seat',
   pouf: 'ottoman',
   footstool: 'ottoman',
   plant: 'plant',

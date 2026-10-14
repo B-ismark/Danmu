@@ -301,4 +301,6 @@ describe('every surface in the Library', () => {
 });
 
 // 10 since "Dining / desk table" became a Dining table and a Desk — two rows, one shape.
-const SURFACE_COUNT = 10;
+// 10 → 14: the worktop, drawer unit, open shelf and door cabinet carry props; the seat pad
+// (a cushion) and the screen and slat panel (category `other`) do not.
+const SURFACE_COUNT = 14;

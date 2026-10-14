@@ -71,6 +71,11 @@ export const DINING_TOP = { top: 0.028, ease: 0.01, apron: 0.077 } as const;
  *  and the cable tray both stop at `hang` — in metres. `hang` is the knee room the tuck
  *  rule measures a chair against (`surfaceKneeMM`, `lib/layout-rules.ts`). */
 export const DESK_TOP = { top: 0.025, hang: 0.075 } as const;
+/** A worktop's slab, in metres. It is a bare slab — nothing hangs under it, so its knee
+ *  room is the slab's own underside — and its end treatment (legs, panels, nothing) is a
+ *  `blockStyle` choice the tuck rule does not read: a chair is stopped by the slab's depth
+ *  and not by a leg, which `docs/what-is-still-open.md` records. */
+export const WORKTOP = { top: 0.025 } as const;
 /** A coffee table's lower shelf, as shares of the height: its underside is the knee
  *  room an ottoman or stool slid under it has. */
 export const COFFEE_SHELF = { lo: 0.25, hi: 0.3 } as const;

@@ -78,6 +78,16 @@ import {
   type HardPart,
   type HardTone,
 } from '@/lib/hard-goods';
+import {
+  doorCabinetForm,
+  drawerUnitForm,
+  openShelfForm,
+  screenForm,
+  seatPadForm,
+  slatPanelForm,
+  worktopForm,
+} from '@/lib/block-forms';
+import { blockStyleFor } from '@/lib/block-style';
 import type { SurfaceKey } from './materials';
 
 /** The module ranges the TILING parametric shapes are divided by, resolved once at module
@@ -305,6 +315,20 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
       return <TvConsoleGeo part={part} locked={locked} />;
     case 'stool':
       return <StoolGeo part={part} locked={locked} />;
+    case 'worktop':
+      return <WorktopGeo part={part} locked={locked} />;
+    case 'screen':
+      return <ScreenGeo part={part} locked={locked} />;
+    case 'drawer-unit':
+      return <DrawerUnitGeo part={part} locked={locked} />;
+    case 'open-shelf':
+      return <OpenShelfGeo part={part} locked={locked} />;
+    case 'door-cabinet':
+      return <DoorCabinetGeo part={part} locked={locked} />;
+    case 'slat-panel':
+      return <SlatPanelGeo part={part} locked={locked} />;
+    case 'seat-pad':
+      return <SeatPadGeo part={part} locked={locked} />;
     case 'box':
       return <BoxGeo part={part} locked={locked} />;
     case 'cylinder':
@@ -1153,6 +1177,69 @@ function OttomanGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       <SoftInstances mesh={CUSHION_MESH.box} items={[f.top]} color={fabric} surface={SURFACE.fabric} />
     </>
   );
+}
+
+// ─── Building blocks ────────────────────────────────────────────────────
+// Each draws what `lib/block-forms.ts` returns and chooses nothing: the options come from
+// `blockStyleFor` (the part's own choice, or the shape's default), the numbers from the
+// form, the colours from the part. All but the seat pad are parametric, so `part` is the
+// effective one and every form is drawn at the size actually stored.
+
+/** A worktop on legs, end panels or nothing, in the piece's own colour. */
+function WorktopGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const { ends } = blockStyleFor(part.shape, part.blockStyle);
+  return <HardParts parts={worktopForm(part.dimMM, ends!)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.65 }} />;
+}
+
+/** A partition: aluminium frame, a fabric board in the piece's colour, and a glass band.
+ *  The band is drawn here, translucent and casting nothing, as the window's glass is. */
+function ScreenGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const { band } = blockStyleFor(part.shape, part.blockStyle);
+  const { parts, glass } = screenForm(part.dimMM, band!);
+  return (
+    <>
+      <HardParts parts={parts} bodyC={body(part, locked)} look={{ surface: 'fabric', roughness: 0.95 }} />
+      {glass.map((g, i) => (
+        <mesh key={i} position={[(g.x0 + g.x1) / 2, (g.y0 + g.y1) / 2, (g.z0 + g.z1) / 2]}>
+          <boxGeometry args={[g.x1 - g.x0, g.y1 - g.y0, g.z1 - g.z0]} />
+          {g.kind === 'frosted' ? (
+            // Milky: a high roughness scatters what is behind it, so it reads as frosted
+            // rather than as a lighter clear pane.
+            <meshStandardMaterial color={DETAIL.windowGlass} {...SURFACE.glass} roughness={0.9} transparent opacity={0.72} />
+          ) : (
+            <meshStandardMaterial color={DETAIL.windowGlass} {...SURFACE.glass} transparent opacity={0.3} metalness={0.1} />
+          )}
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+function DrawerUnitGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const { lock } = blockStyleFor(part.shape, part.blockStyle);
+  return <HardParts parts={drawerUnitForm(part.dimMM, lock!)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.65 }} />;
+}
+
+function OpenShelfGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const { back } = blockStyleFor(part.shape, part.blockStyle);
+  return <HardParts parts={openShelfForm(part.dimMM, back!)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.65 }} />;
+}
+
+function DoorCabinetGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const { plinth } = blockStyleFor(part.shape, part.blockStyle);
+  return <HardParts parts={doorCabinetForm(part.dimMM, plinth!)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.65 }} />;
+}
+
+function SlatPanelGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const { backing } = blockStyleFor(part.shape, part.blockStyle);
+  return <HardParts parts={slatPanelForm(part.dimMM, backing!)} bodyC={body(part, locked)} look={{ surface: 'wood', roughness: 0.65 }} />;
+}
+
+/** One box cushion, the whole outline. Non-parametric: drawn at the authored size and
+ *  group-scaled, like the ottoman's top. */
+function SeatPadGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const f = seatPadForm(part.dimMM);
+  return <SoftInstances mesh={CUSHION_MESH.box} items={[f.top]} color={body(part, locked)} surface={SURFACE.fabric} />;
 }
 
 // ─── Wall-hung ──────────────────────────────────────────────────────────

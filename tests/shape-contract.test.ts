@@ -29,6 +29,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  ADD_PATH_SHAPES,
   PART_LIBRARY,
   CATALOG_SHAPES_ORDERED,
   CATEGORIES,
@@ -43,6 +44,8 @@ import { isObstacle, roleOf } from '@/lib/layout-rules';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import { searchLibrary } from '@/lib/shape-search';
 import { NAME_TO_SHAPE, WORLD_PROMPTS, WORLD_TO_CATEGORY } from '@/lib/local-detect';
+import { BLOCK_SHAPES } from '@/lib/block-style';
+import { buildDetectPrompt } from '@/lib/detect-prompt';
 
 const root = join(__dirname, '..');
 const read = (p: string) => readFileSync(join(root, p), 'utf8');
@@ -75,21 +78,51 @@ function asPart(i: (typeof PART_LIBRARY)[number]): ScenePart {
 
 describe('a catalogue shape is spelled the same everywhere', () => {
   it('offers every add-path shape from the real SHAPES union, once', () => {
+    // The add path is the detector's vocabulary PLUS the building blocks, which no photo
+    // produces and which therefore live in `BLOCK_SHAPES` — see the clause for them below.
     const seen = new Set<Shape>();
-    for (const s of CATALOG_SHAPES_ORDERED) {
+    for (const s of ADD_PATH_SHAPES) {
       expect(SHAPES, `${s} is offered by the picker but is not a Shape`).toContain(s);
-      expect(seen.has(s), `${s} is listed twice in CATALOG_SHAPES_ORDERED`).toBe(false);
+      expect(seen.has(s), `${s} is listed twice in the add path`).toBe(false);
       seen.add(s);
     }
+    expect(ADD_PATH_SHAPES.length, 'the add path is the catalogue plus the seven blocks').toBe(
+      CATALOG_SHAPES_ORDERED.length + 7,
+    );
   });
 
   it('ships every Library entry as an add-path shape', () => {
     for (const i of PART_LIBRARY) {
       expect(
-        CATALOG_SHAPES_ORDERED,
-        `"${i.label}" can be added from the Library but is not in CATALOG_SHAPES_ORDERED, ` +
-          'so no detector may name it',
+        ADD_PATH_SHAPES,
+        `"${i.label}" can be added from the Library but is in neither CATALOG_SHAPES_ORDERED ` +
+          '(the detector\'s vocabulary) nor BLOCK_SHAPES (the pieces a photo never produces)',
       ).toContain(i.shape);
+    }
+  });
+
+  it('keeps the building blocks out of everything a detector reads', () => {
+    // The exemption is a contract and not a gap. A block is a piece a person assembles; the
+    // detector sees a label and a box, and offering it `worktop` or `slat panel` invites it
+    // to name a bookshelf a door cabinet. So a block is in the Library and in the add path,
+    // and in NONE of: the exported detector vocabulary, `CATALOG_SHAPES_ORDERED` (which the
+    // cloud prompt interpolates and the AI-shape gate reads), or what `refineShape` can
+    // return for any category.
+    expect(BLOCK_SHAPES.length).toBe(7);
+    for (const s of BLOCK_SHAPES) {
+      expect(SHAPES, `${s} is a block but not a Shape`).toContain(s);
+      expect(CATALOG_SHAPES_ORDERED, `${s} is a block, which a detector may not name`).not.toContain(s);
+      expect(PART_LIBRARY.some((i) => i.shape === s), `${s} is a block with no Library row`).toBe(true);
+    }
+    const prompt = buildDetectPrompt({ width: 4, depth: 5, height: 2.8 }, ['n']);
+    expect(prompt).toContain(CATALOG_SHAPES_ORDERED.join(', '));
+    for (const s of BLOCK_SHAPES.filter((x) => x.includes('-') || x === 'worktop')) {
+      expect(prompt, `the cloud prompt names the block ${s}`).not.toContain(s);
+    }
+    for (const c of CATEGORIES) {
+      for (const label of [...WORLD_PROMPTS, 'worktop', 'screen', 'drawer unit', 'door cabinet', 'seat pad', 'cabinet', 'slat panel', 'open shelf']) {
+        expect(BLOCK_SHAPES as readonly string[], `${label} as ${c}`).not.toContain(refineShape(c, label));
+      }
     }
   });
 
@@ -105,7 +138,7 @@ describe('a catalogue shape is spelled the same everywhere', () => {
     // missing body. Delete the `return` under `case 'chest-freezer':` and it falls
     // through to the next arm's geometry with this clause still green.
     const src = read('components/three/DynamicPart.tsx');
-    const missing = CATALOG_SHAPES_ORDERED.filter((s) => !src.includes(`case '${s}':`));
+    const missing = ADD_PATH_SHAPES.filter((s) => !src.includes(`case '${s}':`));
     expect(missing, `these shapes have no arm in ShapeDispatch: ${missing.join(', ')}`).toEqual([]);
   });
 });
@@ -244,7 +277,9 @@ describe('a shape lands somewhere the room can hold it', () => {
     // `isObstacle` could make it iterate zero times and stay green.
     // 32 → 30: four beds became one and two fridges one (−4), the dining / desk table
     // split into two rows and the clothes rail joined (+2).
-    expect(obstacles, 'the catalogue is mostly floor-standing furniture').toBe(30);
+    // 30 → 36: the six building blocks over 250 mm (worktop, screen, drawer unit, open
+    // shelf, door cabinet, slat panel); the 60 mm seat pad is a cushion and not an obstacle.
+    expect(obstacles, 'the catalogue is mostly floor-standing furniture').toBe(36);
   });
 });
 
@@ -259,7 +294,7 @@ describe('a shape states its own size bounds', () => {
     //
     // Asked without exporting the table: if the shape owns its band, the answer is
     // the SAME OBJECT whatever category is passed.
-    for (const s of CATALOG_SHAPES_ORDERED) {
+    for (const s of ADD_PATH_SHAPES) {
       const own = dimRangeFor('other', s);
       const borrowed = CATEGORIES.find((c) => dimRangeFor(c, s) !== own);
       expect(
@@ -301,8 +336,9 @@ describe('a shape is reachable by the two things a person types', () => {
     }
     // The picker renders one heading per group present; a group named in the type
     // but shipped empty is a heading with nothing under it.
-    // Nine since Door and Window left Appliances and Decor for their own `Openings`.
-    expect(groups.size, 'every group in the LibraryItem union should ship something').toBe(9);
+    // Nine since Door and Window left Appliances and Decor for their own `Openings`, ten
+    // with the building blocks' `Blocks`.
+    expect(groups.size, 'every group in the LibraryItem union should ship something').toBe(10);
   });
 });
 
