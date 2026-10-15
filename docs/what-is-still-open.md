@@ -10869,7 +10869,8 @@ the way.
 
 1. **Slide-along-wall moves — KEPT** (`slideAlongWall`, `lib/layout-solve.ts`). A piece backed
    square onto a wall moves along that wall's frame, `snapToWall`ed, so the move stays square and
-   legal; it takes most of the move budget for such pieces. Against the no-slide control it costs
+   legal; it takes one band of `propose`'s rolls (0.60–0.72) that used to fall through to a 2D
+   nudge. Against the no-slide control it costs
    nothing on cleanliness and saves 14% of solves tried and of wall clock. Kept on that.
 2. **Repair before refusal — KEPT, the largest single gain** (`repairHard`). Min-conflicts after
    the search: on a winner still carrying a hard term (overlap, outside, door, access,

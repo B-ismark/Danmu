@@ -13,7 +13,7 @@
     "vendor:ort": "node scripts/vendor-ort.mjs",
     "hash:models": "node scripts/hash-models.mjs",
     "sweep:routes": "node scripts/openroutes-sweep.mjs",
-    "bench:ideas": "IDEAS_BENCH=1 vitest run tests/ideas-bench.test.ts --disableConsoleIntercept"
+    "bench:ideas": "node scripts/bench-ideas.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.8.0",
