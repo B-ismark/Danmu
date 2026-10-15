@@ -15,7 +15,7 @@ import { anchorFor } from './physics';
 import { currentRoomScene } from './room-scene';
 import { useScene } from './scene-store';
 import { useStudio } from './store';
-import { explodeMade, MAX_BLOCKS, packMade, type MadeSpec, type PackInput } from './made-piece';
+import { explodeMade, fitMadeDims, layoutMade, MAX_BLOCKS, packMade, type MadeSpec, type PackInput } from './made-piece';
 import type { ScenePart } from './scene-spec';
 
 /** Why a selection cannot become a piece, in a sentence for a person — or null when it
@@ -49,6 +49,29 @@ function openUp(p: ScenePart, spec: MadeSpec): ScenePart[] {
 export function packPreview(chosen: readonly ScenePart[]): MadeSpec | null {
   if (packRefusal(chosen)) return null;
   return packMade(blockInputs(chosen))?.spec ?? null;
+}
+
+/** The spec a made piece would save as, WHAT THE ROOM SHOWS: the part is the resolved one
+ *  (size override and colour already applied), so a piece the user recoloured or resized
+ *  in the studio saves that way rather than as authored. A modular piece that stays
+ *  modular keeps its UNIT width (a four-seat bench saves as the two-seat unit it repeats)
+ *  and takes the drawn depth and height; otherwise the blocks are saved as drawn. */
+export function madeSpecAsShown(part: Pick<ScenePart, 'dimMM' | 'color' | 'made'>, modular: boolean): MadeSpec | null {
+  const spec = part.made;
+  if (!spec) return null;
+  const [w, d, h] = part.dimMM;
+  const keepUnit = modular && !!spec.modular;
+  // The size the room DRAWS (`fitMadeDims` — whole copies, every axis inside what its
+  // blocks allow), never the raw override, so the saved piece is the one on screen.
+  const drawn = fitMadeDims(spec, [w, d, h]);
+  const size: [number, number, number] = keepUnit ? [spec.sizeMM[0], drawn[1], drawn[2]] : drawn;
+  // Laid out as the room draws it — a modular piece's copies included when it is saved
+  // whole, never one unit stretched across their width.
+  const unit = layoutMade(spec, keepUnit ? size : drawn);
+  const blocks = part.color ? unit.map((b) => ({ ...b, color: part.color })) : unit;
+  const out: MadeSpec = { blocks, sizeMM: size };
+  if (modular) out.modular = true;
+  return out;
 }
 
 export type SwapPlan = {

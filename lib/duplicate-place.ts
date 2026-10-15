@@ -79,6 +79,7 @@ import { footprintBounds, type Footprint } from './footprint';
 import { isSoftFurnishing, tuckedAt, tuckProfile } from './layout-rules';
 import { isFloorStanding, restingOn } from './physics';
 import { canCollideWith, type ScenePart } from './scene-spec';
+import { blocksJoin } from './block-style';
 
 /** Air between the original and its copy, metres. Enough to read as two pieces from
  *  the default camera; under the 100 mm a person would call "apart". */
@@ -327,8 +328,11 @@ function place(
         // piece is ever made overlapping (a set falls back to piece by piece first), so
         // the earlier copies of this gesture are in `world` already.
         const inTheWayGrounded = canCollideWith(src, src.dimMM, y);
+        // Building blocks that JOIN are composition, not overlap (`blocksJoin`) — the
+        // same answer the drag gives at this spot.
+        const copy = { shape: src.shape, pos: r.pos, rot: r.rot, dimMM: src.dimMM, circle: src.circle };
         for (const o of world) {
-          if (!inTheWayGrounded(o)) continue;
+          if (!inTheWayGrounded(o) || blocksJoin(copy, o)) continue;
           const ox = aabbExtents(o.rot, o.dimMM);
           const ix = Math.min(r.pos[0] + mx.ex, o.pos[0] + ox.ex) - Math.max(r.pos[0] - mx.ex, o.pos[0] - ox.ex);
           const iz = Math.min(r.pos[2] + mx.ez, o.pos[2] + ox.ez) - Math.max(r.pos[2] - mx.ez, o.pos[2] - ox.ez);

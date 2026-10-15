@@ -17,7 +17,7 @@
 // "Everything fits" over an arrangement that plainly did not.
 
 import type { ScenePart } from './scene-spec';
-import { blocksJoin } from './block-style';
+import { blockClearsAbove, blocksJoin } from './block-style';
 // Type-only, so a pure module does not gain a runtime dependency on the store —
 // `lib/units.ts` takes `DimUnit` from there the same way.
 import type { DimUnit } from './store';
@@ -618,7 +618,9 @@ export function analyzeRoom(
     const zones = accessZones(p, p.pos[0], p.pos[2], p.rot);
     if (zones.length === 0) continue;
     const others = solid
-      .filter((o) => o.id !== p.id && !zoneExempt(roleOf(p), roleOf(o)))
+      // A block standing clear above this one's top (`blockClearsAbove`) — a worktop over
+      // its pedestals — leaves its fronts free to open under it.
+      .filter((o) => o.id !== p.id && !zoneExempt(roleOf(p), roleOf(o)) && !blockClearsAbove(p, o))
       .map((o) => obbs.get(o.id)!);
     const me = obbs.get(p.id)!;
     const byRule = new Map<string, { rule: AccessRule; blocked: string[]; clear: string[]; narrowest: number }>();

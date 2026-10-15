@@ -3786,7 +3786,6 @@ export function canCollideWith(
   const [myBottom, myTop] = verticalExtent(mover.category, mover.shape, dimMM, y);
   return (o) => {
     if (isSoftFurnishing(o)) return false;
-    if (blocksJoin(mover, o)) return false;
     const [oyBottom, oyTop] = verticalExtent(o.category, o.shape, o.dimMM, o.pos[1]);
     // Vertical separation → no collision (stacking allowed).
     return !(myTop <= oyBottom + 0.005 || myBottom >= oyTop - 0.005);
@@ -3840,6 +3839,9 @@ export function collidesAt(
     // as touching, not colliding.
     const theirs = footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape);
     if (!footOverlap(me, theirs, -TOUCH_M)) continue;
+    // Building blocks join (`blocksJoin`) — judged at the CANDIDATE placement, so a block
+    // dragged mostly inside another is refused like any other crash.
+    if (blocksJoin({ shape: mover.shape, pos, rot, dimMM, circle: mover.circle }, o)) continue;
     // A seat pushed under the surface it tucks under, not yet past the room report's
     // tucked bar, is composition rather than a crash — the report's rule 2 asks the
     // same predicate against the same share, so the pair the drag lets through is the

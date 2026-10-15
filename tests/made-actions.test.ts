@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { packRefusal, planPack, planTakeApart } from '@/lib/made-actions';
+import { madeSpecAsShown, packRefusal, planPack, planTakeApart } from '@/lib/made-actions';
 import type { ScenePart } from '@/lib/scene-spec';
 
 const part = (id: string, p: Partial<ScenePart> & Pick<ScenePart, 'shape' | 'category' | 'dimMM'>): ScenePart => ({
@@ -74,5 +74,49 @@ describe('planTakeApart is planPack undone', () => {
 
   it('does nothing to a part that is not a made piece', () => {
     expect(planTakeApart(top, {})).toBeNull();
+  });
+});
+
+describe('madeSpecAsShown saves what the room shows', () => {
+  const spec = planPack([top, left, right], {}, 'Desk', false)!.add[0].made!;
+  const mk = (extra: Partial<ScenePart>) => ({ dimMM: spec.sizeMM, made: spec, ...extra });
+
+  it('is the authored spec when nothing was changed', () => {
+    const out = madeSpecAsShown(mk({}), false)!;
+    expect(out.sizeMM).toEqual(spec.sizeMM);
+    expect(out.blocks.map((b) => b.dimMM)).toEqual(spec.blocks.map((b) => b.dimMM));
+  });
+
+  it('carries a size override and a colour override', () => {
+    const [w, d, h] = spec.sizeMM;
+    const out = madeSpecAsShown(mk({ dimMM: [w * 1.25, d, h], color: '#abcdef' }), false)!;
+    expect(out.sizeMM).toEqual([w * 1.25, d, h]);
+    expect(out.blocks.every((b) => b.color === '#abcdef')).toBe(true);
+    expect(out.blocks[0].dimMM[0]).toBeGreaterThan(spec.blocks[0].dimMM[0]);
+  });
+
+  it('keeps a modular piece at its unit width, scaling depth and height only', () => {
+    const modular = { ...spec, modular: true as const };
+    const [w, d, h] = spec.sizeMM;
+    const out = madeSpecAsShown({ dimMM: [w * 3, d * 1.1, h], made: modular }, true)!;
+    expect(out.sizeMM).toEqual([w, d * 1.1, h]);
+    expect(out.blocks).toHaveLength(spec.blocks.length);
+    expect(out.modular).toBe(true);
+  });
+
+  it('saves every copy of a modular piece saved whole, each block at its own width', () => {
+    const modular = { ...spec, modular: true as const };
+    const [w, d, h] = spec.sizeMM;
+    const out = madeSpecAsShown({ dimMM: [w * 3, d, h], made: modular }, false)!;
+    expect(out.sizeMM).toEqual([w * 3, d, h]);
+    expect(out.blocks).toHaveLength(spec.blocks.length * 3);
+    expect(out.blocks.map((b) => b.dimMM)).toEqual([...spec.blocks, ...spec.blocks, ...spec.blocks].map((b) => b.dimMM));
+  });
+
+  it('saves the size the room draws, not an override past what the blocks allow', () => {
+    const [w, d, h] = spec.sizeMM;
+    // A drawer unit stops at 600 mm wide, so a 400 mm one bounds the piece at 1.5×.
+    const out = madeSpecAsShown(mk({ dimMM: [w * 2, d, h] }), false)!;
+    expect(out.sizeMM).toEqual([w * 1.5, d, h]);
   });
 });

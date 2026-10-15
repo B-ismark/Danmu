@@ -986,8 +986,10 @@ export const piecesStore = {
     }
     return out.sort((a, b) => b.savedAt - a.savedAt);
   },
-  async save(name: string, made: MadeSpec, id: string = uuid()): Promise<MyPiece> {
-    const piece: MyPiece = { id, name: name.trim().slice(0, MAX_PIECE_NAME) || 'My piece', made, savedAt: Date.now() };
+  /** `savedAt` is for a RESTORE (Undo after a removal): the piece goes back where it was
+   *  in the shelf's newest-first order instead of jumping to the top. */
+  async save(name: string, made: MadeSpec, id: string = uuid(), savedAt: number = Date.now()): Promise<MyPiece> {
+    const piece: MyPiece = { id, name: name.trim().slice(0, MAX_PIECE_NAME) || 'My piece', made, savedAt };
     await set(`${PIECE}${id}`, piece);
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('danmu:pieces-changed'));
     return piece;

@@ -21,7 +21,7 @@ import { createPortal } from 'react-dom';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
-import { packIntoPiece, packPreview, packRefusal, takeApart } from '@/lib/made-actions';
+import { madeSpecAsShown, packIntoPiece, packPreview, packRefusal, takeApart } from '@/lib/made-actions';
 import { piecesStore } from '@/lib/storage';
 import type { MadeSpec } from '@/lib/made-piece';
 import { Icon } from '@/components/ui/Icon';
@@ -57,7 +57,9 @@ export function SelectionHeader() {
 
   const startSave = () => {
     if (made && !canGroup && !grouped) {
-      setSaving({ spec: made.made!, ids: [made.id], name: made.name, madeId: made.id });
+      const shown = currentRoomScene().find((p) => p.id === made.id) ?? made;
+      const spec = madeSpecAsShown(shown, !!made.made!.modular) ?? made.made!;
+      setSaving({ spec, ids: [made.id], name: made.name, madeId: made.id });
       return;
     }
     const want = new Set(setIds);
@@ -76,7 +78,8 @@ export function SelectionHeader() {
     if (!s) return;
     let spec: MadeSpec;
     if (s.madeId) {
-      spec = { ...s.spec, modular: modular || undefined };
+      const shown = currentRoomScene().find((p) => p.id === s.madeId);
+      spec = (shown && madeSpecAsShown(shown, modular)) || { ...s.spec, modular: modular || undefined };
       if (!spec.modular) delete spec.modular;
       updatePart(s.madeId, { name, made: spec });
     } else {

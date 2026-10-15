@@ -17,8 +17,8 @@
 
 import { CATEGORIES, SHAPES, type Category, type ScenePart, type Shape } from './scene-spec';
 import { localToWorld, worldToLocal } from './geometry';
-import { verticalExtent } from './physics';
-import { clampDims } from './dimension-ranges';
+import { anchorFor, verticalExtent } from './physics';
+import { clampDims, dimRangeFor } from './dimension-ranges';
 import { blockStyleKeys, readBlockOption, type BlockStyle } from './block-style';
 
 /** One block inside a made piece, in the piece's own frame: metres from the piece's
@@ -62,11 +62,53 @@ export function tileCount(unitWidthMM: number, widthMM: number): number {
 
 /** The size a made piece is actually drawn at when asked for `dimMM`. A modular
  *  piece's width snaps to whole modules — the size shown is the size drawn, never a
- *  number beside a different-sized object. */
+ *  number beside a different-sized object. Every axis the blocks SCALE along is bounded
+ *  by the blocks' own ranges, so no block inside a made piece is ever drawn — or taken
+ *  apart into — a size `clampDims` would refuse it (rule 2): a piece of two 1.4 m
+ *  worktops stops widening where each worktop reaches its 3 m maximum, rather than
+ *  coming apart as two 6 m slabs. */
 export function fitMadeDims(spec: MadeSpec, dimMM: readonly [number, number, number]): [number, number, number] {
-  const [w, d, h] = dimMM;
-  if (!spec.modular) return [w, d, h];
-  return [tileCount(spec.sizeMM[0], w) * spec.sizeMM[0], d, h];
+  const [uw, ud, uh] = spec.sizeMM;
+  const range = dimRangeFor('other', 'made');
+  const bounds = scaleBounds(spec);
+  const d = ud * bounded(dimMM[1] / ud, bounds.z);
+  const h = uh * bounded(dimMM[2] / uh, bounds.y);
+  if (!spec.modular) return [uw * bounded(dimMM[0] / uw, bounds.x), d, h];
+  // Whole copies, never past the piece's own maximum: rounding to the nearest copy can
+  // land above it (a 1400 mm unit asked for 12 m rounds to nine, 12.6 m).
+  let count = tileCount(uw, dimMM[0]);
+  while (count > 1 && count * uw > range.max[0]) count--;
+  return [count * uw, d, h];
+}
+
+/** A requested scale held inside `[lo, hi]`, and 1 when it is not a number at all. */
+function bounded(s: number, [lo, hi]: readonly [number, number]): number {
+  if (!Number.isFinite(s) || s <= 0) return 1;
+  return Math.min(hi, Math.max(lo, s));
+}
+
+/** How far each piece axis may scale before some block leaves its own range. A block
+ *  turned a quarter presents its depth along the piece's width (see `scaledDims`). A
+ *  block already outside its range (an older record) never narrows the answer past
+ *  "as packed", so a piece can always be drawn at the size it was saved at. */
+function scaleBounds(spec: MadeSpec): { x: [number, number]; z: [number, number]; y: [number, number] } {
+  const x: [number, number] = [0, Infinity];
+  const z: [number, number] = [0, Infinity];
+  const y: [number, number] = [0, Infinity];
+  const narrow = (axis: [number, number], size: number, min: number, max: number) => {
+    if (!(size > 0)) return;
+    axis[0] = Math.max(axis[0], Math.min(1, min / size));
+    axis[1] = Math.min(axis[1], Math.max(1, max / size));
+  };
+  for (const b of spec.blocks) {
+    const r = dimRangeFor(b.category, b.shape);
+    const quarter = Math.abs(Math.round(b.rot / (Math.PI / 2))) % 2 === 1;
+    const [ix, iz] = quarter ? [1, 0] : [0, 1];
+    narrow(x, b.dimMM[ix], r.min[ix], r.max[ix]);
+    narrow(z, b.dimMM[iz], r.min[iz], r.max[iz]);
+    narrow(y, b.dimMM[2], r.min[2], r.max[2]);
+  }
+  return { x, z, y };
 }
 
 /** The size to STORE for a part asked to be `dimMM`: a modular made piece snaps to whole
@@ -248,7 +290,11 @@ export function readMadeSpec(raw: unknown): { spec: MadeSpec; dropped: number } 
       typeof b.category !== 'string' || !CATEGORY_SET.has(b.category) ||
       !finite3(b.pos) || !finite3(b.dimMM) || b.dimMM.some((n) => n <= 0) ||
       b.pos.some((n) => Math.abs(n) > 20) ||
-      typeof b.rot !== 'number' || !Number.isFinite(b.rot)
+      typeof b.rot !== 'number' || !Number.isFinite(b.rot) ||
+      // What packing would refuse, a stored record may not smuggle in: a piece inside a
+      // piece has no spec to draw, and a wall or ceiling piece would be pulled to the
+      // floor (`packRefusal`).
+      b.shape === 'made' || anchorFor(b.category as Category, b.shape as Shape) !== 'floor'
     ) {
       dropped++;
       continue;

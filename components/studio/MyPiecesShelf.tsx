@@ -14,6 +14,8 @@
 // already read it the defensive way (`readMadeSpec`).
 
 import { useEffect, useState } from 'react';
+import { useSettings } from '@/lib/store';
+import { formatLength } from '@/lib/units';
 import { piecesStore, type MyPiece } from '@/lib/storage';
 import { Icon } from '@/components/ui/Icon';
 import { ShapeIcon } from '@/components/ui/ShapeIcon';
@@ -59,7 +61,7 @@ function forget(piece: MyPiece) {
         title: `“${piece.name}” removed from My pieces`,
         message: 'Copies already in a room stay where they are.',
         // The same id, so it comes back in the place it had.
-        action: { label: 'Undo', onClick: () => void piecesStore.save(piece.name, piece.made, piece.id) },
+        action: { label: 'Undo', onClick: () => void piecesStore.save(piece.name, piece.made, piece.id, piece.savedAt) },
         ttl: 8000,
       }),
     () => toast({ tone: 'danger', title: `“${piece.name}” could not be removed`, ttl: 6000 }),
@@ -67,6 +69,7 @@ function forget(piece: MyPiece) {
 }
 
 export function MyPiecesShelf({ pieces, onPick }: { pieces: readonly MyPiece[]; onPick: (piece: MyPiece, byPointer: boolean) => void }) {
+  const dimUnit = useSettings((s) => s.dimUnit);
   if (pieces.length === 0) return null;
   return (
     <div>
@@ -96,7 +99,7 @@ export function MyPiecesShelf({ pieces, onPick }: { pieces: readonly MyPiece[]; 
                 type="button"
                 className="ds-btn ds-btn--sm pick-row"
                 onClick={(e) => onPick(piece, e.detail > 0)}
-                title={`${piece.name} · ${w} × ${d} × ${h} mm · ${count} ${count === 1 ? 'block' : 'blocks'}${piece.made.modular ? ' · repeats when widened' : ''}`}
+                title={`${piece.name} · ${formatLength(w, dimUnit)} × ${formatLength(d, dimUnit)} × ${formatLength(h, dimUnit)} · ${count} ${count === 1 ? 'block' : 'blocks'}${piece.made.modular ? ' · repeats when widened' : ''}`}
                 style={{ flex: 1, minWidth: 0, justifyContent: 'flex-start', paddingLeft: 3, cursor: 'pointer' }}
               >
                 <ShapeIcon shape="made" />

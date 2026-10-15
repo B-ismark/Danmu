@@ -26,6 +26,14 @@ describe('piecesStore', () => {
     expect((await piecesStore.list()).map((p) => p.id)).toEqual(['a']);
   });
 
+  it('restores a removed piece at its old place in the order', async () => {
+    const old = await piecesStore.save('Old', TOP, 'old', 100);
+    await piecesStore.save('New', TOP, 'new', 200);
+    await piecesStore.remove('old');
+    await piecesStore.save(old.name, old.made, old.id, old.savedAt);
+    expect((await piecesStore.list()).map((p) => p.id)).toEqual(['new', 'old']);
+  });
+
   it('counts blocks it could not read rather than dropping them silently', async () => {
     await set('piece:x', { id: 'x', name: 'Old', savedAt: 1, made: { ...TOP, blocks: [...TOP.blocks, { shape: 'retired-thing' }] } });
     const [p] = await piecesStore.list();

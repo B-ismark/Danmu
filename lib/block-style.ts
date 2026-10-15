@@ -14,10 +14,13 @@
 // (`BLOCK_STYLE_KEYS`), so the Inspector, the file reader and the renderer cannot hold three
 // opinions about whether a seat pad has a plinth.
 //
-// This module imports a TYPE from `scene-spec` and nothing else, so `scene-spec` can import
-// the `BlockStyle` type back without a cycle at run time.
+// This module imports only a TYPE from `scene-spec`, plus `geometry` and `foot-cells` —
+// neither of which imports `scene-spec` at run time — so `scene-spec` can import it back
+// without a cycle.
 
 import type { Shape } from './scene-spec';
+import { footArea, footFromPart, footIntersectionArea } from './geometry';
+import { WORKTOP } from './foot-cells';
 
 /** The seven shapes that are building blocks: pieces a person assembles a room's storage
  *  and workspace from, and that a photograph is never asked to produce.
@@ -84,15 +87,78 @@ export function blockStyleKeys(shape: Shape | string): readonly BlockStyleKey[] 
   return isBlockShape(shape) ? BLOCK_STYLE_KEYS[shape] : [];
 }
 
+/** A block as the join rule needs it: where it stands and how big it is. */
+export type PlacedBlock = {
+  shape: Shape | string;
+  pos: readonly [number, number, number];
+  rot: number;
+  dimMM: readonly [number, number, number];
+  circle?: boolean;
+};
+
+/** A worktop's slab, in metres: 25 mm, however tall the piece, and never more than a
+ *  fifth of a short one. Here rather than in `block-forms.ts` because the join rule needs
+ *  it and `scene-spec` imports this module; `worktopTop` there reads this. */
+export function worktopSlabM(heightMM: number): number {
+  return Math.min(WORKTOP.top, (heightMM / 1000) * 0.2);
+}
+
+/** The height a block's material actually occupies, metres. Every block stands on its
+ *  origin; a worktop's box reaches the floor so it stands where a desk would, but its
+ *  material is the slab at the top — the drawer units and screens under it are in the
+ *  air it leaves, not inside it. (Its legs or end panels are at its ends, where nothing
+ *  else stands either.) */
+export function blockBody(b: PlacedBlock): [number, number] {
+  const y = b.pos[1];
+  const h = b.dimMM[2] / 1000;
+  return b.shape === 'worktop' ? [y + h - worktopSlabM(b.dimMM[2]), y + h] : [y, y + h];
+}
+
+/** How much of the smaller block's body is inside the other one: the volume share at or
+ *  above which two blocks are NESTED rather than joined. A worktop over its pedestals, a
+ *  screen along a worktop's back edge or a drawer unit butted into a cabinet's end share
+ *  a sliver; a drawer unit dropped into a cabinet shares all of itself. */
+export const NESTED_SHARE = 0.5;
+
+/** Are these both building blocks? The question a "keep pushing until they touch" step
+ *  asks — a press is not where a join is judged; the placement it ends at is. */
+export function bothBlocks(a: { shape: Shape | string }, b: { shape: Shape | string }): boolean {
+  return isBlockShape(a.shape) && isBlockShape(b.shape);
+}
+
+/** Is one block mostly INSIDE the other? Material in the same place, which no build
+ *  needs: two cabinets on one spot, a drawer unit swallowed by a cabinet. */
+export function blocksNest(a: PlacedBlock, b: PlacedBlock): boolean {
+  const fa = footFromPart([...a.pos], a.rot, [...a.dimMM], a.circle, a.shape as Shape);
+  const fb = footFromPart([...b.pos], b.rot, [...b.dimMM], b.circle, b.shape as Shape);
+  const [a0, a1] = blockBody(a);
+  const [b0, b1] = blockBody(b);
+  const rise = Math.min(a1, b1) - Math.max(a0, b0);
+  if (rise <= 0) return false;
+  const shared = footIntersectionArea(fa, fb) * rise;
+  const smaller = Math.min(footArea(fa) * (a1 - a0), footArea(fb) * (b1 - b0));
+  return smaller > 0 && shared / smaller >= NESTED_SHARE;
+}
+
 /** Two building blocks may stand inside each other. That is what building with them IS —
  *  a worktop's ends drop over the drawer units it rests on, a seat pad lies along a
  *  cabinet, a screen clips to a worktop's back edge — and a builder who had to keep every
  *  block a hair apart could not make a workstation at all. Only block against block: a
- *  block still collides with a sofa, and a sofa with it. The drag (`canCollideWith`), the
+ *  block still collides with a sofa, and a sofa with it. And only a JOIN: a block mostly
+ *  inside another (`blocksNest`) is a crash like any other. The drag (`collidesAt`), the
  *  room report's clash rule and the solver's overlap term all ask this one question, so a
  *  pair the drag lets through is a pair Room check calls fine and Suggest does not price. */
-export function blocksJoin(a: { shape: Shape | string }, b: { shape: Shape | string }): boolean {
-  return isBlockShape(a.shape) && isBlockShape(b.shape);
+export function blocksJoin(a: PlacedBlock, b: PlacedBlock): boolean {
+  return bothBlocks(a, b) && !blocksNest(a, b);
+}
+
+/** Does `over` stand clear above `owner`'s top, so `owner`'s fronts open under it? A
+ *  worktop's slab over the drawer units carrying it: the drawers pull out beneath the
+ *  overhang. Block against block only — the access-zone rule asks it of both consumers,
+ *  `lib/clearance.ts` and `lib/layout-score.ts`, so a pedestal Room check calls fine is
+ *  one Suggest does not pull out from under its desk. */
+export function blockClearsAbove(owner: PlacedBlock, over: PlacedBlock): boolean {
+  return bothBlocks(owner, over) && blockBody(over)[0] >= blockBody(owner)[1] - 0.01;
 }
 
 /** One option's value, or `undefined` when `v` is not in that option's vocabulary. The

@@ -2,7 +2,7 @@
  *
  *  What the field understands is only a feature if somebody knows to type it, so the
  *  catalog host offers a few as chips. They are data, not JSX, so
- *  `tests/library-size-examples.test.ts` can hold each one to its promise: it ranks
+ *  `tests/size-examples.test.ts` can hold each one to its promise: it ranks
  *  the piece it names first, and a stated size resolves to the numbers it states.
  *  `expect` is a lowercase fragment of the label that must come out on top. */
 export const SIZE_EXAMPLES: ReadonlyArray<{

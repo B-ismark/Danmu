@@ -475,7 +475,7 @@ function planSections(): HelpSectionSpec[] {
           >
             hold Shift with the arrows to turn it
           </HelpKey>
-          <HelpKey keys={<Kb>A</Kb>}>opens or closes the Library</HelpKey>
+          <HelpKey keys={<Kb>A</Kb>}>opens the Library</HelpKey>
           <HelpKey keys={<Kb>F</Kb>}>brings the selected piece to the middle</HelpKey>
           <HelpKey keys={<Kb>H</Kb>}>hides it</HelpKey>
           <HelpKey keys={<Kb>Tab</Kb>}>steps through the pieces and the walls</HelpKey>

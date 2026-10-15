@@ -26,8 +26,7 @@
 
 import { moduleCount, moduleRangeFor, type ModuleRange } from './scene-spec';
 import { slab, type HardPart } from './hard-goods';
-import { WORKTOP } from './foot-cells';
-import type { BlockBand, BlockEnds } from './block-style';
+import { worktopSlabM, type BlockBand, type BlockEnds } from './block-style';
 import type { SoftItem } from './soft-goods';
 
 type V3 = [number, number, number];
@@ -58,7 +57,7 @@ export type BlockGlass = {
  *  fifth of a short one. Exported because it is an absolute, and the cap table in
  *  `tests/parametric-caps.test.ts` reads every absolute through a helper like this. */
 export function worktopTop(heightMM: number): number {
-  return Math.min(WORKTOP.top, (heightMM / 1000) * 0.2);
+  return worktopSlabM(heightMM);
 }
 
 /** A worktop: a slab at the top of its height, and under it four slim square legs inset

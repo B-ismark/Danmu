@@ -55,7 +55,7 @@ import {
   migrateRetiredPart,
   retiredShapeFor,
 } from './scene-spec';
-import { readMadeSpec } from './made-piece';
+import { fitMadeDims, readMadeSpec } from './made-piece';
 import { BLOCK_BANDS, BLOCK_ENDS, blockStyleKeys, readBlockOption, type BlockStyle, type BlockStyleKey } from './block-style';
 import { clampDims, roomAxisRange, ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import { anchorFor, heightForNewCeiling } from './physics';
@@ -719,6 +719,10 @@ function readPart(
     const made = readMadeSpec(v.made);
     if (made) {
       part.made = made.spec;
+      // The size a made piece is DRAWN at, not merely one inside the `made` range: a
+      // modular width snaps to whole copies and every axis stays where its blocks can
+      // follow, so the size fields never describe a different object than the room shows.
+      part.dimMM = fitMadeDims(made.spec, part.dimMM);
       if (made.dropped > 0) {
         dropped.push(
           `“${part.name}” had ${made.dropped} ${made.dropped === 1 ? 'block' : 'blocks'} this app could not read, so ${made.dropped === 1 ? 'it was' : 'they were'} left out`,
@@ -726,6 +730,9 @@ function readPart(
       }
     } else {
       part.shape = 'box';
+      // A box has its own limits, and the `made` range this size was clamped against is
+      // far wider — so clamp again, or a 9 m piece opens as a 9 m box.
+      part.dimMM = clampDims(part.category, 'box', part.dimMM);
       dropped.push(`“${part.name}” had no blocks this app could read, so it opens as a plain box of its size`);
     }
   }

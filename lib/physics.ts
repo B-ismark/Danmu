@@ -814,7 +814,10 @@ export const SURFACE_PIECE_MAX_MM = 1000;
  *  over a top it does not fit under goes on it, which is § H.6.4's decision and
  *  `tests/seat-support.test.ts` holds it. */
 export function seeksSurface(category: Category, shape: Shape, dimMM: readonly [number, number, number]): boolean {
-  if (!isTabletopProne(category) || shape === 'lamp-floor') return false;
+  // A made piece is filed under `other` because it is whatever its maker built, not
+  // because it is an ornament: it stands on the floor like the blocks it is made of, and
+  // a bench added over a desk must not be stood on the desk like a lamp.
+  if (!isTabletopProne(category) || shape === 'lamp-floor' || shape === 'made') return false;
   return dimMM[2] <= SURFACE_PIECE_MAX_MM;
 }
 

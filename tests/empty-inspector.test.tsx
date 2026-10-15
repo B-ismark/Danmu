@@ -45,6 +45,8 @@ describe('the Inspector with nothing selected', () => {
     try {
       render(<Inspector />);
       expect(screen.getByText('Tap a piece to style it')).toBeTruthy();
+      expect(screen.queryByText(/press A/)).toBeNull();
+      expect(screen.getByText('Or use Add to bring something in from the Library.')).toBeTruthy();
     } finally {
       restore();
     }

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildSceneFile, parseSceneFile, sceneFileJson } from '../lib/scene-file';
 import type { RoomData, Transforms } from '../lib/storage';
 import type { ScenePart } from '../lib/scene-spec';
+import { clampDims, dimRangeFor } from '../lib/dimension-ranges';
+import { seeksSurface } from '../lib/physics';
 import { explodeMade, fitMadeDims, fitPartDims, layoutMade, MAX_MODULES, packMade, readMadeSpec, tileCount, type PackInput } from '../lib/made-piece';
 
 // A two-seat workstation bay: one 1400 mm worktop on two drawer pedestals.
@@ -93,10 +95,10 @@ describe('modular resize repeats the unit instead of stretching it', () => {
 
   it('stretches a non-modular piece through its blocks dimensions, not a mesh scale', () => {
     const plain = packMade(bay())!.spec;
-    const blocks = layoutMade(plain, [2800, 700, 730]);
+    const blocks = layoutMade(plain, [2100, 700, 730]);
     expect(blocks).toHaveLength(3);
-    expect(blocks[0].dimMM[0]).toBe(2800);
-    expect(blocks[1].pos[0]).toBeCloseTo(-1.0);
+    expect(blocks[0].dimMM[0]).toBe(2100);
+    expect(blocks[1].pos[0]).toBeCloseTo(-0.75);
   });
 
   it('puts the width scale on a quarter-turned block’s depth', () => {
@@ -105,12 +107,59 @@ describe('modular resize repeats the unit instead of stretching it', () => {
       { shape: 'box', category: 'other', pos: [0.5, 0, 0], rot: Math.PI / 2, dimMM: [600, 400, 700] },
     ];
     const s = packMade(turned)!.spec;
-    const [, side] = layoutMade(s, [s.sizeMM[0] * 2, s.sizeMM[1], s.sizeMM[2]]);
-    expect(side.dimMM).toEqual([600, 800, 700]);
+    const [, side] = layoutMade(s, [s.sizeMM[0] * 1.5, s.sizeMM[1], s.sizeMM[2]]);
+    expect(side.dimMM).toEqual([600, 600, 700]);
+  });
+});
+
+// Rule 2 inside a made piece: no block is ever drawn — or taken apart into — a size
+// `clampDims` would refuse it. Found in review: two 1400 mm worktops widened to 12 m came
+// apart as two 6 m worktops against a 3 m maximum.
+describe('a made piece never sizes a block past its own range', () => {
+  const twoTops = packMade([
+    { shape: 'worktop', category: 'desk', pos: [-0.7, 0, 0], rot: 0, dimMM: [1400, 700, 740] },
+    { shape: 'worktop', category: 'desk', pos: [0.7, 0, 0], rot: 0, dimMM: [1400, 700, 740] },
+  ])!.spec;
+
+  it('stops widening where a block reaches its maximum', () => {
+    const fitted = fitMadeDims(twoTops, [12000, 700, 740]);
+    expect(fitted[0]).toBe(6000);
+    for (const b of layoutMade(twoTops, [12000, 700, 740])) {
+      expect(b.dimMM).toEqual(clampDims(b.category, b.shape, b.dimMM));
+    }
+  });
+
+  it('takes apart into blocks inside their range', () => {
+    const piece = { id: 'p', name: 'P', pos: [0, 0, 0] as [number, number, number], rot: 0, dimMM: [12000, 700, 740] as [number, number, number] };
+    for (const b of explodeMade(piece, twoTops)) expect(b.dimMM[0]).toBe(3000);
+  });
+
+  it('stops shrinking at a block minimum too', () => {
+    expect(fitMadeDims(twoTops, [100, 700, 740])[0]).toBe(twoTops.sizeMM[0] * (dimRangeFor('desk', 'worktop').min[0] / 1400));
+  });
+
+  it('never rounds a modular width past the made range', () => {
+    const unit = { ...twoTops, sizeMM: [1400, 700, 740] as [number, number, number], modular: true };
+    // 12 m / 1.4 m rounds to nine copies — 12.6 m. Eight is the most that fits.
+    expect(fitMadeDims(unit, [12000, 700, 740])[0]).toBe(8 * 1400);
+    expect(fitMadeDims(unit, [12000, 700, 740])[0]).toBeLessThanOrEqual(dimRangeFor('other', 'made').max[0]);
   });
 });
 
 describe('readMadeSpec — a saved piece is a hint with a filename', () => {
+  it('refuses what packing would: a piece inside a piece, or one that hangs', () => {
+    const ok = { shape: 'drawer-unit', category: 'shelf', pos: [0, 0, 0], rot: 0, dimMM: [400, 500, 600] };
+    const out = readMadeSpec({
+      blocks: [
+        ok,
+        { ...ok, shape: 'tv', category: 'tv', dimMM: [1200, 60, 700] },
+        { ...ok, shape: 'made', category: 'other' },
+      ],
+    })!;
+    expect(out.spec.blocks.map((b) => b.shape)).toEqual(['drawer-unit']);
+    expect(out.dropped).toBe(2);
+  });
+
   it('drops unknown shapes and non-finite blocks, clamps sizes, and says how many it dropped', () => {
     const got = readMadeSpec({
       blocks: [
@@ -206,9 +255,33 @@ describe('a room file carries a made piece', () => {
     expect(out.dropped.join(' ')).toMatch(/1 block /);
   });
 
+  it('opens an unreadable piece as a box inside a box’s own limits', () => {
+    const out = parseSceneFile(raw([{ ...piece, dimMM: [9000, 5000, 900], made: { blocks: [] } }]));
+    if (!out.ok) throw new Error(out.error);
+    const p = out.file.parts[0];
+    expect(p.shape).toBe('box');
+    expect(p.dimMM).toEqual(clampDims(p.category, 'box', [9000, 5000, 900]));
+  });
+
+  it('opens a modular piece at whole copies, whatever width the file says', () => {
+    const modular = { ...packed.spec, modular: true };
+    const out = parseSceneFile(raw([{ ...piece, made: modular, dimMM: [2000, ...packed.spec.sizeMM.slice(1)] }]));
+    if (!out.ok) throw new Error(out.error);
+    expect(out.file.parts[0].dimMM[0]).toBe(packed.spec.sizeMM[0]);
+  });
+
   it('ignores a made field on any other shape', () => {
     const out = parseSceneFile(raw([{ ...piece, shape: 'box', made: packed.spec }]));
     if (!out.ok) throw new Error(out.error);
     expect(out.file.parts[0].made).toBeUndefined();
+  });
+});
+
+// A made piece is filed under `other`, which is tabletop-prone — so a saved 750 mm bench
+// added over a desk used to be stood ON the desk like a lamp.
+describe('a made piece stands on the floor', () => {
+  it('does not seek a surface, where an ornament of its category and size would', () => {
+    expect(seeksSurface('other', 'box', [1200, 600, 750])).toBe(true);
+    expect(seeksSurface('other', 'made', [1200, 600, 750])).toBe(false);
   });
 });
