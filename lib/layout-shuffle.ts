@@ -132,6 +132,8 @@
  * and it has that one now.
  */
 import {
+  awkwardTurns,
+  fixedFloor,
   HARD_TERMS,
   lockedForSolve,
   makeRng,
@@ -300,9 +302,9 @@ export type ShuffleOutcome = {
  *  tolerance a person would name. A candidate discarded for a picometre is one the
  *  user is not offered, and when it is the last one standing the whole Shuffle
  *  refuses. */
-export function isCleanShuffle(result: SolveResult): boolean {
+export function isCleanShuffle(result: SolveResult, floor?: readonly number[]): boolean {
   if (result.moved.length === 0) return false;
-  return HARD_TERMS.every((term) => (result.breakdownAfter[term] as number) <= NEGLIGIBLE_COST);
+  return HARD_TERMS.every((term, k) => (result.breakdownAfter[term] as number) <= (floor?.[k] ?? 0) + NEGLIGIBLE_COST);
 }
 
 /** Apply a solved arrangement to the parts, so the room can be asked about it.
@@ -414,6 +416,9 @@ export function shuffleRoom(
   // room with nothing movable would otherwise run to reach a foregone answer.
   if (!movable.some(Boolean)) return null;
 
+  // What the pieces it may not move already cost — see `fixedFloor`. Zero in a room
+  // where nothing kept is at fault, so the gate is exactly the absolute one there.
+  const floor = fixedFloor(parts, footprint, movable);
   const clean: SolveResult[] = [];
   let tried = 0;
   for (let s = 0; s < maxCandidates && clean.length < minClean; s++) {
@@ -426,8 +431,10 @@ export function shuffleRoom(
     // Both gates, and in this order: the solver's verdict is far cheaper than a
     // clearance field, so the room report is only asked about candidates that have
     // already passed the cheap check.
-    if (!isCleanShuffle(result)) continue;
+    if (!isCleanShuffle(result, floor)) continue;
     if (newRoomFindings(parts, room, result).length > 0) continue;
+    // A crooked sofa is not an idea, whatever else it gets right (`awkwardTurns`).
+    if (awkwardTurns(parts, footprint, result.placements, result.moved).length > 0) continue;
     clean.push(result);
   }
   if (clean.length === 0) return null;
@@ -497,16 +504,25 @@ export function showableIdeas<T extends { placements: Placement[] }>(
  *  The user ruled on 2026-09-06: **keep the gate, name the cause.** So this does not
  *  change what Shuffle will offer — it gives the refusal something true to say.
  *
+ *  **Narrowed 2026-10-15, at the user's report that Ideas offered nothing for a room
+ *  with plainly several arrangements.** The gate is now the floor set by the pieces
+ *  the search may not move (`fixedFloor`) — still absolute for everything it moves —
+ *  so a finding wholly among `kept` pieces (pinned, locked, wall-mounted) no longer
+ *  blocks, and is not named here. Pass `kept` to ask that question.
+ *
  *  Which findings count is DERIVED, never listed: a rule blocks a shuffle exactly
  *  when `RULE_HANDLING` says its cost term is one `isCleanShuffle` reads. A
  *  hand-kept list here would be a second source of truth for "what is a hard fault",
  *  and this repo has paid for that one twice. A rule with no cost term — `tall`,
  *  `crowding`, `turning` — cannot block a gate that reads cost terms, so it is
  *  correctly absent. */
-export function shuffleBlockers(issues: readonly ClearanceIssue[]): ClearanceIssue[] {
+export function shuffleBlockers(issues: readonly ClearanceIssue[], kept?: ReadonlySet<string>): ClearanceIssue[] {
   return issues.filter((i) => {
     const term = RULE_HANDLING[i.rule]?.costTerm;
-    return term != null && (HARD_TERMS as readonly string[]).includes(term);
+    if (term == null || !(HARD_TERMS as readonly string[]).includes(term)) return false;
+    // A finding among pieces the search may not move does not block it any more
+    // (`fixedFloor`), so it is not named as the reason nothing came back.
+    return !kept || !i.partIds.every((id) => kept.has(id));
   });
 }
 

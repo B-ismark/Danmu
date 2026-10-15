@@ -10815,3 +10815,51 @@ already treats a saved piece as a hint with a filename.
 
 **Exists in a commit:** the decision and this note only; nothing writes or reads a shelf
 from a file.
+
+## § 57 · Ideas: crooked pieces and an empty gallery — FIXED 2026-10-15; the research roadmap after it, NOT BUILT
+
+**What was fixed** (branch `claude/practical-pasteur-p75hxx`):
+
+1. **Crooked pieces.** `SNAP_TOL` (12°) was the only line between the search's noise and a
+   choice, for every piece, so a sofa left at 14° stayed at 14°. Now `mayAngle`
+   (`lib/layout-rules.ts`) says only chairs and an ottoman may angle, from `ANGLED_MIN` (20°);
+   `snapYaws` squares anything else the solver turned from any angle; and `shuffleRoom` refuses
+   a candidate `awkwardTurns` still names (1 of 128 clean solves, measured — the veto case).
+   An angle the user gave a piece is theirs and keeps the old `SNAP_TOL` reading. The scatter
+   (`randomizeStart`) starts each piece at a random quarter turn of its wall, not a random angle.
+   **The search itself still turns freely**: restricting its proposals to quarter turns cost Fix
+   8 of 77 clean solves over five scrambled presets x 24 — a free turn is how a piece is walked
+   round another. The angle is a path, not a place.
+2. **Empty gallery.** `isCleanShuffle` asked every hard term to be zero, so one pinned piece in a
+   doorway made every candidate unclean (4 × 3.5 preset: 0 ideas in two presses → 8). The gate
+   is now `fixedFloor`: what the pieces the search may not move cost on their own. Still absolute
+   for everything it moves. This narrows the 2026-09-06 ruling "keep the gate, name the cause"
+   for that one class of finding, at the user's report.
+
+**Measured after** (eight presets x three presses): no piece ≥ 3° off square that may not angle;
+ideas per three presses unchanged on the presets (12/12 where they were), T 6 × 5 9 → 10, a
+crowded 4 × 3.5 (14 pieces) 3 → 5 over two presses.
+
+**What is NOT built — the research, ranked by expected payoff for this solver** (sources: Kán &
+Kaufmann 2018, greedy cost minimisation; Holodeck, Yang et al. CVPR 2024, DFS over discrete
+rotations; Infinigen Indoors, Raistrick et al. CVPR 2024, annealing with discrete relation moves;
+Weiss et al. TVCG 2019, position-based constraint projection; Merrell et al. 2011; Yeh et al. 2012;
+Minton et al. 1992 min-conflicts; Carbonell & Goldstein 1998 maximal marginal relevance):
+
+- **Constructive starts.** Seed each candidate by placing pieces largest first at legal wall
+  slots (`lib/room-bays.ts` has them), a different wall permutation per seed, instead of a
+  uniform scatter. The likeliest fix for crowded rooms, where the scatter starts in heavy overlap
+  and 1600 steps do not escape it (the T is 10 clean of 24).
+- **Slide-along-wall moves.** A piece on a wall moves in that wall's frame (1D), or jumps to
+  another wall with its yaw set to that wall. Keeps moves square and legal; raises acceptance.
+- **Repair before refusal.** Min-conflicts: on a candidate failing one hard term, move the piece
+  in it to its best wall slot × quarter turn, ~20 tries, before throwing the candidate away. Or a
+  few iterations of overlap/wall projection (Weiss) with yaw held.
+- **Diversity by behaviour, not only by distance.** MAP-Elites style cells (which wall the anchor
+  is on × centred or not) so ideas differ in kind; maximal marginal relevance is close to what
+  `orderOffers` already does.
+- **Parallel tempering** across the 12 candidates instead of 12 independent anneals — only if
+  the first three leave a gap.
+
+**Exists in a commit:** the two fixes, `tests/ideas-angles.test.ts`; the roadmap is this note only.
+

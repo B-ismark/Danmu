@@ -324,6 +324,7 @@ describe('Fix on a sofa a few degrees off square', () => {
     // candidate offered to a shuffle as well, this room got 1 idea (measured before the
     // front-first rule, not re-measured since), and that is the
     // reason the shuffle is left out.
-    expect({ n, inPlace }).toEqual({ n: 9, inPlace: 0 });
+    // 10 since the scatter starts square and a solver-made angle is squared (2026-10-15).
+    expect({ n, inPlace }).toEqual({ n: 10, inPlace: 0 });
   });
 });

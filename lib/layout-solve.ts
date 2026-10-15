@@ -61,7 +61,7 @@ import {
   type Placement,
   type ScoreWeights,
 } from './layout-score';
-import { footAt, isObstacle, relationFor, roleOf, standsInSet } from './layout-rules';
+import { footAt, isObstacle, mayAngle, relationFor, roleOf, standsInSet, type Role } from './layout-rules';
 
 export type SolveOptions = {
   /** Same seed, same suggestion. */
@@ -504,6 +504,17 @@ const KEEP_EPS = 0.5;
  *  Beyond this the angle is a choice — a chair turned toward a sofa — and snapping it
  *  would be overruling the search rather than tidying after it. */
 const SNAP_TOL = 0.21; // 12°
+/** The smallest angle off square that reads as MEANT, radians — 20°. A chair turned
+ *  toward a sofa by less than this looks like it was knocked, not placed, so a piece
+ *  that may angle (`mayAngle`) is squared below it and left alone above it.
+ *
+ *  This is `SNAP_TOL` raised, for the pieces that may angle at all, and the reason it
+ *  is raised is measured: at 12°, Ideas over the six presets x three presses handed
+ *  back chairs at 14°, 17° and 23° — angles nobody chose. 20° is the edge of the
+ *  range a person reads as "slightly off"; the armchair turned toward a sofa that
+ *  interior guidelines describe is 30–45°, comfortably clear of it. A piece that may
+ *  NOT angle has no such band: it is squared from any angle (`squareYaw`). */
+export const ANGLED_MIN = 0.35; // 20°
 /** Below this a turn is not a change the app will claim it made — ~2.9°, in radians.
  *
  *  **Why the value, and why the constant exists at all:** the position epsilon had no
@@ -1162,7 +1173,14 @@ export function randomizeStart(
       x = cx;
       z = cz;
     }
-    return { x, z, yaw: rng() * Math.PI * 2 };
+    // A random quarter turn of the nearest wall, not a random angle. The scatter's
+    // job is to put each piece somewhere new; a uniform angle also started every
+    // piece crooked, and the search had to spend its budget turning them back —
+    // which it did not always finish (the 10–15° pieces Ideas used to show). A chair
+    // can still angle, by the facing and free-turn proposals that are its own.
+    const k = Math.floor(rng() * 4);
+    const square = wallSquare(footprint, { x, z, yaw: 0 });
+    return { x, z, yaw: normaliseYaw((square ?? 0) + k * (Math.PI / 2)) };
   });
   // A merged set is scattered as one body: the lead where it landed, the rest where
   // they stand relative to it in the room as given — the set put back as it stands,
@@ -2030,6 +2048,25 @@ export const HARD_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside', 'doo
  *  same question, and a baseline moved by the difference. */
 export const NEGLIGIBLE_COST = 1e-9;
 
+/** What the hard terms cost with ONLY the pieces the search may not move — the
+ *  floor no arrangement can get under, per term, in `HARD_TERMS` order.
+ *
+ *  Ideas used to ask every hard term to be zero, which is right for the pieces it
+ *  moves and wrong for the ones it cannot: a pinned armchair standing in a doorway,
+ *  a kept piece a few millimetres through the plaster, two fixtures touching. Any of
+ *  those makes EVERY candidate unclean, so the gallery came back empty however many
+ *  good arrangements of the rest there were — measured, pinning one piece by the door
+ *  of the 4 × 3.5 preset took two presses from 8 ideas to none. The search answers for
+ *  what it moves; this is the part it does not. Every hard term only grows as pieces
+ *  are added to a room, so a candidate at this floor has added no fault of its own. */
+export function fixedFloor(parts: ScenePart[], footprint: Footprint, movable: readonly boolean[]): number[] {
+  const fixed = parts.filter((_, i) => !movable[i]);
+  if (fixed.length === 0) return HARD_TERMS.map(() => 0);
+  const model = prepare({ parts: fixed, movable: fixed.map(() => false), footprint });
+  const at = fixed.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+  return hardCosts(model, at, DEFAULT_WEIGHTS, NAV_CELL);
+}
+
 /** The hard terms, kept APART rather than added up.
  *
  *  A sum was the first version and it quietly gave away the thing the veto is for:
@@ -2066,15 +2103,69 @@ function untouched(from: Placement, to: Placement): boolean {
 }
 
 /** The quarter turn of its nearest wall that `p` reads as meant to be at, or null when
- *  it is square already or turned further than `SNAP_TOL`, which is a choice. */
-function squareYaw(m: LayoutModel, p: Placement): number | null {
+ *  it is square already or turned far enough to be a choice.
+ *
+ *  How far is "a choice" depends on what the piece IS (`mayAngle`): a chair turned
+ *  `ANGLED_MIN` or more was angled on purpose; a sofa, a bed, a table or a rug the
+ *  SEARCH turned is never angled on purpose, so it is squared from any angle. One
+ *  still at the angle the room gave it is the user's, and keeps the old `SNAP_TOL`
+ *  reading. It used to be `SNAP_TOL` for everything, and a sofa the search left at
+ *  14° stayed at 14°. */
+function squareYaw(m: LayoutModel, i: number, p: Placement, role: Role): number | null {
   // The polygon's winding, cached — see the same call in `layout-score`.
-  const edge = nearestEdge(m.poly, p.x, p.z, m.winding);
+  const snapped = wallSquare(m.poly, p, m.winding);
+  if (snapped === null) return null;
+  const off = Math.abs(angleDelta(snapped, p.yaw));
+  const tol = mayAngle(role) ? ANGLED_MIN : ownAngle(m.ctx.origin?.[i], p) ? SNAP_TOL : Math.PI;
+  return off < 1e-4 || off > tol ? null : snapped;
+}
+
+/** Is `p` still at the angle the room gave it — the user's own turn rather than one
+ *  the search made? Such an angle is never squared for the piece being a sofa: the
+ *  rule against crooked sofas is about angles the SOLVER introduces. */
+function ownAngle(from: Placement | undefined, p: Placement): boolean {
+  return !!from && Math.abs(angleDelta(from.yaw, p.yaw)) <= TURN_EPSILON;
+}
+
+/** The quarter turn of the nearest wall closest to `p.yaw` — square to the room where
+ *  the piece stands, which is right in a room whose walls are off the world axes. */
+export function wallSquare(
+  poly: Parameters<typeof nearestEdge>[0],
+  p: Placement,
+  winding?: 1 | -1,
+): number | null {
+  const edge = nearestEdge(poly, p.x, p.z, winding);
   if (!edge) return null;
   const q = Math.PI / 2;
-  const snapped = normaliseYaw(edge.yaw + Math.round(angleDelta(p.yaw, edge.yaw) / q) * q);
-  const off = Math.abs(angleDelta(snapped, p.yaw));
-  return off < 1e-4 || off > SNAP_TOL ? null : snapped;
+  return normaliseYaw(edge.yaw + Math.round(angleDelta(p.yaw, edge.yaw) / q) * q);
+}
+
+/** The moved pieces an arrangement leaves at an angle nobody would choose: a piece
+ *  that may not angle at all, turned visibly off square, or one that may, turned by
+ *  less than `ANGLED_MIN`. Round pieces, wall fixtures and a piece still at the angle
+ *  the user gave it are never asked — a round piece has no angle to see, and the
+ *  other two are not the search's angles.
+ *
+ *  This is the last word rather than `snapYaws`, because `snapYaws` may be vetoed by
+ *  geometry and leave the angle where it was. Ideas refuses a candidate this names
+ *  (`shuffleRoom`): another arrangement is a press away, a crooked sofa is not a
+ *  suggestion. */
+export function awkwardTurns(
+  parts: readonly ScenePart[],
+  footprint: Footprint,
+  placements: readonly Placement[],
+  moved: readonly number[],
+): number[] {
+  return moved.filter((i) => {
+    const part = parts[i];
+    if (part.circle || part.wallMounted) return false;
+    const square = wallSquare(footprint, placements[i]);
+    if (square === null) return false;
+    const off = Math.abs(angleDelta(square, placements[i].yaw));
+    if (off <= TURN_EPSILON) return false;
+    if (ownAngle({ x: part.pos[0], z: part.pos[2], yaw: part.rot }, placements[i])) return false;
+    return mayAngle(roleOf(part)) ? off < ANGLED_MIN : true;
+  });
 }
 
 /** Did a hard term fall? The same 1e-6 as `anyWorse`, the other way. */
@@ -2131,7 +2222,7 @@ function squareFaults(
     kept = false;
     for (let i = 0; i < out.length; i++) {
       if (!m.ctx.movable[i] || !steers(rigid, i)) continue;
-      const snapped = squareYaw(m, out[i]);
+      const snapped = squareYaw(m, i, out[i], m.roles[i]);
       if (snapped === null || Math.abs(angleDelta(snapped, out[i].yaw)) <= TURN_EPSILON) continue;
       const unit = unitOf(rigid, i);
       const keep = unit.map((k) => out[k]);
@@ -2179,7 +2270,7 @@ export function snapYaws(
     const unit = unitOf(rigid, i);
     // …and only pieces this solve has actually touched. See `untouched`.
     if (onlyMovedFrom && unit.every((k) => untouched(onlyMovedFrom[k], out[k]))) continue;
-    const snapped = squareYaw(m, out[i]);
+    const snapped = squareYaw(m, i, out[i], m.roles[i]);
     if (snapped === null) continue;
     const off = Math.abs(angleDelta(snapped, out[i].yaw));
     const keepUnit = unit.map((k) => out[k]);
@@ -2711,6 +2802,13 @@ function propose(
   const sets = setsOf(m);
   const quarterOnly = sets.setOf[i] >= 0 && sets.formation[sets.setOf[i]];
 
+  // Every piece may still take a free angle DURING the search, sofas included, even
+  // though only a chair may keep one (`mayAngle`, enforced by `snapYaws` and
+  // `awkwardTurns`). A free turn is how the annealer walks a piece round another one:
+  // restricted to quarter turns here, Fix on five scrambled presets x 24 solves ended
+  // clean 69 times against 77 (2026-10-15; rect 4 x 3.5 alone 16 against 21). So the
+  // search turns freely and the answer is squared — the angle is a path, not a place.
+  //
   // Turn to face something worth facing.
   if (roll < 0.3 && !quarterOnly && m.profile.focals.length > 0) {
     const f = m.profile.focals[Math.floor(rng() * m.profile.focals.length) % m.profile.focals.length];
@@ -2724,8 +2822,11 @@ function propose(
     // adding version accumulated: a few thousand steps of "+n quarter turns" left
     // parts stored at 596 radians, which is geometrically the same angle and junk
     // in every readout that shows it.
+    // Quarter turns of the piece's own wall, not of the world: the same answer in a
+    // square room, and the only square one in a room dragged off the axes.
     const q = Math.PI / 2;
-    return { ...p, yaw: normaliseYaw(Math.round(p.yaw / q) * q + Math.floor(rng() * 4) * q) };
+    const square = wallSquare(m.poly, p, m.winding) ?? Math.round(p.yaw / q) * q;
+    return { ...p, yaw: normaliseYaw(square + Math.floor(rng() * 4) * q) };
   }
   if (roll < 0.5 && !quarterOnly) {
     // A small free turn, so a chair can end up angled toward a sofa.

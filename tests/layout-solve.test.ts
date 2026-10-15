@@ -1294,7 +1294,7 @@ describe('the room’s anchor is settled first', () => {
   // improvement goes red too: a `<=` bar here would sit green while the numbers drifted
   // in the good direction and nobody would re-derive.
   //
-  // The worst total (116.35761287695875, and 92.1018827121954 when this was written) also
+  // The worst total (112.18137047133172 since 2026-10-15, 116.35761287695875 before, and 92.1018827121954 when this was written) also
   // appears in `tests/bed-rung-safety.test.ts`, and THE
   // COINCIDENCE IS NOT LOAD-BEARING. Both files run the same solver over the same seeds
   // on the same scrambled U, so agreeing to fifteen digits says the pipeline is
@@ -1361,7 +1361,9 @@ describe('the room’s anchor is settled first', () => {
     //
     // 412.6663679837667 → 116.35761287695875 on 2026-09-30, for the same reason as the
     // count above: seed 1's 408 of stranded floor is gone, and the worst is now seed 10.
-    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(116.35761287695875, 6);
+    // 116.35761287695875 → 112.18137047133172 on 2026-10-15: the solver's own turns are
+    // squared on the way out unless the piece may angle (`mayAngle`); still seed 10.
+    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(112.18137047133172, 6);
     // A TOLERANCE, and it is a physical one rather than a number chosen to pass. This
     // read `toEqual(rows.map(() => 0))`, which was available only while every footprint in
     // the fixture was an axis-aligned box. Once the `u` layout's bedside lamp became round

@@ -280,7 +280,12 @@ describe('the solver hands a merged set back as it took it', () => {
     const before = setPoses(parts, ids);
     let movedMerged = 0;
     let brokeUnmerged = 0;
-    for (const seed of [1, 2, 3]) {
+    // Seeds 1, 2 and 4. Seed 3 was here until 2026-10-15, when a turn the solver makes is
+    // squared rather than kept (`mayAngle`): on it, and on seed 8, Suggest used to hand the
+    // set back at 18.3° and 22.2° — neither the user's 30° nor square, the awkward angle
+    // that change exists to stop. Both now decline (`no-gain`) and move nothing, so they
+    // cannot carry "moved, and rigid".
+    for (const seed of [1, 2, 4]) {
       const solve = (ps: ScenePart[]): SolveResult =>
         solveLayout(ps, FOOTPRINT, lockedForSolve(ps, {}, null), { seed, mode: 'arrange', placed });
       const merged = setPoses(applyPlacements(parts, solve(parts)), ids);

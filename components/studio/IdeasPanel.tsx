@@ -469,8 +469,12 @@ export function IdeasPanel({
   const dimUnit = useSettings((s) => s.dimUnit);
   const refusal = useMemo(() => {
     if (!base || !exhausted || found > 0) return null;
-    const blockers = shuffleBlockers(analyzeRoom(base.standing, base.room, { accessibility: stepFree, dimUnit }).issues);
-    const groups = groupsToUngroup(base.parts, lockedForShuffle(base.parts, base.pinned));
+    const locked = lockedForShuffle(base.parts, base.pinned);
+    // What the search may not move — the same reading `fixedFloor` takes (`movableFor`).
+    const movable = movableFor(base.parts, locked);
+    const kept = new Set(base.parts.filter((_, i) => !movable[i]).map((p) => p.id));
+    const blockers = shuffleBlockers(analyzeRoom(base.standing, base.room, { accessibility: stepFree, dimUnit }).issues, kept);
+    const groups = groupsToUngroup(base.parts, locked);
     return { ...shuffleRefusal(blockers, groups), blocked: blockers.length > 0 };
   }, [base, exhausted, found, stepFree, dimUnit]);
 

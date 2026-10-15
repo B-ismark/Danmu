@@ -305,7 +305,10 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // old figure was `navigation` on three seeds (1: 408, 7: 131.40, 10: 54.00); the first two
     // now end clean and seed 10 is untouched. The caution on `SEEDS_WITH_DANGER` says why
     // this is a moved baseline and not a claim that the solver got safer in general.
-    expect(single.danger, 'sum of danger over 12 seeds').toBeCloseTo(54.00000000000004, 6);
+    // 54.00000000000004 → 52.80000000000004 on 2026-10-15, when a turn the solver makes
+    // is squared on the way out unless the piece may angle (`mayAngle`): seed 10 is still
+    // the one seed that strands floor, by 1.2 less. A moved baseline, per the caution above.
+    expect(single.danger, 'sum of danger over 12 seeds').toBeCloseTo(52.80000000000004, 6);
     // Coincides with `layout-solve.test.ts`'s worst-total figure to fifteen digits, and
     // THE COINCIDENCE IS NOT LOAD-BEARING. Both run the same solver over the same seeds
     // on the same scrambled U, so the agreement says the pipeline is deterministic and
@@ -327,7 +330,8 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // now steers off any step that would swing a lamp over the skirting, took a different
     // path on eight of twelve seeds for it, and seed 1's 408 of stranded floor went with
     // the path it no longer takes. The worst is seed 10.
-    expect(single.worst, 'worst total of the 12').toBeCloseTo(116.35761287695875, 6);
+    // 116.35761287695875 → 112.18137047133172 on 2026-10-15, with `mayAngle` (see danger above).
+    expect(single.worst, 'worst total of the 12').toBeCloseTo(112.18137047133172, 6);
   }, 180_000);
 
   // The assertion is not "the wider bed scores worse" but "the wider bed produces the
@@ -636,11 +640,11 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // pin moved to the one seed that still strands floor, and seed 1 is kept at zero so
     // the move is visible from here.
     expect(danger[0], 'seed 1').toBeCloseTo(0, 6);
-    expect(danger[9], 'seed 10').toBeCloseTo(54.00000000000004, 6);
+    expect(danger[9], 'seed 10').toBeCloseTo(52.80000000000004, 6);
     expect(danger.filter((d) => d > 0.005).length, 'seeds carrying any danger').toBe(SEEDS_WITH_DANGER);
     expect(
       danger.reduce((a, d) => a + d, 0),
       'and they sum to the figure the sweep prints',
-    ).toBeCloseTo(54.00000000000004, 6);
+    ).toBeCloseTo(52.80000000000004, 6);
   }, 180_000);
 });

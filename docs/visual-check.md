@@ -499,6 +499,24 @@ matched the room, and it did, so it is gone. Two things came out of that same lo
 is an eyes-item: a nightstand passing **through** the bed after a Shuffle (§ H.18), and the
 Library search failing to match `stand` → `Nightstand` (§ H.19).*
 
+### Ideas hands back square pieces, and still has ideas when a kept piece is at fault — on branch `claude/practical-pasteur-p75hxx`, NOT LOOKED AT
+
+Two reports from the user (2026-10-15): pieces in ideas turned ~10–15°, and no ideas at all
+for a room they had built. Only a chair or an ottoman may now stand at an angle in an idea,
+and only from 20°; everything else the search turned comes back square to its wall. And a
+fault among pieces Ideas may not move (pinned, locked, on a wall) no longer empties the
+gallery.
+
+**Where to click.** Any L-shaped preset, open Ideas, page through three presses. Then the
+4 × 3.5 rectangle: drag the sofa into the doorway, pin it, open Ideas.
+
+**What right looks like.** Sofas, beds, tables, rugs and shelves square to a wall in every
+thumbnail; an armchair may be angled, visibly (20° or more). The pinned sofa room offers
+ideas, every one with the sofa where you left it.
+
+**What wrong looks like.** Anything off square by a few degrees; an armchair at 10°; "No
+ideas this time" in the pinned room; the refusal naming the pinned sofa as the reason.
+
 *— and the first of those two has since been measured and is NOT what it was filed as. The
 solver produces no floor collisions at all; what goes through the bed is the LAMP standing on
 the nightstand, carried nowhere while the nightstand moved. That fix does want eyes, and it
