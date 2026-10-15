@@ -646,7 +646,7 @@ function useSuggest(appPlaced: AppPlacedRef) {
           (id) => !stillTheApps(appPlaced.current, id, t.positions, t.rotations),
         ),
       );
-      // Three reasons a piece may not move, composed in one place a test can
+      // The reasons a piece may not move (a pin, a confined fix), composed in one place a test can
       // reach — see `lockedForSolve`. The user's Lock button is the first of them.
       // Off the main thread — `lib/layout-offload.ts`. The window keeps drawing
       // while the search runs, which is also why the stamp check below exists.

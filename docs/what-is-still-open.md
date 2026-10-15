@@ -10860,10 +10860,13 @@ idea in a hard room raises the mean). Totals:
 | before | 193 | 117 | 117 | 9.5 | 14,503 | 169 |
 | + slide along wall + repair | 133 | 120 | 118 | 10.7 | 12,253 | 208 |
 | same repair, no slide (control) | 147 | 120 | 120 | 11.3 | 14,394 | 207 |
-| + half the seeds built, not thrown | 127 | 120 | 119 | 11.8 | 9,664 | 208 |
+| + half the seeds built, not thrown | 134 | 120 | 119 | 11.8 | 9,422–10,744 | 203 |
 
-The headline is **Fix: 169 → 208 of 240**, and **Ideas fill every press** — fewer solves to get
-there, so a press is a third faster. What is left weak is Fix on the cut-up rooms from a scramble:
+The headline is **Fix: 169 → 203 of 240**, and **Ideas fill every press** — fewer solves to get
+there, so a press is about a third faster. (The last row first read 127 / 9,664 / 208; that was
+measured before the fixture clash joined `repairHard`'s count in the same commit. Re-run twice on
+the pushed code it read 134 and 203 both times — the bench is deterministic, only its wall clock
+moves — so the earlier figures were a different program, not noise.) What is left weak is Fix on the cut-up rooms from a scramble:
 `t` 6 × 5 and `l` 4.5 × 4 are the rooms where it still most often comes back with something in
 the way.
 
@@ -10929,3 +10932,17 @@ kept (plus walls and groups, via `movableFor`), and photo pieces are on the Keep
 and the Room check's Try a fix follow. `lockedForSolve` no longer reads the flag at all, so the only
 things that hold a piece are Lock, a confine, a wall, and a group (`movableFor`).
 
+**Adversarial review, 2026-10-15** (two independent reviewers, one on `repairHard`, one on the
+starts, the slide and the photo-lock change; 280 fuzzed built starts and ~8,800 simulated slides
+among what they ran). One defect, fixed: `shuffleBlockers` read a room-level finding (`cut-off`,
+`partIds: []`) as "wholly among kept pieces", because `[].every` is true, so the Ideas refusal
+stopped naming cut-off floor and offered "Look again" — `tests/ideas-angles.test.ts` holds it,
+mutation-checked. Two bounds added to `repairHard` from the same review, both measured INERT on
+the bench rooms (refit as-is, refit and arrange from a scramble, 220 solves: identical declines and
+clean counts with and without): a round may not raise impossibility (overlap / outside), which
+`openRoutes` already refused, and outside a shuffle may not push `total` to the room's own, which
+would turn an accepted fix into "no gain". The reviewer measured repair raising `total` in 29 of 63
+repairs, so the path is real; none of those crossed the room's own total. Being inert, neither
+bound has a test that fails without it — said here rather than pretended otherwise. Declined: the
+second `snapYaws` cannot see a wall-fixture clash, but it turns a piece at most 12–20° and no
+sweep showed a clash appear after it.

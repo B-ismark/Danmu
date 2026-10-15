@@ -218,6 +218,17 @@ describe('the refusal names only what the search could have moved', () => {
     expect(shuffleBlockers([door], new Set(['door-1', 'chair-1']))).toHaveLength(0);
     expect(shuffleBlockers([door], new Set(['door-1']))).toHaveLength(1);
   });
+
+  // Review of 2026-10-15: `cut-off` is a room-level finding with no part ids, and
+  // `[].every(...)` is true, so passing ANY `kept` set (the panel always does)
+  // dropped it, and the refusal offered "Look again" instead of naming the cut-off
+  // floor.
+  it('a room-level finding still blocks whatever is kept', () => {
+    const cutOff = { rule: 'cut-off', partIds: [], title: 'cut-off', severity: 'error' } as unknown as Parameters<typeof shuffleBlockers>[0][number];
+    expect(shuffleBlockers([cutOff])).toHaveLength(1);
+    expect(shuffleBlockers([cutOff], new Set())).toHaveLength(1);
+    expect(shuffleBlockers([cutOff], new Set(['door-1']))).toHaveLength(1);
+  });
 });
 
 // Reported 2026-10-15 on a real scanned bedroom: Ideas said "Nothing here can move"

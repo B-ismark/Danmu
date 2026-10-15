@@ -1731,7 +1731,7 @@ export function solveLayout(
   // something is squared again: a nightstand angled toward its bed and then carried
   // away from it keeps an angle nothing justifies any more (measured: seed 15 of
   // `suggest-tidiness`, 10.9° off square, before this second pass).
-  const repaired = repairHard(model, winner, weights, b);
+  const repaired = repairHard(model, winner, weights, b, shuffle ? Infinity : before);
   if (repaired !== winner) winner = snapYaws(model, repaired, weights, true, origin);
 
   // ── A rug the search left through a wall goes back where it was ──
@@ -2223,6 +2223,7 @@ function repairHard(
   placements: Placement[],
   weights: ScoreWeights,
   b: { minX: number; maxX: number; minZ: number; maxZ: number },
+  totalCap: number,
 ): Placement[] {
   // The one fault the cost cannot see (`RULE_HANDLING['clash-mounted']`): a piece
   // standing where a TV or a window hangs. The search may wander into one; a repair
@@ -2252,9 +2253,17 @@ function repairHard(
     // The FINE grid: the near-misses this exists for are a few cells of floor, and the
     // coarse one `openRoutes` reads calls most of them open (0.6 there read 0).
     const br = costBreakdown(m, p, weights, navCell);
-    return { hard: HARD_TERMS.reduce((a, k) => a + br[k], 0) + CLASH_COST * clashes(p), total: br.total };
+    return { hard: HARD_TERMS.reduce((a, k) => a + br[k], 0) + CLASH_COST * clashes(p), total: br.total, imp: impossibility(br) };
   };
-  const startHard = score(placements).hard;
+  const start = score(placements);
+  const startHard = start.hard;
+  // Two bounds a round's sum cannot see, both from review (2026-10-15). The sum of the
+  // hard terms lets a navigation gain buy a sliver of overlap or wall — less possible
+  // than the room it was handed, which the veto then reverts whole, losing the solve;
+  // `openRoutes` carries the same ceiling. And outside a shuffle the answer is refused
+  // unless it beats the room it started from (`declineFor`), so a repair that pushes
+  // `total` past that turns an accepted fix into "no gain".
+  const impCeiling = start.imp + 1e-6;
   if (startHard <= NEGLIGIBLE_COST || startHard > REPAIR_CEILING) return placements;
   const rigid = setsOf(m);
   const pool: number[] = [];
@@ -2263,7 +2272,7 @@ function repairHard(
   }
   if (pool.length === 0) return placements;
   let current = placements.map((p) => ({ ...p }));
-  let now = { hard: startHard, total: score(current).total };
+  let now = { hard: startHard, total: start.total };
   const q = Math.PI / 2;
   for (let round = 0; round < REPAIR_ROUNDS && now.hard > NEGLIGIBLE_COST; round++) {
     // Every option is screened WITHOUT the navigation field (a tenth of the price:
@@ -2278,7 +2287,7 @@ function repairHard(
     // screen would see every option tie.
     const screenCell = nav > 1e-6 ? REPAIR_CELL : null;
     const floor = screenCell === null ? now.hard : score(current, screenCell).hard;
-    const screened: { at: Placement[]; hard: number; total: number }[] = [];
+    const screened: { at: Placement[]; hard: number; total: number; imp: number }[] = [];
     for (const i of pool) {
       const p = current[i];
       const part = m.ctx.parts[i];
@@ -2314,10 +2323,10 @@ function repairHard(
       }
     }
     screened.sort((x, y) => x.hard - y.hard || x.total - y.total);
-    let best: { at: Placement[]; hard: number; total: number } | null = null;
+    let best: { at: Placement[]; hard: number; total: number; imp: number } | null = null;
     for (const c of screened.slice(0, REPAIR_FINE)) {
       const sc = score(c.at);
-      if (sc.hard >= now.hard - 1e-6) continue;
+      if (sc.hard >= now.hard - 1e-6 || sc.imp > impCeiling || sc.total >= totalCap) continue;
       if (!best || sc.hard < best.hard - 1e-6 || (Math.abs(sc.hard - best.hard) <= 1e-6 && sc.total < best.total)) {
         best = { at: c.at, ...sc };
       }

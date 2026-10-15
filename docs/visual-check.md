@@ -531,7 +531,7 @@ constitutionally unable to show.*
 The search learned three things on 2026-10-15 (`docs/what-is-still-open.md` § 57): a piece on a
 wall slides along it, half the ideas start from a room furnished biggest-first against the walls,
 and a candidate with something in the way is nudged clear (turned, stepped, slid) before it is
-thrown away. Measured: Fix from a scrambled room clean 169 → 208 of 240, every Ideas press full.
+thrown away. Measured: Fix from a scrambled room clean 169 → 203 of 240, every Ideas press full.
 
 **Where to click.** T-Shape 6 × 5 and L-Shape 4.5 × 4: press Ideas, page through three presses.
 Then drag every piece into a heap in the middle and press Suggest, a few times.

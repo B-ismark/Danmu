@@ -528,8 +528,11 @@ export function shuffleBlockers(issues: readonly ClearanceIssue[], kept?: Readon
     const term = RULE_HANDLING[i.rule]?.costTerm;
     if (term == null || !(HARD_TERMS as readonly string[]).includes(term)) return false;
     // A finding among pieces the search may not move does not block it any more
-    // (`fixedFloor`), so it is not named as the reason nothing came back.
-    return !kept || !i.partIds.every((id) => kept.has(id));
+    // (`fixedFloor`), so it is not named as the reason nothing came back. A
+    // room-level finding (`cut-off`) names no piece, and `[].every` is true, so
+    // without the length test it read as "wholly among kept" and vanished from
+    // the refusal.
+    return !kept || i.partIds.length === 0 || !i.partIds.every((id) => kept.has(id));
   });
 }
 
