@@ -82,9 +82,9 @@ function facing(p: ScenePart, target: ScenePart): number {
 /** The pieces the candidate turned, or null when there is none. It is built from the room
  *  as it stands, not from the search, so a short search is enough to see it. A piece that
  *  is not square where it stood is marked, since the candidate only ever squares in place. */
-function squaredIn(parts: ScenePart[], footprint: Footprint, placed: Set<string>): string[] | null {
+function squaredIn(parts: ScenePart[], footprint: Footprint, placed: Set<string>, pinned: Record<string, boolean> = {}): string[] | null {
   let rated: readonly Candidate[] = [];
-  const result = solveLayout(parts, footprint, lockedForSolve(parts, {}, null), {
+  const result = solveLayout(parts, footprint, lockedForSolve(parts, pinned, null), {
     seed: 1,
     steps: 40,
     mode: 'arrange',
@@ -219,8 +219,8 @@ describe('Fix on a sofa a few degrees off square', () => {
   it('a locked piece is not turned, however crooked', () => {
     const { parts: base, footprint } = room('t', 6, 5);
     const { parts, id } = turned(base, isSofa, -10, footprint);
-    const locked = parts.map((p) => (p.id === id ? { ...p, locked: true } : p));
-    expect(squaredIn(locked, footprint, new Set([id]))).toBeNull();
+    // Kept with Lock. "From your photo" (`ScenePart.locked`) holds nothing since 2026-10-15.
+    expect(squaredIn(parts, footprint, new Set([id]), { [id]: true })).toBeNull();
   });
 
   it('in the Rectangle the turn itself pushes the sofa back inside, so nothing is squared', () => {

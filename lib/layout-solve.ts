@@ -593,31 +593,31 @@ export function makeRng(seed: number): () => number {
   };
 }
 
-/** The `locked` array for a solve, built from the three separate reasons a piece
- *  may not move. Exported and pure because it used to be one expression inside a
- *  `.map()` in `RoomTools`, where no test could reach it — and it is the whole of
- *  whether the user's Lock button works. A lock that composes wrongly with a
- *  confined fix fails silently: the piece just moves, and the button reads as
- *  decorative.
- *
- *  The three are genuinely different questions:
+/** The `locked` array for a solve, built from the reasons a piece may not move.
+ *  Exported and pure because it used to be one expression inside a `.map()` in
+ *  `RoomTools`, where no test could reach it — and it is the whole of whether the
+ *  user's Lock button works. A lock that composes wrongly with a confined fix fails
+ *  silently: the piece just moves, and the button reads as decorative.
  *
  *  · `pinned` — the user pressed **Lock** on that row. Their answer, and it wins.
- *  · `part.locked` — **"came out of your photo"**, not a lock, whatever the field
- *    is called; see `ScenePart.locked`, whose own comment says the name is wrong.
- *    Honoured here because it always has been, and changing it changes what
- *    Suggest does to every detected room — a product decision, not a tidy-up. Left
- *    as it stands on purpose, and named here because a reader who trusts the
- *    identifier will misread the line.
  *  · `confined` — a **Try a fix** solve names the few pieces it may touch, so
  *    everything else is locked for the duration. Null for a whole-room Suggest.
+ *
+ *  **`part.locked` is deliberately NOT read.** That field means "came out of your
+ *  photo" (`ScenePart.locked` says the name is wrong), and it used to be the third
+ *  reason here, "because it always has been". Its cost was a scanned room in which
+ *  Suggest, Try a fix and Ideas could move nothing: a real L-shaped bedroom had every
+ *  floor piece from the photos and nine of nine held, while every one of them dragged
+ *  freely by hand. The user decided on 2026-10-15 that a photo piece moves like any
+ *  other; keeping one where it is is what **Lock** is for. Wall pieces and groups are
+ *  still held, by `movableFor`.
  */
 export function lockedForSolve(
   parts: ScenePart[],
   pinned: Record<string, boolean>,
   confined: Set<string> | null,
 ): boolean[] {
-  return parts.map((p) => !!pinned[p.id] || p.locked || (confined ? !confined.has(p.id) : false));
+  return parts.map((p) => !!pinned[p.id] || (confined ? !confined.has(p.id) : false));
 }
 
 /** A confine set, plus everything standing on one of its pieces, transitively.
@@ -698,7 +698,8 @@ export function withCompany(ids: Set<string>, parts: ScenePart[]): Set<string> {
   // the chairs at it, or the solve would hold them and move the table out from among
   // them. Only that way round. A chair named for its own fault is the chair's to fix,
   // and naming it does not free the table, so it moves alone, as it always did.
-  const free = parts.map((p) => !p.locked && !p.wallMounted);
+  // `locked` here is "from your photo", which holds nothing (`lockedForSolve`).
+  const free = parts.map((p) => !p.wallMounted);
   const company = new Map<string, string[]>();
   for (const [a, ...members] of formationSets(parts, free)) company.set(parts[a].id, members.map((k) => parts[k].id));
   let out = new Set(ids);
@@ -746,7 +747,7 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
  *  A Room check row asks this before it shows the button, beside the rule's
  *  `RULE_HANDLING.movable`, because the two are different questions. The rule says
  *  whether rearranging could clear a finding of that kind; this says whether THESE
- *  pieces may be rearranged — not kept in place by the user, not from the photo,
+ *  pieces may be rearranged — not kept in place by the user,
  *  not on a wall, and not merged with a piece that is any of those. The report
  *  cannot answer it: the user's pins live in the studio store, and a finding about a
  *  sofa merged with the TV on the wall was offered a button on every rule that

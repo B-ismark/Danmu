@@ -1285,7 +1285,7 @@ function CheckPanel({
   // (`RULE_HANDLING`, the one table that knows), about pieces this press may move
   // (`confineCanMove`, over the same locks the press itself composes). The
   // second half is what the report cannot see — the user's pins, and a merged set
-  // held by a piece from the photo or on a wall — and without it the button spun on
+  // held by a piece on a wall — and without it the button spun on
   // those rows and said it found nothing.
   const fixable = useMemo(
     () =>

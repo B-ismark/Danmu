@@ -1547,16 +1547,15 @@ describe('lockedForSolve', () => {
     expect(lockedForSolve(parts, { [parts[0].id]: true }, only)).toEqual([true, true, false]);
   });
 
-  it('still reports a from-photo piece as locked', () => {
-    // Documents rather than endorses. `ScenePart.locked` means "came out of your
-    // photo" — its own comment says the name is wrong — and it has always been fed
-    // to the solver as a lock, so Suggest does not move detected furniture and the
-    // Lock button cannot release it. Changing that alters every detected room and
-    // is a product decision; this is here so the next reader finds it stated
-    // rather than deducing it from a bug report.
+  it('does not hold a from-photo piece', () => {
+    // `ScenePart.locked` means "came out of your photo". It used to be fed to the
+    // solver as a lock, so a scanned room gave Suggest, Try a fix and Ideas nothing
+    // to move; the user ruled on 2026-10-15 that a photo piece moves like any other.
+    // Lock is the way to keep one.
     const parts = room();
     parts[1] = { ...parts[1], locked: true };
-    expect(lockedForSolve(parts, {}, null)).toEqual([false, true, false]);
+    expect(lockedForSolve(parts, {}, null)).toEqual([false, false, false]);
+    expect(lockedForSolve(parts, { [parts[1].id]: true }, null)).toEqual([false, true, false]);
   });
 
   it('stops the solver moving a locked piece, where it would otherwise move it', () => {

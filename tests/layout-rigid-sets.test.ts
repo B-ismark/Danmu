@@ -202,7 +202,8 @@ describe('Room check offers Try a fix only where the press may move a piece it n
     { why: 'merged with the TV on the wall', parts: [g(sofa), g(tv), plant], pinned: {}, can: false },
     { why: 'merged with a plant the user kept', parts: [g(sofa), tv, g(plant)], pinned: { plant: true }, can: false },
     { why: 'kept in place itself', parts: [sofa, tv, plant], pinned: { sofa: true }, can: false },
-    { why: 'from the photo', parts: [{ ...sofa, locked: true }, tv, plant], pinned: {}, can: false },
+    // A photo piece is not held (2026-10-15): `locked` means "from your photo".
+    { why: 'from the photo', parts: [{ ...sofa, locked: true }, tv, plant], pinned: {}, can: true },
   ];
   const ROOM = { footprint: FOOTPRINT, height: 2.4 };
   const finding = (ps: ScenePart[]) => analyzeRoom(ps, ROOM).issues.find((i) => i.rule === 'outside')!;
@@ -227,9 +228,11 @@ describe('Room check offers Try a fix only where the press may move a piece it n
 
   it('one free piece among those named is enough, and a whole-room fix needs anything free', () => {
     const photo = { ...sofa, locked: true };
-    expect(confineCanMove(['sofa', 'plant'], [photo, tv, plant], {}), 'a clash between the photo sofa and a plant').toBe(true);
-    expect(confineCanMove([], [photo, tv, plant], {}), 'a whole-room fix with the plant free').toBe(true);
-    expect(confineCanMove([], [photo, tv, plant], { plant: true }), 'a whole-room fix with nothing free').toBe(false);
+    expect(confineCanMove(['sofa', 'plant'], [photo, tv, plant], { sofa: true }), 'a clash between the kept sofa and a plant').toBe(true);
+    expect(confineCanMove([], [photo, tv, plant], { sofa: true }), 'a whole-room fix with the plant free').toBe(true);
+    expect(confineCanMove([], [photo, tv, plant], { sofa: true, plant: true }), 'a whole-room fix with nothing free').toBe(false);
+    // From your photo, nothing kept: the sofa is free on its own.
+    expect(confineCanMove(['sofa'], [photo, tv, plant], {}), 'a photo sofa alone').toBe(true);
   });
 
   it('a free lamp riding a held piece does not make that piece\'s row fixable', () => {

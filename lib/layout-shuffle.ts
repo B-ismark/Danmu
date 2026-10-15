@@ -135,6 +135,7 @@ import {
   awkwardTurns,
   fixedFloor,
   HARD_TERMS,
+  lockedForSolve,
   makeRng,
   movableFor,
   NEGLIGIBLE_COST,
@@ -643,23 +644,10 @@ export function groupsToUngroup(parts: ScenePart[], locked: boolean[]): GroupsTo
   }
   return { moving: mine.length, worth };
 }
-/** Which pieces an idea may not move: the ones the user KEPT, and nothing else.
- *
- *  It used to be a thin re-export of `lockedForSolve`, which also honours
- *  `ScenePart.locked` — and that field means "came out of your photo", not "locked"
- *  (its own comment says the name is wrong). So a room built by scanning had every
- *  floor piece held, `movableFor` answered nine-of-nine "no", and the gallery said
- *  "Nothing here can move" about a room whose every piece drags freely, with no
- *  control anywhere to change it: the Keep list left photo pieces out, since it
- *  listed only what an idea could already move. Reported on a real scanned L-shaped
- *  bedroom (2026-10-15): 0 movable, no ideas; with the provenance flag not read, 9
- *  movable and 3 / 2 / 3 / 4 ideas over the first four presses.
- *
- *  Ideas are previews the user chooses between, so a photo piece is no more fixed to
- *  them than to a drag. `lockedForSolve`'s reading is left alone for Suggest and the
- *  Room check fixes, which act on the room directly — that remains the product
- *  decision its comment names. Wall pieces and groups are still held, by
- *  `movableFor`. */
+/** Which pieces an idea may not move: the ones the user KEPT. A thin re-export of
+ *  the solver's own composer so a caller does not have to know that a shuffle
+ *  confines nothing. "From your photo" holds nothing here either — see
+ *  `lockedForSolve` for the room that made that the rule. */
 export function lockedForShuffle(parts: ScenePart[], pinned: Record<string, boolean>): boolean[] {
-  return parts.map((p) => !!pinned[p.id]);
+  return lockedForSolve(parts, pinned, null);
 }

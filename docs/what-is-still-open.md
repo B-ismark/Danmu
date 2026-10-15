@@ -10869,7 +10869,7 @@ Minton et al. 1992 min-conflicts; Carbonell & Goldstein 1998 maximal marginal re
 L-shaped bedroom had 0 movable pieces and the gallery said "Nothing here can move", with no
 control to change it: the Keep list left photo pieces out. Ideas now hold only what the user
 kept (plus walls and groups, via `movableFor`), and photo pieces are on the Keep list. Same room:
-0 → 9 movable, 3 / 2 / 3 / 4 ideas over four presses. **Still open, a product call:** Suggest and
-the Room check's Try a fix still read the flag through `lockedForSolve`, so on a scanned room
-they move only Library pieces. Whether they should follow Ideas is the user's decision.
+0 → 9 movable, 3 / 2 / 3 / 4 ideas over four presses. **Decided by the user the same day:** Suggest
+and the Room check's Try a fix follow. `lockedForSolve` no longer reads the flag at all, so the only
+things that hold a piece are Lock, a confine, a wall, and a group (`movableFor`).
 

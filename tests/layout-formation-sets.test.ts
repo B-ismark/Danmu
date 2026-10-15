@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ScenePart } from '@/lib/scene-spec';
 import { fixedBand, SET_SQUARE_RAD, standsInSet } from '@/lib/layout-rules';
-import { formationSets, rigidSets, withCompany } from '@/lib/layout-solve';
+import { formationSets, lockedForSolve, rigidSets, withCompany } from '@/lib/layout-solve';
 
 // A dining table and the chairs at it, a bed and the nightstands at its head, are one
 // body to the arranger without anyone merging them — but only while they STAND as one.
@@ -212,8 +212,12 @@ describe('rigidSets and withCompany read the sets the room stands in', () => {
     expect([...withCompany(new Set(['a']), parts)]).toEqual(['a']);
   });
 
-  it('a pinned chair stays out of its table\'s company', () => {
+  it('a photo chair is company like any other; a kept one is held by the lock, not here', () => {
+    // `locked` is "from your photo", which holds nothing since 2026-10-15. A chair the
+    // user KEPT is named in the confine too, and `lockedForSolve` holds it: pins win.
     const parts = [table(), chair('a', -0.3, 0.1, 0, { locked: true }), chair('b', 0.3, 0.1)];
-    expect([...withCompany(new Set(['table']), parts)].sort()).toEqual(['b', 'table']);
+    const confined = withCompany(new Set(['table']), parts);
+    expect([...confined].sort()).toEqual(['a', 'b', 'table']);
+    expect(lockedForSolve(parts, { a: true }, confined)).toEqual([false, true, false]);
   });
 });
