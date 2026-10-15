@@ -17,6 +17,7 @@
 // "Everything fits" over an arrangement that plainly did not.
 
 import type { ScenePart } from './scene-spec';
+import { blockClearsAbove, blocksJoin } from './block-style';
 // Type-only, so a pure module does not gain a runtime dependency on the store —
 // `lib/units.ts` takes `DimUnit` from there the same way.
 import type { DimUnit } from './store';
@@ -404,6 +405,9 @@ export function analyzeRoom(
     for (let j = i + 1; j < solid.length; j++) {
       const a = solid[i];
       const b = solid[j];
+      // Two building blocks are allowed inside each other (`blocksJoin`); the drag lets
+      // them through, so this does too.
+      if (blocksJoin(a, b)) continue;
       // Only when they also share vertical space — a monitor over a desk is a
       // stack, not a clash. (`solid` is already floor-level, but a part can sit
       // just under 0.05 m and still be short enough to pass under another.)
@@ -614,7 +618,9 @@ export function analyzeRoom(
     const zones = accessZones(p, p.pos[0], p.pos[2], p.rot);
     if (zones.length === 0) continue;
     const others = solid
-      .filter((o) => o.id !== p.id && !zoneExempt(roleOf(p), roleOf(o)))
+      // A block standing clear above this one's top (`blockClearsAbove`) — a worktop over
+      // its pedestals — leaves its fronts free to open under it.
+      .filter((o) => o.id !== p.id && !zoneExempt(roleOf(p), roleOf(o)) && !blockClearsAbove(p, o))
       .map((o) => obbs.get(o.id)!);
     const me = obbs.get(p.id)!;
     const byRule = new Map<string, { rule: AccessRule; blocked: string[]; clear: string[]; narrowest: number }>();

@@ -646,7 +646,7 @@ function useSuggest(appPlaced: AppPlacedRef) {
           (id) => !stillTheApps(appPlaced.current, id, t.positions, t.rotations),
         ),
       );
-      // Three reasons a piece may not move, composed in one place a test can
+      // The reasons a piece may not move (a pin, a confined fix), composed in one place a test can
       // reach — see `lockedForSolve`. The user's Lock button is the first of them.
       // Off the main thread — `lib/layout-offload.ts`. The window keeps drawing
       // while the search runs, which is also why the stamp check below exists.
@@ -1285,7 +1285,7 @@ function CheckPanel({
   // (`RULE_HANDLING`, the one table that knows), about pieces this press may move
   // (`confineCanMove`, over the same locks the press itself composes). The
   // second half is what the report cannot see — the user's pins, and a merged set
-  // held by a piece from the photo or on a wall — and without it the button spun on
+  // held by a piece on a wall — and without it the button spun on
   // those rows and said it found nothing.
   const fixable = useMemo(
     () =>

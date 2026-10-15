@@ -458,8 +458,11 @@ export function IdeasPanel({
   const range = pageRange(page, size, found);
   const plan = miniPlanBox(room.footprint);
 
-  // Pieces a person can keep or let go: everything an idea could move.
-  const keepable = base ? base.parts.filter((p) => !p.wallMounted && !p.locked) : [];
+  // Pieces a person can keep or let go: everything an idea could move. Photo pieces
+  // included — `locked` is "from your photo", which an idea does not read
+  // (`lockedForShuffle`), so leaving them out left a scanned room with no way to say
+  // which of them to keep.
+  const keepable = base ? base.parts.filter((p) => !p.wallMounted) : [];
   const kept = keepable.filter((p) => pinned[p.id]);
   const free = keepable.filter((p) => !pinned[p.id]);
 
@@ -469,8 +472,12 @@ export function IdeasPanel({
   const dimUnit = useSettings((s) => s.dimUnit);
   const refusal = useMemo(() => {
     if (!base || !exhausted || found > 0) return null;
-    const blockers = shuffleBlockers(analyzeRoom(base.standing, base.room, { accessibility: stepFree, dimUnit }).issues);
-    const groups = groupsToUngroup(base.parts, lockedForShuffle(base.parts, base.pinned));
+    const locked = lockedForShuffle(base.parts, base.pinned);
+    // What the search may not move — the same reading `fixedFloor` takes (`movableFor`).
+    const movable = movableFor(base.parts, locked);
+    const kept = new Set(base.parts.filter((_, i) => !movable[i]).map((p) => p.id));
+    const blockers = shuffleBlockers(analyzeRoom(base.standing, base.room, { accessibility: stepFree, dimUnit }).issues, kept);
+    const groups = groupsToUngroup(base.parts, locked);
     return { ...shuffleRefusal(blockers, groups), blocked: blockers.length > 0 };
   }, [base, exhausted, found, stepFree, dimUnit]);
 

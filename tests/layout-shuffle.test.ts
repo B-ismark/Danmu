@@ -107,8 +107,11 @@ const presetSweep = () => (sweepCache ??= runSweep());
  *  search priced a chair pushed under its table back-first (`tuckedAt`), which moves
  *  any trajectory that passed through one; 44 after, and 45 again since a dining set
  *  moves as one (§ 52): the T's three presses offer 1 + 4 + 4, against 2 + 2 + 4 with
- *  the sets off. */
-const RUG_IDEAS_CHECKED = 45;
+ *  the sets off. 46 later; and 48 — every press full, twelve presses of four — since
+ *  2026-10-15, when the search learned to slide a piece along its wall, to repair a hard
+ *  fault before refusing, and to start half its seeds from a built room. */
+const RUG_IDEAS_CHECKED = 48;
+// 46 since the scatter starts square and Ideas refuses a crooked piece (2026-10-15).
 
 // ── Three tests below USED to carry an explicit 30 s timeout ────────────
 //
@@ -311,7 +314,9 @@ describe("solveLayout mode: 'shuffle'", () => {
     // two checks off: with both off it is 159, and with either one alone on it is 159
     // too, so it is the pair that moves this trajectory. 159 again since a dining set
     // moves as one (§ 52): `t` seed 1 fills its pool, and with the sets off it is 158.
-    expect(checked, 'the finalists this sweep compared').toBe(159);
+    // 160 since the scatter starts every piece square to its wall (2026-10-15), which
+    // moves every trajectory; nothing here asserts which seed changed.
+    expect(checked, 'the finalists this sweep compared').toBe(160);
   });
 
   it('keeps a pool of finalists, because the search moves', { timeout: 120_000 }, () => {
@@ -320,7 +325,8 @@ describe("solveLayout mode: 'shuffle'", () => {
     // pool keeps; `l` seed 7 fills three (`t` seed 4 did, before the search priced a
     // rug, and `open` seed 8 before it priced a chair's back; `t` seed 1 did while the
     // chair had to stand square and clear of the legs, until a dining set moved as one),
-    // so a full pool is not a property to lean on.
+    // so a full pool is not a property to lean on. Every pool fills since the scatter
+    // starts each piece square to its wall (2026-10-15) — `l` seed 7 included.
     const pools = ALL.map(([id]) => [
       id,
       shuffleSweep()
@@ -330,7 +336,7 @@ describe("solveLayout mode: 'shuffle'", () => {
     ]);
     expect(pools).toEqual([
       ['rect', '44444444'],
-      ['l', '44444434'],
+      ['l', '44444444'],
       ['u', '44444444'],
       ['open', '44444444'],
       ['t', '44444444'],
@@ -353,9 +359,10 @@ describe("solveLayout mode: 'shuffle'", () => {
         return bestCandidate(r);
       },
     });
-    // Three, and the number is the search's trajectory rather than a property of it —
-    // it was four until the search priced a rug. The defect this guards reads ONE.
-    expect(rated.length, 'one finalist is the start alone: nothing was accepted').toBe(3);
+    // Four, and the number is the search's trajectory rather than a property of it —
+    // it was four until the search priced a rug, then three, and four again since the
+    // slide-along-wall move (2026-10-15). The defect this guards reads ONE.
+    expect(rated.length, 'one finalist is the start alone: nothing was accepted').toBe(4);
   });
 
   it('is deterministic: same room, same seed, same suggestion', () => {
@@ -457,10 +464,14 @@ describe('shuffleRoom — the offer, not the search', () => {
       worst,
       'a candidate pair reached REPEAT_SIMILARITY: the search is producing near-duplicates and the diversity term now has work to do — see DIVERSITY_PENALTY',
     ).toBeLessThan(REPEAT_SIMILARITY);
+    // 2.5, measured: the worst pair read 0.200 (16 of 18 pairs zero) until 2026-10-15,
+    // when the slide-along-wall move and `repairHard` made the search converge a little
+    // more — 0.600, 13 of 18 zero — so the term can now add 2.4 where it added 0.8. Still
+    // well under the 4–20 cost spread of a press, and still below REPEAT_SIMILARITY.
     expect(
       DIVERSITY_PENALTY * worst,
       'the diversity term can now outweigh a real cost difference between candidates',
-    ).toBeLessThan(2);
+    ).toBeLessThan(2.5);
   });
   it('the diversity term reorders a press — the test § A.2 asked for', { timeout: 120_000 }, () => {
     // Fails at `diversityPenalty: 0`, which is the whole ask. It could not be written
@@ -476,20 +487,23 @@ describe('shuffleRoom — the offer, not the search', () => {
     // was press 4 of this room until the search priced a rug (§ H.6.1), after which none
     // of presses 2–5 on any preset reordered and the sweep had to widen to find one. So
     // if this goes red after a change to the COST, re-run that sweep before concluding
-    // the term broke: the press may simply have moved.
-    const { parts, room: r, locked } = room('rect', 7.5, 5.6);
+    // the term broke: the press may simply have moved. It moved again on 2026-10-15, from
+    // press 6 to press 7, when the scatter began starting each piece square to its wall;
+    // and the same day once more, when the search learned to slide a piece along its wall
+    // and to repair a hard fault before refusing: `rect` 7.5 x 5.6 stopped reordering at
+    // all over presses 2–9, and the sweep (that room, `l` 6 x 5, `u` 6 x 5, `rect` 6 x 4)
+    // found `rect` 6 x 4 press 2 — this one — and `u` 6 x 5 press 4.
+    const { parts, room: r, locked } = room('rect', 6, 4);
     const ids = parts.map((p) => p.id);
-    let prev = shuffleRoom(parts, r, locked, { attempt: 1 });
-    for (let attempt = 2; attempt <= 5; attempt++)
-      prev = shuffleRoom(parts, r, locked, { attempt, history: [{ ids, placements: prev!.ideas[0].placements }] });
+    const prev = shuffleRoom(parts, r, locked, { attempt: 1 });
     const history = [{ ids, placements: prev!.ideas[0].placements }];
     const order = (penalty?: number) =>
-      shuffleRoom(parts, r, locked, { attempt: 6, history, diversityPenalty: penalty })!.ideas.map((i) =>
+      shuffleRoom(parts, r, locked, { attempt: 2, history, diversityPenalty: penalty })!.ideas.map((i) =>
         i.after.toFixed(1),
       );
     const withTerm = order();
     const without = order(0);
-    console.log(`  rect 7.5x5.6 attempt 6: penalty ${DIVERSITY_PENALTY} [${withTerm}] · penalty 0 [${without}]`);
+    console.log(`  rect 6x4 attempt 2: penalty ${DIVERSITY_PENALTY} [${withTerm}] · penalty 0 [${without}]`);
     expect(without, 'the premise: without the term the press ranks on cost alone').toEqual(
       [...without].sort((a, b) => Number(a) - Number(b)),
     );

@@ -9,10 +9,11 @@ import { UndoRedo } from '@/components/studio/UndoRedo';
 import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
 import { SwapModelHost } from '@/components/studio/RegenerateModal';
 import { HoverCard } from '@/components/studio/HoverCard';
-import { CatalogPanel, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
+import { CatalogPanel, CatalogToggle, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { StudioShell } from '@/components/studio/StudioShell';
 import { CanvasVeil } from '@/components/studio/CanvasVeil';
 import { Icon } from '@/components/ui/Icon';
+import { usePhoneStudio } from '@/components/studio/NarrowViewportBanner';
 import { useStudio, useSettings } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { UNIT_OPTIONS } from '@/lib/units';
@@ -60,6 +61,7 @@ export default function PlanPage() {
   // the page drives it through this handle. See PlanViewHandle.
   const planApi = useRef<PlanViewHandle | null>(null);
   const catalogOpen = useStudio((s) => s.catalogOpen);
+  const phone = usePhoneStudio();
 
   useEffect(() => {
     if (!roomId) return;
@@ -126,6 +128,9 @@ export default function PlanPage() {
             Comfort zones
           </button>
         </div>
+        {/* The 3D tab's same trigger, in the same slot. A phone's Add is its toolbar's
+            primary action, so it is not repeated here. */}
+        {!phone && <CatalogToggle />}
       </CanvasTools>
 
       <CanvasView>

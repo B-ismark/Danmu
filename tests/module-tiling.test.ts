@@ -42,6 +42,18 @@ const TILED: Record<string, { axis: 0 | 2; category: Category; span?: (v: number
   curtain: { axis: 0, category: 'curtain' },
   bookshelf: { axis: 2, category: 'shelf' },
   'shoe-rack': { axis: 2, category: 'shelf' },
+  // The building blocks (`lib/block-forms.ts`). A pedestal stacks drawers up its height; a
+  // cabinet puts doors across its width; a slat panel its slats; a cubby shelf both ways,
+  // and `ALSO_TILED` is its second axis — one range, two sweeps.
+  'drawer-unit': { axis: 2, category: 'shelf' },
+  'door-cabinet': { axis: 0, category: 'shelf' },
+  'slat-panel': { axis: 0, category: 'other' },
+  'open-shelf': { axis: 0, category: 'shelf' },
+};
+
+/** The shapes that tile along a SECOND axis with the same range. */
+const ALSO_TILED: Record<string, { axis: 0 | 2; category: Category }> = {
+  'open-shelf': { axis: 2, category: 'shelf' },
 };
 
 const SHAPES = Object.keys(MODULE_RANGE) as Shape[];
@@ -50,17 +62,22 @@ const SHAPES = Object.keys(MODULE_RANGE) as Shape[];
  *  that owns sizes. Not typed here: a hand-copied bound is the "displayed
  *  measurement that is not derived" this repo keeps finding, and it would rot the
  *  moment a range moved. */
-function spanRange(shape: Shape): { lo: number; hi: number } {
-  const t = TILED[shape];
+function spanRange(shape: Shape, t: { axis: 0 | 2; category: Category } = TILED[shape]): { lo: number; hi: number } {
   const r = dimRangeFor(t.category, shape);
   return { lo: r.min[t.axis], hi: r.max[t.axis] };
 }
 
 /** The span the shape's renderer actually hands `moduleCount`, from a dim in mm. */
-function renderedSpan(shape: Shape, mm: number): number {
-  const t = TILED[shape];
+function renderedSpan(shape: Shape, mm: number, t: { span?: (v: number) => number } = TILED[shape]): number {
   return t.span ? t.span(mm / 1000) : mm / 1000;
 }
+
+/** Every (shape, axis) the sweeps below walk: each tiling shape on its own axis, and the
+ *  second axis of one that has two. Named so a failure says which. */
+const SWEEPS: Array<{ name: string; shape: Shape; t: { axis: 0 | 2; category: Category; span?: (v: number) => number } }> = [
+  ...SHAPES.map((shape) => ({ name: shape as string, shape, t: TILED[shape] })),
+  ...Object.entries(ALSO_TILED).map(([shape, t]) => ({ name: `${shape} (axis ${t.axis})`, shape: shape as Shape, t })),
+];
 
 describe('the module ranges themselves', () => {
   it('covers every shape that tiles, and only shapes that tile', () => {
@@ -182,16 +199,16 @@ describe('the module ranges themselves', () => {
 });
 
 describe('every module lands inside its own range, across every legal size', () => {
-  it.each(SHAPES)('%s', (shape) => {
+  it.each(SWEEPS)('$name', ({ shape, t }) => {
     const r = moduleRangeFor(shape)!;
-    const { lo, hi } = spanRange(shape);
+    const { lo, hi } = spanRange(shape, t);
     expect(hi, `${shape}: no legal span to sweep`).toBeGreaterThan(lo);
 
     const bad: string[] = [];
     // 1 mm steps. A coarser sweep is exactly how the 890 mm case survives: it is a
     // band about 190 mm wide inside a range 3400 mm long.
     for (let mm = lo; mm <= hi; mm += 1) {
-      const span = renderedSpan(shape, mm);
+      const span = renderedSpan(shape, mm, t);
       const n = moduleCount(span, r);
       if (!Number.isInteger(n) || n < 1) {
         bad.push(`${mm}mm -> n=${n}`);
@@ -213,13 +230,13 @@ describe('the count never goes DOWN as the piece grows', () => {
   // `Math.round(span / nominal)` is not monotonic — it flips at every half-step — and
   // non-monotonic is what "autoscaling" looks like from the outside: drag the handle
   // wider and a bay disappears.
-  it.each(SHAPES)('%s', (shape) => {
+  it.each(SWEEPS)('$name', ({ shape, t }) => {
     const r = moduleRangeFor(shape)!;
-    const { lo, hi } = spanRange(shape);
+    const { lo, hi } = spanRange(shape, t);
     const drops: string[] = [];
-    let prev = moduleCount(renderedSpan(shape, lo), r);
+    let prev = moduleCount(renderedSpan(shape, lo, t), r);
     for (let mm = lo + 1; mm <= hi; mm += 1) {
-      const n = moduleCount(renderedSpan(shape, mm), r);
+      const n = moduleCount(renderedSpan(shape, mm, t), r);
       if (n < prev) drops.push(`${mm}mm: ${prev} -> ${n}`);
       prev = n;
     }
@@ -278,6 +295,13 @@ describe('every shipped preset keeps the count it draws today', () => {
     Bookshelf: 5,
     'Shoe rack': 5,
     Curtain: 15,
+    // The building blocks, each on the axis it tiles (see `TILED`): three drawers up a
+    // 600 mm pedestal, a pair of doors on 800 mm, eighteen slats across 1.2 m, and two
+    // cubbies across an 800 mm shelf (its two rows are pinned beside the Sofa below).
+    'Drawer unit': 3,
+    'Door cabinet': 2,
+    'Slat panel': 18,
+    'Open shelf': 2,
   };
 
   it.each(Object.keys(EXPECTED))('%s', (label) => {
@@ -311,6 +335,11 @@ describe('every shipped preset keeps the count it draws today', () => {
     // otherwise fail with 'is no longer in PART_LIBRARY' from the sweep above, which
     // is a clearer message than a missing row, so it is only asserted loosely here.
     expect(pinned.size).toBeGreaterThanOrEqual(tiling.length);
+  });
+
+  it('Open shelf — two rows as well as two columns, one range for both', () => {
+    const shelf = PART_LIBRARY.find((i) => i.label === 'Open shelf')!;
+    expect(moduleCount(shelf.dimMM[2] / 1000, moduleRangeFor('open-shelf')!)).toBe(2);
   });
 
   it('Sofa — measured on its INNER width, after the arms', () => {

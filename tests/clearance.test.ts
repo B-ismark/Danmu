@@ -432,7 +432,11 @@ describe('analyzeRoom · a piece that cannot be made to fit at all', () => {
     // the loop walks cannot fail when the list is gutted. Both sides must be
     // non-zero or one of the two branches is going untested.
     expect(stuck).toBe(1);
-    expect(shrinkable).toBe(13); // 13 with the clothes rail, whose 900 mm floor clears 1.8 m
+    // 13 with the clothes rail, whose 900 mm floor clears 1.8 m; 15 with the two building
+    // blocks that can stand over a 1.8 m ceiling at all — the open shelf (to 2400 mm) and
+    // the slat panel (to 2800). The other five top out at or under 1.8 m and are skipped.
+    // 16 with a made piece, which goes to 2800 mm like the tallest block it can hold.
+    expect(shrinkable).toBe(16);
   });
 });
 

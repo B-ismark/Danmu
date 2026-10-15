@@ -180,11 +180,23 @@ describe('SolveOptions.pick', () => {
 
       // …and on such a seed the default and the out-of-range fallback both land on the
       // argmin over TOTAL, not on the pool's first entry.
-      const seed = disagrees[0];
-      const pool = poolAt(seed);
-      const byTotal = pool.reduce((bi, x, i) => (x.total < pool[bi].total ? i : bi), 0);
-      const wanted = uSolve(seed, { pick: () => byTotal }).placements;
-      const first = uSolve(seed, { pick: () => 0 }).placements;
+      //
+      // On a seed where the two picks still END differently. Since 2026-10-15 the passes
+      // after the pick include a repair (`repairHard`), which can carry two different
+      // finalists to the same room — the first disagreeing seed now does — and a seed
+      // where they converge cannot show which one was picked.
+      const ends = (seed: number) => {
+        const pool = poolAt(seed);
+        const byTotal = pool.reduce((bi, x, i) => (x.total < pool[bi].total ? i : bi), 0);
+        return {
+          seed,
+          wanted: uSolve(seed, { pick: () => byTotal }).placements,
+          first: uSolve(seed, { pick: () => 0 }).placements,
+        };
+      };
+      const shown = disagrees.map(ends).find((e) => JSON.stringify(e.wanted) !== JSON.stringify(e.first));
+      expect(shown, 'on every disagreeing seed the two picks ended in one room').toBeDefined();
+      const { seed, wanted, first } = shown!;
       expect(wanted).not.toEqual(first);
       expect(uSolve(seed).placements).toEqual(wanted);
       expect(uSolve(seed, { pick: () => 99 }).placements).toEqual(wanted);

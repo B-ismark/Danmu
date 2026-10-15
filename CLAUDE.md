@@ -744,6 +744,7 @@ pnpm lint         # eslint . --max-warnings 0 — flat config in eslint.config.m
 pnpm audit        # dependency advisories — see `pnpm.overrides` in package.json
 pnpm test:watch   # vitest in watch mode, same flag
 pnpm sweep:routes # minutes-long refusal-set sweep (a measurement, not a gate)
+pnpm bench:ideas  # minutes-long Ideas / Fix bench over ten rooms (a measurement, not a gate)
 pnpm vendor:ort   # copy onnxruntime-web → public/ort/ (loads same-origin, not CDN)
 pnpm hash:models  # SHA-256 digests of public/models/ for MODEL_DIGESTS
 pnpm hash:models --verify   # …and confirm the mirror serves those same bytes (~62 MB)
@@ -767,7 +768,8 @@ Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
 ranges / shape-search / item-snap / units / dates / scene-file / transforms /
 fit-check / capture-slots / detect-prompt / exif / sighting-links /
-repeat-sightings / drag-convoy / drag-resolve / layout-rules / layout-score all
+repeat-sightings / drag-convoy / drag-resolve / layout-rules / layout-score / block-forms / block-style /
+made-piece / made-actions all
 have tests in `tests/`).
 
 **A dead-code sweep that does not read `tests/` is not a sweep.** Two kinds of

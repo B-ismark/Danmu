@@ -24,6 +24,7 @@
 // inside the trust boundary — a suggestion cannot change a measurement.
 
 import type { ScenePart } from './scene-spec';
+import { blockClearsAbove, blocksJoin, bothBlocks, type PlacedBlock } from './block-style';
 import { verticalExtent } from './physics';
 import type { Footprint } from './footprint';
 import {
@@ -224,7 +225,7 @@ export const RULE_HANDLING: Record<
   // found nothing. That is what this table exists to prevent — see `reach` below,
   // which was the last row to claim a capability it did not have. A rug was the
   // third exclusion until the term learned to see one (`containedBySearch`).
-  // Whether THIS sofa may move — kept in place, from the photo, merged with a piece
+  // Whether THIS sofa may move — kept in place, or merged with a piece
   // on a wall — is a question about the pieces rather than the kind, asked per row
   // for every rule in this table (`confineCanMove`), because the user's pins are not
   // anything a finding can see.
@@ -362,6 +363,10 @@ export type LayoutModel = {
   tuck: TuckProfile[];
   /** Does this piece get in a walker's way? */
   obstacle: boolean[];
+  /** `owner * n + other` for every pair where `other` stands clear above `owner`'s top
+   *  (`blockClearsAbove`): a worktop's slab over the drawer units carrying it, which
+   *  open under it. Heights never change in the search, so this is fixed too. */
+  overhead: Set<number>;
   /** Is this piece held inside the walls? `containedBySearch`: every obstacle, and a
    *  rug, which is no obstacle but is floor the search moves. */
   contained: boolean[];
@@ -628,6 +633,13 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     }
   }
 
+  const overhead = new Set<number>();
+  for (let i = 0; i < parts.length; i++) {
+    for (let j = 0; j < parts.length; j++) {
+      if (i !== j && blockClearsAbove(parts[i], parts[j])) overhead.add(i * parts.length + j);
+    }
+  }
+
   return {
     ctx,
     poly,
@@ -635,6 +647,7 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     roles,
     tuck,
     obstacle: parts.map(isObstacle),
+    overhead,
     contained,
     overhang,
     ownSpotCharge,
@@ -882,6 +895,10 @@ export function costBreakdown(
     for (let j = i + 1; j < feet.length; j++) {
       if (!obstacle[j]) continue;
       if (boxGap(i, j) > 0) continue; // cannot overlap
+      // Blocks built into each other are one piece in progress, not a crash — the same
+      // pair `lib/clearance.ts` and the drag exempt (`blocksJoin`).
+      // Judged where the search has them, not where they were authored.
+      if (bothBlocks(parts[i], parts[j]) && blocksJoin(blockAt(parts[i], placements[i]), blockAt(parts[j], placements[j]))) continue;
       const shared = footIntersectionArea(feet[i], feet[j]);
       if (shared <= 0) continue;
       const share = shared / Math.min(area[i], area[j]);
@@ -1377,12 +1394,18 @@ function zoneBlocked(
     if (m.top[j] <= aboveY) continue;
     if (far2(feet[j], zn, m.radius[j] + box.r)) continue;
     if (zoneExempt(m.roles[owner], m.roles[j])) continue;
+    if (m.overhead.has(owner * feet.length + j)) continue;
     taken += footIntersectionArea(feet[j], zn) / box.area;
   }
   // A zone half outside the room is half unusable, which is the same problem as
   // half of it being full of furniture.
   taken += outsideShare(zn, m.poly);
   return Math.min(1, taken);
+}
+
+/** A part as the block-join rule sees it, at a placement the search is trying. */
+function blockAt(p: ScenePart, at: Placement): PlacedBlock {
+  return { shape: p.shape, pos: [at.x, p.pos[1], at.z], rot: at.yaw, dimMM: p.dimMM, circle: p.circle };
 }
 
 /** Are these two certainly further apart than `reach`? Squared throughout, so the

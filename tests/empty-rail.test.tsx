@@ -30,7 +30,7 @@ function Rail() {
   );
 }
 
-const adds = () => screen.queryAllByRole('button', { name: 'Add a piece to the room' });
+const adds = () => screen.queryAllByRole('button', { name: 'Add from the Library' });
 const startOvers = () => screen.queryAllByRole('button', { name: /^Start over/ });
 const footer = () => document.querySelector('.rail-footer');
 
@@ -48,7 +48,7 @@ describe('with nothing selected', () => {
   it('puts Add under the prompt, once, and no footer at all', () => {
     render(<Rail />);
     expect(screen.getByText(/a piece to style it/)).toBeTruthy();
-    expect(screen.getByText(/press Add to bring something in from the Library/)).toBeTruthy();
+    expect(screen.getByText(/press A to bring something in from the Library/)).toBeTruthy();
     expect(adds()).toHaveLength(1);
     expect(adds()[0].closest('.empty-inspector__actions')).not.toBeNull();
     expect(footer()).toBeNull();

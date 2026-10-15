@@ -200,7 +200,23 @@ describe('Segmented can lay its options out on more than one row', () => {
       .flatMap((dir) => walk(root(dir)))
       .filter((f) => /\.tsx$/.test(f) && !f.endsWith('primitives.tsx'))
       .filter((f) => /^\s+(wrap|minItem=)/m.test(codeOnly(readFileSync(f, 'utf8'))));
-    expect(callers, 'a Segmented now passes wrap/minItem — re-derive the rail floors below').toEqual([]);
+    //
+    // **It has exactly one now, and this is the re-derivation.** The Inspector's Style
+    // section (`BlockStyleControls`) puts a row of WORDS — Legs / Panels / None, Frosted /
+    // Clear / None — in the right rail, which is the bug class `wrap` answers. So the
+    // assertion is the single caller, and the measured fact it rests on: three segments at
+    // `minItem` fit one row at the narrowest rail the layout ships (less the section's 16px
+    // either side and a scrollbar), and at anything narrower the grid drops to two rows
+    // instead of clipping.
+    expect(callers.map((f) => f.replace(/^.*[\\/]components[\\/]/, 'components/').replace(/\\/g, '/'))).toEqual([
+      'components/studio/Inspector.tsx',
+    ]);
+    const insp = codeOnly(readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8'));
+    const min = Number(/minItem=\{(\d+)\}/.exec(insp)?.[1]);
+    expect(min, 'the Inspector states its segment floor as a number').toBeGreaterThan(0);
+    const usable = railFloor('rail-right') - 32 - 16;
+    expect(3 * min, 'three words fit one row at the narrowest rail').toBeLessThanOrEqual(usable);
+    expect(insp, 'and it reflows rather than clips').toMatch(/<Segmented<string>[\s\S]*?\bwrap\b/);
   });
 });
 

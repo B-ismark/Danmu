@@ -20,7 +20,10 @@ const parts = defaultScene('t', 6, 5).map((p) => (p.wallMounted ? p : { ...p, ro
 const footprint = footprintForLayout('t', 6, 5);
 const room = { footprint, height: 2.6 };
 const solveArgs = { parts, footprint, locked: lockedForSolve(parts, {}, null), opts: { seed: 3, mode: 'arrange' as const } };
-const shuffleArgs = { parts, room, locked: lockedForShuffle(parts, {}), opts: { attempt: 1, history: [] } };
+// Press 3, because the comparison needs a press that offers something: press 1 found
+// nothing here from 2026-10-15 (the scatter starts square), and over presses 1–8 this
+// room offers 20 ideas against 19 before — a draw that moved, not a room that dried up.
+const shuffleArgs = { parts, room, locked: lockedForShuffle(parts, {}), opts: { attempt: 3, history: [] } };
 
 type Mode = 'real' | 'throw-on-construct' | 'error-after-post' | 'reply-error';
 let mode: Mode = 'real';

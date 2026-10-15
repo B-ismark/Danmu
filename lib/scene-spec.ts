@@ -2,6 +2,9 @@
 // Either default (hand-curated demo room) or built from AI detections across all 4 wall captures.
 
 import { ROOM } from './parts-catalog';
+import { BLOCK_SHAPES, blocksJoin, type BlockStyle } from './block-style';
+// Type only: `made-piece` imports this module's vocabularies at run time.
+import type { MadeSpec } from './made-piece';
 import {
   roomFootprint,
   footprintBounds,
@@ -107,6 +110,10 @@ export const SHAPES = [
   // appliances
   'soundbar', 'radiator', 'air-purifier', 'washing-machine', 'microwave', 'water-dispenser',
   'fan-standing', 'chest-freezer', 'tv-console', 'stool',
+  // building blocks — `BLOCK_SHAPES` in lib/block-style.ts; never produced by a photo
+  'worktop', 'screen', 'drawer-unit', 'open-shelf', 'door-cabinet', 'slat-panel', 'seat-pad',
+  // a made piece — blocks a person saved as one (`lib/made-piece.ts`); never a photo, never the Library
+  'made',
   'box', 'cylinder', 'plane',
 ] as const;
 export type Shape = (typeof SHAPES)[number];
@@ -507,9 +514,20 @@ export type ScenePart = {
    *  default for its shape (see `lightFor`), which for anything that is not a
    *  lamp is no light at all. */
   light?: PartLight;
+  /** The options of a building block (`lib/block-style.ts`): a worktop's ends, a
+   *  screen's top band, whether a drawer unit locks. Absent means the shape's defaults,
+   *  which is what `blockStyleFor` resolves — so only a choice somebody made is stored,
+   *  and a piece that is not a block never carries one. */
+  blockStyle?: BlockStyle;
+  /** The blocks a made piece is built from (`shape: 'made'` only), in its own frame.
+   *  The piece moves, turns, collides and resizes as ONE part; the blocks are how it
+   *  is drawn. `lib/made-piece.ts` packs, lays out and explodes it. */
+  made?: MadeSpec;
   /** group id — parts sharing one move together (multi-select merge). */
   groupId?: string;
 };
+
+export type { BlockStyle };
 
 // ─── Default scene (used until detection runs) ────────────────────────────
 //
@@ -1874,7 +1892,7 @@ function seats(part: ScenePart, placed: ScenePart[], poly: Footprint): boolean {
 // `group` only drives section headers in the Add-model picker.
 export type LibraryItem = {
   label: string;
-  group: 'Seating' | 'Tables' | 'Storage' | 'Bedroom' | 'Lighting' | 'Decor' | 'Tech' | 'Appliances' | 'Openings';
+  group: 'Seating' | 'Tables' | 'Storage' | 'Bedroom' | 'Lighting' | 'Decor' | 'Tech' | 'Appliances' | 'Openings' | 'Blocks';
   category: Category;
   shape: Shape;
   dimMM: [number, number, number];
@@ -1946,6 +1964,15 @@ const PARAMETRIC_SHAPES = new Set<Shape>([
   // centred 65 mm in from the edge while the rule kept the chair out of 50 mm ones
   // centred 40 mm in.
   'desk-l',
+  // …and the building blocks that are not photographable at all. Six of the seven: each
+  // draws an absolute (a 25 mm slab, a 20 mm aluminium edge, a drawer front, a board, a
+  // slat) or tiles a module count off one, so each owns its size. `seat-pad` is a pure
+  // proportion of its box and is group-scaled like the ottoman it is filed with.
+  // `lib/block-forms.ts` has the arithmetic and `tests/block-forms.test.ts` the sweep.
+  'worktop', 'screen', 'drawer-unit', 'open-shelf', 'door-cabinet', 'slat-panel',
+  // A made piece draws its blocks at the size asked (`layoutMade`): a group scale would
+  // squash every handle, slat and plinth in it, which is the thing blocks exist to avoid.
+  'made',
 ]);
 export function isParametric(shape: Shape): boolean {
   return PARAMETRIC_SHAPES.has(shape);
@@ -2023,6 +2050,20 @@ export const MODULE_RANGE: Partial<Record<Shape, ModuleRange>> = {
   // A curtain pleat. The old floor of 8 pleats produced 50 mm pleats on a 400 mm
   // curtain — below any plausible minimum — so the floor goes and the range answers.
   curtain: { min: 0.07, nominal: 0.11, max: 0.14 },
+  // The building blocks. Each satisfies `max >= 2 * min` and `nominal / min >= 4/3`
+  // (`tests/module-tiling.test.ts` holds both), which is why none of them is the round
+  // "0.15 to 0.25" the brief first wrote: a range narrower than a factor of two has spans
+  // no integer count tiles, and 0.25 / 0.15 is 1.67.
+  //
+  // A drawer front: 130-270 mm, nominal 200, so the Library's 600 mm pedestal draws three.
+  'drawer-unit': { min: 0.13, nominal: 0.2, max: 0.27 },
+  // One cubby cell, in BOTH directions — rows up the height, columns across the width —
+  // so the Library's 800 x 800 draws a two-by-two grid.
+  'open-shelf': { min: 0.22, nominal: 0.38, max: 0.45 },
+  // A cabinet door: 300-600 mm, nominal 420, so the 800 mm preset draws a pair.
+  'door-cabinet': { min: 0.3, nominal: 0.42, max: 0.6 },
+  // A slat's pitch (slat plus gap): 45-90 mm, nominal 65.
+  'slat-panel': { min: 0.045, nominal: 0.065, max: 0.09 },
 };
 
 /** How many modules tile `span` metres, preferring a module near `nominal` and
@@ -2063,6 +2104,8 @@ const DECOR_CATEGORIES = new Set<Category>(['table', 'desk', 'nightstand', 'shel
 export function supportsDecor(category: Category, shape: Shape): boolean {
   if (shape === 'shoe-rack') return false; // angled tiers, no flat top
   if (shape === 'clothes-rack') return false; // a pipe, no top at all
+  if (shape === 'seat-pad') return false; // a cushion on a bench or a cabinet, not a shelf
+  if (shape === 'made') return false; // its tops are its blocks', and the decor roll cannot see them
   return DECOR_CATEGORIES.has(category);
 }
 
@@ -2337,6 +2380,16 @@ export const PART_LIBRARY: LibraryItem[] = [
   // and it would have read "Door · Doors & windows" — the echo the header lost.
   { label: 'Door', group: 'Openings', category: 'door', shape: 'door', dimMM: [900, 50, 2100] },
   { label: 'Window', group: 'Openings', category: 'other', shape: 'window', dimMM: [1200, 60, 1200] },
+  // Blocks — pieces a person builds a workspace or a run of storage from, each with its own
+  // option or two (`blockStyle`). None of them is something a photograph can name: they are
+  // in `BLOCK_SHAPES`, not `CATALOG_SHAPES_ORDERED`, so the detector's vocabulary is untouched.
+  { label: 'Worktop', group: 'Blocks', category: 'desk', shape: 'worktop', dimMM: [1200, 600, 750] },
+  { label: 'Screen', group: 'Blocks', category: 'other', shape: 'screen', dimMM: [1200, 30, 1100] },
+  { label: 'Drawer unit', group: 'Blocks', category: 'shelf', shape: 'drawer-unit', dimMM: [400, 500, 600] },
+  { label: 'Open shelf', group: 'Blocks', category: 'shelf', shape: 'open-shelf', dimMM: [800, 350, 800] },
+  { label: 'Door cabinet', group: 'Blocks', category: 'shelf', shape: 'door-cabinet', dimMM: [800, 450, 850] },
+  { label: 'Slat panel', group: 'Blocks', category: 'other', shape: 'slat-panel', dimMM: [1200, 40, 2000] },
+  { label: 'Seat pad', group: 'Blocks', category: 'ottoman', shape: 'seat-pad', dimMM: [1200, 450, 60] },
 ];
 
 /** The Library's ceiling light, which the starter dressing seeds and `migrateRetiredPart`
@@ -2361,7 +2414,9 @@ const SHELF_BY_SHAPE = new Map<Shape, string>(PART_LIBRARY.map((r) => [r.shape, 
 const SHELF_BY_CATEGORY = new Map<Category, string>(
   // `other` is the catch-all, not a kind: the Library's one `other` is the window, and
   // a scanned box of unknown kind is not a window.
-  PART_LIBRARY.filter((r) => r.category !== 'other').map((r) => [r.category, r.group]),
+  // …and `Blocks` is not a category's shelf either: a scanned shelf or desk is not a
+  // building block, and a block shares its category with the piece a scan WOULD make.
+  PART_LIBRARY.filter((r) => r.category !== 'other' && r.group !== 'Blocks').map((r) => [r.category, r.group]),
 );
 export function libraryShelf(shape: Shape, category: Category): string | null {
   return SHELF_BY_SHAPE.get(shape) ?? SHELF_BY_CATEGORY.get(category) ?? null;
@@ -2500,6 +2555,17 @@ export const CATALOG_SHAPES_ORDERED: readonly Shape[] = [
 ] as const;
 
 const CATALOG_SHAPES = new Set<Shape>(CATALOG_SHAPES_ORDERED);
+
+/** Every shape a person can ADD from the Library: the detector's vocabulary plus the
+ *  building blocks.
+ *
+ *  `CATALOG_SHAPES_ORDERED` is what a photograph may be called — the cloud prompt
+ *  interpolates it and `refineShape` must land inside it — so the seven blocks are
+ *  deliberately NOT in it: nothing a camera sees is a "worktop" or a "slat panel", and
+ *  offering them to a detector would invite one to name a bookshelf a door cabinet. The
+ *  contract's add-path clauses (`tests/shape-contract.test.ts`) sweep THIS list, so a block
+ *  is held to every rule a catalogue shape is; only the detection clauses read the other. */
+export const ADD_PATH_SHAPES: readonly Shape[] = [...CATALOG_SHAPES_ORDERED, ...BLOCK_SHAPES];
 
 /** The words for an open clothes rail, read under both categories a detector might file
  *  one under. `rack` and `rail` only with a clothes word in front, because a bare "rack"
@@ -3773,6 +3839,9 @@ export function collidesAt(
     // as touching, not colliding.
     const theirs = footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape);
     if (!footOverlap(me, theirs, -TOUCH_M)) continue;
+    // Building blocks join (`blocksJoin`) — judged at the CANDIDATE placement, so a block
+    // dragged mostly inside another is refused like any other crash.
+    if (blocksJoin({ shape: mover.shape, pos, rot, dimMM, circle: mover.circle }, o)) continue;
     // A seat pushed under the surface it tucks under, not yet past the room report's
     // tucked bar, is composition rather than a crash — the report's rule 2 asks the
     // same predicate against the same share, so the pair the drag lets through is the

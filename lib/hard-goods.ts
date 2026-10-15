@@ -87,7 +87,7 @@ export type HardPart =
 /** A box from its extents rather than its centre and size — every form here is reasoned
  *  about edge by edge (this face sits on that one), and writing centres would put the
  *  arithmetic of each edge into a half-size nobody reads. */
-function slab(key: string, tone: HardTone, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): HardPart {
+export function slab(key: string, tone: HardTone, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): HardPart {
   return {
     kind: 'box',
     key,
