@@ -34,13 +34,18 @@ export function DemoBanner() {
   useEffect(() => {
     if (!roomId) return;
     setDismissed(localStorage.getItem(`danmu-demo-dismissed-${roomId}`) === '1');
+    // `live` drops a read that lands after the room changed or this unmounted.
+    let live = true;
     (async () => {
       const room = await roomStore.loadRoom(roomId);
       const caps = await roomStore.loadCaptures(roomId);
       const hasDetections = !!(room?.detectedObjects && room.detectedObjects.length > 0);
       const hasCaptures = caps.length > 0;
-      setDemo(!hasDetections && !hasCaptures);
+      if (live) setDemo(!hasDetections && !hasCaptures);
     })();
+    return () => {
+      live = false;
+    };
   }, [roomId]);
 
   // Persist the dismissal so it stays gone across tab switches and reloads.
