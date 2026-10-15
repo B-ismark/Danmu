@@ -1,7 +1,7 @@
 # Shape icon sources
 
 `shape-glyphs.ts` copies drawings from four open icon sets, named per row in that file.
-Twelve rows are drawn for Danmu and owe nothing. The licences below cover the rest.
+Twenty rows are drawn for Danmu and owe nothing. The licences below cover the rest.
 
 ## Hugeicons — MIT
 

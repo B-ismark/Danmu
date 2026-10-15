@@ -23,6 +23,7 @@ import { canCollideWith, collidesAt, type ScenePart } from './scene-spec';
 import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
 import { aabbExtents, edgeProjection, footFromPart, footIsBox, frontVector, nearestEdge, TOUCH_M, yawOf, type Poly } from './geometry';
 import { tuckedAt, tuckProfile } from './layout-rules';
+import { bothBlocks } from './block-style';
 import { SAME_TURN, snapAhead, snapToNeighbors, turnBetween, type SnapLine } from './item-snap';
 import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
@@ -212,6 +213,9 @@ function pressObstacle(
   const past = footFromPart([from[0] + (to[0] - from[0]) * k, y, from[1] + (to[1] - from[1]) * k], rot, dim, part.circle, part.shape);
   const mine = tuckProfile({ ...part, dimMM: dim });
   return (o) =>
+    // Blocks are pressed together, not stopped at touch: whether they joined or nested is
+    // the placement's question (`collidesAt`), not the press's.
+    !bothBlocks(part, o) &&
     footIsBox(o.rot, o.dimMM, o.circle, o.shape) &&
     inTheWay(o) &&
     !tuckedAt(mine, past, tuckProfile(o), footFromPart(o.pos, o.rot, o.dimMM, o.circle, o.shape));

@@ -2095,6 +2095,57 @@ detector reporting a sofa as an armchair. Adding one means re-exporting the grap
 and re-pinning `MODEL_DIGESTS`. The cloud path has no such limit: its prompt
 interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
 
+**Building blocks — shapes a photograph never produces.** Seven Library pieces (group
+`Blocks`: worktop, screen, drawer unit, open shelf, door cabinet, slat panel, seat pad) are
+assembled by a person, not found by a detector. They are the contract's one sanctioned
+exemption from the detection half: they are in `BLOCK_SHAPES` (`lib/block-style.ts`) and in
+`ADD_PATH_SHAPES`, and **not** in `CATALOG_SHAPES_ORDERED`, which the cloud prompt
+interpolates and `refineShape` must land inside. Every add-path clause of
+`tests/shape-contract.test.ts` sweeps `ADD_PATH_SHAPES`; the detection clause asserts no
+block is nameable. Their geometry is `lib/block-forms.ts` (pure, swept in
+`tests/block-forms.test.ts`); six are parametric, four tile off `MODULE_RANGE` (rows
+satisfy `max >= 2 * min`, so the brief's round 0.15-0.25 became 0.13-0.27 for drawers).
+Options are the one optional `ScenePart.blockStyle` (`BlockStyle`), resolved by
+`blockStyleFor` (defaults live there only), carried by the scene file with per-key
+validation and a `dropped` report, and edited in the Inspector's **Style** section.
+Roles: `worktop` is a `desk`, `open-shelf` a `bookshelf`, drawer unit and door cabinet are
+the new `cabinet` (front access, route-forming), screen and slat panel the new `partition`
+(an obstacle with no access zone), and the seat pad is `other` on purpose (a cushion, not an
+obstacle; the `ottoman` role would drag it to a sofa). Two blocks that JOIN do not clash:
+`blocksJoin` (`lib/block-style.ts`) is the one predicate the drag (`collidesAt`, at the
+candidate placement), the room report (`clearance.ts` rule 2), the solver's overlap term (at
+the search's placement) and a duplicate's landing spot all skip on, so a worktop laid over
+drawer units is a build, not an overlap — and a sofa against a worktop still is one. A join
+is not a NEST: a block whose body is at least `NESTED_SHARE` inside another's (a drawer unit
+dropped into a cabinet, two cabinets on one spot) is a crash like any other. A block's body
+is its box, except a worktop's, which is its slab (`blockBody`) — the drawer units under it
+stand in the air it leaves. The same fact drives the access zones: a block standing clear
+above another's top (`blockClearsAbove`) does not block that one's fronts, in the report or
+the solver, so pedestals under a desk open freely (`tests/blocks-join.test.ts`). Known limit:
+the tuck rule knows a worktop's slab but not its legs or panels.
+
+**Made pieces — blocks saved as one.** Select two or more floor pieces (or a group) and the
+selection header offers **Save as piece**; a made piece offers **Take apart** and **Save**.
+A made piece is one `ScenePart` with shape `made` and `made: MadeSpec` — its blocks in its
+own frame (`lib/made-piece.ts`: `packMade` / `explodeMade` / `layoutMade`). It moves,
+rotates and collides as one; resizing redraws each block at its own size (never a mesh
+scale), and a **modular** piece repeats its unit when widened instead of stretching, with
+the stored width snapped to whole modules by `fitPartDims` at every write site (Inspector,
+drag commit, file read) — rounding down where a whole copy more would pass the `made`
+range. Every axis is also bounded by the blocks' own ranges (`fitMadeDims`), so no block
+is drawn, or taken apart into, a size `clampDims` would refuse. A made piece stands on the
+floor (`seeksSurface` is false for it, though `other` is tabletop-prone), and **Save** on
+one saves what the room shows — its colour and size overrides — not the authored spec
+(`madeSpecAsShown`). Packing and taking apart are swaps in one store update
+(`lib/made-actions.ts`), so Undo is one step; riders follow the piece, and blocks come
+back as one group. Saved pieces live under `piece:<id>` in IndexedDB (`piecesStore`),
+outside every room, and appear as **My pieces** at the top of the catalog's Library,
+filtered by the same search box, click to add (no drag: the click path takes a spec
+`readMadeSpec` has already checked). A room file carries a made piece's blocks, read
+through `readMadeSpec` like any other hint — which refuses what packing would (a nested
+`made`, anything not floor-anchored) and counts it in `dropped`; a piece with no readable
+blocks opens as a box clamped to a box's limits. It does not carry the shelf (§ 56).
+
 ### Set-dressing & decor — `Dressing.tsx`
 - Decor is **off by default** (`useStudio.dressed` starts `false`; a stored `true` from
   before the default changed is rewritten once, `STUDIO_PREFS_VERSION`). **Decor** is a

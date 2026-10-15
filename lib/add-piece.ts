@@ -37,6 +37,7 @@ import { useSettings, useStudio } from './store';
 import { describeSpaceRefusal, refuseNewForSpace } from './space-bound';
 import { formatDim } from './units';
 import { placeArrival } from './duplicate-place';
+import type { MadeSpec } from './made-piece';
 import { isRoundPart, openSpotForNewPart, placeNewPart, type Category, type ScenePart, type Shape } from './scene-spec';
 
 /** What every trigger has: what the piece is, and what to call it. The Library's own
@@ -46,6 +47,8 @@ export type NewPiece = {
   category: Category;
   shape: Shape;
   dimMM: [number, number, number];
+  /** The blocks of a piece from My pieces. Only meaningful with `shape: 'made'`. */
+  made?: MadeSpec;
 };
 
 export type AddPieceOptions = {
@@ -114,6 +117,7 @@ export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: Ad
     dimMM: item.dimMM,
     locked: false,
     wallMounted,
+    ...(item.made && item.shape === 'made' ? { made: item.made } : {}),
   });
   // RECORD THE EDGE, and this is the half a review found missing rather than the
   // placement itself. `pos[1]` here came off `currentRoomScene()` — resolved parts

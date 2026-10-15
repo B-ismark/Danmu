@@ -234,6 +234,18 @@ const BY_SHAPE: Record<Shape, string> = {
   'chest-freezer': '#EDEDEA',
   'tv-console': '#8A6B44',
   stool: '#8A5A2B',
+  // building blocks — warm timber and soft cloth, the tones the rest of the casework wears.
+  // The aluminium, the glass and the lock are `DETAIL`'s, not these: a recolour reaches the
+  // body and the hardware keeps its own metal.
+  worktop: '#B58B5A',
+  screen: '#B9B3A3',
+  'drawer-unit': '#9A7848',
+  'open-shelf': '#C9A877',
+  'door-cabinet': '#8A6B44',
+  'slat-panel': '#A8825A',
+  'seat-pad': '#8F9A82',
+  // A made piece's blocks carry their own tones; this is only the swatch it starts from.
+  made: '#B58B5A',
   // generic primitives — resolved by category instead (see defaultBodyColor)
   box: '#C9A98E',
   cylinder: '#C9A98E',

@@ -30,7 +30,7 @@ describe('the Inspector with nothing selected', () => {
     expect(screen.getByText('Click a piece to style it')).toBeTruthy();
     expect([...container.querySelectorAll('p')].map((p) => p.textContent)).toEqual([
       'Click a piece to style it',
-      'Or press Add to bring something in from the Library.',
+      'Or press A to bring something in from the Library.',
     ]);
     expect(container.querySelectorAll('h1, h3, dl, section')).toHaveLength(0);
     // An emptied room differs from its start, so Start over is owed here too.
@@ -45,6 +45,8 @@ describe('the Inspector with nothing selected', () => {
     try {
       render(<Inspector />);
       expect(screen.getByText('Tap a piece to style it')).toBeTruthy();
+      expect(screen.queryByText(/press A/)).toBeNull();
+      expect(screen.getByText('Or use Add to bring something in from the Library.')).toBeTruthy();
     } finally {
       restore();
     }

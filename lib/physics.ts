@@ -55,6 +55,22 @@ const ANCHOR_BY_SHAPE: Partial<Record<Shape, Anchor>> = {
   // to the moment two shapes in one category belong in different places.
   'fan-standing': 'floor',
   'lamp-ceiling': 'ceiling',
+  // The building blocks stand on the floor, and each row is a decision rather than a
+  // restatement: `worktop` and `seat-pad` would inherit `floor` from `desk` / `ottoman`,
+  // but `screen` and `slat-panel` are filed under the `other` catch-all, and a future
+  // change to a category's anchor must not move a piece that was meant to stand. A slat
+  // panel is a floor piece that MAY stand against a wall (a headboard) — floor, not
+  // `wall-*`: it is not hung, it is not cut into the plaster, and a wall rider would be
+  // re-grounded to a height.
+  worktop: 'floor',
+  screen: 'floor',
+  'drawer-unit': 'floor',
+  'open-shelf': 'floor',
+  'door-cabinet': 'floor',
+  'slat-panel': 'floor',
+  'seat-pad': 'floor',
+  // A made piece is packed from its lowest point (`packMade`), so it stands.
+  made: 'floor',
   curtain: 'wall-high',
   tv: 'wall-mid',
   mirror: 'wall-mid',
@@ -798,7 +814,10 @@ export const SURFACE_PIECE_MAX_MM = 1000;
  *  over a top it does not fit under goes on it, which is § H.6.4's decision and
  *  `tests/seat-support.test.ts` holds it. */
 export function seeksSurface(category: Category, shape: Shape, dimMM: readonly [number, number, number]): boolean {
-  if (!isTabletopProne(category) || shape === 'lamp-floor') return false;
+  // A made piece is filed under `other` because it is whatever its maker built, not
+  // because it is an ornament: it stands on the floor like the blocks it is made of, and
+  // a bench added over a desk must not be stood on the desk like a lamp.
+  if (!isTabletopProne(category) || shape === 'lamp-floor' || shape === 'made') return false;
   return dimMM[2] <= SURFACE_PIECE_MAX_MM;
 }
 

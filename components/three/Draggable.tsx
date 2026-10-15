@@ -77,6 +77,7 @@ import { Highlight } from './Highlight';
 import { Wobble } from './Wobble';
 import { isStroke } from './strokes';
 import { playSound } from '@/lib/sound';
+import { fitPartDims } from '@/lib/made-piece';
 
 // Touch pick-up: dwell time, and how far the finger may drift while dwelling
 // before we decide it is a camera gesture and let go.
@@ -691,7 +692,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // at its size, by a gesture that never touched a size. Same reason
     // `ConvoyMove.rot` is optional, one field over.
     const heldDim = resolvePart(part, useStudio.getState()).dimMM;
-    if (dim[0] !== heldDim[0] || dim[1] !== heldDim[1] || dim[2] !== heldDim[2]) setDim(partId, dim);
+    // A modular made piece keeps whole copies (`fitPartDims`), so the size it is stored
+    // at is the size it is drawn at.
+    const keptDim = fitPartDims(part, dim);
+    if (keptDim[0] !== heldDim[0] || keptDim[1] !== heldDim[1] || keptDim[2] !== heldDim[2]) setDim(partId, keptDim);
 
     // Rigid parenting: dropping ON something IS what creates the relationship;
     // dropping onto the floor (or a refused cycle) breaks it. Established/

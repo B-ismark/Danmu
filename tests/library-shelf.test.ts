@@ -31,7 +31,10 @@ describe('libraryShelf', () => {
     // last. Decide which shelf it is, here, before adding one.
     const shelves = new Map<string, Set<string>>();
     for (const r of PART_LIBRARY) {
-      if (r.category !== 'other') shelves.set(r.category, (shelves.get(r.category) ?? new Set()).add(r.group));
+      // `Blocks` is the one shelf a category may share: the building blocks are filed under
+      // the category of the piece a scan WOULD make (a drawer unit is a `shelf`), and
+      // `libraryShelf` leaves that shelf out of the category fallback on purpose.
+      if (r.category !== 'other' && r.group !== 'Blocks') shelves.set(r.category, (shelves.get(r.category) ?? new Set()).add(r.group));
     }
     expect([...shelves].filter(([, g]) => g.size > 1).map(([c, g]) => `${c}: ${[...g].join(', ')}`)).toEqual([]);
   });
@@ -41,6 +44,16 @@ describe('libraryShelf', () => {
     // starter room's bed does. An old room's `closet` is a wardrobe.
     expect(libraryShelf('bed-single', 'bed')).toBe('Bedroom');
     expect(libraryShelf('closet', 'wardrobe')).toBe('Storage');
+  });
+
+  it('never files a scanned piece under Blocks, though a block shares its category', () => {
+    // A scanned shelf, desk or footstool is not a building block; only the shape itself is.
+    expect(libraryShelf('drawer-unit', 'shelf')).toBe('Blocks');
+    expect(libraryShelf('worktop', 'desk')).toBe('Blocks');
+    expect(libraryShelf('seat-pad', 'ottoman')).toBe('Blocks');
+    expect(libraryShelf('shoe-rack', 'shelf')).toBe('Storage');
+    expect(libraryShelf('desk-l', 'desk')).toBe('Tables');
+    expect(libraryShelf('ottoman', 'ottoman')).toBe('Seating');
   });
 
   it('answers null where the category is the catch-all', () => {

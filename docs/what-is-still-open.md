@@ -10796,3 +10796,22 @@ holding each half (every rule mutated, all four mutants killed):
    so it said nothing about a ceiling or wall piece, and a wall piece snapped from it went
    to the **nearest** wall: a lamp against the east wall in a photo of the north wall,
    renamed "Painting", was hung on the east wall. The test asserts the north wall.
+
+## § 56 · A room file does not carry the sender's "My pieces" shelf — DECIDED FOR NOW 2026-10-14, revisit
+
+**Decision (user, 2026-10-14):** a room file (`lib/scene-file.ts`) carries the made
+pieces that are *placed in that room* — each one is a part with its blocks inline, so
+the person who opens it sees exactly what was built — but it does **not** carry the
+sender's shelf of saved pieces (`piecesStore` in `lib/storage.ts`, keys `piece:<id>`).
+Opening a friend's room therefore never adds anything to your own Library.
+
+**What is unknown:** whether people sharing rooms want to hand over a *kit* — "here are
+the four desk modules I use" — rather than a room. Nobody has asked yet.
+
+**What would unblock it:** a real request for it. Two shapes it could take, neither built:
+an optional `pieces` array in the file that the import screen offers ("Add 3 pieces to
+your Library?"), or a separate piece file. Either goes through `readMadeSpec`, which
+already treats a saved piece as a hint with a filename.
+
+**Exists in a commit:** the decision and this note only; nothing writes or reads a shelf
+from a file.

@@ -45,14 +45,16 @@ beforeEach(() => {
 });
 
 /** The rail's trigger, found by the accessible name a user would look for rather than
- *  by a test id. `AddPiecesButton` labels itself "Add", named "Add a piece to the
- *  room" (and "Close the Library" once open); `CatalogToggle` on the canvas is the 3D tab's and is not on this page. */
+ *  by a test id. `AddPiecesButton` labels itself "Add", named "Add from the Library"
+ *  (and "Close the Library" once open). The plan tab's canvas `CatalogToggle` carries
+ *  the same names; it is `library-add-discoverable.test.tsx`'s, so this picks the
+ *  rail's by its `rail-cta` class. */
 function addButton(): HTMLElement {
   // Once open it shares "Close the Library" with the panel's own X — both close it —
   // so the trigger is the one that reports open/shut.
   const found = screen
-    .getAllByRole('button', { name: /^(Add a piece to the room|Close the Library)$/ })
-    .filter((b) => b.hasAttribute('aria-expanded'));
+    .getAllByRole('button', { name: /^(Add from the Library|Close the Library)$/ })
+    .filter((b) => b.hasAttribute('aria-expanded') && b.classList.contains('rail-cta'));
   expect(found).toHaveLength(1);
   return found[0];
 }
@@ -86,12 +88,12 @@ describe('the Library opens when a signpost is pressed', () => {
     render(<PlanPage />);
     fireEvent.click(addButton());
     expect(screen.getByText('Library')).toBeTruthy();
-    // Named for what a press does now: its tooltip used to promise "Add a piece to the
-    // room" over a button reading "Close".
+    // Named for what a press does now: its tooltip used to promise "Add from the Library" over a button
+    // reading "Close".
     expect(addButton().getAttribute('aria-label')).toBe('Close the Library');
     fireEvent.click(addButton());
     expect(screen.queryByText('Library')).toBeNull();
-    expect(addButton().getAttribute('aria-label')).toBe('Add a piece to the room');
+    expect(addButton().getAttribute('aria-label')).toBe('Add from the Library');
   });
 
   it('closes on the panel’s own X, which names what it closes', () => {

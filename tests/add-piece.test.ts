@@ -457,3 +457,23 @@ describe('a chair dropped square under a table stays tucked', () => {
     expect(out.note).toMatch(/taken/);
   });
 });
+
+describe('a saved piece from My pieces', () => {
+  const spec = {
+    sizeMM: [1400, 700, 740] as [number, number, number],
+    blocks: [{ shape: 'worktop' as const, category: 'desk' as const, pos: [0, 0, 0] as [number, number, number], rot: 0, dimMM: [1400, 700, 740] as [number, number, number] }],
+  };
+
+  it('arrives carrying its blocks, as one piece', () => {
+    const id = addPieceToRoom({ label: 'Bench', category: 'other', shape: 'made', dimMM: spec.sizeMM, made: spec });
+    const part = useScene.getState().parts.find((p) => p.id === id)!;
+    expect(part.shape).toBe('made');
+    expect(part.made).toEqual(spec);
+    expect(part.dimMM).toEqual([1400, 700, 740]);
+  });
+
+  it('does not hang a block list on any other shape', () => {
+    const id = addPieceToRoom({ ...LAMP, made: spec });
+    expect(useScene.getState().parts.find((p) => p.id === id)!.made).toBeUndefined();
+  });
+});

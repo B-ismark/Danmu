@@ -55,6 +55,8 @@ import {
   migrateRetiredPart,
   retiredShapeFor,
 } from './scene-spec';
+import { fitMadeDims, readMadeSpec } from './made-piece';
+import { BLOCK_BANDS, BLOCK_ENDS, blockStyleKeys, readBlockOption, type BlockStyle, type BlockStyleKey } from './block-style';
 import { clampDims, roomAxisRange, ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import { anchorFor, heightForNewCeiling } from './physics';
 import { resolveScene, riderRelation } from './rider-height';
@@ -706,7 +708,82 @@ function readPart(
   const light = readLight(v.light);
   if (light) part.light = light;
 
+  const blockStyle = readBlockStyle(v.blockStyle, shape, part.name, dropped);
+  if (blockStyle) part.blockStyle = blockStyle;
+
+  // A made piece's blocks are read like the parts around them — every block's shape,
+  // category, size and colour checked by `readMadeSpec` — and a field on any other
+  // shape is ignored. A made piece whose blocks are all unreadable is kept, as the plain
+  // box of its size, and said so: the room still has something where it stood.
+  if (shape === 'made') {
+    const made = readMadeSpec(v.made);
+    if (made) {
+      part.made = made.spec;
+      // The size a made piece is DRAWN at, not merely one inside the `made` range: a
+      // modular width snaps to whole copies and every axis stays where its blocks can
+      // follow, so the size fields never describe a different object than the room shows.
+      part.dimMM = fitMadeDims(made.spec, part.dimMM);
+      if (made.dropped > 0) {
+        dropped.push(
+          `“${part.name}” had ${made.dropped} ${made.dropped === 1 ? 'block' : 'blocks'} this app could not read, so ${made.dropped === 1 ? 'it was' : 'they were'} left out`,
+        );
+      }
+    } else {
+      part.shape = 'box';
+      // A box has its own limits, and the `made` range this size was clamped against is
+      // far wider — so clamp again, or a 9 m piece opens as a 9 m box.
+      part.dimMM = clampDims(part.category, 'box', part.dimMM);
+      dropped.push(`“${part.name}” had no blocks this app could read, so it opens as a plain box of its size`);
+    }
+  }
+
   return { part, originalId };
+}
+
+/** What each block option may be, in the words a person reads in a note. */
+const BLOCK_OPTION_WORDS: Record<BlockStyleKey, string> = {
+  ends: BLOCK_ENDS.join(', '),
+  band: BLOCK_BANDS.join(', '),
+  lock: 'true or false',
+  back: 'true or false',
+  plinth: 'true or false',
+  backing: 'true or false',
+};
+
+/** A block's options, each checked against its own vocabulary (`readBlockOption`, the one
+ *  validator `blockStyleFor` also asks) and against the options the SHAPE has.
+ *
+ *  Lossy and never silent, like everything here: a value outside its vocabulary, a key the
+ *  shape does not have, and options on a piece that is no block are each dropped and named,
+ *  and the piece falls back to the shape's default for that option. Returns null when
+ *  nothing legal survives, so a part with no usable options stores none. */
+function readBlockStyle(v: unknown, shape: Shape, name: string, dropped: string[]): BlockStyle | null {
+  if (v === undefined) return null;
+  if (!isObj(v)) {
+    dropped.push(`“${name}” gave block options that are not a set of choices, so its defaults are used`);
+    return null;
+  }
+  const keys = blockStyleKeys(shape);
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(v)) {
+    if (!(keys as readonly string[]).includes(key)) {
+      dropped.push(
+        keys.length === 0
+          ? `“${name}” carried the option “${key}”, which this piece does not have, so it was ignored`
+          : `“${name}” carried the option “${key}”, which it does not have, so it was ignored`,
+      );
+      continue;
+    }
+    const ok = readBlockOption(key as BlockStyleKey, value);
+    if (ok === undefined) {
+      dropped.push(
+        `“${name}” gave “${key}” as ${JSON.stringify(value) ?? 'nothing'}, which is not ${BLOCK_OPTION_WORDS[key as BlockStyleKey]}; its default is used`,
+      );
+      continue;
+    }
+    out[key] = ok;
+  }
+  return Object.keys(out).length > 0 ? (out as BlockStyle) : null;
 }
 
 function readDecor(v: unknown): DecorItem[] | null {
