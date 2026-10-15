@@ -65,9 +65,14 @@ export default function PlanPage() {
 
   useEffect(() => {
     if (!roomId) return;
+    // `live` drops a read that lands after the room changed or this unmounted.
+    let live = true;
     roomStore.loadRoom(roomId).then((r) => {
-      if (r?.name) setRoomName(r.name);
+      if (live && r?.name) setRoomName(r.name);
     });
+    return () => {
+      live = false;
+    };
   }, [roomId]);
 
   const onViewChange = useCallback((v: { zoom: number; rot: number; hasCutOff: boolean }) => setView(v), []);

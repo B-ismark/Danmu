@@ -25,17 +25,24 @@ export function RoomSwitcher() {
 
   useEffect(() => {
     if (!open) return;
+    // `live` drops a list that lands after the menu closed or this unmounted.
+    let live = true;
     roomStore
       .listRooms()
       .then((rs) => {
+        if (!live) return;
         setRooms(rs);
         setUnreadable(false);
       })
       // Not "No rooms yet", which would be false, and not a spinner forever.
       .catch(() => {
+        if (!live) return;
         setRooms([]);
         setUnreadable(true);
       });
+    return () => {
+      live = false;
+    };
   }, [open]);
 
   useEffect(() => {
