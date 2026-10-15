@@ -95,7 +95,8 @@ export function stackedViewport(): () => void {
  *
  *  Pass the room id and which studio tab the page believes it is on; pass `null` for a
  *  route with no `roomId` (the rooms page), where `useParams` must answer `{}` rather
- *  than a room that does not exist.
+ *  than a room that does not exist. Pass a function instead when the test moves the
+ *  page from one room to another; it is read on every render.
  *
  *  The tab is an explicit argument rather than something derived from the id, and that
  *  is the one thing here worth defending: `usePathname` is the only difference between
@@ -110,13 +111,24 @@ export function stackedViewport(): () => void {
  *  name a tab it is not on. */
 export type RouterMock = { push: (href: string) => void; replace: (href: string) => void; back: () => void; prefetch: (href: string) => void };
 type Tab = 'plan' | 'model';
-export function navigationMock(roomId: string | null, opts: Tab | { tab?: Tab; router?: RouterMock } = 'plan') {
+export function navigationMock(
+  room: string | null | (() => string | null),
+  opts: Tab | { tab?: Tab; router?: RouterMock } = 'plan',
+) {
   const { tab = 'plan', router } = typeof opts === 'string' ? { tab: opts } : opts;
-  const pathname = roomId === null ? '/' : `/room/${roomId}/${tab}`;
+  // A function is read on every render, for a test about moving from one room to the
+  // next; a string is the room for the whole file, which is every other test.
+  const roomId = typeof room === 'function' ? room : () => room;
   const quiet: RouterMock = { push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} };
   return {
-    useParams: () => (roomId === null ? {} : { roomId }),
-    usePathname: () => pathname,
+    useParams: () => {
+      const id = roomId();
+      return id === null ? {} : { roomId: id };
+    },
+    usePathname: () => {
+      const id = roomId();
+      return id === null ? '/' : `/room/${id}/${tab}`;
+    },
     useRouter: () => router ?? quiet,
     useSearchParams: () => new URLSearchParams(),
   };
