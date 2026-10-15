@@ -33,11 +33,16 @@ export function TopBar({
     if (!roomId) return;
     // A room that is not there, or storage that cannot be read, still gets a name
     // to show: "Room", the Export menu's fallback too, rather than a loading gap
-    // that never fills.
+    // that never fills. `live` drops an answer that arrives after the bar moved to
+    // another room or went away, so a slow read cannot name this room after the last.
+    let live = true;
     roomStore
       .loadRoom(roomId)
-      .then((r) => setName(r?.name ?? 'Room'))
-      .catch(() => setName('Room'));
+      .then((r) => live && setName(r?.name ?? 'Room'))
+      .catch(() => live && setName('Room'));
+    return () => {
+      live = false;
+    };
   }, [roomId]);
 
   useEffect(() => () => {
