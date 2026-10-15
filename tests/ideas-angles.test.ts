@@ -11,7 +11,7 @@ import {
   snapYaws,
   solveLayout,
 } from '@/lib/layout-solve';
-import { isCleanShuffle, shuffleBlockers, shuffleRoom } from '@/lib/layout-shuffle';
+import { isCleanShuffle, lockedForShuffle, shuffleBlockers, shuffleRoom } from '@/lib/layout-shuffle';
 import { mayAngle, roleOf, type Role } from '@/lib/layout-rules';
 import { DEFAULT_WEIGHTS, prepare, type LayoutContext, type Placement } from '@/lib/layout-score';
 import { defaultScene, type ScenePart } from '@/lib/scene-spec';
@@ -213,5 +213,39 @@ describe('the refusal names only what the search could have moved', () => {
     expect(shuffleBlockers([door])).toHaveLength(1);
     expect(shuffleBlockers([door], new Set(['door-1', 'chair-1']))).toHaveLength(0);
     expect(shuffleBlockers([door], new Set(['door-1']))).toHaveLength(1);
+  });
+});
+
+// Reported 2026-10-15 on a real scanned bedroom: Ideas said "Nothing here can move"
+// because every floor piece carried `locked: true`, which means "from your photo".
+// This is that room's outline and floor pieces, from the user's own room file.
+describe('a room built from photos still gets ideas', () => {
+  const footprint: [number, number][] = [
+    [-3, -2.191], [2.627, -2.191], [2.627, -0.185], [1.917, -0.185], [1.917, 1.56], [-3, 1.56],
+  ];
+  const scanned: ScenePart[] = [
+    part({ id: 'desk', category: 'desk', shape: 'desk-standard', pos: [-0.048, 0, -1.84], dimMM: [1400, 700, 750], groupId: 'g' }),
+    part({ id: 'chair', category: 'chair', shape: 'chair-office', pos: [-0.048, 0, -1.42], rot: Math.PI, dimMM: [600, 600, 1100], groupId: 'g' }),
+    part({ id: 'wardrobe', category: 'wardrobe', shape: 'wardrobe', pos: [-1.87, 0, -1.79], dimMM: [1800, 600, 2200] }),
+    part({ id: 'fridge', category: 'fridge', shape: 'fridge', pos: [1.595, 0, 0.351], rot: -Math.PI / 2, dimMM: [600, 500, 800] }),
+    part({ id: 'shoes', category: 'shelf', shape: 'shoe-rack', pos: [2.31, 0, -1.26], rot: -Math.PI / 2, dimMM: [800, 300, 900] }),
+    part({ id: 'rail', category: 'wardrobe', shape: 'clothes-rack', pos: [1.02, 0, 1.23], rot: Math.PI, dimMM: [1200, 450, 1600] }),
+    part({ id: 'bed', category: 'bed', shape: 'bed-double', pos: [-1.49, 0, 0.641], rot: Math.PI / 2, dimMM: [1520, 2000, 600] }),
+    part({ id: 'door', category: 'door', shape: 'door', pos: [1.57, 1.07, -2.146], dimMM: [900, 50, 2100], wallMounted: true }),
+  ].map((p) => ({ ...p, locked: true }));
+  const room = { footprint, height: 2.8 };
+
+  it('"from your photo" holds nothing in place; a Keep does', () => {
+    expect(lockedForShuffle(scanned, {})).toEqual(scanned.map(() => false));
+    expect(lockedForShuffle(scanned, { bed: true })).toEqual(scanned.map((p) => p.id === 'bed'));
+    expect(movableFor(scanned, lockedForShuffle(scanned, {})).filter(Boolean)).toHaveLength(7);
+  });
+
+  it('offers ideas for it', () => {
+    let ideas = 0;
+    for (let attempt = 1; attempt <= 2 && ideas === 0; attempt++) {
+      ideas += shuffleRoom(scanned, room, lockedForShuffle(scanned, {}), { attempt })?.ideas.length ?? 0;
+    }
+    expect(ideas).toBeGreaterThan(0);
   });
 });

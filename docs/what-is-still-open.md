@@ -10863,3 +10863,13 @@ Minton et al. 1992 min-conflicts; Carbonell & Goldstein 1998 maximal marginal re
 
 **Exists in a commit:** the two fixes, `tests/ideas-angles.test.ts`; the roadmap is this note only.
 
+**A third cause, found on the user's own room file (2026-10-15).** A room built by scanning gets
+`locked: true` on every detected piece, and that flag means "from your photo", not "locked"
+(`ScenePart.locked` says so). `lockedForShuffle` passed it through `lockedForSolve`, so a scanned
+L-shaped bedroom had 0 movable pieces and the gallery said "Nothing here can move", with no
+control to change it: the Keep list left photo pieces out. Ideas now hold only what the user
+kept (plus walls and groups, via `movableFor`), and photo pieces are on the Keep list. Same room:
+0 → 9 movable, 3 / 2 / 3 / 4 ideas over four presses. **Still open, a product call:** Suggest and
+the Room check's Try a fix still read the flag through `lockedForSolve`, so on a scanned room
+they move only Library pieces. Whether they should follow Ideas is the user's decision.
+

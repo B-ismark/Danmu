@@ -458,8 +458,11 @@ export function IdeasPanel({
   const range = pageRange(page, size, found);
   const plan = miniPlanBox(room.footprint);
 
-  // Pieces a person can keep or let go: everything an idea could move.
-  const keepable = base ? base.parts.filter((p) => !p.wallMounted && !p.locked) : [];
+  // Pieces a person can keep or let go: everything an idea could move. Photo pieces
+  // included — `locked` is "from your photo", which an idea does not read
+  // (`lockedForShuffle`), so leaving them out left a scanned room with no way to say
+  // which of them to keep.
+  const keepable = base ? base.parts.filter((p) => !p.wallMounted) : [];
   const kept = keepable.filter((p) => pinned[p.id]);
   const free = keepable.filter((p) => !pinned[p.id]);
 
