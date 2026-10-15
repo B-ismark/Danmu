@@ -30,9 +30,10 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      # v5 rather than v4 on both: v4 targets the Node 20 action runtime, which
+      # Never below v5 on either: v4 targets the Node 20 action runtime, which
       # GitHub is deprecating — the runner already forces those steps onto Node 24
       # and warns, so v4 is a failure with a date on it, not a working pin.
+      # Dependabot keeps both current (v7 at the time of writing).
       - uses: actions/checkout@v7
 
       # Before setup-node, which needs pnpm on PATH to resolve its cache.
@@ -62,8 +63,8 @@ jobs:
         run: pnpm test
 
       # Next's own build cache — without it every run rebuilds from cold and says
-      # so (`⚠ No build cache found`). `v5` for the same reason as the actions
-      # above: v4 targets the deprecated Node 20 runtime.
+      # so (`⚠ No build cache found`). Never below v5, for the same reason as the
+      # actions above: v4 targets the deprecated Node 20 runtime.
       #
       # The key is the lockfile plus the sources a build actually reads, NOT
       # `**/*.ts` — that pattern would hash `node_modules` too, since this runs
