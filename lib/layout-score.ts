@@ -225,7 +225,7 @@ export const RULE_HANDLING: Record<
   // found nothing. That is what this table exists to prevent — see `reach` below,
   // which was the last row to claim a capability it did not have. A rug was the
   // third exclusion until the term learned to see one (`containedBySearch`).
-  // Whether THIS sofa may move — kept in place, from the photo, merged with a piece
+  // Whether THIS sofa may move — kept in place, or merged with a piece
   // on a wall — is a question about the pieces rather than the kind, asked per row
   // for every rule in this table (`confineCanMove`), because the user's pins are not
   // anything a finding can see.

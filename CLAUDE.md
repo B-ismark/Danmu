@@ -744,6 +744,7 @@ pnpm lint         # eslint . --max-warnings 0 — flat config in eslint.config.m
 pnpm audit        # dependency advisories — see `pnpm.overrides` in package.json
 pnpm test:watch   # vitest in watch mode, same flag
 pnpm sweep:routes # minutes-long refusal-set sweep (a measurement, not a gate)
+pnpm bench:ideas  # minutes-long Ideas / Fix bench over ten rooms (a measurement, not a gate)
 pnpm vendor:ort   # copy onnxruntime-web → public/ort/ (loads same-origin, not CDN)
 pnpm hash:models  # SHA-256 digests of public/models/ for MODEL_DIGESTS
 pnpm hash:models --verify   # …and confirm the mirror serves those same bytes (~62 MB)

@@ -39,9 +39,9 @@
 import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { footprintBounds } from './footprint';
-import { snapToWall } from './physics';
+import { snapToWall, verticalExtent, wallAffinity } from './physics';
 import { distanceToFootprintEdge, ON_WALL_M, pointInFootprint } from './footprint';
-import { localToWorld, nearestEdge, obbGap } from './geometry';
+import { footFromPart, footInsidePoly, footOverlap, localToWorld, nearestEdge, obbGap, type Foot } from './geometry';
 import { cascadeTransform, ridingParents } from './rigid-parent';
 import {
   angleDelta,
@@ -61,7 +61,7 @@ import {
   type Placement,
   type ScoreWeights,
 } from './layout-score';
-import { footAt, isObstacle, relationFor, roleOf, standsInSet } from './layout-rules';
+import { footAt, isMountedObstruction, isObstacle, isSoftFurnishing, mayAngle, relationFor, roleOf, standsInSet, WALL_GAP, type Role } from './layout-rules';
 
 export type SolveOptions = {
   /** Same seed, same suggestion. */
@@ -504,6 +504,17 @@ const KEEP_EPS = 0.5;
  *  Beyond this the angle is a choice — a chair turned toward a sofa — and snapping it
  *  would be overruling the search rather than tidying after it. */
 const SNAP_TOL = 0.21; // 12°
+/** The smallest angle off square that reads as MEANT, radians — 20°. A chair turned
+ *  toward a sofa by less than this looks like it was knocked, not placed, so a piece
+ *  that may angle (`mayAngle`) is squared below it and left alone above it.
+ *
+ *  This is `SNAP_TOL` raised, for the pieces that may angle at all, and the reason it
+ *  is raised is measured: at 12°, Ideas over the six presets x three presses handed
+ *  back chairs at 14°, 17° and 23° — angles nobody chose. 20° is the edge of the
+ *  range a person reads as "slightly off"; the armchair turned toward a sofa that
+ *  interior guidelines describe is 30–45°, comfortably clear of it. A piece that may
+ *  NOT angle has no such band: it is squared from any angle (`squareYaw`). */
+export const ANGLED_MIN = 0.35; // 20°
 /** Below this a turn is not a change the app will claim it made — ~2.9°, in radians.
  *
  *  **Why the value, and why the constant exists at all:** the position epsilon had no
@@ -582,31 +593,31 @@ export function makeRng(seed: number): () => number {
   };
 }
 
-/** The `locked` array for a solve, built from the three separate reasons a piece
- *  may not move. Exported and pure because it used to be one expression inside a
- *  `.map()` in `RoomTools`, where no test could reach it — and it is the whole of
- *  whether the user's Lock button works. A lock that composes wrongly with a
- *  confined fix fails silently: the piece just moves, and the button reads as
- *  decorative.
- *
- *  The three are genuinely different questions:
+/** The `locked` array for a solve, built from the reasons a piece may not move.
+ *  Exported and pure because it used to be one expression inside a `.map()` in
+ *  `RoomTools`, where no test could reach it — and it is the whole of whether the
+ *  user's Lock button works. A lock that composes wrongly with a confined fix fails
+ *  silently: the piece just moves, and the button reads as decorative.
  *
  *  · `pinned` — the user pressed **Lock** on that row. Their answer, and it wins.
- *  · `part.locked` — **"came out of your photo"**, not a lock, whatever the field
- *    is called; see `ScenePart.locked`, whose own comment says the name is wrong.
- *    Honoured here because it always has been, and changing it changes what
- *    Suggest does to every detected room — a product decision, not a tidy-up. Left
- *    as it stands on purpose, and named here because a reader who trusts the
- *    identifier will misread the line.
  *  · `confined` — a **Try a fix** solve names the few pieces it may touch, so
  *    everything else is locked for the duration. Null for a whole-room Suggest.
+ *
+ *  **`part.locked` is deliberately NOT read.** That field means "came out of your
+ *  photo" (`ScenePart.locked` says the name is wrong), and it used to be the third
+ *  reason here, "because it always has been". Its cost was a scanned room in which
+ *  Suggest, Try a fix and Ideas could move nothing: a real L-shaped bedroom had every
+ *  floor piece from the photos and nine of nine held, while every one of them dragged
+ *  freely by hand. The user decided on 2026-10-15 that a photo piece moves like any
+ *  other; keeping one where it is is what **Lock** is for. Wall pieces and groups are
+ *  still held, by `movableFor`.
  */
 export function lockedForSolve(
   parts: ScenePart[],
   pinned: Record<string, boolean>,
   confined: Set<string> | null,
 ): boolean[] {
-  return parts.map((p) => !!pinned[p.id] || p.locked || (confined ? !confined.has(p.id) : false));
+  return parts.map((p) => !!pinned[p.id] || (confined ? !confined.has(p.id) : false));
 }
 
 /** A confine set, plus everything standing on one of its pieces, transitively.
@@ -687,7 +698,8 @@ export function withCompany(ids: Set<string>, parts: ScenePart[]): Set<string> {
   // the chairs at it, or the solve would hold them and move the table out from among
   // them. Only that way round. A chair named for its own fault is the chair's to fix,
   // and naming it does not free the table, so it moves alone, as it always did.
-  const free = parts.map((p) => !p.locked && !p.wallMounted);
+  // `locked` here is "from your photo", which holds nothing (`lockedForSolve`).
+  const free = parts.map((p) => !p.wallMounted);
   const company = new Map<string, string[]>();
   for (const [a, ...members] of formationSets(parts, free)) company.set(parts[a].id, members.map((k) => parts[k].id));
   let out = new Set(ids);
@@ -735,7 +747,7 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
  *  A Room check row asks this before it shows the button, beside the rule's
  *  `RULE_HANDLING.movable`, because the two are different questions. The rule says
  *  whether rearranging could clear a finding of that kind; this says whether THESE
- *  pieces may be rearranged — not kept in place by the user, not from the photo,
+ *  pieces may be rearranged — not kept in place by the user,
  *  not on a wall, and not merged with a piece that is any of those. The report
  *  cannot answer it: the user's pins live in the studio store, and a finding about a
  *  sofa merged with the TV on the wall was offered a button on every rule that
@@ -1162,7 +1174,14 @@ export function randomizeStart(
       x = cx;
       z = cz;
     }
-    return { x, z, yaw: rng() * Math.PI * 2 };
+    // A random quarter turn of the nearest wall, not a random angle. The scatter's
+    // job is to put each piece somewhere new; a uniform angle also started every
+    // piece crooked, and the search had to spend its budget turning them back —
+    // which it did not always finish (the 10–15° pieces Ideas used to show). A chair
+    // can still angle, by the facing and free-turn proposals that are its own.
+    const k = Math.floor(rng() * 4);
+    const square = wallSquare(footprint, { x, z, yaw: 0 });
+    return { x, z, yaw: normaliseYaw((square ?? 0) + k * (Math.PI / 2)) };
   });
   // A merged set is scattered as one body: the lead where it landed, the rest where
   // they stand relative to it in the room as given — the set put back as it stands,
@@ -1174,6 +1193,111 @@ export function randomizeStart(
     const to = out[set[0]];
     for (const k of set) out[k] = { x: parts[k].pos[0], z: parts[k].pos[2], yaw: parts[k].rot };
     carryUnit(r, out, set[0], to);
+  }
+  return out;
+}
+
+/** Clear floor kept between pieces a constructive start puts down — a walkway's worth,
+ *  so the search starts with routes rather than having to open them. */
+const START_PAD_M = 0.3;
+/** How far into the room a door's swing is kept clear of a constructive start. */
+const DOOR_KEEP_M = 0.9;
+/** Wall slots tried per piece before taking the least-crowded one. */
+const START_TRIES = 16;
+
+/** A start BUILT the way a person furnishes an empty room, rather than thrown.
+ *
+ *  `randomizeStart` scatters, and on a small or cut-up room most scatters land the bed
+ *  across the door and the wardrobe in the middle — a start the annealer then spends
+ *  its whole budget digging out of, and on `l` 4.5 x 4 and `t` 6 x 5 often did not
+ *  (§ 57 of `docs/what-is-still-open.md`). So: the biggest pieces first, each backed
+ *  onto a random stretch of wall if it is a piece that `prefers-wall`, kept a walkway
+ *  off everything already down and out of every door's swing; the rest where the
+ *  scatter put them unless that collides, in which case a few more draws. Still
+ *  random — which wall, where along it — so two seeds are two rooms; it is the ORDER
+ *  and the walls that are not. Research: the greedy constructive phase of GRASP (Feo &
+ *  Resende 1995) and the "big furniture first" heuristic of Merrell et al. 2011.
+ *
+ *  Starts from `randomizeStart`'s answer, so every piece this does not place — a rug,
+ *  a rider, a set member — is exactly where the scatter would have put it. */
+export function constructiveStart(
+  parts: ScenePart[],
+  footprint: Footprint,
+  movable: boolean[],
+  rng: () => number,
+): Placement[] {
+  const out = randomizeStart(parts, footprint, movable, rng);
+  const r = rigidSets(parts, movable);
+  const b = footprintBounds(footprint);
+  const taken: Foot[] = [];
+  parts.forEach((p, i) => {
+    if (p.category === 'door') {
+      // The door's swing, in front of it: its own width, `DOOR_KEEP_M` deep.
+      const [fx, fz] = [Math.sin(p.rot), Math.cos(p.rot)];
+      taken.push(footFromPart([p.pos[0] + fx * (DOOR_KEEP_M / 2), 0, p.pos[2] + fz * (DOOR_KEEP_M / 2)], p.rot, [p.dimMM[0], DOOR_KEEP_M * 1000, p.dimMM[2]]));
+    } else if (!movable[i] && isObstacle(p) && !p.wallMounted) {
+      taken.push(footAt(p, p.pos[0], p.pos[2], p.rot));
+    }
+  });
+  // A unit is a set (moved by its lead) or a lone piece. A rider is not an obstacle
+  // (`isObstacle` is floor pieces), so it goes with whatever the scatter did.
+  const units: number[] = [];
+  parts.forEach((p, i) => {
+    if (!movable[i] || p.wallMounted || !isObstacle(p)) return;
+    if (r.setOf[i] >= 0 && r.sets[r.setOf[i]][0] !== i) return;
+    units.push(i);
+  });
+  const area = (i: number) => unitOf(r, i).reduce((a, k) => a + (isObstacle(parts[k]) ? parts[k].dimMM[0] * parts[k].dimMM[1] : 0), 0);
+  units.sort((a, c) => area(c) - area(a) || a - c);
+  const edges = footprint.map((a, e) => {
+    const c = footprint[(e + 1) % footprint.length];
+    return { e, a, c, len: Math.hypot(c[0] - a[0], c[1] - a[1]) };
+  });
+  const perimeter = edges.reduce((a, x) => a + x.len, 0);
+  const feetOf = (trial: Placement[], i: number) =>
+    unitOf(r, i).filter((k) => isObstacle(parts[k])).map((k) => footAt(parts[k], trial[k].x, trial[k].z, trial[k].yaw));
+  const conflicts = (feet: Foot[]) => {
+    let n = 0;
+    for (const f of feet) {
+      if (!footInsidePoly(f, footprint)) n += 2;
+      for (const t of taken) if (footOverlap(f, t, START_PAD_M)) n++;
+    }
+    return n;
+  };
+  for (const i of units) {
+    const part = parts[i];
+    const wall = wallAffinity(part.category, part.shape) === 'prefers-wall';
+    let best = null as { at: Placement[]; n: number } | null;
+    const consider = (to: Placement) => {
+      const trial = out.map((x) => ({ ...x }));
+      carryUnit(r, trial, i, to);
+      const n = conflicts(feetOf(trial, i));
+      if (!best || n < best.n) best = { at: trial, n };
+    };
+    consider(out[i]);
+    for (let t = 0; t < START_TRIES && (!best || best.n > 0); t++) {
+      if (wall) {
+        // A stretch of wall, chosen in proportion to its length, so a long wall gets
+        // the pieces a long wall gets.
+        let pick = rng() * perimeter;
+        const ed = edges.find((x) => (pick -= x.len) <= 0) ?? edges[edges.length - 1];
+        const u = 0.1 + rng() * 0.8;
+        const near = nearestEdge(footprint, ed.a[0] + (ed.c[0] - ed.a[0]) * u, ed.a[1] + (ed.c[1] - ed.a[1]) * u);
+        const s = snapToWall(
+          [ed.a[0] + (ed.c[0] - ed.a[0]) * u + (near?.nx ?? 0) * 0.05, part.pos[1], ed.a[1] + (ed.c[1] - ed.a[1]) * u + (near?.nz ?? 0) * 0.05],
+          part.dimMM, footprint, 0, ed.e,
+        );
+        consider({ x: s.x, z: s.z, yaw: normaliseYaw(s.rot ?? out[i].yaw) });
+      } else {
+        const x = b.minX + rng() * (b.maxX - b.minX);
+        const z = b.minZ + rng() * (b.maxZ - b.minZ);
+        const square = wallSquare(footprint, { x, z, yaw: 0 }) ?? 0;
+        consider({ x, z, yaw: normaliseYaw(square + Math.floor(rng() * 4) * (Math.PI / 2)) });
+      }
+    }
+    const won = best;
+    if (won) for (const k of unitOf(r, i)) out[k] = won.at[k];
+    taken.push(...feetOf(out, i));
   }
   return out;
 }
@@ -1603,6 +1727,13 @@ export function solveLayout(
   // by construction. A piece the prune restored is the user's again.
   winner = snapYaws(model, winner, weights, true, origin);
 
+  // A near-miss is repaired, not refused — see `repairHard`. A repair that moved
+  // something is squared again: a nightstand angled toward its bed and then carried
+  // away from it keeps an angle nothing justifies any more (measured: seed 15 of
+  // `suggest-tidiness`, 10.9° off square, before this second pass).
+  const repaired = repairHard(model, winner, weights, b, shuffle ? Infinity : before);
+  if (repaired !== winner) winner = snapYaws(model, repaired, weights, true, origin);
+
   // ── A rug the search left through a wall goes back where it was ──
   //
   // After every pass that can move a piece and before anything reads the answer, in
@@ -2030,6 +2161,25 @@ export const HARD_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside', 'doo
  *  same question, and a baseline moved by the difference. */
 export const NEGLIGIBLE_COST = 1e-9;
 
+/** What the hard terms cost with ONLY the pieces the search may not move — the
+ *  floor no arrangement can get under, per term, in `HARD_TERMS` order.
+ *
+ *  Ideas used to ask every hard term to be zero, which is right for the pieces it
+ *  moves and wrong for the ones it cannot: a pinned armchair standing in a doorway,
+ *  a kept piece a few millimetres through the plaster, two fixtures touching. Any of
+ *  those makes EVERY candidate unclean, so the gallery came back empty however many
+ *  good arrangements of the rest there were — measured, pinning one piece by the door
+ *  of the 4 × 3.5 preset took two presses from 8 ideas to none. The search answers for
+ *  what it moves; this is the part it does not. Every hard term only grows as pieces
+ *  are added to a room, so a candidate at this floor has added no fault of its own. */
+export function fixedFloor(parts: ScenePart[], footprint: Footprint, movable: readonly boolean[]): number[] {
+  const fixed = parts.filter((_, i) => !movable[i]);
+  if (fixed.length === 0) return HARD_TERMS.map(() => 0);
+  const model = prepare({ parts: fixed, movable: fixed.map(() => false), footprint });
+  const at = fixed.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+  return hardCosts(model, at, DEFAULT_WEIGHTS, NAV_CELL);
+}
+
 /** The hard terms, kept APART rather than added up.
  *
  *  A sum was the first version and it quietly gave away the thing the veto is for:
@@ -2041,6 +2191,151 @@ export const NEGLIGIBLE_COST = 1e-9;
 function hardCosts(m: LayoutModel, p: Placement[], weights: ScoreWeights, navCell: number | null): number[] {
   const b: CostBreakdown = costBreakdown(m, p, weights, navCell);
   return HARD_TERMS.map((k) => b[k]);
+}
+
+/** Rounds of `repairHard`, each one move. Most near-misses need one or two. */
+const REPAIR_ROUNDS = 3;
+/** Above this much hard cost the answer is not a near-miss and a few discrete moves
+ *  will not save it; the next candidate is cheaper than trying. */
+const REPAIR_CEILING = 40;
+/** What one piece standing under a wall fixture counts as, in `repairHard`'s hard cost:
+ *  about a near-miss's worth, so clearing it is worth a little navigation. */
+const CLASH_COST = 1;
+/** How many screened options per round `repairHard` scores with the navigation field. */
+const REPAIR_FINE = 6;
+
+/** Min-conflicts repair (Minton et al. 1992), on what the search hands back.
+ *
+ *  Measured before it, 2026-10-15, on the two presets that refuse the most (`l` 4.5 x 4
+ *  and `t` 6 x 5, 24 shuffle seeds each): 18 of 48 solves clean, and of the 30 refused
+ *  most were NEAR-MISSES — a navigation cost of 0.6–1.8 (a few cells of floor the door
+ *  cannot reach) or an access gap of 0.1–0.3. The annealer's last steps are tiny nudges
+ *  at a temperature that cannot cross the small ridge between that and a clean room, so
+ *  the candidate was thrown away for want of one sensible move.
+ *
+ *  So each round tries a short, DISCRETE menu for every movable obstacle — the square
+ *  moves a person makes: a quarter turn of its wall, a slide along the wall it has its
+ *  back to, a step of 15 or 30 cm, or the middle of another wall — and keeps the one
+ *  that lowers the hard cost and, among those, the total. Every option is square by
+ *  construction, so nothing here can bring back a crooked piece. */
+function repairHard(
+  m: LayoutModel,
+  placements: Placement[],
+  weights: ScoreWeights,
+  b: { minX: number; maxX: number; minZ: number; maxZ: number },
+  totalCap: number,
+): Placement[] {
+  // The one fault the cost cannot see (`RULE_HANDLING['clash-mounted']`): a piece
+  // standing where a TV or a window hangs. The search may wander into one; a repair
+  // that walks INTO one has turned a refused near-miss into another refused candidate,
+  // and measured on the two presets above it did so for 6 of 48 solves.
+  const parts = m.ctx.parts;
+  const mounted = parts.filter(isMountedObstruction).map((w) => ({
+    y: verticalExtent(w.category, w.shape, w.dimMM, w.pos[1]),
+    foot: footFromPart(w.pos, w.rot, w.dimMM, w.circle, w.shape),
+  }));
+  const hangsInto = (k: number, at: Placement) => {
+    const f = parts[k];
+    if (f.wallMounted || isSoftFurnishing(f)) return false;
+    const [lo, hi] = verticalExtent(f.category, f.shape, f.dimMM, f.pos[1]);
+    const foot = footFromPart([at.x, f.pos[1], at.z], at.yaw, f.dimMM, f.circle, f.shape);
+    return mounted.some((w) => hi > w.y[0] + 0.005 && w.y[1] > lo + 0.005 && footOverlap(w.foot, foot, -0.01));
+  };
+  // And since the gallery refuses a clash anyway, one counts here as a fault to clear,
+  // a unit of hard cost per piece — so a repair can walk a piece OUT of one, which the
+  // search left behind for 8 of the 48 solves above.
+  const clashes = (p: Placement[]) => {
+    let n = 0;
+    if (mounted.length > 0) for (let k = 0; k < p.length; k++) if (m.ctx.movable[k] && hangsInto(k, p[k])) n++;
+    return n;
+  };
+  const score = (p: Placement[], navCell: number | null = NAV_CELL) => {
+    // The FINE grid: the near-misses this exists for are a few cells of floor, and the
+    // coarse one `openRoutes` reads calls most of them open (0.6 there read 0).
+    const br = costBreakdown(m, p, weights, navCell);
+    return { hard: HARD_TERMS.reduce((a, k) => a + br[k], 0) + CLASH_COST * clashes(p), total: br.total, imp: impossibility(br) };
+  };
+  const start = score(placements);
+  const startHard = start.hard;
+  // Two bounds a round's sum cannot see, both from review (2026-10-15). The sum of the
+  // hard terms lets a navigation gain buy a sliver of overlap or wall — less possible
+  // than the room it was handed, which the veto then reverts whole, losing the solve;
+  // `openRoutes` carries the same ceiling. And outside a shuffle the answer is refused
+  // unless it beats the room it started from (`declineFor`), so a repair that pushes
+  // `total` past that turns an accepted fix into "no gain".
+  const impCeiling = start.imp + 1e-6;
+  if (startHard <= NEGLIGIBLE_COST || startHard > REPAIR_CEILING) return placements;
+  const rigid = setsOf(m);
+  const pool: number[] = [];
+  for (let i = 0; i < placements.length; i++) {
+    if (m.ctx.movable[i] && m.obstacle[i] && steers(rigid, i)) pool.push(i);
+  }
+  if (pool.length === 0) return placements;
+  let current = placements.map((p) => ({ ...p }));
+  let now = { hard: startHard, total: start.total };
+  const q = Math.PI / 2;
+  for (let round = 0; round < REPAIR_ROUNDS && now.hard > NEGLIGIBLE_COST; round++) {
+    // Every option is screened WITHOUT the navigation field (a tenth of the price:
+    // 0.15 ms against 1.5 ms a breakdown on a twenty-piece room) and only the most
+    // promising few are scored with it. Scoring all of them fine took a twenty-piece
+    // solve from ~300 ms to ~1.6 s, because a room repair cannot fix still pays for
+    // every option it tried. The screen cannot see navigation, so it can only RANK —
+    // it never accepts anything on its own.
+    const nav = now.hard - score(current, null).hard;
+    // …except when navigation is what is wrong, which is most near-misses: then the
+    // screen reads the coarse field, which ranks a route-opening move where the bare
+    // screen would see every option tie.
+    const screenCell = nav > 1e-6 ? REPAIR_CELL : null;
+    const floor = screenCell === null ? now.hard : score(current, screenCell).hard;
+    const screened: { at: Placement[]; hard: number; total: number; imp: number }[] = [];
+    for (const i of pool) {
+      const p = current[i];
+      const part = m.ctx.parts[i];
+      const options: Placement[] = [];
+      const square = wallSquare(m.poly, p, m.winding) ?? Math.round(p.yaw / q) * q;
+      for (let k = 1; k < 4; k++) options.push({ ...p, yaw: normaliseYaw(square + k * q) });
+      for (const d of [0.15, 0.3]) {
+        options.push({ ...p, x: clamp(p.x + d, b.minX, b.maxX) }, { ...p, x: clamp(p.x - d, b.minX, b.maxX) });
+        options.push({ ...p, z: clamp(p.z + d, b.minZ, b.maxZ) }, { ...p, z: clamp(p.z - d, b.minZ, b.maxZ) });
+      }
+      const edge = nearestEdge(m.poly, p.x, p.z, m.winding);
+      if (edge && Math.abs(edge.dist - (part.dimMM[1] / 2000 + WALL_GAP)) <= AGAINST_WALL_M) {
+        for (const d of [-0.6, -0.3, 0.3, 0.6]) {
+          const s = snapToWall([edge.px - edge.nz * d, part.pos[1], edge.pz + edge.nx * d], part.dimMM, m.ctx.footprint, 0, edge.index);
+          options.push({ x: s.x, z: s.z, yaw: normaliseYaw(s.rot ?? p.yaw) });
+        }
+      }
+      for (let e = 0; e < m.poly.length; e++) {
+        const a = m.poly[e];
+        const c = m.poly[(e + 1) % m.poly.length];
+        const s = snapToWall([(a[0] + c[0]) / 2, part.pos[1], (a[1] + c[1]) / 2], part.dimMM, m.ctx.footprint, 0, e);
+        options.push({ x: s.x, z: s.z, yaw: normaliseYaw(s.rot ?? p.yaw) });
+      }
+      for (const o of options) {
+        const trial = current.map((x) => ({ ...x }));
+        carryUnit(rigid, trial, i, o);
+        if (mounted.length > 0 && unitOf(rigid, i).some((k) => hangsInto(k, trial[k]))) continue;
+        const sc = score(trial, screenCell);
+        // Without navigation (or on the coarse grid, which reads less of it) an option
+        // that screens worse than where this round started is not worth a fine look.
+        if (sc.hard > floor + 1e-6) continue;
+        screened.push({ at: trial, ...sc });
+      }
+    }
+    screened.sort((x, y) => x.hard - y.hard || x.total - y.total);
+    let best: { at: Placement[]; hard: number; total: number; imp: number } | null = null;
+    for (const c of screened.slice(0, REPAIR_FINE)) {
+      const sc = score(c.at);
+      if (sc.hard >= now.hard - 1e-6 || sc.imp > impCeiling || sc.total >= totalCap) continue;
+      if (!best || sc.hard < best.hard - 1e-6 || (Math.abs(sc.hard - best.hard) <= 1e-6 && sc.total < best.total)) {
+        best = { at: c.at, ...sc };
+      }
+    }
+    if (!best) break;
+    current = best.at;
+    now = { hard: best.hard, total: best.total };
+  }
+  return now.hard < startHard - 1e-6 ? current : placements;
 }
 
 /** Did any single hard term get worse? The tolerance is per term, because each is a
@@ -2066,15 +2361,69 @@ function untouched(from: Placement, to: Placement): boolean {
 }
 
 /** The quarter turn of its nearest wall that `p` reads as meant to be at, or null when
- *  it is square already or turned further than `SNAP_TOL`, which is a choice. */
-function squareYaw(m: LayoutModel, p: Placement): number | null {
+ *  it is square already or turned far enough to be a choice.
+ *
+ *  How far is "a choice" depends on what the piece IS (`mayAngle`): a chair turned
+ *  `ANGLED_MIN` or more was angled on purpose; a sofa, a bed, a table or a rug the
+ *  SEARCH turned is never angled on purpose, so it is squared from any angle. One
+ *  still at the angle the room gave it is the user's, and keeps the old `SNAP_TOL`
+ *  reading. It used to be `SNAP_TOL` for everything, and a sofa the search left at
+ *  14° stayed at 14°. */
+function squareYaw(m: LayoutModel, i: number, p: Placement, role: Role): number | null {
   // The polygon's winding, cached — see the same call in `layout-score`.
-  const edge = nearestEdge(m.poly, p.x, p.z, m.winding);
+  const snapped = wallSquare(m.poly, p, m.winding);
+  if (snapped === null) return null;
+  const off = Math.abs(angleDelta(snapped, p.yaw));
+  const tol = mayAngle(role) ? ANGLED_MIN : ownAngle(m.ctx.origin?.[i], p) ? SNAP_TOL : Math.PI;
+  return off < 1e-4 || off > tol ? null : snapped;
+}
+
+/** Is `p` still at the angle the room gave it — the user's own turn rather than one
+ *  the search made? Such an angle is never squared for the piece being a sofa: the
+ *  rule against crooked sofas is about angles the SOLVER introduces. */
+function ownAngle(from: Placement | undefined, p: Placement): boolean {
+  return !!from && Math.abs(angleDelta(from.yaw, p.yaw)) <= TURN_EPSILON;
+}
+
+/** The quarter turn of the nearest wall closest to `p.yaw` — square to the room where
+ *  the piece stands, which is right in a room whose walls are off the world axes. */
+export function wallSquare(
+  poly: Parameters<typeof nearestEdge>[0],
+  p: Placement,
+  winding?: 1 | -1,
+): number | null {
+  const edge = nearestEdge(poly, p.x, p.z, winding);
   if (!edge) return null;
   const q = Math.PI / 2;
-  const snapped = normaliseYaw(edge.yaw + Math.round(angleDelta(p.yaw, edge.yaw) / q) * q);
-  const off = Math.abs(angleDelta(snapped, p.yaw));
-  return off < 1e-4 || off > SNAP_TOL ? null : snapped;
+  return normaliseYaw(edge.yaw + Math.round(angleDelta(p.yaw, edge.yaw) / q) * q);
+}
+
+/** The moved pieces an arrangement leaves at an angle nobody would choose: a piece
+ *  that may not angle at all, turned visibly off square, or one that may, turned by
+ *  less than `ANGLED_MIN`. Round pieces, wall fixtures and a piece still at the angle
+ *  the user gave it are never asked — a round piece has no angle to see, and the
+ *  other two are not the search's angles.
+ *
+ *  This is the last word rather than `snapYaws`, because `snapYaws` may be vetoed by
+ *  geometry and leave the angle where it was. Ideas refuses a candidate this names
+ *  (`shuffleRoom`): another arrangement is a press away, a crooked sofa is not a
+ *  suggestion. */
+export function awkwardTurns(
+  parts: readonly ScenePart[],
+  footprint: Footprint,
+  placements: readonly Placement[],
+  moved: readonly number[],
+): number[] {
+  return moved.filter((i) => {
+    const part = parts[i];
+    if (part.circle || part.wallMounted) return false;
+    const square = wallSquare(footprint, placements[i]);
+    if (square === null) return false;
+    const off = Math.abs(angleDelta(square, placements[i].yaw));
+    if (off <= TURN_EPSILON) return false;
+    if (ownAngle({ x: part.pos[0], z: part.pos[2], yaw: part.rot }, placements[i])) return false;
+    return mayAngle(roleOf(part)) ? off < ANGLED_MIN : true;
+  });
 }
 
 /** Did a hard term fall? The same 1e-6 as `anyWorse`, the other way. */
@@ -2131,7 +2480,7 @@ function squareFaults(
     kept = false;
     for (let i = 0; i < out.length; i++) {
       if (!m.ctx.movable[i] || !steers(rigid, i)) continue;
-      const snapped = squareYaw(m, out[i]);
+      const snapped = squareYaw(m, i, out[i], m.roles[i]);
       if (snapped === null || Math.abs(angleDelta(snapped, out[i].yaw)) <= TURN_EPSILON) continue;
       const unit = unitOf(rigid, i);
       const keep = unit.map((k) => out[k]);
@@ -2179,7 +2528,7 @@ export function snapYaws(
     const unit = unitOf(rigid, i);
     // …and only pieces this solve has actually touched. See `untouched`.
     if (onlyMovedFrom && unit.every((k) => untouched(onlyMovedFrom[k], out[k]))) continue;
-    const snapped = squareYaw(m, out[i]);
+    const snapped = squareYaw(m, i, out[i], m.roles[i]);
     if (snapped === null) continue;
     const off = Math.abs(angleDelta(snapped, out[i].yaw));
     const keepUnit = unit.map((k) => out[k]);
@@ -2711,6 +3060,13 @@ function propose(
   const sets = setsOf(m);
   const quarterOnly = sets.setOf[i] >= 0 && sets.formation[sets.setOf[i]];
 
+  // Every piece may still take a free angle DURING the search, sofas included, even
+  // though only a chair may keep one (`mayAngle`, enforced by `snapYaws` and
+  // `awkwardTurns`). A free turn is how the annealer walks a piece round another one:
+  // restricted to quarter turns here, Fix on five scrambled presets x 24 solves ended
+  // clean 69 times against 77 (2026-10-15; rect 4 x 3.5 alone 16 against 21). So the
+  // search turns freely and the answer is squared — the angle is a path, not a place.
+  //
   // Turn to face something worth facing.
   if (roll < 0.3 && !quarterOnly && m.profile.focals.length > 0) {
     const f = m.profile.focals[Math.floor(rng() * m.profile.focals.length) % m.profile.focals.length];
@@ -2724,8 +3080,11 @@ function propose(
     // adding version accumulated: a few thousand steps of "+n quarter turns" left
     // parts stored at 596 radians, which is geometrically the same angle and junk
     // in every readout that shows it.
+    // Quarter turns of the piece's own wall, not of the world: the same answer in a
+    // square room, and the only square one in a room dragged off the axes.
     const q = Math.PI / 2;
-    return { ...p, yaw: normaliseYaw(Math.round(p.yaw / q) * q + Math.floor(rng() * 4) * q) };
+    const square = wallSquare(m.poly, p, m.winding) ?? Math.round(p.yaw / q) * q;
+    return { ...p, yaw: normaliseYaw(square + Math.floor(rng() * 4) * q) };
   }
   if (roll < 0.5 && !quarterOnly) {
     // A small free turn, so a chair can end up angled toward a sofa.
@@ -2741,6 +3100,15 @@ function propose(
         ? { ...p, x: current[j].x, yaw: normaliseYaw(current[j].yaw) }
         : { ...p, z: current[j].z, yaw: normaliseYaw(current[j].yaw) };
     }
+  }
+  // Slide it along the wall it has its back to. A nudge moves a wall piece in 2D, so
+  // most nudges pull a wardrobe off its wall, and the next proposal has to put it
+  // back; sliding is the move a person makes with one, and it stays square and
+  // against the plaster by construction (`snapToWall` on the same edge). Research:
+  // Infinigen Indoors' relation-preserving moves, Merrell et al. 2011.
+  if (roll < 0.72) {
+    const slid = slideAlongWall(m, p, part, reach, rng);
+    if (slid) return slid;
   }
   // The last resort: nudge it. The bounding-box clamp is what keeps the nudge on the
   // floor, and a nudge that ends up in an L, T or U's NOTCH is DECLINED rather than
@@ -2801,6 +3169,30 @@ function propose(
     return p;
   }
   return { ...p, x: jx, z: jz };
+}
+
+/** How far a back may stand off its wall and still count as against it, beyond the
+ *  shared `WALL_GAP`. */
+const AGAINST_WALL_M = 0.05;
+
+/** `p` moved along the wall it has its back to by up to `reach`, or null when it is
+ *  not standing with its back to a wall. */
+function slideAlongWall(
+  m: LayoutModel,
+  p: Placement,
+  part: ScenePart,
+  reach: number,
+  rng: () => number,
+): Placement | null {
+  const edge = nearestEdge(m.poly, p.x, p.z, m.winding);
+  if (!edge) return null;
+  if (Math.abs(edge.dist - (part.dimMM[1] / 2000 + WALL_GAP)) > AGAINST_WALL_M) return null;
+  if (Math.abs(angleDelta(edge.yaw, p.yaw)) > TURN_EPSILON) return null;
+  const s = (rng() - 0.5) * 2 * reach;
+  const tx = edge.px - edge.nz * s;
+  const tz = edge.pz + edge.nx * s;
+  const snap = snapToWall([tx + edge.nx * 0.05, part.pos[1], tz + edge.nz * 0.05], part.dimMM, m.ctx.footprint, 0, edge.index);
+  return { x: snap.x, z: snap.z, yaw: normaliseYaw(snap.rot ?? p.yaw) };
 }
 
 /** A point on some wall to snap toward — usually the nearest one, sometimes

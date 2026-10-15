@@ -10815,3 +10815,134 @@ already treats a saved piece as a hint with a filename.
 
 **Exists in a commit:** the decision and this note only; nothing writes or reads a shelf
 from a file.
+
+## § 57 · Ideas: crooked pieces and an empty gallery — FIXED 2026-10-15; the research roadmap after it BUILT the same day, three of five kept
+
+**What was fixed** (branch `claude/practical-pasteur-p75hxx`):
+
+1. **Crooked pieces.** `SNAP_TOL` (12°) was the only line between the search's noise and a
+   choice, for every piece, so a sofa left at 14° stayed at 14°. Now `mayAngle`
+   (`lib/layout-rules.ts`) says only chairs and an ottoman may angle, from `ANGLED_MIN` (20°);
+   `snapYaws` squares anything else the solver turned from any angle; and `shuffleRoom` refuses
+   a candidate `awkwardTurns` still names (1 of 128 clean solves, measured — the veto case; 4 of
+   562 after the search additions below).
+   An angle the user gave a piece is theirs and keeps the old `SNAP_TOL` reading. The scatter
+   (`randomizeStart`) starts each piece at a random quarter turn of its wall, not a random angle.
+   **The search itself still turns freely**: restricting its proposals to quarter turns cost Fix
+   8 of 77 clean solves over five scrambled presets x 24 — a free turn is how a piece is walked
+   round another. The angle is a path, not a place.
+2. **Empty gallery.** `isCleanShuffle` asked every hard term to be zero, so one pinned piece in a
+   doorway made every candidate unclean (4 × 3.5 preset: 0 ideas in two presses → 8). The gate
+   is now `fixedFloor`: what the pieces the search may not move cost on their own. Still absolute
+   for everything it moves. This narrows the 2026-09-06 ruling "keep the gate, name the cause"
+   for that one class of finding, at the user's report.
+
+**Measured after** (eight presets x three presses): no piece ≥ 3° off square that may not angle;
+ideas per three presses unchanged on the presets (12/12 where they were), T 6 × 5 9 → 10, a
+crowded 4 × 3.5 (14 pieces) 3 → 5 over two presses.
+
+**The research roadmap, built and measured (2026-10-15).** Sources: Kán & Kaufmann 2018,
+greedy cost minimisation; Holodeck, Yang et al. CVPR 2024, DFS over discrete rotations;
+Infinigen Indoors, Raistrick et al. CVPR 2024, annealing with discrete relation moves; Weiss et
+al. TVCG 2019, position-based constraint projection; Merrell et al. 2011; Yeh et al. 2012; Feo &
+Resende 1995 (GRASP); Minton et al. 1992 min-conflicts; Carbonell & Goldstein 1998 maximal
+marginal relevance; Mouret & Clune 2015 MAP-Elites.
+
+Every item was judged on one instrument, `pnpm bench:ideas` (`tests/ideas-bench.test.ts`, fixture
+rooms in `tests/helpers/ideas-rooms.ts`): ten rooms — the five presets at two sizes where it
+matters, a crowded 4.5 × 3.5, and a scanned L — three presses each with history, then **Fix**
+(`arrange` from a scrambled room) over 24 seeds per room. It is a measurement, not a gate, and its
+mean idea cost is noisy (the gallery shows every clean candidate, so a press that finds one more
+idea in a hard room raises the mean). Totals:
+
+| state | solves tried | clean | ideas (of 120) | mean cost | ms per 3 presses, all rooms | Fix clean (of 240) |
+|---|---|---|---|---|---|---|
+| before | 193 | 117 | 117 | 9.5 | 14,503 | 169 |
+| + slide along wall + repair | 133 | 120 | 118 | 10.7 | 12,253 | 208 |
+| same repair, no slide (control) | 147 | 120 | 120 | 11.3 | 14,394 | 207 |
+| + half the seeds built, not thrown | 134 | 120 | 119 | 11.8 | 9,422–10,744 | 203 |
+
+The headline is **Fix: 169 → 203 of 240**, and **Ideas fill every press** — fewer solves to get
+there, so a press is about a third faster. (The last row first read 127 / 9,664 / 208; that was
+measured before the fixture clash joined `repairHard`'s count in the same commit. Re-run twice on
+the pushed code it read 134 and 203 both times — the bench is deterministic, only its wall clock
+moves — so the earlier figures were a different program, not noise.) What is left weak is Fix on the cut-up rooms from a scramble:
+`t` 6 × 5 and `l` 4.5 × 4 are the rooms where it still most often comes back with something in
+the way.
+
+1. **Slide-along-wall moves — KEPT** (`slideAlongWall`, `lib/layout-solve.ts`). A piece backed
+   square onto a wall moves along that wall's frame, `snapToWall`ed, so the move stays square and
+   legal; it takes one band of `propose`'s rolls (0.60–0.72) that used to fall through to a 2D
+   nudge. Against the no-slide control it costs
+   nothing on cleanliness and saves 14% of solves tried and of wall clock. Kept on that.
+2. **Repair before refusal — KEPT, the largest single gain** (`repairHard`). Min-conflicts after
+   the search: on a winner still carrying a hard term (overlap, outside, door, access,
+   navigation), up to three rounds over each piece it may move — quarter turns, 15 and 30 cm
+   steps, slides along its wall, each wall's midpoint — keeping the option that lowers the hard
+   total most. Three things it needed that were measured, not reasoned: a piece colliding with a
+   wall-mounted fixture (`clash-mounted`, which the cost function cannot see) counts as hard
+   (`CLASH_COST`), or repair cleared a door by pushing a wardrobe into a radiator — clean solves on
+   `l` 4.5 × 4 + `t` 6 × 5, 32 → 39 of 48; options are screened without the navigation grid (or on
+   a coarse one when navigation is the fault) and only the best six re-scored at full resolution,
+   because full scoring took a 20-piece solve from 300 ms to 1,591 ms against the 1,200 ms bar —
+   now ~800 ms, and skipping navigation entirely cost 6 of those 39; and `snapYaws` runs again
+   after it, because a repair can leave a nightstand turned with its bed. It retired two parked
+   failures (`bed-rung-safety`: no seed now leaves a bed in a door swing, worst 112 → 26.5).
+3. **Constructive starts — KEPT, for half the seeds** (`constructiveStart`). Biggest pieces first,
+   each wall piece backed onto a random stretch of wall chosen in proportion to length, a 30 cm
+   walkway kept off everything already down and out of each door's swing. On its own start it has
+   a third of the scatter's collisions (104 against 304 over five presets x 12 seeds) and backs 84
+   of 96 wall pieces onto a wall (scatter: 5); the solves it seeds are cleaner too (216 against 207
+   of 240, mean cost 8.0 against 8.9). `shuffleRoom` alternates it with the scatter, by seed,
+   rather than replacing it: the scatter is where the unusual ideas come from, and the bench's
+   one regression without it was variety, not cost.
+4. **Diversity by behaviour — TRIED, REMOVED.** Steering each seed's anchor (the room's largest
+   piece) to a different wall, the cheap half of a MAP-Elites grid. Over the bench, 35 distinct
+   anchor walls without it and 36 with it, mean cost 11.4 against 11.8: the anneal moves the anchor
+   wherever its cost says, so a steered start is forgotten by the end. Behaviour cells would have
+   to be held during the search (a constraint, or a cell per anneal), which is the cost of
+   parallel tempering again. `orderOffers`' similarity penalty stays the diversity mechanism; the
+   candidates did converge a little (`layout-shuffle.test.ts`, worst pair 0.2 → 0.6, under the
+   0.85 repeat bar), which is that term doing more of its job.
+5. **Parallel tempering — NOT BUILT, decided.** The condition was "only if the first three leave a
+   gap", and on Ideas they do not: every room fills its twelve. The gap that remains is Fix from a
+   scramble in the two cut-up rooms, and tempering would multiply the solve's cost (several
+   replicas per candidate) on the one path where the user is waiting on a single answer. Revisit
+   only with a Fix measurement that the cheaper levers — more repair rounds, a constructive start
+   for Fix — have been tried against first.
+
+**Exists in a commit:** the two fixes and `tests/ideas-angles.test.ts`; the roadmap's three kept
+items, with `tests/layout-constructive-start.test.ts`, `tests/layout-repair.test.ts`, the bench,
+and the counts it moved re-pinned with dates in `layout-solve`, `bed-rung-safety`,
+`layout-shuffle`, `suggest-tidiness`, `suggest-square-in-place`, `layout-rigid-sets` and
+`layout-pick`. Mutation-checked: seven mutants (the built start returning the scatter, no
+walkway pad, no repair, the fixture clash not counted, no second `snapYaws`, no slide, the press
+using the scatter only), all seven caught. The scatter-only press SURVIVED the first round and
+the clash one was caught only by a trajectory count, so `layout-repair.test.ts` holds both
+directly, the clash by its own measurement: Fix from a scramble on `l`, `t` and `u`
+6 × 5, 36 solves, 0 rooms with a piece in front of a wall fixture, 11 with the clash uncounted.
+
+**A third cause, found on the user's own room file (2026-10-15).** A room built by scanning gets
+`locked: true` on every detected piece, and that flag means "from your photo", not "locked"
+(`ScenePart.locked` says so). `lockedForShuffle` passed it through `lockedForSolve`, so a scanned
+L-shaped bedroom had 0 movable pieces and the gallery said "Nothing here can move", with no
+control to change it: the Keep list left photo pieces out. Ideas now hold only what the user
+kept (plus walls and groups, via `movableFor`), and photo pieces are on the Keep list. Same room:
+0 → 9 movable, 3 / 2 / 3 / 4 ideas over four presses. **Decided by the user the same day:** Suggest
+and the Room check's Try a fix follow. `lockedForSolve` no longer reads the flag at all, so the only
+things that hold a piece are Lock, a confine, a wall, and a group (`movableFor`).
+
+**Adversarial review, 2026-10-15** (two independent reviewers, one on `repairHard`, one on the
+starts, the slide and the photo-lock change; 280 fuzzed built starts and ~8,800 simulated slides
+among what they ran). One defect, fixed: `shuffleBlockers` read a room-level finding (`cut-off`,
+`partIds: []`) as "wholly among kept pieces", because `[].every` is true, so the Ideas refusal
+stopped naming cut-off floor and offered "Look again" — `tests/ideas-angles.test.ts` holds it,
+mutation-checked. Two bounds added to `repairHard` from the same review, both measured INERT on
+the bench rooms (refit as-is, refit and arrange from a scramble, 220 solves: identical declines and
+clean counts with and without): a round may not raise impossibility (overlap / outside), which
+`openRoutes` already refused, and outside a shuffle may not push `total` to the room's own, which
+would turn an accepted fix into "no gain". The reviewer measured repair raising `total` in 29 of 63
+repairs, so the path is real; none of those crossed the room's own total. Being inert, neither
+bound has a test that fails without it — said here rather than pretended otherwise. Declined: the
+second `snapYaws` cannot see a wall-fixture clash, but it turns a piece at most 12–20° and no
+sweep showed a clash appear after it.

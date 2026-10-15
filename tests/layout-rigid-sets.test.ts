@@ -202,7 +202,8 @@ describe('Room check offers Try a fix only where the press may move a piece it n
     { why: 'merged with the TV on the wall', parts: [g(sofa), g(tv), plant], pinned: {}, can: false },
     { why: 'merged with a plant the user kept', parts: [g(sofa), tv, g(plant)], pinned: { plant: true }, can: false },
     { why: 'kept in place itself', parts: [sofa, tv, plant], pinned: { sofa: true }, can: false },
-    { why: 'from the photo', parts: [{ ...sofa, locked: true }, tv, plant], pinned: {}, can: false },
+    // A photo piece is not held (2026-10-15): `locked` means "from your photo".
+    { why: 'from the photo', parts: [{ ...sofa, locked: true }, tv, plant], pinned: {}, can: true },
   ];
   const ROOM = { footprint: FOOTPRINT, height: 2.4 };
   const finding = (ps: ScenePart[]) => analyzeRoom(ps, ROOM).issues.find((i) => i.rule === 'outside')!;
@@ -227,9 +228,11 @@ describe('Room check offers Try a fix only where the press may move a piece it n
 
   it('one free piece among those named is enough, and a whole-room fix needs anything free', () => {
     const photo = { ...sofa, locked: true };
-    expect(confineCanMove(['sofa', 'plant'], [photo, tv, plant], {}), 'a clash between the photo sofa and a plant').toBe(true);
-    expect(confineCanMove([], [photo, tv, plant], {}), 'a whole-room fix with the plant free').toBe(true);
-    expect(confineCanMove([], [photo, tv, plant], { plant: true }), 'a whole-room fix with nothing free').toBe(false);
+    expect(confineCanMove(['sofa', 'plant'], [photo, tv, plant], { sofa: true }), 'a clash between the kept sofa and a plant').toBe(true);
+    expect(confineCanMove([], [photo, tv, plant], { sofa: true }), 'a whole-room fix with the plant free').toBe(true);
+    expect(confineCanMove([], [photo, tv, plant], { sofa: true, plant: true }), 'a whole-room fix with nothing free').toBe(false);
+    // From your photo, nothing kept: the sofa is free on its own.
+    expect(confineCanMove(['sofa'], [photo, tv, plant], {}), 'a photo sofa alone').toBe(true);
   });
 
   it('a free lamp riding a held piece does not make that piece\'s row fixable', () => {
@@ -280,7 +283,12 @@ describe('the solver hands a merged set back as it took it', () => {
     const before = setPoses(parts, ids);
     let movedMerged = 0;
     let brokeUnmerged = 0;
-    for (const seed of [1, 2, 3]) {
+    // Seeds 1, 2 and 4. Seed 3 was here until 2026-10-15, when a turn the solver makes is
+    // squared rather than kept (`mayAngle`): on it, and on seed 8, Suggest used to hand the
+    // set back at 18.3° and 22.2° — neither the user's 30° nor square, the awkward angle
+    // that change exists to stop. Both now decline (`no-gain`) and move nothing, so they
+    // cannot carry "moved, and rigid".
+    for (const seed of [1, 2, 4]) {
       const solve = (ps: ScenePart[]): SolveResult =>
         solveLayout(ps, FOOTPRINT, lockedForSolve(ps, {}, null), { seed, mode: 'arrange', placed });
       const merged = setPoses(applyPlacements(parts, solve(parts)), ids);
@@ -465,13 +473,24 @@ describe('a set stays whole where it meets the rest of the room', () => {
     // hair along: Suggest on the set turned 30°, with a lamp on the table, seed 2.
     const { parts: set, ids } = diningRoom(Math.PI / 6);
     const t = set.find((p) => p.id === ids[0])!;
-    const parts = [...set, part({ id: 'tl', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [t.pos[0] + 0.4, 0.75, t.pos[2]] })];
+    const parts = [...set, part({ id: 'tl', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [t.pos[0] + 0.4, 0.75, t.pos[2]], rot: t.rot })];
     const before = setPoses(parts, ids);
-    const solve = (ps: ScenePart[]) =>
-      applyPlacements(ps, solveLayout(ps, FOOTPRINT, lockedForSolve(ps, {}, null), { seed: 2, mode: 'arrange', placed: new Set(ids) }));
-    const after = setPoses(solve(parts), ids);
+    const solveAt = (ps: ScenePart[], seed: number) =>
+      applyPlacements(ps, solveLayout(ps, FOOTPRINT, lockedForSolve(ps, {}, null), { seed, mode: 'arrange', placed: new Set(ids) }));
     // The premise, or this is not the case it names: the set did move, and its lead
-    // by less than the rider pass counts as a move (measured: 14.5 mm and 0.044 rad).
+    // by less than the rider pass counts as a move. That was seed 2 (14.5 mm and
+    // 0.044 rad) until `repairHard` (2026-10-15) cleared the 0.42 of door swing that
+    // answer left the set in by moving it further — right for the room, and the end of
+    // that seed's case. So the seed is FOUND rather than named (seed 3 on 2026-10-15,
+    // with the lamp turned with its table: 0 mm and 0.042 rad): the case is the subject, not the seed.
+    const barely = (after: ReturnType<typeof setPoses>) =>
+      moved(before, after) &&
+      Math.hypot(after[0].x - before[0].x, after[0].z - before[0].z) < MOVE_EPSILON &&
+      Math.abs(angleDelta(after[0].yaw, before[0].yaw)) < TURN_EPSILON;
+    const seed = Array.from({ length: 40 }, (_, k) => k + 1).find((sd) => barely(setPoses(solveAt(parts, sd), ids)));
+    expect(seed, 'some seed moves the set by less than a move').toBeDefined();
+    const solve = (ps: ScenePart[]) => solveAt(ps, seed!);
+    const after = setPoses(solve(parts), ids);
     expect(moved(before, after), 'the set moved').toBe(true);
     expect(Math.hypot(after[0].x - before[0].x, after[0].z - before[0].z)).toBeLessThan(MOVE_EPSILON);
     expect(Math.abs(angleDelta(after[0].yaw, before[0].yaw))).toBeLessThan(TURN_EPSILON);

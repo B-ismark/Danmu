@@ -1235,7 +1235,9 @@ describe('the room’s anchor is settled first', () => {
     expect(clean).toBeGreaterThanOrEqual(11);
   }, 120_000);
 
-  it.fails('keeps the untidiest seed bounded, which is a different claim from safe — PARKED at 116.36 vs 60', () => {
+  // UN-PARKED 2026-10-15: the worst of the twelve is 26.54 against the bar of 60, which
+  // was never widened, once `repairHard` clears seed 10's stranded floor.
+  it('keeps the untidiest seed bounded, which is a different claim from safe', () => {
     const { rows } = scrambledU();
     const costs = rows.map((r) => r.total);
 
@@ -1289,12 +1291,12 @@ describe('the room’s anchor is settled first', () => {
   }, 120_000);
 
   // REGRESSION BASELINE, NOT A SPECIFICATION. The two tests above were parked with
-  // `it.fails`, which is self-retiring — the first went red the moment the solver improved
-  // and is live again; the second is still parked — but a mark only says "we know". This says WHAT we know, and it is pinned EXACTLY so an
+  // `it.fails`, which is self-retiring — both went red the moment the solver improved
+  // and are live again — but a mark only says "we know". This says WHAT we know, and it is pinned EXACTLY so an
   // improvement goes red too: a `<=` bar here would sit green while the numbers drifted
   // in the good direction and nobody would re-derive.
   //
-  // The worst total (116.35761287695875, and 92.1018827121954 when this was written) also
+  // The worst total (26.54029889669254 since `repairHard`, 112.18137047133172 earlier on 2026-10-15, 116.35761287695875 before, and 92.1018827121954 when this was written) also
   // appears in `tests/bed-rung-safety.test.ts`, and THE
   // COINCIDENCE IS NOT LOAD-BEARING. Both files run the same solver over the same seeds
   // on the same scrambled U, so agreeing to fifteen digits says the pipeline is
@@ -1334,7 +1336,10 @@ describe('the room’s anchor is settled first', () => {
     // clean, and seed 10 (`navigation` 54.00) is the one unsafe seed left. No lamp was
     // through a wall at the end of any seed before the change, so this is the search
     // walking elsewhere, not a hidden fault found — see the note on the un-parked test.
-    expect(clean, 'seeds ending with nothing on any hard term').toBe(11);
+    // 11 → 12 on 2026-10-15: seed 10, the last, ends clean once the search's answer is
+    // repaired before it is judged (`repairHard` — a quarter turn, a slide along the
+    // wall, a step or another wall for each piece, the move that clears the most).
+    expect(clean, 'seeds ending with nothing on any hard term').toBe(12);
     // Was 7 clean / 92.1018827121954 worst. Both moved when `c.outside` learned to see
     // an overhang (`outsideDeficit`), and the direction of each is the point:
     //
@@ -1361,7 +1366,11 @@ describe('the room’s anchor is settled first', () => {
     //
     // 412.6663679837667 → 116.35761287695875 on 2026-09-30, for the same reason as the
     // count above: seed 1's 408 of stranded floor is gone, and the worst is now seed 10.
-    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(116.35761287695875, 6);
+    // 116.35761287695875 → 112.18137047133172 on 2026-10-15: the solver's own turns are
+    // squared on the way out unless the piece may angle (`mayAngle`); still seed 10.
+    // 112.18137047133172 → 26.54029889669254 the same day, with `repairHard`: seed 10's
+    // stranded floor is gone, and the worst is seed 5 on tidiness terms alone.
+    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(26.54029889669254, 6);
     // A TOLERANCE, and it is a physical one rather than a number chosen to pass. This
     // read `toEqual(rows.map(() => 0))`, which was available only while every footprint in
     // the fixture was an axis-aligned box. Once the `u` layout's bedside lamp became round
@@ -1545,16 +1554,15 @@ describe('lockedForSolve', () => {
     expect(lockedForSolve(parts, { [parts[0].id]: true }, only)).toEqual([true, true, false]);
   });
 
-  it('still reports a from-photo piece as locked', () => {
-    // Documents rather than endorses. `ScenePart.locked` means "came out of your
-    // photo" — its own comment says the name is wrong — and it has always been fed
-    // to the solver as a lock, so Suggest does not move detected furniture and the
-    // Lock button cannot release it. Changing that alters every detected room and
-    // is a product decision; this is here so the next reader finds it stated
-    // rather than deducing it from a bug report.
+  it('does not hold a from-photo piece', () => {
+    // `ScenePart.locked` means "came out of your photo". It used to be fed to the
+    // solver as a lock, so a scanned room gave Suggest, Try a fix and Ideas nothing
+    // to move; the user ruled on 2026-10-15 that a photo piece moves like any other.
+    // Lock is the way to keep one.
     const parts = room();
     parts[1] = { ...parts[1], locked: true };
-    expect(lockedForSolve(parts, {}, null)).toEqual([false, true, false]);
+    expect(lockedForSolve(parts, {}, null)).toEqual([false, false, false]);
+    expect(lockedForSolve(parts, { [parts[1].id]: true }, null)).toEqual([false, true, false]);
   });
 
   it('stops the solver moving a locked piece, where it would otherwise move it', () => {
@@ -1645,13 +1653,15 @@ describe('the finalist pool the search kept', () => {
   // The CAVEAT the old test existed to pin is UNCHANGED and still the thing callers
   // need: four passes run after the pick, so the winner is normally a post-processed
   // descendant of a pool entry rather than one of them. Measured over eight seeds it
-  // is still 7 of 8. What is no longer true is the absolute — seed 3, which the old
-  // single-seed test happened to use, is now the exception, which is why a claim
+  // was 7 of 8, and 6 of 8 since `repairHard` (2026-10-15), which can leave a pool
+  // entry untouched when it has nothing to repair. What is no longer true is the
+  // absolute — seed 3, which the old single-seed test happened to use, was the first
+  // exception, which is why a claim
   // resting on one seed was worth replacing with a count.
   //
   // Pinned EXACTLY, both halves, so a drift in either direction is a red somebody has
   // to re-derive rather than a bar that quietly stays satisfied.
-  it('contains the winner for one seed in eight, and the caveat still stands', () => {
+  it('contains the winner for two seeds in eight, and the caveat still stands', () => {
     const same = (A: Placement[], B: Placement[]) =>
       A.every((q, i) => Math.abs(q.x - B[i].x) < 1e-9 && Math.abs(q.z - B[i].z) < 1e-9);
     let pooled = 0;
@@ -1664,8 +1674,11 @@ describe('the finalist pool the search kept', () => {
       if (r.finalists.some((f) => same(f.placements, r.placements))) pooled++;
     }
     expect(seeds, 'there must be pools for this to be a claim about').toBe(8);
-    expect(pooled, 'seeds whose winner survived post-processing unchanged').toBe(1);
-    expect(seeds - pooled, 'seeds where the four passes still changed the winner').toBe(7);
+    // 1 → 2 on 2026-10-15, with the slide-along-wall proposal and `repairHard`: a
+    // search that ends nearer clean leaves the passes after the pick less to change.
+    // The caveat stands at 6 of 8.
+    expect(pooled, 'seeds whose winner survived post-processing unchanged').toBe(2);
+    expect(seeds - pooled, 'seeds where the four passes still changed the winner').toBe(6);
   });
 
   it('is EMPTY when nothing could move, rather than a pool of one', () => {

@@ -82,9 +82,9 @@ function facing(p: ScenePart, target: ScenePart): number {
 /** The pieces the candidate turned, or null when there is none. It is built from the room
  *  as it stands, not from the search, so a short search is enough to see it. A piece that
  *  is not square where it stood is marked, since the candidate only ever squares in place. */
-function squaredIn(parts: ScenePart[], footprint: Footprint, placed: Set<string>): string[] | null {
+function squaredIn(parts: ScenePart[], footprint: Footprint, placed: Set<string>, pinned: Record<string, boolean> = {}): string[] | null {
   let rated: readonly Candidate[] = [];
-  const result = solveLayout(parts, footprint, lockedForSolve(parts, {}, null), {
+  const result = solveLayout(parts, footprint, lockedForSolve(parts, pinned, null), {
     seed: 1,
     steps: 40,
     mode: 'arrange',
@@ -118,7 +118,10 @@ describe('Fix on a sofa a few degrees off square', () => {
   // answer's 22.42 cannot match on every seed, and on seeds 4 and 6 the one it picks
   // (19.94, 11.00) takes the sofa 112 and 126 mm, square and facing; seed 9 stays put.
   // With the sets off it is 11 again, seed 9 the one that moves.
-  const cases: [LayoutId, number, number, number, number][] = [['t', 6, 5, -10, 10], ['t', 6, 5, 10, 12], ['l', 6, 4.7, -6, 12]];
+  // At +10° it is 8 since 2026-10-15: `repairHard` clears the T's walkway fault before
+  // the answer is handed back, and on four seeds that takes the sofa along — square and
+  // facing still, which is the rule; how many stay put is the search's trajectory.
+  const cases: [LayoutId, number, number, number, number][] = [['t', 6, 5, -10, 10], ['t', 6, 5, 10, 8], ['l', 6, 4.7, -6, 12]];
   for (const [layout, w, d, deg, stays] of cases) {
     it(`${layout} ${w} × ${d}, sofa turned ${deg}°: every seed faces the television`, () => {
       const { parts: base, footprint } = room(layout, w, d);
@@ -219,8 +222,8 @@ describe('Fix on a sofa a few degrees off square', () => {
   it('a locked piece is not turned, however crooked', () => {
     const { parts: base, footprint } = room('t', 6, 5);
     const { parts, id } = turned(base, isSofa, -10, footprint);
-    const locked = parts.map((p) => (p.id === id ? { ...p, locked: true } : p));
-    expect(squaredIn(locked, footprint, new Set([id]))).toBeNull();
+    // Kept with Lock. "From your photo" (`ScenePart.locked`) holds nothing since 2026-10-15.
+    expect(squaredIn(parts, footprint, new Set([id]), { [id]: true })).toBeNull();
   });
 
   it('in the Rectangle the turn itself pushes the sofa back inside, so nothing is squared', () => {
@@ -298,8 +301,9 @@ describe('Fix on a sofa a few degrees off square', () => {
       // search may take, so it walks other paths: four, from the same 22.0 the T starts at,
       // its walkway fault. Five since a dining set moves as one (§ 52), seeds 1, 3, 5, 10
       // and 12; with the sets off it is four again, seeds 2, 6, 8 and 12. `candidates` is
-      // the rule here, and it is 0 on both.
-      expect({ none, candidates }).toEqual({ none: id === 't' ? 7 : 12, candidates: 0 });
+      // the rule here, and it is 0 on both. Every seed acts on the T since 2026-10-15,
+      // when `repairHard` began clearing the walkway fault the search left standing.
+      expect({ none, candidates }).toEqual({ none: id === 't' ? 0 : 12, candidates: 0 });
     });
   }
 
@@ -324,6 +328,8 @@ describe('Fix on a sofa a few degrees off square', () => {
     // candidate offered to a shuffle as well, this room got 1 idea (measured before the
     // front-first rule, not re-measured since), and that is the
     // reason the shuffle is left out.
-    expect({ n, inPlace }).toEqual({ n: 9, inPlace: 0 });
+    // 10 since the scatter starts square and a solver-made angle is squared (2026-10-15);
+    // 12, every press full, since the slide-along-wall move and `repairHard` (same day).
+    expect({ n, inPlace }).toEqual({ n: 12, inPlace: 0 });
   });
 });

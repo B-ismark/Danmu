@@ -132,11 +132,14 @@
  * and it has that one now.
  */
 import {
+  awkwardTurns,
+  fixedFloor,
   HARD_TERMS,
   lockedForSolve,
   makeRng,
   movableFor,
   NEGLIGIBLE_COST,
+  constructiveStart,
   randomizeStart,
   rigidSets,
   solveLayout,
@@ -300,9 +303,9 @@ export type ShuffleOutcome = {
  *  tolerance a person would name. A candidate discarded for a picometre is one the
  *  user is not offered, and when it is the last one standing the whole Shuffle
  *  refuses. */
-export function isCleanShuffle(result: SolveResult): boolean {
+export function isCleanShuffle(result: SolveResult, floor?: readonly number[]): boolean {
   if (result.moved.length === 0) return false;
-  return HARD_TERMS.every((term) => (result.breakdownAfter[term] as number) <= NEGLIGIBLE_COST);
+  return HARD_TERMS.every((term, k) => (result.breakdownAfter[term] as number) <= (floor?.[k] ?? 0) + NEGLIGIBLE_COST);
 }
 
 /** Apply a solved arrangement to the parts, so the room can be asked about it.
@@ -414,6 +417,9 @@ export function shuffleRoom(
   // room with nothing movable would otherwise run to reach a foregone answer.
   if (!movable.some(Boolean)) return null;
 
+  // What the pieces it may not move already cost — see `fixedFloor`. Zero in a room
+  // where nothing kept is at fault, so the gate is exactly the absolute one there.
+  const floor = fixedFloor(parts, footprint, movable);
   const clean: SolveResult[] = [];
   let tried = 0;
   for (let s = 0; s < maxCandidates && clean.length < minClean; s++) {
@@ -421,13 +427,21 @@ export function shuffleRoom(
     // One seed drives both the scatter and the search that follows it, so an
     // attempt is reproducible end to end.
     const seed = opts.attempt * 1000 + s;
-    const start = randomizeStart(parts, footprint, movable, makeRng(seed));
+    // Every other attempt starts from a room BUILT rather than thrown — biggest pieces
+    // first, backed onto walls, out of the doorway (`constructiveStart`). Measured
+    // 2026-10-15 over the bench rooms, 24 seeds each: 216 of 240 solves clean from a
+    // built start against 207 from a scatter, at a mean cost of 8.0 against 8.9, and
+    // `l` 4.5 x 4 went from 16 to 22. Alternating rather than always building, because
+    // the scatter is where the unexpected ideas come from.
+    const start = (s % 2 === 0 ? constructiveStart : randomizeStart)(parts, footprint, movable, makeRng(seed));
     const result = solveLayout(parts, footprint, locked, { seed, mode: 'shuffle', start });
     // Both gates, and in this order: the solver's verdict is far cheaper than a
     // clearance field, so the room report is only asked about candidates that have
     // already passed the cheap check.
-    if (!isCleanShuffle(result)) continue;
+    if (!isCleanShuffle(result, floor)) continue;
     if (newRoomFindings(parts, room, result).length > 0) continue;
+    // A crooked sofa is not an idea, whatever else it gets right (`awkwardTurns`).
+    if (awkwardTurns(parts, footprint, result.placements, result.moved).length > 0) continue;
     clean.push(result);
   }
   if (clean.length === 0) return null;
@@ -497,16 +511,28 @@ export function showableIdeas<T extends { placements: Placement[] }>(
  *  The user ruled on 2026-09-06: **keep the gate, name the cause.** So this does not
  *  change what Shuffle will offer — it gives the refusal something true to say.
  *
+ *  **Narrowed 2026-10-15, at the user's report that Ideas offered nothing for a room
+ *  with plainly several arrangements.** The gate is now the floor set by the pieces
+ *  the search may not move (`fixedFloor`) — still absolute for everything it moves —
+ *  so a finding wholly among `kept` pieces (pinned, locked, wall-mounted) no longer
+ *  blocks, and is not named here. Pass `kept` to ask that question.
+ *
  *  Which findings count is DERIVED, never listed: a rule blocks a shuffle exactly
  *  when `RULE_HANDLING` says its cost term is one `isCleanShuffle` reads. A
  *  hand-kept list here would be a second source of truth for "what is a hard fault",
  *  and this repo has paid for that one twice. A rule with no cost term — `tall`,
  *  `crowding`, `turning` — cannot block a gate that reads cost terms, so it is
  *  correctly absent. */
-export function shuffleBlockers(issues: readonly ClearanceIssue[]): ClearanceIssue[] {
+export function shuffleBlockers(issues: readonly ClearanceIssue[], kept?: ReadonlySet<string>): ClearanceIssue[] {
   return issues.filter((i) => {
     const term = RULE_HANDLING[i.rule]?.costTerm;
-    return term != null && (HARD_TERMS as readonly string[]).includes(term);
+    if (term == null || !(HARD_TERMS as readonly string[]).includes(term)) return false;
+    // A finding among pieces the search may not move does not block it any more
+    // (`fixedFloor`), so it is not named as the reason nothing came back. A
+    // room-level finding (`cut-off`) names no piece, and `[].every` is true, so
+    // without the length test it read as "wholly among kept" and vanished from
+    // the refusal.
+    return !kept || i.partIds.length === 0 || !i.partIds.every((id) => kept.has(id));
   });
 }
 
@@ -628,9 +654,10 @@ export function groupsToUngroup(parts: ScenePart[], locked: boolean[]): GroupsTo
   }
   return { moving: mine.length, worth };
 }
-/** The three reasons a piece may not move, for a whole-room shuffle. A thin re-export
- *  of the solver's own composer so a caller does not have to know that a shuffle
- *  confines nothing. */
+/** Which pieces an idea may not move: the ones the user KEPT. A thin re-export of
+ *  the solver's own composer so a caller does not have to know that a shuffle
+ *  confines nothing. "From your photo" holds nothing here either — see
+ *  `lockedForSolve` for the room that made that the rule. */
 export function lockedForShuffle(parts: ScenePart[], pinned: Record<string, boolean>): boolean[] {
   return lockedForSolve(parts, pinned, null);
 }

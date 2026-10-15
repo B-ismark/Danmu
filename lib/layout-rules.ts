@@ -979,6 +979,27 @@ export function isSeating(role: Role): boolean {
   return SEATING.has(role);
 }
 
+/** The pieces an arrangement may stand at an angle to the walls: a chair turned
+ *  toward a sofa, a desk chair swung out. Everything else — a bed, a sofa, a table,
+ *  a rug, a wardrobe — stands square to its wall, which is how a person furnishes a
+ *  room and why a sofa 14° off reads as a mistake rather than a choice. An ottoman
+ *  is in for the same reason a chair is: a pouf set on the diagonal is a look.
+ *
+ *  The user's report that put this here (2026-10-15): Ideas kept handing back pieces
+ *  ~10–15° off square. Measured on the presets at three presses each, every crooked
+ *  piece was one of two kinds — something that should never angle (sofa, rug, coffee
+ *  table, side table at 14–15° in both L rooms), or a chair angled by less than reads
+ *  as deliberate. Both are answered by the solver reading this set
+ *  (`squareYaw`, `propose`, `awkwardTurns`), and a sofa never gets a free turn at
+ *  all. **An angle the user chose is theirs** — a piece still standing at the angle
+ *  the room gave it is never squared for being a sofa. A role, not a shape flag, because the question is what a person does with
+ *  the piece, which is exactly what `Role` names. */
+const MAY_ANGLE: ReadonlySet<Role> = new Set<Role>(['armchair', 'dining-chair', 'office-chair', 'ottoman']);
+
+export function mayAngle(role: Role): boolean {
+  return MAY_ANGLE.has(role);
+}
+
 /** Does one of these go under the other? `sharesFloor` for the roles, and the seat's
  *  tuck clearing the surface's knee. Symmetric, like `sharesFloor`; seats and surfaces
  *  are disjoint role sets, so which is which is never in doubt. Take the profiles when
