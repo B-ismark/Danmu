@@ -46,9 +46,14 @@ export function useExportItems(): ExportItem[] {
 
   useEffect(() => {
     if (!roomId) return;
+    // `live` drops a read that lands after the room changed or this unmounted.
+    let live = true;
     roomStore.loadRoom(roomId).then((r) => {
-      if (r?.name) setRoomName(r.name);
+      if (live && r?.name) setRoomName(r.name);
     });
+    return () => {
+      live = false;
+    };
   }, [roomId]);
 
   // Close on outside press or Esc. Esc is stopped so it does not also reach the
