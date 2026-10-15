@@ -473,13 +473,24 @@ describe('a set stays whole where it meets the rest of the room', () => {
     // hair along: Suggest on the set turned 30°, with a lamp on the table, seed 2.
     const { parts: set, ids } = diningRoom(Math.PI / 6);
     const t = set.find((p) => p.id === ids[0])!;
-    const parts = [...set, part({ id: 'tl', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [t.pos[0] + 0.4, 0.75, t.pos[2]] })];
+    const parts = [...set, part({ id: 'tl', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [t.pos[0] + 0.4, 0.75, t.pos[2]], rot: t.rot })];
     const before = setPoses(parts, ids);
-    const solve = (ps: ScenePart[]) =>
-      applyPlacements(ps, solveLayout(ps, FOOTPRINT, lockedForSolve(ps, {}, null), { seed: 2, mode: 'arrange', placed: new Set(ids) }));
-    const after = setPoses(solve(parts), ids);
+    const solveAt = (ps: ScenePart[], seed: number) =>
+      applyPlacements(ps, solveLayout(ps, FOOTPRINT, lockedForSolve(ps, {}, null), { seed, mode: 'arrange', placed: new Set(ids) }));
     // The premise, or this is not the case it names: the set did move, and its lead
-    // by less than the rider pass counts as a move (measured: 14.5 mm and 0.044 rad).
+    // by less than the rider pass counts as a move. That was seed 2 (14.5 mm and
+    // 0.044 rad) until `repairHard` (2026-10-15) cleared the 0.42 of door swing that
+    // answer left the set in by moving it further — right for the room, and the end of
+    // that seed's case. So the seed is FOUND rather than named (seed 3 on 2026-10-15,
+    // with the lamp turned with its table: 0 mm and 0.042 rad): the case is the subject, not the seed.
+    const barely = (after: ReturnType<typeof setPoses>) =>
+      moved(before, after) &&
+      Math.hypot(after[0].x - before[0].x, after[0].z - before[0].z) < MOVE_EPSILON &&
+      Math.abs(angleDelta(after[0].yaw, before[0].yaw)) < TURN_EPSILON;
+    const seed = Array.from({ length: 40 }, (_, k) => k + 1).find((sd) => barely(setPoses(solveAt(parts, sd), ids)));
+    expect(seed, 'some seed moves the set by less than a move').toBeDefined();
+    const solve = (ps: ScenePart[]) => solveAt(ps, seed!);
+    const after = setPoses(solve(parts), ids);
     expect(moved(before, after), 'the set moved').toBe(true);
     expect(Math.hypot(after[0].x - before[0].x, after[0].z - before[0].z)).toBeLessThan(MOVE_EPSILON);
     expect(Math.abs(angleDelta(after[0].yaw, before[0].yaw))).toBeLessThan(TURN_EPSILON);

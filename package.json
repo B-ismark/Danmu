@@ -12,7 +12,8 @@
     "test:watch": "vitest --disableConsoleIntercept",
     "vendor:ort": "node scripts/vendor-ort.mjs",
     "hash:models": "node scripts/hash-models.mjs",
-    "sweep:routes": "node scripts/openroutes-sweep.mjs"
+    "sweep:routes": "node scripts/openroutes-sweep.mjs",
+    "bench:ideas": "IDEAS_BENCH=1 vitest run tests/ideas-bench.test.ts --disableConsoleIntercept"
   },
   "dependencies": {
     "@google/genai": "^2.8.0",

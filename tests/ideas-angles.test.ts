@@ -156,14 +156,18 @@ describe('the last word is the gallery\'s, because the tidy can be vetoed', () =
   // presets x 24 shuffle solves (seeds 5000–5023): ONE of 128 clean solves did — this
   // one, a sofa at 6.1° off — which is why the sweep above passes with the gallery's
   // check deleted, and why this witness exists: it is the case only the check catches.
-  it('l 6 x 5, seed 5013: a clean solve with a crooked sofa, which Ideas would refuse', { timeout: 60_000 }, () => {
+  // Re-swept 2026-10-15 after the slide move and `repairHard` moved every trajectory:
+  // seed 5013 squares its sofa now, and over the same seven presets x 48 seeds from both
+  // starts (5000–5047) 4 of 562 clean solves keep a crooked sofa — l 6 x 5 seeds 5002 and
+  // 5019 from the scatter, 5033 built, and l 4.5 x 4 seed 5029 built. 5002 is the witness.
+  it('l 6 x 5, seed 5002: a clean solve with a crooked sofa, which Ideas would refuse', { timeout: 60_000 }, () => {
     const parts = defaultScene('l', 6, 5);
     const fp = footprintForLayout('l', 6, 5);
     const locked = lockedForSolve(parts, {}, null);
     const r = solveLayout(parts, fp, locked, {
-      seed: 5013,
+      seed: 5002,
       mode: 'shuffle',
-      start: randomizeStart(parts, fp, movableFor(parts, locked), makeRng(5013)),
+      start: randomizeStart(parts, fp, movableFor(parts, locked), makeRng(5002)),
     });
     expect(isCleanShuffle(r), 'clean by every hard term — so only the angle check stands in its way').toBe(true);
     expect(awkwardTurns(parts, fp, r.placements, r.moved).map((i) => roleOf(parts[i]))).toEqual(['sofa']);

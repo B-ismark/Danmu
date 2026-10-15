@@ -526,6 +526,24 @@ constitutionally unable to show.*
 *The comfort zones in the plan (outline, halos, warm hatch) were looked at by the user on
 2026-10-01 and that item is gone.*
 
+### Ideas and Fix tidy up a room before giving up on it — on branch `claude/practical-pasteur-p75hxx`, NOT LOOKED AT
+
+The search learned three things on 2026-10-15 (`docs/what-is-still-open.md` § 57): a piece on a
+wall slides along it, half the ideas start from a room furnished biggest-first against the walls,
+and a candidate with something in the way is nudged clear (turned, stepped, slid) before it is
+thrown away. Measured: Fix from a scrambled room clean 169 → 208 of 240, every Ideas press full.
+
+**Where to click.** T-Shape 6 × 5 and L-Shape 4.5 × 4: press Ideas, page through three presses.
+Then drag every piece into a heap in the middle and press Suggest, a few times.
+
+**What right looks like.** Ideas pages that differ in kind — the bed or sofa on different walls
+— with walkways between pieces. Suggest unpicking the heap into a room with nothing through a
+door swing or a radiator.
+
+**What wrong looks like.** Twelve ideas that are the same room with one chair moved; a wardrobe
+standing in front of a radiator or window; a nightstand turned a few degrees with its bed; a
+press that now takes visibly longer than before.
+
 ### A chair tucks only square to the table and between its legs — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 
 A dining chair turned 30° under the table, or slid along its edge into a corner leg, was
