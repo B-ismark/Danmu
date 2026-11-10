@@ -476,26 +476,33 @@ export async function removeDetector(): Promise<void> {
 /** Whether the detector can run at all — the OIV7 model is the floor, the
  *  open-vocabulary pass is a bonus on top. Cached per session. */
 export async function localDetectorAvailable(): Promise<boolean> {
-  return (await resolveFile(MODEL_FILE)) !== null && (await ortAvailable());
+  return (await resolveFile(MODEL_FILE)) !== null;
 }
 
-/** Whether the same-origin runtime is present. There is no remote fallback. */
-let ortProbe: Promise<boolean> | null = null;
-function ortAvailable(): Promise<boolean> {
-  ortProbe ??= (async () => {
-    try {
-      const r = await fetch(ORT_LOCAL_BASE + ORT_ENTRY, { method: 'HEAD' });
-      if (r.ok) return true;
-    } catch {
-      // Unreachable — treated like absent.
-    }
-    console.error(
-      `[detector] ONNX Runtime ${ORT_VERSION} is not served from ${ORT_LOCAL_BASE} — ` +
-        'run `pnpm vendor:ort` (dev and build do this automatically). On-device detection is unavailable.',
-    );
-    return false;
-  })();
-  return ortProbe;
+/** The model is here but the runtime that would run it is not. Kept apart from
+ *  "no model" so the scan screen can say which: an absent detector is a quiet
+ *  default, a broken one is something to be told. */
+export async function localRuntimeMissing(): Promise<boolean> {
+  return (await resolveFile(MODEL_FILE)) !== null && !(await ortAvailable());
+}
+
+/** Whether the same-origin runtime is present. There is no remote fallback. Only a
+ *  `true` is kept: one failed probe (a dropped connection) must not switch the
+ *  detector off until reload. */
+let ortFound = false;
+async function ortAvailable(): Promise<boolean> {
+  if (ortFound) return true;
+  try {
+    const r = await fetch(ORT_LOCAL_BASE + ORT_ENTRY, { method: 'HEAD' });
+    if (r.ok) return (ortFound = true);
+  } catch {
+    // Unreachable — treated like absent, and asked again next time.
+  }
+  console.error(
+    `[detector] ONNX Runtime ${ORT_VERSION} is not served from ${ORT_LOCAL_BASE} — ` +
+      'run `pnpm vendor:ort` (dev and build do this automatically). On-device detection is unavailable.',
+  );
+  return false;
 }
 
 async function load(pack: DetectorPack): Promise<Loaded | null> {

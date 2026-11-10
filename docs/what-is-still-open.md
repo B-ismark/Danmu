@@ -8807,7 +8807,8 @@ own normal.
 `gyroscope` / `magnetometer` on the catch-all `/:path*`, and the only consumer is
 `app/onboarding/capture/page.tsx` through `lib/device-tilt.ts`, so every other route
 carries three sensor permissions it never uses. The threat named was a script from the
-jsDelivr ORT fallback host, which `script-src` allows and which executes in this origin.
+jsDelivr ORT fallback host, which `script-src` allowed and which executed in this origin
+(**resolved: the fallback and the host are gone, see below**).
 
 **The fix it proposed was built on a scratch build and measured, and in Chromium it takes
 the grant away from the capture screen for almost everyone.** The catch-all became
@@ -8855,9 +8856,9 @@ hostile script could read motion on every page, not only on capture. The site-wi
 grant does not create that script; it widens what one could do. The boundary that has
 to hold is `script-src` — which admits `'unsafe-inline'` for Next's bootstrap and the
 jsDelivr host as the ORT fallback — not this header, and that is where the worry is
-better met: `pnpm vendor:ort` already serves the runtime same-origin, and dropping the
-CDN from `script-src` once the vendored copy always ships closes the door this item
-named.
+better met: `dev` and `build` now run `pnpm vendor:ort` so the runtime always ships
+same-origin, and the CDN is dropped from `script-src` and `connect-src`. That closed
+the door this item named (RESOLVED).
 
 **What is done.**
 - `tests/permissions-policy.test.ts` — *serves the policy once, from the catch-all

@@ -3991,7 +3991,7 @@ installable (`components/ServiceWorkerRegistrar.tsx` registers the worker, in pr
 
 | Request | Strategy | Why |
 |---|---|---|
-| Cross-origin | **not intercepted** | Gemini, the ORT CDN, the weights. A cache is storage; storing those is not the worker's business. |
+| Cross-origin | **not intercepted** | Gemini and the weights (the ORT runtime is same-origin, `/ort/`). A cache is storage; storing those is not the worker's business. |
 | `/_next/static/*` | cache-first | Content-hashed, so a URL match is always the right bytes. |
 | Navigations | network-first, then this exact URL, then the same page under another query (`/settings?from=…` is one document), then `/` | A reload of `/room/<id>/model` must come back as that room, not the home page. |
 | Other same-origin | network-first, cache fallback | The manifest, the icon, RSC payloads for client-side navigation. |
@@ -4021,11 +4021,11 @@ The optional local detector is the only part of the app that executes or parses
 anything fetched from outside. Two controls exist because of it:
 
 - **`pnpm vendor:ort`** copies the ONNX Runtime out of `node_modules` into
-  `public/ort/` (git-ignored). A dynamic `import()` cannot carry a
-  subresource-integrity hash, so while this resolved to a CDN nothing verified
-  what came back — and whatever came back runs with access to the origin holding
-  the user's API key and every room. `lib/local-detect.ts` probes the local copy
-  first and keeps the CDN as a fallback, so a fresh clone still works.
+  `public/ort/` (git-ignored); `dev` and `build` run it first and it skips when the
+  version marker matches. A dynamic `import()` cannot carry a subresource-integrity
+  hash, so there is **no CDN fallback**: if the directory is missing the detector
+  is unavailable, the scan screen says so (`LOCAL_UNAVAILABLE`) and nothing runs
+  on-device.
 - **Weights** are format-checked on every remote fetch (ONNX protobuf magic plus a
   size window) and digest-checked against `MODEL_DIGESTS` in
   `lib/model-verify.ts` — the boundary is its own module now, because inside
