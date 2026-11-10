@@ -21,7 +21,8 @@
 // synonym-folded scoring and "queen bed 160x200cm" arriving at that size — is on
 // the ordinary search box inside `LibraryPicker` now. One field, not two tabs.
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { publishToastInset } from '@/lib/toast-inset';
 import { useStudio } from '@/lib/store';
 
 import { type LibraryItem } from '@/lib/scene-spec';
@@ -248,6 +249,13 @@ export function CatalogPanel({
 }) {
   const setOpen = useStudio((s) => s.setCatalogOpen);
   const phone = usePhoneStudio();
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Tell the toast host where this card starts, so an add's fit result stands beside it.
+  useEffect(() => {
+    const el = cardRef.current;
+    return el ? publishToastInset(el) : undefined;
+  }, [phone]);
 
   // Esc closes it, like every other panel in the studio (Look, Room, help). It
   // yields to a field being edited or a dialog in front — so Esc out of the search
@@ -272,6 +280,7 @@ export function CatalogPanel({
 
   return (
     <div
+      ref={cardRef}
       className="ds-card"
       style={{
         position: 'absolute',

@@ -138,10 +138,12 @@ export function StorageToast() {
       style={{
         position: 'fixed',
         top,
-        right: 16,
+        // `--toast-inset-right` is published by an open Library card (lib/toast-inset.ts)
+        // so a fit result is never printed on the list it answers.
+        right: 'var(--toast-inset-right, 16px)',
         // Never wider than the strip it sits in, and on a phone never wider than
         // the screen. Width is content-driven below that.
-        maxWidth: 'min(360px, calc(100vw - 32px))',
+        maxWidth: 'min(360px, calc(100vw - var(--toast-inset-right, 16px) - 16px))',
         zIndex: 'var(--z-toast)',
         display: 'flex',
         flexDirection: 'column',
