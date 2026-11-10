@@ -21,21 +21,33 @@ export function toastInsetFor(cardLeft: number, viewportW: number): number {
   return Math.max(TOAST_EDGE_PX, Math.min(wanted, cap));
 }
 
-/** Publish the inset for `el`, keep it fresh, and return the cleanup. */
+/** Live publishers, oldest first. A route change can mount the next card before the
+ *  last one's cleanup runs, so a cleanup must not clear what a newer card set. */
+const live: Array<() => void> = [];
+
+/** Publish the inset for `el`, keep it fresh, and return the cleanup. The newest live
+ *  card owns the variable; it is removed only when none is left. */
 export function publishToastInset(el: HTMLElement): () => void {
   const root = document.documentElement;
   const update = () => {
     const r = el.getBoundingClientRect();
     root.style.setProperty(TOAST_INSET_VAR, `${toastInsetFor(r.left, window.innerWidth)}px`);
   };
+  live.push(update);
   update();
-  window.addEventListener('resize', update);
-  const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+  const onChange = () => {
+    if (live[live.length - 1] === update) update();
+  };
+  window.addEventListener('resize', onChange);
+  const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(onChange);
   ro?.observe(el);
   if (el.parentElement) ro?.observe(el.parentElement);
   return () => {
-    window.removeEventListener('resize', update);
+    window.removeEventListener('resize', onChange);
     ro?.disconnect();
-    root.style.removeProperty(TOAST_INSET_VAR);
+    const at = live.indexOf(update);
+    if (at >= 0) live.splice(at, 1);
+    if (live.length) live[live.length - 1]();
+    else root.style.removeProperty(TOAST_INSET_VAR);
   };
 }

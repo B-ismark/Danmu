@@ -37,6 +37,29 @@ describe('toast inset', () => {
     expect(document.documentElement.style.getPropertyValue(TOAST_INSET_VAR)).toBe('');
   });
 
+  it("keeps the newer card's value when an older card's cleanup runs late", () => {
+    const mk = (left: number) => {
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      el.getBoundingClientRect = () => ({ left }) as DOMRect;
+      return el;
+    };
+    const stopA = publishToastInset(mk(window.innerWidth - 300));
+    const stopB = publishToastInset(mk(window.innerWidth - 400));
+    stopA();
+    expect(document.documentElement.style.getPropertyValue(TOAST_INSET_VAR)).toBe('416px');
+    stopB();
+    expect(document.documentElement.style.getPropertyValue(TOAST_INSET_VAR)).toBe('');
+  });
+
+  it('is published by the real CatalogPanel while open and removed when it closes', async () => {
+    const { CatalogPanel } = await import('@/components/studio/CatalogPanel');
+    const { unmount } = render(<CatalogPanel />);
+    expect(document.documentElement.style.getPropertyValue(TOAST_INSET_VAR)).not.toBe('');
+    unmount();
+    expect(document.documentElement.style.getPropertyValue(TOAST_INSET_VAR)).toBe('');
+  });
+
   it('has the toast host read that variable for its right edge', () => {
     render(<StorageToast />);
     act(() => {
