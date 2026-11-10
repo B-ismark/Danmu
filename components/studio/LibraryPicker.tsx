@@ -24,6 +24,7 @@ import { createLongPress } from '@/lib/long-press';
 import { SIZE_EXAMPLES } from '@/lib/size-examples';
 import { rankLibrary, sizeFromQuery, queryNamesSize, resolveQuerySize, describeOverruled } from '@/lib/shape-search';
 import { Icon } from '@/components/ui/Icon';
+import { toast } from '@/components/ui/StorageToast';
 import { ShapeIcon } from '@/components/ui/ShapeIcon';
 import type { MyPiece } from '@/lib/storage';
 import { MyPiecesShelf, matchMyPieces, useMyPieces } from './MyPiecesShelf';
@@ -151,8 +152,15 @@ export function LibraryPicker({
   const holdRef = useRef<(item: LibraryItem) => void>(() => {});
   holdRef.current = (item) => {
     anchorRef.current = item.label;
+    // Un-marking is always allowed; marking takes the same gate as a press.
+    const isMarked = marked.some((m) => m.label === item.label);
+    if (!isMarked && outOfRange(item) !== null) {
+      sayNotMarked([item]);
+      return;
+    }
+    const resolved = asAdded(item);
     setMarked((prev) =>
-      prev.some((m) => m.label === item.label) ? prev.filter((m) => m.label !== item.label) : [...prev, item],
+      prev.some((m) => m.label === item.label) ? prev.filter((m) => m.label !== item.label) : [...prev, resolved],
     );
   };
   const pending = useRef<LibraryItem | null>(null);
@@ -184,6 +192,55 @@ export function LibraryPicker({
   const asAdded = (item: LibraryItem): LibraryItem =>
     sized ? { ...item, dimMM: sizeFromQuery(item, q) } : item;
 
+  /** Why the size in the box cannot be THIS piece's, or `null` when it can.
+   *
+   *  `asAdded` clamps, and that is right for what a row SHOWS. It was wrong for what
+   *  a press DID: `sofa 700cm` arrived as a 4 m sofa, and the fit check then said "it
+   *  goes in, but it is tight" about a piece the user never asked for — a size
+   *  silently resized to fit (rule 2), at the one moment "use my own size" exists for.
+   *  So every way out of this list — click, Shift-range, long-press mark, drag, and
+   *  the swap modal's pick, which is `onPick` too — asks this first. Takes the
+   *  CATALOGUE item, not the resolved one: the resolved one is already clamped and
+   *  has nothing left to overrule. */
+  const outOfRange = (item: LibraryItem): string | null =>
+    sized ? describeOverruled(resolveQuerySize(item, q).overruled) : null;
+
+  /** Refuse a typed size the piece cannot be, and say so. The clamped size is
+   *  offered as the toast's one action, so arriving at the nearest legal size is
+   *  still one press away — but it is the user's press, not the app's assumption.
+   *  Returns true when it refused. */
+  function refuse(item: LibraryItem): boolean {
+    const why = outOfRange(item);
+    if (!why) return false;
+    const at = asAdded(item);
+    toast({
+      tone: 'danger',
+      title: `${item.label} not added`,
+      message: why,
+      ttl: 9000,
+      action: {
+        label: `Add at ${at.dimMM[0]}×${at.dimMM[1]}×${at.dimMM[2]} mm`,
+        onClick: () => onPick(at, { ownSize: true, byPointer: false }),
+      },
+    });
+    return true;
+  }
+
+  /** A mark is a promise to add later, so a size the piece cannot be is refused at
+   *  the mark rather than discovered at "Add 3". One toast for the whole gesture. */
+  function sayNotMarked(items: LibraryItem[]) {
+    if (items.length === 0) return;
+    toast({
+      tone: 'danger',
+      title: items.length === 1 ? `${items[0].label} not marked` : `${items.length} pieces not marked`,
+      message:
+        items.length === 1
+          ? outOfRange(items[0])!
+          : `The size you typed is outside the range of ${items.map((i) => i.label).join(', ')}.`,
+      ttl: 9000,
+    });
+  }
+
   /**
    * What a press on an entry means.
    *
@@ -199,12 +256,11 @@ export function LibraryPicker({
       const from = ordered.findIndex((i) => i.label === anchorRef.current);
       const to = ordered.findIndex((i) => i.label === item.label);
       // No anchor yet (or the search has hidden it): mark this one and start here.
-      // `item` arrives already resolved (the row passes `added`), and the rest of a
-      // Shift-range is resolved here, under the query that is in the box right now.
-      const range =
-        from < 0 || to < 0
-          ? [item]
-          : ordered.slice(Math.min(from, to), Math.max(from, to) + 1).map(asAdded);
+      // `item` is the CATALOGUE entry (see `outOfRange`), and the whole span is
+      // resolved here, under the query that is in the box right now.
+      const span = from < 0 || to < 0 ? [item] : ordered.slice(Math.min(from, to), Math.max(from, to) + 1);
+      sayNotMarked(span.filter((i) => outOfRange(i) !== null));
+      const range = span.filter((i) => outOfRange(i) === null).map(asAdded);
       anchorRef.current = anchorRef.current ?? item.label;
       // De-duplicated by label, and an existing mark WINS over a re-mark: the first
       // press is the one the user chose a size under.
@@ -216,10 +272,11 @@ export function LibraryPicker({
     }
     anchorRef.current = item.label;
     setMarked([]);
+    if (refuse(item)) return;
     // `detail` counts the clicks of a pointer press and is 0 for a button activated
     // from the keyboard — the one thing the host needs to know to decide where focus
     // goes next (see `focusStudioSurface`).
-    onPick(item, { ownSize: sized, byPointer: e.detail > 0 });
+    onPick(asAdded(item), { ownSize: sized, byPointer: e.detail > 0 });
   }
 
   return (
@@ -322,6 +379,12 @@ export function LibraryPicker({
                   onDragStart={
                     draggable
                       ? (e) => {
+                          // A drop is an add like any other, so it takes the same gate:
+                          // cancelling the drag here is what stops a clamped piece landing.
+                          if (refuse(item)) {
+                            e.preventDefault();
+                            return;
+                          }
                           e.dataTransfer.setData(
                             DND_MIME,
                             JSON.stringify({
@@ -351,11 +414,11 @@ export function LibraryPicker({
                         }
                       : undefined
                   }
-                  onClick={(e) => press(e, added)}
+                  onClick={(e) => press(e, item)}
                   onPointerDown={
                     canMark
                       ? (e) => {
-                          pending.current = added;
+                          pending.current = item;
                           lastType.current = e.pointerType;
                           press$.down(e.clientX, e.clientY, e.pointerType);
                         }
