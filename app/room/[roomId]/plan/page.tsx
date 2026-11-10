@@ -159,7 +159,7 @@ export default function PlanPage() {
           piece where the pointer let go, which on a map of the floor is the whole
           point. Click-to-drop-in-the-centre still works for anyone who would
           rather not drag. */}
-      {catalogOpen && <CatalogPanel bottomGap={100} canDrag />}
+      {catalogOpen && <CatalogPanel bottomGap={comfort ? 100 : undefined} canDrag />}
 
     </main>
   );

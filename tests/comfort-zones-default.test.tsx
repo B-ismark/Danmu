@@ -6,7 +6,8 @@
 // migrate and no way for this default to override a user's earlier choice.
 import 'fake-indexeddb/auto';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
+import { useStudio } from '@/lib/store';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('comfort-default', 'plan'));
 
@@ -22,5 +23,16 @@ describe('comfort zones default', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(toggle);
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('the Library stops short of the legend only while shading is on', () => {
+    cleanup();
+    act(() => useStudio.getState().setCatalogOpen(true));
+    const { container } = render(<PlanPage />);
+    const panel = () => container.querySelector<HTMLElement>('.ds-card[style*="min(268px"]')!;
+    expect(panel().style.bottom).toBe('56px');
+    fireEvent.click(screen.getByRole('button', { name: /comfort zones/i }));
+    expect(panel().style.bottom).toBe('100px');
+    act(() => useStudio.getState().setCatalogOpen(false));
   });
 });
