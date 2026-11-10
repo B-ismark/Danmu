@@ -24,7 +24,7 @@ import { createLongPress } from '@/lib/long-press';
 import { SIZE_EXAMPLES } from '@/lib/size-examples';
 import { rankLibrary, sizeFromQuery, queryNamesSize, resolveQuerySize, describeOverruled } from '@/lib/shape-search';
 import { Icon } from '@/components/ui/Icon';
-import { toast } from '@/components/ui/StorageToast';
+import { toast, dismissToast } from '@/components/ui/StorageToast';
 import { ShapeIcon } from '@/components/ui/ShapeIcon';
 import type { MyPiece } from '@/lib/storage';
 import { MyPiecesShelf, matchMyPieces, useMyPieces } from './MyPiecesShelf';
@@ -74,6 +74,7 @@ export function LibraryPicker({
   autoFocus = true,
   initialQuery = '',
   onPickMine,
+  pickVerb = 'add',
 }: {
   /** `ownSize` is set when the search words named the size — "sofa 228x95x83cm" —
    *  so the host can treat it as the user's own measurement rather than a preset's
@@ -101,6 +102,12 @@ export function LibraryPicker({
   /** Offer the user's saved pieces ("My pieces") above the catalogue. Only the catalog
    *  host passes it: swapping a piece for a saved build is not a thing yet. */
   onPickMine?: (piece: MyPiece, byPointer: boolean) => void;
+  /** What a pick DOES, for the words of a refusal. The swap modal passes 'swap': a
+   *  refused size there is "not swapped in", and it offers no "Add at…" button,
+   *  because the dialog is still open and retyping the size is the way on — a
+   *  button that outlived the dialog would swap a piece the user had walked away
+   *  from. */
+  pickVerb?: 'add' | 'swap';
 }) {
   const [q, setQ] = useState(initialQuery);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -192,6 +199,23 @@ export function LibraryPicker({
   const asAdded = (item: LibraryItem): LibraryItem =>
     sized ? { ...item, dimMM: sizeFromQuery(item, q) } : item;
 
+  /** The one refusal card this list has up. A new one REPLACES it, so pressing the
+   *  same row three times is one card, not a stack of three; and it goes when the
+   *  list does, because its "Add at…" acts through this list's `onPick` — closing
+   *  the panel, or leaving the room, must not leave a button that adds into
+   *  whichever room is open nine seconds later. */
+  const refusalToast = useRef<number | null>(null);
+  function say(spec: Parameters<typeof toast>[0]) {
+    if (refusalToast.current !== null) dismissToast(refusalToast.current);
+    refusalToast.current = toast(spec);
+  }
+  useEffect(
+    () => () => {
+      if (refusalToast.current !== null) dismissToast(refusalToast.current);
+    },
+    [],
+  );
+
   /** Why the size in the box cannot be THIS piece's, or `null` when it can.
    *
    *  `asAdded` clamps, and that is right for what a row SHOWS. It was wrong for what
@@ -213,16 +237,25 @@ export function LibraryPicker({
     const why = outOfRange(item);
     if (!why) return false;
     const at = asAdded(item);
-    toast({
-      tone: 'danger',
-      title: `${item.label} not added`,
-      message: why,
-      ttl: 9000,
-      action: {
-        label: `Add at ${at.dimMM[0]}×${at.dimMM[1]}×${at.dimMM[2]} mm`,
-        onClick: () => onPick(at, { ownSize: true, byPointer: false }),
-      },
-    });
+    say(
+      pickVerb === 'swap'
+        ? {
+            tone: 'danger',
+            title: `${item.label} not swapped in`,
+            message: `${why} Type a size inside that, or leave the size out.`,
+            ttl: 9000,
+          }
+        : {
+            tone: 'danger',
+            title: `${item.label} not added`,
+            message: why,
+            ttl: 9000,
+            action: {
+              label: `Add at ${at.dimMM[0]}×${at.dimMM[1]}×${at.dimMM[2]} mm`,
+              onClick: () => onPick(at, { ownSize: true, byPointer: false }),
+            },
+          },
+    );
     return true;
   }
 
@@ -230,7 +263,7 @@ export function LibraryPicker({
    *  the mark rather than discovered at "Add 3". One toast for the whole gesture. */
   function sayNotMarked(items: LibraryItem[]) {
     if (items.length === 0) return;
-    toast({
+    say({
       tone: 'danger',
       title: items.length === 1 ? `${items[0].label} not marked` : `${items.length} pieces not marked`,
       message:

@@ -11,13 +11,15 @@
 // on the first press, and Shift-range marking skips the refused rows.
 import 'fake-indexeddb/auto';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 
+let nextId = 0;
 const toast = vi.fn((spec: unknown) => {
   void spec;
-  return 1;
+  return ++nextId;
 });
-vi.mock('@/components/ui/StorageToast', () => ({ toast }));
+const dismissToast = vi.fn();
+vi.mock('@/components/ui/StorageToast', () => ({ toast, dismissToast }));
 
 const { LibraryPicker } = await import('@/components/studio/LibraryPicker');
 
@@ -26,6 +28,8 @@ type Spec = { tone: string; title: string; message: string; action?: { label: st
 beforeEach(() => {
   cleanup();
   toast.mockClear();
+  dismissToast.mockClear();
+  vi.useRealTimers();
 });
 
 /** The plain "Sofa" row, found by its visible name (a refused row also carries an
@@ -98,5 +102,73 @@ describe('a typed size outside the piece’s range is refused, not clamped', () 
     expect(notCancelled).toBe(false);
     expect(setData).not.toHaveBeenCalled();
     expect(toast).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps one refusal card up, not a stack, and takes it down with the list', () => {
+    const { unmount } = render(<LibraryPicker onPick={vi.fn()} initialQuery="sofa 700x95x83cm" autoFocus={false} />);
+    fireEvent.click(sofaRow(), { detail: 1 });
+    fireEvent.click(sofaRow(), { detail: 1 });
+    expect(toast).toHaveBeenCalledTimes(2);
+    // The second press replaced the first card…
+    const [first, second] = toast.mock.results.map((r) => r.value as number);
+    expect(dismissToast).toHaveBeenCalledWith(first);
+    // …and closing the panel removes the one left, so its "Add at…" cannot add into
+    // whatever room is open by the time someone presses it.
+    unmount();
+    expect(dismissToast).toHaveBeenLastCalledWith(second);
+  });
+});
+
+describe('the swap modal says swap, and offers no button that outlives it', () => {
+  it('refuses with swap words and no action', () => {
+    const onPick = vi.fn();
+    render(<LibraryPicker onPick={onPick} pickVerb="swap" initialQuery="sofa 700x95x83cm" autoFocus={false} />);
+    fireEvent.click(sofaRow(), { detail: 1 });
+    expect(onPick).not.toHaveBeenCalled();
+    const spec = toast.mock.calls[0][0] as Spec;
+    expect(spec.title).toBe('Sofa not swapped in');
+    expect(spec.action).toBeUndefined();
+  });
+});
+
+describe('a mark is refused the same way a press is', () => {
+  const addMarked = () =>
+    screen.queryAllByRole('button').find((b) => /^\s*Add \d+\s*$/.test(b.textContent ?? '')) ?? null;
+
+  it('Shift-click does not mark an out-of-range row', () => {
+    const onPickMany = vi.fn();
+    render(<LibraryPicker onPick={vi.fn()} onPickMany={onPickMany} initialQuery="sofa 700x95x83cm" autoFocus={false} />);
+    fireEvent.click(sofaRow(), { detail: 1, shiftKey: true });
+    expect((toast.mock.calls[0][0] as Spec).title).toBe('Sofa not marked');
+    expect(addMarked()).toBeNull();
+  });
+
+  it('Shift-click still marks an in-range row (the gate is not a wall)', () => {
+    render(<LibraryPicker onPick={vi.fn()} onPickMany={vi.fn()} initialQuery="sofa 200x90x80cm" autoFocus={false} />);
+    fireEvent.click(sofaRow(), { detail: 1, shiftKey: true });
+    expect(toast).not.toHaveBeenCalled();
+    expect(addMarked()).not.toBeNull();
+  });
+
+  it('a long press does not mark an out-of-range row', () => {
+    vi.useFakeTimers();
+    render(<LibraryPicker onPick={vi.fn()} onPickMany={vi.fn()} initialQuery="sofa 700x95x83cm" autoFocus={false} />);
+    fireEvent.pointerDown(sofaRow(), { clientX: 5, clientY: 5, pointerType: 'touch' });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect((toast.mock.calls[0][0] as Spec).title).toBe('Sofa not marked');
+    expect(addMarked()).toBeNull();
+  });
+
+  it('a long press still marks an in-range row', () => {
+    vi.useFakeTimers();
+    render(<LibraryPicker onPick={vi.fn()} onPickMany={vi.fn()} initialQuery="sofa 200x90x80cm" autoFocus={false} />);
+    fireEvent.pointerDown(sofaRow(), { clientX: 5, clientY: 5, pointerType: 'touch' });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(toast).not.toHaveBeenCalled();
+    expect(addMarked()).not.toBeNull();
   });
 });
