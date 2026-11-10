@@ -1038,13 +1038,13 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 }
 .idea-card__lead {
   font-size: var(--fs-caption); font-weight: 600; line-height: 1.3;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
   overflow: hidden; overflow-wrap: anywhere;
 }
 .idea-card__count { font-size: var(--fs-micro); color: var(--ink-3); }
-/* Three to a row leaves about seventeen characters a line, and the caption's last
-   clause ("facing the TV") is the part that says what the idea is for. */
-.ideas-grid--phone .idea-card__lead { -webkit-line-clamp: 3; }
+/* Three to a row leaves about seventeen characters a line. A tied card's caption grows a
+   tail saying how it differs, so the clamp is generous: that tail is the point. */
+.ideas-grid--phone .idea-card__lead { -webkit-line-clamp: 5; }
 .idea-card__heart {
   position: absolute; top: 3px; right: 3px;
   width: 26px; height: 26px;

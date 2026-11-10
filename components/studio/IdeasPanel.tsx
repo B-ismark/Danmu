@@ -47,6 +47,7 @@ import {
   freeName,
   IDEAS_PER_PAGE,
   ideaCaption,
+  distinctLeads,
   ideaTransforms,
   MAX_IDEAS,
   pageOf,
@@ -449,7 +450,14 @@ export function IdeasPanel({
   // A page past the last idea is only worth showing while more are coming. Pressed
   // Next into a search that then ran dry, it would be a blank card.
   const page = Math.min(session?.page ?? 0, exhausted || failed ? lastPage : Infinity);
-  const shown = session ? pageOf(session.ideas, page, size) : [];
+  const pageIdeas = session ? pageOf(session.ideas, page, size) : [];
+  // Captions are made different within the page the person is comparing.
+  const shown = useMemo(() => {
+    if (!session) return pageIdeas;
+    const leads = distinctLeads(session.base.parts, session.base.room.footprint, pageIdeas);
+    return pageIdeas.map((idea, i) => ({ ...idea, lead: leads[i] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.ideas, session?.base, page, size]);
   const onScreen = session?.ideas.find((i) => i.key === tKey) ?? null;
   const expecting =
     session !== null && hydrated && anyMovable && status === 'ok' && !failed && wantsMore(found, page, size, session.dry);

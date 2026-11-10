@@ -19,13 +19,13 @@
  * would make each thumbnail a lie about the room it produces, because the solver
  * arranged each one against the base and nothing else.
  */
-import { distToBoundary, footFromPart, footInsidePoly, frontVector, localToWorld, worldToLocal } from './geometry';
+import { distToBoundary, footFromPart, footInsidePoly, frontVector, nearestEdge, localToWorld, worldToLocal } from './geometry';
 import { isSeating, roleOf, roomProfile, WALL_ATTACH_TOL, isSoftFurnishing, type Role } from './layout-rules';
 import { highestSurfaceUnder, SUPPORT_Y_EPS } from './physics';
 import { ridingParents } from './rigid-parent';
 import { withRiders } from './layout-solve';
 import type { Placement } from './layout-score';
-import type { Footprint } from './footprint';
+import { footprintBounds, wallOutwardNormal, type Footprint } from './footprint';
 import type { ScenePart } from './scene-spec';
 
 /** Ideas to a page. Decision D6 of the 2026-09 overhaul: **three on a phone, four
@@ -259,6 +259,116 @@ export function ideaCaption(
   const lead =
     target === null ? `${part.name} ${where}` : `${part.name} ${where}, facing ${FACE[target.rank][1]}`;
   return { lead, count };
+}
+
+/** Compass word for the direction a vector points in the plan, the convention the
+ *  wall editor and the plan's rose already use: north is the top of the plan, -z. */
+function compass(dx: number, dz: number): 'north' | 'south' | 'east' | 'west' {
+  if (Math.abs(dz) >= Math.abs(dx)) return dz < 0 ? 'north' : 'south';
+  return dx > 0 ? 'east' : 'west';
+}
+
+/** Which wall the subject's back is against, by the compass side that wall faces
+ *  OUT to. Null when it is not against one (the same test `ideaCaption` makes). */
+function wallSide(part: ScenePart, at: Placement, footprint: Footprint): string | null {
+  const [fx, fz] = frontVector(at.yaw);
+  const half = part.dimMM[1] / 2000;
+  const bx = at.x - fx * half;
+  const bz = at.z - fz * half;
+  if (distToBoundary(footprint, bx, bz) > WALL_ATTACH_TOL) return null;
+  const hit = nearestEdge(footprint, bx, bz);
+  if (!hit) return null;
+  const [ox, oz] = wallOutwardNormal(footprint, hit.index);
+  return compass(ox, oz);
+}
+
+/** Where a piece standing in the open sits in the room, as "in the middle of the
+ *  room" or "in the north-east": the third of the room's bounding box it is in,
+ *  each way, in the same compass words the walls use. */
+function openRegion(at: Placement, footprint: Footprint): string {
+  const bb = footprintBounds(footprint);
+  const third = (v: number, lo: number, hi: number) => {
+    const t = (v - lo) / (hi - lo || 1);
+    return t < 1 / 3 ? -1 : t > 2 / 3 ? 1 : 0;
+  };
+  const ew = third(at.x, bb.minX, bb.maxX);
+  const ns = third(at.z, bb.minZ, bb.maxZ);
+  const north = ns < 0 ? 'north' : ns > 0 ? 'south' : '';
+  const east = ew > 0 ? 'east' : ew < 0 ? 'west' : '';
+  if (!north && !east) return 'in the middle of the room';
+  return `in the ${north && east ? `${north}-${east}` : north || east}`;
+}
+
+/** Where `j` ended up, in words: by a wall (which one) or in part of the room. */
+function placeWords(part: ScenePart, at: Placement, footprint: Footprint, verb: string): string {
+  const side = wallSide(part, at, footprint);
+  return side ? `${verb} the ${side} wall` : openRegion(at, footprint);
+}
+
+/** The captions for ONE page of ideas, made different from each other.
+ *
+ *  `ideaCaption` names the piece the room is arranged around, whether it stands by
+ *  a wall and what it faces: in a room with one sofa and a TV that is a handful of
+ *  possible sentences across four different arrangements, and three of four cards
+ *  read the same. A caption that does not tell the cards apart is no help choosing.
+ *
+ *  So a card keeps the short caption unless another card on the page has the same
+ *  one, and only then is it made more specific, for the cards still tied: which
+ *  compass wall the piece's back is against, or what part of the room it stands in;
+ *  then, piece by piece (largest first), where the other pieces that moved ended up,
+ *  taking the first piece whose whereabouts actually differ among the tied cards.
+ *  All of it is read off the placements. Cards still tied once every piece has been
+ *  tried are the same arrangement as far as any sentence here can say, and keep
+ *  equal captions rather than an invented difference.
+ *
+ *  Index-aligned to `ideas`. */
+export function distinctLeads(
+  parts: readonly ScenePart[],
+  footprint: Footprint,
+  ideas: readonly Pick<Idea, 'placements' | 'moved'>[],
+): (string | null)[] {
+  const out = ideas.map((idea) => ideaCaption(parts, footprint, idea).lead);
+  const subjects = ideas.map((idea) => captionSubject(parts, idea));
+  const tied = () => {
+    const by = new Map<string, number[]>();
+    out.forEach((l, i) => {
+      if (l !== null && subjects[i] !== null) by.set(l, [...(by.get(l) ?? []), i]);
+    });
+    return [...by.values()].filter((g) => g.length > 1);
+  };
+
+  // 1. The subject's wall, or its part of the room.
+  for (const group of tied()) {
+    for (const i of group) {
+      const s = subjects[i]!;
+      const at = ideas[i].placements[s];
+      const side = wallSide(parts[s], at, footprint);
+      out[i] = side
+        ? out[i]!.replace('against a wall', `against the ${side} wall`)
+        : out[i]!.replace('in the open', openRegion(at, footprint));
+    }
+  }
+
+  // 2. The other pieces that moved, largest first.
+  const bigFirst = parts.map((_, j) => j).filter((j) => !isSoftFurnishing(parts[j])).sort(
+    (x, y) => parts[y].dimMM[0] * parts[y].dimMM[1] - parts[x].dimMM[0] * parts[x].dimMM[1],
+  );
+  for (const group of tied()) {
+    const live = group.slice();
+    for (const j of bigFirst) {
+      const here = live.filter((i) => j !== subjects[i] && ideas[i].moved.includes(j));
+      const says = here.map((i) => placeWords(parts[j], ideas[i].placements[j], footprint, 'by'));
+      if (here.length === 0 || new Set(says).size < 2) continue;
+      here.forEach((i, k) => {
+        out[i] = `${out[i]} · ${parts[j].name} ${says[k]}`;
+      });
+      // Only the cards that still tie go on to the next piece.
+      const still = tied().find((g) => g.includes(live[0]));
+      if (!still) break;
+      live.splice(0, live.length, ...still.filter((i) => group.includes(i)));
+    }
+  }
+  return out;
 }
 
 /** The piece a caption is about: the room's anchor (bed, sofa, dining table, desk —
