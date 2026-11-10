@@ -44,6 +44,7 @@ import { ROOM_PRESETS as PRESETS, createPresetRoom, typicalOf } from '@/lib/room
 //
 // All of it is computed per render rather than once per preset, because the size
 // is no longer the preset's: a typed room draws every outline at the typed size.
+
 /** The preview at screen scale: how many drawing units one CSS pixel is, and the
  *  caption step in pixels, read off the page rather than copied from it.
  *

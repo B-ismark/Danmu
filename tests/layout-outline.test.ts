@@ -12,6 +12,17 @@ const fit = {
   d: Math.max(...ROOM_PRESETS.map((p) => p.depth)),
 };
 
+describe('fit', () => {
+  it('a larger fit shrinks the same room, leaving its vertices and box centre proportionate', () => {
+    const own = planFor('l', 6, 4.7);
+    const shared = planFor('l', 6, 4.7, { w: 12, d: 9.4 });
+    expect(shared.path).not.toBe(own.path);
+    expect(shared.box.w).toBeCloseTo(own.box.w / 2, 5);
+    expect(shared.box.h).toBeCloseTo(own.box.h / 2, 5);
+    expect(points(shared.path)).toHaveLength(points(own.path).length);
+  });
+});
+
 describe('layout picker outlines are derived from the footprint', () => {
   for (const p of ROOM_PRESETS) {
     it(`${p.id}: one outline vertex per footprint vertex, in the footprint's proportions`, () => {
