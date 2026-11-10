@@ -1,40 +1,81 @@
 import { describe, expect, it } from 'vitest';
-import { distinctLeads, ideaCaption, IDEAS_PER_PAGE } from '@/lib/layout-ideas';
+import { backWall, distinctLeads, ideaCaption, IDEAS_PER_PAGE, NEAR_LANDMARK_M } from '@/lib/layout-ideas';
 import { lockedForShuffle, shuffleRoom, type ShuffleOffer } from '@/lib/layout-shuffle';
-import { footprintBounds, type Footprint } from '@/lib/footprint';
-import { frontVector } from '@/lib/geometry';
+import { footprintBounds, footprintForLayout, wallOutwardNormal, wallSegments, type Footprint } from '@/lib/footprint';
+import { distToBoundary, footFromPart, footInsidePoly, frontVector, pointInPoly } from '@/lib/geometry';
+import { roleOf, WALL_ATTACH_TOL } from '@/lib/layout-rules';
+import { wallLabelFor, wallLabelOf } from '@/lib/wall-label';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Placement } from '@/lib/layout-score';
 import { ROOMS } from './helpers/ideas-rooms';
 
 // The Ideas gallery's cards must be told apart by their captions, and what a caption
 // says must be true of its arrangement. Measured on every room the bench uses, with
-// the real search, one press, first page of four.
+// the real search, one press, first page of four. Wall names are the plan's own
+// (`wallLabelOf`), never a convention of this file's.
 
-const COMPASS_OUT: Record<string, [number, number]> = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
+const lower = (label: string) => (/^wall \d+$/i.test(label) ? label.toLowerCase() : `the ${label.toLowerCase()}`);
 
-/** An independent read of "against the X wall": some polygon edge lies within a hand
- *  of the piece's back, and that edge faces out toward X. Written from the polygon
- *  alone, not from the production helpers. */
-function backIsOnWall(poly: Footprint, part: ScenePart, at: Placement, side: string): boolean {
+function edgeDist(poly: Footprint, e: number, x: number, z: number): number {
+  const [ax, az] = poly[e];
+  const [bx, bz] = poly[(e + 1) % poly.length];
+  const l2 = (bx - ax) ** 2 + (bz - az) ** 2;
+  const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / l2));
+  return Math.hypot(x - (ax + t * (bx - ax)), z - (az + t * (bz - az)));
+}
+
+/** Is `phrase` ("the north wall" / "wall 3") a wall the piece's back is on? Some edge
+ *  the plan labels that way is within reach of the back and faces away from it. */
+function backIsOn(poly: Footprint, part: ScenePart, at: Placement, phrase: string): boolean {
   const [fx, fz] = frontVector(at.yaw);
   const x = at.x - (fx * part.dimMM[1]) / 2000;
   const z = at.z - (fz * part.dimMM[1]) / 2000;
-  const area = poly.reduce((s, [ax, az], i) => {
-    const [bx, bz] = poly[(i + 1) % poly.length];
-    return s + (ax * bz - bx * az);
-  }, 0);
-  const sign = area > 0 ? 1 : -1;
-  const [ox, oz] = COMPASS_OUT[side];
-  return poly.some(([ax, az], i) => {
-    const [bx, bz] = poly[(i + 1) % poly.length];
-    const len = Math.hypot(bx - ax, bz - az);
-    const nx = (sign * (bz - az)) / len;
-    const nz = (sign * -(bx - ax)) / len;
-    if (nx * ox + nz * oz < 0.9) return false;
-    const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / (len * len)));
-    return Math.hypot(x - (ax + t * (bx - ax)), z - (az + t * (bz - az))) <= 0.1;
+  return poly.some((_, e) => {
+    if (lower(wallLabelOf(poly, e)) !== phrase) return false;
+    const [ox, oz] = wallOutwardNormal(poly, e);
+    return ox * -fx + oz * -fz >= 0.5 && edgeDist(poly, e, x, z) <= WALL_ATTACH_TOL;
   });
+}
+
+const TAIL = /^(.+?) moves (by (?:the .+ wall|wall \d+)|near the (?:window|door|TV)|to the middle of the room)$/;
+
+/** Every claim in `lead` checked against the arrangement. */
+function checkTrue(parts: ScenePart[], footprint: Footprint, lead: string, idea: { placements: Placement[]; moved: number[] }) {
+  const b = footprintBounds(footprint);
+  const [head, ...tails] = lead.split(' · ');
+  const subject = parts.findIndex((p) => head.startsWith(`${p.name} `));
+  expect(subject, lead).toBeGreaterThanOrEqual(0);
+  const claimIn = (j: number, words: string) => {
+    const part = parts[j];
+    const at = idea.placements[j];
+    const wall = /(?:against|by) ((?:the .+? wall)|(?:wall \d+))/.exec(words);
+    if (wall) expect(backIsOn(footprint, part, at, wall[1]), words).toBe(true);
+    if (/in the middle of the room/.test(words)) {
+      // Inside the room (the footprint test, not a box), and in the box's central third.
+      expect(footInsidePoly(footFromPart([at.x, 0, at.z], at.yaw, part.dimMM, part.circle, part.shape), footprint), words).toBe(true);
+      for (const t of [(at.x - b.minX) / b.width, (at.z - b.minZ) / b.depth]) {
+        expect(t).toBeGreaterThanOrEqual(1 / 3);
+        expect(t).toBeLessThanOrEqual(2 / 3);
+      }
+    }
+    const near = /near the (window|door|TV)/.exec(words);
+    if (near) {
+      const role = near[1] === 'TV' ? 'tv' : near[1];
+      expect(
+        parts.some((q, k) => k !== j && roleOf(q) === role && Math.hypot(q.pos[0] - at.x, q.pos[2] - at.z) <= NEAR_LANDMARK_M),
+        words,
+      ).toBe(true);
+    }
+  };
+  claimIn(subject, head.split(', facing')[0]);
+  for (const tail of tails) {
+    const m = TAIL.exec(tail);
+    expect(m, `a tail with a verb: ${tail}`).not.toBeNull();
+    const j = parts.findIndex((p) => p.name === m![1]);
+    expect(j, tail).toBeGreaterThanOrEqual(0);
+    expect(idea.moved, tail).toContain(j);
+    claimIn(j, m![2].replace('to the middle', 'in the middle'));
+  }
 }
 
 describe('Ideas captions tell the cards apart', () => {
@@ -46,44 +87,8 @@ describe('Ideas captions tell the cards apart', () => {
       expect(ideas.length).toBeGreaterThan(1);
       const leads = distinctLeads(r.parts, r.footprint, ideas);
       expect(new Set(leads).size, leads.join('\n')).toBe(leads.length);
-
-      const b = footprintBounds(r.footprint);
       leads.forEach((lead, i) => {
-        if (lead === null) return;
-        const subject = r.parts.findIndex((p) => lead.startsWith(`${p.name} `));
-        expect(subject, lead).toBeGreaterThanOrEqual(0);
-        const part = r.parts[subject];
-        const at = ideas[i].placements[subject];
-        const [headAll, ...tails] = lead.split(' · ');
-        const head = headAll.split(', facing')[0];
-        const wall = /against the (north|south|east|west) wall/.exec(head);
-        if (wall) expect(backIsOnWall(r.footprint, part, at, wall[1]), lead).toBe(true);
-        // A named region of the room: its bounding-box third, each way.
-        const tx = (at.x - b.minX) / b.width;
-        const tz = (at.z - b.minZ) / b.depth;
-        const region = /in the (?:(north|south)(?:-(east|west))?|(east|west))$/.exec(head);
-        if (region) {
-          const ns = region[1];
-          const ew = region[2] ?? region[3];
-          if (ns === 'north') expect(tz).toBeLessThan(1 / 3);
-          if (ns === 'south') expect(tz).toBeGreaterThan(2 / 3);
-          if (ew === 'west') expect(tx).toBeLessThan(1 / 3);
-          if (ew === 'east') expect(tx).toBeGreaterThan(2 / 3);
-        }
-        if (head.endsWith('in the middle of the room')) {
-          for (const t of [tx, tz]) {
-            expect(t).toBeGreaterThanOrEqual(1 / 3);
-            expect(t).toBeLessThanOrEqual(2 / 3);
-          }
-        }
-        // Each trailing clause names a piece that moved in this idea, truthfully.
-        for (const tail of tails) {
-          const j = r.parts.findIndex((p) => tail.startsWith(`${p.name} `));
-          expect(j, tail).toBeGreaterThanOrEqual(0);
-          expect(ideas[i].moved).toContain(j);
-          const w = /by the (north|south|east|west) wall$/.exec(tail);
-          if (w) expect(backIsOnWall(r.footprint, r.parts[j], ideas[i].placements[j], w[1]), tail).toBe(true);
-        }
+        if (lead !== null) checkTrue(r.parts, r.footprint, lead, ideas[i]);
       });
     });
   }
@@ -94,5 +99,91 @@ describe('Ideas captions tell the cards apart', () => {
     const out = shuffleRoom(r.parts, { footprint: r.footprint, height: 2.4 }, locked, { attempt: 1, history: [] });
     const one = (out?.ideas ?? []).slice(0, 1).map((i) => ({ placements: i.placements, moved: i.moved }));
     expect(distinctLeads(r.parts, r.footprint, one)).toEqual([ideaCaption(r.parts, r.footprint, one[0]).lead]);
+  });
+});
+
+describe('a caption names a wall the way the plan does', () => {
+  it('wallLabelOf is what the plan and the Inspector compute from wallSegments, in every preset', () => {
+    for (const id of ['rect', 'l', 't', 'u', 'open'] as const) {
+      const fp = footprintForLayout(id, 6, 5);
+      const segs = wallSegments(fp);
+      expect(segs.length).toBe(fp.length);
+      fp.forEach((_, e) => expect(wallLabelOf(fp, e), `${id} edge ${e}`).toBe(wallLabelFor(segs[e].yaw, e, fp.length === 4)));
+    }
+  });
+
+  it('says "wall N" on an outline that is not four-sided, and a compass side on one that is', () => {
+    expect(wallLabelOf(footprintForLayout('l', 6, 5), 0)).toMatch(/^Wall \d$/);
+    expect(wallLabelOf(footprintForLayout('rect', 6, 5), 0)).toMatch(/^(North|South|East|West) wall$/);
+  });
+
+  const sofa = { id: 'sofa', name: 'Sofa', category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 800], pos: [0, 0, 0], rot: 0, locked: false } as ScenePart;
+  const tied = (fp: Footprint, parts: ScenePart[], pls: Placement[][]) =>
+    distinctLeads(parts, fp, pls.map((placements) => ({ placements, moved: placements.map((_, i) => i) })));
+
+  it('an L room: the caption says the wall the plan labels, "against wall N"', () => {
+    const fp = footprintForLayout('l', 6, 5);
+    const b = footprintBounds(fp);
+    // Back flat on the first edge's wall, in two spots, so the two cards tie.
+    const [ax, az] = fp[0];
+    const [bx, bz] = fp[1];
+    const [ox, oz] = wallOutwardNormal(fp, 0);
+    const yaw = Math.atan2(-ox, -oz);
+    const pl = (t: number): Placement => ({ x: ax + (bx - ax) * t - ox * 0.45, z: az + (bz - az) * t - oz * 0.45, yaw }) as Placement;
+    const [one, two] = tied(fp, [sofa], [[pl(0.35)], [pl(0.65)]]);
+    expect(b.width).toBeGreaterThan(0);
+    expect(one).toBe(two);
+    expect(one).toBe(`Sofa against ${wallLabelOf(fp, 0).toLowerCase()}`);
+  });
+
+  it('open-floor claims in an L stay inside the footprint: the notch is never "the middle of the room"', () => {
+    const fp = footprintForLayout('l', 6, 5);
+    const b = footprintBounds(fp);
+    // The deepest point of the cut-away quadrant inside the box's central third.
+    let notch: [number, number] | null = null;
+    let deepest = 0;
+    for (let i = 0; i <= 20; i++) {
+      for (let k = 0; k <= 20; k++) {
+        const x = b.minX + b.width * (1 / 3 + (i / 20) / 3);
+        const z = b.minZ + b.depth * (1 / 3 + (k / 20) / 3);
+        if (pointInPoly(x, z, fp)) continue;
+        const d = distToBoundary(fp, x, z);
+        if (d > deepest) {
+          deepest = d;
+          notch = [x, z];
+        }
+      }
+    }
+    expect(notch, 'the fixture must have floor-less ground in its middle third').not.toBeNull();
+    expect(deepest).toBeGreaterThan(WALL_ATTACH_TOL + 0.1);
+    let inside: [number, number] | null = null;
+    for (let i = 0; i <= 20 && !inside; i++) {
+      for (let k = 0; k <= 20 && !inside; k++) {
+        const x = b.minX + b.width * (1 / 3 + (i / 20) / 3);
+        const z = b.minZ + b.depth * (1 / 3 + (k / 20) / 3);
+        if (pointInPoly(x, z, fp) && distToBoundary(fp, x, z) > 0.8) inside = [x, z];
+      }
+    }
+    expect(inside, 'and some floor in it too').not.toBeNull();
+    const at = (p: [number, number]): Placement => ({ x: p[0], z: p[1], yaw: 0 }) as Placement;
+    const [inNotch, onFloor] = tied(fp, [{ ...sofa, dimMM: [600, 200, 800] }], [[at(notch!)], [at(inside!)]]);
+    expect(inNotch).not.toMatch(/middle of the room/);
+    expect(onFloor).toBe('Sofa in the middle of the room');
+  });
+
+  it('a corner takes the wall the back faces, not the nearer edge', () => {
+    const fp = footprintForLayout('rect', 6, 4);
+    const b = footprintBounds(fp);
+    // Back to the EAST wall (front is -x), 0.04 m off it, and only 0.01 m off the
+    // north wall: the nearest edge is north, the wall it is turned away from is east.
+    const yaw = -Math.PI / 2;
+    const place = { x: b.maxX - 0.04 - 0.45, z: b.minZ + 0.01, yaw } as Placement;
+    const e = backWall(sofa, place, fp);
+    expect(e).not.toBeNull();
+    expect(lower(wallLabelOf(fp, e!))).toBe('the east wall');
+    const other = { x: b.maxX - 0.04 - 0.45, z: b.minZ + 0.8, yaw } as Placement;
+    const [a, c] = tied(fp, [sofa], [[place], [other]]);
+    expect(a).toBe('Sofa against the east wall');
+    expect(c).toBe('Sofa against the east wall');
   });
 });

@@ -22,6 +22,7 @@ import { MOUNT_PAD, restingOn } from '@/lib/physics';
 import { moveToWall, wallSentence } from '@/lib/to-wall';
 import { useRoomReport } from './RoomTools';
 import { wallSegments, type Footprint } from '@/lib/footprint';
+import { wallLabelFor } from '@/lib/wall-label';
 import { describeSpaceRefusal, refuseForSpace, spaceLimits } from '@/lib/space-bound';
 import { moveWallCarrying } from '@/lib/wall-actions';
 import { onPageLeave } from '@/lib/page-leave';
@@ -798,16 +799,6 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
   );
 }
 
-// Compass label for a wall from its inward normal (wallSegments yaw encodes it).
-// Falls back to "Wall n" for the extra edges of L / T / U footprints.
-function wallName(yaw: number, index: number, edgeCount: number): string {
-  if (edgeCount !== 4) return `Wall ${index + 1}`;
-  const inX = Math.sin(yaw);
-  const inZ = Math.cos(yaw);
-  if (Math.abs(inZ) >= Math.abs(inX)) return inZ > 0 ? 'North wall' : 'South wall';
-  return inX > 0 ? 'West wall' : 'East wall';
-}
-
 // Wall editor — shown when a wall is selected instead of a part. Paint one wall
 // or all walls, reset, and nudge the wall in/out (drag in the 3D / plan views is
 // the primary move affordance; these buttons are the precise fallback).
@@ -819,7 +810,7 @@ function WallInspector({ index }: { index: number }) {
 
   const segs = wallSegments(room.footprint);
   const seg = segs[index];
-  const name = seg ? wallName(seg.yaw, index, room.footprint.length) : `Wall ${index + 1}`;
+  const name = seg ? wallLabelFor(seg.yaw, index, room.footprint.length === 4) : `Wall ${index + 1}`;
   const painted = room.wallColors?.[index] !== undefined;
   const current = room.wallColors?.[index] ?? SCENE.wall;
 
