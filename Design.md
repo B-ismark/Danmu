@@ -3513,9 +3513,9 @@ surface, Backspace included: the Undo toast is the answer (the user, 2026-10-01)
 - Loaded at runtime, not bundled: the ONNX weights, and `onnxruntime-web`
   itself via a `webpackIgnore` dynamic `import()` (bundling ort breaks the Next
   build), so ort is a **devDependency** — installed for its types only. It
-  resolves **`public/ort/` first** (`pnpm vendor:ort`, same-origin, which is what
-  lets the CSP stay tight) and keeps the jsDelivr CDN as the fallback for a fresh
-  clone — see §9. Its version is pinned exactly and mirrored by `ORT_VERSION` in
+  loads from **`public/ort/` only** (`pnpm vendor:ort`, run automatically by `dev` and
+  `build`; same-origin, which is what lets the CSP stay tight) — there is no CDN
+  fallback, and a missing directory reports the detector unavailable — see §9. Its version is pinned exactly and mirrored by `ORT_VERSION` in
   `lib/local-detect.ts`; move both together or the compiled types drift from the
   executed wasm.
 

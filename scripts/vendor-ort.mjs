@@ -11,12 +11,13 @@
 // The runtime still must NOT be bundled — `onnxruntime-web`'s prebuilt dists
 // break Next's server pass, which is why the import is marked `webpackIgnore`.
 // Serving the same files from public/ keeps that property and removes the third
-// party. public/ort/ is git-ignored; run this after install.
+// party. public/ort/ is git-ignored; `pnpm dev` and `pnpm build` run this first,
+// so CI and any host that builds from source ship it without a separate step.
 //
 //   node scripts/vendor-ort.mjs      (or: pnpm vendor:ort)
 //
-// If it has not been run, lib/local-detect.ts falls back to the CDN, so a fresh
-// clone still works — it just trusts jsDelivr until this is run.
+// There is no CDN fallback: if public/ort/ is missing, lib/local-detect.ts reports
+// the detector unavailable.
 
 import { cp, mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -100,7 +101,7 @@ async function main() {
     `[vendor-ort] copied ${picked.length} files (${(bytes / 1024 / 1024).toFixed(1)} MB) ` +
       `from onnxruntime-web@${found.version} → public/ort/`,
   );
-  console.log('[vendor-ort] the CDN is now only a fallback. Keep ORT_VERSION in lib/local-detect.ts in step with this version.');
+  console.log('[vendor-ort] same-origin only, no CDN fallback. Keep ORT_VERSION in lib/local-detect.ts in step with this version.');
 }
 
 main().catch((e) => {

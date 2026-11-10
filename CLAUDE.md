@@ -956,9 +956,9 @@ the boundary honest in both directions: a module only tests import does not belo
   grepping the build's output. Neither guard is decoration: each of the five
   assertions was checked by mutation, including an actual downgrade to 8.57.
 - `onnxruntime-web` must stay **runtime-loaded** with `webpackIgnore` — bundling
-  it breaks the Next build. It is served from `public/ort/` after
-  `pnpm vendor:ort` (same-origin, so the CSP can be tight); the jsDelivr CDN is
-  only the fallback when that has not been run.
+  it breaks the Next build. It is served from `public/ort/`, which
+  `pnpm dev` / `pnpm build` fill via `vendor:ort` (same-origin, so the CSP can be tight);
+  there is no CDN fallback and the CSP names no runtime host.
 - Persisted data is read defensively and `RoomData.version` exists for the first
   non-additive change. When you add a field to a saved record, add it to BOTH
   directions of its codec — `toRecord`/`fromRecord` on the detect screen exist

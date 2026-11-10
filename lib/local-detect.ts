@@ -216,13 +216,13 @@ export const NAME_TO_SHAPE: Partial<Record<string, Shape>> = {
 // of the app bundle entirely. The package stays installed as a devDependency for
 // its types only.
 //
-// SAME-ORIGIN FIRST. A dynamic import() cannot carry a subresource-integrity
-// hash, so when this resolved to a CDN there was nothing verifying what came
-// back — and whatever came back executes with full access to this origin, which
-// holds the user's Google API key (localStorage) and every room they own
-// (IndexedDB). `pnpm vendor:ort` copies the runtime into public/ort/, and the
-// probe below prefers it. The CDN stays as a fallback so a fresh clone still
-// works; the CSP in next.config.mjs allows exactly these two.
+// SAME-ORIGIN ONLY. A dynamic import() cannot carry a subresource-integrity
+// hash, so a CDN here would be third-party code with nothing verifying it,
+// executing with full access to this origin, which holds the user's Google API key
+// (localStorage) and every room they own (IndexedDB). There is no CDN fallback:
+// `pnpm dev` and `pnpm build` run scripts/vendor-ort.mjs, which copies the runtime
+// into public/ort/. If that directory is absent the detector reports itself
+// unavailable and says why; the CSP in next.config.mjs allows no runtime host.
 //
 // ORT_VERSION must match that devDependency exactly, or the types compiled
 // against will drift from the wasm actually executed. Both are pinned (no
@@ -230,7 +230,6 @@ export const NAME_TO_SHAPE: Partial<Record<string, Shape>> = {
 type OrtNS = typeof import('onnxruntime-web');
 const ORT_VERSION = '1.27.0';
 const ORT_LOCAL_BASE = '/ort/';
-const ORT_CDN_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 const ORT_ENTRY = 'ort.min.mjs';
 
 // ─── Weights integrity ──────────────────────────────────────────
@@ -477,22 +476,26 @@ export async function removeDetector(): Promise<void> {
 /** Whether the detector can run at all — the OIV7 model is the floor, the
  *  open-vocabulary pass is a bonus on top. Cached per session. */
 export async function localDetectorAvailable(): Promise<boolean> {
-  return (await resolveFile(MODEL_FILE)) !== null;
+  return (await resolveFile(MODEL_FILE)) !== null && (await ortAvailable());
 }
 
-/** Same local-then-remote probe as the weights, for the runtime itself. */
-let ortBase: Promise<string> | null = null;
-function resolveOrtBase(): Promise<string> {
-  ortBase ??= (async () => {
+/** Whether the same-origin runtime is present. There is no remote fallback. */
+let ortProbe: Promise<boolean> | null = null;
+function ortAvailable(): Promise<boolean> {
+  ortProbe ??= (async () => {
     try {
       const r = await fetch(ORT_LOCAL_BASE + ORT_ENTRY, { method: 'HEAD' });
-      if (r.ok) return ORT_LOCAL_BASE;
+      if (r.ok) return true;
     } catch {
-      // Not vendored — fall through to the CDN.
+      // Unreachable — treated like absent.
     }
-    return ORT_CDN_BASE;
+    console.error(
+      `[detector] ONNX Runtime ${ORT_VERSION} is not served from ${ORT_LOCAL_BASE} — ` +
+        'run `pnpm vendor:ort` (dev and build do this automatically). On-device detection is unavailable.',
+    );
+    return false;
   })();
-  return ortBase;
+  return ortProbe;
 }
 
 async function load(pack: DetectorPack): Promise<Loaded | null> {
@@ -502,9 +505,9 @@ async function load(pack: DetectorPack): Promise<Loaded | null> {
     try {
       const modelBase = await resolveFile(MODEL_FILE);
       if (!modelBase) return null;
-      const base = await resolveOrtBase();
-      const ort = (await import(/* webpackIgnore: true */ `${base}${ORT_ENTRY}`)) as OrtNS;
-      ort.env.wasm.wasmPaths = base;
+      if (!(await ortAvailable())) return null;
+      const ort = (await import(/* webpackIgnore: true */ `${ORT_LOCAL_BASE}${ORT_ENTRY}`)) as OrtNS;
+      ort.env.wasm.wasmPaths = ORT_LOCAL_BASE;
       const namesBase = (await resolveFile(NAMES_FILE)) ?? modelBase;
       const names = await fetchNames(namesBase, NAMES_FILE);
       // Without the class table every detection would be an index, so this is a
