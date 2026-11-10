@@ -28,7 +28,9 @@ export default function PlanPage() {
   // while the drawing labelled millimetres, rendered at 100 px/m, and zoomed
   // 0.4×–4× — three false claims on the one screen someone might measure from.
   const [view, setView] = useState({ zoom: 1, rot: 0, hasCutOff: false });
-  const [comfort, setComfort] = useState(true);
+  // Off until asked for: the shading washes the whole plan orange, and a first look at
+  // a room should be the room. Page-local on purpose, so there is no stored choice to migrate.
+  const [comfort, setComfort] = useState(false);
 
   // Warm the 3D chunk while the user is here, because from this page the 3D tab is
   // the likeliest next click and its module graph is the heaviest in the app —
