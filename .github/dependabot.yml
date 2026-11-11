@@ -30,7 +30,7 @@ updates:
         update-types: [minor, patch]
     ignore:
       # Pinned exactly, and the same version is written into lib/local-detect.ts
-      # (ORT_VERSION, the CDN fallback) and tests/service-worker.test.ts. A bump here
+      # (ORT_VERSION) and tests/service-worker.test.ts. A bump here
       # alone would install one runtime and fetch another. Move all three together,
       # then run `pnpm vendor:ort`. Version updates only: a SECURITY update still
       # opens, and fails CI on that mismatch loudly, which is the right failure.

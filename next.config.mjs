@@ -13,10 +13,6 @@
 
 const dev = process.env.NODE_ENV !== 'production';
 
-/** ONNX Runtime. Served from public/ort/ when `pnpm vendor:ort` has been run;
- *  the CDN stays as the fallback for a fresh clone, so it has to stay allowed.
- *  (See scripts/vendor-ort.mjs and the resolver in lib/local-detect.ts.) */
-const ORT_CDN = 'https://cdn.jsdelivr.net';
 /** Optional Gemini detection — the only user-data egress in the app. */
 const GEMINI = 'https://generativelanguage.googleapis.com';
 /** Detector weights, when public/models/ has not been populated locally. The
@@ -30,7 +26,7 @@ const csp = [
   // no other reason to run. 'wasm-unsafe-eval' is for the ONNX Runtime's wasm
   // backend. 'unsafe-eval' is dev-only — the Next dev overlay and React refresh
   // need it, production does not.
-  `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${dev ? `'unsafe-eval' ` : ''}${ORT_CDN}`,
+  `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${dev ? ` 'unsafe-eval'` : ''}`,
   // The app styles almost everything with inline style objects.
   `style-src 'self' 'unsafe-inline'`,
   // Photo previews and the plan/snapshot exports are blob: and data: URLs.
@@ -42,7 +38,7 @@ const csp = [
   // already covers registering /sw.js — it was there for ORT's blob: workers.
   `manifest-src 'self'`,
   // next/font self-hosts the Google fonts at build time, so no font CDN here.
-  `connect-src 'self' blob: data: ${GEMINI} ${ORT_CDN} ${WEIGHTS.join(' ')}`,
+  `connect-src 'self' blob: data: ${GEMINI} ${WEIGHTS.join(' ')}`,
   // ORT's threaded backend spawns workers from blob URLs.
   `worker-src 'self' blob:`,
   `media-src 'self' blob:`,

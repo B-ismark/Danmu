@@ -18,7 +18,7 @@ import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { Select } from '@/components/ui/Select';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
 import { isTypingOrDialog } from '@/components/studio/KeyboardShortcuts';
-import { localDetectorAvailable, detectLocalAcrossImages, detectorStatus, onDetectorDownload, type DetectorStatus, type DownloadProgress } from '@/lib/local-detect';
+import { localDetectorAvailable, localRuntimeMissing, detectLocalAcrossImages, detectorStatus, onDetectorDownload, type DetectorStatus, type DownloadProgress } from '@/lib/local-detect';
 import { megabytes } from '@/lib/model-cache';
 import type { DetectorPack } from '@/lib/model-verify';
 import { DetectorPackPicker, onMeteredConnection } from '@/components/ui/DetectorPackPicker';
@@ -92,6 +92,7 @@ type Notice = {
     | 'INVALID_KEY'
     | 'PHOTOS_TOO_BIG'
     | 'SKIPPED_DOWNLOAD'
+    | 'LOCAL_UNAVAILABLE'
     | 'BAD_RESPONSE'
     | 'UNKNOWN';
   tone: 'calm' | 'warn' | 'error';
@@ -368,7 +369,20 @@ export default function DetectPage() {
         try {
           let dets: Detection[] | null = null;
           let skipped = false;
-          if (await localDetectorAvailable()) {
+          // The detector's runtime is missing from this deployment. This is the same
+          // road a runtime failure takes (no rows, so the cloud is asked if a key is
+          // set, with the upload disclosure up) but it is SAID: a scan that quietly
+          // went to Google because the device could not read it is a privacy surprise.
+          const runtimeMissing = await localRuntimeMissing();
+          const localUnavailable: Notice = {
+            code: 'LOCAL_UNAVAILABLE',
+            tone: 'calm',
+            kicker: 'On-device scan unavailable',
+            title: 'This device could not run the on-device scan',
+            body: 'Its scanning engine is missing from this copy of Danmu. Draw a box around each piece in your photos, or add a Google key in Settings to have them read there.',
+          };
+          if (runtimeMissing) setNotice(localUnavailable);
+          if (await localDetectorAvailable() && !runtimeMissing) {
             // ~65 MB the first time, nothing after (`lib/model-cache.ts`). Asked, never
             // assumed: on mobile data that is the most this app ever costs anyone.
             // An update is asked about the same way: a kept copy for another version
@@ -406,6 +420,12 @@ export default function DetectPage() {
             } else {
               skipped = true;
             }
+          }
+          if (runtimeMissing && !apiKeyRef.current) {
+            setAdding(true);
+            setPath('idle');
+            setNotice(localUnavailable);
+            return;
           }
           if (skipped && !apiKeyRef.current) {
             // Nothing was downloaded and nothing was sent: the by-hand path is the path,
