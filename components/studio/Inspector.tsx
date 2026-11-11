@@ -564,10 +564,9 @@ export function Inspector() {
 // What a fixture emits, in the units printed on the box it came in. Shown only
 // for lamps (isLightFixture), because everything else emits nothing.
 //
-// Real units are the point: 800 lm really is twice 400 lm in the scene, and 2700 K
-// really is a warm bulb. The alternative — an abstract 0-to-1 "brightness" — would
-// have made this another slider to fiddle with rather than a decision about a
-// lamp you could go and buy.
+// The scene still works in real units (800 lm really is twice 400 lm, and 2700 K
+// really is a warm bulb); the control just never prints them. Brightness is a
+// Dim to Bright slider that writes the same lumens, and warmth is four named chips.
 const WARMTHS: Array<{ k: number; label: string }> = [
   { k: 2200, label: 'Candle' },
   { k: 2700, label: 'Warm' },
@@ -587,45 +586,30 @@ function LightControls({
   const set = (patch: Partial<PartLight>) => onChange({ ...spec, ...patch });
   return (
     <Section label="Light">
-      {/* Wraps, and the field shrinks — defensively, not because this row was
-          measured overflowing. Flat it is 66 + 8 + 104 + 8 + 'lm' ≈ 201px of
-          FIXED content, against ~228px of usable width at the narrowest rail that
-          ships (`--rail-right-min` 276px, less its border, the section's 16px
-          either side and a vertical scrollbar). 27px of margin, and no margin at
-          all if the label's font or the unit ever grows.
-
-          `--rail-right-tight` (248px) is NOT the number to check against, but not
-          for the reason this comment used to give. It said the token "is applied to
-          nothing"; `DockedShell` applies it for the whole `compact` step, through a
-          template string that a grep for the token name cannot see. The reason is
-          narrower: 276px is the narrowest a rail gets in the layout this row was
-          sized for, and a laptop at 248px is a band whose contents nobody has
-          measured this row against.
-
-          This comment said 248 in its first version and concluded the row
-          overflowed by a pixel, which was wrong in a way that would have sent the
-          next reader hunting the wrong row. The panel's stray horizontal scrollbar
-          is real and its cause is NOT identified here — it needs
-          `scrollWidth > clientWidth` read off the live box, which no test in this
-          repo can do. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        <label htmlFor={`lm-${part.id}`} className="t-small" style={{ minWidth: 66, flex: '0 1 auto' }}>
+      {/* Dim to Bright, written as the same lumens underneath. The words at the ends
+          do the job a unit used to, and the row wraps whole when the rail is too
+          narrow for the track's floor width, rather than clipping. */}
+      <div style={{ marginBottom: 8 }}>
+        <label htmlFor={`lm-${part.id}`} className="t-small" style={{ display: 'block', marginBottom: 4 }}>
           Brightness
         </label>
-        <NumberField
-          value={String(spec.lumens)}
-          onChange={(v) => {
-            const n = Number(v);
-            if (Number.isFinite(n) && n >= 0) set({ lumens: n });
-          }}
-          step={50}
-          min={0}
-          max={5000}
-          height={30}
-          ariaLabel="Brightness in lumens"
-          style={{ width: 104, maxWidth: '100%', minWidth: 0 }}
-        />
-        <span className="t-meta">lm</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span className="t-meta">Dim</span>
+          <input
+            id={`lm-${part.id}`}
+            type="range"
+            min={0}
+            max={5000}
+            step={50}
+            value={spec.lumens}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              if (Number.isFinite(n) && n >= 0) set({ lumens: n });
+            }}
+            style={{ flex: '1 1 96px', minWidth: 0, accentColor: 'var(--accent-text)' }}
+          />
+          <span className="t-meta">Bright</span>
+        </div>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {WARMTHS.map((w) => {

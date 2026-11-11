@@ -70,7 +70,7 @@ export function ViewMenu() {
               settings rather than view settings, and a second copy of them here
               would be a second place to keep in step. */}
           <Link href={settingsHref(pathname)} className="view-menu__foot" onClick={() => setOpen(false)}>
-            <span>Units, detection and storage</span>
+            <span>More settings</span>
             <Icon name="arrow-right" size={12} />
           </Link>
         </div>

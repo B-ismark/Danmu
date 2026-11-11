@@ -287,10 +287,10 @@ describe('a measured number renders the same physical quantity at every unit', (
     for (const unit of UNITS) {
       const detail = one(parts(), 'tv', unit).detail;
       expect(detail, `tv @ ${unit}: ${detail}`).toContain(formatLength(comfortableMM, unit));
-      // The ″ does NOT convert. A screen diagonal is the product's name worldwide —
+      // The "-inch" does NOT convert. A screen diagonal is the product's name worldwide —
       // "a 55-inch TV" — not a room measurement the user picked a unit for, and this is
       // the one number in the report that stays put.
-      expect(detail).toContain('″');
+      expect(detail).toMatch(/[0-9]-inch TV/);
     }
     // …and the seat distance, which is measured, agrees across units.
     const seen = backToMM(parts, 'tv');
@@ -316,9 +316,9 @@ describe('a measured number renders the same physical quantity at every unit', (
     const diagMM = Math.hypot(wMM, hMM);
     for (const unit of UNITS) {
       const detail = one(parts(), 'tv', unit).detail;
-      expect(detail, `far-TV @ ${unit}: ${detail}`).toContain('ideal range');
-      expect(detail, `the low end of the ideal range @ ${unit}`).toContain(formatLength(diagMM * 1.2, unit));
-      expect(detail, `the high end of the ideal range @ ${unit}`).toContain(formatLength(diagMM * 2.5, unit));
+      expect(detail, `far-TV @ ${unit}: ${detail}`).toContain('best distance');
+      expect(detail, `the low end of the best distance @ ${unit}`).toContain(formatLength(diagMM * 1.2, unit));
+      expect(detail, `the high end of the best distance @ ${unit}`).toContain(formatLength(diagMM * 2.5, unit));
     }
     const seen = backToMM(parts, 'tv');
     for (const s of seen) {

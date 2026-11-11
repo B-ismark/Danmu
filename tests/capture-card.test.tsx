@@ -269,14 +269,13 @@ describe('the plan answers back: a wall pointed at lifts its card', () => {
   });
 });
 
-describe('why a photo is on its wall', () => {
-  it('says so in quiet text, in a "Placed by" phrase', async () => {
+describe('no wall-assignment jargon', () => {
+  it('shows no "Placed by" reason beside a photo', async () => {
     await mounted();
-    // A photo read back from storage has no moment to describe, so no reason is shown.
-    expect(screen.queryByText(/^Placed by/)).toBeNull();
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], 'wall.jpg', { type: 'image/jpeg' });
     fireEvent.change(screen.getByLabelText('Choose a different photo for Wall 1'), { target: { files: [file] } });
-    expect(await screen.findByText('Placed by you')).toBeTruthy();
-    expect(screen.getByText('Placed by you').className).toContain('capture-foot__reason');
+    await screen.findByLabelText('Choose a different photo for Wall 1');
+    expect(screen.queryByText(/Placed by/)).toBeNull();
+    expect(document.querySelector('.capture-foot__reason')).toBeNull();
   });
 });

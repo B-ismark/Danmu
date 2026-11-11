@@ -39,7 +39,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type MouseEvent, type PointerEvent } from 'react';
 import { SUN_DRAG_ID, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
-import { DEFAULT_BEARING_DEG, compassName, formatClock, isDaytime, lightingAt, sunAt, turnedBearing } from '@/lib/lighting-moods';
+import { DEFAULT_BEARING_DEG, formatClock, isDaytime, lightingAt, sunAt } from '@/lib/lighting-moods';
 import { isAperture } from '@/lib/apertures';
 import { glyphAt, hourT, phaseWords, scrubHour, skyGradient, stripFor, stripX, tAtX, type DayPhase } from '@/lib/day-strip';
 import { playSound } from '@/lib/sound';
@@ -132,7 +132,6 @@ export function DayStrip() {
   const setLighting = useStudio((s) => s.setLighting);
   const setDragging = useStudio((s) => s.setDragging);
   const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
-  const setSite = useScene((s) => s.setSite);
   // Whether the sun has anything to shine through. The room is a closed shell, so a
   // sealed room is lit by sky and lamps alone (`components/three/RoomShell.tsx`);
   // said here, beside the control that raises the question, rather than leaving
@@ -517,15 +516,6 @@ export function DayStrip() {
                   <Icon name="cloud" size={13} />
                   <span>Overcast</span>
                 </button>
-                <span className="day-strip__facing">
-                  <button type="button" className="icon-btn" aria-label="Turn the room anticlockwise" onClick={() => setSite({ ...useScene.getState().room.site, bearingDeg: turnedBearing(bearingDeg, -1) })}>
-                    <Icon name="rotate-ccw" size={12} />
-                  </button>
-                  <span className="t-micro" aria-live="polite" title="Which way the top of the plan faces">Plan top faces {compassName(bearingDeg)}</span>
-                  <button type="button" className="icon-btn" aria-label="Turn the room clockwise" onClick={() => setSite({ ...useScene.getState().room.site, bearingDeg: turnedBearing(bearingDeg, 1) })}>
-                    <Icon name="rotate-cw" size={12} />
-                  </button>
-                </span>
               </div>
               {sunHasNoWayIn && (
                 <p className="t-micro day-strip__hint">No window or door, so no sunlight gets in. Add one from the Library.</p>

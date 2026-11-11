@@ -336,13 +336,10 @@ describe('describePlacement', () => {
   const L = (s: CaptureSlot) => `Wall ${SLOT_ORDER.indexOf(s) + 1}`;
   const FULL = SLOT_ORDER.map((slot) => ({ slot }));
 
-  it('names the walls and how they were decided', () => {
+  it('names the walls without compass or EXIF language', () => {
     const said = describePlacement(placePhotos([], [{ bearingDeg: 10 }, { bearingDeg: 100 }]), L);
     expect(said).toContain('2 photos added: Wall 1, Wall 2.');
-    // The curly apostrophe the rest of this screen's copy uses. A straight one
-    // here would be the only ASCII quote in a sentence sitting beside four typeset
-    // ones, which is the kind of thing nobody sees until it is on screen.
-    expect(said).toContain('1 placed from the photo’s own compass.');
+    expect(said).not.toMatch(/compass|shutter|placed from/i);
   });
 
   it('has something to say about an empty batch rather than an empty string', () => {
@@ -365,11 +362,8 @@ describe('describePlacement', () => {
     expect(describePlacement(placePhotos(FULL, [{}, {}]), L)).toContain('2 photos could not be added');
   });
 
-  it('mentions the shutter-time ordering only when it was used', () => {
-    expect(describePlacement(placePhotos([], [{ shotAt: 2 }, { shotAt: 1 }]), L)).toContain(
-      'Ordered by when they were taken.',
-    );
-    expect(describePlacement(placePhotos([], [{}, {}]), L)).not.toContain('Ordered by');
+  it('does not narrate how the order was decided', () => {
+    expect(describePlacement(placePhotos([], [{ shotAt: 2 }, { shotAt: 1 }]), L)).not.toContain('Ordered by');
   });
 
   it('says which wall a contradicted bearing pointed at', () => {

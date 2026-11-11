@@ -151,19 +151,19 @@ describe("the plan's zoom bar is two pills", () => {
   const plan = src('components/studio/PlanChrome.tsx');
   const bar = plan.slice(plan.indexOf('export function PlanViewControls'), plan.indexOf('export function ComfortLegend'));
 
-  it('zoom, then turn + fit, each its own labelled pill with no wrapper around both', () => {
+  it('zoom, then fit, each its own labelled pill with no wrapper around both', () => {
     expect(bar.match(/<div className="chrome-pill" role="group" aria-label="[^"]+"/g)).toHaveLength(2);
     // A wrapper made both pills ONE flex item, so on a cramped canvas the pair dropped
     // below undo/redo as a block and folded again inside it: three rows, not two.
     expect(bar).toMatch(/return \([\s\S]*?<>\s*<div className="chrome-pill"/);
     expect(bar).not.toMatch(/plan-view-bar/);
     const second = bar.slice(bar.lastIndexOf('className="chrome-pill"'));
-    expect(second).toMatch(/rotate-ccw/);
+    // The page-turn buttons were removed with the compass (plain-language pass).
+    expect(second).not.toMatch(/rotate-c/);
     expect(second).toMatch(/Fit/);
     expect(second).not.toMatch(/Zoom in/);
-    // The one rule sits INSIDE a pill, beside Fit, so nothing can strand it.
-    expect(bar.match(/chrome-pill__rule/g)).toHaveLength(1);
-    expect(second).toMatch(/chrome-pill__rule/);
+    // The rule that split the turn buttons from Fit went with them: Fit stands alone.
+    expect(bar).not.toMatch(/chrome-pill__rule/);
   });
 
   it('quiet buttons inside the capsule: no outlined control inside a rimmed one', () => {
@@ -173,10 +173,10 @@ describe("the plan's zoom bar is two pills", () => {
 
   it('holds the readouts to a width, so + and − do not shift as a digit arrives', () => {
     expect(bar).toMatch(/chrome-pill__readout chrome-pill__readout--zoom/);
-    expect(bar).toMatch(/chrome-pill__readout chrome-pill__readout--deg/);
+    expect(bar).not.toMatch(/chrome-pill__readout--deg/);
     expect(CSS).toMatch(/\.chrome-pill__readout \{[^}]*font-variant-numeric: tabular-nums;/);
     expect(CSS).toMatch(/\.chrome-pill__readout--zoom \{ min-width: 9ch; \}/);
-    expect(CSS).toMatch(/\.chrome-pill__readout--deg \{ min-width: 4ch; \}/);
+    expect(CSS).not.toMatch(/\.chrome-pill__readout--deg/);
   });
 });
 

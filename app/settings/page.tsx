@@ -10,11 +10,10 @@ import { validateKey, type KeyFailure, type KeyResult } from '@/lib/validate-key
 import { UNIT_OPTIONS, formatLength } from '@/lib/units';
 import { returnLabel, safeReturnPath, wayBack } from '@/lib/settings-return';
 import { Icon, type IconName } from '@/components/ui/Icon';
-import { Dot, IconButton, Pill, Segmented } from '@/components/ui/primitives';
+import { Dot, IconButton, Segmented } from '@/components/ui/primitives';
 import { useConfirm, useConfirmDeleteRooms } from '@/components/ui/Confirm';
 import { BackButton, DocShell } from '@/components/ui/DocShell';
 import { toast } from '@/components/ui/StorageToast';
-import { DetectorPackPicker } from '@/components/ui/DetectorPackPicker';
 import { detectorStatus, downloadDetector, onDetectorDownload, removeDetector, type DetectorStatus, type DownloadProgress } from '@/lib/local-detect';
 import { megabytes } from '@/lib/model-cache';
 import { MAX_EDGE } from '@/lib/capture';
@@ -262,14 +261,122 @@ export default function SettingsPage() {
             as a form left unstyled beside every other screen's cards. */}
         <div className="settings__cards">
           <Section
+            icon="ruler"
+            tint="var(--accent-2-tint)"
+            color="var(--accent-2)"
+            id="units"
+            title="Units"
+          >
+            {/* The hint is the setting's own preview, formatted by the same function
+                every size on screen goes through, so it cannot describe a different
+                rounding from the one the studio shows. */}
+            <Row label="Dimension units" hint={`A ${SOFA_MM} mm sofa reads ${formatLength(SOFA_MM, dimUnit)}; a ${CEILING_MM / 1000} m ceiling, ${formatLength(CEILING_MM, dimUnit)}.`}>
+              {/* This replaced a Metric/Imperial switch that was wired to a store
+                  field nothing read — a units control that changed nothing, on a
+                  product whose promise is that its dimensions are trustworthy. */}
+              <Segmented
+                ariaLabel="Dimension units"
+                value={dimUnit}
+                onChange={(u) => s.setDimUnit(u)}
+                options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.id }))}
+              />
+            </Row>
+          </Section>
+
+          <Section
+            icon="moon"
+            tint="var(--paper-3)"
+            color="var(--ink-2)"
+            id="appearance"
+            title="Appearance"
+          >
+            {/* The whole choice. System is the default and follows the device, which is
+                what most people want and the only answer that changes at sunset by
+                itself. The 3D room keeps its own colours and light either way — it is
+                the room, not the app's paper — and the View menu in the studio carries
+                the same switch. */}
+            <Row label="Night mode" hint="System follows your device. The room itself keeps its own colours and light.">
+              <Segmented
+                ariaLabel="Night mode"
+                value={appearance}
+                onChange={(a) => s.setAppearance(a)}
+                options={[...APPEARANCE_OPTIONS]}
+              />
+            </Row>
+          </Section>
+
+          <DownloadsSection />
+
+          <Section
+            icon="layers"
+            tint="var(--paper-3)"
+            color="var(--ink-2)"
+            id="rooms"
+            title="Your rooms"
+            desc="Saved only in this browser. Clearing this site's data in your browser deletes them."
+          >
+            <Row label="Saved here">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600 }}>
+                  {roomCount === undefined ? (
+                    'Counting…'
+                  ) : roomCount === null ? (
+                    'Your rooms could not be read.'
+                  ) : (
+                    <>
+                      <span className="mono">{roomCount}</span> room{roomCount === 1 ? '' : 's'}
+                    </>
+                  )}
+                </span>
+                <Link href="/" className="ds-btn ds-btn--sm">
+                  Manage rooms
+                  <Icon name="arrow-right" size={12} />
+                </Link>
+              </div>
+            </Row>
+            <Row
+              label={room ? 'Delete this room' : 'Delete a room'}
+              hint={
+                room
+                  ? 'Recoverable for 30 days.'
+                  : room === undefined
+                    ? 'Finding the open room…'
+                    : unreadable
+                      ? 'The open room could not be read.'
+                      : 'No room is open.'
+              }
+            >
+              <button
+                onClick={deleteRoomData}
+                disabled={!room}
+                className="ds-btn ds-btn--sm"
+                style={{
+                  color: 'var(--danger-text)',
+                  borderColor: 'var(--danger)',
+                }}
+              >
+                <Icon name="trash" size={12} />
+                {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
+              </button>
+            </Row>
+            <Row label="Send feedback">
+              {/* A plain link the person follows, never a form that posts from here:
+                  rule 5 allows no egress but the optional detection call. */}
+              <a href={FEEDBACK_URL} className="ds-btn ds-btn--sm">
+                <Icon name="mail" size={12} />
+                Send feedback
+              </a>
+            </Row>
+          </Section>
+
+          <Section
             icon="sparkles"
             tint="var(--accent-tint)"
             color="var(--accent)"
-            id="detection"
-            title="Furniture detection"
-            tag={<Pill>Optional</Pill>}
+            id="advanced"
+            title="Advanced"
           >
-            <Row label="Access key" controlId={KEY_INPUT_ID}>
+            <Row label="Google key" hint="Optional. Lets Google find furniture in your photos for you." controlId={KEY_INPUT_ID}>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <div
                   // The field is this wrapper, not the input inside it, so this is what
@@ -300,7 +407,7 @@ export default function SettingsPage() {
                     onBlur={autoValidate}
                     autoComplete="off"
                     spellCheck={false}
-                    placeholder="Paste your key (starts with AIza)"
+                    placeholder="Paste your key"
                     style={{
                       flex: 1,
                       minWidth: 0,
@@ -413,114 +520,6 @@ export default function SettingsPage() {
             </Row>
           </Section>
 
-          <Section
-            icon="ruler"
-            tint="var(--accent-2-tint)"
-            color="var(--accent-2)"
-            id="units"
-            title="Units"
-          >
-            {/* The hint is the setting's own preview, formatted by the same function
-                every size on screen goes through, so it cannot describe a different
-                rounding from the one the studio shows. */}
-            <Row label="Dimension units" hint={`A ${SOFA_MM} mm sofa reads ${formatLength(SOFA_MM, dimUnit)}; a ${CEILING_MM / 1000} m ceiling, ${formatLength(CEILING_MM, dimUnit)}.`}>
-              {/* This replaced a Metric/Imperial switch that was wired to a store
-                  field nothing read — a units control that changed nothing, on a
-                  product whose promise is that its dimensions are trustworthy. */}
-              <Segmented
-                ariaLabel="Dimension units"
-                value={dimUnit}
-                onChange={(u) => s.setDimUnit(u)}
-                options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.id }))}
-              />
-            </Row>
-          </Section>
-
-          <Section
-            icon="moon"
-            tint="var(--paper-3)"
-            color="var(--ink-2)"
-            id="appearance"
-            title="Appearance"
-          >
-            {/* The whole choice. System is the default and follows the device, which is
-                what most people want and the only answer that changes at sunset by
-                itself. The 3D room keeps its own colours and light either way — it is
-                the room, not the app's paper — and the View menu in the studio carries
-                the same switch. */}
-            <Row label="Night mode" hint="System follows your device. The room itself keeps its own colours and light.">
-              <Segmented
-                ariaLabel="Night mode"
-                value={appearance}
-                onChange={(a) => s.setAppearance(a)}
-                options={[...APPEARANCE_OPTIONS]}
-              />
-            </Row>
-          </Section>
-
-          <DownloadsSection />
-
-          <Section
-            icon="layers"
-            tint="var(--paper-3)"
-            color="var(--ink-2)"
-            id="rooms"
-            title="Your rooms"
-            desc="Saved only in this browser. Clearing this site's data in your browser deletes them."
-          >
-            <Row label="Saved here">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600 }}>
-                  {roomCount === undefined ? (
-                    'Counting…'
-                  ) : roomCount === null ? (
-                    'Your rooms could not be read.'
-                  ) : (
-                    <>
-                      <span className="mono">{roomCount}</span> room{roomCount === 1 ? '' : 's'}
-                    </>
-                  )}
-                </span>
-                <Link href="/" className="ds-btn ds-btn--sm">
-                  Manage rooms
-                  <Icon name="arrow-right" size={12} />
-                </Link>
-              </div>
-            </Row>
-            <Row
-              label={room ? 'Delete this room' : 'Delete a room'}
-              hint={
-                room
-                  ? 'Recoverable for 30 days.'
-                  : room === undefined
-                    ? 'Finding the open room…'
-                    : unreadable
-                      ? 'The open room could not be read.'
-                      : 'No room is open.'
-              }
-            >
-              <button
-                onClick={deleteRoomData}
-                disabled={!room}
-                className="ds-btn ds-btn--sm"
-                style={{
-                  color: 'var(--danger-text)',
-                  borderColor: 'var(--danger)',
-                }}
-              >
-                <Icon name="trash" size={12} />
-                {room ? `Delete “${truncate(room.name, 28)}”` : 'Delete room'}
-              </button>
-            </Row>
-            <Row label="Send feedback">
-              {/* A plain link the person follows, never a form that posts from here:
-                  rule 5 allows no egress but the optional detection call. */}
-              <a href={FEEDBACK_URL} className="ds-btn ds-btn--sm">
-                <Icon name="mail" size={12} />
-                Send feedback
-              </a>
-            </Row>
-          </Section>
         </div>
       </div>
     </DocShell>
@@ -533,11 +532,11 @@ const CEILING_MM = 2800;
 
 /** The page's sections, in order, for the index beside them. */
 const SETTINGS_SECTIONS = [
-  { id: 'detection', label: 'Furniture detection' },
   { id: 'units', label: 'Units' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'downloads', label: 'Downloads' },
   { id: 'rooms', label: 'Your rooms' },
+  { id: 'advanced', label: 'Advanced' },
 ] as const;
 type SectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
 
@@ -622,8 +621,9 @@ function SettingsIndex() {
  *  ahead of a scan), Update when this version expects a newer file, and Remove.
  *  The sizes are the mirror's, read live; nothing here downloads until a press. */
 function DownloadsSection() {
-  const pack = useSettings((s) => s.detectorPack);
-  const setPack = useSettings((s) => s.setDetectorPack);
+  // One pack, always the full pair. A saved 'basic' from before the picker went is
+  // ignored (never read), so nobody stays on the smaller finder.
+  const pack: DetectorPack = 'full';
   const [sizes, setSizes] = useState<Record<DetectorPack, DetectorStatus | null>>({ full: null, basic: null });
   const [busy, setBusy] = useState<'download' | 'remove' | null>(null);
   const [got, setGot] = useState<DownloadProgress | null>(null);
@@ -692,7 +692,6 @@ function DownloadsSection() {
     >
       <Row label="Furniture finder" hint={hint}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <DetectorPackPicker value={pack} onChange={setPack} sizes={sizes} />
           {got && got.total > 0 && (
             <p className="t-small" role="status" style={{ margin: 0 }}>
               Downloading… {megabytes(got.loaded)} of {megabytes(got.total)}

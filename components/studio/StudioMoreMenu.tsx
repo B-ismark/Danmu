@@ -26,7 +26,6 @@ export function StudioMoreMenu() {
   const items = useExportItems();
   const snapMode = useStudio((s) => s.snapMode);
   const setSnapMode = useStudio((s) => s.setSnapMode);
-  const snap = SNAPS.find((x) => x.id === snapMode)!;
   const wrapRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -77,7 +76,6 @@ export function StudioMoreMenu() {
               size={44}
               stretch
             />
-            {snap.id !== 'off' && <span className="t-hint mono">{snap.sub}</span>}
           </div>
           <div className="ds-label more-menu__heading">Export</div>
           {items.map((it) => (

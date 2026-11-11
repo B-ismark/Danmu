@@ -6,7 +6,6 @@
 // is a wiring one, and a layout engine is not available under jsdom.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { compassName, turnedBearing } from '@/lib/lighting-moods';
 
 const read = (p: string) => readFileSync(p, 'utf8');
 const CHROME = read('components/studio/CanvasChrome.tsx');
@@ -52,14 +51,6 @@ describe('the sun is golden, the moon is not', () => {
 });
 
 describe('the Light section left the rail, its unique jobs did not', () => {
-  it('turns the room by compass points', () => {
-    expect(compassName(0)).toBe('north');
-    expect(compassName(225)).toBe('south-west');
-    expect(turnedBearing(0, 1)).toBe(45);
-    expect(turnedBearing(0, -1)).toBe(315);
-    expect(turnedBearing(213, 1)).toBe(225);
-    expect(turnedBearing(213, -1)).toBe(180);
-  });
   it('keeps Overcast and the no-opening hint on the strip', () => {
     const strip = read('components/studio/DayStrip.tsx');
     expect(strip).toMatch(/Overcast/);

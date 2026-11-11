@@ -96,8 +96,6 @@ const CUT_OFF = 1;
 export type PlanViewHandle = {
   zoomIn: () => void;
   zoomOut: () => void;
-  rotateLeft: () => void;
-  rotateRight: () => void;
   /** Back to the default framing. */
   fit: () => void;
   /** Bring the selected piece to the middle, at the current magnification. */
@@ -106,11 +104,11 @@ export type PlanViewHandle = {
 
 export const PlanView = forwardRef<PlanViewHandle, {
   /**
-   * Reports live magnification, page rotation, and whether any walkable run is
+   * Reports live magnification, and whether any walkable run is
    * cut off from the door — the last is the only thing the page's comfort legend
    * needs that it cannot compute for itself.
    */
-  onViewChange?: (v: { zoom: number; rot: number; hasCutOff: boolean }) => void;
+  onViewChange?: (v: { zoom: number; hasCutOff: boolean }) => void;
   showComfort?: boolean;
 }>(function PlanView({ onViewChange, showComfort = false }, ref) {
   const ROOM_DYN = useScene((s) => s.room);
@@ -345,11 +343,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const blockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
 
-  // Pan + zoom + rotate
+  // Pan + zoom
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  /** view rotation in radians around viewport center */
-  const [rot, setRot] = useState(0);
   const panRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
   // An Alt-press waiting to become a pick on release, and the cycle it belongs to.
   // The cycle lives in a ref rather than in the store: it is the memory of one
@@ -393,8 +389,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
   }, [setDragging]);
 
   useEffect(() => {
-    onViewChange?.({ zoom, rot, hasCutOff });
-  }, [zoom, rot, hasCutOff, onViewChange]);
+    onViewChange?.({ zoom, hasCutOff });
+  }, [zoom, hasCutOff, onViewChange]);
 
   // Escape, during a drag, puts the piece back — the way it does in every 3D
   // tool. It is bound in the capture phase so it beats the studio's global
@@ -446,7 +442,6 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const fit = useCallback(() => {
     setZoom(1);
     setOffset({ x: 0, y: 0 });
-    setRot(0);
   }, []);
 
 
@@ -474,8 +469,6 @@ export const PlanView = forwardRef<PlanViewHandle, {
     () => ({
       zoomIn: () => setZoom((z) => Math.min(MAX_ZOOM, z * 1.15)),
       zoomOut: () => setZoom((z) => Math.max(MIN_ZOOM, z / 1.15)),
-      rotateLeft: () => setRot((r) => r - Math.PI / 12),
-      rotateRight: () => setRot((r) => r + Math.PI / 12),
       fit,
       frameSelection,
     }),
@@ -500,18 +493,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
    *  is remembered from a press that is long over by the time it is resolved. */
   function svgToWorldAt(clientX: number, clientY: number): { x: number; z: number } {
     const p = toViewBox(clientX, clientY);
-    // undo view rotation around viewport center
-    const cx = baseW / 2;
-    const cy = baseH / 2;
-    const dx = p.x - cx;
-    const dy = p.y - cy;
-    const cos = Math.cos(-rot);
-    const sin = Math.sin(-rot);
-    const ux = dx * cos - dy * sin + cx;
-    const uy = dx * sin + dy * cos + cy;
     // undo pan + zoom
-    const sx = (ux - offset.x) / zoom;
-    const sy = (uy - offset.y) / zoom;
+    const sx = (p.x - offset.x) / zoom;
+    const sy = (p.y - offset.y) / zoom;
     return {
       x: (sx - PAD) / SCALE + bounds.minX,
       z: (sy - PAD) / SCALE + bounds.minZ,
@@ -1389,8 +1373,6 @@ export const PlanView = forwardRef<PlanViewHandle, {
       else if (e.key === 'f' || e.key === 'F') frameSelection();
       else if (e.key === '=' || e.key === '+') setZoom((z) => Math.min(MAX_ZOOM, z * 1.15));
       else if (e.key === '-' || e.key === '_') setZoom((z) => Math.max(MIN_ZOOM, z / 1.15));
-      else if (e.key === '[') setRot((r) => r - Math.PI / 12);
-      else if (e.key === ']') setRot((r) => r + Math.PI / 12);
       else return;
       e.preventDefault();
     }
@@ -1597,7 +1579,6 @@ export const PlanView = forwardRef<PlanViewHandle, {
   // Compass names only mean something on a four-edge room. An L / T / U footprint
   // has six or eight edges, and the Inspector already falls back to "Wall n".
   const useCompass = ROOM_DYN.footprint.length === 4;
-  const viewRotDeg = (rot * 180) / Math.PI;
 
   const widthLabel = `${formatDim(bounds.width * 1000, dimUnit)} ${dimUnit}`;
   const depthLabel = `${formatDim(bounds.depth * 1000, dimUnit)} ${dimUnit}`;
@@ -1664,7 +1645,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
           ))}
         </defs>
 
-        <g transform={`rotate(${viewRotDeg} ${baseW / 2} ${baseH / 2}) translate(${offset.x} ${offset.y}) scale(${zoom})`}>
+        <g transform={`translate(${offset.x} ${offset.y}) scale(${zoom})`}>
           <path
             d={
               ROOM_DYN.footprint
@@ -1767,7 +1748,6 @@ export const PlanView = forwardRef<PlanViewHandle, {
                 y={y}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                transform={`rotate(${-viewRotDeg} ${x} ${y})`}
                 fontFamily="var(--font-sans)"
                 fontSize="11"
                 fill="var(--ink-2)"
@@ -1937,7 +1917,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
                     the current magnification — and dropped entirely when that is
                     nothing, rather than drawn illegibly. */}
                 {Math.min(wpx, hpx) > LABEL_MIN_PX * k && (
-                  <g transform={`rotate(${-rotDeg - viewRotDeg})`}>
+                  <g transform={`rotate(${-rotDeg})`}>
                     <text
                       x={0}
                       y={3 * k}
@@ -2124,7 +2104,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
                       strokeWidth={1 * k}
                       strokeDasharray={`${3 * k} ${2 * k}`}
                     />
-                    <g transform={`rotate(${-viewRotDeg} ${mx} ${my})`}>
+                    <g>
                       <rect
                         x={mx - (label.length * 2.6 + 4) * k}
                         y={my - 7 * k}
@@ -2151,18 +2131,6 @@ export const PlanView = forwardRef<PlanViewHandle, {
               })}
             </g>
           )}
-
-          {/* North rose. The needle turns with the drawing — that is the point of
-              it — but the letter stays upright and readable. */}
-          <g transform={`translate(${PAD - 30} ${PAD - 30})`} style={{ pointerEvents: 'none' }}>
-            <circle r="14" fill="var(--paper)" stroke="var(--ink)" />
-            <path d="M0 -9 L3 0 L0 9 L-3 0 Z" fill="var(--accent)" />
-            <g transform={`rotate(${-viewRotDeg})`}>
-              <text y="-18" textAnchor="middle" fontFamily="var(--font-sans)" fontSize="9" fill="var(--ink)" fontWeight="700">
-                N
-              </text>
-            </g>
-          </g>
         </g>
       </svg>
 

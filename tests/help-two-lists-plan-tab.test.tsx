@@ -228,9 +228,10 @@ describe('help on the 2D plan says what the two lists are', () => {
   // entirely while making this file greener. So: this must still be the PLAN card.
   it('while still being the plan card and not the 3D one', () => {
     openHelp();
-    // Only the plan card has these — a lasso and a page rotation are 2D gestures.
+    // Only the plan card has these — the lasso is a 2D gesture.
     expect(screen.getByText('Choosing pieces')).toBeTruthy();
-    expect(screen.getByText(/turn the page/)).toBeTruthy();
+    expect(screen.getByText(/to lasso several pieces/)).toBeTruthy();
+    expect(screen.queryByText(/turn the page/)).toBeNull();
     // And only the 3D card has these.
     expect(screen.queryByText('Walls and the room')).toBeNull();
     expect(screen.queryByText(/Left-drag to orbit/)).toBeNull();

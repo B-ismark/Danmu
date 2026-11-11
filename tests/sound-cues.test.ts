@@ -17,7 +17,6 @@ function world(over: Partial<CueWorld> = {}): CueWorld {
     wallColors: {},
     footprint: FP,
     roomSize: { width: 4, depth: 4, height: 2.6 },
-    bearingDeg: 0,
     positions: {},
     rotations: {},
     dims: {},
@@ -145,10 +144,6 @@ describe('the day', () => {
     const at = (h: number) => cueFor(world({ hour: h - 0.05 }), world({ hour: h + 0.05 }))!.opts!.brightness!;
     expect(at(13)).toBeGreaterThan(at(8));
     expect(at(23)).toBe(0);
-  });
-
-  it('turns the room with a click', () => {
-    expect(cue({ bearingDeg: 0 }, { bearingDeg: 45 })).toBe('turn');
   });
 });
 

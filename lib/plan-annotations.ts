@@ -41,11 +41,11 @@
  *  and scaled back out of the fit. */
 export const LABEL_HALF_H = 7;
 
-/** Half the WIDTH of the widest wall name. "North wall" and "South wall" are the two
- *  longest strings `wallLabelFor` can produce (the non-compass branch is "Wall N",
- *  much shorter), and a browser gives them ~42 units. This is the number that decides
+/** Half the WIDTH of the widest wall name. "Bottom wall" is the
+ *  longest string `wallLabelFor` can produce (the non-compass branch is "Wall N",
+ *  much shorter), and a browser gives it ~46 units. This is the number that decides
  *  where the ruler goes, because east and west reach toward it edge-on. */
-export const LABEL_HALF_W = 22;
+export const LABEL_HALF_W = 24;
 
 /** How far a wall's NAME sits outside its own edge, along that edge's outward normal.
  *  Applies to every edge of every footprint, including the interior edges of an L, T
@@ -58,7 +58,7 @@ export const WALL_LABEL_OFFSET = 26;
  *  its wall and the room's overall size outside it, so the ruler is what moved. Driven
  *  by the east/west case, not the north/south one. `PAD` is 80, so the ruler and its
  *  backdrop still sit inside the plan's margin. */
-export const DIM_RULER_OFFSET = 62;
+export const DIM_RULER_OFFSET = 64;
 
 /** The ruler's opaque backdrop, relative to `DIM_RULER_OFFSET`: the rect is 15 units
  *  tall and hangs from 8 above the line to 7 below it. Its extent along the normal is

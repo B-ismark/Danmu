@@ -21,7 +21,6 @@ import { isTypingOrDialog } from '@/components/studio/KeyboardShortcuts';
 import { localDetectorAvailable, localRuntimeMissing, detectLocalAcrossImages, detectorStatus, onDetectorDownload, type DetectorStatus, type DownloadProgress } from '@/lib/local-detect';
 import { megabytes } from '@/lib/model-cache';
 import type { DetectorPack } from '@/lib/model-verify';
-import { DetectorPackPicker, onMeteredConnection } from '@/components/ui/DetectorPackPicker';
 import {
   calForPhoto,
   findFloorLine,
@@ -67,6 +66,18 @@ const BUILD_MIN_MS = 1200;
  *  — and an in-flight rename — to the row below it. */
 function keyed(items: Detection[]): Detection[] {
   return items.map((d) => (d.uid ? d : { ...d, uid: uuid() }));
+}
+
+/** Whether the browser says this connection is metered: mobile data, or Data Saver on.
+ *  Only Chromium reports either, so `false` means "not known to be", never "known not
+ *  to be" — the card is careful to say "seem". */
+function onMeteredConnection(): boolean {
+  try {
+    const c = (navigator as unknown as { connection?: { type?: string; saveData?: boolean } }).connection;
+    return !!c && (c.type === 'cellular' || c.saveData === true);
+  } catch {
+    return false;
+  }
 }
 
 // Where the recognising happened. This drives the privacy line, so it has to be
@@ -151,7 +162,7 @@ function noticeFor(e: unknown): Notice {
         kicker: 'No key needed',
         title: 'Add your pieces by hand',
         body:
-          'Automatic detection is optional and no key is set for it. Draw a box around anything you want in the room and Danmu gives it a typical size you can adjust in the studio.',
+          'Finding furniture automatically is optional and isn’t set up. Draw a box around anything you want in the room and Danmu gives it a typical size you can adjust in the studio.',
         settings: true,
       };
     case 'DAILY_QUOTA':
@@ -180,7 +191,7 @@ function noticeFor(e: unknown): Notice {
         kicker: 'Key not accepted',
         title: 'Google didn’t accept that key',
         body:
-          'Check the detection key in Settings. A stray space is the usual cause. Or add your pieces by hand, which needs no key.',
+          'Check the key in Settings under Advanced. A stray space is the usual cause. Or add your pieces by hand, which needs no key.',
         settings: true,
       };
     case 'PHOTOS_TOO_BIG':
@@ -206,7 +217,7 @@ function noticeFor(e: unknown): Notice {
         kicker: 'Unreadable answer',
         title: 'Danmu couldn’t make sense of the reply',
         body:
-          'The detection service replied in a form Danmu can’t read. Nothing is wrong with your photos. Try again, or add your pieces by hand.',
+          'Google’s reply wasn’t in a form Danmu can read. Nothing is wrong with your photos. Try again, or add your pieces by hand.',
         retry: true,
       };
     default:
@@ -232,12 +243,11 @@ export default function DetectPage() {
   // The detector's one-time download: asked about before a byte of it moves, then
   // counted while it runs. `ask` resolves the question the scan is waiting on.
   const [download, setDownload] = useState<{
-    sizes: Record<DetectorPack, DetectorStatus>;
+    size: DetectorStatus;
     update: boolean;
     metered: boolean;
-    ask: (pack: DetectorPack | null) => void;
+    ask: (go: boolean) => void;
   } | null>(null);
-  const detectorPack = useSettings((s) => s.detectorPack);
   const [fetched, setFetched] = useState<DownloadProgress | null>(null);
   const [saving, setSaving] = useState(false);
   // The Building screen, from Continue until the studio has taken over. Not `saving`:
@@ -377,9 +387,9 @@ export default function DetectPage() {
           const localUnavailable: Notice = {
             code: 'LOCAL_UNAVAILABLE',
             tone: 'calm',
-            kicker: 'On-device scan unavailable',
-            title: 'This device could not run the on-device scan',
-            body: 'Its scanning engine is missing from this copy of Danmu. Draw a box around each piece in your photos, or add a Google key in Settings to have them read there.',
+            kicker: 'Scan unavailable',
+            title: 'This device could not scan your photos',
+            body: 'The scanner is missing from this copy of Danmu. Draw a box around each piece in your photos, or add a Google key in Settings to have Google read them.',
           };
           if (runtimeMissing) setNotice(localUnavailable);
           if (await localDetectorAvailable() && !runtimeMissing) {
@@ -387,22 +397,18 @@ export default function DetectPage() {
             // assumed: on mobile data that is the most this app ever costs anyone.
             // An update is asked about the same way: a kept copy for another version
             // of the file is a download, and nobody's data plan is spent unasked.
-            let pack = useSettings.getState().detectorPack;
+            // One pack, always: the full pair. An old saved 'basic' is ignored rather than
+            // honoured, so nobody stays stuck on the smaller, weaker finder.
+            const pack: DetectorPack = 'full';
             const status = await detectorStatus(pack);
             let go = status.owed === 0;
-            let owed = status.owed;
+            const owed = status.owed;
             if (!go) {
-              const [full, basic] = await Promise.all([detectorStatus('full'), detectorStatus('basic')]);
-              const chosen = await new Promise<DetectorPack | null>((ask) =>
-                setDownload({ sizes: { full, basic }, update: status.update, metered: onMeteredConnection(), ask }),
+              const accepted = await new Promise<boolean>((ask) =>
+                setDownload({ size: status, update: status.update, metered: onMeteredConnection(), ask }),
               );
               setDownload(null);
-              if (chosen) {
-                owed = (chosen === 'full' ? full : basic).owed;
-                pack = chosen;
-                useSettings.getState().setDetectorPack(chosen);
-                go = true;
-              }
+              if (accepted) go = true;
             }
             if (cancelled || stopped.current) return;
             if (go) {
@@ -866,7 +872,7 @@ export default function DetectPage() {
     setRunning(false);
     // A scan waiting on the download question is answered no, so it does not wait forever.
     setDownload((d) => {
-      d?.ask(null);
+      d?.ask(false);
       return null;
     });
     setPath('stopped');
@@ -1110,19 +1116,14 @@ export default function DetectPage() {
                 : 'To spot your furniture on this device, Danmu needs a one-time download. It is kept afterwards, so later scans use no data.'}{' '}
               {download.metered ? 'You seem to be on mobile data, so you may want to wait for Wi-Fi.' : null}
             </p>
-            <DetectorPackPicker
-              value={detectorPack}
-              onChange={(p) => useSettings.getState().setDetectorPack(p)}
-              sizes={download.sizes}
-            />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="ds-btn ds-btn--accent" onClick={() => download.ask(detectorPack)}>
+              <button className="ds-btn ds-btn--accent" onClick={() => download.ask(true)}>
                 <Icon name="download" size={13} />
-                {download.sizes[detectorPack].owed === 0
-                  ? `Use ${detectorPack === 'full' ? 'Full' : 'Basic'}, already kept`
-                  : `${download.update ? 'Update' : 'Download'} ${megabytes(download.sizes[detectorPack].owed)}`}
+                {download.size.owed === 0
+                  ? 'Use the furniture finder, already kept'
+                  : `${download.update ? 'Update' : 'Download'} the furniture finder (${megabytes(download.size.owed)})`}
               </button>
-              <button className="ds-btn" onClick={() => download.ask(null)}>
+              <button className="ds-btn" onClick={() => download.ask(false)}>
                 Skip for now
               </button>
             </div>
@@ -1184,7 +1185,7 @@ export default function DetectPage() {
             </button>
           )}
           {notice.settings && (
-            <Link href={settingsHref('/onboarding/detect')} className="ds-btn ds-btn--sm">
+            <Link href={`${settingsHref('/onboarding/detect')}#advanced`} className="ds-btn ds-btn--sm">
               <Icon name="key" size={12} />
               Set up a key in Settings
             </Link>

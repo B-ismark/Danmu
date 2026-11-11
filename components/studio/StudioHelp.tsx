@@ -429,16 +429,6 @@ function planSections(): HelpSectionSpec[] {
             To pan: two fingers, middle-drag, <Kb>Shift</Kb>-scroll, or hold <Kb>Space</Kb> and drag.
           </HelpLine>
           <HelpKeys>
-            <HelpKey
-              keys={
-                <>
-                  <Kb>[</Kb>
-                  <Kb>]</Kb>
-                </>
-              }
-            >
-              turn the page, not the furniture
-            </HelpKey>
             <HelpKey keys={<Kb>0</Kb>}>puts the view back</HelpKey>
           </HelpKeys>
         </>

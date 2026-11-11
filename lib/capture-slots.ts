@@ -343,12 +343,8 @@ export function describePlacement(
     : '';
   if (!placed.length) return tooMany || 'Nothing to add.';
 
-  const compass = placed.filter((p) => p.by === 'bearing').length;
-  const timed = placed.some((p) => p.by === 'time');
   return [
     `${placed.length} photo${placed.length > 1 ? 's' : ''} added: ${placed.map((p) => labelOf(p.slot)).join(', ')}.`,
-    compass > 0 ? `${compass} placed from the photo’s own compass.` : '',
-    timed ? 'Ordered by when they were taken.' : '',
     ...placed
       .filter((p) => p.clashedWith)
       .map((p) => `${labelOf(p.slot)} may be a second photo of ${labelOf(p.clashedWith!)}. Check it.`),

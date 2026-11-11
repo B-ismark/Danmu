@@ -1102,7 +1102,6 @@ function CheckSummary({
   onStepFree: (on: boolean) => void;
 }) {
   const dimUnit = useSettings((s) => s.dimUnit);
-  const turn = turnLabel(dimUnit);
   const desc = stepFreeDesc(dimUnit);
   return (
     <div
@@ -1142,14 +1141,15 @@ function CheckSummary({
           aria-describedby={STEP_FREE_DESC_ID}
           style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
         />
-        Step-free <span style={{ color: 'var(--ink-3)' }}>· {turn}</span>
+        Wheelchair check
       </label>
       {/* OUTSIDE the label, and that is the whole point. A `<label>`'s text content
           is the checkbox's accessible NAME, so a description nested inside it became
           part of the name — and then `aria-describedby` pointed at the same node, so
           a screen reader read the sentence twice: once as what the control is called
-          and again as what it does. The name is "Step-free · <the turning circle>";
-          the sentence is the description, and the two must not be the same string.
+          and again as what it does. The name is "Wheelchair check";
+          the sentence (which carries the turning circle in the user's unit) is the
+          description, and the two must not be the same string.
           The name is written that way here on purpose: it used to read "90 cm", a
           number `TURNING_DIAMETER` has not produced for as long as this comment has
           existed — the label was derived and the COMMENT ABOUT the label was not, so
