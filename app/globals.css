@@ -70,8 +70,8 @@
   --snap-edge: #1E9E54;
   --snap-center: #27A06A;
 
-  /* The isometric room drawing (`components/ui/IsoRoom.tsx`) — the empty Rooms
-     page's hero, and the room that assembles while a scan is being built. A
+  /* The isometric room drawing (`components/ui/IsoRoom.tsx`) — the room that
+     assembles while a scan is being built. A
      drawing, never type: decorative values, so no contrast is claimed. Floor and
      two walls, then five furniture tones drawn from the same warm set as the
      palette (clay, walnut, sage, mustard, moss). */
@@ -296,7 +296,7 @@
   --dur-base: 160ms;
   --dur-slow: 300ms;
   --dur-breathe: 1100ms; /* one half-cycle of a placeholder's breathing */
-  --dur-sweep: 1800ms;     /* one pass of an indeterminate progress bar (BuildingRoom) */
+  --dur-sweep: 1800ms;     /* one pass of an indeterminate progress bar (BuildingRoom), and the landing plan drawing its walls */
   --dur-loop: 9s;          /* one pass of a waiting illustration (FindingFurniture) */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
@@ -358,9 +358,13 @@
 }
 
 /* ─── Night mode ──────────────────────────────────────────────────────────────
-   A warm dark, not an inverted one: the paper is a deep olive-brown charcoal (never
-   black), the ink is the light theme's cream, the moss accent is lifted so it still
-   reads as moss on a dark ground, and the amber stays warm. Every token that is a
+   A drafting-room graphite, not an inverted page. The paper is near-neutral charcoal
+   with only a trace of the light paper's warm hue (OKLCH chroma ~0.007 at hue 88), and
+   the ink is chalk rather than cream. It is not black. The first night palette held
+   that hue at several times this chroma, and at this lightness a warm yellow-orange
+   reads as brown: paper and ink both came out olive and muddy. The moss accent is a
+   cleaner sage here, lighter rather than more saturated, and the amber stays warm
+   because it is the only other hue on the page. Every token that is a
    COLOUR is restated here; everything else (type, radii, motion, measures, the
    z-scale, the sky) is shared and stays in the block above.
 
@@ -394,46 +398,46 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --paper-0: #17150F;       /* page wash — the darkest step; cards stand up out of it */
-  --paper: #211E18;         /* cards and panels */
-  --paper-2: #2B2820;       /* wells, hovers — a step LIGHTER here, the way elevation reads in the dark */
-  --paper-3: #35312A;
-  --ink: #F0E9D9;           /* the light theme's cream, as type. 13.74:1 on --paper */
-  --ink-2: #D3CBB8;         /* 10.29:1 on --paper */
-  --ink-3: #ADA48F;         /* 6.71:1 on --paper, 5.22:1 on --paper-3 */
-  --ink-4: #5C5748;         /* decorative fills only (2.30:1) */
-  --ink-hover: #FFF9EC;     /* the primary button is cream here, so its hover is a step brighter */
+  --paper-0: #12100D;       /* page wash — the darkest step; cards stand up out of it */
+  --paper: #1A1815;         /* cards and panels */
+  --paper-2: #22211D;       /* wells, hovers — a step LIGHTER here, the way elevation reads in the dark */
+  --paper-3: #2B2A26;
+  --ink: #EFEDE7;           /* chalk, as type. 15.13:1 on --paper */
+  --ink-2: #CDCAC5;         /* 10.84:1 on --paper */
+  --ink-3: #A8A6A1;         /* 7.28:1 on --paper, 5.90:1 on --paper-3 */
+  --ink-4: #52504B;         /* decorative fills only (2.20:1) */
+  --ink-hover: #FCFAF6;     /* the primary button is chalk here, so its hover is a step brighter */
 
-  --hairline: rgba(240, 233, 217, 0.12);
-  --hairline-soft: rgba(240, 233, 217, 0.06);
-  --hairline-strong: rgba(240, 233, 217, 0.20);
-  --edge: rgba(240, 233, 217, 0.46);          /* 3.97:1 on --paper — boundary of anything interactive */
+  --hairline: rgba(239, 237, 231, 0.12);
+  --hairline-soft: rgba(239, 237, 231, 0.06);
+  --hairline-strong: rgba(239, 237, 231, 0.20);
+  --edge: rgba(239, 237, 231, 0.46);          /* 4.13:1 on --paper — boundary of anything interactive */
 
-  --accent: #628E55;        /* moss, lifted a touch — fills only, still NOT text (4.37:1) */
-  --accent-tint: rgba(98, 142, 85, 0.18);
-  --accent-tint-strong: rgba(98, 142, 85, 0.32);
-  --accent-ink: #9DC58E;      /* 8.56:1 with --paper — the accent-button surface, carrying dark type */
-  --accent-ink-hover: #B2D4A5;/* 10.17:1 with --paper */
-  --accent-text: #A3C994;     /* 8.97:1 on --paper, 7.12:1 on --accent-tint */
+  --accent: #588659;        /* sage — fills only, still NOT text (4.19:1) */
+  --accent-tint: rgba(88, 134, 89, 0.18);
+  --accent-tint-strong: rgba(88, 134, 89, 0.32);
+  --accent-ink: #9CCD9C;      /* 9.80:1 with --paper — the accent-button surface, carrying dark type */
+  --accent-ink-hover: #B3DFB3;/* 11.91:1 with --paper */
+  --accent-text: #A4D2A4;     /* 10.40:1 on --paper, 8.44:1 on --accent-tint */
   --accent-2: #E0A23A;
   --accent-2-tint: rgba(224, 162, 58, 0.18);
-  --sun: #E0A21C;           /* 7.40:1 on --paper — a graphic */
-  --sun-rise: #EE8A3C;      /* 6.60:1 on --paper — the sun on the horizon at sunrise; a graphic */
-  --sun-set: #EC6F4A;       /* 5.49:1 on --paper — sunset, redder than sunrise; a graphic */
+  --sun: #E0A21C;           /* 7.89:1 on --paper — a graphic */
+  --sun-rise: #EE8A3C;      /* 7.03:1 on --paper — the sun on the horizon at sunrise; a graphic */
+  --sun-set: #EC6F4A;       /* 5.85:1 on --paper — sunset, redder than sunrise; a graphic */
 
-  --locked: #CFA0BA;        /* 7.43:1 on --paper */
+  --locked: #CFA0BA;        /* 7.92:1 on --paper */
   --locked-tint: rgba(207, 160, 186, 0.16);
 
   /* The scan review's eight piece colours carry a label in --on-accent, which is dark
      here, so they are the same eight hues raised to a pastel. */
-  --piece-1: #E79A7C;  /* 7.37:1 on --paper */
-  --piece-2: #AFC67C;  /* 8.86:1 on --paper */
-  --piece-3: #7FC2C6;  /* 8.26:1 on --paper */
-  --piece-4: #9DB3E6;  /* 7.93:1 on --paper */
-  --piece-5: #BCA6E6;  /* 7.70:1 on --paper */
-  --piece-6: #D9B35A;  /* 8.35:1 on --paper */
-  --piece-7: #E89AAE;  /* 7.65:1 on --paper */
-  --piece-8: #CDAE95;  /* 7.98:1 on --paper */
+  --piece-1: #E79A7C;  /* 7.85:1 on --paper */
+  --piece-2: #AFC67C;  /* 9.44:1 on --paper */
+  --piece-3: #7FC2C6;  /* 8.80:1 on --paper */
+  --piece-4: #9DB3E6;  /* 8.45:1 on --paper */
+  --piece-5: #BCA6E6;  /* 8.21:1 on --paper */
+  --piece-6: #D9B35A;  /* 8.89:1 on --paper */
+  --piece-7: #E89AAE;  /* 8.15:1 on --paper */
+  --piece-8: #CDAE95;  /* 8.50:1 on --paper */
 
   --snap-edge: #3FBF72;
   --snap-center: #46C08A;
@@ -449,25 +453,25 @@
   --art-4: #DBA63C;
   --art-5: #5F8A4A;
 
-  --danger: #E88670;        /* 6.39:1 on --paper */
+  --danger: #E88670;        /* 6.81:1 on --paper */
   --danger-tint: rgba(232, 134, 112, 0.14);
-  --danger-text: #F2A592;   /* 6.64:1 on --danger-tint */
-  --warn: #E3A65A;          /* 7.81:1 on --paper */
-  --warn-text: #E9B26C;     /* 7.74:1 on --paper-2 */
+  --danger-text: #F2A592;   /* 7.16:1 on --danger-tint */
+  --warn: #E3A65A;          /* 8.32:1 on --paper */
+  --warn-text: #E9B26C;     /* 8.47:1 on --paper-2 */
   --warn-tint: rgba(227, 166, 90, 0.16);
-  --success: #5F8C55;       /* fills only (4.25:1) */
-  --success-tint: rgba(95, 140, 85, 0.18);
-  --success-text: #A8CB98;  /* 9.23:1 on --paper */
+  --success: #568157;       /* fills only (3.94:1) */
+  --success-tint: rgba(86, 129, 87, 0.18);
+  --success-text: #A2CAA2;  /* 9.71:1 on --paper */
 
-  /* Type on an --ink chip. --ink is cream here, so these are the warn and success
+  /* Type on an --ink chip. --ink is chalk here, so these are the warn and success
      hues brought DOWN to a shared lightness rather than up. */
-  --on-ink-warn: #86500C;    /* 5.48:1 on --ink */
-  --on-ink-success: #3E6534; /* 5.57:1 on --ink */
-  --edge-on-ink: rgba(23, 21, 15, 0.90);
+  --on-ink-warn: #86500C;    /* 5.66:1 on --ink */
+  --on-ink-success: #3E6534; /* 5.75:1 on --ink */
+  --edge-on-ink: rgba(18, 16, 13, 0.90);
   --scrim: rgba(0, 0, 0, 0.62);
 
-  --grid-line: rgba(240, 233, 217, 0.035);
-  --grid-line-major: rgba(240, 233, 217, 0.06);
+  --grid-line: rgba(239, 237, 231, 0.035);
+  --grid-line-major: rgba(239, 237, 231, 0.06);
 
   /* Shadows are black in the dark — a warm-brown shadow on a near-black ground is
      invisible — and heavier, because a dark surface casts less contrast. */
@@ -476,14 +480,14 @@
   /* The wash glows from the top instead of deepening toward the edges, and ends on
      --paper-0, which every text token above is measured on as well. */
   --studio-wash: radial-gradient(120% 90% at 70% 0%, var(--paper-2) 0%, var(--paper) 45%, var(--paper-0) 100%);
-  --glass-fill: rgba(33, 30, 24, 0.74);        /* --paper at 74% */
-  --glass-fill-strong: rgba(33, 30, 24, 0.84);
-  --glass-tone: rgba(240, 233, 217, 0.04);
-  --glass-rim: rgba(255, 248, 232, 0.07);
+  --glass-fill: rgba(26, 24, 21, 0.74);        /* --paper at 74% */
+  --glass-fill-strong: rgba(26, 24, 21, 0.84);
+  --glass-tone: rgba(239, 237, 231, 0.04);
+  --glass-rim: rgba(255, 253, 248, 0.07);
   --shadow-float: 0 1px 2px rgba(0, 0, 0, 0.30), 0 10px 30px rgba(0, 0, 0, 0.38);
-  --clay-raise: inset 0 1px 0 rgba(255, 248, 232, 0.07), 0 1px 2px rgba(0, 0, 0, 0.30), 0 3px 8px rgba(0, 0, 0, 0.26);
-  --clay-raise-hover: inset 0 1px 0 rgba(255, 248, 232, 0.09), 0 2px 4px rgba(0, 0, 0, 0.32), 0 8px 18px rgba(0, 0, 0, 0.34);
-  --clay-well: inset 0 1px 2px rgba(0, 0, 0, 0.40), inset 0 -1px 0 rgba(255, 248, 232, 0.05);
+  --clay-raise: inset 0 1px 0 rgba(255, 253, 248, 0.07), 0 1px 2px rgba(0, 0, 0, 0.30), 0 3px 8px rgba(0, 0, 0, 0.26);
+  --clay-raise-hover: inset 0 1px 0 rgba(255, 253, 248, 0.09), 0 2px 4px rgba(0, 0, 0, 0.32), 0 8px 18px rgba(0, 0, 0, 0.34);
+  --clay-well: inset 0 1px 2px rgba(0, 0, 0, 0.40), inset 0 -1px 0 rgba(255, 253, 248, 0.05);
   --shadow-sheet: 0 -1px 3px rgba(0, 0, 0, 0.30), 0 -12px 28px rgba(0, 0, 0, 0.38);
 
   --rim-on-dark: var(--edge);
@@ -494,25 +498,25 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --paper-0: #17150F;
-    --paper: #211E18;
-    --paper-2: #2B2820;
-    --paper-3: #35312A;
-    --ink: #F0E9D9;
-    --ink-2: #D3CBB8;
-    --ink-3: #ADA48F;
-    --ink-4: #5C5748;
-    --ink-hover: #FFF9EC;
-    --hairline: rgba(240, 233, 217, 0.12);
-    --hairline-soft: rgba(240, 233, 217, 0.06);
-    --hairline-strong: rgba(240, 233, 217, 0.20);
-    --edge: rgba(240, 233, 217, 0.46);
-    --accent: #628E55;
-    --accent-tint: rgba(98, 142, 85, 0.18);
-    --accent-tint-strong: rgba(98, 142, 85, 0.32);
-    --accent-ink: #9DC58E;
-    --accent-ink-hover: #B2D4A5;
-    --accent-text: #A3C994;
+    --paper-0: #12100D;
+    --paper: #1A1815;
+    --paper-2: #22211D;
+    --paper-3: #2B2A26;
+    --ink: #EFEDE7;
+    --ink-2: #CDCAC5;
+    --ink-3: #A8A6A1;
+    --ink-4: #52504B;
+    --ink-hover: #FCFAF6;
+    --hairline: rgba(239, 237, 231, 0.12);
+    --hairline-soft: rgba(239, 237, 231, 0.06);
+    --hairline-strong: rgba(239, 237, 231, 0.20);
+    --edge: rgba(239, 237, 231, 0.46);
+    --accent: #588659;
+    --accent-tint: rgba(88, 134, 89, 0.18);
+    --accent-tint-strong: rgba(88, 134, 89, 0.32);
+    --accent-ink: #9CCD9C;
+    --accent-ink-hover: #B3DFB3;
+    --accent-text: #A4D2A4;
     --accent-2: #E0A23A;
     --accent-2-tint: rgba(224, 162, 58, 0.18);
     --sun: #E0A21C;
@@ -544,26 +548,26 @@
     --warn: #E3A65A;
     --warn-text: #E9B26C;
     --warn-tint: rgba(227, 166, 90, 0.16);
-    --success: #5F8C55;
-    --success-tint: rgba(95, 140, 85, 0.18);
-    --success-text: #A8CB98;
+    --success: #568157;
+    --success-tint: rgba(86, 129, 87, 0.18);
+    --success-text: #A2CAA2;
     --on-ink-warn: #86500C;
     --on-ink-success: #3E6534;
-    --edge-on-ink: rgba(23, 21, 15, 0.90);
+    --edge-on-ink: rgba(18, 16, 13, 0.90);
     --scrim: rgba(0, 0, 0, 0.62);
-    --grid-line: rgba(240, 233, 217, 0.035);
-    --grid-line-major: rgba(240, 233, 217, 0.06);
+    --grid-line: rgba(239, 237, 231, 0.035);
+    --grid-line-major: rgba(239, 237, 231, 0.06);
     --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.30), 0 6px 16px rgba(0, 0, 0, 0.28);
     --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.32), 0 12px 28px rgba(0, 0, 0, 0.40);
     --studio-wash: radial-gradient(120% 90% at 70% 0%, var(--paper-2) 0%, var(--paper) 45%, var(--paper-0) 100%);
-    --glass-fill: rgba(33, 30, 24, 0.74);
-    --glass-fill-strong: rgba(33, 30, 24, 0.84);
-    --glass-tone: rgba(240, 233, 217, 0.04);
-    --glass-rim: rgba(255, 248, 232, 0.07);
+    --glass-fill: rgba(26, 24, 21, 0.74);
+    --glass-fill-strong: rgba(26, 24, 21, 0.84);
+    --glass-tone: rgba(239, 237, 231, 0.04);
+    --glass-rim: rgba(255, 253, 248, 0.07);
     --shadow-float: 0 1px 2px rgba(0, 0, 0, 0.30), 0 10px 30px rgba(0, 0, 0, 0.38);
-    --clay-raise: inset 0 1px 0 rgba(255, 248, 232, 0.07), 0 1px 2px rgba(0, 0, 0, 0.30), 0 3px 8px rgba(0, 0, 0, 0.26);
-    --clay-raise-hover: inset 0 1px 0 rgba(255, 248, 232, 0.09), 0 2px 4px rgba(0, 0, 0, 0.32), 0 8px 18px rgba(0, 0, 0, 0.34);
-    --clay-well: inset 0 1px 2px rgba(0, 0, 0, 0.40), inset 0 -1px 0 rgba(255, 248, 232, 0.05);
+    --clay-raise: inset 0 1px 0 rgba(255, 253, 248, 0.07), 0 1px 2px rgba(0, 0, 0, 0.30), 0 3px 8px rgba(0, 0, 0, 0.26);
+    --clay-raise-hover: inset 0 1px 0 rgba(255, 253, 248, 0.09), 0 2px 4px rgba(0, 0, 0, 0.32), 0 8px 18px rgba(0, 0, 0, 0.34);
+    --clay-well: inset 0 1px 2px rgba(0, 0, 0, 0.40), inset 0 -1px 0 rgba(255, 253, 248, 0.05);
     --shadow-sheet: 0 -1px 3px rgba(0, 0, 0, 0.30), 0 -12px 28px rgba(0, 0, 0, 0.38);
     --rim-on-dark: var(--edge);
   }
@@ -896,33 +900,156 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 .room-group-head::after { content: ''; flex: 1; height: 1px; background: var(--hairline); align-self: center; }
 .room-group-head .mono { color: var(--ink); letter-spacing: 0; }
 
-/* The empty Rooms page: a welcome beside a drawing, then three ways to start. */
-.rooms-welcome { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 30px; align-items: center; margin-bottom: 34px; }
-.rooms-welcome h1 { font-size: var(--fs-hero); font-weight: 300; line-height: 1; letter-spacing: -0.02em; margin: 10px 0 14px; }
-.rooms-welcome p { margin: 0; color: var(--ink-3); font-size: var(--fs-lead); line-height: 1.55; max-width: 44ch; }
-.rooms-welcome__art { background: var(--paper-2); border-radius: var(--r-card); padding: 10px 10px 0; aspect-ratio: 7 / 5; overflow: hidden; }
-@media (max-width: 759px) {
-  .rooms-welcome { grid-template-columns: minmax(0, 1fr); }
+/* ─── The landing sheet: the rooms list when it is empty ──────────────────────
+   Laid out as a drawing sheet: a thin frame, the ways in as a numbered list, the
+   starter room in plan beside them, and a title block. It replaced a serif hero
+   beside an illustration in a rounded card and three identical icon cards, which
+   read as a template. Square-ish corners (--r-1) and hairline rules on purpose:
+   this is the one screen that is a sheet of paper rather than a stack of cards. */
+.landing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  grid-template-areas: "lede drawing" "foot foot";
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-1);
+  background: var(--paper);
+  overflow: hidden;
 }
-.start-cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
-.start-card {
-  display: flex; flex-direction: column; gap: 8px; padding: 20px; text-align: left;
-  font: inherit; color: var(--ink); text-decoration: none; cursor: pointer;
-  background: var(--paper); border: 1px solid var(--edge); border-radius: var(--r-card);
-  transition: border-color var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+.landing__lede { grid-area: lede; display: flex; flex-direction: column; min-width: 0; padding: 36px 32px 24px; }
+.landing__kicker { margin: 0; font-size: var(--fs-caption); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.landing__title {
+  font-family: var(--font-sans);
+  font-size: var(--fs-hero);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  margin: 14px 0;
+  max-width: 12ch;
+  text-wrap: balance;
 }
-.start-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
-.start-card:disabled { cursor: progress; }
-.start-card__icon { width: 44px; height: 44px; border-radius: var(--r-3); background: var(--paper-2); display: grid; place-items: center; margin-bottom: 6px; }
-.start-card__title { font-family: var(--font-display); font-weight: 400; font-size: var(--fs-title); line-height: 1.15; }
-.start-card__desc { color: var(--ink-3); font-size: var(--fs-body); line-height: 1.45; flex: 1; }
-.start-card__go { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: var(--fs-body); margin-top: 6px; }
-/* The recommended way in: the one inked card, so the three are not three equal claims. */
-.start-card--lead { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
-.start-card--lead .start-card__icon { background: color-mix(in srgb, var(--on-ink) 16%, transparent); }
-.start-card--lead .start-card__desc { color: var(--on-ink-2); }
-.rooms-foot { display: flex; align-items: center; gap: 8px 18px; margin-top: 26px; flex-wrap: wrap; color: var(--ink-3); font-size: var(--fs-small); }
-.rooms-foot__note { display: flex; align-items: center; gap: 7px; }
+.landing__intro { margin: 0 0 28px; color: var(--ink-2); font-size: var(--fs-lead); line-height: 1.5; max-width: 40ch; }
+
+/* The ways in. A list, numbered, read top to bottom. The rows are the controls,
+   so the rules between them are --hairline (dividers) and the row's own focus and
+   hover state is what says it can be pressed. */
+.landing-menu { list-style: none; margin: auto 0 0; padding: 0; border-top: 1px solid var(--hairline-strong); }
+.landing-menu > li { border-bottom: 1px solid var(--hairline); }
+.landing-menu > li:last-child { border-bottom: 0; }
+.landing-menu__row {
+  display: grid;
+  grid-template-columns: 2.4em minmax(0, 1fr);
+  grid-template-areas: "no body" ". go";
+  column-gap: 10px;
+  row-gap: 8px;
+  width: 100%;
+  padding: 16px 10px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-out);
+}
+.landing-menu__row:hover:not(:disabled) { background: var(--paper-2); }
+.landing-menu__row:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; border-radius: var(--r-1); }
+.landing-menu__row:disabled { cursor: progress; }
+.landing-menu__no { grid-area: no; padding-top: 5px; font-size: var(--fs-small); color: var(--ink-3); }
+.landing-menu__body { grid-area: body; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.landing-menu__name { font-size: var(--fs-title); font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.landing-menu__desc { color: var(--ink-3); font-size: var(--fs-body); line-height: 1.45; max-width: 46ch; }
+.landing-menu__go { grid-area: go; display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-small); font-weight: 700; color: var(--ink-2); }
+.landing-menu__go svg { transition: transform var(--dur-base) var(--ease-out); }
+.landing-menu__row:hover .landing-menu__go svg { transform: translateX(3px); }
+/* The recommended way in is marked by its number and its call, in the accent's
+   TEXT token, not by a filled card. */
+.landing-menu__row--lead .landing-menu__no,
+.landing-menu__row--lead .landing-menu__go { color: var(--accent-text); }
+
+/* The drawing: the starter room on faint grid paper. */
+.landing__drawing {
+  grid-area: drawing;
+  padding-top: 40px;
+  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  border-left: 1px solid var(--hairline-strong);
+  background-color: var(--paper-0);
+  background-image:
+    linear-gradient(var(--grid-line-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line-major) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.landing-plan { position: relative; margin: auto 12px; }
+.landing-plan__svg { display: block; width: 100%; height: auto; overflow: visible; }
+.landing-plan__floor { fill: var(--paper); }
+.landing-plan__walls {
+  fill: none;
+  stroke: var(--ink);
+  stroke-linejoin: miter;
+  /* The dash lives only in the keyframes, and the fill mode is backwards, not both: a
+     dashed outline leaves its start corner unjoined, so once drawn it goes back to a
+     plain stroke and the corner mitres like the other three. */
+  animation: landing-draw var(--dur-sweep) var(--ease-in-out) backwards;
+}
+.landing-plan__parts rect,
+.landing-plan__parts circle {
+  fill: var(--paper-2);
+  stroke: var(--ink-2);
+  stroke-width: 1.2;
+  animation: danmu-arrive var(--dur-slow) var(--ease-out) both;
+  animation-delay: var(--dur-sweep);
+}
+.landing-plan__dims path { fill: none; stroke: var(--ink-3); stroke-width: 1; }
+.landing-plan__dims rect { fill: none; stroke: var(--ink-3); stroke-width: 1; }
+.landing-plan__dims .landing-plan__bar-fill { fill: var(--ink-3); }
+.landing-plan__label {
+  position: absolute;
+  white-space: nowrap;
+  font-size: var(--fs-caption);
+  color: var(--ink-2);
+  pointer-events: none;
+}
+.landing-plan__label--top { transform: translate(-50%, -135%); }
+.landing-plan__label--left { transform: translate(-50%, -50%) rotate(-90deg) translateY(-0.9em); }
+.landing-plan__label--bar { transform: translate(8px, -50%); color: var(--ink-3); }
+@keyframes landing-draw {
+  from { stroke-dasharray: var(--perimeter); stroke-dashoffset: var(--perimeter); }
+  to { stroke-dasharray: var(--perimeter); stroke-dashoffset: 0; }
+}
+
+/* The title block, bottom of the drawing. */
+.title-block { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; border-top: 1px solid var(--hairline-strong); background: var(--paper); font-size: var(--fs-small); }
+.title-block__cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 10px 16px; border-left: 1px solid var(--hairline); }
+.title-block__cell:first-child { border-left: 0; }
+.title-block__key { font-size: var(--fs-micro); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+
+.landing__foot {
+  grid-area: foot;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 12px 16px 12px 32px;
+  border-top: 1px solid var(--hairline-strong);
+  color: var(--ink-3);
+  font-size: var(--fs-small);
+}
+.landing__note { display: flex; align-items: center; gap: 7px; }
+
+@media (max-width: 860px) {
+  .landing { grid-template-columns: minmax(0, 1fr); grid-template-areas: "lede" "drawing" "foot"; }
+  .landing__lede { padding: 26px 18px 16px; }
+  .landing__drawing { border-left: 0; border-top: 1px solid var(--hairline-strong); }
+  .landing-plan { margin: auto 14px; }
+  .landing__drawing { padding-top: 26px; }
+  .landing__foot { padding: 12px 18px; }
+}
 
 /* What a top-bar popover hangs from: its trigger's wrapper, which the card is
    absolutely positioned against. */
@@ -2960,10 +3087,11 @@ textarea.field { border-radius: var(--r-2); }
     transition-duration: var(--dur-quick) !important;
     scroll-behavior: auto !important;
   }
-  .ds-btn:hover, .ds-btn:active, .ds-card:hover, .start-card:hover, .swatch:hover { transform: none !important; }
+  .ds-btn:hover, .ds-btn:active, .ds-card:hover, .landing-menu__row:hover .landing-menu__go svg, .swatch:hover { transform: none !important; }
   /* The duration above is cut, the stagger is not: without this the Building screen's
      pieces wait their turn invisibly, on a screen that is up only as long as the save. */
   .iso-room__piece { animation-delay: 0s !important; }
+  .landing-plan__parts rect, .landing-plan__parts circle { animation-delay: 0s !important; }
   /* The Building screen's sweeping bar: a full, still, pale bar. */
   .build-screen__bar::after { animation: none; inset-inline-start: 0; inline-size: 100%; opacity: 0.35; }
   /* The capture plan's wall shimmer: lit and still, no pulse and no marching dashes. */

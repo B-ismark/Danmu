@@ -199,20 +199,20 @@ describe("the browser chrome's colour", () => {
   beforeEach(() => {
     document.head.innerHTML =
       '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F4EFE4">' +
-      '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#17150F">';
+      '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D">';
   });
   const media = () =>
     Array.from(document.querySelectorAll('meta[name="theme-color"]')).map((m) => [m.getAttribute('content'), m.getAttribute('media')]);
 
   it('follows a pinned choice rather than the device, and goes back for System', () => {
     applyThemeColor(document, 'dark');
-    expect(media()).toEqual([['#F4EFE4', 'not all'], ['#17150F', 'all']]);
+    expect(media()).toEqual([['#F4EFE4', 'not all'], ['#12100D', 'all']]);
     applyThemeColor(document, 'light');
-    expect(media()).toEqual([['#F4EFE4', 'all'], ['#17150F', 'not all']]);
+    expect(media()).toEqual([['#F4EFE4', 'all'], ['#12100D', 'not all']]);
     applyThemeColor(document, 'system');
     expect(media()).toEqual([
       ['#F4EFE4', '(prefers-color-scheme: light)'],
-      ['#17150F', '(prefers-color-scheme: dark)'],
+      ['#12100D', '(prefers-color-scheme: dark)'],
     ]);
   });
 
@@ -224,11 +224,11 @@ describe("the browser chrome's colour", () => {
     expect(media()[1][1]).toBe('all');
     document.head.innerHTML =
       '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F4EFE4">' +
-      '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#17150F">';
+      '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D">';
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
-    expect(media()).toEqual([['#F4EFE4', 'not all'], ['#17150F', 'all']]);
+    expect(media()).toEqual([['#F4EFE4', 'not all'], ['#12100D', 'all']]);
   });
 });
 
