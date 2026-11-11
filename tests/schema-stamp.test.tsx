@@ -87,7 +87,7 @@ describe('an open room whose migration write was lost', () => {
 
   it('a repaint carries the overrides with the stamp', async () => {
     const spy = await openWithLostWrite();
-    useScene.getState().setSite({ bearingDeg: 90 } as never);
+    useScene.getState().setWallColor(0, '#abcdef');
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2), { timeout: 2000 });
     await spy.mock.results[1].value;
     expect(spy.mock.calls[1][1].transforms).toBeDefined();
@@ -113,7 +113,7 @@ describe('an open room whose migration write was lost', () => {
       pos: [0.4, 2.0, -0.6], rot: 0, dimMM: [350, 350, 400], locked: false, wallMounted: true,
     };
     const spy = await openWithLostWrite([pendant]);
-    useScene.getState().setSite({ bearingDeg: 90 } as never);
+    useScene.getState().setWallColor(0, '#abcdef');
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2), { timeout: 2000 });
     await spy.mock.results[1].value;
     const stored = await get<{ shape: string }[]>('room:old-room:scene');
@@ -123,7 +123,7 @@ describe('an open room whose migration write was lost', () => {
 
   it('writes no scene for a room that had none', async () => {
     const spy = await openWithLostWrite();
-    useScene.getState().setSite({ bearingDeg: 90 } as never);
+    useScene.getState().setWallColor(0, '#abcdef');
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2), { timeout: 2000 });
     expect(spy.mock.calls[1][1].parts).toBeUndefined();
   });

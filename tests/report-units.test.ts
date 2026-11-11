@@ -152,6 +152,8 @@ describe('a finding states its rule’s constant in the unit the user set', () =
 
     it(`the route in from the door, in ${unit}`, () => {
       expect(one(swingBlocked(), 'entry', unit).detail).toContain(formatLength(routeWidth(RECT) * 1000, unit));
+      // The length stands on its own: no hyphen glued to a unit ("0.9 m-wide").
+      expect(one(swingBlocked(), 'entry', unit).detail).not.toMatch(/\S-wide/);
     });
 
     it(`the comfortable-passage minimum, in ${unit}`, () => {

@@ -27,7 +27,6 @@ import {
   swapSet,
   type PlacedPhoto,
   type SlotMap,
-  type SlotSignal,
 } from '@/lib/capture-slots';
 import { wallFrame } from '@/lib/photo-geometry';
 import { roomFootprint } from '@/lib/footprint';
@@ -69,11 +68,6 @@ type Photo = {
    *  reaches at most a handful of times. */
   quality: Quality | null;
   pose?: CapturePose;
-  /** Which rung of the ladder put it on this wall. Absent for a photo read back
-   *  out of IndexedDB on a fresh visit — the reasoning was a fact about the
-   *  moment it was added, and inventing one after the fact would be worse than
-   *  saying nothing. */
-  by?: SlotSignal;
   /** The wall this photo may be a second shot of, when that wall already had one. */
   clashedWith?: CaptureSlot;
 };
@@ -128,9 +122,12 @@ export default function CapturePage() {
   const dimUnit = useSettings((s) => s.dimUnit);
   // No phone height goes onto a photo. There is no field for it any more, and a
   // height stated in older saved settings is ignored rather than stamped forever
-  // with no way to change it: the geometry assumes the standard chest-height rig
-  // (`CAM_HEIGHT`, 1.5 m) and the detect screen solves the real height off the
-  // wall-floor line. Old captures that already carry `pose.heightM` keep it.
+  // with no way to change it. The geometry assumes the standard chest-height rig
+  // (`CAM_HEIGHT`, 1.5 m). Only when a lens is known (EXIF or a vanishing-point
+  // estimate) does the detect screen fit the real height to the wall-floor line
+  // (`calForPhoto` in `lib/photo-geometry.ts`); with no lens, that same line solves
+  // the focal length instead and the height stays 1.5 m. Old captures that already
+  // carry `pose.heightM` keep it.
   const { tilt, requestAccess } = useDeviceTilt();
 
   // Mirror of `photos` readable from async handlers, so replacing or removing a
@@ -221,13 +218,12 @@ export default function CapturePage() {
     slot: CaptureSlot,
     blob: Blob,
     pose: CapturePose | undefined,
-    by: SlotSignal,
     clashedWith?: CaptureSlot,
   ) {
     if (!roomId) return;
     await roomStore.saveCapture(roomId, { slot, blob, takenAt: Date.now(), pose });
     const retiring = photosRef.current[slot]?.url;
-    setPhotos((p) => ({ ...p, [slot]: { blob, url: blobToObjectUrl(blob), quality: null, pose, by, clashedWith } }));
+    setPhotos((p) => ({ ...p, [slot]: { blob, url: blobToObjectUrl(blob), quality: null, pose, clashedWith } }));
     if (retiring) URL.revokeObjectURL(retiring);
     // Keyed on the blob, not the wall. A score started for this photo must not
     // land on whichever photo occupies this wall by the time it resolves — which
@@ -277,7 +273,7 @@ export default function CapturePage() {
     const refused: CaptureSlot[] = [];
     for (const { p, blob } of prepared) {
       try {
-        await persistPhoto(p.slot, blob, read[p.index].pose, p.by, p.clashedWith);
+        await persistPhoto(p.slot, blob, read[p.index].pose, p.clashedWith);
         landed.push(p);
       } catch {
         refused.push(p.slot);
@@ -304,7 +300,7 @@ export default function CapturePage() {
     }
     const { pose } = await readCaptureFacts(file);
     try {
-      await persistPhoto(slot, await normalizePhoto(file), pose, 'manual');
+      await persistPhoto(slot, await normalizePhoto(file), pose);
     } catch {
       setAnnounce(writeFailed(`The new ${labelOf(slot)} photo`));
       return;
@@ -529,7 +525,7 @@ export default function CapturePage() {
         const { pose } = await readCaptureFacts(blob, {
           tiltDeg: tilt ?? undefined,
         });
-        await persistPhoto(nextSlot, blob, pose, 'order');
+        await persistPhoto(nextSlot, blob, pose);
         setAnnounce(`Photo taken for ${labelOf(nextSlot)}.`);
       }}
       onUseUpload={() => setSource('upload')}

@@ -1513,9 +1513,9 @@ on a second line with every number whole.
 
 Swept at all seven widths: **0 findings**. On both tabs every cluster over the room is
 a rounded capsule with quiet buttons inside: undo/redo; on the plan, Zoom (− m · 100% +)
-and Turn and fit (⟲ 0° ⟳ | Fit); on 3D, Move / Scale / Rotate with the chosen mode as a
+and Fit (the page rotation that used to sit beside it is gone); on 3D, Move / Scale / Rotate with the chosen mode as a
 dark capsule, then Snap and Add. At 1024 on the plan the right corner folds into two
-rows (undo/redo + Zoom, then Turn and fit), never three. Press + and − repeatedly: the
+rows (undo/redo + Zoom, then Fit), never three. Press + and − repeatedly: the
 buttons must not shift as the percentage changes digits. Wrong would be: a pill that
 disappears into a pale wall in 3D (the rim is deliberately soft and the lift is the
 shadow, so check a light wall colour), a keyboard focus ring cut off inside the mode
@@ -2218,8 +2218,7 @@ carry it into the coffee table.
 
 **Where to click.** Open any room in **3D Model**. A dashed path circles over the room with the
 sun and a clock pill on it; drag the sun along it from morning to evening, then press **Night**
-in **Style → Light** and drag the moon. Press **Overcast**, then grab the sun again. Turn the
-room with **Plan top faces**. Carry the sofa quickly across the floor and let go; carry it into
+in **Style → Light** and drag the moon. Press **Overcast**, then grab the sun again. Carry the sofa quickly across the floor and let go; carry it into
 the coffee table. In **2D Plan**, drag a piece and drag a wall. Add a piece from the Library,
 delete it, recolour one, turn one with R, press Undo and Redo. **View → Sounds** switches it off.
 
@@ -2801,7 +2800,7 @@ edge, or the card not following the shapes. The *ROOM SIZE* label in the serif.
 
 **Where:** New room → pick an L-Shape → *Continue to photos*, at a laptop width and on a
 phone; add two photos. The steps sit over the page with Photos current. On a laptop: the
-title, three numbered instructions, a small plan of the room and the phone height on the
+title, three numbered instructions, a small plan of the room on the
 left, photos on the right. The plan lights the next wall in green with its number, ticks
 off the walls already added, and the caption names the next wall and its length. On a
 phone the order is title, photos, then the guide — the add tile comes before the plan.
@@ -3056,8 +3055,8 @@ each option; pick one that is taken.
 
 **What wrong looks like:** the badge not reading as part of the photo; the plan wall not
 shimmering for the option under the pointer (or still shimmering after the list closes); a
-swap that leaves the "Placed by" line saying anything other than *you*; the old *Back one /
-On one* pair still under the photos.
+"Placed by …" line (compass, shutter time, order or you) anywhere under a card, which no
+longer exists; the old *Back one / On one* pair still under the photos.
 
 **Why eyes:** the move, the swap and the shimmer flag are tested; whether the shimmer is
 visible enough to connect the name to the wall is a judgement.

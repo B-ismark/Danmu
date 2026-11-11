@@ -178,8 +178,8 @@ export default function SettingsPage() {
 
   async function removeKey() {
     const ok = await confirm({
-      title: 'Remove your detection key?',
-      body: 'It is deleted from this browser. Detection stops working until you add a key again.',
+      title: 'Remove your Google key?',
+      body: 'It is deleted from this browser. Danmu can’t find furniture with Google until you add a key again.',
       confirmLabel: 'Remove key',
       danger: true,
     });
@@ -621,25 +621,24 @@ function SettingsIndex() {
  *  ahead of a scan), Update when this version expects a newer file, and Remove.
  *  The sizes are the mirror's, read live; nothing here downloads until a press. */
 function DownloadsSection() {
-  // One pack, always the full pair. A saved 'basic' from before the picker went is
-  // ignored (never read), so nobody stays on the smaller finder.
+  // One pack, always the full pair. The smaller finder's files are a subset of it, so
+  // what is kept of the full pair already counts whatever was kept of the smaller one.
   const pack: DetectorPack = 'full';
-  const [sizes, setSizes] = useState<Record<DetectorPack, DetectorStatus | null>>({ full: null, basic: null });
+  const [st, setSt] = useState<DetectorStatus | null>(null);
   const [busy, setBusy] = useState<'download' | 'remove' | null>(null);
   const [got, setGot] = useState<DownloadProgress | null>(null);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let live = true;
-    void Promise.all([detectorStatus('full'), detectorStatus('basic')]).then(([full, basic]) => {
-      if (live) setSizes({ full, basic });
+    void detectorStatus(pack).then((status) => {
+      if (live) setSt(status);
     });
     return () => {
       live = false;
     };
   }, [tick]);
 
-  const st = sizes[pack];
   const served = st !== null && !st.unreachable && st.size === 0;
   const hint =
     st === null
@@ -681,7 +680,7 @@ function DownloadsSection() {
     }
   }
 
-  const keptAny = (sizes.full?.kept ?? 0) > 0 || (sizes.basic?.kept ?? 0) > 0;
+  const keptAny = (st?.kept ?? 0) > 0;
   return (
     <Section
       icon="download"

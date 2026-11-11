@@ -272,9 +272,15 @@ describe('the plan answers back: a wall pointed at lifts its card', () => {
 describe('no wall-assignment jargon', () => {
   it('shows no "Placed by" reason beside a photo', async () => {
     await mounted();
+    const made = vi.mocked(URL.createObjectURL);
+    const before = made.mock.calls.length;
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], 'wall.jpg', { type: 'image/jpeg' });
     fireEvent.change(screen.getByLabelText('Choose a different photo for Wall 1'), { target: { files: [file] } });
-    await screen.findByLabelText('Choose a different photo for Wall 1');
+    // The label above existed before the change, so awaiting it proves nothing. A new
+    // object URL is made only when the replacement has been saved and put on the card,
+    // and its score chip settles after that.
+    await waitFor(() => expect(made.mock.calls.length).toBeGreaterThan(before));
+    await waitFor(() => expect(within(cardOf('Your photo of Wall 1')).queryByText('Checking this photo…')).toBeNull());
     expect(screen.queryByText(/Placed by/)).toBeNull();
     expect(document.querySelector('.capture-foot__reason')).toBeNull();
   });

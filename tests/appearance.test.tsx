@@ -142,6 +142,16 @@ describe('the setting', () => {
     expect(useSettings.getState().dimUnit).toBe('cm');
   });
 
+  it('loads a record that still carries settings the app no longer has, and drops them', async () => {
+    record({ dimUnit: 'ft', camHeightM: 1.7, camHeightSet: true, detectorPack: 'basic' });
+    await act(() => useSettings.persist.rehydrate());
+    const s = useSettings.getState() as unknown as Record<string, unknown>;
+    expect(s.dimUnit).toBe('ft');
+    expect('camHeightM' in s).toBe(false);
+    expect('camHeightSet' in s).toBe(false);
+    expect('detectorPack' in s).toBe(false);
+  });
+
   it('maps to the attribute the stylesheet keys on', () => {
     expect(themeAttribute('system')).toBeNull();
     expect(themeAttribute('dark')).toBe('dark');

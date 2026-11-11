@@ -5,7 +5,7 @@
 // have read "Wall 1 … Wall 4" ever since. Nothing outside this file's own
 // arithmetic cares where north is: `slotToWorld` maps the four ids onto the
 // room's own axes, and the room's relationship to true north lives separately in
-// `Site.bearingDeg`, which the user sets on a dial for the sun.
+// `Site.bearingDeg`, which only turns the sun and which nothing in the studio sets any more.
 //
 // That is the fact that makes auto-slotting safe. A compass bearing cannot tell
 // anyone which wall of their living room "faces north" in a way they would

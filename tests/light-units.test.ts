@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { candelaFromLumens, candelaFromLumensInCone, hexFromKelvin, shadeGlow } from '@/lib/light-units';
+import {
+  MAX_LUMENS,
+  brightnessWord,
+  candelaFromLumens,
+  candelaFromLumensInCone,
+  hexFromKelvin,
+  lumensFromPosition,
+  positionFromLumens,
+  roundLumens,
+  shadeGlow,
+} from '@/lib/light-units';
 
 const channels = (hex: string) => [
   parseInt(hex.slice(1, 3), 16),
@@ -96,5 +106,59 @@ describe('shadeGlow', () => {
     expect(shadeGlow(5000)).toBe(0.9);
     expect(shadeGlow(0)).toBe(0);
     expect(shadeGlow(Number.NaN)).toBe(0);
+  });
+});
+
+describe('the brightness slider', () => {
+  it('is a square: the shipped lamps sit near the middle, not at Dim', () => {
+    for (const lm of [400, 800, 1600]) {
+      const p = positionFromLumens(lm);
+      expect(p, `${lm} lm`).toBeGreaterThan(0.25);
+      expect(p, `${lm} lm`).toBeLessThan(0.6);
+    }
+    expect(lumensFromPosition(1)).toBe(MAX_LUMENS);
+    expect(lumensFromPosition(0)).toBe(0);
+    expect(lumensFromPosition(0.5)).toBe(1250);
+  });
+
+  it('gives the stored lumens back, as closely as the rounding allows', () => {
+    // The slider moves in steps of 0.01; the figure rounds to tens, then fifties.
+    for (const lm of [0, 400, 800, 1250, 1600, 3000, 5000]) {
+      const pos = Math.round(positionFromLumens(lm) * 100) / 100;
+      const back = lumensFromPosition(pos);
+      const slack = Math.max(60, lm * 0.04);
+      expect(Math.abs(back - lm), `${lm} lm came back as ${back}`).toBeLessThanOrEqual(slack);
+    }
+    // And exactly where the position is fine enough to say so.
+    for (const lm of [400, 800, 1600]) expect(lumensFromPosition(positionFromLumens(lm))).toBe(lm);
+  });
+
+  it('is monotonic, and clamps a position outside the track', () => {
+    let last = -1;
+    for (let i = 0; i <= 100; i++) {
+      const lm = lumensFromPosition(i / 100);
+      expect(lm).toBeGreaterThanOrEqual(last);
+      last = lm;
+    }
+    expect(lumensFromPosition(-1)).toBe(0);
+    expect(lumensFromPosition(7)).toBe(MAX_LUMENS);
+    expect(lumensFromPosition(NaN)).toBe(0);
+    expect(positionFromLumens(99999)).toBe(1);
+    expect(positionFromLumens(-5)).toBe(0);
+  });
+
+  it('rounds to tens while small and fifties after', () => {
+    expect(roundLumens(404)).toBe(400);
+    expect(roundLumens(495)).toBe(500);
+    expect(roundLumens(1610)).toBe(1600);
+    expect(roundLumens(1630)).toBe(1650);
+  });
+
+  it('says each band in words', () => {
+    expect(
+      [0, 0.19, 0.2, 0.39, 0.4, 0.59, 0.6, 0.79, 0.8, 1].map(brightnessWord),
+    ).toEqual(['Dim', 'Dim', 'Soft', 'Soft', 'Medium', 'Medium', 'Bright', 'Bright', 'Very bright', 'Very bright']);
+    expect(brightnessWord(positionFromLumens(400))).toBe('Soft');
+    expect(brightnessWord(positionFromLumens(1600))).toBe('Medium');
   });
 });

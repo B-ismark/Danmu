@@ -70,7 +70,7 @@ describe('ViewGizmo', () => {
     const bs = buttons();
     expect(bs.map((b) => b.getAttribute('aria-label'))).toEqual([
       'Look from the corner',
-      'Look straight at the front wall',
+      'Look straight across the room',
       'Look down from above',
     ]);
     for (const b of bs) expect(b.querySelector('svg')).toBeTruthy();

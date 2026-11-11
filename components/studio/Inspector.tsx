@@ -23,6 +23,7 @@ import { moveToWall, wallSentence } from '@/lib/to-wall';
 import { useRoomReport } from './RoomTools';
 import { wallSegments, type Footprint } from '@/lib/footprint';
 import { wallLabelFor } from '@/lib/wall-label';
+import { brightnessWord, lumensFromPosition, positionFromLumens } from '@/lib/light-units';
 import { describeSpaceRefusal, refuseForSpace, spaceLimits } from '@/lib/space-bound';
 import { moveWallCarrying } from '@/lib/wall-actions';
 import { onPageLeave } from '@/lib/page-leave';
@@ -594,21 +595,25 @@ function LightControls({
           Brightness
         </label>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span className="t-meta">Dim</span>
+          <span className="t-meta" id={`lm-${part.id}-lo`}>Dim</span>
+          {/* The track is a square (lib/light-units.ts): the lamps Danmu ships sit
+              near the middle rather than at "Dim". The stored value is still lumens. */}
           <input
             id={`lm-${part.id}`}
             type="range"
             min={0}
-            max={5000}
-            step={50}
-            value={spec.lumens}
+            max={1000}
+            step={10}
+            value={Math.round(positionFromLumens(spec.lumens) * 1000)}
+            aria-valuetext={brightnessWord(positionFromLumens(spec.lumens))}
+            aria-describedby={`lm-${part.id}-lo lm-${part.id}-hi`}
             onChange={(e) => {
               const n = Number(e.target.value);
-              if (Number.isFinite(n) && n >= 0) set({ lumens: n });
+              if (Number.isFinite(n) && n >= 0) set({ lumens: lumensFromPosition(n / 1000) });
             }}
             style={{ flex: '1 1 96px', minWidth: 0, accentColor: 'var(--accent-text)' }}
           />
-          <span className="t-meta">Bright</span>
+          <span className="t-meta" id={`lm-${part.id}-hi`}>Bright</span>
         </div>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

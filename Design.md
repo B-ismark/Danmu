@@ -309,9 +309,9 @@ label and the derived span) and two round buttons on paper, Replace and Remove, 
 wall in their `aria-label`s. Under it, a paper footer holds a status pill (sage "Looks
 good", warn for a flag or a clash, "Checking this photo…" while unscored, all from
 `flagTone` / `flagLabel` / `flagHelp`), then the **Wall** dropdown (`Select`; a wall that
-already holds a photo reads "Wall 3 (swap)" because `movePhoto` swaps) beside the rung that
-placed it in quiet text — `REASON`: "Placed by compass", "Placed by shutter time", "Placed
-by order added", "Placed by you". Pointing at or focusing anywhere on a card sets `data-wall-state="hover"` on its wall's `<g>` in
+already holds a photo reads "Wall 3 (swap)" because `movePhoto` swaps). The footer says
+nothing about *how* a wall was chosen: the ladder in `lib/capture-slots.ts` still reports its rung
+(`PlacedPhoto.by`) to `describePlacement`'s announcement, but no chip shows it. Pointing at or focusing anywhere on a card sets `data-wall-state="hover"` on its wall's `<g>` in
 the plan beside the how-to: a moss CSS pulse and marching highlight, `calc(var(--dur-slow) * 4)` a loop
 (still and lit under reduced motion). With the card's Wall list open (`Select`'s optional
 `onActiveChange`) the picture is two states, not one: the card's own wall is `current` (steady, thick moss) and
@@ -331,17 +331,17 @@ already?** (`lib/sighting-links.ts`): link it to an earlier row and the later ro
 being built, so one bed seen from three walls is one bed, and unticking a piece hands it to
 its next sighting. A scanned piece is built at its model's typical size and default colour (rule 2 in
 CLAUDE.md), so the screen says "typical size", never "measured". The local detector is
-a one-time download of **Basic** (smaller, finds about half as much) or **Full** (finds the
-most), asked about before it starts and kept afterwards; Settings' **Downloads** section
-holds the same choice, its size and a remove. When the review is confirmed, the **Building
+a one-time download of the full finder (about 65 MB, both models), asked about before it starts
+and kept afterwards; Settings' **Downloads** section holds its size and a remove. There is no
+smaller pack to choose any more. When the review is confirmed, the **Building
 your room** screen (`components/ui/BuildingRoom.tsx`) shows the room's real size, floor
 area, the pieces kept and the photos used while the list is written and the studio opens.
 
 
 That works because the slot ids are a **cyclic order, not compass directions**.
 Nothing outside `capture-slots`' own arithmetic cares where north is — the room's
-own relationship to true north lives separately in `Site.bearingDeg`, which the
-user sets on a dial for the sun — so any error common to every bearing, magnetic
+own relationship to true north lives separately in `Site.bearingDeg`, which only
+turns the sun and which nothing in the studio sets any more — so any error common to every bearing, magnetic
 declination included, cancels out of the differences. `bearingRef` is read by the
 EXIF parser and deliberately **not** carried into the decision for that reason.
 
@@ -405,9 +405,10 @@ Furniture detection runs through a fallback chain, best-effort:
    Skipping with no key set arms by-hand boxes and says *Look again* brings the scan
    back on Wi-Fi; with a key, the cloud path runs instead. The count while it runs is
    against the whole download from the first byte (`DetectorStatus.owed`, handed to
-   `onDetectorDownload`). **Basic or Full** is one picker (`DetectorPackPicker`,
-   `settings.detectorPack`, default Full): Basic is the OIV7 model alone (~14 MB, about
-   half the finds), Full is the ensemble below (`packFiles`). A kept copy records the
+   `onDetectorDownload`). The pack is always **Full**, the ensemble below (`packFiles('full')`).
+   The picker (`DetectorPackPicker`) and `settings.detectorPack` are deleted; an old saved value
+   is dropped when settings load. `packFiles('basic')` (the OIV7 model alone) is still in
+   `lib/model-verify.ts` and nothing selects it. A kept copy records the
    digest it was verified against, so one an app update no longer pins reads as an
    *update* and is asked about the same way, never downloaded unasked.
    **Settings → Downloads** shows what is kept with *Download now* / *Update* /
@@ -527,7 +528,7 @@ Furniture detection runs through a fallback chain, best-effort:
 
    The OIV7 model earns exactly one object for double the passes and +14 MB.
    Dropping the OIV7 model is the lever if detection ever feels too slow (note the
-   Basic pack is the opposite cut: it keeps OIV7 and drops the world model, for size).
+   `basic` in `lib/model-verify.ts` is the opposite cut, and is no longer offered).
 
    **Licence boundary:** the weights are AGPL-3.0 (Ultralytics) and Danmu is
    MIT. AGPL is copyleft, so the two cannot be mixed — the weights therefore
@@ -1160,10 +1161,12 @@ short for their angles to mean anything. `normalizePhoto` caps the long edge at
 
 Tilt is never solved for from the floor line — one equation cannot give two
 unknowns. It comes from `lib/device-tilt.ts` at capture time, or from the
-vanishing points, or not at all; a measured device tilt outranks an inferred one. Camera height is asked
-for on the capture screen (`useSettings.camHeightM`, remembered per person since
-it is a property of the shooter, not the room) and written onto each photo's
-`CapturePose` as it is saved.
+vanishing points, or not at all; a measured device tilt outranks an inferred one. Camera height is no
+longer asked for: the capture screen has no field for it and `useSettings.camHeightM` is deleted (an
+old saved value is dropped on load). The rig assumes `CAM_HEIGHT` (1.5 m); a capture whose stored
+`pose.heightM` came from an older version keeps it. Only when a lens is known does the detect screen
+fit the real height to the wall-floor line (`calForPhoto`); with no lens the same line solves the focal
+length and the height stays at 1.5 m.
 
 **The fourth assumption is the unmeasured one, and it has now been priced.** The rig's
 header names four: camera at the room centre, at a known height, level, and **framing one
@@ -2278,16 +2281,16 @@ blocks opens as a box clamped to a box's limits. It does not carry the shelf (§
     `tests/render-churn.test.ts` holds all three.
   - **The strip carries the rest** (there is no rail Light section: `LightingPicker`
     and the Style → Light section are deleted): while it is open, an extras row
-    under it holds the **Overcast** toggle, **Plan top faces** — the room's bearing,
-    one compass point a press (`turnedBearing`, `lib/lighting-moods.ts`) — and the
-    "no window or door, so no sunlight gets in" hint. The strip's span is the
+    under it holds the **Overcast** toggle and the
+    "no window or door, so no sunlight gets in" hint. (The "Plan top faces" turner that
+    used to sit there, and `turnedBearing`, are deleted.) The strip's span is the
     canvas's own: it does **not** back off for the Library card, so opening the
     Library never moves it. The sun glyph is `--sun` (golden) by day, warming to `--sun-rise` / `--sun-set`
     at its horizon; the moon stays paper.
-  - **`Site.bearingDeg` still turns the whole day** with the room, so which wall
-    the morning comes through is the user's answer. It was the Sun direction dial
-    (`NorthDial.tsx`, deleted); the strip shows the answer and its extras row keeps the
-    setting.
+  - **`Site.bearingDeg` still turns the whole day** with the room when a loaded room or
+    file carries one; a new room uses the default and the studio has no control for it.
+    It was the Sun direction dial (`NorthDial.tsx`, deleted), then a "Plan top faces"
+    turner on the strip (also deleted). `setSite` is gone from `useScene` with them.
 - **Carried pieces sway** (`lib/wobble.ts`, `components/three/Wobble.tsx`). A floor
   piece being dragged lifts 14 mm and leans back against its travel, up to 7°, and
   rocks upright on release — an underdamped spring, ζ ≈ 0.35, two or three rocks
@@ -2553,8 +2556,8 @@ Three things left the canvas to make that true:
 also held a help card, a zoom toolbar and a legend — while the 3D tab's lived in
 its page. That split in ownership is *why* the tabs drifted: nobody comparing them
 was looking at both. `PlanView` now exposes a `PlanViewHandle`
-(`zoomIn`/`zoomOut`/`rotateLeft`/`rotateRight`/`fit`) and reports `{ zoom, rot,
-hasCutOff }` upward; the chrome is `PlanChrome.tsx`, rendered by the page. The
+(`zoomIn`/`zoomOut`/`fit`/`frameSelection`) and reports `{ zoom, hasCutOff }` upward (the page
+rotation and its `rot` are gone — the plan never turns); the chrome is `PlanChrome.tsx`, rendered by the page. The
 drawing still owns its transform, because wheel, pinch and drag all write it.
 
 The help card is the exception, and it took a second round to finish: it went to
@@ -2734,7 +2737,7 @@ asks about width.
 - **Targets.** Toolbar items are 56px tall, past Apple's 44pt and Material's 48dp,
   because the bottom edge is where Hoober measured touches landing least accurately.
   They stop at 128px wide, so three items never become three slabs.
-- **Gestures replace chrome.** The plan's zoom, rotate and fit box is gone on a phone,
+- **Gestures replace chrome.** The plan's zoom and fit box is gone on a phone,
   because pinch zooms and a finger pans. The Help card says *tap*, and a tapped
   piece drops into the first clear spot, because there is no cursor to drag from.
 
@@ -2790,7 +2793,7 @@ the room is never under them.
 ### Floating chrome — one pill per group
 
 Everything that floats over the room on either tab is a `.chrome-pill`: undo/redo,
-the plan's **Zoom** and **Turn and fit**, the 3D tab's Move / Scale / Rotate (a
+the plan's **Zoom** and **Fit**, the 3D tab's Move / Scale / Rotate (a
 segmented pill, `.chrome-seg`), Snap, Add and Comfort zones. The camera switcher (`ViewGizmo`: **Corner / Front / Top** as words in one segmented pill, glyph-only 40px cells on a phone or a canvas under 360px; `free` is not a button, it is what orbiting sets and leaves all three unpressed) and
 the comfort legend wear the same rim and lift at card corners. It replaced an
 outlined box around outlined buttons, which put two boundaries on every control.
@@ -3306,7 +3309,7 @@ size, so turning a 2 m sofa that stands against a wall pushes it off that wall �
 real, correct positional delta produced by a gesture that translated nothing. The
 set copied it, and a chair selected alongside a sofa turned to 45° travelled 575 mm
 across the room and was persisted. 3D reads the gesture off the gizmo (a raw pointer
-drag is always a move); the plan's rotate never enters `resolveConvoy` at all — it
+drag is always a move); the plan's piece rotate (the handle, not the page) never enters `resolveConvoy` at all — it
 writes the angle and cascades the dragged piece's own rigid children, which it had
 not been doing either, so turning a desk up here left the lamp on it behind.
 
@@ -3722,7 +3725,7 @@ target in a way an explicit Back button is not. Do not "fix" detect's to match.
 | `NumberField.tsx` | Measurement input with our own two-chevron stepper (the native spinner is suppressed app-wide). Hold-to-repeat reads the clock and pays at most 3 steps per tick — a plain interval drifts badly when every step re-renders an inspector and a 3D scene, and pure clock catch-up turns one starved tick into a huge leap. It calls `onChange` through a ref, since callers rebuild that closure each render over their own local state. Chevrons are `aria-hidden` + `tabIndex -1`: the input is already a spinbutton and Up/Down step it. |
 | `StorageToast.tsx` | One live region for the whole app, plus the imperative `toast()`. Lifted clear of the studio's bottom-right control cluster on `/room/` routes — the card takes pointer events, so at the default offset it swallowed their clicks. |
 | `DocShell.tsx` | The document-route shell — see above. Takes `trail` (the breadcrumb), `actions`, `back`, `measure` (`page` \| `prose`) and `variant` (`plain` \| `hero`). |
-| `FlowStepper.tsx` · `BuildingRoom.tsx` · `FindingFurniture.tsx` · `LoadingOverlay.tsx` · `DetectorPackPicker.tsx` | The photo route's furniture: where you are (Shape, Photos, Furniture, Room), the last step's "building" screen, the wait while the finder runs, a blocking progress overlay, and the Basic / Full detector choice shared by the scan screen and Settings. |
+| `FlowStepper.tsx` · `BuildingRoom.tsx` · `FindingFurniture.tsx` · `LoadingOverlay.tsx` | The photo route's furniture: where you are (Shape, Photos, Furniture, Room), the last step's "building" screen, the wait while the finder runs, and a blocking progress overlay. |
 | `IsoRoom.tsx` · `ShapeIcon.tsx` | The empty rooms page's isometric hero, and the chip that draws a piece's shape at the start of list rows. |
 | `Confirm.tsx` · `ColorPicker.tsx` | Promise-based confirm modal; HSV picker. Both exist to keep an OS widget out of the UI. |
 

@@ -62,6 +62,7 @@ import { TURNING_DIAMETER } from '@/lib/clearance-field';
 const turnLabel = (unit: DimUnit) => formatLength(TURNING_DIAMETER * 1000, unit);
 
 const STEP_FREE_DESC_ID = 'step-free-desc';
+const stepFreeHint = (unit: DimUnit) => `Looks for ${turnLabel(unit)} of clear floor to turn a wheelchair.`;
 const stepFreeDesc = (unit: DimUnit) =>
   `Check for the ${turnLabel(unit)} of clear floor a wheelchair needs to turn`;
 import { useScene } from '@/lib/scene-store';
@@ -1155,8 +1156,13 @@ function CheckSummary({
           existed — the label was derived and the COMMENT ABOUT the label was not, so
           the stale copy simply moved one line up. A comment quoting a derived value
           is a second source of truth wearing a comment's clothes. */}
-      <span id={STEP_FREE_DESC_ID} className="sr-only">
-        {desc}
+      {/* The explanation, in sight. It used to live in a `title` and a screen-reader
+          only span, and a touch screen has no hover, so nobody on a phone ever saw
+          the size. Its own full-width row, so it reflows under the checkbox instead
+          of squeezing beside it, and it is the description `aria-describedby` points
+          at, so it is read once. */}
+      <span id={STEP_FREE_DESC_ID} className="t-hint" style={{ flexBasis: '100%', minWidth: 0 }}>
+        {stepFreeHint(dimUnit)}
       </span>
     </div>
   );

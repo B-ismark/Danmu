@@ -33,6 +33,47 @@ export function candelaFromLumensInCone(lumens: number, coneDeg: number): number
   return lumens / solidAngle;
 }
 
+// ─── The brightness slider ──────────────────────────────────────────────────
+// A lamp's brightness is stored in lumens, but the person sets it on a Dim to Bright
+// slider. A straight line from 0 to 5000 lm put the shipped defaults (400, 800 and
+// 1600) in its first third, all reading "Dim"; the eye judges brightness on a curve,
+// so the slider is a square: lumens = MAX_LUMENS · position². The defaults land at
+// 0.28, 0.40 and 0.57 of the track, around the middle.
+
+/** The top of the slider, in lumens. */
+export const MAX_LUMENS = 5000;
+
+/** Lumens to a sensible figure: tens while small, then fifties. */
+export function roundLumens(lumens: number): number {
+  if (!(lumens > 0)) return 0;
+  return lumens < 500 ? Math.round(lumens / 10) * 10 : Math.round(lumens / 50) * 50;
+}
+
+const unit = (p: number) => (Number.isFinite(p) ? Math.min(1, Math.max(0, p)) : 0);
+
+/** Slider position (0 to 1) to lumens. */
+export function lumensFromPosition(position: number): number {
+  const p = unit(position);
+  return roundLumens(MAX_LUMENS * p * p);
+}
+
+/** Lumens to the slider position (0 to 1) that gives them back. */
+export function positionFromLumens(lumens: number): number {
+  if (!(lumens > 0)) return 0;
+  return Math.sqrt(Math.min(MAX_LUMENS, lumens) / MAX_LUMENS);
+}
+
+/** The word for a slider position, for a screen reader (and anywhere the level is
+ *  said in words). */
+export function brightnessWord(position: number): string {
+  const p = unit(position);
+  if (p < 0.2) return 'Dim';
+  if (p < 0.4) return 'Soft';
+  if (p < 0.6) return 'Medium';
+  if (p < 0.8) return 'Bright';
+  return 'Very bright';
+}
+
 // ─── Colour temperature ─────────────────────────────────────────────────────
 // Kelvin → sRGB via the Planckian locus. Warm domestic bulbs sit around 2700 K,
 // "cool white" around 4000 K, and daylight around 6500 K; getting this right is

@@ -384,7 +384,7 @@ export function analyzeRoom(
         rule: 'entry',
         severity: 'warn',
         title: 'The way in is blocked',
-        detail: `${inTheWay.map((b) => b.name).join(', ')} ${inTheWay.length === 1 ? 'stands' : 'stand'} in the ${len(route)}-wide path in from “${door.name}”.`,
+        detail: `${inTheWay.map((b) => b.name).join(', ')} ${inTheWay.length === 1 ? 'stands' : 'stand'} in the path in from “${door.name}”, which needs ${len(route)} clear.`,
         partIds: [door.id, ...inTheWay.map((b) => b.id)],
       });
     }

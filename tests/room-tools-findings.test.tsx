@@ -199,6 +199,12 @@ describe('the room panel renders the finding lib/clearance.ts computed', () => {
       // tooltip and the description a screen reader is given.
       expect(label?.textContent, `Wheelchair label at ${u}`).toBe('Wheelchair check');
       expect(label?.getAttribute('title'), `Wheelchair tooltip at ${u}`).toContain(expected);
+      // A touch screen never sees a title, so the size is also printed, once, under it
+      // and is what the checkbox is described by.
+      const hint = document.getElementById(box.getAttribute('aria-describedby') ?? '');
+      expect(hint?.textContent, `Wheelchair hint at ${u}`).toContain(expected);
+      expect(hint?.className).toContain('t-hint');
+      expect(hint?.classList.contains('sr-only')).toBe(false);
     },
   );
 

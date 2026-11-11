@@ -1119,9 +1119,7 @@ export default function DetectPage() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button className="ds-btn ds-btn--accent" onClick={() => download.ask(true)}>
                 <Icon name="download" size={13} />
-                {download.size.owed === 0
-                  ? 'Use the furniture finder, already kept'
-                  : `${download.update ? 'Update' : 'Download'} the furniture finder (${megabytes(download.size.owed)})`}
+                {`${download.update ? 'Update' : 'Download'} the furniture finder (${megabytes(download.size.owed)})`}
               </button>
               <button className="ds-btn" onClick={() => download.ask(false)}>
                 Skip for now

@@ -36,7 +36,7 @@ const CELLS: Array<{ value: Preset; word: string; label: string; glyph: ReactNod
     value: 'front',
     word: 'Front',
     // An elevation: one wall, straight on.
-    label: 'Look straight at the front wall',
+    label: 'Look straight across the room',
     glyph: (
       <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
         <rect x="3.5" y="5" width="9" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />

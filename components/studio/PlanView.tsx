@@ -457,8 +457,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     const part = currentRoomScene().find((p) => p.id === id);
     if (!part) return;
     // Where the piece sits in the un-panned drawing, then the pan that brings
-    // that point to the centre of the viewBox. Rotation is applied about the
-    // centre, so a centred point stays centred whatever the page angle.
+    // that point to the centre of the viewBox.
     const sx = PAD + (part.pos[0] - bounds.minX) * SCALE;
     const sy = PAD + (part.pos[2] - bounds.minZ) * SCALE;
     setOffset({ x: baseW / 2 - sx * zoom, y: baseH / 2 - sy * zoom });
@@ -1029,12 +1028,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
       return;
     }
 
-    // Alt used to free-rotate the drawing from here. It does not any more: the
-    // page turns in 15° steps from `[` / `]` and the two toolbar buttons, which is
-    // what a measured drawing wants (a freely rotated plan has every label and
-    // dimension line fighting its own angle), and Alt is worth more as the
-    // modifier that chooses between overlapping pieces — the one thing the plan
-    // could not do at all.
+    // Alt used to free-rotate the drawing from here. It does not: the plan never
+    // turns (a rotated plan has every label and dimension line fighting its own
+    // angle), and Alt is worth more as the modifier that chooses between
+    // overlapping pieces — the one thing the plan could not do at all.
     //
     // Space + left-drag, as in the 3D tab, or the middle button. Shift-drag used
     // to pan too and does not any more: a left-drag from empty floor is a marquee
@@ -1179,9 +1176,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
       const m = marqueeRef.current;
       if (!m.moved && Math.hypot(e.clientX - m.x0, e.clientY - m.y0) > MOVE_SLOP) m.moved = true;
       if (m.moved) {
-        // Drawn in viewport pixels over the drawing, not in the rotated/zoomed
-        // group: a marquee is a screen gesture and must stay a screen-aligned
-        // rectangle however the page is turned.
+        // Drawn in viewport pixels over the drawing, not in the zoomed group: a
+        // marquee is a screen gesture and must stay a screen-aligned rectangle.
         setMarquee({
           x: Math.min(m.x0, e.clientX) - m.left,
           y: Math.min(m.y0, e.clientY) - m.top,
@@ -1576,9 +1572,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
   })();
 
   const segs = wallSegments(ROOM_DYN.footprint);
-  // Compass names only mean something on a four-edge room. An L / T / U footprint
-  // has six or eight edges, and the Inspector already falls back to "Wall n".
-  const useCompass = ROOM_DYN.footprint.length === 4;
+  // Side names (Back / Front / Left / Right) only mean something on a four-edge room.
+  // An L / T / U footprint has six or eight edges, and the Inspector already falls
+  // back to "Wall n".
+  const fourSided = ROOM_DYN.footprint.length === 4;
 
   const widthLabel = `${formatDim(bounds.width * 1000, dimUnit)} ${dimUnit}`;
   const depthLabel = `${formatDim(bounds.depth * 1000, dimUnit)} ${dimUnit}`;
@@ -1705,7 +1702,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
             const lb = toLocal(b[0], b[1]);
             const sel = selectedWall === i;
             const focused = focusKey === `wall:${i}`;
-            const label = wallLabelFor(segs[i]?.yaw ?? 0, i, useCompass);
+            const label = wallLabelFor(segs[i]?.yaw ?? 0, i, fourSided);
             return (
               <g
                 key={`wall-${i}`}
@@ -1754,7 +1751,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
                 fontWeight="600"
                 style={{ pointerEvents: 'none' }}
               >
-                {wallLabelFor(seg.yaw, i, useCompass)}
+                {wallLabelFor(seg.yaw, i, fourSided)}
               </text>
             );
           })}

@@ -24,9 +24,11 @@ import { hexFromKelvin } from './light-units';
 // south, down at 19:30 west-north-west — which is a choice made once, here, rather
 // than a guess dressed as a fact. Nothing in the UI names a date or a place.
 //
-// The room's own BEARING (`Site.bearingDeg`) is still the one fact the user owns,
-// for the reason it always was: it is the only input whose effect is visible at
-// furniture scale, because it changes which wall the light comes through.
+// The room's BEARING (`Site.bearingDeg`) is no longer something the user sets: the
+// studio has no control for it, and a room uses `DEFAULT_BEARING_DEG` unless an old
+// room or scene file already carries one, which still loads and still turns the sun.
+// It is the only input whose effect is visible at furniture scale, because it changes
+// which wall the light comes through, so the field stays.
 //
 // ── Two kinds of light, still ────────────────────────────────────────────────
 //

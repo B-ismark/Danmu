@@ -24,11 +24,11 @@ every current feature, architecture, geometry engine, and roadmap).
 - **Zustand** (client state)
 - **idb-keyval** for rooms, **localStorage** for settings + API key
 - **onnxruntime-web** — local, in-browser furniture detection (no key). The
-  **Full** pack runs two YOLOv8 models as an ensemble (**Basic** keeps just the small one): a fixed 601-class Open Images detector plus
+  detector runs two YOLOv8 models as an ensemble: a fixed 601-class Open Images detector plus
   an open-vocabulary one prompted with Danmu's own furniture words, because they
   miss different things. The runtime is loaded at runtime, not bundled — from
   same-origin `public/ort/` (filled by `pnpm dev` / `pnpm build`), with no CDN fallback — so
-  onnxruntime-web is a devDependency (types only). The weights (~64 MB for Full; Basic is smaller) are not in the repo: the first scan
+  onnxruntime-web is a devDependency (types only). The weights (~64 MB) are not in the repo: the first scan
   asks before fetching them, once, from
   [DearthAI/danmu-detector](https://huggingface.co/DearthAI/danmu-detector), or
   built locally with `python scripts/export-detector.py`. Those weights are
@@ -61,7 +61,7 @@ without any key: pick a footprint and start decorating.
 | `/onboarding/detect` | Check furniture: review list (local ONNX → Gemini → manual), then the Building screen |
 | `/room/[id]/model` | **3D decoration studio (default)** |
 | `/room/[id]/plan` | 2D floor plan |
-| `/settings` | Detection key, display unit, Downloads (the local detector, Basic or Full), your rooms, feedback |
+| `/settings` | Detection key, display unit, Downloads (the local detector), your rooms, feedback |
 
 ## Architecture rules
 
