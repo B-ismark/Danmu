@@ -1,6 +1,6 @@
 // A room drawn in isometric: floor, the two far walls, and a few blocks of
 // furniture. An illustration, not a plan — nothing in it is measured, and it is
-// hidden from assistive tech. The empty Rooms page shows it as its hero.
+// hidden from assistive tech. The Building screen shows it while a scan is built.
 //
 // Colours are the `--art-*` tokens, so the drawing follows the palette. Shading
 // is a brightness filter on the two side faces rather than a second colour per
@@ -67,7 +67,7 @@ export function IsoRoom({ room, pieces, settle = false }: { room: IsoRoomSize; p
   );
 }
 
-/** The living room the empty Rooms page draws: a rug, a sofa on the far wall, a
+/** The living room the Building screen draws: a rug, a sofa on the far wall, a
  *  tall cabinet, a coffee table, an armchair, a floor lamp and a plant. */
 export const HERO_ROOM: IsoRoomSize = { w: 420, d: 420, h: 280 };
 export const HERO_PIECES: IsoPiece[] = [

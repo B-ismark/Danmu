@@ -19,8 +19,8 @@ import { useConfirmDeleteRooms } from '@/components/ui/Confirm';
 import { DocShell } from '@/components/ui/DocShell';
 import { toast } from '@/components/ui/StorageToast';
 import { PlanThumb } from '@/components/studio/PlanThumb';
-import { IsoRoom, HERO_PIECES, HERO_ROOM } from '@/components/ui/IsoRoom';
-import { createPresetRoom } from '@/lib/room-presets';
+import { SheetPlan } from '@/components/ui/SheetPlan';
+import { createPresetRoom, presetById } from '@/lib/room-presets';
 import { ImportSceneButton } from '@/components/studio/SceneFile';
 
 // Recency grouping and the "Edited …" label live in lib/dates, alongside the
@@ -692,73 +692,106 @@ function EmptyState({ unreadable }: { unreadable: boolean }) {
     }
   }
 
+  // A drawing sheet rather than a hero and three cards. The ways in are a numbered
+  // list, the way a title screen lists its options: one column read top to bottom,
+  // the recommended one first, with no icons. The drawing beside them is the room
+  // that 03 opens. The bar hides its own "New Room" in this state, so these rows are
+  // the page's only calls to action.
+  const starter = presetById('rect');
   return (
-    <div>
-      <div className="rooms-welcome">
-        <div>
-          <div className="ds-kicker">Welcome to Danmu</div>
-          <h1>Decorate your first room</h1>
-          <p>
-            Start from a floor shape, or photograph the room you have. Then move things around in 3D and see what
-            works. Everything stays on this device.
-          </p>
-        </div>
-        <div className="rooms-welcome__art">
-          <IsoRoom room={HERO_ROOM} pieces={HERO_PIECES} />
-        </div>
+    <section className="landing" aria-labelledby="landing-title">
+      <div className="landing__lede">
+        <p className="landing__kicker mono">Danmu · room studio</p>
+        <h1 id="landing-title" className="landing__title">
+          Your room, drawn to scale.
+        </h1>
+        <p className="landing__intro">
+          Start from a floor shape or four photos of the room you have. Then move every piece around in 3D until
+          it works.
+        </p>
+
+        <ol className="landing-menu" aria-label="Ways to start">
+          <li>
+            <Link href="/onboarding/layout-pick?then=photos" className="landing-menu__row landing-menu__row--lead">
+              <span className="landing-menu__no mono">01</span>
+              <span className="landing-menu__body">
+                <span className="landing-menu__name">Photograph your room</span>
+                <span className="landing-menu__desc">
+                  Four photos, one per wall. Danmu finds the furniture and rebuilds the room, each piece at a typical
+                  size you can adjust.
+                </span>
+              </span>
+              <span className="landing-menu__go">
+                Start with photos <Icon name="arrow-right" size={14} />
+              </span>
+            </Link>
+          </li>
+          <li>
+            <Link href="/onboarding/layout-pick" className="landing-menu__row">
+              <span className="landing-menu__no mono">02</span>
+              <span className="landing-menu__body">
+                <span className="landing-menu__name">Pick a footprint</span>
+                <span className="landing-menu__desc">
+                  Rectangle, L, T, U or open plan. Add furniture from the Library and size it exactly.
+                </span>
+              </span>
+              <span className="landing-menu__go">
+                Choose a shape <Icon name="arrow-right" size={14} />
+              </span>
+            </Link>
+          </li>
+          <li>
+            <button
+              type="button"
+              onClick={openStarter}
+              disabled={starting}
+              aria-busy={starting}
+              className="landing-menu__row"
+            >
+              <span className="landing-menu__no mono">03</span>
+              <span className="landing-menu__body">
+                <span className="landing-menu__name">Try the starter room</span>
+                <span className="landing-menu__desc">
+                  The {starter.starter.toLowerCase()} in this drawing, furnished and ready to rearrange.
+                </span>
+              </span>
+              <span className="landing-menu__go">
+                {starting ? (
+                  <>
+                    <Spinner size={14} /> Opening…
+                  </>
+                ) : (
+                  <>
+                    Open it <Icon name="arrow-right" size={14} />
+                  </>
+                )}
+              </span>
+            </button>
+          </li>
+        </ol>
       </div>
 
-      {/* Three ways in, the recommended one inked. The bar hides its own "New
-          Room" in this state, so these are the page's only calls to action. */}
-      <div className="start-cards">
-        <Link href="/onboarding/layout-pick?then=photos" className="start-card start-card--lead">
-          <span className="start-card__icon">
-            <Icon name="camera" size={20} />
+      <figure className="landing__drawing">
+        <SheetPlan preset={starter.id} />
+        {/* The drawing's title block: what the sheet shows, then where it is kept. */}
+        <figcaption className="title-block">
+          <span className="title-block__cell">
+            <span className="title-block__key mono">Sheet</span>
+            <span className="mono">03</span>
           </span>
-          <span className="start-card__title">Photograph your room</span>
-          <span className="start-card__desc">
-            Four photos, one per wall. Danmu finds the furniture and rebuilds the room, with each piece at a typical size you can adjust.
+          <span className="title-block__cell title-block__cell--wide">
+            <span className="title-block__key mono">Drawing</span>
+            <span>Starter {starter.starter.toLowerCase()}, plan</span>
           </span>
-          <span className="start-card__go">
-            Start with photos <Icon name="arrow-right" size={14} />
+          <span className="title-block__cell">
+            <span className="title-block__key mono">Kept</span>
+            <span>This browser</span>
           </span>
-        </Link>
-        <Link href="/onboarding/layout-pick" className="start-card">
-          <span className="start-card__icon">
-            <Icon name="footprint" size={20} />
-          </span>
-          <span className="start-card__title">Pick a footprint</span>
-          <span className="start-card__desc">
-            Rectangle, L, T, U or open plan. Add furniture from the Library and size it exactly.
-          </span>
-          <span className="start-card__go">
-            Choose a shape <Icon name="arrow-right" size={14} />
-          </span>
-        </Link>
-        <button type="button" onClick={openStarter} disabled={starting} aria-busy={starting} className="start-card">
-          <span className="start-card__icon">
-            <Icon name="home" size={20} />
-          </span>
-          <span className="start-card__title">Try the starter room</span>
-          <span className="start-card__desc">
-            A furnished living room to rearrange while you look around. Nothing to set up.
-          </span>
-          <span className="start-card__go">
-            {starting ? (
-              <>
-                <Spinner size={14} /> Opening…
-              </>
-            ) : (
-              <>
-                Open it <Icon name="arrow-right" size={14} />
-              </>
-            )}
-          </span>
-        </button>
-      </div>
+        </figcaption>
+      </figure>
 
-      <div className="rooms-foot">
-        <span className="rooms-foot__note">
+      <div className="landing__foot">
+        <span className="landing__note">
           <Icon name="lock" size={14} />
           Rooms live in this browser. No account, nothing uploaded.
         </span>
@@ -766,7 +799,7 @@ function EmptyState({ unreadable }: { unreadable: boolean }) {
             state is exactly where they need this. */}
         <ImportSceneButton />
       </div>
-    </div>
+    </section>
   );
 }
 
