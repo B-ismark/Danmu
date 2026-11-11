@@ -27,7 +27,7 @@ every current feature, architecture, geometry engine, and roadmap).
   **Full** pack runs two YOLOv8 models as an ensemble (**Basic** keeps just the small one): a fixed 601-class Open Images detector plus
   an open-vocabulary one prompted with Danmu's own furniture words, because they
   miss different things. The runtime is loaded at runtime, not bundled — from
-  same-origin `public/ort/` after `pnpm vendor:ort`, with a CDN fallback — so
+  same-origin `public/ort/` (filled by `pnpm dev` / `pnpm build`), with no CDN fallback — so
   onnxruntime-web is a devDependency (types only). The weights (~64 MB for Full; Basic is smaller) are not in the repo: the first scan
   asks before fetching them, once, from
   [DearthAI/danmu-detector](https://huggingface.co/DearthAI/danmu-detector), or

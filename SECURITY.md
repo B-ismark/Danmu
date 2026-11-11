@@ -31,9 +31,7 @@ secrets meet the app:
   vulnerability.
 - **The on-device detector** (`lib/local-detect.ts`). Its model files are checked
   against known digests wherever they load from. Its runtime loads from this site
-  first and from the jsDelivr CDN only as a fallback, and that fallback carries no
-  integrity check, because a dynamic import cannot. It is a known weak point and in
-  scope.
+  only; there is no CDN fallback.
 - **The Content-Security-Policy and Permissions-Policy** in `next.config.mjs`, and the
   service worker in `public/sw.js`.
 

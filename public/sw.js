@@ -24,9 +24,10 @@
 // ── What is deliberately never cached ──────────────────────────────────────
 //
 // Cross-origin requests are passed straight through and never stored: Gemini
-// (the user's own key, their data), the ONNX Runtime CDN, and the detector
-// weights. A cache is storage, and storage of someone else's room photos or a
-// response to an authenticated call is not this worker's business. The origin
+// (the user's own key, their data) and the detector weights. The ONNX Runtime is
+// same-origin under /ort/, so it is cached like any asset. A cache is storage, and
+// storage of someone else's room photos or a response to an authenticated call is
+// not this worker's business. The origin
 // check is the first thing `fetch` does.
 
 // v2: the rooms list moved to `/` and the welcome page went. A v1 shell still
