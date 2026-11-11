@@ -24,9 +24,11 @@ import { hexFromKelvin } from './light-units';
 // south, down at 19:30 west-north-west — which is a choice made once, here, rather
 // than a guess dressed as a fact. Nothing in the UI names a date or a place.
 //
-// The room's own BEARING (`Site.bearingDeg`) is still the one fact the user owns,
-// for the reason it always was: it is the only input whose effect is visible at
-// furniture scale, because it changes which wall the light comes through.
+// The room's BEARING (`Site.bearingDeg`) is no longer something the user sets: the
+// studio has no control for it, and a room uses `DEFAULT_BEARING_DEG` unless an old
+// room or scene file already carries one, which still loads and still turns the sun.
+// It is the only input whose effect is visible at furniture scale, because it changes
+// which wall the light comes through, so the field stays.
 //
 // ── Two kinds of light, still ────────────────────────────────────────────────
 //
@@ -415,17 +417,3 @@ export function legacyLighting(id: unknown): { lighting: Lighting; hour?: number
   }
 }
 
-/** Eight points, because sixteen would be precision the sentence around it does
- *  not have. Takes a TRUE bearing, clockwise from north. */
-const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
-export function compassName(deg: number): string {
-  return COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
-}
-
-/** The bearing one eighth-turn from `deg`. Snaps to the nearest compass point
- *  first, so a bearing a photo supplied (213 deg) steps to 225 and then by whole points. */
-export function turnedBearing(deg: number, dir: 1 | -1): number {
-  const onPoint = deg % 45 === 0;
-  const next = onPoint ? deg + 45 * dir : (dir > 0 ? Math.ceil(deg / 45) : Math.floor(deg / 45)) * 45;
-  return ((next % 360) + 360) % 360;
-}

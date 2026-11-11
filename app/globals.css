@@ -1930,7 +1930,6 @@ textarea.field { border-radius: var(--r-2); }
   font-variant-numeric: tabular-nums; color: var(--ink-3);
 }
 .chrome-pill__readout--zoom { min-width: 9ch; }  /* "cm · 100%" — the longest unit × zoom */
-.chrome-pill__readout--deg { min-width: 4ch; }   /* "-90°" / "270°" */
 /* A divider INSIDE a pill only, so it can never be stranded by its neighbour hiding. */
 .chrome-pill__rule { width: 1px; height: 16px; margin: 0 3px; flex-shrink: 0; background: var(--hairline-strong); }
 
@@ -2635,10 +2634,6 @@ textarea.field { border-radius: var(--r-2); }
 .capture-status[data-tone="warn"] { background: var(--warn-tint); color: var(--warn-text); }
 .capture-status[data-tone="quiet"] { background: var(--paper-2); color: var(--ink-3); font-weight: 600; }
 .capture-foot__wall { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
-.capture-foot__reason { color: var(--ink-3); font-size: var(--fs-caption); min-inline-size: 0; }
-.capture-height { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
-.capture-height__text { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; font-size: var(--fs-body); }
-.capture-height__field { display: flex; align-items: center; gap: 6px; }
 
 /* ── Check furniture, in the Flow design ───────────────────────────────────────
    The steps and a serif title over the review, as on the photo screen before it;
@@ -3201,7 +3196,6 @@ textarea.field { border-radius: var(--r-2); }
   font-size: var(--fs-caption); font-weight: 600;
 }
 .day-strip__tool[aria-pressed='true'] { background: var(--accent-tint); border-color: var(--accent); color: var(--accent-text); }
-.day-strip__facing { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); }
 .day-strip__hint {
   margin: 0; padding: 3px 10px; text-align: center; line-height: 1.4;
   background: var(--paper); border-radius: var(--r-2); box-shadow: var(--shadow-float);

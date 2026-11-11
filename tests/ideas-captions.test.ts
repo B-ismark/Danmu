@@ -112,9 +112,9 @@ describe('a caption names a wall the way the plan does', () => {
     }
   });
 
-  it('says "wall N" on an outline that is not four-sided, and a compass side on one that is', () => {
+  it('says "wall N" on an outline that is not four-sided, and a plain side on one that is', () => {
     expect(wallLabelOf(footprintForLayout('l', 6, 5), 0)).toMatch(/^Wall \d$/);
-    expect(wallLabelOf(footprintForLayout('rect', 6, 5), 0)).toMatch(/^(North|South|East|West) wall$/);
+    expect(wallLabelOf(footprintForLayout('rect', 6, 5), 0)).toMatch(/^(Back|Front|Left|Right) wall$/);
   });
 
   const sofa = { id: 'sofa', name: 'Sofa', category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 800], pos: [0, 0, 0], rot: 0, locked: false } as ScenePart;
@@ -175,15 +175,15 @@ describe('a caption names a wall the way the plan does', () => {
     const fp = footprintForLayout('rect', 6, 4);
     const b = footprintBounds(fp);
     // Back to the EAST wall (front is -x), 0.04 m off it, and only 0.01 m off the
-    // north wall: the nearest edge is north, the wall it is turned away from is east.
+    // back wall: the nearest edge is the back one, the wall it is turned away from is the right one.
     const yaw = -Math.PI / 2;
     const place = { x: b.maxX - 0.04 - 0.45, z: b.minZ + 0.01, yaw } as Placement;
     const e = backWall(sofa, place, fp);
     expect(e).not.toBeNull();
-    expect(lower(wallLabelOf(fp, e!))).toBe('the east wall');
+    expect(lower(wallLabelOf(fp, e!))).toBe('the right wall');
     const other = { x: b.maxX - 0.04 - 0.45, z: b.minZ + 0.8, yaw } as Placement;
     const [a, c] = tied(fp, [sofa], [[place], [other]]);
-    expect(a).toBe('Sofa against the east wall');
-    expect(c).toBe('Sofa against the east wall');
+    expect(a).toBe('Sofa against the right wall');
+    expect(c).toBe('Sofa against the right wall');
   });
 });

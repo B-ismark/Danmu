@@ -227,9 +227,9 @@ export default function LayoutPickPage() {
           than under the fold. Stacks to one column on a narrow window. */}
       <div className="pick">
         <div className="pick__main">
-          <h1 className="pick__title">Which footprint is closest to your room?</h1>
+          <h1 className="pick__title">Which room shape is closest to yours?</h1>
           <p className="pick__lede">You can drag the walls to the exact size later.</p>
-        <div role="radiogroup" aria-label="Room footprint" className="shape-options">
+        <div role="radiogroup" aria-label="Room shape" className="shape-options">
           {layouts.map((l, i) => {
             const active = sel === l.id;
             return (
@@ -277,10 +277,10 @@ export default function LayoutPickPage() {
         </div>
         </div>
 
-        <section className="pick-side" aria-label={`${layout.name}, the chosen footprint`}>
+        <section className="pick-side" aria-label={`${layout.name}, the chosen room shape`}>
           <figure>
             <div className="pick-side__plan">
-              <svg ref={planRef} viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} footprint, ${wText} by ${dText}, ${layout.areaText} of floor`}>
+              <svg ref={planRef} viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} room shape, ${wText} by ${dText}, ${layout.areaText} of floor`}>
                 <path
                   d={layout.path}
                   fill="var(--accent-tint)"

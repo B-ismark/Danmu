@@ -150,7 +150,7 @@ export function useExportItems(): ExportItem[] {
       icon: 'ruler',
       // Says what it is FOR, not just the format: the PNG is the one to send, this is
       // the one to print large or open in a design tool.
-      label: 'Floor plan for print (SVG)',
+      label: 'Floor plan to print',
       onClick: () => void planSvg().catch(reportExportFailure('the floor plan')),
     },
     {

@@ -24,11 +24,12 @@
 //
 // ── The half that a symmetric model gets wrong ────────────────────────────────
 //
-// A label's extent ALONG THE OUTWARD NORMAL is not one number. For the north and
-// south walls the normal is vertical, so what reaches toward the ruler is the text's
-// HEIGHT — about 12 units. For east and west it is the text's WIDTH, about 42. The
-// first version of this file modelled one half-extent for both, moved the ruler far
-// enough to clear the north wall, and left east overlapping by 4 units — measured in a
+// A label's extent ALONG THE OUTWARD NORMAL is not one number. For the back and
+// front walls (top and bottom of the plan) the normal is vertical, so what reaches
+// toward the ruler is the text's HEIGHT — about 12 units. For the left and right walls
+// it is the text's WIDTH, up to 49.3. The first version of this file modelled one
+// half-extent for both, moved the ruler far enough to clear the top wall, and left the
+// right wall overlapping by 4 units — measured in a
 // browser, which is the only reason it was caught, because the arithmetic agreed with
 // itself the whole time. It is the repo's own "verify in the asymmetric case", and a
 // square room and a vertical-normal wall hide it identically.
@@ -41,11 +42,17 @@
  *  and scaled back out of the fit. */
 export const LABEL_HALF_H = 7;
 
-/** Half the WIDTH of the widest wall name. "North wall" and "South wall" are the two
- *  longest strings `wallLabelFor` can produce (the non-compass branch is "Wall N",
- *  much shorter), and a browser gives them ~42 units. This is the number that decides
- *  where the ruler goes, because east and west reach toward it edge-on. */
-export const LABEL_HALF_W = 22;
+/** Half the WIDTH of the widest wall name. MEASURED in a browser (`getBBox` on the
+ *  plan's own `<text>`, Figtree at 11 units, 2026-11-11): "Front wall" and "Right wall"
+ *  49.3, "Back wall" 46.6, "Left wall" 42.8. Half the widest is 24.65, so 25 — and
+ *  not 26, which would put the label's inner edge exactly ON the wall (26 − 26 = 0). The
+ *  first guess here was 24, carried over from a ~42 measurement of "North wall" on the
+ *  ground that both names have 10 characters, and it was 0.65 too small: character
+ *  counts do not predict width. Too small is the only direction that lets the ruler's
+ *  backdrop eat the word. It decides where the ruler goes, because the left and right
+ *  walls reach toward it edge-on (26 + 25 = 51, six clear of the backdrop's 57). Re-measure
+ *  in a browser before lowering it, and whenever `wallLabelFor`'s names change. */
+export const LABEL_HALF_W = 25;
 
 /** How far a wall's NAME sits outside its own edge, along that edge's outward normal.
  *  Applies to every edge of every footprint, including the interior edges of an L, T
@@ -56,9 +63,10 @@ export const WALL_LABEL_OFFSET = 26;
  *
  *  Was 18, which put its backdrop across the wall names. The wall name belongs nearest
  *  its wall and the room's overall size outside it, so the ruler is what moved. Driven
- *  by the east/west case, not the north/south one. `PAD` is 80, so the ruler and its
- *  backdrop still sit inside the plan's margin. */
-export const DIM_RULER_OFFSET = 62;
+ *  by the east/west case, not the north/south one: 64 until the wall names were
+ *  measured wider (2026-11-11), 65 now so the gap stays 6. `PAD` is 80, so the ruler
+ *  and its backdrop (to 72) still sit inside the plan's margin. */
+export const DIM_RULER_OFFSET = 65;
 
 /** The ruler's opaque backdrop, relative to `DIM_RULER_OFFSET`: the rect is 15 units
  *  tall and hangs from 8 above the line to 7 below it. Its extent along the normal is

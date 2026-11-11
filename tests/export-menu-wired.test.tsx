@@ -74,7 +74,7 @@ describe('the floor-plan export says how it went', () => {
 });
 
 describe('the SVG floor plan says how it went', () => {
-  const SVG = 'Floor plan for print (SVG)';
+  const SVG = 'Floor plan to print';
 
   it('a failure is reported, not dropped', async () => {
     fail = true;

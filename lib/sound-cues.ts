@@ -49,7 +49,6 @@ export type CueWorld = {
   /** The outline, by reference: a new array is a room that changed shape. */
   footprint: unknown;
   roomSize: { width: number; depth: number; height: number };
-  bearingDeg: number | undefined;
   positions: Readonly<Record<string, Vec3>>;
   rotations: Readonly<Record<string, number>>;
   dims: Readonly<Record<string, Vec3>>;
@@ -161,7 +160,6 @@ export function cueFor(prev: CueWorld, next: CueWorld, opts: { afterDrag?: boole
     const c = clockCue(prev, next);
     if (c) found.push(c);
   }
-  if (prev.bearingDeg !== next.bearingDeg) found.push({ name: 'turn' });
 
   // ── Pieces moved, turned, resized, outside a drag ──
   if (!quietMoves) {

@@ -62,6 +62,7 @@ import { TURNING_DIAMETER } from '@/lib/clearance-field';
 const turnLabel = (unit: DimUnit) => formatLength(TURNING_DIAMETER * 1000, unit);
 
 const STEP_FREE_DESC_ID = 'step-free-desc';
+const stepFreeHint = (unit: DimUnit) => `Looks for ${turnLabel(unit)} of clear floor to turn a wheelchair.`;
 const stepFreeDesc = (unit: DimUnit) =>
   `Check for the ${turnLabel(unit)} of clear floor a wheelchair needs to turn`;
 import { useScene } from '@/lib/scene-store';
@@ -1102,7 +1103,6 @@ function CheckSummary({
   onStepFree: (on: boolean) => void;
 }) {
   const dimUnit = useSettings((s) => s.dimUnit);
-  const turn = turnLabel(dimUnit);
   const desc = stepFreeDesc(dimUnit);
   return (
     <div
@@ -1142,21 +1142,27 @@ function CheckSummary({
           aria-describedby={STEP_FREE_DESC_ID}
           style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
         />
-        Step-free <span style={{ color: 'var(--ink-3)' }}>· {turn}</span>
+        Wheelchair check
       </label>
       {/* OUTSIDE the label, and that is the whole point. A `<label>`'s text content
           is the checkbox's accessible NAME, so a description nested inside it became
           part of the name — and then `aria-describedby` pointed at the same node, so
           a screen reader read the sentence twice: once as what the control is called
-          and again as what it does. The name is "Step-free · <the turning circle>";
-          the sentence is the description, and the two must not be the same string.
+          and again as what it does. The name is "Wheelchair check";
+          the sentence (which carries the turning circle in the user's unit) is the
+          description, and the two must not be the same string.
           The name is written that way here on purpose: it used to read "90 cm", a
           number `TURNING_DIAMETER` has not produced for as long as this comment has
           existed — the label was derived and the COMMENT ABOUT the label was not, so
           the stale copy simply moved one line up. A comment quoting a derived value
           is a second source of truth wearing a comment's clothes. */}
-      <span id={STEP_FREE_DESC_ID} className="sr-only">
-        {desc}
+      {/* The explanation, in sight. It used to live in a `title` and a screen-reader
+          only span, and a touch screen has no hover, so nobody on a phone ever saw
+          the size. Its own full-width row, so it reflows under the checkbox instead
+          of squeezing beside it, and it is the description `aria-describedby` points
+          at, so it is read once. */}
+      <span id={STEP_FREE_DESC_ID} className="t-hint" style={{ flexBasis: '100%', minWidth: 0 }}>
+        {stepFreeHint(dimUnit)}
       </span>
     </div>
   );

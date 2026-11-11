@@ -113,7 +113,7 @@ describe('the plan does not write two annotations in the same place', () => {
     expect(dimRulerBand().hi - dimRulerBand().lo).toBe(DIM_BACKDROP_ABOVE + DIM_BACKDROP_BELOW);
     expect(dimRulerBand().hi - dimRulerBand().lo).toBe(15);
     expect(WALL_LABEL_OFFSET).toBe(26);
-    expect(DIM_RULER_OFFSET).toBe(62);
+    expect(DIM_RULER_OFFSET).toBe(65);
   });
 
   it('and neither half-extent is free to shrink until the bands clear on paper only', () => {
@@ -125,14 +125,14 @@ describe('the plan does not write two annotations in the same place', () => {
     // name, and it survived a first battery of five.
     //
     // So both are pinned against something outside the file. A browser reports the wall
-    // name's box as ~11.8 plan units tall and the widest of them ("North wall",
-    // "South wall") as ~42 wide, measured at three room sizes and scaled back out of
-    // the fit. An UNDER-estimate is the only direction that silently re-opens the
+    // name's box as ~11.8 plan units tall, and measures the widest names, "Front wall"
+    // and "Right wall", at 49.3 wide (2026-11-11). An estimate from character counts said
+    // ~42 and was wrong, which is why this is a reading. An UNDER-estimate is the only direction that silently re-opens the
     // defect, because it is the direction that makes the arithmetic look better than
     // the paint.
     expect(LABEL_HALF_H, 'the label is ~11.8 units tall; half of it is ~5.9').toBeGreaterThanOrEqual(6);
     expect(LABEL_HALF_H, 'padding a glyph box to this is guessing, not measuring').toBeLessThanOrEqual(9);
-    expect(LABEL_HALF_W, '"North wall" is ~42 units wide; half of it is ~21').toBeGreaterThanOrEqual(21);
+    expect(LABEL_HALF_W, 'the widest name measures 49.3 units wide; half of it is 24.65').toBeGreaterThanOrEqual(25);
     expect(LABEL_HALF_W).toBeLessThanOrEqual(30);
     // And the asymmetry itself, which is the thing that was got wrong: a wall name is
     // far wider than it is tall, so the two are not interchangeable and a single

@@ -144,8 +144,10 @@ describe('the sun dial is gone, and its two jobs have new homes', () => {
     expect(ARC).toMatch(/role="slider"[\s\S]{0,120}tabIndex=\{0\}[\s\S]{0,80}aria-label="Time of day"/);
     expect(ARC).toMatch(/onKeyDown=/);
   });
-  it('keeps the bearing settable, both ways, by name', () => {
-    expect(ARC).toMatch(/aria-label="Turn the room anticlockwise"/);
-    expect(ARC).toMatch(/aria-label="Turn the room clockwise"/);
+  // The bearing control was then removed outright: most people do not know which way
+  // their room faces, so it is not asked. The sun keeps the default bearing.
+  it('asks nobody which way the room faces', () => {
+    expect(ARC).not.toMatch(/Turn the room/);
+    expect(ARC).not.toMatch(/Plan top faces/);
   });
 });

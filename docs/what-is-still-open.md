@@ -9376,11 +9376,13 @@ note per part, each with its own time. Worth building only if the phone check fi
 the round trip through `RoomSync`. Of 20 mutants, 19 were caught. The survivor replaces
 `writeLeaveNote`'s `true` with `!!note`, which is the same value.
 
-**Also not registered, on purpose: the phone height on the photo screen.** It waits 500 ms,
-then saves a setting and re-stamps every photo already taken, a read and then a put of each
+**Also not registered, on purpose: the phone height on the photo screen.** *(Moot now: the
+field, `camHeightM` and the re-stamp are deleted, so there is nothing left to register or to
+lose. What follows is why it was left out while it existed.)* It waited 500 ms,
+then saved a setting and re-stamped every photo already taken, a read and then a put of each
 photo. Run on the way out, the setting would land and the photos would not, and because the
-screen only re-stamps when the typed height differs from the setting, nothing would ever
-put the two back together. Lost whole is the better failure.
+screen only re-stamped when the typed height differed from the setting, nothing would ever
+have put the two back together. Lost whole was the better failure.
 
 **Not measured:** a phone putting the browser in the background. The unit test covers the
 event, not the phone, and nothing here says how long a hidden page lives.
@@ -10740,10 +10742,11 @@ skips the question.
 offline maps, streaming downloads and game DLC handle large optional content: the size
 beside every download button, the user in control of when an update downloads, and a
 storage screen that lists what is kept with a way to remove it.
-- **Basic or Full** (`detectorPack` in `useSettings`, `packFiles` in `lib/model-verify.ts`):
-  Full is both models, ~65 MB; Basic is the OIV7 model alone, ~14 MB, which finds about
-  half as much. One picker (`components/ui/DetectorPackPicker.tsx`) on the scan card and
-  in Settings, each option labelled with its size from the mirror.
+- **Basic or Full** *(history: the picker, `DetectorPackPicker.tsx` and `detectorPack` in
+  `useSettings` are deleted; the app is always Full and an old saved value is dropped on
+  load. `packFiles` in `lib/model-verify.ts` still knows both packs.)* Full is both models,
+  ~65 MB; Basic is the OIV7 model alone, ~14 MB, which finds about half as much. It was one
+  picker on the scan card and in Settings, each option labelled with its size from the mirror.
 - **Updates are asked about.** A kept copy now carries the digest it was verified against
   (`x-danmu-digest`), so `keptState` tells a current copy from one a newer app no longer
   pins without reading 50 MB. A stale copy makes the scan card read "An improved furniture

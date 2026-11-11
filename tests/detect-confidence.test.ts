@@ -54,15 +54,14 @@ describe('shouldAutoConfirm', () => {
     expect(shouldAutoConfirm(det(0.9), 'unmeasured')).toBe(false);
   });
 
-  it('gives every source a name for the user, and none of them says a number', () => {
+  it('names only a box the person drew', () => {
     // The label sits in a metadata line next to the category and the wall. It exists
     // so a row the user drew and a row a language model guessed at stop looking like
     // the same claim — and deliberately does NOT show `conf`, which is three
     // incomparable scales in one field.
-    for (const s of SOURCES) {
-      expect(sourceLabel(s), s).toMatch(/^[A-Z]/);
-      expect(sourceLabel(s), s).not.toMatch(/[0-9]/);
-    }
-    expect(new Set(SOURCES.map(sourceLabel)).size).toBe(SOURCES.length);
+    // Only a box the person drew is named; the engine that found the rest is not.
+    expect(sourceLabel('manual')).toBe('You');
+    expect(sourceLabel('local')).toBeNull();
+    expect(sourceLabel('cloud')).toBeNull();
   });
 });

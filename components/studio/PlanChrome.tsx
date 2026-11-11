@@ -18,24 +18,21 @@ import { IconButton } from '@/components/ui/primitives';
 import { MAX_ZOOM, MIN_ZOOM, type PlanViewHandle } from './PlanView';
 import { usePhoneStudio } from './NarrowViewportBanner';
 
-/** Zoom, page rotation, fit — driven through PlanView's handle. */
+/** Zoom, fit — driven through PlanView's handle. */
 export function PlanViewControls({
   api,
   zoom,
-  rot,
   dimUnit,
   unitName,
 }: {
   api: RefObject<PlanViewHandle | null>;
   zoom: number;
-  rot: number;
   /** The unit's short form, as the readout prints it — `m`, `cm`, `ft`. */
   dimUnit: string;
   /** Its full name, for the tooltip. */
   unitName: string;
 }) {
   const phone = usePhoneStudio();
-  const deg = (((rot * 180) / Math.PI) % 360).toFixed(0);
   // None on a phone. Pinch zooms and a finger pans, which is how every map on it already
   // works, and a box of seven small controls stacked in two columns
   // over the drawing cost more of the room than it gave back.
@@ -93,23 +90,7 @@ export function PlanViewControls({
           iconSize={15}
         />
       </div>
-      <div className="chrome-pill" role="group" aria-label="Turn and fit">
-        <IconButton
-          icon="rotate-ccw"
-          label="Turn the page left"
-          onClick={() => api.current?.rotateLeft()}
-          size={30}
-          iconSize={14}
-        />
-        <span className="chrome-pill__readout chrome-pill__readout--deg">{deg}°</span>
-        <IconButton
-          icon="rotate-cw"
-          label="Turn the page right"
-          onClick={() => api.current?.rotateRight()}
-          size={30}
-          iconSize={14}
-        />
-        <span aria-hidden="true" className="chrome-pill__rule" />
+      <div className="chrome-pill" role="group" aria-label="Fit">
         <button type="button" onClick={() => api.current?.fit()} title="Back to the default view" className="chrome-pill__text">
           <Icon name="fit" size={12} />
           Fit

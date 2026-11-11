@@ -27,7 +27,7 @@ export default function PlanPage() {
   // Live from PlanView, which owns the zoom. The old chip hard-coded "1:50 · cm"
   // while the drawing labelled millimetres, rendered at 100 px/m, and zoomed
   // 0.4×–4× — three false claims on the one screen someone might measure from.
-  const [view, setView] = useState({ zoom: 1, rot: 0, hasCutOff: false });
+  const [view, setView] = useState({ zoom: 1, hasCutOff: false });
   // Off until asked for: the shading washes the whole plan orange, and a first look at
   // a room should be the room. Page-local on purpose, so there is no stored choice to migrate.
   const [comfort, setComfort] = useState(false);
@@ -77,7 +77,7 @@ export default function PlanPage() {
     };
   }, [roomId]);
 
-  const onViewChange = useCallback((v: { zoom: number; rot: number; hasCutOff: boolean }) => setView(v), []);
+  const onViewChange = useCallback((v: { zoom: number; hasCutOff: boolean }) => setView(v), []);
 
   const unitName = UNIT_OPTIONS.find((u) => u.id === dimUnit)?.label ?? dimUnit;
 
@@ -144,7 +144,7 @@ export default function PlanPage() {
         {/* Pills, so the gap is the separation: no rule to strand when the zoom
             pills are not on a phone (pinch is). */}
         <UndoRedo />
-        <PlanViewControls api={planApi} zoom={view.zoom} rot={view.rot} dimUnit={dimUnit} unitName={unitName.toLowerCase()} />
+        <PlanViewControls api={planApi} zoom={view.zoom} dimUnit={dimUnit} unitName={unitName.toLowerCase()} />
       </CanvasView>
 
       {/* The tab's one bottom-right aide, and only while the shading is on. */}

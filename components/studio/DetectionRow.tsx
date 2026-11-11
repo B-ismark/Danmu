@@ -256,10 +256,9 @@ export function DetectionRow({
         {/* Confidence percentages and slot codes were telemetry. What helps is
             which photo it came from and what Danmu thinks it is. */}
         <div className="t-hint">
-          {/* Who found it, said plainly. A row the user drew and a row a language
-              model guessed at look identical otherwise, and they are not the same
-              claim. */}
-          {modelName} · {slotLabel(d.slot)} · {sourceLabel(sourceOf(d))}
+          {/* Which wall, and "You" when the person drew the box: that is the only
+              difference between rows that is theirs to act on. */}
+          {[slotLabel(d.slot), sourceLabel(sourceOf(d))].filter(Boolean).join(' · ')}
         </div>
         {/* Why this row started unticked, when that is the reason. Said rather than
             acted on — it is still on the list, one tap from kept, because a real

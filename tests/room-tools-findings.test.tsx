@@ -172,11 +172,11 @@ describe('the room panel renders the finding lib/clearance.ts computed', () => {
     expect(screen.getByText(new RegExp(`does not go any shorter than ${shown.replace('.', '\\.')}`))).toBeTruthy();
   });
 
-  // The Step-free control names the same turning circle the `turning` finding does, three
+  // The Wheelchair check control names the same turning circle the `turning` finding does, three
   // rows above it, and it is the last label in this panel that was still hard-coded: a
   // module-scope `const TURN_CM = Math.round(TURNING_DIAMETER * 100)` rendered as
   // `{TURN_CM} cm`. § B.12 converted the findings and not the label, so a user on feet
-  // read "Step-free · 150 cm" above "A wheelchair needs 4.92 ft to turn on the spot" —
+  // read the turning circle in cm above "A wheelchair needs 4.92 ft to turn on the spot" —
   // the very defect § B.12 was opened for, reintroduced three rows from where it was fixed.
   //
   // This is MOUNTED rather than grepped, and that distinction was measured: a source gate
@@ -193,8 +193,18 @@ describe('the room panel renders the finding lib/clearance.ts computed', () => {
       // Reached through the checkbox and its own `<label>`, which is how a screen reader
       // reaches it: the label's text content IS the control's accessible name, so this
       // asserts the name a user hears as well as the glyphs a user sees.
-      const box = screen.getByRole('checkbox', { name: /Step-free/ });
-      expect(box.closest('label')?.textContent, `Step-free label at ${u}`).toBe(`Step-free · ${expected}`);
+      const box = screen.getByRole('checkbox', { name: /Wheelchair check/ });
+      const label = box.closest('label');
+      // The name is plain words; the turning circle, in the user's unit, lives in the
+      // tooltip and the description a screen reader is given.
+      expect(label?.textContent, `Wheelchair label at ${u}`).toBe('Wheelchair check');
+      expect(label?.getAttribute('title'), `Wheelchair tooltip at ${u}`).toContain(expected);
+      // A touch screen never sees a title, so the size is also printed, once, under it
+      // and is what the checkbox is described by.
+      const hint = document.getElementById(box.getAttribute('aria-describedby') ?? '');
+      expect(hint?.textContent, `Wheelchair hint at ${u}`).toContain(expected);
+      expect(hint?.className).toContain('t-hint');
+      expect(hint?.classList.contains('sr-only')).toBe(false);
     },
   );
 

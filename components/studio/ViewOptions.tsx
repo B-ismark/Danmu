@@ -117,11 +117,14 @@ export function ViewOptions() {
       <Group label="Quality">
         <Segmented
           ariaLabel="Quality"
-          options={[{ value: 'high', label: 'High' }, { value: 'low', label: 'Fast' }]}
+          options={[{ value: 'high', label: 'Best looking' }, { value: 'low', label: 'Smoother' }]}
           value={hi ? 'high' : 'low'}
           onChange={(v) => setQuality(v === 'high' ? 'high' : 'low')}
           stretch
         />
+        <p className="t-hint" style={{ margin: '6px 0 0' }}>
+          {hi ? 'Softer shadows and richer light. Choose Smoother if moving around feels slow.' : 'Simpler shadows, so moving around stays smooth on slower devices.'}
+        </p>
       </Group>
 
       <div style={{ height: 1, background: 'var(--hairline)' }} />

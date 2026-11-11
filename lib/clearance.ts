@@ -363,7 +363,7 @@ export function analyzeRoom(
           // left the rule's title unreachable and this string free to drift from it.
           // That is the failure `ZONE_TITLE` was deleted for, one consumer along.
           title: swing.rule.title,
-          detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'sits' : 'sit'} inside the ${len(swing.rule.depth)} swing of “${door.name}”.`,
+          detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'sits' : 'sit'} in the ${len(swing.rule.depth)} of space “${door.name}” needs to open.`,
           partIds: [door.id, ...blockers.map((b) => b.id)],
         });
       }
@@ -384,7 +384,7 @@ export function analyzeRoom(
         rule: 'entry',
         severity: 'warn',
         title: 'The way in is blocked',
-        detail: `${inTheWay.map((b) => b.name).join(', ')} ${inTheWay.length === 1 ? 'stands' : 'stand'} in the ${len(route)} route in from “${door.name}”.`,
+        detail: `${inTheWay.map((b) => b.name).join(', ')} ${inTheWay.length === 1 ? 'stands' : 'stand'} in the path in from “${door.name}”, which needs ${len(route)} clear.`,
         partIds: [door.id, ...inTheWay.map((b) => b.id)],
       });
     }
@@ -601,7 +601,7 @@ export function analyzeRoom(
         rule: 'walk',
         severity: 'warn',
         title: 'Tight walkway',
-        detail: `Only ${len(gap)} between “${a.name}” and “${b.name}”. A comfortable walkway needs ${len(MIN_WALKWAY)}.`,
+        detail: `Only ${len(gap)} between “${a.name}” and “${b.name}”. You need about ${len(MIN_WALKWAY)} to walk through comfortably.`,
         partIds: [a.id, b.id],
       });
     }
@@ -687,7 +687,7 @@ export function analyzeRoom(
         severity: 'warn',
         // See the door above: read the rule, never restate it.
         title: zn.rule.title,
-        detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'stands' : 'stand'} in front of “${win.name}” and ${blockers.length === 1 ? 'rises' : 'rise'} above its ${len(zn.rule.aboveY)} sill.`,
+        detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'stands' : 'stand'} in front of “${win.name}” and ${blockers.length === 1 ? 'rises' : 'rise'} above the bottom of the window, which is ${len(zn.rule.aboveY)} up.`,
         partIds: [win.id, ...blockers.map((b) => b.id)],
       });
     }
@@ -714,10 +714,10 @@ export function analyzeRoom(
         rule: 'tv',
         severity: 'warn',
         title: 'Sitting too close to the TV',
-        // The ″ stays. A screen diagonal is quoted in inches worldwide — "a 55-inch
+        // "-inch" stays. A screen diagonal is quoted in inches worldwide — "a 55-inch
         // TV" is the product's name, not a measurement the user chose a unit for —
         // while the two DISTANCES are room measurements and convert like every other.
-        detail: `“${nearest.name}” is ${len(nd)} from the ${Math.round((diag / 0.0254) * 10) / 10}″-class screen. Comfortable viewing starts at about ${len(diag * 1.2)}.`,
+        detail: `“${nearest.name}” is ${len(nd)} from the ${Math.round((diag / 0.0254) * 10) / 10}-inch TV. Comfortable viewing starts at about ${len(diag * 1.2)}.`,
         partIds: [tv.id, nearest.id],
       });
     } else if (nd > diag * 3.2) {
@@ -726,7 +726,7 @@ export function analyzeRoom(
         rule: 'tv',
         severity: 'info',
         title: 'TV may feel small from the seat',
-        detail: `“${nearest.name}” sits ${len(nd)} away. The ideal range for this screen is ${len(diag * 1.2)}–${len(diag * 2.5)}.`,
+        detail: `“${nearest.name}” sits ${len(nd)} away. The best distance for this screen is ${len(diag * 1.2)}–${len(diag * 2.5)}.`,
         partIds: [tv.id, nearest.id],
       });
     }
@@ -933,7 +933,7 @@ export function analyzeRoom(
         rule: 'reach',
         severity: 'warn',
         title: 'You can’t walk to everything',
-        detail: `${stranded.map((p) => `“${p.name}”`).join(', ')} ${stranded.length === 1 ? 'sits' : 'sit'} in part of the room with no way in from the door. Every route in is under ${len(MIN_WALKWAY)} wide.`,
+        detail: `${stranded.map((p) => `“${p.name}”`).join(', ')} ${stranded.length === 1 ? 'sits' : 'sit'} in part of the room with no way in from the door. Every way in is under ${len(MIN_WALKWAY)} wide.`,
         partIds: stranded.map((p) => p.id),
       });
     }
@@ -944,7 +944,7 @@ export function analyzeRoom(
         rule: 'cut-off',
         severity: 'info',
         title: 'Part of the floor is cut off',
-        detail: `About ${area(cutOff)} of floor has no route to the door wider than ${len(MIN_WALKWAY)}.`,
+        detail: `About ${area(cutOff)} of floor is cut off from the door: every way there is narrower than ${len(MIN_WALKWAY)}.`,
         partIds: [],
       });
     }
@@ -963,7 +963,7 @@ export function analyzeRoom(
         rule: 'turning',
         severity: 'warn',
         title: 'No room to turn a wheelchair',
-        detail: `The largest clear circle in this room is about ${len(diameter)} across. A wheelchair needs ${len(TURNING_DIAMETER)} to turn on the spot.`,
+        detail: `The biggest clear patch of floor in this room is about ${len(diameter)} across. A wheelchair needs ${len(TURNING_DIAMETER)} to turn around.`,
         partIds: [],
       });
     }

@@ -71,15 +71,9 @@ export function shouldAutoConfirm(d: Pick<Detection, 'conf' | 'source'>, verdict
   return verdict === 'ok' && d.conf >= bar;
 }
 
-/** How to name a source to the user. Short, because it sits in a metadata line
- *  beside the category and the wall. */
-export function sourceLabel(s: DetectSource): string {
-  switch (s) {
-    case 'local':
-      return 'On-device';
-    case 'cloud':
-      return 'Cloud';
-    case 'manual':
-      return 'You';
-  }
+/** How to name a source to the user, or null when there is nothing worth saying.
+ *  Short, because it sits in a metadata line beside the wall. Only a box the person
+ *  drew is named: which engine found the rest is not something they can act on. */
+export function sourceLabel(s: DetectSource): string | null {
+  return s === 'manual' ? 'You' : null;
 }

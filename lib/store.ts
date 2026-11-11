@@ -1,6 +1,5 @@
 'use client';
 
-import type { DetectorPack } from './model-verify';
 import { useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
@@ -480,25 +479,6 @@ type SettingsState = {
   /** Last reason if validation failed — a KeyFailure code, not an exception
    *  string (see lib/validate-key.ts). */
   keyValidReason: string | null;
-  /** How high off the floor the user holds the phone, in metres.
-   *
-   *  Remembered here rather than per room because it is a property of the person,
-   *  not the room — the same shooter is the same height in the next one. The
-   *  geometry engine assumed a flat 1.5 m, and distance scales linearly with this
-   *  (∂d/∂h = d/h), so an unasked question was a ±17% error on every measurement
-   *  taken from a photo. It is still written onto each capture's pose as the
-   *  photo is saved, so a stored photo records what was believed when it was
-   *  taken. */
-  camHeightM: number;
-  /** Whether the user has actually answered, as opposed to inheriting 1.5.
-   *
-   *  The difference matters downstream and cannot be recovered from the number
-   *  itself: a photo whose height is merely the default should let the wall-floor
-   *  line SOLVE for the height (see `calForPhoto` in lib/photo-geometry.ts), while a
-   *  height the user stated should not be overruled by a luminance heuristic that
-   *  can lock onto a rug edge. Without this flag every photo carried a height and
-   *  the solve was unreachable. */
-  camHeightSet: boolean;
   /** Report step-free access in the room check — 1500 mm turning space, reachable
    *  routes. Off by default and remembered: whether a room has to meet this is a
    *  fact about the person using it, not about the room, so it belongs with the
@@ -509,10 +489,6 @@ type SettingsState = {
    *  room, so it lives here. On by default: they are quiet enough to sit under
    *  anything else playing, and the switch is in the View panel. */
   sound: boolean;
-  /** Which furniture finder to keep on this device (`lib/local-detect.ts`): `full` is both
-   *  models, ~65 MB, and finds the most; `basic` is the smaller one alone, ~14 MB. A
-   *  property of the device and its data plan, so it lives here. */
-  detectorPack: DetectorPack;
   /** Night mode: `system` follows the device, `light` / `dark` pin it
    *  (`lib/appearance.ts`). A property of the person and the room they are sitting
    *  in, not of the room being decorated, so it lives here. */
@@ -520,17 +496,10 @@ type SettingsState = {
   setApiKey: (k: string) => void;
   setDimUnit: (u: DimUnit) => void;
   setKeyValid: (v: boolean | null, reason?: string | null) => void;
-  setCamHeight: (m: number) => void;
   setStepFree: (on: boolean) => void;
   setSound: (on: boolean) => void;
-  setDetectorPack: (p: DetectorPack) => void;
   setAppearance: (a: Appearance) => void;
 };
-
-/** Bounds on the remembered camera height. Outside these it is a typo, and a
- *  typo here silently rescales an entire room. */
-export const CAM_HEIGHT_MIN = 0.8;
-export const CAM_HEIGHT_MAX = 2.2;
 
 export const useSettings = create<SettingsState>()(
   persist(
@@ -539,24 +508,15 @@ export const useSettings = create<SettingsState>()(
       dimUnit: 'm',
       keyValid: null,
       keyValidReason: null,
-      camHeightM: 1.5,
-      camHeightSet: false,
       stepFree: false,
       sound: true,
-      detectorPack: 'full',
       appearance: DEFAULT_APPEARANCE,
       // Setting a new key invalidates the cached test result.
       setApiKey: (k) => set({ apiKey: k, keyValid: null, keyValidReason: null }),
       setDimUnit: (u) => set({ dimUnit: u }),
       setKeyValid: (v, reason) => set({ keyValid: v, keyValidReason: reason ?? null }),
-      setCamHeight: (m) =>
-        set({
-          camHeightM: Math.min(CAM_HEIGHT_MAX, Math.max(CAM_HEIGHT_MIN, m)),
-          camHeightSet: true,
-        }),
       setStepFree: (on) => set({ stepFree: on }),
       setSound: (on) => set({ sound: on }),
-      setDetectorPack: (p) => set({ detectorPack: p }),
       setAppearance: (a) => set({ appearance: parseAppearance(a) }),
     }),
     {
@@ -574,7 +534,16 @@ export const useSettings = create<SettingsState>()(
       // someone typed into devtools, and the whole UI's palette hangs off this one
       // string, so it is checked against the vocabulary rather than trusted.
       merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<SettingsState>;
+        // Three settings that used to exist (the phone height, whether it was
+        // answered, and which furniture finder to keep) may still sit in an old
+        // record. They are dropped here rather than carried into state, so they are
+        // not written back for ever with nothing left to read them.
+        const {
+          camHeightM: _height,
+          camHeightSet: _heightSet,
+          detectorPack: _pack,
+          ...p
+        } = (persisted ?? {}) as Partial<SettingsState> & Record<string, unknown>;
         return { ...current, ...p, appearance: parseAppearance(p.appearance) };
       },
     },

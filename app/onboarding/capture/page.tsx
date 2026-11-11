@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useRoom, useSettings, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX } from '@/lib/store';
+import { useRoom, useSettings } from '@/lib/store';
 import { roomStore, blobToObjectUrl } from '@/lib/storage';
 import {
   ACCEPTED_PHOTO_TYPES,
@@ -27,7 +27,6 @@ import {
   swapSet,
   type PlacedPhoto,
   type SlotMap,
-  type SlotSignal,
 } from '@/lib/capture-slots';
 import { wallFrame } from '@/lib/photo-geometry';
 import { roomFootprint } from '@/lib/footprint';
@@ -38,7 +37,6 @@ import { useMediaQuery } from '@/lib/use-media-query';
 import { formatDim } from '@/lib/units';
 import { Icon } from '@/components/ui/Icon';
 import { Select, type SelectOption } from '@/components/ui/Select';
-import { NumberField } from '@/components/ui/NumberField';
 import { FlowBarLead, Pill, Segmented } from '@/components/ui/primitives';
 import { FlowStepper } from '@/components/ui/FlowStepper';
 import { framedWall } from '@/lib/capture-plan';
@@ -70,12 +68,7 @@ type Photo = {
    *  reaches at most a handful of times. */
   quality: Quality | null;
   pose?: CapturePose;
-  /** Which rung of the ladder put it on this wall. Absent for a photo read back
-   *  out of IndexedDB on a fresh visit — the reasoning was a fact about the
-   *  moment it was added, and inventing one after the fact would be worse than
-   *  saying nothing. */
-  by?: SlotSignal;
-  /** The wall its own compass pointed at, when that wall was already taken. */
+  /** The wall this photo may be a second shot of, when that wall already had one. */
   clashedWith?: CaptureSlot;
 };
 
@@ -84,19 +77,6 @@ const emptyPhotos = (): PhotoMap => emptySlotMap<Photo>();
 
 const labelOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.label;
 const turnOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.instruction;
-
-/** What the wall assignment is standing on, in words. The screen says this per
- *  photo because a wrong wall is a wrong room — `wallFrame` reads the framed wall's
- *  distance across the room's depth for n/s and across its width for e/w, so a photo
- *  filed under the wrong wall is measured from the wrong distance — and the user is
- *  the only one who can see whether we got it right. (It named `wallDistance` until
- *  § 44 deleted it; the convention is the same, the function is not.) */
-const REASON: Record<SlotSignal, string> = {
-  bearing: 'Placed by compass',
-  time: 'Placed by shutter time',
-  order: 'Placed by order added',
-  manual: 'Placed by you',
-};
 
 /** The photos already placed, in the shape `placePhotos` reads. */
 const placedIn = (photos: PhotoMap): PlacedPhoto[] =>
@@ -140,16 +120,14 @@ export default function CapturePage() {
   /** single polite live region for everything that happens without a page change */
   const [announce, setAnnounce] = useState('');
   const dimUnit = useSettings((s) => s.dimUnit);
-  // How high the phone is held. Remembered per person, not per room, and written
-  // onto each photo's pose as it is saved.
-  const camHeightM = useSettings((s) => s.camHeightM);
-  // Only a stated height goes onto a photo. Recording the 1.5 m default would be
-  // indistinguishable from an answer, and would stop the detect screen solving
-  // for the real height off the wall-floor line.
-  const camHeightSet = useSettings((s) => s.camHeightSet);
-  const statedHeight = camHeightSet ? camHeightM : undefined;
-  const setCamHeight = useSettings((s) => s.setCamHeight);
-  const [heightDraft, setHeightDraft] = useState(String(camHeightM));
+  // No phone height goes onto a photo. There is no field for it any more, and a
+  // height stated in older saved settings is ignored rather than stamped forever
+  // with no way to change it. The geometry assumes the standard chest-height rig
+  // (`CAM_HEIGHT`, 1.5 m). Only when a lens is known (EXIF or a vanishing-point
+  // estimate) does the detect screen fit the real height to the wall-floor line
+  // (`calForPhoto` in `lib/photo-geometry.ts`); with no lens, that same line solves
+  // the focal length instead and the height stays 1.5 m. Old captures that already
+  // carry `pose.heightM` keep it.
   const { tilt, requestAccess } = useDeviceTilt();
 
   // Mirror of `photos` readable from async handlers, so replacing or removing a
@@ -168,36 +146,6 @@ export default function CapturePage() {
     },
     [],
   );
-
-  // Committing a new height re-stamps the photos already saved. Someone who
-  // uploads four walls and only then answers the question should not have their
-  // answer quietly ignored. Debounced, because the field emits per keystroke.
-  useEffect(() => {
-    const n = Number(heightDraft);
-    if (!Number.isFinite(n) || n < CAM_HEIGHT_MIN || n > CAM_HEIGHT_MAX || n === camHeightM) return;
-    const t = setTimeout(() => {
-      setCamHeight(n);
-      if (!roomId) return;
-      void (async () => {
-        const caps = await roomStore.loadCaptures(roomId);
-        await Promise.all(
-          caps.map((c) => roomStore.saveCapture(roomId, { ...c, pose: { ...c.pose, heightM: n } })),
-        );
-        // …and on screen too, so what is in state is what is in the store. The
-        // bearing lives in the same object and now decides a wall, so a `pose`
-        // that has drifted from its record is no longer a cosmetic difference.
-        setPhotos((prev) => {
-          const next = { ...prev };
-          for (const s of SLOT_ORDER) {
-            const p = next[s];
-            if (p) next[s] = { ...p, pose: { ...p.pose, heightM: n } };
-          }
-          return next;
-        });
-      })();
-    }, 500);
-    return () => clearTimeout(t);
-  }, [heightDraft, camHeightM, roomId, setCamHeight]);
 
   // Rehydrate from IndexedDB: photos survive leaving and coming back.
   useEffect(() => {
@@ -270,13 +218,12 @@ export default function CapturePage() {
     slot: CaptureSlot,
     blob: Blob,
     pose: CapturePose | undefined,
-    by: SlotSignal,
     clashedWith?: CaptureSlot,
   ) {
     if (!roomId) return;
     await roomStore.saveCapture(roomId, { slot, blob, takenAt: Date.now(), pose });
     const retiring = photosRef.current[slot]?.url;
-    setPhotos((p) => ({ ...p, [slot]: { blob, url: blobToObjectUrl(blob), quality: null, pose, by, clashedWith } }));
+    setPhotos((p) => ({ ...p, [slot]: { blob, url: blobToObjectUrl(blob), quality: null, pose, clashedWith } }));
     if (retiring) URL.revokeObjectURL(retiring);
     // Keyed on the blob, not the wall. A score started for this photo must not
     // land on whichever photo occupies this wall by the time it resolves — which
@@ -309,7 +256,7 @@ export default function CapturePage() {
     // Read what each ORIGINAL file knows about itself first: `normalizePhoto`
     // strips exactly the metadata the wall is decided from, which is the point of
     // the strip. Then place, then normalise — in that order, and never the other.
-    const read = await Promise.all(files.map((f) => readCaptureFacts(f, { heightM: statedHeight })));
+    const read = await Promise.all(files.map((f) => readCaptureFacts(f)));
     const { placed, rejected } = placePhotos(
       placedIn(photosRef.current),
       read.map((r) => r.facts),
@@ -326,7 +273,7 @@ export default function CapturePage() {
     const refused: CaptureSlot[] = [];
     for (const { p, blob } of prepared) {
       try {
-        await persistPhoto(p.slot, blob, read[p.index].pose, p.by, p.clashedWith);
+        await persistPhoto(p.slot, blob, read[p.index].pose, p.clashedWith);
         landed.push(p);
       } catch {
         refused.push(p.slot);
@@ -351,9 +298,9 @@ export default function CapturePage() {
       setAnnounce('Danmu can’t read that kind of file. Choose a JPEG, PNG, WebP or HEIC photo.');
       return;
     }
-    const { pose } = await readCaptureFacts(file, { heightM: statedHeight });
+    const { pose } = await readCaptureFacts(file);
     try {
-      await persistPhoto(slot, await normalizePhoto(file), pose, 'manual');
+      await persistPhoto(slot, await normalizePhoto(file), pose);
     } catch {
       setAnnounce(writeFailed(`The new ${labelOf(slot)} photo`));
       return;
@@ -529,31 +476,6 @@ export default function CapturePage() {
           </figcaption>
         </figure>
       )}
-      {/* "Chest height" above is the one number the geometry engine cannot see and
-          cannot do without: every distance it reads off a photo scales directly
-          with it. Asking is a 10-second question that removes a ±17% error, so it
-          sits with the instruction it makes precise rather than in Settings. */}
-      <div className="capture-card capture-height">
-        {/* A span, not a label: NumberField takes no `id`. The field carries its
-            own accessible name via `ariaLabel`. */}
-        <span className="capture-height__text">
-          <b>Phone height</b>
-          <span className="t-small">Off the floor, to the lens</span>
-        </span>
-        <span className="capture-height__field">
-          <NumberField
-            value={heightDraft}
-            onChange={setHeightDraft}
-            step={0.05}
-            min={CAM_HEIGHT_MIN}
-            max={CAM_HEIGHT_MAX}
-            height={36}
-            ariaLabel="Phone height off the floor, in metres"
-            style={{ width: 96 }}
-          />
-          <span className="t-meta">m</span>
-        </span>
-      </div>
     </div>
   );
 
@@ -602,9 +524,8 @@ export default function CapturePage() {
         // telling them to make it true, and they are standing in the room.
         const { pose } = await readCaptureFacts(blob, {
           tiltDeg: tilt ?? undefined,
-          heightM: statedHeight,
         });
-        await persistPhoto(nextSlot, blob, pose, 'order');
+        await persistPhoto(nextSlot, blob, pose);
         setAnnounce(`Photo taken for ${labelOf(nextSlot)}.`);
       }}
       onUseUpload={() => setSource('upload')}
@@ -1233,7 +1154,7 @@ function PhotoCard({
         {compact && photo.clashedWith && (
           <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             <span
-              title={`This photo’s compass pointed at ${labelOf(photo.clashedWith)}, which already had one. It may be a second photo of the same wall.`}
+              title={`This might be a second photo of ${labelOf(photo.clashedWith)}.`}
               // Signalled in the TYPE, not the ground — see photoChrome.
               style={{ ...photoChrome(), color: 'var(--on-ink-warn)' }}
             >
@@ -1251,7 +1172,7 @@ function PhotoCard({
               <span
                 className="capture-status"
                 data-tone="warn"
-                title={`This photo’s compass pointed at ${labelOf(photo.clashedWith)}, which already had one. It may be a second photo of the same wall.`}
+                title={`This might be a second photo of ${labelOf(photo.clashedWith)}.`}
               >
                 <Icon name="info" size={12} />
                 Maybe {labelOf(photo.clashedWith)} again
@@ -1290,10 +1211,6 @@ function PhotoCard({
                 fontSize="var(--fs-small)"
               />
             </div>
-            {/* Why it is on this wall: the user is the only one who can see whether
-                the assignment is right, so the screen says what it stood on. Absent
-                for a photo read back from storage, which has no moment to describe. */}
-            {photo.by && <span className="capture-foot__reason">{REASON[photo.by]}</span>}
           </div>
         </div>
       )}

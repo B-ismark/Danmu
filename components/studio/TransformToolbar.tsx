@@ -36,10 +36,10 @@ const MODES: Array<{ id: 'translate' | 'rotate' | 'scale'; label: string; key: s
   { id: 'rotate', label: 'Rotate', key: 'R', does: 'spin it in place', icon: 'refresh' },
 ];
 
-export const SNAPS: Array<{ id: 'off' | 'fine' | 'coarse'; label: string; sub: string }> = [
-  { id: 'off', label: 'Free', sub: 'no snap' },
-  { id: 'fine', label: 'Fine', sub: '10mm · 15°' },
-  { id: 'coarse', label: 'Coarse', sub: '50mm · 45°' },
+export const SNAPS: Array<{ id: 'off' | 'fine' | 'coarse'; label: string }> = [
+  { id: 'off', label: 'Free' },
+  { id: 'fine', label: 'Fine' },
+  { id: 'coarse', label: 'Coarse' },
 ];
 
 const SNAP_ORDER: Array<'off' | 'fine' | 'coarse'> = ['off', 'fine', 'coarse'];
@@ -130,7 +130,7 @@ export function TransformToolbar() {
 }
 
 // Single button that cycles Free → Fine → Coarse. Replaces the 3-chip group to
-// reclaim toolbar width. Shows the active label + its step; click advances.
+// reclaim toolbar width. Shows the active label; click advances.
 function SnapCycleButton({
   snapMode,
   setSnapMode,
@@ -150,8 +150,8 @@ function SnapCycleButton({
       <button
         type="button"
         onClick={() => setSnapMode(next.id)}
-        aria-label={`Snap: ${cur.label}, ${cur.sub}. Activate for ${next.label}.`}
-        title={`Snap · ${cur.label} (${cur.sub}) · Next: ${next.label}`}
+        aria-label={`Snap: ${cur.label}. Activate for ${next.label}.`}
+        title={`Snap · ${cur.label} · Next: ${next.label}`}
         className={`chrome-pill__text${active ? ' is-on' : ''}`}
         style={{ whiteSpace: 'nowrap' }}
       >

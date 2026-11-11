@@ -87,8 +87,6 @@ type SceneState = {
    *  without moving a wall. */
   confirmSize: () => void;
   loadFromRoom: (room: RoomData | undefined) => void;
-  /** where the room is on earth + which way it faces (sun path). */
-  setSite: (site: Site) => void;
   /** paint one wall (by footprint-edge index). */
   setWallColor: (index: number, color: string) => void;
   /** paint every wall the same colour in one go. */
@@ -196,7 +194,6 @@ export const useScene = create<SceneState>((set, get) => ({
       ready: true,
     });
   },
-  setSite: (site) => set((s) => ({ room: { ...s.room, site } })),
   setWallColor: (index, color) =>
     set((s) => ({ room: { ...s.room, wallColors: { ...s.room.wallColors, [index]: color } } })),
   setAllWallColors: (color) =>

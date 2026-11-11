@@ -406,7 +406,7 @@ export function PartTree() {
           // Re-scan changes what is IN the room, which is this section's subject — it
           // was in the top bar, next to controls about how the app is framed. It is
           // the header's trailing action rather than a full-width button in the body
-          // for two reasons: the body is dimensions, a compass dial and nothing else
+          // for two reasons: the body is dimensions and nothing else
           // that is a NAVIGATION, and a control about the section should survive the
           // section being closed.
           //

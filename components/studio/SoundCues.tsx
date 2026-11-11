@@ -52,7 +52,6 @@ function read(): CueWorld {
     wallColors: s.room.wallColors,
     footprint: s.room.footprint,
     roomSize: { width: s.room.width, depth: s.room.depth, height: s.room.height },
-    bearingDeg: s.room.site?.bearingDeg,
     positions: t.positions,
     rotations: t.rotations,
     dims: t.dims,

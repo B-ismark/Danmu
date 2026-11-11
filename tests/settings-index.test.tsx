@@ -29,12 +29,12 @@ describe('the Settings index', () => {
   it('marks the first card as the one being read on arrival', () => {
     render(<SettingsPage />);
     const current = document.querySelectorAll('.settings-index [aria-current]');
-    expect([...current].map((a) => a.textContent)).toEqual(['Furniture detection']);
+    expect([...current].map((a) => a.textContent)).toEqual(['Units']);
   });
 
   it('follows the card whose top has crossed the upper third once scrolled', () => {
     render(<SettingsPage />);
-    const tops: Record<string, number> = { detection: -900, units: -300, appearance: -100, downloads: 100, rooms: 700 };
+    const tops: Record<string, number> = { units: -900, appearance: -300, downloads: 100, rooms: 700, advanced: 1000 };
     for (const [id, top] of Object.entries(tops)) {
       document.getElementById(id)!.getBoundingClientRect = () => ({ top }) as DOMRect;
     }
@@ -51,12 +51,12 @@ describe('the Settings index', () => {
     act(() => {
       window.dispatchEvent(new Event('scroll'));
     });
-    expect(current()).toEqual(['Your rooms']);
+    expect(current()).toEqual(['Advanced']);
     Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
   });
 
   // Downloads is short and near the end, so its jump ends at the foot of the page,
-  // where the position alone would mark Your rooms.
+  // where the position alone would mark the last card.
   const atFoot = () => {
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
     Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2000 });
@@ -82,7 +82,7 @@ describe('the Settings index', () => {
       window.dispatchEvent(new Event('wheel'));
       window.dispatchEvent(new Event('scroll'));
     });
-    expect(current()).toEqual(['Your rooms']);
+    expect(current()).toEqual(['Advanced']);
   });
 
   it('follows Back to the card the address names, even after a press marked another', () => {
