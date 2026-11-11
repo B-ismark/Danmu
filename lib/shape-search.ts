@@ -401,6 +401,14 @@ export function resolveQuerySize(
  *  beside a clamp the speaker did not call is the hand-typed-measurement defect
  *  this repo keeps finding. Every figure in it comes off the `AxisRequest` pairs.
  *
+ *  It states the LIMIT, not an outcome. It used to end "so it will be added at N mm",
+ *  and the picker did exactly that: `sofa 700cm` arrived as a 4 m sofa and the fit
+ *  check reported "It goes in, but it is tight" — about a piece the user never asked
+ *  for, at the one moment the feature exists for (will THIS product fit). The badge
+ *  carried the sentence, but only on hover. A typed size outside the range is now
+ *  refused by the picker (`LibraryPicker`'s `refuse`), and the clamped size is offered
+ *  as an explicit choice rather than taken as one.
+ *
  *  Axis order is fixed w→d→h so two rows overruled on different axes read the same
  *  way round, and the axes are named in the words the Inspector uses to the user
  *  ('Width', 'Depth', 'Height') rather than as `w`/`d`/`h`. */
@@ -416,9 +424,9 @@ export function describeOverruled(o: {
   ];
   const parts = named
     .filter((e): e is [string, AxisRequest] => e[1] !== undefined)
-    .map(([axis, r]) => `${axis.toLowerCase()} ${r.asked} mm is outside this shape's range, so it will be added at ${r.got} mm`);
+    .map(([axis, r]) => `${axis.toLowerCase()} ${r.asked} mm (it ${r.asked > r.got ? 'goes up to' : 'starts at'} ${r.got} mm)`);
   if (parts.length === 0) return null;
-  return `The size you typed does not fit: ${parts.join('; ')}.`;
+  return `The size you typed is outside this piece's range: ${parts.join('; ')}.`;
 }
 /** True when `query` named any size at all — the one thing a caller needs to know
  *  before deciding whether to SHOW a size it did not have to show. Kept beside
