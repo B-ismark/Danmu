@@ -73,6 +73,13 @@ export function toast(spec: ToastSpec): number {
   return useToasts.getState().push(spec);
 }
 
+/** Take one toast down early — for a card whose action belongs to a surface that
+ *  has since gone (an "Add at…" offered by a Library panel that was closed), where
+ *  leaving it up would let the button act on a context the user has left. */
+export function dismissToast(id: number) {
+  useToasts.getState().dismiss(id);
+}
+
 /** How long work runs before it is worth a word. Under this, the result is the only
  *  thing said: a "working" card replaced a frame later reads as a flicker. Over it, a
  *  press with nothing but an 11px spinner in a rail button reads as a press that did
@@ -138,10 +145,12 @@ export function StorageToast() {
       style={{
         position: 'fixed',
         top,
-        right: 16,
+        // `--toast-inset-right` is published by an open Library card (lib/toast-inset.ts)
+        // so a fit result is never printed on the list it answers.
+        right: 'var(--toast-inset-right, 16px)',
         // Never wider than the strip it sits in, and on a phone never wider than
         // the screen. Width is content-driven below that.
-        maxWidth: 'min(360px, calc(100vw - 32px))',
+        maxWidth: 'min(360px, calc(100vw - var(--toast-inset-right, 16px) - 16px))',
         zIndex: 'var(--z-toast)',
         display: 'flex',
         flexDirection: 'column',
