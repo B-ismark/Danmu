@@ -984,15 +984,17 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
     linear-gradient(90deg, var(--grid-line-major) 1px, transparent 1px);
   background-size: 24px 24px;
 }
-.landing-plan { position: relative; margin: auto 24px; }
+.landing-plan { position: relative; margin: auto 12px; }
 .landing-plan__svg { display: block; width: 100%; height: auto; overflow: visible; }
 .landing-plan__floor { fill: var(--paper); }
 .landing-plan__walls {
   fill: none;
   stroke: var(--ink);
   stroke-linejoin: miter;
-  stroke-dasharray: var(--perimeter);
-  animation: landing-draw var(--dur-sweep) var(--ease-in-out) both;
+  /* The dash lives only in the keyframes, and the fill mode is backwards, not both: a
+     dashed outline leaves its start corner unjoined, so once drawn it goes back to a
+     plain stroke and the corner mitres like the other three. */
+  animation: landing-draw var(--dur-sweep) var(--ease-in-out) backwards;
 }
 .landing-plan__parts rect,
 .landing-plan__parts circle {
@@ -1015,7 +1017,10 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 .landing-plan__label--top { transform: translate(-50%, -135%); }
 .landing-plan__label--left { transform: translate(-50%, -50%) rotate(-90deg) translateY(-0.9em); }
 .landing-plan__label--bar { transform: translate(8px, -50%); color: var(--ink-3); }
-@keyframes landing-draw { from { stroke-dashoffset: var(--perimeter); } to { stroke-dashoffset: 0; } }
+@keyframes landing-draw {
+  from { stroke-dasharray: var(--perimeter); stroke-dashoffset: var(--perimeter); }
+  to { stroke-dasharray: var(--perimeter); stroke-dashoffset: 0; }
+}
 
 /* The title block, bottom of the drawing. */
 .title-block { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; border-top: 1px solid var(--hairline-strong); background: var(--paper); font-size: var(--fs-small); }
