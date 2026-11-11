@@ -20,12 +20,13 @@
  * arranged each one against the base and nothing else.
  */
 import { distToBoundary, footFromPart, footInsidePoly, frontVector, localToWorld, worldToLocal } from './geometry';
+import { wallLabelOf } from './wall-label';
 import { isSeating, roleOf, roomProfile, WALL_ATTACH_TOL, isSoftFurnishing, type Role } from './layout-rules';
 import { highestSurfaceUnder, SUPPORT_Y_EPS } from './physics';
 import { ridingParents } from './rigid-parent';
 import { withRiders } from './layout-solve';
 import type { Placement } from './layout-score';
-import type { Footprint } from './footprint';
+import { footprintBounds, wallOutwardNormal, type Footprint } from './footprint';
 import type { ScenePart } from './scene-spec';
 
 /** Ideas to a page. Decision D6 of the 2026-09 overhaul: **three on a phone, four
@@ -259,6 +260,158 @@ export function ideaCaption(
   const lead =
     target === null ? `${part.name} ${where}` : `${part.name} ${where}, facing ${FACE[target.rank][1]}`;
   return { lead, count };
+}
+
+/** A piece within this of a window, a door or a TV is "near" it. */
+export const NEAR_LANDMARK_M = 1.5;
+
+const LANDMARKS: readonly [Role, string][] = [
+  ['window', 'the window'],
+  ['door', 'the door'],
+  ['tv', 'the TV'],
+];
+
+/** "by the north wall" / "against wall 3": the wall's name is the one the plan and
+ *  the Inspector print (`wallLabelOf`), lower-cased so it sits in a sentence. */
+function wallWords(label: string, prep: 'by' | 'against'): string {
+  return /^wall \d+$/i.test(label) ? `${prep} ${label.toLowerCase()}` : `${prep} the ${label.toLowerCase()}`;
+}
+
+/** The wall a piece's back is against, as its index in the footprint, or null when
+ *  it is not against one. Of the walls within reach of the back, the one FACING the
+ *  piece's back wins — its outward normal best matches the way the back points —
+ *  and distance only breaks a tie, so a piece in a corner is named for the wall it
+ *  is actually turned away from, not whichever edge is a millimetre closer. */
+export function backWall(part: ScenePart, at: Placement, footprint: Footprint): number | null {
+  const [fx, fz] = frontVector(at.yaw);
+  const half = part.dimMM[1] / 2000;
+  const bx = at.x - fx * half;
+  const bz = at.z - fz * half;
+  let best: number | null = null;
+  let bestDot = 0.5;
+  let bestDist = Infinity;
+  for (let i = 0; i < footprint.length; i++) {
+    const a = footprint[i];
+    const c = footprint[(i + 1) % footprint.length];
+    const dx = c[0] - a[0];
+    const dz = c[1] - a[1];
+    const len2 = dx * dx + dz * dz;
+    if (len2 < 1e-8) continue;
+    const t = Math.max(0, Math.min(1, ((bx - a[0]) * dx + (bz - a[1]) * dz) / len2));
+    const dist = Math.hypot(bx - (a[0] + t * dx), bz - (a[1] + t * dz));
+    if (dist > WALL_ATTACH_TOL) continue;
+    const [ox, oz] = wallOutwardNormal(footprint, i);
+    const dot = ox * -fx + oz * -fz;
+    if (dot > bestDot + 1e-6 || (Math.abs(dot - bestDot) <= 1e-6 && dist < bestDist)) {
+      best = i;
+      bestDot = dot;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+/** Where a piece is, in words that are true without a compass: by a wall (named as
+ *  the plan names it), else near the nearest window / door / TV, else in the middle
+ *  of the room when it stands in the central third of the room's box AND on the
+ *  floor. Null when none of those holds, and then nothing is claimed. */
+function placeWords(parts: readonly ScenePart[], j: number, at: Placement, footprint: Footprint): string | null {
+  const wall = backWall(parts[j], at, footprint);
+  if (wall !== null) return wallWords(wallLabelOf(footprint, wall), 'by');
+  let near: string | null = null;
+  let nearD = NEAR_LANDMARK_M;
+  parts.forEach((q, k) => {
+    if (k === j) return;
+    const hit = LANDMARKS.find(([role]) => roleOf(q) === role);
+    if (!hit) return;
+    const d = Math.hypot(q.pos[0] - at.x, q.pos[2] - at.z);
+    if (d <= nearD) {
+      near = `near ${hit[1]}`;
+      nearD = d;
+    }
+  });
+  if (near) return near;
+  const bb = footprintBounds(footprint);
+  const tx = (at.x - bb.minX) / (bb.width || 1);
+  const tz = (at.z - bb.minZ) / (bb.depth || 1);
+  const central = tx >= 1 / 3 && tx <= 2 / 3 && tz >= 1 / 3 && tz <= 2 / 3;
+  const p = parts[j];
+  if (central && footInsidePoly(footFromPart([at.x, 0, at.z], at.yaw, p.dimMM, p.circle, p.shape), footprint)) {
+    return 'in the middle of the room';
+  }
+  return null;
+}
+
+/** The captions for ONE page of ideas, made different from each other.
+ *
+ *  `ideaCaption` names the piece the room is arranged around, whether it stands by
+ *  a wall and what it faces: in a room with one sofa and a TV that is a handful of
+ *  possible sentences across four different arrangements, and three of four cards
+ *  read the same. A caption that does not tell the cards apart is no help choosing.
+ *
+ *  So a card keeps the short caption unless another card on the page has the same
+ *  one, and only then is it made more specific, for the cards still tied: which
+ *  wall the piece's back is against (named as the plan names it) or what it is near;
+ *  then, piece by piece (largest first), where another piece that moved ended up,
+ *  taking the first piece whose whereabouts differ among the tied cards. All of it
+ *  is read off the placements, and a whereabouts that cannot be said truthfully is
+ *  left out rather than coined. Cards still tied once every piece has been tried
+ *  are the same arrangement as far as any sentence here can say, and keep equal
+ *  captions rather than an invented difference.
+ *
+ *  Index-aligned to `ideas`. */
+export function distinctLeads(
+  parts: readonly ScenePart[],
+  footprint: Footprint,
+  ideas: readonly Pick<Idea, 'placements' | 'moved'>[],
+): (string | null)[] {
+  const out = ideas.map((idea) => ideaCaption(parts, footprint, idea).lead);
+  const subjects = ideas.map((idea) => captionSubject(parts, idea));
+  const tied = () => {
+    const by = new Map<string, number[]>();
+    out.forEach((l, i) => {
+      if (l !== null && subjects[i] !== null) by.set(l, [...(by.get(l) ?? []), i]);
+    });
+    return [...by.values()].filter((g) => g.length > 1);
+  };
+
+  // 1. The subject's wall, or what it is near.
+  for (const group of tied()) {
+    for (const i of group) {
+      const s = subjects[i]!;
+      const at = ideas[i].placements[s];
+      const wall = backWall(parts[s], at, footprint);
+      if (wall !== null) {
+        out[i] = out[i]!.replace('against a wall', wallWords(wallLabelOf(footprint, wall), 'against'));
+      } else {
+        const where = placeWords(parts, s, at, footprint);
+        if (where) out[i] = out[i]!.replace('in the open', where.startsWith('in the') ? where : `in the open, ${where}`);
+      }
+    }
+  }
+
+  // 2. The other pieces that moved, largest first.
+  const bigFirst = parts
+    .map((_, j) => j)
+    .filter((j) => !isSoftFurnishing(parts[j]))
+    .sort((x, y) => parts[y].dimMM[0] * parts[y].dimMM[1] - parts[x].dimMM[0] * parts[x].dimMM[1]);
+  for (const group of tied()) {
+    let live = group.slice();
+    for (const j of bigFirst) {
+      const here = live.filter((i) => j !== subjects[i] && ideas[i].moved.includes(j));
+      const says = here.map((i) => placeWords(parts, j, ideas[i].placements[j], footprint));
+      if (here.length === 0 || new Set(says.map((w) => w ?? '')).size < 2) continue;
+      here.forEach((i, k) => {
+        const w = says[k];
+        if (w) out[i] = `${out[i]} · ${parts[j].name} moves ${w.startsWith('in the') ? `to the ${w.slice(7)}` : w}`;
+      });
+      // Only the cards that still tie go on to the next piece.
+      const still = tied().find((g) => g.includes(live[0]));
+      if (!still) break;
+      live = still.filter((i) => group.includes(i));
+    }
+  }
+  return out;
 }
 
 /** The piece a caption is about: the room's anchor (bed, sofa, dining table, desk —
