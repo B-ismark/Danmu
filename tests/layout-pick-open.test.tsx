@@ -57,6 +57,16 @@ describe('the footprint page', () => {
     expect(room?.layoutId).toBe('t');
   });
 
+  it('draws the row of thumbnails at one scale, so Open Plan is larger than Rectangle', () => {
+    render(<LayoutPickPage />);
+    const extent = (name: RegExp) => {
+      const d = screen.getByRole('radio', { name }).querySelector('.shape-option__thumb path')!.getAttribute('d')!;
+      const xs = [...d.matchAll(/[ML]([0-9.-]+) /g)].map((m) => Number(m[1]));
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    expect(extent(/^Open Plan/)).toBeGreaterThan(extent(/^Rectangle/) * 1.2);
+  });
+
   it('puts both ways on in one row', () => {
     // The row's own layout is CSS, asserted in tests/reflow.test.ts.
     render(<LayoutPickPage />);

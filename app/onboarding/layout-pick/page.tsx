@@ -4,8 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDimUnit, useRoom, useSettings, type DimUnit } from '@/lib/store';
 import { useMediaQuery } from '@/lib/use-media-query';
-import { footprintForLayout, type LayoutId } from '@/lib/footprint';
-import { polygonArea } from '@/lib/geometry';
+import { planFor, VIEW } from '@/lib/layout-outline';
 import { ROOM_AXES, type RoomAxis } from '@/lib/dimension-ranges';
 import { formatArea, formatLength, stepFor, UNIT_OPTIONS } from '@/lib/units';
 import {
@@ -45,26 +44,6 @@ import { ROOM_PRESETS as PRESETS, createPresetRoom, typicalOf } from '@/lib/room
 //
 // All of it is computed per render rather than once per preset, because the size
 // is no longer the preset's: a typed room draws every outline at the typed size.
-const VIEW = { w: 240, h: 180, pad: 20 };
-
-/** Footprint polygon → SVG path in the fixed 240×180 viewBox, preserving aspect,
- *  plus the box it was drawn in (for the dimension lines) and its real floor area. */
-function planFor(layout: LayoutId, w: number, d: number) {
-  const poly = footprintForLayout(layout, w, d);
-  const innerW = VIEW.w - VIEW.pad * 2;
-  const innerH = VIEW.h - VIEW.pad * 2;
-  const scale = Math.min(innerW / w, innerH / d);
-  const box = { x: (VIEW.w - w * scale) / 2, y: (VIEW.h - d * scale) / 2, w: w * scale, h: d * scale };
-  const path =
-    poly
-      .map(([x, z], i) => {
-        const px = box.x + (x + w / 2) * scale;
-        const pz = box.y + (z + d / 2) * scale;
-        return `${i === 0 ? 'M' : 'L'}${px.toFixed(1)} ${pz.toFixed(1)}`;
-      })
-      .join(' ') + ' Z';
-  return { path, box, area: polygonArea(poly) };
-}
 
 /** The preview at screen scale: how many drawing units one CSS pixel is, and the
  *  caption step in pixels, read off the page rather than copied from it.
@@ -138,10 +117,14 @@ export default function LayoutPickPage() {
   const bad = entry ? badAxes(text, dimUnit) : [];
   const flagged = bad.filter((a) => tried || left.has(a));
 
-  const layouts = PRESETS.map((p) => {
-    const size = drawnDims(entry, typicalOf(p));
+  const sizes = PRESETS.map((p) => drawnDims(entry, typicalOf(p)));
+  // One scale across the row's thumbnails (the big preview keeps its own fit).
+  const fit = { w: Math.max(...sizes.map((z) => z.width)), d: Math.max(...sizes.map((z) => z.depth)) };
+  const layouts = PRESETS.map((p, i) => {
+    const size = sizes[i];
     const plan = planFor(p.id, size.width, size.depth);
-    return { ...p, size, ...plan, areaText: formatArea(plan.area, dimUnit) };
+    const thumbPath = planFor(p.id, size.width, size.depth, fit).path;
+    return { ...p, size, ...plan, thumbPath, areaText: formatArea(plan.area, dimUnit) };
   });
   const layout = layouts.find((l) => l.id === sel)!;
   const wText = formatLength(layout.size.width * 1000, dimUnit);
@@ -275,7 +258,7 @@ export default function LayoutPickPage() {
                 <span className="shape-option__thumb" aria-hidden="true">
                   <svg viewBox="0 0 240 180">
                     <path
-                      d={l.path}
+                      d={l.thumbPath}
                       fill={active ? 'var(--accent-tint)' : 'var(--paper)'}
                       stroke={active ? 'var(--accent)' : 'var(--ink-2)'}
                       strokeWidth="2"
