@@ -47,6 +47,7 @@ import {
   freeName,
   IDEAS_PER_PAGE,
   ideaCaption,
+  distinctLeads,
   ideaTransforms,
   MAX_IDEAS,
   pageOf,
@@ -449,7 +450,16 @@ export function IdeasPanel({
   // A page past the last idea is only worth showing while more are coming. Pressed
   // Next into a search that then ran dry, it would be a blank card.
   const page = Math.min(session?.page ?? 0, exhausted || failed ? lastPage : Infinity);
-  const shown = session ? pageOf(session.ideas, page, size) : [];
+  // Captions are made different within the page the person is comparing. The page
+  // is sliced inside the memo from `ideas`, so the deps are the real inputs.
+  const sessionIdeas = session?.ideas;
+  const sessionBase = session?.base;
+  const shown = useMemo(() => {
+    if (!sessionIdeas || !sessionBase) return [];
+    const pageIdeas = pageOf(sessionIdeas, page, size);
+    const leads = distinctLeads(sessionBase.parts, sessionBase.room.footprint, pageIdeas);
+    return pageIdeas.map((idea, i) => ({ ...idea, lead: leads[i] }));
+  }, [sessionIdeas, sessionBase, page, size]);
   const onScreen = session?.ideas.find((i) => i.key === tKey) ?? null;
   const expecting =
     session !== null && hydrated && anyMovable && status === 'ok' && !failed && wantsMore(found, page, size, session.dry);

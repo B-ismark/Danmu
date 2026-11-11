@@ -29,6 +29,7 @@ import { footFromPart, obbExtentAlong, rayToBoundary } from '@/lib/geometry';
 import { footOutlineLocal } from '@/lib/foot-cells';
 import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
+import { wallLabelFor } from '@/lib/wall-label';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 import {
   resolvePlacement,
@@ -2247,15 +2248,6 @@ function fitLabel(name: string, widthPx: number, fontSize: number): string {
   if (budget >= name.length) return name;
   if (budget <= 1) return name.slice(0, 1);
   return name.slice(0, budget - 1).trimEnd() + '…';
-}
-
-/** Mirrors the Inspector's wall naming so the two screens can never disagree. */
-function wallLabelFor(yaw: number, index: number, useCompass: boolean): string {
-  if (!useCompass) return `Wall ${index + 1}`;
-  const inX = Math.sin(yaw);
-  const inZ = Math.cos(yaw);
-  if (Math.abs(inZ) >= Math.abs(inX)) return inZ > 0 ? 'North wall' : 'South wall';
-  return inX > 0 ? 'West wall' : 'East wall';
 }
 
 function clamp(v: number, lo: number, hi: number) {
