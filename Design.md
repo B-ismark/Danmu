@@ -3729,7 +3729,7 @@ target in a way an explicit Back button is not. Do not "fix" detect's to match.
 | `StorageToast.tsx` | One live region for the whole app, plus the imperative `toast()`. Lifted clear of the studio's bottom-right control cluster on `/room/` routes — the card takes pointer events, so at the default offset it swallowed their clicks. |
 | `DocShell.tsx` | The document-route shell — see above. Takes `trail` (the breadcrumb), `actions`, `back`, `measure` (`page` \| `prose`) and `variant` (`plain` \| `hero`). |
 | `FlowStepper.tsx` · `BuildingRoom.tsx` · `FindingFurniture.tsx` · `LoadingOverlay.tsx` · `DetectorPackPicker.tsx` | The photo route's furniture: where you are (Shape, Photos, Furniture, Room), the last step's "building" screen, the wait while the finder runs, a blocking progress overlay, and the Basic / Full detector choice shared by the scan screen and Settings. |
-| `IsoRoom.tsx` · `ShapeIcon.tsx` | The empty rooms page's isometric hero, and the chip that draws a piece's shape at the start of list rows. |
+| `IsoRoom.tsx` · `ShapeIcon.tsx` | The Building screen's isometric room, and the chip that draws a piece's shape at the start of list rows. |
 | `Confirm.tsx` · `ColorPicker.tsx` | Promise-based confirm modal; HSV picker. Both exist to keep an OS widget out of the UI. |
 
 ### Waiting: what the app shows while it works

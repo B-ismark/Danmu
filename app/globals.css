@@ -70,8 +70,8 @@
   --snap-edge: #1E9E54;
   --snap-center: #27A06A;
 
-  /* The isometric room drawing (`components/ui/IsoRoom.tsx`) — the empty Rooms
-     page's hero, and the room that assembles while a scan is being built. A
+  /* The isometric room drawing (`components/ui/IsoRoom.tsx`) — the room that
+     assembles while a scan is being built. A
      drawing, never type: decorative values, so no contrast is claimed. Floor and
      two walls, then five furniture tones drawn from the same warm set as the
      palette (clay, walnut, sage, mustard, moss). */
@@ -296,7 +296,7 @@
   --dur-base: 160ms;
   --dur-slow: 300ms;
   --dur-breathe: 1100ms; /* one half-cycle of a placeholder's breathing */
-  --dur-sweep: 1800ms;     /* one pass of an indeterminate progress bar (BuildingRoom) */
+  --dur-sweep: 1800ms;     /* one pass of an indeterminate progress bar (BuildingRoom), and the landing plan drawing its walls */
   --dur-loop: 9s;          /* one pass of a waiting illustration (FindingFurniture) */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);   /* settles — most UI */
   --ease-in-out: cubic-bezier(0.45, 0, 0.35, 1); /* loops and back-and-forth */
@@ -405,8 +405,8 @@
   --ink: #EFEDE7;           /* chalk, as type. 15.13:1 on --paper */
   --ink-2: #CDCAC5;         /* 10.84:1 on --paper */
   --ink-3: #A8A6A1;         /* 7.28:1 on --paper, 5.90:1 on --paper-3 */
-  --ink-4: #52504B;         /* decorative fills only (2.30:1) */
-  --ink-hover: #FCFAF6;     /* the primary button is cream here, so its hover is a step brighter */
+  --ink-4: #52504B;         /* decorative fills only (2.20:1) */
+  --ink-hover: #FCFAF6;     /* the primary button is chalk here, so its hover is a step brighter */
 
   --hairline: rgba(239, 237, 231, 0.12);
   --hairline-soft: rgba(239, 237, 231, 0.06);
@@ -414,11 +414,11 @@
   --edge: rgba(239, 237, 231, 0.46);          /* 4.13:1 on --paper — boundary of anything interactive */
 
   --accent: #588659;        /* sage — fills only, still NOT text (4.19:1) */
-  --accent-tint: rgba(98, 142, 85, 0.18);
-  --accent-tint-strong: rgba(98, 142, 85, 0.32);
+  --accent-tint: rgba(88, 134, 89, 0.18);
+  --accent-tint-strong: rgba(88, 134, 89, 0.32);
   --accent-ink: #9CCD9C;      /* 9.80:1 with --paper — the accent-button surface, carrying dark type */
   --accent-ink-hover: #B3DFB3;/* 11.91:1 with --paper */
-  --accent-text: #A4D2A4;     /* 10.40:1 on --paper, 8.31:1 on --accent-tint */
+  --accent-text: #A4D2A4;     /* 10.40:1 on --paper, 8.44:1 on --accent-tint */
   --accent-2: #E0A23A;
   --accent-2-tint: rgba(224, 162, 58, 0.18);
   --sun: #E0A21C;           /* 7.89:1 on --paper — a graphic */
@@ -459,11 +459,11 @@
   --warn: #E3A65A;          /* 8.32:1 on --paper */
   --warn-text: #E9B26C;     /* 8.47:1 on --paper-2 */
   --warn-tint: rgba(227, 166, 90, 0.16);
-  --success: #568157;       /* fills only (4.25:1) */
-  --success-tint: rgba(95, 140, 85, 0.18);
+  --success: #568157;       /* fills only (3.94:1) */
+  --success-tint: rgba(86, 129, 87, 0.18);
   --success-text: #A2CAA2;  /* 9.71:1 on --paper */
 
-  /* Type on an --ink chip. --ink is cream here, so these are the warn and success
+  /* Type on an --ink chip. --ink is chalk here, so these are the warn and success
      hues brought DOWN to a shared lightness rather than up. */
   --on-ink-warn: #86500C;    /* 5.66:1 on --ink */
   --on-ink-success: #3E6534; /* 5.75:1 on --ink */
@@ -512,8 +512,8 @@
     --hairline-strong: rgba(239, 237, 231, 0.20);
     --edge: rgba(239, 237, 231, 0.46);
     --accent: #588659;
-    --accent-tint: rgba(98, 142, 85, 0.18);
-    --accent-tint-strong: rgba(98, 142, 85, 0.32);
+    --accent-tint: rgba(88, 134, 89, 0.18);
+    --accent-tint-strong: rgba(88, 134, 89, 0.32);
     --accent-ink: #9CCD9C;
     --accent-ink-hover: #B3DFB3;
     --accent-text: #A4D2A4;
@@ -549,7 +549,7 @@
     --warn-text: #E9B26C;
     --warn-tint: rgba(227, 166, 90, 0.16);
     --success: #568157;
-    --success-tint: rgba(95, 140, 85, 0.18);
+    --success-tint: rgba(86, 129, 87, 0.18);
     --success-text: #A2CAA2;
     --on-ink-warn: #86500C;
     --on-ink-success: #3E6534;
@@ -953,7 +953,7 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   cursor: pointer;
   transition: background var(--dur-base) var(--ease-out);
 }
-.landing-menu__row:hover { background: var(--paper-2); }
+.landing-menu__row:hover:not(:disabled) { background: var(--paper-2); }
 .landing-menu__row:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; border-radius: var(--r-1); }
 .landing-menu__row:disabled { cursor: progress; }
 .landing-menu__no { grid-area: no; padding-top: 5px; font-size: var(--fs-small); color: var(--ink-3); }
@@ -3096,6 +3096,7 @@ textarea.field { border-radius: var(--r-2); }
   /* The duration above is cut, the stagger is not: without this the Building screen's
      pieces wait their turn invisibly, on a screen that is up only as long as the save. */
   .iso-room__piece { animation-delay: 0s !important; }
+  .landing-plan__parts rect, .landing-plan__parts circle { animation-delay: 0s !important; }
   /* The Building screen's sweeping bar: a full, still, pale bar. */
   .build-screen__bar::after { animation: none; inset-inline-start: 0; inline-size: 100%; opacity: 0.35; }
   /* The capture plan's wall shimmer: lit and still, no pulse and no marching dashes. */

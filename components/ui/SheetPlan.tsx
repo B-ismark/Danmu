@@ -16,7 +16,8 @@
 
 import { useMemo, type CSSProperties } from 'react';
 import { buildSceneFromRoom } from '@/lib/scene-spec';
-import { footprintForLayout } from '@/lib/footprint';
+import { footprintBounds, footprintForLayout } from '@/lib/footprint';
+import { planPaintOrder } from '@/lib/plan-hit';
 import { PRESET_HEIGHT, presetById, type PresetId } from '@/lib/room-presets';
 import { formatDim } from '@/lib/units';
 import { useSettings } from '@/lib/store';
@@ -44,24 +45,29 @@ export function SheetPlan({ preset = 'rect' }: { preset?: PresetId }) {
       depth: p.depth,
       height: PRESET_HEIGHT,
     };
-    return buildSceneFromRoom(room);
+    // Biggest first, as the 2D Plan paints, so the rug lies under the table
+    // rather than over it.
+    return planPaintOrder(buildSceneFromRoom(room));
   }, [p]);
 
-  const W = p.width;
-  const D = p.depth;
-  const poly = footprintForLayout(p.id, W, D);
+  // Fitted to the outline's own bounds, not to ±width/2, so a footprint that is not
+  // centred on the origin still lands inside the sheet with its dimensions true.
+  const poly = footprintForLayout(p.id, p.width, p.depth);
+  const b = footprintBounds(poly);
+  const W = b.width;
+  const D = b.depth;
   const k = Math.min((VW - M.left - M.right) / W, (VH - M.top - M.bottom) / D);
   const x0 = M.left + (VW - M.left - M.right - W * k) / 2;
   const y0 = M.top;
-  const px = (x: number) => x0 + (x + W / 2) * k;
-  const pz = (z: number) => y0 + (z + D / 2) * k;
+  const px = (x: number) => x0 + (x - b.minX) * k;
+  const pz = (z: number) => y0 + (z - b.minZ) * k;
   const points = poly.map(([x, z]) => `${px(x).toFixed(1)},${pz(z).toFixed(1)}`).join(' ');
   const perimeter = poly.reduce((sum, [x, z], i) => {
     const [nx, nz] = poly[(i + 1) % poly.length];
     return sum + Math.hypot(nx - x, nz - z) * k;
   }, 0);
-  const right = px(W / 2);
-  const bottom = pz(D / 2);
+  const right = px(b.maxX);
+  const bottom = pz(b.maxZ);
 
   const dim = (m: number) => `${formatDim(m * 1000, unit)} ${unit}`;
   const at = (x: number, y: number): CSSProperties => ({ left: `${(x / VW) * 100}%`, top: `${(y / VH) * 100}%` });
@@ -75,14 +81,23 @@ export function SheetPlan({ preset = 'rect' }: { preset?: PresetId }) {
   const barY = bottom + 40;
   const barX = x0;
 
-  const label = `Floor plan of the starter ${p.starter.toLowerCase()}: ${dim(W)} by ${dim(D)}, ${parts.length} pieces of furniture`;
+  const label = `Floor plan of the starter ${p.starter.toLowerCase()}: ${dim(W)} by ${dim(D)}, ${parts.length} pieces including its door and windows`;
 
   return (
     <div className="landing-plan">
       <svg viewBox={`0 0 ${VW} ${VH}`} role="img" aria-label={label} className="landing-plan__svg">
-        {/* Floor, then furniture, then the walls on top, so a piece that rides a
-            wall (a window, a door) sits in the wall's line rather than under the floor. */}
+        {/* Floor, then walls, then furniture. A door or window rides the wall's inner
+            face, which is where the wall's stroke is centred, so drawn after the walls
+            it reads as an opening in them instead of vanishing under the line. */}
         <polygon className="landing-plan__floor" points={points} />
+        <polygon
+          className="landing-plan__walls"
+          points={points}
+          strokeWidth={WALL_M * k}
+          // The draw-on animation dashes the outline by its own length. `pathLength`
+          // would be simpler and Chromium ignores it for a CSS dasharray on a polygon.
+          style={{ '--perimeter': perimeter.toFixed(1) } as CSSProperties}
+        />
         <g className="landing-plan__parts">
           {parts.map((part) => {
             const w = (part.dimMM[0] / 1000) * k;
@@ -95,14 +110,6 @@ export function SheetPlan({ preset = 'rect' }: { preset?: PresetId }) {
             );
           })}
         </g>
-        <polygon
-          className="landing-plan__walls"
-          points={points}
-          strokeWidth={WALL_M * k}
-          // The draw-on animation dashes the outline by its own length. `pathLength`
-          // would be simpler and Chromium ignores it for a CSS dasharray on a polygon.
-          style={{ '--perimeter': perimeter.toFixed(1) } as CSSProperties}
-        />
         <g className="landing-plan__dims">
           <path d={`M${x0},${dimTop} H${right} ${tick(x0, dimTop)} ${tick(right, dimTop)} M${x0},${dimTop - 8} V${y0 - 6} M${right},${dimTop - 8} V${y0 - 6}`} />
           <path d={`M${dimLeft},${y0} V${bottom} ${tick(dimLeft, y0)} ${tick(dimLeft, bottom)} M${dimLeft - 8},${y0} H${x0 - 6} M${dimLeft - 8},${bottom} H${x0 - 6}`} />
@@ -111,10 +118,10 @@ export function SheetPlan({ preset = 'rect' }: { preset?: PresetId }) {
           <rect x={barX + k / 2} y={barY} width={k / 2} height={5} />
         </g>
       </svg>
-      <span className="landing-plan__label landing-plan__label--top mono" style={at((x0 + right) / 2, dimTop)}>
+      <span className="landing-plan__label landing-plan__label--top mono" style={at((x0 + right) / 2, dimTop)} aria-hidden="true">
         {dim(W)}
       </span>
-      <span className="landing-plan__label landing-plan__label--left mono" style={at(dimLeft, (y0 + bottom) / 2)}>
+      <span className="landing-plan__label landing-plan__label--left mono" style={at(dimLeft, (y0 + bottom) / 2)} aria-hidden="true">
         {dim(D)}
       </span>
       <span className="landing-plan__label landing-plan__label--bar mono" style={at(barX + k, barY + 2.5)} aria-hidden="true">

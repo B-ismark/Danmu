@@ -803,7 +803,6 @@ function EmptyState({ unreadable }: { unreadable: boolean }) {
   );
 }
 
-
 /** The bar's select-all box. A native checkbox, so its three states are announced
  *  for free; `indeterminate` has no attribute and is set on the element. */
 function SelectAllBox({ checked, mixed, onChange }: { checked: boolean; mixed: boolean; onChange: () => void }) {
