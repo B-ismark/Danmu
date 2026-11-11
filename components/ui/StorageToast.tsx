@@ -73,6 +73,13 @@ export function toast(spec: ToastSpec): number {
   return useToasts.getState().push(spec);
 }
 
+/** Take one toast down early — for a card whose action belongs to a surface that
+ *  has since gone (an "Add at…" offered by a Library panel that was closed), where
+ *  leaving it up would let the button act on a context the user has left. */
+export function dismissToast(id: number) {
+  useToasts.getState().dismiss(id);
+}
+
 /** How long work runs before it is worth a word. Under this, the result is the only
  *  thing said: a "working" card replaced a frame later reads as a flicker. Over it, a
  *  press with nothing but an 11px spinner in a rail button reads as a press that did

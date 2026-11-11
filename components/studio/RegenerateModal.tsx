@@ -67,7 +67,7 @@ export function SwapModelModal({
           nothing that can catch it, and a drag that cannot land is worse than no
           drag at all. No `onPickMany` either — swapping one piece for a SET is not
           a thing, and offering the Shift gesture here would lead nowhere. */}
-      <LibraryPicker onPick={(item) => onSwap(item, item.dimMM)} maxHeight={320} />
+      <LibraryPicker onPick={(item) => onSwap(item, item.dimMM)} maxHeight={320} pickVerb="swap" />
     </Modal>
   );
 }
