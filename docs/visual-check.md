@@ -3437,17 +3437,21 @@ changed everywhere, not only on this page.
 **What wrong looks like:** the plan's walls drawing on with an open or rounded top-left
 corner when the animation ends; the 6.00 m / 4.00 m labels or the scale bar's 1.00 m
 sitting off their lines; the drawing differing from the starter room it opens (a missing
-piece, a different size); the dimension labels not changing with the unit setting; the
+piece, a different size), above all the coffee table hidden under the rug, or no door
+and windows showing as gaps in the walls; with the OS set to reduce motion, the furniture
+appearing a beat after the walls rather than at once; the dimension labels not changing with the unit setting; the
 title block's three cells wrapping into a mess at phone width; anything running off the
 right edge. In Dark: a green tint that reads as the old olive, captions that need
 squinting on `--paper-3`, or a surface that reads as pure black rather than warm graphite.
 
 **Why eyes:** no test renders this page. It was walked in the app's browser pane at 1440
-and 375 wide in both themes, and in headless Edge at 1440. The palette passes every
+and 375 wide in both themes, and in headless Edge at 1440. The fixes from review (paint
+order, walls before furniture, the reduced-motion delay, the retinted dark tints) were
+seen only in headless Edge at 1440, never at phone width. The palette passes every
 contrast and hue assertion in `tests/color-tokens.test.ts`, but "warm, not muddy" is a
 judgement.
 
 **Supersedes** the empty half of *The Rooms page in the Flow design* above: the three
 "ways in" cards are now three numbered rows.
 
-**Branch:** `feat/landing-redesign`, not yet looked at.
+**Merged:** `5ef1ed6` (B-ismark/Danmu#300), not yet looked at.
