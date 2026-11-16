@@ -63,6 +63,58 @@ export function viewportAt(widthPx: number, { touch = false }: { touch?: boolean
   };
 }
 
+/** `viewportAt`, but one that can be RESIZED mid-test, firing `change` on every query
+ *  whose answer flips — the way a phone turned to landscape or a window dragged wider
+ *  does. `viewportAt`'s listeners are no-ops, which is right for a fixed width and means
+ *  a component that reacts to the width CHANGING has a branch no test can reach.
+ *
+ *  Returns `resize(px)` (call it inside `act`) and `restore`, for `afterEach`. */
+export function resizableViewport(
+  widthPx: number,
+  { touch = false }: { touch?: boolean } = {},
+): { resize: (px: number) => void; restore: () => void } {
+  const prior = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+  let width = widthPx;
+  const answer = (query: string) =>
+    /\(\s*(pointer:\s*coarse|hover:\s*none)\s*\)/.test(query) ? touch : widthMatches(query, width);
+  const lists: Array<{ query: string; last: boolean; listeners: Set<() => void>; mql: { matches: boolean } }> = [];
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: (query: string) => {
+      const listeners = new Set<() => void>();
+      const mql = {
+        get matches() {
+          return answer(query);
+        },
+        media: query,
+        onchange: null,
+        addEventListener: (_: string, l: () => void) => listeners.add(l),
+        removeEventListener: (_: string, l: () => void) => listeners.delete(l),
+        addListener: (l: () => void) => listeners.add(l),
+        removeListener: (l: () => void) => listeners.delete(l),
+        dispatchEvent: () => false,
+      };
+      lists.push({ query, last: answer(query), listeners, mql });
+      return mql;
+    },
+  });
+  return {
+    resize: (px: number) => {
+      width = px;
+      for (const l of lists) {
+        const now = answer(l.query);
+        if (now === l.last) continue;
+        l.last = now;
+        for (const fn of l.listeners) fn();
+      }
+    },
+    restore: () => {
+      if (prior) Object.defineProperty(window, 'matchMedia', prior);
+    },
+  };
+}
+
 /** A viewport narrow enough for the studio to stack its rails under the room.
  *
  *  640px because that is what a 1280px laptop reports at 200% browser zoom — the case
