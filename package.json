@@ -23,7 +23,7 @@
     "geist": "^1.9.2",
     "idb-keyval": "^6.3.0",
     "lucide-react": "^1.70.0",
-    "next": "^15.5.27",
+    "next": "^15.5.28",
     "postprocessing": "^6.39.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
