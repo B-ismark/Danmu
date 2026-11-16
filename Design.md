@@ -3964,7 +3964,7 @@ pnpm test         # vitest run --disableConsoleIntercept — pure logic, plus th
 pnpm test:watch   # the same, watching
 pnpm build        # next build
 pnpm lint         # eslint . --max-warnings 0 — `next lint` is gone in Next 16
-                  # flat config; ESLint must stay >= 9 or `next build` lints nothing
+                  # flat config, ESLint >= 9; the only lint gate (`next build` no longer lints)
 pnpm audit        # dependency advisories; transitive fixes live in pnpm.overrides
 pnpm vendor:ort   # copy onnxruntime-web into public/ort/ so it loads same-origin
 pnpm hash:models  # print SHA-256 digests of public/models/ for MODEL_DIGESTS
@@ -3977,12 +3977,14 @@ pull request, plus `pnpm audit` as an advisory step that cannot fail the job. On
 backend has nothing to give a build. Node is 22 and pnpm comes from
 `packageManager`, so CI does not carry a second copy of either version.
 
-The build step reads its **output** as well as its exit code, because
-`next build` runs an ESLint pass of its own that can fail while the build still
-exits 0 — an ESLint below 9 gets handed eslintrc options and lints nothing, and a
-config that ignores `*.config.mjs` hides itself from Next's plugin detection.
-`tests/toolchain.test.ts` asserts both invariants directly, so they fail in
-`pnpm test` before CI ever sees them.
+The build step reads its **output** as well as its exit code, because Next 16
+reports a `next.config.mjs` key it does not recognise as a warning and builds anyway —
+a setting that silently stopped meaning anything. (Up to Next 15 the same grep caught
+`next build`'s own ESLint pass linting nothing while exiting 0; Next 16 removed that
+pass, so `pnpm lint` is the only lint gate.) `tests/toolchain.test.ts` pins what the
+lint config itself must keep: ESLint >= 9, `next/typescript` extended, the config not
+ignoring itself, and the classic React hook rules on while the React Compiler's are
+deliberately off.
 
 Next's build cache (`.next/cache`) is carried between runs, keyed on the lockfile
 plus the sources a build reads — not `**/*.ts`, which would hash `node_modules`

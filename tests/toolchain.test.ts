@@ -1,22 +1,17 @@
-// Two properties of the lint setup that `next build` depends on, and that its
-// exit code does not cover.
+// Properties of the lint setup that no exit code covers.
 //
-// `next build` runs its own ESLint pass over `eslint.config.mjs`. Both ways that
-// pass can break print one line and then **exit 0 having linted nothing** — a
-// silently skipped gate wearing a green build. Both have shipped here once:
+// Until Next 16, `next build` ran its own ESLint pass over `eslint.config.mjs`, and
+// both ways that pass broke printed one line and then **exited 0 having linted
+// nothing** — an ESLint 8.57 handed eslintrc options, and a config that ignored
+// *itself* hiding from Next's plugin detection. Next 16 removed that pass, so
+// `pnpm lint` is the only lint gate. What is left to pin is the config itself: that it
+// loads, carries Next's rules, lints itself, can see a dead import, and keeps the
+// classic hook rules on now that the React Compiler's are deliberately off.
 //
-//   · ESLint 8.57 with a flat config. Next only strips the eslintrc-era options
-//     (`useEslintrc`, `extensions`, …) at ESLint >= 9; below that it loads
-//     `FlatESLint` and hands it eslintrc options, so the pass dies before the
-//     first file. `pnpm lint` is unaffected and stays green, which is why no
-//     check anybody was reading caught it.
-//   · A `*.config.mjs` ignore entry — what `.eslintignore` used to carry. Next
-//     detects its plugin with `calculateConfigForFile('eslint.config.mjs')`, so
-//     a config that ignores *itself* resolves to nothing and the build reports
-//     the plugin missing while every Next rule is in fact firing.
-//
-// These assertions are the fast, local half of that guard; `.github/workflows/ci.yml`
-// reads the build's own output as a backstop for a third way nobody has found yet.
+// `.github/workflows/ci.yml` still reads the build's own output as well as its exit
+// code, for the same reason: Next 16 also reports an unrecognised `next.config.mjs`
+// key as a warning and carries on, which is how the old `eslint` key would have sat
+// there doing nothing.
 //
 // A third invariant of the same shape lives at the bottom of this file, about the
 // `test` script rather than the lint one: vitest 4's default reporter DISCARDS
@@ -32,7 +27,7 @@ import semver from 'semver';
 const ROOT = join(__dirname, '..');
 const CONFIG = 'eslint.config.mjs';
 
-/** Loading ESLint and resolving `eslint-config-next` through `FlatCompat` is real
+/** Loading ESLint and resolving `eslint-config-next` is real
  *  work — a cold call measured 5.8 s on Windows, which overran the harness's own bound
  *  and failed the FIRST of these tests while the others passed on the warm module
  *  cache. The instance is reused (`calculateConfigForFile` only reads) and the three
@@ -69,7 +64,8 @@ async function lintProbe(file: string, text: string) {
 }
 
 describe('ESLint major version', () => {
-  // Below 9 the build lints nothing and says so in a line that does not fail it.
+  // Flat config is the only format here and eslint-config-next 16 needs >= 9. (Below 9,
+  // Next 15's build lint pass also silently linted nothing; that pass is gone.)
   it('is at least 9, installed', async () => {
     const { ESLint } = await import('eslint');
     expect(semver.gte(ESLint.version, '9.0.0')).toBe(true);
@@ -85,9 +81,9 @@ describe('ESLint major version', () => {
   });
 });
 
-describe('the flat config, as `next build` reads it', () => {
-  // The exact call Next makes. If this stops finding the plugin, the build warns
-  // and carries on, so nothing else would tell us.
+describe('the flat config', () => {
+  // Resolved for the config file itself: it lints itself, and an ignore entry that
+  // swallowed it would take the root config files out of the gate with no error.
   it('exposes @next/next when resolved for eslint.config.mjs itself', async () => {
     const resolved = await resolveFor(CONFIG);
     const plugins = resolved?.plugins;
@@ -111,13 +107,26 @@ describe('the flat config, as `next build` reads it', () => {
     expect(resolved?.rules).toHaveProperty('react-hooks/exhaustive-deps');
   }, RESOLVE_TIMEOUT);
 
+  it('keeps the classic hook rules on while the React Compiler rules are off', async () => {
+    // eslint.config.mjs switches off `refs`, `set-state-in-effect`, `immutability` and
+    // `purity` (why is in its header). A blanket `react-hooks/*: off`, or a later block
+    // that went one rule too far, would also silence the two that catch real bugs —
+    // and every gate would stay green. Asked of a real source file, by severity.
+    const rules = (await resolveFor('components/studio/TopBar.tsx'))?.rules ?? {};
+    const sev = (r: string) => [rules[r]].flat()[0];
+    expect(sev('react-hooks/rules-of-hooks'), 'rules-of-hooks must be an error').toBe(2);
+    expect(sev('react-hooks/exhaustive-deps'), 'exhaustive-deps must stay live').not.toBe(0);
+    for (const r of ['refs', 'set-state-in-effect', 'immutability', 'purity']) {
+      expect(sev(`react-hooks/${r}`), `react-hooks/${r} is meant to be off`).toBe(0);
+    }
+  }, RESOLVE_TIMEOUT);
+
   it('extends next/typescript, so the lint gate can see a dead import', async () => {
     // The third load-bearing property of eslint.config.mjs, and the one nothing was
     // holding. `next/typescript` is what puts `@typescript-eslint/no-unused-vars`
     // in the chain; without it that rule is simply absent, `tsconfig.json` sets no
-    // `noUnusedLocals`, and `pnpm lint --max-warnings 0`, `pnpm typecheck` and
-    // `next build`'s own lint pass are ALL structurally unable to see an unused
-    // import. Deleting the extends line leaves every gate green — which is how the
+    // `noUnusedLocals`, and `pnpm lint --max-warnings 0` and `pnpm typecheck` are
+    // BOTH structurally unable to see an unused import. Deleting the extends line leaves every gate green — which is how the
     // repo shipped thirteen dead imports across nine files, one of them a
     // `collidesAt` that had outlived its call site.
     //
@@ -299,7 +308,7 @@ describe('vitest is configured so a component test can exist', () => {
     expect((await config()).test.environment).toBe('node');
   });
 
-  it('names the automatic JSX runtime, which tsconfig deliberately does not', async () => {
+  it('names the automatic JSX runtime itself, rather than inheriting tsconfig\'s Next-owned value', async () => {
     expect((await config()).oxc.jsx.runtime).toBe('automatic');
   });
 

@@ -38,6 +38,10 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         </div>
         <div style={{ display: 'flex', gap: 8, padding: '14px 24px', background: 'var(--paper-2)', borderTop: '1px solid var(--hairline)' }}>
           {/* '/' is the rooms page — the first screen, with or without rooms. */}
+          {/* A full document load on purpose, not `router.push`: this screen means the
+              React tree crashed, and a fresh document is what discards whatever state
+              broke it. Client navigation would carry that state along. */}
+          {/* eslint-disable-next-line @next/next/no-location-assign-relative-destination */}
           <button className="ds-btn ds-btn--lg" style={{ flex: 1, justifyContent: 'center' }} onClick={() => (window.location.href = '/')}>
             Back to your rooms
           </button>
