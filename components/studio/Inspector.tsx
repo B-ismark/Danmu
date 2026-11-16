@@ -903,11 +903,18 @@ function DimensionEditor({
     const hi = i === 2 ? range.max[i] : Math.max(range.min[i], Math.min(range.max[i], Math.max(space[i].maxMM, value[i])));
     return boundsToUnit(range.min[i], hi, dimUnit);
   };
-  // Tagged with the piece it was said about, so selecting another piece hides it in
-  // the same render rather than painting the last piece's refusal for a frame and
-  // clearing it in an effect. It also keeps a late commit (the debounce below) from
-  // pinning one piece's refusal onto the next.
+  // A refusal is about one piece and one typed number. Selecting another piece drops
+  // it during render — not in an effect, which painted the last piece's sentence onto
+  // the next for a frame — and dropping it, rather than only hiding it, is what keeps
+  // it from coming back with the first piece, whose field by then shows its real width
+  // again (tests/size-refusal.test.tsx). The tag keeps a late commit (the debounce
+  // below) from pinning one piece's refusal onto the next.
   const [refused, setRefused] = useState<{ partId: string; text: string } | null>(null);
+  const [refusedSeen, setRefusedSeen] = useState(partId);
+  if (refusedSeen !== partId) {
+    setRefusedSeen(partId);
+    setRefused(null);
+  }
   const refusal = refused?.partId === partId ? refused.text : null;
   const setRefusal = (text: string | null) => setRefused(text === null ? null : { partId, text });
   // Open by default. It was collapsed on the reasoning that typing millimetres is
