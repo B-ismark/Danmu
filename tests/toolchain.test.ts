@@ -223,9 +223,9 @@ describe('the test script keeps its console output', () => {
 //   · `environment` flipping to `jsdom` for the whole suite would make everything
 //     pass while quietly charging every pure-logic file for a DOM. `CLAUDE.md` says
 //     per-file, and the per-file pragma only works if the default stays `node`.
-//   · `esbuild.jsx` falling back to the classic runtime emits `React.createElement`
-//     into files that never import React, so **every** `.tsx` test fails to
-//     compile. That one is loud, and it is pinned because the setting spent months
+//   · the JSX runtime falling back to classic (esbuild, Vite 7) or to `preserve`
+//     (Oxc, Vite 8, which reads tsconfig's `jsx`) means **every** `.tsx` test fails
+//     to compile. That one is loud, and it is pinned because the setting spent months
 //     justified by a comment naming a file that had been deleted — the next reader
 //     was one grep away from removing it as dead.
 describe('vitest is configured so a component test can exist', () => {
@@ -241,7 +241,7 @@ describe('vitest is configured so a component test can exist', () => {
         testTimeout?: number;
         hookTimeout?: number;
       };
-      esbuild: { jsx: string };
+      oxc: { jsx: { runtime: string } };
     };
   }
 
@@ -309,7 +309,7 @@ describe('vitest is configured so a component test can exist', () => {
   });
 
   it('names the automatic JSX runtime, which tsconfig deliberately does not', async () => {
-    expect((await config()).esbuild.jsx).toBe('automatic');
+    expect((await config()).oxc.jsx.runtime).toBe('automatic');
   });
 
   // ── The jsdom shims, which are one thing and were ten ──────────────────────
