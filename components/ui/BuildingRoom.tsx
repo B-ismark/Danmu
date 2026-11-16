@@ -31,6 +31,7 @@ export function BuildingRoom({ facts, dimUnit }: { facts: BuildingFacts | null; 
   // Filled in after mount, not rendered with the page: a live region is announced
   // when its text CHANGES, so text present from the first paint is usually not read.
   const [announce, setAnnounce] = useState('');
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- a live region is announced when its text changes, so it must change after first paint
   useEffect(() => setAnnounce('Building your room'), []);
   return (
     <main className="build-screen" aria-busy="true">

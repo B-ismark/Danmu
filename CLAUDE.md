@@ -950,15 +950,21 @@ the boundary honest in both directions: a module only tests import does not belo
   - **The config must not ignore itself.** It lints itself and the other root config
     files, which is why `postcss.config.mjs` and `eslint.config.mjs` name their default
     export; a `*.config.mjs` ignore entry would take them out of the gate silently.
-  - **The React Compiler's hook rules are off, the classic ones on.** `eslint-config-next`
-    16 brings `eslint-plugin-react-hooks` 7, whose recommended set adds `refs`,
-    `set-state-in-effect`, `immutability` and `purity`. This app does not use the React
-    Compiler, and those four reported 72 findings in 29 files that were overwhelmingly
-    the app's own deliberate patterns (`Draggable` mutating its refs and Three objects
-    in pointer handlers, `Date.now()` in a click handler read as "during render").
-    Rewriting the drag path to satisfy a compiler nothing runs is how drag breaks
-    quietly. `rules-of-hooks` and `exhaustive-deps` stay on. `set-state-in-effect` is
-    the one with real (small) wins in it — a later, separate cleanup, if ever.
+  - **Three React Compiler hook rules are off; `set-state-in-effect` and the classic
+    ones are on.** `eslint-config-next` 16 brings `eslint-plugin-react-hooks` 7, whose
+    recommended set adds `refs`, `set-state-in-effect`, `immutability` and `purity`.
+    This app does not use the React Compiler, and `refs` / `immutability` / `purity`
+    reported 52 findings that were overwhelmingly the app's own deliberate patterns
+    (`Draggable` mutating its refs and Three objects in pointer handlers, `Date.now()`
+    in a click handler read as "during render"). Rewriting the drag path to satisfy a
+    compiler nothing runs is how drag breaks quietly, so those three are off.
+    `set-state-in-effect` is on: seven of its twenty findings were real — state reset
+    in an effect when a prop changed, which paints one frame of the old state (the
+    Inspector's "won't fit" sentence flashing onto the next piece) — and now reset
+    during render, against the value last seen. The other thirteen read the browser
+    after mount, start a timer, or hand off from a store, and each carries a one-line
+    `eslint-disable-next-line … -- reason`. **A new prop-driven reset goes in render,
+    not in an effect**; a new genuine effect states its reason the same way.
 
   All of it is pinned by `tests/toolchain.test.ts` — which asserts the *declared* range
   admits nothing below 9, not just the installed version, resolves the config for

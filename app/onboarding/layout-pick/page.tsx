@@ -94,6 +94,7 @@ export default function LayoutPickPage() {
   // wait on a Suspense boundary for one boolean.
   const [photoFirst, setPhotoFirst] = useState(false);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the address is only readable in the browser; the server render cannot know it
     setPhotoFirst(new URLSearchParams(window.location.search).get('then') === 'photos');
   }, []);
   // Roving tabindex needs the DOM nodes: arrow keys move focus, not just state.

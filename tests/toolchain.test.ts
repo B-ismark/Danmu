@@ -107,16 +107,18 @@ describe('the flat config', () => {
     expect(resolved?.rules).toHaveProperty('react-hooks/exhaustive-deps');
   }, RESOLVE_TIMEOUT);
 
-  it('keeps the classic hook rules on while the React Compiler rules are off', async () => {
-    // eslint.config.mjs switches off `refs`, `set-state-in-effect`, `immutability` and
-    // `purity` (why is in its header). A blanket `react-hooks/*: off`, or a later block
-    // that went one rule too far, would also silence the two that catch real bugs —
-    // and every gate would stay green. Asked of a real source file, by severity.
+  it('keeps the classic hook rules and set-state-in-effect on, three compiler rules off', async () => {
+    // eslint.config.mjs switches off `refs`, `immutability` and `purity` (why is in its
+    // header) and keeps `set-state-in-effect`, whose remaining sites each carry a
+    // reasoned disable. A blanket `react-hooks/*: off`, or a later block that went one
+    // rule too far, would also silence the rules that catch real bugs — and every gate
+    // would stay green. Asked of a real source file, by severity.
     const rules = (await resolveFor('components/studio/TopBar.tsx'))?.rules ?? {};
     const sev = (r: string) => [rules[r]].flat()[0];
     expect(sev('react-hooks/rules-of-hooks'), 'rules-of-hooks must be an error').toBe(2);
     expect(sev('react-hooks/exhaustive-deps'), 'exhaustive-deps must stay live').not.toBe(0);
-    for (const r of ['refs', 'set-state-in-effect', 'immutability', 'purity']) {
+    expect(sev('react-hooks/set-state-in-effect'), 'set-state-in-effect must be an error').toBe(2);
+    for (const r of ['refs', 'immutability', 'purity']) {
       expect(sev(`react-hooks/${r}`), `react-hooks/${r} is meant to be off`).toBe(0);
     }
   }, RESOLVE_TIMEOUT);

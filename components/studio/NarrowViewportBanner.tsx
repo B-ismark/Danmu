@@ -95,6 +95,7 @@ export function NarrowViewportBanner() {
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is browser-only; starting dismissed is what stops a server-rendered flash
     setDismissed(localStorage.getItem(DISMISS_KEY) === '1');
   }, []);
 

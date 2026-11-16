@@ -663,11 +663,12 @@ export function IdeasPanel({
  *  Measured, like everything else that floats here, and kept true on resize. */
 function useDockTop(phone: boolean): number | null {
   const [top, setTop] = useState<number | null>(null);
+  // Off a phone there is no bar. Forgotten during render rather than in the effect,
+  // so leaving phone width never paints a frame docked to a bar that is gone, and a
+  // return to it waits for a fresh measurement instead of reusing an old one.
+  if (!phone && top !== null) setTop(null);
   useEffect(() => {
-    if (!phone) {
-      setTop(null);
-      return;
-    }
+    if (!phone) return;
     const measure = () => {
       const bar = document.querySelector('.phone-toolbar');
       setTop(bar ? bar.getBoundingClientRect().top : null);

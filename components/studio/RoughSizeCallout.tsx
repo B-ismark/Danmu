@@ -77,6 +77,7 @@ export function RoughSizeCallout() {
 
   const show = rough && hydrated && !gone && !!roomId;
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- a mounted flag: the portal target exists only in the browser
   useEffect(() => setMounted(true), []);
 
   useLayoutEffect(() => {

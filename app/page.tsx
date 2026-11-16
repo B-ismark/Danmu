@@ -86,6 +86,7 @@ export default function RoomsPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reload() is async and sets state only after the IndexedDB read resolves
     reload();
   }, [reload]);
 
