@@ -65,6 +65,7 @@ export function PartTree() {
   useEffect(() => {
     const s = wanted && useRailIntent.getState().takeLeft();
     if (!s) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- consumes a one-shot request from the rail-intent store; taking it is a side effect
     setSec((v) => ({ ...v, [s]: true }));
     setLandOn(s);
   }, [wanted]);
@@ -73,6 +74,7 @@ export function PartTree() {
     const el = rootRef.current?.querySelector<HTMLElement>(`[data-rail-section="${landOn}"]`);
     el?.scrollIntoView({ block: 'nearest' });
     el?.querySelector<HTMLElement>('.rail-section-toggle')?.focus({ preventScroll: true });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: cleared after the DOM scroll and focus it exists to trigger
     setLandOn(null);
   }, [landOn]);
   const listRef = useRef<HTMLDivElement>(null);

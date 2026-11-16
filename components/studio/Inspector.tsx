@@ -903,8 +903,13 @@ function DimensionEditor({
     const hi = i === 2 ? range.max[i] : Math.max(range.min[i], Math.min(range.max[i], Math.max(space[i].maxMM, value[i])));
     return boundsToUnit(range.min[i], hi, dimUnit);
   };
-  const [refusal, setRefusal] = useState<string | null>(null);
-  useEffect(() => setRefusal(null), [partId]);
+  // Tagged with the piece it was said about, so selecting another piece hides it in
+  // the same render rather than painting the last piece's refusal for a frame and
+  // clearing it in an effect. It also keeps a late commit (the debounce below) from
+  // pinning one piece's refusal onto the next.
+  const [refused, setRefused] = useState<{ partId: string; text: string } | null>(null);
+  const refusal = refused?.partId === partId ? refused.text : null;
+  const setRefusal = (text: string | null) => setRefused(text === null ? null : { partId, text });
   // Open by default. It was collapsed on the reasoning that typing millimetres is
   // the rare path — true of typing, and beside the point for READING: the three
   // numbers are what tells you whether the piece you just dropped is the size you
@@ -1304,10 +1309,16 @@ function MountHeightRow({
   onCommit: (bottomMM: number) => void;
 }) {
   const dimUnit = useSettings((s) => s.dimUnit);
-  const [draft, setDraft] = useState(() => formatDim(Math.max(0, bottomMM), dimUnit));
-  useEffect(() => {
-    setDraft(formatDim(Math.max(0, bottomMM), dimUnit));
-  }, [bottomMM, dimUnit]);
+  // The draft follows the piece's height whenever that changes from outside (a drag,
+  // an undo, a unit switch). Reset during render, against the value it was last
+  // synced to, so the field never paints one frame of the old number first.
+  const synced = formatDim(Math.max(0, bottomMM), dimUnit);
+  const [draft, setDraft] = useState(synced);
+  const [draftOf, setDraftOf] = useState(synced);
+  if (draftOf !== synced) {
+    setDraftOf(synced);
+    setDraft(synced);
+  }
 
   // A piece TALLER than the room has no legal mount height at all, and the caller
   // hands that over as a negative `maxBottomMM` (`room.height - dimMM[2]/1000`).

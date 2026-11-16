@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  useEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -60,14 +59,17 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (hex
   });
   const [hexDraft, setHexDraft] = useState(value.toUpperCase());
 
-  useEffect(() => {
+  // Re-synced during render, against the hex last seen, so a colour changed from
+  // outside (undo, another swatch) never paints one frame of the old one first.
+  const [seen, setSeen] = useState(value);
+  if (seen !== value) {
+    setSeen(value);
     if (hsvToHex(...hsv).toLowerCase() !== value.toLowerCase()) {
       const rgb = hexToRgb(value);
       if (rgb) setHsv(rgbToHsv(...rgb));
     }
     setHexDraft(value.toUpperCase());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }
 
   const [h, s, v] = hsv;
 

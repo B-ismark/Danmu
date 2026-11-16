@@ -33,6 +33,7 @@ export function DemoBanner() {
 
   useEffect(() => {
     if (!roomId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is browser-only; starting dismissed is what stops a server-rendered flash
     setDismissed(localStorage.getItem(`danmu-demo-dismissed-${roomId}`) === '1');
     // `live` drops a read that lands after the room changed or this unmounted.
     let live = true;

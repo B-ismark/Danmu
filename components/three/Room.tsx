@@ -736,6 +736,7 @@ function GroundShadows({ hi }: { hi: boolean }) {
   const invalidate = useThree((s) => s.invalidate);
   const [baking, setBaking] = useState(true);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- starts a timer: shadows re-bake for 300 ms after a change, then settle
     setBaking(true);
     const t = setTimeout(() => setBaking(false), 300);
     return () => clearTimeout(t);

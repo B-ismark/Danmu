@@ -300,10 +300,13 @@ export function RoomTools() {
   // Offer a re-fit when a size change is what broke things. See `useRefitOffer`.
   useRefitOffer(effParts, room.footprint, dims, problems, appPlaced);
 
-  // Close any open panel when a drag starts.
-  useEffect(() => {
+  // Close any open panel when a drag starts — during render, against the drag last
+  // seen, so the panel is gone from the first frame of the drag rather than the second.
+  const [seenDrag, setSeenDrag] = useState(draggingId);
+  if (seenDrag !== draggingId) {
+    setSeenDrag(draggingId);
     if (draggingId) setPanel(null);
-  }, [draggingId]);
+  }
 
   // Esc closes the open panel — it was previously only closable by re-clicking
   // the trigger or clicking somewhere harmless.

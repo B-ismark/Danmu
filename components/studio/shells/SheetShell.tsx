@@ -75,10 +75,14 @@ function PaneShell({ surface }: { surface: ReactNode }) {
   const selectedWall = useStudio((s) => s.selectedWall);
 
   // A new selection points the panel at what acts on it; here the panel is always
-  // open, so switching costs the room nothing.
-  useEffect(() => {
+  // open, so switching costs the room nothing. Switched during render, against the
+  // selection last seen, so the Room tab never paints one frame under a new pick.
+  const selection = `${selectedPartId ?? ''}|${selectedWall ?? ''}|${selected}`;
+  const [seenSelection, setSeenSelection] = useState(selection);
+  if (seenSelection !== selection) {
+    setSeenSelection(selection);
     if (selected) setTab('details');
-  }, [selectedPartId, selectedWall, selected]);
+  }
 
   return (
     <div className="pane-shell">
@@ -166,6 +170,7 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
   panelRef.current = panel;
   useEffect(() => {
     if (catalogOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- follows the shared Library-open flag, which other surfaces set; a store-to-sheet hand-off
       setPanel('add');
       setSnap((s) => (s === 'closed' ? 'half' : s));
     } else if (panelRef.current === 'add') {
