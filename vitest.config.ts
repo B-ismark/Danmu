@@ -80,13 +80,15 @@ export default defineConfig({
   resolve: {
     alias: { '@': resolve(__dirname, '.') },
   },
-  // Component tests import `.tsx`, and tsconfig says `jsx: "preserve"` because Next
-  // owns that transform in the app build. Vite's transformer reads the same setting:
-  // esbuild (Vite 7) fell back to the CLASSIC runtime, which emits
-  // `React.createElement` into files that — correctly, under Next — never import
-  // React, and Oxc (Vite 8) honours `preserve` outright and leaves the JSX in, so
-  // every `.tsx` test fails to parse. Naming the automatic runtime here fixes it for
-  // the test run only; the app build is untouched. Vite 8 no longer reads an
+  // Component tests import `.tsx`, and tsconfig's `jsx` belongs to Next, which
+  // rewrites it on build: `"preserve"` up to Next 15, `"react-jsx"` since 16. Vite's
+  // transformer reads that same setting, and both of its readings of `preserve` broke
+  // every `.tsx` test — esbuild (Vite 7) fell back to the CLASSIC runtime, emitting
+  // `React.createElement` into files that never import React, and Oxc (Vite 8) kept
+  // the JSX in, so nothing parsed. Next 16's `react-jsx` happens to be what the tests
+  // need, but the tests should not depend on a value another tool owns and has
+  // already changed once, so the automatic runtime is named here explicitly. It
+  // affects the test run only; the app build is untouched. Vite 8 no longer reads an
   // `esbuild` key for this, which is why the setting is `oxc` and not `esbuild`.
   //
   // This comment used to name `tests/sun-controls.test.ts` as the file that needed

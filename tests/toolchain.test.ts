@@ -308,7 +308,7 @@ describe('vitest is configured so a component test can exist', () => {
     expect((await config()).test.environment).toBe('node');
   });
 
-  it('names the automatic JSX runtime, which tsconfig deliberately does not', async () => {
+  it('names the automatic JSX runtime itself, rather than inheriting tsconfig\'s Next-owned value', async () => {
     expect((await config()).oxc.jsx.runtime).toBe('automatic');
   });
 
