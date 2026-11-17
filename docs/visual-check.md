@@ -2169,7 +2169,7 @@ inside the box.
 
 ## Look and light
 
-### High quality draws its corner shading again, on every GPU — on branch `claude/friendly-maxwell-cep4vz`, NOT LOOKED AT on a real GPU
+### High quality draws its corner shading again, on every GPU — on branch `claude/friendly-maxwell-cep4vz` (PR #307), NOT LOOKED AT on a real GPU
 
 **What was wrong, and why it was not a headless quirk.** On **High** (the default), every
 frame threw `Cannot read properties of undefined (reading 'length')` from
