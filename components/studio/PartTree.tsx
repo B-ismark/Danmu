@@ -13,6 +13,8 @@ import Link from 'next/link';
 import { RoomDimsEditor } from './RoomDimsEditor';
 import { FloorFinishEditor, floorSummary } from './FloorFinishEditor';
 import { resolveFloor } from '@/lib/floor-finish';
+import { WallFinishEditor, wallsSummary } from './WallFinishEditor';
+import { resolveWalls } from '@/lib/wall-finish';
 import { RailSection } from './RailSection';
 import { RoomTools } from './RoomTools';
 import { duplicateSelection, removeParts } from './KeyboardShortcuts';
@@ -55,7 +57,7 @@ export function PartTree() {
   // LOOKS. Room and Catalog open by default — the dimensions and the piece list
   // are what the rail is for; Style is occasional. (View is
   // behind the top bar's gear; see `ViewMenu`.)
-  const [sec, setSec] = useState({ room: true, floor: false, style: false, pieces: true });
+  const [sec, setSec] = useState({ room: true, floor: false, walls: false, style: false, pieces: true });
   const toggle = (k: keyof typeof sec) => setSec((v) => ({ ...v, [k]: !v[k] }));
   // A request to open ON a section, from a collapsed rail's icon or the empty
   // Inspector (see `lib/rail-intent.ts`). Taken once, then the section is opened,
@@ -451,6 +453,18 @@ export function PartTree() {
           onToggle={() => toggle('floor')}
         >
           <FloorFinishEditor />
+        </RailSection>
+
+        {/* What the walls are built from — one finish for the room. Each wall's colour
+            stays where it was (select the wall), and the finish multiplies it. */}
+        <RailSection
+          title="Walls"
+          anchor="walls"
+          meta={wallsSummary(resolveWalls(room.walls))}
+          open={sec.walls}
+          onToggle={() => toggle('walls')}
+        >
+          <WallFinishEditor />
         </RailSection>
 
         <RailSection

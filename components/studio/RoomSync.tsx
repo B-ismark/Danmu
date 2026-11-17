@@ -40,6 +40,7 @@ function withShell(stored: RoomData, room: SceneRoom): RoomData {
       height: room.height,
       wallColors: room.wallColors,
       floor: room.floor,
+      walls: room.walls,
       footprint: room.footprint,
       site: room.site,
     },

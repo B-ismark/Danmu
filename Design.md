@@ -1719,6 +1719,20 @@ pair and they are **one row**, and the measured one survives in either photo ord
   it and was removed in review because it changed nothing a person could see. A
   room saved with one still loads; the value is ignored, and a room file does not
   write it out.
+- A **Finish** section beside it, and it is NOT that row back. It offers only what the
+  piece draws — **Wood** (Natural / Painted / Lacquered) and **Fabric** (Linen / Velvet /
+  Bouclé) — and every option changes what the surface LOOKS like: painted wood loses the
+  grain's colour and keeps a faint relief, lacquer is a mirror-sharp highlight, velvet
+  drops the weave for a crushed pile and a tight edge sheen, bouclé is deep loops.
+  `tests/finish-visibility.test.ts` holds each one to ×3 against its default on tone,
+  relief, gloss or sheen, prints the table every run, and shows the deleted Satin step
+  failing the same bar. Which pieces get which control is `WOOD_SHAPES` /
+  `FABRIC_SHAPES` (`lib/part-finish.ts`), derived by walking every renderer and
+  asserted equal in both directions (`tests/part-finish.test.tsx`), so a frame, a lamp
+  shade or the clothes on a rack count and nothing gets a control that does nothing.
+  Applied through one context (`components/three/part-finish.tsx`) read by `Box`, the
+  instanced sets and `FinishMaterial`, so no renderer can be missed. The fields are
+  `woodFinish` / `fabricFinish`, never `finish`, so the old row's value stays dead.
 
 ### Scanned pieces are approximate — decided 2026-10-03
 
@@ -2208,6 +2222,22 @@ blocks opens as a box clamped to a box's limits. It does not carry the shelf (§
   bounce, or it read as a brown lid. Generation is deterministic (a seeded RNG, so a
   floor's boards do not reshuffle on reload) and costs ~0.4 s of main-thread time the
   first time a room opens, measured in a software-rendered headless Chromium.
+- **The walls are a choice of finish too** (`lib/wall-finish.ts`, the left rail's
+  **Walls** section in `components/studio/WallFinishEditor.tsx`): plaster (the default,
+  and the ceiling's), smooth paint, limewash, vertical panelling, brick in a running bond
+  and bevelled metro tile, with matching or contrast mortar/grout on the last two. ONE
+  finish for the room, multiplying each wall's own paint colour — a finish is how a room
+  was built, a colour how it was painted — so a pale wall over brick is painted brick.
+  `RoomData.walls` is optional for the floor's reason and travels in the scene file.
+- **A finish is prepared without freezing the page.** Building brick, tile or stone
+  takes a few hundred milliseconds of main-thread work the first time. `useStagedMaps`
+  (`RoomShell.tsx`) keeps the old finish on screen, marks the new one pending
+  (`lib/finish-loading.ts`), lets a frame paint, then builds; a newer choice cancels
+  the older build, and a stale finish cannot clear the newer one's state. The editors
+  show "Laying the new floor…" / "Finishing the walls…" with a spinner in an
+  always-mounted live region, faded in after `--dur-quick` so a quick build never
+  flashes one. The room's first finish is built synchronously, so a room never opens
+  on the wrong floor and then changes.
 - **The floor is a choice of material** (`lib/floor-finish.ts`, the left rail's
   **Floor** section in `components/studio/FloorFinishEditor.tsx`). Six kinds —
   planks, herringbone, ceramic tile, stone, concrete, carpet — each with the module

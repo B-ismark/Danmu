@@ -241,6 +241,21 @@ running into each other in the narrow left rail (laptop width, 1024–1279 px); 
 colour dots wrapping the mixer onto a row of its own; a pause on first choosing
 stone (~0.4 s, measured in software rendering).
 
+### Wall finishes, furniture finishes, loading line — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
+
+Checked in headless Chromium on **low** quality, at the evening mood only. Where to
+click: open **Walls** in the left rail and step through all six finishes and both
+mortar/grout choices, with walls painted different colours; select a sofa, a dining
+chair, a door and a mirror and try every **Finish** option on each. What wrong looks
+like: brick or tile joints shimmering at a distance (metro tile is the finest pattern
+in the app — 150 × 75 mm with a 2 mm joint — and read faintly in the evening light);
+panelling boards not lining up at a wall's corner; a repeat visible across a long
+brick wall; velvet reading as plain plastic in daylight (its sheen is the material);
+lacquer showing no reflection at all; a piece with half its parts finished (legs
+lacquered, top not); the **Laying the new floor…** / **Finishing the walls…** line
+flashing for a frame on a quick build, or never showing on a slow one (it appeared
+in the headless run for every first-time finish).
+
 ## Drag and selection
 
 *Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone,

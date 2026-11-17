@@ -66,6 +66,7 @@ export async function saveSceneFile(roomId: string) {
         height: room.height,
         wallColors: room.wallColors,
         floor: room.floor,
+        walls: room.walls,
         // The polygon is written even for a preset shape, not just a customised
         // one. It costs a few hundred bytes and makes the file say what the room
         // IS rather than which preset to re-derive it from — so a room survives

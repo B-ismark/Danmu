@@ -43,6 +43,7 @@
 // every open — a floor whose boards reshuffle on reload is not a floor.
 
 import type { FloorKind, Grout } from './floor-finish';
+import type { WallKind } from './wall-finish';
 import { DataTexture, LinearMipmapLinearFilter, NoColorSpace, RepeatWrapping, RGBAFormat, UnsignedByteType, type Texture } from 'three';
 
 // ─── Pure fields ─────────────────────────────────────────────────────────────
@@ -470,6 +471,188 @@ export function metalFields(size = 256, seed = 5): SurfaceFields {
   return { ...f, tileM: 0.25, bump: 2.5 };
 }
 
+// ─── Wall finishes ───────────────────────────────────────────────────────────
+//
+// A wall's UVs are its own shape's coordinates: U runs along the wall, V up it, both
+// in metres (`components/three/RoomShell.tsx`). So a course of brick lies along U and
+// a panelling board stands along V, on every wall alike.
+
+/** Smooth painted wall: an eggshell coat over a skimmed wall, with only the faintest
+ *  unevenness — the finish that is meant to disappear behind the room. */
+export function paintFields(size = 256, seed = 11): SurfaceFields {
+  const mottle = fbm(2, 2, 3, seed);
+  const peel = fbm(64, 64, 1, seed + 3);
+  const f = fields(size, (u, v) => {
+    const p = peel(u, v);
+    return [0.5 + 0.5 * p, 1 - 0.035 * mottle(u, v) - 0.01 * p, 0.86 + 0.08 * p];
+  });
+  return { ...f, tileM: 1, bump: 0.5 };
+}
+
+/** Limewash: a chalky, cloudy coat laid on in overlapping brush sweeps, so the colour
+ *  moves across the wall in soft patches. The cloud is the look, and it is strong on
+ *  purpose — a limewash that reads as flat paint is the failure. */
+export function limewashFields(size = 512, seed = 12): SurfaceFields {
+  const cloud = fbm(3, 3, 5, seed);
+  const sweepA = fbm(5, 20, 2, seed + 3);
+  const sweepB = fbm(20, 5, 2, seed + 5);
+  const chalk = fbm(128, 128, 1, seed + 7);
+  const f = fields(size, (u, v) => {
+    const c = cloud(u, v);
+    const s = 0.5 * sweepA(u, v) + 0.5 * sweepB(u, v);
+    const tone = 1 - 0.26 * smoothstep(0.25, 0.8, c) - 0.07 * s - 0.03 * chalk(u, v);
+    return [0.4 * s + 0.6 * chalk(u, v), tone, 0.96 + 0.04 * chalk(u, v)];
+  });
+  return { ...f, tileM: 2, bump: 0.9 };
+}
+
+/** Tongue-and-groove panelling: painted boards standing up the wall, a V-groove
+ *  between each, and the grain only just showing through the paint. */
+export function panellingFields(boardMM = 120, size = 512, seed = 13): SurfaceFields {
+  const N = tilesPerRepeat(boardMM, 1.2);
+  const tileM = (N * boardMM) / 1000;
+  const mmPerTexel = (tileM * 1000) / size;
+  const g = grain(seed, 30);
+  const f = fields(size, (u, v) => {
+    const x = u * N;
+    const b = Math.floor(x);
+    const fx = x - b;
+    const h = rng(seed * 977 + (b % N) * 131 + 1);
+    h();
+    const shade = h();
+    const edgeMM = Math.min(fx, 1 - fx) * boardMM;
+    // A 3 mm chamfer each side of the joint, its two faces meeting in a dark line.
+    const groove = 1 - smoothstep(0, 3 + mmPerTexel, edgeMM);
+    const gv = g(frac(fx * 0.12 + shade * 3.7), frac(v + shade * 0.61));
+    const tone = (0.97 + 0.03 * shade) * (1 - 0.03 * gv.late) * (1 - 0.35 * groove * groove);
+    const height = (0.7 - 0.04 * gv.late + 0.03 * gv.s) * (1 - 0.7 * groove);
+    return [height, tone, 0.9 + 0.1 * groove];
+  });
+  return { ...f, tileM, bump: 3 };
+}
+
+/** Which unit of a running bond a point is on: `cols` units across a tile, `rows`
+ *  courses up it, every other course shifted half a unit. `rows` is even, so the
+ *  shift wraps with the tile. Distances are in the unit's own fractions. */
+function bondCell(u: number, v: number, cols: number, rows: number) {
+  const y = v * rows;
+  const j = Math.floor(y);
+  const x = u * cols + (j % 2 === 1 ? 0.5 : 0);
+  const i = Math.floor(x);
+  return { i: ((i % cols) + cols) % cols, j: ((j % rows) + rows) % rows, fx: x - i, fy: y - j };
+}
+
+/** Brick in running bond: a 215 × 65 mm face with a 10 mm joint, every brick its own
+ *  shade, pitted, with ragged arrises, and the mortar raked back from the face. The
+ *  repeat is 0.9 m — four bricks and twelve courses — so it holds whole bricks. */
+export function brickFields(grout: 'match' | 'dark' = 'match', size = 1024, seed = 14): SurfaceFields {
+  const COLS = 4;
+  const ROWS = 12;
+  const L = 225;
+  const H = 75;
+  const JOINT = 10;
+  const tileM = (COLS * L) / 1000;
+  const mmPerTexel = (tileM * 1000) / size;
+  const pit = fbm(160, 160, 1, seed);
+  const face = fbm(24, 24, 2, seed + 3);
+  const ragged = fbm(90, 90, 1, seed + 5);
+  const sand = fbm(256, 256, 1, seed + 7);
+  const f = fields(size, (u, v) => {
+    const c = bondCell(u, v, COLS, ROWS);
+    const h = rng(seed * 977 + c.i * 131 + c.j * 17 + 1);
+    h();
+    const shade = h();
+    const fired = h();
+    // Distance in from the joint's centre line, roughened so an arris is not a ruler.
+    const edgeMM = Math.min(Math.min(c.fx, 1 - c.fx) * L, Math.min(c.fy, 1 - c.fy) * H) - 2.5 * ragged(u, v);
+    const inJoint = 1 - smoothstep(JOINT / 2 - mmPerTexel, JOINT / 2 + mmPerTexel, edgeMM);
+    const p = smoothstep(0.62, 0.85, pit(u, v));
+    const brick = (0.84 + 0.16 * shade) * (1 - 0.08 * face(u, v) - 0.12 * p) * (fired > 0.85 ? 0.88 : 1);
+    const mortar = (grout === 'dark' ? GROUT_TONE.dark : 0.93) * (1 - 0.06 * sand(u, v));
+    const tone = brick * (1 - inJoint) + mortar * inJoint;
+    const height = (0.8 + 0.08 * face(u, v) - 0.25 * p) * (1 - inJoint) + (0.2 + 0.05 * sand(u, v)) * inJoint;
+    return [height, Math.min(1, tone), 0.92 + 0.08 * sand(u, v)];
+  });
+  return { ...f, tileM, bump: 4 };
+}
+
+/** Metro tile: 150 × 75 mm glazed bricks with a 2 mm joint, bevelled so each one
+ *  catches its own highlight along the top edge — the bevel is what makes a metro
+ *  wall read from across a room. Repeat 0.6 m, four tiles by eight courses. */
+export function metroTileFields(grout: 'match' | 'dark' = 'match', size = 1024, seed = 15): SurfaceFields {
+  const COLS = 4;
+  const ROWS = 8;
+  const L = 150;
+  const H = 75;
+  const JOINT = 2;
+  const tileM = (COLS * L) / 1000;
+  const mmPerTexel = (tileM * 1000) / size;
+  const wave = fbm(COLS * 2, ROWS, 2, seed);
+  const speck = fbm(128, 128, 1, seed + 5);
+  const f = fields(size, (u, v) => {
+    const c = bondCell(u, v, COLS, ROWS);
+    const h = rng(seed * 977 + c.i * 131 + c.j * 17 + 1);
+    h();
+    const shade = h();
+    const edgeMM = Math.min(Math.min(c.fx, 1 - c.fx) * L, Math.min(c.fy, 1 - c.fy) * H);
+    const inGrout = 1 - smoothstep(JOINT / 2 - mmPerTexel * 0.5, JOINT / 2 + mmPerTexel * 0.5, edgeMM);
+    // The bevel: the glaze curves down over the last 6 mm into the joint.
+    const bevel = 1 - smoothstep(JOINT / 2, JOINT / 2 + 6, edgeMM);
+    const glaze = (0.95 + 0.05 * shade) * (1 - 0.02 * speck(u, v));
+    const tone = glaze * (1 - inGrout) + GROUT_TONE[grout] * inGrout;
+    const height = (0.8 + 0.05 * wave(u, v)) * (1 - 0.6 * bevel * bevel) * (1 - inGrout) + 0.1 * inGrout;
+    const rough = 0.25 + 0.05 * speck(u, v) + 0.75 * inGrout;
+    return [height, Math.min(1, tone), Math.min(1, rough)];
+  });
+  return { ...f, tileM, bump: 5 };
+}
+
+// ─── Upholstery and wood finishes ────────────────────────────────────────────
+
+/** Velvet: a dense cut pile, so there is no weave to see at all. What reads is the
+ *  crush — broad soft patches where the pile lies a different way and the colour
+ *  deepens — and the strong sheen at the edges, which is the material's, not the map's. */
+export function velvetFields(size = 256, seed = 16): SurfaceFields {
+  const crush = fbm(3, 3, 3, seed);
+  const lay = fbm(6, 14, 2, seed + 3);
+  const fine = fbm(128, 128, 1, seed + 5);
+  const f = fields(size, (u, v) => {
+    const c = smoothstep(0.35, 0.75, crush(u, v));
+    const tone = 1 - 0.14 * c - 0.05 * lay(u, v) - 0.02 * fine(u, v);
+    return [0.5 + 0.3 * lay(u, v) + 0.2 * fine(u, v), tone, 0.9 + 0.1 * fine(u, v)];
+  });
+  return { ...f, tileM: 0.4, bump: 0.8 };
+}
+
+/** Bouclé: a looped yarn, so the surface is a crowd of small nubs — 4–6 mm — with
+ *  shadow between them. Relief does the work, and a deep one: it is the one fabric
+ *  people choose for its texture rather than its colour. */
+export function boucleFields(size = 256, seed = 17): SurfaceFields {
+  const loops = fbm(44, 44, 1, seed);
+  const small = fbm(88, 88, 1, seed + 3);
+  const heather = fbm(6, 6, 3, seed + 5);
+  const f = fields(size, (u, v) => {
+    const l = smoothstep(0.4, 0.75, 0.7 * loops(u, v) + 0.3 * small(u, v));
+    const tone = 1 - 0.22 * (1 - l) - 0.06 * heather(u, v);
+    return [l, tone, 0.96 + 0.04 * l];
+  });
+  return { ...f, tileM: 0.2, bump: 6 };
+}
+
+/** Painted wood: the same grain, under a coat of paint. The colour goes flat — no
+ *  latewood lines, no board-to-board shade — and only the relief of the grain is
+ *  left, faintly, as it is through real paint. */
+export function paintedWoodFields(size = 512, seed = 1): SurfaceFields {
+  const g = grain(seed, 18);
+  const f = fields(size, (u, v) => {
+    const { late, s } = g(u, v);
+    return [0.6 - 0.1 * late + 0.06 * s, 1 - 0.02 * s, 0.95];
+  });
+  // bump 8 under a 0.45 normal scale leaves the grain’s relief at ~1/8 of bare wood’s:
+  // faint, and still there. At 2 it was 1/30 and the paint read as plastic.
+  return { ...f, tileM: 0.5, bump: 8 };
+}
+
 // ─── Fields → texel bytes ────────────────────────────────────────────────────
 
 /** Tangent-space normal map from a height field (central differences, wrapping), in
@@ -556,27 +739,71 @@ export function floorFinishFields(kind: FloorKind, sizeMM: number | null, grout:
   }
 }
 
-/** Floor maps, kept for the last few finishes so switching back and forth while
- *  choosing is instant. A floor is one material per room, so a handful is plenty;
- *  the oldest is disposed (its GPU copy freed) when a new one pushes it out. */
-const FLOOR_CACHE_SIZE = 4;
-const floorCache = new Map<string, SurfaceMaps>();
-export function floorFinishMaps(kind: FloorKind, sizeMM: number | null, grout: Grout): SurfaceMaps {
-  const key = `${kind}:${sizeMM ?? ''}:${grout}`;
-  const hit = floorCache.get(key);
+/** Maps for a finish the user chooses — a floor, a wall — kept for the last few
+ *  choices per CHANNEL, so switching back and forth while choosing is instant. One
+ *  finish is live per channel at a time, so a handful is plenty; the oldest is disposed
+ *  (its GPU copy freed) when a new one pushes it out. A channel is "floor" or "wall":
+ *  one cache each, so choosing walls never evicts the floor on screen. */
+const FINISH_CACHE_SIZE = 4;
+const finishCaches = new Map<string, Map<string, SurfaceMaps>>();
+function cacheOf(channel: string): Map<string, SurfaceMaps> {
+  let c = finishCaches.get(channel);
+  if (!c) finishCaches.set(channel, (c = new Map()));
+  return c;
+}
+
+/** Already generated? Asked by the renderer before it decides whether a change needs
+ *  a moment (`lib/finish-loading.ts`). Read-only: it does not count as a use. */
+export function peekFinishMaps(channel: string, key: string): SurfaceMaps | null {
+  return cacheOf(channel).get(key) ?? null;
+}
+
+export function finishMaps(channel: string, key: string, make: () => SurfaceFields): SurfaceMaps {
+  const cache = cacheOf(channel);
+  const hit = cache.get(key);
   if (hit) {
-    floorCache.delete(key);
-    floorCache.set(key, hit);
+    cache.delete(key);
+    cache.set(key, hit);
     return hit;
   }
-  const made = maps(floorFinishFields(kind, sizeMM, grout));
-  floorCache.set(key, made);
-  while (floorCache.size > FLOOR_CACHE_SIZE) {
-    const [oldest, m] = floorCache.entries().next().value as [string, SurfaceMaps];
-    floorCache.delete(oldest);
+  const made = maps(make());
+  cache.set(key, made);
+  while (cache.size > FINISH_CACHE_SIZE) {
+    const [oldest, m] = cache.entries().next().value as [string, SurfaceMaps];
+    cache.delete(oldest);
     m.map.dispose();
     m.normalMap.dispose();
     m.roughnessMap.dispose();
   }
   return made;
 }
+
+export const floorFinishKey = (kind: FloorKind, sizeMM: number | null, grout: Grout) => `${kind}:${sizeMM ?? ''}:${grout}`;
+export function floorFinishMaps(kind: FloorKind, sizeMM: number | null, grout: Grout): SurfaceMaps {
+  return finishMaps('floor', floorFinishKey(kind, sizeMM, grout), () => floorFinishFields(kind, sizeMM, grout));
+}
+
+/** The fields for a wall finish. Like the floor, colour is not an input: it is each
+ *  wall's own paint, multiplied by these. */
+export function wallFinishFields(kind: WallKind, grout: Grout): SurfaceFields {
+  switch (kind) {
+    case 'plaster': return plasterFields();
+    case 'paint': return paintFields();
+    case 'limewash': return limewashFields();
+    case 'panelling': return panellingFields();
+    case 'brick': return brickFields(grout);
+    case 'tile': return metroTileFields(grout);
+  }
+}
+
+export const wallFinishKey = (kind: WallKind, grout: Grout) => `${kind}:${grout}`;
+export function wallFinishMaps(kind: WallKind, grout: Grout): SurfaceMaps {
+  // Plaster is also the ceiling's, so it is the one shared memo rather than a cache
+  // entry that a choice could evict from under the ceiling.
+  if (kind === 'plaster') return plasterMaps();
+  return finishMaps('wall', wallFinishKey(kind, grout), () => wallFinishFields(kind, grout));
+}
+
+export const velvetMaps = memo(() => velvetFields());
+export const boucleMaps = memo(() => boucleFields());
+export const paintedWoodMaps = memo(() => paintedWoodFields());

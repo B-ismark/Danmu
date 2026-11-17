@@ -1094,6 +1094,15 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 }
 @keyframes danmu-arrive { from { opacity: 0; } to { opacity: 1; } }
 
+/* A room finish being prepared (`FinishStatus`). Delayed by `--dur-quick` so a finish
+   that is ready in a frame never shows a spinner at all — a flash of one reads as a
+   glitch, not as work being done. */
+.finish-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-caption); color: var(--ink-3);
+  animation: danmu-arrive var(--dur-quick) var(--ease-out) var(--dur-quick) both;
+}
+
 /* ─── Loading placeholders ────────────────────────────────────────────────
    The shape of what is coming, breathing, where the empty space would otherwise
    read as "there is nothing here". Always paired with words somewhere a screen

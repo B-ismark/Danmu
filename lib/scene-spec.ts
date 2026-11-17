@@ -5,6 +5,7 @@ import { ROOM } from './parts-catalog';
 import { BLOCK_SHAPES, blocksJoin, type BlockStyle } from './block-style';
 // Type only: `made-piece` imports this module's vocabularies at run time.
 import type { MadeSpec } from './made-piece';
+import type { FabricFinish, WoodFinish } from './part-finish';
 import {
   roomFootprint,
   footprintBounds,
@@ -523,6 +524,12 @@ export type ScenePart = {
    *  The piece moves, turns, collides and resizes as ONE part; the blocks are how it
    *  is drawn. `lib/made-piece.ts` packs, lays out and explodes it. */
   made?: MadeSpec;
+  /** How its wood is finished (`lib/part-finish.ts`). Absent = natural, the grain
+   *  as the piece is drawn. Only a shape in `WOOD_SHAPES` is offered the choice. */
+  woodFinish?: WoodFinish;
+  /** What its upholstery is (`lib/part-finish.ts`). Absent = linen, the weave every
+   *  piece is drawn in. Only a shape in `FABRIC_SHAPES` is offered the choice. */
+  fabricFinish?: FabricFinish;
   /** group id — parts sharing one move together (multi-select merge). */
   groupId?: string;
 };

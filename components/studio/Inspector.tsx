@@ -13,6 +13,16 @@ import { ColorPicker } from '@/components/ui/ColorPicker';
 import { Select } from '@/components/ui/Select';
 import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill, Segmented, Toggle } from '@/components/ui/primitives';
+import {
+  FABRIC_FINISHES,
+  FABRIC_FINISH_SPEC,
+  WOOD_FINISHES,
+  WOOD_FINISH_SPEC,
+  finishAxes,
+  resolvePartFinish,
+  type FabricFinish,
+  type WoodFinish,
+} from '@/lib/part-finish';
 import { blockStyleFor, blockStyleKeys, type BlockStyle, type BlockStyleKey } from '@/lib/block-style';
 import { RailSection } from './RailSection';
 import { EmptyInspector } from './EmptyInspector';
@@ -416,6 +426,10 @@ export function Inspector() {
         onReset={() => updatePart(id!, { color: undefined })}
       />
 
+      {(finishAxes(part).wood || finishAxes(part).fabric) && (
+        <FinishControls part={part} onChange={(patch) => updatePart(id!, patch)} />
+      )}
+
       {isLightFixture(part.shape) && (
         <LightControls part={part} onChange={(light) => updatePart(id!, { light })} />
       )}
@@ -703,6 +717,56 @@ function BlockStyleControls({ part, onChange }: { part: ScenePart; onChange: (st
             </div>
           );
         })}
+      </div>
+    </Section>
+  );
+}
+
+/** What the piece's wood and its upholstery are — only the axes this piece draws
+ *  (`finishAxes`, derived from the renderers). Each option changes what the surface
+ *  LOOKS like, not only how it catches light; why, and the row that was deleted for
+ *  failing that, is `lib/part-finish.ts`. The default is written as ABSENT, so choosing
+ *  Natural or Linen again leaves the piece exactly as it was drawn before. */
+function FinishControls({
+  part,
+  onChange,
+}: {
+  part: ScenePart;
+  onChange: (patch: { woodFinish?: WoodFinish; fabricFinish?: FabricFinish }) => void;
+}) {
+  const axes = finishAxes(part);
+  const f = resolvePartFinish(part);
+  return (
+    <Section label="Finish">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {axes.wood && (
+          <div style={{ minWidth: 0 }}>
+            <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>Wood</span>
+            <Segmented<WoodFinish>
+              ariaLabel="Wood finish"
+              options={WOOD_FINISHES.map((w) => ({ value: w, label: WOOD_FINISH_SPEC[w].label }))}
+              value={f.wood}
+              onChange={(w) => onChange({ woodFinish: w === 'natural' ? undefined : w })}
+              wrap
+              minItem={72}
+            />
+            <div className="t-hint" style={{ marginTop: 6 }}>{WOOD_FINISH_SPEC[f.wood].note}</div>
+          </div>
+        )}
+        {axes.fabric && (
+          <div style={{ minWidth: 0 }}>
+            <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>Fabric</span>
+            <Segmented<FabricFinish>
+              ariaLabel="Fabric"
+              options={FABRIC_FINISHES.map((x) => ({ value: x, label: FABRIC_FINISH_SPEC[x].label }))}
+              value={f.fabric}
+              onChange={(x) => onChange({ fabricFinish: x === 'linen' ? undefined : x })}
+              wrap
+              minItem={72}
+            />
+            <div className="t-hint" style={{ marginTop: 6 }}>{FABRIC_FINISH_SPEC[f.fabric].note}</div>
+          </div>
+        )}
       </div>
     </Section>
   );

@@ -66,7 +66,7 @@
 // `lib/sun-shadow.ts` described; per-light masking (layers, or two passes) is the
 // real fix and is a change to how the scene is lit.
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackSide, DoubleSide, FrontSide, Path, Shape, Vector2, type Group } from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { Line } from './strokes';
@@ -78,8 +78,18 @@ import { SCENE } from '@/lib/scene-palette';
 import { wallApertures, skirtingRuns, type Aperture } from '@/lib/apertures';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { cutAwayWithWall } from '@/lib/near-wall';
-import { floorFinishMaps, plasterMaps } from '@/lib/textures';
+import {
+  floorFinishKey,
+  floorFinishMaps,
+  peekFinishMaps,
+  plasterMaps,
+  wallFinishKey,
+  wallFinishMaps,
+  type SurfaceMaps,
+} from '@/lib/textures';
 import { FLOOR_SPEC, resolveFloor } from '@/lib/floor-finish';
+import { WALL_SPEC, resolveWalls } from '@/lib/wall-finish';
+import { clearPending, markPending, type FinishChannel } from '@/lib/finish-loading';
 
 /** Paint over plaster: enough relief to catch a lamp's raking light, not enough to
  *  read as a pattern from across the room. */
@@ -96,6 +106,44 @@ const SKIRTING_H = 0.1;
  *  `WALL_GAP` (20 mm) on purpose, so a piece snapped flush to a wall still clears it. */
 const SKIRTING_PROUD = 0.012;
 
+/** A finish's maps, prepared without freezing the page.
+ *
+ *  Generating a finish is a few hundred milliseconds of JavaScript the first time (brick,
+ *  tile, stone). Done in the render that asked for it, the press that chose it did not
+ *  even show as pressed until it was over. So: a finish already made is used at once; a
+ *  new one keeps the OLD finish on screen, is marked pending (`lib/finish-loading.ts`, so
+ *  the editor can say "laying the new floor…"), lets a frame paint, and is built after it.
+ *  A newer choice made meanwhile cancels the older build rather than queueing behind it.
+ *
+ *  The room's FIRST finish is built synchronously, on mount: a room must never open on
+ *  the wrong floor for a frame and then change, which reads as a glitch, not a load. */
+function useStagedMaps(channel: FinishChannel, key: string, peek: () => SurfaceMaps | null, build: () => SurfaceMaps): SurfaceMaps {
+  const [shown, setShown] = useState(() => ({ key, maps: build() }));
+  const ready = key === shown.key ? shown.maps : peek();
+  const isReady = ready !== null;
+  useEffect(() => {
+    if (isReady) return;
+    markPending(channel, key);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // rAF then a macrotask: the rAF lets the pressed state and the spinner paint; the
+    // timeout moves the build past that paint rather than into the same frame.
+    const frame = requestAnimationFrame(() => {
+      timer = setTimeout(() => {
+        setShown({ key, maps: build() });
+        clearPending(channel, key);
+      }, 0);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (timer !== undefined) clearTimeout(timer);
+      clearPending(channel, key);
+    };
+    // The key names the maps; `peek` and `build` are functions of it, rebuilt each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel, key, isReady]);
+  return ready ?? shown.maps;
+}
+
 export function RoomShell() {
   // Field-level subscriptions, not the whole `room` object: a wall drag replaces
   // `room` on every rAF tick, and painting one wall replaces it too. Subscribing
@@ -108,7 +156,26 @@ export function RoomShell() {
   // and grout, so a recolour regenerates nothing. See `lib/floor-finish.ts`.
   const floorChoice = useScene((s) => s.room.floor);
   const floor = useMemo(() => resolveFloor(floorChoice), [floorChoice]);
-  const floorMaps = useMemo(() => floorFinishMaps(floor.kind, floor.sizeMM, floor.grout), [floor.kind, floor.sizeMM, floor.grout]);
+  const floorKey = floorFinishKey(floor.kind, floor.sizeMM, floor.grout);
+  const floorMaps = useStagedMaps(
+    'floor',
+    floorKey,
+    () => peekFinishMaps('floor', floorKey),
+    () => floorFinishMaps(floor.kind, floor.sizeMM, floor.grout),
+  );
+  // The walls' finish is one for the room, multiplying each wall's own colour
+  // (`lib/wall-finish.ts`). Plaster is the ceiling's maps too, so it is always ready.
+  const wallChoice = useScene((s) => s.room.walls);
+  const wallFinish = useMemo(() => resolveWalls(wallChoice), [wallChoice]);
+  const wallKey = wallFinishKey(wallFinish.kind, wallFinish.grout);
+  const wallMaps = useStagedMaps(
+    'wall',
+    wallKey,
+    () => (wallFinish.kind === 'plaster' ? plasterMaps() : peekFinishMaps('wall', wallKey)),
+    () => wallFinishMaps(wallFinish.kind, wallFinish.grout),
+  );
+  const wallSpec = WALL_SPEC[wallFinish.kind];
+  const wallRelief = useMemo(() => new Vector2(wallSpec.relief, wallSpec.relief), [wallSpec.relief]);
   const floorRelief = useMemo(() => {
     const r = FLOOR_SPEC[floor.kind].relief;
     return new Vector2(r, r);
@@ -323,7 +390,7 @@ export function RoomShell() {
               }}
             >
               <shapeGeometry args={[wallShapes[i]]} />
-              <meshStandardMaterial color={color} roughness={0.96} metalness={0} side={FrontSide} {...plasterMaps()} normalScale={PLASTER_NORMAL_SCALE} />
+              <meshStandardMaterial color={color} roughness={wallSpec.roughness} metalness={0} side={FrontSide} {...wallMaps} normalScale={wallRelief} />
             </mesh>
             {/* Selection / hover frame — drawn just inside the room face so it
                 reads on the visible side. Marked as an editor helper so

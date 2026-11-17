@@ -64,6 +64,13 @@ export type WalkReport = {
   degenerate: number;
   /** components that threw when called */
   threw: Record<string, string>;
+  /** Every surface the piece asks for, as the renderer named it: a preset KEY where it
+   *  passed one (`Box`, `FinishMaterial`), or what a preset OBJECT identifies itself as
+   *  where it passed that (the instanced sets). An object that cannot say is recorded
+   *  as `'<object>'`, never dropped — `tests/part-finish.test.ts` reads this to decide
+   *  which pieces get a wood or a fabric control, and a surface it cannot see is a
+   *  control that silently goes missing. */
+  surfaces: string[];
 };
 
 /** Wrappers that animate their children without displacing them at rest.
@@ -72,6 +79,24 @@ const ANIMATION_WRAPPERS = new Set(['Sway', 'Spin']);
 
 /** Renders no geometry — lights only. Declared rather than skipped by accident. */
 const NO_GEOMETRY = new Set(['PartLight']);
+
+/** Components that ARE a material — no geometry, but the surface they name is recorded.
+ *  `FinishMaterial` reads the piece's finish from context, so it cannot be called. */
+const MATERIALS = new Set(['FinishMaterial']);
+
+const REACT_CONTEXT = Symbol.for('react.context');
+
+/** How a surface prop is recorded: a key as itself, a preset object by the `__key` a
+ *  test's stable mock gives it. */
+function surfaceName(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    const k = (v as { __key?: unknown }).__key;
+    return typeof k === 'string' ? k : '<object>';
+  }
+  return '<unknown>';
+}
 
 const _e = new Euler();
 const _v = new Vector3();
@@ -186,7 +211,11 @@ type AnyProps = Record<string, unknown>;
 const REACT_FRAGMENT = Symbol.for('react.fragment');
 
 export function walk(node: ReactNode): WalkReport {
-  const rep: WalkReport = { prims: [], descended: {}, declared: {}, unhandled: {}, threw: {}, degenerate: 0 };
+  const rep: WalkReport = { prims: [], descended: {}, declared: {}, unhandled: {}, threw: {}, degenerate: 0, surfaces: [] };
+  const noteSurface = (v: unknown) => {
+    const s = surfaceName(v);
+    if (s) rep.surfaces.push(s);
+  };
   const bump = (m: Record<string, number>, k: string) => {
     m[k] = (m[k] ?? 0) + 1;
   };
@@ -203,6 +232,14 @@ export function walk(node: ReactNode): WalkReport {
     const t = n.type as unknown;
 
     if (t === REACT_FRAGMENT) {
+      visit(props.children as ReactNode, m, spun);
+      return;
+    }
+
+    // A context provider (React 19 renders the context object itself). It places
+    // nothing — `PartGeometry` wraps a finished piece in one — so descend.
+    if (typeof t === 'object' && t !== null && (t as { $$typeof?: unknown }).$$typeof === REACT_CONTEXT) {
+      bump(rep.descended, 'Context');
       visit(props.children as ReactNode, m, spun);
       return;
     }
@@ -233,6 +270,15 @@ export function walk(node: ReactNode): WalkReport {
       bump(rep.declared, name);
       return;
     }
+
+    if (MATERIALS.has(name)) {
+      bump(rep.declared, name);
+      noteSurface(props.surface);
+      return;
+    }
+
+    // Every component below that draws takes its surface as a prop.
+    noteSurface(props.surface);
 
     if (ANIMATION_WRAPPERS.has(name)) {
       bump(rep.descended, name);

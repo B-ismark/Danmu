@@ -8,6 +8,7 @@ import { Color } from 'three';
 import { Box, BoxInstances, LeafInstances, RoundInstances, SoftInstances, SoftMesh, StemInstances, type InstanceItem } from './Box';
 import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
+import { FinishMaterial, PartFinishContext, finishChoice } from './part-finish';
 import { Spin, Sway } from './Motion';
 import {
   clothesRail,
@@ -192,12 +193,17 @@ export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolea
   // two. A fixture that cannot express its defect, which is why the gate for this is
   // `tests/parametric-caps.test.ts`'s "one dim reaches both" clause instead.
   const p = useEffectivePart(part);
-  return (
+  // The piece's wood and fabric finish, for every surface it draws (`./part-finish`).
+  // No provider at all when none is chosen, so an unfinished piece's tree is the one
+  // it always was.
+  const finish = finishChoice(p.woodFinish, p.fabricFinish);
+  const body = (
     <>
       <ShapeDispatch part={p} locked={locked} />
       <PartLight part={p} />
     </>
   );
+  return finish ? <PartFinishContext value={finish}>{body}</PartFinishContext> : body;
 }
 
 /** The part as the user has resized it, for a shape whose geometry owns its size.
@@ -502,7 +508,7 @@ function HardParts({ parts, bodyC, look }: { parts: HardPart[]; bodyC: string; l
           );
         }
         const { surface, ...plain } = mat;
-        const material = <meshStandardMaterial {...(surface ? SURFACE[surface] : undefined)} {...plain} />;
+        const material = <FinishMaterial surface={surface} {...plain} />;
         if (p.kind === 'post') {
           return (
             <mesh key={p.key} position={p.pos} castShadow receiveShadow>
@@ -651,7 +657,7 @@ function LampShade({ part, color }: { part: ScenePart; color: string }) {
   // No hook: the footprint tests walk these renderers as plain functions, with
   // no React dispatcher, and two Color multiplies are not worth memoising.
   const emissive = spec ? new Color(color).multiply(new Color(hexFromKelvin(spec.kelvin))).getStyle() : '#000000';
-  return <meshPhysicalMaterial color={color} side={2} {...SURFACE.fabric} emissive={emissive} emissiveIntensity={glow} />;
+  return <FinishMaterial surface="fabric" physical color={color} side={2} emissive={emissive} emissiveIntensity={glow} />;
 }
 
 /** A standing lamp: `lampForm` draws it on a circle of the declared width, and the

@@ -214,9 +214,13 @@ describe('Segmented can lay its options out on more than one row', () => {
     // and in the `compact` step it runs at its `-tight` width, so that is the floor the
     // segments are measured against: two per row must fit there, or a material list
     // collapses to one long column.
+    //
+    // **And a third, beside it:** the Walls section (`WallFinishEditor`) names six finishes
+    // in the same rail, against the same floor.
     expect(callers.map((f) => f.replace(/^.*[\\/]components[\\/]/, 'components/').replace(/\\/g, '/')).sort()).toEqual([
       'components/studio/FloorFinishEditor.tsx',
       'components/studio/Inspector.tsx',
+      'components/studio/WallFinishEditor.tsx',
     ]);
     const floorSrc = codeOnly(readFileSync(root('components', 'studio', 'FloorFinishEditor.tsx'), 'utf8'));
     const floorMins = [...floorSrc.matchAll(/minItem=\{(\d+)\}/g)].map((m) => Number(m[1]));
@@ -224,6 +228,10 @@ describe('Segmented can lay its options out on more than one row', () => {
     const leftTight = Number(/^(\d+)px$/.exec(token('rail-left-tight'))?.[1]);
     expect(leftTight).toBeGreaterThan(0);
     for (const m of floorMins) expect(2 * m, 'two words a row at the tightest left rail').toBeLessThanOrEqual(leftTight - 32 - 16);
+    const wallSrc = codeOnly(readFileSync(root('components', 'studio', 'WallFinishEditor.tsx'), 'utf8'));
+    const wallMins = [...wallSrc.matchAll(/minItem=\{(\d+)\}/g)].map((m) => Number(m[1]));
+    expect(wallMins.length, 'the wrapped Walls row states its segment floor').toBe(1);
+    for (const m of wallMins) expect(2 * m, 'two finishes a row at the tightest left rail').toBeLessThanOrEqual(leftTight - 32 - 16);
     const insp = codeOnly(readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8'));
     const min = Number(/minItem=\{(\d+)\}/.exec(insp)?.[1]);
     expect(min, 'the Inspector states its segment floor as a number').toBeGreaterThan(0);
@@ -1086,7 +1094,19 @@ describe('the inspector folds its options away', () => {
   it('has no sheen control', () => {
     // A Finish row (Auto / Matte / Satin / Polished / Metal) sat inside Colour and
     // was removed in review: it changed nothing a person could see.
-    expect(INSPECTOR).not.toMatch(/Finish/);
+    //
+    // This used to forbid the WORD "Finish", which was the cheap form of the rule and
+    // stopped being the right one when a finish that IS visible arrived (painted or
+    // lacquered wood, velvet, bouclé — `lib/part-finish.ts`). What it protects is the
+    // pair: no sheen-only option words, and any finish option the Inspector offers comes
+    // from the list `tests/finish-visibility.test.ts` measures against a ×3 bar — which
+    // the deleted row's satin step fails, and says so.
+    expect(INSPECTOR).not.toMatch(/['"](Matte|Satin|Polished|Gloss|Glossy|Sheen)['"]/);
+    expect(INSPECTOR).not.toMatch(/label:\s*['"](Matte|Satin|Polished)/);
+    const finishSection = /function FinishControls[\s\S]*?\n}\n/.exec(INSPECTOR)?.[0] ?? '';
+    expect(finishSection, 'the Finish section exists and reads its options from the measured lists').toMatch(/WOOD_FINISHES\.map/);
+    expect(finishSection).toMatch(/FABRIC_FINISHES\.map/);
+    expect(finishSection, 'no option is typed in beside them').not.toMatch(/value:\s*['"]/);
   });
 });
 

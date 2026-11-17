@@ -26,6 +26,7 @@ import type { ThreeElements } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type InstancedMesh, type Mesh } from 'three';
 import { PHYSICAL_SURFACES, SURFACE, type SurfaceKey } from './materials';
+import { finishedPreset, finishedSurface, usePartFinish } from './part-finish';
 import { Edges } from './strokes';
 import { DETAIL } from '@/lib/scene-palette';
 import { boxProjectUV } from '@/lib/surface-uv';
@@ -73,21 +74,24 @@ export function Box({
   // (doors, shelves, TV) don't collapse.
   const minDim = Math.min(size[0], size[1], size[2]);
   const radius = Math.min(0.03, Math.max(0.004, minDim * 0.18));
-  const preset = surface ? SURFACE[surface] : undefined;
+  // The piece's finish may turn this wood or fabric into another (`./part-finish`);
+  // with none chosen it is the surface asked for, unchanged.
+  const fin = finishedSurface(surface, usePartFinish());
+  const preset = fin.key ? SURFACE[fin.key] : undefined;
   const matProps = {
     color,
     envMapIntensity: 0.5,
     emissive: emissive ?? '#000000',
     emissiveIntensity,
     ...preset,
-    roughness: roughness ?? preset?.roughness ?? 0.8,
+    roughness: (fin.owns ? undefined : roughness) ?? preset?.roughness ?? 0.8,
     metalness: metalness ?? preset?.metalness ?? 0,
   };
   // meshPhysicalMaterial is the heavier shader, so it is used only where the
   // preset actually needs it — cloth, for its sheen. Everything else stays on
   // meshStandardMaterial exactly as before.
   const material =
-    surface && PHYSICAL_SURFACES.includes(surface) ? (
+    fin.key && PHYSICAL_SURFACES.includes(fin.key) ? (
       <meshPhysicalMaterial {...matProps} />
     ) : (
       <meshStandardMaterial {...matProps} />
@@ -202,7 +206,8 @@ type InstancedProps = {
   surface?: Omit<ThreeElements['meshPhysicalMaterial'], 'color'>;
 };
 
-function InstanceMaterial({ surface, ...base }: Omit<ThreeElements['meshPhysicalMaterial'], 'surface'> & { surface?: InstancedProps['surface'] }) {
+function InstanceMaterial({ surface: asked, ...base }: Omit<ThreeElements['meshPhysicalMaterial'], 'surface'> & { surface?: InstancedProps['surface'] }) {
+  const surface = finishedPreset(asked, usePartFinish()) as InstancedProps['surface'];
   return surface && 'sheen' in surface ? (
     <meshPhysicalMaterial {...base} {...surface} />
   ) : (

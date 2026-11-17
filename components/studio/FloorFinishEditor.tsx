@@ -13,6 +13,7 @@ import { FLOOR_KINDS, FLOOR_SPEC, resolveFloor, withKind, type FloorKind, type G
 import { Segmented } from '@/components/ui/primitives';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { Icon } from '@/components/ui/Icon';
+import { FinishStatus } from './FinishStatus';
 
 /** The collapsed row's summary: what the floor is, in the words the panel uses. */
 export function floorSummary(floor: ReturnType<typeof resolveFloor>): string {
@@ -141,6 +142,8 @@ export function FloorFinishEditor() {
           )}
         </div>
       </Field>
+
+      <FinishStatus channel="floor" saying="Laying the new floor…" />
 
       {chosen && (
         <button
