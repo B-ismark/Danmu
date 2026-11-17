@@ -28,8 +28,9 @@ type ViewPreset = 'free' | 'front' | 'top' | 'iso';
  *  of their ids onto it. */
 export const LIGHTINGS = ['daylight', 'overcast'] as const;
 export type Lighting = (typeof LIGHTINGS)[number];
-/** Render quality — 'high' enables soft cast shadows, ambient occlusion and
- *  per-part procedural material maps. */
+/** Render quality — 'high' enables soft cast shadows, ambient occlusion and the
+ *  floor-bounce light. The procedural surface maps (`lib/textures.ts`) are on at
+ *  both; nothing gates them on quality, whatever this line used to say. */
 export type Quality = 'low' | 'high';
 
 type StudioState = {
@@ -89,7 +90,7 @@ type StudioState = {
    *  it was scrubbed to yesterday. In history beside the lighting kind all the same
    *  — a theme sets both in one gesture, so undoing the theme has to put both back. */
   hour: number;
-  /** render quality (soft shadows + AO + material maps on 'high') */
+  /** render quality (soft shadows + AO + bounce light on 'high') */
   quality: Quality;
   /** auto set-dressing — decorative props on furniture surfaces */
   dressed: boolean;

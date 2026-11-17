@@ -210,6 +210,24 @@ itself is for eyes only.
 
 **Merged:** `e4e3f4e` (B-ismark/Danmu#261), not yet looked at.
 
+## Surfaces and textures
+
+### Wood, fabric, floorboards, plaster and a visible ceiling — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
+
+Checked in headless Chromium on **low** quality only, because the `high` quality AO pass
+throws every frame there (on `main` too — a separate task). So the real-GPU, `high`
+picture is unseen. Where to click: start any room from the layout picker, then
+orbit low until the ceiling closes the top of the view, and zoom close to the sofa and
+the coffee table, on both quality settings and both themes of light (Midday, Night).
+What wrong looks like: board seams or wall mottle shimmering/moiré as the camera moves
+(mipmapping or anisotropy not taking); a visible repeat on the floor across a large
+room (the board tile is 2.4 m); a fabric recolour reading noticeably darker than its
+swatch in the Inspector (the weave's tone layer averages ~0.78 of the colour, the
+largest of any surface); the ceiling on `high` too bright or too dark beside the walls
+(the `low` emissive stand-in is off there and the bounce light is meant to take over);
+a hitch when a room first opens (~0.4 s of texture generation, measured in software
+rendering, likely less on a phone's real CPU but unmeasured).
+
 ## Drag and selection
 
 *Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone,

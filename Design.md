@@ -2177,6 +2177,37 @@ blocks opens as a box clamped to a box's limits. It does not carry the shelf (§
   `PlantBody`, the floor plant's own geometry at tabletop size.
 
 ### Lighting, realism & motion
+- **Every surface has a texture, and it is mostly TONE** (`lib/textures.ts`,
+  `components/three/materials.ts`). Wood, fabric, brushed metal, the floorboards and
+  the plaster of the walls and ceiling each carry three procedural greyscale maps:
+  relief (`normalMap`), where the sheen breaks (`roughnessMap`) and a tone layer
+  (`map`) multiplied over the material's `color`. The tone layer is the part that
+  makes them visible. The first kit shipped relief only, to keep recolours intact, and
+  measured on a lit swatch at the studio's viewing scale it changed the picture by
+  0.6 grey levels in 255 on wood and fabric and 0.3 on the floor — under soft image
+  light a bump only shows where a light rakes across it. Grain reads as grain because
+  latewood is darker; a floor reads as boards because no two are the same shade. The
+  layer is grey and never above 1, so a recolour keeps its hue and the darkest grain
+  line is still ~60% of the chosen colour; `tests/surface-textures.test.ts` pins a
+  floor under each surface's tonal spread and relief so the kit cannot fade back to
+  invisible without a red test.
+  **Scale is metres.** Each set has a `tileM`, and a texture only means "metres" on
+  geometry whose UVs do: the floor and walls (`ShapeGeometry` takes UVs from the
+  outline), every textured `Box` (rewritten by `lib/surface-uv.ts`, grain up a door
+  and along a top) and all cloth, which `lib/soft-goods.ts` now builds with UVs laid
+  by arc length. Cloth had **no UVs at all** before, so cushions, duvets and curtains
+  carried a fabric texture that three sampled at a single texel — measured, exactly
+  zero detail added to the most-looked-at surface in the room. Primitives with 0..1
+  UVs per face (cylinder legs, instanced boards) still show the texture at their own
+  scale.
+  **The ceiling is drawn now, from below only.** A second mesh beside the
+  shadow-only one, its back face looking down into the room: it appears when the
+  camera is under it — orbiting low, looking in at eye level — and culls the moment
+  the camera rises above it, so the dollhouse view is untouched. On `low` quality,
+  which has no floor-bounce light, it carries a faint emissive stand-in for that
+  bounce, or it read as a brown lid. Generation is deterministic (a seeded RNG, so a
+  floor's boards do not reshuffle on reload) and costs ~0.4 s of main-thread time the
+  first time a room opens, measured in a software-rendered headless Chromium.
 - **Fixtures emit real light** (`components/three/PartLight.tsx`, `lib/light-units.ts`).
   A lamp carries `light?: { lumens, kelvin, coneDeg? }` on its `ScenePart`
   (defaults per shape in `scene-spec.ts`), and the Inspector edits it in those

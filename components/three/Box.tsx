@@ -24,10 +24,11 @@ import { RoundedBox } from '@react-three/drei';
 // come off the `ThreeElements` map instead.
 import type { ThreeElements } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
-import { BufferGeometry, Color, DoubleSide, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
+import { BufferAttribute, BufferGeometry, Color, DoubleSide, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type InstancedMesh, type Mesh } from 'three';
 import { PHYSICAL_SURFACES, SURFACE, type SurfaceKey } from './materials';
 import { Edges } from './strokes';
 import { DETAIL } from '@/lib/scene-palette';
+import { boxProjectUV } from '@/lib/surface-uv';
 import { LEAF_MESH, PLANT_STEM_TAPER, type PlantLeaf, type PlantStem } from '@/lib/plant-form';
 import type { SoftItem, SoftMeshData } from '@/lib/soft-goods';
 
@@ -91,19 +92,32 @@ export function Box({
     ) : (
       <meshStandardMaterial {...matProps} />
     );
+  // A textured surface is laid out in metres, so its grain is the same size on a drawer
+  // front as on a wardrobe door (lib/surface-uv.ts). Rewritten after every commit that
+  // could have replaced the geometry — R3F rebuilds it when `size` changes — and only
+  // for a surface that carries maps; an untextured box has nothing to lay out.
+  const meshRef = useRef<Mesh>(null);
+  const bevelled = minDim >= BEVEL_FLOOR;
+  useLayoutEffect(() => {
+    const g = meshRef.current?.geometry;
+    const pos = g?.getAttribute('position');
+    const nrm = g?.getAttribute('normal');
+    if (!g || !pos || !nrm || !preset || !('normalMap' in preset)) return;
+    g.setAttribute('uv', new BufferAttribute(boxProjectUV(pos.array, nrm.array), 2));
+  }, [size[0], size[1], size[2], bevelled, preset]); // eslint-disable-line react-hooks/exhaustive-deps -- `size` is a fresh tuple every render; its three numbers are the identity
   const outline = edgeOpacity > 0 && (
     <Edges threshold={30} renderOrder={1} color={edgeColor} transparent opacity={edgeOpacity} />
   );
   return (
     <group position={position} rotation={rotation}>
-      {minDim < BEVEL_FLOOR ? (
-        <mesh castShadow receiveShadow>
+      {!bevelled ? (
+        <mesh ref={meshRef} castShadow receiveShadow>
           <boxGeometry args={size} />
           {material}
           {outline}
         </mesh>
       ) : (
-        <RoundedBox args={size} radius={radius} smoothness={3} steps={1} castShadow receiveShadow>
+        <RoundedBox ref={meshRef} args={size} radius={radius} smoothness={3} steps={1} castShadow receiveShadow>
           {material}
           {outline}
         </RoundedBox>
@@ -287,6 +301,7 @@ export function StemInstances({ items, wood, green, noPick }: { items: readonly 
 function geometryOf(mesh: SoftMeshData): BufferGeometry {
   const g = new BufferGeometry();
   g.setAttribute('position', new Float32BufferAttribute([...mesh.positions], 3));
+  g.setAttribute('uv', new Float32BufferAttribute([...mesh.uvs], 2));
   g.setIndex([...mesh.index]);
   g.computeVertexNormals();
   return g;

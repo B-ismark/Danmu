@@ -67,7 +67,7 @@
 // real fix and is a change to how the scene is lit.
 
 import { useMemo, useRef, useState } from 'react';
-import { DoubleSide, FrontSide, Path, Shape, Vector2, type Group } from 'three';
+import { BackSide, DoubleSide, FrontSide, Path, Shape, Vector2, type Group } from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { Line } from './strokes';
 import { useScene } from '@/lib/scene-store';
@@ -78,13 +78,18 @@ import { SCENE } from '@/lib/scene-palette';
 import { wallApertures, skirtingRuns, type Aperture } from '@/lib/apertures';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { cutAwayWithWall } from '@/lib/near-wall';
-import { floorNormal, floorRoughness } from '@/lib/textures';
+import { floorMaps, plasterMaps } from '@/lib/textures';
 
 // Floor board tone. Stays local rather than reading SCENE.floor: that value is
 // the *swatch* the plan view and inspector show for a floor, deliberately a shade
 // deeper than the lit 3D board so the two read the same on screen.
 const FLOOR = '#E6E1D6';
-const FLOOR_NORMAL_SCALE = new Vector2(0.25, 0.25);
+const FLOOR_NORMAL_SCALE = new Vector2(0.8, 0.8);
+/** Paint over plaster: enough relief to catch a lamp's raking light, not enough to
+ *  read as a pattern from across the room. */
+const PLASTER_NORMAL_SCALE = new Vector2(0.5, 0.5);
+/** The ceiling's stand-in for floor bounce on 'low' quality, which has no bounce light. */
+const CEILING_BOUNCE_LOW = 0.22;
 /** Skirting height, metres. Shared with the aperture maths, which needs to know
  *  which openings reach down far enough to interrupt it. */
 const SKIRTING_H = 0.1;
@@ -103,6 +108,7 @@ export function RoomShell() {
   const footprint = useScene((s) => s.room.footprint);
   const wallColors = useScene((s) => s.room.wallColors);
   const showGrid = useStudio((s) => s.showGrid);
+  const quality = useStudio((s) => s.quality);
   const selectedWall = useStudio((s) => s.selectedWall);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
   const [hoverWall, setHoverWall] = useState<number | null>(null);
@@ -220,9 +226,37 @@ export function RoomShell() {
           roughness={0.92}
           metalness={0}
           side={DoubleSide}
-          normalMap={floorNormal()}
+          {...floorMaps()}
           normalScale={FLOOR_NORMAL_SCALE}
-          roughnessMap={floorRoughness()}
+        />
+      </mesh>
+
+      {/* Ceiling, for the eye. A separate mesh from the shadow caster below because the
+          two want opposite things: that one must be drawn in no pass but the light's,
+          this one in the colour pass only. Its BACK face is the side that looks down
+          into the room (it shares the floor's shape and rotation, whose front looks
+          up), so it shows whenever the camera is below it — orbiting low, looking in
+          at eye level — and culls the moment the camera rises above it, which keeps
+          the dollhouse view from above exactly as it was. No shadows either way: it
+          neither needs to cast (its twin does) nor receive (receiving the sun's map
+          from the plane that writes it is self-shadowing acne). Not raycastable, for
+          the twin's reason.
+          A ceiling is lit almost entirely by light thrown back up off the floor. On
+          'high' that is `Room.tsx`'s bounce light; 'low' has none, and without it the
+          one surface facing straight down read as a muddy brown lid at eye level. So on
+          'low' it carries a faint glow of its own colour standing in for the bounce,
+          and on 'high' none, so the two are not counted twice. */}
+      <mesh name="ceiling-view" position={[0, height, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <shapeGeometry args={[floorShape]} />
+        <meshStandardMaterial
+          color={SCENE.ceiling}
+          roughness={0.95}
+          metalness={0}
+          side={BackSide}
+          {...plasterMaps()}
+          normalScale={PLASTER_NORMAL_SCALE}
+          emissive={SCENE.ceiling}
+          emissiveIntensity={quality === 'high' ? 0 : CEILING_BOUNCE_LOW}
         />
       </mesh>
 
@@ -233,7 +267,7 @@ export function RoomShell() {
           never drawn, so which way its normal points cannot matter, and building a
           second footprint Shape for it would be a second answer to "what polygon is
           this room". */}
-      <mesh position={[0, height, 0]} rotation={[-Math.PI / 2, 0, 0]} castShadow raycast={() => null}>
+      <mesh name="ceiling-shadow" position={[0, height, 0]} rotation={[-Math.PI / 2, 0, 0]} castShadow raycast={() => null}>
         <shapeGeometry args={[floorShape]} />
         <meshBasicMaterial side={DoubleSide} colorWrite={false} depthWrite={false} />
       </mesh>
@@ -283,7 +317,7 @@ export function RoomShell() {
               }}
             >
               <shapeGeometry args={[wallShapes[i]]} />
-              <meshStandardMaterial color={color} roughness={0.96} metalness={0} side={FrontSide} />
+              <meshStandardMaterial color={color} roughness={0.96} metalness={0} side={FrontSide} {...plasterMaps()} normalScale={PLASTER_NORMAL_SCALE} />
             </mesh>
             {/* Selection / hover frame — drawn just inside the room face so it
                 reads on the visible side. Marked as an editor helper so
@@ -356,7 +390,9 @@ function WallSkirting({ wl, runs, wall }: { wl: WallSeg; runs: Array<[number, nu
             rotation={[0, wl.yaw, 0]}
           >
             <boxGeometry args={[b - a, SKIRTING_H, SKIRTING_PROUD]} />
-            <meshStandardMaterial color="#D8D3C6" roughness={0.9} side={FrontSide} />
+            {/* Satin, not flat: skirting is trim paint, and the soft highlight along its
+                top edge is most of what separates it from the wall above. */}
+            <meshStandardMaterial color="#D8D3C6" roughness={0.55} side={FrontSide} />
           </mesh>
         );
       })}

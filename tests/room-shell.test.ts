@@ -47,9 +47,14 @@ function meshBlock(marker: string): string | null {
   return open < 0 || close < 0 ? null : SHELL.slice(open, close + '</mesh>'.length);
 }
 
-/** The ceiling, identified by the one thing only it does: it sits at the wall
- *  height. */
-const ceiling = meshBlock('position={[0, height, 0]}');
+/** The ceiling the SUN sees. There are two meshes at the wall height now — this one,
+ *  and the one the eye sees from below (`ceilingView`) — so position no longer names
+ *  either, and each carries a `name` that does. Found by position, this test quietly
+ *  started asserting the shadow rules against the visible ceiling the day it arrived. */
+const ceiling = meshBlock('name="ceiling-shadow"');
+
+/** The ceiling the EYE sees, from below only. */
+const ceilingView = meshBlock('name="ceiling-view"');
 
 /** A wall, likewise: positioned at half the wall height and rotated to its yaw. */
 const wall = meshBlock('position={[wl.x, height / 2, wl.z]}');
@@ -88,6 +93,26 @@ describe('the room is closed to the sun', () => {
 
   it('does not let that ceiling answer a raycast', () => {
     expect(ceiling).toMatch(/raycast=\{\(\) => null\}/);
+  });
+
+  // The ceiling you SEE is the hazard the header names — "a ceiling that starts
+  // RENDERING hides the room from the dollhouse camera" — answered by drawing only its
+  // underside: the back face of the floor-shaped plane, which looks down into the room
+  // and is culled the moment the camera rises above it.
+  it('draws the visible ceiling from below only, so the view from above is untouched', () => {
+    expect(ceilingView, 'visible ceiling not found in RoomShell.tsx').toBeTruthy();
+    expect(ceilingView).not.toBe(ceiling);
+    expect(ceilingView).toContain('side={BackSide}');
+    expect(ceilingView).toContain('rotation={[-Math.PI / 2, 0, 0]}');
+    expect(ceilingView).not.toMatch(/DoubleSide|FrontSide/);
+  });
+
+  it('keeps the visible ceiling out of the shadow pass and the pointer\'s way', () => {
+    // Its twin casts; this one casting too would double the roof in the shadow map,
+    // and receiving the sun's map from the plane that writes it is self-shadowing acne.
+    expect(ceilingView).not.toContain('castShadow');
+    expect(ceilingView).not.toContain('receiveShadow');
+    expect(ceilingView).toMatch(/raycast=\{\(\) => null\}/);
   });
 
   it('cuts the openings once, in the geometry both passes read', () => {

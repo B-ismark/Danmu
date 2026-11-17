@@ -6,16 +6,23 @@
 // to reflect — see the inline <Environment> in Room.tsx. Without it they go
 // near-black. Keep that env mounted whenever these presets are used.
 //
-// wood + fabric carry a procedural NORMAL map via a lazy getter — spreading the
-// preset reads it (client-only, memoised), so the texture builds once on first
-// use and never during SSR. Colour stays driven by `color`/themes; the normal
-// map only adds microrelief (grain / weave).
+// wood, fabric and metal carry procedural maps via lazy getters — spreading the
+// preset reads them (client-only, memoised), so each set builds once on first use
+// and never during SSR. `map` is a GREY tone layer multiplied over `color`, so the
+// user's recolour keeps its hue; see `lib/textures.ts` for why the relief alone
+// changed nothing anyone could see.
+//
+// The maps are laid out in METRES, which only holds on geometry with metric UVs:
+// `Box` rewrites its own (`lib/surface-uv.ts`) and cloth is built with them
+// (`lib/soft-goods.ts`). A primitive with 0..1 UVs per face — a cylinder leg, an
+// instanced shelf board — still shows the texture, just at its own scale.
 
 import { Vector2, type Texture } from 'three';
-import { woodNormal, fabricNormal } from '@/lib/textures';
+import { woodMaps, fabricMaps, metalMaps } from '@/lib/textures';
 
-const NORMAL_SCALE_WOOD = new Vector2(0.35, 0.35);
-const NORMAL_SCALE_FABRIC = new Vector2(0.5, 0.5);
+const NORMAL_SCALE_WOOD = new Vector2(0.6, 0.6);
+const NORMAL_SCALE_FABRIC = new Vector2(0.9, 0.9);
+const NORMAL_SCALE_METAL = new Vector2(0.35, 0.35);
 
 // Tuned-hybrid: matte-leaning. Metals are brushed (not mirror), gloss is gentle.
 export const SURFACE = {
@@ -23,20 +30,38 @@ export const SURFACE = {
   wood: {
     roughness: 0.7,
     metalness: 0.0,
-    get normalMap(): Texture { return woodNormal(); },
+    get map(): Texture { return woodMaps().map; },
+    get normalMap(): Texture { return woodMaps().normalMap; },
+    get roughnessMap(): Texture { return woodMaps().roughnessMap; },
     normalScale: NORMAL_SCALE_WOOD,
   },
   /** Oiled / satin wood — slightly glossier. */
   woodSatin: {
     roughness: 0.58,
     metalness: 0.0,
-    get normalMap(): Texture { return woodNormal(); },
+    get map(): Texture { return woodMaps().map; },
+    get normalMap(): Texture { return woodMaps().normalMap; },
+    get roughnessMap(): Texture { return woodMaps().roughnessMap; },
     normalScale: NORMAL_SCALE_WOOD,
   },
   /** Brushed metal — chair bases, table legs, lamp poles, hardware. */
-  metal: { roughness: 0.52, metalness: 0.55 },
+  metal: {
+    roughness: 0.52,
+    metalness: 0.55,
+    get map(): Texture { return metalMaps().map; },
+    get normalMap(): Texture { return metalMaps().normalMap; },
+    get roughnessMap(): Texture { return metalMaps().roughnessMap; },
+    normalScale: NORMAL_SCALE_METAL,
+  },
   /** Dark matte metal — feet, thin frames. */
-  metalDark: { roughness: 0.6, metalness: 0.45 },
+  metalDark: {
+    roughness: 0.6,
+    metalness: 0.45,
+    get map(): Texture { return metalMaps().map; },
+    get normalMap(): Texture { return metalMaps().normalMap; },
+    get roughnessMap(): Texture { return metalMaps().roughnessMap; },
+    normalScale: NORMAL_SCALE_METAL,
+  },
   /** Upholstery — sofas, cushions, ottomans, lamp shades.
    *
    *  `sheen` is the cloth term, and it is the difference between a sofa and a
@@ -55,7 +80,9 @@ export const SURFACE = {
     // Slightly warm rather than pure white, so the rim reads as fibre rather than
     // as a specular highlight sitting on top of the colour.
     sheenColor: '#fff4e6',
-    get normalMap(): Texture { return fabricNormal(); },
+    get map(): Texture { return fabricMaps().map; },
+    get normalMap(): Texture { return fabricMaps().normalMap; },
+    get roughnessMap(): Texture { return fabricMaps().roughnessMap; },
     normalScale: NORMAL_SCALE_FABRIC,
   },
   /** Painted plastic / appliance shell. */
