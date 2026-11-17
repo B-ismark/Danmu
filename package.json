@@ -78,7 +78,20 @@
       "rather than a bump: Next 15.5.22 depends on postcss 8.4.31 exactly and on",
       "sharp ^0.34. Both are patch-compatible with the versions here. sharp is",
       "only ever reached through the Image Optimizer, which this app has no",
-      "`images` config for and never calls — see next.config.mjs."
+      "`images` config for and never calls — see next.config.mjs.",
+      "",
+      "n8ao is not an advisory but a crash, and the same rule applies. It is reached",
+      "only through @react-three/postprocessing (^2.0.0), and 2.0.1's MRT shim gave",
+      "its half-res depth target a `texture` getter returning the whole `textures`",
+      "ARRAY; three >= 0.162 reads `renderTarget.texture.mipmaps.length` in",
+      "setupRenderTarget, so with `halfRes` (Room.tsx) every frame on 'high' threw",
+      "before the AO pass drew — on any GPU, not just SwiftShader. 2.0.2's whole",
+      "diff is the deletion of that getter. The floor is the fix; the lockfile",
+      "already resolving it is not enough, because ^2.0.0 admits 2.0.1 again.",
+      "It is a TILDE, the one exception to the caret rule above, because a caret",
+      "here resolved 2.1.0 — a minor two days old that rewrites the pass (+400",
+      "lines), i.e. a change to how every room is shaded, smuggled in by a crash",
+      "fix. Moving to 2.1 is a separate, looked-at decision."
     ],
     "overrides": {
       "brace-expansion@1": "^1.1.18",
@@ -89,7 +102,8 @@
       "glob@10": "^10.5.0",
       "protobufjs@7": "^7.6.5",
       "postcss": "^8.5.32",
-      "sharp": "^0.35.0"
+      "sharp": "^0.35.0",
+      "n8ao@2": "~2.0.2"
     }
   }
 }
