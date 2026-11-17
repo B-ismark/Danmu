@@ -2208,6 +2208,25 @@ blocks opens as a box clamped to a box's limits. It does not carry the shelf (§
   bounce, or it read as a brown lid. Generation is deterministic (a seeded RNG, so a
   floor's boards do not reshuffle on reload) and costs ~0.4 s of main-thread time the
   first time a room opens, measured in a software-rendered headless Chromium.
+- **The floor is a choice of material** (`lib/floor-finish.ts`, the left rail's
+  **Floor** section in `components/studio/FloorFinishEditor.tsx`). Six kinds —
+  planks, herringbone, ceramic tile, stone, concrete, carpet — each with the module
+  a fitter would name (board width, block width, tile or slab side) from a short
+  list rather than a free number, grout (matching or contrast) on tile and stone,
+  and its own six swatches plus the mixer. The textures are the same three-map kit
+  as every other surface, drawn per choice by `floorFinishFields` and kept in a
+  four-entry cache, so switching back is instant; stone is the slowest at ~0.4 s
+  the first time. **Grout can only be darker than its tile**, because the tone map
+  multiplies the chosen colour — a pale joint on a dark tile is a second colour and
+  a different shader, and is not offered. Each repeat holds whole modules (a 900 mm
+  tile repeats every 1.8 m, never mid-tile), and tile and stone are drawn at 1024
+  texels so a 3 mm joint survives a large tile. **An unchosen floor is the floor the
+  app always had** — 200 mm pale planks — so `RoomData.floor` is optional and every
+  older room opens unchanged. It travels in the scene file and is read back through
+  `readFloorFinish`, which snaps an off-list size to the nearest one and reports
+  whatever it dropped. `tests/floor-finish.test.ts` pins the herringbone tiling
+  (each point covered exactly once), seamless repeats, visible joints, colour
+  preservation and the codec.
 - **Fixtures emit real light** (`components/three/PartLight.tsx`, `lib/light-units.ts`).
   A lamp carries `light?: { lumens, kelvin, coneDeg? }` on its `ScenePart`
   (defaults per shape in `scene-spec.ts`), and the Inspector edits it in those

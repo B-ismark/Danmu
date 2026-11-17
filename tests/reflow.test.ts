@@ -208,9 +208,22 @@ describe('Segmented can lay its options out on more than one row', () => {
     // `minItem` fit one row at the narrowest rail the layout ships (less the section's 16px
     // either side and a scrollbar), and at anything narrower the grid drops to two rows
     // instead of clipping.
-    expect(callers.map((f) => f.replace(/^.*[\\/]components[\\/]/, 'components/').replace(/\\/g, '/'))).toEqual([
+    //
+    // **And a second, in the LEFT rail:** the Floor section (`FloorFinishEditor`) names
+    // six materials and up to five sizes in words. The left rail is the narrower one,
+    // and in the `compact` step it runs at its `-tight` width, so that is the floor the
+    // segments are measured against: two per row must fit there, or a material list
+    // collapses to one long column.
+    expect(callers.map((f) => f.replace(/^.*[\\/]components[\\/]/, 'components/').replace(/\\/g, '/')).sort()).toEqual([
+      'components/studio/FloorFinishEditor.tsx',
       'components/studio/Inspector.tsx',
     ]);
+    const floorSrc = codeOnly(readFileSync(root('components', 'studio', 'FloorFinishEditor.tsx'), 'utf8'));
+    const floorMins = [...floorSrc.matchAll(/minItem=\{(\d+)\}/g)].map((m) => Number(m[1]));
+    expect(floorMins.length, 'every wrapped Floor row states its segment floor').toBe(2);
+    const leftTight = Number(/^(\d+)px$/.exec(token('rail-left-tight'))?.[1]);
+    expect(leftTight).toBeGreaterThan(0);
+    for (const m of floorMins) expect(2 * m, 'two words a row at the tightest left rail').toBeLessThanOrEqual(leftTight - 32 - 16);
     const insp = codeOnly(readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8'));
     const min = Number(/minItem=\{(\d+)\}/.exec(insp)?.[1]);
     expect(min, 'the Inspector states its segment floor as a number').toBeGreaterThan(0);

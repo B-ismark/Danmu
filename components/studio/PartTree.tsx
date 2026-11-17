@@ -11,6 +11,8 @@ import { toast } from '@/components/ui/StorageToast';
 import { Tooltip } from '@/components/ui/Tooltip';
 import Link from 'next/link';
 import { RoomDimsEditor } from './RoomDimsEditor';
+import { FloorFinishEditor, floorSummary } from './FloorFinishEditor';
+import { resolveFloor } from '@/lib/floor-finish';
 import { RailSection } from './RailSection';
 import { RoomTools } from './RoomTools';
 import { duplicateSelection, removeParts } from './KeyboardShortcuts';
@@ -53,7 +55,7 @@ export function PartTree() {
   // LOOKS. Room and Catalog open by default — the dimensions and the piece list
   // are what the rail is for; Style is occasional. (View is
   // behind the top bar's gear; see `ViewMenu`.)
-  const [sec, setSec] = useState({ room: true, style: false, pieces: true });
+  const [sec, setSec] = useState({ room: true, floor: false, style: false, pieces: true });
   const toggle = (k: keyof typeof sec) => setSec((v) => ({ ...v, [k]: !v[k] }));
   // A request to open ON a section, from a collapsed rail's icon or the empty
   // Inspector (see `lib/rail-intent.ts`). Taken once, then the section is opened,
@@ -435,6 +437,20 @@ export function PartTree() {
           }
         >
           <RoomDimsEditor />
+        </RailSection>
+
+        {/* What the floor is made of. Its own section rather than a row inside Room:
+            Room is the size of the box, and this is a material — the same split as a
+            wall's size and its paint. Closed by default, like Style: it is a decision
+            made once, not a control worked at. */}
+        <RailSection
+          title="Floor"
+          anchor="floor"
+          meta={floorSummary(resolveFloor(room.floor))}
+          open={sec.floor}
+          onToggle={() => toggle('floor')}
+        >
+          <FloorFinishEditor />
         </RailSection>
 
         <RailSection

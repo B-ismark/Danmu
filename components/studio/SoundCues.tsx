@@ -50,6 +50,7 @@ function read(): CueWorld {
     room: s.hydratedRoomId,
     parts: s.parts,
     wallColors: s.room.wallColors,
+    floor: s.room.floor,
     footprint: s.room.footprint,
     roomSize: { width: s.room.width, depth: s.room.depth, height: s.room.height },
     positions: t.positions,

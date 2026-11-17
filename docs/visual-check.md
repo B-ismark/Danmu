@@ -228,6 +228,19 @@ largest of any surface); the ceiling on `high` too bright or too dark beside the
 a hitch when a room first opens (~0.4 s of texture generation, measured in software
 rendering, likely less on a phone's real CPU but unmeasured).
 
+### Floor materials — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
+
+Checked in headless Chromium on **low** quality only. Where to click: open any room,
+open **Floor** in the left rail, and step through all six materials, each size, both
+grouts and a dark and a pale swatch; then orbit low and zoom in near a wall. What
+wrong looks like: grout lines shimmering or vanishing at a distance (moiré on the
+mosaic and the contrast grid especially); a visible repeat on stone across a large
+room (it repeats every 1.6–2.4 m); herringbone reading as stripes rather than a
+zigzag; marble veins looking like cracks; the Material or Size buttons clipping or
+running into each other in the narrow left rail (laptop width, 1024–1279 px); the
+colour dots wrapping the mixer onto a row of its own; a pause on first choosing
+stone (~0.4 s, measured in software rendering).
+
 ## Drag and selection
 
 *Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone,

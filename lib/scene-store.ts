@@ -15,6 +15,7 @@ import {
 } from './footprint';
 import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import type { RoomData, Site } from './storage';
+import { readFloorFinish, type FloorFinish } from './floor-finish';
 
 export type RoomShape = {
   width: number;
@@ -26,6 +27,9 @@ export type RoomShape = {
   /** per-wall paint colour, keyed by footprint-edge index. Missing = default
    *  shell colour (rendered in RoomShell). */
   wallColors: Record<number, string>;
+  /** What the floor is made of (`lib/floor-finish.ts`). Absent = the planks the
+   *  floor always had. */
+  floor?: FloorFinish;
   /** Where the room is and which way it faces, for the sun path. Absent until the
    *  user says — a latitude cannot be guessed, and guessing one would make the
    *  daylight study quietly wrong rather than obviously unset. */
@@ -87,6 +91,8 @@ type SceneState = {
    *  without moving a wall. */
   confirmSize: () => void;
   loadFromRoom: (room: RoomData | undefined) => void;
+  /** Choose the floor's material, size, grout and colour; undefined = the default floor. */
+  setFloor: (floor: FloorFinish | undefined) => void;
   /** paint one wall (by footprint-edge index). */
   setWallColor: (index: number, color: string) => void;
   /** paint every wall the same colour in one go. */
@@ -182,6 +188,11 @@ export const useScene = create<SceneState>((set, get) => ({
       layoutId,
       footprint,
       wallColors: room.wallColors ?? {},
+      // Read, not trusted: a record is bytes from an older build as often as not.
+      ...(() => {
+        const floor = readFloorFinish(room.floor);
+        return floor ? { floor } : {};
+      })(),
       site: room.site,
       ...(room.roughSize === true ? { roughSize: true as const } : {}),
     };
@@ -194,6 +205,13 @@ export const useScene = create<SceneState>((set, get) => ({
       ready: true,
     });
   },
+  setFloor: (floor) =>
+    set((s) => {
+      const room = { ...s.room };
+      if (floor) room.floor = floor;
+      else delete room.floor;
+      return { room };
+    }),
   setWallColor: (index, color) =>
     set((s) => ({ room: { ...s.room, wallColors: { ...s.room.wallColors, [index]: color } } })),
   setAllWallColors: (color) =>

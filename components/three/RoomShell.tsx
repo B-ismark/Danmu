@@ -78,13 +78,9 @@ import { SCENE } from '@/lib/scene-palette';
 import { wallApertures, skirtingRuns, type Aperture } from '@/lib/apertures';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { cutAwayWithWall } from '@/lib/near-wall';
-import { floorMaps, plasterMaps } from '@/lib/textures';
+import { floorFinishMaps, plasterMaps } from '@/lib/textures';
+import { FLOOR_SPEC, resolveFloor } from '@/lib/floor-finish';
 
-// Floor board tone. Stays local rather than reading SCENE.floor: that value is
-// the *swatch* the plan view and inspector show for a floor, deliberately a shade
-// deeper than the lit 3D board so the two read the same on screen.
-const FLOOR = '#E6E1D6';
-const FLOOR_NORMAL_SCALE = new Vector2(0.8, 0.8);
 /** Paint over plaster: enough relief to catch a lamp's raking light, not enough to
  *  read as a pattern from across the room. */
 const PLASTER_NORMAL_SCALE = new Vector2(0.5, 0.5);
@@ -107,6 +103,16 @@ export function RoomShell() {
   const height = useScene((s) => s.room.height);
   const footprint = useScene((s) => s.room.footprint);
   const wallColors = useScene((s) => s.room.wallColors);
+  // The floor's colour is the user's (or its kind's first swatch, which for planks
+  // is the board tone the floor always had); its maps depend only on material, size
+  // and grout, so a recolour regenerates nothing. See `lib/floor-finish.ts`.
+  const floorChoice = useScene((s) => s.room.floor);
+  const floor = useMemo(() => resolveFloor(floorChoice), [floorChoice]);
+  const floorMaps = useMemo(() => floorFinishMaps(floor.kind, floor.sizeMM, floor.grout), [floor.kind, floor.sizeMM, floor.grout]);
+  const floorRelief = useMemo(() => {
+    const r = FLOOR_SPEC[floor.kind].relief;
+    return new Vector2(r, r);
+  }, [floor.kind]);
   const showGrid = useStudio((s) => s.showGrid);
   const quality = useStudio((s) => s.quality);
   const selectedWall = useStudio((s) => s.selectedWall);
@@ -222,12 +228,12 @@ export function RoomShell() {
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <shapeGeometry args={[floorShape]} />
         <meshStandardMaterial
-          color={FLOOR}
-          roughness={0.92}
+          color={floor.color}
+          roughness={FLOOR_SPEC[floor.kind].roughness}
           metalness={0}
           side={DoubleSide}
-          {...floorMaps()}
-          normalScale={FLOOR_NORMAL_SCALE}
+          {...floorMaps}
+          normalScale={floorRelief}
         />
       </mesh>
 

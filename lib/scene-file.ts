@@ -41,6 +41,7 @@
 // Refusing the whole file for one bad field would make a version skew unrecoverable;
 // pretending nothing was lost would be the other failure.
 
+import { readFloorFinish, type FloorFinish } from './floor-finish';
 import {
   CATEGORIES,
   DECOR_KINDS,
@@ -114,6 +115,9 @@ export type SceneFileRoom = {
   depth: number;
   height: number;
   wallColors?: Record<number, string>;
+  /** The floor's material. A room file is for showing somebody the room, and the
+   *  floor is half of how it looks. */
+  floor?: FloorFinish;
   footprint?: Array<[number, number]>;
   site?: Site;
   /** The size is a shape's typical one, not measured (`RoomData.roughSize`). It
@@ -191,6 +195,7 @@ export function buildSceneFile(
       depth: room.depth,
       height: room.height,
       ...(room.wallColors ? { wallColors: room.wallColors } : {}),
+      ...(room.floor ? { floor: room.floor } : {}),
       ...(room.footprint ? { footprint: room.footprint } : {}),
       // Projected field by field, never spread. `Site` declares one key, but a
       // record written by the old sun mood also carries `lat` and `lon`, and those
@@ -500,6 +505,9 @@ function readRoom(
 
   const wallColors = readWallColors(v.wallColors);
   if (wallColors && Object.keys(wallColors).length > 0) room.wallColors = wallColors;
+
+  const floor = readFloorFinish(v.floor, dropped);
+  if (floor) room.floor = floor;
 
   const site = readSite(v.site);
   if (site) room.site = site;

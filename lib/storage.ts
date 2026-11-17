@@ -1,5 +1,6 @@
 'use client';
 
+import type { FloorFinish } from './floor-finish';
 import {
   createStore,
   del as idbDel,
@@ -253,6 +254,9 @@ export type RoomData = {
   /** per-wall paint colour, keyed by footprint-edge index. Optional — absent on
    *  rooms created before wall painting shipped (defensive read on load). */
   wallColors?: Record<number, string>;
+  /** What the floor is made of (`lib/floor-finish.ts`). Optional and additive:
+   *  absent is the planked floor every earlier room had, so no version bump. */
+  floor?: FloorFinish;
   /** Which way this room faces — the one input the sun still takes
    *  (`lib/solar.ts`). A property of the room, not of the device, which is why it
    *  is saved per room and edited in the rail's Room section rather than in a
