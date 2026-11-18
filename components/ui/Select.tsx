@@ -37,6 +37,8 @@ export type SelectOption<T extends string> = {
 
 const MAX_LIST_H = 288;
 const GAP = 6;
+/** The list's clear margin from the window's side edges. */
+const EDGE = 8;
 
 export function Select<T extends string>({
   options,
@@ -97,6 +99,7 @@ export function Select<T extends string>({
       position: 'fixed',
       left: r.left,
       minWidth: r.width,
+      maxWidth: `calc(100vw - ${2 * EDGE}px)`,
       maxHeight: Math.min(MAX_LIST_H, Math.max(120, flip ? above : below)),
       ...(flip ? { bottom: window.innerHeight - r.top + GAP } : { top: r.bottom + GAP }),
     });
@@ -106,6 +109,20 @@ export function Select<T extends string>({
     if (open) place();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // The list grows to the right from the trigger's left edge, and an option's trailing
+  // hint can make it wider than the trigger — so in the RIGHT rail, or on a phone, it
+  // can reach past the window. Measured once it exists, and slid back left until it
+  // fits: a list cut off at the screen edge hides the very numbers it was widened for.
+  useLayoutEffect(() => {
+    const el = list.current;
+    if (!open || !box || !el) return;
+    const r = el.getBoundingClientRect();
+    const limit = window.innerWidth - EDGE;
+    if (r.right <= limit + 0.5) return;
+    const left = Math.max(EDGE, limit - r.width);
+    if (left !== box.left) setBox({ ...box, left });
+  }, [open, box]);
 
   useEffect(() => {
     if (!open) return;
