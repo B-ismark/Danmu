@@ -7,10 +7,11 @@
 
 import { useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
-import { useSettings } from '@/lib/store';
+import { useSettings, type DimUnit } from '@/lib/store';
 import { formatLength } from '@/lib/units';
 import { FLOOR_KINDS, FLOOR_SPEC, resolveFloor, withKind, type FloorKind, type Grout } from '@/lib/floor-finish';
 import { Segmented } from '@/components/ui/primitives';
+import { Select } from '@/components/ui/Select';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { Icon } from '@/components/ui/Icon';
 import { FinishStatus } from './FinishStatus';
@@ -37,10 +38,10 @@ export function FloorFinishEditor() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       <Field label="Material">
-        <Segmented<FloorKind>
+        {/* A dropdown, not a grid of six buttons: the choice is one word and the room
+            itself is the preview, so the list only needs to be there while choosing. */}
+        <Select<FloorKind>
           ariaLabel="Floor material"
-          wrap
-          minItem={76}
           options={FLOOR_KINDS.map((k) => ({ value: k, label: FLOOR_SPEC[k].label }))}
           value={floor.kind}
           onChange={(k) => {
@@ -53,32 +54,15 @@ export function FloorFinishEditor() {
 
       {spec.sizeOf && size && (
         <Field label={spec.sizeOf}>
-          <Segmented<string>
+          <Select<string>
             ariaLabel={spec.sizeOf}
-            wrap
-            minItem={72}
-            options={spec.sizes.map((s) => ({ value: String(s.mm), label: s.name }))}
+            options={spec.sizes.map((s) => ({ value: String(s.mm), label: s.name, hint: measure(floor.kind, s.mm, unit) }))}
             value={String(size.mm)}
             onChange={(mm) => setFloor({ ...base, kind: floor.kind, sizeMM: Number(mm) })}
           />
           {/* The measure is derived from the same number the texture is drawn at, in
               the user's own unit, never typed beside it. */}
-          <div className="t-hint" style={{ marginTop: 6 }}>
-            {floor.kind === 'herringbone' ? (
-              <>
-                <span className="mono">{formatLength(size.mm, unit)}</span> ×{' '}
-                <span className="mono">{formatLength(size.mm * 5, unit)}</span> blocks
-              </>
-            ) : floor.kind === 'planks' ? (
-              <>
-                <span className="mono">{formatLength(size.mm, unit)}</span> wide boards
-              </>
-            ) : (
-              <>
-                <span className="mono">{formatLength(size.mm, unit)}</span> square
-              </>
-            )}
-          </div>
+          <div className="t-hint" style={{ marginTop: 6 }}>{measure(floor.kind, size.mm, unit)}</div>
         </Field>
       )}
 
@@ -173,6 +157,14 @@ export function FloorFinishEditor() {
       )}
     </div>
   );
+}
+
+/** What a size means on the floor, in the user's unit — one sentence for the list's
+ *  trailing note and the line under it, so the two cannot disagree. */
+function measure(kind: FloorKind, mm: number, unit: DimUnit): string {
+  if (kind === 'herringbone') return `${formatLength(mm, unit)} × ${formatLength(mm * 5, unit)} blocks`;
+  if (kind === 'planks') return `${formatLength(mm, unit)} wide boards`;
+  return `${formatLength(mm, unit)} square`;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

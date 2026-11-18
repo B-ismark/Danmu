@@ -9,6 +9,7 @@ import { useScene } from '@/lib/scene-store';
 import { WALL_KINDS, WALL_SPEC, resolveWalls, type WallKind } from '@/lib/wall-finish';
 import type { Grout } from '@/lib/floor-finish';
 import { Segmented } from '@/components/ui/primitives';
+import { Select } from '@/components/ui/Select';
 import { Icon } from '@/components/ui/Icon';
 import { FinishStatus } from './FinishStatus';
 
@@ -29,10 +30,8 @@ export function WallFinishEditor({ titled = true }: { titled?: boolean } = {}) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       <div style={{ minWidth: 0 }}>
         {titled && <span className="section-title" style={{ marginBottom: 6, display: 'block' }}>Finish</span>}
-        <Segmented<WallKind>
+        <Select<WallKind>
           ariaLabel="Wall finish"
-          wrap
-          minItem={76}
           options={WALL_KINDS.map((k) => ({ value: k, label: WALL_SPEC[k].label }))}
           value={walls.kind}
           onChange={(k) => {
