@@ -91,6 +91,8 @@ export function RailFooter() {
   const selectedId = useStudio((s) => s.selectedPartId);
   const selectedWall = useStudio((s) => s.selectedWall);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
+  const selectedFloor = useStudio((s) => s.selectedFloor);
+  const setSelectedFloor = useStudio((s) => s.setSelectedFloor);
   const canStartOver = useCanStartOver();
   // The NAME, not the parts array: subscribing to the list re-renders this on every
   // scene write, and all the footer needs is whether the selected id still names
@@ -116,18 +118,20 @@ export function RailFooter() {
   const phone = usePhoneStudio();
 
   // Nothing selected: the empty panel holds this row's verbs (see the header).
-  if (selectedWall === null && selectedName == null) return null;
+  if (selectedWall === null && !selectedFloor && selectedName == null) return null;
 
   return (
     <div className="rail-footer">
       <div className="rail-footer__row">
-        {selectedWall !== null ? (
+        {selectedWall !== null || selectedFloor ? (
           <div style={{ minWidth: 0 }}>
-            <Tooltip label="Done with this wall">
+            {/* The room's own surfaces share one Done: a wall and the floor are both
+                left the same way, and the row's geometry is measured per branch. */}
+            <Tooltip label={selectedFloor ? 'Done with the floor' : 'Done with this wall'}>
               <button
-                onClick={() => setSelectedWall(null)}
+                onClick={() => (selectedFloor ? setSelectedFloor(false) : setSelectedWall(null))}
                 className="ds-btn ds-btn--sm"
-                aria-label="Done with this wall"
+                aria-label={selectedFloor ? 'Done with the floor' : 'Done with this wall'}
               >
                 <Icon name="x" size={12} />
                 <span style={LABEL}>Done</span>

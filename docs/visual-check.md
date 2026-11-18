@@ -264,6 +264,20 @@ the WHOLE old floor or wall on screen while the new one is built (it used to fli
 to an older one for a moment). Check: herringbone and stone colours match their swatch
 in daylight; a brick wall's first joint sits at the corner on every wall.
 
+### Click the floor to change it; small wood gets no finish — on branch `claude/admiring-maxwell-tpa1rj`, PROBED
+
+Reported as "there's no way to change the texture for the floor since there's no way to
+select it" and "the wood on the couch is too small to give it its own finish setting".
+Probed in headless Chromium: a still click on the floor selects it (green edge) and the
+right panel shows **Floor** with material, size and colour; Esc clears it; a drag that
+orbits the camera and ends on the floor does not select it; a selected wall now shows
+**Wall finish** under its colour; a sofa's panel has Fabric and no Wood; a coffee table
+keeps Wood. Look for: an orbit that *returns to where it started* does select the
+floor (R3F measures press to release, not the path) — judge whether that bothers
+anyone; the floor's green edge being hidden behind the near wall's cut-away; on a
+phone, tapping the floor bringing up the Floor sheet. The 2D plan is unchanged — a
+press on its floor is still the marquee.
+
 ### Opening a room on Best looking quality draws the room — on branch `claude/admiring-maxwell-tpa1rj`, PROBED
 
 Reported as "a dark screen after the room loads; the models don't show even when

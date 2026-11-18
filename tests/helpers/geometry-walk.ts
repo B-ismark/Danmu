@@ -48,6 +48,10 @@ export type Prim = {
    *  ceiling fan reads as 22% of its own box and the box looks wildly too generous;
    *  swept, it is the inscribed circle the box is drawn around. */
   spun: boolean;
+  /** The surface it is drawn in, where the walk can tell: the `surface` (or
+   *  `look.surface`) of the innermost component that drew it, or the finish material
+   *  inside its mesh. Absent for a plain material the finish never reaches. */
+  surface?: string;
 };
 
 export type WalkReport = {
@@ -220,7 +224,41 @@ export function walk(node: ReactNode): WalkReport {
     m[k] = (m[k] ?? 0) + 1;
   };
 
+  /** The surface an element draws its own primitives in, if it names one. */
+  const surfaceOf = (n: ReactNode): string | null => {
+    if (!isValidElement(n)) return null;
+    const props = (n.props ?? {}) as AnyProps;
+    if (n.type === 'mesh' || n.type === 'instancedMesh') {
+      const kids = ([] as ReactNode[]).concat(props.children as ReactNode).flat(Infinity as 1);
+      for (const k of kids) {
+        if (!isValidElement(k)) continue;
+        const t = k.type as { displayName?: string; name?: string };
+        if (typeof k.type !== 'string' && MATERIALS.has(t.displayName ?? t.name ?? '')) {
+          return surfaceName((k.props as AnyProps).surface) ?? '';
+        }
+      }
+      // A plain material: drawn in no finishable surface. '' rather than null, so a
+      // parent's `look` cannot claim it — a mirror's glass is not its frame's wood.
+      return '';
+    }
+    const pr = props as { surface?: unknown; look?: { surface?: unknown } };
+    const t = n.type as { displayName?: string; name?: string };
+    if (typeof n.type !== 'string' && (t.displayName ?? t.name) === 'Box') return surfaceName(pr.surface) ?? '';
+    return surfaceName(pr.surface) ?? surfaceName(pr.look?.surface);
+  };
+
   const visit = (n: ReactNode, m: Matrix4, spun = false): void => {
+    const start = rep.prims.length;
+    const named = rep.surfaces.length;
+    visitInner(n, m, spun);
+    let s = surfaceOf(n);
+    // A mesh whose material is a component of its own (`LampShade`) names its surface
+    // while it is walked, not as a prop the mesh can be read for.
+    if (s === '' && isValidElement(n) && n.type === 'mesh' && rep.surfaces.length > named) s = rep.surfaces[rep.surfaces.length - 1];
+    if (s !== null) for (let i = start; i < rep.prims.length; i++) rep.prims[i].surface ??= s;
+  };
+
+  const visitInner = (n: ReactNode, m: Matrix4, spun = false): void => {
     if (n == null || typeof n === 'boolean' || typeof n === 'string' || typeof n === 'number') return;
     if (Array.isArray(n)) {
       for (const c of n) visit(c, m, spun);

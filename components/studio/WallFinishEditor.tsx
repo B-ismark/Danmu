@@ -17,7 +17,9 @@ export function wallsSummary(walls: ReturnType<typeof resolveWalls>): string {
   return WALL_SPEC[walls.kind].label;
 }
 
-export function WallFinishEditor() {
+/** `titled={false}` where the caller already heads the block (the wall panel's own
+ *  "Wall finish" section), so the word is not said twice in a row. */
+export function WallFinishEditor({ titled = true }: { titled?: boolean } = {}) {
   const chosen = useScene((s) => s.room.walls);
   const setWalls = useScene((s) => s.setWalls);
   const walls = resolveWalls(chosen);
@@ -26,7 +28,7 @@ export function WallFinishEditor() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       <div style={{ minWidth: 0 }}>
-        <span className="section-title" style={{ marginBottom: 6, display: 'block' }}>Finish</span>
+        {titled && <span className="section-title" style={{ marginBottom: 6, display: 'block' }}>Finish</span>}
         <Segmented<WallKind>
           ariaLabel="Wall finish"
           wrap

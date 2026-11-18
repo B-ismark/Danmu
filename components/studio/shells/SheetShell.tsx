@@ -55,10 +55,12 @@ function useSelectionName(): { selected: boolean; name: string | null } {
   const selectedPartId = useStudio((s) => s.selectedPartId);
   const selectionCount = useStudio((s) => s.selection.length);
   const selectedWall = useStudio((s) => s.selectedWall);
+  const selectedFloor = useStudio((s) => s.selectedFloor);
   const partName = useScene((s) => s.parts.find((p) => p.id === selectedPartId)?.name);
   if (selectionCount > 1) return { selected: true, name: `${selectionCount} selected` };
   if (partName) return { selected: true, name: partName };
   if (selectedWall != null) return { selected: true, name: `Wall ${selectedWall + 1}` };
+  if (selectedFloor) return { selected: true, name: 'Floor' };
   return { selected: false, name: null };
 }
 

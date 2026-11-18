@@ -66,18 +66,26 @@ export function resolvePartFinish(p: Pick<ScenePart, 'woodFinish' | 'fabricFinis
 // ── Which pieces have which ─────────────────────────────────────────────────
 //
 // Read off the renderers, not written from what furniture usually is: a shape is in a
-// set exactly when its drawing uses that surface. `tests/part-finish.test.ts` walks
-// every shape's geometry and fails in BOTH directions — a shape that draws wood but is
-// missing here gets no control for it, and one listed here that draws none gets a
-// control that does nothing, which is the defect this whole file exists to avoid.
+// set when its drawing uses that surface for at least `FINISH_MIN_SHARE` of what it
+// shows. `tests/part-finish.test.tsx` walks every shape's geometry, measures each
+// surface's share of the piece's outer area, and fails in BOTH directions — a shape
+// that is substantially wood with no control for it, and one listed here whose wood is
+// a trim nobody could see change.
+//
+// The share is the half that was added after use: the sofa, the armchair and the
+// ottoman were offered a Wood row for their legs — 1–2% of what they show — and in the
+// room the legs are too small to read as any finish at all. That is the same defect
+// as a control with no surface behind it, one size up: the row exists and nothing a
+// person can see answers it. Everything still offered is at least ~24% wood.
 
-// A mirror's or a painting's wood is its frame; a lamp's fabric is its shade; a clothes
-// rack's is the clothes. Each is what the control would change, so each is listed.
+/** The least of a piece's outer area a surface must cover to be offered a finish. */
+export const FINISH_MIN_SHARE = 0.1;
+
 export const WOOD_SHAPES: ReadonlySet<Shape> = new Set<Shape>([
-  'bed-double', 'bed-single', 'bookshelf', 'chair-armchair', 'chair-dining', 'closet',
+  'bed-double', 'bed-single', 'bookshelf', 'chair-dining', 'closet',
   'coffee-table', 'desk-l', 'desk-standard', 'door', 'door-cabinet', 'drawer-unit',
-  'mirror', 'mirror-oval', 'nightstand', 'open-shelf', 'ottoman', 'painting',
-  'shoe-rack', 'side-table', 'slat-panel', 'sofa', 'stool', 'tv-console', 'wardrobe',
+  'mirror', 'mirror-oval', 'nightstand', 'open-shelf', 'painting',
+  'shoe-rack', 'side-table', 'slat-panel', 'stool', 'tv-console', 'wardrobe',
   'worktop',
 ]);
 export const FABRIC_SHAPES: ReadonlySet<Shape> = new Set<Shape>([
@@ -111,7 +119,7 @@ export function readPartFinishes(
   const out: Finishes = {};
   if (v.woodFinish !== undefined) {
     if (!(WOOD_FINISHES as readonly unknown[]).includes(v.woodFinish)) dropped?.push(`${name}'s wood finish was unreadable, so it was left natural`);
-    else if (!axes.wood) dropped?.push(`${name} has no wood to finish, so its wood finish was left out`);
+    else if (!axes.wood) dropped?.push(`${name} has no wood finish to choose, so its wood finish was left out`);
     else out.woodFinish = v.woodFinish as WoodFinish;
   }
   if (v.fabricFinish !== undefined) {

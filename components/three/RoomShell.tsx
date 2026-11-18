@@ -105,6 +105,24 @@ const SKIRTING_H = 0.1;
  *  picture on 2026-10-01. A board has a thickness, so it has one now. Under
  *  `WALL_GAP` (20 mm) on purpose, so a piece snapped flush to a wall still clears it. */
 const SKIRTING_PROUD = 0.012;
+/** How far a press may travel, in CSS pixels, and still be a click on the floor or a
+ *  wall. R3F hands an object its click whenever the press began and ended on it,
+ *  however far the pointer went between — so an orbit that starts and ends on the
+ *  floor would select the floor, and every look around the room would open its panel.
+ *  Two pixels is R3F's own line for a click on nothing (`onPointerMissed`). */
+const STILL_PX = 2;
+
+/** A click on the room's own surfaces, or a gesture that happened to end over one. */
+function isStillClick(e: ThreeEvent<MouseEvent>): boolean {
+  // First, and unconditionally: a gizmo ring released over the room is not a choice
+  // of it, and the gate must be spent by this click whatever else it turns out to be,
+  // or it stays armed and eats an ordinary click one gesture later. See
+  // lib/gizmo-press.ts.
+  if (consumeGizmoClick()) return false;
+  if (e.delta > STILL_PX) return false;
+  // A pan held on the keyboard ends over bare floor too, and is not a choice of it.
+  return !useStudio.getState().panKeyHeld;
+}
 
 /** A finish, prepared without freezing the page.
  *
@@ -207,6 +225,8 @@ export function RoomShell() {
   const quality = useStudio((s) => s.quality);
   const selectedWall = useStudio((s) => s.selectedWall);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
+  const floorSelected = useStudio((s) => s.selectedFloor);
+  const setSelectedFloor = useStudio((s) => s.setSelectedFloor);
   const [hoverWall, setHoverWall] = useState<number | null>(null);
 
   const gridLines = useMemo(() => {
@@ -246,6 +266,11 @@ export function RoomShell() {
     shape.closePath();
     return shape;
   }, [footprint]);
+  // The selected floor's edge, a hair above the boards so it never fights them.
+  const floorEdge = useMemo(
+    () => [...footprint, footprint[0]].map(([x, z]) => [x, 0.004, z] as [number, number, number]),
+    [footprint],
+  );
 
   // One inward-facing single-sided wall per polygon edge — the near one culls.
   const walls = useMemo(() => wallSegments(footprint), [footprint]);
@@ -321,8 +346,21 @@ export function RoomShell() {
 
   return (
     <group>
-      {/* Floor — double-sided so it reads from above and below. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      {/* Floor — double-sided so it reads from above and below. A still click
+          selects it, the way a wall is selected, and the panel shows what it is
+          made of: until then its finish lived only in a shut rail section, and a
+          surface you cannot click reads as one you cannot change. No hover cue on
+          purpose: the floor is under the pointer nearly all the time, and a cursor
+          that is always a hand says nothing. */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+        onClick={(e: ThreeEvent<MouseEvent>) => {
+          e.stopPropagation();
+          if (!isStillClick(e)) return;
+          setSelectedFloor(true);
+        }}
+      >
         <shapeGeometry args={[floorShape]} />
         <meshStandardMaterial
           color={floor.color}
@@ -333,6 +371,11 @@ export function RoomShell() {
           normalScale={floorRelief}
         />
       </mesh>
+      {floorSelected && (
+        <group userData={{ helper: true }}>
+          <Line points={floorEdge} color={SCENE.accent} lineWidth={2.5} />
+        </group>
+      )}
 
       {/* Ceiling, for the eye. A separate mesh from the shadow caster below because the
           two want opposite things: that one must be drawn in no pass but the light's,
@@ -405,7 +448,7 @@ export function RoomShell() {
                 // over. Without this the wall got selected by a gizmo drag AND the
                 // gate stayed armed with nothing to consume it, so it went on to eat
                 // an ordinary click one gesture later. See lib/gizmo-press.ts.
-                if (consumeGizmoClick()) return;
+                if (!isStillClick(e)) return;
                 setSelectedWall(i);
               }}
               onPointerOver={(e: ThreeEvent<PointerEvent>) => {

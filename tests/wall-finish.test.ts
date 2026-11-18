@@ -152,7 +152,8 @@ describe('the walls travel', () => {
   });
 
   it('a piece finish travels through a room file too', () => {
-    const part = { id: 'a', name: 'Sofa', shape: 'sofa', category: 'sofa', dimMM: [2000, 850, 800], pos: [0, 0, 0], rot: 0, woodFinish: 'lacquered', fabricFinish: 'velvet' };
+    // A dining chair: substantially wood AND fabric, so both rows are its to carry.
+    const part = { id: 'a', name: 'Chair', shape: 'chair-dining', category: 'chair', dimMM: [450, 500, 900], pos: [0, 0, 0], rot: 0, woodFinish: 'lacquered', fabricFinish: 'velvet' };
     const out = parseSceneFile(
       sceneFileJson(buildSceneFile(ROOM, [part] as never, { positions: {}, rotations: {}, dims: {} }, 2)),
     );

@@ -36,6 +36,7 @@ function snapshot(over: Partial<Snapshot> = {}): Snapshot {
     selectedPartId: t.selectedPartId,
     selection: t.selection,
     selectedWall: t.selectedWall,
+    selectedFloor: t.selectedFloor,
     ...over,
   };
 }

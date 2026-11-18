@@ -42,6 +42,9 @@ type StudioState = {
    *  exclusive with part selection — selecting a wall clears the part selection
    *  and vice versa, so the Inspector shows one or the other. */
   selectedWall: number | null;
+  /** The floor is selected: the panel shows what it is made of. Exclusive with the
+   *  part and wall selections, by the same construction (each setter clears the rest). */
+  selectedFloor: boolean;
   hoveredPartId: string | null;
   viewPreset: ViewPreset;
   /** map of cabinet door/drawer id -> open progress 0..1 */
@@ -118,6 +121,8 @@ type StudioState = {
   /** select a wall by footprint-edge index (or null to clear). Clears any part
    *  selection so the two never show at once. */
   setSelectedWall: (i: number | null) => void;
+  /** select the floor (or clear it). Clears any part or wall selection. */
+  setSelectedFloor: (on: boolean) => void;
   /** shift-click: add/remove one id from the selection. */
   toggleInSelection: (id: string) => void;
   setHovered: (id: string | null) => void;
@@ -256,6 +261,7 @@ export const useStudio = create<StudioState>()(
   selectedPartId: null,
   selection: [],
   selectedWall: null,
+  selectedFloor: false,
   hoveredPartId: null,
   viewPreset: 'iso',
   openState: {},
@@ -286,15 +292,16 @@ export const useStudio = create<StudioState>()(
   pinned: {},
   hidden: {},
 
-  setSelected: (id) => set({ selectedPartId: id, selection: id ? [id] : [], selectedWall: null }),
-  setSelection: (ids, primary) => set({ selection: ids, selectedPartId: primary, selectedWall: null }),
-  setSelectedWall: (i) => set({ selectedWall: i, selectedPartId: null, selection: [] }),
+  setSelected: (id) => set({ selectedPartId: id, selection: id ? [id] : [], selectedWall: null, selectedFloor: false }),
+  setSelection: (ids, primary) => set({ selection: ids, selectedPartId: primary, selectedWall: null, selectedFloor: false }),
+  setSelectedWall: (i) => set({ selectedWall: i, selectedPartId: null, selection: [], selectedFloor: false }),
+  setSelectedFloor: (on) => set({ selectedFloor: on, selectedWall: null, selectedPartId: null, selection: [] }),
   toggleInSelection: (id) =>
     set((s) => {
       const has = s.selection.includes(id);
       const selection = has ? s.selection.filter((x) => x !== id) : [...s.selection, id];
       const selectedPartId = has ? (s.selectedPartId === id ? (selection[selection.length - 1] ?? null) : s.selectedPartId) : id;
-      return { selection, selectedPartId };
+      return { selection, selectedPartId, selectedWall: null, selectedFloor: false };
     }),
   setHovered: (id) => set({ hoveredPartId: id }),
   setView: (v) => set({ viewPreset: v }),

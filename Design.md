@@ -1590,7 +1590,18 @@ pair and they are **one row**, and the measured one survives in either photo ord
 
 ### Walls — `RoomShell.tsx`, `WallHandles.tsx`
 - Click a wall (3D or 2D plan) to select it — mutually exclusive with part
-  selection (`useStudio.selectedWall`). Shows a Wall panel in the Inspector.
+  selection (`useStudio.selectedWall`). Shows a Wall panel in the Inspector, which
+  carries the walls' finish (one for the room) beside the wall's own colour.
+- **The floor is selectable the same way** (3D only): a still click on it sets
+  `useStudio.selectedFloor` and the Inspector shows the Floor panel — the same
+  `FloorFinishEditor` the rail's Floor section holds. Its finish used to live only in
+  that shut section. The four selections (part, multi, wall, floor) are exclusive by
+  construction and ride undo together (`lib/history.ts`). A click on the floor or a
+  wall must be STILL (`STILL_PX`, 2 px from press to release): R3F hands an object its
+  click whenever the press began and ended on it, so without the gate every orbit that
+  started and ended on the floor would open its panel. A click on the floor therefore
+  no longer deselects a piece into the empty panel — Esc, Done, or a click beyond the
+  room does.
 - **Paint**: per-wall swatch / hex, or **Apply to all walls**. Stored per
   footprint-edge index in `room.wallColors`.
 - **Move / resize**: drag the selected wall's handle (3D) or edge (plan). The 3D
@@ -1730,6 +1741,13 @@ pair and they are **one row**, and the measured one survives in either photo ord
   `FABRIC_SHAPES` (`lib/part-finish.ts`), derived by walking every renderer and
   asserted equal in both directions (`tests/part-finish.test.tsx`), so a frame, a lamp
   shade or the clothes on a rack count and nothing gets a control that does nothing.
+  **A trim is not a finish:** a surface is offered only where it is at least
+  `FINISH_MIN_SHARE` (10%) of the piece's outer area at its Library size. A sofa's,
+  armchair's and ottoman's wood is their legs — 1–2% — so they offer Fabric only, and
+  the legs keep their stock wood (`finishesFor` filters at render time too, so an old
+  record's wood finish on a sofa draws nothing). The least-wood piece still offered is
+  a picture frame at 24%, and the test holds the line inside that gap and prints the
+  measured shares every run.
   Applied through one context (`components/three/part-finish.tsx`) read by `Box`, the
   instanced sets and `FinishMaterial`, so no renderer can be missed. The fields are
   `woodFinish` / `fabricFinish`, never `finish`, so the old row's value stays dead.

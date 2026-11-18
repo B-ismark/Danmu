@@ -227,8 +227,10 @@ describe('applyListEdits', () => {
     it('a different model keeps its colour and set, and not what belonged to the old model', () => {
       const part = rebuild({ category: 'sofa', label: 'sofa__slot:n' });
       expect(part).toMatchObject({ category: 'sofa', name: 'sofa', color: '#123456', groupId: 'g1' });
-      // A sofa has both surfaces a bed has, so both finishes travel.
-      expect(part).toMatchObject({ woodFinish: 'lacquered', fabricFinish: 'velvet' });
+      // A sofa's fabric is its look, so that travels; its wood is a few legs, too
+      // little to be offered a finish, so the bed's wood finish stays behind.
+      expect(part).toMatchObject({ fabricFinish: 'velvet' });
+      expect(part?.woodFinish).toBeUndefined();
       expect(part?.decor).toBeUndefined();
       expect(part?.light).toBeUndefined();
     });

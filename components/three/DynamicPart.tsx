@@ -9,6 +9,7 @@ import { Box, BoxInstances, LeafInstances, RoundInstances, SoftInstances, SoftMe
 import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { FinishMaterial, PartFinishContext, finishChoice } from './part-finish';
+import { finishesFor } from '@/lib/part-finish';
 import { Spin, Sway } from './Motion';
 import {
   clothesRail,
@@ -200,8 +201,11 @@ export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolea
   // React remounted every mesh in the piece — rebuilding each rounded box, and leaving
   // the meshes `ShadowCaster` flags (it re-runs on size and shape, not on this) with
   // no shadow until the next resize.
+  // Only the axes this piece offers: a sofa saved lacquered before its legs stopped
+  // being finishable must not keep a lacquer no control can show or clear.
+  const f = finishesFor(p, p);
   return (
-    <PartFinishContext value={finishChoice(p.woodFinish, p.fabricFinish)}>
+    <PartFinishContext value={finishChoice(f.woodFinish, f.fabricFinish)}>
       <ShapeDispatch part={p} locked={locked} />
       <PartLight part={p} />
     </PartFinishContext>
@@ -1601,7 +1605,7 @@ function MadeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
         // Always a provider, for the remount reason `PartGeometry` gives.
         return (
           <group key={block.id} position={b.pos} rotation-y={b.rot}>
-            <PartFinishContext value={finishChoice(part.woodFinish ?? b.woodFinish, part.fabricFinish ?? b.fabricFinish)}>
+            <PartFinishContext value={blockFinish(block, part, b)}>
               <ShapeDispatch part={block} locked={locked} />
             </PartFinishContext>
           </group>
@@ -1641,4 +1645,11 @@ function PlaneGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       <meshStandardMaterial color={color} />
     </mesh>
   );
+}
+
+/** A made piece's block's finish: the piece's own wins, as its colour does, and only on
+ *  the axes the block's model offers. */
+function blockFinish(block: Pick<ScenePart, 'shape' | 'made'>, part: Pick<ScenePart, 'woodFinish' | 'fabricFinish'>, b: Pick<ScenePart, 'woodFinish' | 'fabricFinish'>) {
+  const f = finishesFor(block, { woodFinish: part.woodFinish ?? b.woodFinish, fabricFinish: part.fabricFinish ?? b.fabricFinish });
+  return finishChoice(f.woodFinish, f.fabricFinish);
 }
