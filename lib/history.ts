@@ -64,6 +64,8 @@ export type Snapshot = {
   /** Index into `room.footprint`, so it goes stale in a way a part id does not — see
    *  `applySnapshot`. */
   selectedWall: number | null;
+  /** The fourth member of the same exclusive set. */
+  selectedFloor: boolean;
 };
 
 const MAX = 80;
@@ -157,6 +159,7 @@ function takeSnapshot(): Snapshot {
     selectedPartId: t.selectedPartId,
     selection: t.selection,
     selectedWall: t.selectedWall,
+    selectedFloor: t.selectedFloor,
   };
 }
 
@@ -244,7 +247,8 @@ export function startHistoryRecording() {
       state.pinned === prev.pinned &&
       state.selectedPartId === prev.selectedPartId &&
       state.selection === prev.selection &&
-      state.selectedWall === prev.selectedWall
+      state.selectedWall === prev.selectedWall &&
+      state.selectedFloor === prev.selectedFloor
     )
       return;
     scheduleSnapshot();
@@ -287,6 +291,7 @@ function sameSelection(a: Snapshot, b: Snapshot): boolean {
   return (
     a.selectedPartId === b.selectedPartId &&
     a.selectedWall === b.selectedWall &&
+    a.selectedFloor === b.selectedFloor &&
     a.selection.length === b.selection.length &&
     a.selection.every((id, i) => id === b.selection[i])
   );
@@ -355,6 +360,8 @@ export function applySnapshot(snap: Snapshot) {
       snap.selectedWall !== null && snap.selectedWall >= 0 && snap.selectedWall < wallCount
         ? snap.selectedWall
         : null,
+    // Undefined on a snapshot written before the floor could be selected.
+    selectedFloor: snap.selectedFloor === true,
   });
   // small async unsuspend so subscribe fires after state settles
   setTimeout(() => {

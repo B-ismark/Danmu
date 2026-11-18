@@ -8,6 +8,8 @@ import { Color } from 'three';
 import { Box, BoxInstances, LeafInstances, RoundInstances, SoftInstances, SoftMesh, StemInstances, type InstanceItem } from './Box';
 import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
+import { FinishMaterial, PartFinishContext, finishChoice } from './part-finish';
+import { finishesFor } from '@/lib/part-finish';
 import { Spin, Sway } from './Motion';
 import {
   clothesRail,
@@ -192,11 +194,21 @@ export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolea
   // two. A fixture that cannot express its defect, which is why the gate for this is
   // `tests/parametric-caps.test.ts`'s "one dim reaches both" clause instead.
   const p = useEffectivePart(part);
+  // The piece's wood and fabric finish, for every surface it draws (`./part-finish`).
+  // The provider is ALWAYS there, holding `undefined` when nothing is chosen (the
+  // context's own default, so an unfinished piece draws exactly as before). Rendered
+  // only when a finish existed, the root's element type flipped on the first choice and
+  // React remounted every mesh in the piece — rebuilding each rounded box, and leaving
+  // the meshes `ShadowCaster` flags (it re-runs on size and shape, not on this) with
+  // no shadow until the next resize.
+  // Only the axes this piece offers: a sofa saved lacquered before its legs stopped
+  // being finishable must not keep a lacquer no control can show or clear.
+  const f = finishesFor(p, p);
   return (
-    <>
+    <PartFinishContext value={finishChoice(f.woodFinish, f.fabricFinish)}>
       <ShapeDispatch part={p} locked={locked} />
       <PartLight part={p} />
-    </>
+    </PartFinishContext>
   );
 }
 
@@ -502,7 +514,7 @@ function HardParts({ parts, bodyC, look }: { parts: HardPart[]; bodyC: string; l
           );
         }
         const { surface, ...plain } = mat;
-        const material = <meshStandardMaterial {...(surface ? SURFACE[surface] : undefined)} {...plain} />;
+        const material = <FinishMaterial surface={surface} {...plain} />;
         if (p.kind === 'post') {
           return (
             <mesh key={p.key} position={p.pos} castShadow receiveShadow>
@@ -651,7 +663,7 @@ function LampShade({ part, color }: { part: ScenePart; color: string }) {
   // No hook: the footprint tests walk these renderers as plain functions, with
   // no React dispatcher, and two Color multiplies are not worth memoising.
   const emissive = spec ? new Color(color).multiply(new Color(hexFromKelvin(spec.kelvin))).getStyle() : '#000000';
-  return <meshPhysicalMaterial color={color} side={2} {...SURFACE.fabric} emissive={emissive} emissiveIntensity={glow} />;
+  return <FinishMaterial surface="fabric" physical color={color} side={2} emissive={emissive} emissiveIntensity={glow} />;
 }
 
 /** A standing lamp: `lampForm` draws it on a circle of the declared width, and the
@@ -862,7 +874,7 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
         const soles = tier.filter((b) => b.sole);
         return (
           <group key={i} position={[0, (i + 0.5) * gap, 0]} rotation={[-SHOE_TIER_TILT, 0, 0]}>
-            <BoxInstances items={slats} color={wood} surface={{ roughness: 0.7 }} />
+            <BoxInstances items={slats} color={wood} surface={SURFACE.wood} />
             {/* side rails the slats rest on, running front post to back post. Without
                 them every slat was a board floating 40 mm from the next, held by
                 nothing — a rack drawn as a stack of loose sticks. */}
@@ -1588,9 +1600,14 @@ function MadeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
           blockStyle: b.blockStyle,
           locked: false,
         };
+        // The piece's finish wins over the block's own, as its colour does; a block's
+        // own finish is what it was packed in.
+        // Always a provider, for the remount reason `PartGeometry` gives.
         return (
           <group key={block.id} position={b.pos} rotation-y={b.rot}>
-            <ShapeDispatch part={block} locked={locked} />
+            <PartFinishContext value={blockFinish(block, part, b)}>
+              <ShapeDispatch part={block} locked={locked} />
+            </PartFinishContext>
           </group>
         );
       })}
@@ -1628,4 +1645,11 @@ function PlaneGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       <meshStandardMaterial color={color} />
     </mesh>
   );
+}
+
+/** A made piece's block's finish: the piece's own wins, as its colour does, and only on
+ *  the axes the block's model offers. */
+function blockFinish(block: Pick<ScenePart, 'shape' | 'made'>, part: Pick<ScenePart, 'woodFinish' | 'fabricFinish'>, b: Pick<ScenePart, 'woodFinish' | 'fabricFinish'>) {
+  const f = finishesFor(block, { woodFinish: part.woodFinish ?? b.woodFinish, fabricFinish: part.fabricFinish ?? b.fabricFinish });
+  return finishChoice(f.woodFinish, f.fabricFinish);
 }

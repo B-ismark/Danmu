@@ -24,7 +24,7 @@ export default function ModelPage() {
   // shows the room that was already built; `drawn` is true again at once and the veil
   // never comes back. Its chunk and first frame are still what the veil waits on the
   // first time.
-  const { drawn } = useRoomHost();
+  const { drawn, failed } = useRoomHost();
 
   const canvas = (
     <main
@@ -36,7 +36,7 @@ export default function ModelPage() {
           screen readers — putting it on screen would just repeat the top bar. */}
       <h1 className="sr-only">Your room in 3D</h1>
       <RoomSlot />
-      <CanvasVeil building={!drawn} />
+      <CanvasVeil building={!drawn} failed={failed} />
 
       {/* ONE tool cluster, top-centre. This tab had four occupied corners plus the
           bottom centre; the slots are CanvasChrome's now, and both tabs use them. */}

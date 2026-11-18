@@ -1093,7 +1093,21 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   font-size: var(--fs-body); color: var(--ink-3);
   animation: danmu-arrive var(--dur-slow) var(--ease-out) var(--dur-slow) both;
 }
+.veil__fail {
+  display: grid; justify-items: center; gap: 10px; max-width: min(360px, calc(100vw - 32px));
+  text-align: center; font-size: var(--fs-body); color: var(--ink);
+}
+.veil__hint { font-size: var(--fs-caption); color: var(--ink-3); }
 @keyframes danmu-arrive { from { opacity: 0; } to { opacity: 1; } }
+
+/* A room finish being prepared (`FinishStatus`). The component itself holds it back
+   `SAY_AFTER_MS`, so a finish that is ready in a frame never shows a spinner at all —
+   a flash of one reads as a glitch, not as work being done; this only fades it in. */
+.finish-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-caption); color: var(--ink-3);
+  animation: danmu-arrive var(--dur-quick) var(--ease-out) both;
+}
 
 /* ─── Loading placeholders ────────────────────────────────────────────────
    The shape of what is coming, breathing, where the empty space would otherwise

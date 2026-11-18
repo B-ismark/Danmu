@@ -1590,7 +1590,18 @@ pair and they are **one row**, and the measured one survives in either photo ord
 
 ### Walls — `RoomShell.tsx`, `WallHandles.tsx`
 - Click a wall (3D or 2D plan) to select it — mutually exclusive with part
-  selection (`useStudio.selectedWall`). Shows a Wall panel in the Inspector.
+  selection (`useStudio.selectedWall`). Shows a Wall panel in the Inspector, which
+  carries the walls' finish (one for the room) beside the wall's own colour.
+- **The floor is selectable the same way** (3D only): a still click on it sets
+  `useStudio.selectedFloor` and the Inspector shows the Floor panel — the same
+  `FloorFinishEditor` the rail's Floor section holds. Its finish used to live only in
+  that shut section. The four selections (part, multi, wall, floor) are exclusive by
+  construction and ride undo together (`lib/history.ts`). A click on the floor or a
+  wall must be STILL (`STILL_PX`, 2 px from press to release): R3F hands an object its
+  click whenever the press began and ended on it, so without the gate every orbit that
+  started and ended on the floor would open its panel. A click on the floor therefore
+  no longer deselects a piece into the empty panel — Esc, Done, or a click beyond the
+  room does.
 - **Paint**: per-wall swatch / hex, or **Apply to all walls**. Stored per
   footprint-edge index in `room.wallColors`.
 - **Move / resize**: drag the selected wall's handle (3D) or edge (plan). The 3D
@@ -1719,6 +1730,27 @@ pair and they are **one row**, and the measured one survives in either photo ord
   it and was removed in review because it changed nothing a person could see. A
   room saved with one still loads; the value is ignored, and a room file does not
   write it out.
+- A **Finish** section beside it, and it is NOT that row back. It offers only what the
+  piece draws — **Wood** (Natural / Painted / Lacquered) and **Fabric** (Linen / Velvet /
+  Bouclé) — and every option changes what the surface LOOKS like: painted wood loses the
+  grain's colour and keeps a faint relief, lacquer is a mirror-sharp highlight, velvet
+  drops the weave for a crushed pile and a tight edge sheen, bouclé is deep loops.
+  `tests/finish-visibility.test.ts` holds each one to ×3 against its default on tone,
+  relief, gloss or sheen, prints the table every run, and shows the deleted Satin step
+  failing the same bar. Which pieces get which control is `WOOD_SHAPES` /
+  `FABRIC_SHAPES` (`lib/part-finish.ts`), derived by walking every renderer and
+  asserted equal in both directions (`tests/part-finish.test.tsx`), so a frame, a lamp
+  shade or the clothes on a rack count and nothing gets a control that does nothing.
+  **A trim is not a finish:** a surface is offered only where it is at least
+  `FINISH_MIN_SHARE` (10%) of the piece's outer area at its Library size. A sofa's,
+  armchair's and ottoman's wood is their legs — 1–2% — so they offer Fabric only, and
+  the legs keep their stock wood (`finishesFor` filters at render time too, so an old
+  record's wood finish on a sofa draws nothing). The least-wood piece still offered is
+  a picture frame at 24%, and the test holds the line inside that gap and prints the
+  measured shares every run.
+  Applied through one context (`components/three/part-finish.tsx`) read by `Box`, the
+  instanced sets and `FinishMaterial`, so no renderer can be missed. The fields are
+  `woodFinish` / `fabricFinish`, never `finish`, so the old row's value stays dead.
 
 ### Scanned pieces are approximate — decided 2026-10-03
 
@@ -2177,6 +2209,72 @@ blocks opens as a box clamped to a box's limits. It does not carry the shelf (§
   `PlantBody`, the floor plant's own geometry at tabletop size.
 
 ### Lighting, realism & motion
+- **Every surface has a texture, and it is mostly TONE** (`lib/textures.ts`,
+  `components/three/materials.ts`). Wood, fabric, brushed metal, the floorboards and
+  the plaster of the walls and ceiling each carry three procedural greyscale maps:
+  relief (`normalMap`), where the sheen breaks (`roughnessMap`) and a tone layer
+  (`map`) multiplied over the material's `color`. The tone layer is the part that
+  makes them visible. The first kit shipped relief only, to keep recolours intact, and
+  measured on a lit swatch at the studio's viewing scale it changed the picture by
+  0.6 grey levels in 255 on wood and fabric and 0.3 on the floor — under soft image
+  light a bump only shows where a light rakes across it. Grain reads as grain because
+  latewood is darker; a floor reads as boards because no two are the same shade. The
+  layer is grey and never above 1, so a recolour keeps its hue and the darkest grain
+  line is still ~60% of the chosen colour; `tests/surface-textures.test.ts` pins a
+  floor under each surface's tonal spread and relief so the kit cannot fade back to
+  invisible without a red test.
+  **Scale is metres.** Each set has a `tileM`, and a texture only means "metres" on
+  geometry whose UVs do: the floor and walls (`ShapeGeometry` takes UVs from the
+  outline), every textured `Box` (rewritten by `lib/surface-uv.ts`, grain up a door
+  and along a top) and all cloth, which `lib/soft-goods.ts` now builds with UVs laid
+  by arc length. Cloth had **no UVs at all** before, so cushions, duvets and curtains
+  carried a fabric texture that three sampled at a single texel — measured, exactly
+  zero detail added to the most-looked-at surface in the room. Primitives with 0..1
+  UVs per face (cylinder legs, instanced boards) still show the texture at their own
+  scale.
+  **The ceiling is drawn now, from below only.** A second mesh beside the
+  shadow-only one, its back face looking down into the room: it appears when the
+  camera is under it — orbiting low, looking in at eye level — and culls the moment
+  the camera rises above it, so the dollhouse view is untouched. On `low` quality,
+  which has no floor-bounce light, it carries a faint emissive stand-in for that
+  bounce, or it read as a brown lid. Generation is deterministic (a seeded RNG, so a
+  floor's boards do not reshuffle on reload) and costs ~0.4 s of main-thread time the
+  first time a room opens, measured in a software-rendered headless Chromium.
+- **The walls are a choice of finish too** (`lib/wall-finish.ts`, the left rail's
+  **Walls** section in `components/studio/WallFinishEditor.tsx`): plaster (the default,
+  and the ceiling's), smooth paint, limewash, vertical panelling, brick in a running bond
+  and bevelled metro tile, with matching or contrast mortar/grout on the last two. ONE
+  finish for the room, multiplying each wall's own paint colour — a finish is how a room
+  was built, a colour how it was painted — so a pale wall over brick is painted brick.
+  `RoomData.walls` is optional for the floor's reason and travels in the scene file.
+- **A finish is prepared without freezing the page.** Building brick, tile or stone
+  takes a few hundred milliseconds of main-thread work the first time. `useStagedMaps`
+  (`RoomShell.tsx`) keeps the old finish on screen, marks the new one pending
+  (`lib/finish-loading.ts`), lets a frame paint, then builds; a newer choice cancels
+  the older build, and a stale finish cannot clear the newer one's state. The editors
+  show "Laying the new floor…" / "Finishing the walls…" with a spinner in an
+  always-mounted live region, faded in after `--dur-quick` so a quick build never
+  flashes one. The room's first finish is built synchronously, so a room never opens
+  on the wrong floor and then changes.
+- **The floor is a choice of material** (`lib/floor-finish.ts`, the left rail's
+  **Floor** section in `components/studio/FloorFinishEditor.tsx`). Six kinds —
+  planks, herringbone, ceramic tile, stone, concrete, carpet — each with the module
+  a fitter would name (board width, block width, tile or slab side) from a short
+  list rather than a free number, grout (matching or contrast) on tile and stone,
+  and its own six swatches plus the mixer. The textures are the same three-map kit
+  as every other surface, drawn per choice by `floorFinishFields` and kept in a
+  four-entry cache, so switching back is instant; stone is the slowest at ~0.4 s
+  the first time. **Grout can only be darker than its tile**, because the tone map
+  multiplies the chosen colour — a pale joint on a dark tile is a second colour and
+  a different shader, and is not offered. Each repeat holds whole modules (a 900 mm
+  tile repeats every 1.8 m, never mid-tile), and tile and stone are drawn at 1024
+  texels so a 3 mm joint survives a large tile. **An unchosen floor is the floor the
+  app always had** — 200 mm pale planks — so `RoomData.floor` is optional and every
+  older room opens unchanged. It travels in the scene file and is read back through
+  `readFloorFinish`, which snaps an off-list size to the nearest one and reports
+  whatever it dropped. `tests/floor-finish.test.ts` pins the herringbone tiling
+  (each point covered exactly once), seamless repeats, visible joints, colour
+  preservation and the codec.
 - **Fixtures emit real light** (`components/three/PartLight.tsx`, `lib/light-units.ts`).
   A lamp carries `light?: { lumens, kelvin, coneDeg? }` on its `ScenePart`
   (defaults per shape in `scene-spec.ts`), and the Inspector edits it in those
@@ -3743,7 +3841,7 @@ list that looks empty.
 
 | Wait | What it shows | Where |
 |---|---|---|
-| **A room opening** | `CanvasVeil`: opaque paper over the canvas and its floating chrome, "Opening your room…" until `RoomSync`'s three reads are in (`useScene.hydratedRoomId`, set only there, reset at the start of every load), then on the 3D tab "Building the 3D view…" until the first frame (`Room`'s `onFirstFrame`). Before it, the studio drew whatever the store still held: the previous room, or the starter room. The words arrive after a beat (`.veil__say`), so a one-frame load is a frame of paper, not a flash of text. `StudioShell`'s pre-layout "Setting up your studio…" uses the same look. | both room tabs |
+| **A room opening** | `CanvasVeil`: opaque paper over the canvas and its floating chrome, "Opening your room…" until `RoomSync`'s three reads are in (`useScene.hydratedRoomId`, set only there, reset at the start of every load), then on the 3D tab "Building the 3D view…" until the first frame has been DRAWN — not merely begun — without an uncaught error (`lib/first-frame.ts`, via `Room`'s `onFirstFrame`). Three broken frames in a row, or a loop that stops after one, keep the veil up with "The 3D view could not draw this room" and a **Switch to Smoother and reload** button (`roomHost.failed`), because a render that throws leaves a dark canvas that hover still raycasts into — the n8ao crash looked exactly like that. Before it, the studio drew whatever the store still held: the previous room, or the starter room. The words arrive after a beat (`.veil__say`), so a one-frame load is a frame of paper, not a flash of text. `StudioShell`'s pre-layout "Setting up your studio…" uses the same look. | both room tabs |
 | **A press that takes a while** | The button says so (`Fixing…`), and at **full strength**: `.ds-btn[aria-busy="true"]:disabled` undoes the disabled rule's half opacity, which had made the spinner faint and the button read as switched off. After `SAY_WORKING_AFTER_MS` (600 ms) `toastWhile` also puts up a working toast ("Arranging your room…"), taken down when the work settles either way, so the result toast is the only card left. Under 600 ms nothing extra is said, since a card that flashes for a frame is flicker. It needs the arranging worker: on the inline fallback the solve holds the thread and nothing can paint anyway. | Fix, Try a fix, Re-fit |
 | **A search** | Placeholders the shape of what is coming (`.ds-skeleton`, breathing) and a live region saying "Finding more…". | the ideas gallery |
 | **A list being read** | `.ds-skeleton--row` rows and an `sr-only` status, instead of the empty-state sentence. "No saved layouts yet", "No rooms yet", "No room is open" and a room briefly called "Living Room" were all said during the read, about rooms that had layouts, rooms and names. | Layouts, the room switcher, Settings, the top bar's name, the workspace |

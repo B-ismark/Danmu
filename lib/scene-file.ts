@@ -41,6 +41,9 @@
 // Refusing the whole file for one bad field would make a version skew unrecoverable;
 // pretending nothing was lost would be the other failure.
 
+import { readFloorFinish, type FloorFinish } from './floor-finish';
+import { readWallFinish, type WallFinish } from './wall-finish';
+import { finishAxes, readPartFinishes } from './part-finish';
 import {
   CATEGORIES,
   DECOR_KINDS,
@@ -114,6 +117,11 @@ export type SceneFileRoom = {
   depth: number;
   height: number;
   wallColors?: Record<number, string>;
+  /** The floor's material. A room file is for showing somebody the room, and the
+   *  floor is half of how it looks. */
+  floor?: FloorFinish;
+  /** The walls' finish, for the floor's reason. */
+  walls?: WallFinish;
   footprint?: Array<[number, number]>;
   site?: Site;
   /** The size is a shape's typical one, not measured (`RoomData.roughSize`). It
@@ -191,6 +199,8 @@ export function buildSceneFile(
       depth: room.depth,
       height: room.height,
       ...(room.wallColors ? { wallColors: room.wallColors } : {}),
+      ...(room.floor ? { floor: room.floor } : {}),
+      ...(room.walls ? { walls: room.walls } : {}),
       ...(room.footprint ? { footprint: room.footprint } : {}),
       // Projected field by field, never spread. `Site` declares one key, but a
       // record written by the old sun mood also carries `lat` and `lon`, and those
@@ -501,6 +511,12 @@ function readRoom(
   const wallColors = readWallColors(v.wallColors);
   if (wallColors && Object.keys(wallColors).length > 0) room.wallColors = wallColors;
 
+  const floor = readFloorFinish(v.floor, dropped);
+  if (floor) room.floor = floor;
+
+  const walls = readWallFinish(v.walls, dropped);
+  if (walls) room.walls = walls;
+
   const site = readSite(v.site);
   if (site) room.site = site;
   else if (v.site !== undefined) dropped.push("which way the room faces was unreadable and was left off");
@@ -736,6 +752,11 @@ function readPart(
       dropped.push(`“${part.name}” had no blocks this app could read, so it opens as a plain box of its size`);
     }
   }
+
+  // Wood and fabric finishes (`lib/part-finish.ts`), read LAST: whether the piece has a
+  // surface for each depends on its shape as read, and a made piece's on its blocks.
+  // Off-list or off-surface values are dropped and said.
+  Object.assign(part, readPartFinishes(v, finishAxes(part), part.name, dropped));
 
   return { part, originalId };
 }

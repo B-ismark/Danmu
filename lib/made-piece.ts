@@ -20,6 +20,7 @@ import { localToWorld, worldToLocal } from './geometry';
 import { anchorFor, verticalExtent } from './physics';
 import { clampDims, dimRangeFor } from './dimension-ranges';
 import { blockStyleKeys, readBlockOption, type BlockStyle } from './block-style';
+import { finishAxes, finishesFor, readPartFinishes, type FabricFinish, type WoodFinish } from './part-finish';
 
 /** One block inside a made piece, in the piece's own frame: metres from the piece's
  *  origin (footprint centre, at its lowest point), yaw relative to the piece. `pos.y`
@@ -34,6 +35,11 @@ export type MadeBlock = {
   color?: string;
   /** The block's style switches (`lib/block-style.ts`). */
   blockStyle?: BlockStyle;
+  /** Its wood and fabric finish (`lib/part-finish.ts`), carried like `color` so a
+   *  lacquered desk packed into a piece, taken apart or saved to the shelf stays
+   *  lacquered. Only a surface the block's shape has. */
+  woodFinish?: WoodFinish;
+  fabricFinish?: FabricFinish;
 };
 
 /** What makes a part a made piece. `sizeMM` is the size the blocks were packed at;
@@ -163,7 +169,7 @@ function scaledDims(b: MadeBlock, sx: number, sz: number, sy: number): [number, 
 }
 
 /** The parts to pack: what `packMade` needs of each block part. */
-export type PackInput = Pick<ScenePart, 'shape' | 'category' | 'pos' | 'rot' | 'dimMM' | 'color' | 'blockStyle'>;
+export type PackInput = Pick<ScenePart, 'shape' | 'category' | 'pos' | 'rot' | 'dimMM' | 'color' | 'blockStyle' | 'woodFinish' | 'fabricFinish'>;
 
 /** Pack block parts (world transforms) into a made piece. The piece's yaw is the
  *  largest block's, so a build assembled at an angle packs tight rather than inside
@@ -207,6 +213,7 @@ export function packMade(parts: readonly PackInput[], modular = false, frameRot?
     };
     if (p.color) b.color = p.color;
     if (p.blockStyle) b.blockStyle = p.blockStyle;
+    Object.assign(b, finishesFor(p, p));
     return b;
   });
   const sizeMM: [number, number, number] = [
@@ -246,6 +253,7 @@ export function explodeMade(
     };
     if (b.color) out.color = b.color;
     if (b.blockStyle) out.blockStyle = b.blockStyle;
+    Object.assign(out, finishesFor(b, b));
     return out;
   });
 }
@@ -311,6 +319,8 @@ export function readMadeSpec(raw: unknown): { spec: MadeSpec; dropped: number } 
     if (typeof b.color === 'string' && HEX.test(b.color)) block.color = b.color.toLowerCase();
     const style = readStyle(shape, b.blockStyle);
     if (style) block.blockStyle = style;
+    // Same rule as `readStyle`: a block keeps only legal finishes its shape can show.
+    Object.assign(block, readPartFinishes(b, finishAxes({ shape }), shape));
     blocks.push(block);
   }
   dropped += Math.max(0, r.blocks.length - MAX_BLOCKS);

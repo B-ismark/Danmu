@@ -29,6 +29,7 @@
 import { newLayout, roomStore, type LayoutVariant, type RoomData, type Transforms } from './storage';
 import { buildSceneFromRoom, type ScenePart } from './scene-spec';
 import { detectionPartIds, fromRecord, type SavedDetection } from './detection-record';
+import { finishesFor } from './part-finish';
 
 export const BEFORE_RESCAN = 'Before re-scan';
 
@@ -193,6 +194,9 @@ function carryStudioEdits(
   const sampled = (was as { color?: unknown } | undefined)?.color;
   if (old.color !== undefined && old.color !== sampled) out.color = old.color;
   if (old.groupId !== undefined) out.groupId = old.groupId;
+  // Finishes, like colour, are somebody's choice — kept on whatever surface the
+  // rebuilt model still has, so a re-worded velvet sofa stays velvet.
+  Object.assign(out, finishesFor(fresh, { woodFinish: old.woodFinish, fabricFinish: old.fabricFinish }));
   if (old.shape === fresh.shape) {
     if (old.decor !== undefined) out.decor = old.decor;
     if (old.light !== undefined) out.light = old.light;

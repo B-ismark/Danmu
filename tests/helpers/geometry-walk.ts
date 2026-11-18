@@ -48,6 +48,10 @@ export type Prim = {
    *  ceiling fan reads as 22% of its own box and the box looks wildly too generous;
    *  swept, it is the inscribed circle the box is drawn around. */
   spun: boolean;
+  /** The surface it is drawn in, where the walk can tell: the `surface` (or
+   *  `look.surface`) of the innermost component that drew it, or the finish material
+   *  inside its mesh. Absent for a plain material the finish never reaches. */
+  surface?: string;
 };
 
 export type WalkReport = {
@@ -64,6 +68,13 @@ export type WalkReport = {
   degenerate: number;
   /** components that threw when called */
   threw: Record<string, string>;
+  /** Every surface the piece asks for, as the renderer named it: a preset KEY where it
+   *  passed one (`Box`, `FinishMaterial`), or what a preset OBJECT identifies itself as
+   *  where it passed that (the instanced sets). An object that cannot say is recorded
+   *  as `'<object>'`, never dropped — `tests/part-finish.test.ts` reads this to decide
+   *  which pieces get a wood or a fabric control, and a surface it cannot see is a
+   *  control that silently goes missing. */
+  surfaces: string[];
 };
 
 /** Wrappers that animate their children without displacing them at rest.
@@ -72,6 +83,24 @@ const ANIMATION_WRAPPERS = new Set(['Sway', 'Spin']);
 
 /** Renders no geometry — lights only. Declared rather than skipped by accident. */
 const NO_GEOMETRY = new Set(['PartLight']);
+
+/** Components that ARE a material — no geometry, but the surface they name is recorded.
+ *  `FinishMaterial` reads the piece's finish from context, so it cannot be called. */
+const MATERIALS = new Set(['FinishMaterial']);
+
+const REACT_CONTEXT = Symbol.for('react.context');
+
+/** How a surface prop is recorded: a key as itself, a preset object by the `__key` a
+ *  test's stable mock gives it. */
+function surfaceName(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    const k = (v as { __key?: unknown }).__key;
+    return typeof k === 'string' ? k : '<object>';
+  }
+  return '<unknown>';
+}
 
 const _e = new Euler();
 const _v = new Vector3();
@@ -186,12 +215,50 @@ type AnyProps = Record<string, unknown>;
 const REACT_FRAGMENT = Symbol.for('react.fragment');
 
 export function walk(node: ReactNode): WalkReport {
-  const rep: WalkReport = { prims: [], descended: {}, declared: {}, unhandled: {}, threw: {}, degenerate: 0 };
+  const rep: WalkReport = { prims: [], descended: {}, declared: {}, unhandled: {}, threw: {}, degenerate: 0, surfaces: [] };
+  const noteSurface = (v: unknown) => {
+    const s = surfaceName(v);
+    if (s) rep.surfaces.push(s);
+  };
   const bump = (m: Record<string, number>, k: string) => {
     m[k] = (m[k] ?? 0) + 1;
   };
 
+  /** The surface an element draws its own primitives in, if it names one. */
+  const surfaceOf = (n: ReactNode): string | null => {
+    if (!isValidElement(n)) return null;
+    const props = (n.props ?? {}) as AnyProps;
+    if (n.type === 'mesh' || n.type === 'instancedMesh') {
+      const kids = ([] as ReactNode[]).concat(props.children as ReactNode).flat(Infinity as 1);
+      for (const k of kids) {
+        if (!isValidElement(k)) continue;
+        const t = k.type as { displayName?: string; name?: string };
+        if (typeof k.type !== 'string' && MATERIALS.has(t.displayName ?? t.name ?? '')) {
+          return surfaceName((k.props as AnyProps).surface) ?? '';
+        }
+      }
+      // A plain material: drawn in no finishable surface. '' rather than null, so a
+      // parent's `look` cannot claim it — a mirror's glass is not its frame's wood.
+      return '';
+    }
+    const pr = props as { surface?: unknown; look?: { surface?: unknown } };
+    const t = n.type as { displayName?: string; name?: string };
+    if (typeof n.type !== 'string' && (t.displayName ?? t.name) === 'Box') return surfaceName(pr.surface) ?? '';
+    return surfaceName(pr.surface) ?? surfaceName(pr.look?.surface);
+  };
+
   const visit = (n: ReactNode, m: Matrix4, spun = false): void => {
+    const start = rep.prims.length;
+    const named = rep.surfaces.length;
+    visitInner(n, m, spun);
+    let s = surfaceOf(n);
+    // A mesh whose material is a component of its own (`LampShade`) names its surface
+    // while it is walked, not as a prop the mesh can be read for.
+    if (s === '' && isValidElement(n) && n.type === 'mesh' && rep.surfaces.length > named) s = rep.surfaces[rep.surfaces.length - 1];
+    if (s !== null) for (let i = start; i < rep.prims.length; i++) rep.prims[i].surface ??= s;
+  };
+
+  const visitInner = (n: ReactNode, m: Matrix4, spun = false): void => {
     if (n == null || typeof n === 'boolean' || typeof n === 'string' || typeof n === 'number') return;
     if (Array.isArray(n)) {
       for (const c of n) visit(c, m, spun);
@@ -203,6 +270,14 @@ export function walk(node: ReactNode): WalkReport {
     const t = n.type as unknown;
 
     if (t === REACT_FRAGMENT) {
+      visit(props.children as ReactNode, m, spun);
+      return;
+    }
+
+    // A context provider (React 19 renders the context object itself). It places
+    // nothing — `PartGeometry` wraps a finished piece in one — so descend.
+    if (typeof t === 'object' && t !== null && (t as { $$typeof?: unknown }).$$typeof === REACT_CONTEXT) {
+      bump(rep.descended, 'Context');
       visit(props.children as ReactNode, m, spun);
       return;
     }
@@ -233,6 +308,15 @@ export function walk(node: ReactNode): WalkReport {
       bump(rep.declared, name);
       return;
     }
+
+    if (MATERIALS.has(name)) {
+      bump(rep.declared, name);
+      noteSurface(props.surface);
+      return;
+    }
+
+    // Every component below that draws takes its surface as a prop.
+    noteSurface(props.surface);
 
     if (ANIMATION_WRAPPERS.has(name)) {
       bump(rep.descended, name);

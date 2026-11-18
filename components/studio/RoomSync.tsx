@@ -39,6 +39,8 @@ function withShell(stored: RoomData, room: SceneRoom): RoomData {
       depth: room.depth,
       height: room.height,
       wallColors: room.wallColors,
+      floor: room.floor,
+      walls: room.walls,
       footprint: room.footprint,
       site: room.site,
     },

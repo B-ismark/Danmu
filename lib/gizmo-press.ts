@@ -145,8 +145,9 @@ export function claimPressForGizmo(): string | null {
  *  mesh eat it and select itself.
  *
  *  **Three consumers, because a ring sweeps over three kinds of thing.**
- *  `Pickable.onClick` for furniture, `RoomShell`'s wall mesh, and `Room`'s
- *  `onPointerMissed` for bare floor. Furniture alone leaves the gate armed with
+ *  `Pickable.onClick` for furniture, `RoomShell`'s wall and floor meshes
+ *  (`isStillClick`, which spends it before anything else), and `Room`'s
+ *  `onPointerMissed` for a click beyond the room. Furniture alone leaves the gate armed with
  *  nothing to consume it whenever a rotate finishes over plaster or air, and an
  *  armed gate outlives its gesture: the next press that would clear it can be one
  *  that never reaches `Draggable` at all — `WallHandles` stops propagation on its

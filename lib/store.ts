@@ -28,8 +28,9 @@ type ViewPreset = 'free' | 'front' | 'top' | 'iso';
  *  of their ids onto it. */
 export const LIGHTINGS = ['daylight', 'overcast'] as const;
 export type Lighting = (typeof LIGHTINGS)[number];
-/** Render quality — 'high' enables soft cast shadows, ambient occlusion and
- *  per-part procedural material maps. */
+/** Render quality — 'high' enables soft cast shadows, ambient occlusion and the
+ *  floor-bounce light. The procedural surface maps (`lib/textures.ts`) are on at
+ *  both; nothing gates them on quality, whatever this line used to say. */
 export type Quality = 'low' | 'high';
 
 type StudioState = {
@@ -41,6 +42,9 @@ type StudioState = {
    *  exclusive with part selection — selecting a wall clears the part selection
    *  and vice versa, so the Inspector shows one or the other. */
   selectedWall: number | null;
+  /** The floor is selected: the panel shows what it is made of. Exclusive with the
+   *  part and wall selections, by the same construction (each setter clears the rest). */
+  selectedFloor: boolean;
   hoveredPartId: string | null;
   viewPreset: ViewPreset;
   /** map of cabinet door/drawer id -> open progress 0..1 */
@@ -89,7 +93,7 @@ type StudioState = {
    *  it was scrubbed to yesterday. In history beside the lighting kind all the same
    *  — a theme sets both in one gesture, so undoing the theme has to put both back. */
   hour: number;
-  /** render quality (soft shadows + AO + material maps on 'high') */
+  /** render quality (soft shadows + AO + bounce light on 'high') */
   quality: Quality;
   /** auto set-dressing — decorative props on furniture surfaces */
   dressed: boolean;
@@ -117,6 +121,8 @@ type StudioState = {
   /** select a wall by footprint-edge index (or null to clear). Clears any part
    *  selection so the two never show at once. */
   setSelectedWall: (i: number | null) => void;
+  /** select the floor (or clear it). Clears any part or wall selection. */
+  setSelectedFloor: (on: boolean) => void;
   /** shift-click: add/remove one id from the selection. */
   toggleInSelection: (id: string) => void;
   setHovered: (id: string | null) => void;
@@ -255,6 +261,7 @@ export const useStudio = create<StudioState>()(
   selectedPartId: null,
   selection: [],
   selectedWall: null,
+  selectedFloor: false,
   hoveredPartId: null,
   viewPreset: 'iso',
   openState: {},
@@ -285,15 +292,16 @@ export const useStudio = create<StudioState>()(
   pinned: {},
   hidden: {},
 
-  setSelected: (id) => set({ selectedPartId: id, selection: id ? [id] : [], selectedWall: null }),
-  setSelection: (ids, primary) => set({ selection: ids, selectedPartId: primary, selectedWall: null }),
-  setSelectedWall: (i) => set({ selectedWall: i, selectedPartId: null, selection: [] }),
+  setSelected: (id) => set({ selectedPartId: id, selection: id ? [id] : [], selectedWall: null, selectedFloor: false }),
+  setSelection: (ids, primary) => set({ selection: ids, selectedPartId: primary, selectedWall: null, selectedFloor: false }),
+  setSelectedWall: (i) => set({ selectedWall: i, selectedPartId: null, selection: [], selectedFloor: false }),
+  setSelectedFloor: (on) => set({ selectedFloor: on, selectedWall: null, selectedPartId: null, selection: [] }),
   toggleInSelection: (id) =>
     set((s) => {
       const has = s.selection.includes(id);
       const selection = has ? s.selection.filter((x) => x !== id) : [...s.selection, id];
       const selectedPartId = has ? (s.selectedPartId === id ? (selection[selection.length - 1] ?? null) : s.selectedPartId) : id;
-      return { selection, selectedPartId };
+      return { selection, selectedPartId, selectedWall: null, selectedFloor: false };
     }),
   setHovered: (id) => set({ hoveredPartId: id }),
   setView: (v) => set({ viewPreset: v }),

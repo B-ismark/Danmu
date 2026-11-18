@@ -13,9 +13,21 @@ import { ColorPicker } from '@/components/ui/ColorPicker';
 import { Select } from '@/components/ui/Select';
 import { fieldMinWidth, NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill, Segmented, Toggle } from '@/components/ui/primitives';
+import {
+  FABRIC_FINISHES,
+  FABRIC_FINISH_SPEC,
+  WOOD_FINISHES,
+  WOOD_FINISH_SPEC,
+  finishAxes,
+  resolvePartFinish,
+  type FabricFinish,
+  type WoodFinish,
+} from '@/lib/part-finish';
 import { blockStyleFor, blockStyleKeys, type BlockStyle, type BlockStyleKey } from '@/lib/block-style';
 import { RailSection } from './RailSection';
 import { EmptyInspector } from './EmptyInspector';
+import { FloorFinishEditor } from './FloorFinishEditor';
+import { WallFinishEditor } from './WallFinishEditor';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, libraryShelf, DECOR_KINDS, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { MOUNT_PAD, restingOn } from '@/lib/physics';
@@ -46,6 +58,7 @@ import { fitPartDims } from '@/lib/made-piece';
 export function Inspector() {
   const id = useStudio((s) => s.selectedPartId);
   const selectedWall = useStudio((s) => s.selectedWall);
+  const selectedFloor = useStudio((s) => s.selectedFloor);
   const part = useRoomPart(id);
   const baseDim = useScene((s) => s.parts.find((p) => p.id === id)?.dimMM);
   const hasOverrides = useHasOverrides(id);
@@ -87,6 +100,7 @@ export function Inspector() {
   );
 
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
+  if (selectedFloor) return <FloorInspector />;
 
   // Nothing selected is the state everyone lands in first, so it is designed rather
   // than a grey line; see EmptyInspector.
@@ -416,6 +430,10 @@ export function Inspector() {
         onReset={() => updatePart(id!, { color: undefined })}
       />
 
+      {(finishAxes(part).wood || finishAxes(part).fabric) && (
+        <FinishControls part={part} onChange={(patch) => updatePart(id!, patch)} />
+      )}
+
       {isLightFixture(part.shape) && (
         <LightControls part={part} onChange={(light) => updatePart(id!, { light })} />
       )}
@@ -708,6 +726,56 @@ function BlockStyleControls({ part, onChange }: { part: ScenePart; onChange: (st
   );
 }
 
+/** What the piece's wood and its upholstery are — only the axes this piece draws
+ *  (`finishAxes`, derived from the renderers). Each option changes what the surface
+ *  LOOKS like, not only how it catches light; why, and the row that was deleted for
+ *  failing that, is `lib/part-finish.ts`. The default is written as ABSENT, so choosing
+ *  Natural or Linen again leaves the piece exactly as it was drawn before. */
+function FinishControls({
+  part,
+  onChange,
+}: {
+  part: ScenePart;
+  onChange: (patch: { woodFinish?: WoodFinish; fabricFinish?: FabricFinish }) => void;
+}) {
+  const axes = finishAxes(part);
+  const f = resolvePartFinish(part);
+  return (
+    <Section label="Finish">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {axes.wood && (
+          <div style={{ minWidth: 0 }}>
+            <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>Wood</span>
+            <Segmented<WoodFinish>
+              ariaLabel="Wood finish"
+              options={WOOD_FINISHES.map((w) => ({ value: w, label: WOOD_FINISH_SPEC[w].label }))}
+              value={f.wood}
+              onChange={(w) => onChange({ woodFinish: w === 'natural' && part.shape !== 'made' ? undefined : w })}
+              wrap
+              minItem={72}
+            />
+            <div className="t-hint" style={{ marginTop: 6 }}>{WOOD_FINISH_SPEC[f.wood].note}</div>
+          </div>
+        )}
+        {axes.fabric && (
+          <div style={{ minWidth: 0 }}>
+            <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>Fabric</span>
+            <Segmented<FabricFinish>
+              ariaLabel="Fabric"
+              options={FABRIC_FINISHES.map((x) => ({ value: x, label: FABRIC_FINISH_SPEC[x].label }))}
+              value={f.fabric}
+              onChange={(x) => onChange({ fabricFinish: x === 'linen' && part.shape !== 'made' ? undefined : x })}
+              wrap
+              minItem={72}
+            />
+            <div className="t-hint" style={{ marginTop: 6 }}>{FABRIC_FINISH_SPEC[f.fabric].note}</div>
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 // Editable decor collection on a part's surface. Starts from the suggested
 // arrangement; the user can add props, remove them, clear, or reset to auto.
 const DECOR_LABEL: Record<DecorKind, string> = {
@@ -836,6 +904,15 @@ function WallInspector({ index }: { index: number }) {
         }
       />
 
+      {/* The material, beside the colour it multiplies. One finish for the whole
+          room — said here, because this panel is about ONE wall and a change that
+          lands on all four should not surprise anyone. The same editor as the
+          rail's Walls section, so the two cannot drift. */}
+      <Section label="Wall finish">
+        <div className="t-hint" style={{ marginTop: -4, marginBottom: 8 }}>Applies to every wall in the room.</div>
+        <WallFinishEditor titled={false} />
+      </Section>
+
       {/* Move */}
       <Section label="Move wall">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
@@ -848,6 +925,23 @@ function WallInspector({ index }: { index: number }) {
         </div>
       </Section>
 
+    </div>
+  );
+}
+
+/** The floor, selected by clicking it in the room. Its finish used to be reachable
+ *  only through a shut section of the left rail, and a surface you cannot click
+ *  reads as one you cannot change. The same editor the rail's Floor section holds. */
+function FloorInspector() {
+  return (
+    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', flex: '0 0 auto', minWidth: 0 }}>
+      <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
+        <div style={{ fontSize: 'var(--fs-lead)', fontWeight: 500, letterSpacing: '-0.01em' }}>Floor</div>
+        <div className="t-hint" style={{ marginTop: 2 }}>What the whole floor is laid with.</div>
+      </div>
+      <div className="section section--flush">
+        <FloorFinishEditor />
+      </div>
     </div>
   );
 }

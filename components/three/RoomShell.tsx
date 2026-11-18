@@ -66,8 +66,8 @@
 // `lib/sun-shadow.ts` described; per-light masking (layers, or two passes) is the
 // real fix and is a change to how the scene is lit.
 
-import { useMemo, useRef, useState } from 'react';
-import { DoubleSide, FrontSide, Path, Shape, Vector2, type Group } from 'three';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BackSide, DoubleSide, FrontSide, Path, Shape, Vector2, type Group } from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { Line } from './strokes';
 import { useScene } from '@/lib/scene-store';
@@ -78,13 +78,24 @@ import { SCENE } from '@/lib/scene-palette';
 import { wallApertures, skirtingRuns, type Aperture } from '@/lib/apertures';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { cutAwayWithWall } from '@/lib/near-wall';
-import { floorNormal, floorRoughness } from '@/lib/textures';
+import {
+  floorFinishKey,
+  floorFinishMaps,
+  peekFinishMaps,
+  plasterMaps,
+  wallFinishKey,
+  wallFinishMaps,
+  type SurfaceMaps,
+} from '@/lib/textures';
+import { FLOOR_SPEC, resolveFloor } from '@/lib/floor-finish';
+import { WALL_SPEC, resolveWalls } from '@/lib/wall-finish';
+import { clearPending, markPending, stagedView, type FinishChannel, type StagedFinish } from '@/lib/finish-loading';
 
-// Floor board tone. Stays local rather than reading SCENE.floor: that value is
-// the *swatch* the plan view and inspector show for a floor, deliberately a shade
-// deeper than the lit 3D board so the two read the same on screen.
-const FLOOR = '#E6E1D6';
-const FLOOR_NORMAL_SCALE = new Vector2(0.25, 0.25);
+/** Paint over plaster: enough relief to catch a lamp's raking light, not enough to
+ *  read as a pattern from across the room. */
+const PLASTER_NORMAL_SCALE = new Vector2(0.5, 0.5);
+/** The ceiling's stand-in for floor bounce on 'low' quality, which has no bounce light. */
+const CEILING_BOUNCE_LOW = 0.22;
 /** Skirting height, metres. Shared with the aperture maths, which needs to know
  *  which openings reach down far enough to interrupt it. */
 const SKIRTING_H = 0.1;
@@ -94,6 +105,88 @@ const SKIRTING_H = 0.1;
  *  picture on 2026-10-01. A board has a thickness, so it has one now. Under
  *  `WALL_GAP` (20 mm) on purpose, so a piece snapped flush to a wall still clears it. */
 const SKIRTING_PROUD = 0.012;
+/** How far a press may travel, in CSS pixels, and still be a click on the floor or a
+ *  wall. R3F hands an object its click whenever the press began and ended on it,
+ *  however far the pointer went between — so an orbit that starts and ends on the
+ *  floor would select the floor, and every look around the room would open its panel.
+ *  Two pixels is R3F's own line for a click on nothing (`onPointerMissed`). */
+const STILL_PX = 2;
+/** The same line for a finger or a pen, which wobble on a tap where a mouse does not.
+ *  At 2 px a tap on a wall or the floor failed often enough to read as a dead
+ *  surface on a phone; an orbit by finger travels far further than this. */
+const STILL_TOUCH_PX = 10;
+
+/** A click on the room's own surfaces, or a gesture that happened to end over one. */
+function isStillClick(e: ThreeEvent<MouseEvent>): boolean {
+  // First, and unconditionally: a gizmo ring released over the room is not a choice
+  // of it, and the gate must be spent by this click whatever else it turns out to be,
+  // or it stays armed and eats an ordinary click one gesture later. See
+  // lib/gizmo-press.ts.
+  if (consumeGizmoClick()) return false;
+  const kind = (e.nativeEvent as Partial<PointerEvent>).pointerType;
+  if (e.delta > (kind === 'touch' || kind === 'pen' ? STILL_TOUCH_PX : STILL_PX)) return false;
+  // A pan held on the keyboard ends over bare floor too, and is not a choice of it.
+  return !useStudio.getState().panKeyHeld;
+}
+
+/** A finish, prepared without freezing the page.
+ *
+ *  Generating a finish is a few hundred milliseconds of JavaScript the first time (brick,
+ *  tile, stone). Done in the render that asked for it, the press that chose it did not
+ *  even show as pressed until it was over. So: a finish already made is used at once; a
+ *  new one keeps the WHOLE old finish on screen — maps, colour, sheen and relief, never
+ *  the new colour over the old boards (`stagedView` in `lib/finish-loading.ts`, where
+ *  the rule is tested) — is marked pending so the editor can say "laying the new
+ *  floor…", lets a frame paint, and is built after it. A newer choice made meanwhile
+ *  cancels the older build rather than queueing behind it.
+ *
+ *  The room's FIRST finish is built synchronously, on mount: a room must never open on
+ *  the wrong floor for a frame and then change, which reads as a glitch, not a load. */
+function useStagedFinish<C>(
+  channel: FinishChannel,
+  key: string,
+  choice: C,
+  peek: () => SurfaceMaps | null,
+  build: () => SurfaceMaps,
+): { choice: C; maps: SurfaceMaps } {
+  const [shown, setShown] = useState<StagedFinish<C, SurfaceMaps>>(() => ({ key, choice, maps: build() }));
+  const { view, ready, adopt } = stagedView(shown, key, choice, peek);
+  // A finish reached from the cache becomes what is on screen, during render, against
+  // the key last seen (the repo's rule for a prop-driven reset). `adopt` is non-null only
+  // while `shown.key` differs from `key`, and storing it closes that gap, so it settles.
+  if (adopt) setShown(adopt);
+  useEffect(() => {
+    if (ready) return;
+    markPending(channel, key);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // rAF then a macrotask: the rAF lets the pressed state and the spinner paint; the
+    // timeout moves the build past that paint rather than into the same frame.
+    const frame = requestAnimationFrame(() => {
+      timer = setTimeout(() => {
+        setShown({ key, choice, maps: build() });
+        clearPending(channel, key);
+      }, 0);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (timer !== undefined) clearTimeout(timer);
+      clearPending(channel, key);
+    };
+    // The key names the maps; `peek`, `build` and `choice` are rebuilt each render, and
+    // the choice stored with a build is only read while its key is the chosen one — when
+    // `stagedView` hands back the live choice instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel, key, ready]);
+  return view;
+}
+
+/** A wall's start corner at floor level: where its outline's (0, 0) sits. The local +X
+ *  of a wall turned by `yaw` is (cos yaw, −sin yaw) in world XZ, the same frame
+ *  `wallFrames` draws the selection loop in. */
+function wallOrigin(wl: { x: number; z: number; len: number; yaw: number }): [number, number, number] {
+  const hw = wl.len / 2;
+  return [wl.x - hw * Math.cos(wl.yaw), 0, wl.z + hw * Math.sin(wl.yaw)];
+}
 
 export function RoomShell() {
   // Field-level subscriptions, not the whole `room` object: a wall drag replaces
@@ -102,9 +195,43 @@ export function RoomShell() {
   const height = useScene((s) => s.room.height);
   const footprint = useScene((s) => s.room.footprint);
   const wallColors = useScene((s) => s.room.wallColors);
+  // The floor's colour is the user's (or its kind's first swatch, which for planks
+  // is the board tone the floor always had); its maps depend only on material, size
+  // and grout, so a recolour regenerates nothing. See `lib/floor-finish.ts`.
+  const floorChoice = useScene((s) => s.room.floor);
+  const chosenFloor = useMemo(() => resolveFloor(floorChoice), [floorChoice]);
+  const floorKey = floorFinishKey(chosenFloor.kind, chosenFloor.sizeMM, chosenFloor.grout);
+  const { choice: floor, maps: floorMaps } = useStagedFinish(
+    'floor',
+    floorKey,
+    chosenFloor,
+    () => peekFinishMaps('floor', floorKey),
+    () => floorFinishMaps(chosenFloor.kind, chosenFloor.sizeMM, chosenFloor.grout),
+  );
+  // The walls' finish is one for the room, multiplying each wall's own colour
+  // (`lib/wall-finish.ts`). Plaster is the ceiling's maps too, so it is always ready.
+  const wallChoice = useScene((s) => s.room.walls);
+  const chosenWalls = useMemo(() => resolveWalls(wallChoice), [wallChoice]);
+  const wallKey = wallFinishKey(chosenWalls.kind, chosenWalls.grout);
+  const { choice: wallFinish, maps: wallMaps } = useStagedFinish(
+    'wall',
+    wallKey,
+    chosenWalls,
+    () => (chosenWalls.kind === 'plaster' ? plasterMaps() : peekFinishMaps('wall', wallKey)),
+    () => wallFinishMaps(chosenWalls.kind, chosenWalls.grout),
+  );
+  const wallSpec = WALL_SPEC[wallFinish.kind];
+  const wallRelief = useMemo(() => new Vector2(wallSpec.relief, wallSpec.relief), [wallSpec.relief]);
+  const floorRelief = useMemo(() => {
+    const r = FLOOR_SPEC[floor.kind].relief;
+    return new Vector2(r, r);
+  }, [floor.kind]);
   const showGrid = useStudio((s) => s.showGrid);
+  const quality = useStudio((s) => s.quality);
   const selectedWall = useStudio((s) => s.selectedWall);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
+  const floorSelected = useStudio((s) => s.selectedFloor);
+  const setSelectedFloor = useStudio((s) => s.setSelectedFloor);
   const [hoverWall, setHoverWall] = useState<number | null>(null);
 
   const gridLines = useMemo(() => {
@@ -144,6 +271,11 @@ export function RoomShell() {
     shape.closePath();
     return shape;
   }, [footprint]);
+  // The selected floor's edge, a hair above the boards so it never fights them.
+  const floorEdge = useMemo(
+    () => [...footprint, footprint[0]].map(([x, z]) => [x, 0.004, z] as [number, number, number]),
+    [footprint],
+  );
 
   // One inward-facing single-sided wall per polygon edge — the near one culls.
   const walls = useMemo(() => wallSegments(footprint), [footprint]);
@@ -167,23 +299,30 @@ export function RoomShell() {
   // wall needs no CSG library — and a ShapeGeometry in the XY plane faces +Z just
   // as planeGeometry did, which is what keeps the near-wall back-face culling
   // (the whole dollhouse trick) working unchanged.
+  //
+  // The outline is drawn from the wall's START CORNER at floor level — (0, 0) to
+  // (len, height) — and the mesh is placed at that corner (`wallOrigin`), because a
+  // ShapeGeometry's UVs ARE its outline coordinates. Drawn about the wall's centre, a
+  // brick course or a tile row was measured from mid-height: the first course did not
+  // sit on the floor, and changing the ceiling slid every course by half the change.
+  // Apertures stay in their centred frame (`lib/apertures.ts`) and are shifted here.
   const wallShapes = useMemo(
     () =>
       walls.map((wl, i) => {
         const hw = wl.len / 2;
         const hh = height / 2;
         const shape = new Shape();
-        shape.moveTo(-hw, -hh);
-        shape.lineTo(hw, -hh);
-        shape.lineTo(hw, hh);
-        shape.lineTo(-hw, hh);
+        shape.moveTo(0, 0);
+        shape.lineTo(wl.len, 0);
+        shape.lineTo(wl.len, height);
+        shape.lineTo(0, height);
         shape.closePath();
         for (const a of apertures.get(i) ?? []) {
           const hole = new Path();
-          hole.moveTo(a.x0, a.y0);
-          hole.lineTo(a.x1, a.y0);
-          hole.lineTo(a.x1, a.y1);
-          hole.lineTo(a.x0, a.y1);
+          hole.moveTo(a.x0 + hw, a.y0 + hh);
+          hole.lineTo(a.x1 + hw, a.y0 + hh);
+          hole.lineTo(a.x1 + hw, a.y1 + hh);
+          hole.lineTo(a.x0 + hw, a.y1 + hh);
           hole.closePath();
           shape.holes.push(hole);
         }
@@ -212,17 +351,63 @@ export function RoomShell() {
 
   return (
     <group>
-      {/* Floor — double-sided so it reads from above and below. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      {/* Floor — double-sided so it reads from above and below. A still click
+          selects it, the way a wall is selected, and the panel shows what it is
+          made of: until then its finish lived only in a shut rail section, and a
+          surface you cannot click reads as one you cannot change. No hover cue on
+          purpose: the floor is under the pointer nearly all the time, and a cursor
+          that is always a hand says nothing. */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+        onClick={(e: ThreeEvent<MouseEvent>) => {
+          e.stopPropagation();
+          if (!isStillClick(e)) return;
+          setSelectedFloor(true);
+        }}
+      >
         <shapeGeometry args={[floorShape]} />
         <meshStandardMaterial
-          color={FLOOR}
-          roughness={0.92}
+          color={floor.color}
+          roughness={FLOOR_SPEC[floor.kind].roughness}
           metalness={0}
           side={DoubleSide}
-          normalMap={floorNormal()}
-          normalScale={FLOOR_NORMAL_SCALE}
-          roughnessMap={floorRoughness()}
+          {...floorMaps}
+          normalScale={floorRelief}
+        />
+      </mesh>
+      {floorSelected && (
+        <group userData={{ helper: true }}>
+          <Line points={floorEdge} color={SCENE.accent} lineWidth={2.5} />
+        </group>
+      )}
+
+      {/* Ceiling, for the eye. A separate mesh from the shadow caster below because the
+          two want opposite things: that one must be drawn in no pass but the light's,
+          this one in the colour pass only. Its BACK face is the side that looks down
+          into the room (it shares the floor's shape and rotation, whose front looks
+          up), so it shows whenever the camera is below it — orbiting low, looking in
+          at eye level — and culls the moment the camera rises above it, which keeps
+          the dollhouse view from above exactly as it was. No shadows either way: it
+          neither needs to cast (its twin does) nor receive (receiving the sun's map
+          from the plane that writes it is self-shadowing acne). Not raycastable, for
+          the twin's reason.
+          A ceiling is lit almost entirely by light thrown back up off the floor. On
+          'high' that is `Room.tsx`'s bounce light; 'low' has none, and without it the
+          one surface facing straight down read as a muddy brown lid at eye level. So on
+          'low' it carries a faint glow of its own colour standing in for the bounce,
+          and on 'high' none, so the two are not counted twice. */}
+      <mesh name="ceiling-view" position={[0, height, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <shapeGeometry args={[floorShape]} />
+        <meshStandardMaterial
+          color={SCENE.ceiling}
+          roughness={0.95}
+          metalness={0}
+          side={BackSide}
+          {...plasterMaps()}
+          normalScale={PLASTER_NORMAL_SCALE}
+          emissive={SCENE.ceiling}
+          emissiveIntensity={quality === 'high' ? 0 : CEILING_BOUNCE_LOW}
         />
       </mesh>
 
@@ -233,7 +418,7 @@ export function RoomShell() {
           never drawn, so which way its normal points cannot matter, and building a
           second footprint Shape for it would be a second answer to "what polygon is
           this room". */}
-      <mesh position={[0, height, 0]} rotation={[-Math.PI / 2, 0, 0]} castShadow raycast={() => null}>
+      <mesh name="ceiling-shadow" position={[0, height, 0]} rotation={[-Math.PI / 2, 0, 0]} castShadow raycast={() => null}>
         <shapeGeometry args={[floorShape]} />
         <meshBasicMaterial side={DoubleSide} colorWrite={false} depthWrite={false} />
       </mesh>
@@ -257,7 +442,7 @@ export function RoomShell() {
         return (
           <group key={`w-${i}`}>
             <mesh
-              position={[wl.x, height / 2, wl.z]}
+              position={wallOrigin(wl)}
               rotation={[0, wl.yaw, 0]}
               receiveShadow
               castShadow
@@ -268,7 +453,7 @@ export function RoomShell() {
                 // over. Without this the wall got selected by a gizmo drag AND the
                 // gate stayed armed with nothing to consume it, so it went on to eat
                 // an ordinary click one gesture later. See lib/gizmo-press.ts.
-                if (consumeGizmoClick()) return;
+                if (!isStillClick(e)) return;
                 setSelectedWall(i);
               }}
               onPointerOver={(e: ThreeEvent<PointerEvent>) => {
@@ -283,7 +468,7 @@ export function RoomShell() {
               }}
             >
               <shapeGeometry args={[wallShapes[i]]} />
-              <meshStandardMaterial color={color} roughness={0.96} metalness={0} side={FrontSide} />
+              <meshStandardMaterial color={color} roughness={wallSpec.roughness} metalness={0} side={FrontSide} {...wallMaps} normalScale={wallRelief} />
             </mesh>
             {/* Selection / hover frame — drawn just inside the room face so it
                 reads on the visible side. Marked as an editor helper so
@@ -356,7 +541,9 @@ function WallSkirting({ wl, runs, wall }: { wl: WallSeg; runs: Array<[number, nu
             rotation={[0, wl.yaw, 0]}
           >
             <boxGeometry args={[b - a, SKIRTING_H, SKIRTING_PROUD]} />
-            <meshStandardMaterial color="#D8D3C6" roughness={0.9} side={FrontSide} />
+            {/* Satin, not flat: skirting is trim paint, and the soft highlight along its
+                top edge is most of what separates it from the wall above. */}
+            <meshStandardMaterial color="#D8D3C6" roughness={0.55} side={FrontSide} />
           </mesh>
         );
       })}

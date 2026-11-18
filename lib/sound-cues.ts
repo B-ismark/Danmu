@@ -43,9 +43,15 @@ export type CueWorld = {
     dimMM: Vec3;
     color?: string;
     decor?: unknown;
+    woodFinish?: string;
+    fabricFinish?: string;
     groupId?: string;
   }>;
   wallColors: Readonly<Record<number, string>>;
+  /** The floor's finish — material, size, grout, colour. */
+  floor?: unknown;
+  /** The walls' finish. */
+  walls?: unknown;
   /** The outline, by reference: a new array is a room that changed shape. */
   footprint: unknown;
   roomSize: { width: number; depth: number; height: number };
@@ -142,13 +148,13 @@ export function cueFor(prev: CueWorld, next: CueWorld, opts: { afterDrag?: boole
   for (const p of next.parts) {
     const q = before.get(p.id);
     if (!q) continue;
-    if (q.color !== p.color) restyled++;
+    if (q.color !== p.color || q.woodFinish !== p.woodFinish || q.fabricFinish !== p.fabricFinish) restyled++;
     else if (differs(q.decor, p.decor)) found.push({ name: 'place', opts: { size: 0.05 } });
     if (q.groupId !== p.groupId) found.push({ name: 'snap' });
   }
   // A theme recolours everything at once; that is a re-arrangement of the look,
   // and it gets the one "brush" rather than a swish per piece.
-  if (restyled > 0 || differs(prev.wallColors, next.wallColors)) found.push({ name: 'brush' });
+  if (restyled > 0 || differs(prev.wallColors, next.wallColors) || differs(prev.floor, next.floor) || differs(prev.walls, next.walls)) found.push({ name: 'brush' });
 
   // ── The light ──
   // A lighting switch made BY a gesture — grabbing the sun in an overcast room

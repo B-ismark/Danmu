@@ -22,11 +22,14 @@ type State = {
   attached: boolean;
   /** The 3D view has drawn a frame at least once, for the loading veil. */
   drawn: boolean;
+  /** Its first frame threw and the render loop stopped: the veil says so rather
+   *  than lifting onto a canvas that will never paint. */
+  failed: boolean;
   /** The 3D tab has been opened once, so the canvas is worth keeping. */
   wanted: boolean;
 };
 
-const EMPTY: State = { host: null, attached: false, drawn: false, wanted: false };
+const EMPTY: State = { host: null, attached: false, drawn: false, failed: false, wanted: false };
 let state: State = EMPTY;
 const listeners = new Set<Listener>();
 
@@ -81,7 +84,7 @@ export const roomHost = {
     el.setAttribute('data-room-host', '');
     park(el);
     doc.body.appendChild(el);
-    set({ host: el, attached: false, drawn: false });
+    set({ host: el, attached: false, drawn: false, failed: false });
     return el;
   },
   /** Layout unmount (leaving the room, or switching rooms): free the node. */
@@ -108,7 +111,10 @@ export const roomHost = {
     set({ attached: false });
   },
   markDrawn() {
-    if (!state.drawn) set({ drawn: true });
+    if (!state.drawn || state.failed) set({ drawn: true, failed: false });
+  },
+  markFailed() {
+    if (!state.failed && !state.drawn) set({ failed: true });
   },
   /** Test seam. */
   reset() {

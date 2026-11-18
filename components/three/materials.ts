@@ -6,16 +6,27 @@
 // to reflect — see the inline <Environment> in Room.tsx. Without it they go
 // near-black. Keep that env mounted whenever these presets are used.
 //
-// wood + fabric carry a procedural NORMAL map via a lazy getter — spreading the
-// preset reads it (client-only, memoised), so the texture builds once on first
-// use and never during SSR. Colour stays driven by `color`/themes; the normal
-// map only adds microrelief (grain / weave).
+// wood, fabric and metal carry procedural maps via lazy getters — spreading the
+// preset reads them (client-only, memoised), so each set builds once on first use
+// and never during SSR. `map` is a GREY tone layer multiplied over `color`, so the
+// user's recolour keeps its hue; see `lib/textures.ts` for why the relief alone
+// changed nothing anyone could see.
+//
+// The maps are laid out in METRES, which only holds on geometry with metric UVs:
+// `Box` rewrites its own (`lib/surface-uv.ts`) and cloth is built with them
+// (`lib/soft-goods.ts`). A primitive with 0..1 UVs per face — a cylinder leg, an
+// instanced shelf board — still shows the texture, just at its own scale.
 
 import { Vector2, type Texture } from 'three';
-import { woodNormal, fabricNormal } from '@/lib/textures';
+import { woodMaps, fabricMaps, metalMaps, velvetMaps, boucleMaps, paintedWoodMaps } from '@/lib/textures';
 
-const NORMAL_SCALE_WOOD = new Vector2(0.35, 0.35);
-const NORMAL_SCALE_FABRIC = new Vector2(0.5, 0.5);
+const NORMAL_SCALE_WOOD = new Vector2(0.6, 0.6);
+const NORMAL_SCALE_FABRIC = new Vector2(0.9, 0.9);
+const NORMAL_SCALE_METAL = new Vector2(0.35, 0.35);
+const NORMAL_SCALE_PAINTED = new Vector2(0.45, 0.45);
+const NORMAL_SCALE_LACQUER = new Vector2(0.25, 0.25);
+const NORMAL_SCALE_VELVET = new Vector2(0.5, 0.5);
+const NORMAL_SCALE_BOUCLE = new Vector2(1.3, 1.3);
 
 // Tuned-hybrid: matte-leaning. Metals are brushed (not mirror), gloss is gentle.
 export const SURFACE = {
@@ -23,20 +34,38 @@ export const SURFACE = {
   wood: {
     roughness: 0.7,
     metalness: 0.0,
-    get normalMap(): Texture { return woodNormal(); },
+    get map(): Texture { return woodMaps().map; },
+    get normalMap(): Texture { return woodMaps().normalMap; },
+    get roughnessMap(): Texture { return woodMaps().roughnessMap; },
     normalScale: NORMAL_SCALE_WOOD,
   },
   /** Oiled / satin wood — slightly glossier. */
   woodSatin: {
     roughness: 0.58,
     metalness: 0.0,
-    get normalMap(): Texture { return woodNormal(); },
+    get map(): Texture { return woodMaps().map; },
+    get normalMap(): Texture { return woodMaps().normalMap; },
+    get roughnessMap(): Texture { return woodMaps().roughnessMap; },
     normalScale: NORMAL_SCALE_WOOD,
   },
   /** Brushed metal — chair bases, table legs, lamp poles, hardware. */
-  metal: { roughness: 0.52, metalness: 0.55 },
+  metal: {
+    roughness: 0.52,
+    metalness: 0.55,
+    get map(): Texture { return metalMaps().map; },
+    get normalMap(): Texture { return metalMaps().normalMap; },
+    get roughnessMap(): Texture { return metalMaps().roughnessMap; },
+    normalScale: NORMAL_SCALE_METAL,
+  },
   /** Dark matte metal — feet, thin frames. */
-  metalDark: { roughness: 0.6, metalness: 0.45 },
+  metalDark: {
+    roughness: 0.6,
+    metalness: 0.45,
+    get map(): Texture { return metalMaps().map; },
+    get normalMap(): Texture { return metalMaps().normalMap; },
+    get roughnessMap(): Texture { return metalMaps().roughnessMap; },
+    normalScale: NORMAL_SCALE_METAL,
+  },
   /** Upholstery — sofas, cushions, ottomans, lamp shades.
    *
    *  `sheen` is the cloth term, and it is the difference between a sofa and a
@@ -55,8 +84,58 @@ export const SURFACE = {
     // Slightly warm rather than pure white, so the rim reads as fibre rather than
     // as a specular highlight sitting on top of the colour.
     sheenColor: '#fff4e6',
-    get normalMap(): Texture { return fabricNormal(); },
+    get map(): Texture { return fabricMaps().map; },
+    get normalMap(): Texture { return fabricMaps().normalMap; },
+    get roughnessMap(): Texture { return fabricMaps().roughnessMap; },
     normalScale: NORMAL_SCALE_FABRIC,
+  },
+  // ── Finishes a piece can be given (`lib/part-finish.ts`) ──────────────────
+  // Never asked for by a renderer directly: `components/three/part-finish.tsx` swaps
+  // `wood`/`woodSatin` and `fabric` for these when the user picks a finish.
+  /** Painted wood: flat colour, the grain only as relief under the paint. */
+  woodPainted: {
+    roughness: 0.6,
+    metalness: 0.0,
+    get map(): Texture { return paintedWoodMaps().map; },
+    get normalMap(): Texture { return paintedWoodMaps().normalMap; },
+    get roughnessMap(): Texture { return paintedWoodMaps().roughnessMap; },
+    normalScale: NORMAL_SCALE_PAINTED,
+  },
+  /** Lacquered wood: the grain under a high gloss. Low enough that the room's image
+   *  light shows as a reflection, which is what makes it read as lacquer at all. */
+  woodLacquer: {
+    roughness: 0.16,
+    metalness: 0.0,
+    get map(): Texture { return woodMaps().map; },
+    get normalMap(): Texture { return woodMaps().normalMap; },
+    get roughnessMap(): Texture { return woodMaps().roughnessMap; },
+    normalScale: NORMAL_SCALE_LACQUER,
+  },
+  /** Velvet: a tight, bright sheen lobe (low `sheenRoughness`) over a crushed pile.
+   *  The sheen is the material — it is why velvet looks paler at its edges and deeper
+   *  face-on. Physical only, like `fabric`. */
+  velvet: {
+    roughness: 0.9,
+    metalness: 0.0,
+    sheen: 1,
+    sheenRoughness: 0.3,
+    sheenColor: '#ffffff',
+    get map(): Texture { return velvetMaps().map; },
+    get normalMap(): Texture { return velvetMaps().normalMap; },
+    get roughnessMap(): Texture { return velvetMaps().roughnessMap; },
+    normalScale: NORMAL_SCALE_VELVET,
+  },
+  /** Bouclé: deep loops, a soft wide sheen. The relief does the work. */
+  boucle: {
+    roughness: 1,
+    metalness: 0.0,
+    sheen: 0.7,
+    sheenRoughness: 0.95,
+    sheenColor: '#fff4e6',
+    get map(): Texture { return boucleMaps().map; },
+    get normalMap(): Texture { return boucleMaps().normalMap; },
+    get roughnessMap(): Texture { return boucleMaps().roughnessMap; },
+    normalScale: NORMAL_SCALE_BOUCLE,
   },
   /** Painted plastic / appliance shell. */
   plastic: { roughness: 0.55, metalness: 0.0 },
@@ -77,4 +156,4 @@ export type SurfaceKey = keyof typeof SURFACE;
  *  looking exactly as flat as it did before, which is the kind of change that
  *  gets written twice because the first time left no trace. Anything listed here
  *  must be spread onto `<meshPhysicalMaterial>`. */
-export const PHYSICAL_SURFACES: readonly SurfaceKey[] = ['fabric'];
+export const PHYSICAL_SURFACES: readonly SurfaceKey[] = ['fabric', 'velvet', 'boucle'];

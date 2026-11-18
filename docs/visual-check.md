@@ -210,6 +210,88 @@ itself is for eyes only.
 
 **Merged:** `e4e3f4e` (B-ismark/Danmu#261), not yet looked at.
 
+## Surfaces and textures
+
+### Wood, fabric, floorboards, plaster and a visible ceiling — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
+
+Checked in headless Chromium on **low** quality only, because the `high` quality AO pass
+throws every frame there (on `main` too — a separate task). So the real-GPU, `high`
+picture is unseen. Where to click: start any room from the layout picker, then
+orbit low until the ceiling closes the top of the view, and zoom close to the sofa and
+the coffee table, on both quality settings and both themes of light (Midday, Night).
+What wrong looks like: board seams or wall mottle shimmering/moiré as the camera moves
+(mipmapping or anisotropy not taking); a visible repeat on the floor across a large
+room (the board tile is 2.4 m); a fabric recolour reading noticeably darker than its
+swatch in the Inspector (the weave's tone layer averages ~0.78 of the colour, the
+largest of any surface); the ceiling on `high` too bright or too dark beside the walls
+(the `low` emissive stand-in is off there and the bounce light is meant to take over);
+a hitch when a room first opens (~0.4 s of texture generation, measured in software
+rendering, likely less on a phone's real CPU but unmeasured).
+
+### Floor materials — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
+
+Checked in headless Chromium on **low** quality only. Where to click: open any room,
+open **Floor** in the left rail, and step through all six materials, each size, both
+grouts and a dark and a pale swatch; then orbit low and zoom in near a wall. What
+wrong looks like: grout lines shimmering or vanishing at a distance (moiré on the
+mosaic and the contrast grid especially); a visible repeat on stone across a large
+room (it repeats every 1.6–2.4 m); herringbone reading as stripes rather than a
+zigzag; marble veins looking like cracks; the Material or Size buttons clipping or
+running into each other in the narrow left rail (laptop width, 1024–1279 px); the
+colour dots wrapping the mixer onto a row of its own; a pause on first choosing
+stone (~0.4 s, measured in software rendering).
+
+### Wall finishes, furniture finishes, loading line — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
+
+Checked in headless Chromium on **low** quality, at the evening mood only. Where to
+click: open **Walls** in the left rail and step through all six finishes and both
+mortar/grout choices, with walls painted different colours; select a sofa, a dining
+chair, a door and a mirror and try every **Finish** option on each. What wrong looks
+like: brick or tile joints shimmering at a distance (metro tile is the finest pattern
+in the app — 150 × 75 mm with a 2 mm joint — and read faintly in the evening light);
+panelling boards not lining up at a wall's corner; a repeat visible across a long
+brick wall; velvet reading as plain plastic in daylight (its sheen is the material);
+lacquer showing no reflection at all; a piece with half its parts finished (legs
+lacquered, top not); the **Laying the new floor…** / **Finishing the walls…** line
+flashing for a frame on a quick build, or never showing on a slow one (it appeared
+in the headless run for every first-time finish).
+
+Since the review round: **colours no longer read washed out** — the colour maps are
+now sRGB-encoded, which is how the renderer decodes them (`toneBytes`); a wall's brick
+or panelling now starts at the wall's own corner rather than mid-board; a made piece
+keeps its blocks' finishes through pack, open-up and save; and a finish change keeps
+the WHOLE old floor or wall on screen while the new one is built (it used to flip back
+to an older one for a moment). Check: herringbone and stone colours match their swatch
+in daylight; a brick wall's first joint sits at the corner on every wall.
+
+### Click the floor to change it; small wood gets no finish — on branch `claude/admiring-maxwell-tpa1rj`, PROBED
+
+Reported as "there's no way to change the texture for the floor since there's no way to
+select it" and "the wood on the couch is too small to give it its own finish setting".
+Probed in headless Chromium: a still click on the floor selects it (green edge) and the
+right panel shows **Floor** with material, size and colour; Esc clears it; a drag that
+orbits the camera and ends on the floor does not select it; a selected wall now shows
+**Wall finish** under its colour; a sofa's panel has Fabric and no Wood; a coffee table
+keeps Wood. Look for: an orbit that *returns to where it started* does select the
+floor (R3F measures press to release, not the path) — judge whether that bothers
+anyone; the floor's green edge being hidden behind the near wall's cut-away; on a
+phone, tapping the floor bringing up the Floor sheet. The 2D plan is unchanged — a
+press on its floor is still the marquee.
+
+### Opening a room on Best looking quality draws the room — on branch `claude/admiring-maxwell-tpa1rj`, PROBED
+
+Reported as "a dark screen after the room loads; the models don't show even when
+hovered". Cause: the branch lacked `main`'s n8ao 2.0.2 pin, so on **Best looking** the
+ambient-occlusion pass threw on every frame and nothing was drawn, while hover (a
+raycast, no render) still found the pieces. Merged `main`; probed in headless Chromium
+at high quality, night mode — the room draws, no page errors. And the veil no longer
+lifts on a frame that only *began*: `lib/first-frame.ts` waits for one the browser got
+past cleanly, and if three in a row break it stays up and says **The 3D view could
+not draw this room**, with **Switch to Smoother and reload** (probed by making every
+draw call in the render loop throw). Look at: a real phone and a real laptop GPU on
+Best looking, opening a room twice; the veil should lift onto a furnished room, never
+onto a dark canvas.
+
 ## Drag and selection
 
 *Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone,

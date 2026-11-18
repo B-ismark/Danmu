@@ -200,6 +200,8 @@ describe('applyListEdits', () => {
       groupId: 'g1',
       decor,
       light,
+      woodFinish: 'lacquered',
+      fabricFinish: 'velvet',
     };
     const scene = [dressed, built[1], plant];
     const rebuild = (change: Partial<(typeof LIST)[0]>) =>
@@ -211,6 +213,8 @@ describe('applyListEdits', () => {
       expect(part?.decor).toBe(decor);
       expect(part?.light).toBe(light);
       expect(part?.rot).not.toBe(dressed.rot);
+      // Finishes are somebody's choice, like colour: a re-measured bed keeps both.
+      expect(part).toMatchObject({ woodFinish: 'lacquered', fabricFinish: 'velvet' });
     });
 
     it('new words for the same model are its new name, and the rest stays', () => {
@@ -223,6 +227,10 @@ describe('applyListEdits', () => {
     it('a different model keeps its colour and set, and not what belonged to the old model', () => {
       const part = rebuild({ category: 'sofa', label: 'sofa__slot:n' });
       expect(part).toMatchObject({ category: 'sofa', name: 'sofa', color: '#123456', groupId: 'g1' });
+      // A sofa's fabric is its look, so that travels; its wood is a few legs, too
+      // little to be offered a finish, so the bed's wood finish stays behind.
+      expect(part).toMatchObject({ fabricFinish: 'velvet' });
+      expect(part?.woodFinish).toBeUndefined();
       expect(part?.decor).toBeUndefined();
       expect(part?.light).toBeUndefined();
     });
