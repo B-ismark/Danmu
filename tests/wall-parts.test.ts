@@ -216,6 +216,21 @@ describe('a curtain hangs in front of the window, not inside it', () => {
     expect(Math.hypot(c.pos[0] - w.pos[0], c.pos[2] - w.pos[2])).toBeCloseTo(Math.hypot(sc.x - sw.x, sc.z - sw.z), 9);
   });
 
+  it('every seeded door and window stands where the first drag would put it', () => {
+    // `room-openings` stood them 10 mm off the plaster while `snapToWall` puts every wall
+    // piece `WALL_GAP` off it, so the first touch jumped each one 1 cm into the room.
+    let openings = 0;
+    for (const { id, w, d } of PRESETS) {
+      const fp = footprintForLayout(id, w, d);
+      for (const p of defaultScene(id, w, d).filter((q) => q.shape === 'window' || q.shape === 'door')) {
+        const s = snapToWall(p.pos, p.dimMM, fp, wallStandoff(p.shape));
+        expect(Math.hypot(s.x - p.pos[0], s.z - p.pos[2]), `${id}: ${p.name}`).toBeLessThan(1e-9);
+        openings++;
+      }
+    }
+    expect(openings, 'seeded openings').toBeGreaterThan(PRESETS.length);
+  });
+
   it('a deeper window pushes its seeded curtain further out, by the sill it adds', () => {
     expect(curtainStandoff(0.06)).toBe(CURTAIN_STANDOFF);
     expect(curtainStandoff(0.04)).toBe(CURTAIN_STANDOFF);
