@@ -307,13 +307,15 @@ export function InfoTip({
     setPinned(false);
   }, []);
 
+  // A closed bubble forgets where it was, so the next opening waits for a fresh
+  // measurement rather than flashing at the old spot. Dropped during render, not in
+  // the effect below, so the close and the forgetting are one frame.
+  if (!shown && box) setBox(null);
+
   // Measured when it opens, like `Tooltip`: a bubble that survives a scroll is a
   // bubble pointing at nothing, so a scroll or a resize closes it instead.
   useEffect(() => {
-    if (!shown) {
-      setBox(null);
-      return;
-    }
+    if (!shown) return;
     const r = btnRef.current?.getBoundingClientRect();
     if (r) setBox(placeBubble(r, placement));
     const outside = (e: PointerEvent) => {

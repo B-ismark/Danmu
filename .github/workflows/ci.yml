@@ -102,24 +102,22 @@ jobs:
           restore-keys: |
             nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
-      # `next build` runs its own ESLint pass over the same config, and two ways
-      # that pass can fail do NOT fail the build — it prints one line and exits
-      # 0. Both have happened here (an ESLint 8 / flat-config mismatch linted
-      # nothing; a `*.config.mjs` ignore entry hid the config from Next's plugin
-      # detection), and a green build is exactly what they look like. So the
-      # build's own output is read, not just its exit code.
-      #
-      # `tests/toolchain.test.ts` asserts the same two invariants structurally,
-      # which is the check that fails fast and locally; this one is the backstop
-      # for a *new* way of skipping the pass that no test anticipates yet.
+      # The build's OUTPUT is read as well as its exit code. Up to Next 15 that was
+      # for `next build`'s own ESLint pass, which twice printed one line and exited 0
+      # having linted nothing; Next 16 removed that pass (`pnpm lint` above is the only
+      # lint gate now). What remains of the same shape: Next 16 reports a
+      # `next.config.mjs` key it does not recognise as a warning and builds anyway,
+      # so a setting can sit there doing nothing — the old `eslint` key did exactly
+      # that until the upgrade removed it. A config option that silently stopped
+      # meaning anything is a defect, so it fails the job.
       - name: Build
         if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -o pipefail
           pnpm build 2>&1 | tee build.log
-          if grep -qE 'ESLint: Invalid Options|plugin was not detected' build.log; then
-            echo "::error::next build ran its ESLint pass but the pass did not lint — see the line above. The build's exit code does not cover this."
+          if grep -qE 'Invalid next\.config\.(mjs|js|ts) options|Unrecognized key' build.log; then
+            echo "::error::next build ignored part of next.config.mjs — see the warning above. The build's exit code does not cover this."
             exit 1
           fi
 

@@ -189,9 +189,6 @@ const nextConfig = {
   // the deleted render pipeline. This is also why the Image Optimizer advisories
   // against Next do not reach this app, and why `sharp` — which Next depends on
   // for exactly that feature — is never called here.
-  // `next lint` only walks app/pages/components/lib/src by default; `tests` is
-  // real TypeScript we ship rules for, so lint it too.
-  eslint: { dirs: ['app', 'components', 'lib', 'tests'] },
   experimental: {
     optimizePackageImports: ['@react-three/drei', 'three'],
     // No `esmExternals: 'loose'`. It was needed on Next 14 for the three /

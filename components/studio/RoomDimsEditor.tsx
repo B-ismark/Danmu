@@ -68,6 +68,7 @@ export function RoomDimsEditor() {
     // also fires on the field's own commit, and rewriting "2" as "2.00" there put
     // the caret after a dot the user never typed, so "2" · pause · ".7" read 2.007
     // (`resyncDraft`). Blur is where a draft is tidied into display form.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the resync also clears the edited-fields ref, which must not change during render
     setLocal((was) =>
       [room.width, room.depth, room.height].map((m, i) => resyncDraft(was[i], m * 1000, dimUnit)) as [string, string, string],
     );

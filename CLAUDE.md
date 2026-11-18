@@ -760,9 +760,9 @@ deploy to). Each gate is guarded by `!cancelled()` so one red gate does not hide
 the other three, and `pnpm audit` runs `continue-on-error` on purpose: an
 advisory published upstream overnight is not a defect in whichever pull request
 happens to run next. The build step also **greps its own output**, because
-`next build` can skip its ESLint pass and still exit 0 — see the lint notes
-below, and `tests/toolchain.test.ts`, which pins the same two invariants where
-they fail faster.
+`next build` warns about a `next.config.mjs` key it does not recognise and still
+exits 0 — see the lint notes below (it used to be for the build's own ESLint pass,
+which Next 16 removed).
 
 Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
@@ -915,12 +915,14 @@ the boundary honest in both directions: a module only tests import does not belo
   byte and decoding as UTF-8 — `latin1` will not do, since the mojibake contains
   characters from CP1252's 0x80–0x9F range.)
 - **Linting is the ESLint CLI, not `next lint`** (removed in Next 16). Rules still
-  come from `eslint-config-next`, bridged into `eslint.config.mjs` by `FlatCompat`
-  from `@eslint/eslintrc` — which is a declared devDependency, not a borrowed
-  transitive of ESLint's. The ignore list moved out of `.eslintignore` (deprecated in
-  ESLint 9, and **silently ignored** under flat config, which is the dangerous part:
-  it does not error, it just starts linting `public/` and `.next/`). `eslint .` covers
-  `tests/` and `scripts/` as well, which `next lint`'s default dirs did not.
+  come from `eslint-config-next`, which since Next 16 ships **flat configs** that
+  `eslint.config.mjs` imports directly (`eslint-config-next/core-web-vitals`,
+  `/typescript`). The `FlatCompat` bridge from `@eslint/eslintrc` it needed up to
+  Next 15 is gone along with that devDependency — under 16 it fails outright. The
+  ignore list moved out of `.eslintignore` (deprecated in ESLint 9, and **silently
+  ignored** under flat config, which is the dangerous part: it does not error, it just
+  starts linting `public/` and `.next/`). `eslint .` covers `tests/` and `scripts/` as
+  well, which `next lint`'s default dirs did not.
   **`--max-warnings 0`: a warning fails the command.** `next lint` let warnings pass,
   which is how a lint result stops being read — the repo is at zero and stays there.
   So a new `@next/next/*` or `jsx-a11y/*` warning is a red build, not a line of
@@ -928,33 +930,46 @@ the boundary honest in both directions: a module only tests import does not belo
   raise the ceiling. And **do not add a stale directive:** ESLint 9 reports an
   `eslint-disable` that suppressed nothing, so at `--max-warnings 0` a comment left
   behind after the code stopped violating the rule is itself a red build.
-  Three properties of `eslint.config.mjs` are load-bearing for `next build`, which runs
-  its **own** lint pass over the same config, and all three fail in the direction that
-  looks like success:
-  - **ESLint must stay `>= 9`.** Next only strips the eslintrc-era options
-    (`useEslintrc`, `extensions`, …) when the installed ESLint is 9+. On 8.57 it finds
-    the flat config, loads `FlatESLint`, hands it eslintrc options, prints
-    `⨯ ESLint: Invalid Options` — and **exits 0 having linted nothing.** Verified by
-    planting a `react/jsx-key` error: the build passed on 8.57 and fails on 9.
+  **`next build` does not lint as of Next 16**, so `pnpm lint` is the only lint gate.
+  Up to 15 the build ran its own pass over the same config, and twice that pass printed
+  one line and **exited 0 having linted nothing** (ESLint 8.57 handed eslintrc options;
+  a config that ignored itself hiding from Next's plugin detection). The pass is gone;
+  the lesson is not — CI still reads the build's *output*, now for Next 16 reporting an
+  unrecognised `next.config.mjs` key as a warning and building anyway, which is how the
+  old `eslint: { dirs }` key would have sat there meaning nothing.
+  What is load-bearing in `eslint.config.mjs` now:
+  - **ESLint must stay `>= 9`.** Flat config is the only format here and
+    `eslint-config-next` 16 needs it.
   - **`next/typescript` is extended, not just `next/core-web-vitals`.** Without it
     `@typescript-eslint/no-unused-vars` is never enabled, `eslint:recommended` is not
-    in the chain, and `tsconfig.json` sets no `noUnusedLocals` — so `pnpm lint`,
-    `pnpm typecheck` and the build's own pass were all structurally incapable of
-    seeing a dead import. Adding it found thirteen across nine files, one a stale
-    `collidesAt` that had outlived its call site. A gate reporting zero because it
-    cannot see the defect is the failure this repo keeps finding.
-  - **The config must not ignore itself.** Next detects its plugin by calling
-    `calculateConfigForFile('eslint.config.mjs')` and looking for `@next/next` in the
-    result, so a `*.config.mjs` ignore entry (what `.eslintignore` used to carry) makes
-    the build warn the plugin is missing while every Next rule is in fact firing. The
-    root config files are linted instead, which is why `postcss.config.mjs` and
-    `eslint.config.mjs` name their default export.
+    in the chain, and `tsconfig.json` sets no `noUnusedLocals` — so `pnpm lint` and
+    `pnpm typecheck` were both structurally incapable of seeing a dead import. Adding
+    it found thirteen across nine files, one a stale `collidesAt` that had outlived
+    its call site. A gate reporting zero because it cannot see the defect is the
+    failure this repo keeps finding.
+  - **The config must not ignore itself.** It lints itself and the other root config
+    files, which is why `postcss.config.mjs` and `eslint.config.mjs` name their default
+    export; a `*.config.mjs` ignore entry would take them out of the gate silently.
+  - **Three React Compiler hook rules are off; `set-state-in-effect` and the classic
+    ones are on.** `eslint-config-next` 16 brings `eslint-plugin-react-hooks` 7, whose
+    recommended set adds `refs`, `set-state-in-effect`, `immutability` and `purity`.
+    This app does not use the React Compiler, and `refs` / `immutability` / `purity`
+    reported 52 findings that were overwhelmingly the app's own deliberate patterns
+    (`Draggable` mutating its refs and Three objects in pointer handlers, `Date.now()`
+    in a click handler read as "during render"). Rewriting the drag path to satisfy a
+    compiler nothing runs is how drag breaks quietly, so those three are off.
+    `set-state-in-effect` is on: seven of its twenty findings were real — state reset
+    in an effect when a prop changed, which paints one frame of the old state (the
+    Inspector's "won't fit" sentence flashing onto the next piece) — and now reset
+    during render, against the value last seen. The other thirteen read the browser
+    after mount, start a timer, or hand off from a store, and each carries a one-line
+    `eslint-disable-next-line … -- reason`. **A new prop-driven reset goes in render,
+    not in an effect**; a new genuine effect states its reason the same way.
 
-  All three are pinned by `tests/toolchain.test.ts` — which asserts the *declared* range
-  admits nothing below 9, not just the installed version, and makes Next's own
-  `calculateConfigForFile('eslint.config.mjs')` call itself — and backstopped in CI by
-  grepping the build's output. Neither guard is decoration: each of the five
-  assertions was checked by mutation, including an actual downgrade to 8.57.
+  All of it is pinned by `tests/toolchain.test.ts` — which asserts the *declared* range
+  admits nothing below 9, not just the installed version, resolves the config for
+  itself, lints a real dead import end to end, and reads the hook rules' severities
+  both ways. Each assertion was checked by mutation.
 - `onnxruntime-web` must stay **runtime-loaded** with `webpackIgnore` — bundling
   it breaks the Next build. It is served from `public/ort/`, which
   `pnpm dev` / `pnpm build` fill via `vendor:ort` (same-origin, so the CSP can be tight);

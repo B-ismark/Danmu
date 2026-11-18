@@ -27,9 +27,10 @@ tokens on every read and still relies on someone choosing to look.
 **Two limits on rule two, both of which it needs stated.** It applies to entries being
 ADDED, not retroactively — an existing entry is not evicted by someone later writing a
 test for it, because the entry usually says something the assertion cannot. And "a gate
-can see it" means a gate *you* will see fire: `next build`'s silent ESLint skip is
-grepped by `ci.yml`, and that entry stays, because a developer running `pnpm build` by
-hand gets the exit code and not the grep. The question rule two asks is whether the next
+can see it" means a gate *you* will see fire: `next build`'s silent ESLint skip was
+grepped by `ci.yml`, and that entry stayed, because a developer running `pnpm build` by
+hand gets the exit code and not the grep (Next 16 removed the pass; the entry now covers
+its successor, the unrecognised-config-key warning). The question rule two asks is whether the next
 session will be TOLD, not whether a machine somewhere knows.
 
 The case that set this rule: seven docblocks across five files had been separated from
@@ -460,9 +461,11 @@ it is no reason to distrust worktree installs, which are the one recipe here tha
 Repair needs `pnpm install --force` — 5m48s against the plain install's lying 5.2s.)*
 
 **Symptom: `next build` exits 0 and you are not sure it linted.**
-It can print `ESLint: Invalid Options` and exit 0 having linted nothing.
-→ Grep the build output for `Linting and checking validity of types`. CI does; so should
-you.
+Since Next 16 it does not lint at all — `pnpm lint` is the only lint gate. (Up to 15 it
+could print `ESLint: Invalid Options` and exit 0 having linted nothing.) The same shape
+survives in one place: Next 16 warns `Invalid next.config.mjs options detected` about a
+key it does not recognise and builds anyway.
+→ Run `pnpm lint` yourself; grep the build output for `Invalid next.config`. CI does both.
 
 **Symptom: a failure under load that you cannot reproduce.**
 `layout-solve`'s timing assertions fail when anything else is using the machine — a

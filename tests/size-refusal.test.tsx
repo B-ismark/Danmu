@@ -78,3 +78,50 @@ describe('a curtain wider than its wall', () => {
     expect(Number(widthField().getAttribute('aria-valuemax') ?? widthField().max)).toBeCloseTo(4, 6);
   });
 });
+
+// The refusal is about one piece and one typed number. Selecting another piece must not
+// carry it over (it used to be cleared in an effect, so it painted one frame on the next
+// piece first), and coming back must not resurrect it either: by then the field shows the
+// piece's real width again, and a sentence about a number no longer in the field is the
+// misleading half of a refusal.
+describe('the refusal belongs to the piece and the number it was about', () => {
+  const OTHER = 'curtain-2';
+  beforeEach(() => {
+    const [first] = useScene.getState().parts;
+    useScene.setState({
+      parts: [first, { ...first, id: OTHER, name: 'Second curtain', pos: [0, 1.1, 1.46], rot: Math.PI } as ScenePart],
+    });
+  });
+
+  function select(id: string) {
+    act(() => {
+      useStudio.setState({ selection: [id], selectedPartId: id });
+    });
+  }
+
+  it('is gone on the next piece, and still gone on the way back', () => {
+    render(<PlanPage />);
+    type('4.5');
+    expect(screen.getByText(/Curtain can be at most 4\.00 m wide here/)).toBeTruthy();
+
+    select(OTHER);
+    expect(screen.queryByText(/can be at most/), 'carried onto the other piece').toBeNull();
+
+    select(ID);
+    expect(screen.queryByText(/can be at most/), 'resurrected on the way back').toBeNull();
+    expect(widthField().value, 'the field shows the real width again').not.toBe('4.5');
+    expect(useStudio.getState().dims[ID], 'and nothing was written').toBeUndefined();
+  });
+
+  it('is not pinned onto the next piece by a commit that lands after the switch', () => {
+    // Type, then switch inside the 120 ms debounce: the pending check still runs, for
+    // the FIRST piece, while the second is on screen. Its sentence must not show here.
+    render(<PlanPage />);
+    fireEvent.change(widthField(), { target: { value: '4.5' } });
+    select(OTHER);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(screen.queryByText(/can be at most/), 'a late refusal landed on the other piece').toBeNull();
+  });
+});

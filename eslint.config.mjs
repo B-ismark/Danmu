@@ -3,12 +3,11 @@
 // `next lint` is removed in Next 16, so linting runs through the ESLint CLI directly
 // (`pnpm lint` → `eslint .`). Two things had to move for that:
 //
-//   · The rules. `eslint-config-next` is still what supplies them, but it ships in
-//     eslintrc format, so `FlatCompat` bridges it. That is the officially supported
-//     path and the one Next's own codemod produces; `@eslint/eslintrc` is a direct
-//     devDependency rather than a borrowed transitive of ESLint's, because importing
-//     a package you have not declared is how a working lint setup breaks on someone
-//     else's install.
+//   · The rules. `eslint-config-next` is still what supplies them, and since Next 16
+//     it ships them as flat configs, imported below. Up to Next 15 it shipped eslintrc
+//     format and `FlatCompat` (`@eslint/eslintrc`) bridged it; under 16 that bridge
+//     fails outright (a circular-structure error while validating the `react`
+//     plugin), so it and its devDependency are gone.
 //   · The ignore list, out of `.eslintignore` — deprecated in ESLint 9 and silently
 //     ignored under flat config, which is the failure mode worth avoiding: it does
 //     not error, it just starts linting `public/` and the build output.
@@ -17,33 +16,46 @@
 // `eslint .` covers `tests/`, `scripts/` and the root config files too, which is a
 // deliberate widening — 171 files, and they were already clean.
 //
-// Three things about this file are load-bearing and easy to undo by accident:
+// `next build` no longer lints at all as of Next 16, so `pnpm lint` (a CI step of its
+// own) is the only lint gate. Three things about this file are load-bearing:
 //
-//   · **ESLint must be >= 9.** `next build` runs its own lint pass, and it only strips
-//     the eslintrc-era options (`useEslintrc`, `extensions`, …) when the installed
-//     ESLint is 9+. On 8.57 it sees this flat config, loads `FlatESLint`, then hands it
-//     eslintrc options — and the build prints `Invalid Options` and lints nothing while
-//     still exiting 0. A silently skipped lint pass that looks like a passing build.
+//   · **ESLint must be >= 9.** Flat config is the only format here, and
+//     `eslint-config-next` 16's flat exports need it. (It used to matter for a second
+//     reason — `next build`'s own lint pass silently linted nothing on 8.57 — which
+//     went with that pass.)
 //   · **`next/typescript` is extended, not just `next/core-web-vitals`.** Without it
 //     `@typescript-eslint/no-unused-vars` is never enabled, `eslint:recommended` is
 //     not in the chain either, and `tsconfig.json` sets no `noUnusedLocals` — so
-//     `pnpm lint --max-warnings 0`, `pnpm typecheck` and `next build`'s own lint pass
-//     were all structurally incapable of seeing a dead import. Adding it found
-//     thirteen across nine files on the first run, one of them a stale `collidesAt`
-//     that had outlived its call site. A gate reporting zero because it cannot see
-//     the defect is the failure mode this repo keeps finding.
-//   · **This file must not be self-ignored.** That same build pass detects the Next
-//     plugin by calling `calculateConfigForFile('eslint.config.mjs')` and looking for
-//     `@next/next` in the result. A `*.config.mjs` ignore entry (which is what
-//     `.eslintignore` used to carry) makes that resolve to an ignored, plugin-less
-//     config, so the build warns the plugin is missing even though every Next rule is
-//     in fact firing.
+//     `pnpm lint --max-warnings 0` and `pnpm typecheck` were both structurally
+//     incapable of seeing a dead import. Adding it found thirteen across nine files on
+//     the first run, one of them a stale `collidesAt` that had outlived its call site.
+//     A gate reporting zero because it cannot see the defect is the failure mode this
+//     repo keeps finding.
+//   · **This file must not be self-ignored.** It lints itself (that is why the default
+//     export is named), and a `*.config.mjs` ignore entry — what `.eslintignore` used
+//     to carry — would quietly take it, and every root config file, out of the gate.
+//
+// And one decision, made with the Next 16 upgrade: `eslint-config-next` 16 brings
+// `eslint-plugin-react-hooks` 7, whose recommended set adds the React Compiler's rules.
+// Three of them (`refs`, `immutability`, `purity`) are switched off below. This app does
+// not use the React Compiler, and on first run they reported 52 findings that were
+// overwhelmingly the patterns the app is built on rather than defects: `Draggable` and
+// `CameraRig` mutating their own refs and Three objects inside pointer handlers,
+// `Date.now()` / `Math.random()` inside click handlers read as "during render", a ref
+// mirrored from a prop. Rewriting the drag path to satisfy a compiler nothing runs is
+// how drag behaviour breaks quietly.
+//
+// The fourth, `set-state-in-effect`, is ON. Its 20 first-run findings split three
+// ways: seven were real — state reset in an effect when a prop changed, which paints
+// one frame of the old state first (the Inspector's refusal flashing onto the next
+// piece) — and are now reset during render instead; the other thirteen read the
+// browser after mount, start a timer, or hand off from a store, and each carries a
+// one-line disable saying which. New code gets the rule. The classic hook rules —
+// `rules-of-hooks`, `exhaustive-deps` — stay on too, and `tests/toolchain.test.ts`
+// pins all of it.
 
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { FlatCompat } from '@eslint/eslintrc';
-
-const compat = new FlatCompat({ baseDirectory: dirname(fileURLToPath(import.meta.url)) });
+import nextVitals from 'eslint-config-next/core-web-vitals';
+import nextTs from 'eslint-config-next/typescript';
 
 // Named rather than exported anonymously so `import/no-anonymous-default-export`
 // stays satisfied — this file lints itself now, see the note above.
@@ -65,7 +77,16 @@ const config = [
       'next-env.d.ts',
     ],
   },
-  ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  ...nextVitals,
+  ...nextTs,
+  {
+    // Three of the React Compiler's rules — off on purpose; the reason is in the header.
+    rules: {
+      'react-hooks/refs': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/purity': 'off',
+    },
+  },
   {
     // Raised from `warn` to `error` — `--max-warnings 0` already fails on a warning,
     // so this only makes the output say what it means. The ignore patterns are the

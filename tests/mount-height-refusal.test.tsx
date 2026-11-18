@@ -26,7 +26,7 @@
 // `tests/color-tokens.test.ts` cannot see this element at all.
 import 'fake-indexeddb/auto';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
 import { MOUNT_PAD } from '@/lib/physics';
 import { stepFor, fromMM } from '@/lib/units';
@@ -167,5 +167,28 @@ describe('a range narrower than one step is said in words, not quoted as a range
     // Not a fault: the piece fits. So the field stays usable and is not marked invalid.
     expect(field().disabled).toBe(false);
     expect(field().getAttribute('aria-invalid')).toBe('false');
+  });
+});
+
+// The draft is the field's own copy of the number, so it has to be re-synced when what
+// it shows changes from outside. A MOVE does not need that — the Inspector keys the row
+// on the piece's height, so a drag or an undo remounts it with a fresh draft (the first
+// version of this test moved the piece, and passed with the re-sync deleted). What keeps
+// the row mounted and changes its number is the UNIT: switching metres to feet in
+// Settings while the piece is selected. That re-sync runs during render now (it was an
+// effect, which painted the old number for a frame); this holds that it happens at all.
+describe('the field follows a unit change made elsewhere', () => {
+  beforeEach(() => setUp(1200, 'm'));
+
+  it('shows the same height in the new unit, not the old number', () => {
+    // Lifted 300 mm before opening, so the number is not 0 in every unit.
+    useStudio.setState({ positions: { [ID]: [0, 1.2 / 2 + 0.3, -1.9] } });
+    render(<PlanPage />);
+    expect(parseFloat(field().value)).toBeCloseTo(0.3, 2);
+
+    act(() => {
+      useSettings.setState({ dimUnit: 'ft' });
+    });
+    expect(parseFloat(field().value), 'the field kept the metre number').toBeCloseTo(fromMM(300, 'ft'), 1);
   });
 });

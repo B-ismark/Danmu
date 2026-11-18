@@ -92,6 +92,7 @@ export default function SettingsPage() {
   const alive = useRef(true);
 
   useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the address is only readable in the browser; layout effect so Back is right on first paint
     setReturnTo(safeReturnPath(new URLSearchParams(window.location.search).get('from')));
   }, []);
 
@@ -584,6 +585,7 @@ function SettingsIndex() {
     const own = ['wheel', 'touchmove', 'keydown', 'pointerdown'] as const;
     if (fromHash) {
       chosen.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the section mark follows the page's scroll position, measured from the DOM
       setCurrent(fromHash.id);
     } else pick();
     window.addEventListener('scroll', pick, { passive: true });

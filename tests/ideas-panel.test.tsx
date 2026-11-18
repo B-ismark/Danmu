@@ -24,7 +24,7 @@ import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import type { SolveResult } from '@/lib/layout-solve';
-import { viewportAt } from './helpers/mount';
+import { resizableViewport, viewportAt } from './helpers/mount';
 import { DRY_SEARCHES } from '@/lib/layout-ideas';
 import { ridingParents } from '@/lib/rigid-parent';
 
@@ -130,6 +130,32 @@ describe('the ideas gallery', () => {
     mount();
     expect(await openIdeas()).toHaveLength(3);
     expect(document.querySelector('.ideas-grid--phone')).not.toBeNull();
+  });
+
+  it('rests on the phone bar, and lets go of it when the screen gets wider', async () => {
+    // On a phone the gallery docks to the studio's bottom bar, measured. Turned to a
+    // width with no bar, it must stop docking at once — not paint a frame (or, with
+    // the reset gone, stay) pinned to a bar that has left the page. The reset that
+    // forgets the measurement runs during render; this holds that it runs at all.
+    const vp = resizableViewport(390, { touch: true });
+    restoreViewport = vp.restore;
+    const bar = document.createElement('div');
+    bar.className = 'phone-toolbar';
+    bar.getBoundingClientRect = () => ({ top: 700, bottom: 756, left: 0, right: 390, width: 390, height: 56, x: 0, y: 700, toJSON: () => ({}) });
+    document.body.appendChild(bar);
+    try {
+      mount();
+      await openIdeas();
+      const panel = () => screen.getByRole('region', { name: 'Ideas for this room' });
+      expect(panel().style.bottom, 'not docked to the bar on a phone').toBe('calc(100dvh - 700px)');
+
+      bar.remove();
+      act(() => vp.resize(1400));
+      expect(panel().style.bottom, 'still docked to a bar that is gone').toBe('');
+      expect(panel().style.width).not.toBe('100%');
+    } finally {
+      bar.remove();
+    }
   });
 
   it('pressing an idea puts the room in it, and Back to your room undoes it', async () => {

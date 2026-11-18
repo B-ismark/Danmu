@@ -2011,7 +2011,9 @@ kind is the one a heading vouches for.
 - react / react-dom **19.2.8**, vitest **4.1.10**, jsdom **30.0.1**, vite 7. Unchanged.
 - `vitest.config.ts`: `environment: 'node'`, `include: ['tests/**/*.test.{ts,tsx}']`,
   alias `@` to repo root, `esbuild: { jsx: 'automatic' }`. The `include` was
-  `tests/**/*.test.ts` before this PR widened it.
+  `tests/**/*.test.ts` before this PR widened it. (Since Vite 8 that key is
+  `oxc: { jsx: { runtime: 'automatic' } }` — Vite 8 ignores `esbuild` here and its Oxc
+  transformer honours tsconfig's `preserve`, which failed every `.tsx` test to parse.)
 - **The old `include` did not match `.test.tsx`**, and JSX will not parse inside a
   `.test.ts`. The choice was widening it or writing every component test through
   `React.createElement`; widening was taken, because the second is a transcript of JSX

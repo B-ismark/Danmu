@@ -2169,6 +2169,36 @@ inside the box.
 
 ## Look and light
 
+### High quality draws its corner shading again, on every GPU — merged to `main` in `2f31b3d` (PR #307), NOT LOOKED AT on a real GPU
+
+**What was wrong, and why it was not a headless quirk.** On **High** (the default), every
+frame threw `Cannot read properties of undefined (reading 'length')` from
+`WebGLTextures.setupRenderTarget` inside `N8AOPostPass.render`, so the soft corner shading
+never drew and the canvas stalled — 155 throws in 12 s in SwiftShader, and one more from
+`GroundShadows` restoring the half-built target the throw left current. The target is
+N8AO's **half-res depth target** (`<N8AO halfRes />` in `Room.tsx`): n8ao 2.0.1's MRT shim
+gave it a `texture` getter returning the whole `textures` array, and three ≥ 0.162 reads
+`renderTarget.texture.mipmaps.length`. Nothing on that path asks the GPU anything — the
+only branches are three's `REVISION` and our `halfRes` prop — so a real GPU takes the same
+road. (The trace in the report pointed at `.textures.length`; the column actually lands
+on `texture.mipmaps.length` a few lines down. Same object, wrong field — worth knowing if
+it is ever traced again.) n8ao 2.0.2's entire diff is deleting that getter; the
+`n8ao@2: ~2.0.2` override in `package.json` holds it, as a tilde because a caret resolved
+2.1.0, a two-day-old minor that rewrites the pass. `tests/n8ao-mrt.test.ts` reads the
+target's shape without a GL context, and fails with the getter put back.
+
+**Where to click.** Any room → **3D Model** on **High**, in a desktop browser with a real
+GPU. Open the console first. Then flip **Fast** and back.
+
+**What right looks like.** No errors in the console; a soft darkening where the walls meet
+the floor and under the sofa and table on High, gone on Fast.
+
+**What wrong looks like.** The `reading 'length'` error repeating; a frozen or blank canvas
+on High that unfreezes on Fast; or High showing no corner shading at all.
+
+**What was measured, and on what.** SwiftShader only (no GPU in the container), on the
+layout picker's **Start decorating** room at 1440 × 900: 155 page errors before, 0 after.
+
 ### Shoes on the rack, a pipe clothes rail, and a dining table on four legs — merged to `main` in `28e1e03` (PR #212), NOT LOOKED AT
 
 From the 2026-10-01 batch. The shoe rack carries a random mix of shoes, trainers and the odd
@@ -3437,7 +3467,9 @@ changed everywhere, not only on this page.
 **What wrong looks like:** the plan's walls drawing on with an open or rounded top-left
 corner when the animation ends; the 6.00 m / 4.00 m labels or the scale bar's 1.00 m
 sitting off their lines; the drawing differing from the starter room it opens (a missing
-piece, a different size); the dimension labels not changing with the unit setting; the
+piece, a different size), above all the coffee table hidden under the rug, or no door
+and windows showing as gaps in the walls; with the OS set to reduce motion, the furniture
+appearing a beat after the walls rather than at once; the dimension labels not changing with the unit setting; the
 title block's three cells wrapping into a mess at phone width; anything running off the
 right edge. In Dark: a green tint that reads as the old olive, captions that need
 squinting on `--paper-3`, or any surface with a warm/brown cast: the night papers are
@@ -3445,11 +3477,13 @@ neutral greys (#0A0A0A–#242424) since the graphite was dropped as reading "sty
 than dark. Check that cards still stand out from the page at that depth.
 
 **Why eyes:** no test renders this page. It was walked in the app's browser pane at 1440
-and 375 wide in both themes, and in headless Edge at 1440. The palette passes every
+and 375 wide in both themes, and in headless Edge at 1440. The fixes from review (paint
+order, walls before furniture, the reduced-motion delay, the retinted dark tints) were
+seen only in headless Edge at 1440, never at phone width. The palette passes every
 contrast and hue assertion in `tests/color-tokens.test.ts`, but "warm, not muddy" is a
 judgement.
 
 **Supersedes** the empty half of *The Rooms page in the Flow design* above: the three
 "ways in" cards are now three numbered rows.
 
-**Branch:** `feat/landing-redesign`, not yet looked at.
+**Merged:** `5ef1ed6` (B-ismark/Danmu#300), not yet looked at.
