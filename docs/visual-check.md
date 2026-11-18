@@ -3625,3 +3625,24 @@ judgement.
 "ways in" cards are now three numbered rows.
 
 **Merged:** `5ef1ed6` (B-ismark/Danmu#300), not yet looked at.
+
+## A curtain steps out when its window is made deeper
+
+**Where:** any room with a window — add a Curtain from the Library and hang it over the
+window. Select the window, and in the Inspector's size fields type a depth of 200 mm.
+Then do the same with the depth stretch handle in 3D, and type 60 mm again.
+
+**Wrong looks like:** the sill showing through the curtain's folds after the depth
+change; the curtain moving sideways or up the wall rather than straight out; a curtain on
+another wall moving; the window itself sinking into the plaster after a typed depth
+(its back should stay against the wall); a single undo leaving the curtain out with the
+window shallow again (the size and the curtain move should undo as one step).
+
+Also: select a TV and a print and type a much deeper, then a much shallower, depth — the
+back should stay flat on the plaster each time, never sunk into it or floating off it.
+And select a ceiling fan and type a taller, then a shorter, height — its top should stay
+just under the ceiling, never through it or hanging free. A door typed taller should keep
+its threshold on the floor.
+
+**Rides:** branch `claude/admiring-maxwell-tpa1rj` (`lib/mount-resize.ts`, wired in
+`components/studio/Inspector.tsx` and `components/three/Draggable.tsx`).

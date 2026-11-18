@@ -595,9 +595,10 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
     // DELETED rather than moved — unless the deleted one happened to be the single file
     // it named.
     //
-    // Four is correct and is not a smell: they answer four different questions — a
+    // Five is correct and is not a smell: they answer five different questions — a
     // piece under a live pointer, a whole room after a solve, a ceiling the user has
-    // just changed, and a piece riding a support that grew (§ 12). What matters is that
+    // just changed, a piece riding a support that grew (§ 12), and a hung piece whose
+    // height was typed (`mount-resize.ts`, which keeps a ceiling fan's top at the slab). What matters is that
     // none of them declares its own pad, which is the assertion above. This one pins
     // WHO, so a fifth reader arrives as a decision rather than as a diff nobody reads.
     //
@@ -609,6 +610,7 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
     expect(clampers, 'the sweep must actually find the clampers').toEqual([
       'drag-resolve.ts',
       'layout-settle.ts',
+      'mount-resize.ts',
       'physics.ts',
       'rider-height.ts',
     ]);

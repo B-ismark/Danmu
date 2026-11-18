@@ -2,7 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
-import { useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
+import { currentRoomScene, useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
+import { rehangForResize } from '@/lib/mount-resize';
 import { arrangeDecor } from '@/lib/decor';
 import { useScene } from '@/lib/scene-store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, resyncDraft, tidyDraft, UNIT_OPTIONS } from '@/lib/units';
@@ -64,6 +65,7 @@ export function Inspector() {
   const hasOverrides = useHasOverrides(id);
   const setDim = useStudio((s) => s.setDim);
   const setPosition = useStudio((s) => s.setPosition);
+  const setTransformsFor = useStudio((s) => s.setTransformsFor);
   const resetTransforms = useStudio((s) => s.resetTransforms);
   const updatePart = useScene((s) => s.updatePart);
   // Resolved once for the whole panel: surface snapping and the dimension fields
@@ -435,7 +437,16 @@ export function Inspector() {
         footprint={room.footprint}
         value={currentDim}
         defaultDim={defaultDim}
-        onChange={(d) => setDim(id, fitPartDims(part, d))}
+        onChange={(d) => {
+          const kept = fitPartDims(part, d);
+          // A mounted piece resized here stays on what it hangs from — back on its
+          // wall, top at the ceiling, door on the floor — and a curtain over a window
+          // made deeper is re-hung clear of the new sill (lib/mount-resize.ts). Read
+          // before the write, so the room is measured at the old size.
+          const moves = rehangForResize(currentRoomScene(), id, kept, room.footprint, room.height);
+          setDim(id, kept);
+          if (moves.length > 0) setTransformsFor(moves);
+        }}
       />
     </div>
   );
