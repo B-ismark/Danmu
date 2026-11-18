@@ -2,8 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
-import { currentRiderRelation, useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
-import { cascadeTransform, snapshotDescendants } from '@/lib/rigid-parent';
+import { useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
 import { arrangeDecor } from '@/lib/decor';
 import { useScene } from '@/lib/scene-store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, resyncDraft, tidyDraft, UNIT_OPTIONS } from '@/lib/units';
@@ -31,7 +30,6 @@ import { WallFinishEditor } from './WallFinishEditor';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, libraryShelf, DECOR_KINDS, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { MOUNT_PAD, restingOn } from '@/lib/physics';
-import { moveToWall, wallSentence } from '@/lib/to-wall';
 import { useRoomReport } from './RoomTools';
 import { wallSegments, type Footprint } from '@/lib/footprint';
 import { wallLabelFor } from '@/lib/wall-label';
@@ -64,9 +62,6 @@ export function Inspector() {
   const hasOverrides = useHasOverrides(id);
   const setDim = useStudio((s) => s.setDim);
   const setPosition = useStudio((s) => s.setPosition);
-  const clearParent = useStudio((s) => s.clearParent);
-  const setTransformsFor = useStudio((s) => s.setTransformsFor);
-  const landAll = useStudio((s) => s.landAll);
   const resetTransforms = useStudio((s) => s.resetTransforms);
   const updatePart = useScene((s) => s.updatePart);
   // Resolved once for the whole panel: surface snapping and the dimension fields
@@ -79,26 +74,6 @@ export function Inspector() {
   const { report } = useRoomReport();
 
   const setSwapPartId = useStudio((s) => s.setSwapPartId);
-  /** What the last Wall press said, and the room it said it about. Shown only while
-   *  that room still stands: a sentence naming the stool that could not follow is
-   *  about somewhere else once anything has moved, turned or been resized, or the
-   *  selection it judged has changed. The store replaces each of those maps on any
-   *  write, so comparing references is the whole test — and a boolean selector, so
-   *  the panel re-renders when the note goes, not on every frame of a drag. */
-  const [wallSaid, setWallSaid] = useState<{
-    id: string;
-    text: string;
-    world: Pick<ReturnType<typeof useStudio.getState>, 'positions' | 'rotations' | 'dims' | 'selection'>;
-  } | null>(null);
-  const wallWorldStands = useStudio(
-    (s) =>
-      wallSaid !== null &&
-      s.positions === wallSaid.world.positions &&
-      s.rotations === wallSaid.world.rotations &&
-      s.dims === wallSaid.world.dims &&
-      s.selection === wallSaid.world.selection,
-  );
-
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
   if (selectedFloor) return <FloorInspector />;
 
@@ -136,61 +111,8 @@ export function Inspector() {
     }));
   }
 
-  /** What stands on this piece goes where it goes. Floor is a move like any other and
-   *  used to move the piece alone (§ H.6.7). Asked of the relation a drag plans its
-   *  company from, about the spot the piece actually lands on. Wall used to come
-   *  through here too and is a whole gesture now — see `snapToNearestWall`.
-   *
-   *  It writes only the riders that already have a stored position. Floor moves
-   *  a piece only upright, and the height pass brings down a rider with no position of
-   *  its own; writing that one too would restate the height pass as an override a
-   *  re-scan will not move. A rider WITH a stored position is the one it can miss: it
-   *  follows an inferred link only while the support's top differs from its authored
-   *  top, so a nightstand floored back to where the room put it left a lamp carried up
-   *  with it standing at desk height. */
-  function carryPinnedRiders(to: [number, number, number], rot: number) {
-    const riders = snapshotDescendants(id!, effParts, currentRiderRelation());
-    if (riders.length === 0) return;
-    const moves = cascadeTransform(id!, to, rot, riders);
-    const stored = useStudio.getState().positions;
-    const write = moves.filter((m) => stored[m.id] !== undefined);
-    if (write.length > 0) setTransformsFor(write);
-  }
-
-  function groundToFloor() {
-    const [x, , z] = currentXYZ();
-    setPosition(id!, [x, 0, z]);
-    carryPinnedRiders([x, 0, z], part!.rot);
-    clearParent(id!);
-  }
-
   // The model swap is `lib/swap-model.ts` now, and its dialog is `SwapModelHost`:
   // the right-click menu offers the same verb, so neither can live in this panel.
-
-  /** A gesture like a drag, so it takes what a drag takes — the rest of the selection,
-   *  a merged set, what stands on the piece — and is checked the way a drag is. It used
-   *  to move the piece and its riders alone and unchecked (§ H.6.7). See `lib/to-wall.ts`. */
-  function snapToNearestWall() {
-    const move = moveToWall({
-      id: id!,
-      parts: effParts,
-      selection: useStudio.getState().selection,
-      restsOn: currentRiderRelation(),
-      footprint: room.footprint,
-      roomHeight: room.height,
-      memberHasPosOverride: (pid) => useStudio.getState().positions[pid] !== undefined,
-    });
-    if (move.kind === 'moved') {
-      setTransformsFor(move.moves);
-      landAll(move.landings);
-    }
-    const text = wallSentence(part!.name, move);
-    // Read after the writes, so the note describes the room the press left.
-    const { positions, rotations, dims, selection } = useStudio.getState();
-    setWallSaid(text ? { id: id!, text, world: { positions, rotations, dims, selection } } : null);
-    if (text) announce(text);
-  }
-  const wallNote = wallSaid && wallSaid.id === id && wallWorldStands ? wallSaid.text : null;
 
   // `supportBelow` and `snapToSurface` lived here and are gone with the Surface button
   // (§ B.17). `supportBelow` existed only to decide whether Surface was worth showing,
@@ -446,75 +368,13 @@ export function Inspector() {
         <DecorCollection part={part} onChange={(decor) => updatePart(id!, { decor })} />
       )}
 
-      {/* Placement — surfaced as visible buttons (was buried in a ⋯ menu).
-
-          No label. It read "Where it sits", and the user's verdict after looking at
-          the real thing was that the section is redundant and takes too much
-          horizontal space. The heading was the redundant half: every button in the row
-          says where the piece will sit, in a word, and each one's `title` says it
-          again in a sentence. The horizontal half is answered below. */}
+      {/* Placement. A floor-standing piece has no row here: "Move to the nearest wall"
+          and "Put on the floor" are on its right-click menu (`lib/placement-actions.ts`),
+          because the user said the two-button row was mostly not needed — the third
+          time they had said so. A wall-mounted piece keeps the one number that means
+          something about where it sits: how high it hangs. */}
+      {part.wallMounted && (
       <div className="section section--flush">
-        {/* Two buttons for a piece that stands on the floor, and none for a piece fixed
-            to the building.
-
-            **It was three, and Surface is gone — § B.17.** The user said outright that
-            they did not think the row was needed, and the answer taken from that was
-            "keep the operations, drop the row", on the stated grounds that neither
-            Floor-off-a-table nor Surface-back-onto-it was reachable by dragging. That
-            premise expired when the drag pipeline moved into `lib/drag-resolve.ts`:
-            measured against `resolvePlacement`, dragging a lamp clear of a desk lands
-            it at y = 0, and dragging it back over lands it at the desk's top with
-            `supportId` set. Surface is a drag, exactly, so it goes.
-
-            The other two are not, which is why the row survives at all rather than
-            being deleted as the original answer's letter would have had it:
-
-            · **Wall** moves the piece to the NEAREST wall and turns it to face the
-              room. No drag does this — `drag-resolve`'s wall snap is gated on
-              `ridesWall`, which is the TV/mirror/painting/AC/curtain family, so a sofa
-              is never slid onto plaster and never rotated. Measured: a sofa dragged to
-              z = 1.4 with snap on keeps its 0.9 rad yaw and stops 0.84 m short.
-            · **Floor** puts the piece on the floor WITHOUT moving it in x/z. Dragging
-              it clear of what it stands on also drops it, but somewhere else — and
-              "on the floor, under the desk" is a placement only this expresses.
-
-            Not icons-only — the other way out the user offered. Three icon+word buttons
-            at 33% is what did not fit; two at 50% does, and stripping the words to keep
-            a button that should not be there would have fixed the symptom, kept the
-            cause, and taken on an accessible-name obligation for nothing.
-
-            A wall-mounted part gets neither: it has nowhere else to be put — "Wall"
-            moves it along the wall it is already on, which reads as an action and is
-            barely one — and for the ceiling family it is worse than useless, since
-            `snapToWallPhys` would slide a ceiling fan sideways onto a wall. What those
-            parts get instead is the one number that does mean something about where
-            they sit, below.
-
-            The row carried a `rail-triple` class, the hook a container query in
-            `globals.css` folded from three columns to two under 293px. Both are gone,
-            measured rather than assumed: two buttons want 234px of the 243px a rail
-            dragged to its 276px floor gives them, and 206px of 215px at the 248px
-            compact step — nothing overflowing and nothing painting past the rail's
-            edge at any width. The query set `1fr 1fr`, which is what the inline style
-            below already says, so it computed to the same `118.5px 118.5px` with and
-            without it. A class named for three that holds two is a name that lies, and
-            one with no CSS reader left is plumbing wearing a rule's name. */}
-        {!part.wallMounted && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
-            <button onClick={snapToNearestWall} className="ds-btn ds-btn--sm" title="Move to the nearest wall and face the room" style={{ fontSize: 'var(--fs-caption)', gap: 6, justifyContent: 'center' }}>
-              <Icon name="snap-wall" size={13} /> Wall
-            </button>
-            <button onClick={groundToFloor} className="ds-btn ds-btn--sm" title="Put this piece on the floor, without moving it sideways" style={{ fontSize: 'var(--fs-caption)', gap: 6, justifyContent: 'center' }}>
-              <Icon name="snap-floor" size={13} /> Floor
-            </button>
-          </div>
-        )}
-        {!part.wallMounted && wallNote && (
-          <div role="status" style={{ fontSize: 'var(--fs-caption)', color: 'var(--warn-text)', lineHeight: 1.4, display: 'flex', gap: 6 }}>
-            <Icon name="info" size={12} />
-            <span style={{ minWidth: 0 }}>{wallNote}</span>
-          </div>
-        )}
         {part.wallMounted && (
           <MountHeightRow
             key={`${id}-${currentXYZ()[1]}`}
@@ -531,6 +391,7 @@ export function Inspector() {
           />
         )}
       </div>
+      )}
 
       {/* One entry point to the model library. Generic-box parts (low-confidence
           detections) read poorly, so for those the same button leads with why. */}

@@ -293,7 +293,7 @@ describe('a piece standing on the floor rides nothing', () => {
     const parts = [desk(), lamp(0.75)];
     const o: Partial<TransformOverrides> = { positions: { lamp: [0, 0, 0] }, dims: { desk: [1400, 700, 900] } };
     expect(deriveRiderYs(parts, o, {}, ROOM_H)).toEqual({});
-    // …and the same for an edge a drag DID record, which `groundToFloor` also clears.
+    // …and the same for an edge a drag DID record, which `putOnFloor` also clears.
     expect(deriveRiderYs(parts, o, { lamp: 'desk' }, ROOM_H)).toEqual({});
   });
 });

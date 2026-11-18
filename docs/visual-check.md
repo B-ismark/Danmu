@@ -351,30 +351,34 @@ before it. The lamp left behind after that notch is the review's finding back.
 **Where it rides.** `lib/drag-convoy.ts` + `components/three/Draggable.tsx` +
 `components/studio/PlanView.tsx`.
 
-### Wall takes the whole selection, and says when it cannot — merged to `main` in `42d2a7d` (PR #226), NOT LOOKED AT
+### Wall and Floor moved off the panel into the right-click menu — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
 
-The Inspector's **Wall** button used to move the selected piece and what stood on it, and
-nothing else, with no check. It now moves like a drag. In the seeded living room the Sofa
-already stands against its wall, so press Wall on it first: it should say *already
-against the nearest wall* and do nothing. Then, in 2D Plan, drag the Coffee table and the
-Plant out into open floor, a metre or more from every wall, shift-click both, and press
-**Wall** with the Coffee table selected: both go, the Plant by the same step and at its
-own angle. If the nearest wall would have turned the table, it goes to the wall behind it
-instead and the line under Wall and Floor says so. Next, drag a third piece onto the
-spot the Plant would land on and press again: nothing moves, and the line names the
-Plant. Move anything or change the selection and the line goes. Last, set a table lamp
-on a nightstand away from the walls and press Wall with the lamp selected: it should
-land on the floor at the wall, not float at nightstand height, which is what it did.
+The user said the Inspector's **Wall · Floor** row is mostly not needed, so it is gone
+from the panel and both moves are on a piece's right-click menu: **Move to the nearest
+wall** and **Put on the floor**. Select a sofa: the panel should go straight from its
+other sections to the next with no empty gap where the row was. Right-click it (both
+tabs): the two rows sit beside the other piece actions. Right-click a TV or a painting:
+neither row is there, and its panel still shows the height-off-the-floor field.
 
-What would be wrong: the line overflowing the rail at its narrowest width (it wraps, like
-the size refusal below it), the line staying after something moves, a selection that
-moves only partly, or a set arriving with a piece turned and its company not. A set that
-stops short of the wall is allowed — a drag does the same when a member meets the wall
-first — but the line must then say so.
+Then the move itself, which is unchanged apart from where it reports. In the seeded
+living room the Sofa already stands against its wall, so choose *Move to the nearest
+wall* on it: a toast titled *Nothing moved* says it is already against the wall. In 2D
+Plan drag the Coffee table and the Plant a metre or more from every wall, shift-click
+both, and choose the move with the Coffee table under the pointer: both go, the Plant by
+the same step and at its own angle. Drag a third piece onto the spot the Plant would land
+on and do it again: nothing moves, and the toast names the Plant. Last, set a table lamp
+on a nightstand away from the walls and move it to the wall: it lands on the floor at the
+wall, not at nightstand height. *Put on the floor* on that lamp, back on the nightstand,
+drops it straight down where it stands.
 
-**Gates.** `tests/to-wall.test.ts`, `tests/inspector-carries-riders.test.tsx`.
+What would be wrong: a gap left in the panel, either row missing from a sofa's menu or
+present on a TV's, a refused move with no toast, a toast overflowing a phone's width, or
+a set arriving with a piece turned and its company not.
 
-**Where it rides.** `lib/to-wall.ts` + `components/studio/Inspector.tsx`.
+**Gates.** `tests/to-wall.test.ts`, `tests/placement-actions.test.ts`,
+`tests/where-it-sits.test.tsx`.
+
+**Where it rides.** `lib/to-wall.ts` + `lib/placement-actions.ts` + `components/studio/SceneContextMenu.tsx`.
 
 ### A drag that is cancelled, or comes back, leaves nothing marked as moved — merged to `main` in `624bfda` (PR #229), NOT LOOKED AT
 
