@@ -75,6 +75,7 @@ import { useStudio } from '@/lib/store';
 import { isPickingColor, setPickHover, usePickHover } from '@/lib/eyedropper';
 import { pickColor } from '@/components/studio/Eyedropper';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
+import { travelledPastClick } from '@/lib/still-click';
 import { useRoomScene } from '@/lib/room-scene';
 import { SCENE } from '@/lib/scene-palette';
 import { wallApertures, skirtingRuns, type Aperture } from '@/lib/apertures';
@@ -107,17 +108,6 @@ const SKIRTING_H = 0.1;
  *  picture on 2026-10-01. A board has a thickness, so it has one now. Under
  *  `WALL_GAP` (20 mm) on purpose, so a piece snapped flush to a wall still clears it. */
 const SKIRTING_PROUD = 0.012;
-/** How far a press may travel, in CSS pixels, and still be a click on the floor or a
- *  wall. R3F hands an object its click whenever the press began and ended on it,
- *  however far the pointer went between — so an orbit that starts and ends on the
- *  floor would select the floor, and every look around the room would open its panel.
- *  Two pixels is R3F's own line for a click on nothing (`onPointerMissed`). */
-const STILL_PX = 2;
-/** The same line for a finger or a pen, which wobble on a tap where a mouse does not.
- *  At 2 px a tap on a wall or the floor failed often enough to read as a dead
- *  surface on a phone; an orbit by finger travels far further than this. */
-const STILL_TOUCH_PX = 10;
-
 /** A click on the room's own surfaces, or a gesture that happened to end over one. */
 function isStillClick(e: ThreeEvent<MouseEvent>): boolean {
   // First, and unconditionally: a gizmo ring released over the room is not a choice
@@ -125,8 +115,9 @@ function isStillClick(e: ThreeEvent<MouseEvent>): boolean {
   // or it stays armed and eats an ordinary click one gesture later. See
   // lib/gizmo-press.ts.
   if (consumeGizmoClick()) return false;
-  const kind = (e.nativeEvent as Partial<PointerEvent>).pointerType;
-  if (e.delta > (kind === 'touch' || kind === 'pen' ? STILL_TOUCH_PX : STILL_PX)) return false;
+  // An orbit that started and ended on the surface is not a choice of it
+  // (lib/still-click.ts).
+  if (travelledPastClick(e)) return false;
   // A pan held on the keyboard ends over bare floor too, and is not a choice of it.
   return !useStudio.getState().panKeyHeld;
 }

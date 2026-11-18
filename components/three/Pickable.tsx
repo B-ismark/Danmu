@@ -14,6 +14,7 @@ import { pickIdsFrom, PART_ID_KEY } from '@/lib/pick-through';
 import { openPickMenu } from '@/components/studio/SceneContextMenu';
 import { pickColor } from '@/components/studio/Eyedropper';
 import { isPickingColor } from '@/lib/eyedropper';
+import { travelledPastClick } from '@/lib/still-click';
 
 // The Alt-click cycle's memory. Module-scoped rather than per-component because
 // the handler that fires belongs to whichever piece is in FRONT, and that changes
@@ -95,7 +96,10 @@ export function Pickable({
         e.stopPropagation();
         // Eyedropper first: while it is armed a click picks this piece's own colour
         // for the selection, and selects nothing. `Draggable` refused the press.
+        // A press that travelled is an orbit that happened to end on this piece, not
+        // an aim at it: the picker stays armed for the click that is one.
         if (isPickingColor()) {
+          if (travelledPastClick(e)) return;
           pickColor({ kind: 'part', id: partId });
           return;
         }

@@ -78,11 +78,27 @@ describe('a click on the room is a click, not the end of a look around', () => {
     const body = shell.slice(shell.indexOf('function isStillClick'));
     const gate = body.indexOf('consumeGizmoClick()');
     expect(gate).toBeGreaterThan(-1);
-    expect(gate).toBeLessThan(body.indexOf('e.delta'));
-    expect(body).toMatch(/if \(e\.delta > \(kind === 'touch' \|\| kind === 'pen' \? STILL_TOUCH_PX : STILL_PX\)\) return false;/);
-    expect(shell).toMatch(/const STILL_PX = 2;/);
+    expect(gate).toBeLessThan(body.indexOf('travelledPastClick(e)'));
+    expect(body).toMatch(/if \(travelledPastClick\(e\)\) return false;/);
+  });
+
+  it('a click is two pixels of travel for a mouse, ten for a finger or pen', async () => {
+    const { travelledPastClick, STILL_PX, STILL_TOUCH_PX } = await import('@/lib/still-click');
+    expect(STILL_PX).toBe(2);
     // A finger wobbles on a tap; 2 px there made the floor and walls feel dead.
-    expect(shell).toMatch(/const STILL_TOUCH_PX = 10;/);
+    expect(STILL_TOUCH_PX).toBe(10);
+    const at = (delta: number, pointerType: string) => travelledPastClick({ delta, nativeEvent: { pointerType } });
+    expect(at(2, 'mouse')).toBe(false);
+    expect(at(3, 'mouse')).toBe(true);
+    expect(at(10, 'touch')).toBe(false);
+    expect(at(11, 'touch')).toBe(true);
+    expect(at(10, 'pen')).toBe(false);
+    expect(at(11, 'pen')).toBe(true);
+  });
+
+  it('the eyedropper on a piece in 3D obeys the same line: an orbit ending on it is not a pick', () => {
+    const pick = read('components/three/Pickable.tsx');
+    expect(pick).toMatch(/if \(isPickingColor\(\)\) \{\s*if \(travelledPastClick\(e\)\) return;\s*pickColor\(\{ kind: 'part', id: partId \}\);/);
   });
 
   it('the panel opens on the floor when it is selected', () => {
