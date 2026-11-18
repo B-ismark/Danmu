@@ -5,7 +5,7 @@ import {
   Camera, Lock, Unlock, Grid3x3, Layers, Ruler, Settings, Sparkles, Box, Palette, MousePointerClick,
   Download, Share2, FileText, FileArchive, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
-  Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Mail, Pencil, Trash2, RefreshCw,
+  Eye, EyeOff, Pipette, Info, HelpCircle, BarChart3, ExternalLink, Mail, Pencil, Trash2, RefreshCw,
   Image, Play, ArrowRightLeft, Circle, Sun, Sunrise, Sunset, Moon, Cloud, Compass,
   RotateCcw, RotateCw, Maximize, Copy, Undo2, Redo2, type LucideIcon,
   Ellipsis, List, SlidersHorizontal, Heart, Lightbulb, House, Search, SquareDashed, Ungroup, Link2, Unlink2,
@@ -28,7 +28,7 @@ export type IconName =
   | 'chevron-right' | 'chevron-left' | 'chevron-down' | 'chevron-up'
   | 'zap' | 'leaf' | 'crosshair'
   | 'sofa' | 'bed' | 'tv' | 'lamp' | 'table' | 'plant'
-  | 'key' | 'eye' | 'eye-off'
+  | 'key' | 'eye' | 'eye-off' | 'pipette'
   | 'info' | 'help' | 'chart' | 'external' | 'mail'
   | 'edit' | 'trash' | 'refresh' | 'copy'
   | 'image' | 'play'
@@ -53,7 +53,7 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, Lu
   'chevron-right': ChevronRight, 'chevron-left': ChevronLeft, 'chevron-down': ChevronDown, 'chevron-up': ChevronUp,
   zap: Zap, leaf: Leaf, crosshair: Crosshair,
   sofa: Sofa, bed: Bed, tv: Tv, lamp: Lamp, table: Table, plant: Sprout,
-  key: KeyRound, eye: Eye, 'eye-off': EyeOff,
+  key: KeyRound, eye: Eye, 'eye-off': EyeOff, pipette: Pipette,
   info: Info, help: HelpCircle, chart: BarChart3, external: ExternalLink, mail: Mail,
   edit: Pencil, trash: Trash2, refresh: RefreshCw, copy: Copy,
   image: Image, play: Play, swap: ArrowRightLeft, ungroup: Ungroup,

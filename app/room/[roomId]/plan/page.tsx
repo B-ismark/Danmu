@@ -17,6 +17,7 @@ import { usePhoneStudio } from '@/components/studio/NarrowViewportBanner';
 import { useStudio, useSettings } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { UNIT_OPTIONS } from '@/lib/units';
+import { EyedropperHint } from '@/components/studio/Eyedropper';
 
 export default function PlanPage() {
   const dimUnit = useSettings((s) => s.dimUnit);
@@ -117,6 +118,7 @@ export default function PlanPage() {
           away — it is `position: fixed` and tracks the pointer itself, so it does
           not care which surface is underneath. */}
       <HoverCard />
+      <EyedropperHint />
 
       {/* ONE tool cluster, top-centre — the shared slot. What used to be here was
           a readout chip and a toggle top-left, an export button top-right, a help

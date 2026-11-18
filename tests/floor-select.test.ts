@@ -66,8 +66,10 @@ describe('a click on the room is a click, not the end of a look around', () => {
   const shell = read('components/three/RoomShell.tsx');
 
   it('the floor and every wall select through the same still-click gate', () => {
-    expect(shell).toMatch(/onClick=\{[^}]*\{\s*e\.stopPropagation\(\);\s*if \(!isStillClick\(e\)\) return;\s*setSelectedFloor\(true\);/);
-    expect(shell).toMatch(/if \(!isStillClick\(e\)\) return;\s*setSelectedWall\(i\);/);
+    // The eyedropper's pick sits between the gate and the select, so a pick is a still
+    // click too: a look-around that ends over a wall must not paint the selection.
+    expect(shell).toMatch(/onClick=\{[^}]*\{\s*e\.stopPropagation\(\);\s*if \(!isStillClick\(e\)\) return;\s*if \(isPickingColor\(\)\) return pickColor\(\{ kind: 'floor' \}\);\s*setSelectedFloor\(true\);/);
+    expect(shell).toMatch(/if \(!isStillClick\(e\)\) return;\s*(?:\/\/[^\n]*\s*)*if \(isPickingColor\(\)\) return pickColor\(\{ kind: 'wall', index: i \}\);\s*setSelectedWall\(i\);/);
   });
 
   it('spends the gizmo gate before anything can return early', () => {

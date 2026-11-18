@@ -182,6 +182,7 @@ function modelSections(): HelpSectionSpec[] {
           <HelpKey keys={<Kb>R</Kb>}>spin</HelpKey>
           <HelpKey keys={<Kb>F</Kb>}>fly to the selection</HelpKey>
           <HelpKey keys={<Kb>H</Kb>}>hide it</HelpKey>
+          <HelpKey keys={<Kb>I</Kb>}>pick a colour</HelpKey>
           <HelpKey keys={<Kb>Esc</Kb>}>put a drag back, or deselect</HelpKey>
           <HelpKey keys={<Kb>Del</Kb>}>remove the selection</HelpKey>
           <HelpKey

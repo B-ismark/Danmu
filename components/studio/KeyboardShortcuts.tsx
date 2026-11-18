@@ -39,6 +39,7 @@ import { ANNOUNCE_EVENT, announce } from '@/lib/announce';
 import { settingsHref } from '@/lib/settings-return';
 import { toast } from '@/components/ui/StorageToast';
 import { isHideInterfaceKey, toggleInterface } from '@/lib/hide-interface';
+import { isPickingColor, setPickingColor } from '@/lib/eyedropper';
 
 export const STUDIO_SURFACE_ID = 'danmu-studio-surface';
 
@@ -670,6 +671,12 @@ export function KeyboardShortcuts() {
       // Esc is the one bare key that stays live everywhere: it is the universal
       // way out, and there is nothing it can silently change.
       if (e.key === 'Escape') {
+        // Picking first: Esc puts the eyedropper down and leaves the selection it
+        // was going to paint exactly as it was.
+        if (isPickingColor()) {
+          setPickingColor(false);
+          return;
+        }
         useStudio.getState().setSelected(null);
         return;
       }
@@ -714,6 +721,14 @@ export function KeyboardShortcuts() {
           break;
         case 'f':
           if (s.selectedPartId) s.frameSelected();
+          break;
+        // I for the eyedropper, as in Figma: the next click on a piece, a wall or the
+        // floor picks up its own colour — never its lit one — for the selection. Both
+        // tabs; pressing it again puts it down. See lib/eyedropper.ts.
+        case 'i':
+          if (e.altKey || e.shiftKey) break;
+          e.preventDefault();
+          setPickingColor(!s.pickingColor);
           break;
         // H, not V. V was the modelling-tool convention (Blender, Maya) and it is
         // the one binding here nobody could guess from the app itself — the word

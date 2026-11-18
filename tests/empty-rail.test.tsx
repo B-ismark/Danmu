@@ -102,9 +102,11 @@ describe('the paint picker', () => {
   it('fills exactly two rows, the mixer taking the last cell', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('components/studio/Inspector.tsx', 'utf8');
-    const table = /const SWATCHES: Swatch\[\] = \[([\s\S]*?)\n\];/.exec(src)![1];
-    const dabs = [...table.matchAll(/\{ hex: '#[0-9A-F]{6}', name: '[^']+' \}/g)].length;
-    const columns = Number(/const SWATCH_COLUMNS = (\d+);/.exec(src)![1]);
+    // The palette is importable now (lib/paint-swatches.ts, shared with the
+    // eyedropper's names), so the count is the real array's, not a parse of source.
+    const { SWATCHES, SWATCH_COLUMNS } = await import('@/lib/paint-swatches');
+    const dabs = SWATCHES.length;
+    const columns = SWATCH_COLUMNS;
     expect(dabs).toBe(13);
     expect(dabs + 1).toBe(2 * columns);
     expect(src).toContain('gridTemplateColumns: `repeat(${SWATCH_COLUMNS}, 1fr)`');

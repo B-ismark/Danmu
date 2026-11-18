@@ -12,6 +12,8 @@ import { armPressSelection, selectionAtPress } from '@/lib/press-selection';
 import { cycleThrough, type CycleState } from '@/lib/plan-hit';
 import { pickIdsFrom, PART_ID_KEY } from '@/lib/pick-through';
 import { openPickMenu } from '@/components/studio/SceneContextMenu';
+import { pickColor } from '@/components/studio/Eyedropper';
+import { isPickingColor } from '@/lib/eyedropper';
 
 // The Alt-click cycle's memory. Module-scoped rather than per-component because
 // the handler that fires belongs to whichever piece is in FRONT, and that changes
@@ -91,6 +93,12 @@ export function Pickable({
       }}
       onClick={(e: ThreeEvent<MouseEvent>) => {
         e.stopPropagation();
+        // Eyedropper first: while it is armed a click picks this piece's own colour
+        // for the selection, and selects nothing. `Draggable` refused the press.
+        if (isPickingColor()) {
+          pickColor({ kind: 'part', id: partId });
+          return;
+        }
         // Same exclusivity as onPointerOver, for the click that would otherwise
         // reselect whatever the cursor ended up over when the gesture released.
         if (gestureOwnedByOther(partId)) return;

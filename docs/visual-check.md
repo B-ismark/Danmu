@@ -2280,6 +2280,32 @@ typing into a field instead of hiding.
 **Where it rides.** `lib/hide-interface.ts`, `components/studio/ShowInterfaceButton.tsx`,
 the two shells, `CanvasChrome.tsx`, and `app/room/[roomId]/layout.tsx`.
 
+### Eyedropper — I — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
+
+Select a piece, click the room, press **I**. A small dark card rides the pointer: a big
+square of the colour under it, a dot and its name or hex, and *Click to sample* — and the
+cursor is a crosshair. The square is the surface's **paint**, not its lit look: in the
+starter room at 15:50 the sofa renders a deep warm orange under the lamp and the card reads
+#C9A98E, its fabric's own colour; the back wall renders taupe-grey and reads #ECE9E1. A
+colour the studio names is shown by name — the floor reads *Pale oak*. Click: the
+selection takes it (a wall or the floor too, if that is what is selected; every piece of a
+multi-selection), nothing gets selected or nudged, and the card goes. With nothing
+selected the hex is copied. Esc or I again puts it down and keeps the selection. On touch
+the way in is the *Pick* button under any colour grid, and the card docks bottom centre
+with a close button. Measured on 2026-11-18 in Chromium at 1440, by script, on the 3D tab.
+
+What would be wrong: a picked colour that changes with the time of day or the light mood
+(that is a pixel, not paint), the card lagging the pointer or running off the window's
+edge, the clicked piece getting selected or nudged, the docked card on the phone's toolbar, the crosshair missing over a piece on the plan, or an `i`
+typed into a field arming it.
+
+**Gates.** `tests/eyedropper.test.tsx` (plan tab; the 3D handlers need WebGL, which is
+this item).
+
+**Where it rides.** `lib/eyedropper.ts`, `components/studio/Eyedropper.tsx`, the press,
+click and hover handlers in `Draggable`, `Pickable`, `RoomShell` and `PlanView`, and the
+*Pick* buttons in `Inspector.tsx` and `FloorFinishEditor.tsx`.
+
 
 ### High quality draws its corner shading again, on every GPU — merged to `main` in `2f31b3d` (PR #307), NOT LOOKED AT on a real GPU
 

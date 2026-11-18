@@ -34,6 +34,10 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
   // reason, and more so: the next room opening with no buttons reads as broken.
   const uiHidden = useStudio((s) => s.uiHidden);
   useEffect(() => () => useStudio.getState().setUiHidden(false), []);
+  // The eyedropper (I) is put down on the way out too: a pick armed in one room and
+  // spent on the first click in the next would paint something you never aimed at.
+  const pickingColor = useStudio((s) => s.pickingColor);
+  useEffect(() => () => useStudio.getState().setPickingColor(false), []);
   return (
     // dvh, not vh: on mobile browsers vh includes the collapsing URL bar, so the
     // bottom row of studio chrome sat under it.
@@ -73,7 +77,13 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
       {/* The work surface. It is focusable and takes focus on a press that isn't
           on a control — that is what scopes the studio's single-character
           shortcuts to the room instead of the whole window. */}
-      <div {...surface} style={{ ...surface.style, flex: 1, minHeight: 0 }}>
+      {/* `data-picking-color` is what turns the cursor over the room into a crosshair
+          while the eyedropper is armed (globals.css, `.sampler`). */}
+      <div
+        {...surface}
+        data-picking-color={pickingColor ? '' : undefined}
+        style={{ ...surface.style, flex: 1, minHeight: 0 }}
+      >
         {children}
       </div>
       {/* The 3D canvas, mounted once for both tabs: see lib/room-host.ts. */}
