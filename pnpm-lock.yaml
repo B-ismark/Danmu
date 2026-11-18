@@ -14,6 +14,7 @@ overrides:
   protobufjs@7: ^7.6.5
   postcss: ^8.5.32
   sharp: ^0.35.0
+  n8ao@2: ~2.0.2
 
 importers:
 
@@ -2351,8 +2352,8 @@ packages:
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
 
-  n8ao@2.0.1:
-    resolution: {integrity: sha512-MoP1QKUdj4/3cKEnhFl917t0eQwWGER1l43ckz5mNOPyYWGRDGQbVoTOQz/VBvy01in6QVNG+AL6Xxx5AjZBYA==}
+  n8ao@2.0.2:
+    resolution: {integrity: sha512-lS1CVf31V3u8NOPpOaHKW+1syIAQCsz+KKmQJAYu0hldTh8UwwkFzdnPnuJc9hYozP+0ZZ4o5b8LPkoMytzb8Q==}
     peerDependencies:
       postprocessing: '>=6.30.0'
       three: '>=0.137'
@@ -3839,7 +3840,7 @@ snapshots:
     dependencies:
       '@react-three/fiber': 9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0)
       maath: 0.10.8(@types/three@0.187.0)(three@0.187.0)
-      n8ao: 2.0.1(postprocessing@6.39.6(three@0.187.0))(three@0.187.0)
+      n8ao: 2.0.2(postprocessing@6.39.6(three@0.187.0))(three@0.187.0)
       postprocessing: 6.39.6(three@0.187.0)
       react: 19.3.1
       three: 0.187.0
@@ -5485,7 +5486,7 @@ snapshots:
       object-assign: 4.1.1
       thenify-all: 1.6.0
 
-  n8ao@2.0.1(postprocessing@6.39.6(three@0.187.0))(three@0.187.0):
+  n8ao@2.0.2(postprocessing@6.39.6(three@0.187.0))(three@0.187.0):
     dependencies:
       postprocessing: 6.39.6(three@0.187.0)
       three: 0.187.0
