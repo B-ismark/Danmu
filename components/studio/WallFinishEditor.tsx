@@ -58,9 +58,9 @@ export function WallFinishEditor() {
         </div>
       )}
 
-      <FinishStatus channel="wall" saying="Finishing the walls…" />
+      <FinishStatus channel="wall" saying="Finishing the walls…" done="Walls finished" />
 
-      {chosen && (
+      {chosen && JSON.stringify(walls) !== JSON.stringify(resolveWalls(undefined)) && (
         <button
           onClick={() => setWalls(undefined)}
           className="ds-btn ds-btn--xs ds-btn--ghost"

@@ -60,6 +60,16 @@ describe('the canvas veil', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
+  it('a first frame that failed keeps the canvas covered and offers the way forward, never a dark canvas', () => {
+    act(() => useScene.setState({ hydratedRoomId: 'veil-room' }));
+    act(() => useStudio.setState({ quality: 'high' }));
+    render(<CanvasVeil building failed />);
+    expect(screen.getByRole('alert').textContent).toMatch(/could not draw this room/);
+    expect(screen.getByRole('button').textContent).toBe('Switch to Smoother and reload');
+    act(() => useStudio.setState({ quality: 'low' }));
+    expect(screen.getByRole('button').textContent).toBe('Reload');
+  });
+
   it('a revisit of the same room still waits for its load, since another tab may have changed it', async () => {
     act(() => useScene.setState({ hydratedRoomId: 'veil-room' }));
     await roomStore.saveRoom(ROOM);

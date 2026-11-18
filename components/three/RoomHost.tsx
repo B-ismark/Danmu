@@ -23,7 +23,7 @@ export function RoomHostProvider() {
     return () => roomHost.unmount();
   }, []);
   if (!host || !wanted) return null;
-  return createPortal(<Room paused={!attached} onFirstFrame={roomHost.markDrawn} />, host);
+  return createPortal(<Room paused={!attached} onFirstFrame={roomHost.markDrawn} onFirstFrameFailed={roomHost.markFailed} />, host);
 }
 
 /** On the 3D page: where the host is shown. */

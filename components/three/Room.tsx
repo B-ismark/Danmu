@@ -24,6 +24,7 @@ import { snapshotFileName } from '@/lib/exports';
 import { addPieceToRoom, planPiece } from '@/lib/add-piece';
 import { dropCarry } from '@/lib/drop-carry';
 import { frameGate } from '@/lib/frame-gate';
+import { firstFrameWatch } from '@/lib/first-frame';
 import { sayAdded } from '@/components/studio/say-added';
 import { toast } from '@/components/ui/StorageToast';
 import { pickIdsFrom } from '@/lib/pick-through';
@@ -105,24 +106,38 @@ const _snapCss = new Vector2();
 const _dropPlane = new Plane(new Vector3(0, 1, 0), 0);
 const Grade = wrapEffect(GradeEffect);
 
-/** Calls `onFrame` once, when the first frame is drawn: the canvas veil stays up
- *  until then, because between the WebGL context arriving and the first frame is
- *  shader compilation, and that is the wait a slow device sees as a blank room. */
-function FirstFrame({ onFrame }: { onFrame?: () => void }) {
-  const said = useRef(false);
-  useFrame(() => {
-    if (said.current || !onFrame) return;
-    said.current = true;
-    onFrame();
-  });
+/** Calls `onFrame` once the first frame has been DRAWN, and `onFail` if it threw and
+ *  the loop stopped (`lib/first-frame.ts`). The canvas veil stays up until one of
+ *  them: between the WebGL context arriving and the first frame is shader
+ *  compilation, the wait a slow device sees as a blank room. */
+function FirstFrame({ onFrame, onFail }: { onFrame?: () => void; onFail?: () => void }) {
+  const invalidate = useThree((s) => s.invalidate);
+  const [watch] = useState(() =>
+    firstFrameWatch({
+      drawn: () => onFrame?.(),
+      failed: () => onFail?.(),
+      nudge: () => invalidate(),
+      next: (f) => requestAnimationFrame(f),
+      later: (f, ms) => setTimeout(f, ms),
+    }),
+  );
+  useEffect(() => {
+    const onError = () => watch.error();
+    window.addEventListener('error', onError);
+    return () => window.removeEventListener('error', onError);
+  }, [watch]);
+  useFrame(() => watch.frame());
   return null;
 }
 
 export function Room({
   onFirstFrame,
+  onFirstFrameFailed,
   paused = false,
 }: {
   onFirstFrame?: () => void;
+  /** The first frame threw and the render loop stopped. */
+  onFirstFrameFailed?: () => void;
   /** The 3D tab is not on screen (see `lib/room-host.ts`): draw nothing, keep everything built. */
   paused?: boolean;
 } = {}) {
@@ -423,7 +438,7 @@ export function Room({
       <SceneCapture composer={hi ? composer : null} />
       <DropConnector apiRef={dropApi} />
       <DropGhost />
-      <FirstFrame onFrame={onFirstFrame} />
+      <FirstFrame onFrame={onFirstFrame} onFail={onFirstFrameFailed} />
     </Canvas>
     <DropGhostSay />
     </div>

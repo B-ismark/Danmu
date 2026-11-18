@@ -5,7 +5,7 @@
 // `lib/floor-finish.ts` for why the sizes are not a free number — and the 3D room is
 // the preview, so nothing here tries to draw a second one.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
 import { useSettings } from '@/lib/store';
 import { formatLength } from '@/lib/units';
@@ -27,6 +27,7 @@ export function FloorFinishEditor() {
   const setFloor = useScene((s) => s.setFloor);
   const unit = useSettings((s) => s.dimUnit);
   const [mixing, setMixing] = useState(false);
+  const mixRef = useRef<HTMLButtonElement>(null);
   const floor = resolveFloor(chosen);
   const spec = FLOOR_SPEC[floor.kind];
   const base = chosen ?? { kind: floor.kind };
@@ -97,7 +98,16 @@ export function FloorFinishEditor() {
       )}
 
       <Field label="Colour">
-        <div style={{ position: 'relative' }}>
+        {/* Esc closes the mixer from anywhere in it, the "+" included, and hands focus
+            back to the "+" so the keyboard is not left inside a picker that is gone. */}
+        <div
+          onKeyDown={(e) => {
+            if (!mixing || e.key !== 'Escape') return;
+            e.stopPropagation();
+            setMixing(false);
+            mixRef.current?.focus();
+          }}
+        >
           <div
             role="group"
             aria-label="Floor colour swatches"
@@ -122,6 +132,7 @@ export function FloorFinishEditor() {
               );
             })}
             <button
+              ref={mixRef}
               onClick={() => setMixing((o) => !o)}
               aria-expanded={mixing}
               aria-label={named ? 'Mix a custom floor colour' : `Custom floor colour ${floor.color.toUpperCase()} — mix another`}
@@ -132,20 +143,22 @@ export function FloorFinishEditor() {
               <Icon name="plus" size={14} />
             </button>
           </div>
+          {/* Inline, under the swatches — a rail section's body never floats
+              (CLAUDE.md rule 4). As a popover it hung past the rail's bottom edge and
+              over the sections below it, with its hex field cut off. */}
           {mixing && (
-            <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-popover)' }} onClick={() => setMixing(false)} />
-              <div className="popover" style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 'var(--z-popover)', padding: 12 }}>
-                <ColorPicker value={floor.color} onChange={(hex) => setFloor({ ...base, kind: floor.kind, color: hex })} />
-              </div>
-            </>
+            <div style={{ marginTop: 8 }}>
+              <ColorPicker value={floor.color} onChange={(hex) => setFloor({ ...base, kind: floor.kind, color: hex })} />
+            </div>
           )}
         </div>
       </Field>
 
-      <FinishStatus channel="floor" saying="Laying the new floor…" />
+      <FinishStatus channel="floor" saying="Laying the new floor…" done="Floor laid" />
 
-      {chosen && (
+      {/* Offered only when it would change something: picking the default planks and
+          their first swatch stores a floor, and a reset that resets nothing is noise. */}
+      {chosen && JSON.stringify(floor) !== JSON.stringify(resolveFloor(undefined)) && (
         <button
           onClick={() => {
             setMixing(false);

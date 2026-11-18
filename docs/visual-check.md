@@ -256,6 +256,28 @@ lacquered, top not); the **Laying the new floor…** / **Finishing the walls…*
 flashing for a frame on a quick build, or never showing on a slow one (it appeared
 in the headless run for every first-time finish).
 
+Since the review round: **colours no longer read washed out** — the colour maps are
+now sRGB-encoded, which is how the renderer decodes them (`toneBytes`); a wall's brick
+or panelling now starts at the wall's own corner rather than mid-board; a made piece
+keeps its blocks' finishes through pack, open-up and save; and a finish change keeps
+the WHOLE old floor or wall on screen while the new one is built (it used to flip back
+to an older one for a moment). Check: herringbone and stone colours match their swatch
+in daylight; a brick wall's first joint sits at the corner on every wall.
+
+### Opening a room on Best looking quality draws the room — on branch `claude/admiring-maxwell-tpa1rj`, PROBED
+
+Reported as "a dark screen after the room loads; the models don't show even when
+hovered". Cause: the branch lacked `main`'s n8ao 2.0.2 pin, so on **Best looking** the
+ambient-occlusion pass threw on every frame and nothing was drawn, while hover (a
+raycast, no render) still found the pieces. Merged `main`; probed in headless Chromium
+at high quality, night mode — the room draws, no page errors. And the veil no longer
+lifts on a frame that only *began*: `lib/first-frame.ts` waits for one the browser got
+past cleanly, and if three in a row break it stays up and says **The 3D view could
+not draw this room**, with **Switch to Smoother and reload** (probed by making every
+draw call in the render loop throw). Look at: a real phone and a real laptop GPU on
+Best looking, opening a room twice; the veil should lift onto a furnished room, never
+onto a dark canvas.
+
 ## Drag and selection
 
 *Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone,
