@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 //
-// § H.6.7 — the Inspector's Floor and Wall buttons take what stands on a piece along.
+// "Move to the nearest wall" and "Put on the floor" (`lib/placement-actions.ts`) take what
+// stands on a piece along — § H.6.7. They were the Inspector's Wall and Floor buttons and
+// live on a piece's right-click menu now; the behaviour pinned here is the same.
 //
 // Wall moved the piece alone: press it on a nightstand and its lamp stayed where the
 // nightstand had been, standing on air. It is asked of the same relation a drag plans its
@@ -14,16 +16,13 @@
 // follows such a link only while the support's top differs from its AUTHORED top, so a
 // nightstand floored back to where the room put it left the lamp at desk height.
 import 'fake-indexeddb/auto';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { footprintForLayout } from '@/lib/footprint';
 import { currentRoomScene } from '@/lib/room-scene';
+import { moveToNearestWall, putOnFloor } from '@/lib/placement-actions';
 import type { ScenePart } from '@/lib/scene-spec';
-
-vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('rider-room', 'model'));
-const { Inspector } = await import('@/components/studio/Inspector');
 
 const part = (over: Partial<ScenePart> & Pick<ScenePart, 'id'>): ScenePart =>
   ({
@@ -47,11 +46,9 @@ function room(parts: ScenePart[], selected: string) {
 }
 
 const at = (id: string) => currentRoomScene().find((p) => p.id === id)!;
+const selected = () => useStudio.getState().selectedPartId!;
 
-beforeEach(() => useStudio.setState({ selectedWall: null }));
-afterEach(() => cleanup());
-
-describe('the Floor and Wall buttons carry what stands on the piece (§ H.6.7)', () => {
+describe('Floor and Wall carry what stands on the piece (§ H.6.7)', () => {
   it('Wall takes the lamp to the wall with its nightstand', () => {
     // Nearest wall is the north one, 1 m away; the lamp stands 50 mm in front of the
     // nightstand's middle, and no drag has ever linked it.
@@ -59,8 +56,7 @@ describe('the Floor and Wall buttons carry what stands on the piece (§ H.6.7)',
       part({ id: 'ns', name: 'Nightstand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [0, 0, -1.5] }),
       lamp([0, 0.55, -1.45]),
     ], 'ns');
-    render(<Inspector />);
-    fireEvent.click(screen.getByTitle('Move to the nearest wall and face the room'));
+    moveToNearestWall(selected());
 
     const ns = at('ns');
     const l = at('lamp');
@@ -79,8 +75,7 @@ describe('the Floor and Wall buttons carry what stands on the piece (§ H.6.7)',
       part({ id: 'ns', name: 'Nightstand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [-2.5, 0, 0] }),
       lamp([-2.5, 0.55, 0.05]),
     ], 'ns');
-    render(<Inspector />);
-    fireEvent.click(screen.getByTitle('Move to the nearest wall and face the room'));
+    moveToNearestWall(selected());
 
     const ns = at('ns');
     const l = at('lamp');
@@ -96,8 +91,7 @@ describe('the Floor and Wall buttons carry what stands on the piece (§ H.6.7)',
       part({ id: 'box', name: 'Box', dimMM: [400, 400, 300], pos: [1, 0.75, 0] }),
       lamp([1, 1.05, 0]),
     ], 'box');
-    render(<Inspector />);
-    fireEvent.click(screen.getByTitle('Put this piece on the floor, without moving it sideways'));
+    putOnFloor(selected());
 
     expect(at('box').pos[1]).toBe(0);
     const l = at('lamp');
@@ -123,8 +117,7 @@ describe('the Floor and Wall buttons carry what stands on the piece (§ H.6.7)',
       parentIds: { ns: 'desk' },
     });
     expect(at('lamp').pos[1]).toBeCloseTo(1.3, 6);
-    render(<Inspector />);
-    fireEvent.click(screen.getByTitle('Put this piece on the floor, without moving it sideways'));
+    putOnFloor(selected());
 
     expect(at('ns').pos[1]).toBe(0);
     expect(at('lamp').pos[1]).toBeCloseTo(0.55, 6);
@@ -133,22 +126,16 @@ describe('the Floor and Wall buttons carry what stands on the piece (§ H.6.7)',
 });
 
 describe('Wall takes the selection and says when it cannot (§ H.6.7)', () => {
-  const WALL = 'Move to the nearest wall and face the room';
   const box = (id: string, name: string, pos: [number, number, number]) =>
     part({ id, name, dimMM: [400, 400, 500], pos });
-  /** The note under the buttons. Not `getByRole('status')`: the panel's announcer is
-   *  one too. */
-  const note = () => screen.queryByText(/stopped short|Nothing moved|already against|will not fit against|wall behind/);
 
-  it('moves the rest of the selection with the piece', () => {
+  it('moves the rest of the selection with the piece, and has nothing to add', () => {
     room([box('a', 'Crate', [0, 0, -1.5]), box('b', 'Stool', [1.5, 0, -1.0])], 'a');
     useStudio.setState({ selection: ['a', 'b'] });
-    render(<Inspector />);
-    fireEvent.click(screen.getByTitle(WALL));
+    expect(moveToNearestWall('a')).toEqual({ moved: true, text: null });
     const step = at('a').pos[2] - -1.5;
     expect(step).toBeLessThan(-0.5);
     expect(at('b').pos[2]).toBeCloseTo(-1.0 + step, 6);
-    expect(note()).toBeNull();
   });
 
   it('records what the piece was set down on', () => {
@@ -159,60 +146,38 @@ describe('Wall takes the selection and says when it cannot (§ H.6.7)', () => {
       lamp([0, 0.55, 0]),
     ], 'lamp');
     useStudio.setState({ parentIds: { lamp: 'ns' } });
-    render(<Inspector />);
-    fireEvent.click(screen.getByTitle(WALL));
+    moveToNearestWall('lamp');
     expect(at('lamp').pos[1]).toBe(0);
     expect(useStudio.getState().parentIds).toEqual({});
   });
 
-  it('says why nothing moved, until the piece is moved some other way', () => {
+  it('says why nothing moved, and moves nothing', () => {
     // The stool's wall spot is taken by a post too small to stand on, so it cannot
-    // follow; the whole press is refused and the panel names the stool.
+    // follow; the whole press is refused and the sentence names the stool.
     room([
       box('a', 'Crate', [0, 0, -1.5]),
       box('b', 'Stool', [1.5, 0, -1.5]),
       part({ id: 'post', name: 'Post', dimMM: [150, 150, 900], pos: [1.5, 0, -2.28] }),
     ], 'a');
     useStudio.setState({ selection: ['a', 'b'] });
-    render(<Inspector />);
-    fireEvent.click(screen.getByTitle(WALL));
+    expect(moveToNearestWall('a')).toEqual({
+      moved: false,
+      text: 'Nothing moved: Stool will not fit there, so the rest of the selection cannot follow.',
+    });
     expect(at('a').pos).toEqual([0, 0, -1.5]);
     expect(at('b').pos).toEqual([1.5, 0, -1.5]);
     expect(useStudio.getState().positions).toEqual({});
-    expect(note()?.textContent).toBe('Nothing moved: Stool will not fit there, so the rest of the selection cannot follow.');
-    expect(note()?.closest('[role="status"]')).not.toBeNull();
-    // A sentence about the room as it WAS is not left standing once anything in it
-    // moves — here the post that blocked the stool, which the crate never noticed.
-    act(() => useStudio.getState().setPosition('post', [2, 0, 0]));
-    expect(note()).toBeNull();
   });
 
-  it.each<[string, () => void]>([
-    ['the selection it judged changes', () => useStudio.getState().setSelection(['a'], 'a')],
-    ['the post that blocked the stool turns', () => useStudio.getState().setRotation('post', 1)],
-    ['the post is resized', () => useStudio.getState().setDim('post', [100, 100, 900])],
-  ])('takes the note down when %s', (_, change) => {
-    room([
-      box('a', 'Crate', [0, 0, -1.5]),
-      box('b', 'Stool', [1.5, 0, -1.5]),
-      part({ id: 'post', name: 'Post', dimMM: [150, 150, 900], pos: [1.5, 0, -2.28] }),
-    ], 'a');
-    useStudio.setState({ selection: ['a', 'b'] });
-    render(<Inspector />);
-    fireEvent.click(screen.getByTitle(WALL));
-    expect(note()).not.toBeNull();
-    act(change);
-    expect(note()).toBeNull();
-  });
-
-  it('keeps the note a press left, while the room it describes stands', () => {
+  it('says so when it went somewhere other than the nearest wall', () => {
     // The crate faces north and the west wall is nearer, but the stool is coming too,
     // so the crate goes to the wall behind it instead of turning — and says so.
     room([box('a', 'Crate', [-2, 0, 0]), box('b', 'Stool', [-2, 0, 0.8])], 'a');
     useStudio.setState({ selection: ['a', 'b'] });
-    render(<Inspector />);
-    fireEvent.click(screen.getByTitle(WALL));
+    expect(moveToNearestWall('a')).toEqual({
+      moved: true,
+      text: 'Crate went to the wall behind it, so the rest of the selection did not have to turn.',
+    });
     expect(at('a').pos[2]).toBeCloseTo(-2.28, 9);
-    expect(note()?.textContent).toBe('Crate went to the wall behind it, so the rest of the selection did not have to turn.');
   });
 });

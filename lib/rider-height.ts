@@ -340,7 +340,7 @@ export function deriveRiderYs(
       // `pos[1]` is a CENTRE, so "put its bottom on the top" is not even the right
       // arithmetic for one.
       if (!isFloorStanding(rider.category, rider.shape)) continue;
-      // Rule 1: on the floor is on the floor. `groundToFloor` and a drag that finds no
+      // Rule 1: on the floor is on the floor. `putOnFloor` and a drag that finds no
       // support both write exactly 0, and neither can leave a tombstone in `parentIds`
       // for a relation that was only ever inferred.
       if (rider.pos[1] <= 0) continue;

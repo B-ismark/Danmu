@@ -1,4 +1,4 @@
-// § H.6.7 — the Inspector's Wall button moves through the convoy.
+// § H.6.7 — "Move to the nearest wall" (the right-click menu, once the Inspector's Wall button) moves through the convoy.
 //
 // Wall moved the piece and what stood on it, and nothing else, unchecked: merged-set
 // siblings and the rest of a selection stayed behind, and a press into an occupied wall
