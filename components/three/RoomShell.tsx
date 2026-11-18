@@ -111,6 +111,10 @@ const SKIRTING_PROUD = 0.012;
  *  floor would select the floor, and every look around the room would open its panel.
  *  Two pixels is R3F's own line for a click on nothing (`onPointerMissed`). */
 const STILL_PX = 2;
+/** The same line for a finger or a pen, which wobble on a tap where a mouse does not.
+ *  At 2 px a tap on a wall or the floor failed often enough to read as a dead
+ *  surface on a phone; an orbit by finger travels far further than this. */
+const STILL_TOUCH_PX = 10;
 
 /** A click on the room's own surfaces, or a gesture that happened to end over one. */
 function isStillClick(e: ThreeEvent<MouseEvent>): boolean {
@@ -119,7 +123,8 @@ function isStillClick(e: ThreeEvent<MouseEvent>): boolean {
   // or it stays armed and eats an ordinary click one gesture later. See
   // lib/gizmo-press.ts.
   if (consumeGizmoClick()) return false;
-  if (e.delta > STILL_PX) return false;
+  const kind = (e.nativeEvent as Partial<PointerEvent>).pointerType;
+  if (e.delta > (kind === 'touch' || kind === 'pen' ? STILL_TOUCH_PX : STILL_PX)) return false;
   // A pan held on the keyboard ends over bare floor too, and is not a choice of it.
   return !useStudio.getState().panKeyHeld;
 }

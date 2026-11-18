@@ -77,8 +77,10 @@ describe('a click on the room is a click, not the end of a look around', () => {
     const gate = body.indexOf('consumeGizmoClick()');
     expect(gate).toBeGreaterThan(-1);
     expect(gate).toBeLessThan(body.indexOf('e.delta'));
-    expect(body).toMatch(/if \(e\.delta > STILL_PX\) return false;/);
+    expect(body).toMatch(/if \(e\.delta > \(kind === 'touch' \|\| kind === 'pen' \? STILL_TOUCH_PX : STILL_PX\)\) return false;/);
     expect(shell).toMatch(/const STILL_PX = 2;/);
+    // A finger wobbles on a tap; 2 px there made the floor and walls feel dead.
+    expect(shell).toMatch(/const STILL_TOUCH_PX = 10;/);
   });
 
   it('the panel opens on the floor when it is selected', () => {
