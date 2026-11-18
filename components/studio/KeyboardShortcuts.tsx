@@ -38,6 +38,7 @@ import { formatDim, formatLength } from '@/lib/units';
 import { ANNOUNCE_EVENT, announce } from '@/lib/announce';
 import { settingsHref } from '@/lib/settings-return';
 import { toast } from '@/components/ui/StorageToast';
+import { isHideInterfaceKey, toggleInterface } from '@/lib/hide-interface';
 
 export const STUDIO_SURFACE_ID = 'danmu-studio-surface';
 
@@ -609,6 +610,17 @@ export function KeyboardShortcuts() {
     const unsubHistory = startHistoryRecording();
 
     function onKey(e: KeyboardEvent) {
+      // Hide / show the interface. Ahead of the text-field guard: Ctrl+\ types
+      // nothing into a field, so there is nothing to protect, and it is exactly when
+      // focus is in a rail's field that the rail is what the user wants gone. Focus
+      // goes to the room either way — the field it was in has just left the page,
+      // and the room is where the single-key shortcuts are armed.
+      if (isHideInterfaceKey(e)) {
+        e.preventDefault();
+        toggleInterface();
+        focusStudioSurface();
+        return;
+      }
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       const meta = e.metaKey || e.ctrlKey;

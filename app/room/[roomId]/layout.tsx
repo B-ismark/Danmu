@@ -18,6 +18,7 @@ import { ExportMenu } from '@/components/studio/ExportMenu';
 import { StudioMoreMenu } from '@/components/studio/StudioMoreMenu';
 import { NarrowViewportBanner } from '@/components/studio/NarrowViewportBanner';
 import { RoomHostProvider } from '@/components/three/RoomHost';
+import { ShowInterfaceButton } from '@/components/studio/ShowInterfaceButton';
 
 export default function StudioLayout({ children }: { children: ReactNode }) {
   const surface = studioSurfaceProps();
@@ -29,13 +30,20 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
   // keeps this layout mounted — leaves it open, which is the point of it being
   // shared in the first place.
   useEffect(() => () => useStudio.getState().setCatalogOpen(false), []);
+  // Hide interface (Ctrl/Cmd + backslash). Cleared on the way out for the catalog's
+  // reason, and more so: the next room opening with no buttons reads as broken.
+  const uiHidden = useStudio((s) => s.uiHidden);
+  useEffect(() => () => useStudio.getState().setUiHidden(false), []);
   return (
     // dvh, not vh: on mobile browsers vh includes the collapsing URL bar, so the
     // bottom row of studio chrome sat under it.
     // Less the top safe-area inset, which `body` pads for: the studio is exactly one
     // screen tall, not one screen plus a notch.
     <div style={{ height: 'calc(100dvh - env(safe-area-inset-top, 0px))', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
-      <TopBar
+      {/* Not rendered while the interface is hidden, rather than hidden by CSS: it is
+          a flex row, so a display rule would have to win against its own layout, and
+          nothing in it holds state worth keeping across a toggle. */}
+      {!uiHidden && <TopBar
         // flexShrink: 0 — the bar wraps rather than squeezes, and these two are
         // the studio's whole navigation; they move to a second row intact before
         // they give up a pixel of label.
@@ -61,7 +69,7 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
           </>
         }
         phoneEnd={<StudioMoreMenu />}
-      />
+      />}
       {/* The work surface. It is focusable and takes focus on a press that isn't
           on a control — that is what scopes the studio's single-character
           shortcuts to the room instead of the whole window. */}
@@ -75,6 +83,7 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
       <SoundCues />
       <StudioAnnouncer />
       <NarrowViewportBanner />
+      <ShowInterfaceButton />
     </div>
   );
 }

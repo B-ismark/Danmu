@@ -2256,6 +2256,31 @@ inside the box.
 
 ## Look and light
 
+### Hide interface — Ctrl/Cmd + backslash — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
+
+Open the starter room at a laptop width, click the room, and press **Ctrl + \\** (Cmd on a
+Mac). The top bar, both rails and every floating cluster (tools, day strip, undo, view
+buttons) go, and the room fills the window; one pill, *Show interface*, sits bottom
+centre with the shortcut beside it. The camera must not move. Press the key again, or the
+pill: everything returns as it was, including an open Library card with what was typed in
+its search. Try it from inside a rail's text field, then on the 2D plan (its zoom stays),
+from the View menu's *Hide interface* row, and on a phone, where the toolbar and sheet go
+and the pill shows no key hint. Measured on 2026-11-18 in Chromium at 1440 and on an
+iPhone 13 profile, by script: the canvas went 820 × 832 → 1420 × 880 and 390 × 538 → 390 ×
+664, no cluster left visible, and the pill centred to the pixel while hovered — which it
+was not on the first version, whose `translateX(-50%)` the button's hover lift replaced.
+
+What would be wrong: anything left floating over the room, the room not reaching the
+window's edges, the camera or the plan's zoom resetting, the pill off-centre or under the
+home indicator, a key on a German or Nordic layout that does nothing, or Ctrl + \\
+typing into a field instead of hiding.
+
+**Gates.** `tests/hide-interface.test.tsx`.
+
+**Where it rides.** `lib/hide-interface.ts`, `components/studio/ShowInterfaceButton.tsx`,
+the two shells, `CanvasChrome.tsx`, and `app/room/[roomId]/layout.tsx`.
+
+
 ### High quality draws its corner shading again, on every GPU — merged to `main` in `2f31b3d` (PR #307), NOT LOOKED AT on a real GPU
 
 **What was wrong, and why it was not a headless quirk.** On **High** (the default), every

@@ -86,10 +86,14 @@ function PaneShell({ surface }: { surface: ReactNode }) {
     if (selected) setTab('details');
   }
 
+  // Hide interface (Ctrl/Cmd + backslash): the panel leaves and the room takes the
+  // width. Kept mounted, as `DockedShell` keeps its rails, so a toggle loses nothing.
+  const uiHidden = useStudio((s) => s.uiHidden);
+
   return (
-    <div className="pane-shell">
+    <div className="pane-shell" style={uiHidden ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
       <div className="shell-room">{surface}</div>
-      <aside className="rail pane" aria-label="Studio panels">
+      <aside className="rail pane" aria-label="Studio panels" style={uiHidden ? { display: 'none' } : undefined}>
         <div className="panel-tabs" role="tablist" aria-label="Panel">
           <PanelTab id="room" active={tab === 'room'} onChoose={() => setTab('room')}>
             Room
@@ -160,6 +164,9 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
   const { selected, name } = useSelectionName();
   const catalogOpen = useStudio((s) => s.catalogOpen);
   const setCatalogOpen = useStudio((s) => s.setCatalogOpen);
+  // Hide interface: the toolbar and the sheet both go, and the room has the screen.
+  // Mounted still, so the sheet's open panel is where it was when they come back.
+  const uiHidden = useStudio((s) => s.uiHidden);
   const setSelected = useStudio((s) => s.setSelected);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
 
@@ -303,6 +310,7 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
         ref={sheetRef}
         id={SHEET_ID}
         className="sheet"
+        style={uiHidden ? { display: 'none' } : undefined}
         data-snap={snap}
         data-fit={fit || undefined}
         aria-label={title}
@@ -355,7 +363,7 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
       </section>
       </div>
 
-      <nav className="phone-toolbar" aria-label="Studio">
+      <nav className="phone-toolbar" aria-label="Studio" style={uiHidden ? { display: 'none' } : undefined}>
         <ToolButton icon="list" label="Room" pressed={open && panel === 'room'} onPress={() => show('room')} />
         {selected ? (
           <>

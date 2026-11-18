@@ -214,6 +214,16 @@ function modelSections(): HelpSectionSpec[] {
           >
             undo · add <Kb>Shift</Kb> to redo
           </HelpKey>
+          <HelpKey
+            keys={
+              <>
+                <Kb>Ctrl</Kb>
+                <Kb>\</Kb>
+              </>
+            }
+          >
+            hide or show the interface
+          </HelpKey>
         </HelpKeys>
       ),
     },

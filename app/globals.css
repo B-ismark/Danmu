@@ -2317,6 +2317,20 @@ textarea.field { border-radius: var(--r-2); }
 }
 .help-keys__row:nth-child(even) .help-kb { background: var(--paper); }
 .help-line .help-kb { margin: 0 1px; }
+/* Hide interface (Ctrl/Cmd + backslash): the one control left over the room. Bottom centre,
+   clear of the home indicator, floating like the canvas chrome it stands in for. */
+.show-ui {
+  /* Centred by auto margins, not `translateX(-50%)`: `.ds-btn` presses with a
+     transform, and a press — or a hover over the spot — replaced the centring and
+     the pill jumped half its width to the right. */
+  position: fixed; left: 0; right: 0; margin-inline: auto; width: fit-content;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-canvas-hint);
+  box-shadow: var(--shadow-float);
+  max-width: calc(100vw - 32px);
+}
+.show-ui__keys { display: inline-flex; gap: 3px; margin-left: 2px; }
+@media (hover: none) { .show-ui__keys { display: none; } }
 /* The sheet a phone gets for any Modal that asks for one: the whole screen, no scrim
    showing round it, the list of topics dropped so the sections simply stack. */
 @media (max-width: 599px) {

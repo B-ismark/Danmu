@@ -23,6 +23,7 @@
 // the selection bar folded into the Inspector, which already answers "what is
 // selected". If you are reaching for a fourth slot, the answer is a rail.
 
+import { useStudio } from '@/lib/store';
 import { useEffect, useRef, type ReactNode } from 'react';
 
 // Every slot carries `.canvas-chrome`, which makes the cluster itself
@@ -37,6 +38,15 @@ const BASE = {
   alignItems: 'center',
   gap: 8,
 };
+
+/** `BASE`, or out of sight while the interface is hidden (Ctrl/Cmd + backslash).
+ *  Inline, because `display` is inline here and a stylesheet rule cannot outrank it;
+ *  `display: none` rather than unrendering, so a slot's published size and whatever
+ *  is open inside it (the day strip's extras, a tool's popover) survive the toggle. */
+function useBase() {
+  const hidden = useStudio((s) => s.uiHidden);
+  return hidden ? { ...BASE, display: 'none' } : BASE;
+}
 
 // How much of each edge something else is covering, so a cluster centres on the
 // room you can SEE rather than on an element something is sitting on top of.
@@ -145,7 +155,7 @@ export function CanvasTools({ children }: { children: ReactNode }) {
       ref={ref}
       className="canvas-chrome"
       style={{
-        ...BASE,
+        ...useBase(),
         top: EDGE,
         // Spans the visible canvas and centres its contents inside that span,
         // rather than being a shrink-to-fit box nudged to the middle.
@@ -208,7 +218,7 @@ export function CanvasDay({ children }: { children: ReactNode }) {
     <div
       className="canvas-chrome"
       style={{
-        ...BASE,
+        ...useBase(),
         top: `calc(${DAY_ROW_BOTTOM} - ${DAY_ROW_H}px)`,
         // Above the Library card: the strip's extras row opens over the card's top edge
         // while the strip is reached for, and must not be cut by it.
@@ -232,7 +242,7 @@ export function CanvasView({ children }: { children: ReactNode }) {
       ref={ref}
       className="canvas-chrome"
       style={{
-        ...BASE,
+        ...useBase(),
         top: EDGE,
         right: `calc(${EDGE}px + ${INSET_R})`,
         flexWrap: 'wrap',
@@ -265,7 +275,7 @@ export function CanvasAide({ children }: { children: ReactNode }) {
     <div
       className="canvas-chrome"
       style={{
-        ...BASE,
+        ...useBase(),
         bottom: EDGE,
         right: `calc(${EDGE}px + ${INSET_R})`,
         zIndex: 'var(--z-canvas-hint)',
