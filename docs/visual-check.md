@@ -364,7 +364,8 @@ Then the move itself, which is unchanged apart from where it reports. In the see
 living room the Sofa already stands against its wall, so choose *Move to the nearest
 wall* on it: a toast titled *Nothing moved* says it is already against the wall. In 2D
 Plan drag the Coffee table and the Plant a metre or more from every wall, shift-click
-both, and choose the move with the Coffee table under the pointer: both go, the Plant by
+both, and right-click the Coffee table: the row reads *Move 2 to the nearest wall*
+and there is no *Put on the floor*. Choose it: both go, the Plant by
 the same step and at its own angle. Drag a third piece onto the spot the Plant would land
 on and do it again: nothing moves, and the toast names the Plant. Last, set a table lamp
 on a nightstand away from the walls and move it to the wall: it lands on the floor at the

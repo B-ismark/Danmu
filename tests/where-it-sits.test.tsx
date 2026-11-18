@@ -117,6 +117,20 @@ describe('placement lives on the right-click menu, not in the panel', () => {
     expect(items.some((t) => /surface/i.test(t))).toBe(false);
   });
 
+  it('with several selected, the wall move stays on offer and takes them all; Floor does not', () => {
+    // The Inspector's Wall took the whole selection — shift-click two, press it, both go
+    // — so the move must not vanish from the menu the moment there are two. The first
+    // version of this menu gated both rows on a single selection and lost exactly that.
+    // Floor only ever moved the one piece, so offering it for "2" would promise more
+    // than it does.
+    setUp([table(), lamp(0.45)]);
+    useStudio.setState({ selection: [LAMP, TABLE], selectedPartId: LAMP });
+    render(<PlanPage />);
+    const items = rightClick(LAMP);
+    expect(items).toContain('Move 2 to the nearest wall');
+    expect(items).not.toContain(FLOOR);
+  });
+
   // Why Surface could go, asserted rather than asserted-in-a-comment. `resolvePlacement`
   // is the one resolve both tabs run, so this is the real path a user's drag takes.
   //

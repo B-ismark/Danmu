@@ -376,27 +376,31 @@ function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
     });
   }
 
-  // The Inspector's own words for the same dialog: one action, one name. It took
-  // the slot "Back where it was" held, which was asked to go — undo already reaches
-  // a moved piece, and the Inspector still offers the full reset beside its button.
   // The two placements a drag cannot make (`lib/placement-actions.ts`). They were a
   // permanent row in the Inspector, which the user said was mostly not needed; here they
   // cost nothing until asked for. A wall-mounted piece gets neither: it is already on a
   // wall, and "the floor" would pull a TV or a ceiling fan off it.
-  if (!many && !part.wallMounted) {
+  //
+  // The wall move is a gesture like a drag and takes the whole selection, as the
+  // Inspector's button did — so it stays on offer for many, and says how many. Floor
+  // only ever moved the one piece, so it is offered only when one is selected.
+  if (!part.wallMounted) {
     entries.push({
       kind: 'item',
       id: 'to-wall',
-      label: 'Move to the nearest wall',
+      label: many ? `Move ${ids.length} to the nearest wall` : 'Move to the nearest wall',
       icon: 'snap-wall',
       run: () => {
         const { moved, text } = moveToNearestWall(partId);
         if (text) toast({ title: moved ? 'Moved to the wall' : 'Nothing moved', message: text, ttl: 6000 });
       },
     });
-    entries.push({ kind: 'item', id: 'to-floor', label: 'Put on the floor', icon: 'snap-floor', run: () => putOnFloor(partId) });
+    if (!many) entries.push({ kind: 'item', id: 'to-floor', label: 'Put on the floor', icon: 'snap-floor', run: () => putOnFloor(partId) });
   }
 
+  // The Inspector's own words for the same dialog: one action, one name. It took
+  // the slot "Back where it was" held, which was asked to go — undo already reaches
+  // a moved piece, and the Inspector still offers the full reset beside its button.
   if (!many) {
     entries.push({
       kind: 'item',

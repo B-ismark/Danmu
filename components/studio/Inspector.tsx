@@ -374,8 +374,7 @@ export function Inspector() {
           time they had said so. A wall-mounted piece keeps the one number that means
           something about where it sits: how high it hangs. */}
       {part.wallMounted && (
-      <div className="section section--flush">
-        {part.wallMounted && (
+        <div className="section section--flush">
           <MountHeightRow
             key={`${id}-${currentXYZ()[1]}`}
             bottomMM={(currentXYZ()[1] - part.dimMM[2] / 2000) * 1000}
@@ -389,8 +388,7 @@ export function Inspector() {
               setPosition(id!, [x, y, z]);
             }}
           />
-        )}
-      </div>
+        </div>
       )}
 
       {/* One entry point to the model library. Generic-box parts (low-confidence
