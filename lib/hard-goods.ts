@@ -38,6 +38,7 @@
 // along an edge. `tests/coplanar-faces.test.tsx` sweeps the result at three sizes.
 
 import { consoleSlabs, doorHandleY, drawerSlide, radiatorFins, stoolSeat, windowPanes } from './scene-spec';
+import { windowReach, WINDOW_SILL } from './physics';
 import { COFFEE_SHELF, DESK_TOP, DINING_LEG, DINING_TOP, ELL_ARM_DEPTH, ELL_RETURN_WIDTH, surfacePostsLocal } from './foot-cells';
 
 type V3 = [number, number, number];
@@ -803,7 +804,7 @@ export function deskForm(dimMM: readonly number[], lShape: boolean): HardPart[] 
 }
 
 /** A window's joinery, real sizes in metres. */
-export const WINDOW = { casing: 0.05, frame: 0.045, mullion: 0.04, sash: 0.035, sill: 0.03, apron: 0.05, sillReach: 0.12, sillOver: 0.06 } as const;
+export const WINDOW = { casing: 0.05, frame: 0.045, mullion: 0.04, sash: 0.035, sill: 0.03, apron: 0.05, sillReach: WINDOW_SILL.reach, sillOver: WINDOW_SILL.over } as const;
 
 /** One pane of glass, in the window's own frame: an opening in a sash, at `z`. */
 export interface WindowGlass { x0: number; x1: number; y0: number; y1: number; z: number }
@@ -824,7 +825,7 @@ export interface WindowGlass { x0: number; x1: number; y0: number; y1: number; z
  *  origin, its back on the wall at `-d/2`. */
 export function windowForm(dimMM: readonly number[]): { parts: HardPart[]; glass: WindowGlass[] } {
   const [w, d, h] = m(dimMM);
-  const { casing, frame, mullion, sash, sill, apron, sillReach, sillOver } = WINDOW;
+  const { casing, frame, mullion, sash, sill, apron, sillOver } = WINDOW;
   const back = -d / 2;
   const n = windowPanes(dimMM[0]);
   const xi = w / 2 - frame;
@@ -840,7 +841,7 @@ export function windowForm(dimMM: readonly number[]): { parts: HardPart[]; glass
     slab('casing-l', 'body', -w / 2 - casing, -w / 2, -h / 2, h / 2, back, back + 0.02),
     slab('casing-r', 'body', w / 2, w / 2 + casing, -h / 2, h / 2, back, back + 0.02),
     // At least 60 mm past the frame's room face, however deep the frame.
-    slab('sill', 'body', -w / 2 - sillOver, w / 2 + sillOver, -h / 2 - sill, -h / 2, back, back + Math.max(sillReach, d + 0.06)),
+    slab('sill', 'body', -w / 2 - sillOver, w / 2 + sillOver, -h / 2 - sill, -h / 2, back, back + windowReach(d)),
     slab('apron', 'trim', -w / 2 - casing, w / 2 + casing, -h / 2 - sill - apron, -h / 2 - sill, back, back + 0.02),
     // In the opening.
     ...border('frame', 'body', -w / 2, w / 2, -h / 2, h / 2, frame, frame, back, d / 2),

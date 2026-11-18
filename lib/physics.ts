@@ -268,15 +268,45 @@ export function verticalExtent(
   return [y - h / 2, y + h / 2];
 }
 
-/** How far a curtain hangs in FRONT of the window's front face.
+/** A window's sill, which is the part of a window that reaches furthest into the room:
+ *  `reach` from the plaster at least, and `over` past a deeper frame's room face.
+ *  Here rather than beside the rest of the joinery (`WINDOW` in `lib/hard-goods.ts`,
+ *  which reads these two) because the curtain's standoff below is measured against it,
+ *  and `hard-goods` sits above this module. */
+export const WINDOW_SILL = { reach: 0.12, over: 0.06 } as const;
+
+/** How far a window of depth `depthM` reaches into the room, from the plaster: the
+ *  front of its sill. The same expression `windowForm` draws the sill with. */
+export function windowReach(depthM: number): number {
+  return Math.max(WINDOW_SILL.reach, depthM + WINDOW_SILL.over);
+}
+
+/** The air between a window's sill and the deepest fold of the cloth in front of it. */
+export const CURTAIN_CLEAR = 0.01;
+
+/** How far a curtain stands off the wall beyond its own depth: far enough that its
+ *  cloth clears the sill of any window up to `WINDOW_SILL.reach - WINDOW_SILL.over`
+ *  (60 mm) deep — the catalogue's window and every scanned one.
  *
- *  Curtains sat at the window's exact x/z, so the cloth, the rod and the window's
- *  mullions were coplanar and z-fought — which reads as a rendering fault rather
- *  than as a curtain. It has to clear the window's frame and sill (both stand
- *  proud of the glass) and the pleats' own depth (they are rotated planes, so
- *  they have some). A real curtain rod does stand about a hand's width off the
- *  wall, so this is the honest figure, not a fudge to dodge the z-fight. */
-export const CURTAIN_STANDOFF = 0.09;
+ *  It was 90 mm, measured as "clear of the window's front face", and the test said so
+ *  by comparing the curtain's CENTRE with the frame. Two things that comparison could
+ *  not see: the cloth hangs in waves whose troughs swing back toward the wall by up to
+ *  half the curtain's depth (`curtainCloth`), and the sill stands 120 mm proud of the
+ *  plaster, twice as far as the frame. So every curtain hung over a window had the sill
+ *  showing through it, a pale block in each trough — reported from a screenshot on
+ *  2026-11-18. Now the arithmetic is the cloth against the sill: the curtain's back is
+ *  `standoff` off the wall-gap line, the sill's front is `reach` off it, and the
+ *  waves never reach behind the curtain's back. */
+export const CURTAIN_STANDOFF = WINDOW_SILL.reach + CURTAIN_CLEAR;
+
+/** The standoff for a curtain dressing a window `windowDepthM` deep. Equal to
+ *  `CURTAIN_STANDOFF` for any window up to 60 mm; further out for a deeper one, whose
+ *  sill reaches further. The seeded pair asks with its window's depth. A curtain hung
+ *  by a drag or the Library does not know which window it is in front of and takes
+ *  `CURTAIN_STANDOFF` (docs/what-is-still-open.md). */
+export function curtainStandoff(windowDepthM: number): number {
+  return Math.max(CURTAIN_STANDOFF, windowReach(windowDepthM) + CURTAIN_CLEAR);
+}
 
 /** Extra clearance in front of the wall for a part that hangs over ANOTHER wall
  *  part rather than against the plaster. Only a curtain does. Lives here so the

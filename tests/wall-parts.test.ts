@@ -3,7 +3,9 @@ import { wallApertures } from '@/lib/apertures';
 import { clampIntoFootprint, footprintForLayout, pointInFootprint, polygonCentroid, wallSegments, type Footprint } from '@/lib/footprint';
 import { footExtentAlong, footFromPart, footInsidePoly, obbExtentAlong, type Poly } from '@/lib/geometry';
 import { openingsForRoom } from '@/lib/room-openings';
-import { anchorFor, groundY, ridesWall, snapToWall, wallStandoff, CURTAIN_STANDOFF } from '@/lib/physics';
+import { anchorFor, groundY, ridesWall, snapToWall, wallStandoff, CURTAIN_STANDOFF, CURTAIN_CLEAR, curtainStandoff } from '@/lib/physics';
+import { curtainCloth } from '@/lib/soft-goods';
+import { partExtent, windowForm } from '@/lib/hard-goods';
 import { defaultScene, isWallMountedPart, placeNewPart, type ScenePart } from '@/lib/scene-spec';
 import { ROOM } from '@/lib/parts-catalog';
 // `WALL_GAP` is imported rather than spelled where an assertion is about a piece's
@@ -147,7 +149,26 @@ describe('a curtain hangs in front of the window, not inside it', () => {
     expect(stood.z - flush.z).toBeCloseTo(CURTAIN_STANDOFF, 6);
   });
 
-  it('hangs clear of every window it dresses, in every preset', () => {
+  // The CLOTH against the SILL, both as drawn. The first version of this measured the
+  // curtain's centre against the window's frame, which is two substitutions deep: the
+  // cloth's troughs swing back toward the wall by up to half the curtain's depth, and
+  // the sill stands proud of the frame by 60 mm. It passed while every curtain in every
+  // preset had the sill showing through its folds (a screenshot, 2026-11-18).
+  /** How far the cloth's deepest trough and the window's furthest part each stand
+   *  into the room, measured along the window's own facing direction. */
+  function clothAndWindow(c: ScenePart, w: ScenePart): { cloth: number; window: number } {
+    const [fx, fz] = localToWorld(w.rot, 0, 1);
+    const ahead = (p: ScenePart) => p.pos[0] * fx + p.pos[2] * fz;
+    const verts = curtainCloth(c.dimMM, 12).positions;
+    let back = Infinity;
+    for (let i = 2; i < verts.length; i += 3) back = Math.min(back, verts[i]);
+    let front = -Infinity;
+    for (const part of windowForm(w.dimMM).parts) front = Math.max(front, partExtent(part).hi[2]);
+    return { cloth: ahead(c) + back, window: ahead(w) + front };
+  }
+
+  it('hangs its cloth clear of the sill of every window it dresses, in every preset', () => {
+    let pairs = 0;
     for (const { id, w, d } of PRESETS) {
       const parts = defaultScene(id, w, d);
       const curtains = parts.filter((p) => p.shape === 'curtain');
@@ -156,19 +177,49 @@ describe('a curtain hangs in front of the window, not inside it', () => {
       expect(curtains.length, `${id} curtains vs windows`).toBe(windows.length);
       for (const c of curtains) {
         // Its window is the one it shares a wall and a centre line with.
-        const w = windows.find((q) => Math.abs(q.rot - c.rot) < 0.01)!;
-        expect(w, `${id}: a curtain with no window`).toBeDefined();
-        // Distance along the window's OWN facing direction, which is the only
-        // reading that works on all four walls of an L or a T.
-        const [fx, fz] = localToWorld(w.rot, 0, 1);
-        const ahead = (c.pos[0] - w.pos[0]) * fx + (c.pos[2] - w.pos[2]) * fz;
-        // Clear of the window's front face, and the cloth is genuinely in front
-        // of the glass rather than merely offset by a z-fight epsilon.
-        expect(ahead, `${id} curtain standoff`).toBeGreaterThanOrEqual(
-          w.dimMM[1] / 2000 + CURTAIN_STANDOFF - 1e-6,
-        );
+        const win = windows.find((q) => Math.abs(q.rot - c.rot) < 0.01)!;
+        expect(win, `${id}: a curtain with no window`).toBeDefined();
+        const { cloth, window } = clothAndWindow(c, win);
+        expect(cloth - window, `${id}: the sill shows through the curtain`).toBeGreaterThanOrEqual(CURTAIN_CLEAR - 1e-9);
+        pairs++;
       }
     }
+    expect(pairs, 'presets that hang a curtain').toBeGreaterThan(0);
+  });
+
+  it('hung by a drag, clears the sill too — over every window the catalogue or a scan makes', () => {
+    // Both snapped to the same wall, the way a drag or the Library puts them there; every
+    // legal curtain depth, and window depths up to the 60 mm `CURTAIN_STANDOFF` covers.
+    for (const winDepth of [40, 60]) {
+      for (const clothDepth of [40, 80, 120, 200]) {
+        const wDim: [number, number, number] = [1200, winDepth, 1200];
+        const cDim: [number, number, number] = [1600, clothDepth, 2200];
+        const ws = snapToWall([0, 0, -2], wDim, RECT, wallStandoff('window'));
+        const cs = snapToWall([0, 0, -2], cDim, RECT, wallStandoff('curtain'));
+        const win = { shape: 'window', dimMM: wDim, pos: [ws.x, 1.4, ws.z], rot: ws.rot ?? 0 } as ScenePart;
+        const c = { shape: 'curtain', dimMM: cDim, pos: [cs.x, 1.4, cs.z], rot: cs.rot ?? 0 } as ScenePart;
+        const { cloth, window } = clothAndWindow(c, win);
+        expect(cloth - window, `window ${winDepth} mm, curtain ${clothDepth} mm`).toBeGreaterThanOrEqual(CURTAIN_CLEAR - 1e-9);
+      }
+    }
+  });
+
+  it('the seeded pair stands apart by exactly what a drag puts between them', () => {
+    // Relative to its window, not to the wall: the seeder sets a window on its own
+    // gap, which is a separate question from how far the curtain hangs in front of it.
+    const fp = footprintForLayout('rect', 4, 4);
+    const parts = defaultScene('rect', 4, 4);
+    const c = parts.find((p) => p.shape === 'curtain')!;
+    const w = parts.find((p) => p.shape === 'window')!;
+    const sc = snapToWall(c.pos, c.dimMM, fp, wallStandoff('curtain'));
+    const sw = snapToWall(w.pos, w.dimMM, fp, wallStandoff('window'));
+    expect(Math.hypot(c.pos[0] - w.pos[0], c.pos[2] - w.pos[2])).toBeCloseTo(Math.hypot(sc.x - sw.x, sc.z - sw.z), 9);
+  });
+
+  it('a deeper window pushes its seeded curtain further out, by the sill it adds', () => {
+    expect(curtainStandoff(0.06)).toBe(CURTAIN_STANDOFF);
+    expect(curtainStandoff(0.04)).toBe(CURTAIN_STANDOFF);
+    expect(curtainStandoff(0.2)).toBeCloseTo(0.2 + 0.06 + CURTAIN_CLEAR, 12);
   });
 
   it('does not hang through the ceiling', () => {

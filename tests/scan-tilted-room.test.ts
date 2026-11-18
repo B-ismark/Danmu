@@ -387,7 +387,12 @@ describe('a scan tilted up, cut at the edges, with the size skipped', () => {
     for (const r of rows) {
       expect(Math.abs(r.widthErr), r.piece.label).toBeLessThan(0.01);
       expect(Math.abs(r.heightErr), r.piece.label).toBeLessThan(0.01);
-      expect(r.posErrM, r.piece.label).toBeLessThan(0.12); // wall pieces differ by half the truth's depth less the catalogue's
+      // Exact, but for the curtain: the photograph reads it as hung on the plaster,
+      // and the standoff is the build's to add, so the reading is out by exactly that.
+      // This was `< 0.12` for everything, a bound that quietly held a 90 mm standoff
+      // and went red when the standoff grew to clear a sill.
+      const owed = r.piece.shape === 'curtain' ? CURTAIN_STANDOFF : 0;
+      expect(Math.abs(r.posErrM - owed), r.piece.label).toBeLessThan(0.01);
     }
   });
 
