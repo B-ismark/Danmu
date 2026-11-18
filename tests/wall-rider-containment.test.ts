@@ -9,7 +9,8 @@ import {
   type ScenePart,
   type Shape,
 } from '@/lib/scene-spec';
-import { ridesWall } from '@/lib/physics';
+import { CURTAIN_STANDOFF, ridesWall } from '@/lib/physics';
+import { WALL_GAP } from '@/lib/layout-rules';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import { ELL_ARM_DEPTH, ELL_RETURN_WIDTH } from '@/lib/foot-cells';
 
@@ -621,6 +622,8 @@ describe('a refusal says which kind of refusal it is', () => {
 describe('a wall piece follows the pointer to the wall it is at', () => {
   const room = footprintForLayout('rect', 6, 4) as Array<[number, number]>;
   const curtain: ScenePart = { ...mk('curtain', 'curtain', [5000, 120, 2200]), pos: [0, 1.25, -1.9] };
+  /** Where a curtain's centre hangs off its wall: half its depth, the gap, the standoff. */
+  const hung = 0.06 + WALL_GAP + CURTAIN_STANDOFF;
   const drag = (x: number, z: number) =>
     resolvePlacement({
       part: curtain,
@@ -639,7 +642,7 @@ describe('a wall piece follows the pointer to the wall it is at', () => {
     // that used to hand the curtain to the south wall.
     for (const z of [-1.5, -0.5, 0, 0.5, 1, 1.5]) {
       const r = drag(-2.9, z);
-      expect(r.pos[0], `z=${z}: not on the west wall`).toBeLessThan(-2.8);
+      expect(r.pos[0], `z=${z}: not on the west wall`).toBeCloseTo(-3 + hung, 9);
       expect(Math.abs(r.pos[2]), `z=${z}: centred on the 4 m wall`).toBeLessThan(1e-6);
       // Wider than the wall, so refused — and refused for THAT reason, visibly, on a
       // wall the camera can see.
@@ -749,6 +752,6 @@ describe('a wall piece follows the pointer to the wall it is at', () => {
     // The near wall is a legal place to hang a curtain; it is only reached when the
     // pointer is nearer it than to any other wall.
     const south = drag(0, 1.8);
-    expect(south.pos[2]).toBeGreaterThan(1.8);
+    expect(south.pos[2]).toBeCloseTo(2 - hung, 9);
   });
 });

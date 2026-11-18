@@ -5,6 +5,8 @@
 // for its own size and mount, keeps the spot, drops stale overrides, and stands on
 // whatever it lands on. jsdom because the real stores are driven.
 
+import { CURTAIN_STANDOFF } from '@/lib/physics';
+import { WALL_GAP } from '@/lib/layout-rules';
 import { describe, expect, it } from 'vitest';
 import { swapPartModel } from '@/lib/swap-model';
 import { useScene } from '@/lib/scene-store';
@@ -147,9 +149,11 @@ describe('changing the model', () => {
     swapPartModel('notch', curtain);
     const s = useStudio.getState();
     expect(s.positions.arm![0]).toBeCloseTo(-2.2, 9);
-    expect(s.positions.arm![2]).toBeCloseTo(-3 + 0.15, 9);
+    // Half its 80 mm depth, the wall gap and the curtain's standoff off each wall.
+    const off = 0.04 + WALL_GAP + CURTAIN_STANDOFF;
+    expect(s.positions.arm![2]).toBeCloseTo(-3 + off, 9);
     expect(s.positions.notch![0]).toBeCloseTo(0, 9);
-    expect(s.positions.notch![2]).toBeCloseTo(0.15, 9);
+    expect(s.positions.notch![2]).toBeCloseTo(off, 9);
   });
 
   it('a turn equal to the authored one up to a full circle writes nothing', () => {

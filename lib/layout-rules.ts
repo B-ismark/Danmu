@@ -1674,8 +1674,9 @@ export function doorPath(
  *  Every one of them is a state the app loads and the user cannot re-create by
  *  dragging, which is the same class `visual-check.md` keeps recording. The reason is
  *  the curtain's own geometry: its depth is 80 mm in the catalogue (a 40–200 mm range
- *  in `dimension-ranges.ts`) and `CURTAIN_STANDOFF` in `lib/physics.ts` holds it 90 mm
- *  off the plaster, so its inner face stands roughly 200 mm into the room and anything
+ *  in `dimension-ranges.ts`) and `CURTAIN_STANDOFF` in `lib/physics.ts` holds it off
+ *  the plaster far enough to clear a window's sill, so its inner face stands well over
+ *  200 mm into the room and anything
  *  with its back to that wall is inside it by construction. Those two constants are
  *  named rather than their sum quoted, because a hand-typed total does not move when
  *  somebody retunes either one.

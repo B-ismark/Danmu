@@ -85,7 +85,7 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
     );
     // Onto the wall, facing the room, by the NEW piece's own depth — the same call the
     // add path makes. Keeping the old spot is right for a floor piece and wrong for a
-    // wall one: a print's centre sits 35 mm off the plaster and a curtain's wants 150,
+    // wall one: a print's centre sits 35 mm off the plaster and a curtain's wants nearly 200,
     // so a curtain swapped in there hung half through the wall, and `resetTransforms`
     // had already thrown away the turn that faced the print into the room, so it hung
     // crossways as well.

@@ -23,6 +23,7 @@ import {
   wallAffinity,
   wallStandoff,
   CURTAIN_STANDOFF,
+  curtainStandoff,
   snapToWall,
   pullToward,
   findSupportDetailed,
@@ -1762,7 +1763,11 @@ function dress(
     // In FRONT of the glass, along the window's own facing direction — `w.rot` is
     // the wall's yaw and local +Z faces into the room, so `localToWorld` is the
     // one expression that gets this right on all four walls of any footprint.
-    const [ox, oz] = localToWorld(w.rot, 0, w.dimMM[1] / 2000 + CURTAIN_STANDOFF);
+    // Measured from the WALL, the way `snapToWall` hangs a curtain, so the first drag
+    // does not jump it: the window's back and the curtain's back both sit on the
+    // wall-gap line, and the curtain's is `curtainStandoff` further out — clear of the
+    // window's sill, not merely of its frame.
+    const [ox, oz] = localToWorld(w.rot, 0, dim[1] / 2000 + curtainStandoff(w.dimMM[1] / 1000) - w.dimMM[1] / 2000);
     add('curtain', 'Curtain', 'curtain', dim, [w.pos[0] + ox, height - drop / 2 - 0.05, w.pos[2] + oz], w.rot);
   }
 
