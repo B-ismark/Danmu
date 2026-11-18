@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backWall, distinctLeads, ideaCaption, IDEAS_PER_PAGE, NEAR_LANDMARK_M } from '@/lib/layout-ideas';
+import { backWall, distinctLeads, ideaCaption, IDEAS_PER_PAGE, NEAR_LANDMARK_M, OFF_CENTRE } from '@/lib/layout-ideas';
 import { lockedForShuffle, shuffleRoom, type ShuffleOffer } from '@/lib/layout-shuffle';
 import { footprintBounds, footprintForLayout, wallOutwardNormal, wallSegments, type Footprint } from '@/lib/footprint';
 import { distToBoundary, footFromPart, footInsidePoly, frontVector, pointInPoly } from '@/lib/geometry';
@@ -57,6 +57,23 @@ function checkTrue(parts: ScenePart[], footprint: Footprint, lead: string, idea:
         expect(t).toBeGreaterThanOrEqual(1 / 3);
         expect(t).toBeLessThanOrEqual(2 / 3);
       }
+    }
+    const toward = /toward ((?:the .+? wall)|(?:wall \d+))/.exec(words);
+    if (toward) {
+      // Some wall the back is on, and an edge so labelled meeting it at the end the
+      // piece is nearer — with the piece outside that wall's middle quarter.
+      const n = footprint.length;
+      const ok = footprint.some((_, e) => {
+        if (!wall || !backIsOn(footprint, part, at, wall[1])) return false;
+        const [ax, az] = footprint[e];
+        const [cx, cz] = footprint[(e + 1) % n];
+        const len2 = (cx - ax) ** 2 + (cz - az) ** 2;
+        const t = ((at.x - ax) * (cx - ax) + (at.z - az) * (cz - az)) / len2;
+        if (Math.abs(t - 0.5) < OFF_CENTRE) return false;
+        const endEdge = t < 0.5 ? (e - 1 + n) % n : (e + 1) % n;
+        return lower(wallLabelOf(footprint, e)) === wall[1] && lower(wallLabelOf(footprint, endEdge)) === toward[1];
+      });
+      expect(ok, words).toBe(true);
     }
     const near = /near the (window|door|TV)/.exec(words);
     if (near) {
@@ -121,19 +138,40 @@ describe('a caption names a wall the way the plan does', () => {
   const tied = (fp: Footprint, parts: ScenePart[], pls: Placement[][]) =>
     distinctLeads(parts, fp, pls.map((placements) => ({ placements, moved: placements.map((_, i) => i) })));
 
-  it('an L room: the caption says the wall the plan labels, "against wall N"', () => {
-    const fp = footprintForLayout('l', 6, 5);
-    const b = footprintBounds(fp);
-    // Back flat on the first edge's wall, in two spots, so the two cards tie.
+  /** The sofa with its back flat on edge 0's wall, `t` of the way along it. */
+  const onWall0 = (fp: Footprint, t: number): Placement => {
     const [ax, az] = fp[0];
     const [bx, bz] = fp[1];
     const [ox, oz] = wallOutwardNormal(fp, 0);
     const yaw = Math.atan2(-ox, -oz);
-    const pl = (t: number): Placement => ({ x: ax + (bx - ax) * t - ox * 0.45, z: az + (bz - az) * t - oz * 0.45, yaw }) as Placement;
-    const [one, two] = tied(fp, [sofa], [[pl(0.35)], [pl(0.65)]]);
+    return { x: ax + (bx - ax) * t - ox * 0.45, z: az + (bz - az) * t - oz * 0.45, yaw } as Placement;
+  };
+
+  it('an L room: the caption says the wall the plan labels, "against wall N"', () => {
+    const fp = footprintForLayout('l', 6, 5);
+    const b = footprintBounds(fp);
+    // Back flat on the first edge's wall, in two spots inside its middle quarter, so
+    // nothing a caption may say tells the two cards apart and they tie.
+    const [one, two] = tied(fp, [sofa], [[onWall0(fp, 0.5 - OFF_CENTRE / 2)], [onWall0(fp, 0.5 + OFF_CENTRE / 2)]]);
     expect(b.width).toBeGreaterThan(0);
     expect(one).toBe(two);
     expect(one).toBe(`Sofa against ${wallLabelOf(fp, 0).toLowerCase()}`);
+  });
+
+  it('two cards that differ only along a wall say which end, by the wall at that end', () => {
+    // Centred against off towards each end: the wall at an end is the edge meeting the
+    // back wall's corner there — the one before it at the start, after it at the end.
+    for (const id of ['rect', 'l'] as const) {
+      const fp = footprintForLayout(id, 6, 5);
+      const n = fp.length;
+      const back = wallLabelOf(fp, 0).toLowerCase();
+      const name = (e: number) => wallLabelOf(fp, e).toLowerCase();
+      const the = (label: string) => (/^wall \d+$/.test(label) ? label : `the ${label}`);
+      const [start, mid, end] = tied(fp, [sofa], [[onWall0(fp, 0.25)], [onWall0(fp, 0.5)], [onWall0(fp, 0.75)]]);
+      expect(mid, id).toBe(`Sofa against ${the(back)}`);
+      expect(start, id).toBe(`Sofa against ${the(back)}, toward ${the(name(n - 1))}`);
+      expect(end, id).toBe(`Sofa against ${the(back)}, toward ${the(name(1))}`);
+    }
   });
 
   it('open-floor claims in an L stay inside the footprint: the notch is never "the middle of the room"', () => {

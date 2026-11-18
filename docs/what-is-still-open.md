@@ -10953,21 +10953,25 @@ bound has a test that fails without it — said here rather than pretended other
 second `snapYaws` cannot see a wall-fixture clash, but it turns a piece at most 12–20° and no
 sweep showed a clash appear after it.
 
-## § 58 · A curtain dragged over a window deeper than 60 mm — WRITTEN DOWN, NOT FIXED
+## § 58 · A curtain dragged over a window deeper than 60 mm — CLOSED
 
-**Exists in a commit:** the fix this follows (the sill showing through every curtain, from a
-screenshot on 2026-11-18) is on `claude/admiring-maxwell-tpa1rj`. This limit is not built.
+**Exists in a commit:** yes — `hangOnWall` in `lib/physics.ts`, tests in
+`tests/curtain-deep-window.test.ts` and `tests/swap-model.test.ts`.
 
-A window's sill reaches `windowReach(depth)` into the room (`lib/physics.ts`): 120 mm for any
-window up to 60 mm deep, which is the catalogue's window and every scanned one, and
-`depth + 60 mm` beyond that, up to 260 mm for the 200 mm maximum. `CURTAIN_STANDOFF` clears the
-120 mm sill. The seeded pair asks `curtainStandoff(window depth)` and clears any sill, but a
-curtain hung by a **drag, the Library, a swap or a scan** does not know which window it is in
-front of, so over a window the user has made deeper than 60 mm its folds can still meet the
-sill. Six callers take `wallStandoff(shape)` (`drag-resolve`, `to-wall`, `swap-model`, the add
-path, both detection placements). Making all six window-aware means each finding the windows
-that share the curtain's wall and span — one helper, but six call sites in one commit, or the
-paths disagree, which is what put the cloth inside the glass the first time
-(`wallStandoff`'s comment). Not done because a deeper-than-standard window is an edit few
-rooms will have, and raising the constant to clear a 200 mm window would stand every curtain
-a third of a metre off the wall.
+A window's sill reaches `windowReach(depth)` into the room: 120 mm for any window up to
+60 mm deep, `depth + 60 mm` beyond that. `CURTAIN_STANDOFF` clears the 120 mm sill, and
+only the seeded pair used to know about a deeper one. Now a drag, a swap and the Library's
+add hang a curtain through `hangOnWall`, which snaps once, finds the windows on that wall
+whose span (sill overhang included) the curtain overlaps, and snaps again further out if a
+sill reaches past the standard gap — measured from where each window actually stands. A
+curtain with no deep window behind it keeps the standard gap, so nothing else moved.
+
+Two paths deliberately stay on the constant, with the reason on each: a **scan** builds
+every window at the catalogue's 60 mm (`approximateDims`), which the constant clears; and
+the **Wall button** hands its target to `resolvePlacement`, the drag path, so it lands
+through `hangOnWall` anyway (a mutation removing the button's own neighbour list survived
+every test, which is how that was found — the button is also offered only to floor pieces).
+
+Not covered: a window made deeper AFTER its curtain was hung leaves the curtain where it
+was until the curtain is next moved. Re-hanging the pieces in front of a window on every
+resize of it is a different feature (a resize moving pieces the user did not touch).

@@ -5,7 +5,7 @@
 // for its own size and mount, keeps the spot, drops stale overrides, and stands on
 // whatever it lands on. jsdom because the real stores are driven.
 
-import { CURTAIN_STANDOFF } from '@/lib/physics';
+import { CURTAIN_CLEAR, CURTAIN_STANDOFF, windowReach } from '@/lib/physics';
 import { WALL_GAP } from '@/lib/layout-rules';
 import { describe, expect, it } from 'vitest';
 import { swapPartModel } from '@/lib/swap-model';
@@ -154,6 +154,24 @@ describe('changing the model', () => {
     expect(s.positions.arm![2]).toBeCloseTo(-3 + off, 9);
     expect(s.positions.notch![0]).toBeCloseTo(0, 9);
     expect(s.positions.notch![2]).toBeCloseTo(off, 9);
+  });
+
+  it('a print swapped for a curtain over a 200 mm window hangs clear of its sill', () => {
+    // `hangOnWall` finds the window on the same wall; a swap that only asked
+    // `wallStandoff` hung the curtain's folds through a deep window's sill
+    // (docs/what-is-still-open.md § 58).
+    useStudio.setState({ positions: {}, rotations: {}, dims: {}, parentIds: {} });
+    const win = part({ id: 'win', shape: 'window', pos: [0, 1.4, -3 + WALL_GAP + 0.1], rot: 0, dimMM: [1200, 200, 1200], wallMounted: true });
+    const print = part({ id: 'p', category: 'painting', shape: 'painting', pos: [0, 1.8, -3 + 0.035], rot: 0, dimMM: [600, 30, 400], wallMounted: true });
+    useScene.setState({
+      room: { width: 6, depth: 6, height: 2.5, layoutId: 'rect', footprint: footprintForLayout('rect', 6, 6), wallColors: {} },
+      parts: [win, print],
+      ready: true,
+    });
+    swapPartModel('p', { label: 'Curtain', group: 'Decor', category: 'curtain', shape: 'curtain', dimMM: [1600, 80, 2200] });
+    // The curtain's back `CURTAIN_CLEAR` past the sill's front.
+    const sill = WALL_GAP + windowReach(0.2);
+    expect(useStudio.getState().positions.p![2]).toBeCloseTo(-3 + sill + CURTAIN_CLEAR + 0.04, 9);
   });
 
   it('a turn equal to the authored one up to a full circle writes nothing', () => {

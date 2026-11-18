@@ -299,11 +299,11 @@ export const CURTAIN_CLEAR = 0.01;
  *  waves never reach behind the curtain's back. */
 export const CURTAIN_STANDOFF = WINDOW_SILL.reach + CURTAIN_CLEAR;
 
-/** The standoff for a curtain dressing a window `windowDepthM` deep. Equal to
- *  `CURTAIN_STANDOFF` for any window up to 60 mm; further out for a deeper one, whose
- *  sill reaches further. The seeded pair asks with its window's depth. A curtain hung
- *  by a drag or the Library does not know which window it is in front of and takes
- *  `CURTAIN_STANDOFF` (docs/what-is-still-open.md). */
+/** The standoff for a curtain dressing a window `windowDepthM` deep, the window's back
+ *  on the wall-gap line. Equal to `CURTAIN_STANDOFF` for any window up to 60 mm; further
+ *  out for a deeper one, whose sill reaches further. The seeded pair asks with its
+ *  window's depth; every other way a curtain is hung goes through `hangOnWall`, which
+ *  measures the windows actually behind it. */
 export function curtainStandoff(windowDepthM: number): number {
   return Math.max(CURTAIN_STANDOFF, windowReach(windowDepthM) + CURTAIN_CLEAR);
 }
@@ -314,6 +314,96 @@ export function curtainStandoff(windowDepthM: number): number {
  *  number — the three of them disagreeing is what put the cloth inside the glass. */
 export function wallStandoff(shape: Shape): number {
   return shape === 'curtain' ? CURTAIN_STANDOFF : 0;
+}
+
+/** What `hangOnWall` needs to know about the other pieces in the room. */
+export interface WallNeighbour {
+  shape: Shape;
+  pos: readonly number[];
+  rot: number;
+  dimMM: readonly number[];
+}
+
+/** `snapToWall`, for a piece that may hang over ANOTHER wall piece — and the one call
+ *  every path that hangs a curtain by hand makes: a drag, a swap and the Library's add.
+ *  (The Wall button hands its target to the drag's resolve, so it lands here too. A
+ *  scan keeps `wallStandoff`: its windows are built at the catalogue's 60 mm, which the
+ *  constant clears, and `approximateDims` is what guarantees that.)
+ *
+ *  `wallStandoff` is a constant, and a constant can only clear the sill of the window it
+ *  was sized for: 60 mm deep, the catalogue's. Make a window deeper and its sill reaches
+ *  `depth + 60 mm` into the room, so a curtain dragged over it had the sill showing
+ *  through its folds again (docs/what-is-still-open.md § 58, now closed). Raising the
+ *  constant to the deepest window's would stand every curtain a third of a metre off the
+ *  plaster, so instead this snaps once, finds the windows on THAT wall whose span the
+ *  curtain overlaps, and — if any of their sills reach further than the constant clears
+ *  — snaps again to the same wall, further out.
+ *
+ *  Measured from where the window actually stands, not from its depth alone, so a window
+ *  sitting 10 mm off the plaster is cleared by its real sill line. Never nearer the wall
+ *  than `wallStandoff`: a curtain with no window behind it keeps the standard gap, the
+ *  one every other path and test already assumes. Anything that is not a curtain is
+ *  `snapToWall` unchanged. */
+export function hangOnWall(
+  pos: [number, number, number],
+  dimMM: [number, number, number],
+  footprint: Footprint,
+  shape: Shape,
+  neighbours: readonly WallNeighbour[],
+  edgeIndex?: number | null,
+  opts: { alongRot?: number } = {},
+): { x: number; z: number; rot?: number } {
+  const base = wallStandoff(shape);
+  if (shape !== 'curtain') return snapToWall(pos, dimMM, footprint, base, edgeIndex, opts);
+  // The wall `snapToWall` is about to choose, named so the second snap cannot pick a
+  // different one from the first answer's position (a corner is a tie).
+  const edge =
+    (edgeIndex == null ? null : edgeProjection(footprint, edgeIndex, pos[0], pos[2])) ??
+    nearestEdge(footprint, pos[0], pos[2]);
+  if (!edge) return snapToWall(pos, dimMM, footprint, base, edgeIndex, opts);
+  const first = snapToWall(pos, dimMM, footprint, base, edge.index, opts);
+  const standoff = Math.max(base, sillClearance(first, dimMM, base, edge.yaw, neighbours));
+  return standoff > base ? snapToWall(pos, dimMM, footprint, standoff, edge.index, opts) : first;
+}
+
+/** The standoff a curtain at `at` needs to clear every window sill behind it, or 0. */
+function sillClearance(
+  at: { x: number; z: number },
+  dimMM: readonly number[],
+  standoff: number,
+  yaw: number,
+  neighbours: readonly WallNeighbour[],
+): number {
+  // The wall's inward normal (the curtain's front) and its run.
+  const nx = Math.sin(yaw);
+  const nz = Math.cos(yaw);
+  const ux = nz;
+  const uz = -nx;
+  // The plaster line, behind the curtain's centre.
+  const inset = dimMM[1] / 2000 + WALL_GAP + standoff;
+  const wx = at.x - nx * inset;
+  const wz = at.z - nz * inset;
+  const half = dimMM[0] / 2000;
+  let need = 0;
+  for (const n of neighbours) {
+    if (n.shape !== 'window') continue;
+    // On this wall: facing the same way…
+    if (Math.sin(n.rot) * nx + Math.cos(n.rot) * nz < 0.999) continue;
+    const dx = n.pos[0] - wx;
+    const dz = n.pos[2] - wz;
+    const d = n.dimMM[1] / 1000;
+    // …its back near the plaster (a window is a hole in THIS wall, not a piece across
+    // the room that happens to face the same way)…
+    const back = dx * nx + dz * nz - d / 2;
+    if (back < -0.05 || back > 0.1) continue;
+    // …and behind the curtain, sill overhang included.
+    const along = dx * ux + dz * uz;
+    if (Math.abs(along) >= half + n.dimMM[0] / 2000 + WINDOW_SILL.over) continue;
+    // Curtain back at `WALL_GAP + standoff` off the plaster; the sill's front at
+    // `back + windowReach(d)`.
+    need = Math.max(need, back + windowReach(d) + CURTAIN_CLEAR - WALL_GAP);
+  }
+  return need;
 }
 
 /** True when a part belongs flat against a wall — the wall-* anchors, and only

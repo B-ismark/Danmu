@@ -38,6 +38,7 @@
 
 import type { Footprint } from './footprint';
 import { polygonCentroid } from './footprint';
+import { WALL_GAP } from './layout-rules';
 
 /** A hole in a wall, ready to become a `ScenePart`. */
 export type Opening = {
@@ -200,9 +201,14 @@ function windowOn(edge: Edge, t: number): Opening {
  *  centre, so half its depth is the geometry, and the extra millimetres are because
  *  a point ON a polygon's boundary is not reliably inside it — `pointInFootprint`
  *  answered `false` for every opening placed on the line, which is how a door came to
- *  be reported as not being in the room it is the way into. */
+ *  be reported as not being in the room it is the way into.
+ *
+ *  Those millimetres are `WALL_GAP`, the one `snapToWall` puts behind every wall piece.
+ *  They were a literal 10 mm, half of it, so every seeded door and window jumped 1 cm
+ *  into the room the first time it was touched, and a curtain hung over a seeded window
+ *  stood 1 cm further from it than over one the user had placed. */
 function pointOn(e: Edge, d: number, depthMM = 0): { x: number; z: number } {
-  const inset = depthMM / 2000 + 0.01;
+  const inset = depthMM / 2000 + WALL_GAP;
   return { x: e.ax + e.ux * d + e.nx * inset, z: e.az + e.uz * d + e.nz * inset };
 }
 

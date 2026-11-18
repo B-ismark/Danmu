@@ -51,7 +51,7 @@
     "tailwindcss": "^3.4.14",
     "typescript": "^6.0.3",
     "vite": "^8.3.8",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "packageManager": "pnpm@9.12.0",
   "pnpm": {
@@ -103,7 +103,11 @@
       "protobufjs@7": "^7.6.5",
       "postcss": "^8.5.32",
       "sharp": "^0.35.0",
-      "n8ao@2": "~2.0.2"
+      "n8ao@2": "~2.0.2",
+      "undici@8": "^8.12.2",
+      "postcss-selector-parser@6": "^6.1.6",
+      "fflate@0.6": "^0.6.11",
+      "typescript-eslint@8": "^8.73.0"
     }
   }
 }

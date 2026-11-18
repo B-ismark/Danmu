@@ -25,7 +25,7 @@ import { aabbExtents, edgeProjection, footFromPart, footIsBox, frontVector, near
 import { tuckedAt, tuckProfile } from './layout-rules';
 import { bothBlocks } from './block-style';
 import { SAME_TURN, snapAhead, snapToNeighbors, turnBetween, type SnapLine } from './item-snap';
-import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
+import { findSupportDetailed, followsPointerUp, groundY, isFloorStanding, MOUNT_PAD, ridesWall, hangOnWall } from './physics';
 
 export type SnapMode = 'off' | 'fine' | 'coarse';
 
@@ -339,7 +339,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
     // `snapToWall`'s own nearest-wall choice can be the same tie again. A drag keeps
     // letting the snap choose, which is the answer `stay` was derived from anyway.
     const edge = input.wallEdge ?? (back && !switches ? stay!.index : input.wallEdge);
-    const snapped = snapToWall([sx, 0, sz], dim, footprint, wallStandoff(part.shape), edge);
+    const snapped = hangOnWall([sx, 0, sz], dim, footprint, part.shape, input.parts, edge);
     x = snapped.x;
     z = snapped.z;
     if (snapped.rot !== undefined) outRot = snapped.rot;

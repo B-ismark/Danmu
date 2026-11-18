@@ -342,6 +342,30 @@ function placeWords(parts: readonly ScenePart[], j: number, at: Placement, footp
   return null;
 }
 
+/** How far from its wall's midpoint a piece must stand, as a share of the wall's
+ *  length, before a caption may say which end it is toward: outside the middle
+ *  quarter. Nearer the middle than that, "toward the left wall" would be a coin toss
+ *  dressed as a description. */
+export const OFF_CENTRE = 1 / 8;
+
+/** The wall at the end of `part`'s back wall that it stands toward, as a footprint
+ *  index, or null when it is not against a wall or stands near the middle of it.
+ *  The wall at an end is the edge that meets the back wall's corner there. */
+export function wallEndToward(part: ScenePart, at: Placement, footprint: Footprint): number | null {
+  const w = backWall(part, at, footprint);
+  if (w === null) return null;
+  const n = footprint.length;
+  const a = footprint[w];
+  const c = footprint[(w + 1) % n];
+  const dx = c[0] - a[0];
+  const dz = c[1] - a[1];
+  const len2 = dx * dx + dz * dz;
+  if (len2 < 1e-8) return null;
+  const t = ((at.x - a[0]) * dx + (at.z - a[1]) * dz) / len2;
+  if (Math.abs(t - 0.5) < OFF_CENTRE) return null;
+  return t < 0.5 ? (w - 1 + n) % n : (w + 1) % n;
+}
+
 /** The captions for ONE page of ideas, made different from each other.
  *
  *  `ideaCaption` names the piece the room is arranged around, whether it stands by
@@ -355,7 +379,8 @@ function placeWords(parts: readonly ScenePart[], j: number, at: Placement, footp
  *  then, piece by piece (largest first), where another piece that moved ended up,
  *  taking the first piece whose whereabouts differ among the tied cards. All of it
  *  is read off the placements, and a whereabouts that cannot be said truthfully is
- *  left out rather than coined. Cards still tied once every piece has been tried
+ *  left out rather than coined. Last, for cards still tied, which end of its wall a
+ *  piece stands toward (`wallEndToward`). Cards still tied once every piece has been tried
  *  are the same arrangement as far as any sentence here can say, and keep equal
  *  captions rather than an invented difference.
  *
@@ -406,6 +431,37 @@ export function distinctLeads(
         if (w) out[i] = `${out[i]} · ${parts[j].name} moves ${w.startsWith('in the') ? `to the ${w.slice(7)}` : w}`;
       });
       // Only the cards that still tie go on to the next piece.
+      const still = tied().find((g) => g.includes(live[0]));
+      if (!still) break;
+      live = still.filter((i) => group.includes(i));
+    }
+  }
+
+  // 3. Which end of its wall a piece stands toward — the subject first, then the
+  // others largest first. Two arrangements can put every piece by the same walls and
+  // differ only in WHERE along them (a sofa centred on its wall against one at its
+  // end), and nothing above can say that. Last, so a caption the first two steps
+  // already told apart is never touched.
+  for (const group of tied()) {
+    let live = group.slice();
+    const order = [subjects[live[0]]!, ...bigFirst.filter((j) => j !== subjects[live[0]])];
+    for (const j of order) {
+      const here = live.filter((i) => j === subjects[i] || ideas[i].moved.includes(j));
+      const ends = here.map((i) => wallEndToward(parts[j], ideas[i].placements[j], footprint));
+      if (here.length === 0 || new Set(ends.map((e) => e ?? -1)).size < 2) continue;
+      here.forEach((i, k) => {
+        const end = ends[k];
+        if (end === null) return;
+        const at = ideas[i].placements[j];
+        const back = backWall(parts[j], at, footprint)!;
+        const toward = wallWords(wallLabelOf(footprint, end), 'by').replace(/^by /, 'toward ');
+        if (j === subjects[i]) {
+          const against = wallWords(wallLabelOf(footprint, back), 'against');
+          out[i] = out[i]!.replace(against, `${against}, ${toward}`);
+        } else {
+          out[i] = `${out[i]} · ${parts[j].name} moves ${wallWords(wallLabelOf(footprint, back), 'by')}, ${toward}`;
+        }
+      });
       const still = tied().find((g) => g.includes(live[0]));
       if (!still) break;
       live = still.filter((i) => group.includes(i));
