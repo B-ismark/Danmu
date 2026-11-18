@@ -10,7 +10,7 @@
 import { useStudio } from './store';
 import { useScene } from './scene-store';
 import { currentRoomScene } from './room-scene';
-import { findSupportDetailed, groundY, heightForNewCeiling, ridesWall, seeksSurface, snapToWall, wallAffinity, wallStandoff } from './physics';
+import { findSupportDetailed, groundY, heightForNewCeiling, ridesWall, seeksSurface, hangOnWall, snapToWall, wallAffinity } from './physics';
 import { containedXZ } from './layout-settle';
 import { placeArrival } from './duplicate-place';
 import { ridersOf } from './rider-height';
@@ -91,7 +91,7 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
     // crossways as well.
     if (room.footprint && ridesWall(item.category, item.shape)) {
       const edge = ownWall(room.footprint, part, x, z);
-      const snapped = snapToWall([x, 0, z], dimMM, room.footprint, wallStandoff(item.shape), edge);
+      const snapped = hangOnWall([x, 0, z], dimMM, room.footprint, item.shape, scene.filter((p) => p.id !== id), edge);
       x = snapped.x;
       z = snapped.z;
       rot = snapped.rot ?? baseRot;

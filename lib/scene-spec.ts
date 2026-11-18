@@ -22,6 +22,7 @@ import {
   ridesWall,
   wallAffinity,
   wallStandoff,
+  hangOnWall,
   CURTAIN_STANDOFF,
   curtainStandoff,
   snapToWall,
@@ -3541,7 +3542,7 @@ export function placeNewPart(
     // was nowhere near. Ceiling parts (fan, ceiling light) are wall-mounted by the
     // centred-geometry test but do not ride a wall — hence `ridesWall`.
     if (room.footprint && ridesWall(cat, shape)) {
-      const snapped = snapToWall([ax, 0, az], dimMM, room.footprint, wallStandoff(shape));
+      const snapped = hangOnWall([ax, 0, az], dimMM, room.footprint, shape, existing);
       // `supportId: null` for the whole wall-mounted family, and it is a fact rather
       // than a placeholder: a piece fixed to a wall or hung from the slab does not REST
       // on furniture, so there is no riding edge to record. `seeksSurface` is false
