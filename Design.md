@@ -3624,9 +3624,10 @@ in, and `globals.css` turns every transition off under it; the attribute comes o
 frames later. A System flip while the app is open gets the same treatment.
 
 **The palette.** `globals.css`' `:root[data-theme="dark"]` restates every COLOUR
-token. It is a graphite, never black. The papers keep only a trace of the light paper's
-hue (OKLCH chroma ~0.007) and step LIGHTER with elevation. The first night palette held
-that hue at several times the chroma, and it read as muddy olive-brown. The ink is chalk, the
+token. It is an actual dark: plain neutral greys (#0A0A0A to #242424, no hue), never pure
+black, stepping LIGHTER with elevation. Two earlier palettes carried the light paper's warm
+hue into the dark (strongly, then as a trace) and both read as a styled effect rather than as
+night mode, so the papers are held neutral by test. The ink is a neutral off-white, the
 moss is a cleaner sage (`--accent` still a fill, under 4.5:1 on purpose), amber stays warm,
 and shadows go black and heavier. Ink surfaces invert with the rest: `--ink` is chalk and `--on-ink` /
 `--on-accent` (aliases of `--paper`) are dark, so the primary button and the photo
