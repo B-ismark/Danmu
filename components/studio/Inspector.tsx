@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { currentRoomScene, useDecorBlockers, useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
-import { rehangForResize } from '@/lib/curtain-rehang';
+import { rehangForResize } from '@/lib/wall-resize';
 import { arrangeDecor } from '@/lib/decor';
 import { useScene } from '@/lib/scene-store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, resyncDraft, tidyDraft, UNIT_OPTIONS } from '@/lib/units';
@@ -439,10 +439,10 @@ export function Inspector() {
         defaultDim={defaultDim}
         onChange={(d) => {
           const kept = fitPartDims(part, d);
-          // A window or curtain resized here is set back against its wall, and a
-          // curtain over a window made deeper is re-hung clear of the new sill — the
-          // places a drag of the same size would have put them (lib/curtain-rehang.ts).
-          // Read before the write, so the room is measured at the old size.
+          // A wall piece resized here is set back against its wall, and a curtain
+          // over a window made deeper is re-hung clear of the new sill — the places a
+          // drag of the same size would have put them (lib/wall-resize.ts). Read
+          // before the write, so the room is measured at the old size.
           const moves = rehangForResize(currentRoomScene(), id, kept, room.footprint);
           setDim(id, kept);
           if (moves.length > 0) setTransformsFor(moves);

@@ -1,24 +1,27 @@
 // What a typed size change owes the wall it is made on.
 //
-// A drag hangs a curtain clear of the window behind it (`hangOnWall`), but a size typed
-// into the Inspector is not a drag: it rewrote `dims` and nothing else, so a window made
-// deeper there kept its centre — its back sinking into the plaster, its sill reaching
-// further into the room — and the curtain over it stayed where the shallow window had
-// let it hang, with the sill showing through its folds (docs/what-is-still-open.md § 58,
-// the half that section left open).
+// A drag puts a wall piece's BACK on the plaster (`snapToWall`, through `hangOnWall`),
+// but a size typed into the Inspector is not a drag: it rewrote `dims` and nothing else,
+// so the piece grew about its centre. A TV or print made deeper sank half the difference
+// into the plaster, one made shallower stood off it in the air, and a window made deeper
+// kept the curtain over it where the shallow window had let it hang, with the new sill
+// showing through its folds (docs/what-is-still-open.md § 58).
 //
-// So a resize of a WINDOW or a CURTAIN answers two questions, both by the same call a
-// drag makes:
-//   · where the resized piece now stands — back to the plaster on its own wall, which is
-//     where a drag would put a piece of that depth (a curtain also clearing any sill);
+// So a resize of any piece that rides a wall answers, by the same call a drag makes:
+//   · where the resized piece now stands — back to the plaster on its own wall (a
+//     curtain also clearing any sill behind it). Nothing rides a wall piece —
+//     `findSupportDetailed` never offers a mounted piece as a support — so there is no
+//     company to carry;
 //   · for a window, which curtains hung over it must move, and to where. Only the ones
 //     whose hang actually CHANGES with this window's new size: a curtain on another wall,
 //     further along, or over a window that did not get deeper is not touched. That also
 //     makes a shallower window bring its curtain back in, which is the same re-hang read
 //     the other way.
 //
-// Pure, so it can be tested without a store. Every other piece is left alone: a resize
-// is not a reason to re-hang a TV the user has not touched.
+// The re-seat moves along the wall's normal only. Width and height grow about the
+// centre as before — the piece stays where it was put along the wall and up it.
+//
+// Pure, so it can be tested without a store.
 import { backOf } from './drag-resolve';
 import { nearestEdge } from './geometry';
 import { hangOnWall, ridesWall } from './physics';
@@ -46,7 +49,7 @@ function hang(p: ScenePart, dimMM: [number, number, number], footprint: Footprin
 
 /** The moves a resize of `id` to `dimMM` owes the room, given the room as it stands
  *  (`scene` is RESOLVED — effective positions and sizes — with `id` still at its old
- *  size). Empty for anything that is not a wall-hung window or curtain. */
+ *  size). Empty for anything that does not ride a wall. */
 export function rehangForResize(
   scene: readonly ScenePart[],
   id: string,
@@ -54,17 +57,17 @@ export function rehangForResize(
   footprint: Footprint,
 ): RehangMove[] {
   const piece = scene.find((p) => p.id === id);
-  if (!piece || (piece.shape !== 'window' && piece.shape !== 'curtain')) return [];
-  if (!ridesWall(piece.category, piece.shape)) return [];
+  if (!piece || !ridesWall(piece.category, piece.shape)) return [];
   const edge = wallOf(piece, footprint);
   if (edge === null) return [];
 
   const others = scene.filter((p) => p.id !== id);
   const moves: RehangMove[] = [];
   const seated = hang(piece, dimMM, footprint, others, edge);
-  const after: ScenePart = { ...piece, dimMM, pos: [seated.x, piece.pos[1], seated.z] };
+  const at: [number, number, number] = [seated.x, piece.pos[1], seated.z];
+  const after: ScenePart = { ...piece, dimMM, pos: at };
   if (Math.hypot(seated.x - piece.pos[0], seated.z - piece.pos[2]) > SAME_SPOT_M) {
-    moves.push({ id, pos: after.pos as [number, number, number] });
+    moves.push({ id, pos: at });
   }
   if (piece.shape !== 'window') return moves;
 

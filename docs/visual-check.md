@@ -3638,5 +3638,8 @@ another wall moving; the window itself sinking into the plaster after a typed de
 (its back should stay against the wall); a single undo leaving the curtain out with the
 window shallow again (the size and the curtain move should undo as one step).
 
-**Rides:** branch `claude/admiring-maxwell-tpa1rj` (`lib/curtain-rehang.ts`, wired in
+Also: select a TV and a print and type a much deeper, then a much shallower, depth — the
+back should stay flat on the plaster each time, never sunk into it or floating off it.
+
+**Rides:** branch `claude/admiring-maxwell-tpa1rj` (`lib/wall-resize.ts`, wired in
 `components/studio/Inspector.tsx` and `components/three/Draggable.tsx`).

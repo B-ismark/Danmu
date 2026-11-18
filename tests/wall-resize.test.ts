@@ -1,6 +1,7 @@
-// A window made deeper by a typed size re-hangs the curtain over it (lib/curtain-rehang.ts).
-// `tests/curtain-deep-window.test.ts` covers hanging a curtain over a window that is
-// ALREADY deep; this is the other order — curtain first, window deepened after.
+// A wall piece resized by a typed size stays on its wall, and a window made deeper
+// re-hangs the curtain over it (lib/wall-resize.ts). `tests/curtain-deep-window.test.ts`
+// covers hanging a curtain over a window that is ALREADY deep; this is the other order —
+// curtain first, window deepened after.
 import { describe, expect, it } from 'vitest';
 import { footprintForLayout } from '@/lib/footprint';
 import { localToWorld } from '@/lib/geometry';
@@ -9,7 +10,7 @@ import { curtainCloth } from '@/lib/soft-goods';
 import { partExtent, windowForm } from '@/lib/hard-goods';
 import type { ScenePart } from '@/lib/scene-spec';
 import { WALL_GAP } from '@/lib/layout-rules';
-import { rehangForResize, type RehangMove } from '@/lib/curtain-rehang';
+import { rehangForResize, type RehangMove } from '@/lib/wall-resize';
 
 const FP = footprintForLayout('rect', 4, 4);
 const C_DIM: [number, number, number] = [1600, 120, 2200];
@@ -139,10 +140,9 @@ describe('deepening a window re-hangs the curtain over it', () => {
     expect(gap(byId(after, 'c'), win)).toBeGreaterThanOrEqual(CURTAIN_CLEAR - 1e-9);
   });
 
-  it('asks nothing of a piece that is not a window or a curtain', () => {
-    const win = windowAt('w', 60);
-    const tv = { ...windowAt('tv', 80, 1.2), shape: 'tv', category: 'tv', name: 'TV' } as ScenePart;
-    expect(rehangForResize([win, curtainAt('c', 0.1, [win]), tv], 'tv', [1200, 200, 700], FP)).toEqual([]);
+  it('asks nothing of a piece that does not ride a wall', () => {
+    const sofa = { ...windowAt('sofa', 900, 0), shape: 'sofa', category: 'sofa', name: 'Sofa', wallMounted: false } as ScenePart;
+    expect(rehangForResize([sofa], 'sofa', [2000, 1000, 850], FP)).toEqual([]);
   });
 
   it('writes nothing when the size change moves nothing', () => {
@@ -151,5 +151,53 @@ describe('deepening a window re-hangs the curtain over it', () => {
     // Taller, same depth: the window's back is already on the plaster and the sill
     // reaches no further.
     expect(rehangForResize(scene, 'w', [1200, 60, 1400], FP)).toEqual([]);
+  });
+});
+
+/** A wall piece where the Library hangs one: back on the north wall's plaster. */
+function hungAt(id: string, shape: string, category: string, dim: [number, number, number], x = 0, rot?: number): ScenePart {
+  const s = snapToWall([x, 0, -2], dim, FP, 0);
+  return {
+    id, name: id, category, shape, locked: false,
+    dimMM: dim, pos: [s.x, 1.4, s.z], rot: rot ?? s.rot ?? 0, wallMounted: true,
+  } as ScenePart;
+}
+
+/** How far the piece's back stands off the north wall's plaster. */
+const backOff = (p: ScenePart) => p.pos[2] - p.dimMM[1] / 2000 + 2;
+
+describe('a wall piece resized in place keeps its back on the wall', () => {
+  // TV, print, mirror, air conditioner and door: every wall rider that is not the
+  // window/curtain pair above, each made deeper and shallower than it was hung.
+  const CASES: Array<[string, string, [number, number, number], number[]]> = [
+    ['tv', 'tv', [1200, 80, 700], [40, 150]],
+    ['painting', 'painting', [700, 30, 500], [15, 80]],
+    ['mirror', 'mirror', [600, 25, 900], [15, 50]],
+    ['ac-unit', 'ac', [800, 220, 280], [150, 300]],
+    ['door', 'door', [900, 40, 2000], [35, 60]],
+  ];
+  for (const [shape, category, dim, depths] of CASES) {
+    it(shape, () => {
+      const piece = hungAt('p', shape, category, dim, 0.3);
+      expect(backOff(piece), 'hung on the plaster first').toBeCloseTo(WALL_GAP, 9);
+      for (const d of depths) {
+        const next: [number, number, number] = [dim[0], d, dim[2]];
+        const after = apply([piece], 'p', next, rehangForResize([piece], 'p', next, FP));
+        expect(backOff(byId(after, 'p')), `${shape} at ${d} mm`).toBeCloseTo(WALL_GAP, 9);
+        // Along the wall and up it, nothing changes.
+        expect(byId(after, 'p').pos[0]).toBeCloseTo(0.3, 9);
+        expect(byId(after, 'p').pos[1]).toBe(1.4);
+      }
+    });
+  }
+
+  it('on a side wall too, where the move is along x', () => {
+    const s = snapToWall([1.5, 0, 0.4], [1200, 80, 700], FP, 0);
+    const tv = { ...hungAt('tv', 'tv', 'tv', [1200, 80, 700]), pos: [s.x, 1.4, s.z], rot: s.rot ?? 0 } as ScenePart;
+    const moves = rehangForResize([tv], 'tv', [1200, 160, 700], FP);
+    const seated = snapToWall([s.x, 0, s.z], [1200, 160, 700], FP, 0);
+    expect(moves).toHaveLength(1);
+    expect(moves[0].pos[0]).toBeCloseTo(seated.x, 9);
+    expect(moves[0].pos[2]).toBeCloseTo(0.4, 9);
   });
 });

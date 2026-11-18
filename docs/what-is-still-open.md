@@ -10972,7 +10972,7 @@ the **Wall button** hands its target to `resolvePlacement`, the drag path, so it
 through `hangOnWall` anyway (a mutation removing the button's own neighbour list survived
 every test, which is how that was found — the button is also offered only to floor pieces).
 
-**The other order is closed too** (`lib/curtain-rehang.ts`, `tests/curtain-rehang.test.ts`):
+**The other order is closed too** (`lib/wall-resize.ts`, `tests/wall-resize.test.ts`):
 a window made deeper after its curtain was hung — typed in the Inspector or stretched in
 3D — re-hangs the curtain over it, and made shallow again brings it back in. A resize is
 allowed to move a piece the user did not touch here because the curtain's position was
@@ -10981,6 +10981,8 @@ from the same window. Only curtains whose hang this window's change actually mov
 written — compared against where each WOULD hang before the change, not where it stands,
 so an old curtain off its hang on another wall is not tidied as a side effect. The
 Inspector also used to deepen a window about its centre, sinking its back 70 mm into the
-plaster; a window or curtain resized there is set back against its wall now, where a drag
-of that size puts it. Other wall pieces (a TV, a print) still resize about their centre in
-the Inspector — the same defect, not touched here.
+plaster; every wall piece resized there — window, curtain, TV, print, mirror, air
+conditioner, door — is set back against its wall now, where a drag of that size puts it.
+Only along the wall's normal: width and height still grow about the centre, so a piece
+stays where it was put along the wall and up it. Nothing rides a wall piece
+(`findSupportDetailed` never offers one as a support), so the re-seat carries nothing.
