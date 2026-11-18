@@ -14,7 +14,7 @@ import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import type { ScenePart } from '@/lib/scene-spec';
 import { viewportAt } from './helpers/mount';
-import { stripComments } from './helpers/source';
+import { posixPath, stripComments } from './helpers/source';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('view-room', 'model'));
 
@@ -104,7 +104,7 @@ describe('where the view controls live', () => {
     // to name here.
     const tsx = (dir: string): string[] =>
       readdirSync(join(process.cwd(), dir), { withFileTypes: true }).flatMap((e) =>
-        e.isDirectory() ? tsx(join(dir, e.name)) : e.name.endsWith('.tsx') ? [join(dir, e.name)] : [],
+        e.isDirectory() ? tsx(join(dir, e.name)) : e.name.endsWith('.tsx') ? [posixPath(join(dir, e.name))] : [],
       );
     const files = [...tsx('components'), ...tsx('app')];
     // A floor of NAMED files, not a count: a count is passed by a sweep that found the

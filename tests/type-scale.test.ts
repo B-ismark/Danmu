@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { stripComments } from './helpers/source';
+import { posixPath, stripComments } from './helpers/source';
 
 // **One type scale and one set of speeds, in `globals.css`, and nowhere else.**
 //
@@ -23,7 +23,7 @@ function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) walk(p, out);
-    else if (/\.(tsx|css)$/.test(name)) out.push(relative(ROOT, p));
+    else if (/\.(tsx|css)$/.test(name)) out.push(posixPath(relative(ROOT, p)));
   }
   return out;
 }

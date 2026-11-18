@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readSource } from './helpers/source';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { EVENING_BEGINS_H, HORIZONS, MAX_WIDTH, MORNING_ENDS_H, glyphAt, hourT, phaseWords, scrubHour, skyGradient, stripFor, stripX, tAtX } from '@/lib/day-strip';
@@ -103,7 +103,7 @@ describe('the sky it is painted with', () => {
 });
 
 describe('the pill\'s paint, read from the stylesheet', () => {
-  const css = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8');
+  const css = readSource(join(process.cwd(), 'app', 'globals.css'));
   const rule = (sel: string) => css.match(new RegExp(`\\n${sel.replace(/[.\-_]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
 
   it('has no halo ring at rest, in either theme of the pill', () => {
@@ -197,7 +197,7 @@ describe('the glyph in the pill', () => {
 });
 
 describe('the glyph\'s paint, read from the stylesheet', () => {
-  const css = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8');
+  const css = readSource(join(process.cwd(), 'app', 'globals.css'));
   const hex = (n: string) => new RegExp(`--${n}: (#[0-9A-Fa-f]{6})`).exec(css)![1];
   const lum = (h: string) => {
     const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
