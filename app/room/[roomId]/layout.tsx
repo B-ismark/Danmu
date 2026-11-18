@@ -17,7 +17,6 @@ import { ViewMenu } from '@/components/studio/ViewMenu';
 import { ExportMenu } from '@/components/studio/ExportMenu';
 import { StudioMoreMenu } from '@/components/studio/StudioMoreMenu';
 import { NarrowViewportBanner } from '@/components/studio/NarrowViewportBanner';
-import { DemoBanner } from '@/components/studio/DemoBanner';
 import { RoomHostProvider } from '@/components/three/RoomHost';
 
 export default function StudioLayout({ children }: { children: ReactNode }) {
@@ -63,9 +62,6 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
         }
         phoneEnd={<StudioMoreMenu />}
       />
-      {/* A full-width strip under the top bar, so it can never overlap the
-          canvas toolbars the way the old floating pill did. */}
-      <DemoBanner />
       {/* The work surface. It is focusable and takes focus on a press that isn't
           on a control — that is what scopes the studio's single-character
           shortcuts to the room instead of the whole window. */}

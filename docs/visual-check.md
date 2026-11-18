@@ -2720,8 +2720,8 @@ check.
 
 **Where:** the rooms page empty state; **New room**; the capture screen; the scan review
 screen; Settings; in the studio, the Library's search field (the own-size example is now its
-placeholder, *"Search, or sofa 228x95x83cm"*), the Room check with nothing to report, the
-demo room's banner (only *"Want your own room? Photograph it"*), the narrow-window gate,
+placeholder, *"Search, or sofa 228x95x83cm"*), the Room check with nothing to report (the
+demo room's photograph banner is gone entirely now), the narrow-window gate,
 and the Inspector on a lamp standing on a table.
 
 **What wrong looks like:** a screen that no longer says something a person needs in the
@@ -3378,7 +3378,7 @@ tint over the floor; a downloaded floor-plan PNG coming out dark (it stays light
 
 **Why eyes:** every token pair is asserted at WCAG contrast in both themes and a
 production build was walked in headless Chromium at 1440 and 390 px in both System-dark
-and pinned-Dark, but "warm dark, not black" and whether the plan's amber is too heavy
+and pinned-Dark, but "a real dark, not black" and whether the plan's amber is too heavy
 are judgements, and Safari's handling of a re-pointed `theme-color` and of
 `color-scheme` on form controls has not been seen.
 
@@ -3456,7 +3456,7 @@ other should be the same drawing.
 
 **Merged:** `3172cc9` (B-ismark/Danmu#268), not yet looked at.
 
-## The empty Rooms page as a drawing sheet, and the graphite night palette
+## The empty Rooms page as a drawing sheet, and the night palette (now neutral grey)
 
 **Where:** `/` with no rooms (a fresh private window), in Light and in Dark, at a laptop
 width and at phone width. Hover each of the three numbered rows. Press *Try the starter
@@ -3472,7 +3472,9 @@ and windows showing as gaps in the walls; with the OS set to reduce motion, the 
 appearing a beat after the walls rather than at once; the dimension labels not changing with the unit setting; the
 title block's three cells wrapping into a mess at phone width; anything running off the
 right edge. In Dark: a green tint that reads as the old olive, captions that need
-squinting on `--paper-3`, or a surface that reads as pure black rather than warm graphite.
+squinting on `--paper-3`, or any surface with a warm/brown cast: the night papers are
+neutral greys (#0A0A0A–#242424) since the graphite was dropped as reading "styled" rather
+than dark. Check that cards still stand out from the page at that depth.
 
 **Why eyes:** no test renders this page. It was walked in the app's browser pane at 1440
 and 375 wide in both themes, and in headless Edge at 1440. The fixes from review (paint
