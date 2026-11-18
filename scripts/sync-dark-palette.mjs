@@ -19,7 +19,12 @@ const SOURCE = ':root[data-theme="dark"] {';
 const MIRROR_OPEN = '@media (prefers-color-scheme: dark) {\n  :root:not([data-theme="light"]) {\n';
 const MIRROR_CLOSE = '\n  }\n}';
 
-const css = readFileSync(FILE, 'utf8');
+// Worked on with LF and written back with the file's own line ending: a Windows
+// checkout with autocrlf hands this CRLF, where every '\n'-anchored marker above
+// misses and the script used to throw "no mirror block" on a file that has one.
+const raw = readFileSync(FILE, 'utf8');
+const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+const css = raw.replace(/\r\n/g, '\n');
 
 const start = css.indexOf(SOURCE);
 if (start === -1) throw new Error(`no \`${SOURCE}\` block in globals.css`);
@@ -46,7 +51,7 @@ if (process.argv.includes('--check')) {
     process.exit(1);
   }
 } else if (next !== css) {
-  writeFileSync(FILE, next);
+  writeFileSync(FILE, eol === '\n' ? next : next.replace(/\n/g, eol));
   console.log('Rewrote the prefers-color-scheme mirror of the dark palette.');
 } else {
   console.log('The dark palette mirror is already in step.');

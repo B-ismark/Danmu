@@ -4,10 +4,10 @@
 // published width (`--canvas-panel-width`), so opening the Library re-centred the
 // strip in a narrower span and shoved it left. Source-level on purpose: the defect
 // is a wiring one, and a layout engine is not available under jsdom.
-import { readFileSync } from 'node:fs';
+import { readSource } from './helpers/source';
 import { describe, expect, it } from 'vitest';
 
-const read = (p: string) => readFileSync(p, 'utf8');
+const read = readSource;
 const CHROME = read('components/studio/CanvasChrome.tsx');
 const CATALOG = read('components/studio/CatalogPanel.tsx');
 const CSS = read('app/globals.css');

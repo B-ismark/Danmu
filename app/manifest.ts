@@ -26,7 +26,7 @@ export const PAPER_0 = '#F4EFE4';
  *  page script could choose — but `viewport.themeColor` in app/layout.tsx gives the
  *  browser chrome one colour per scheme, and the pair is kept here together so the
  *  test that pins them to globals.css reads one file. */
-export const PAPER_0_DARK = '#12100D';
+export const PAPER_0_DARK = '#0A0A0A';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {

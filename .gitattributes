@@ -1,0 +1,19 @@
+# LF everywhere: in the repository AND in every working tree, whatever the OS or the
+# user's core.autocrlf. Without this, a Windows checkout with autocrlf=true got CRLF
+# files, and code that anchors on '\n' over its own source quietly found nothing —
+# scripts/sync-dark-palette.mjs threw "no mirror block" on a file that had one, and
+# two source-sweep tests failed (tests/helpers/source.ts `readSource` still guards
+# those, for checkouts made before this file existed).
+* text=auto eol=lf
+
+# Never touch these, even if one ever looks like text to Git's heuristic.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.onnx binary
+*.wasm binary

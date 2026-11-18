@@ -194,14 +194,15 @@ describe("night mode's palette", () => {
     expect(dark.map(([p]) => p).filter((p) => !lightNames.has(p))).toEqual([]);
   });
 
-  it('is a warm dark: not black, and the same warm hue as the light paper', () => {
+  it('is an actual dark: neutral grey, not black and not tinted', () => {
+    // A warm graphite read as "vibe-coded" rather than dark; the papers are plain
+    // greys now. Not #000 either, so a card can still stand up out of the page.
     const paper0 = DARK.surface('paper-0')!;
-    expect(relativeLuminance(paper0), '--paper-0 is pure black').toBeGreaterThan(0.005);
+    expect(relativeLuminance(paper0), '--paper-0 is pure black').toBeGreaterThan(0);
     for (const name of ['paper-0', 'paper', 'paper-2', 'paper-3']) {
       const c = toOklch(DARK.surface(name)!);
-      expect(c.c, `--${name} has no warmth at all`).toBeGreaterThan(0.005);
-      const hue = Math.abs(c.h - toOklch(LIGHT.surface('paper')!).h);
-      expect(Math.min(hue, 360 - hue), `--${name} is not the light paper's hue`).toBeLessThan(25);
+      expect(c.c, `--${name} carries a hue`).toBeLessThan(0.002);
+      expect(c.L, `--${name} is not dark`).toBeLessThan(0.3);
     }
   });
 
