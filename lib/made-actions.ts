@@ -17,6 +17,7 @@ import { useScene } from './scene-store';
 import { useStudio } from './store';
 import { explodeMade, fitMadeDims, layoutMade, MAX_BLOCKS, packMade, type MadeSpec, type PackInput } from './made-piece';
 import type { ScenePart } from './scene-spec';
+import { withFinishes } from './part-finish';
 
 /** Why a selection cannot become a piece, in a sentence for a person — or null when it
  *  can. Only things that stand on the floor pack: a made piece is floor-anchored, so a
@@ -40,8 +41,21 @@ function blockInputs(chosen: readonly ScenePart[]): PackInput[] {
 }
 
 function openUp(p: ScenePart, spec: MadeSpec): ScenePart[] {
-  const blocks = explodeMade(p, spec);
-  return p.color ? blocks.map((b) => ({ ...b, color: p.color })) : blocks;
+  return explodeMade(p, spec).map((b) => asShownOnPiece(b, p));
+}
+
+/** A block as its piece draws it: a colour or finish chosen for the whole piece wins
+ *  over the block's own (`MadeGeo` draws it so), and a finish only lands on a block
+ *  whose shape has that surface. */
+function asShownOnPiece<B extends Pick<ScenePart, 'shape' | 'color' | 'woodFinish' | 'fabricFinish'>>(
+  b: B,
+  piece: Pick<ScenePart, 'color' | 'woodFinish' | 'fabricFinish'>,
+): B {
+  const out = piece.color ? { ...b, color: piece.color } : b;
+  return withFinishes(out, {
+    woodFinish: piece.woodFinish ?? b.woodFinish,
+    fabricFinish: piece.fabricFinish ?? b.fabricFinish,
+  });
 }
 
 /** The piece a selection WOULD pack into, for the save dialog to describe before
@@ -56,7 +70,7 @@ export function packPreview(chosen: readonly ScenePart[]): MadeSpec | null {
  *  in the studio saves that way rather than as authored. A modular piece that stays
  *  modular keeps its UNIT width (a four-seat bench saves as the two-seat unit it repeats)
  *  and takes the drawn depth and height; otherwise the blocks are saved as drawn. */
-export function madeSpecAsShown(part: Pick<ScenePart, 'dimMM' | 'color' | 'made'>, modular: boolean): MadeSpec | null {
+export function madeSpecAsShown(part: Pick<ScenePart, 'dimMM' | 'color' | 'made' | 'woodFinish' | 'fabricFinish'>, modular: boolean): MadeSpec | null {
   const spec = part.made;
   if (!spec) return null;
   const [w, d, h] = part.dimMM;
@@ -68,7 +82,7 @@ export function madeSpecAsShown(part: Pick<ScenePart, 'dimMM' | 'color' | 'made'
   // Laid out as the room draws it — a modular piece's copies included when it is saved
   // whole, never one unit stretched across their width.
   const unit = layoutMade(spec, keepUnit ? size : drawn);
-  const blocks = part.color ? unit.map((b) => ({ ...b, color: part.color })) : unit;
+  const blocks = unit.map((b) => asShownOnPiece(b, part));
   const out: MadeSpec = { blocks, sizeMM: size };
   if (modular) out.modular = true;
   return out;

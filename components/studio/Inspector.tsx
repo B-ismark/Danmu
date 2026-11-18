@@ -746,7 +746,7 @@ function FinishControls({
               ariaLabel="Wood finish"
               options={WOOD_FINISHES.map((w) => ({ value: w, label: WOOD_FINISH_SPEC[w].label }))}
               value={f.wood}
-              onChange={(w) => onChange({ woodFinish: w === 'natural' ? undefined : w })}
+              onChange={(w) => onChange({ woodFinish: w === 'natural' && part.shape !== 'made' ? undefined : w })}
               wrap
               minItem={72}
             />
@@ -760,7 +760,7 @@ function FinishControls({
               ariaLabel="Fabric"
               options={FABRIC_FINISHES.map((x) => ({ value: x, label: FABRIC_FINISH_SPEC[x].label }))}
               value={f.fabric}
-              onChange={(x) => onChange({ fabricFinish: x === 'linen' ? undefined : x })}
+              onChange={(x) => onChange({ fabricFinish: x === 'linen' && part.shape !== 'made' ? undefined : x })}
               wrap
               minItem={72}
             />

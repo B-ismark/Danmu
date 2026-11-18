@@ -56,3 +56,35 @@ export function useFinishPending(channel: FinishChannel): boolean {
     () => false,
   );
 }
+
+// ── What is on screen while one is prepared ──────────────────────────────────
+
+/** A finish as drawn: the choice (its colour, kind — everything the material reads
+ *  besides the maps) together with the maps made for it. */
+export type StagedFinish<C, M> = { key: string; choice: C; maps: M };
+
+/** What to draw this render, given what is on screen (`shown`) and what was chosen.
+ *
+ *  · The chosen finish, if its maps are on screen or already made (\`peek\`): the live
+ *    choice, so a recolour of the same material shows at once. A hit from \`peek\` is
+ *    also returned as \`adopt\` — the caller stores it as what is on screen, so a later
+ *    slow build falls back to THIS, not to whatever was last BUILT. (Without that, A →
+ *    built B → cached A → new C showed B, a floor the user had already left, while C
+ *    was laid.)
+ *  · Otherwise the whole old finish — its maps AND its choice. Staging the maps alone
+ *    drew plank boards in a stone floor's marble white and gloss for as long as the
+ *    stone took: a hybrid nobody chose. \`ready\` false tells the caller to build. */
+export function stagedView<C, M>(
+  shown: StagedFinish<C, M>,
+  key: string,
+  choice: C,
+  peek: () => M | null,
+): { view: StagedFinish<C, M>; ready: boolean; adopt: StagedFinish<C, M> | null } {
+  if (key === shown.key) return { view: { key, choice, maps: shown.maps }, ready: true, adopt: null };
+  const hit = peek();
+  if (hit !== null) {
+    const view = { key, choice, maps: hit };
+    return { view, ready: true, adopt: view };
+  }
+  return { view: shown, ready: false, adopt: null };
+}

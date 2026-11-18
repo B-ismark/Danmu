@@ -17,6 +17,7 @@ import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import type { RoomData, Site } from './storage';
 import { readFloorFinish, type FloorFinish } from './floor-finish';
 import { readWallFinish, type WallFinish } from './wall-finish';
+import { withFinishes } from './part-finish';
 
 export type RoomShape = {
   width: number;
@@ -301,6 +302,12 @@ export const useScene = create<SceneState>((set, get) => ({
         // A new model has none of the old one's options (a screen's band means nothing to a
         // worktop), so a swap clears them unless the same patch brings its own.
         if (patch.shape !== undefined && patch.shape !== p.shape && !('blockStyle' in patch)) delete next.blockStyle;
+        // A finish survives a swap only where the new model has that surface: a velvet
+        // sofa swapped for an armchair stays velvet, one swapped for a bookshelf keeps
+        // no invisible velvet to revive later.
+        if (patch.shape !== undefined && patch.shape !== p.shape) {
+          return normalizeStoredParts([withFinishes(next, next)])[0];
+        }
         return patch.shape === undefined && patch.category === undefined ? next : normalizeStoredParts([next])[0];
       }),
     })),

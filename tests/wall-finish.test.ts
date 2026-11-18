@@ -117,10 +117,12 @@ describe('reading a wall finish', () => {
     expect(dropped[0]).toMatch(/grout/);
   });
 
-  it('ignores grout on a finish that has no joints', () => {
+  it('leaves out grout on a finish that has no joints, and says so', () => {
+    // The editor never writes one there, so a file that has it was not made by this
+    // app as it stands: lossy, never silent.
     const dropped: string[] = [];
     expect(readWallFinish({ kind: 'limewash', grout: 'dark' }, dropped)).toEqual({ kind: 'limewash' });
-    expect(dropped).toEqual([]);
+    expect(dropped[0]).toMatch(/limewash walls have no joints/);
   });
 });
 
@@ -145,7 +147,7 @@ describe('the walls travel', () => {
     expect(src('components/studio/SceneFile.tsx')).toMatch(/walls: room\.walls,/);
     expect(src('lib/scene-store.ts')).toMatch(/readWallFinish\(room\.walls\)/);
     const shell = src('components/three/RoomShell.tsx');
-    expect(shell).toMatch(/wallFinishMaps\(wallFinish\.kind, wallFinish\.grout\)/);
+    expect(shell).toMatch(/wallFinishMaps\(chosenWalls\.kind, chosenWalls\.grout\)/);
     expect(shell).toMatch(/roughness=\{wallSpec\.roughness\}[^>]*\{\.\.\.wallMaps\}/);
   });
 

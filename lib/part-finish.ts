@@ -49,8 +49,18 @@ export const FABRIC_FINISH_SPEC: Record<FabricFinish, FinishSpec> = {
 /** What a piece's finish resolves to, both axes filled in. */
 export type PartFinish = { wood: WoodFinish; fabric: FabricFinish };
 
-export function resolvePartFinish(p: Pick<ScenePart, 'woodFinish' | 'fabricFinish'>): PartFinish {
-  return { wood: p.woodFinish ?? 'natural', fabric: p.fabricFinish ?? 'linen' };
+/** What a piece is DRAWN in, so the Inspector names the finish on screen. A made piece
+ *  with none of its own shows its blocks' finish when every block with that surface
+ *  shares it (`MadeGeo` draws each block in its own), whichever way it arrived — packed,
+ *  off the shelf or out of a file. */
+export function resolvePartFinish(p: Pick<ScenePart, 'woodFinish' | 'fabricFinish'> & Partial<Pick<ScenePart, 'shape' | 'made'>>): PartFinish {
+  const blocks = p.shape === 'made' && p.made ? p.made.blocks : [];
+  const shared = <T,>(vals: (T | undefined)[]): T | undefined =>
+    vals.length > 0 && vals.every((v) => v === vals[0]) ? vals[0] : undefined;
+  return {
+    wood: p.woodFinish ?? shared(blocks.filter((b) => WOOD_SHAPES.has(b.shape)).map((b) => b.woodFinish)) ?? 'natural',
+    fabric: p.fabricFinish ?? shared(blocks.filter((b) => FABRIC_SHAPES.has(b.shape)).map((b) => b.fabricFinish)) ?? 'linen',
+  };
 }
 
 // ── Which pieces have which ─────────────────────────────────────────────────
@@ -85,21 +95,50 @@ export function finishAxes(part: Pick<ScenePart, 'shape' | 'made'>): { wood: boo
   return { wood: WOOD_SHAPES.has(part.shape), fabric: FABRIC_SHAPES.has(part.shape) };
 }
 
-/** Reads a piece's finishes from a file. A value off the list is dropped and said so;
- *  absent is the default and says nothing. */
+type Finishes = { woodFinish?: WoodFinish; fabricFinish?: FabricFinish };
+
+/** Reads a piece's finishes from a file. A value off the list is dropped and said so,
+ *  and so is one the piece has no surface for (a lacquered TV): kept, it would be
+ *  state no control shows or clears, riding along until a model swap revived it.
+ *  Absent is the default and says nothing. `axes` is `finishAxes` of the piece as
+ *  read — for a made piece, AFTER its blocks are. */
 export function readPartFinishes(
   v: { woodFinish?: unknown; fabricFinish?: unknown },
+  axes: { wood: boolean; fabric: boolean },
   name: string,
   dropped?: string[],
-): { woodFinish?: WoodFinish; fabricFinish?: FabricFinish } {
-  const out: { woodFinish?: WoodFinish; fabricFinish?: FabricFinish } = {};
+): Finishes {
+  const out: Finishes = {};
   if (v.woodFinish !== undefined) {
-    if ((WOOD_FINISHES as readonly unknown[]).includes(v.woodFinish)) out.woodFinish = v.woodFinish as WoodFinish;
-    else dropped?.push(`${name}'s wood finish was unreadable, so it was left natural`);
+    if (!(WOOD_FINISHES as readonly unknown[]).includes(v.woodFinish)) dropped?.push(`${name}'s wood finish was unreadable, so it was left natural`);
+    else if (!axes.wood) dropped?.push(`${name} has no wood to finish, so its wood finish was left out`);
+    else out.woodFinish = v.woodFinish as WoodFinish;
   }
   if (v.fabricFinish !== undefined) {
-    if ((FABRIC_FINISHES as readonly unknown[]).includes(v.fabricFinish)) out.fabricFinish = v.fabricFinish as FabricFinish;
-    else dropped?.push(`${name}'s fabric was unreadable, so it was left linen`);
+    if (!(FABRIC_FINISHES as readonly unknown[]).includes(v.fabricFinish)) dropped?.push(`${name}'s fabric was unreadable, so it was left linen`);
+    else if (!axes.fabric) dropped?.push(`${name} has no upholstery, so its fabric was left out`);
+    else out.fabricFinish = v.fabricFinish as FabricFinish;
   }
   return out;
+}
+
+/** The finishes `f` names that a piece of this kind can actually show — the rest
+ *  dropped. Every path that carries a finish onto a DIFFERENT model (a swap, a
+ *  re-scan's rebuild, a block packed into a piece) passes it through here, so a velvet
+ *  sofa swapped for a bookshelf does not keep an invisible velvet that comes back the
+ *  day it is swapped for an armchair. */
+export function finishesFor(part: Pick<ScenePart, 'shape' | 'made'>, f: Finishes): Finishes {
+  const axes = finishAxes(part);
+  const out: Finishes = {};
+  if (axes.wood && f.woodFinish !== undefined) out.woodFinish = f.woodFinish;
+  if (axes.fabric && f.fabricFinish !== undefined) out.fabricFinish = f.fabricFinish;
+  return out;
+}
+
+/** `part` with `finishes` set to what it can show, and nothing else. */
+export function withFinishes<P extends Pick<ScenePart, 'shape' | 'made'> & Finishes>(part: P, finishes: Finishes): P {
+  const out = { ...part };
+  delete out.woodFinish;
+  delete out.fabricFinish;
+  return Object.assign(out, finishesFor(part, finishes));
 }

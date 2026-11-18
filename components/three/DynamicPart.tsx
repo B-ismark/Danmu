@@ -194,16 +194,18 @@ export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolea
   // `tests/parametric-caps.test.ts`'s "one dim reaches both" clause instead.
   const p = useEffectivePart(part);
   // The piece's wood and fabric finish, for every surface it draws (`./part-finish`).
-  // No provider at all when none is chosen, so an unfinished piece's tree is the one
-  // it always was.
-  const finish = finishChoice(p.woodFinish, p.fabricFinish);
-  const body = (
-    <>
+  // The provider is ALWAYS there, holding `undefined` when nothing is chosen (the
+  // context's own default, so an unfinished piece draws exactly as before). Rendered
+  // only when a finish existed, the root's element type flipped on the first choice and
+  // React remounted every mesh in the piece — rebuilding each rounded box, and leaving
+  // the meshes `ShadowCaster` flags (it re-runs on size and shape, not on this) with
+  // no shadow until the next resize.
+  return (
+    <PartFinishContext value={finishChoice(p.woodFinish, p.fabricFinish)}>
       <ShapeDispatch part={p} locked={locked} />
       <PartLight part={p} />
-    </>
+    </PartFinishContext>
   );
-  return finish ? <PartFinishContext value={finish}>{body}</PartFinishContext> : body;
 }
 
 /** The part as the user has resized it, for a shape whose geometry owns its size.
@@ -868,7 +870,7 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
         const soles = tier.filter((b) => b.sole);
         return (
           <group key={i} position={[0, (i + 0.5) * gap, 0]} rotation={[-SHOE_TIER_TILT, 0, 0]}>
-            <BoxInstances items={slats} color={wood} surface={{ roughness: 0.7 }} />
+            <BoxInstances items={slats} color={wood} surface={SURFACE.wood} />
             {/* side rails the slats rest on, running front post to back post. Without
                 them every slat was a board floating 40 mm from the next, held by
                 nothing — a rack drawn as a stack of loose sticks. */}
@@ -1594,9 +1596,14 @@ function MadeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
           blockStyle: b.blockStyle,
           locked: false,
         };
+        // The piece's finish wins over the block's own, as its colour does; a block's
+        // own finish is what it was packed in.
+        // Always a provider, for the remount reason `PartGeometry` gives.
         return (
           <group key={block.id} position={b.pos} rotation-y={b.rot}>
-            <ShapeDispatch part={block} locked={locked} />
+            <PartFinishContext value={finishChoice(part.woodFinish ?? b.woodFinish, part.fabricFinish ?? b.fabricFinish)}>
+              <ShapeDispatch part={block} locked={locked} />
+            </PartFinishContext>
           </group>
         );
       })}

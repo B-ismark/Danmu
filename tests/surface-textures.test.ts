@@ -5,9 +5,12 @@ import {
   fabricFields,
   floorFields,
   grayBytes,
+  linearToSrgb,
   metalFields,
   normalBytes,
   plasterFields,
+  srgbToLinear,
+  toneBytes,
   woodFields,
   woodMaps,
   type Field,
@@ -16,6 +19,7 @@ import {
 import { boxProjectUV } from '@/lib/surface-uv';
 import { CUSHION_MESH, GARMENT_MESH, SHOE_LINING_MESH, SHOE_SOLE_MESH, SHOE_UPPER_MESH, curtainCloth, type SoftMeshData } from '@/lib/soft-goods';
 import { SURFACE } from '@/components/three/materials';
+import { NoColorSpace, SRGBColorSpace } from 'three';
 
 // The first texture kit was wired to every material and changed the picture by under a
 // grey level (0.6 in 255 on wood and fabric, 0.3 on the floor, measured on a lit swatch
@@ -91,6 +95,41 @@ describe('the tone layer keeps the user’s colour', () => {
       expect(b[i]).toBe(b[i + 1]);
       expect(b[i]).toBe(b[i + 2]);
     }
+  });
+});
+
+// R3F labels every RGBA8 texture handed to a `map` prop sRGB (the canvas is not
+// `linear`), so the GPU DECODES the colour map. Every other assertion here reads the
+// linear field; this one reads what the material actually multiplies by. Before it,
+// the maps were written raw and plaster drew at 0.87 of the paint for a field of 0.94.
+describe('what the GPU reads back', () => {
+  it('the colour map the app BUILDS decodes to the tone the field holds', () => {
+    // The built texture, not the encoder: an encoder nobody calls certifies nothing.
+    const built = (woodMaps().map.image as { data: Uint8Array }).data;
+    const field = woodFields().tone.data;
+    let worst = 0;
+    for (let i = 0; i < field.length; i += 97) worst = Math.max(worst, Math.abs(srgbToLinear(built[i * 4] / 255) - field[i]));
+    expect(worst).toBeLessThan(0.01);
+  });
+
+  it('the encoder is exact on every surface', () => {
+    for (const [name, f] of [['plaster', plasterFields()], ['wood', woodFields(64)], ['fabric', fabricFields()]] as const) {
+      const b = toneBytes(f.tone);
+      let err = 0;
+      for (let i = 0; i < f.tone.data.length; i++) err = Math.max(err, Math.abs(srgbToLinear(b[i * 4] / 255) - f.tone.data[i]));
+      expect(err, name).toBeLessThan(0.01);
+    }
+  });
+
+  it('the colour map says it is sRGB, and the data maps say they are not', () => {
+    const m = woodMaps();
+    expect(m.map.colorSpace).toBe(SRGBColorSpace);
+    expect(m.normalMap.colorSpace).toBe(NoColorSpace);
+    expect(m.roughnessMap.colorSpace).toBe(NoColorSpace);
+  });
+
+  it('the transfer curve round-trips', () => {
+    for (const v of [0, 0.002, 0.2, 0.5, 0.94, 1]) expect(srgbToLinear(linearToSrgb(v))).toBeCloseTo(v, 6);
   });
 });
 

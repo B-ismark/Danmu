@@ -261,7 +261,7 @@ describe('the floor travels', () => {
     expect(src('components/studio/RoomSync.tsx')).toMatch(/floor: room\.floor,/);
     expect(src('components/studio/SceneFile.tsx')).toMatch(/floor: room\.floor,/);
     expect(src('lib/scene-store.ts')).toMatch(/readFloorFinish\(room\.floor\)/);
-    expect(src('components/three/RoomShell.tsx')).toMatch(/floorFinishMaps\(floor\.kind, floor\.sizeMM, floor\.grout\)/);
+    expect(src('components/three/RoomShell.tsx')).toMatch(/floorFinishMaps\(chosenFloor\.kind, chosenFloor\.sizeMM, chosenFloor\.grout\)/);
     expect(src('components/three/RoomShell.tsx')).toMatch(/color=\{floor\.color\}/);
   });
 });

@@ -21,8 +21,10 @@
 //
 // The recolour survives because the tone map is GREY and multiplies: every texel is
 // the user's colour at 100% down to (for the darkest grain line) about 60%, with
-// the hue untouched. The maps are authored in linear (`NoColorSpace`) so "0.9"
-// means 90% of the chosen colour, not 90% of an sRGB-decoded one.
+// the hue untouched. The fields are authored in linear so "0.9" means 90% of the
+// chosen colour; the colour map's BYTES are then sRGB-encoded and the texture says so
+// (`toneBytes`), because R3F labels every colour map sRGB on its way in and the GPU
+// decodes it. Written raw, the GPU decoded them darker than the field — see `toneBytes`.
 //
 // ── Scale is metres ───────────────────────────────────────────────────────────
 //
@@ -44,7 +46,7 @@
 
 import type { FloorKind, Grout } from './floor-finish';
 import type { WallKind } from './wall-finish';
-import { DataTexture, LinearMipmapLinearFilter, NoColorSpace, RepeatWrapping, RGBAFormat, UnsignedByteType, type Texture } from 'three';
+import { DataTexture, LinearMipmapLinearFilter, NoColorSpace, RepeatWrapping, SRGBColorSpace, RGBAFormat, UnsignedByteType, type Texture } from 'three';
 
 // ─── Pure fields ─────────────────────────────────────────────────────────────
 
@@ -688,15 +690,41 @@ export function grayBytes(f: Field): Uint8Array {
   return out;
 }
 
+/** A tone field as a COLOUR map: the same values, sRGB-encoded. R3F marks any RGBA8
+ *  texture handed to a `map` prop as sRGB (unless the canvas is `linear`, and ours is
+ *  not), so the GPU decodes these bytes on read. Written raw, a tone of 0.94 decoded to
+ *  0.87 and every wall drew 13% darker than its paint, a sofa 26% darker than its
+ *  colour; encoded here, the multiply the material sees is the tone the field holds.
+ *  `tests/surface-textures.test.ts` decodes it back the way the GPU will. */
+export function toneBytes(f: Field): Uint8Array {
+  const out = new Uint8Array(f.data.length * 4);
+  for (let i = 0; i < f.data.length; i++) {
+    const b = Math.round(linearToSrgb(clamp01(f.data[i])) * 255);
+    out[i * 4] = out[i * 4 + 1] = out[i * 4 + 2] = b;
+    out[i * 4 + 3] = 255;
+  }
+  return out;
+}
+
+/** The sRGB transfer curve (IEC 61966-2-1), as three's `SRGBColorSpace` decodes it. */
+export function linearToSrgb(v: number): number {
+  return v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+}
+export function srgbToLinear(v: number): number {
+  return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+}
+
 // ─── three ───────────────────────────────────────────────────────────────────
 
 /** The three maps a material spreads, plus nothing else — so a preset can spread it. */
 export type SurfaceMaps = { map: Texture; normalMap: Texture; roughnessMap: Texture };
 
-function texture(bytes: Uint8Array, size: number, tileM: number): Texture {
+function texture(bytes: Uint8Array, size: number, tileM: number, colour = false): Texture {
   const t = new DataTexture(bytes, size, size, RGBAFormat, UnsignedByteType);
   t.wrapS = t.wrapT = RepeatWrapping;
-  t.colorSpace = NoColorSpace;
+  // Said here rather than left to R3F, so the texture means the same thing however it
+  // reaches a material — a JSX prop, an imperative assignment, or a test.
+  t.colorSpace = colour ? SRGBColorSpace : NoColorSpace;
   t.generateMipmaps = true;
   t.minFilter = LinearMipmapLinearFilter;
   // Floors and walls are seen at a grazing angle more than anything else in the
@@ -710,7 +738,7 @@ function texture(bytes: Uint8Array, size: number, tileM: number): Texture {
 
 function maps(f: SurfaceFields): SurfaceMaps {
   return {
-    map: texture(grayBytes(f.tone), f.tone.size, f.tileM),
+    map: texture(toneBytes(f.tone), f.tone.size, f.tileM, true),
     normalMap: texture(normalBytes(f.height, f.bump), f.height.size, f.tileM),
     roughnessMap: texture(grayBytes(f.rough), f.rough.size, f.tileM),
   };
@@ -741,10 +769,12 @@ export function floorFinishFields(kind: FloorKind, sizeMM: number | null, grout:
 
 /** Maps for a finish the user chooses — a floor, a wall — kept for the last few
  *  choices per CHANNEL, so switching back and forth while choosing is instant. One
- *  finish is live per channel at a time, so a handful is plenty; the oldest is disposed
+ *  finish is live per channel at a time, and the one on screen is always the newest
+ *  or (while the next builds) the second newest, so three is enough; each is ~13 MB of
+ *  bytes at 1024², which is why it is not more; the oldest is disposed
  *  (its GPU copy freed) when a new one pushes it out. A channel is "floor" or "wall":
  *  one cache each, so choosing walls never evicts the floor on screen. */
-const FINISH_CACHE_SIZE = 4;
+const FINISH_CACHE_SIZE = 3;
 const finishCaches = new Map<string, Map<string, SurfaceMaps>>();
 function cacheOf(channel: string): Map<string, SurfaceMaps> {
   let c = finishCaches.get(channel);
@@ -753,9 +783,17 @@ function cacheOf(channel: string): Map<string, SurfaceMaps> {
 }
 
 /** Already generated? Asked by the renderer before it decides whether a change needs
- *  a moment (`lib/finish-loading.ts`). Read-only: it does not count as a use. */
+ *  a moment (`lib/finish-loading.ts`). A hit COUNTS as a use: the renderer puts it on
+ *  screen at once (`stagedView` adopts it), so it must be the newest entry. Left at its
+ *  old place, a finish reached by going back to it could be the oldest entry while on
+ *  screen, and the next build would dispose the textures it was still drawing with. */
 export function peekFinishMaps(channel: string, key: string): SurfaceMaps | null {
-  return cacheOf(channel).get(key) ?? null;
+  const cache = cacheOf(channel);
+  const hit = cache.get(key);
+  if (!hit) return null;
+  cache.delete(key);
+  cache.set(key, hit);
+  return hit;
 }
 
 export function finishMaps(channel: string, key: string, make: () => SurfaceFields): SurfaceMaps {

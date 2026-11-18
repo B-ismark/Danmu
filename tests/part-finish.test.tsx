@@ -11,6 +11,8 @@
 //     the renderer is handed, not argued. The table prints on every green run.
 //   · No finish chosen is no change: the same preset, the same roughness, no provider.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/store', () => ({
@@ -37,10 +39,13 @@ import {
   WOOD_FINISHES,
   WOOD_SHAPES,
   finishAxes,
+  finishesFor,
   readPartFinishes,
   resolvePartFinish,
 } from '@/lib/part-finish';
 import { walk } from './helpers/geometry-walk';
+import { buildSceneFile, parseSceneFile, sceneFileJson } from '@/lib/scene-file';
+import type { RoomData } from '@/lib/storage';
 
 const categoryOf = (shape: Shape): Category => PART_LIBRARY.find((l) => l.shape === shape)?.category ?? 'other';
 
@@ -126,22 +131,78 @@ describe('absent is unchanged', () => {
 describe('reading from a file', () => {
   it('keeps what is on the list and says what it dropped', () => {
     const dropped: string[] = [];
-    expect(readPartFinishes({ woodFinish: 'painted', fabricFinish: 'boucle' }, 'Sofa', dropped)).toEqual({
+    expect(readPartFinishes({ woodFinish: 'painted', fabricFinish: 'boucle' }, { wood: true, fabric: true }, 'Sofa', dropped)).toEqual({
       woodFinish: 'painted',
       fabricFinish: 'boucle',
     });
     expect(dropped).toEqual([]);
-    expect(readPartFinishes({ woodFinish: 'gilded', fabricFinish: 7 }, 'Sofa', dropped)).toEqual({});
+    expect(readPartFinishes({ woodFinish: 'gilded', fabricFinish: 7 }, { wood: true, fabric: true }, 'Sofa', dropped)).toEqual({});
     expect(dropped).toHaveLength(2);
     expect(dropped[0]).toMatch(/Sofa.*wood/);
   });
 
   it('absent says nothing', () => {
     const dropped: string[] = [];
-    expect(readPartFinishes({}, 'Sofa', dropped)).toEqual({});
+    expect(readPartFinishes({}, { wood: true, fabric: true }, 'Sofa', dropped)).toEqual({});
     expect(dropped).toEqual([]);
   });
 
+  it('drops, and says, a finish the piece has no surface for', () => {
+    const dropped: string[] = [];
+    expect(readPartFinishes({ woodFinish: 'lacquered', fabricFinish: 'velvet' }, finishAxes({ shape: 'tv' }), 'TV', dropped)).toEqual({});
+    expect(dropped).toHaveLength(2);
+    expect(dropped.join(' ')).toMatch(/TV has no wood/);
+    expect(dropped.join(' ')).toMatch(/TV has no upholstery/);
+  });
+
+  it('a room file drops an off-surface finish and keeps an on-surface one', () => {
+    const room: RoomData = { id: 'r', createdAt: 1, name: 'Den', layoutId: 'rect', width: 4, depth: 3, height: 2.6 };
+    const parts = [
+      { id: 't', name: 'TV', shape: 'tv', category: 'tv', dimMM: [1200, 80, 700], pos: [0, 1, 0], rot: 0, woodFinish: 'lacquered' },
+      { id: 's', name: 'Sofa', shape: 'sofa', category: 'sofa', dimMM: [2000, 850, 800], pos: [1, 0, 0], rot: 0, fabricFinish: 'velvet' },
+    ];
+    const out = parseSceneFile(sceneFileJson(buildSceneFile(room, parts as never, { positions: {}, rotations: {}, dims: {} }, 2)));
+    if (!out.ok) throw new Error(out.error);
+    expect(out.file.parts.find((p) => p.name === 'TV')?.woodFinish).toBeUndefined();
+    expect(out.file.parts.find((p) => p.name === 'Sofa')?.fabricFinish).toBe('velvet');
+    expect(out.dropped.join(' ')).toMatch(/TV has no wood/);
+  });
+});
+
+describe('a finish across a change of model', () => {
+  it('keeps only the surfaces the new model has', () => {
+    expect(finishesFor({ shape: 'bookshelf' }, { woodFinish: 'painted', fabricFinish: 'velvet' })).toEqual({ woodFinish: 'painted' });
+    expect(finishesFor({ shape: 'chair-armchair' }, { woodFinish: 'painted', fabricFinish: 'velvet' })).toEqual({
+      woodFinish: 'painted',
+      fabricFinish: 'velvet',
+    });
+    expect(finishesFor({ shape: 'tv' }, { woodFinish: 'painted', fabricFinish: 'velvet' })).toEqual({});
+  });
+});
+
+// Two holes the derivation above cannot see, because it asks which surfaces a shape
+// draws, not whether each wooden surface goes through a finishable preset.
+describe('the finish reaches every board', () => {
+  const src = readFileSync(join(process.cwd(), 'components/three/DynamicPart.tsx'), 'utf8');
+
+  it('no wood-coloured surface is drawn with an inline material the finish cannot see', () => {
+    // `finishedPreset` matches presets by identity, so `surface={{ roughness }}` beside
+    // a wood colour stays matte under Lacquered — how a shoe rack's 40 slats ignored the
+    // finish its posts took. The hangers are the one exemption: a clothes rack has no
+    // wood control (its wood is the hangers, which nobody would call the rack's finish).
+    const inline = [...src.matchAll(/color=\{(\w*[wW]ood\w*)\}\s+surface=\{\{/g)].map((m) => m[1]);
+    expect(inline).toEqual(['hangerWood']);
+    expect(FABRIC_SHAPES.has('clothes-rack') && !WOOD_SHAPES.has('clothes-rack')).toBe(true);
+  });
+
+  it('choosing a first finish does not remount the piece', () => {
+    // A provider rendered only when a finish exists flips the root's element type, and
+    // React remounts every mesh: shadows flagged once by `ShadowCaster` were lost.
+    expect(src).not.toMatch(/\?\s*<PartFinishContext/);
+  });
+});
+
+describe('the vocabularies', () => {
   it('the vocabularies are the ones the options read', () => {
     expect(WOOD_FINISHES[0]).toBe('natural');
     expect(FABRIC_FINISHES[0]).toBe('linen');

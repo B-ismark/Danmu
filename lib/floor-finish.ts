@@ -236,6 +236,7 @@ export function readFloorFinish(v: unknown, dropped?: string[]): FloorFinish | n
     if (typeof o.color === 'string' && HEX.test(o.color)) out.color = o.color;
     else dropped?.push("the floor's colour was unreadable, so its default was used");
   }
+  if (o.sizeMM !== undefined && spec.defaultSizeMM === null) dropped?.push(`the ${spec.label.toLowerCase()} floor has no module size, so the one given was left out`);
   if (o.sizeMM !== undefined && spec.defaultSizeMM !== null) {
     if (typeof o.sizeMM === 'number' && Number.isFinite(o.sizeMM)) {
       const snapped = nearestSize(spec, o.sizeMM);
@@ -243,6 +244,7 @@ export function readFloorFinish(v: unknown, dropped?: string[]): FloorFinish | n
       out.sizeMM = snapped;
     } else dropped?.push(`the floor's ${spec.sizeOf?.toLowerCase()} was unreadable, so its default was used`);
   }
+  if (o.grout !== undefined && !spec.grout) dropped?.push(`the ${spec.label.toLowerCase()} floor has no grout, so the one given was left out`);
   if (o.grout !== undefined && spec.grout) {
     if ((GROUTS as readonly unknown[]).includes(o.grout)) out.grout = o.grout as Grout;
     else dropped?.push("the floor's grout was unreadable, so matching grout was used");

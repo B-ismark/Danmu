@@ -89,7 +89,7 @@ import {
 } from '@/lib/textures';
 import { FLOOR_SPEC, resolveFloor } from '@/lib/floor-finish';
 import { WALL_SPEC, resolveWalls } from '@/lib/wall-finish';
-import { clearPending, markPending, type FinishChannel } from '@/lib/finish-loading';
+import { clearPending, markPending, stagedView, type FinishChannel, type StagedFinish } from '@/lib/finish-loading';
 
 /** Paint over plaster: enough relief to catch a lamp's raking light, not enough to
  *  read as a pattern from across the room. */
@@ -106,30 +106,41 @@ const SKIRTING_H = 0.1;
  *  `WALL_GAP` (20 mm) on purpose, so a piece snapped flush to a wall still clears it. */
 const SKIRTING_PROUD = 0.012;
 
-/** A finish's maps, prepared without freezing the page.
+/** A finish, prepared without freezing the page.
  *
  *  Generating a finish is a few hundred milliseconds of JavaScript the first time (brick,
  *  tile, stone). Done in the render that asked for it, the press that chose it did not
  *  even show as pressed until it was over. So: a finish already made is used at once; a
- *  new one keeps the OLD finish on screen, is marked pending (`lib/finish-loading.ts`, so
- *  the editor can say "laying the new floor…"), lets a frame paint, and is built after it.
- *  A newer choice made meanwhile cancels the older build rather than queueing behind it.
+ *  new one keeps the WHOLE old finish on screen — maps, colour, sheen and relief, never
+ *  the new colour over the old boards (`stagedView` in `lib/finish-loading.ts`, where
+ *  the rule is tested) — is marked pending so the editor can say "laying the new
+ *  floor…", lets a frame paint, and is built after it. A newer choice made meanwhile
+ *  cancels the older build rather than queueing behind it.
  *
  *  The room's FIRST finish is built synchronously, on mount: a room must never open on
  *  the wrong floor for a frame and then change, which reads as a glitch, not a load. */
-function useStagedMaps(channel: FinishChannel, key: string, peek: () => SurfaceMaps | null, build: () => SurfaceMaps): SurfaceMaps {
-  const [shown, setShown] = useState(() => ({ key, maps: build() }));
-  const ready = key === shown.key ? shown.maps : peek();
-  const isReady = ready !== null;
+function useStagedFinish<C>(
+  channel: FinishChannel,
+  key: string,
+  choice: C,
+  peek: () => SurfaceMaps | null,
+  build: () => SurfaceMaps,
+): { choice: C; maps: SurfaceMaps } {
+  const [shown, setShown] = useState<StagedFinish<C, SurfaceMaps>>(() => ({ key, choice, maps: build() }));
+  const { view, ready, adopt } = stagedView(shown, key, choice, peek);
+  // A finish reached from the cache becomes what is on screen, during render, against
+  // the key last seen (the repo's rule for a prop-driven reset). `adopt` is non-null only
+  // while `shown.key` differs from `key`, and storing it closes that gap, so it settles.
+  if (adopt) setShown(adopt);
   useEffect(() => {
-    if (isReady) return;
+    if (ready) return;
     markPending(channel, key);
     let timer: ReturnType<typeof setTimeout> | undefined;
     // rAF then a macrotask: the rAF lets the pressed state and the spinner paint; the
     // timeout moves the build past that paint rather than into the same frame.
     const frame = requestAnimationFrame(() => {
       timer = setTimeout(() => {
-        setShown({ key, maps: build() });
+        setShown({ key, choice, maps: build() });
         clearPending(channel, key);
       }, 0);
     });
@@ -138,10 +149,20 @@ function useStagedMaps(channel: FinishChannel, key: string, peek: () => SurfaceM
       if (timer !== undefined) clearTimeout(timer);
       clearPending(channel, key);
     };
-    // The key names the maps; `peek` and `build` are functions of it, rebuilt each render.
+    // The key names the maps; `peek`, `build` and `choice` are rebuilt each render, and
+    // the choice stored with a build is only read while its key is the chosen one — when
+    // `stagedView` hands back the live choice instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel, key, isReady]);
-  return ready ?? shown.maps;
+  }, [channel, key, ready]);
+  return view;
+}
+
+/** A wall's start corner at floor level: where its outline's (0, 0) sits. The local +X
+ *  of a wall turned by `yaw` is (cos yaw, −sin yaw) in world XZ, the same frame
+ *  `wallFrames` draws the selection loop in. */
+function wallOrigin(wl: { x: number; z: number; len: number; yaw: number }): [number, number, number] {
+  const hw = wl.len / 2;
+  return [wl.x - hw * Math.cos(wl.yaw), 0, wl.z + hw * Math.sin(wl.yaw)];
 }
 
 export function RoomShell() {
@@ -155,24 +176,26 @@ export function RoomShell() {
   // is the board tone the floor always had); its maps depend only on material, size
   // and grout, so a recolour regenerates nothing. See `lib/floor-finish.ts`.
   const floorChoice = useScene((s) => s.room.floor);
-  const floor = useMemo(() => resolveFloor(floorChoice), [floorChoice]);
-  const floorKey = floorFinishKey(floor.kind, floor.sizeMM, floor.grout);
-  const floorMaps = useStagedMaps(
+  const chosenFloor = useMemo(() => resolveFloor(floorChoice), [floorChoice]);
+  const floorKey = floorFinishKey(chosenFloor.kind, chosenFloor.sizeMM, chosenFloor.grout);
+  const { choice: floor, maps: floorMaps } = useStagedFinish(
     'floor',
     floorKey,
+    chosenFloor,
     () => peekFinishMaps('floor', floorKey),
-    () => floorFinishMaps(floor.kind, floor.sizeMM, floor.grout),
+    () => floorFinishMaps(chosenFloor.kind, chosenFloor.sizeMM, chosenFloor.grout),
   );
   // The walls' finish is one for the room, multiplying each wall's own colour
   // (`lib/wall-finish.ts`). Plaster is the ceiling's maps too, so it is always ready.
   const wallChoice = useScene((s) => s.room.walls);
-  const wallFinish = useMemo(() => resolveWalls(wallChoice), [wallChoice]);
-  const wallKey = wallFinishKey(wallFinish.kind, wallFinish.grout);
-  const wallMaps = useStagedMaps(
+  const chosenWalls = useMemo(() => resolveWalls(wallChoice), [wallChoice]);
+  const wallKey = wallFinishKey(chosenWalls.kind, chosenWalls.grout);
+  const { choice: wallFinish, maps: wallMaps } = useStagedFinish(
     'wall',
     wallKey,
-    () => (wallFinish.kind === 'plaster' ? plasterMaps() : peekFinishMaps('wall', wallKey)),
-    () => wallFinishMaps(wallFinish.kind, wallFinish.grout),
+    chosenWalls,
+    () => (chosenWalls.kind === 'plaster' ? plasterMaps() : peekFinishMaps('wall', wallKey)),
+    () => wallFinishMaps(chosenWalls.kind, chosenWalls.grout),
   );
   const wallSpec = WALL_SPEC[wallFinish.kind];
   const wallRelief = useMemo(() => new Vector2(wallSpec.relief, wallSpec.relief), [wallSpec.relief]);
@@ -246,23 +269,30 @@ export function RoomShell() {
   // wall needs no CSG library — and a ShapeGeometry in the XY plane faces +Z just
   // as planeGeometry did, which is what keeps the near-wall back-face culling
   // (the whole dollhouse trick) working unchanged.
+  //
+  // The outline is drawn from the wall's START CORNER at floor level — (0, 0) to
+  // (len, height) — and the mesh is placed at that corner (`wallOrigin`), because a
+  // ShapeGeometry's UVs ARE its outline coordinates. Drawn about the wall's centre, a
+  // brick course or a tile row was measured from mid-height: the first course did not
+  // sit on the floor, and changing the ceiling slid every course by half the change.
+  // Apertures stay in their centred frame (`lib/apertures.ts`) and are shifted here.
   const wallShapes = useMemo(
     () =>
       walls.map((wl, i) => {
         const hw = wl.len / 2;
         const hh = height / 2;
         const shape = new Shape();
-        shape.moveTo(-hw, -hh);
-        shape.lineTo(hw, -hh);
-        shape.lineTo(hw, hh);
-        shape.lineTo(-hw, hh);
+        shape.moveTo(0, 0);
+        shape.lineTo(wl.len, 0);
+        shape.lineTo(wl.len, height);
+        shape.lineTo(0, height);
         shape.closePath();
         for (const a of apertures.get(i) ?? []) {
           const hole = new Path();
-          hole.moveTo(a.x0, a.y0);
-          hole.lineTo(a.x1, a.y0);
-          hole.lineTo(a.x1, a.y1);
-          hole.lineTo(a.x0, a.y1);
+          hole.moveTo(a.x0 + hw, a.y0 + hh);
+          hole.lineTo(a.x1 + hw, a.y0 + hh);
+          hole.lineTo(a.x1 + hw, a.y1 + hh);
+          hole.lineTo(a.x0 + hw, a.y1 + hh);
           hole.closePath();
           shape.holes.push(hole);
         }
@@ -364,7 +394,7 @@ export function RoomShell() {
         return (
           <group key={`w-${i}`}>
             <mesh
-              position={[wl.x, height / 2, wl.z]}
+              position={wallOrigin(wl)}
               rotation={[0, wl.yaw, 0]}
               receiveShadow
               castShadow

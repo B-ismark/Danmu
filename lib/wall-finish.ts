@@ -110,6 +110,7 @@ export function readWallFinish(v: unknown, dropped?: string[]): WallFinish | nul
     return null;
   }
   const out: WallFinish = { kind };
+  if (o.grout !== undefined && !WALL_SPEC[kind].joints) dropped?.push(`${WALL_SPEC[kind].label.toLowerCase()} walls have no joints, so the grout given was left out`);
   if (o.grout !== undefined && WALL_SPEC[kind].joints) {
     if ((GROUTS as readonly unknown[]).includes(o.grout)) out.grout = o.grout as Grout;
     else dropped?.push(`the walls' ${WALL_SPEC[kind].jointLabel?.toLowerCase()} was unreadable, so a matching one was used`);

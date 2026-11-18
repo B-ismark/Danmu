@@ -57,7 +57,7 @@ const ceiling = meshBlock('name="ceiling-shadow"');
 const ceilingView = meshBlock('name="ceiling-view"');
 
 /** A wall, likewise: positioned at half the wall height and rotated to its yaw. */
-const wall = meshBlock('position={[wl.x, height / 2, wl.z]}');
+const wall = meshBlock('position={wallOrigin(wl)}');
 
 describe('the room is closed to the sun', () => {
   it('finds the two meshes these assertions are about', () => {

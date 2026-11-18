@@ -43,7 +43,7 @@
 
 import { readFloorFinish, type FloorFinish } from './floor-finish';
 import { readWallFinish, type WallFinish } from './wall-finish';
-import { readPartFinishes } from './part-finish';
+import { finishAxes, readPartFinishes } from './part-finish';
 import {
   CATEGORIES,
   DECOR_KINDS,
@@ -727,9 +727,6 @@ function readPart(
   const blockStyle = readBlockStyle(v.blockStyle, shape, part.name, dropped);
   if (blockStyle) part.blockStyle = blockStyle;
 
-  // Wood and fabric finishes (`lib/part-finish.ts`). Off-list values are dropped and said.
-  Object.assign(part, readPartFinishes(v, part.name, dropped));
-
   // A made piece's blocks are read like the parts around them — every block's shape,
   // category, size and colour checked by `readMadeSpec` — and a field on any other
   // shape is ignored. A made piece whose blocks are all unreadable is kept, as the plain
@@ -755,6 +752,11 @@ function readPart(
       dropped.push(`“${part.name}” had no blocks this app could read, so it opens as a plain box of its size`);
     }
   }
+
+  // Wood and fabric finishes (`lib/part-finish.ts`), read LAST: whether the piece has a
+  // surface for each depends on its shape as read, and a made piece's on its blocks.
+  // Off-list or off-surface values are dropped and said.
+  Object.assign(part, readPartFinishes(v, finishAxes(part), part.name, dropped));
 
   return { part, originalId };
 }
