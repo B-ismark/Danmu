@@ -10,6 +10,7 @@
 // to the same rule, since a context cannot reach a `title=` written by hand.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { posixPath } from './helpers/source';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -37,7 +38,7 @@ function sources(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) sources(path, out);
-    else if (name.endsWith('.tsx')) out.push(path);
+    else if (name.endsWith('.tsx')) out.push(posixPath(path));
   }
   return out;
 }

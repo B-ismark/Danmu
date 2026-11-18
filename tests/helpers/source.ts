@@ -10,6 +10,24 @@
 // function docblock is indistinguishable from a docblock separated from its subject.
 // It caught this file on the merge, which is exactly where it should have.
 
+import { readFileSync } from 'node:fs';
+import { sep } from 'node:path';
+
+/** A repo-relative path with `/` separators, whatever the OS. A sweep that names its
+ *  files with `path.join` / `path.relative` gets `lib\detect-prompt.ts` on Windows, so
+ *  every literal it is compared against (`'lib/detect-prompt.ts'`) silently misses. */
+export function posixPath(p: string): string {
+  return sep === '/' ? p : p.split(sep).join('/');
+}
+
+/** A source file as text with `\n` line endings. A Windows checkout with
+ *  `core.autocrlf` hands back CRLF, and any marker anchored on `\n` (`'\n}\n'`, a
+ *  multi-line `indexOf`) then finds nothing and the slice it bounds is empty or runs
+ *  to the end of the file — which reads as a failure about the code, not the checkout. */
+export function readSource(path: string): string {
+  return readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+}
+
 /** Blank out every comment and every string/template literal, leaving code.
  *
  *  A scanner rather than a pair of regexes, because BOTH orders of the regex version are

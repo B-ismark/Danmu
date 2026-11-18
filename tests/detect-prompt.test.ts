@@ -7,7 +7,7 @@ import { detectionBox } from '@/lib/local-detect';
 import { fromRecord, toRecord } from '@/lib/detection-record';
 import { refineDetections } from '@/lib/detect-refine';
 import { SLIVER } from '@/lib/photo-geometry';
-import { stripComments } from './helpers/source';
+import { posixPath, stripComments } from './helpers/source';
 import type { CaptureSlot } from '@/lib/storage';
 import { CATALOG_SHAPES_ORDERED } from '@/lib/scene-spec';
 
@@ -388,7 +388,7 @@ describe('only the reply to a Gemini call is stamped as the cloud’s', () => {
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry);
       if (statSync(full).isDirectory()) walk(full);
-      else if (/\.tsx?$/.test(full)) files.push([relative(process.cwd(), full), stripComments(readFileSync(full, 'utf8'))]);
+      else if (/\.tsx?$/.test(full)) files.push([posixPath(relative(process.cwd(), full)), stripComments(readFileSync(full, 'utf8'))]);
     }
   };
   for (const root of ['app', 'components', 'lib']) walk(join(process.cwd(), root));
