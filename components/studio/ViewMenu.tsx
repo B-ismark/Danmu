@@ -31,6 +31,8 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { ViewOptions } from './ViewOptions';
 import { usePopoverDismiss } from './usePopoverDismiss';
 import { settingsHref } from '@/lib/settings-return';
+import { setInterfaceHidden } from '@/lib/hide-interface';
+import { focusStudioSurface } from './KeyboardShortcuts';
 
 export function ViewMenu() {
   const [open, setOpen] = useState(false);
@@ -66,6 +68,26 @@ export function ViewMenu() {
           <div className="view-menu__body">
             <ViewOptions />
           </div>
+          {/* The interface itself, beside how the room is drawn: Figma keeps "Show
+              UI" in its View menu for the same reason, and this is where someone who
+              does not know the shortcut will look. The button learns it for them. */}
+          <button
+            type="button"
+            className="view-menu__foot"
+            style={{ width: '100%', border: 0, borderTop: '1px solid var(--hairline)', cursor: 'pointer', font: 'inherit', fontSize: 'var(--fs-small)', fontWeight: 600 }}
+            aria-keyshortcuts="Control+Backslash Meta+Backslash"
+            onClick={() => {
+              setOpen(false);
+              setInterfaceHidden(true);
+              focusStudioSurface();
+            }}
+          >
+            <span>Hide interface</span>
+            <span style={{ display: 'inline-flex', gap: 3 }} aria-hidden="true">
+              <kbd className="help-kb">Ctrl</kbd>
+              <kbd className="help-kb">\</kbd>
+            </span>
+          </button>
           {/* Units and the detection key live on the settings page. They are app
               settings rather than view settings, and a second copy of them here
               would be a second place to keep in step. */}

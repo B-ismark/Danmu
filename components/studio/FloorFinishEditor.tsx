@@ -7,7 +7,7 @@
 
 import { useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
-import { useSettings, type DimUnit } from '@/lib/store';
+import { useSettings, useStudio, type DimUnit } from '@/lib/store';
 import { formatLength } from '@/lib/units';
 import { FLOOR_KINDS, FLOOR_SPEC, resolveFloor, withKind, type FloorKind, type Grout } from '@/lib/floor-finish';
 import { Segmented } from '@/components/ui/primitives';
@@ -15,6 +15,7 @@ import { Select } from '@/components/ui/Select';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { Icon } from '@/components/ui/Icon';
 import { FinishStatus } from './FinishStatus';
+import { setPickingColor } from '@/lib/eyedropper';
 
 /** The collapsed row's summary: what the floor is, in the words the panel uses. */
 export function floorSummary(floor: ReturnType<typeof resolveFloor>): string {
@@ -135,6 +136,23 @@ export function FloorFinishEditor() {
               <ColorPicker value={floor.color} onChange={(hex) => setFloor({ ...base, kind: floor.kind, color: hex })} />
             </div>
           )}
+          {/* The eyedropper (I), aimed at the floor. This editor also lives in the Room
+              section with a piece selected, and a pick lands on the selection — so the
+              press selects the floor first, or "pick for the floor" would paint the
+              chair. */}
+          <button
+            onClick={() => {
+              setMixing(false);
+              if (!useStudio.getState().selectedFloor) useStudio.getState().setSelectedFloor(true);
+              setPickingColor(true);
+            }}
+            className="ds-btn ds-btn--xs ds-btn--ghost"
+            title="Pick colour (I)"
+            aria-keyshortcuts="I"
+            style={{ marginTop: 8, padding: '0 8px', fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}
+          >
+            <Icon name="pipette" size={11} /> Pick
+          </button>
         </div>
       </Field>
 

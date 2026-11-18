@@ -48,6 +48,12 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: E
   // outside the component and asserts the variable follows.
   useStudio((s) => s.railLeftW);
   useStudio((s) => s.railRightW);
+  // Hide interface: both rails leave and the room takes the whole width. The asides
+  // stay MOUNTED (display: none) rather than unrendered, and the canvas keeps its
+  // place in the children, so the toggle never remounts the room or the plan — the
+  // camera, the zoom and a half-typed field all survive it. With both asides out of
+  // the grid's placement, the surface auto-places into the one `1fr` column.
+  const uiHidden = useStudio((s) => s.uiHidden);
 
   const shellRef = useRef<HTMLDivElement>(null);
   const leftRef = useRef<HTMLElement>(null);
@@ -100,11 +106,13 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: E
   const shell: CSSProperties = {
     // `--sash-left` / `--sash-right` are NOT set here — see the layout effect
     // below, which writes them to the DOM after every render.
-    gridTemplateColumns: [
-      leftOpen ? 'var(--sash-left)' : 'var(--rail-closed)',
-      '1fr',
-      rightOpen ? 'var(--sash-right)' : 'var(--rail-closed)',
-    ].join(' '),
+    gridTemplateColumns: uiHidden
+      ? '1fr'
+      : [
+          leftOpen ? 'var(--sash-left)' : 'var(--rail-closed)',
+          '1fr',
+          rightOpen ? 'var(--sash-right)' : 'var(--rail-closed)',
+        ].join(' '),
     height: '100%',
   };
 
@@ -140,7 +148,9 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: E
   });
 
   // `relative` so the sash can straddle this rail's own border.
-  const railStyle: CSSProperties = { minHeight: 0, position: 'relative' };
+  // Inline `display`, not the `hidden` attribute: `.rail` sets `display: flex`, which
+  // outranks the user-agent's `[hidden]` rule and would leave the rail on screen.
+  const railStyle: CSSProperties = { minHeight: 0, position: 'relative', ...(uiHidden ? { display: 'none' } : null) };
 
   // Collapsed rails keep their <aside> and their toggle, so the control that
   // reopens one is always where the rail was. (Below 1024px there are no rails to

@@ -2256,6 +2256,57 @@ inside the box.
 
 ## Look and light
 
+### Hide interface — Ctrl/Cmd + backslash — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
+
+Open the starter room at a laptop width, click the room, and press **Ctrl + \\** (Cmd on a
+Mac). The top bar, both rails and every floating cluster (tools, day strip, undo, view
+buttons) go, and the room fills the window; one pill, *Show interface*, sits bottom
+centre with the shortcut beside it. The camera must not move. Press the key again, or the
+pill: everything returns as it was, including an open Library card with what was typed in
+its search. Try it from inside a rail's text field, then on the 2D plan (its zoom stays),
+from the View menu's *Hide interface* row, and on a phone, where the toolbar and sheet go
+and the pill shows no key hint. Measured on 2026-11-18 in Chromium at 1440 and on an
+iPhone 13 profile, by script: the canvas went 820 × 832 → 1420 × 880 and 390 × 538 → 390 ×
+664, no cluster left visible, and the pill centred to the pixel while hovered — which it
+was not on the first version, whose `translateX(-50%)` the button's hover lift replaced.
+
+What would be wrong: anything left floating over the room, the room not reaching the
+window's edges, the camera or the plan's zoom resetting, the pill off-centre or under the
+home indicator, a key on a German or Nordic layout that does nothing, or Ctrl + \\
+typing into a field instead of hiding.
+
+**Gates.** `tests/hide-interface.test.tsx`.
+
+**Where it rides.** `lib/hide-interface.ts`, `components/studio/ShowInterfaceButton.tsx`,
+the two shells, `CanvasChrome.tsx`, and `app/room/[roomId]/layout.tsx`.
+
+### Eyedropper — I — on branch `claude/admiring-maxwell-tpa1rj`, NOT LOOKED AT
+
+Select a piece, click the room, press **I**. A small dark card rides the pointer: a big
+square of the colour under it, a dot and its name or hex, and *Click to sample* — and the
+cursor is a crosshair. The square is the surface's **paint**, not its lit look: in the
+starter room at 15:50 the sofa renders a deep warm orange under the lamp and the card reads
+#C9A98E, its fabric's own colour; the back wall renders taupe-grey and reads #ECE9E1. A
+colour the studio names is shown by name — the floor reads *Pale oak*. Click: the
+selection takes it (a wall or the floor too, if that is what is selected; every piece of a
+multi-selection), nothing gets selected or nudged, and the card goes. With nothing
+selected the hex is copied. Esc or I again puts it down and keeps the selection. On touch
+the way in is the *Pick* button under any colour grid, and the card docks bottom centre
+with a close button. Measured on 2026-11-18 in Chromium at 1440, by script, on the 3D tab.
+
+What would be wrong: a picked colour that changes with the time of day or the light mood
+(that is a pixel, not paint), the card lagging the pointer or running off the window's
+edge, the clicked piece getting selected or nudged, the docked card on the phone's toolbar, the crosshair missing over a piece on the plan, or an `i`
+typed into a field arming it.
+
+**Gates.** `tests/eyedropper.test.tsx` (plan tab; the 3D handlers need WebGL, which is
+this item).
+
+**Where it rides.** `lib/eyedropper.ts`, `components/studio/Eyedropper.tsx`, the press,
+click and hover handlers in `Draggable`, `Pickable`, `RoomShell` and `PlanView`, and the
+*Pick* buttons in `Inspector.tsx` and `FloorFinishEditor.tsx`.
+
+
 ### High quality draws its corner shading again, on every GPU — merged to `main` in `2f31b3d` (PR #307), NOT LOOKED AT on a real GPU
 
 **What was wrong, and why it was not a headless quirk.** On **High** (the default), every

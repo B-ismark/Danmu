@@ -18,7 +18,9 @@ export function HoverCard() {
   // orbiting and dragging cost zero React work.
   const live = useRef(false);
   const latest = useRef({ x: 0, y: 0 });
-  const showing = !!hoveredId && hoveredId !== selectedId;
+  // While the eyedropper is up its own card follows the pointer; two would stack.
+  const picking = useStudio((s) => s.pickingColor);
+  const showing = !!hoveredId && hoveredId !== selectedId && !picking;
   live.current = showing;
 
   useEffect(() => {

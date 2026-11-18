@@ -72,7 +72,10 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { Line } from './strokes';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
+import { isPickingColor, setPickHover, usePickHover } from '@/lib/eyedropper';
+import { pickColor } from '@/components/studio/Eyedropper';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
+import { travelledPastClick } from '@/lib/still-click';
 import { useRoomScene } from '@/lib/room-scene';
 import { SCENE } from '@/lib/scene-palette';
 import { wallApertures, skirtingRuns, type Aperture } from '@/lib/apertures';
@@ -105,17 +108,6 @@ const SKIRTING_H = 0.1;
  *  picture on 2026-10-01. A board has a thickness, so it has one now. Under
  *  `WALL_GAP` (20 mm) on purpose, so a piece snapped flush to a wall still clears it. */
 const SKIRTING_PROUD = 0.012;
-/** How far a press may travel, in CSS pixels, and still be a click on the floor or a
- *  wall. R3F hands an object its click whenever the press began and ended on it,
- *  however far the pointer went between — so an orbit that starts and ends on the
- *  floor would select the floor, and every look around the room would open its panel.
- *  Two pixels is R3F's own line for a click on nothing (`onPointerMissed`). */
-const STILL_PX = 2;
-/** The same line for a finger or a pen, which wobble on a tap where a mouse does not.
- *  At 2 px a tap on a wall or the floor failed often enough to read as a dead
- *  surface on a phone; an orbit by finger travels far further than this. */
-const STILL_TOUCH_PX = 10;
-
 /** A click on the room's own surfaces, or a gesture that happened to end over one. */
 function isStillClick(e: ThreeEvent<MouseEvent>): boolean {
   // First, and unconditionally: a gizmo ring released over the room is not a choice
@@ -123,8 +115,9 @@ function isStillClick(e: ThreeEvent<MouseEvent>): boolean {
   // or it stays armed and eats an ordinary click one gesture later. See
   // lib/gizmo-press.ts.
   if (consumeGizmoClick()) return false;
-  const kind = (e.nativeEvent as Partial<PointerEvent>).pointerType;
-  if (e.delta > (kind === 'touch' || kind === 'pen' ? STILL_TOUCH_PX : STILL_PX)) return false;
+  // An orbit that started and ended on the surface is not a choice of it
+  // (lib/still-click.ts).
+  if (travelledPastClick(e)) return false;
   // A pan held on the keyboard ends over bare floor too, and is not a choice of it.
   return !useStudio.getState().panKeyHeld;
 }
@@ -363,7 +356,16 @@ export function RoomShell() {
         onClick={(e: ThreeEvent<MouseEvent>) => {
           e.stopPropagation();
           if (!isStillClick(e)) return;
+          if (isPickingColor()) return pickColor({ kind: 'floor' });
           setSelectedFloor(true);
+        }}
+        // The sampler card's preview while picking. A wall in front claims the
+        // hover through its own over/out, so the floor only takes it when free.
+        onPointerMove={() => {
+          if (isPickingColor() && usePickHover.getState().source?.kind !== 'wall') setPickHover({ kind: 'floor' });
+        }}
+        onPointerOut={() => {
+          if (usePickHover.getState().source?.kind === 'floor') setPickHover(null);
         }}
       >
         <shapeGeometry args={[floorShape]} />
@@ -454,16 +456,22 @@ export function RoomShell() {
                 // gate stayed armed with nothing to consume it, so it went on to eat
                 // an ordinary click one gesture later. See lib/gizmo-press.ts.
                 if (!isStillClick(e)) return;
+                // The eyedropper reads the wall's PAINT, not its lit pixel — see
+                // lib/eyedropper.ts.
+                if (isPickingColor()) return pickColor({ kind: 'wall', index: i });
                 setSelectedWall(i);
               }}
               onPointerOver={(e: ThreeEvent<PointerEvent>) => {
                 e.stopPropagation();
                 setHoverWall(i);
+                if (isPickingColor()) setPickHover({ kind: 'wall', index: i });
                 document.body.style.cursor = 'pointer';
               }}
               onPointerOut={(e: ThreeEvent<PointerEvent>) => {
                 e.stopPropagation();
                 setHoverWall((h) => (h === i ? null : h));
+                const was = usePickHover.getState().source;
+                if (was?.kind === 'wall' && was.index === i) setPickHover(null);
                 document.body.style.cursor = '';
               }}
             >

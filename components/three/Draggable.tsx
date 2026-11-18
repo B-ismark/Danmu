@@ -41,6 +41,7 @@ import { TransformControls } from '@react-three/drei';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Group, Mesh, Plane, Vector3 } from 'three';
 import { gestureOwnedByOther, useStudio } from '@/lib/store';
+import { isPickingColor } from '@/lib/eyedropper';
 import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
 import { claimPressForGizmo, clearGizmoClick, holdPress, releasePress } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
@@ -1159,6 +1160,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // `holdPress` below. Left uncorrected, this comment is an argument for deleting
     // that as redundant plumbing, 45 lines above the code that disproves it.
     e.stopPropagation();
+    // The eyedropper is armed: this press is the start of a PICK, which `Pickable`
+    // answers on the click. Claimed (so the room shell behind it does not pick the
+    // floor instead), but never a drag — a pick that nudged the piece would be a
+    // colour change with a move hidden inside it.
+    if (isPickingColor()) return;
 
     // The gizmo already owns this part's transform — a second finger pressing
     // its mesh body (not the handle) must not start a competing direct-drag

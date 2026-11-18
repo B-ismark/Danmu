@@ -39,6 +39,8 @@ import { moveWallCarrying } from '@/lib/wall-actions';
 import { onPageLeave } from '@/lib/page-leave';
 import { announce } from '@/lib/announce';
 import { fitPartDims } from '@/lib/made-piece';
+import { setPickingColor } from '@/lib/eyedropper';
+import { SWATCHES, SWATCH_COLUMNS, SWATCH_NAME } from '@/lib/paint-swatches';
 
 // The right rail is a DECORATING panel, not a properties palette — and it now
 // practises the disclosure the left rail has always had. Every decorating
@@ -1092,39 +1094,7 @@ function DimensionEditor({
   );
 }
 
-// Curated palette — thirteen dabs and the mixer, two rows of seven.
-//
-// Two rows is the brief, and the cut is what makes it a palette rather than a chart:
-// the first row is the room's quiet half — whites, a stone, the woods and a near-black,
-// light to dark — and the second the colour you choose a piece FOR. Where the old 24
-// had two near-identical charcoals and two oaks a shade apart, each dab here is one a
-// person can tell from its neighbour at a glance. Anything else is the mixer, which is
-// the fourteenth cell rather than a row of its own.
-//
-// The names are what a screen reader announces and what the tooltip shows: "#E8E5DB"
-// told nobody anything.
-type Swatch = { hex: string; name: string };
-const SWATCHES: Swatch[] = [
-  // The quiet row
-  { hex: '#E8E5DB', name: 'Chalk' },
-  { hex: '#EDE6D6', name: 'Cream' },
-  { hex: '#D6C7AE', name: 'Linen' },
-  { hex: '#C9A87C', name: 'Warm oak' },
-  { hex: '#9A6A48', name: 'Teak' },
-  { hex: '#5D3820', name: 'Espresso' },
-  { hex: '#3A3733', name: 'Charcoal' },
-  // The colour row, ending in the mixer
-  { hex: '#8FA98C', name: 'Sage' },
-  { hex: '#A9C4C0', name: 'Eucalyptus' },
-  { hex: '#4F6D8C', name: 'Denim' },
-  { hex: '#C57B53', name: 'Terracotta' },
-  { hex: '#C44A3A', name: 'Paprika' },
-  { hex: '#D8C36A', name: 'Ochre' },
-];
-/** Seven a row, and the mixer takes the last cell of the second. */
-const SWATCH_COLUMNS = 7;
-
-const SWATCH_NAME = new Map(SWATCHES.map((s) => [s.hex.toLowerCase(), s.name] as const));
+// The palette itself lives in lib/paint-swatches.ts, where the eyedropper reads its names too.
 
 // One paint control, used for furniture AND for walls — the two used to be
 // separate 24-swatch grids that could drift apart.
@@ -1238,16 +1208,31 @@ function PaintPicker({
 
       {/* The way back is the one rare path left outside the grid, and only when there
           is somewhere to go back from. */}
-      {value && (
+      {/* The eyedropper (I), for a hand without a keyboard and for anyone who has not
+          met the key: pick this colour up off something already in the room. Beside
+          the way back, in the row of quiet text buttons, because the grid above is
+          two full rows by design and a fifteenth cell would break it. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 10 }}>
         <button
-          onClick={onReset}
+          onClick={() => setPickingColor(true)}
           className="ds-btn ds-btn--xs ds-btn--ghost"
-          title="Back to the default colour"
-          style={{ marginTop: 10, padding: '0 8px', fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}
+          title="Pick colour (I)"
+          aria-keyshortcuts="I"
+          style={{ padding: '0 8px', fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}
         >
-          <Icon name="refresh" size={11} /> Default colour
+          <Icon name="pipette" size={11} /> Pick
         </button>
-      )}
+        {value && (
+          <button
+            onClick={onReset}
+            className="ds-btn ds-btn--xs ds-btn--ghost"
+            title="Back to the default colour"
+            style={{ padding: '0 8px', fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}
+          >
+            <Icon name="refresh" size={11} /> Default colour
+          </button>
+        )}
+      </div>
 
       {footer && <div style={{ marginTop: 10 }}>{footer}</div>}
     </RailSection>

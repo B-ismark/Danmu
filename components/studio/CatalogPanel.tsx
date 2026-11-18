@@ -248,6 +248,9 @@ export function CatalogPanel({
   belowDay?: boolean;
 }) {
   const setOpen = useStudio((s) => s.setCatalogOpen);
+  // Hide interface (Ctrl/Cmd + backslash) puts the card away with the rest of the
+  // chrome — hidden, not closed, so it is open again with its search intact after.
+  const uiHidden = useStudio((s) => s.uiHidden);
   const phone = usePhoneStudio();
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -300,7 +303,7 @@ export function CatalogPanel({
         // two thirds of a stacked layout's room, and you cannot drag a piece into
         // a room the panel you are dragging from is sitting on.
         width: 'min(268px, calc(100% - 24px))',
-        display: 'flex',
+        display: uiHidden ? 'none' : 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
         zIndex: 'var(--z-canvas-ui)',

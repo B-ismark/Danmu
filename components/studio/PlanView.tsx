@@ -25,7 +25,9 @@ import { entranceComponents, floorBlockers } from '@/lib/clearance';
 import { buildClearanceField, FREE_CELL } from '@/lib/clearance-field';
 import { fieldContours, roundedPath, simplifyLoop, SIMPLIFY_CELLS } from '@/lib/field-contour';
 import { accessZones, type ZoneSide } from '@/lib/layout-rules';
-import { footFromPart, obbExtentAlong, rayToBoundary } from '@/lib/geometry';
+import { footFromPart, obbExtentAlong, pointInPoly, rayToBoundary } from '@/lib/geometry';
+import { isPickingColor, setPickHover, usePickHover } from '@/lib/eyedropper';
+import { pickColor } from './Eyedropper';
 import { footOutlineLocal } from '@/lib/foot-cells';
 import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
@@ -1004,6 +1006,16 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // with nothing in the console.
     if (beginAltPick(e)) return;
 
+    // The eyedropper, on the floor. Pieces and walls claim their own presses (and
+    // pick there), so what reaches here inside the outline is the floor; a press
+    // outside it is the grey margin, which has no colour, so the mode stays on.
+    if (isPickingColor() && e.button === 0) {
+      e.preventDefault();
+      const w = svgToWorld(e);
+      if (pointInPoly(w.x, w.z, ROOM_DYN.footprint)) pickColor({ kind: 'floor' });
+      return;
+    }
+
     // Touch: one finger pans, two fingers pinch. There are no modifier keys on a
     // touch screen, so the desktop gestures below are unreachable there.
     if (e.pointerType === 'touch') {
@@ -1078,6 +1090,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
       return;
     }
     e.stopPropagation();
+    // The eyedropper: this press picks the piece's own colour for the selection —
+    // it neither selects the piece nor starts a drag.
+    if (isPickingColor()) {
+      e.preventDefault();
+      pickColor({ kind: 'part', id });
+      return;
+    }
     // Shift adds to (or removes from) the selection, matching the 3D tab. A piece
     // toggled into a set must not also become the thing a drag moves, so this
     // returns before the drag bookkeeping below.
@@ -1157,6 +1176,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
     const w = svgToWorld(e);
     const next = hitsAt(w.x, w.z, visible)[0] ?? null;
     if (useStudio.getState().hoveredPartId !== next) setHovered(next);
+    // The sampler card's preview: a wall claims it on enter/leave; otherwise the
+    // floor, inside the outline.
+    if (isPickingColor() && usePickHover.getState().source?.kind !== 'wall') {
+      setPickHover(pointInPoly(w.x, w.z, ROOM_DYN.footprint) ? { kind: 'floor' } : null);
+    }
   }
 
   function onPointerMove(e: React.PointerEvent) {
@@ -1255,6 +1279,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
   function onWallPointerDown(e: React.PointerEvent, index: number) {
     e.stopPropagation();
+    // A press on a wall while picking takes its paint and moves nothing.
+    if (isPickingColor()) {
+      e.preventDefault();
+      pickColor({ kind: 'wall', index });
+      return;
+    }
     setSelectedWall(index);
     setDragging(WALL_DRAG_ID);
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -1711,6 +1741,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
                 aria-label={`${label}. Arrow keys move it.`}
                 style={{ cursor: 'grab', outline: 'none' }}
                 onPointerDown={(e) => onWallPointerDown(e, i)}
+                onPointerEnter={() => {
+                  if (isPickingColor()) setPickHover({ kind: 'wall', index: i });
+                }}
+                onPointerLeave={() => {
+                  const was = usePickHover.getState().source;
+                  if (was?.kind === 'wall' && was.index === i) setPickHover(null);
+                }}
                 onKeyDown={(e) => onWallKeyDown(e, i, label)}
                 onFocus={() => setFocusKey(`wall:${i}`)}
                 onBlur={() => setFocusKey(null)}

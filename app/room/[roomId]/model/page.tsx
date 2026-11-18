@@ -14,6 +14,7 @@ import { UndoRedo } from '@/components/studio/UndoRedo';
 import { CanvasTools, CanvasView, CanvasAide, CanvasDay } from '@/components/studio/CanvasChrome';
 import { DayStrip } from '@/components/studio/DayStrip';
 import { RoomSlot, useRoomHost } from '@/components/three/RoomHost';
+import { EyedropperHint } from '@/components/studio/Eyedropper';
 
 export default function ModelPage() {
   // In the store, not in this page: the rail's catalog button opens the same
@@ -61,6 +62,7 @@ export default function ModelPage() {
       {catalogOpen && <CatalogPanel canDrag ghostDrag belowDay />}
 
       <HoverCard />
+      <EyedropperHint />
 
       {/* The one bottom-right aide, and the only thing left on any canvas edge —
           the same slot the 2D tab gives its comfort legend. */}

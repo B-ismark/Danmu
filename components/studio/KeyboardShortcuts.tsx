@@ -38,6 +38,8 @@ import { formatDim, formatLength } from '@/lib/units';
 import { ANNOUNCE_EVENT, announce } from '@/lib/announce';
 import { settingsHref } from '@/lib/settings-return';
 import { toast } from '@/components/ui/StorageToast';
+import { isHideInterfaceKey, toggleInterface } from '@/lib/hide-interface';
+import { isPickingColor, setPickingColor } from '@/lib/eyedropper';
 
 export const STUDIO_SURFACE_ID = 'danmu-studio-surface';
 
@@ -609,6 +611,17 @@ export function KeyboardShortcuts() {
     const unsubHistory = startHistoryRecording();
 
     function onKey(e: KeyboardEvent) {
+      // Hide / show the interface. Ahead of the text-field guard: Ctrl+\ types
+      // nothing into a field, so there is nothing to protect, and it is exactly when
+      // focus is in a rail's field that the rail is what the user wants gone. Focus
+      // goes to the room either way — the field it was in has just left the page,
+      // and the room is where the single-key shortcuts are armed.
+      if (isHideInterfaceKey(e)) {
+        e.preventDefault();
+        toggleInterface();
+        focusStudioSurface();
+        return;
+      }
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       const meta = e.metaKey || e.ctrlKey;
@@ -658,6 +671,12 @@ export function KeyboardShortcuts() {
       // Esc is the one bare key that stays live everywhere: it is the universal
       // way out, and there is nothing it can silently change.
       if (e.key === 'Escape') {
+        // Picking first: Esc puts the eyedropper down and leaves the selection it
+        // was going to paint exactly as it was.
+        if (isPickingColor()) {
+          setPickingColor(false);
+          return;
+        }
         useStudio.getState().setSelected(null);
         return;
       }
@@ -702,6 +721,14 @@ export function KeyboardShortcuts() {
           break;
         case 'f':
           if (s.selectedPartId) s.frameSelected();
+          break;
+        // I for the eyedropper, as in Figma: the next click on a piece, a wall or the
+        // floor picks up its own colour — never its lit one — for the selection. Both
+        // tabs; pressing it again puts it down. See lib/eyedropper.ts.
+        case 'i':
+          if (e.altKey || e.shiftKey) break;
+          e.preventDefault();
+          setPickingColor(!s.pickingColor);
           break;
         // H, not V. V was the modelling-tool convention (Blender, Maya) and it is
         // the one binding here nobody could guess from the app itself — the word

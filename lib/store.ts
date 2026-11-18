@@ -114,6 +114,16 @@ type StudioState = {
    *  button and the right-click menu) open one dialog, and the Inspector is not
    *  mounted in every shell. Not persisted. */
   swapPartId: string | null;
+  /** Ctrl/Cmd + \ — everything but the room is put away: the top bar, both rails,
+   *  the floating canvas chrome, the Library card and the phone's toolbar and sheet.
+   *  Figma's binding for the same idea, so a designer's hand already knows it. Not
+   *  persisted, and cleared when the room is left: a room that opens with no way to
+   *  see a button reads as broken, not as a preference remembered. */
+  uiHidden: boolean;
+  /** The eyedropper (I) is armed: the next click on a piece, wall or floor picks up
+   *  its own colour for the selection instead of selecting it. See
+   *  `lib/eyedropper.ts`. Input state, never persisted or snapshotted. */
+  pickingColor: boolean;
 
   setSelected: (id: string | null) => void;
   /** set the whole selection at once (group click). primary becomes selectedPartId. */
@@ -179,6 +189,8 @@ type StudioState = {
   setTransformMode: (m: 'translate' | 'rotate' | 'scale') => void;
   setSnapMode: (m: 'off' | 'fine' | 'coarse') => void;
   setCatalogOpen: (open: boolean) => void;
+  setUiHidden: (hidden: boolean) => void;
+  setPickingColor: (on: boolean) => void;
   setSwapPartId: (id: string | null) => void;
   toggleGrid: () => void;
   toggleRail: (side: 'left' | 'right') => void;
@@ -288,6 +300,8 @@ export const useStudio = create<StudioState>()(
   dressed: false,
   catalogOpen: false,
   swapPartId: null,
+  uiHidden: false,
+  pickingColor: false,
   frameSelectedToken: 0,
   pinned: {},
   hidden: {},
@@ -354,6 +368,8 @@ export const useStudio = create<StudioState>()(
   setTransformMode: (m) => set({ transformMode: m }),
   setCatalogOpen: (open) => set({ catalogOpen: open }),
   setSwapPartId: (id) => set({ swapPartId: id }),
+  setUiHidden: (hidden) => set({ uiHidden: hidden }),
+  setPickingColor: (on) => set({ pickingColor: on }),
   setSnapMode: (m) => set({ snapMode: m }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   // Opens and closes. It does NOT touch the width, and that is a decision rather
