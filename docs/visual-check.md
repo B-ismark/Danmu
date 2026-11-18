@@ -3640,6 +3640,9 @@ window shallow again (the size and the curtain move should undo as one step).
 
 Also: select a TV and a print and type a much deeper, then a much shallower, depth — the
 back should stay flat on the plaster each time, never sunk into it or floating off it.
+And select a ceiling fan and type a taller, then a shorter, height — its top should stay
+just under the ceiling, never through it or hanging free. A door typed taller should keep
+its threshold on the floor.
 
-**Rides:** branch `claude/admiring-maxwell-tpa1rj` (`lib/wall-resize.ts`, wired in
+**Rides:** branch `claude/admiring-maxwell-tpa1rj` (`lib/mount-resize.ts`, wired in
 `components/studio/Inspector.tsx` and `components/three/Draggable.tsx`).

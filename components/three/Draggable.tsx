@@ -79,7 +79,7 @@ import { Wobble } from './Wobble';
 import { isStroke } from './strokes';
 import { playSound } from '@/lib/sound';
 import { fitPartDims } from '@/lib/made-piece';
-import { rehangForResize } from '@/lib/wall-resize';
+import { rehangForResize } from '@/lib/mount-resize';
 
 // Touch pick-up: dwell time, and how far the finger may drift while dwelling
 // before we decide it is a camera gesture and let go.
@@ -698,10 +698,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // at is the size it is drawn at.
     const keptDim = fitPartDims(part, dim);
     if (keptDim[0] !== heldDim[0] || keptDim[1] !== heldDim[1] || keptDim[2] !== heldDim[2]) {
-      // A window stretched deeper re-hangs the curtains over it (lib/wall-resize.ts).
+      // A window stretched deeper re-hangs the curtains over it (lib/mount-resize.ts).
       // The piece itself is already where the resolve put it, so only the others move.
       // Read before `setDim`, which is the size the room is compared against.
-      const curtains = rehangForResize(currentRoomScene(), partId, keptDim, footprint).filter((m) => m.id !== partId);
+      const curtains = rehangForResize(currentRoomScene(), partId, keptDim, footprint, useScene.getState().room.height).filter((m) => m.id !== partId);
       setDim(partId, keptDim);
       if (curtains.length > 0) setTransformsFor(curtains);
     }

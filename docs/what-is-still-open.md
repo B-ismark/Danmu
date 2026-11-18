@@ -10972,7 +10972,7 @@ the **Wall button** hands its target to `resolvePlacement`, the drag path, so it
 through `hangOnWall` anyway (a mutation removing the button's own neighbour list survived
 every test, which is how that was found — the button is also offered only to floor pieces).
 
-**The other order is closed too** (`lib/wall-resize.ts`, `tests/wall-resize.test.ts`):
+**The other order is closed too** (`lib/mount-resize.ts`, `tests/mount-resize.test.ts`):
 a window made deeper after its curtain was hung — typed in the Inspector or stretched in
 3D — re-hangs the curtain over it, and made shallow again brings it back in. A resize is
 allowed to move a piece the user did not touch here because the curtain's position was
@@ -10983,6 +10983,13 @@ so an old curtain off its hang on another wall is not tidied as a side effect. T
 Inspector also used to deepen a window about its centre, sinking its back 70 mm into the
 plaster; every wall piece resized there — window, curtain, TV, print, mirror, air
 conditioner, door — is set back against its wall now, where a drag of that size puts it.
-Only along the wall's normal: width and height still grow about the centre, so a piece
-stays where it was put along the wall and up it. Nothing rides a wall piece
-(`findSupportDetailed` never offers one as a support), so the re-seat carries nothing.
+Only along the wall's normal: width still grows about the centre, so a piece stays where
+it was put along the wall. Nothing rides a mounted piece (`findSupportDetailed` never
+offers one as a support), so the re-seat carries nothing.
+
+Height follows what the piece hangs from (`heightForResize`, the same reading of the
+anchors `heightForNewCeiling` makes): a ceiling fan or ceiling light, a curtain and an air
+conditioner keep their TOP — a fan typed taller used to push through the slab, one typed
+shorter dropped away from it — a door keeps its threshold on the floor, and a TV, print or
+window keeps its centre, the height a person chose. Then the band a drag clamps to;
+`tests/scene-build.test.ts` now lists this as the fifth `MOUNT_PAD` clamper.

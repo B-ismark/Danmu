@@ -1,18 +1,19 @@
-// A wall piece resized by a typed size stays on its wall, and a window made deeper
-// re-hangs the curtain over it (lib/wall-resize.ts). `tests/curtain-deep-window.test.ts`
+// A mounted piece resized by a typed size stays on what it hangs from, and a window made
+// deeper re-hangs the curtain over it (lib/mount-resize.ts). `tests/curtain-deep-window.test.ts`
 // covers hanging a curtain over a window that is ALREADY deep; this is the other order —
 // curtain first, window deepened after.
 import { describe, expect, it } from 'vitest';
 import { footprintForLayout } from '@/lib/footprint';
 import { localToWorld } from '@/lib/geometry';
-import { CURTAIN_CLEAR, CURTAIN_STANDOFF, hangOnWall, snapToWall, windowReach } from '@/lib/physics';
+import { CURTAIN_CLEAR, CURTAIN_STANDOFF, groundY, hangOnWall, MOUNT_PAD, snapToWall, windowReach } from '@/lib/physics';
 import { curtainCloth } from '@/lib/soft-goods';
 import { partExtent, windowForm } from '@/lib/hard-goods';
 import type { ScenePart } from '@/lib/scene-spec';
 import { WALL_GAP } from '@/lib/layout-rules';
-import { rehangForResize, type RehangMove } from '@/lib/wall-resize';
+import { heightForResize, rehangForResize, type RehangMove } from '@/lib/mount-resize';
 
 const FP = footprintForLayout('rect', 4, 4);
+const H = 2.6;
 const C_DIM: [number, number, number] = [1600, 120, 2200];
 const W_DIM = (d: number): [number, number, number] => [1200, d, 1200];
 
@@ -64,7 +65,7 @@ describe('deepening a window re-hangs the curtain over it', () => {
       const win = windowAt('w', 60);
       const scene = [win, curtainAt('c', 0.1, [win])];
       expect(offWall(byId(scene, 'c')), 'hung at the standard gap first').toBeCloseTo(STANDARD, 9);
-      const moves = rehangForResize(scene, 'w', W_DIM(d), FP);
+      const moves = rehangForResize(scene, 'w', W_DIM(d), FP, H);
       const after = apply(scene, 'w', W_DIM(d), moves);
       expect(gap(byId(after, 'c'), byId(after, 'w')), `window ${d} mm`).toBeGreaterThanOrEqual(CURTAIN_CLEAR - 1e-9);
     }
@@ -73,7 +74,7 @@ describe('deepening a window re-hangs the curtain over it', () => {
   it('lands exactly where hanging it over the deep window would have', () => {
     const win = windowAt('w', 60);
     const scene = [win, curtainAt('c', 0.1, [win])];
-    const after = apply(scene, 'w', W_DIM(200), rehangForResize(scene, 'w', W_DIM(200), FP));
+    const after = apply(scene, 'w', W_DIM(200), rehangForResize(scene, 'w', W_DIM(200), FP, H));
     expect(offWall(byId(after, 'c'))).toBeCloseTo(WALL_GAP + windowReach(0.2) + CURTAIN_CLEAR + C_DIM[1] / 2000, 9);
     // Along the wall and up it, nothing changes.
     expect(byId(after, 'c').pos[0]).toBeCloseTo(byId(scene, 'c').pos[0], 9);
@@ -83,7 +84,7 @@ describe('deepening a window re-hangs the curtain over it', () => {
 
   it('sets the deepened window back against its wall, as a drag would', () => {
     const win = windowAt('w', 60);
-    const moves = rehangForResize([win], 'w', W_DIM(200), FP);
+    const moves = rehangForResize([win], 'w', W_DIM(200), FP, H);
     const seated = snapToWall([win.pos[0], 0, win.pos[2]], W_DIM(200), FP, 0);
     expect(moves).toHaveLength(1);
     expect(moves[0].pos[0]).toBeCloseTo(seated.x, 9);
@@ -95,7 +96,7 @@ describe('deepening a window re-hangs the curtain over it', () => {
     const win = windowAt('w', 200);
     const scene = [win, curtainAt('c', 0.1, [win])];
     expect(offWall(byId(scene, 'c'))).toBeGreaterThan(STANDARD + 0.1);
-    const after = apply(scene, 'w', W_DIM(60), rehangForResize(scene, 'w', W_DIM(60), FP));
+    const after = apply(scene, 'w', W_DIM(60), rehangForResize(scene, 'w', W_DIM(60), FP, H));
     expect(offWall(byId(after, 'c'))).toBeCloseTo(STANDARD, 9);
   });
 
@@ -106,7 +107,7 @@ describe('deepening a window re-hangs the curtain over it', () => {
     // …and on another wall altogether (east, x = +2).
     const east = curtainAt('east', 1.5, [win], 0);
     expect(east.rot).not.toBe(along.rot);
-    const moves = rehangForResize([win, along, east], 'w', W_DIM(200), FP);
+    const moves = rehangForResize([win, along, east], 'w', W_DIM(200), FP, H);
     expect(moves.map((m) => m.id)).toEqual(['w']);
   });
 
@@ -117,7 +118,7 @@ describe('deepening a window re-hangs the curtain over it', () => {
     const win = windowAt('w', 60, -1.2);
     const east = curtainAt('east', 1.5, [win], 0);
     const off = { ...east, pos: [east.pos[0] - 0.05, east.pos[1], east.pos[2]] } as ScenePart;
-    expect(rehangForResize([win, off], 'w', W_DIM(200), FP).map((m) => m.id)).toEqual(['w']);
+    expect(rehangForResize([win, off], 'w', W_DIM(200), FP, H).map((m) => m.id)).toEqual(['w']);
   });
 
   it('leaves a curtain that a deeper window beside it already holds out', () => {
@@ -128,7 +129,7 @@ describe('deepening a window re-hangs the curtain over it', () => {
     const wide: [number, number, number] = [3000, 120, 2200];
     const s = hangOnWall([0, 0, -1.5], wide, FP, 'curtain', [deep, shallow]);
     const c = { ...curtainAt('c', 0, []), dimMM: wide, pos: [s.x, 1.4, s.z] } as ScenePart;
-    const moves = rehangForResize([deep, shallow, c], 'shallow', W_DIM(150), FP);
+    const moves = rehangForResize([deep, shallow, c], 'shallow', W_DIM(150), FP, H);
     expect(moves.map((m) => m.id)).toEqual(['shallow']);
   });
 
@@ -136,13 +137,13 @@ describe('deepening a window re-hangs the curtain over it', () => {
     const win = windowAt('w', 200);
     const scene = [win, curtainAt('c', 0.1, [win])];
     const deeper: [number, number, number] = [1600, 200, 2200];
-    const after = apply(scene, 'c', deeper, rehangForResize(scene, 'c', deeper, FP));
+    const after = apply(scene, 'c', deeper, rehangForResize(scene, 'c', deeper, FP, H));
     expect(gap(byId(after, 'c'), win)).toBeGreaterThanOrEqual(CURTAIN_CLEAR - 1e-9);
   });
 
   it('asks nothing of a piece that does not ride a wall', () => {
     const sofa = { ...windowAt('sofa', 900, 0), shape: 'sofa', category: 'sofa', name: 'Sofa', wallMounted: false } as ScenePart;
-    expect(rehangForResize([sofa], 'sofa', [2000, 1000, 850], FP)).toEqual([]);
+    expect(rehangForResize([sofa], 'sofa', [2000, 1000, 850], FP, H)).toEqual([]);
   });
 
   it('writes nothing when the size change moves nothing', () => {
@@ -150,7 +151,7 @@ describe('deepening a window re-hangs the curtain over it', () => {
     const scene = [win, curtainAt('c', 0.1, [win])];
     // Taller, same depth: the window's back is already on the plaster and the sill
     // reaches no further.
-    expect(rehangForResize(scene, 'w', [1200, 60, 1400], FP)).toEqual([]);
+    expect(rehangForResize(scene, 'w', [1200, 60, 1400], FP, H)).toEqual([]);
   });
 });
 
@@ -182,7 +183,7 @@ describe('a wall piece resized in place keeps its back on the wall', () => {
       expect(backOff(piece), 'hung on the plaster first').toBeCloseTo(WALL_GAP, 9);
       for (const d of depths) {
         const next: [number, number, number] = [dim[0], d, dim[2]];
-        const after = apply([piece], 'p', next, rehangForResize([piece], 'p', next, FP));
+        const after = apply([piece], 'p', next, rehangForResize([piece], 'p', next, FP, H));
         expect(backOff(byId(after, 'p')), `${shape} at ${d} mm`).toBeCloseTo(WALL_GAP, 9);
         // Along the wall and up it, nothing changes.
         expect(byId(after, 'p').pos[0]).toBeCloseTo(0.3, 9);
@@ -194,10 +195,73 @@ describe('a wall piece resized in place keeps its back on the wall', () => {
   it('on a side wall too, where the move is along x', () => {
     const s = snapToWall([1.5, 0, 0.4], [1200, 80, 700], FP, 0);
     const tv = { ...hungAt('tv', 'tv', 'tv', [1200, 80, 700]), pos: [s.x, 1.4, s.z], rot: s.rot ?? 0 } as ScenePart;
-    const moves = rehangForResize([tv], 'tv', [1200, 160, 700], FP);
+    const moves = rehangForResize([tv], 'tv', [1200, 160, 700], FP, H);
     const seated = snapToWall([s.x, 0, s.z], [1200, 160, 700], FP, 0);
     expect(moves).toHaveLength(1);
     expect(moves[0].pos[0]).toBeCloseTo(seated.x, 9);
     expect(moves[0].pos[2]).toBeCloseTo(0.4, 9);
   });
 });
+
+describe('a mounted piece resized in place keeps the edge it hangs by', () => {
+  /** A ceiling piece where the Library hangs one: top `MOUNT_PAD` under the slab. */
+  function ceilingAt(id: string, shape: string, category: string, dim: [number, number, number]): ScenePart {
+    return {
+      id, name: id, category, shape, locked: false, dimMM: dim, rot: 0,
+      pos: [0.4, groundY(category as never, shape as never, dim, H), -0.3],
+    } as ScenePart;
+  }
+  const top = (p: ScenePart) => p.pos[1] + p.dimMM[2] / 2000;
+  const bottom = (p: ScenePart) => p.pos[1] - p.dimMM[2] / 2000;
+
+  it('a ceiling fan or ceiling light keeps its top at the ceiling, taller or shorter', () => {
+    for (const [shape, category, dim] of [
+      ['fan', 'fan', [1200, 1200, 400]],
+      ['lamp-ceiling', 'lighting', [500, 500, 150]],
+    ] as Array<[string, string, [number, number, number]]>) {
+      const piece = ceilingAt('p', shape, category, dim);
+      expect(top(piece), `${shape} hung under the slab first`).toBeCloseTo(H - MOUNT_PAD, 9);
+      for (const h of [dim[2] / 2, dim[2] * 2]) {
+        const next: [number, number, number] = [dim[0], dim[1], h];
+        const after = apply([piece], 'p', next, rehangForResize([piece], 'p', next, FP, H));
+        expect(top(byId(after, 'p')), `${shape} at ${h} mm`).toBeCloseTo(H - MOUNT_PAD, 9);
+        // Ceiling pieces ride no wall: x and z stay exactly where they were.
+        expect(byId(after, 'p').pos[0]).toBe(0.4);
+        expect(byId(after, 'p').pos[2]).toBe(-0.3);
+      }
+    }
+  });
+
+  it('a curtain and an air conditioner keep their top; a door keeps its threshold', () => {
+    const curtain = hungAt('c', 'curtain', 'curtain', [1600, 120, 2200]);
+    const c2 = { ...curtain, pos: [curtain.pos[0], 1.4, curtain.pos[2]] } as ScenePart;
+    const tall: [number, number, number] = [1600, 120, 2400];
+    const cAfter = apply([c2], 'c', tall, rehangForResize([c2], 'c', tall, FP, H));
+    expect(top(byId(cAfter, 'c'))).toBeCloseTo(top(c2), 9);
+
+    const ac = hungAt('ac', 'ac-unit', 'ac', [800, 220, 280]);
+    const acTall: [number, number, number] = [800, 220, 340];
+    const acAfter = apply([ac], 'ac', acTall, rehangForResize([ac], 'ac', acTall, FP, H));
+    expect(top(byId(acAfter, 'ac'))).toBeCloseTo(top(ac), 9);
+
+    const door = { ...hungAt('d', 'door', 'door', [900, 40, 2000]), pos: [0.3, 1.0, -2 + 0.02 + 0.02] } as ScenePart;
+    const dTall: [number, number, number] = [900, 40, 2200];
+    const dAfter = apply([door], 'd', dTall, rehangForResize([door], 'd', dTall, FP, H));
+    expect(bottom(byId(dAfter, 'd'))).toBeCloseTo(0, 9);
+  });
+
+  it('a TV keeps its centre — the height a person chose for it', () => {
+    const tv = hungAt('tv', 'tv', 'tv', [1200, 80, 700]);
+    const tall: [number, number, number] = [1200, 80, 900];
+    expect(rehangForResize([tv], 'tv', tall, FP, H)).toEqual([]);
+  });
+
+  it('stays inside the band a drag clamps to', () => {
+    // Pinned at the band a drag clamps to, from either side.
+    expect(heightForResize('tv', 'tv', 2.5, 700, 900, H)).toBeCloseTo(H - 0.45 - MOUNT_PAD, 9);
+    expect(heightForResize('tv', 'tv', 0.1, 700, 900, H)).toBeCloseTo(0.45 + MOUNT_PAD, 9);
+    // A floor piece's y is its base and never moves.
+    expect(heightForResize('sofa', 'sofa', 0, 850, 950, H)).toBe(0);
+  });
+});
+
