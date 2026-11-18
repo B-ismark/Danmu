@@ -209,35 +209,31 @@ describe('Segmented can lay its options out on more than one row', () => {
     // either side and a scrollbar), and at anything narrower the grid drops to two rows
     // instead of clipping.
     //
-    // **And a second, in the LEFT rail:** the Floor section (`FloorFinishEditor`) names
-    // six materials and up to five sizes in words. The left rail is the narrower one,
-    // and in the `compact` step it runs at its `-tight` width, so that is the floor the
-    // segments are measured against: two per row must fit there, or a material list
-    // collapses to one long column.
-    //
-    // **And a third, beside it:** the Walls section (`WallFinishEditor`) names six finishes
-    // in the same rail, against the same floor.
+    // The Floor and Walls sections used it too, for six materials and up to five sizes,
+    // and were moved to dropdowns: a 2×3 grid of words took the height of a whole
+    // section to make a one-word choice. That is pinned in the next test.
     expect(callers.map((f) => f.replace(/^.*[\\/]components[\\/]/, 'components/').replace(/\\/g, '/')).sort()).toEqual([
-      'components/studio/FloorFinishEditor.tsx',
       'components/studio/Inspector.tsx',
-      'components/studio/WallFinishEditor.tsx',
     ]);
-    const floorSrc = codeOnly(readFileSync(root('components', 'studio', 'FloorFinishEditor.tsx'), 'utf8'));
-    const floorMins = [...floorSrc.matchAll(/minItem=\{(\d+)\}/g)].map((m) => Number(m[1]));
-    expect(floorMins.length, 'every wrapped Floor row states its segment floor').toBe(2);
-    const leftTight = Number(/^(\d+)px$/.exec(token('rail-left-tight'))?.[1]);
-    expect(leftTight).toBeGreaterThan(0);
-    for (const m of floorMins) expect(2 * m, 'two words a row at the tightest left rail').toBeLessThanOrEqual(leftTight - 32 - 16);
-    const wallSrc = codeOnly(readFileSync(root('components', 'studio', 'WallFinishEditor.tsx'), 'utf8'));
-    const wallMins = [...wallSrc.matchAll(/minItem=\{(\d+)\}/g)].map((m) => Number(m[1]));
-    expect(wallMins.length, 'the wrapped Walls row states its segment floor').toBe(1);
-    for (const m of wallMins) expect(2 * m, 'two finishes a row at the tightest left rail').toBeLessThanOrEqual(leftTight - 32 - 16);
     const insp = codeOnly(readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8'));
     const min = Number(/minItem=\{(\d+)\}/.exec(insp)?.[1]);
     expect(min, 'the Inspector states its segment floor as a number').toBeGreaterThan(0);
     const usable = railFloor('rail-right') - 32 - 16;
     expect(3 * min, 'three words fit one row at the narrowest rail').toBeLessThanOrEqual(usable);
     expect(insp, 'and it reflows rather than clips').toMatch(/<Segmented<string>[\s\S]*?\bwrap\b/);
+  });
+});
+
+describe('a long list of finishes is a dropdown, not a grid of buttons', () => {
+  // Reported: material and board width took "all that space" as wrapped button grids.
+  // Two-way choices (grout) stay a segmented toggle; anything longer is a Select.
+  it.each([
+    ['FloorFinishEditor.tsx', ['Select<FloorKind>', 'Select<string>']],
+    ['WallFinishEditor.tsx', ['Select<WallKind>']],
+  ])('%s', (file, selects) => {
+    const src = codeOnly(readFileSync(root('components', 'studio', file), 'utf8'));
+    for (const s of selects) expect(src).toContain(`<${s}`);
+    for (const m of src.matchAll(/<Segmented<(\w+)>/g)) expect(m[1], 'only the two-way grout toggle stays segmented').toBe('Grout');
   });
 });
 
