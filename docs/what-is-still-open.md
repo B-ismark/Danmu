@@ -10953,7 +10953,7 @@ bound has a test that fails without it — said here rather than pretended other
 second `snapYaws` cannot see a wall-fixture clash, but it turns a piece at most 12–20° and no
 sweep showed a clash appear after it.
 
-## § 58 · A curtain dragged over a window deeper than 60 mm — CLOSED
+## § 58 · A curtain over a window deeper than 60 mm — CLOSED
 
 **Exists in a commit:** yes — `hangOnWall` in `lib/physics.ts`, tests in
 `tests/curtain-deep-window.test.ts` and `tests/swap-model.test.ts`.
@@ -10972,6 +10972,15 @@ the **Wall button** hands its target to `resolvePlacement`, the drag path, so it
 through `hangOnWall` anyway (a mutation removing the button's own neighbour list survived
 every test, which is how that was found — the button is also offered only to floor pieces).
 
-Not covered: a window made deeper AFTER its curtain was hung leaves the curtain where it
-was until the curtain is next moved. Re-hanging the pieces in front of a window on every
-resize of it is a different feature (a resize moving pieces the user did not touch).
+**The other order is closed too** (`lib/curtain-rehang.ts`, `tests/curtain-rehang.test.ts`):
+a window made deeper after its curtain was hung — typed in the Inspector or stretched in
+3D — re-hangs the curtain over it, and made shallow again brings it back in. A resize is
+allowed to move a piece the user did not touch here because the curtain's position was
+never the user's choice: `hangOnWall` derived it from this window, so it is re-derived
+from the same window. Only curtains whose hang this window's change actually moves are
+written — compared against where each WOULD hang before the change, not where it stands,
+so an old curtain off its hang on another wall is not tidied as a side effect. The
+Inspector also used to deepen a window about its centre, sinking its back 70 mm into the
+plaster; a window or curtain resized there is set back against its wall now, where a drag
+of that size puts it. Other wall pieces (a TV, a print) still resize about their centre in
+the Inspector — the same defect, not touched here.

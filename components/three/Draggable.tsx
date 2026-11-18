@@ -79,6 +79,7 @@ import { Wobble } from './Wobble';
 import { isStroke } from './strokes';
 import { playSound } from '@/lib/sound';
 import { fitPartDims } from '@/lib/made-piece';
+import { rehangForResize } from '@/lib/curtain-rehang';
 
 // Touch pick-up: dwell time, and how far the finger may drift while dwelling
 // before we decide it is a camera gesture and let go.
@@ -696,7 +697,14 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // A modular made piece keeps whole copies (`fitPartDims`), so the size it is stored
     // at is the size it is drawn at.
     const keptDim = fitPartDims(part, dim);
-    if (keptDim[0] !== heldDim[0] || keptDim[1] !== heldDim[1] || keptDim[2] !== heldDim[2]) setDim(partId, keptDim);
+    if (keptDim[0] !== heldDim[0] || keptDim[1] !== heldDim[1] || keptDim[2] !== heldDim[2]) {
+      // A window stretched deeper re-hangs the curtains over it (lib/curtain-rehang.ts).
+      // The piece itself is already where the resolve put it, so only the others move.
+      // Read before `setDim`, which is the size the room is compared against.
+      const curtains = rehangForResize(currentRoomScene(), partId, keptDim, footprint).filter((m) => m.id !== partId);
+      setDim(partId, keptDim);
+      if (curtains.length > 0) setTransformsFor(curtains);
+    }
 
     // Rigid parenting: dropping ON something IS what creates the relationship;
     // dropping onto the floor (or a refused cycle) breaks it. Established/
