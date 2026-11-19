@@ -510,3 +510,43 @@ export function judgeLabels(dets: Detection[], cals: CalMap, room: RoomDims | nu
   if (!room) return dets.map(() => ({ status: 'unmeasured' }) as LabelVerdict);
   return dets.map((d) => judgeLabel(d, cals, room));
 }
+
+/** The fewest pieces a photo must have had read before the photo itself can be
+ *  doubted. Two misfits out of two is as likely to be two wrong words as one bad
+ *  photograph; three is the first count where a majority says something about the
+ *  CAMERA rather than about the pieces. */
+export const PHOTO_DOUBT_MIN_READ = 3;
+
+/** The photos whose sizes disagree with their own pieces more often than not.
+ *
+ *  Every size on this screen is read through one camera per photo, and that camera
+ *  is ASSUMED: standing at the room's centre, at standing height, level, square to
+ *  the wall. A photo taken from the foot of the bed and tilted down breaks all four,
+ *  and then every piece in it reads the wrong size together. `judgeLabel` sees one
+ *  row at a time, so it blamed each WORD in turn: a field test's hotel photo had
+ *  seven of its eight pieces called the wrong size, a real bed and both real
+ *  nightstands among them, while the thing that was actually wrong was the photo.
+ *
+ *  A majority of misfits in one photo falsifies that photo's camera, not its words —
+ *  so the caller says so once, on the photo, and stops telling the person each piece
+ *  is not what it is. **It changes no verdict and no tick.** The same photo held a
+ *  "sofa" that was the headboard and a TV seen in the mirror, and a doubted camera
+ *  cannot tell those from the bed either, so every row stays as the judge left it;
+ *  what changes is which of the two the screen blames. Only measured rows count —
+ *  `unmeasured` says nothing about the camera either way. */
+export function photosInDoubt(dets: readonly Pick<Detection, 'slot'>[], verdicts: readonly LabelVerdict[]): Set<Detection['slot']> {
+  const tally = new Map<Detection['slot'], { read: number; misfit: number }>();
+  dets.forEach((d, i) => {
+    const status = verdicts[i]?.status;
+    if (status !== 'ok' && status !== 'suspect') return;
+    const t = tally.get(d.slot) ?? { read: 0, misfit: 0 };
+    t.read += 1;
+    if (status === 'suspect') t.misfit += 1;
+    tally.set(d.slot, t);
+  });
+  const out = new Set<Detection['slot']>();
+  for (const [slot, t] of tally) {
+    if (t.read >= PHOTO_DOUBT_MIN_READ && t.misfit * 2 > t.read) out.add(slot);
+  }
+  return out;
+}

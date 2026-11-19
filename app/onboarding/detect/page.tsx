@@ -31,7 +31,7 @@ import {
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
 import { geoPlace, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
-import { judgeLabels, type LabelCandidate } from '@/lib/label-repair';
+import { judgeLabels, photosInDoubt, type LabelCandidate } from '@/lib/label-repair';
 import { suggestFromLabel } from '@/lib/label-suggest';
 import {
   canRedo,
@@ -621,6 +621,9 @@ export default function DetectPage() {
   // verdict is about the current measurement, so persisting one would let a stale
   // accusation outlive the row it was about.
   const verdicts = useMemo(() => judgeLabels(measuredRows, cals, roomDims), [measuredRows, cals, roomDims]);
+  /** Photos where most pieces read the wrong size: the camera is what is off, so the
+   *  photo says so once and its rows stop blaming their own words (`photosInDoubt`). */
+  const doubtedPhotos = useMemo(() => photosInDoubt(measuredRows, verdicts), [measuredRows, verdicts]);
 
   /** Which row each row probably repeats — the same piece seen from another wall,
    *  or read twice from one photo. Ranked by the confidence policy rather than by
@@ -1229,6 +1232,20 @@ export default function DetectPage() {
           )}
 
           <div ref={photoBoxRef} style={{ flex: 1, padding: 16, minHeight: 0, overflow: 'auto' }}>
+            {active && doubtedPhotos.has(active.slot) && (
+              <div className="scan-photo-doubt" role="note">
+                <Icon name="info" size={14} />
+                <span>
+                  <b>Most sizes in this photo look off.</b> It may have been taken away from the middle of the
+                  room, or with the phone tilted. Pieces from it are left out until you tick them. For a better
+                  read, retake it standing in the middle, phone upright.
+                </span>
+                <Link href="/onboarding/capture" className="ds-btn ds-btn--sm">
+                  <Icon name="camera" size={13} />
+                  Retake
+                </Link>
+              </div>
+            )}
             {active ? (
               // On the page's left edge with the heading, the notice and the wall
               // buttons, rather than centred away from all three.
@@ -1395,6 +1412,7 @@ export default function DetectPage() {
                 confirmed={confirmed.has(pieceRow(detections, i))}
                 repeatOf={repeats[i] == null ? null : (detections[repeats[i]] ?? null)}
                 doubted={verdicts[i]?.status === 'suspect'}
+                photoDoubted={doubtedPhotos.has(d.slot)}
                 index={i}
                 onRepair={(cand, keep) => applyRepair(i, cand, keep)}
                 offer={offer?.index === i ? offer.candidates : EMPTY_OFFER}

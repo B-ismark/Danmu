@@ -93,6 +93,7 @@ export function DetectionRow({
   confirmed,
   repeatOf,
   doubted,
+  photoDoubted = false,
   highlighted,
   scrollWhenHovered,
   index,
@@ -127,6 +128,9 @@ export function DetectionRow({
    *  at the wrong size, from photos taken away from the room's centre — so the note
    *  names what was measured and leaves the person to judge which it is. */
   doubted: boolean;
+  /** Most pieces in this row's PHOTO read the wrong size (`photosInDoubt`), so the
+   *  camera is the likelier culprit and the note blames the photo, not the word. */
+  photoDoubted?: boolean;
   /** This row is the screen's one hovered piece (from the row or from its box). */
   highlighted: boolean;
   /** The hover started on the photo, so the row is brought into view; one the pointer
@@ -336,7 +340,9 @@ export function DetectionRow({
         )}
         {doubted && !repeatOf && !sameAs && !confirmed && (
           <RowNote icon="info">
-            Left out: its size in this photo does not fit a {inSentence(modelName)}. Tick it if it is one
+            {photoDoubted
+              ? <>Left out: sizes in this photo look off, so it could not be checked. Tick it if it is a {inSentence(modelName)}</>
+              : <>Left out: its size in this photo does not fit a {inSentence(modelName)}. Tick it if it is one</>}
           </RowNote>
         )}
         {/* A model offered because of the WORD: the user has typed something the
