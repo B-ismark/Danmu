@@ -14,7 +14,7 @@ import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
 import { useRoomScene } from '@/lib/room-scene';
 import { dropPlaneConstant, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
-import { footprintBounds } from '@/lib/footprint';
+import { footprintBounds, nearestWall } from '@/lib/footprint';
 import { lightingAt, KEY_DIR, DEFAULT_BEARING_DEG, type KeyLightSpec } from '@/lib/lighting-moods';
 import { shadowFit } from '@/lib/shadow-fit';
 import { bounceIntensity, glazingArea } from '@/lib/bounce';
@@ -27,8 +27,8 @@ import { frameGate } from '@/lib/frame-gate';
 import { firstFrameWatch } from '@/lib/first-frame';
 import { sayAdded } from '@/components/studio/say-added';
 import { toast } from '@/components/ui/StorageToast';
-import { pickIdsFrom } from '@/lib/pick-through';
-import { openSceneMenu } from '@/components/studio/SceneContextMenu';
+import { firstSurface, pickIdsFrom } from '@/lib/pick-through';
+import { openSceneMenu, openWallMenu } from '@/components/studio/SceneContextMenu';
 import { RoomShell } from './RoomShell';
 import { WallHandles } from './WallHandles';
 import { DragTag } from './DragTag';
@@ -176,6 +176,20 @@ export function Room({
     return pickIdsFrom(_raycaster.intersectObjects(api.scene.children, true));
   }
 
+  /** The wall a viewport point SEES — the first drawn surface along the ray, if
+   *  that is a wall — mapped to the outline's own index and how far along it. */
+  function wallUnder(clientX: number, clientY: number): { index: number; t: number } | null {
+    const api = dropApi.current;
+    if (!api) return null;
+    const rect = api.gl.domElement.getBoundingClientRect();
+    _ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    _raycaster.setFromCamera(_ndc, api.camera);
+    const seen = firstSurface(_raycaster.intersectObjects(api.scene.children, true));
+    if (seen?.kind !== 'wall') return null;
+    const w = nearestWall(useScene.getState().room.footprint, seen.point.x, seen.point.z);
+    return w ? { index: w.index, t: w.t } : null;
+  }
+
   /** The world x/z a pointer at (clientX, clientY) aims `item` at, or null when the
    *  ray misses the plane the piece will live on. Shared by the drop and the ghost
    *  drawn on the way to it, so the two cannot aim differently. */
@@ -311,7 +325,19 @@ export function Room({
         // the second door to the Alt-click picker, for a window manager that eats
         // Alt, a browser that claims it, and a touch screen that has no modifiers
         // at all.
-        openSceneMenu(e.clientX, e.clientY, useStudio.getState().hoveredPartId, partsUnder(e.clientX, e.clientY));
+        // A press that SEES a wall opens the wall's menu. It used to open the room's
+        // ("Add from the Library… / Reset the view"), which read as the app not
+        // knowing a wall had been pressed. A piece in front of the wall keeps the
+        // press — its own menu offers "The wall behind it…".
+        const hovered = useStudio.getState().hoveredPartId;
+        if (!hovered) {
+          const wall = wallUnder(e.clientX, e.clientY);
+          if (wall) {
+            openWallMenu(e.clientX, e.clientY, wall.index, wall.t);
+            return;
+          }
+        }
+        openSceneMenu(e.clientX, e.clientY, hovered, partsUnder(e.clientX, e.clientY));
       }}
     >
     <Canvas

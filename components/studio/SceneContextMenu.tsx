@@ -33,8 +33,13 @@ import {
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { moveToNearestWall, putOnFloor } from '@/lib/placement-actions';
-import { joinWallWithNext, splitWallAt } from '@/lib/wall-actions';
-import { wallsInLine } from '@/lib/footprint';
+import { joinWallWithNext, moveWallCarrying, splitWallAt } from '@/lib/wall-actions';
+import { nearestWall, wallOutwardNormal, wallsInLine } from '@/lib/footprint';
+import { ridesWall } from '@/lib/menu-target';
+import { addPieceToRoom } from '@/lib/add-piece';
+import { currentRoomScene } from '@/lib/room-scene';
+import { PART_LIBRARY } from '@/lib/scene-spec';
+import { sayAdded } from './say-added';
 import { toast } from '@/components/ui/StorageToast';
 import { formatDim } from '@/lib/units';
 import { CATEGORY_ICON, Icon, type IconName } from '@/components/ui/Icon';
@@ -81,8 +86,9 @@ export function openSceneMenu(x: number, y: number, partId: string | null, candi
   window.dispatchEvent(new CustomEvent<MenuRequest>(MENU_EVENT, { detail: { x, y, partId, candidates } }));
 }
 
-/** Open the menu for one wall of the plan: split it where it was pressed, or
- *  join it to a neighbour it runs in line with. */
+/** Open the menu for one wall — from either tab, or from the "The wall behind
+ *  it…" row of a piece that hangs on one. `t` is how far along the wall the press
+ *  landed (0–1), which is where a split cuts and where a new opening goes. */
 export function openWallMenu(x: number, y: number, index: number, t: number) {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent<MenuRequest>(MENU_EVENT, { detail: { x, y, partId: null, wall: { index, t } } }));
@@ -145,6 +151,13 @@ export function SceneContextMenu() {
       // candidate, and choosing a row is what changes the selection.
       if (detail.partId && !detail.pick && !useStudio.getState().selection.includes(detail.partId)) {
         useStudio.getState().setSelected(detail.partId);
+      }
+      // A wall menu selects its wall for the same reason: the accent frame shows
+      // WHICH wall the rows will act on, and the Inspector beside it shows the
+      // same wall's paint, position and shape. Here rather than at each caller so
+      // the 3D tab, the plan and a piece's "wall behind it" row cannot disagree.
+      if (detail.wall && useStudio.getState().selectedWall !== detail.wall.index) {
+        useStudio.getState().setSelectedWall(detail.wall.index);
       }
       setAt(null);
       setReq(detail);
@@ -401,6 +414,25 @@ function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
   // The wall move is a gesture like a drag and takes the whole selection, as the
   // Inspector's button did — so it stays on offer for many, and says how many. Floor
   // only ever moved the one piece, so it is offered only when one is selected.
+  // A piece that hangs on a wall covers part of it — in the plan it is drawn right
+  // on the wall's line — so the wall's own menu is one row away from here rather
+  // than reachable only by aiming at the bit of plaster the piece leaves showing.
+  if (!many && ridesWall(part.category, part.shape)) {
+    const at = currentRoomScene().find((p) => p.id === partId)?.pos ?? part.pos;
+    const wall = nearestWall(sc.room.footprint, at[0], at[2]);
+    if (wall) {
+      entries.push({
+        kind: 'item',
+        id: 'wall-behind',
+        label: 'The wall behind it…',
+        icon: 'snap-wall',
+        // A microtask for the same reason as "Select what's here": the row's own
+        // handler closes the menu right after this returns.
+        run: () => queueMicrotask(() => openWallMenu(req.x, req.y, wall.index, wall.t)),
+      });
+    }
+  }
+
   if (!part.wallMounted) {
     entries.push({
       kind: 'item',
@@ -413,6 +445,21 @@ function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
       },
     });
     if (!many) entries.push({ kind: 'item', id: 'to-floor', label: 'Put on the floor', icon: 'snap-floor', run: () => putOnFloor(partId) });
+  }
+
+  // Ideas' own words ("Kept in place" / "Let ideas move …"): this is that panel's
+  // lock, offered where the piece is rather than only in a list of names. What it
+  // holds still is Fix and Shuffle; a drag still moves it, so it does not say
+  // "lock". Wall pieces never move under Ideas, so they are not offered it.
+  if (!many && !part.wallMounted) {
+    const kept = !!s.pinned[partId];
+    entries.push({
+      kind: 'item',
+      id: 'keep',
+      label: kept ? 'Let ideas move it' : 'Keep where it is',
+      icon: kept ? 'unlock' : 'lock',
+      run: () => s.togglePinned(partId),
+    });
   }
 
   // The Inspector's own words for the same dialog: one action, one name. It took
@@ -464,17 +511,80 @@ function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
   return entries;
 }
 
-/** Actions on the room itself — a right-click that landed on floor, wall or air. */
+/** How far one press of "Push out" / "Pull in" moves a wall — the Inspector's
+ *  Out / In buttons and the plan's arrow key use the same 10 cm. */
+const WALL_NUDGE_M = 0.1;
+/** How far inside the plaster a new opening is aimed. A wall piece takes the
+ *  wall NEAREST its aim, so the point has to be unambiguously this wall's — at a
+ *  corner, a point exactly on the line is as near the neighbour as it is to this. */
+const OPENING_AIM_IN_M = 0.05;
+
+/** The wall's own actions, most-used first: its paint, what goes in it, where it
+ *  stands, and its shape. Each of them was reachable before — the Inspector holds
+ *  paint, move and shape, the Library holds doors and windows — but a right-click
+ *  on a wall that answered with "Add from the Library… / Reset the view" read as
+ *  the app not knowing a wall had been pressed. */
 function wallEntries(index: number, t: number): MenuEntry[] {
-  const fp = useScene.getState().room.footprint;
+  const sc = useScene.getState();
+  const fp = sc.room.footprint;
   const n = fp.length;
+  if (index < 0 || index >= n) return [];
   const prev = (index - 1 + n) % n;
   // Not right at a corner: a cut there would leave a sliver nobody could grab, so
-  // a press near either end splits a fifth of the way in instead.
+  // a press near either end splits a fifth of the way in instead. The same reason
+  // keeps a new opening off the corner, where it could only half-fit.
   const at = Math.min(0.8, Math.max(0.2, t));
+  const painted = sc.room.wallColors?.[index];
+
   const out: MenuEntry[] = [
-    { kind: 'item', id: 'split', label: 'Split wall here', icon: 'split', run: () => splitWallAt(index, at) },
+    {
+      kind: 'item',
+      id: 'paint',
+      label: 'Paint this wall…',
+      icon: 'palette',
+      run: () => {
+        // The wall is already selected (the menu did that on opening); what this
+        // adds is putting the panel that holds its colour on screen — the rail when
+        // docked, the Details sheet on a phone (`showDetails`).
+        useStudio.getState().setSelectedWall(index);
+        useStudio.getState().showDetails();
+      },
+    },
   ];
+  if (painted) {
+    out.push({ kind: 'item', id: 'paint-all', label: 'Use this colour on every wall', icon: 'layers', run: () => sc.setAllWallColors(painted) });
+    out.push({ kind: 'item', id: 'unpaint', label: 'Back to the default colour', icon: 'rotate-ccw', run: () => sc.resetWallColor(index) });
+  }
+
+  // An opening goes where the wall was pressed — the only thing about it a menu
+  // can know that the Library cannot.
+  const a = fp[index];
+  const b = fp[(index + 1) % n];
+  const [ox, oz] = wallOutwardNormal(fp, index);
+  const aim: [number, number] = [a[0] + (b[0] - a[0]) * at - ox * OPENING_AIM_IN_M, a[1] + (b[1] - a[1]) * at - oz * OPENING_AIM_IN_M];
+  out.push({ kind: 'separator', id: 'sep-open' });
+  for (const shape of ['window', 'door'] as const) {
+    const item = PART_LIBRARY.find((i) => i.shape === shape);
+    if (!item) continue;
+    out.push({
+      kind: 'item',
+      id: `add-${shape}`,
+      label: `Add a ${shape} here`,
+      icon: 'plus',
+      run: () => {
+        sayAdded(addPieceToRoom({ label: item.label, category: item.category, shape: item.shape, dimMM: [...item.dimMM] }, aim), item.label);
+      },
+    });
+  }
+
+  // `moveWallCarrying` speaks its own refusal (the piece in the way, the room at
+  // its limit), so these rows need say nothing when it declines.
+  out.push({ kind: 'separator', id: 'sep-move' });
+  out.push({ kind: 'item', id: 'out', label: 'Push out 10 cm', icon: 'plus', run: () => moveWallCarrying(index, WALL_NUDGE_M) });
+  out.push({ kind: 'item', id: 'in', label: 'Pull in 10 cm', icon: 'minus', run: () => moveWallCarrying(index, -WALL_NUDGE_M) });
+
+  out.push({ kind: 'separator', id: 'sep-shape' });
+  out.push({ kind: 'item', id: 'split', label: 'Split wall here', icon: 'split', run: () => splitWallAt(index, at) });
   if (wallsInLine(fp, index, (index + 1) % n))
     out.push({ kind: 'item', id: 'join-next', label: 'Join with the next wall', icon: 'join', run: () => joinWallWithNext(index) });
   if (wallsInLine(fp, prev, index))
@@ -482,6 +592,7 @@ function wallEntries(index: number, t: number): MenuEntry[] {
   return out;
 }
 
+/** Actions on the room itself — a right-click that landed on floor or air. */
 function roomEntries(): MenuEntry[] {
   const s = useStudio.getState();
   return [
@@ -492,6 +603,18 @@ function roomEntries(): MenuEntry[] {
     // with one name.
     { kind: 'item', id: 'add', label: 'Add from the Library…', icon: 'plus', run: () => s.setCatalogOpen(true) },
     { kind: 'item', id: 'all', label: 'Select everything', icon: 'layers', hint: 'Ctrl A', run: selectAllParts },
+    {
+      kind: 'item',
+      id: 'floor',
+      label: 'Change the floor…',
+      icon: 'grid',
+      // The floor's finish lives in the Inspector once the floor is selected —
+      // the same thing a left-click on it does, with the panel made visible.
+      run: () => {
+        useStudio.getState().setSelectedFloor(true);
+        useStudio.getState().showDetails();
+      },
+    },
     { kind: 'separator', id: 'sep-view' },
     { kind: 'item', id: 'view', label: 'Reset the view', icon: 'fit', run: () => s.setView('iso') },
     {
