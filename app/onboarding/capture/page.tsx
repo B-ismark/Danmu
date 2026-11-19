@@ -599,6 +599,11 @@ export default function CapturePage() {
         // filmstrip under the shutter. A 360px side rail here left ~30px for the
         // gallery the old copy told people to click.
         <>
+          {/* The finder's card too: the guide that holds it is not on this layout,
+              and a phone camera is the main way photos are taken. */}
+          <div style={{ padding: '0 14px' }}>
+            <FinderPrep />
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: 320 }}>{cameraPanel}</div>
           <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '10px 14px' }}>{gallery(true)}</div>
         </>

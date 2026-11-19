@@ -66,6 +66,15 @@ function inSentence(label: string): string {
   return /^.[A-Z]/.test(label) ? label : label.charAt(0).toLowerCase() + label.slice(1);
 }
 
+/** Where the OTHER sighting is, said from this row. A repeat is usually on another
+ *  wall, but one photo can hold two boxes round one thing (the finder reads every
+ *  photo more than once), and "Same sofa as on Wall 2?" on a Wall 2 row reads as a
+ *  mistake. Same photo: "the other sofa in this photo". */
+function otherSighting(d: Detection, other: Detection): string {
+  const name = inSentence(cleanLabelOf(other));
+  return other.slot === d.slot ? `the other ${name} in this photo` : `the ${name} on ${slotLabel(other.slot)}`;
+}
+
 export function categoryLabel(cat?: string): string {
   return MANUAL_CATEGORIES.find((c) => c.value === cat)?.label ?? 'Furniture';
 }
@@ -191,8 +200,8 @@ export function DetectionRow({
     categoryLabel(piece.category);
   const keepTitle = sameAs
     ? confirmed
-      ? `Kept: built once, as the ${inSentence(cleanLabelOf(sameAs))} on ${slotLabel(sameAs.slot)}. Press to leave it out`
-      : `Left out, with the ${inSentence(cleanLabelOf(sameAs))} on ${slotLabel(sameAs.slot)}. Press to put it back`
+      ? `Kept: built once, as ${otherSighting(d, sameAs)}. Press to leave it out`
+      : `Left out, with ${otherSighting(d, sameAs)}. Press to put it back`
     : confirmed
       ? 'Kept: this piece goes into your room at a typical size'
       : 'Not kept: it stays on this list and out of your room';
@@ -303,7 +312,9 @@ export function DetectionRow({
           <div className="t-hint" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 3, lineHeight: 1.45 }}>
             <Icon name="link" size={11} style={{ flex: '0 0 auto' }} />
             <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
-              Same {inSentence(cleanLabelOf(sameAs))} as on {slotLabel(sameAs.slot)}
+              {sameAs.slot === d.slot
+                ? `Same as the other ${inSentence(cleanLabelOf(sameAs))} in this photo`
+                : `Same ${inSentence(cleanLabelOf(sameAs))} as on ${slotLabel(sameAs.slot)}`}
               {confirmed ? ' · kept' : ' · left out'}
             </span>
             <button
@@ -342,7 +353,9 @@ export function DetectionRow({
           // starts unticked; Same links it, Different keeps it as its own piece.
           <div className="t-hint" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 3, lineHeight: 1.45 }}>
             <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
-              Same {inSentence(cleanLabelOf(repeatOf))} as on {slotLabel(repeatOf.slot)}?
+              {repeatOf.slot === d.slot
+                ? `Same as the other ${inSentence(cleanLabelOf(repeatOf))} in this photo?`
+                : `Same ${inSentence(cleanLabelOf(repeatOf))} as on ${slotLabel(repeatOf.slot)}?`}
             </span>
             <span style={{ display: 'inline-flex', gap: 4, flex: '0 0 auto' }}>
               <button onClick={onConfirmRepeat} className="ds-chip" style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px' }}>
@@ -371,7 +384,7 @@ export function DetectionRow({
       {!sameAs && linkOptions.length > 0 && !linking && (
         <IconButton
           icon="link"
-          label={`${label} is already on the list`}
+          label={`Link ${label} to one on another wall`}
           title="Already on the list from another wall? Link it, and it is built once"
           onClick={() => setLinking(true)}
           size={26}

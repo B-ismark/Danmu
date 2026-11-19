@@ -56,6 +56,18 @@ describe('DetectionRow — same piece', () => {
     expect(no).toHaveBeenCalledTimes(1);
   });
 
+  // One photo can hold two boxes round one thing. "as on Wall 2" on a Wall 2 row
+  // read as a mistake on the phone walk-through.
+  it('says "in this photo" when the other sighting is on the same wall', () => {
+    const twin: Detection = { ...bedE, uid: 'e2', box: [0.12, 0.5, 0.4, 0.4] };
+    const { rerender } = render(<DetectionRow {...props({ repeatOf: twin })} />);
+    expect(screen.getByText('Same as the other bed in this photo?')).toBeTruthy();
+    expect(screen.queryByText(/as on Wall 2/)).toBeNull();
+    rerender(<DetectionRow {...props({ sameAs: twin, confirmed: true })} />);
+    expect(screen.getByText(/^Same as the other bed in this photo/)).toBeTruthy();
+    expect(screen.getByTitle(/as the other bed in this photo/)).toBeTruthy();
+  });
+
   it('stops asking once the row is kept', () => {
     render(<DetectionRow {...props({ repeatOf: bedN, confirmed: true })} />);
     expect(screen.queryByText('Same')).toBeNull();
@@ -93,7 +105,7 @@ describe('DetectionRow — same piece', () => {
 
   // The picker sits behind a link icon now, not a full-width dropdown in every row:
   // the person asked for rows that are not crowded. Same rule as before about when.
-  const linkBtn = () => screen.queryByRole('button', { name: 'bed is already on the list' });
+  const linkBtn = () => screen.queryByRole('button', { name: 'Link bed to one on another wall' });
   it('offers the link only when there is something to pick, and never on a linked row', () => {
     const opts = [{ index: 0, label: 'bed · Wall 1' }];
     const { rerender } = render(<DetectionRow {...props()} />);

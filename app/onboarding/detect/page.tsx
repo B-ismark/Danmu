@@ -397,6 +397,10 @@ export default function DetectPage() {
             if (pending) {
               onDetectorDownload(setFetched);
               await pending.catch(() => false);
+              // Settled either way: a partial count left behind would title the next
+              // step (the question, or a Google scan) "Getting the furniture finder".
+              onDetectorDownload(null);
+              setFetched(null);
               if (cancelled || stopped.current) return;
             }
             const status = await detectorStatus(pack);
@@ -1405,7 +1409,7 @@ export default function DetectPage() {
                 alsoSeenOn={sightingsOf(detections, i).map((j) => detections[j].slot)}
                 linkOptions={linkCandidates(detections, confirmed, i).map((j) => ({
                   index: j,
-                  label: `${cleanLabelOf(detections[j])} · ${slotLabel(detections[j].slot)}`,
+                  label: `${cleanLabelOf(detections[j])} · ${detections[j].slot === d.slot ? 'this photo' : slotLabel(detections[j].slot)}`,
                 }))}
                 onLinkTo={(j) => linkRow(i, j)}
                 onUnlink={() => unlinkRow(i)}

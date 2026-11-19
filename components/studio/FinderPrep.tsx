@@ -34,10 +34,12 @@ type Stage =
 export function FinderPrep() {
   const [stage, setStage] = useState<Stage>({ kind: 'hidden' });
 
-  function follow(run: Promise<boolean>, total: number) {
+  /** `start` is called AFTER the listener is set: `onDetectorDownload` only takes a
+   *  total (and clears old counts) when no download is in flight yet. */
+  function follow(start: () => Promise<boolean>, total: number) {
     setStage({ kind: 'getting', progress: null });
     onDetectorDownload((p) => setStage({ kind: 'getting', progress: p }), total);
-    run
+    start()
       .then((ok) => setStage(ok ? { kind: 'ready' } : { kind: 'failed' }))
       .catch(() => setStage({ kind: 'failed' }));
   }
@@ -47,7 +49,7 @@ export function FinderPrep() {
     (async () => {
       const pending = detectorDownloadInFlight();
       if (pending) {
-        if (!gone) follow(pending, 0);
+        if (!gone) follow(() => pending, 0);
         return;
       }
       if (!(await localDetectorAvailable()) || (await localRuntimeMissing())) return;
@@ -82,7 +84,7 @@ export function FinderPrep() {
           </button>
           <button
             className="ds-btn ds-btn--sm ds-btn--accent"
-            onClick={() => follow(downloadDetector('full'), status.owed)}
+            onClick={() => follow(() => downloadDetector('full'), status.owed)}
           >
             {status.update ? 'Update' : 'Download'}
           </button>
