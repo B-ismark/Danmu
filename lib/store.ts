@@ -140,6 +140,10 @@ type StudioState = {
   toggleOpen: (id: string) => void;
   /** monotonically-incrementing token used to nudge CameraRig to frame the selected part. */
   frameSelectedToken: number;
+  /** Bumped by `showDetails` — "put the Inspector on screen". The docked layout
+   *  answers through `railRightOpen` (set in the same write); the sheet layouts
+   *  hold their open panel in local state, so they watch this token. */
+  detailsToken: number;
   /** hidden parts (visibility toggle) — keyed by partId */
   hidden: Record<string, boolean>;
   /** Parts the user locked against **Fix** and **Shuffle** — keyed by partId.
@@ -202,6 +206,10 @@ type StudioState = {
   setQuality: (q: Quality) => void;
   toggleDressed: () => void;
   frameSelected: () => void;
+  /** Bring the panel that edits the current selection into view, on every layout:
+   *  the right rail when docked, the Details sheet / tab below 1024px. A menu row
+   *  that only opened the rail did nothing on a phone, whose sheet never reads it. */
+  showDetails: () => void;
   toggleHidden: (id: string) => void;
   /** restore the whole hidden map from persistence (per-room, via RoomSync) */
   setHiddenMap: (h: Record<string, boolean>) => void;
@@ -303,6 +311,7 @@ export const useStudio = create<StudioState>()(
   uiHidden: false,
   pickingColor: false,
   frameSelectedToken: 0,
+  detailsToken: 0,
   pinned: {},
   hidden: {},
 
@@ -430,6 +439,7 @@ export const useStudio = create<StudioState>()(
       return positions === s.positions && rotations === s.rotations ? s : { positions, rotations };
     }),
   frameSelected: () => set((s) => ({ frameSelectedToken: s.frameSelectedToken + 1 })),
+  showDetails: () => set((s) => ({ detailsToken: s.detailsToken + 1, railRightOpen: true })),
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
   setHiddenMap: (hidden) => set({ hidden }),
   togglePinned: (id) => set((s) => ({ pinned: { ...s.pinned, [id]: !s.pinned[id] } })),

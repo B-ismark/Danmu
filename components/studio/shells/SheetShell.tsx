@@ -85,6 +85,14 @@ function PaneShell({ surface }: { surface: ReactNode }) {
     setSeenSelection(selection);
     if (selected) setTab('details');
   }
+  // An explicit "show me its details" (`showDetails`, e.g. the right-click menu's
+  // Paint this wall… / Change the floor…) — answered the same way, during render.
+  const detailsToken = useStudio((s) => s.detailsToken);
+  const [seenDetails, setSeenDetails] = useState(detailsToken);
+  if (seenDetails !== detailsToken) {
+    setSeenDetails(detailsToken);
+    setTab('details');
+  }
 
   // Hide interface (Ctrl/Cmd + backslash): the panel leaves and the room takes the
   // width. Kept mounted, as `DockedShell` keeps its rails, so a toggle loses nothing.
@@ -197,6 +205,19 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
   useEffect(() => {
     if (selected && panelRef.current === 'view') setPanel('details');
   }, [selected, selectedPartId, selectedWallId]);
+
+  // An explicit "show me its details" (`showDetails`) raises the sheet on Details.
+  // The docked layout reads `railRightOpen` for this; the sheet never did, so a
+  // menu row that only opened the rail did nothing here.
+  const detailsToken = useStudio((s) => s.detailsToken);
+  const seenDetails = useRef(detailsToken);
+  useEffect(() => {
+    if (seenDetails.current === detailsToken) return;
+    seenDetails.current = detailsToken;
+    if (catalogOpen) setCatalogOpen(false);
+    setPanel('details');
+    setSnap((s) => (s === 'closed' ? 'half' : s));
+  }, [detailsToken, catalogOpen, setCatalogOpen]);
 
   const show = (p: Panel) => {
     // Pressing the button for the sheet already showing lowers it: a toolbar item

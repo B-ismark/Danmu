@@ -1678,13 +1678,18 @@ export const PlanView = forwardRef<PlanViewHandle, {
           // or, with no hover yet, the room. `wallUnderPress` splits the stretch at
           // the room's outline: the far side is the wall's, the room side the
           // piece's. `band` is the hit line's half-width (16 px wide) in metres.
-          const piece = hovered ? (visible.find((p) => p.id === hovered) ?? null) : null;
+          // A touch long-press arrives with no hover (nothing moved over the canvas
+          // first), so the piece under the press is asked for directly — otherwise
+          // a sofa near a wall handed its press to the wall.
+          const stack = hitsAt(w.x, w.z, visible);
+          const target = hovered ?? stack[0] ?? null;
+          const piece = target ? (visible.find((p) => p.id === target) ?? null) : null;
           const wall = wallUnderPress(ROOM_DYN.footprint, w.x, w.z, (8 * k) / SCALE, piece);
           if (wall) {
             openWallMenu(e.clientX, e.clientY, wall.index, wall.t);
             return;
           }
-          openSceneMenu(e.clientX, e.clientY, hovered, hitsAt(w.x, w.z, visible));
+          openSceneMenu(e.clientX, e.clientY, target, stack);
         }}
         onWheel={onWheel}
         style={{ width: '100%', height: '100%', maxWidth: 1100, touchAction: 'none', cursor: panRef.current ? 'grabbing' : panKey ? 'grab' : 'default' }}

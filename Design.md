@@ -1581,7 +1581,8 @@ pair and they are **one row**, and the measured one survives in either photo ord
   3D view with no menu behind it reads as broken, so do not hand the button back to
   the camera.
 - **A wall has its own menu, in both tabs** — paint it (*Paint this wall…* opens the
-  panel holding its colour), put a window or door where it was pressed, push it out
+  panel holding its colour on every layout — `showDetails` opens the docked rail and
+  raises the phone / tablet Details sheet, which never read the rail's flag), put a window or door where it was pressed, push it out
   or pull it in 10 cm, split it there or join it to a neighbour in line. A wall used
   to answer a right-click with the room's menu in 3D, and in the plan a wall piece
   drawn on the line (the TV) took the press. **Which surface a 3D press SEES** is

@@ -524,8 +524,9 @@ type WallSeg = ReturnType<typeof wallSegments>[number];
  *  plane of the plaster (`cutAwayWithWall` at depth 0), and hides with it.
  *
  *  `visible` is the right switch HERE and is the wrong one in `CutAway.tsx`: the
- *  skirting casts no shadow and takes no clicks, so leaving the shadow pass costs
- *  nothing it was doing. */
+ *  skirting casts no shadow, so leaving the shadow pass costs nothing it was doing.
+ *  It does take the wall's right-click (`WALL_KEY`), and a hidden board drops out of
+ *  the raycast with it. */
 function WallSkirting({ wl, runs, wall }: { wl: WallSeg; runs: Array<[number, number]>; wall: number }) {
   const ref = useRef<Group>(null);
   useFrame(({ camera }) => {
@@ -551,6 +552,9 @@ function WallSkirting({ wl, runs, wall }: { wl: WallSeg; runs: Array<[number, nu
               wl.z - mid * Math.sin(wl.yaw) + out * Math.cos(wl.yaw),
             ]}
             rotation={[0, wl.yaw, 0]}
+            // A right-click on the board is a right-click on its wall: without the
+            // tag, `firstSurface` read it as 'other' and the room's menu opened.
+            userData={{ [WALL_KEY]: wall }}
           >
             <boxGeometry args={[b - a, SKIRTING_H, SKIRTING_PROUD]} />
             {/* Satin, not flat: skirting is trim paint, and the soft highlight along its

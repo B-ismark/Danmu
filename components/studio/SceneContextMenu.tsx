@@ -525,7 +525,6 @@ const OPENING_AIM_IN_M = 0.05;
  *  on a wall that answered with "Add from the Library… / Reset the view" read as
  *  the app not knowing a wall had been pressed. */
 function wallEntries(index: number, t: number): MenuEntry[] {
-  const s = useStudio.getState();
   const sc = useScene.getState();
   const fp = sc.room.footprint;
   const n = fp.length;
@@ -545,9 +544,10 @@ function wallEntries(index: number, t: number): MenuEntry[] {
       icon: 'palette',
       run: () => {
         // The wall is already selected (the menu did that on opening); what this
-        // adds is making sure the panel that holds its colour is on screen.
-        s.setSelectedWall(index);
-        if (!s.railRightOpen) s.toggleRail('right');
+        // adds is putting the panel that holds its colour on screen — the rail when
+        // docked, the Details sheet on a phone (`showDetails`).
+        useStudio.getState().setSelectedWall(index);
+        useStudio.getState().showDetails();
       },
     },
   ];
@@ -611,8 +611,8 @@ function roomEntries(): MenuEntry[] {
       // The floor's finish lives in the Inspector once the floor is selected —
       // the same thing a left-click on it does, with the panel made visible.
       run: () => {
-        s.setSelectedFloor(true);
-        if (!s.railRightOpen) s.toggleRail('right');
+        useStudio.getState().setSelectedFloor(true);
+        useStudio.getState().showDetails();
       },
     },
     { kind: 'separator', id: 'sep-view' },
