@@ -355,16 +355,10 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Rides:** `e8b6bd3` (B-ismark/Danmu#314)
 
 ### Best looking on a real GPU
-- **Where:** any room, 3D Model, View → Quality → Best looking, every mood, console open; flip to Smoother and back; Export → This 3D view. Settings → Best looking; open a room twice, on a real phone and a real laptop GPU.
-- **Wrong looks like:** a repeating `reading 'length'` error or frozen canvas; no corner shading; Best looking flatter than Smoother; backdrop a different colour inside the canvas; a windowless room as bright as one with windows; wood grain as stripes; lamp shade clipping white; the PNG missing the shading; the veil lifting onto a dark canvas, or "The 3D view could not draw this room" on a healthy device.
+- **Where:** any room, 3D Model, View → Quality → Best looking, every mood, flip to Smoother and back; Export → This 3D view. Settings → Best looking; open a room twice, on a real phone and a real laptop GPU.
+- **Wrong looks like:** Best looking flatter than Smoother; backdrop a different colour inside the canvas; a windowless room as bright as one with windows; wood grain as stripes; lamp shade clipping white; the PNG missing the shading; the veil lifting onto a dark canvas, or "The 3D view could not draw this room" on a healthy device.
 - **Needs:** real GPU, real phone.
-- **Rides:** `2f31b3d` (B-ismark/Danmu#307), `c2137c4` (B-ismark/Danmu#157), `93e65aa` (B-ismark/Danmu#306)
-
-### Best looking on a real GPU
-- **Where:** any room, 3D Model, View → Quality → Best looking, every mood, console open; flip to Smoother and back; Export → This 3D view. Settings → Best looking; open a room twice, on a real phone and a real laptop GPU.
-- **Wrong looks like:** a repeating `reading 'length'` error or frozen canvas; no corner shading; Best looking flatter than Smoother; backdrop a different colour inside the canvas; a windowless room as bright as one with windows; wood grain as stripes; lamp shade clipping white; the PNG missing the shading; the veil lifting onto a dark canvas, or "The 3D view could not draw this room" on a healthy device.
-- **Needs:** real GPU, real phone.
-- **Rides:** `2f31b3d` (B-ismark/Danmu#307), `c2137c4` (B-ismark/Danmu#157), `93e65aa` (B-ismark/Danmu#306)
+- **Rides:** `c2137c4` (B-ismark/Danmu#157), `93e65aa` (B-ismark/Danmu#306)
 
 ### The day strip
 - **Where:** 3D Model tab, the sun pill: rest, approach, drag 05:00 → 22:00 slow and fast, release off the strip, arrows from 23:30/00:00, Overcast, reduced motion, open the Library, reload at morning/19:30/night; a phone.
