@@ -46,6 +46,11 @@ export type Detection = {
    *  on the review screen (`lib/sighting-links.ts`). A linked row is never kept, so
    *  it is never built; it stays on the list so the link can be undone. */
   sameAs?: string;
+  /** A nearer floor piece in the same photo covers this one's foot — set and cleared by
+   *  `markHiddenFeet` (lib/detect-refine.ts) from the boxes alone, read by `geoMeasure`.
+   *  **Never saved**: it is a relation between boxes, so it is re-derived from them
+   *  wherever a list is measured, and a stored copy would outlive the bed it was about. */
+  footHidden?: true;
 };
 
 

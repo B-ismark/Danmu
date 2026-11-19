@@ -47,6 +47,12 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Needs:** any browser and a real off-centre photo (seen headless on a stock hotel photo only).
 - **Rides:** this branch, before its PR merges
 
+### A nightstand behind the bed reads its real size
+- **Where:** Photos → a wall photo taken from the foot of a bed, with a nightstand beside the headboard whose legs the mattress hides → Furniture → that wall's tab, then the 3D model.
+- **Wrong looks like:** that nightstand's row says it does not fit a nightstand, or it stands out in the middle of the bed in 3D; or a nightstand standing clear of the bed, legs in view, moving back to the wall when it was further out.
+- **Needs:** any browser and a real bedroom photo (checked headless on the seaview suite's ultrawide east wall only).
+- **Rides:** this branch, before its PR merges
+
 ## Surfaces and textures
 
 ### Floor, wall, furniture and ceiling textures on a real GPU

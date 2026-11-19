@@ -18,6 +18,7 @@ import { anchorFor } from './physics';
 import {
   AS_READ,
   cutByFrame,
+  frameCuts,
   locateOnWall,
   placeCeilingObject,
   placeFloorObject,
@@ -158,7 +159,7 @@ export function geoMeasure(
   };
   const g =
     plane === 'floor'
-      ? placeFloorObject(d.box, d.slot, room, cal, foot)
+      ? placeFloorObject(d.box, d.slot, room, cal, foot, d.footHidden === true)
       : placeWallObject(d.box, d.slot, room, cal, foot);
   if (!g) return unmeasured;
   const row: Detection = {
@@ -168,6 +169,79 @@ export function geoMeasure(
     dimMM: [g.widthMM, catalogueDepth, g.heightMM],
   };
   return { row, bounds: g.bounds, distanceDoubt: g.distanceDoubt };
+}
+
+/** How far below another piece's foot a row's must sit before the other is nearer the
+ *  lens, as a share of the photo's height. A floor point's image row is set by its
+ *  distance alone, so lower is nearer; the margin keeps two pieces standing side by side
+ *  on one line from hiding each other on a pixel's difference. */
+const NEARER_BY = 0.02;
+/** How far inside the nearer box the hidden row's foot must be, so a foot resting on
+ *  the very top edge of a low piece in front is not called hidden behind it. */
+const INSIDE_BY = 0.01;
+/** How far a row may reach past either side of the nearer box and still count as behind
+ *  it, as a share of the photo's width — a detector's edge, not a piece's. */
+const SPANNED_BY = 0.01;
+/** The shortest typical piece that can hide another's foot, mm. A rug lies on the floor
+ *  rather than standing in front of anything, and a sofa on one has its foot in plain
+ *  view, inside the rug's box. */
+export const OCCLUDER_MIN_HEIGHT_MM = 300;
+
+/** Mark the floor rows whose foot a nearer floor piece in the same photo hides.
+ *
+ *  From the foot of a bed, the nightstands either side of its head are seen from the
+ *  mattress up: their boxes end where the bed starts, and the floor placer read that
+ *  row as where they stand — nearer and smaller than they are, so the label check
+ *  called two real nightstands the wrong size. The photo did not show their foot, which
+ *  is the case the frame cutting a box already has an answer for (`placeFloorObject`'s
+ *  `cut.bottom`): read it standing as far back as the room lets it, and say which way
+ *  each size can be wrong (`ReadBounds`).
+ *
+ *  The test is the boxes' own: another floor piece, tall enough to hide anything, whose
+ *  foot is lower in the photo (so nearer the lens), with this row's foot inside its box
+ *  and this row's whole width inside its width. **The whole width, not most of it:** a
+ *  piece that reaches past the nearer one's side shows its foot there — the nightstand
+ *  standing clear beside a bed on the tiles, the far one of twin beds seen end-on — and
+ *  a floor box's bottom edge is the front face's, which runs nearly the box's full width,
+ *  so half a width covered still leaves the foot in view.
+ *
+ *  **A row the frame cuts at a side is never marked.** Its outline leaves the picture
+ *  there, so its nearer corner may be out of shot and the box's lower edge is where the
+ *  outline crosses the frame — the frame-cut reading's question, not this one — and
+ *  "inside the nearer box's width" means nothing at an edge both boxes share. With its
+ *  side lost to the frame and its foot lost too, nothing is left to read the piece at a
+ *  place by, and the doubt that honestly follows sweeps it across the photo onto
+ *  whatever else stands on that line of sight: the far one of twin beds, seen past the
+ *  near one's corner, was unticked as a repeat of it (§ 49.16's pair).
+ *
+ *  A row whose mark does not change comes back as the same object. */
+export function markHiddenFeet(dets: Detection[]): Detection[] {
+  const tallness = dets.map((d) => {
+    const cat = (d.category ?? 'other') as Category;
+    const shape = sceneShapeFor(cat, d.label, d.shape);
+    return measuredPlane(cat, shape) === 'floor' ? defaultAxisFor(cat, shape, 2) : null;
+  });
+  return dets.map((d, i) => {
+    let hidden = false;
+    const sides = frameCuts(d.box);
+    if (tallness[i] !== null && !sides.left && !sides.right) {
+      const [x, , w] = d.box;
+      const foot = d.box[1] + d.box[3];
+      hidden = dets.some((o, j) => {
+        if (j === i || o.slot !== d.slot) return false;
+        const tall = tallness[j];
+        if (tall === null || tall < OCCLUDER_MIN_HEIGHT_MM) return false;
+        const [ox, oy, ow, oh] = o.box;
+        if (!(oy + oh > foot + NEARER_BY) || !(oy < foot - INSIDE_BY)) return false;
+        return x >= ox - SPANNED_BY && x + w <= ox + ow + SPANNED_BY;
+      });
+    }
+    if (hidden === (d.footHidden === true)) return d;
+    if (hidden) return { ...d, footHidden: true };
+    const { footHidden: _drop, ...rest } = d;
+    void _drop;
+    return rest;
+  });
 }
 
 /** WHERE a wall row is, when `geoRefine` could not measure it — position and heading,
@@ -472,6 +546,7 @@ function survivorRank(d: Detection, measured: ReadonlySet<Detection> | undefined
  *  wrong here — see the note on `confirmed` in app/onboarding/detect/page.tsx. */
 export function refineDetections(dets: Detection[], cals: CalMap, room: RoomDims | null): Detection[] {
   if (!room) return dedupeDetections(dets);
+  dets = markHiddenFeet(dets);
   // `geoPlace` written out, because the merge needs to know which rows it measured, and
   // how sure each one's place is, and `geoPlace`'s answer cannot say: a located row is a
   // new object too.

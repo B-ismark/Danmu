@@ -22,7 +22,7 @@
 // The caller shows the verdict and the user accepts it.
 
 import { dimRangeFor } from './dimension-ranges';
-import { geoMeasure, measuredPlane, type CalMap, type RoomDims } from './detect-refine';
+import { geoMeasure, markHiddenFeet, measuredPlane, type CalMap, type RoomDims } from './detect-refine';
 import { cutAxes, type ReadBounds } from './photo-geometry';
 import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
@@ -508,7 +508,10 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
  *  it, and a stale one would accuse the wrong row. */
 export function judgeLabels(dets: Detection[], cals: CalMap, room: RoomDims | null): LabelVerdict[] {
   if (!room) return dets.map(() => ({ status: 'unmeasured' }) as LabelVerdict);
-  return dets.map((d) => judgeLabel(d, cals, room));
+  // Whose foot a nearer piece hides is a fact about the whole photo, so it is read off
+  // the list here rather than trusted from the row: a row reopened from storage carries
+  // no mark, and one whose bed was deleted carries a stale one.
+  return markHiddenFeet(dets).map((d) => judgeLabel(d, cals, room));
 }
 
 /** The fewest pieces a photo must have had read before the photo itself can be
