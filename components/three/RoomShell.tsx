@@ -80,6 +80,7 @@ import { useRoomScene } from '@/lib/room-scene';
 import { SCENE } from '@/lib/scene-palette';
 import { wallApertures, skirtingRuns, type Aperture } from '@/lib/apertures';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
+import { WALL_KEY } from '@/lib/pick-through';
 import { cutAwayWithWall } from '@/lib/near-wall';
 import {
   floorFinishKey,
@@ -446,6 +447,9 @@ export function RoomShell() {
             <mesh
               position={wallOrigin(wl)}
               rotation={[0, wl.yaw, 0]}
+              // How the room's right-click knows a press landed on plaster rather
+              // than floor or air — see `firstSurface` in lib/pick-through.ts.
+              userData={{ [WALL_KEY]: i }}
               receiveShadow
               castShadow
               onClick={(e: ThreeEvent<MouseEvent>) => {

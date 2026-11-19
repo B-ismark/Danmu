@@ -30,6 +30,7 @@ import { isPickingColor, setPickHover, usePickHover } from '@/lib/eyedropper';
 import { pickColor } from './Eyedropper';
 import { footOutlineLocal } from '@/lib/foot-cells';
 import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
+import { wallUnderPress } from '@/lib/menu-target';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { wallLabelFor } from '@/lib/wall-label';
 import { endWallGesture, moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
@@ -1080,6 +1081,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
   }
 
   function onPointerDown(e: React.PointerEvent, id: string, mode: 'translate' | 'rotate') {
+    // The right button opens the menu (which selects the piece itself) and never
+    // starts a drag — see `onWallPointerDown`.
+    if (e.button === 2) return;
     // Space held = the press belongs to the pan. Left unstopped so it reaches the
     // svg's own handler, which is where panning starts.
     if (useStudio.getState().panKeyHeld) return;
@@ -1278,6 +1282,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
   }
 
   function onWallPointerDown(e: React.PointerEvent, index: number) {
+    // The right button is the menu's, never a drag. It used to start one: the
+    // press captured the pointer and set `wallDragRef`, and on a platform that
+    // raises `contextmenu` on the press the release went to the menu instead, so
+    // the drag was never ended and hover froze — the next right-click on a TV
+    // opened the WALL's menu, because the plan no longer knew the TV was there.
+    if (e.button === 2) return;
     e.stopPropagation();
     // A press on a wall while picking takes its paint and moves nothing.
     if (isPickingColor()) {
@@ -1662,7 +1672,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
           // stack goes with it, for the "Select what's here" row — the picker's
           // no-modifier route, and the only one a touch screen has.
           const w = svgToWorldAt(e.clientX, e.clientY);
-          openSceneMenu(e.clientX, e.clientY, useStudio.getState().hoveredPartId, hitsAt(w.x, w.z, visible));
+          const hovered = useStudio.getState().hoveredPartId;
+          // A TV, window or door is drawn ON its wall's line, above the wall's own
+          // hit target, so a right-click on the plaster behind it opened the TV —
+          // or, with no hover yet, the room. `wallUnderPress` splits the stretch at
+          // the room's outline: the far side is the wall's, the room side the
+          // piece's. `band` is the hit line's half-width (16 px wide) in metres.
+          const piece = hovered ? (visible.find((p) => p.id === hovered) ?? null) : null;
+          const wall = wallUnderPress(ROOM_DYN.footprint, w.x, w.z, (8 * k) / SCALE, piece);
+          if (wall) {
+            openWallMenu(e.clientX, e.clientY, wall.index, wall.t);
+            return;
+          }
+          openSceneMenu(e.clientX, e.clientY, hovered, hitsAt(w.x, w.z, visible));
         }}
         onWheel={onWheel}
         style={{ width: '100%', height: '100%', maxWidth: 1100, touchAction: 'none', cursor: panRef.current ? 'grabbing' : panKey ? 'grab' : 'default' }}
@@ -1756,7 +1778,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
                 key={`wall-${i}`}
                 tabIndex={0}
                 role="button"
-                aria-label={`${label}. Arrow keys move it; right-click to split it.`}
+                aria-label={`${label}. Arrow keys move it; right-click for its menu.`}
                 style={{ cursor: 'grab', outline: 'none' }}
                 onPointerDown={(e) => onWallPointerDown(e, i)}
                 onPointerEnter={() => {
@@ -1768,15 +1790,14 @@ export const PlanView = forwardRef<PlanViewHandle, {
                 }}
                 onKeyDown={(e) => onWallKeyDown(e, i, label)}
                 onContextMenu={(e) => {
-                  // The wall's own menu — split it where it was pressed, or join
-                  // it to a neighbour in line — instead of the room's.
+                  // The wall's own menu — paint it, put an opening in it, move it,
+                  // split or join it — instead of the room's.
                   e.preventDefault();
                   e.stopPropagation();
                   const w = svgToWorldAt(e.clientX, e.clientY);
                   const dx = b[0] - a[0];
                   const dz = b[1] - a[1];
                   const t = ((w.x - a[0]) * dx + (w.z - a[1]) * dz) / (dx * dx + dz * dz || 1);
-                  setSelectedWall(i);
                   openWallMenu(e.clientX, e.clientY, i, t);
                 }}
                 data-wall={i}

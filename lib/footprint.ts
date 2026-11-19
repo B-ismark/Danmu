@@ -935,3 +935,35 @@ export function partInsideRoom(
   const c = roomContainment(pos, rot, dimMM, poly, circle, shape);
   return c.box && c.centre;
 }
+
+/** The wall a point is nearest to: its index in the outline, how far along it the
+ *  point's foot lands (0 at `poly[index]`, 1 at the next corner), and the distance
+ *  to it in metres. Null for an outline with no walls.
+ *
+ *  It answers "which wall did this right-click mean" for both studio tabs, which
+ *  is why it takes the FOOTPRINT and returns its index: `RoomShell`'s meshes are
+ *  numbered by `wallSegments`, which skips a degenerate edge, so a mesh's own
+ *  index is not always the wall's — and every wall action is keyed on the
+ *  outline. A tie goes to the lower index, so a press exactly on a corner names
+ *  one wall rather than flickering between two. */
+export function nearestWall(
+  poly: Footprint,
+  x: number,
+  z: number,
+): { index: number; t: number; dist: number } | null {
+  const n = poly.length;
+  if (n < 3) return null;
+  let best: { index: number; t: number; dist: number } | null = null;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % n];
+    const dx = b[0] - a[0];
+    const dz = b[1] - a[1];
+    const l2 = dx * dx + dz * dz;
+    if (l2 < WALL_EDGE_MIN_M * WALL_EDGE_MIN_M) continue;
+    const t = Math.min(1, Math.max(0, ((x - a[0]) * dx + (z - a[1]) * dz) / l2));
+    const dist = Math.hypot(x - (a[0] + t * dx), z - (a[1] + t * dz));
+    if (!best || dist < best.dist) best = { index: i, t, dist };
+  }
+  return best;
+}
