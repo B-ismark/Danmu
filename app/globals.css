@@ -2738,6 +2738,16 @@ textarea.field { border-radius: var(--r-2); }
 }
 .scan-privacy svg { flex: none; margin-block-start: 3px; }
 .scan-privacy[data-sends] { background: var(--paper-2); color: var(--ink-2); border-radius: var(--r-2); }
+/* One note for the photo when most of its pieces read the wrong size: the camera is
+   what is off, so the photo is what gets blamed (`photosInDoubt`). Icon beside the
+   words, the retake button under them, so nothing is squeezed at any pane width. */
+.scan-photo-doubt {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px 10px;
+  margin: 0 0 12px; max-inline-size: 72ch; padding: 9px 12px; border-radius: var(--r-2);
+  background: var(--warn-tint); color: var(--warn-text); font-size: var(--fs-small); line-height: 1.5;
+}
+.scan-photo-doubt > svg { margin-block-start: 3px; }
+.scan-photo-doubt > .ds-btn { grid-column: 2; justify-self: start; }
 .scan-walls { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px 0; flex-shrink: 0; }
 .scan-walls__tab {
   /* Share the row, up to a button's width: two walls at 1920 were 751px each for

@@ -41,6 +41,12 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Needs:** a browser with a room saved by an older build.
 - **Rides:** `1d16087` (B-ismark/Danmu#88)
 
+### A badly framed scan photo blames the photo, not its pieces
+- **Where:** Photos → add four wall photos where one is shot close up from the foot of the bed, tilted down → Furniture → that wall's tab. Then narrow the window to phone width.
+- **Wrong looks like:** no amber note above that photo; rows there still say "does not fit a bed"; the note or its Retake button squeezed or clipped at phone width; the note on a photo where most pieces did fit.
+- **Needs:** any browser and a real off-centre photo (seen headless on a stock hotel photo only).
+- **Rides:** this branch, before its PR merges
+
 ## Surfaces and textures
 
 ### Floor, wall, furniture and ceiling textures on a real GPU
