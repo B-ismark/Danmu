@@ -20,13 +20,17 @@ afterEach(() => {
 });
 
 describe('the scan waiting card', () => {
-  it('keeps its title as the dialog name only, and never adds a slow line', () => {
+  // The title used to be screen-reader only, with a "Working…" chip on screen. The
+  // person asked to always see which step they are in, so it is visible now: the
+  // step's name, in the dialog's heading. Still no slow line.
+  it('names its step visibly, as the dialog name, and never adds a slow line', () => {
     vi.useFakeTimers();
-    const { getByRole, container } = render(
-      <LoadingOverlay title="Finding your furniture" onCancel={() => {}} cancelLabel="Stop and add by hand" />,
-    );
+    const { getByRole, container } = render(<LoadingOverlay title="Finding your furniture" onCancel={() => {}} />);
     expect(getByRole('dialog', { name: 'Finding your furniture' })).toBeTruthy();
-    expect(container.ownerDocument.getElementById('loading-overlay-title')!.className).toMatch(/\bsr-only\b/);
+    const title = container.ownerDocument.getElementById('loading-overlay-title')!;
+    expect(title.className).not.toMatch(/\bsr-only\b/);
+    expect(title.textContent).toBe('Finding your furniture');
+    expect(getByRole('button', { name: 'Stop' })).toBeTruthy();
     act(() => void vi.advanceTimersByTime(60_000));
     expect(container.ownerDocument.body.textContent).not.toMatch(/still working/i);
   });

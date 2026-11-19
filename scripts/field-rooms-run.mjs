@@ -83,7 +83,7 @@ try {
   }
   await page.waitForTimeout(300);
   await shot('1-layout');
-  await page.getByRole('button', { name: /Photograph my real room first/ }).click();
+  await page.getByRole('button', { name: /^Start with photos$/ }).click();
   await page.waitForURL('**/onboarding/capture', { timeout: 30000 });
 
   const files = order.split('').map((n) => join(KIT, 'photos', `${slug}-wall${n}-${lens}.jpg`));
@@ -145,20 +145,21 @@ try {
   writeFileSync(join(OUT, 'capture-text.txt'), await text());
 
   if (detect) {
-    await page.getByRole('button', { name: /Continue (with|·)/ }).click();
+    await page.getByRole('button', { name: /^Continue$/ }).first().click();
     await page.waitForURL('**/onboarding/detect', { timeout: 30000 });
     const t0 = Date.now();
     let accepted = false;
     const cont = () => page.getByRole('button', { name: /^Continue (with \d+ piece|to the studio|with an empty room)/ });
     for (;;) {
-      const dl = page.getByRole('button', { name: /(Download|Update) the furniture finder/ });
+      // The scan screen asks in its card; the photos screen may already have started it.
+      const dl = page.getByRole('dialog').getByRole('button', { name: /^(Download|Update)$/ });
       if (!accepted && (await dl.count())) {
         log('accepting finder download');
-        await dl.first().evaluate((b) => b.click());
+        await dl.first().click();
         accepted = true;
       }
       const done = await cont().count();
-      const running = await page.getByText(/Looking through your/).count();
+      const running = await page.getByRole('dialog').count();
       if (done && !running && Date.now() - t0 > 5000) break;
       if (Date.now() - t0 > 15 * 60 * 1000) {
         log('TIMEOUT waiting for detection');

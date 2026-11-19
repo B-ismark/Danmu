@@ -193,7 +193,7 @@ export default function LayoutPickPage() {
     >
       {/* Named for the detour it skips when the page arrived for photos, so the
           second button does not read as a second way to do the same thing. */}
-      {saving === 'model' ? 'Creating your room…' : photoFirst ? 'Skip photos and start decorating' : (<>Start decorating<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
+      {saving === 'model' ? 'Creating your room…' : photoFirst ? 'Skip photos' : (<>Start decorating<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
     </button>
   );
   const photoButton = (
@@ -203,7 +203,7 @@ export default function LayoutPickPage() {
       className={`ds-btn ds-btn--lg ds-btn--block-compact${photoFirst ? ' ds-btn--accent' : ''}`}
     >
       <Icon name="camera" size={14} color={photoFirst ? 'var(--on-accent)' : undefined} />
-      {saving === 'capture' ? 'Creating your room…' : photoFirst ? 'Continue to photos' : 'Photograph my real room first'}
+      {saving === 'capture' ? 'Creating your room…' : photoFirst ? 'Continue' : 'Start with photos'}
     </button>
   );
 

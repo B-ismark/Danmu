@@ -231,8 +231,9 @@ describe('a row the outline doubts', () => {
 
   it('says why it was left out, without a size', () => {
     row({ doubted: true });
-    const note = screen.getByText(/^Left out: its size in this photo does not fit a /);
-    expect(note.textContent).toMatch(/Tick it if it is one$/);
+    // Shortened on request ("not too wordy"); still names the size, not the look.
+    const note = screen.getByText(/^Size doesn’t fit a /);
+    expect(note.textContent).toMatch(/Tick to keep\.$/);
     // It names the measurement, not the piece's look: two thirds of doubted rows in
     // the field were correctly named pieces read at the wrong size.
     expect(note.textContent).not.toMatch(/look like/);
@@ -241,9 +242,9 @@ describe('a row the outline doubts', () => {
 
   it('goes quiet once the piece is kept, and is not said for a trusted row', () => {
     row({ doubted: true, confirmed: true });
-    expect(screen.queryByText(/^Left out/)).toBeNull();
+    expect(screen.queryByText(/^Size doesn’t fit/)).toBeNull();
     cleanup();
     row({ doubted: false });
-    expect(screen.queryByText(/^Left out/)).toBeNull();
+    expect(screen.queryByText(/^Size doesn’t fit/)).toBeNull();
   });
 });
