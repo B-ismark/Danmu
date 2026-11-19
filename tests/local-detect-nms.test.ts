@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectionBox, nms, type RawBox } from '../lib/local-detect';
+import { cutByTile, detectionBox, nms, tilesFor, type RawBox } from '../lib/local-detect';
 
 function box(p: Partial<RawBox> = {}): RawBox {
   return {
@@ -60,6 +60,48 @@ describe('nms', () => {
     const a = nms(set).map((b) => b.conf).sort();
     const b = nms([...set].reverse()).map((b) => b.conf).sort();
     expect(a).toEqual(b);
+  });
+});
+
+// Field test, four real rooms: both hotel doors and two curtains came out with
+// their boxes ending at 0.64–0.65 of the photo height, which is the bottom edge of
+// the upper tiles (0.5 + 15% overlap). The zoomed tile scored the door's top half
+// above the whole frame's whole door, so the half won: the review photo outlined half
+// a door and the geometry read it ~1.2 m tall (the built piece takes its height from
+// the catalogue, so the damage was to the outline, the verdict and the confidence).
+describe('a box cut by its tile', () => {
+  const [whole, topLeft, topRight, bottomLeft] = tilesFor(4000, 3000);
+
+  it('knows the inner edges of each tile, and that the whole frame has none', () => {
+    expect(topLeft).toEqual({ ox: 0, oy: 0, cw: 2600, ch: 1950 });
+    // Top of a door in the upper-left tile: runs to the tile's bottom edge, 0.65.
+    expect(cutByTile({ x: 0.3, y: 0.4, w: 0.1, h: 0.5 }, topLeft, 4000, 3000)).toBe(true);
+    // Same box, judged against the whole frame: nothing cut it.
+    expect(cutByTile({ x: 0.3, y: 0.4, w: 0.1, h: 0.5 }, whole, 4000, 3000)).toBe(false);
+    // A box that ends at the PHOTO's own edge is not cut by the tile.
+    expect(cutByTile({ x: 0.3, y: 0.75, w: 0.1, h: 0.5 }, bottomLeft, 4000, 3000)).toBe(false);
+    // …but one reaching the bottom-left tile's TOP inner edge (0.35) is.
+    expect(cutByTile({ x: 0.3, y: 0.6, w: 0.1, h: 0.5 }, bottomLeft, 4000, 3000)).toBe(true);
+    // A small box well inside the tile is whole.
+    expect(cutByTile({ x: 0.3, y: 0.3, w: 0.1, h: 0.1 }, topLeft, 4000, 3000)).toBe(false);
+    // Right inner edge of the upper-left tile, at 0.65 of the width.
+    expect(cutByTile({ x: 0.6, y: 0.3, w: 0.1, h: 0.1 }, topLeft, 4000, 3000)).toBe(true);
+    // Left inner edge of the upper-right tile, at 0.35.
+    expect(cutByTile({ x: 0.4, y: 0.3, w: 0.1, h: 0.1 }, topRight, 4000, 3000)).toBe(true);
+  });
+
+  it('loses to the whole-frame box of the same door, even when more confident', () => {
+    const wholeDoor = box({ x: 0.3, y: 0.55, w: 0.12, h: 0.7, conf: 0.6, category: 'door', label: 'Door' });
+    const topHalf = box({ x: 0.3, y: 0.42, w: 0.12, h: 0.45, conf: 0.9, category: 'door', label: 'Door', cut: true });
+    const kept = nms([topHalf, wholeDoor]);
+    expect(kept).toHaveLength(1);
+    expect(kept[0].h).toBeCloseTo(0.7, 12);
+  });
+
+  it('still survives where nothing whole overlaps it', () => {
+    const onlyHalf = box({ x: 0.3, y: 0.42, w: 0.12, h: 0.45, conf: 0.9, category: 'door', label: 'Door', cut: true });
+    const elsewhere = box({ x: 0.8, conf: 0.7 });
+    expect(nms([onlyHalf, elsewhere])).toHaveLength(2);
   });
 });
 

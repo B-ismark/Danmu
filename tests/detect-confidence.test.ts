@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { shouldAutoConfirm, sourceLabel, sourceOf, type DetectSource } from '@/lib/detect-confidence';
 import type { LabelVerdict } from '@/lib/label-repair';
 
-const SOURCES: DetectSource[] = ['local', 'cloud', 'manual'];
 const STATUSES: LabelVerdict['status'][] = ['ok', 'unmeasured', 'suspect'];
 
 const det = (conf: number, source?: DetectSource) => ({ conf, source });
@@ -39,11 +38,22 @@ describe('shouldAutoConfirm', () => {
   });
 
   it('holds a low-confidence row back on every model-driven source', () => {
-    for (const source of SOURCES.filter((s) => s !== 'manual')) {
-      expect(shouldAutoConfirm(det(0.5, source), 'ok'), source).toBe(false);
-      expect(shouldAutoConfirm(det(0.84, source), 'ok'), source).toBe(false);
-      expect(shouldAutoConfirm(det(0.85, source), 'ok'), source).toBe(true);
-    }
+    // Cloud: a self-report, so the bar stays high.
+    expect(shouldAutoConfirm(det(0.5, 'cloud'), 'ok')).toBe(false);
+    expect(shouldAutoConfirm(det(0.84, 'cloud'), 'ok')).toBe(false);
+    expect(shouldAutoConfirm(det(0.85, 'cloud'), 'ok')).toBe(true);
+    // Local: a real class score, measured against four photographed rooms. At 0.85
+    // it ticked nothing; measured-and-agreeing rows between 0.5 and 0.85 were right.
+    expect(shouldAutoConfirm(det(0.49, 'local'), 'ok')).toBe(false);
+    expect(shouldAutoConfirm(det(0.5, 'local'), 'ok')).toBe(true);
+    expect(shouldAutoConfirm(det(0.7, 'local'), 'ok')).toBe(true);
+  });
+
+  it('still needs the geometry to agree before a mid-confidence local row is ticked', () => {
+    // The lowered bar is only safe because of the corroboration rule: the
+    // unmeasured rows that scored well in the field test were pendant lamps.
+    expect(shouldAutoConfirm(det(0.7, 'local'), 'unmeasured')).toBe(false);
+    expect(shouldAutoConfirm(det(0.7, 'local'), 'suspect')).toBe(false);
   });
 
   it('reads a source-less detection as the cloud, which is what produced them', () => {

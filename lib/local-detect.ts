@@ -73,6 +73,10 @@ const MAX_PER_IMAGE = 12;
 // Fraction of the image each 2×2 tile extends past its quadrant, so an object
 // sitting on a seam is still whole inside at least one tile.
 const TILE_OVERLAP = 0.15;
+// How close (as a share of the whole photo) a tile's box may come to one of that
+// tile's INNER edges before it counts as cut there. Measured on real wall photos:
+// a door or curtain cut by the bottom of an upper tile ends within ~0.005 of it.
+const TILE_EDGE_SLACK = 0.01;
 
 // Open Images class name (lowercase) → our category. Classes not listed are
 // ignored — a 600-class detector sees a lot of irrelevant things.
@@ -580,8 +584,8 @@ async function decode(blob: Blob): Promise<HTMLImageElement | null> {
   }
 }
 
-/** A crop of the source image, in source pixels. */
-type Crop = { ox: number; oy: number; cw: number; ch: number };
+/** A crop of the source image, in source pixels. Exported for tests. */
+export type Crop = { ox: number; oy: number; cw: number; ch: number };
 
 /** Whole frame plus 2×2 tiles with 15% overlap.
  *
@@ -594,7 +598,7 @@ type Crop = { ox: number; oy: number; cw: number; ch: number };
  *  Measured alternative: bigger OIV7 variants do NOT help. s (46 MB), m
  *  (105 MB) and x (275 MB) all land on the same 7/19 as tiled nano, so the
  *  input resolution is the binding constraint, not model capacity. */
-function tilesFor(iw: number, ih: number): Crop[] {
+export function tilesFor(iw: number, ih: number): Crop[] {
   const ox = iw * TILE_OVERLAP;
   const oy = ih * TILE_OVERLAP;
   const crops: Crop[] = [{ ox: 0, oy: 0, cw: iw, ch: ih }];
@@ -652,7 +656,32 @@ export type RawBox = {
   label: string;
   category: Category;
   shape?: Shape;
+  /** The tile it came from cut it: the box runs up to an edge of that tile that is
+   *  not an edge of the photo, so the piece carries on past what this box shows. */
+  cut?: boolean;
 };
+
+/** Does `b` (normalized whole-photo space) run up to an INNER edge of `crop`?
+ *  Only a tile has inner edges; the whole frame never cuts. A box cut this way is
+ *  the top of a door or curtain, and it was beating the whole-frame box of the
+ *  same door in `nms` on confidence: both hotel doors in the field test were
+ *  outlined as half a door and measured ~1.2 m tall (1172 mm; 1932 mm with the
+ *  whole-frame box winning). The built piece takes its height from the catalogue
+ *  either way, so what this repairs is the outline, the reading and its verdict.
+ *  Exported for tests. */
+export function cutByTile(b: Pick<RawBox, 'x' | 'y' | 'w' | 'h'>, crop: Crop, iw: number, ih: number): boolean {
+  const x0 = crop.ox / iw;
+  const y0 = crop.oy / ih;
+  const x1 = (crop.ox + crop.cw) / iw;
+  const y1 = (crop.oy + crop.ch) / ih;
+  const e = 1e-9;
+  return (
+    (x0 > e && b.x - b.w / 2 <= x0 + TILE_EDGE_SLACK) ||
+    (y0 > e && b.y - b.h / 2 <= y0 + TILE_EDGE_SLACK) ||
+    (x1 < 1 - e && b.x + b.w / 2 >= x1 - TILE_EDGE_SLACK) ||
+    (y1 < 1 - e && b.y + b.h / 2 >= y1 - TILE_EDGE_SLACK)
+  );
+}
 
 function overlap(a: RawBox, b: RawBox): number {
   const x1 = Math.max(a.x - a.w / 2, b.x - b.w / 2);
@@ -691,7 +720,11 @@ export function detectionBox(b: RawBox): [number, number, number, number] | null
  *  and it has to collapse three different kinds of duplicate: two tiles finding
  *  the same object, both models finding it, and one model stacking boxes on it. */
 export function nms(boxes: RawBox[]): RawBox[] {
-  const sorted = [...boxes].sort((a, b) => b.conf - a.conf);
+  // A box its tile cut goes after every whole one, whatever its confidence. A zoomed
+  // tile sees a door's top half clearly and scores it higher than the whole frame
+  // scores the whole door, so ranking on confidence alone kept the half. A cut box
+  // still survives where nothing whole overlaps it, so recall is unchanged.
+  const sorted = [...boxes].sort((a, b) => Number(!!a.cut) - Number(!!b.cut) || b.conf - a.conf);
   const keep: RawBox[] = [];
   for (const b of sorted) {
     const dup = keep.some(
@@ -809,14 +842,13 @@ async function runDetection(
           if (best < CONF_THRESHOLD || bestC < 0) continue;
           const cls = classOf(bestC);
           if (!cls) continue;
-          merged.push({
+          const raw = {
             x: toX(at(0, a)),
             y: toY(at(1, a)),
             w: at(2, a) / pre.scale / iw,
             h: at(3, a) / pre.scale / ih,
-            conf: best,
-            ...cls,
-          });
+          };
+          merged.push({ ...raw, conf: best, ...cls, cut: cutByTile(raw, crop, iw, ih) });
         }
       }
     }
