@@ -220,6 +220,12 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Needs:** any browser (a judgement call).
 - **Rides:** `270455f` (B-ismark/Danmu#72)
 
+### Split a wall, drag half into a step, drag a wall past its corner
+- **Where:** 2D plan: right-click a wall → *Split wall here*, then drag either half in and out; Inspector → **Split in half**, then a join button; push an L's inner wall through its corner. Then 3D: drag a split half by its handle and watch the shell, paint and windows on it. Keyboard: Tab to a split half and press arrows past zero and back.
+- **Wrong looks like:** a slanted wall anywhere; a 3D wall rebuilding with a seam, a gap, a flicker or paint jumping walls mid-drag; a window or picture riding the wrong half; the focus ring left on a different wall after a drag or an arrow press; a step dragged back to nothing leaving a dot or a stray label; the right-click landing on the room's menu because a piece covers the wall (the TV does in the default room).
+- **Needs:** any browser for the plan (checked headlessly: split, step and focus follow, no slant); a real GPU for the 3D shell.
+- **Rides:** this branch (`claude/admiring-maxwell-tpa1rj`)
+
 ## Shell and flow
 
 *The app's shell, the capture and scan screens, and the phone layout: the things a test can measure but only a person can judge.*

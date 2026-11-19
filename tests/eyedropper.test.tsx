@@ -94,8 +94,7 @@ function pressI(target: Element = surface()) {
 }
 const piece = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}\\. Arrow keys`) });
 /** A wall's handle on the plan, by its index in the footprint. */
-const wall = (i: number) =>
-  screen.getAllByRole('button').filter((b) => /Arrow keys move it\.$/.test(b.getAttribute('aria-label') ?? '') && !/Shift/.test(b.getAttribute('aria-label') ?? ''))[i];
+const wall = (i: number) => document.querySelector<SVGGElement>(`[data-wall="${i}"]`)!;
 const press = (el: Element) => fireEvent.pointerDown(el, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
 const hint = () => document.querySelector<HTMLElement>('.sampler');
 const part = (id: string) => useScene.getState().parts.find((p) => p.id === id)!;

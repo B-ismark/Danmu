@@ -32,7 +32,7 @@ import { footOutlineLocal } from '@/lib/foot-cells';
 import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { wallLabelFor } from '@/lib/wall-label';
-import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
+import { endWallGesture, moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 import {
   resolvePlacement,
   snapSteps,
@@ -54,7 +54,7 @@ import { addPieceToRoom } from '@/lib/add-piece';
 import { sayAdded } from '@/components/studio/say-added';
 import { removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
 import { announce } from '@/lib/announce';
-import { openPickMenu, openSceneMenu } from './SceneContextMenu';
+import { openPickMenu, openSceneMenu, openWallMenu } from './SceneContextMenu';
 import {
   DIM_BACKDROP_ABOVE,
   DIM_RULER_OFFSET,
@@ -1338,7 +1338,17 @@ export const PlanView = forwardRef<PlanViewHandle, {
     }
     if (wallDragRef.current) {
       wallDragRef.current = null;
+      endWallGesture();
       setDragging(null);
+      // The press focused the wall's `<g>`, and a drag that grew or removed a step
+      // renumbered the walls under it — so the focus ring would be left on whichever
+      // wall now holds the old number. Hand it to the wall the selection followed.
+      const now = useStudio.getState().selectedWall;
+      const svg = svgRef.current;
+      const held = document.activeElement?.getAttribute('data-wall');
+      if (now !== null && svg && held != null && Number(held) !== now) {
+        requestAnimationFrame(() => svg.querySelector<SVGGElement>(`[data-wall="${now}"]`)?.focus());
+      }
       (e.target as Element).releasePointerCapture?.(e.pointerId);
     }
     if (panRef.current) {
@@ -1516,6 +1526,14 @@ export const PlanView = forwardRef<PlanViewHandle, {
     setSelectedWall(index);
     const applied = moveWallCarrying(index, out);
     force((v) => v + 1);
+    // A nudge that grew a step, or took one away, renumbers the walls, and the
+    // selection follows the wall — so focus has to follow it too, or the next
+    // arrow press moves whichever wall now holds the old number.
+    const now = useStudio.getState().selectedWall;
+    if (now !== null && now !== index) {
+      const svg = (e.currentTarget as SVGGElement).ownerSVGElement;
+      requestAnimationFrame(() => svg?.querySelector<SVGGElement>(`[data-wall="${now}"]`)?.focus());
+    }
     // Only when it MOVED. This announced the move and the room's new size on every
     // press, including the ones the room clamp refused — so a wall held at its
     // limit reported a move it had not made, and repeated the same unchanged size
@@ -1738,7 +1756,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
                 key={`wall-${i}`}
                 tabIndex={0}
                 role="button"
-                aria-label={`${label}. Arrow keys move it.`}
+                aria-label={`${label}. Arrow keys move it; right-click to split it.`}
                 style={{ cursor: 'grab', outline: 'none' }}
                 onPointerDown={(e) => onWallPointerDown(e, i)}
                 onPointerEnter={() => {
@@ -1749,6 +1767,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
                   if (was?.kind === 'wall' && was.index === i) setPickHover(null);
                 }}
                 onKeyDown={(e) => onWallKeyDown(e, i, label)}
+                onContextMenu={(e) => {
+                  // The wall's own menu — split it where it was pressed, or join
+                  // it to a neighbour in line — instead of the room's.
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const w = svgToWorldAt(e.clientX, e.clientY);
+                  const dx = b[0] - a[0];
+                  const dz = b[1] - a[1];
+                  const t = ((w.x - a[0]) * dx + (w.z - a[1]) * dz) / (dx * dx + dz * dz || 1);
+                  setSelectedWall(i);
+                  openWallMenu(e.clientX, e.clientY, i, t);
+                }}
+                data-wall={i}
                 onFocus={() => setFocusKey(`wall:${i}`)}
                 onBlur={() => setFocusKey(null)}
               >

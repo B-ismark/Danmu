@@ -10,7 +10,11 @@ import {
   wallTravel,
   footprintBounds,
   wallSegments,
+  prepareWallMove,
+  tidyFootprint,
+  remapWallRecord,
   type Footprint,
+  type Reshape,
   type LayoutId,
 } from './footprint';
 import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
@@ -116,8 +120,18 @@ type SceneState = {
    *  know that, or they translate furniture on a frame the wall did not move.
    *
    *  Geometry only: call it through `moveWallCarrying` in `lib/wall-actions.ts`
-   *  rather than directly, so what is mounted on the wall comes too. */
+   *  rather than directly, so what is mounted on the wall comes too.
+   *
+   *  A neighbour running in line with the wall (the other half of a split wall)
+   *  is not slanted: the move grows a square step instead (`prepareWallMove`), so
+   *  the wall's INDEX can change — `prepareWallMove(footprint, index).map[index]`
+   *  says where it went, and wall colours are re-keyed in the same write. */
   moveWall: (index: number, delta: number) => number;
+  /** Apply a reshape from `lib/footprint.ts` (split, join, tidy): the outline and
+   *  the wall colours, re-keyed, in one write so undo takes both back together. */
+  reshapeWalls: (r: Reshape) => void;
+  /** Take out walls a drag left with no length. The reshape, or null if none. */
+  tidyWalls: () => Reshape | null;
   /** scene mutations — user can edit, delete, add parts after detection. */
   updatePart: (id: string, patch: Partial<ScenePart>) => void;
   deletePart: (id: string) => void;
@@ -260,7 +274,12 @@ export const useScene = create<SceneState>((set, get) => ({
     // off-centre; width/depth are re-derived from the new bounding box and
     // every downstream consumer reads footprint bounds (not ±width/2).
     const s = get();
-    const poly = offsetWall(s.room.footprint, index, delta);
+    // A neighbour in line with this wall grows a step rather than slanting — see
+    // `prepareWallMove`. Deterministic, so `moveWallCarrying` asks the same
+    // function for the index this wall will have and agrees with this write.
+    const prep = prepareWallMove(s.room.footprint, index);
+    const at = prep.map[index];
+    const poly = offsetWall(prep.footprint, at, delta);
     const b = footprintBounds(poly);
     // All-or-nothing, and it must be reported: the caller carries the furniture
     // that is on this wall by the SAME delta, and a rejected wall move with an
@@ -280,9 +299,31 @@ export const useScene = create<SceneState>((set, get) => ({
     // The box cannot see a room fold over itself, so the SHAPE is asked too — the
     // same `wallTravel` `moveWallCarrying` reads for its sentence, so a wall the
     // action lets through is never one the store then refuses in silence.
-    if (Math.abs(wallTravel(s.room.footprint, index, delta).travel - delta) > ROOM_SIDE_EPS) return 0;
-    set({ room: { ...s.room, footprint: poly, width: b.width, depth: b.depth, layoutId: 'custom' } });
+    if (Math.abs(wallTravel(prep.footprint, at, delta).travel - delta) > ROOM_SIDE_EPS) return 0;
+    const wallColors = prep.footprint === s.room.footprint ? s.room.wallColors : remapWallRecord(s.room.wallColors, prep);
+    set({ room: { ...s.room, footprint: poly, wallColors, width: b.width, depth: b.depth, layoutId: 'custom' } });
     return delta;
+  },
+  reshapeWalls: (r) =>
+    set((s) => {
+      const b = footprintBounds(r.footprint);
+      return {
+        room: {
+          ...s.room,
+          footprint: r.footprint,
+          wallColors: remapWallRecord(s.room.wallColors, r),
+          width: b.width,
+          depth: b.depth,
+          layoutId: 'custom',
+        },
+      };
+    }),
+  tidyWalls: () => {
+    const fp = get().room.footprint;
+    const r = tidyFootprint(fp);
+    if (r.footprint === fp) return null;
+    get().reshapeWalls(r);
+    return r;
   },
   // A patch that changes the piece's KIND — its shape or its category — re-derives what
   // the kind decides, for `addPart`'s reason below: the Inspector's model swap is such a

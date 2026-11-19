@@ -23,7 +23,17 @@
 import { useSettings, useStudio } from './store';
 import { currentRoomScene } from './room-scene';
 import { attachedToWall, carryAttached, pushedByWall, type PushStop } from './wall-move';
-import { footprintBounds, offsetWall, wallOutwardNormal, wallTravel, type WallFault } from './footprint';
+import {
+  footprintBounds,
+  joinWalls,
+  offsetWall,
+  prepareWallMove,
+  splitWall,
+  wallOutwardNormal,
+  wallTravel,
+  type Reshape,
+  type WallFault,
+} from './footprint';
 import { useScene } from './scene-store';
 import { announce } from './announce';
 import { ROOM_SIDE_EPS, ROOM_SIDE_M, WALL_MIN_M } from './dimension-ranges';
@@ -46,9 +56,14 @@ export function wallAttachments(index: number): string[] {
   // and pushes into it a second time is refused in silence.
   said = null;
   const parts = currentRoomScene();
-  const footprint = useScene.getState().room.footprint;
-  const ids = attachedToWall(parts, footprint, index, useStudio.getState().parentIds);
-  gesture = { ids, index, parts, footprint, total: 0, pushed: new Set(), overrides: useStudio.getState().positions };
+  // The outline the drag will actually move: a wall with a neighbour in line grows
+  // a step, and doubles a corner to do it, so its index here can differ from the
+  // one the caller pressed. Nothing is written yet — the first frame that moves
+  // writes it, so a press that never moves leaves the room exactly as it was.
+  const prep = prepareWallMove(useScene.getState().room.footprint, index);
+  const at = prep.map[index];
+  const ids = attachedToWall(parts, prep.footprint, at, useStudio.getState().parentIds);
+  gesture = { ids, index: at, asked: index, parts, footprint: prep.footprint, total: 0, pushed: new Set(), overrides: useStudio.getState().positions };
   return ids;
 }
 
@@ -60,7 +75,11 @@ export function wallAttachments(index: number): string[] {
  *  same one to every frame, and any other caller does not have it. */
 let gesture: {
   ids: string[];
+  /** The wall being moved, in `footprint` — after `prepareWallMove`. */
   index: number;
+  /** The index the caller pressed. A drag keeps handing that one back, and is
+   *  still the same drag. */
+  asked: number;
   parts: ScenePart[];
   footprint: Footprint;
   total: number;
@@ -241,12 +260,10 @@ function wallRefusal(
 
 /** The sentence for a wall stopped by the room's shape rather than its size. The
  *  number is `WALL_MIN_M`, in the user's unit — derived, never typed beside it. */
-function shapeRefusal(fault: WallFault): string {
+function shapeRefusal(_fault: WallFault): string {
   const unit = useSettings.getState().dimUnit;
   const size = `${formatDim(WALL_MIN_M * 1000, unit)} ${unit}`;
-  return fault === 'close'
-    ? `That wall stops ${size} short of another wall.`
-    : `That wall stops here: the wall beside it cannot get shorter than ${size}.`;
+  return `That wall stops ${size} short of another wall.`;
 }
 
 /**
@@ -265,7 +282,14 @@ function shapeRefusal(fault: WallFault): string {
  * correct. A call without that array ends the gesture.
  */
 export function moveWallCarrying(index: number, delta: number, ids?: string[]): number {
-  const before = useScene.getState().room.footprint;
+  const found = ids !== undefined && gesture !== null && gesture.ids === ids && (gesture.index === index || gesture.asked === index) ? gesture : null;
+  const live = useScene.getState().room.footprint;
+  // Which wall that is in the LIVE outline: the gesture's own index once its first
+  // frame has written the prepared outline, the pressed one before that.
+  const liveIndex = found ? (live.length === found.footprint.length ? found.index : found.asked) : index;
+  const prep = prepareWallMove(live, liveIndex);
+  const before = prep.footprint;
+  index = prep.map[liveIndex];
   const resolved = currentRoomScene();
   const parentIds = useStudio.getState().parentIds;
   const attached = ids ?? attachedToWall(resolved, before, index, parentIds);
@@ -301,7 +325,7 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
   // Then what stands in the way. A wall coming in pushes it ahead, and stops where
   // the pushed stack runs out of room. Resolved from the gesture's start when this
   // is a drag, so the answer depends on where the wall IS, not on the path.
-  const g = ids !== undefined && gesture !== null && gesture.ids === ids && gesture.index === index ? gesture : null;
+  const g = found;
   // Any other move ends the gesture: its snapshot no longer describes the room, and
   // a later frame resolved from it would undo this one.
   if (g === null) gesture = null;
@@ -320,7 +344,7 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
   // direction, so one reading holds for the whole gesture — but the polygon object
   // does not, so take it from `before`.
   const outward = wallOutwardNormal(before, index);
-  const applied = useScene.getState().moveWall(index, delta);
+  const applied = useScene.getState().moveWall(liveIndex, delta);
   // Clamped anyway. `wallRefusal` covers every bound `moveWall` enforces, so this
   // is unreachable today and is kept as the honest handling of a store that
   // enforces its own rules: the wall did not move, so nothing on it may move
@@ -330,6 +354,7 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
     say(index, cur, 'That wall will not move any further.');
     return 0;
   }
+  if (prep.footprint !== live) follow(prep);
   const after = useScene.getState().room.footprint;
   const moves = attached.length === 0 ? [] : carryAttached(attached, currentRoomScene(), before, after, outward, applied, parentIds);
   // The push, at the travel the wall actually took. Recomputed only when the store
@@ -359,5 +384,63 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
     }
   }
   if (moves.length > 0) useStudio.getState().setTransformsFor(moves);
+  // A one-shot nudge is its own whole gesture, so it tidies after itself: a step
+  // nudged back to nothing goes rather than staying as a wall of no length.
+  if (g === null) tidyAfter();
   return applied;
+}
+
+/** Keep the selected wall on the same wall after a reshape renumbers them. */
+function follow(r: Pick<Reshape, 'map'>): void {
+  const sel = useStudio.getState().selectedWall;
+  if (sel === null) return;
+  const m = r.map[sel];
+  if (m === sel) return;
+  useStudio.setState({ selectedWall: m === undefined || m < 0 ? null : m });
+}
+
+function tidyAfter(): void {
+  const r = useScene.getState().tidyWalls();
+  if (r) follow(r);
+}
+
+/**
+ * The end of a wall drag. A step dragged back to where it started has no length
+ * left, and a wall of no length is not one — it is taken out here rather than
+ * mid-drag, where renumbering the walls would pull the one under the pointer out
+ * from under it.
+ */
+export function endWallGesture(): void {
+  gesture = null;
+  tidyAfter();
+}
+
+/**
+ * Divide wall `index` in two at fraction `t` along it, so either half can be
+ * dragged on its own — which is how a room gets a shape no preset has. Both halves
+ * keep the wall's colour; the first half stays selected. Returns whether it split.
+ */
+export function splitWallAt(index: number, t = 0.5): boolean {
+  gesture = null;
+  const r = splitWall(useScene.getState().room.footprint, index, t);
+  if (r === null) {
+    announce('That wall is too short to split.');
+    return false;
+  }
+  useScene.getState().reshapeWalls(r);
+  follow(r);
+  announce('Wall split in two. Drag either half to make a step.');
+  return true;
+}
+
+/** Join wall `index` with the wall after it, when the two run in line — the undo
+ *  of a split that a person can reach without undoing everything since. */
+export function joinWallWithNext(index: number): boolean {
+  gesture = null;
+  const r = joinWalls(useScene.getState().room.footprint, index);
+  if (r === null) return false;
+  useScene.getState().reshapeWalls(r);
+  follow(r);
+  announce('Walls joined.');
+  return true;
 }

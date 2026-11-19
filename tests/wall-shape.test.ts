@@ -21,14 +21,17 @@ function crosses(a: P, b: P, c: P, d: P): boolean {
   return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0;
 }
 
-/** Least distance between two walls: 400 points along each, measured to the other
- *  wall by projection. Sampling only ever OVER-estimates a gap, by at most half a
- *  sample spacing, which is what `SAMPLE_SLACK` allows for. */
+/** Least distance between two walls WHERE THEY FACE: 400 points along each,
+ *  measured to the other wall only when the point's foot lands strictly inside it.
+ *  Two walls meeting end to end in a line, or corner past corner, do not face, and
+ *  are not a passage anyone has to fit through. Sampling only ever OVER-estimates a
+ *  gap, by at most half a sample spacing, which is what `SAMPLE_SLACK` allows for. */
 function sampledGap(a: P, b: P, c: P, d: P): number {
   const toWall = (p: P, s: P, e: P) => {
     const ex = e[0] - s[0];
     const ez = e[1] - s[1];
-    const t = Math.max(0, Math.min(1, ((p[0] - s[0]) * ex + (p[1] - s[1]) * ez) / (ex * ex + ez * ez || 1)));
+    const t = ((p[0] - s[0]) * ex + (p[1] - s[1]) * ez) / (ex * ex + ez * ez || 1);
+    if (t <= 1e-6 || t >= 1 - 1e-6) return Infinity;
     return Math.hypot(p[0] - s[0] - t * ex, p[1] - s[1] - t * ez);
   };
   const N = 400;
@@ -42,16 +45,15 @@ function sampledGap(a: P, b: P, c: P, d: P): number {
 }
 
 const SAMPLE_SLACK = 0.02;
+const STOPPED = 43;
 const EPS = 1e-6;
 
 /** What is wrong with this outline as a room, or null. */
 function brokenBy(poly: Footprint): string | null {
   const n = poly.length;
   const edge = (k: number): [P, P] => [poly[k], poly[(k + 1) % n]];
-  for (let k = 0; k < n; k++) {
-    const [a, b] = edge(k);
-    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < WALL_MIN_M - EPS) return `wall ${k} is shorter than the minimum`;
-  }
+  // No rule on a wall's own LENGTH: since 2026-11-19 a neighbour wall may shrink
+  // to nothing and come out the other side — that is how an L becomes a rectangle.
   // Signed area flips when the room is turned inside out without a crossing —
   // a wall pushed clean through the one opposite it.
   for (let e = 0; e < n; e++) {
@@ -109,15 +111,18 @@ describe('a dragged wall keeps the room a room', () => {
     }
     // Literals, not floors: 4 + 6 + 8 + 8 walls × 6 deltas, and how many of them
     // the rule stops. A change that stops more, or fewer, is a decision to look at.
+    // (64 under the old rule, which also stopped a neighbour wall at 60 cm long.)
     expect(cases).toBe(156);
-    expect(stopped).toBe(64);
+    expect(stopped).toBe(STOPPED);
   });
 
-  it("stops a T's bar wall pushed up through the north wall, with the bar's end wall at the minimum", () => {
+  it("stops a T's bar wall pushed up toward the north wall, 60 cm short of it", () => {
     const t = footprintForLayout('t', 6, 5);
-    // Wall 2 runs under the bar's east half; wall 1 is the bar's east end.
+    // Wall 2 runs under the bar's east half; wall 1 is the bar's east end. The bar
+    // is a passage between wall 2 and the north wall, so it is the GAP that binds,
+    // and the end wall between them is that gap.
     const { travel, fault } = wallTravel(t, 2, -5);
-    expect(fault).toBe('short');
+    expect(fault).toBe('close');
     const after = offsetWall(t, 2, travel);
     expect(Math.hypot(after[2][0] - after[1][0], after[2][1] - after[1][1])).toBeCloseTo(WALL_MIN_M, 6);
   });
@@ -157,7 +162,7 @@ describe('a dragged wall keeps the room a room', () => {
       [-3, 2.5],
     ];
     expect(brokenBy(l)).not.toBeNull();
-    expect(wallTravel(l, 2, -0.05)).toEqual({ travel: 0, fault: 'short' });
+    expect(wallTravel(l, 2, -0.05)).toEqual({ travel: 0, fault: 'close' });
     expect(wallTravel(l, 2, 1)).toEqual({ travel: 1, fault: null });
   });
 
