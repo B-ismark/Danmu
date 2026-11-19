@@ -261,12 +261,17 @@ describe('combinedFloorSpot — 150 furnished rooms', () => {
     // length), and there the combined spot is about 40% nearer the truth. On a
     // measured lens the uncut sightings rarely number two, so the kept row stands
     // where it was measured — the mean of EVERY sighting there was 0.382 at 106°,
-    // worse than the 0.318 kept row, which is why the cut ones are dropped.
+    // worse than the then 0.318 kept row, which is why the cut ones are dropped.
+    // Reading a foot another piece hides as hidden (`markHiddenFeet`) moved the measured
+    // rows most: n 106 → 126 and 157 → 212 (more pieces with a placed row in two photos,
+    // not traced further), and the mean off 0.318 → 0.270 and 0.327 → 0.248. On the lens read
+    // at 66° the kept row alone went 1.224 → 1.251 and 1.435 → 1.465, combined 0.760 →
+    // 0.756 and 0.791 → 0.793.
     expect(table).toEqual({
-      '106° read as 66°': { n: 182, alone: 1.224, joined: 0.76, worse: 18 },
-      '120° read as 66°': { n: 330, alone: 1.435, joined: 0.791, worse: 9 },
-      '106° measured': { n: 106, alone: 0.318, joined: 0.318, worse: 0 },
-      '120° measured': { n: 157, alone: 0.327, joined: 0.327, worse: 0 },
+      '106° read as 66°': { n: 182, alone: 1.251, joined: 0.756, worse: 18 },
+      '120° read as 66°': { n: 330, alone: 1.465, joined: 0.793, worse: 9 },
+      '106° measured': { n: 126, alone: 0.27, joined: 0.27, worse: 0 },
+      '120° measured': { n: 212, alone: 0.248, joined: 0.248, worse: 0 },
     });
   }, 120_000);
 });

@@ -30,7 +30,7 @@ import {
   calibrateFromPhoto,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
-import { geoPlace, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
+import { geoPlace, refineDetections, settleHiddenFeet, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { judgeLabels, photosInDoubt, type LabelCandidate } from '@/lib/label-repair';
 import { suggestFromLabel } from '@/lib/label-suggest';
 import {
@@ -614,7 +614,14 @@ export default function DetectPage() {
     });
   }
 
-  const measuredRows = detections;
+  /** The list as measured: each row read with the answer the WHOLE list gives to
+   *  whether a nearer piece hides its foot (`settleHiddenFeet`). A row's place and size
+   *  now depend on the other rows, and the list changes under them — a box drawn by
+   *  hand above a mattress, a bed deleted, a list reopened from storage, which never
+   *  saves the mark — so it is settled here, once, and everything that judges, compares,
+   *  offers, shows or saves a row reads this rather than `detections`. Same length and
+   *  order, so every index into one is an index into the other. */
+  const measuredRows = useMemo(() => settleHiddenFeet(detections, cals, roomDims), [detections, cals, roomDims]);
 
   // Only the geometry may accuse a word, and only the user may change it. The
   // verdicts are recomputed from `detections` rather than stored on them: a
@@ -804,7 +811,7 @@ export default function DetectPage() {
     // Offered, never applied. The rule is two comments down in this same file — "a
     // silent re-label is the same mistake as a silent resize" — and accepting this
     // re-measures the piece, which is a size the user has not asked for yet.
-    const cands = suggestFromLabel(detections[i], label, cals, roomDims);
+    const cands = suggestFromLabel(measuredRows[i], label, cals, roomDims, measuredRows);
     setOffer(cands.length > 0 ? { index: i, candidates: cands } : null);
   }
 
@@ -908,8 +915,8 @@ export default function DetectPage() {
       // sightings put it together — derived here because only this screen has the
       // lenses (`withSeenAt`).
       const flat = withSeenAt(
-        detections.map((d, i) => toRecord(d, i, confirmed.has(i), uuid)),
-        detections,
+        measuredRows.map((d, i) => toRecord(d, i, confirmed.has(i), uuid)),
+        measuredRows,
         cals,
       );
       if (detections.some((d) => d.uid && runUids.current.has(d.uid))) {
@@ -941,13 +948,13 @@ export default function DetectPage() {
   }
 
   const active = slots.find((s) => s.slot === activeSlot);
-  const activeDetections = detections
+  const activeDetections = measuredRows
     .map((d, i) => ({ d, i }))
     .filter((x) => x.d.slot === activeSlot);
   const total = detections.length;
   // The rows the list shows: the wall being looked at, or every wall. With one photo
   // there is nothing to choose between, and the list is all of it.
-  const listed = detections
+  const listed = measuredRows
     .map((d, i) => ({ d, i }))
     .filter((x) => listScope === 'all' || slots.length <= 1 || x.d.slot === activeSlot);
   const keptCount = confirmed.size;
@@ -1422,7 +1429,7 @@ export default function DetectPage() {
                 onThisPhoto={d.slot === activeSlot}
                 onToggle={() => togglePiece(i)}
                 onRename={(label) => renameDetection(i, label)}
-                suggestModels={(draft) => suggestFromLabel(d, draft, cals, roomDims)}
+                suggestModels={(draft) => suggestFromLabel(d, draft, cals, roomDims, measuredRows)}
                 onDelete={() => deleteDetection(i)}
                 onLink={(on) => setHover(on ? { index: i, from: 'row' } : null)}
                 onShow={() => setActiveSlot(d.slot)}

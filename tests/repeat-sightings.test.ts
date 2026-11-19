@@ -806,12 +806,18 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
       ];
     });
     console.log(`findRepeats over ${ROOMS} furnished rooms:\n  ${lines.join('\n  ')}`);
+    // Reading a foot another piece hides as hidden (`markHiddenFeet`) moved three of the
+    // five rows: 106° and 120° read at 66°, and 120° read right. Swept, the
+    // reading the app runs: lost 41 → 37 and 43 → 41, dup 21 → 22 and 26 → 25. Unswept
+    // and measured: lost down 1 and 4, dup up 3, 0 and 1. A piece standing behind another
+    // was read nearer and smaller than it is, on its top edge taken for a foot, and so
+    // read onto a neighbour's floor.
     expect(got).toEqual([
       [575, 0, 0, 0, 2, 0, 10, 0, 2],
-      [993, 252, 1, 247, 37, 5, 41, 216, 37],
+      [993, 252, 1, 250, 36, 5, 37, 219, 36],
       [993, 252, 0, 9, 11, 5, 15, 7, 11],
-      [989, 464, 1, 455, 45, 21, 43, 426, 45],
-      [989, 464, 0, 38, 4, 26, 4, 36, 4],
+      [989, 464, 1, 455, 41, 22, 41, 426, 41],
+      [989, 464, 0, 39, 4, 25, 4, 37, 4],
     ]);
   });
 
@@ -892,9 +898,12 @@ describe('findRepeats — a hundred and fifty furnished rooms', () => {
       return [r.vis, r.footCut, r.was.gone, r.now.gone, r.was.dup, r.now.dup, r.was.lost, r.now.lost];
     });
     console.log(`the hard merge, tipped up, over 150 furnished rooms:\n  ${lines.join('\n  ')}`);
+    // The second row's last number was 37 until a foot another piece hides was read as
+    // hidden (`markHiddenFeet`): four pieces behind another, read nearer than they stand,
+    // had landed on a neighbour and started unticked.
     expect(got).toEqual([
       [970, 448, 13, 0, 7, 9, 22, 21],
-      [970, 448, 28, 1, 10, 10, 37, 37],
+      [970, 448, 28, 1, 10, 10, 37, 33],
       [946, 541, 11, 1, 3, 3, 19, 19],
       [946, 541, 17, 2, 3, 3, 24, 24],
       [898, 609, 5, 0, 3, 6, 10, 11],
@@ -1007,8 +1016,10 @@ describe('findRepeats — a lens a floor line tied to the height', () => {
     // 1.7 m — measured, dup and lost identical row for row. LOST fell by 1, 3, 0 and 1 on
     // both readings when the hard merge stopped joining pieces by a place a bound held
     // (§ 46.3): pieces it had deleted came back as rows, and a few of them ticked.
+    // HELD's 16 is 17 since a foot another piece hides is read as hidden
+    // (`markHiddenFeet`); TIED did not move.
     expect(got).toEqual([
-      [1000, 16, 12, 4, 12],
+      [1000, 17, 12, 4, 12],
       [993, 4, 22, 5, 13],
       [968, 14, 20, 15, 18],
       [979, 25, 16, 25, 16],

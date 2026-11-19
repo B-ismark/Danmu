@@ -1780,6 +1780,11 @@ export function placeFloorObject(
   room: { height: number; footprint: Footprint },
   cal: CameraCal,
   foot: PieceFootprint,
+  /** Something NEARER the lens hides this piece's foot — a nightstand behind the bed
+   *  it stands beside, seen from the mattress up (`markHiddenFeet`). Its box's bottom
+   *  row is then where the hiding starts, not where the piece meets the floor: the
+   *  same case as the frame cutting it there, and read the same way. */
+  footHidden = false,
 ): GeoPlacement | null {
   const [bx, by, bw, bh] = box;
   const height = heightOf(cal);
@@ -1823,7 +1828,10 @@ export function placeFloorObject(
   // footing as a wall piece's are read on the wall — a plane assumed, not a distance
   // seen. Photographed with the lens tipped up to get the ceiling in, which is how
   // people photograph a room, that is most of the floor pieces in the picture.
-  const cut = frameCuts(box);
+  // "Cut at the foot" means the photo does not show the foot, whether the frame's edge
+  // or a nearer piece is what stops it: every line below treats the two as one case.
+  const framed = frameCuts(box);
+  const cut = { ...framed, bottom: framed.bottom || footHidden };
   if (cut.bottom && frame) near = Math.min(near, Math.max(0.3, frame.distance - depthM));
 
   // A round piece cut at one side, its foot seen, is placed by the radius it is about

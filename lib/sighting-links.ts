@@ -25,8 +25,7 @@
 //
 // Pure — no React — so the rules can be tested without a screen.
 
-import { cutByFrame } from './photo-geometry';
-import { measuredPlane, type CalMap } from './detect-refine';
+import { footUnseen, measuredPlane, type CalMap } from './detect-refine';
 import { sceneShapeFor, type Category } from './scene-spec';
 import { cleanLabelOf, type SavedDetection } from './detection-record';
 import type { Detection } from './detection';
@@ -187,7 +186,7 @@ export function combinedFloorSpot(rows: readonly Detection[], cals: CalMap): { x
   const placed = rows.filter((d) => d.position && Number.isFinite(d.position.x) && Number.isFinite(d.position.z));
   if (placed.length < 2) return null;
   const assumed = placed.some((d) => cals[d.slot]?.lens !== 'measured');
-  const use = assumed ? placed : placed.filter((d) => !cutByFrame(d.box));
+  const use = assumed ? placed : placed.filter((d) => !footUnseen(d));
   if (use.length < 2) return null;
   const x = use.reduce((s, d) => s + d.position!.x, 0) / use.length;
   const z = use.reduce((s, d) => s + d.position!.z, 0) / use.length;
