@@ -372,7 +372,7 @@ EXIF parser and deliberately **not** carried into the decision for that reason.
 > piece is built as (the row's subtitle names it, `sceneShapeFor`) and keeps the piece
 > (`keptAfterPick`), and Enter on the typed text alone is a plain rename. Unticking is
 > still the person's. A row that starts unticked says why, in a note under it: a
-> doubted outline reads "Left out: its outline does not look like a …" (and no size),
+> doubted size reads "Left out: its size in this photo does not fit a …" (and no number),
 > a probable repeat asks "Same … as on …?" with *Yes, same one* / *No, it's another*.
 > The photo column is sized by `--scan-photo-w`, published by the page's
 > `ResizeObserver` from the pinned photo's height and aspect, so the rail sits beside
@@ -942,8 +942,11 @@ the judge's own strict repairs never reach it. The scan screen used to say so on
 width is an estimate* and a *Measured about 1.27 × 0.27 m* sentence. Both are gone: a
 scanned piece is built at an approximate catalogue size (`approximateDims`, rule 2's
 decision of 2026-10-03), so the screen says "typical size" and prints no measurement to
-qualify. A row the judge doubts starts unticked with *Left out: its outline does not look
-like a …. Tick it if it is one* and no size in it. The cut and bounded reasoning below still
+qualify. A row the judge doubts starts unticked with *Left out: its size in this photo does not
+fit a …. Tick it if it is one* and no number in it. It says SIZE rather than "does not look
+like" because the field test of four real rooms (88 doubted rows) found about a third were
+wrong words and two thirds correctly named pieces read at the wrong size, the photos having
+been taken from doorways and low down rather than the room's centre at chest height. The cut and bounded reasoning below still
 decides the placement and the verdict. A piece cut only at its FOOT was seen whole across
 and to its top, but its distance is the wall's rather than its own: it is read at the far end
 of where it could stand, its back on the plaster at its kind's typical depth. **It is judged at

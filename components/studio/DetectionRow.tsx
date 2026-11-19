@@ -120,8 +120,12 @@ export function DetectionRow({
   /** The row this one is probably a second sighting of — see
    *  lib/repeat-sightings.ts. Null for a piece in its own right. */
   repeatOf: Detection | null;
-  /** The photo's outline of the piece does not look like what it is called
-   *  (`judgeLabels` said suspect), which is why it started unticked. */
+  /** The size the photo gives this piece is outside its model's range
+   *  (`judgeLabels` said suspect), which is why it started unticked. The note says
+   *  SIZE, not "does not look like": in a field test of 88 such rows about a third
+   *  were wrong words (sockets called picture frames) and two thirds right ones read
+   *  at the wrong size, from photos taken away from the room's centre — so the note
+   *  names what was measured and leaves the person to judge which it is. */
   doubted: boolean;
   /** This row is the screen's one hovered piece (from the row or from its box). */
   highlighted: boolean;
@@ -332,7 +336,7 @@ export function DetectionRow({
         )}
         {doubted && !repeatOf && !sameAs && !confirmed && (
           <RowNote icon="info">
-            Left out: its outline does not look like a {inSentence(modelName)}. Tick it if it is one
+            Left out: its size in this photo does not fit a {inSentence(modelName)}. Tick it if it is one
           </RowNote>
         )}
         {/* A model offered because of the WORD: the user has typed something the

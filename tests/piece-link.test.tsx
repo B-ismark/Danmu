@@ -231,8 +231,11 @@ describe('a row the outline doubts', () => {
 
   it('says why it was left out, without a size', () => {
     row({ doubted: true });
-    const note = screen.getByText(/^Left out: its outline does not look like/);
+    const note = screen.getByText(/^Left out: its size in this photo does not fit a /);
     expect(note.textContent).toMatch(/Tick it if it is one$/);
+    // It names the measurement, not the piece's look: two thirds of doubted rows in
+    // the field were correctly named pieces read at the wrong size.
+    expect(note.textContent).not.toMatch(/look like/);
     expect(note.textContent).not.toMatch(/\d/);
   });
 
