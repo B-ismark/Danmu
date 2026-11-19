@@ -182,6 +182,17 @@ describe('tidying', () => {
     expect(joinWalls(RECT, 0)).toBeNull();
   });
 
+  it('the joined wall keeps its own paint, wherever the seam falls', () => {
+    // Halves painted differently, then "Join with the next wall" from the first:
+    // the result wears the first half's colour, mid-outline and across corner 0.
+    const mid = splitWall(RECT, 1, 0.5)!.footprint;
+    expect(remapWallRecord({ 1: '#first', 2: '#second' }, joinWalls(mid, 1)!)).toEqual({ 1: '#first' });
+    const n = RECT.length;
+    const cut = splitWall(RECT, n - 1, 0.5)!.footprint;
+    const wrap: Footprint = [cut[n], ...cut.slice(0, n)];
+    expect(remapWallRecord({ [n]: '#first', 0: '#second' }, joinWalls(wrap, n)!)).toEqual({ [n - 1]: '#first' });
+  });
+
   it('joins across corner 0', () => {
     // Rotate a split outline so the cut IS corner 0: the two halves are then the
     // last wall and wall 0.

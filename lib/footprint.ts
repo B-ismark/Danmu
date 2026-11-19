@@ -545,8 +545,12 @@ export function joinWalls(poly: Footprint, index: number): Reshape | null {
   if (!wallsInLine(poly, index, next)) return null;
   // Remove the shared corner: wall `index` now runs to where `next` ended.
   const footprint: Footprint = poly.filter((_, i) => i !== next).map((p) => [p[0], p[1]]);
+  // The joined wall is wall `index` made longer, so it keeps `index`'s own record
+  // (its paint): `next` maps to nothing. Mapping both onto one slot let the record's
+  // key order pick the survivor, so a join painted differently depending on whether
+  // the seam fell at corner 0.
   const map = identity(n).map((e) => {
-    if (e === next) return next === 0 ? n - 2 : index;
+    if (e === next) return -1;
     if (next === 0) return e - 1;
     return e < next ? e : e - 1;
   });
