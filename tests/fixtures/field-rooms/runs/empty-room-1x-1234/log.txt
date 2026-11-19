@@ -1,0 +1,6 @@
+SLOTS empty-room 1x order=1234: Wall 1←wall1  Wall 2←wall2  Wall 3←wall3  Wall 4←wall4  (4/4 right)
+detect took 39 s
+initially kept: 0 of 10 pieces kept
+rows offered: 10
+status: 10 of 10 pieces kept
+room 18e91e27-65e0-4e56-9f53-4c25189a238d saved → runs/empty-room-1x-1234

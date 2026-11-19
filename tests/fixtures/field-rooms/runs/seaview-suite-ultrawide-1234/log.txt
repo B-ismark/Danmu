@@ -1,0 +1,6 @@
+SLOTS seaview-suite ultrawide order=1234: Wall 1←wall1  Wall 2←wall2  Wall 3←wall3  Wall 4←wall4  (4/4 right)
+detect took 41 s
+initially kept: 14 of 42 pieces kept
+rows offered: 42
+status: 42 of 42 pieces kept
+room ce673efa-c650-4efb-9424-4503c5c44b00 saved → runs/seaview-suite-ultrawide-1234

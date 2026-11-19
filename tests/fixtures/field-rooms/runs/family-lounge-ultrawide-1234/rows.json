@@ -1,0 +1,194 @@
+[
+ {
+  "label": "Sofa",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Sofa Wall 1 Same couch as on Wall 2? Yes, same one No, it’s another Seen this already? Show"
+ },
+ {
+  "label": "Chest of drawers",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Chest of drawers Wall 1 Same chest of drawers as on Wall 4? Yes, same one No, it’s another Seen this already? Show"
+ },
+ {
+  "label": "Potted plant",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Potted plant Wall 1 Seen this already? Show"
+ },
+ {
+  "label": "Potted plant",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Potted plant Wall 1 Same potted plant as on Wall 2? Yes, same one No, it’s another Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Picture frame Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Potted plant",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Potted plant Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Coffee table",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Coffee table Wall 2 Seen this already? Left out: its size in this photo does not fit a coffee table. Tick it if it is one Show"
+ },
+ {
+  "label": "Couch",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Couch Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Sofa",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Sofa Wall 2 Seen this already? Left out: its size in this photo does not fit a sofa. Tick it if it is one Show"
+ },
+ {
+  "label": "Coffee table",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Coffee table Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Chest of drawers",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Chest of drawers Wall 2 Seen this already? Left out: its size in this photo does not fit a wardrobe. Tick it if it is one Show"
+ },
+ {
+  "label": "Coffee table",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Coffee table Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Potted plant",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Potted plant Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Picture frame Wall 3 Seen this already? Left out: its size in this photo does not fit a painting. Tick it if it is one Show"
+ },
+ {
+  "label": "Couch",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Couch Wall 3 Same couch as on Wall 4? Yes, same one No, it’s another Seen this already? Show"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Lamp Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Picture frame Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Picture frame Wall 3 Seen this already? Left out: its size in this photo does not fit a painting. Tick it if it is one Show"
+ },
+ {
+  "label": "Curtain",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Curtain Wall 3 Seen this already? Left out: its size in this photo does not fit a curtain. Tick it if it is one Show"
+ },
+ {
+  "label": "Couch",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Couch Wall 3 Same sofa as on Wall 2? Yes, same one No, it’s another Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Picture frame Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Sofa",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Sofa Wall 3 Same sofa as on Wall 2? Yes, same one No, it’s another Seen this already? Show"
+ },
+ {
+  "label": "Chair",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Chair Wall 3 Seen this already? Left out: its size in this photo does not fit a dining chair. Tick it if it is one Show"
+ },
+ {
+  "label": "Potted plant",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Potted plant Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Picture frame Wall 3 Seen this already? Left out: its size in this photo does not fit a painting. Tick it if it is one Show"
+ },
+ {
+  "label": "Chest of drawers",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Chest of drawers Wall 4 Seen this already? Left out: its size in this photo does not fit a wardrobe. Tick it if it is one"
+ },
+ {
+  "label": "Couch",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Couch Wall 4 Same couch as on Wall 4? Yes, same one No, it’s another Seen this already?"
+ },
+ {
+  "label": "Potted plant",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Potted plant Wall 4 Same potted plant as on Wall 1? Yes, same one No, it’s another Seen this already?"
+ },
+ {
+  "label": "Couch",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Couch Wall 4 Same couch as on Wall 4? Yes, same one No, it’s another Seen this already?"
+ },
+ {
+  "label": "Couch",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Couch Wall 4 Seen this already?"
+ },
+ {
+  "label": "Coffee table",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Coffee table Wall 4 Seen this already? Left out: its size in this photo does not fit a coffee table. Tick it if it is one"
+ },
+ {
+  "label": "Curtain",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Curtain Wall 4 Seen this already?"
+ }
+]

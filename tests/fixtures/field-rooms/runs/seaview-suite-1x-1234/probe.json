@@ -1,0 +1,2364 @@
+{
+ "v": [
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     440,
+     600
+    ],
+    "height": [
+     250,
+     400
+    ]
+   },
+   "measured": {
+    "height": 911
+   },
+   "candidates": [
+    {
+     "category": "chair",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9680708646774292,
+      "source": "local",
+      "box": [
+       0,
+       0.6885720570882162,
+       0.17218437194824218,
+       0.18564453125
+      ],
+      "category": "chair",
+      "slot": "n",
+      "shape": "chair-dining",
+      "position": {
+       "x": -1.6158158867473402,
+       "y": 0,
+       "z": -2.5
+      },
+      "yaw": 0,
+      "dimMM": [
+       500,
+       500,
+       911
+      ],
+      "uid": "1ba4e804-f320-45c2-8c0d-7246dde5e9e7"
+     },
+     "margin": 0.46
+    },
+    {
+     "category": "sofa",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9680708646774292,
+      "source": "local",
+      "box": [
+       0,
+       0.6885720570882162,
+       0.17218437194824218,
+       0.18564453125
+      ],
+      "category": "sofa",
+      "slot": "n",
+      "shape": "sofa",
+      "position": {
+       "x": -1.9899644278407935,
+       "y": 0,
+       "z": -2.275
+      },
+      "yaw": 0,
+      "dimMM": [
+       870,
+       950,
+       829
+      ],
+      "uid": "1ba4e804-f320-45c2-8c0d-7246dde5e9e7"
+     },
+     "margin": 0.458
+    },
+    {
+     "category": "bed",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9680708646774292,
+      "source": "local",
+      "box": [
+       0,
+       0.6885720570882162,
+       0.17218437194824218,
+       0.18564453125
+      ],
+      "category": "bed",
+      "slot": "n",
+      "shape": "bed-single",
+      "position": {
+       "x": -2.2105962249307485,
+       "y": 0,
+       "z": -1.75
+      },
+      "yaw": 0,
+      "dimMM": [
+       429,
+       2000,
+       639
+      ],
+      "uid": "1ba4e804-f320-45c2-8c0d-7246dde5e9e7"
+     },
+     "margin": 0.339
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9680708646774292,
+      "source": "local",
+      "box": [
+       0,
+       0.6885720570882162,
+       0.17218437194824218,
+       0.18564453125
+      ],
+      "category": "plant",
+      "slot": "n",
+      "shape": "plant",
+      "position": {
+       "x": -1.6009386193389266,
+       "y": 0,
+       "z": -2.4541476991487654
+      },
+      "yaw": 0,
+      "dimMM": [
+       592,
+       400,
+       894
+      ],
+      "uid": "1ba4e804-f320-45c2-8c0d-7246dde5e9e7"
+     },
+     "margin": 0.3036734693877551
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9680708646774292,
+      "source": "local",
+      "box": [
+       0,
+       0.6885720570882162,
+       0.17218437194824218,
+       0.18564453125
+      ],
+      "category": "painting",
+      "slot": "n",
+      "shape": "painting",
+      "position": {
+       "x": -1.5556903657092875,
+       "y": 0.7613704783337579,
+       "z": -2.735
+      },
+      "yaw": 0,
+      "dimMM": [
+       800,
+       30,
+       480
+      ],
+      "uid": "1ba4e804-f320-45c2-8c0d-7246dde5e9e7"
+     },
+     "margin": 0.2
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9680708646774292,
+      "source": "local",
+      "box": [
+       0,
+       0.6885720570882162,
+       0.17218437194824218,
+       0.18564453125
+      ],
+      "category": "shelf",
+      "slot": "n",
+      "shape": "bookshelf",
+      "position": {
+       "x": -1.7527782304359245,
+       "y": 0,
+       "z": -2.575
+      },
+      "yaw": 0,
+      "dimMM": [
+       900,
+       350,
+       938
+      ],
+      "uid": "1ba4e804-f320-45c2-8c0d-7246dde5e9e7"
+     },
+     "margin": 0.169
+    },
+    {
+     "category": "tv",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9680708646774292,
+      "source": "local",
+      "box": [
+       0,
+       0.6885720570882162,
+       0.17218437194824218,
+       0.18564453125
+      ],
+      "category": "tv",
+      "slot": "n",
+      "shape": "tv",
+      "position": {
+       "x": -1.7903451828546437,
+       "y": 0.7667675067232885,
+       "z": -2.72
+      },
+      "yaw": 0,
+      "dimMM": [
+       1269,
+       60,
+       469
+      ],
+      "uid": "1ba4e804-f320-45c2-8c0d-7246dde5e9e7"
+     },
+     "margin": 0.092
+    },
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9680708646774292,
+      "source": "local",
+      "box": [
+       0,
+       0.6885720570882162,
+       0.17218437194824218,
+       0.18564453125
+      ],
+      "category": "mirror",
+      "slot": "n",
+      "shape": "mirror",
+      "position": {
+       "x": -1.4556903657092877,
+       "y": 0.7613704783337579,
+       "z": -2.735
+      },
+      "yaw": 0,
+      "dimMM": [
+       600,
+       30,
+       480
+      ],
+      "uid": "1ba4e804-f320-45c2-8c0d-7246dde5e9e7"
+     },
+     "margin": 0.05
+    },
+    {
+     "category": "table",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9680708646774292,
+      "source": "local",
+      "box": [
+       0,
+       0.6885720570882162,
+       0.17218437194824218,
+       0.18564453125
+      ],
+      "category": "table",
+      "slot": "n",
+      "shape": "desk-standard",
+      "position": {
+       "x": -1.9164204954774753,
+       "y": 0,
+       "z": -2.45
+      },
+      "yaw": 0,
+      "dimMM": [
+       1017,
+       600,
+       893
+      ],
+      "uid": "1ba4e804-f320-45c2-8c0d-7246dde5e9e7"
+     },
+     "margin": 0.023333333333333334
+    }
+   ],
+   "cut": [
+    "width"
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     500,
+     950
+    ],
+    "height": [
+     800,
+     2100
+    ]
+   },
+   "measured": {
+    "height": 698
+   },
+   "candidates": [
+    {
+     "category": "bed",
+     "detection": {
+      "label": "Refrigerator",
+      "conf": 0.7834553718566895,
+      "source": "local",
+      "box": [
+       0.00009120106697083075,
+       0.8032065391540527,
+       0.2157505750656128,
+       0.1967934608459472
+      ],
+      "category": "bed",
+      "slot": "n",
+      "shape": "bed-single",
+      "position": {
+       "x": -1.4517793343543286,
+       "y": 0,
+       "z": -1.75
+      },
+      "yaw": 0,
+      "dimMM": [
+       900,
+       2000,
+       698
+      ],
+      "uid": "8c7c2a79-3d4d-48aa-b66f-87eae0bab372"
+     },
+     "margin": 0.398
+    },
+    {
+     "category": "lamp",
+     "detection": {
+      "label": "Refrigerator",
+      "conf": 0.7834553718566895,
+      "source": "local",
+      "box": [
+       0.00009120106697083075,
+       0.8032065391540527,
+       0.2157505750656128,
+       0.1967934608459472
+      ],
+      "category": "lamp",
+      "slot": "n",
+      "shape": "lamp-table",
+      "position": {
+       "x": -1.382539172779096,
+       "y": 0,
+       "z": -2.4069678525419644
+      },
+      "yaw": 0,
+      "dimMM": [
+       686,
+       300,
+       586
+      ],
+      "uid": "8c7c2a79-3d4d-48aa-b66f-87eae0bab372"
+     },
+     "name": "Table lamp",
+     "margin": 0.3890909090909091
+    },
+    {
+     "category": "table",
+     "detection": {
+      "label": "Refrigerator",
+      "conf": 0.7834553718566895,
+      "source": "local",
+      "box": [
+       0.00009120106697083075,
+       0.8032065391540527,
+       0.2157505750656128,
+       0.1967934608459472
+      ],
+      "category": "table",
+      "slot": "n",
+      "shape": "desk-standard",
+      "position": {
+       "x": -1.6017793343543287,
+       "y": 0,
+       "z": -2.4499999999999997
+      },
+      "yaw": 0,
+      "dimMM": [
+       1200,
+       600,
+       698
+      ],
+      "uid": "8c7c2a79-3d4d-48aa-b66f-87eae0bab372"
+     },
+     "margin": 0.32666666666666666
+    },
+    {
+     "category": "desk",
+     "detection": {
+      "label": "Refrigerator",
+      "conf": 0.7834553718566895,
+      "source": "local",
+      "box": [
+       0.00009120106697083075,
+       0.8032065391540527,
+       0.2157505750656128,
+       0.1967934608459472
+      ],
+      "category": "desk",
+      "slot": "n",
+      "shape": "desk-standard",
+      "position": {
+       "x": -1.7017793343543286,
+       "y": 0,
+       "z": -2.4
+      },
+      "yaw": 0,
+      "dimMM": [
+       1400,
+       700,
+       698
+      ],
+      "uid": "8c7c2a79-3d4d-48aa-b66f-87eae0bab372"
+     },
+     "margin": 0.32666666666666666
+    },
+    {
+     "category": "nightstand",
+     "detection": {
+      "label": "Refrigerator",
+      "conf": 0.7834553718566895,
+      "source": "local",
+      "box": [
+       0.00009120106697083075,
+       0.8032065391540527,
+       0.2157505750656128,
+       0.1967934608459472
+      ],
+      "category": "nightstand",
+      "slot": "n",
+      "shape": "nightstand",
+      "position": {
+       "x": -1.2539118890225582,
+       "y": 0,
+       "z": -2.55
+      },
+      "yaw": 0,
+      "dimMM": [
+       504,
+       400,
+       698
+      ],
+      "uid": "8c7c2a79-3d4d-48aa-b66f-87eae0bab372"
+     },
+     "margin": 0.22666666666666666
+    },
+    {
+     "category": "sofa",
+     "detection": {
+      "label": "Refrigerator",
+      "conf": 0.7834553718566895,
+      "source": "local",
+      "box": [
+       0.00009120106697083075,
+       0.8032065391540527,
+       0.2157505750656128,
+       0.1967934608459472
+      ],
+      "category": "sofa",
+      "slot": "n",
+      "shape": "sofa",
+      "position": {
+       "x": -1.7133896671771645,
+       "y": 0,
+       "z": -2.275
+      },
+      "yaw": 0,
+      "dimMM": [
+       1423,
+       950,
+       698
+      ],
+      "uid": "8c7c2a79-3d4d-48aa-b66f-87eae0bab372"
+     },
+     "margin": 0.196
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Refrigerator",
+      "conf": 0.7834553718566895,
+      "source": "local",
+      "box": [
+       0.00009120106697083075,
+       0.8032065391540527,
+       0.2157505750656128,
+       0.1967934608459472
+      ],
+      "category": "plant",
+      "slot": "n",
+      "shape": "plant",
+      "position": {
+       "x": -1.3261090024615823,
+       "y": 0,
+       "z": -2.4209691646831084
+      },
+      "yaw": 0,
+      "dimMM": [
+       658,
+       400,
+       623
+      ],
+      "uid": "8c7c2a79-3d4d-48aa-b66f-87eae0bab372"
+     },
+     "margin": 0.19306122448979593
+    },
+    {
+     "category": "chair",
+     "detection": {
+      "label": "Refrigerator",
+      "conf": 0.7834553718566895,
+      "source": "local",
+      "box": [
+       0.00009120106697083075,
+       0.8032065391540527,
+       0.2157505750656128,
+       0.1967934608459472
+      ],
+      "category": "chair",
+      "slot": "n",
+      "shape": "chair-armchair",
+      "position": {
+       "x": -1.301779334354329,
+       "y": 0,
+       "z": -2.4499999999999997
+      },
+      "yaw": 0,
+      "dimMM": [
+       600,
+       600,
+       698
+      ],
+      "uid": "8c7c2a79-3d4d-48aa-b66f-87eae0bab372"
+     },
+     "name": "Armchair",
+     "margin": 0.10666666666666667
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Refrigerator",
+      "conf": 0.7834553718566895,
+      "source": "local",
+      "box": [
+       0.00009120106697083075,
+       0.8032065391540527,
+       0.2157505750656128,
+       0.1967934608459472
+      ],
+      "category": "shelf",
+      "slot": "n",
+      "shape": "bookshelf",
+      "position": {
+       "x": -1.4517793343543286,
+       "y": 0,
+       "z": -2.5749999999999997
+      },
+      "yaw": 0,
+      "dimMM": [
+       900,
+       350,
+       698
+      ],
+      "uid": "8c7c2a79-3d4d-48aa-b66f-87eae0bab372"
+     },
+     "margin": 0.049
+    }
+   ],
+   "cut": [
+    "width"
+   ],
+   "bounded": [
+    "height"
+   ]
+  },
+  {
+   "status": "ok",
+   "cut": [
+    "width"
+   ]
+  },
+  {
+   "status": "ok",
+   "cut": [
+    "height"
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width"
+   ],
+   "allowed": {
+    "width": [
+     260,
+     520
+    ],
+    "height": [
+     300,
+     700
+    ]
+   },
+   "measured": {
+    "width": 254,
+    "height": 594
+   },
+   "candidates": [
+    {
+     "category": "lamp",
+     "detection": {
+      "label": "Stool",
+      "conf": 0.4440057873725891,
+      "source": "local",
+      "box": [
+       0.33035600543022153,
+       0.8137880118687947,
+       0.07007319688796997,
+       0.13697552045186362
+      ],
+      "category": "lamp",
+      "slot": "n",
+      "shape": "lamp-table",
+      "position": {
+       "x": -0.4955331069307427,
+       "y": 0,
+       "z": -2.6227695170113763
+      },
+      "yaw": 0,
+      "dimMM": [
+       254,
+       300,
+       594
+      ],
+      "uid": "9451d023-93e5-4c56-b702-f83b2cfe6571"
+     },
+     "name": "Table lamp",
+     "margin": 0.37454545454545457
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Stool",
+      "conf": 0.4440057873725891,
+      "source": "local",
+      "box": [
+       0.33035600543022153,
+       0.8137880118687947,
+       0.07007319688796997,
+       0.13697552045186362
+      ],
+      "category": "plant",
+      "slot": "n",
+      "shape": "plant",
+      "position": {
+       "x": -0.4955331069307427,
+       "y": 0,
+       "z": -2.6227695170113763
+      },
+      "yaw": 0,
+      "dimMM": [
+       254,
+       400,
+       594
+      ],
+      "uid": "9451d023-93e5-4c56-b702-f83b2cfe6571"
+     },
+     "margin": 0.14
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Stool",
+      "conf": 0.4440057873725891,
+      "source": "local",
+      "box": [
+       0.33035600543022153,
+       0.8137880118687947,
+       0.07007319688796997,
+       0.13697552045186362
+      ],
+      "category": "painting",
+      "slot": "n",
+      "shape": "painting",
+      "position": {
+       "x": -0.4712864843920802,
+       "y": 0.49573674583514193,
+       "z": -2.735
+      },
+      "yaw": 0,
+      "dimMM": [
+       241,
+       30,
+       349
+      ],
+      "uid": "9451d023-93e5-4c56-b702-f83b2cfe6571"
+     },
+     "margin": 0.04044444444444444
+    }
+   ]
+  },
+  {
+   "status": "unmeasured",
+   "cut": [
+    "width",
+    "height"
+   ]
+  },
+  {
+   "status": "unmeasured",
+   "cut": [
+    "width",
+    "height"
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok",
+   "bounded": [
+    "width",
+    "height"
+   ]
+  },
+  {
+   "status": "ok",
+   "cut": [
+    "width"
+   ],
+   "bounded": [
+    "height"
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     500,
+     1800
+    ],
+    "height": [
+     250,
+     600
+    ]
+   },
+   "measured": {
+    "width": 515,
+    "height": 818
+   },
+   "candidates": [
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6639119982719421,
+      "source": "local",
+      "box": [
+       0.24211939156055448,
+       0.7579496510823567,
+       0.2023482644557953,
+       0.24126375198364258
+      ],
+      "category": "mirror",
+      "slot": "s",
+      "shape": "mirror",
+      "position": {
+       "x": 0.547498442805118,
+       "y": 0.40898141239598973,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       703,
+       30,
+       818
+      ],
+      "uid": "633d57a6-3258-48cc-960c-33d7634680df"
+     },
+     "margin": 0.4477777777777778
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6639119982719421,
+      "source": "local",
+      "box": [
+       0.24211939156055448,
+       0.7579496510823567,
+       0.2023482644557953,
+       0.24126375198364258
+      ],
+      "category": "painting",
+      "slot": "s",
+      "shape": "painting",
+      "position": {
+       "x": 0.547498442805118,
+       "y": 0.5062033456950474,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       703,
+       30,
+       624
+      ],
+      "uid": "633d57a6-3258-48cc-960c-33d7634680df"
+     },
+     "margin": 0.2457777777777778
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6639119982719421,
+      "source": "local",
+      "box": [
+       0.24211939156055448,
+       0.7579496510823567,
+       0.2023482644557953,
+       0.24126375198364258
+      ],
+      "category": "plant",
+      "slot": "s",
+      "shape": "plant",
+      "position": {
+       "x": 0.5316716407874271,
+       "y": 0,
+       "z": 2.410645113525288
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       679,
+       400,
+       749
+      ],
+      "uid": "633d57a6-3258-48cc-960c-33d7634680df"
+     },
+     "margin": 0.24448979591836734
+    },
+    {
+     "category": "chair",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6639119982719421,
+      "source": "local",
+      "box": [
+       0.24211939156055448,
+       0.7579496510823567,
+       0.2023482644557953,
+       0.24126375198364258
+      ],
+      "category": "chair",
+      "slot": "s",
+      "shape": "chair-dining",
+      "position": {
+       "x": 0.46980834046950054,
+       "y": 0,
+       "z": 2.5
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       548,
+       500,
+       818
+      ],
+      "uid": "633d57a6-3258-48cc-960c-33d7634680df"
+     },
+     "margin": 0.19428571428571428
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6639119982719421,
+      "source": "local",
+      "box": [
+       0.24211939156055448,
+       0.7579496510823567,
+       0.2023482644557953,
+       0.24126375198364258
+      ],
+      "category": "shelf",
+      "slot": "s",
+      "shape": "bookshelf",
+      "position": {
+       "x": 0.4946030539808678,
+       "y": 0,
+       "z": 2.5749999999999997
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       598,
+       350,
+       818
+      ],
+      "uid": "633d57a6-3258-48cc-960c-33d7634680df"
+     },
+     "margin": 0.099
+    },
+    {
+     "category": "curtain",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6639119982719421,
+      "source": "local",
+      "box": [
+       0.24211939156055448,
+       0.7579496510823567,
+       0.2023482644557953,
+       0.24126375198364258
+      ],
+      "category": "curtain",
+      "slot": "s",
+      "shape": "curtain",
+      "position": {
+       "x": 0.5392335383013289,
+       "y": 0.40898141239598973,
+       "z": 2.71
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       687,
+       80,
+       818
+      ],
+      "uid": "633d57a6-3258-48cc-960c-33d7634680df"
+     },
+     "margin": 0.06239130434782609
+    },
+    {
+     "category": "fridge",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6639119982719421,
+      "source": "local",
+      "box": [
+       0.24211939156055448,
+       0.7579496510823567,
+       0.2023482644557953,
+       0.24126375198364258
+      ],
+      "category": "fridge",
+      "slot": "s",
+      "shape": "fridge",
+      "position": {
+       "x": 0.46154343596571146,
+       "y": 0,
+       "z": 2.475
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       532,
+       550,
+       818
+      ],
+      "uid": "633d57a6-3258-48cc-960c-33d7634680df"
+     },
+     "margin": 0.013846153846153847
+    }
+   ],
+   "bounded": [
+    "width",
+    "height"
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width"
+   ],
+   "allowed": {
+    "width": [
+     600,
+     4000
+    ],
+    "height": [
+     1600,
+     2600
+    ]
+   },
+   "measured": {
+    "width": 564,
+    "height": 1806
+   },
+   "candidates": [
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Wardrobe",
+      "conf": 0.5571303367614746,
+      "source": "local",
+      "box": [
+       0.4452852964401245,
+       0.35180032094319663,
+       0.20468401908874512,
+       0.6453191820780436
+      ],
+      "category": "mirror",
+      "slot": "s",
+      "shape": "mirror",
+      "position": {
+       "x": -0.16607492524193512,
+       "y": 1.0437478106111149,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       714,
+       30,
+       1688
+      ],
+      "uid": "5ca9936c-a973-4a22-ad5d-35d4fb9bce0f"
+     },
+     "margin": 0.46
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Wardrobe",
+      "conf": 0.5571303367614746,
+      "source": "local",
+      "box": [
+       0.4452852964401245,
+       0.35180032094319663,
+       0.20468401908874512,
+       0.6453191820780436
+      ],
+      "category": "plant",
+      "slot": "s",
+      "shape": "plant",
+      "position": {
+       "x": -0.16211540512466316,
+       "y": 0,
+       "z": 2.3993123976162227
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       701,
+       400,
+       1835
+      ],
+      "uid": "5ca9936c-a973-4a22-ad5d-35d4fb9bce0f"
+     },
+     "margin": 0.3122448979591837
+    },
+    {
+     "category": "fridge",
+     "detection": {
+      "label": "Wardrobe",
+      "conf": 0.5571303367614746,
+      "source": "local",
+      "box": [
+       0.4452852964401245,
+       0.35180032094319663,
+       0.20468401908874512,
+       0.6453191820780436
+      ],
+      "category": "fridge",
+      "slot": "s",
+      "shape": "fridge",
+      "position": {
+       "x": -0.13432530718097693,
+       "y": 0,
+       "z": 2.475
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       577,
+       550,
+       1813
+      ],
+      "uid": "5ca9936c-a973-4a22-ad5d-35d4fb9bce0f"
+     },
+     "margin": 0.1711111111111111
+    },
+    {
+     "category": "curtain",
+     "detection": {
+      "label": "Wardrobe",
+      "conf": 0.5571303367614746,
+      "source": "local",
+      "box": [
+       0.4452852964401245,
+       0.35180032094319663,
+       0.20468401908874512,
+       0.6453191820780436
+      ],
+      "category": "curtain",
+      "slot": "s",
+      "shape": "curtain",
+      "position": {
+       "x": -0.16302207735145835,
+       "y": 0.9402255888973938,
+       "z": 2.71
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       701,
+       80,
+       1880
+      ],
+      "uid": "5ca9936c-a973-4a22-ad5d-35d4fb9bce0f"
+     },
+     "margin": 0.06543478260869565
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Wardrobe",
+      "conf": 0.5571303367614746,
+      "source": "local",
+      "box": [
+       0.4452852964401245,
+       0.35180032094319663,
+       0.20468401908874512,
+       0.6453191820780436
+      ],
+      "category": "shelf",
+      "slot": "s",
+      "shape": "wardrobe",
+      "position": {
+       "x": -0.14348385085240717,
+       "y": 0,
+       "z": 2.55
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       617,
+       400,
+       1835
+      ],
+      "uid": "5ca9936c-a973-4a22-ad5d-35d4fb9bce0f"
+     },
+     "margin": 0.005
+    }
+   ],
+   "bounded": [
+    "width",
+    "height"
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     620,
+     1100
+    ],
+    "height": [
+     1980,
+     2400
+    ]
+   },
+   "measured": {
+    "width": 641,
+    "height": 1647
+   },
+   "candidates": [
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Door",
+      "conf": 0.5478042960166931,
+      "source": "local",
+      "box": [
+       0.6196589756011962,
+       0.35208249409993486,
+       0.18728158473968506,
+       0.634561144510905
+      ],
+      "category": "plant",
+      "slot": "s",
+      "shape": "plant",
+      "position": {
+       "x": -0.8385083066551322,
+       "y": 0,
+       "z": 2.3923823776149025
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       715,
+       400,
+       1891
+      ],
+      "uid": "b7947928-e144-4ec9-b047-712a5c25920d"
+     },
+     "margin": 0.2893877551020408
+    },
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Door",
+      "conf": 0.5478042960166931,
+      "source": "local",
+      "box": [
+       0.6196589756011962,
+       0.35208249409993486,
+       0.18728158473968506,
+       0.634561144510905
+      ],
+      "category": "mirror",
+      "slot": "s",
+      "shape": "mirror",
+      "position": {
+       "x": -0.7460706097223068,
+       "y": 1.0570772164889297,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       648,
+       30,
+       1660
+      ],
+      "uid": "b7947928-e144-4ec9-b047-712a5c25920d"
+     },
+     "margin": 0.2125
+    },
+    {
+     "category": "fridge",
+     "detection": {
+      "label": "Door",
+      "conf": 0.5478042960166931,
+      "source": "local",
+      "box": [
+       0.6196589756011962,
+       0.35208249409993486,
+       0.18728158473968506,
+       0.634561144510905
+      ],
+      "category": "fridge",
+      "slot": "s",
+      "shape": "fridge",
+      "position": {
+       "x": -0.7941578652813546,
+       "y": 0,
+       "z": 2.475
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       576,
+       550,
+       1891
+      ],
+      "uid": "b7947928-e144-4ec9-b047-712a5c25920d"
+     },
+     "margin": 0.16076923076923078
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Door",
+      "conf": 0.5478042960166931,
+      "source": "local",
+      "box": [
+       0.6196589756011962,
+       0.35208249409993486,
+       0.18728158473968506,
+       0.634561144510905
+      ],
+      "category": "shelf",
+      "slot": "s",
+      "shape": "bookshelf",
+      "position": {
+       "x": -0.7788178982733687,
+       "y": 0,
+       "z": 2.575
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       607,
+       350,
+       1891
+      ],
+      "uid": "b7947928-e144-4ec9-b047-712a5c25920d"
+     },
+     "margin": 0.1035
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Door",
+      "conf": 0.5478042960166931,
+      "source": "local",
+      "box": [
+       0.6196589756011962,
+       0.35208249409993486,
+       0.18728158473968506,
+       0.634561144510905
+      ],
+      "category": "painting",
+      "slot": "s",
+      "shape": "painting",
+      "position": {
+       "x": -0.7460706097223068,
+       "y": 1.0570772164889297,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       648,
+       30,
+       1660
+      ],
+      "uid": "b7947928-e144-4ec9-b047-712a5c25920d"
+     },
+     "margin": 0.08484848484848485
+    },
+    {
+     "category": "curtain",
+     "detection": {
+      "label": "Door",
+      "conf": 0.5478042960166931,
+      "source": "local",
+      "box": [
+       0.6196589756011962,
+       0.35208249409993486,
+       0.18728158473968506,
+       0.634561144510905
+      ],
+      "category": "curtain",
+      "slot": "s",
+      "shape": "curtain",
+      "position": {
+       "x": -0.736233365910496,
+       "y": 1.0652191794211185,
+       "z": 2.71
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       629,
+       80,
+       1629
+      ],
+      "uid": "b7947928-e144-4ec9-b047-712a5c25920d"
+     },
+     "margin": 0.049782608695652174
+    }
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width"
+   ],
+   "allowed": {
+    "width": [
+     200,
+     600
+    ],
+    "height": [
+     1200,
+     2000
+    ]
+   },
+   "measured": {
+    "width": 86,
+    "height": 1798
+   },
+   "candidates": []
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width",
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     600,
+     4000
+    ],
+    "height": [
+     1600,
+     2600
+    ]
+   },
+   "measured": {
+    "width": 392,
+    "height": 695
+   },
+   "candidates": [
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Chest of drawers",
+      "conf": 0.40007394552230835,
+      "source": "local",
+      "box": [
+       0.6235728728771209,
+       0.8046361668904622,
+       0.17686209917068482,
+       0.1937801424662272
+      ],
+      "category": "mirror",
+      "slot": "s",
+      "shape": "mirror",
+      "position": {
+       "x": -0.7416272996993141,
+       "y": 0.347260182635732,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       612,
+       30,
+       695
+      ],
+      "uid": "de9a31c1-af38-4d83-9bce-d333ff931c59"
+     },
+     "margin": 0.3466666666666667
+    },
+    {
+     "category": "nightstand",
+     "detection": {
+      "label": "Chest of drawers",
+      "conf": 0.40007394552230835,
+      "source": "local",
+      "box": [
+       0.6235728728771209,
+       0.8046361668904622,
+       0.17686209917068482,
+       0.1937801424662272
+      ],
+      "category": "nightstand",
+      "slot": "s",
+      "shape": "nightstand",
+      "position": {
+       "x": -0.6703745943189492,
+       "y": 0,
+       "z": 2.55
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       469,
+       400,
+       695
+      ],
+      "uid": "de9a31c1-af38-4d83-9bce-d333ff931c59"
+     },
+     "margin": 0.23333333333333334
+    },
+    {
+     "category": "table",
+     "detection": {
+      "label": "Chest of drawers",
+      "conf": 0.40007394552230835,
+      "source": "local",
+      "box": [
+       0.6235728728771209,
+       0.8046361668904622,
+       0.17686209917068482,
+       0.1937801424662272
+      ],
+      "category": "table",
+      "slot": "s",
+      "shape": "side-table",
+      "position": {
+       "x": -0.6318596184376708,
+       "y": 0,
+       "z": 2.4499999999999997
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       392,
+       600,
+       695
+      ],
+      "uid": "de9a31c1-af38-4d83-9bce-d333ff931c59"
+     },
+     "name": "Side table",
+     "margin": 0.23333333333333334
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Chest of drawers",
+      "conf": 0.40007394552230835,
+      "source": "local",
+      "box": [
+       0.6235728728771209,
+       0.8046361668904622,
+       0.17686209917068482,
+       0.1937801424662272
+      ],
+      "category": "painting",
+      "slot": "s",
+      "shape": "painting",
+      "position": {
+       "x": -0.7416272996993141,
+       "y": 0.394520365271464,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       612,
+       30,
+       600
+      ],
+      "uid": "de9a31c1-af38-4d83-9bce-d333ff931c59"
+     },
+     "margin": 0.20533333333333334
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Chest of drawers",
+      "conf": 0.40007394552230835,
+      "source": "local",
+      "box": [
+       0.6235728728771209,
+       0.8046361668904622,
+       0.17686209917068482,
+       0.1937801424662272
+      ],
+      "category": "plant",
+      "slot": "s",
+      "shape": "plant",
+      "position": {
+       "x": -0.7081761685598835,
+       "y": 0,
+       "z": 2.463127173986263
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       574,
+       400,
+       644
+      ],
+      "uid": "de9a31c1-af38-4d83-9bce-d333ff931c59"
+     },
+     "margin": 0.2016326530612245
+    }
+   ],
+   "bounded": [
+    "width",
+    "height"
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok",
+   "cut": [
+    "width"
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width"
+   ],
+   "allowed": {
+    "width": [
+     200,
+     600
+    ],
+    "height": [
+     1200,
+     2000
+    ]
+   },
+   "measured": {
+    "width": 135,
+    "height": 1458
+   },
+   "candidates": [
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Lamp",
+      "conf": 0.8550716042518616,
+      "source": "local",
+      "box": [
+       0.7781391704082489,
+       0.5168964544932048,
+       0.04526067972183227,
+       0.13366560618082682
+      ],
+      "category": "plant",
+      "slot": "w",
+      "shape": "plant",
+      "position": {
+       "x": -2.3575534430150857,
+       "y": 0,
+       "z": -0.9603303929366988
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       135,
+       400,
+       1458
+      ],
+      "uid": "3046d05b-7e70-4533-9c4f-6556a82cb789"
+     },
+     "margin": 0.031818181818181815
+    }
+   ]
+  },
+  {
+   "status": "ok",
+   "cut": [
+    "width"
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width",
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     380,
+     600
+    ],
+    "height": [
+     750,
+     1100
+    ]
+   },
+   "measured": {
+    "width": 347,
+    "height": 706
+   },
+   "candidates": [
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Chair",
+      "conf": 0.660209596157074,
+      "source": "local",
+      "box": [
+       0.7423920249938964,
+       0.7824877643585205,
+       0.16160556316375732,
+       0.10705479303995769
+      ],
+      "category": "plant",
+      "slot": "w",
+      "shape": "plant",
+      "position": {
+       "x": -2.169477037448015,
+       "y": 0,
+       "z": -1.1005216077662074
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       511,
+       400,
+       703
+      ],
+      "uid": "4549953c-a09c-4e54-9ffa-4b8b34d91014"
+     },
+     "margin": 0.2257142857142857
+    },
+    {
+     "category": "nightstand",
+     "detection": {
+      "label": "Chair",
+      "conf": 0.660209596157074,
+      "source": "local",
+      "box": [
+       0.7423920249938964,
+       0.7824877643585205,
+       0.16160556316375732,
+       0.10705479303995769
+      ],
+      "category": "nightstand",
+      "slot": "w",
+      "shape": "nightstand",
+      "position": {
+       "x": -2.2249999999999996,
+       "y": 0,
+       "z": -1.0668916743562384
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       378,
+       400,
+       733
+      ],
+      "uid": "4549953c-a09c-4e54-9ffa-4b8b34d91014"
+     },
+     "margin": 0.14888888888888888
+    },
+    {
+     "category": "table",
+     "detection": {
+      "label": "Chair",
+      "conf": 0.660209596157074,
+      "source": "local",
+      "box": [
+       0.7423920249938964,
+       0.7824877643585205,
+       0.16160556316375732,
+       0.10705479303995769
+      ],
+      "category": "table",
+      "slot": "w",
+      "shape": "side-table",
+      "position": {
+       "x": -2.125,
+       "y": 0,
+       "z": -1.09796569657416
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       316,
+       600,
+       678
+      ],
+      "uid": "4549953c-a09c-4e54-9ffa-4b8b34d91014"
+     },
+     "name": "Side table",
+     "margin": 0.12
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Chair",
+      "conf": 0.660209596157074,
+      "source": "local",
+      "box": [
+       0.7423920249938964,
+       0.7824877643585205,
+       0.16160556316375732,
+       0.10705479303995769
+      ],
+      "category": "painting",
+      "slot": "w",
+      "shape": "painting",
+      "position": {
+       "x": -2.4099999999999997,
+       "y": 0.7221685325758422,
+       "z": -0.9969749151509758
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       487,
+       30,
+       238
+      ],
+      "uid": "4549953c-a09c-4e54-9ffa-4b8b34d91014"
+     },
+     "margin": 0.05333333333333334
+    }
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width",
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     300,
+     700
+    ],
+    "height": [
+     350,
+     800
+    ]
+   },
+   "measured": {
+    "width": 195,
+    "height": 1136
+   },
+   "candidates": [
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.5938001871109009,
+      "source": "local",
+      "box": [
+       0.7666214942932129,
+       0.6341935157775879,
+       0.10662117004394531,
+       0.13828741709391276
+      ],
+      "category": "plant",
+      "slot": "w",
+      "shape": "plant",
+      "position": {
+       "x": -2.2616130299927737,
+       "y": 0,
+       "z": -1.0573827597909318
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       327,
+       400,
+       1145
+      ],
+      "uid": "52314798-d2b5-4968-9abb-a0e3280e4890"
+     },
+     "margin": 0.20636363636363636
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.5938001871109009,
+      "source": "local",
+      "box": [
+       0.7666214942932129,
+       0.6341935157775879,
+       0.10662117004394531,
+       0.13828741709391276
+      ],
+      "category": "painting",
+      "slot": "w",
+      "shape": "painting",
+      "position": {
+       "x": -2.4099999999999997,
+       "y": 1.0298307726620257,
+       "z": -0.9874231980007663
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       317,
+       30,
+       315
+      ],
+      "uid": "52314798-d2b5-4968-9abb-a0e3280e4890"
+     },
+     "margin": 0.07422222222222222
+    }
+   ]
+  },
+  {
+   "status": "ok",
+   "cut": [
+    "width"
+   ]
+  }
+ ],
+ "d": [
+  {
+   "label": "Microwave oven",
+   "conf": 0.9680708646774292,
+   "source": "local",
+   "box": [
+    0,
+    0.6885720570882162,
+    0.17218437194824218,
+    0.18564453125
+   ],
+   "dimMM": [
+    600,
+    500,
+    911
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Refrigerator",
+   "conf": 0.7834553718566895,
+   "source": "local",
+   "box": [
+    0.00009120106697083075,
+    0.8032065391540527,
+    0.2157505750656128,
+    0.1967934608459472
+   ],
+   "dimMM": [
+    550,
+    550,
+    698
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Television",
+   "conf": 0.6036534905433655,
+   "source": "local",
+   "box": [
+    0.0004060733318328874,
+    0.2563649129867554,
+    0.19073465704917908,
+    0.2799038283030192
+   ],
+   "dimMM": [
+    1336,
+    60,
+    724
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Curtain",
+   "conf": 0.5081489086151123,
+   "source": "local",
+   "box": [
+    0.07074528932571411,
+    0.21963500976562494,
+    0.2728668928146362,
+    0.7770609537760417
+   ],
+   "dimMM": [
+    918,
+    80,
+    2200
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Window",
+   "conf": 0.45964929461479187,
+   "source": "local",
+   "box": [
+    0.32763688087463383,
+    0.3358928219477335,
+    0.32168930053710937,
+    0.31276939709981283
+   ],
+   "dimMM": [
+    1052,
+    200,
+    767
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Stool",
+   "conf": 0.4440057873725891,
+   "source": "local",
+   "box": [
+    0.33035600543022153,
+    0.8137880118687947,
+    0.07007319688796997,
+    0.13697552045186362
+   ],
+   "dimMM": [
+    254,
+    500,
+    594
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Window",
+   "conf": 0.38425105810165405,
+   "source": "local",
+   "box": [
+    0.35014183044433594,
+    0.3541321754455566,
+    0.6452506637573242,
+    0.6438015302022299
+   ],
+   "dimMM": [
+    2109,
+    200,
+    1578
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Curtain",
+   "conf": 0.350510835647583,
+   "source": "local",
+   "box": [
+    0.9406950950622559,
+    0.2267630259195963,
+    0.059304904937744096,
+    0.7732369740804037
+   ],
+   "dimMM": [
+    871,
+    80,
+    2200
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.906460165977478,
+   "source": "local",
+   "box": [
+    0.5847527551651002,
+    0.5612723986307779,
+    0.09852486133575439,
+    0.2951308059692383
+   ],
+   "dimMM": [
+    321,
+    300,
+    1338
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Nightstand",
+   "conf": 0.8010774850845337,
+   "source": "local",
+   "box": [
+    0.560374864935875,
+    0.8143284718195597,
+    0.2130495512485504,
+    0.1851758861541748
+   ],
+   "dimMM": [
+    522,
+    400,
+    767
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Bed",
+   "conf": 0.7917213439941406,
+   "source": "local",
+   "box": [
+    0,
+    0.5965994517008463,
+    0.5608611106872559,
+    0.4034005482991538
+   ],
+   "dimMM": [
+    900,
+    2000,
+    1275
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Picture frame",
+   "conf": 0.5624539256095886,
+   "source": "local",
+   "box": [
+    0.10892349928617479,
+    0.3890402968724569,
+    0.10721874058246612,
+    0.14232776006062825
+   ],
+   "dimMM": [
+    318,
+    30,
+    328
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Picture frame",
+   "conf": 0.4714033603668213,
+   "source": "local",
+   "box": [
+    0.35458309650421144,
+    0.38982489903767903,
+    0.10814776420593261,
+    0.14274857838948568
+   ],
+   "dimMM": [
+    331,
+    30,
+    329
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Picture frame",
+   "conf": 0.44864872097969055,
+   "source": "local",
+   "box": [
+    0.22898199796676633,
+    0.39064557234446207,
+    0.11100556850433349,
+    0.14104496320088705
+   ],
+   "dimMM": [
+    335,
+    30,
+    325
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Potted plant",
+   "conf": 0.8819355368614197,
+   "source": "local",
+   "box": [
+    0.2585572177171707,
+    0.5850112382570902,
+    0.14591753840446473,
+    0.20073411146799724
+   ],
+   "dimMM": [
+    551,
+    400,
+    1230
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Mirror",
+   "conf": 0.871807873249054,
+   "source": "local",
+   "box": [
+    0.16520590782165526,
+    0.4071505228678386,
+    0.2151797294616699,
+    0.29272015889485675
+   ],
+   "dimMM": [
+    746,
+    30,
+    766
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Coffee table",
+   "conf": 0.6639119982719421,
+   "source": "local",
+   "box": [
+    0.24211939156055448,
+    0.7579496510823567,
+    0.2023482644557953,
+    0.24126375198364258
+   ],
+   "dimMM": [
+    515,
+    600,
+    818
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Wardrobe",
+   "conf": 0.5571303367614746,
+   "source": "local",
+   "box": [
+    0.4452852964401245,
+    0.35180032094319663,
+    0.20468401908874512,
+    0.6453191820780436
+   ],
+   "dimMM": [
+    564,
+    600,
+    1806
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Door",
+   "conf": 0.5478042960166931,
+   "source": "local",
+   "box": [
+    0.6196589756011962,
+    0.35208249409993486,
+    0.18728158473968506,
+    0.634561144510905
+   ],
+   "dimMM": [
+    641,
+    50,
+    1647
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.5473319888114929,
+   "source": "local",
+   "box": [
+    0.1434029459953308,
+    0.38731549104054774,
+    0.02630533218383789,
+    0.20647681872049967
+   ],
+   "dimMM": [
+    86,
+    300,
+    1798
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Chest of drawers",
+   "conf": 0.40007394552230835,
+   "source": "local",
+   "box": [
+    0.6235728728771209,
+    0.8046361668904622,
+    0.17686209917068482,
+    0.1937801424662272
+   ],
+   "dimMM": [
+    392,
+    600,
+    695
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Picture frame",
+   "conf": 0.3687368333339691,
+   "source": "local",
+   "box": [
+    0.20649579763412473,
+    0.4654151598612467,
+    0.08440163135528564,
+    0.11768321990966797
+   ],
+   "dimMM": [
+    286,
+    30,
+    308
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Wall art",
+   "conf": 0.36787331104278564,
+   "source": "local",
+   "box": [
+    0,
+    0.34821151097615555,
+    0.0805630475282669,
+    0.30193412144978843
+   ],
+   "dimMM": [
+    800,
+    30,
+    790
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.8550716042518616,
+   "source": "local",
+   "box": [
+    0.7781391704082489,
+    0.5168964544932048,
+    0.04526067972183227,
+    0.13366560618082682
+   ],
+   "dimMM": [
+    135,
+    300,
+    1458
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Mirror",
+   "conf": 0.7745537757873535,
+   "source": "local",
+   "box": [
+    0.7001554727554321,
+    0.4130610148111979,
+    0.29984452724456795,
+    0.5194151560465495
+   ],
+   "dimMM": [
+    913,
+    30,
+    1196
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Chair",
+   "conf": 0.660209596157074,
+   "source": "local",
+   "box": [
+    0.7423920249938964,
+    0.7824877643585205,
+    0.16160556316375732,
+    0.10705479303995769
+   ],
+   "dimMM": [
+    347,
+    500,
+    706
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Nightstand",
+   "conf": 0.5938001871109009,
+   "source": "local",
+   "box": [
+    0.7666214942932129,
+    0.6341935157775879,
+    0.10662117004394531,
+    0.13828741709391276
+   ],
+   "dimMM": [
+    195,
+    400,
+    1136
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Curtain",
+   "conf": 0.407992959022522,
+   "source": "local",
+   "box": [
+    0.8577903854846953,
+    0.4648534838358561,
+    0.1325839114189148,
+    0.36677443822224937
+   ],
+   "dimMM": [
+    1600,
+    80,
+    827
+   ],
+   "slot": "w"
+  }
+ ]
+}

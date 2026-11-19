@@ -1,0 +1,6 @@
+SLOTS empty-room ultrawide order=1234: Wall 1←wall1  Wall 2←wall2  Wall 3←wall3  Wall 4←wall4  (4/4 right)
+detect took 41 s
+initially kept: 0 of 4 pieces kept
+rows offered: 4
+status: 4 of 4 pieces kept
+room 8266daea-8080-4ab0-b932-ded368504e40 saved → runs/empty-room-ultrawide-1234

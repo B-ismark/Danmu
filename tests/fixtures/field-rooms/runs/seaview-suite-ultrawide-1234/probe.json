@@ -1,0 +1,3512 @@
+{
+ "v": [
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     440,
+     600
+    ],
+    "height": [
+     250,
+     400
+    ]
+   },
+   "measured": {
+    "width": 475,
+    "height": 866
+   },
+   "candidates": [
+    {
+     "category": "chair",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9470214247703552,
+      "source": "local",
+      "box": [
+       0.2494040012359619,
+       0.5921334346135457,
+       0.09339416980743408,
+       0.08797268867492676
+      ],
+      "category": "chair",
+      "slot": "n",
+      "shape": "chair-dining",
+      "position": {
+       "x": -1.5975963938183233,
+       "y": 0,
+       "z": -2.5
+      },
+      "yaw": 0,
+      "dimMM": [
+       475,
+       500,
+       866
+      ],
+      "uid": "9d90151b-9b50-4981-9bd5-c9e7566ff9f1"
+     },
+     "margin": 0.3314285714285714
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9470214247703552,
+      "source": "local",
+      "box": [
+       0.2494040012359619,
+       0.5921334346135457,
+       0.09339416980743408,
+       0.08797268867492676
+      ],
+      "category": "plant",
+      "slot": "n",
+      "shape": "plant",
+      "position": {
+       "x": -1.6553421937378565,
+       "y": 0,
+       "z": -2.4143842264272646
+      },
+      "yaw": 0,
+      "dimMM": [
+       671,
+       400,
+       835
+      ],
+      "uid": "9d90151b-9b50-4981-9bd5-c9e7566ff9f1"
+     },
+     "margin": 0.2795918367346939
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9470214247703552,
+      "source": "local",
+      "box": [
+       0.2494040012359619,
+       0.5921334346135457,
+       0.09339416980743408,
+       0.08797268867492676
+      ],
+      "category": "painting",
+      "slot": "n",
+      "shape": "painting",
+      "position": {
+       "x": -1.4829481245977796,
+       "y": 0.7222972686056275,
+       "z": -2.735
+      },
+      "yaw": 0,
+      "dimMM": [
+       664,
+       30,
+       472
+      ],
+      "uid": "9d90151b-9b50-4981-9bd5-c9e7566ff9f1"
+     },
+     "margin": 0.19515151515151516
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9470214247703552,
+      "source": "local",
+      "box": [
+       0.2494040012359619,
+       0.5921334346135457,
+       0.09339416980743408,
+       0.08797268867492676
+      ],
+      "category": "shelf",
+      "slot": "n",
+      "shape": "bookshelf",
+      "position": {
+       "x": -1.5662044350854138,
+       "y": 0,
+       "z": -2.575
+      },
+      "yaw": 0,
+      "dimMM": [
+       537,
+       350,
+       894
+      ],
+      "uid": "9d90151b-9b50-4981-9bd5-c9e7566ff9f1"
+     },
+     "margin": 0.0685
+    },
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Microwave oven",
+      "conf": 0.9470214247703552,
+      "source": "local",
+      "box": [
+       0.2494040012359619,
+       0.5921334346135457,
+       0.09339416980743408,
+       0.08797268867492676
+      ],
+      "category": "mirror",
+      "slot": "n",
+      "shape": "mirror",
+      "position": {
+       "x": -1.4829481245977796,
+       "y": 0.7222972686056275,
+       "z": -2.735
+      },
+      "yaw": 0,
+      "dimMM": [
+       664,
+       30,
+       472
+      ],
+      "uid": "9d90151b-9b50-4981-9bd5-c9e7566ff9f1"
+     },
+     "margin": 0.045
+    }
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok",
+   "cut": [
+    "width"
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     800,
+     2400
+    ],
+    "height": [
+     600,
+     900
+    ]
+   },
+   "measured": {
+    "height": 315
+   },
+   "candidates": [
+    {
+     "category": "table",
+     "detection": {
+      "label": "Desk",
+      "conf": 0.8601839542388916,
+      "source": "local",
+      "box": [
+       0,
+       0.7655267524719238,
+       0.21755824685096742,
+       0.234212646484375
+      ],
+      "category": "table",
+      "slot": "n",
+      "shape": "coffee-table",
+      "position": {
+       "x": -1.9898732421256868,
+       "y": 0,
+       "z": -1.767431495024994
+      },
+      "yaw": 0,
+      "dimMM": [
+       870,
+       600,
+       368
+      ],
+      "uid": "6a02cf89-fb67-4f61-894a-50c98bec61e9"
+     },
+     "name": "Coffee table",
+     "margin": 0.33714285714285713
+    },
+    {
+     "category": "ottoman",
+     "detection": {
+      "label": "Desk",
+      "conf": 0.8601839542388916,
+      "source": "local",
+      "box": [
+       0,
+       0.7655267524719238,
+       0.21755824685096742,
+       0.234212646484375
+      ],
+      "category": "ottoman",
+      "slot": "n",
+      "shape": "ottoman",
+      "position": {
+       "x": -1.6793428081931663,
+       "y": 0,
+       "z": -1.667431495024994
+      },
+      "yaw": 0,
+      "dimMM": [
+       550,
+       400,
+       474
+      ],
+      "uid": "6a02cf89-fb67-4f61-894a-50c98bec61e9"
+     },
+     "margin": 0.304
+    },
+    {
+     "category": "lamp",
+     "detection": {
+      "label": "Desk",
+      "conf": 0.8601839542388916,
+      "source": "local",
+      "box": [
+       0,
+       0.7655267524719238,
+       0.21755824685096742,
+       0.234212646484375
+      ],
+      "category": "lamp",
+      "slot": "n",
+      "shape": "lamp-table",
+      "position": {
+       "x": -1.832170114120236,
+       "y": 0,
+       "z": -1.831161318476505
+      },
+      "yaw": 0,
+      "dimMM": [
+       727,
+       300,
+       301
+      ],
+      "uid": "6a02cf89-fb67-4f61-894a-50c98bec61e9"
+     },
+     "name": "Table lamp",
+     "margin": 0.09272727272727273
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Desk",
+      "conf": 0.8601839542388916,
+      "source": "local",
+      "box": [
+       0,
+       0.7655267524719238,
+       0.21755824685096742,
+       0.234212646484375
+      ],
+      "category": "plant",
+      "slot": "n",
+      "shape": "plant",
+      "position": {
+       "x": -1.832170114120236,
+       "y": 0,
+       "z": -1.831161318476505
+      },
+      "yaw": 0,
+      "dimMM": [
+       727,
+       400,
+       301
+      ],
+      "uid": "6a02cf89-fb67-4f61-894a-50c98bec61e9"
+     },
+     "margin": 0.061632653061224486
+    },
+    {
+     "category": "monitor",
+     "detection": {
+      "label": "Desk",
+      "conf": 0.8601839542388916,
+      "source": "local",
+      "box": [
+       0,
+       0.7655267524719238,
+       0.21755824685096742,
+       0.234212646484375
+      ],
+      "category": "monitor",
+      "slot": "n",
+      "shape": "monitor",
+      "position": {
+       "x": -1.603751011952414,
+       "y": 0,
+       "z": -1.5674314950249941
+      },
+      "yaw": 0,
+      "dimMM": [
+       700,
+       200,
+       580
+      ],
+      "uid": "6a02cf89-fb67-4f61-894a-50c98bec61e9"
+     },
+     "margin": 0.05714285714285714
+    }
+   ],
+   "cut": [
+    "width"
+   ],
+   "bounded": [
+    "height"
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     200,
+     600
+    ],
+    "height": [
+     1200,
+     2000
+    ]
+   },
+   "measured": {
+    "height": 646
+   },
+   "candidates": [
+    {
+     "category": "table",
+     "detection": {
+      "label": "Lamp",
+      "conf": 0.803410530090332,
+      "source": "local",
+      "box": [
+       0.0000446087121963451,
+       0.6718452644348144,
+       0.12067781746387482,
+       0.20715667088826498
+      ],
+      "category": "table",
+      "slot": "n",
+      "shape": "side-table",
+      "position": {
+       "x": -2.567774014484326,
+       "y": 0,
+       "z": -2.234906566395776
+      },
+      "yaw": 0,
+      "dimMM": [
+       16,
+       600,
+       595
+      ],
+      "uid": "e9d5abe8-ae6e-484d-980a-21aa9bc69a9b"
+     },
+     "name": "Side table",
+     "margin": 0.45555555555555555
+    },
+    {
+     "category": "nightstand",
+     "detection": {
+      "label": "Lamp",
+      "conf": 0.803410530090332,
+      "source": "local",
+      "box": [
+       0.0000446087121963451,
+       0.6718452644348144,
+       0.12067781746387482,
+       0.20715667088826498
+      ],
+      "category": "nightstand",
+      "slot": "n",
+      "shape": "nightstand",
+      "position": {
+       "x": -2.466789049064824,
+       "y": 0,
+       "z": -2.1349065663957765
+      },
+      "yaw": 0,
+      "dimMM": [
+       218,
+       400,
+       663
+      ],
+      "uid": "e9d5abe8-ae6e-484d-980a-21aa9bc69a9b"
+     },
+     "margin": 0.30444444444444446
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Lamp",
+      "conf": 0.803410530090332,
+      "source": "local",
+      "box": [
+       0.0000446087121963451,
+       0.6718452644348144,
+       0.12067781746387482,
+       0.20715667088826498
+      ],
+      "category": "plant",
+      "slot": "n",
+      "shape": "plant",
+      "position": {
+       "x": -2.5006208433271713,
+       "y": 0,
+       "z": -2.1597712264091005
+      },
+      "yaw": 0,
+      "dimMM": [
+       450,
+       400,
+       646
+      ],
+      "uid": "e9d5abe8-ae6e-484d-980a-21aa9bc69a9b"
+     },
+     "margin": 0.20244897959183675
+    },
+    {
+     "category": "chair",
+     "detection": {
+      "label": "Lamp",
+      "conf": 0.803410530090332,
+      "source": "local",
+      "box": [
+       0.0000446087121963451,
+       0.6718452644348144,
+       0.12067781746387482,
+       0.20715667088826498
+      ],
+      "category": "chair",
+      "slot": "n",
+      "shape": "stool",
+      "position": {
+       "x": -2.5006208433271713,
+       "y": 0,
+       "z": -2.1597712264091005
+      },
+      "yaw": 0,
+      "dimMM": [
+       450,
+       500,
+       646
+      ],
+      "uid": "e9d5abe8-ae6e-484d-980a-21aa9bc69a9b"
+     },
+     "name": "Stool",
+     "margin": 0.135
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Lamp",
+      "conf": 0.803410530090332,
+      "source": "local",
+      "box": [
+       0.0000446087121963451,
+       0.6718452644348144,
+       0.12067781746387482,
+       0.20715667088826498
+      ],
+      "category": "shelf",
+      "slot": "n",
+      "shape": "bookshelf",
+      "position": {
+       "x": -2.441542807709949,
+       "y": 0,
+       "z": -2.109906566395776
+      },
+      "yaw": 0,
+      "dimMM": [
+       268,
+       350,
+       680
+      ],
+      "uid": "e9d5abe8-ae6e-484d-980a-21aa9bc69a9b"
+     },
+     "margin": 0.04
+    }
+   ],
+   "cut": [
+    "width"
+   ]
+  },
+  {
+   "status": "unmeasured"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width",
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     600,
+     4000
+    ],
+    "height": [
+     1600,
+     2600
+    ]
+   },
+   "measured": {
+    "width": 407,
+    "height": 722
+   },
+   "candidates": [
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Cabinet",
+      "conf": 0.726257860660553,
+      "source": "local",
+      "box": [
+       0.24370770812034606,
+       0.6457627820968628,
+       0.12019922494888306,
+       0.2301506010691325
+      ],
+      "category": "mirror",
+      "slot": "n",
+      "shape": "mirror",
+      "position": {
+       "x": -1.4262952467941683,
+       "y": 0.04326789368972639,
+       "z": -2.735
+      },
+      "yaw": 0,
+      "dimMM": [
+       860,
+       30,
+       1241
+      ],
+      "uid": "bc301183-8375-4a54-8152-c0fcbaae3cc2"
+     },
+     "margin": 0.37777777777777777
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Cabinet",
+      "conf": 0.726257860660553,
+      "source": "local",
+      "box": [
+       0.24370770812034606,
+       0.6457627820968628,
+       0.12019922494888306,
+       0.2301506010691325
+      ],
+      "category": "painting",
+      "slot": "n",
+      "shape": "painting",
+      "position": {
+       "x": -1.4262952467941683,
+       "y": 0.04326789368972639,
+       "z": -2.735
+      },
+      "yaw": 0,
+      "dimMM": [
+       860,
+       30,
+       1241
+      ],
+      "uid": "bc301183-8375-4a54-8152-c0fcbaae3cc2"
+     },
+     "margin": 0.31555555555555553
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Cabinet",
+      "conf": 0.726257860660553,
+      "source": "local",
+      "box": [
+       0.24370770812034606,
+       0.6457627820968628,
+       0.12019922494888306,
+       0.2301506010691325
+      ],
+      "category": "plant",
+      "slot": "n",
+      "shape": "plant",
+      "position": {
+       "x": -1.1624530563871307,
+       "y": 0,
+       "z": -2.270280042171417
+      },
+      "yaw": 0,
+      "dimMM": [
+       639,
+       400,
+       711
+      ],
+      "uid": "bc301183-8375-4a54-8152-c0fcbaae3cc2"
+     },
+     "margin": 0.2289795918367347
+    },
+    {
+     "category": "table",
+     "detection": {
+      "label": "Cabinet",
+      "conf": 0.726257860660553,
+      "source": "local",
+      "box": [
+       0.24370770812034606,
+       0.6457627820968628,
+       0.12019922494888306,
+       0.2301506010691325
+      ],
+      "category": "table",
+      "slot": "n",
+      "shape": "side-table",
+      "position": {
+       "x": -1.1277579995852713,
+       "y": 0,
+       "z": -2.2508040047872124
+      },
+      "yaw": 0,
+      "dimMM": [
+       407,
+       600,
+       722
+      ],
+      "uid": "bc301183-8375-4a54-8152-c0fcbaae3cc2"
+     },
+     "name": "Side table",
+     "margin": 0.17333333333333334
+    },
+    {
+     "category": "nightstand",
+     "detection": {
+      "label": "Cabinet",
+      "conf": 0.726257860660553,
+      "source": "local",
+      "box": [
+       0.24370770812034606,
+       0.6457627820968628,
+       0.12019922494888306,
+       0.2301506010691325
+      ],
+      "category": "nightstand",
+      "slot": "n",
+      "shape": "nightstand",
+      "position": {
+       "x": -1.0915223911382033,
+       "y": 0,
+       "z": -2.1508040047872123
+      },
+      "yaw": 0,
+      "dimMM": [
+       479,
+       400,
+       780
+      ],
+      "uid": "bc301183-8375-4a54-8152-c0fcbaae3cc2"
+     },
+     "margin": 0.044444444444444446
+    },
+    {
+     "category": "chair",
+     "detection": {
+      "label": "Cabinet",
+      "conf": 0.726257860660553,
+      "source": "local",
+      "box": [
+       0.24370770812034606,
+       0.6457627820968628,
+       0.12019922494888306,
+       0.2301506010691325
+      ],
+      "category": "chair",
+      "slot": "n",
+      "shape": "chair-dining",
+      "position": {
+       "x": -1.1096401953617372,
+       "y": 0,
+       "z": -2.200804004787212
+      },
+      "yaw": 0,
+      "dimMM": [
+       443,
+       500,
+       751
+      ],
+      "uid": "bc301183-8375-4a54-8152-c0fcbaae3cc2"
+     },
+     "margin": 0.002857142857142857
+    }
+   ]
+  },
+  {
+   "status": "ok",
+   "cut": [
+    "width"
+   ],
+   "bounded": [
+    "height"
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     800,
+     2400
+    ],
+    "height": [
+     600,
+     900
+    ]
+   },
+   "measured": {
+    "height": 358
+   },
+   "candidates": [
+    {
+     "category": "table",
+     "detection": {
+      "label": "Desk",
+      "conf": 0.5666857957839966,
+      "source": "local",
+      "box": [
+       0.849920732975006,
+       0.6762770318984985,
+       0.1500792670249939,
+       0.12402084668477377
+      ],
+      "category": "table",
+      "slot": "n",
+      "shape": "coffee-table",
+      "position": {
+       "x": 3.042609042926893,
+       "y": 0,
+       "z": -2.45
+      },
+      "yaw": 0,
+      "dimMM": [
+       417,
+       600,
+       394
+      ],
+      "uid": "6d187783-52fa-40e3-8b8a-4f4ef79f3d5e"
+     },
+     "name": "Coffee table",
+     "margin": 0.4114285714285714
+    },
+    {
+     "category": "ottoman",
+     "detection": {
+      "label": "Desk",
+      "conf": 0.5666857957839966,
+      "source": "local",
+      "box": [
+       0.849920732975006,
+       0.6762770318984985,
+       0.1500792670249939,
+       0.12402084668477377
+      ],
+      "category": "ottoman",
+      "slot": "n",
+      "shape": "ottoman",
+      "position": {
+       "x": 2.949440515289527,
+       "y": 0,
+       "z": -2.55
+      },
+      "yaw": 0,
+      "dimMM": [
+       603,
+       400,
+       464
+      ],
+      "uid": "6d187783-52fa-40e3-8b8a-4f4ef79f3d5e"
+     },
+     "margin": 0.344
+    },
+    {
+     "category": "nightstand",
+     "detection": {
+      "label": "Desk",
+      "conf": 0.5666857957839966,
+      "source": "local",
+      "box": [
+       0.849920732975006,
+       0.6762770318984985,
+       0.1500792670249939,
+       0.12402084668477377
+      ],
+      "category": "nightstand",
+      "slot": "n",
+      "shape": "nightstand",
+      "position": {
+       "x": 2.949440515289527,
+       "y": 0,
+       "z": -2.55
+      },
+      "yaw": 0,
+      "dimMM": [
+       603,
+       400,
+       464
+      ],
+      "uid": "6d187783-52fa-40e3-8b8a-4f4ef79f3d5e"
+     },
+     "margin": 0.25333333333333335
+    },
+    {
+     "category": "monitor",
+     "detection": {
+      "label": "Desk",
+      "conf": 0.5666857957839966,
+      "source": "local",
+      "box": [
+       0.849920732975006,
+       0.6762770318984985,
+       0.1500792670249939,
+       0.12402084668477377
+      ],
+      "category": "monitor",
+      "slot": "n",
+      "shape": "monitor",
+      "position": {
+       "x": 2.8562719876521614,
+       "y": 0,
+       "z": -2.5420196932226444
+      },
+      "yaw": 0,
+      "dimMM": [
+       789,
+       200,
+       534
+      ],
+      "uid": "6d187783-52fa-40e3-8b8a-4f4ef79f3d5e"
+     },
+     "margin": 0.18857142857142858
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Desk",
+      "conf": 0.5666857957839966,
+      "source": "local",
+      "box": [
+       0.849920732975006,
+       0.6762770318984985,
+       0.1500792670249939,
+       0.12402084668477377
+      ],
+      "category": "plant",
+      "slot": "n",
+      "shape": "plant",
+      "position": {
+       "x": 3.1272857218515346,
+       "y": 0,
+       "z": -2.379274919074823
+      },
+      "yaw": 0,
+      "dimMM": [
+       741,
+       400,
+       344
+      ],
+      "uid": "6d187783-52fa-40e3-8b8a-4f4ef79f3d5e"
+     },
+     "margin": 0.07918367346938776
+    }
+   ],
+   "cut": [
+    "width"
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "unmeasured"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     800,
+     1200
+    ],
+    "height": [
+     300,
+     1300
+    ]
+   },
+   "measured": {
+    "height": 1363
+   },
+   "candidates": [
+    {
+     "category": "fridge",
+     "detection": {
+      "label": "Bed",
+      "conf": 0.8731036186218262,
+      "source": "local",
+      "box": [
+       0,
+       0.5282629330952963,
+       0.5526459836959838,
+       0.47173706690470385
+      ],
+      "category": "fridge",
+      "slot": "e",
+      "shape": "fridge",
+      "position": {
+       "x": 1.7773130314433288,
+       "y": 0,
+       "z": -0.8947080326080323
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       2211,
+       550,
+       1384
+      ],
+      "uid": "f16f5ba3-63f3-4a62-a6c2-8255cdcfe027"
+     },
+     "margin": 0.4492307692307692
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Bed",
+      "conf": 0.8731036186218262,
+      "source": "local",
+      "box": [
+       0,
+       0.5282629330952963,
+       0.5526459836959838,
+       0.47173706690470385
+      ],
+      "category": "plant",
+      "slot": "e",
+      "shape": "plant",
+      "position": {
+       "x": 0.587971550325876,
+       "y": 0,
+       "z": -1.3869021131915238
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       3674,
+       400,
+       1208
+      ],
+      "uid": "f16f5ba3-63f3-4a62-a6c2-8255cdcfe027"
+     },
+     "margin": 0.43183673469387757
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Bed",
+      "conf": 0.8731036186218262,
+      "source": "local",
+      "box": [
+       0,
+       0.5282629330952963,
+       0.5526459836959838,
+       0.47173706690470385
+      ],
+      "category": "shelf",
+      "slot": "e",
+      "shape": "bookshelf",
+      "position": {
+       "x": 1.6773130314433289,
+       "y": 0,
+       "z": -0.8947080326080323
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       2211,
+       350,
+       1395
+      ],
+      "uid": "f16f5ba3-63f3-4a62-a6c2-8255cdcfe027"
+     },
+     "margin": 0.3975
+    },
+    {
+     "category": "chair",
+     "detection": {
+      "label": "Bed",
+      "conf": 0.8731036186218262,
+      "source": "local",
+      "box": [
+       0,
+       0.5282629330952963,
+       0.5526459836959838,
+       0.47173706690470385
+      ],
+      "category": "chair",
+      "slot": "e",
+      "shape": "chair-office",
+      "position": {
+       "x": 1.7523130314433288,
+       "y": 0,
+       "z": -0.8947080326080323
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       2211,
+       500,
+       1387
+      ],
+      "uid": "f16f5ba3-63f3-4a62-a6c2-8255cdcfe027"
+     },
+     "name": "Office chair",
+     "margin": 0.026
+    },
+    {
+     "category": "lamp",
+     "detection": {
+      "label": "Bed",
+      "conf": 0.8731036186218262,
+      "source": "local",
+      "box": [
+       0,
+       0.5282629330952963,
+       0.5526459836959838,
+       0.47173706690470385
+      ],
+      "category": "lamp",
+      "slot": "e",
+      "shape": "lamp-floor",
+      "position": {
+       "x": 0.587971550325876,
+       "y": 0,
+       "z": -1.3869021131915238
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       3674,
+       300,
+       1208
+      ],
+      "uid": "f16f5ba3-63f3-4a62-a6c2-8255cdcfe027"
+     },
+     "margin": 0.01
+    }
+   ],
+   "cut": [
+    "width"
+   ],
+   "bounded": [
+    "height"
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width"
+   ],
+   "allowed": {
+    "width": [
+     300,
+     700
+    ],
+    "height": [
+     350,
+     800
+    ]
+   },
+   "measured": {
+    "width": 702,
+    "height": 610
+   },
+   "candidates": [
+    {
+     "category": "table",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.7211254835128784,
+      "source": "local",
+      "box": [
+       0.09480035305023193,
+       0.6578141530354817,
+       0.15073621273040771,
+       0.13822352091471354
+      ],
+      "category": "table",
+      "slot": "e",
+      "shape": "nightstand",
+      "position": {
+       "x": 2.125,
+       "y": 0,
+       "z": -2.3328840204270787
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       567,
+       600,
+       547
+      ],
+      "uid": "bef71769-344c-4d78-a764-b1da9b8d26d1"
+     },
+     "margin": 0.3325
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.7211254835128784,
+      "source": "local",
+      "box": [
+       0.09480035305023193,
+       0.6578141530354817,
+       0.15073621273040771,
+       0.13822352091471354
+      ],
+      "category": "painting",
+      "slot": "e",
+      "shape": "painting",
+      "position": {
+       "x": 2.4099999999999997,
+       "y": 0.4099712968878585,
+       "z": -2.113443668795772
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       941,
+       30,
+       652
+      ],
+      "uid": "bef71769-344c-4d78-a764-b1da9b8d26d1"
+     },
+     "margin": 0.30424242424242426
+    },
+    {
+     "category": "tv",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.7211254835128784,
+      "source": "local",
+      "box": [
+       0.09480035305023193,
+       0.6578141530354817,
+       0.15073621273040771,
+       0.13822352091471354
+      ],
+      "category": "tv",
+      "slot": "e",
+      "shape": "tv",
+      "position": {
+       "x": 2.395,
+       "y": 0.41883875330269127,
+       "z": -2.0972606374912846
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       909,
+       60,
+       634
+      ],
+      "uid": "bef71769-344c-4d78-a764-b1da9b8d26d1"
+     },
+     "margin": 0.16076923076923078
+    },
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.7211254835128784,
+      "source": "local",
+      "box": [
+       0.09480035305023193,
+       0.6578141530354817,
+       0.15073621273040771,
+       0.13822352091471354
+      ],
+      "category": "mirror",
+      "slot": "e",
+      "shape": "mirror",
+      "position": {
+       "x": 2.4099999999999997,
+       "y": 0.4099712968878585,
+       "z": -2.113443668795772
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       941,
+       30,
+       652
+      ],
+      "uid": "bef71769-344c-4d78-a764-b1da9b8d26d1"
+     },
+     "margin": 0.1575
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.7211254835128784,
+      "source": "local",
+      "box": [
+       0.09480035305023193,
+       0.6578141530354817,
+       0.15073621273040771,
+       0.13822352091471354
+      ],
+      "category": "plant",
+      "slot": "e",
+      "shape": "plant",
+      "position": {
+       "x": 1.9976821853584168,
+       "y": 0,
+       "z": -2.4486750974484908
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       855,
+       400,
+       466
+      ],
+      "uid": "bef71769-344c-4d78-a764-b1da9b8d26d1"
+     },
+     "margin": 0.12897959183673469
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.7211254835128784,
+      "source": "local",
+      "box": [
+       0.09480035305023193,
+       0.6578141530354817,
+       0.15073621273040771,
+       0.13822352091471354
+      ],
+      "category": "shelf",
+      "slot": "e",
+      "shape": "bookshelf",
+      "position": {
+       "x": 2.25,
+       "y": 0,
+       "z": -2.2481934702909037
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       736,
+       350,
+       625
+      ],
+      "uid": "bef71769-344c-4d78-a764-b1da9b8d26d1"
+     },
+     "margin": 0.0125
+    }
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "unmeasured",
+   "cut": [
+    "width",
+    "height"
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width",
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     1200,
+     4000
+    ],
+    "height": [
+     600,
+     1100
+    ]
+   },
+   "measured": {
+    "width": 810,
+    "height": 1180
+   },
+   "candidates": [
+    {
+     "category": "fridge",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.4678072929382324,
+      "source": "local",
+      "box": [
+       0.39689081788063046,
+       0.547536595662435,
+       0.12548383474349975,
+       0.10214403788248698
+      ],
+      "category": "fridge",
+      "slot": "e",
+      "shape": "fridge",
+      "position": {
+       "x": 2.15,
+       "y": 0,
+       "z": -0.2606397334353959
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       810,
+       550,
+       1218
+      ],
+      "uid": "846efe3d-fdd7-472b-b799-1900454108e7"
+     },
+     "margin": 0.3111111111111111
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.4678072929382324,
+      "source": "local",
+      "box": [
+       0.39689081788063046,
+       0.547536595662435,
+       0.12548383474349975,
+       0.10214403788248698
+      ],
+      "category": "plant",
+      "slot": "e",
+      "shape": "plant",
+      "position": {
+       "x": 1.9497084221958696,
+       "y": 0,
+       "z": -0.30335263550738323
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       951,
+       400,
+       1180
+      ],
+      "uid": "846efe3d-fdd7-472b-b799-1900454108e7"
+     },
+     "margin": 0.22636363636363635
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.4678072929382324,
+      "source": "local",
+      "box": [
+       0.39689081788063046,
+       0.547536595662435,
+       0.12548383474349975,
+       0.10214403788248698
+      ],
+      "category": "shelf",
+      "slot": "e",
+      "shape": "bookshelf",
+      "position": {
+       "x": 2.25,
+       "y": 0,
+       "z": -0.2606397334353959
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       810,
+       350,
+       1237
+      ],
+      "uid": "846efe3d-fdd7-472b-b799-1900454108e7"
+     },
+     "margin": 0.205
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.4678072929382324,
+      "source": "local",
+      "box": [
+       0.39689081788063046,
+       0.547536595662435,
+       0.12548383474349975,
+       0.10214403788248698
+      ],
+      "category": "painting",
+      "slot": "e",
+      "shape": "painting",
+      "position": {
+       "x": 2.4099999999999997,
+       "y": 1.026968063340635,
+       "z": -0.25741532436196835
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       800,
+       30,
+       486
+      ],
+      "uid": "846efe3d-fdd7-472b-b799-1900454108e7"
+     },
+     "margin": 0.20363636363636364
+    },
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.4678072929382324,
+      "source": "local",
+      "box": [
+       0.39689081788063046,
+       0.547536595662435,
+       0.12548383474349975,
+       0.10214403788248698
+      ],
+      "category": "mirror",
+      "slot": "e",
+      "shape": "mirror",
+      "position": {
+       "x": 2.4099999999999997,
+       "y": 1.026968063340635,
+       "z": -0.25741532436196835
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       800,
+       30,
+       486
+      ],
+      "uid": "846efe3d-fdd7-472b-b799-1900454108e7"
+     },
+     "margin": 0.05375
+    },
+    {
+     "category": "bed",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.4678072929382324,
+      "source": "local",
+      "box": [
+       0.39689081788063046,
+       0.547536595662435,
+       0.12548383474349975,
+       0.10214403788248698
+      ],
+      "category": "bed",
+      "slot": "e",
+      "shape": "bed-single",
+      "position": {
+       "x": 1.4249999999999998,
+       "y": 0,
+       "z": -0.2606397334353959
+      },
+      "yaw": -1.5707963267948966,
+      "dimMM": [
+       810,
+       2000,
+       1080
+      ],
+      "uid": "846efe3d-fdd7-472b-b799-1900454108e7"
+     },
+     "margin": 0.025
+    }
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     1200,
+     4000
+    ],
+    "height": [
+     600,
+     1100
+    ]
+   },
+   "measured": {
+    "height": 509
+   },
+   "candidates": [
+    {
+     "category": "table",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.8526694774627686,
+      "source": "local",
+      "box": [
+       0.6629549980163574,
+       0.7022867838541667,
+       0.3369548797607422,
+       0.2970118204752604
+      ],
+      "category": "table",
+      "slot": "s",
+      "shape": "desk-standard",
+      "position": {
+       "x": -1.5130622117764538,
+       "y": 0,
+       "z": 1.8044234235953653
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       1200,
+       600,
+       650
+      ],
+      "uid": "da239eb1-0ff5-421c-a2ce-0465a5541658"
+     },
+     "margin": 0.16666666666666666
+    },
+    {
+     "category": "nightstand",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.8526694774627686,
+      "source": "local",
+      "box": [
+       0.6629549980163574,
+       0.7022867838541667,
+       0.3369548797607422,
+       0.2970118204752604
+      ],
+      "category": "nightstand",
+      "slot": "s",
+      "shape": "nightstand",
+      "position": {
+       "x": -1.4143676088706405,
+       "y": 0,
+       "z": 1.7044234235953653
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       1176,
+       400,
+       731
+      ],
+      "uid": "da239eb1-0ff5-421c-a2ce-0465a5541658"
+     },
+     "margin": 0.15333333333333332
+    },
+    {
+     "category": "lamp",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.8526694774627686,
+      "source": "local",
+      "box": [
+       0.6629549980163574,
+       0.7022867838541667,
+       0.3369548797607422,
+       0.2970118204752604
+      ],
+      "category": "lamp",
+      "slot": "s",
+      "shape": "lamp-table",
+      "position": {
+       "x": -1.7599365052557845,
+       "y": 0,
+       "z": 2.023464657042069
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       1453,
+       300,
+       305
+      ],
+      "uid": "da239eb1-0ff5-421c-a2ce-0465a5541658"
+     },
+     "name": "Table lamp",
+     "margin": 0.1
+    },
+    {
+     "category": "bed",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.8526694774627686,
+      "source": "local",
+      "box": [
+       0.6629549980163574,
+       0.7022867838541667,
+       0.3369548797607422,
+       0.2970118204752604
+      ],
+      "category": "bed",
+      "slot": "s",
+      "shape": "bed-single",
+      "position": {
+       "x": -1.6431634357573295,
+       "y": 0,
+       "z": 1.75
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       900,
+       2000,
+       389
+      ],
+      "uid": "da239eb1-0ff5-421c-a2ce-0465a5541658"
+     },
+     "margin": 0.089
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.8526694774627686,
+      "source": "local",
+      "box": [
+       0.6629549980163574,
+       0.7022867838541667,
+       0.3369548797607422,
+       0.2970118204752604
+      ],
+      "category": "plant",
+      "slot": "s",
+      "shape": "plant",
+      "position": {
+       "x": -1.7599365052557845,
+       "y": 0,
+       "z": 2.023464657042069
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       1453,
+       400,
+       305
+      ],
+      "uid": "da239eb1-0ff5-421c-a2ce-0465a5541658"
+     },
+     "margin": 0.06326530612244897
+    },
+    {
+     "category": "chair",
+     "detection": {
+      "label": "Sofa",
+      "conf": 0.8526694774627686,
+      "source": "local",
+      "box": [
+       0.6629549980163574,
+       0.7022867838541667,
+       0.3369548797607422,
+       0.2970118204752604
+      ],
+      "category": "chair",
+      "slot": "s",
+      "shape": "chair-armchair",
+      "position": {
+       "x": -1.457755370170907,
+       "y": 0,
+       "z": 1.8044234235953653
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       1089,
+       600,
+       650
+      ],
+      "uid": "da239eb1-0ff5-421c-a2ce-0465a5541658"
+     },
+     "name": "Armchair",
+     "margin": 0
+    }
+   ],
+   "cut": [
+    "width"
+   ],
+   "bounded": [
+    "height"
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     500,
+     1800
+    ],
+    "height": [
+     250,
+     600
+    ]
+   },
+   "measured": {
+    "width": 600,
+    "height": 732
+   },
+   "candidates": [
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6221809387207031,
+      "source": "local",
+      "box": [
+       0.3765946984291077,
+       0.6240361928939819,
+       0.09651394367218018,
+       0.17636809984842935
+      ],
+      "category": "mirror",
+      "slot": "s",
+      "shape": "mirror",
+      "position": {
+       "x": 0.5453106588588319,
+       "y": 0.3435840109783077,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       697,
+       30,
+       951
+      ],
+      "uid": "560b2db4-7021-4f53-abd9-a16cb192ae61"
+     },
+     "margin": 0.344375
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6221809387207031,
+      "source": "local",
+      "box": [
+       0.3765946984291077,
+       0.6240361928939819,
+       0.09651394367218018,
+       0.17636809984842935
+      ],
+      "category": "painting",
+      "slot": "s",
+      "shape": "painting",
+      "position": {
+       "x": 0.5453106588588319,
+       "y": 0.3435840109783077,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       697,
+       30,
+       951
+      ],
+      "uid": "560b2db4-7021-4f53-abd9-a16cb192ae61"
+     },
+     "margin": 0.2431111111111111
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6221809387207031,
+      "source": "local",
+      "box": [
+       0.3765946984291077,
+       0.6240361928939819,
+       0.09651394367218018,
+       0.17636809984842935
+      ],
+      "category": "plant",
+      "slot": "s",
+      "shape": "plant",
+      "position": {
+       "x": 0.5628733256307432,
+       "y": 0,
+       "z": 2.392661311321109
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       715,
+       400,
+       704
+      ],
+      "uid": "560b2db4-7021-4f53-abd9-a16cb192ae61"
+     },
+     "margin": 0.22612244897959183
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6221809387207031,
+      "source": "local",
+      "box": [
+       0.3765946984291077,
+       0.6240361928939819,
+       0.09651394367218018,
+       0.17636809984842935
+      ],
+      "category": "shelf",
+      "slot": "s",
+      "shape": "bookshelf",
+      "position": {
+       "x": 0.5128445985291731,
+       "y": 0,
+       "z": 2.575
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       618,
+       350,
+       794
+      ],
+      "uid": "560b2db4-7021-4f53-abd9-a16cb192ae61"
+     },
+     "margin": 0.097
+    },
+    {
+     "category": "nightstand",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6221809387207031,
+      "source": "local",
+      "box": [
+       0.3765946984291077,
+       0.6240361928939819,
+       0.09651394367218018,
+       0.17636809984842935
+      ],
+      "category": "nightstand",
+      "slot": "s",
+      "shape": "nightstand",
+      "position": {
+       "x": 0.5146345955095545,
+       "y": 0,
+       "z": 2.55
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       614,
+       400,
+       782
+      ],
+      "uid": "560b2db4-7021-4f53-abd9-a16cb192ae61"
+     },
+     "margin": 0.04
+    },
+    {
+     "category": "chair",
+     "detection": {
+      "label": "Coffee table",
+      "conf": 0.6221809387207031,
+      "source": "local",
+      "box": [
+       0.3765946984291077,
+       0.6240361928939819,
+       0.09651394367218018,
+       0.17636809984842935
+      ],
+      "category": "chair",
+      "slot": "s",
+      "shape": "chair-armchair",
+      "position": {
+       "x": 0.5217945834310802,
+       "y": 0,
+       "z": 2.45
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       600,
+       600,
+       732
+      ],
+      "uid": "560b2db4-7021-4f53-abd9-a16cb192ae61"
+     },
+     "name": "Armchair",
+     "margin": 0
+    }
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     620,
+     1100
+    ],
+    "height": [
+     1980,
+     2400
+    ]
+   },
+   "measured": {
+    "width": 675,
+    "height": 1216
+   },
+   "candidates": [
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Door",
+      "conf": 0.4856775999069214,
+      "source": "local",
+      "box": [
+       0.2010015958547592,
+       0.42395318349202477,
+       0.09761587262153626,
+       0.22558595021565755
+      ],
+      "category": "mirror",
+      "slot": "s",
+      "shape": "mirror",
+      "position": {
+       "x": 1.8199637390508947,
+       "y": 1.3004086712296377,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       691,
+       30,
+       1225
+      ],
+      "uid": "69ec635a-9b2e-4e56-8503-1dbeffc421f7"
+     },
+     "margin": 0.43444444444444447
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Door",
+      "conf": 0.4856775999069214,
+      "source": "local",
+      "box": [
+       0.2010015958547592,
+       0.42395318349202477,
+       0.09761587262153626,
+       0.22558595021565755
+      ],
+      "category": "plant",
+      "slot": "s",
+      "shape": "plant",
+      "position": {
+       "x": 2.029233014527711,
+       "y": 0,
+       "z": 2.418017381100076
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       664,
+       400,
+       1918
+      ],
+      "uid": "69ec635a-9b2e-4e56-8503-1dbeffc421f7"
+     },
+     "margin": 0.2783673469387755
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Door",
+      "conf": 0.4856775999069214,
+      "source": "local",
+      "box": [
+       0.2010015958547592,
+       0.42395318349202477,
+       0.09761587262153626,
+       0.22558595021565755
+      ],
+      "category": "painting",
+      "slot": "s",
+      "shape": "painting",
+      "position": {
+       "x": 1.8199637390508947,
+       "y": 1.3004086712296377,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       691,
+       30,
+       1225
+      ],
+      "uid": "69ec635a-9b2e-4e56-8503-1dbeffc421f7"
+     },
+     "margin": 0.24044444444444443
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Door",
+      "conf": 0.4856775999069214,
+      "source": "local",
+      "box": [
+       0.2010015958547592,
+       0.42395318349202477,
+       0.09761587262153626,
+       0.22558595021565755
+      ],
+      "category": "shelf",
+      "slot": "s",
+      "shape": "bookshelf",
+      "position": {
+       "x": 1.9257390821314502,
+       "y": 0,
+       "z": 2.575
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       527,
+       350,
+       1918
+      ],
+      "uid": "69ec635a-9b2e-4e56-8503-1dbeffc421f7"
+     },
+     "margin": 0.0635
+    },
+    {
+     "category": "curtain",
+     "detection": {
+      "label": "Door",
+      "conf": 0.4856775999069214,
+      "source": "local",
+      "box": [
+       0.2010015958547592,
+       0.42395318349202477,
+       0.09761587262153626,
+       0.22558595021565755
+      ],
+      "category": "curtain",
+      "slot": "s",
+      "shape": "curtain",
+      "position": {
+       "x": 1.8000612022368472,
+       "y": 1.3040776294790928,
+       "z": 2.71
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       651,
+       80,
+       1203
+      ],
+      "uid": "69ec635a-9b2e-4e56-8503-1dbeffc421f7"
+     },
+     "margin": 0.05456521739130435
+    }
+   ]
+  },
+  {
+   "status": "unmeasured"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width",
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     400,
+     3200
+    ],
+    "height": [
+     400,
+     2400
+    ]
+   },
+   "measured": {
+    "width": 220,
+    "height": 296
+   },
+   "candidates": [
+    {
+     "category": "lamp",
+     "detection": {
+      "label": "Window",
+      "conf": 0.4039587676525116,
+      "source": "local",
+      "box": [
+       0.3585220718383789,
+       0.4827275212605795,
+       0.04031790733337402,
+       0.05803890228271484
+      ],
+      "category": "lamp",
+      "slot": "s",
+      "shape": "lamp-floor",
+      "position": {
+       "x": 0.9336200342843823,
+       "y": 0,
+       "z": 2.602165079387583
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       296,
+       300,
+       1595
+      ],
+      "uid": "69d11450-f55c-47c3-92be-c035d1492878"
+     },
+     "margin": 0.24
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Window",
+      "conf": 0.4039587676525116,
+      "source": "local",
+      "box": [
+       0.3585220718383789,
+       0.4827275212605795,
+       0.04031790733337402,
+       0.05803890228271484
+      ],
+      "category": "plant",
+      "slot": "s",
+      "shape": "plant",
+      "position": {
+       "x": 0.9336200342843823,
+       "y": 0,
+       "z": 2.602165079387583
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       296,
+       400,
+       1595
+      ],
+      "uid": "69d11450-f55c-47c3-92be-c035d1492878"
+     },
+     "margin": 0.1781818181818182
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Window",
+      "conf": 0.4039587676525116,
+      "source": "local",
+      "box": [
+       0.3585220718383789,
+       0.4827275212605795,
+       0.04031790733337402,
+       0.05803890228271484
+      ],
+      "category": "painting",
+      "slot": "s",
+      "shape": "painting",
+      "position": {
+       "x": 0.8826522941631012,
+       "y": 1.4361948589983853,
+       "z": 2.735
+      },
+      "yaw": 3.141592653589793,
+      "dimMM": [
+       284,
+       30,
+       315
+      ],
+      "uid": "69d11450-f55c-47c3-92be-c035d1492878"
+     },
+     "margin": 0.059555555555555556
+    }
+   ]
+  },
+  {
+   "status": "unmeasured"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width"
+   ],
+   "allowed": {
+    "width": [
+     300,
+     1200
+    ],
+    "height": [
+     400,
+     2000
+    ]
+   },
+   "measured": {
+    "width": 1530,
+    "height": 1236
+   },
+   "candidates": [
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Mirror",
+      "conf": 0.8724133968353271,
+      "source": "local",
+      "box": [
+       0.595301628112793,
+       0.4575986544291178,
+       0.24116983413696289,
+       0.2585349400838216
+      ],
+      "category": "painting",
+      "slot": "w",
+      "shape": "painting",
+      "position": {
+       "x": -2.4099999999999997,
+       "y": 0.593412875357388,
+       "z": -1.3804787398608211
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       1530,
+       30,
+       1236
+      ],
+      "uid": "53627e7b-bd27-41a6-8109-63147bf950ae"
+     },
+     "margin": 0.3418181818181818
+    },
+    {
+     "category": "shelf",
+     "detection": {
+      "label": "Mirror",
+      "conf": 0.8724133968353271,
+      "source": "local",
+      "box": [
+       0.595301628112793,
+       0.4575986544291178,
+       0.24116983413696289,
+       0.2585349400838216
+      ],
+      "category": "shelf",
+      "slot": "w",
+      "shape": "bookshelf",
+      "position": {
+       "x": -2.25,
+       "y": 0,
+       "z": -1.3880160367042327
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       1412,
+       350,
+       1207
+      ],
+      "uid": "53627e7b-bd27-41a6-8109-63147bf950ae"
+     },
+     "margin": 0.3035
+    },
+    {
+     "category": "curtain",
+     "detection": {
+      "label": "Mirror",
+      "conf": 0.8724133968353271,
+      "source": "local",
+      "box": [
+       0.595301628112793,
+       0.4575986544291178,
+       0.24116983413696289,
+       0.2585349400838216
+      ],
+      "category": "curtain",
+      "slot": "w",
+      "shape": "curtain",
+      "position": {
+       "x": -2.385,
+       "y": 0.6020861134894808,
+       "z": -1.3580818455247252
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       1485,
+       80,
+       1211
+      ],
+      "uid": "53627e7b-bd27-41a6-8109-63147bf950ae"
+     },
+     "margin": 0.17125
+    },
+    {
+     "category": "bed",
+     "detection": {
+      "label": "Mirror",
+      "conf": 0.8724133968353271,
+      "source": "local",
+      "box": [
+       0.595301628112793,
+       0.4575986544291178,
+       0.24116983413696289,
+       0.2585349400838216
+      ],
+      "category": "bed",
+      "slot": "w",
+      "shape": "bed-single",
+      "position": {
+       "x": -1.4249999999999998,
+       "y": 0,
+       "z": -1.597356810690643
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       993,
+       2000,
+       1207
+      ],
+      "uid": "53627e7b-bd27-41a6-8109-63147bf950ae"
+     },
+     "margin": 0.093
+    }
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     800,
+     2400
+    ],
+    "height": [
+     600,
+     900
+    ]
+   },
+   "measured": {
+    "height": 164
+   },
+   "candidates": [],
+   "cut": [
+    "width"
+   ],
+   "bounded": [
+    "height"
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width",
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     200,
+     600
+    ],
+    "height": [
+     1200,
+     2000
+    ]
+   },
+   "measured": {
+    "width": 132,
+    "height": 969
+   },
+   "candidates": [
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Lamp",
+      "conf": 0.7719425559043884,
+      "source": "local",
+      "box": [
+       0.6345709156990051,
+       0.5078025404612224,
+       0.02136903762817383,
+       0.06082153956095378
+      ],
+      "category": "plant",
+      "slot": "w",
+      "shape": "plant",
+      "position": {
+       "x": -2.3589246511981803,
+       "y": 0,
+       "z": -0.9627491595319764
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       132,
+       400,
+       969
+      ],
+      "uid": "6a68e156-960c-44b0-b098-89bcd2c16f13"
+     },
+     "margin": 0.02909090909090909
+    }
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     1200,
+     4000
+    ],
+    "height": [
+     600,
+     1100
+    ]
+   },
+   "measured": {
+    "height": 165
+   },
+   "candidates": [],
+   "cut": [
+    "width"
+   ],
+   "bounded": [
+    "height"
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width"
+   ],
+   "allowed": {
+    "width": [
+     400,
+     5000
+    ],
+    "height": [
+     800,
+     3200
+    ]
+   },
+   "measured": {
+    "width": 377,
+    "height": 802
+   },
+   "candidates": [
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Curtain",
+      "conf": 0.5944199562072754,
+      "source": "local",
+      "box": [
+       0.6702024698257446,
+       0.48054943084716795,
+       0.06615710258483887,
+       0.17123985290527344
+      ],
+      "category": "plant",
+      "slot": "w",
+      "shape": "plant",
+      "position": {
+       "x": -2.2219098320288655,
+       "y": 0,
+       "z": -1.4139544047499213
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       406,
+       400,
+       1103
+      ],
+      "uid": "a45cdd6a-10f1-4c11-b897-ad08373248c1"
+     },
+     "margin": 0.2781818181818182
+    },
+    {
+     "category": "mirror",
+     "detection": {
+      "label": "Curtain",
+      "conf": 0.5944199562072754,
+      "source": "local",
+      "box": [
+       0.6702024698257446,
+       0.48054943084716795,
+       0.06615710258483887,
+       0.17123985290527344
+      ],
+      "category": "mirror",
+      "slot": "w",
+      "shape": "mirror",
+      "position": {
+       "x": -2.4099999999999997,
+       "y": 0.6923977533507422,
+       "z": -1.3030868331221046
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       408,
+       30,
+       819
+      ],
+      "uid": "a45cdd6a-10f1-4c11-b897-ad08373248c1"
+     },
+     "margin": 0.12
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Curtain",
+      "conf": 0.5944199562072754,
+      "source": "local",
+      "box": [
+       0.6702024698257446,
+       0.48054943084716795,
+       0.06615710258483887,
+       0.17123985290527344
+      ],
+      "category": "painting",
+      "slot": "w",
+      "shape": "painting",
+      "position": {
+       "x": -2.4099999999999997,
+       "y": 0.6923977533507422,
+       "z": -1.3030868331221046
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       408,
+       30,
+       819
+      ],
+      "uid": "a45cdd6a-10f1-4c11-b897-ad08373248c1"
+     },
+     "margin": 0.11466666666666667
+    }
+   ]
+  },
+  {
+   "status": "ok"
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "width"
+   ],
+   "allowed": {
+    "width": [
+     300,
+     700
+    ],
+    "height": [
+     350,
+     800
+    ]
+   },
+   "measured": {
+    "width": 194,
+    "height": 622
+   },
+   "candidates": [
+    {
+     "category": "lamp",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.5527914762496948,
+      "source": "local",
+      "box": [
+       0.6277246832847595,
+       0.5685176658630371,
+       0.051041665077209475,
+       0.05822437286376953
+      ],
+      "category": "lamp",
+      "slot": "w",
+      "shape": "lamp-table",
+      "position": {
+       "x": -2.2624817078855535,
+       "y": 0,
+       "z": -1.051608572778582
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       325,
+       300,
+       633
+      ],
+      "uid": "1e317315-b5c8-4dab-925f-98ee0e883787"
+     },
+     "name": "Table lamp",
+     "margin": 0.30363636363636365
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.5527914762496948,
+      "source": "local",
+      "box": [
+       0.6277246832847595,
+       0.5685176658630371,
+       0.051041665077209475,
+       0.05822437286376953
+      ],
+      "category": "plant",
+      "slot": "w",
+      "shape": "plant",
+      "position": {
+       "x": -2.2624817078855535,
+       "y": 0,
+       "z": -1.051608572778582
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       325,
+       400,
+       633
+      ],
+      "uid": "1e317315-b5c8-4dab-925f-98ee0e883787"
+     },
+     "margin": 0.19714285714285715
+    },
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Nightstand",
+      "conf": 0.5527914762496948,
+      "source": "local",
+      "box": [
+       0.6277246832847595,
+       0.5685176658630371,
+       0.051041665077209475,
+       0.05822437286376953
+      ],
+      "category": "painting",
+      "slot": "w",
+      "shape": "painting",
+      "position": {
+       "x": -2.4099999999999997,
+       "y": 0.5398816353991971,
+       "z": -0.9823222535499816
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       315,
+       30,
+       274
+      ],
+      "uid": "1e317315-b5c8-4dab-925f-98ee0e883787"
+     },
+     "margin": 0.07333333333333333
+    }
+   ]
+  },
+  {
+   "status": "suspect",
+   "failed": [
+    "height"
+   ],
+   "allowed": {
+    "width": [
+     200,
+     600
+    ],
+    "height": [
+     1200,
+     2000
+    ]
+   },
+   "measured": {
+    "width": 265,
+    "height": 399
+   },
+   "candidates": [
+    {
+     "category": "painting",
+     "detection": {
+      "label": "Lamp",
+      "conf": 0.5369991660118103,
+      "source": "local",
+      "box": [
+       0.8138594627380371,
+       0.6503646532694498,
+       0.0715850830078125,
+       0.13563391367594402
+      ],
+      "category": "painting",
+      "slot": "w",
+      "shape": "painting",
+      "position": {
+       "x": -2.4099999999999997,
+       "y": -0.03912385554060066,
+       "z": -2.242207647740269
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       431,
+       30,
+       640
+      ],
+      "uid": "3bbff5b2-b1ff-4e4b-99a1-2c4f0593d095"
+     },
+     "margin": 0.12488888888888888
+    },
+    {
+     "category": "plant",
+     "detection": {
+      "label": "Lamp",
+      "conf": 0.5369991660118103,
+      "source": "local",
+      "box": [
+       0.8138594627380371,
+       0.6503646532694498,
+       0.0715850830078125,
+       0.13563391367594402
+      ],
+      "category": "plant",
+      "slot": "w",
+      "shape": "plant",
+      "position": {
+       "x": -1.8987390291055493,
+       "y": 0,
+       "z": -1.7590908267768743
+      },
+      "yaw": 1.5707963267948966,
+      "dimMM": [
+       265,
+       400,
+       399
+      ],
+      "uid": "3bbff5b2-b1ff-4e4b-99a1-2c4f0593d095"
+     },
+     "margin": 0.10163265306122449
+    }
+   ]
+  },
+  {
+   "status": "unmeasured"
+  },
+  {
+   "status": "unmeasured"
+  },
+  {
+   "status": "ok"
+  }
+ ],
+ "d": [
+  {
+   "label": "Microwave oven",
+   "conf": 0.9470214247703552,
+   "source": "local",
+   "box": [
+    0.2494040012359619,
+    0.5921334346135457,
+    0.09339416980743408,
+    0.08797268867492676
+   ],
+   "dimMM": [
+    475,
+    500,
+    866
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Curtain",
+   "conf": 0.9262939095497131,
+   "source": "local",
+   "box": [
+    0.7119174945354462,
+    0.36769607543945315,
+    0.18980797052383422,
+    0.42865259806315104
+   ],
+   "dimMM": [
+    1304,
+    80,
+    2285
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.9067171216011047,
+   "source": "local",
+   "box": [
+    0.9302641773223878,
+    0.5417409992218017,
+    0.06973582267761223,
+    0.18127228418986002
+   ],
+   "dimMM": [
+    340,
+    300,
+    1207
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Desk",
+   "conf": 0.8601839542388916,
+   "source": "local",
+   "box": [
+    0,
+    0.7655267524719238,
+    0.21755824685096742,
+    0.234212646484375
+   ],
+   "dimMM": [
+    795,
+    700,
+    315
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.803410530090332,
+   "source": "local",
+   "box": [
+    0.0000446087121963451,
+    0.6718452644348144,
+    0.12067781746387482,
+    0.20715667088826498
+   ],
+   "dimMM": [
+    450,
+    300,
+    646
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.7650589346885681,
+   "source": "local",
+   "box": [
+    0.7364213943481445,
+    0.0019273757934570312,
+    0.19281845092773436,
+    0.34248104095458987
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Cabinet",
+   "conf": 0.726257860660553,
+   "source": "local",
+   "box": [
+    0.24370770812034606,
+    0.6457627820968628,
+    0.12019922494888306,
+    0.2301506010691325
+   ],
+   "dimMM": [
+    407,
+    600,
+    722
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Bed",
+   "conf": 0.6502397656440735,
+   "source": "local",
+   "box": [
+    0.7202589750289917,
+    0.6720360247294108,
+    0.27974102497100833,
+    0.32677974065144855
+   ],
+   "dimMM": [
+    812,
+    2000,
+    520
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Picture frame",
+   "conf": 0.5928298234939575,
+   "source": "local",
+   "box": [
+    0.1553926467895508,
+    0.3664019584655762,
+    0.19643168449401854,
+    0.1526033401489258
+   ],
+   "dimMM": [
+    1411,
+    30,
+    829
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Desk",
+   "conf": 0.5666857957839966,
+   "source": "local",
+   "box": [
+    0.849920732975006,
+    0.6762770318984985,
+    0.1500792670249939,
+    0.12402084668477377
+   ],
+   "dimMM": [
+    324,
+    700,
+    358
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Window",
+   "conf": 0.5167869329452515,
+   "source": "local",
+   "box": [
+    0.41603146314620965,
+    0.41368767579396565,
+    0.3082213282585144,
+    0.35166209856669106
+   ],
+   "dimMM": [
+    2093,
+    200,
+    1791
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Television",
+   "conf": 0.45525702834129333,
+   "source": "local",
+   "box": [
+    0.058959161341190336,
+    0.688377768198649,
+    0.07524398744106292,
+    0.11514565785725911
+   ],
+   "slot": "n"
+  },
+  {
+   "label": "Bed",
+   "conf": 0.8731036186218262,
+   "source": "local",
+   "box": [
+    0,
+    0.5282629330952963,
+    0.5526459836959838,
+    0.47173706690470385
+   ],
+   "dimMM": [
+    900,
+    2000,
+    1363
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.8511013388633728,
+   "source": "local",
+   "box": [
+    0.17136747121810914,
+    0.5335941584904988,
+    0.05988548755645752,
+    0.14164856910705567
+   ],
+   "dimMM": [
+    322,
+    300,
+    1316
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.8168526887893677,
+   "source": "local",
+   "box": [
+    0.5411779260635377,
+    0.5291047517458598,
+    0.047206850051879884,
+    0.14395102024078368
+   ],
+   "dimMM": [
+    320,
+    300,
+    1340
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Nightstand",
+   "conf": 0.7211254835128784,
+   "source": "local",
+   "box": [
+    0.09480035305023193,
+    0.6578141530354817,
+    0.15073621273040771,
+    0.13822352091471354
+   ],
+   "dimMM": [
+    702,
+    400,
+    610
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Nightstand",
+   "conf": 0.6618949174880981,
+   "source": "local",
+   "box": [
+    0.5286587238311768,
+    0.6455954551696776,
+    0.10368099212646484,
+    0.17266712188720704
+   ],
+   "dimMM": [
+    621,
+    400,
+    697
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Window",
+   "conf": 0.525004506111145,
+   "source": "local",
+   "box": [
+    0,
+    0.0005426502227783014,
+    0.172980637550354,
+    0.32276249249776207
+   ],
+   "dimMM": [
+    851,
+    200,
+    1364
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Picture frame",
+   "conf": 0.5179185271263123,
+   "source": "local",
+   "box": [
+    0.31004128456115726,
+    0.4451728820800781,
+    0.054494476318359374,
+    0.0718560536702474
+   ],
+   "dimMM": [
+    337,
+    30,
+    344
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Picture frame",
+   "conf": 0.4867715835571289,
+   "source": "local",
+   "box": [
+    0.4281715393066406,
+    0.44621362686157223,
+    0.054942893981933597,
+    0.07122503916422526
+   ],
+   "dimMM": [
+    349,
+    30,
+    341
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Sofa",
+   "conf": 0.4678072929382324,
+   "source": "local",
+   "box": [
+    0.39689081788063046,
+    0.547536595662435,
+    0.12548383474349975,
+    0.10214403788248698
+   ],
+   "dimMM": [
+    810,
+    950,
+    1180
+   ],
+   "slot": "e"
+  },
+  {
+   "label": "Mirror",
+   "conf": 0.9022629857063293,
+   "source": "local",
+   "box": [
+    0.33612565994262694,
+    0.4540776570638021,
+    0.1084144115447998,
+    0.1419336954752604
+   ],
+   "dimMM": [
+    781,
+    30,
+    771
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Sofa",
+   "conf": 0.8526694774627686,
+   "source": "local",
+   "box": [
+    0.6629549980163574,
+    0.7022867838541667,
+    0.3369548797607422,
+    0.2970118204752604
+   ],
+   "dimMM": [
+    1360,
+    950,
+    509
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Potted plant",
+   "conf": 0.7667241096496582,
+   "source": "local",
+   "box": [
+    0.3841518497467041,
+    0.5391727526982625,
+    0.06972540855407715,
+    0.09761153856913249
+   ],
+   "dimMM": [
+    547,
+    400,
+    1242
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Armchair",
+   "conf": 0.7200411558151245,
+   "source": "local",
+   "box": [
+    0.27530163288116455,
+    0.5944946098327637,
+    0.12243754863739013,
+    0.21426959991455077
+   ],
+   "dimMM": [
+    630,
+    600,
+    928
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Cabinet",
+   "conf": 0.6632298231124878,
+   "source": "local",
+   "box": [
+    0.46901545763015745,
+    0.3516314633687337,
+    0.1784747076034546,
+    0.448678461710612
+   ],
+   "dimMM": [
+    1189,
+    600,
+    2241
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Coffee table",
+   "conf": 0.6221809387207031,
+   "source": "local",
+   "box": [
+    0.3765946984291077,
+    0.6240361928939819,
+    0.09651394367218018,
+    0.17636809984842935
+   ],
+   "dimMM": [
+    600,
+    600,
+    732
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Door",
+   "conf": 0.4856775999069214,
+   "source": "local",
+   "box": [
+    0.2010015958547592,
+    0.42395318349202477,
+    0.09761587262153626,
+    0.22558595021565755
+   ],
+   "dimMM": [
+    675,
+    50,
+    1216
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Picture frame",
+   "conf": 0.4501481056213379,
+   "source": "local",
+   "box": [
+    0.12249954342842104,
+    0.4827305475870768,
+    0.026469695568084716,
+    0.059581883748372394
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Window",
+   "conf": 0.4039587676525116,
+   "source": "local",
+   "box": [
+    0.3585220718383789,
+    0.4827275212605795,
+    0.04031790733337402,
+    0.05803890228271484
+   ],
+   "dimMM": [
+    220,
+    200,
+    296
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.37079304456710815,
+   "source": "local",
+   "box": [
+    0.4348768347501755,
+    0.4346591711044312,
+    0.017499632835388183,
+    0.028389355341593425
+   ],
+   "slot": "s"
+  },
+  {
+   "label": "Mirror",
+   "conf": 0.8724133968353271,
+   "source": "local",
+   "box": [
+    0.595301628112793,
+    0.4575986544291178,
+    0.24116983413696289,
+    0.2585349400838216
+   ],
+   "dimMM": [
+    1530,
+    30,
+    1236
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Desk",
+   "conf": 0.8529331088066101,
+   "source": "local",
+   "box": [
+    0.5793238639831543,
+    0.7473590850830079,
+    0.4202280044555664,
+    0.2526409149169922
+   ],
+   "dimMM": [
+    1400,
+    700,
+    164
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.7719425559043884,
+   "source": "local",
+   "box": [
+    0.6345709156990051,
+    0.5078025404612224,
+    0.02136903762817383,
+    0.06082153956095378
+   ],
+   "dimMM": [
+    132,
+    300,
+    969
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Sofa",
+   "conf": 0.7687615156173706,
+   "source": "local",
+   "box": [
+    0,
+    0.7154399871826171,
+    0.5784849166870117,
+    0.2837235768636068
+   ],
+   "dimMM": [
+    2200,
+    950,
+    165
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Curtain",
+   "conf": 0.5944199562072754,
+   "source": "local",
+   "box": [
+    0.6702024698257446,
+    0.48054943084716795,
+    0.06615710258483887,
+    0.17123985290527344
+   ],
+   "dimMM": [
+    377,
+    80,
+    802
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Picture frame",
+   "conf": 0.5691580176353455,
+   "source": "local",
+   "box": [
+    0.5934345722198486,
+    0.45666422208150237,
+    0.056518936157226564,
+    0.2519764137268066
+   ],
+   "dimMM": [
+    353,
+    30,
+    1205
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Nightstand",
+   "conf": 0.5527914762496948,
+   "source": "local",
+   "box": [
+    0.6277246832847595,
+    0.5685176658630371,
+    0.051041665077209475,
+    0.05822437286376953
+   ],
+   "dimMM": [
+    194,
+    400,
+    622
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Lamp",
+   "conf": 0.5369991660118103,
+   "source": "local",
+   "box": [
+    0.8138594627380371,
+    0.6503646532694498,
+    0.0715850830078125,
+    0.13563391367594402
+   ],
+   "dimMM": [
+    265,
+    300,
+    399
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Chair",
+   "conf": 0.4079003632068634,
+   "source": "local",
+   "box": [
+    0.7396729624271393,
+    0.6243884881337484,
+    0.0470401930809021,
+    0.02580099105834961
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Bed",
+   "conf": 0.38344311714172363,
+   "source": "local",
+   "box": [
+    0.6148813724517823,
+    0.5790934975941976,
+    0.07887960910797119,
+    0.07069247563680013
+   ],
+   "slot": "w"
+  },
+  {
+   "label": "Picture frame",
+   "conf": 0.35832542181015015,
+   "source": "local",
+   "box": [
+    0.35002412915229797,
+    0.39907020568847656,
+    0.10937403798103333,
+    0.18969235102335613
+   ],
+   "dimMM": [
+    694,
+    30,
+    907
+   ],
+   "slot": "w"
+  }
+ ]
+}

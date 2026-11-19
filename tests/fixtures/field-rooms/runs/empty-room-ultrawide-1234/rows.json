@@ -1,0 +1,26 @@
+[
+ {
+  "label": "Door",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Door Wall 1 Left out: its size in this photo does not fit a door. Tick it if it is one Show"
+ },
+ {
+  "label": "Curtain",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Curtain Wall 1 Show"
+ },
+ {
+  "label": "Curtain",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Curtain Wall 1 Left out: its size in this photo does not fit a curtain. Tick it if it is one Show"
+ },
+ {
+  "label": "Window blind",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Window blind Wall 4"
+ }
+]

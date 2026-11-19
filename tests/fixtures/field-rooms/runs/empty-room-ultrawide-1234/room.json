@@ -1,0 +1,153 @@
+{
+ "room:8266daea-8080-4ab0-b932-ded368504e40:cap:e": {
+  "slot": "e",
+  "blob": "<blob 171580>",
+  "takenAt": 1795098853571,
+  "pose": {
+   "focal35mm": 13
+  }
+ },
+ "room:8266daea-8080-4ab0-b932-ded368504e40:cap:n": {
+  "slot": "n",
+  "blob": "<blob 191409>",
+  "takenAt": 1795098853564,
+  "pose": {
+   "focal35mm": 13
+  }
+ },
+ "room:8266daea-8080-4ab0-b932-ded368504e40:cap:s": {
+  "slot": "s",
+  "blob": "<blob 279608>",
+  "takenAt": 1795098853611,
+  "pose": {
+   "focal35mm": 13
+  }
+ },
+ "room:8266daea-8080-4ab0-b932-ded368504e40:cap:w": {
+  "slot": "w",
+  "blob": "<blob 291540>",
+  "takenAt": 1795098853630,
+  "pose": {
+   "focal35mm": 13
+  }
+ },
+ "room:8266daea-8080-4ab0-b932-ded368504e40:meta": {
+  "id": "8266daea-8080-4ab0-b932-ded368504e40",
+  "name": "Living room",
+  "createdAt": 1795098853377,
+  "layoutId": "rect",
+  "width": 2.9,
+  "depth": 4.4,
+  "height": 2.45,
+  "version": 3,
+  "detectedObjects": [
+   {
+    "id": 0,
+    "uid": "aa4c5758-295c-46d3-989d-35bf7532b9c9",
+    "label": "Door__slot:n",
+    "conf": 0.4329128563404083,
+    "source": "local",
+    "locked": true,
+    "box": [
+     0.4030642676353454,
+     0.35072590986887614,
+     0.2440231227874756,
+     0.5319938055674235
+    ],
+    "category": "door",
+    "dimMM": [
+     1397,
+     50,
+     2284
+    ],
+    "position": {
+     "x": 0.14354673435996934,
+     "y": 0.9632731848172075,
+     "z": -2.1750000000000003
+    },
+    "yaw": 0
+   },
+   {
+    "id": 1,
+    "uid": "440b5a9c-f059-4683-9ee2-8d165426d572",
+    "label": "Curtain__slot:n",
+    "conf": 0.428394079208374,
+    "source": "local",
+    "locked": true,
+    "box": [
+     0.21753560543060305,
+     0.353628495534261,
+     0.18625133037567138,
+     0.6358014170328776
+    ],
+    "category": "curtain",
+    "dimMM": [
+     1031,
+     80,
+     2692
+    ],
+    "position": {
+     "x": -1.0789938458227262,
+     "y": 0.7382444530698241,
+     "z": -2.16
+    },
+    "yaw": 0
+   },
+   {
+    "id": 2,
+    "uid": "79ff2612-76fe-469d-b12f-e41dcd64ee56",
+    "label": "Curtain__slot:n",
+    "conf": 0.3845098912715912,
+    "source": "local",
+    "locked": true,
+    "box": [
+     0.6240546464920045,
+     0.151782480875651,
+     0.15152182579040527,
+     0.848217519124349
+    ],
+    "category": "curtain",
+    "dimMM": [
+     829,
+     80,
+     3591
+    ],
+    "position": {
+     "x": 1.1410968627458815,
+     "y": 1.1431250843677532,
+     "z": -2.16
+    },
+    "yaw": 0
+   },
+   {
+    "id": 3,
+    "uid": "caeb468d-6867-4adf-a99f-5ade19ebe5e4",
+    "label": "Window blind__slot:w",
+    "conf": 0.4662114083766937,
+    "source": "local",
+    "locked": true,
+    "box": [
+     0,
+     0.00172812461853028,
+     0.4841364860534668,
+     0.20557186444600423
+    ],
+    "category": "curtain",
+    "dimMM": [
+     1763,
+     80,
+     516
+    ],
+    "position": {
+     "x": -1.41,
+     "y": 2.5331413281008435,
+     "z": 0.94254936275467
+    },
+    "yaw": 1.5707963267948966
+   }
+  ]
+ },
+ "room:8266daea-8080-4ab0-b932-ded368504e40:touched": 1795098903403,
+ "room:8266daea-8080-4ab0-b932-ded368504e40:wrote:scene": 1795098903402,
+ "room:8266daea-8080-4ab0-b932-ded368504e40:wrote:transforms": 1795098903402
+}

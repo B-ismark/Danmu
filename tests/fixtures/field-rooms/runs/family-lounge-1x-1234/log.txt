@@ -1,0 +1,6 @@
+SLOTS family-lounge 1x order=1234: Wall 1←wall1  Wall 2←wall2  Wall 3←wall3  Wall 4←wall4  (4/4 right)
+detect took 40 s
+initially kept: 6 of 19 pieces kept
+rows offered: 19
+status: 19 of 19 pieces kept
+room ace6519b-a8b0-4a34-b006-c4d494bb4f40 saved → runs/family-lounge-1x-1234

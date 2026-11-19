@@ -1,0 +1,6 @@
+SLOTS hotel-room 1x order=1234: Wall 1←wall1  Wall 2←wall2  Wall 3←wall3  Wall 4←wall4  (4/4 right)
+detect took 40 s
+initially kept: 2 of 18 pieces kept
+rows offered: 18
+status: 18 of 18 pieces kept
+room ad22db36-55ed-466c-8fae-58cf4ac9562b saved → runs/hotel-room-1x-1234

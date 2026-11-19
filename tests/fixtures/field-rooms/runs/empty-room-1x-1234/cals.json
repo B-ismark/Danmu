@@ -1,0 +1,54 @@
+{
+ "photos": {
+  "n": {
+   "aspect": 1.3333333333333333,
+   "view": {},
+   "exifHfov": 65.31867838577682,
+   "vanishing": null,
+   "floorLine": 0.9
+  },
+  "e": {
+   "aspect": 1.3333333333333333,
+   "view": {},
+   "exifHfov": 65.31867838577682,
+   "vanishing": null,
+   "floorLine": null
+  },
+  "s": {
+   "aspect": 1.3333333333333333,
+   "view": {},
+   "exifHfov": 65.31867838577682,
+   "vanishing": null,
+   "floorLine": null
+  },
+  "w": {
+   "aspect": 1.3333333333333333,
+   "view": {},
+   "exifHfov": 65.31867838577682,
+   "vanishing": null,
+   "floorLine": 0.8666666666666667
+  }
+ },
+ "cals": {
+  "n": {
+   "k": 1.2819737868316412,
+   "aspect": 1.3333333333333333,
+   "lens": "measured"
+  },
+  "e": {
+   "k": 1.2819737868316412,
+   "aspect": 1.3333333333333333,
+   "lens": "measured"
+  },
+  "s": {
+   "k": 1.2819737868316412,
+   "aspect": 1.3333333333333333,
+   "lens": "measured"
+  },
+  "w": {
+   "k": 1.2819737868316412,
+   "aspect": 1.3333333333333333,
+   "lens": "measured"
+  }
+ }
+}

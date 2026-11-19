@@ -1008,6 +1008,11 @@ the boundary honest in both directions: a module only tests import does not belo
   and options decided against so nobody re-proposes them. Every item says whether
   it exists in a commit anywhere, which is what separates real work from a note in
   a window that is about to close.
+- `tests/fixtures/field-rooms/` — **the photo kit for measuring the capture route.**
+  32 wall photos of four rooms at two lenses, cut from CC0 Poly Haven panoramas (no
+  one's home, so they may live here), with each room's ground truth (`rooms.json`), the
+  last recorded runs and the field-test findings. `scripts/field-rooms-run.mjs` walks a
+  set through a production build; its README says how sure each number is.
 - `docs/history/` — **point-in-time studies, not live docs.** The 2026-07 platform
   audit (`AUDIT.md` + `audit/`), the engine research (`Research.md`) and the
   remediation plan (`Plan.md`). Every phase in them is shipped or explicitly

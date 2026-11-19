@@ -1,0 +1,6 @@
+SLOTS seaview-suite 1x order=1234: Wall 1←wall1  Wall 2←wall2  Wall 3←wall3  Wall 4←wall4  (4/4 right)
+detect took 39 s
+initially kept: 9 of 28 pieces kept
+rows offered: 28
+status: 28 of 28 pieces kept
+room 5fbad05c-b72f-44da-bb19-e090ba07451c saved → runs/seaview-suite-1x-1234
